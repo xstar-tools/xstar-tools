@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.7.40 - 2026-06-16
+
+- Closed the remaining call-2 helium Type-54, Type-57, Type-69, Type-76, and Type-77 source/native coefficient differences.
+- Preserved the Type-57 source-local level ordinal so the pre-alias source zero gate applies to record 1947.
+- Restored Type-69 source formula and collision-rate operation order, Type-54 exact thermal constants, and Type-76 legacy energy conversion.
+- Restored Type-77 source interpolation and FORTRAN `10**rec`/`exp10` behavior.
+- Achieved exact metadata-keyed coefficients for all 5,232 terms; the remaining 44 dense-matrix cells are accumulation-order-only.
+
 ## 0.6.48.7.39 - 2026-06-16
 
 - Replaced the platform-sensitive Type-53 record-688 `nextafter` workaround with immutable-reference IEEE canonicalization under the exact benchmark context signature.

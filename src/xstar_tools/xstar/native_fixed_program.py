@@ -670,7 +670,9 @@ def _lower_record(master: Any, derived: Any, rec: int, element_index: int, rows:
         upper_row = _compact_row_for_local(basis, ion_index, int(block.nlev))
         principal_n = _row_n(rows, lower_row) or i57
         payload_reals = []
-        payload_ints = [i57, principal_n]
+        # Preserve the source-local level ordinal: ucalc Type-57 applies its
+        # exact zero gate to idest1 before compact-row aliasing.
+        payload_ints = [i57, principal_n, local]
         line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
     elif dt in {60, 62}:
         minimum_reals = 3 if dt == 60 else 6

@@ -797,13 +797,31 @@ double expint_scaled(double x) {
     return numerator / denominator;
 }
 
+double type69_expint_scaled_source_order(double x) {
+    if (!(x > 0.0) || !std::isfinite(x)) return 0.0;
+    if (x > 1.0) {
+        const double numerator =
+            std::pow(x, 4.0) + 8.5733287401 * std::pow(x, 3.0) +
+            18.0590169730 * x * x + 8.6347608925 * x + 0.2677737343;
+        const double denominator =
+            std::pow(x, 4.0) + 9.5733223454 * std::pow(x, 3.0) +
+            25.6329561486 * x * x + 21.0996530827 * x + 3.9584969228;
+        return numerator / denominator;
+    }
+    const double e1 =
+        -0.57721566 + 0.99999193 * x - 0.24991055 * x * x +
+        0.05519968 * std::pow(x, 3.0) - 0.00976004 * std::pow(x, 4.0) +
+        0.00107857 * std::pow(x, 5.0) - std::log(x);
+    return e1 * x * type53_expo(x);
+}
+
 double type69_upsilon(const double* r, std::size_t n, double temperature_k) {
     if (!r || n < 6 || temperature_k <= 0.0 || r[0] <= 0.0) return -1.0;
     double y = r[0] / temperature_k * 1.160443e4;
     if (y < 1.0e-20) return -1.0;
     if (y > 1.0e20) return 0.0;
     y = std::max(5.0e-2, std::min(77.0, y));
-    const double em1 = expint_scaled(y);
+    const double em1 = type69_expint_scaled_source_order(y);
     const double a = r[1], b = r[2], c = r[3], d = r[4], e = r[5];
     double gamma = 0.0;
     if (n == 6) {
@@ -812,13 +830,15 @@ double type69_upsilon(const double* r, std::size_t n, double temperature_k) {
     } else {
         if (n < 9 || r[8] <= 0.0) return -1.0;
         const double p = r[6], q = r[7], x1 = r[8];
-        const double em1x = expint_scaled(y * x1);
+        const double em1x = type69_expint_scaled_source_order(y * x1);
         double gnr = a / y + c / x1 + d * 0.5 * (1.0 / (x1 * x1) - y / x1) + e / y * std::log(x1);
         gnr += em1x / y / x1 * (b - c * y + d * y * y * 0.5 + e / y);
         gnr *= y * limited_exp(y * (1.0 - x1));
         const double base = 1.0 + 1.0 / y;
-        const double gr = p * base * (1.0 - limited_exp(y * (1.0 - x1)) * (x1 + 1.0 / y) / base);
-        gamma = gnr + gr + q * em1;
+        const double exp_tail = type53_expo(y * (1.0 - x1));
+        double gr = p * base * (1.0 - exp_tail * (x1 + 1.0 / y) / base);
+        gr += q * (1.0 - exp_tail);
+        gamma = gnr + gr;
     }
     return std::max(0.0, gamma);
 }
@@ -1028,9 +1048,9 @@ double bilinear_log_table(const double* dens, std::size_t nd, const double* temp
     const double n0=dens[ni],n1=dens[ni+1],t0=temp[ti],t1=temp[ti+1];
     if (n1==n0||t1==t0) throw std::runtime_error("degenerate density/temperature grid");
     const auto at=[&](std::size_t i,std::size_t j){return table[i*nt+j];};
-    const double r0=at(ni,ti)+(at(ni,ti+1)-at(ni,ti))*(logt-t0)/(t1-t0);
-    const double r1=at(ni+1,ti)+(at(ni+1,ti+1)-at(ni+1,ti))*(logt-t0)/(t1-t0);
-    return r0+(r1-r0)*(logn-n0)/(n1-n0);
+    const double r0=at(ni,ti)+(at(ni,ti+1)-at(ni,ti))/(t1-t0+1.0e-36)*(logt-t0);
+    const double r1=at(ni+1,ti)+(at(ni+1,ti+1)-at(ni+1,ti))/(t1-t0+1.0e-36)*(logt-t0);
+    return r0+(r1-r0)/(n1-n0+1.0e-36)*(logn-n0);
 }
 
 bool type71_rate(const double* r, std::size_t nr, const std::int64_t* ints, std::size_t ni, double temperature, double density, double& aij, double& wavelength) {
@@ -1139,10 +1159,13 @@ bool type77_rates(const double* r, std::size_t nr, const std::int64_t* ints, std
     double logn=std::min(std::log10(density),dg[nd-1]);
     double logt=std::min(tg[nt-1]+1.0,std::max(tg[0]-1.0,std::log10(tused)));
     const double rec=bilinear_log_table(dg,nd,tg,nt,table,logn,logt);
-    downward=std::pow(10.0,rec);
+    // gfortran lowers the source REAL(8) 10**rec expression to the
+    // libm exp10 path on the benchmark platform.  Runtime std::pow(10, rec)
+    // is one ULP lower for records 1962/1963.
+    downward=::exp10(rec);
     int k=1; while (nll >= (k+1)*k/2+1 && k<10000) ++k;
     const int nl1=k*(k-1)/2+1, il=nll-nl1; const double gg=2.0*(2.0*il+1.0);
-    const double xt=1.43817e8/(wav*tused);
+    const double xt=1.43817e8/wav/tused;
     upward=(xt<100.0&&gg>0.0)?downward*std::exp(-xt)/gg:0.0;
     return std::isfinite(upward)&&std::isfinite(downward);
 }
@@ -2226,12 +2249,20 @@ EvaluatedRecord evaluate_record(
         case XSTAR_FIXED_OPCODE_TYPE51_BT_COLLISION: {
             const double ups = type51_upsilon(r, record.real_count, ints, record.int_count, input.temperature_k);
             if (!(ups >= 0.0)) throw std::runtime_error("invalid type51 payload");
-            const double qde = xstar_constants::kCollisionRateCoefficientPerSqrtT4 * ups / sqrt_t4 / std::max(upper.statistical_weight, 1.0e-300);
-            const double qex = qde * upper.statistical_weight / std::max(lower.statistical_weight, 1.0e-300) * limited_exp(-delta_ev / std::max(kt_ev, 1.0e-300));
+            const double root_t = std::sqrt(input.temperature_k);
+            const double source_kt_ev =
+                xstar_constants::kSourceCollisionBoltzmannEvPerK * input.temperature_k;
+            const double qex =
+                xstar_constants::kCollisionRateCoefficientPerSqrtK * ups *
+                std::exp(-delta_ev / source_kt_ev) /
+                (lower.statistical_weight * root_t);
+            const double qde =
+                xstar_constants::kCollisionRateCoefficientPerSqrtK * ups /
+                (upper.statistical_weight * root_t);
             c.ans1 = qex * ne;
             c.ans2 = qde * ne;
-            c.ans5 = c.ans2 * delta_ev * kErgPerEv;
-            c.ans6 = c.ans1 * delta_ev * kErgPerEv;
+            c.ans5 = c.ans2 * delta_ev * xstar_constants::kLegacyCollisionErgPerEv;
+            c.ans6 = c.ans1 * delta_ev * xstar_constants::kLegacyCollisionErgPerEv;
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE54_ANGULAR_REDIS: {
@@ -2243,15 +2274,20 @@ EvaluatedRecord evaluate_record(
             if (xstar_engine_anl1_v1(ni0,nf0,lf,iq,&alm,&alp)!=0) throw std::runtime_error("type54 anl1 evaluation failed");
             const double rate = li < lf ? alm : alp;
             c.ans2 = rate;
-            const double delt = delta_ev / std::max(kt_ev,1.0e-300);
-            c.ans3 = -rate*delt*kErgPerEv;
+            const double source_kt_ev =
+                xstar_constants::kBoltzmannErgPerK * input.temperature_k /
+                xstar_constants::kModernErgPerEv;
+            const double delt = delta_ev / std::max(source_kt_ev,1.0e-300);
+            c.ans3 = -rate*delt*xstar_constants::kModernErgPerEv;
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE57_COLLISIONAL_IONIZATION: {
             if (!ints || record.int_count < 2) throw std::runtime_error("type57 payload requires i57,principal_n");
             const int i57=static_cast<int>(ints[0]);
             const int n=static_cast<int>(ints[1]);
-            if (i57<=0 || record.lower_row<=1) break;
+            const int source_local_level = record.int_count >= 3
+                ? static_cast<int>(ints[2]) : record.lower_row;
+            if (i57<=0 || source_local_level<=1) break;
             const double e1=lower.energy_ev;
             const double eth=std::max(upper.energy_ev-e1,0.0);
             double cion=0.0,crec=0.0;
@@ -2404,12 +2440,23 @@ EvaluatedRecord evaluate_record(
         case XSTAR_FIXED_OPCODE_TYPE69_HELIKE_COLLISION: {
             const double ups = type69_upsilon(r, record.real_count, input.temperature_k);
             if (!(ups >= 0.0)) throw std::runtime_error("invalid type69 payload");
-            const double qde = xstar_constants::kCollisionRateCoefficientPerSqrtT4 * ups / sqrt_t4 / std::max(upper.statistical_weight, 1.0e-300);
-            const double qex = qde * upper.statistical_weight / std::max(lower.statistical_weight, 1.0e-300) * limited_exp(-delta_ev / std::max(kt_ev, 1.0e-300));
+            // Match collisions.q_rates_from_upsilon operation order literally.
+            // Using the algebraically equivalent T4 coefficient changes the
+            // last bit for the six active helium Type-69 records.
+            const double root_temperature = std::sqrt(input.temperature_k);
+            const double source_kt_ev =
+                xstar_constants::kSourceCollisionBoltzmannEvPerK * input.temperature_k;
+            const double qex =
+                xstar_constants::kCollisionRateCoefficientPerSqrtK * ups *
+                limited_exp(-delta_ev / std::max(source_kt_ev, 1.0e-300)) /
+                (std::max(lower.statistical_weight, 1.0e-300) * root_temperature);
+            const double qde =
+                xstar_constants::kCollisionRateCoefficientPerSqrtK * ups /
+                (std::max(upper.statistical_weight, 1.0e-300) * root_temperature);
             c.ans1 = qex * ne;
             c.ans2 = qde * ne;
-            c.ans5 = c.ans2 * delta_ev * kErgPerEv;
-            c.ans6 = c.ans1 * delta_ev * kErgPerEv;
+            c.ans5 = c.ans2 * delta_ev * xstar_constants::kLegacyCollisionErgPerEv;
+            c.ans6 = c.ans1 * delta_ev * xstar_constants::kLegacyCollisionErgPerEv;
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE71_SUPERLEVEL_CASCADE: {
@@ -2427,8 +2474,8 @@ EvaluatedRecord evaluate_record(
             double upward=0.0,downward=0.0;
             if (!type77_rates(r,record.real_count,ints,record.int_count,input.temperature_k,input.hydrogen_density_cm3,delta_ev,upward,downward)) throw std::runtime_error("invalid type77 payload");
             c.ans1=upward; c.ans2=downward;
-            c.ans5=downward*delta_ev*kErgPerEv;
-            c.ans6=upward*delta_ev*kErgPerEv;
+            c.ans5=downward*delta_ev*xstar_constants::kLegacyCollisionErgPerEv;
+            c.ans6=upward*delta_ev*xstar_constants::kLegacyCollisionErgPerEv;
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE72_DIELECTRONIC_CAPTURE: {
@@ -2457,7 +2504,7 @@ EvaluatedRecord evaluate_record(
             if (!r||record.real_count<1) throw std::runtime_error("type76 payload too short");
             const double aij=std::max(0.0,r[0]);
             c.ans2=aij;
-            c.ans3=-aij*delta_ev*kErgPerEv;
+            c.ans3=-aij*delta_ev*xstar_constants::kLegacyCollisionErgPerEv;
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE95_SPLINE_IONIZATION: {
