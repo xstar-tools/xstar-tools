@@ -1,4 +1,4 @@
-"""Capture all 61 immutable v0.6.47.2 H/He/Mg fixed-state evaluations.
+"""Capture all 61 immutable v0.6.47.2 post-seed element systems.
 
 The probe observes the 57 DSEC evaluations and the four retained final
 fixed-state evaluations. It does not change rates, matrices, controller
@@ -18,9 +18,9 @@ from typing import Any
 
 from . import v0472_full_dsec_thermal_budget_capture as base
 
-RELEASE = "0.6.48.7.44"
-SCHEMA = "xstar-tools-v0648744-v0472-all61-fixed-state-capture-v1"
-VERIFY_SCHEMA = "xstar-tools-v0648744-v0472-all61-fixed-state-oracle-v1"
+RELEASE = "0.6.48.7.46"
+SCHEMA = "xstar-tools-v0648746-v0472-all61-post-seed-system-capture-v1"
+VERIFY_SCHEMA = "xstar-tools-v0648746-v0472-all61-post-seed-system-oracle-v1"
 STATE_NAME = "v0472_all61_fixed_state_rows.csv"
 INPUT_NAME = "v0472_all61_input_states.csv"
 ION_NAME = "v0472_all61_ion_populations.csv"
@@ -28,7 +28,8 @@ LEVEL_NAME = "v0472_all61_level_populations.csv"
 SOLVE_NAME = "v0472_all61_element_solve_rows.csv"
 REPORT_NAME = "all61_fixed_state_capture_report.json"
 VERIFY_NAME = "all61_fixed_state_capture_verification.json"
-MANIFEST_NAME = "all61_fixed_state_capture_manifest.json"
+MANIFEST_NAME = "all61_post_seed_system_capture_manifest.json"
+SYSTEM_NAME = "v0472_all61_element_solve_systems.csv"
 
 
 def canonical_sequence(kind: str, call_id: int, evaluation_index: int) -> int:
@@ -49,7 +50,7 @@ def canonical_sequence(kind: str, call_id: int, evaluation_index: int) -> int:
 _PROBE = base._PROBE
 _PROBE = _PROBE.replace(
     '"bypassed_retained_evaluators": 0}',
-    '"bypassed_retained_evaluators": 0, "all61_states": [], "all61_ions": [], "all61_levels": [], "all61_inputs": [], "all61_solve_rows": [], "final_counter": 0}',
+    '"bypassed_retained_evaluators": 0, "all61_states": [], "all61_ions": [], "all61_levels": [], "all61_inputs": [], "all61_solve_rows": [], "all61_solve_systems": [], "final_counter": 0}',
 )
 
 _CAPTURE_CODE = r'''
@@ -68,6 +69,13 @@ ALL61_SOLVE_FIELDS = [
  "superlevel","is_normalization_row","transformed_initial_population",
  "final_outer_start_population","final_population","rhs","row_residual","row_scale",
  "relative_row_residual","solver_method","converged"
+]
+ALL61_SYSTEM_FIELDS = [
+ "sequence","kind","dsec_call_id","evaluation_index","element_z","abundance",
+ "active_min_stage","active_max_stage","n_rows","normalization_row",
+ "dense_file","heating_file","heating2_file","rhs_file","initial_file","outer_file",
+ "final_file","ion_final_file","solver_method","converged","outer_iterations",
+ "fixed_point_iterations","normalization","normalization_error","max_relative_row_residual"
 ]
 ALL61_INPUT_FIELDS = [
  "sequence","kind","dsec_call_id","evaluation_index","temperature_k","temperature_t4",
@@ -126,6 +134,55 @@ def _v048742_capture_input(kind, call_id, evaluation_index, sequence, state):
       "continuum_tau_count": tau_count, "global_level_count": global_count,
     })
 
+def _v048746_capture_solve_system(kind, call_id, evaluation_index, sequence, z, abundance, assembly, solve):
+    sequence = _v048743_canonical_sequence(kind, call_id, evaluation_index)
+    basis = assembly.basis
+    n = int(basis.n_rows)
+    dense = np.asarray(assembly.dense_matrix, dtype=np.float64)
+    heat = np.asarray(assembly.heating_matrix, dtype=np.float64)
+    heat2 = np.asarray(assembly.heating_matrix2, dtype=np.float64)
+    rhs = np.asarray(assembly.rhs, dtype=np.float64)
+    initial = np.asarray(assembly.initial_populations[1:n+1], dtype=np.float64)
+    outer = np.asarray(solve.final_outer_start_populations, dtype=np.float64)
+    final = np.asarray(solve.populations, dtype=np.float64)
+    ion_final = np.asarray(solve.ion_population_totals_final_vector, dtype=np.float64)
+    if dense.shape != (n, n) or heat.shape != (n, n) or heat2.shape != (n, n):
+        raise RuntimeError(f"invalid source solve-system matrix shape z={z} n={n}")
+    for name, array in (("rhs", rhs), ("initial", initial), ("outer", outer), ("final", final)):
+        if array.size != n:
+            raise RuntimeError(f"invalid source solve-system {name} size z={z} n={n} size={array.size}")
+    directory = _OUT / "all61_solve_systems" / f"evaluation_{int(sequence):04d}" / f"element_z{int(z):02d}"
+    directory.mkdir(parents=True, exist_ok=True)
+    arrays = {
+      "dense": dense, "heating": heat, "heating2": heat2, "rhs": rhs,
+      "initial": initial, "outer": outer, "final": final, "ion_final": ion_final,
+    }
+    files = {}
+    for name, array in arrays.items():
+        path = directory / f"{name}.bin"
+        np.asarray(array, dtype=np.float64).tofile(path)
+        files[name] = str(path.relative_to(_OUT))
+    ion_stages = np.asarray(basis.ion_stage, dtype=np.int32)
+    stages = [int(ion_stages[i]) for i in range(1, min(n + 1, ion_stages.size))]
+    active_min = min(stages) if stages else 0
+    active_max = max(stages) if stages else 0
+    _STATE["all61_solve_systems"].append({
+      "sequence": int(sequence), "kind": str(kind), "dsec_call_id": int(call_id),
+      "evaluation_index": int(evaluation_index), "element_z": int(z), "abundance": float(abundance),
+      "active_min_stage": active_min, "active_max_stage": active_max, "n_rows": n,
+      "normalization_row": int(basis.normalization_row),
+      "dense_file": files["dense"], "heating_file": files["heating"],
+      "heating2_file": files["heating2"], "rhs_file": files["rhs"],
+      "initial_file": files["initial"], "outer_file": files["outer"],
+      "final_file": files["final"], "ion_final_file": files["ion_final"],
+      "solver_method": str(solve.solver_method), "converged": int(bool(solve.converged)),
+      "outer_iterations": int(solve.outer_iterations),
+      "fixed_point_iterations": int(solve.fixed_point_iterations),
+      "normalization": float(solve.normalization),
+      "normalization_error": float(solve.normalization_error),
+      "max_relative_row_residual": float(solve.max_relative_row_residual),
+    })
+
 def _v048744_capture_solve_rows(kind, call_id, evaluation_index, sequence, result):
     sequence = _v048743_canonical_sequence(kind, call_id, evaluation_index)
     for item in tuple(getattr(result, "element_results", ()) or ()):
@@ -152,6 +209,7 @@ def _v048744_capture_solve_rows(kind, call_id, evaluation_index, sequence, resul
         active_min = min(stages) if stages else 0
         active_max = max(stages) if stages else 0
         abundance = float(_field(request, "abundance") or 0.0)
+        _v048746_capture_solve_system(kind, call_id, evaluation_index, sequence, z, abundance, assembly, solve)
         for i in range(n):
             meta = rows[i]
             stage = int(ion_stages[i + 1]) if i + 1 < ion_stages.size else 0
@@ -222,6 +280,7 @@ def _v048742_write_all61():
       "v0472_all61_level_populations.csv": lambda row: (int(row["sequence"]), int(row["global_level_index"])),
       "v0472_all61_input_states.csv": lambda row: (int(row["sequence"]),),
       "v0472_all61_element_solve_rows.csv": lambda row: (int(row["sequence"]), int(row["element_z"]), int(row["compact_row"])),
+      "v0472_all61_element_solve_systems.csv": lambda row: (int(row["sequence"]), int(row["element_z"])),
     }
     for name, fields, rows in [
       ("v0472_all61_fixed_state_rows.csv", ALL61_STATE_FIELDS, _STATE["all61_states"]),
@@ -229,6 +288,7 @@ def _v048742_write_all61():
       ("v0472_all61_level_populations.csv", ALL61_LEVEL_FIELDS, _STATE["all61_levels"]),
       ("v0472_all61_input_states.csv", ALL61_INPUT_FIELDS, _STATE["all61_inputs"]),
       ("v0472_all61_element_solve_rows.csv", ALL61_SOLVE_FIELDS, _STATE["all61_solve_rows"]),
+      ("v0472_all61_element_solve_systems.csv", ALL61_SYSTEM_FIELDS, _STATE["all61_solve_systems"]),
     ]:
         ordered = sorted(rows, key=sort_keys[name])
         with (_OUT / name).open("w", newline="") as handle:
@@ -255,12 +315,13 @@ _NEW_RETAINED = '''        if bool(getattr(self, "retain_fixed_state_results", T
             with _LOCK:
                 _v048742_capture_input("final", call_id, final_evaluation_index, global_eval, state)
             previous_factory = self.calc_kwargs_factory
-            def retained_factory(current_state):
-                payload = {} if previous_factory is None else dict(previous_factory(current_state))
-                payload["retain_element_results"] = True
-                payload["retain_diagnostic_arrays"] = True
-                return payload
-            self.calc_kwargs_factory = retained_factory
+            if previous_factory is not None:
+                def retained_factory(current_state):
+                    payload = dict(previous_factory(current_state))
+                    payload["retain_element_results"] = True
+                    payload["retain_diagnostic_arrays"] = True
+                    return payload
+                self.calc_kwargs_factory = retained_factory
             try:
                 out = original(self, state)
             finally:
@@ -294,12 +355,13 @@ _PROBE = _PROBE.replace(
 _PROBE = _PROBE.replace(
 '''        try:\n            out = original(self, state)\n        finally:\n            self.pre_evaluation_callback = previous_pre\n            self.progress_callback = previous_progress\n''',
 '''        previous_factory = self.calc_kwargs_factory
-        def retained_factory(current_state):
-            payload = {} if previous_factory is None else dict(previous_factory(current_state))
-            payload["retain_element_results"] = True
-            payload["retain_diagnostic_arrays"] = True
-            return payload
-        self.calc_kwargs_factory = retained_factory
+        if previous_factory is not None:
+            def retained_factory(current_state):
+                payload = dict(previous_factory(current_state))
+                payload["retain_element_results"] = True
+                payload["retain_diagnostic_arrays"] = True
+                return payload
+            self.calc_kwargs_factory = retained_factory
         try:
             out = original(self, state)
         finally:
@@ -310,7 +372,7 @@ _PROBE = _PROBE.replace(
 
 _PROBE = _PROBE.replace(f'"schema": "{base.SCHEMA}"', f'"schema": "{SCHEMA}"')
 _PROBE = _PROBE.replace(f'"release": "{base.RELEASE}"', f'"release": "{RELEASE}"')
-_DRIVER = base._DRIVER.replace("import v048726_full_probe_runtime as probe", "import v048744_all61_probe_runtime as probe")
+_DRIVER = base._DRIVER.replace("import v048726_full_probe_runtime as probe", "import v048746_all61_probe_runtime as probe")
 
 
 def _write_json(path: Path, obj: Any) -> None:
@@ -325,7 +387,7 @@ def _read_csv(path: Path) -> list[dict[str, str]]:
 
 def verify(bundle: Path) -> dict[str, Any]:
     errors: list[str] = []
-    for name in (STATE_NAME, INPUT_NAME, ION_NAME, LEVEL_NAME, SOLVE_NAME, REPORT_NAME):
+    for name in (STATE_NAME, INPUT_NAME, ION_NAME, LEVEL_NAME, SOLVE_NAME, SYSTEM_NAME, REPORT_NAME):
         if not (bundle / name).is_file():
             errors.append(f"missing:{name}")
     if errors:
@@ -336,6 +398,7 @@ def verify(bundle: Path) -> dict[str, Any]:
     ions = _read_csv(bundle / ION_NAME)
     levels = _read_csv(bundle / LEVEL_NAME)
     solve_rows = _read_csv(bundle / SOLVE_NAME)
+    systems = _read_csv(bundle / SYSTEM_NAME)
     sequences = [int(row["sequence"]) for row in states]
     kinds = [row["kind"] for row in states]
     workspace_contract_exact = True
@@ -373,6 +436,19 @@ def verify(bundle: Path) -> dict[str, Any]:
         errors.append("solve_row_sequence_inventory")
     if len(solve_elements) != 61 * 3:
         errors.append(f"solve_element_inventory={len(solve_elements)}")
+    system_elements = {(int(row["sequence"]), int(row["element_z"])) for row in systems}
+    if len(system_elements) != 61 * 3:
+        errors.append(f"solve_system_inventory={len(system_elements)}")
+    for row in systems:
+        n = int(row["n_rows"])
+        for field, expected in (("dense_file", n*n), ("heating_file", n*n), ("heating2_file", n*n),
+                                ("rhs_file", n), ("initial_file", n), ("outer_file", n), ("final_file", n)):
+            path = bundle / row[field]
+            if not path.is_file() or path.stat().st_size != expected * 8:
+                errors.append(f"invalid_system_file:{row['sequence']}:{row['element_z']}:{field}")
+        ion_path = bundle / row["ion_final_file"]
+        if not ion_path.is_file() or ion_path.stat().st_size % 8 != 0:
+            errors.append(f"invalid_system_file:{row['sequence']}:{row['element_z']}:ion_final_file")
     report = json.loads((bundle / REPORT_NAME).read_text())
     if not report.get("actual_v0472_runtime_capture"):
         errors.append("not_actual_v0472_runtime_capture")
@@ -382,7 +458,7 @@ def verify(bundle: Path) -> dict[str, Any]:
         "actual_v0472_runtime_capture": bool(report.get("actual_v0472_runtime_capture")),
         "evaluations": len(states), "input_states": len(inputs), "dsec_evaluations": kinds.count("dsec"),
         "final_evaluations": kinds.count("final"), "ion_rows": len(ions), "level_rows": len(levels),
-        "solve_rows": len(solve_rows), "solve_elements": len(solve_elements),
+        "solve_rows": len(solve_rows), "solve_elements": len(solve_elements), "solve_systems": len(systems),
         "workspace_sequence_contract_exact": workspace_contract_exact,
         "qualification_only": True, "production_promotion_ready": False,
     }
@@ -393,12 +469,12 @@ def capture(source_archive: Path, atdb_path: Path, output_dir: Path,
     output_dir = output_dir.resolve(); output_dir.mkdir(parents=True, exist_ok=True)
     if base.base._sha256(source_archive) != base.base.SOURCE_ARCHIVE_SHA256:
         raise ValueError("v0.6.47.2 source archive hash mismatch")
-    with tempfile.TemporaryDirectory(prefix="v048744_") as tmp:
+    with tempfile.TemporaryDirectory(prefix="v048746_") as tmp:
         tmp_path = Path(tmp)
         base.base._safe_extract(source_archive, tmp_path / "source")
         root = base.base._source_root(tmp_path / "source")
         probe_dir = tmp_path / "probe"; probe_dir.mkdir()
-        (probe_dir / "v048744_all61_probe_runtime.py").write_text(_PROBE)
+        (probe_dir / "v048746_all61_probe_runtime.py").write_text(_PROBE)
         (probe_dir / "probe_config.json").write_text(json.dumps({"output_dir": str(output_dir)}, indent=2))
         (probe_dir / "driver.py").write_text(_DRIVER)
         env = dict(os.environ)
@@ -420,7 +496,7 @@ def capture(source_archive: Path, atdb_path: Path, output_dir: Path,
     result = verify(output_dir)
     _write_json(output_dir / VERIFY_NAME, result)
     files = {}
-    for name in (STATE_NAME, INPUT_NAME, ION_NAME, LEVEL_NAME, SOLVE_NAME, REPORT_NAME, VERIFY_NAME):
+    for name in (STATE_NAME, INPUT_NAME, ION_NAME, LEVEL_NAME, SOLVE_NAME, SYSTEM_NAME, REPORT_NAME, VERIFY_NAME):
         path = output_dir / name
         files[name] = {"sha256": base.base._sha256(path), "size_bytes": path.stat().st_size}
     _write_json(output_dir / MANIFEST_NAME, {**result, "immutable": result["result"] == "ACCEPT", "files": files})

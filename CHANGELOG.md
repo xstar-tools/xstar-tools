@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 0.6.48.7.46.1 - 2026-06-16
+
+- Fixed the all-61 source solve-system capture when `calc_kwargs_factory` is null by installing the diagnostic-retention wrapper unconditionally.
+- Ensured both repeated DSEC and retained-final source evaluations request `retain_element_results=True` and `retain_diagnostic_arrays=True`.
+- Preserved all v0.6.48.7.46 physics and fail-closed fixed-state/Thermal/product/promotion gates.
+
 ## 0.6.48.7.45 — all-61 source compact-basis and transformed-seed restoration - 2026-06-16
 
 - Restored source lifecycle semantics for empty call-start workspaces, zero normalization rows, unnormalized transported compact seeds, and the source `critf=1e-7`.

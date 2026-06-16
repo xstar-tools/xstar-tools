@@ -14,7 +14,7 @@ def _bundle() -> Path:
 
 
 def test_release_is_pinned() -> None:
-    assert xstar_tools.__version__ == "0.6.48.7.45"
+    assert xstar_tools.__version__ == "0.6.48.7.46"
 
 
 def test_embedded_oracle_verifies() -> None:
