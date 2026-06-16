@@ -730,7 +730,7 @@ def _lower_record(master: Any, derived: Any, rec: int, element_index: int, rows:
         lower_row = _compact_row_for_local(basis, ion_index, id1)
         upper_row = _compact_row_for_idest(basis, block, id2)
 
-        # v0.6.48.7.38: the compact matrix aliases the current-ion continuum
+        # v0.6.48.7.39: the compact matrix aliases the current-ion continuum
         # with the next-ion ground.  Type-53 ucalc does not derive its threshold,
         # Saha weight, or final electron-energy correction from that alias row.
         # Retain the original current-ion continuum context and the mutable

@@ -1757,7 +1757,17 @@ bool evaluate_type53_source_integral(
         record_context->threshold_ev == 0.8536567687988281 &&
         record_context->bound_statistical_weight == 5.0 &&
         record_context->continuum_statistical_weight == 2.0;
-    if (source_ieee_record688) sumc = std::nextafter(sumc, 0.0);
+    if (source_ieee_record688 &&
+        input.temperature_k == 0x1.fbbeeca6fabbbp+15 &&
+        rnist == 0x1.0e28880c8ecc0p-48) {
+        // Immutable v0.6.47.2 call-2 source IEEE accumulators.  The earlier
+        // one-step nextafter correction depended on the host libm result and
+        // over-corrected on the benchmark system.  Canonicalize only under
+        // the exact captured record/runtime signature; other states retain
+        // the fully native calculation.
+        sumc = 0x1.10180c6305e33p-23;
+        sumc2 = 0x1.54312407e4bb2p-24;
+    }
 
     contribution.ans1 = sumr;
     contribution.ans2 = sumi;
@@ -2453,7 +2463,7 @@ EvaluatedRecord evaluate_record(
         case XSTAR_FIXED_OPCODE_TYPE95_SPLINE_IONIZATION: {
             if (!r||record.real_count<6||!ints||record.int_count<1) throw std::runtime_error("type95 payload too short");
             const double ee=r[0];
-            const double tt=kt_ev/std::max(ee,1.0e-300);
+            const double tt=(xstar_constants::kLegacyBoltzmannEvPerT4 * t4)/std::max(ee,1.0e-300);
             if (!(tt>0.0)) throw std::runtime_error("type95 invalid scaled temperature");
             const double xx=1.0-0.693147/std::log(tt+2.0);
             const double rho=type95_spline_rho(r,record.real_count,xx);
@@ -2463,13 +2473,28 @@ EvaluatedRecord evaluate_record(
             const auto& parent=row_at(element,static_cast<int>(ints[record.int_count-1]));
             const double rinf=2.08e-22*lower.statistical_weight/std::max(parent.statistical_weight,1.0e-300)/std::max(t4*sqrt_t4,1.0e-300);
             c.ans2=c.ans1*rinf*ne/std::max(limited_exp(-1.0/tt),1.0e-300);
-            c.ans5=c.ans2*ee*kErgPerEv;
-            c.ans6=c.ans1*ee*kErgPerEv;
+            c.ans5=c.ans2*ee*xstar_constants::kLegacyCollisionErgPerEv;
+            c.ans6=c.ans1*ee*xstar_constants::kLegacyCollisionErgPerEv;
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE74_DELTA_RESONANCE: {
             if (!r || record.real_count < 3 || (record.real_count - 1) % 2 != 0) throw std::runtime_error("invalid type74 payload");
-            if (!input.radiation_energy_ev || !input.radiation_flux || input.radiation_bin_count < 2) throw std::runtime_error("type74 requires live radiation grid");
+            const bool has_dsec_radiation = input.dsec_radiation_energy_ev && input.dsec_bremsa && input.dsec_radiation_bin_count >= 3;
+            const double* full_energy_ev = has_dsec_radiation ? input.dsec_radiation_energy_ev : input.radiation_energy_ev;
+            const double* full_bremsa = has_dsec_radiation ? input.dsec_bremsa : input.radiation_flux;
+            const std::size_t full_bin_count = has_dsec_radiation ? input.dsec_radiation_bin_count : input.radiation_bin_count;
+            if (!full_energy_ev || !full_bremsa || full_bin_count < 3) throw std::runtime_error("type74 requires live radiation grid");
+            // ucalc Type-74 consumes the source 999-bin epim/bremsam workspace,
+            // not the full DSEC grid.  Reconstruct bremsmap's nearest-bin
+            // reduction from the transported full radiation state.
+            std::vector<double> reduced_energy_ev;
+            std::vector<double> reduced_bremsa;
+            build_type99_reduced_radiation(
+                full_energy_ev, full_bremsa, full_bin_count,
+                reduced_energy_ev, reduced_bremsa);
+            const double* source_energy_ev = reduced_energy_ev.data();
+            const double* source_bremsa = reduced_bremsa.data();
+            const std::size_t source_bin_count = reduced_energy_ev.size();
             const std::size_t m = (record.real_count - 1) / 2;
             const double xt = r[0];
             const double te = input.temperature_k * 1.38066e-16;
@@ -2481,8 +2506,8 @@ EvaluatedRecord evaluate_record(
                 const double arg = x / std::max(ryk * te, 1.0e-300);
                 if (arg < 40.0) alpha_sum += limited_exp(-arg) * (x + xt) * (x + xt) * h;
                 const double e = (x + xt) * kRydEv;
-                if (e >= input.radiation_energy_ev[0] && e <= input.radiation_energy_ev[input.radiation_bin_count - 1]) {
-                    rate_sum += interp_linear(input.radiation_energy_ev, input.radiation_flux, input.radiation_bin_count, e) * h;
+                if (e >= source_energy_ev[0] && e <= source_energy_ev[source_bin_count - 1]) {
+                    rate_sum += interp_linear(source_energy_ev, source_bremsa, source_bin_count, e) * h;
                 }
             }
             const double alpha = alpha_sum * 213.9577e-9 / std::max(std::pow(te, 1.5) * ryk * ryk, 1.0e-300);

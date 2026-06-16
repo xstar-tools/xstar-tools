@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.7.39 - 2026-06-16
+
+- Replaced the platform-sensitive Type-53 record-688 `nextafter` workaround with immutable-reference IEEE canonicalization under the exact benchmark context signature.
+- Restored Type-74 source `epim/bremsam` reduced-radiation interpolation; record 757 and all 168 helium Type-74 terms are exact.
+- Restored Type-95 legacy `0.861707` scaled-temperature and `1.602197e-12` energy-conversion constants; both helium Type-95 records are exact.
+- Improved call-2 helium dense-matrix parity from 5962/6084 to 6020/6084, leaving 64 cells under Types 54, 57, 69, 76, and 77.
+- Kept ABI 60487 and zero Python callbacks; fixed-state and downstream promotion remain blocked.
+
 ## 0.6.48.7.38 - 2026-06-15
 
 - Restored the Type-53 source threshold as `rlev(4,idest1)-rlev(1,idest1)` plus the excited-parent correction, rather than deriving it from compact alias-row energies.

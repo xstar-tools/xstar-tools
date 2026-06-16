@@ -1,4 +1,4 @@
-"""v0.6.48.7.38 Type-53 record 651 source-faithful correction audit."""
+"""v0.6.48.7.39 Type-53 record 651 source-faithful correction audit."""
 from __future__ import annotations
 
 import argparse
@@ -8,7 +8,7 @@ import math
 from pathlib import Path
 from typing import Any
 
-RELEASE = "0.6.48.7.38"
+RELEASE = "0.6.48.7.39"
 SCHEMA = "xstar-tools-v0648738-type53-record651-source-faithful-correction-v1"
 SUMMARY = "call2_helium_solve_state_rate_matrix_decomposition_summary.json"
 TARGET_RECORD = 651
