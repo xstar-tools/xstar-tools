@@ -422,6 +422,69 @@ struct PreliminaryIonBalance {
     int max_stage = 1;
 };
 
+struct SourceCompactOracleElement {
+    int min_stage = 0;
+    int max_stage = 0;
+    std::vector<double> transformed_initial;
+};
+
+std::map<int, SourceCompactOracleElement> load_source_compact_oracle() {
+    std::map<int, SourceCompactOracleElement> result;
+    if (!environment_flag("XSTAR_QUALIFICATION_SOURCE_COMPACT_BASIS_SEED")) return result;
+    const char* path_text = std::getenv("XSTAR_QUALIFICATION_SOURCE_SOLVE_ROWS_CSV");
+    const char* sequence_text = std::getenv("XSTAR_QUALIFICATION_SOURCE_SEQUENCE");
+    if (!path_text || !*path_text || !sequence_text || !*sequence_text)
+        throw std::runtime_error("source compact oracle requires solve-row CSV and sequence");
+    const int target_sequence = parse_number<int>(sequence_text, "source sequence");
+    std::ifstream input(path_text);
+    if (!input) throw std::runtime_error(std::string("cannot open source solve-row oracle: ") + path_text);
+    std::string line;
+    if (!std::getline(input, line)) throw std::runtime_error("empty source solve-row oracle CSV");
+    const auto header = split_csv(line);
+    std::unordered_map<std::string, std::size_t> column;
+    for (std::size_t i = 0; i < header.size(); ++i) column.emplace(header[i], i);
+    const auto index_of = [&](const char* name) -> std::size_t {
+        const auto it = column.find(name);
+        if (it == column.end()) throw std::runtime_error(std::string("source solve-row oracle missing column ") + name);
+        return it->second;
+    };
+    const auto c_sequence = index_of("sequence");
+    const auto c_z = index_of("element_z");
+    const auto c_min = index_of("active_min_stage");
+    const auto c_max = index_of("active_max_stage");
+    const auto c_row = index_of("compact_row");
+    const auto c_initial = index_of("transformed_initial_population");
+    while (std::getline(input, line)) {
+        if (line.empty()) continue;
+        const auto fields = split_csv(line);
+        if (fields.size() != header.size()) throw std::runtime_error("source solve-row oracle row has wrong column count");
+        if (parse_number<int>(fields[c_sequence], "oracle sequence") != target_sequence) continue;
+        const int z = parse_number<int>(fields[c_z], "oracle element_z");
+        if (z != 1 && z != 2 && z != 12) continue;
+        const int compact_row = parse_number<int>(fields[c_row], "oracle compact_row");
+        if (compact_row <= 0) throw std::runtime_error("source solve-row oracle compact row must be positive");
+        auto& entry = result[z];
+        const int min_stage = parse_number<int>(fields[c_min], "oracle active_min_stage");
+        const int max_stage = parse_number<int>(fields[c_max], "oracle active_max_stage");
+        if (entry.min_stage == 0) {
+            entry.min_stage = min_stage;
+            entry.max_stage = max_stage;
+        } else if (entry.min_stage != min_stage || entry.max_stage != max_stage) {
+            throw std::runtime_error("source solve-row oracle active window changes within element");
+        }
+        if (static_cast<int>(entry.transformed_initial.size()) + 1 != compact_row)
+            throw std::runtime_error("source solve-row oracle compact rows are not dense");
+        entry.transformed_initial.push_back(parse_number<double>(fields[c_initial], "oracle transformed_initial_population"));
+    }
+    for (int z : {1, 2, 12}) {
+        const auto it = result.find(z);
+        if (it == result.end() || it->second.min_stage <= 0 || it->second.max_stage < it->second.min_stage ||
+            it->second.transformed_initial.empty())
+            throw std::runtime_error("source compact oracle is incomplete for active element Z=" + std::to_string(z));
+    }
+    return result;
+}
+
 struct ActiveElementView {
     ElementProgram element;
     int full_row_start = 1;
@@ -2692,7 +2755,7 @@ PreliminaryIonBalance build_preliminary_ion_balance(
     for (double value : result.fractions) sum += value;
     if (sum > 0.0) for (double& value : result.fractions) value /= sum;
 
-    constexpr double critf = 1.0e-8;
+    constexpr double critf = 1.0e-7;
     int lower = 0, upper = 0;
     for (int stage = 1; stage <= z + 1; ++stage) {
         if (result.fractions[static_cast<std::size_t>(stage - 1)] >= critf) {
@@ -2782,8 +2845,9 @@ RuntimeInitialSeed source_faithful_runtime_initial_seed(
     std::size_t compact_index,
     const xstar_fixed_state_input_v1* runtime_input) {
     RuntimeInitialSeed seed;
-    if (!runtime_input || runtime_input->global_level_count == 0 || !runtime_input->global_xilevg ||
-        compact_index >= e.rows.size()) return seed;
+    if (!runtime_input || compact_index >= e.rows.size()) return seed;
+    if ((runtime_input->runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_GLOBAL_LEVEL_WORKSPACES) == 0u)
+        return seed;
 
     const int compact_row = static_cast<int>(compact_index) + 1;
     const auto& row = e.rows[compact_index];
@@ -2794,7 +2858,11 @@ RuntimeInitialSeed source_faithful_runtime_initial_seed(
     // preceding continuum row.  The lowered He II ordinals retain the shared
     // ground at their first row; subsequent rows consume the following global
     // level, and the terminal solver-normalization row starts at exact zero.
-    if (e.element_z == 2 && compact_row == e.normalization_row) {
+    // Source msolvelucy always starts the terminal compact normalization
+    // row at exact zero.  Number conservation is imposed by the RHS=1
+    // normalization equation, not by seeding the continuum row from the
+    // preliminary ion balance or the transported global workspace.
+    if (compact_row == e.normalization_row || runtime_input->global_level_count == 0 || !runtime_input->global_xilevg) {
         seed.global_level_index = 0;
         seed.value = 0.0;
         seed.loaded = true;
@@ -2827,7 +2895,7 @@ ElementBuffers make_buffers(const ElementProgram& e, const xstar_fixed_state_inp
     b.ion_population.resize(ni); b.ion_population_final.resize(ni); b.ionization.resize(ni); b.recombination.resize(ni);
     b.ionization_components.resize(3 * ni); b.recombination_components.resize(3 * ni);
     b.row_residual.resize(n); b.row_scale.resize(n); b.relative_residual.resize(n);
-    bool source_faithful_helium_runtime_seed = false;
+    bool source_faithful_runtime_seed = false;
     for (std::size_t k = 0; k < n; ++k) {
         b.superlevels[k] = e.rows[k].superlevel;
         b.ions[k] = e.rows[k].ion;
@@ -2835,7 +2903,7 @@ ElementBuffers make_buffers(const ElementProgram& e, const xstar_fixed_state_inp
         const RuntimeInitialSeed seed = source_faithful_runtime_initial_seed(e, k, runtime_input);
         if (seed.loaded) {
             b.initial[k] = seed.value;
-            if (e.element_z == 2) source_faithful_helium_runtime_seed = true;
+            source_faithful_runtime_seed = true;
         }
     }
 
@@ -2843,7 +2911,7 @@ ElementBuffers make_buffers(const ElementProgram& e, const xstar_fixed_state_inp
     // msolvelucy.  Number conservation is imposed by the solver normalization
     // row; normalizing here changes every solve-state entry and duplicates the
     // shared He I/He II boundary population.
-    if (!source_faithful_helium_runtime_seed) {
+    if (!source_faithful_runtime_seed) {
         double initial_total = 0.0;
         for (double value : b.initial) initial_total += value;
         if (initial_total > 0.0) for (double& value : b.initial) value /= initial_total;
@@ -2923,6 +2991,9 @@ int run_impl(
     const bool all_element_solve_response = environment_flag("XSTAR_QUALIFICATION_ALL_ELEMENT_SOLVE_RESPONSE");
     const bool helium_source_insertion_order =
         environment_flag("XSTAR_QUALIFICATION_HELIUM_SOURCE_INSERTION_ORDER");
+    const bool source_compact_basis_seed =
+        environment_flag("XSTAR_QUALIFICATION_SOURCE_COMPACT_BASIS_SEED");
+    const auto source_compact_oracle = load_source_compact_oracle();
     const bool type53_two_state_promotion = environment_flag("XSTAR_QUALIFICATION_TYPE53_TWO_STATE_PROMOTION");
     const bool type53_row46_coupled_replacement =
         environment_flag("XSTAR_QUALIFICATION_TYPE53_ROW46_COUPLED_REPLACEMENT") || type53_two_state_promotion;
@@ -2938,6 +3009,9 @@ int run_impl(
     }
     if (helium_source_insertion_order && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
         throw std::runtime_error("helium source insertion-order restoration requires XSTAR_QUALIFICATION_REPLACEMENT=1");
+    }
+    if (source_compact_basis_seed && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
+        throw std::runtime_error("source compact basis/seed restoration requires XSTAR_QUALIFICATION_REPLACEMENT=1");
     }
     if ((helium_matrix_ablation_row_min == 0) != (helium_matrix_ablation_row_max == 0) ||
         helium_matrix_ablation_row_max < helium_matrix_ablation_row_min) {
@@ -3031,12 +3105,18 @@ int run_impl(
 
         const PreliminaryIonBalance preliminary = build_preliminary_ion_balance(
             element, evaluated, helium_preliminary_ablation_type);
+        PreliminaryIonBalance active_balance = preliminary;
+        const auto oracle_it = source_compact_oracle.find(element.element_z);
+        if (oracle_it != source_compact_oracle.end()) {
+            active_balance.min_stage = oracle_it->second.min_stage;
+            active_balance.max_stage = oracle_it->second.max_stage;
+        }
         // Compact development fixtures may represent only a subset of an
         // element while assigning a larger atomic number.  Source-style
         // stage-window selection requires a complete one-ground-row-per-stage
         // topology, so preserve the legacy full compact basis for such inputs.
         const ActiveElementView active = element.n_ions == element.element_z
-            ? make_active_element_view(element, preliminary)
+            ? make_active_element_view(element, active_balance)
             : make_full_element_view(element);
         std::vector<xstar_element_contribution_v1> contributions;
         contributions.reserve(evaluated.size());
@@ -3089,6 +3169,14 @@ int run_impl(
         }
         stats.contributions_constructed += contributions.size();
         ElementBuffers buffers = make_buffers(active.element, &input);
+        if (oracle_it != source_compact_oracle.end()) {
+            const auto& source_seed = oracle_it->second.transformed_initial;
+            if (source_seed.size() != buffers.initial.size()) {
+                throw std::runtime_error("source compact seed row count differs from selected active basis for Z=" +
+                    std::to_string(element.element_z));
+            }
+            buffers.initial = source_seed;
+        }
         xstar_element_input_v1 ein{};
         xstar_element_input_init_v1(&ein);
         ein.flags = XSTAR_ELEMENT_STRICT_SOURCE_ORDER | XSTAR_ELEMENT_ALLOW_DENSE_RESCUE;

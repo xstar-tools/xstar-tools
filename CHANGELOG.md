@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.48.7.45 — all-61 source compact-basis and transformed-seed restoration - 2026-06-16
+
+- Restored source lifecycle semantics for empty call-start workspaces, zero normalization rows, unnormalized transported compact seeds, and the source `critf=1e-7`.
+- Added a qualification-only immutable-reference compact-basis/seed path keyed by source sequence, element, and compact row.
+- Removed all 55 observed Mg active-window exclusions and all transformed-seed divergences in the recovered 61-state replay.
+- Verified exact source/native compact windows for 183/183 element solves and exact transformed seeds for 40,149/40,149 compact rows.
+- Isolated 179 remaining element divergences after exact seeding while preserving the exact detailed call-2 helium boundary.
+- Kept fixed-state parity rejected and v0.6.48.8 Thermal parity blocked.
+- Preserved fixed-state ABI 60487 and lowered-program ABI 60485.
+
 ## 0.6.48.7.44 — all-61 fixed-state residual decomposition - 2026-06-16
 
 - Added direct compact source/native solve-row capture for H, He, and Mg across all 61 immutable reference-input states.

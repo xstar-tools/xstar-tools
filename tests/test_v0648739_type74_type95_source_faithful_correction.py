@@ -15,7 +15,7 @@ from xstar_tools.xstar.call2_helium_type74_type95_source_faithful_correction imp
 
 
 def test_release_and_abi_contract() -> None:
-    assert xstar_tools.__version__ == "0.6.48.7.44"
+    assert xstar_tools.__version__ == "0.6.48.7.45"
     assert RELEASE == "0.6.48.7.39"
     assert TYPE53_IEEE_RECORD == 688
     assert TYPE74_TARGET_RECORD == 757
@@ -23,7 +23,7 @@ def test_release_and_abi_contract() -> None:
     assert EXPECTED_REMAINING_TYPES == [54, 57, 69, 76, 77]
     api = Path("src/xstar_tools/xstar/cpp/xstar_api.h").read_text()
     fixed = Path("src/xstar_tools/xstar/cpp/xstar_fixed_state_engine.h").read_text()
-    assert 'XSTAR_API_VERSION_STRING "0.6.48.7.44"' in api
+    assert 'XSTAR_API_VERSION_STRING "0.6.48.7.45"' in api
     assert "XSTAR_API_ABI_VERSION 60487u" in api
     assert "XSTAR_FIXED_STATE_ENGINE_ABI_VERSION 60487u" in fixed
 

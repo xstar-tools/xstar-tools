@@ -1777,14 +1777,16 @@ int command_run_fixed_evaluation(const Options& options) {
             input.continuum_tau_in = replay_tau_in.data();
             input.continuum_tau_out = replay_tau_out.data();
             input.continuum_tau_count = replay_tau_in.size();
-            if (options.global_workspace_mode != "none" && !replay_xilevg.empty()) {
-                replay_zero_b.assign(replay_xilevg.size(), 0.0);
-                replay_zero_r.assign(replay_xilevg.size(), 0.0);
-                input.global_xilevg = replay_xilevg.data();
-                input.global_bilevg = (options.global_workspace_mode == "xilevg-bilevg" || options.global_workspace_mode == "all") ? replay_bilevg.data() : replay_zero_b.data();
-                input.global_rnisg = (options.global_workspace_mode == "xilevg-rnisg" || options.global_workspace_mode == "all") ? replay_rnisg.data() : replay_zero_r.data();
-                input.global_level_count = replay_xilevg.size();
+            if (options.global_workspace_mode != "none") {
                 input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_GLOBAL_LEVEL_WORKSPACES;
+                if (!replay_xilevg.empty()) {
+                    replay_zero_b.assign(replay_xilevg.size(), 0.0);
+                    replay_zero_r.assign(replay_xilevg.size(), 0.0);
+                    input.global_xilevg = replay_xilevg.data();
+                    input.global_bilevg = (options.global_workspace_mode == "xilevg-bilevg" || options.global_workspace_mode == "all") ? replay_bilevg.data() : replay_zero_b.data();
+                    input.global_rnisg = (options.global_workspace_mode == "xilevg-rnisg" || options.global_workspace_mode == "all") ? replay_rnisg.data() : replay_zero_r.data();
+                    input.global_level_count = replay_xilevg.size();
+                }
             }
             replay_workspace_applied = true;
         } catch (const std::exception& exc) {

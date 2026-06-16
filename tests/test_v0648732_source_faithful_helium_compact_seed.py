@@ -16,7 +16,8 @@ def test_release_and_cpp_seed_contract():
     assert "seed.value = 0.0" in block
     assert "e.rows[compact_index - 1].ion_charge == row.ion_charge" in block
     assert "++global_level_index" in block
-    assert "if (!source_faithful_helium_runtime_seed)" in block
+    assert "if (!source_faithful_runtime_seed)" in block
+    assert "source_faithful_runtime_seed = true" in block
 
 
 def test_new_audit_gates_and_runner_contract():
