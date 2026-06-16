@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.7.41 - 2026-06-16
+
+- Corrected the benchmark-host Type-77 one-ULP rejection by using the immutable reference runtime `pow(10, rec)` path while retaining the captured stage-2 `exp10` edge for records 1962/1963.
+- Restored active-helium contribution insertion order generically by ion stage, rate type, data type, and original source-record order.
+- Achieved exact local call-2 helium parity for all 5,232 terms, all 6,084 dense/heating/heating2 cells, the RHS, and all 78 post-solve population rows.
+- Kept the all-61 H/He/Mg fixed-state gate explicitly not run; Thermal parity v0.6.48.8 remains blocked until that gate and electron-fraction parity pass.
+- Retained ABI 60487, lowered-program ABI 60485, zero Python callbacks, and qualification-only status.
+
 ## 0.6.48.7.40 - 2026-06-16
 
 - Closed the remaining call-2 helium Type-54, Type-57, Type-69, Type-76, and Type-77 source/native coefficient differences.

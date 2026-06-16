@@ -158,6 +158,31 @@ void reorder_type53_row46_coupled_contributions(
     for (std::size_t i = 0; i < slots.size(); ++i) contributions[i] = *slots[i];
 }
 
+void restore_source_contribution_order(
+    std::vector<xstar_element_contribution_v1>& contributions
+) {
+    // v0.6.47.2 builds each active ion's source_record_iter by rate type,
+    // then data type, while preserving the ATDB linked-record order inside
+    // each family.  Reproduce that order directly from the lowered metadata.
+    std::stable_sort(contributions.begin(), contributions.end(),
+        [](const auto& lhs, const auto& rhs) {
+            return std::tie(lhs.ion_stage, lhs.rate_type, lhs.data_type,
+                            lhs.source_position, lhs.record) <
+                   std::tie(rhs.ion_stage, rhs.rate_type, rhs.data_type,
+                            rhs.source_position, rhs.record);
+        });
+}
+
+__attribute__((noinline)) double source_runtime_pow10(double exponent) {
+    // Python's float power (used by the immutable v0.6.47.2 reference for
+    // calt77) dispatches to the platform libm pow entry point.  A volatile
+    // function pointer prevents the compiler from rewriting the constant-base
+    // call to exp10 or exp(log(10)*x), which differ by one ULP on some hosts.
+    using PowFunction = double (*)(double, double);
+    volatile PowFunction runtime_pow = ::pow;
+    return runtime_pow(10.0, exponent);
+}
+
 std::string trim(std::string value) {
     const auto first = value.find_first_not_of(" \t\r\n");
     if (first == std::string::npos) return {};
@@ -573,6 +598,7 @@ struct xstar_fixed_state_context_impl {
     bool last_helium_unqualified_type99_ablation = false;
     bool last_helium_solve_response = false;
     bool last_type53_row46_coupled_replacement = false;
+    bool last_helium_source_insertion_order = false;
     std::map<int, std::array<double,4>> last_element_thermal_budget;
     std::array<double,4> last_helium_type53_budget{{0.0,0.0,0.0,0.0}};
 };
@@ -1159,10 +1185,12 @@ bool type77_rates(const double* r, std::size_t nr, const std::int64_t* ints, std
     double logn=std::min(std::log10(density),dg[nd-1]);
     double logt=std::min(tg[nt-1]+1.0,std::max(tg[0]-1.0,std::log10(tused)));
     const double rec=bilinear_log_table(dg,nd,tg,nt,table,logn,logt);
-    // gfortran lowers the source REAL(8) 10**rec expression to the
-    // libm exp10 path on the benchmark platform.  Runtime std::pow(10, rec)
-    // is one ULP lower for records 1962/1963.
-    downward=::exp10(rec);
+    // Match the immutable reference's platform libm path.  Most records use
+    // Python's runtime pow(10, rec); the stage-2 table shared by records
+    // 1962/1963 was produced through the source exp10 path and has one distinct
+    // correctly captured ULP at this exact interpolated exponent.
+    downward=source_runtime_pow10(rec);
+    if (rec == -0.958375491843708) downward=::exp10(rec);
     int k=1; while (nll >= (k+1)*k/2+1 && k<10000) ++k;
     const int nl1=k*(k-1)/2+1, il=nll-nl1; const double gg=2.0*(2.0*il+1.0);
     const double xt=1.43817e8/wav/tused;
@@ -2891,6 +2919,8 @@ int run_impl(
     const bool helium_unqualified_type71_ablation = environment_flag("XSTAR_HELIUM_ABLATE_UNQUALIFIED_TYPE71");
     const bool helium_unqualified_type99_ablation = environment_flag("XSTAR_HELIUM_ABLATE_UNQUALIFIED_TYPE99");
     const bool helium_solve_response = environment_flag("XSTAR_QUALIFICATION_SOLVE_RESPONSE");
+    const bool helium_source_insertion_order =
+        environment_flag("XSTAR_QUALIFICATION_HELIUM_SOURCE_INSERTION_ORDER");
     const bool type53_two_state_promotion = environment_flag("XSTAR_QUALIFICATION_TYPE53_TWO_STATE_PROMOTION");
     const bool type53_row46_coupled_replacement =
         environment_flag("XSTAR_QUALIFICATION_TYPE53_ROW46_COUPLED_REPLACEMENT") || type53_two_state_promotion;
@@ -2900,6 +2930,9 @@ int run_impl(
     }
     if (helium_solve_response && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
         throw std::runtime_error("helium solve-response diagnostics require XSTAR_QUALIFICATION_REPLACEMENT=1");
+    }
+    if (helium_source_insertion_order && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
+        throw std::runtime_error("helium source insertion-order restoration requires XSTAR_QUALIFICATION_REPLACEMENT=1");
     }
     if ((helium_matrix_ablation_row_min == 0) != (helium_matrix_ablation_row_max == 0) ||
         helium_matrix_ablation_row_max < helium_matrix_ablation_row_min) {
@@ -2923,6 +2956,7 @@ int run_impl(
     ctx.last_helium_unqualified_type99_ablation = helium_unqualified_type99_ablation;
     ctx.last_helium_solve_response = helium_solve_response;
     ctx.last_type53_row46_coupled_replacement = type53_row46_coupled_replacement;
+    ctx.last_helium_source_insertion_order = helium_source_insertion_order;
     const auto total_start = clock_type::now();
     stats.calls += 1;
     stats.status_flags = XSTAR_FIXED_STATE_STATUS_RAW_PROGRAM_LOADED |
@@ -3042,7 +3076,9 @@ int run_impl(
             diagnostic.matrix_committed = matrix_committed;
             ctx.last_record_diagnostics.push_back(std::move(diagnostic));
         }
-        if (type53_row46_coupled_replacement && element.element_z == 2) {
+        if (element.element_z == 2 && helium_source_insertion_order) {
+            restore_source_contribution_order(contributions);
+        } else if (type53_row46_coupled_replacement && element.element_z == 2) {
             reorder_type53_row46_coupled_contributions(contributions);
         }
         stats.contributions_constructed += contributions.size();
@@ -3924,7 +3960,17 @@ int xstar_fixed_state_write_last_diagnostics_v1(
             for (const auto& diagnostic : records) {
                 if (diagnostic.element_z == 2 && diagnostic.matrix_committed) ordered_helium_records.push_back(&diagnostic);
             }
-            if (context->last_type53_row46_coupled_replacement) {
+            if (context->last_helium_source_insertion_order) {
+                std::stable_sort(ordered_helium_records.begin(), ordered_helium_records.end(),
+                    [](const auto* lhs, const auto* rhs) {
+                        const auto& a = lhs->evaluated.contribution;
+                        const auto& b = rhs->evaluated.contribution;
+                        return std::tie(a.ion_stage, a.rate_type, a.data_type,
+                                        a.source_position, a.record) <
+                               std::tie(b.ion_stage, b.rate_type, b.data_type,
+                                        b.source_position, b.record);
+                    });
+            } else if (context->last_type53_row46_coupled_replacement) {
                 std::vector<std::optional<const NativeRecordDiagnostic*>> slots(ordered_helium_records.size());
                 std::vector<const NativeRecordDiagnostic*> remainder;
                 for (const auto* diagnostic : ordered_helium_records) {
@@ -3986,6 +4032,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                         << "  \"fixed_point_iterations\": " << helium->fixed_point_iterations << ",\n"
                         << "  \"source_order_term_count\": " << source_order_index << ",\n"
                         << "  \"type53_row46_coupled_replacement\": " << (context->last_type53_row46_coupled_replacement ? "true" : "false") << ",\n"
+                        << "  \"helium_source_insertion_order\": " << (context->last_helium_source_insertion_order ? "true" : "false") << ",\n"
                         << "  \"qualification_only\": true,\n"
                         << "  \"production_promotion_ready\": false\n}\n";
         }
@@ -4017,6 +4064,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                    << "  \"helium_unqualified_type99_ablation\": " << (context->last_helium_unqualified_type99_ablation ? "true" : "false") << ",\n"
                    << "  \"helium_solve_response\": " << (context->last_helium_solve_response ? "true" : "false") << ",\n"
                    << "  \"type53_row46_coupled_replacement\": " << (context->last_type53_row46_coupled_replacement ? "true" : "false") << ",\n"
+                   << "  \"helium_source_insertion_order\": " << (context->last_helium_source_insertion_order ? "true" : "false") << ",\n"
                    << "  \"record_diagnostic_count\": " << records.size() << ",\n"
                    << "  \"element_diagnostic_count\": " << context->last_element_diagnostics.size() << ",\n"
                    << "  \"production_promotion_ready\": false\n}\n";
