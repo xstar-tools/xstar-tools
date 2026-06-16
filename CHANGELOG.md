@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.48.7.42 — all-61 H/He/Mg fixed-state closure and electron-fraction audit - 2026-06-16
+
+- Added a hash-verified v0.6.47.2 probe that captures all 57 DSEC and four retained final fixed-state evaluations, including H/He/Mg ion fractions, active global level populations, electron fraction, charge residual, and per-evaluation runtime workspaces.
+- Added a qualification-only 61-state native replay that feeds each immutable reference input state and its captured global/radiation/escape workspace independently, avoiding controller-trajectory coupling before v0.6.48.9.
+- Added strict bitwise gates for all 61 H, He, and Mg ion populations; all active level populations; computed electron fraction; charge residual; reference input state; native evaluation count; and zero Python callbacks.
+- Added an explicit `V06488_THERMAL_PARITY_READY` gate. Thermal parity remains blocked unless every v0.6.48.7 fixed-state gate accepts.
+- Corrected the v0.6.48.7.41 qualification workflow so an intermediate legacy audit cannot terminate the runner before its final summary. The physical v0.6.48.7.41 package remains rejected because the requested summary was absent and its shortened chain retained a stale Type-95 comparison.
+- Retained `pow(10,x)` only for immutable-reference Type-77 qualification. `exp10` remains the intended production optimization after cross-platform exactness is separately demonstrated.
+- Preserved fixed-state ABI 60487 and lowered-program ABI 60485. This release is a qualification candidate, not a Thermal-parity or production promotion.
+
 ## 0.6.48.7.41 - 2026-06-16
 
 - Corrected the benchmark-host Type-77 one-ULP rejection by using the immutable reference runtime `pow(10, rec)` path while retaining the captured stage-2 `exp10` edge for records 1962/1963.

@@ -1,0 +1,299 @@
+"""Capture all 61 immutable v0.6.47.2 H/He/Mg fixed-state evaluations.
+
+The probe observes the 57 DSEC evaluations and the four retained final
+fixed-state evaluations. It does not change rates, matrices, controller
+branches, or products.
+"""
+from __future__ import annotations
+
+import argparse
+import csv
+import json
+import os
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+from typing import Any
+
+from . import v0472_full_dsec_thermal_budget_capture as base
+
+RELEASE = "0.6.48.7.42"
+SCHEMA = "xstar-tools-v0648742-v0472-all61-fixed-state-capture-v1"
+VERIFY_SCHEMA = "xstar-tools-v0648742-v0472-all61-fixed-state-oracle-v1"
+STATE_NAME = "v0472_all61_fixed_state_rows.csv"
+INPUT_NAME = "v0472_all61_input_states.csv"
+ION_NAME = "v0472_all61_ion_populations.csv"
+LEVEL_NAME = "v0472_all61_level_populations.csv"
+REPORT_NAME = "all61_fixed_state_capture_report.json"
+VERIFY_NAME = "all61_fixed_state_capture_verification.json"
+MANIFEST_NAME = "all61_fixed_state_capture_manifest.json"
+
+_PROBE = base._PROBE
+_PROBE = _PROBE.replace(
+    '"bypassed_retained_evaluators": 0}',
+    '"bypassed_retained_evaluators": 0, "all61_states": [], "all61_ions": [], "all61_levels": [], "all61_inputs": [], "final_counter": 0}',
+)
+
+_CAPTURE_CODE = r'''
+ALL61_STATE_FIELDS = [
+ "sequence","kind","dsec_call_id","evaluation_index","temperature_k","temperature_t4",
+ "electron_fraction_input","computed_electron_fraction","charge_residual","hmctot"
+]
+ALL61_ION_FIELDS = ["sequence","kind","dsec_call_id","evaluation_index","element_z","stage","ion_charge","population"]
+ALL61_LEVEL_FIELDS = [
+ "sequence","kind","dsec_call_id","evaluation_index","element_z","stage","local_level_ordinal",
+ "global_level_index","population","bilevg","rnisg"
+]
+ALL61_INPUT_FIELDS = [
+ "sequence","kind","dsec_call_id","evaluation_index","temperature_k","temperature_t4",
+ "electron_fraction_input","covering_fraction","turbulent_velocity_km_s","workspace_directory",
+ "radiation_bins","continuum_tau_count","global_level_count"
+]
+
+def _v048742_value(array, one_based_index):
+    values = _array(array)
+    index = int(one_based_index) - 1
+    return float(values[index]) if 0 <= index < values.size else 0.0
+
+def _v048742_capture_input(kind, call_id, evaluation_index, sequence, state):
+    requests = tuple(getattr(state, "element_requests", ()) or ())
+    request = requests[0] if requests else None
+    radiation = _field(request, "radiation")
+    escape = _field(request, "escape")
+    directory = _OUT / "all61_input_workspaces" / f"evaluation_{int(sequence):04d}"
+    directory.mkdir(parents=True, exist_ok=True)
+    prefix = f"call_{int(call_id)}_"
+    arrays = {
+      "radiation_energy": _field(radiation, "epi_eV", "epi"),
+      "bremsa": _field(radiation, "bremsa"),
+      "continuum_tau_in": _field(escape, "continuum_tau_in"),
+      "continuum_tau_out": _field(escape, "continuum_tau_out"),
+      "global_xilevg": getattr(state, "global_xilevg_by_index", None),
+      "global_bilevg": getattr(state, "global_bilevg_by_index", None),
+      "global_rnisg": getattr(state, "global_rnisg_by_index", None),
+    }
+    for name, value in arrays.items():
+        np.asarray(_array(value), dtype=np.float64).tofile(directory / (prefix + name + ".bin"))
+    radiation_bins = int(_array(arrays["radiation_energy"]).size)
+    tau_count = int(_array(arrays["continuum_tau_in"]).size)
+    global_count = int(_array(arrays["global_xilevg"]).size)
+    _STATE["all61_inputs"].append({
+      "sequence": int(sequence), "kind": str(kind), "dsec_call_id": int(call_id),
+      "evaluation_index": int(evaluation_index), "temperature_k": float(state.temperature_k),
+      "temperature_t4": float(state.temperature_t4), "electron_fraction_input": float(state.electron_fraction_xee),
+      "covering_fraction": float(_field(request, "covering_fraction") or 0.0),
+      "turbulent_velocity_km_s": float(_field(request, "turbulent_velocity_km_s") or 0.0),
+      "workspace_directory": str(directory), "radiation_bins": radiation_bins,
+      "continuum_tau_count": tau_count, "global_level_count": global_count,
+    })
+
+def _v048742_capture(kind, call_id, evaluation_index, sequence, state, result):
+    computed_xee = float(result.elcter)
+    input_xee = float(result.electron_fraction_xee)
+    _STATE["all61_states"].append({
+      "sequence": int(sequence), "kind": str(kind), "dsec_call_id": int(call_id),
+      "evaluation_index": int(evaluation_index), "temperature_k": float(result.temperature_k),
+      "temperature_t4": float(result.temperature_k) / 1.0e4,
+      "electron_fraction_input": input_xee,
+      "computed_electron_fraction": computed_xee,
+      "charge_residual": input_xee - computed_xee, "hmctot": float(result.hmctot),
+    })
+    for z in (1, 2, 12):
+        for stage in range(1, z + 2):
+            _STATE["all61_ions"].append({
+              "sequence": int(sequence), "kind": str(kind), "dsec_call_id": int(call_id),
+              "evaluation_index": int(evaluation_index), "element_z": z, "stage": stage,
+              "ion_charge": stage - 1,
+              "population": float(result.ion_fractions.get((z, stage), 0.0)),
+            })
+    mapping = dict(getattr(result, "global_level_index_by_key", {}) or {})
+    gx = getattr(result, "global_xilevg_by_index", None)
+    gb = getattr(result, "global_bilevg_by_index", None)
+    gr = getattr(result, "global_rnisg_by_index", None)
+    for key, global_index in sorted(mapping.items(), key=lambda item: int(item[1])):
+        if len(key) != 3:
+            continue
+        z, stage, local_ordinal = (int(key[0]), int(key[1]), int(key[2]))
+        if z not in (1, 2, 12):
+            continue
+        _STATE["all61_levels"].append({
+          "sequence": int(sequence), "kind": str(kind), "dsec_call_id": int(call_id),
+          "evaluation_index": int(evaluation_index), "element_z": z, "stage": stage,
+          "local_level_ordinal": local_ordinal, "global_level_index": int(global_index),
+          "population": _v048742_value(gx, global_index),
+          "bilevg": _v048742_value(gb, global_index),
+          "rnisg": _v048742_value(gr, global_index),
+        })
+
+def _v048742_write_all61():
+    for name, fields, rows in [
+      ("v0472_all61_fixed_state_rows.csv", ALL61_STATE_FIELDS, _STATE["all61_states"]),
+      ("v0472_all61_ion_populations.csv", ALL61_ION_FIELDS, _STATE["all61_ions"]),
+      ("v0472_all61_level_populations.csv", ALL61_LEVEL_FIELDS, _STATE["all61_levels"]),
+      ("v0472_all61_input_states.csv", ALL61_INPUT_FIELDS, _STATE["all61_inputs"]),
+    ]:
+        with (_OUT / name).open("w", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
+            writer.writeheader(); writer.writerows(rows)
+'''
+_PROBE = _PROBE.replace("def _capture_result(call_id, local_eval, global_eval, state, result):", _CAPTURE_CODE + "\n\ndef _capture_result(call_id, local_eval, global_eval, state, result):\n    _v048742_capture(\"dsec\", call_id, local_eval, global_eval, state, result)")
+
+_OLD_RETAINED = '''        if bool(getattr(self, "retain_fixed_state_results", True)):
+            with _LOCK:
+                _STATE["bypassed_retained_evaluators"] += 1
+            print("v0487214_capture_bypass retained_fixed_state_result=1", flush=True)
+            return original(self, state)
+'''
+_NEW_RETAINED = '''        if bool(getattr(self, "retain_fixed_state_results", True)):
+            with _LOCK:
+                _STATE["final_counter"] += 1
+                call_id = int(_STATE["final_counter"])
+                final_indices = (22, 2, 19, 18)
+                final_evaluation_index = final_indices[call_id - 1] if 1 <= call_id <= 4 else 0
+                _STATE["global_eval"] += 1
+                global_eval = int(_STATE["global_eval"])
+                _STATE["bypassed_retained_evaluators"] += 1
+            with _LOCK:
+                _v048742_capture_input("final", call_id, final_evaluation_index, global_eval, state)
+            out = original(self, state)
+            fixed = getattr(out, "fixed_state_result", None)
+            if fixed is not None:
+                with _LOCK:
+                    _v048742_capture("final", call_id, final_evaluation_index, global_eval, state, fixed)
+            print(f"v048742_capture_final call={call_id} global={global_eval}", flush=True)
+            return out
+'''
+if _OLD_RETAINED not in _PROBE:
+    raise RuntimeError("retained-evaluator probe anchor not found")
+_PROBE = _PROBE.replace(_OLD_RETAINED, _NEW_RETAINED)
+_PROBE = _PROBE.replace(
+    '        def capture_pre(evaluation_index, current_state):\n            if previous_pre is not None:\n                previous_pre(evaluation_index, current_state)\n            if int(evaluation_index) == 1:\n                with _LOCK:\n                    _capture_start_state(self, current_state, call_id, global_eval)\n',
+    '        def capture_pre(evaluation_index, current_state):\n            if previous_pre is not None:\n                previous_pre(evaluation_index, current_state)\n            with _LOCK:\n                _v048742_capture_input("dsec", call_id, local_eval, global_eval, current_state)\n                if int(evaluation_index) == 1:\n                    _capture_start_state(self, current_state, call_id, global_eval)\n',
+)
+_PROBE = _PROBE.replace(
+    "def finalize(run_summary=None):\n    for name, fields, rows in [",
+    "def finalize(run_summary=None):\n    _v048742_write_all61()\n    for name, fields, rows in [",
+)
+_PROBE = _PROBE.replace(
+    '"result": "ACCEPT" if len(_STATE["budgets"]) == 57 and len(_STATE["states"]) == 4 and len(_STATE["trace"]) == 57 else "REJECT",',
+    '"result": "ACCEPT" if len(_STATE["budgets"]) == 57 and len(_STATE["states"]) == 4 and len(_STATE["trace"]) == 57 and len(_STATE["all61_states"]) == 61 else "REJECT",',
+)
+_PROBE = _PROBE.replace(
+    '"dsec_evaluations_observed": len(_STATE["trace"]),',
+    '"dsec_evaluations_observed": len(_STATE["trace"]), "all61_evaluations_observed": len(_STATE["all61_states"]), "all61_ion_rows": len(_STATE["all61_ions"]), "all61_level_rows": len(_STATE["all61_levels"]),',
+)
+_PROBE = _PROBE.replace(f'"schema": "{base.SCHEMA}"', f'"schema": "{SCHEMA}"')
+_PROBE = _PROBE.replace(f'"release": "{base.RELEASE}"', f'"release": "{RELEASE}"')
+_DRIVER = base._DRIVER.replace("import v048726_full_probe_runtime as probe", "import v048742_all61_probe_runtime as probe")
+
+
+def _write_json(path: Path, obj: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(obj, indent=2, sort_keys=True) + "\n")
+
+
+def _read_csv(path: Path) -> list[dict[str, str]]:
+    with path.open(newline="") as handle:
+        return list(csv.DictReader(handle))
+
+
+def verify(bundle: Path) -> dict[str, Any]:
+    errors: list[str] = []
+    for name in (STATE_NAME, INPUT_NAME, ION_NAME, LEVEL_NAME, REPORT_NAME):
+        if not (bundle / name).is_file():
+            errors.append(f"missing:{name}")
+    if errors:
+        return {"schema": VERIFY_SCHEMA, "release": RELEASE, "result": "REJECT", "errors": errors,
+                "qualification_only": True, "production_promotion_ready": False}
+    states = _read_csv(bundle / STATE_NAME)
+    inputs = _read_csv(bundle / INPUT_NAME)
+    ions = _read_csv(bundle / ION_NAME)
+    levels = _read_csv(bundle / LEVEL_NAME)
+    sequences = [int(row["sequence"]) for row in states]
+    kinds = [row["kind"] for row in states]
+    if len(inputs) != 61 or [int(row["sequence"]) for row in inputs] != list(range(1, 62)):
+        errors.append(f"input_inventory={len(inputs)}")
+    if len(states) != 61 or sequences != list(range(1, 62)):
+        errors.append(f"state_inventory={len(states)}")
+    if kinds.count("dsec") != 57 or kinds.count("final") != 4:
+        errors.append(f"kind_inventory=dsec:{kinds.count('dsec')},final:{kinds.count('final')}")
+    expected_ions = 61 * ((1 + 1) + (2 + 1) + (12 + 1))
+    if len(ions) != expected_ions:
+        errors.append(f"ion_rows={len(ions)} expected={expected_ions}")
+    if not levels or {int(row["sequence"]) for row in levels} != set(range(1, 62)):
+        errors.append("level_sequence_inventory")
+    report = json.loads((bundle / REPORT_NAME).read_text())
+    if not report.get("actual_v0472_runtime_capture"):
+        errors.append("not_actual_v0472_runtime_capture")
+    return {
+        "schema": VERIFY_SCHEMA, "release": RELEASE,
+        "result": "ACCEPT" if not errors else "REJECT", "errors": errors,
+        "actual_v0472_runtime_capture": bool(report.get("actual_v0472_runtime_capture")),
+        "evaluations": len(states), "input_states": len(inputs), "dsec_evaluations": kinds.count("dsec"),
+        "final_evaluations": kinds.count("final"), "ion_rows": len(ions), "level_rows": len(levels),
+        "qualification_only": True, "production_promotion_ready": False,
+    }
+
+
+def capture(source_archive: Path, atdb_path: Path, output_dir: Path,
+            parameters_json: Path, coheat_path: Path | None) -> dict[str, Any]:
+    output_dir = output_dir.resolve(); output_dir.mkdir(parents=True, exist_ok=True)
+    if base.base._sha256(source_archive) != base.base.SOURCE_ARCHIVE_SHA256:
+        raise ValueError("v0.6.47.2 source archive hash mismatch")
+    with tempfile.TemporaryDirectory(prefix="v048742_") as tmp:
+        tmp_path = Path(tmp)
+        base.base._safe_extract(source_archive, tmp_path / "source")
+        root = base.base._source_root(tmp_path / "source")
+        probe_dir = tmp_path / "probe"; probe_dir.mkdir()
+        (probe_dir / "v048742_all61_probe_runtime.py").write_text(_PROBE)
+        (probe_dir / "probe_config.json").write_text(json.dumps({"output_dir": str(output_dir)}, indent=2))
+        (probe_dir / "driver.py").write_text(_DRIVER)
+        env = dict(os.environ)
+        env["PYTHONPATH"] = os.pathsep.join([str(probe_dir), str(root / "src")])
+        env.update({"PYTHONFAULTHANDLER": "1", "PYTHONUNBUFFERED": "1", "OMP_NUM_THREADS": "1",
+                    "OPENBLAS_NUM_THREADS": "1", "MKL_NUM_THREADS": "1", "NUMEXPR_NUM_THREADS": "1"})
+        cmd = [sys.executable, str(probe_dir / "driver.py"), "--parameters-json", str(parameters_json.resolve()),
+               "--atdb-path", str(atdb_path.resolve()), "--output-dir", str(output_dir / "physical_run")]
+        if coheat_path is not None:
+            cmd += ["--coheat-path", str(coheat_path.resolve())]
+        log = output_dir / "v0472_all61_capture_run.log"
+        with log.open("w") as handle:
+            completed = subprocess.run(cmd, cwd=root, env=env, stdout=handle, stderr=subprocess.STDOUT)
+        if completed.returncode != 0:
+            raise RuntimeError(f"v0.6.47.2 all-61 capture failed with exit {completed.returncode}; see {log}")
+    historical = output_dir / "capture_report.json"
+    if historical.is_file():
+        historical.replace(output_dir / REPORT_NAME)
+    result = verify(output_dir)
+    _write_json(output_dir / VERIFY_NAME, result)
+    files = {}
+    for name in (STATE_NAME, INPUT_NAME, ION_NAME, LEVEL_NAME, REPORT_NAME, VERIFY_NAME):
+        path = output_dir / name
+        files[name] = {"sha256": base.base._sha256(path), "size_bytes": path.stat().st_size}
+    _write_json(output_dir / MANIFEST_NAME, {**result, "immutable": result["result"] == "ACCEPT", "files": files})
+    return result
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser()
+    sub = parser.add_subparsers(dest="cmd", required=True)
+    cap = sub.add_parser("capture")
+    cap.add_argument("source_archive", type=Path); cap.add_argument("atdb_path", type=Path)
+    cap.add_argument("output_dir", type=Path); cap.add_argument("parameters_json", type=Path)
+    cap.add_argument("--coheat-path", type=Path); cap.add_argument("--output-json", type=Path)
+    ver = sub.add_parser("verify"); ver.add_argument("bundle", type=Path); ver.add_argument("--output-json", type=Path)
+    args = parser.parse_args(argv)
+    try:
+        result = capture(args.source_archive, args.atdb_path, args.output_dir, args.parameters_json, args.coheat_path) if args.cmd == "capture" else verify(args.bundle)
+    except Exception as exc:
+        result = {"schema": VERIFY_SCHEMA, "release": RELEASE, "result": "REJECT", "errors": [str(exc)],
+                  "qualification_only": True, "production_promotion_ready": False}
+    if args.output_json:
+        _write_json(args.output_json, result)
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0 if result["result"] == "ACCEPT" else 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
