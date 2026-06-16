@@ -18,9 +18,9 @@ from typing import Any
 
 from . import v0472_full_dsec_thermal_budget_capture as base
 
-RELEASE = "0.6.48.7.42"
-SCHEMA = "xstar-tools-v0648742-v0472-all61-fixed-state-capture-v1"
-VERIFY_SCHEMA = "xstar-tools-v0648742-v0472-all61-fixed-state-oracle-v1"
+RELEASE = "0.6.48.7.43"
+SCHEMA = "xstar-tools-v0648743-v0472-all61-fixed-state-capture-v1"
+VERIFY_SCHEMA = "xstar-tools-v0648743-v0472-all61-fixed-state-oracle-v1"
 STATE_NAME = "v0472_all61_fixed_state_rows.csv"
 INPUT_NAME = "v0472_all61_input_states.csv"
 ION_NAME = "v0472_all61_ion_populations.csv"
@@ -28,6 +28,22 @@ LEVEL_NAME = "v0472_all61_level_populations.csv"
 REPORT_NAME = "all61_fixed_state_capture_report.json"
 VERIFY_NAME = "all61_fixed_state_capture_verification.json"
 MANIFEST_NAME = "all61_fixed_state_capture_manifest.json"
+
+
+def canonical_sequence(kind: str, call_id: int, evaluation_index: int) -> int:
+    """Map a source fixed-state identity to the canonical 61-row trajectory."""
+    call_id = int(call_id)
+    evaluation_index = int(evaluation_index)
+    if str(kind) == "final":
+        if call_id not in (1, 2, 3, 4):
+            raise ValueError(f"invalid final call_id={call_id}")
+        return 57 + call_id
+    offsets = {1: 0, 2: 21, 3: 22, 4: 40}
+    limits = {1: 21, 2: 1, 3: 18, 4: 17}
+    if call_id not in offsets or not (1 <= evaluation_index <= limits[call_id]):
+        raise ValueError(f"invalid DSEC identity call={call_id} evaluation={evaluation_index}")
+    return offsets[call_id] + evaluation_index
+
 
 _PROBE = base._PROBE
 _PROBE = _PROBE.replace(
@@ -51,12 +67,26 @@ ALL61_INPUT_FIELDS = [
  "radiation_bins","continuum_tau_count","global_level_count"
 ]
 
+def _v048743_canonical_sequence(kind, call_id, evaluation_index):
+    call_id = int(call_id)
+    evaluation_index = int(evaluation_index)
+    if str(kind) == "final":
+        if call_id not in (1, 2, 3, 4):
+            raise ValueError(f"invalid final call_id={call_id}")
+        return 57 + call_id
+    offsets = {1: 0, 2: 21, 3: 22, 4: 40}
+    limits = {1: 21, 2: 1, 3: 18, 4: 17}
+    if call_id not in offsets or not (1 <= evaluation_index <= limits[call_id]):
+        raise ValueError(f"invalid DSEC identity call={call_id} evaluation={evaluation_index}")
+    return offsets[call_id] + evaluation_index
+
 def _v048742_value(array, one_based_index):
     values = _array(array)
     index = int(one_based_index) - 1
     return float(values[index]) if 0 <= index < values.size else 0.0
 
 def _v048742_capture_input(kind, call_id, evaluation_index, sequence, state):
+    sequence = _v048743_canonical_sequence(kind, call_id, evaluation_index)
     requests = tuple(getattr(state, "element_requests", ()) or ())
     request = requests[0] if requests else None
     radiation = _field(request, "radiation")
@@ -89,15 +119,17 @@ def _v048742_capture_input(kind, call_id, evaluation_index, sequence, state):
     })
 
 def _v048742_capture(kind, call_id, evaluation_index, sequence, state, result):
-    computed_xee = float(result.elcter)
+    sequence = _v048743_canonical_sequence(kind, call_id, evaluation_index)
     input_xee = float(result.electron_fraction_xee)
+    charge_residual = float(result.elcter)
+    computed_xee = input_xee - charge_residual
     _STATE["all61_states"].append({
       "sequence": int(sequence), "kind": str(kind), "dsec_call_id": int(call_id),
       "evaluation_index": int(evaluation_index), "temperature_k": float(result.temperature_k),
       "temperature_t4": float(result.temperature_k) / 1.0e4,
       "electron_fraction_input": input_xee,
       "computed_electron_fraction": computed_xee,
-      "charge_residual": input_xee - computed_xee, "hmctot": float(result.hmctot),
+      "charge_residual": charge_residual, "hmctot": float(result.hmctot),
     })
     for z in (1, 2, 12):
         for stage in range(1, z + 2):
@@ -127,15 +159,22 @@ def _v048742_capture(kind, call_id, evaluation_index, sequence, state, result):
         })
 
 def _v048742_write_all61():
+    sort_keys = {
+      "v0472_all61_fixed_state_rows.csv": lambda row: (int(row["sequence"]),),
+      "v0472_all61_ion_populations.csv": lambda row: (int(row["sequence"]), int(row["element_z"]), int(row["stage"])),
+      "v0472_all61_level_populations.csv": lambda row: (int(row["sequence"]), int(row["global_level_index"])),
+      "v0472_all61_input_states.csv": lambda row: (int(row["sequence"]),),
+    }
     for name, fields, rows in [
       ("v0472_all61_fixed_state_rows.csv", ALL61_STATE_FIELDS, _STATE["all61_states"]),
       ("v0472_all61_ion_populations.csv", ALL61_ION_FIELDS, _STATE["all61_ions"]),
       ("v0472_all61_level_populations.csv", ALL61_LEVEL_FIELDS, _STATE["all61_levels"]),
       ("v0472_all61_input_states.csv", ALL61_INPUT_FIELDS, _STATE["all61_inputs"]),
     ]:
+        ordered = sorted(rows, key=sort_keys[name])
         with (_OUT / name).open("w", newline="") as handle:
             writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
-            writer.writeheader(); writer.writerows(rows)
+            writer.writeheader(); writer.writerows(ordered)
 '''
 _PROBE = _PROBE.replace("def _capture_result(call_id, local_eval, global_eval, state, result):", _CAPTURE_CODE + "\n\ndef _capture_result(call_id, local_eval, global_eval, state, result):\n    _v048742_capture(\"dsec\", call_id, local_eval, global_eval, state, result)")
 
@@ -185,7 +224,7 @@ _PROBE = _PROBE.replace(
 )
 _PROBE = _PROBE.replace(f'"schema": "{base.SCHEMA}"', f'"schema": "{SCHEMA}"')
 _PROBE = _PROBE.replace(f'"release": "{base.RELEASE}"', f'"release": "{RELEASE}"')
-_DRIVER = base._DRIVER.replace("import v048726_full_probe_runtime as probe", "import v048742_all61_probe_runtime as probe")
+_DRIVER = base._DRIVER.replace("import v048726_full_probe_runtime as probe", "import v048743_all61_probe_runtime as probe")
 
 
 def _write_json(path: Path, obj: Any) -> None:
@@ -212,6 +251,24 @@ def verify(bundle: Path) -> dict[str, Any]:
     levels = _read_csv(bundle / LEVEL_NAME)
     sequences = [int(row["sequence"]) for row in states]
     kinds = [row["kind"] for row in states]
+    workspace_contract_exact = True
+    for row in inputs:
+        try:
+            expected_sequence = canonical_sequence(row["kind"], int(row["dsec_call_id"]), int(row["evaluation_index"]))
+        except Exception as exc:
+            errors.append(f"invalid_identity:{exc}")
+            workspace_contract_exact = False
+            continue
+        actual_sequence = int(row["sequence"])
+        if actual_sequence != expected_sequence:
+            errors.append(f"sequence_identity_mismatch:{actual_sequence}!={expected_sequence}")
+            workspace_contract_exact = False
+        directory = Path(row["workspace_directory"])
+        prefix = f"call_{int(row['dsec_call_id'])}_"
+        for name in ("radiation_energy", "bremsa", "continuum_tau_in", "continuum_tau_out", "global_xilevg", "global_bilevg", "global_rnisg"):
+            if not (directory / f"{prefix}{name}.bin").is_file():
+                errors.append(f"missing_workspace:{actual_sequence}:{prefix}{name}.bin")
+                workspace_contract_exact = False
     if len(inputs) != 61 or [int(row["sequence"]) for row in inputs] != list(range(1, 62)):
         errors.append(f"input_inventory={len(inputs)}")
     if len(states) != 61 or sequences != list(range(1, 62)):
@@ -232,6 +289,7 @@ def verify(bundle: Path) -> dict[str, Any]:
         "actual_v0472_runtime_capture": bool(report.get("actual_v0472_runtime_capture")),
         "evaluations": len(states), "input_states": len(inputs), "dsec_evaluations": kinds.count("dsec"),
         "final_evaluations": kinds.count("final"), "ion_rows": len(ions), "level_rows": len(levels),
+        "workspace_sequence_contract_exact": workspace_contract_exact,
         "qualification_only": True, "production_promotion_ready": False,
     }
 
@@ -241,12 +299,12 @@ def capture(source_archive: Path, atdb_path: Path, output_dir: Path,
     output_dir = output_dir.resolve(); output_dir.mkdir(parents=True, exist_ok=True)
     if base.base._sha256(source_archive) != base.base.SOURCE_ARCHIVE_SHA256:
         raise ValueError("v0.6.47.2 source archive hash mismatch")
-    with tempfile.TemporaryDirectory(prefix="v048742_") as tmp:
+    with tempfile.TemporaryDirectory(prefix="v048743_") as tmp:
         tmp_path = Path(tmp)
         base.base._safe_extract(source_archive, tmp_path / "source")
         root = base.base._source_root(tmp_path / "source")
         probe_dir = tmp_path / "probe"; probe_dir.mkdir()
-        (probe_dir / "v048742_all61_probe_runtime.py").write_text(_PROBE)
+        (probe_dir / "v048743_all61_probe_runtime.py").write_text(_PROBE)
         (probe_dir / "probe_config.json").write_text(json.dumps({"output_dir": str(output_dir)}, indent=2))
         (probe_dir / "driver.py").write_text(_DRIVER)
         env = dict(os.environ)

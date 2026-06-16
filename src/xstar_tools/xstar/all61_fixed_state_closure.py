@@ -9,8 +9,8 @@ import struct
 from pathlib import Path
 from typing import Any, Iterable
 
-RELEASE = "0.6.48.7.42"
-SCHEMA = "xstar-tools-v0648742-all61-h-he-mg-fixed-state-closure-v1"
+RELEASE = "0.6.48.7.43"
+SCHEMA = "xstar-tools-v0648743-all61-h-he-mg-fixed-state-closure-v1"
 SUMMARY_NAME = "all61_h_he_mg_fixed_state_closure_summary.json"
 STATE_DIFF_NAME = "all61_state_comparison.csv"
 ION_DIFF_NAME = "all61_ion_population_comparison.csv"
@@ -49,6 +49,7 @@ def compare(source_dir: Path, native_dir: Path, program_rows_csv: Path, output_d
     output_dir.mkdir(parents=True, exist_ok=True)
     required = {
         "source_states": source_dir / "v0472_all61_fixed_state_rows.csv",
+        "source_inputs": source_dir / "v0472_all61_input_states.csv",
         "source_ions": source_dir / "v0472_all61_ion_populations.csv",
         "source_levels": source_dir / "v0472_all61_level_populations.csv",
         "native_states": native_dir / "native_dsec_trajectory.csv",
@@ -73,22 +74,29 @@ def compare(source_dir: Path, native_dir: Path, program_rows_csv: Path, output_d
         return result
 
     source_states = _read_csv(required["source_states"])
+    source_inputs = _read_csv(required["source_inputs"])
     native_states = _read_csv(required["native_states"])
     native_summary = json.loads(required["native_summary"].read_text())
     state_fields = ["temperature_t4", "electron_fraction_input", "computed_electron_fraction", "charge_residual"]
+    source_state_by_sequence = {int(row["sequence"]): row for row in source_states}
+    source_input_by_sequence = {int(row["sequence"]): row for row in source_inputs}
     native_state_by_sequence = {int(row["sequence"]): row for row in native_states}
     state_rows: list[dict[str, Any]] = []
     state_field_exact = {field: 0 for field in state_fields}
-    for source in source_states:
-        sequence = int(source["sequence"]); native = native_state_by_sequence.get(sequence)
+    for sequence in range(1, 62):
+        source_state = source_state_by_sequence.get(sequence)
+        source_input = source_input_by_sequence.get(sequence)
+        native = native_state_by_sequence.get(sequence)
+        identity = source_input or source_state or {}
         for field in state_fields:
-            source_value = _float(source, field)
+            source_row = source_input if field in ("temperature_t4", "electron_fraction_input") else source_state
+            source_value = float("nan") if source_row is None else _float(source_row, field)
             native_value = float("nan") if native is None else _float(native, field)
-            exact = native is not None and _exact(source_value, native_value)
+            exact = source_row is not None and native is not None and _exact(source_value, native_value)
             state_field_exact[field] += int(exact)
             state_rows.append({
-                "sequence": sequence, "kind": source["kind"], "call_index": source["dsec_call_id"],
-                "evaluation_index": source["evaluation_index"], "field": field,
+                "sequence": sequence, "kind": identity.get("kind", ""), "call_index": identity.get("dsec_call_id", ""),
+                "evaluation_index": identity.get("evaluation_index", ""), "field": field,
                 "source_value": source_value, "native_value": native_value,
                 "signed_delta": native_value - source_value, "exact": int(exact),
             })
@@ -161,7 +169,7 @@ def compare(source_dir: Path, native_dir: Path, program_rows_csv: Path, output_d
 
     total_evaluations = int(native_summary.get("total_evaluations", len(native_states)))
     python_callbacks = int(native_summary.get("python_callbacks", -1))
-    all61 = len(source_states) == 61 and len(native_states) == 61 and total_evaluations == 61
+    all61 = len(source_states) == 61 and len(source_inputs) == 61 and len(native_states) == 61 and total_evaluations == 61
     callbacks_zero = python_callbacks == 0
     input_states_exact = state_field_exact["temperature_t4"] == 61 and state_field_exact["electron_fraction_input"] == 61
     electron_exact = state_field_exact["computed_electron_fraction"] == 61

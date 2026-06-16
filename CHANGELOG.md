@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.48.7.43 — canonical all-61 fixed-state capture and replay repair - 2026-06-16
+
+- Rejected v0.6.48.7.42 as a completed fixed-state milestone because its capture interleaved retained final evaluations with DSEC rows, while the immutable trajectory places DSEC rows at 1–57 and final rows at 58–61.
+- Canonicalized all source state, input, ion, level, and workspace identities by `(kind, call_index, evaluation_index)`.
+- Added strict source-oracle verification for the 61-row trajectory identity and all seven call-keyed workspace binaries.
+- Corrected the all-61 source electron semantics: `result.elcter` is the charge residual, while the computed electron fraction is `electron_fraction_input - result.elcter`.
+- Added runner preflight and fail-closed summary generation so capture/replay failures no longer degrade to a missing-summary checker error.
+- Retained qualification-only `pow(10,x)` for Type-77 benchmark parity; `exp10` remains the intended production optimization after exactness qualification.
+- Kept v0.6.48.8 Thermal parity blocked pending physical acceptance of all 61 H/He/Mg populations, active levels, electron fraction, and charge residual with zero callbacks.
+- Preserved fixed-state ABI 60487 and lowered-program ABI 60485.
+
 ## 0.6.48.7.42 — all-61 H/He/Mg fixed-state closure and electron-fraction audit - 2026-06-16
 
 - Added a hash-verified v0.6.47.2 probe that captures all 57 DSEC and four retained final fixed-state evaluations, including H/He/Mg ion fractions, active global level populations, electron fraction, charge residual, and per-evaluation runtime workspaces.

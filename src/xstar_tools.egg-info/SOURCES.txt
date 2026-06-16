@@ -1555,3 +1555,8 @@ xstar_tools_v0.6.48.7.6_handoff.md
 xstar_tools_v0.6.48.7.7_handoff.md
 xstar_tools_v0.6.48.7.9_handoff.md
 xstar_tools_v0.6.48.7_handoff.md
+V0648743_ALL61_H_HE_MG_FIXED_STATE_CLOSURE.md
+check_v048743_all61_h_he_mg_fixed_state_closure.py
+check_v048743_all61_h_he_mg_fixed_state_readiness.py
+run_v048743_all61_h_he_mg_fixed_state_closure.sh
+tests/test_v0648743_all61_h_he_mg_fixed_state_closure.py
