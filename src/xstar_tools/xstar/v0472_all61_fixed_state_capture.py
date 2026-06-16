@@ -18,13 +18,14 @@ from typing import Any
 
 from . import v0472_full_dsec_thermal_budget_capture as base
 
-RELEASE = "0.6.48.7.43"
-SCHEMA = "xstar-tools-v0648743-v0472-all61-fixed-state-capture-v1"
-VERIFY_SCHEMA = "xstar-tools-v0648743-v0472-all61-fixed-state-oracle-v1"
+RELEASE = "0.6.48.7.44"
+SCHEMA = "xstar-tools-v0648744-v0472-all61-fixed-state-capture-v1"
+VERIFY_SCHEMA = "xstar-tools-v0648744-v0472-all61-fixed-state-oracle-v1"
 STATE_NAME = "v0472_all61_fixed_state_rows.csv"
 INPUT_NAME = "v0472_all61_input_states.csv"
 ION_NAME = "v0472_all61_ion_populations.csv"
 LEVEL_NAME = "v0472_all61_level_populations.csv"
+SOLVE_NAME = "v0472_all61_element_solve_rows.csv"
 REPORT_NAME = "all61_fixed_state_capture_report.json"
 VERIFY_NAME = "all61_fixed_state_capture_verification.json"
 MANIFEST_NAME = "all61_fixed_state_capture_manifest.json"
@@ -48,7 +49,7 @@ def canonical_sequence(kind: str, call_id: int, evaluation_index: int) -> int:
 _PROBE = base._PROBE
 _PROBE = _PROBE.replace(
     '"bypassed_retained_evaluators": 0}',
-    '"bypassed_retained_evaluators": 0, "all61_states": [], "all61_ions": [], "all61_levels": [], "all61_inputs": [], "final_counter": 0}',
+    '"bypassed_retained_evaluators": 0, "all61_states": [], "all61_ions": [], "all61_levels": [], "all61_inputs": [], "all61_solve_rows": [], "final_counter": 0}',
 )
 
 _CAPTURE_CODE = r'''
@@ -60,6 +61,13 @@ ALL61_ION_FIELDS = ["sequence","kind","dsec_call_id","evaluation_index","element
 ALL61_LEVEL_FIELDS = [
  "sequence","kind","dsec_call_id","evaluation_index","element_z","stage","local_level_ordinal",
  "global_level_index","population","bilevg","rnisg"
+]
+ALL61_SOLVE_FIELDS = [
+ "sequence","kind","dsec_call_id","evaluation_index","element_z","abundance",
+ "active_min_stage","active_max_stage","compact_row","ion","ion_stage","ion_charge",
+ "superlevel","is_normalization_row","transformed_initial_population",
+ "final_outer_start_population","final_population","rhs","row_residual","row_scale",
+ "relative_row_residual","solver_method","converged"
 ]
 ALL61_INPUT_FIELDS = [
  "sequence","kind","dsec_call_id","evaluation_index","temperature_k","temperature_t4",
@@ -118,8 +126,57 @@ def _v048742_capture_input(kind, call_id, evaluation_index, sequence, state):
       "continuum_tau_count": tau_count, "global_level_count": global_count,
     })
 
+def _v048744_capture_solve_rows(kind, call_id, evaluation_index, sequence, result):
+    sequence = _v048743_canonical_sequence(kind, call_id, evaluation_index)
+    for item in tuple(getattr(result, "element_results", ()) or ()):
+        request = getattr(item, "request", None)
+        z = int(_field(request, "element_z") or 0)
+        if z not in (1, 2, 12):
+            continue
+        eq = getattr(item, "equilibrium", None)
+        assembly = getattr(eq, "assembly", None)
+        solve = getattr(eq, "solve", None)
+        if assembly is None or solve is None:
+            continue
+        basis = assembly.basis
+        n = int(basis.n_rows)
+        rows = tuple(basis.rows)
+        ion_stages = np.asarray(basis.ion_stage, dtype=np.int32)
+        initial = np.asarray(assembly.initial_populations[1:n+1], dtype=float)
+        final = np.asarray(solve.populations, dtype=float)
+        outer = np.asarray(solve.final_outer_start_populations, dtype=float)
+        rhs = np.asarray(assembly.rhs, dtype=float)
+        residual = np.asarray(solve.row_residual, dtype=float)
+        scale = np.asarray(solve.row_scale, dtype=float)
+        stages = [int(ion_stages[i]) for i in range(1, min(n + 1, ion_stages.size))]
+        active_min = min(stages) if stages else 0
+        active_max = max(stages) if stages else 0
+        abundance = float(_field(request, "abundance") or 0.0)
+        for i in range(n):
+            meta = rows[i]
+            stage = int(ion_stages[i + 1]) if i + 1 < ion_stages.size else 0
+            row_residual = float(residual[i]) if residual.size == n else float("nan")
+            row_scale = float(scale[i]) if scale.size == n else float("nan")
+            relative = abs(row_residual) / max(abs(row_scale), 1.0e-300)
+            _STATE["all61_solve_rows"].append({
+              "sequence": int(sequence), "kind": str(kind), "dsec_call_id": int(call_id),
+              "evaluation_index": int(evaluation_index), "element_z": z, "abundance": abundance,
+              "active_min_stage": active_min, "active_max_stage": active_max,
+              "compact_row": i + 1, "ion": int(meta.ion_counter), "ion_stage": stage,
+              "ion_charge": max(0, stage - 1), "superlevel": int(meta.superlevel),
+              "is_normalization_row": 1 if i + 1 == int(basis.normalization_row) else 0,
+              "transformed_initial_population": float(initial[i]) if initial.size == n else float("nan"),
+              "final_outer_start_population": float(outer[i]) if outer.size == n else float("nan"),
+              "final_population": float(final[i]) if final.size == n else float("nan"),
+              "rhs": float(rhs[i]) if rhs.size == n else float("nan"),
+              "row_residual": row_residual, "row_scale": row_scale,
+              "relative_row_residual": relative, "solver_method": str(solve.solver_method),
+              "converged": int(bool(solve.converged)),
+            })
+
 def _v048742_capture(kind, call_id, evaluation_index, sequence, state, result):
     sequence = _v048743_canonical_sequence(kind, call_id, evaluation_index)
+    _v048744_capture_solve_rows(kind, call_id, evaluation_index, sequence, result)
     input_xee = float(result.electron_fraction_xee)
     charge_residual = float(result.elcter)
     computed_xee = input_xee - charge_residual
@@ -164,12 +221,14 @@ def _v048742_write_all61():
       "v0472_all61_ion_populations.csv": lambda row: (int(row["sequence"]), int(row["element_z"]), int(row["stage"])),
       "v0472_all61_level_populations.csv": lambda row: (int(row["sequence"]), int(row["global_level_index"])),
       "v0472_all61_input_states.csv": lambda row: (int(row["sequence"]),),
+      "v0472_all61_element_solve_rows.csv": lambda row: (int(row["sequence"]), int(row["element_z"]), int(row["compact_row"])),
     }
     for name, fields, rows in [
       ("v0472_all61_fixed_state_rows.csv", ALL61_STATE_FIELDS, _STATE["all61_states"]),
       ("v0472_all61_ion_populations.csv", ALL61_ION_FIELDS, _STATE["all61_ions"]),
       ("v0472_all61_level_populations.csv", ALL61_LEVEL_FIELDS, _STATE["all61_levels"]),
       ("v0472_all61_input_states.csv", ALL61_INPUT_FIELDS, _STATE["all61_inputs"]),
+      ("v0472_all61_element_solve_rows.csv", ALL61_SOLVE_FIELDS, _STATE["all61_solve_rows"]),
     ]:
         ordered = sorted(rows, key=sort_keys[name])
         with (_OUT / name).open("w", newline="") as handle:
@@ -195,7 +254,18 @@ _NEW_RETAINED = '''        if bool(getattr(self, "retain_fixed_state_results", T
                 _STATE["bypassed_retained_evaluators"] += 1
             with _LOCK:
                 _v048742_capture_input("final", call_id, final_evaluation_index, global_eval, state)
-            out = original(self, state)
+            previous_factory = self.calc_kwargs_factory
+            if previous_factory is not None:
+                def retained_factory(current_state):
+                    payload = dict(previous_factory(current_state))
+                    payload["retain_element_results"] = True
+                    payload["retain_diagnostic_arrays"] = True
+                    return payload
+                self.calc_kwargs_factory = retained_factory
+            try:
+                out = original(self, state)
+            finally:
+                self.calc_kwargs_factory = previous_factory
             fixed = getattr(out, "fixed_state_result", None)
             if fixed is not None:
                 with _LOCK:
@@ -222,9 +292,27 @@ _PROBE = _PROBE.replace(
     '"dsec_evaluations_observed": len(_STATE["trace"]),',
     '"dsec_evaluations_observed": len(_STATE["trace"]), "all61_evaluations_observed": len(_STATE["all61_states"]), "all61_ion_rows": len(_STATE["all61_ions"]), "all61_level_rows": len(_STATE["all61_levels"]),',
 )
+_PROBE = _PROBE.replace(
+'''        try:\n            out = original(self, state)\n        finally:\n            self.pre_evaluation_callback = previous_pre\n            self.progress_callback = previous_progress\n''',
+'''        previous_factory = self.calc_kwargs_factory
+        if previous_factory is not None:
+            def retained_factory(current_state):
+                payload = dict(previous_factory(current_state))
+                payload["retain_element_results"] = True
+                payload["retain_diagnostic_arrays"] = True
+                return payload
+            self.calc_kwargs_factory = retained_factory
+        try:
+            out = original(self, state)
+        finally:
+            self.calc_kwargs_factory = previous_factory
+            self.pre_evaluation_callback = previous_pre
+            self.progress_callback = previous_progress
+''')
+
 _PROBE = _PROBE.replace(f'"schema": "{base.SCHEMA}"', f'"schema": "{SCHEMA}"')
 _PROBE = _PROBE.replace(f'"release": "{base.RELEASE}"', f'"release": "{RELEASE}"')
-_DRIVER = base._DRIVER.replace("import v048726_full_probe_runtime as probe", "import v048743_all61_probe_runtime as probe")
+_DRIVER = base._DRIVER.replace("import v048726_full_probe_runtime as probe", "import v048744_all61_probe_runtime as probe")
 
 
 def _write_json(path: Path, obj: Any) -> None:
@@ -239,7 +327,7 @@ def _read_csv(path: Path) -> list[dict[str, str]]:
 
 def verify(bundle: Path) -> dict[str, Any]:
     errors: list[str] = []
-    for name in (STATE_NAME, INPUT_NAME, ION_NAME, LEVEL_NAME, REPORT_NAME):
+    for name in (STATE_NAME, INPUT_NAME, ION_NAME, LEVEL_NAME, SOLVE_NAME, REPORT_NAME):
         if not (bundle / name).is_file():
             errors.append(f"missing:{name}")
     if errors:
@@ -249,6 +337,7 @@ def verify(bundle: Path) -> dict[str, Any]:
     inputs = _read_csv(bundle / INPUT_NAME)
     ions = _read_csv(bundle / ION_NAME)
     levels = _read_csv(bundle / LEVEL_NAME)
+    solve_rows = _read_csv(bundle / SOLVE_NAME)
     sequences = [int(row["sequence"]) for row in states]
     kinds = [row["kind"] for row in states]
     workspace_contract_exact = True
@@ -280,6 +369,12 @@ def verify(bundle: Path) -> dict[str, Any]:
         errors.append(f"ion_rows={len(ions)} expected={expected_ions}")
     if not levels or {int(row["sequence"]) for row in levels} != set(range(1, 62)):
         errors.append("level_sequence_inventory")
+    solve_sequences = {int(row["sequence"]) for row in solve_rows}
+    solve_elements = {(int(row["sequence"]), int(row["element_z"])) for row in solve_rows}
+    if not solve_rows or solve_sequences != set(range(1, 62)):
+        errors.append("solve_row_sequence_inventory")
+    if len(solve_elements) != 61 * 3:
+        errors.append(f"solve_element_inventory={len(solve_elements)}")
     report = json.loads((bundle / REPORT_NAME).read_text())
     if not report.get("actual_v0472_runtime_capture"):
         errors.append("not_actual_v0472_runtime_capture")
@@ -289,6 +384,7 @@ def verify(bundle: Path) -> dict[str, Any]:
         "actual_v0472_runtime_capture": bool(report.get("actual_v0472_runtime_capture")),
         "evaluations": len(states), "input_states": len(inputs), "dsec_evaluations": kinds.count("dsec"),
         "final_evaluations": kinds.count("final"), "ion_rows": len(ions), "level_rows": len(levels),
+        "solve_rows": len(solve_rows), "solve_elements": len(solve_elements),
         "workspace_sequence_contract_exact": workspace_contract_exact,
         "qualification_only": True, "production_promotion_ready": False,
     }
@@ -299,12 +395,12 @@ def capture(source_archive: Path, atdb_path: Path, output_dir: Path,
     output_dir = output_dir.resolve(); output_dir.mkdir(parents=True, exist_ok=True)
     if base.base._sha256(source_archive) != base.base.SOURCE_ARCHIVE_SHA256:
         raise ValueError("v0.6.47.2 source archive hash mismatch")
-    with tempfile.TemporaryDirectory(prefix="v048743_") as tmp:
+    with tempfile.TemporaryDirectory(prefix="v048744_") as tmp:
         tmp_path = Path(tmp)
         base.base._safe_extract(source_archive, tmp_path / "source")
         root = base.base._source_root(tmp_path / "source")
         probe_dir = tmp_path / "probe"; probe_dir.mkdir()
-        (probe_dir / "v048743_all61_probe_runtime.py").write_text(_PROBE)
+        (probe_dir / "v048744_all61_probe_runtime.py").write_text(_PROBE)
         (probe_dir / "probe_config.json").write_text(json.dumps({"output_dir": str(output_dir)}, indent=2))
         (probe_dir / "driver.py").write_text(_DRIVER)
         env = dict(os.environ)
@@ -326,7 +422,7 @@ def capture(source_archive: Path, atdb_path: Path, output_dir: Path,
     result = verify(output_dir)
     _write_json(output_dir / VERIFY_NAME, result)
     files = {}
-    for name in (STATE_NAME, INPUT_NAME, ION_NAME, LEVEL_NAME, REPORT_NAME, VERIFY_NAME):
+    for name in (STATE_NAME, INPUT_NAME, ION_NAME, LEVEL_NAME, SOLVE_NAME, REPORT_NAME, VERIFY_NAME):
         path = output_dir / name
         files[name] = {"sha256": base.base._sha256(path), "size_bytes": path.stat().st_size}
     _write_json(output_dir / MANIFEST_NAME, {**result, "immutable": result["result"] == "ACCEPT", "files": files})

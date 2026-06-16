@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.7.44 — all-61 fixed-state residual decomposition - 2026-06-16
+
+- Added direct compact source/native solve-row capture for H, He, and Mg across all 61 immutable reference-input states.
+- Added per-element first-divergence classification across active-window construction, transformed call-start seed, element solve response, global commit, and fully ionized-stage reconstruction.
+- Added abundance-weighted H/He/Mg charge-contribution decomposition for computed electron fraction and charge residual.
+- Added the qualification-only `XSTAR_QUALIFICATION_ALL_ELEMENT_SOLVE_RESPONSE` diagnostic stream.
+- Confirmed that v0.6.48.7.43 is a complete diagnostic rejection: all 61 native evaluations and zero callbacks pass, while fixed-state parity remains rejected. Thermal parity remains blocked.
+- Preserved fixed-state ABI 60487 and lowered-program ABI 60485.
+
 ## 0.6.48.7.43 — canonical all-61 fixed-state capture and replay repair - 2026-06-16
 
 - Rejected v0.6.48.7.42 as a completed fixed-state milestone because its capture interleaved retained final evaluations with DSEC rows, while the immutable trajectory places DSEC rows at 1–57 and final rows at 58–61.

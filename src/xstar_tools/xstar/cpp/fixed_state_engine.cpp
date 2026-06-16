@@ -597,6 +597,7 @@ struct xstar_fixed_state_context_impl {
     bool last_helium_unqualified_type71_ablation = false;
     bool last_helium_unqualified_type99_ablation = false;
     bool last_helium_solve_response = false;
+    bool last_all_element_solve_response = false;
     bool last_type53_row46_coupled_replacement = false;
     bool last_helium_source_insertion_order = false;
     std::map<int, std::array<double,4>> last_element_thermal_budget;
@@ -2919,6 +2920,7 @@ int run_impl(
     const bool helium_unqualified_type71_ablation = environment_flag("XSTAR_HELIUM_ABLATE_UNQUALIFIED_TYPE71");
     const bool helium_unqualified_type99_ablation = environment_flag("XSTAR_HELIUM_ABLATE_UNQUALIFIED_TYPE99");
     const bool helium_solve_response = environment_flag("XSTAR_QUALIFICATION_SOLVE_RESPONSE");
+    const bool all_element_solve_response = environment_flag("XSTAR_QUALIFICATION_ALL_ELEMENT_SOLVE_RESPONSE");
     const bool helium_source_insertion_order =
         environment_flag("XSTAR_QUALIFICATION_HELIUM_SOURCE_INSERTION_ORDER");
     const bool type53_two_state_promotion = environment_flag("XSTAR_QUALIFICATION_TYPE53_TWO_STATE_PROMOTION");
@@ -2930,6 +2932,9 @@ int run_impl(
     }
     if (helium_solve_response && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
         throw std::runtime_error("helium solve-response diagnostics require XSTAR_QUALIFICATION_REPLACEMENT=1");
+    }
+    if (all_element_solve_response && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
+        throw std::runtime_error("all-element solve-response diagnostics require XSTAR_QUALIFICATION_REPLACEMENT=1");
     }
     if (helium_source_insertion_order && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
         throw std::runtime_error("helium source insertion-order restoration requires XSTAR_QUALIFICATION_REPLACEMENT=1");
@@ -2955,6 +2960,7 @@ int run_impl(
     ctx.last_helium_unqualified_type71_ablation = helium_unqualified_type71_ablation;
     ctx.last_helium_unqualified_type99_ablation = helium_unqualified_type99_ablation;
     ctx.last_helium_solve_response = helium_solve_response;
+    ctx.last_all_element_solve_response = all_element_solve_response;
     ctx.last_type53_row46_coupled_replacement = type53_row46_coupled_replacement;
     ctx.last_helium_source_insertion_order = helium_source_insertion_order;
     const auto total_start = clock_type::now();
@@ -3086,8 +3092,13 @@ int run_impl(
         xstar_element_input_v1 ein{};
         xstar_element_input_init_v1(&ein);
         ein.flags = XSTAR_ELEMENT_STRICT_SOURCE_ORDER | XSTAR_ELEMENT_ALLOW_DENSE_RESCUE;
+        const bool capture_element_solve_response = all_element_solve_response ||
+            (helium_solve_response && element.element_z == 2);
+        if (capture_element_solve_response) {
+            ein.flags |= XSTAR_ELEMENT_DIAGNOSTICS_SUMMARY;
+        }
         if (helium_solve_response && element.element_z == 2) {
-            ein.flags |= XSTAR_ELEMENT_DIAGNOSTICS_SUMMARY | XSTAR_ELEMENT_RETURN_MATRICES;
+            ein.flags |= XSTAR_ELEMENT_RETURN_MATRICES;
         }
         ein.element_z = active.element.element_z;
         ein.n_rows = active.element.n_rows;
@@ -3219,7 +3230,7 @@ int run_impl(
         element_diagnostic.max_relative_row_residual = eout.max_relative_row_residual;
         element_diagnostic.records_constructed = eout.records_constructed;
         element_diagnostic.terms_constructed = eout.terms_constructed;
-        if (helium_solve_response && element.element_z == 2) {
+        if (capture_element_solve_response) {
             element_diagnostic.solve_response_captured = true;
             element_diagnostic.active_raw_global_level_indices.resize(static_cast<std::size_t>(active.element.n_rows), 0);
             element_diagnostic.active_raw_call_start_xilevg.resize(static_cast<std::size_t>(active.element.n_rows), 0.0);
@@ -3241,9 +3252,11 @@ int run_impl(
             element_diagnostic.active_initial_populations = buffers.initial;
             element_diagnostic.active_final_outer_start_populations = buffers.outer;
             element_diagnostic.active_final_populations = buffers.populations;
-            element_diagnostic.dense_matrix = buffers.dense;
-            element_diagnostic.heating_matrix = buffers.heat;
-            element_diagnostic.heating_matrix2 = buffers.heat2;
+            if (helium_solve_response && element.element_z == 2) {
+                element_diagnostic.dense_matrix = buffers.dense;
+                element_diagnostic.heating_matrix = buffers.heat;
+                element_diagnostic.heating_matrix2 = buffers.heat2;
+            }
             element_diagnostic.rhs = buffers.rhs;
             element_diagnostic.row_residual = buffers.row_residual;
             element_diagnostic.row_scale = buffers.row_scale;
@@ -3891,6 +3904,45 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                                 << row.statistical_weight << ',' << effective_initial_population << ',' << final_population << ',' << (active_row ? 1 : 0) << '\n';
             }
             global_offset += source.rows.size();
+        }
+
+        if (context->last_all_element_solve_response) {
+            std::ofstream all_solve_rows(root / (stem + "_all_element_solve_rows.csv"));
+            if (!all_solve_rows) throw std::runtime_error("cannot create all-element solve-response CSV file");
+            all_solve_rows << "evaluation_ordinal,element_index,element_z,abundance,active_min_stage,active_max_stage,compact_row,full_row,global_level_index,superlevel,ion,ion_charge,is_normalization_row,raw_global_level_index,raw_call_start_xilevg,loaded_global_level_index,loaded_call_start_xilevg,initial_population,final_outer_start_population,final_population,rhs,native_row_residual,native_row_scale,native_relative_row_residual\n";
+            all_solve_rows << std::setprecision(17);
+            for (const auto& diagnostic : context->last_element_diagnostics) {
+                if (!diagnostic.solve_response_captured) continue;
+                const auto& source = context->program.elements.at(static_cast<std::size_t>(diagnostic.element_index));
+                const int n = diagnostic.active.element.n_rows;
+                if (diagnostic.active_initial_populations.size() != static_cast<std::size_t>(n) ||
+                    diagnostic.active_final_outer_start_populations.size() != static_cast<std::size_t>(n) ||
+                    diagnostic.active_final_populations.size() != static_cast<std::size_t>(n) ||
+                    diagnostic.rhs.size() != static_cast<std::size_t>(n)) {
+                    throw std::runtime_error("all-element solve-response buffer dimensions are inconsistent");
+                }
+                for (int compact_row = 1; compact_row <= n; ++compact_row) {
+                    const int full_row = diagnostic.active.full_row_start + compact_row - 1;
+                    const auto& row = source.rows.at(static_cast<std::size_t>(full_row - 1));
+                    const std::size_t index = static_cast<std::size_t>(compact_row - 1);
+                    all_solve_rows << evaluation_ordinal << ',' << diagnostic.element_index << ',' << diagnostic.element_z << ','
+                                   << diagnostic.abundance << ',' << diagnostic.active.min_stage << ',' << diagnostic.active.max_stage << ','
+                                   << compact_row << ',' << full_row << ',' << row.global_level_index << ',' << row.superlevel << ','
+                                   << row.ion << ',' << row.ion_charge << ','
+                                   << (compact_row == diagnostic.active.element.normalization_row ? 1 : 0) << ','
+                                   << diagnostic.active_raw_global_level_indices.at(index) << ','
+                                   << diagnostic.active_raw_call_start_xilevg.at(index) << ','
+                                   << diagnostic.active_loaded_global_level_indices.at(index) << ','
+                                   << diagnostic.active_loaded_call_start_xilevg.at(index) << ','
+                                   << diagnostic.active_initial_populations.at(index) << ','
+                                   << diagnostic.active_final_outer_start_populations.at(index) << ','
+                                   << diagnostic.active_final_populations.at(index) << ','
+                                   << diagnostic.rhs.at(index) << ','
+                                   << diagnostic.row_residual.at(index) << ','
+                                   << diagnostic.row_scale.at(index) << ','
+                                   << diagnostic.relative_row_residual.at(index) << '\n';
+                }
+            }
         }
 
         if (context->last_helium_solve_response) {
