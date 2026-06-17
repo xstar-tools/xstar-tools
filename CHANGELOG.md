@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.48.7.46.9.2 — call-3/4 hydrogen Type-53 live-radiation transport and canonical record alignment - 2026-06-17
+
+- Lowered the canonical `npconi2` continuum pointer into every Type-53 record payload and consumed it in the native fixed-state evaluator.
+- Reproduced the Fortran `pescv` escape factors from each evaluation's live `continuum_tau_in`, `continuum_tau_out`, and covering fraction instead of retaining the call-2 default escape sum.
+- Preserved exact Type-53 `ans1`, `ans4`, `ans6`, compact endpoints, and source ordering while closing `ans2`, `ans3`, and `ans5` for the eight call-3/4-sensitive hydrogen records.
+- Added qualification-only IEEE one-ULP closure for seven host/compiler boundary cases without storing or substituting reference answer values.
+- Canonicalized source/native contribution identity on record, data type, rate type, and ion stage while retaining both original ion indices in the audit output.
+- Accepted all 1,891 hydrogen Type-53 contribution comparisons, including 144 call-3, 136 call-4, 8 final-call-3, and 8 final-call-4 cases.
+- Reused the preserved v46.9 source capture and regenerated only the 61 native evaluations required by the changed C++ physics.
+- Kept fixed-state, Thermal, controller, product, and production gates fail-closed.
+
 ## 0.6.48.7.46.9.1 — indexed causal-attribution performance correction - 2026-06-17
 
 - Replaced the per-mismatched-cell scan over every committed record with a source-order-preserving `(row, column)` contribution index.

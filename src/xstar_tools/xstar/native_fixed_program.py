@@ -785,7 +785,14 @@ def _lower_record(master: Any, derived: Any, rec: int, element_index: int, rows:
             float(destination_weight),
             float(leveltemp_destination_energy),
         ]
-        payload_ints = []
+        # v0.6.48.7.46.9.2: calc_hmc_ion obtains the Type-53 RRC escape
+        # factors from tauc(:, derivedpointers%npconi2(record)).  Preserve that
+        # canonical one-based continuum identity in the lowered program so the
+        # native evaluator can consume each call's live continuum-tau arrays.
+        continuum_index = int(derived.npconi2[rec]) if rec < len(derived.npconi2) else 0
+        if continuum_index <= 0:
+            raise ValueError(f"type53 record {rec} has no canonical continuum index")
+        payload_ints = [continuum_index]
         line_energy = float(threshold_ev)
     elif dt == 76:
         if len(raw_ints) < 2 or len(raw_reals) < 1:

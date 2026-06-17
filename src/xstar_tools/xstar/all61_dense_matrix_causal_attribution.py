@@ -1,4 +1,4 @@
-"""Indexed all-61 dense-matrix causal attribution for v0.6.48.7.46.9.1.
+"""Indexed all-61 dense-matrix causal attribution for v0.6.48.7.46.9.2.
 
 The audit consumes the exact source and native contribution streams captured by
 v0.6.48.7.46.9, but indexes those streams once by matrix cell instead of
@@ -24,8 +24,8 @@ from typing import Any, Iterable, Mapping
 
 import numpy as np
 
-RELEASE = "0.6.48.7.46.9.1"
-SCHEMA = "xstar-tools-v064874691-indexed-dense-matrix-causal-attribution-v1"
+RELEASE = "0.6.48.7.46.9.2"
+SCHEMA = "xstar-tools-v064874692-live-type53-canonical-attribution-v1"
 SUMMARY_NAME = "all61_dense_matrix_causal_attribution_summary.json"
 CELL_NAME = "all61_dense_matrix_causal_cells.csv"
 RECORD_NAME = "all61_dense_matrix_causal_records.csv.gz"
@@ -54,7 +54,7 @@ CELL_FIELDS = [
 ]
 RECORD_FIELDS = [
     "sequence", "element_z", "row", "column", "record", "data_type", "rate_type",
-    "ion_index", "ion_stage", "role", "classification", "source_present", "native_present",
+    "ion_index", "ion_stage", "source_ion_index", "native_ion_index", "role", "classification", "source_present", "native_present",
     "source_order_index", "native_order_index", "source_lower_row", "source_upper_row",
     "native_lower_row", "native_upper_row", "source_value", "native_value", "delta",
 ]
@@ -119,8 +119,15 @@ class Contribution:
         return self.ints[8]
 
     @property
-    def identity(self) -> tuple[int, int, int, int, int]:
-        return (self.record, self.data_type, self.rate_type, self.ion_index, self.ion_stage)
+    def identity(self) -> tuple[int, int, int, int]:
+        """Canonical source/native record identity.
+
+        The source contribution stream stores the global XSTAR ion index while
+        the lowered native stream stores an element-local ion index.  Record
+        number, data type, rate type, and ion stage are invariant across both
+        representations and uniquely identify the committed atomic record.
+        """
+        return (self.record, self.data_type, self.rate_type, self.ion_stage)
 
     def cell(self, role_index: int) -> tuple[int, int]:
         if role_index == 0:
@@ -290,8 +297,8 @@ def _reconstruct(system: SystemData) -> tuple[np.ndarray, np.ndarray, np.ndarray
     return dense, heat, heat2
 
 
-def _record_maps(contributions: list[Contribution]) -> dict[tuple[int, int, int, int, int], Contribution]:
-    out: dict[tuple[int, int, int, int, int], Contribution] = {}
+def _record_maps(contributions: list[Contribution]) -> dict[tuple[int, int, int, int], Contribution]:
+    out: dict[tuple[int, int, int, int], Contribution] = {}
     for contribution in contributions:
         if contribution.identity in out:
             raise ValueError(f"duplicate record identity {contribution.identity}")
@@ -319,7 +326,7 @@ def _classify_record(source: Contribution | None, native: Contribution | None) -
     return "EXACT_RECORD"
 
 
-TermEntry = tuple[tuple[int, int, int, int, int], int, float]
+TermEntry = tuple[tuple[int, int, int, int], int, float]
 
 
 def _index_terms_by_cell(contributions: list[Contribution]) -> dict[tuple[int, int], list[TermEntry]]:
@@ -369,6 +376,16 @@ def _attribute_system(
         identity: _classify_record(source_map.get(identity), native_map.get(identity))
         for identity in identities
     }
+    if metrics is not None:
+        canonical_pairs = [
+            identity for identity in identities
+            if source_map.get(identity) is not None and native_map.get(identity) is not None
+        ]
+        metrics["canonical_record_pairs"] = metrics.get("canonical_record_pairs", 0) + len(canonical_pairs)
+        metrics["global_to_local_ion_index_pairs"] = metrics.get("global_to_local_ion_index_pairs", 0) + sum(
+            source_map[identity].ion_index != native_map[identity].ion_index
+            for identity in canonical_pairs
+        )
     source_terms_by_cell = _index_terms_by_cell(source.contributions)
     native_terms_by_cell = _index_terms_by_cell(native.contributions)
     cell_rows: list[dict[str, Any]] = []
@@ -421,8 +438,10 @@ def _attribute_system(
                     "record": identity[0],
                     "data_type": identity[1],
                     "rate_type": identity[2],
-                    "ion_index": identity[3],
-                    "ion_stage": identity[4],
+                    "ion_index": native_contribution.ion_index if native_contribution else source_contribution.ion_index,
+                    "ion_stage": identity[3],
+                    "source_ion_index": source_contribution.ion_index if source_contribution else 0,
+                    "native_ion_index": native_contribution.ion_index if native_contribution else 0,
                     "role": role,
                     "classification": classification,
                     "source_present": int(source_contribution is not None),
@@ -495,8 +514,31 @@ def _new_hydrogen_type53_state() -> dict[str, Any]:
         "endpoints_exact": 0,
         "diagnostics_seen": 0,
         "diagnostics_exact": 0,
+        "affected_channel_exact": {"ans1": 0, "ans2": 0, "ans3": 0, "ans4": 0, "ans5": 0, "ans6": 0},
+        "phase_exact": {"call3": 0, "call4": 0, "final_call3": 0, "final_call4": 0},
         "errors": [],
     }
+
+
+_HYDROGEN_TYPE53_AFFECTED_RECORDS = {41, 42, 43, 45, 47, 48, 59, 66}
+_HYDROGEN_TYPE53_PHASE_EXPECTED = {
+    "call3": 144,
+    "call4": 136,
+    "final_call3": 8,
+    "final_call4": 8,
+}
+
+
+def _hydrogen_type53_phase(sequence: int) -> str | None:
+    if 23 <= sequence <= 40:
+        return "call3"
+    if 41 <= sequence <= 57:
+        return "call4"
+    if sequence == 60:
+        return "final_call3"
+    if sequence == 61:
+        return "final_call4"
+    return None
 
 
 def _update_hydrogen_type53_state(
@@ -509,6 +551,7 @@ def _update_hydrogen_type53_state(
     source_map = _record_maps(source.contributions)
     native_map = _record_maps(native.contributions)
     errors: list[str] = state["errors"]
+    phase = _hydrogen_type53_phase(sequence)
     for identity, source_contribution in source_map.items():
         if identity[1] != 53:
             continue
@@ -517,15 +560,23 @@ def _update_hydrogen_type53_state(
         if native_contribution is None:
             errors.append(f"missing_native_type53:{sequence}:{identity[0]}")
             continue
-        if (source_contribution.lower, source_contribution.upper) == (
+        endpoints_exact = (source_contribution.lower, source_contribution.upper) == (
             native_contribution.lower, native_contribution.upper
-        ):
+        )
+        if endpoints_exact:
             state["endpoints_exact"] += 1
-        if (
-            source_contribution.ints[2:9] == native_contribution.ints[2:9]
+        contribution_exact = (
+            source_contribution.record == native_contribution.record
+            and source_contribution.data_type == native_contribution.data_type
+            and source_contribution.rate_type == native_contribution.rate_type
+            and source_contribution.ion_stage == native_contribution.ion_stage
+            and endpoints_exact
             and source_contribution.reals == native_contribution.reals
-        ):
+        )
+        if contribution_exact:
             state["contributions_exact"] += 1
+            if phase and identity[0] in _HYDROGEN_TYPE53_AFFECTED_RECORDS:
+                state["phase_exact"][phase] += 1
     records_path = native_run / "qualification_diagnostics" / f"evaluation_{sequence:04d}_records.csv"
     if not records_path.is_file():
         errors.append(f"missing_record_diagnostics:{sequence}")
@@ -534,18 +585,22 @@ def _update_hydrogen_type53_state(
         if int(row["element_z"]) != 1 or int(row["data_type"]) != 53:
             continue
         state["diagnostics_seen"] += 1
+        channel_exact = {
+            f"ans{index}": float(row[f"ans{index}"]) == float(row[f"type53_shadow_ans{index}"])
+            for index in range(1, 7)
+        }
         exact = (
             int(row["matrix_committed"]) == 1
             and int(row["type53_shadow_valid"]) == 1
-            and all(
-                float(row[f"ans{index}"]) == float(row[f"type53_shadow_ans{index}"])
-                for index in range(1, 7)
-            )
+            and all(channel_exact.values())
         )
         if exact:
             state["diagnostics_exact"] += 1
         else:
             errors.append(f"type53_shadow_not_committed:{sequence}:{row['record']}")
+        if int(row["record"]) in _HYDROGEN_TYPE53_AFFECTED_RECORDS and phase:
+            for name, value in channel_exact.items():
+                state["affected_channel_exact"][name] += int(value)
 
 
 def _finalize_hydrogen_type53_state(state: dict[str, Any]) -> dict[str, Any]:
@@ -555,6 +610,15 @@ def _finalize_hydrogen_type53_state(state: dict[str, Any]) -> dict[str, Any]:
         errors.append(
             f"hydrogen_type53_inventory={state['records_expected']} expected={expected_inventory}"
         )
+    for phase, expected in _HYDROGEN_TYPE53_PHASE_EXPECTED.items():
+        if state["phase_exact"][phase] != expected:
+            errors.append(f"hydrogen_type53_{phase}_exact={state['phase_exact'][phase]} expected={expected}")
+    affected_total = sum(_HYDROGEN_TYPE53_PHASE_EXPECTED.values())
+    for channel in ("ans1", "ans2", "ans3", "ans4", "ans5", "ans6"):
+        if state["affected_channel_exact"][channel] != affected_total:
+            errors.append(
+                f"hydrogen_type53_{channel}_exact={state['affected_channel_exact'][channel]} expected={affected_total}"
+            )
     result = "ACCEPT" if (
         not errors
         and state["contributions_exact"] == state["records_expected"]
@@ -569,9 +633,12 @@ def _finalize_hydrogen_type53_state(state: dict[str, Any]) -> dict[str, Any]:
         "endpoints_exact": state["endpoints_exact"],
         "diagnostics_seen": state["diagnostics_seen"],
         "diagnostics_exact": state["diagnostics_exact"],
+        "affected_records": sorted(_HYDROGEN_TYPE53_AFFECTED_RECORDS),
+        "affected_channel_exact": state["affected_channel_exact"],
+        "phase_exact": state["phase_exact"],
+        "phase_expected": dict(_HYDROGEN_TYPE53_PHASE_EXPECTED),
         "errors": errors[:50],
     }
-
 
 def analyze(
     source_capture: Path,
@@ -678,7 +745,7 @@ def analyze(
                 if progress_every > 0 and (processed % progress_every == 0 or processed == len(expected)):
                     elapsed = time.perf_counter() - started
                     print(
-                        "V04874691_PROGRESS "
+                        "V04874692_PROGRESS "
                         f"systems={processed}/{len(expected)} "
                         f"mismatch_cells={total_mismatch_cells} "
                         f"attributed_cells={attributed_cells} "
@@ -714,6 +781,19 @@ def analyze(
         "ALL_61_NATIVE_MATRIX_RECONSTRUCTION_EXACT": "ACCEPT" if native_reconstruction_exact == 183 else "REJECT",
         "ALL_61_DENSE_MATRIX_CAUSAL_RECORDS_ATTRIBUTED": "ACCEPT" if all_attributed else "REJECT",
         "ALL_61_HYDROGEN_TYPE53_SOURCE_FAITHFUL": h53["result"],
+        "HYDROGEN_TYPE53_RECORDS_EXPECTED": "ACCEPT" if h53["records_expected"] == 1891 else "REJECT",
+        "HYDROGEN_TYPE53_CONTRIBUTIONS_EXACT": "ACCEPT" if h53["contributions_exact"] == 1891 else "REJECT",
+        "HYDROGEN_TYPE53_CALL3_EXACT": "ACCEPT" if h53["phase_exact"]["call3"] == 144 else "REJECT",
+        "HYDROGEN_TYPE53_CALL4_EXACT": "ACCEPT" if h53["phase_exact"]["call4"] == 136 else "REJECT",
+        "HYDROGEN_TYPE53_FINAL_CALL3_EXACT": "ACCEPT" if h53["phase_exact"]["final_call3"] == 8 else "REJECT",
+        "HYDROGEN_TYPE53_FINAL_CALL4_EXACT": "ACCEPT" if h53["phase_exact"]["final_call4"] == 8 else "REJECT",
+        "CANONICAL_RECORD_ALIGNMENT": "ACCEPT" if (
+            attribution_metrics.get("canonical_record_pairs", 0) > 0
+            and attribution_metrics.get("global_to_local_ion_index_pairs", 0) > 0
+        ) else "REJECT",
+        "V064874692_HYDROGEN_TYPE53_LIVE_RADIATION_AND_CANONICAL_ALIGNMENT": (
+            "ACCEPT" if scientific_milestone else "REJECT"
+        ),
         "V064874691_INDEXED_CAUSAL_ATTRIBUTION_PERFORMANCE": (
             "ACCEPT" if performance_milestone else "REJECT"
         ),
@@ -804,6 +884,46 @@ def causal_attribution_self_test() -> dict[str, Any]:
     }
 
 
+
+
+def canonical_record_alignment_self_test() -> dict[str, Any]:
+    """Verify that global source and element-local native ion indices align.
+
+    The source stream uses a global XSTAR ion index while the lowered native
+    stream uses an element-local index.  The canonical identity must pair the
+    same physical record without erasing either original audit value.
+    """
+    common_reals = tuple(float(index + 1) for index in range(REAL_COLUMNS))
+    source = Contribution(
+        (17, 40402, 40402, 50, 7, 71, 5, 11, 12, 0, 11, 12, 11, 12),
+        common_reals,
+    )
+    native = Contribution(
+        (3, 40402, 40402, 50, 7, 5, 5, 11, 12, 0, 11, 12, 11, 12),
+        common_reals,
+    )
+    errors: list[str] = []
+    if source.identity != native.identity:
+        errors.append(f"canonical identities differ: {source.identity} != {native.identity}")
+    source_map = _record_maps([source])
+    native_map = _record_maps([native])
+    if set(source_map) != set(native_map):
+        errors.append("canonical maps do not pair the record")
+    if source.ion_index == native.ion_index:
+        errors.append("fixture does not exercise global-to-local ion-index alignment")
+    if _classify_record(source, native) not in {"ACCUMULATION_ORDER_DELTA", "EXACT_RECORD"}:
+        errors.append("canonical pair was classified as a missing or rate-delta record")
+    return {
+        "schema": "xstar-tools-v064874692-canonical-record-alignment-self-test-v1",
+        "release": RELEASE,
+        "result": "ACCEPT" if not errors else "REJECT",
+        "errors": errors,
+        "source_identity": list(source.identity),
+        "native_identity": list(native.identity),
+        "source_ion_index": source.ion_index,
+        "native_ion_index": native.ion_index,
+        "classification": _classify_record(source, native),
+    }
 
 def indexed_performance_self_test() -> dict[str, Any]:
     """Exercise semantic equivalence and require a large index advantage."""

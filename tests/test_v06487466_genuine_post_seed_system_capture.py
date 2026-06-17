@@ -19,7 +19,7 @@ def write_csv(path: Path, rows: list[dict[str, object]]) -> None:
 
 
 def test_generated_probe_contains_real_system_capture() -> None:
-    assert capture.RELEASE == "0.6.48.7.46.9.1"
+    assert capture.RELEASE == "0.6.48.7.46.9.2"
     assert len(capture._PROBE) > 25_000
     assert capture._PROBE.count("def _v048746_capture_solve_system") == 1
     assert capture._PROBE.count("_v048746_capture_solve_system(kind") >= 2
