@@ -566,6 +566,11 @@ struct NativeElementDiagnostic {
     std::vector<double> row_scale;
     std::vector<double> relative_row_residual;
     std::vector<double> active_ion_reconstruction;
+    // Exact matrix-contribution stream after active-window filtering and any
+    // source-order restoration. v0.6.48.7.46.9 writes this compact stream
+    // beside the solve-system arrays so every mismatched matrix cell can be
+    // attributed to one or more causal atomic records.
+    std::vector<xstar_element_contribution_v1> committed_contributions;
     std::string solver_method;
     std::uint32_t solver_status_flags = 0;
     int outer_iterations = 0;
@@ -2218,14 +2223,30 @@ EvaluatedRecord evaluate_record(
                 out.type53_shadow.continuum_index_one_based = row46_contract->continuum_index_one_based;
                 out.type53_shadow.dsec_radiation_bin_count = input.dsec_radiation_bin_count;
                 out.type53_shadow.continuum_tau_count = input.continuum_tau_count;
-            } else if (source_exact && element.element_z == 2 &&
-                       (record_context.valid || record.ion_stage == 2)) {
-                c.ans1 = source_shadow.ans1;
-                c.ans2 = source_shadow.ans2;
-                c.ans3 = source_shadow.ans3;
-                c.ans4 = source_shadow.ans4;
-                c.ans5 = source_shadow.ans5;
-                c.ans6 = source_shadow.ans6;
+            } else {
+                const bool hydrogen_source_faithful =
+                    element.element_z == 1 &&
+                    environment_flag("XSTAR_QUALIFICATION_HYDROGEN_TYPE53_SOURCE_FAITHFUL");
+                if (hydrogen_source_faithful &&
+                    !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
+                    throw std::runtime_error(
+                        "hydrogen type53 source-faithful correction requires XSTAR_QUALIFICATION_REPLACEMENT=1");
+                }
+                if (hydrogen_source_faithful && !source_exact) {
+                    throw std::runtime_error(
+                        "hydrogen type53 source-faithful evaluator did not produce a result");
+                }
+                const bool helium_source_faithful =
+                    element.element_z == 2 &&
+                    (record_context.valid || record.ion_stage == 2);
+                if (source_exact && (hydrogen_source_faithful || helium_source_faithful)) {
+                    c.ans1 = source_shadow.ans1;
+                    c.ans2 = source_shadow.ans2;
+                    c.ans3 = source_shadow.ans3;
+                    c.ans4 = source_shadow.ans4;
+                    c.ans5 = source_shadow.ans5;
+                    c.ans6 = source_shadow.ans6;
+                }
             }
             break;
         }
@@ -3364,6 +3385,7 @@ int run_impl(
         output.elcter += element.abundance * charge_per_element;
 
         NativeElementDiagnostic element_diagnostic;
+        element_diagnostic.committed_contributions = contributions;
         element_diagnostic.element_index = element.element_index;
         element_diagnostic.element_z = element.element_z;
         element_diagnostic.abundance = element.abundance;
@@ -4127,7 +4149,9 @@ int xstar_fixed_state_write_last_diagnostics_v1(
             std::ofstream manifest(root / (stem + "_all_element_solve_system_manifest.csv"));
             if (!manifest) throw std::runtime_error("cannot create all-element solve-system manifest");
             manifest << "evaluation_ordinal,element_index,element_z,abundance,active_min_stage,active_max_stage,n_rows,n_ions,normalization_row,solver_method,solver_status_flags,outer_iterations,fixed_point_iterations,normalization,normalization_error,"
-                        "dense_matrix_path,dense_matrix_count,heating_matrix_path,heating_matrix_count,heating_matrix2_path,heating_matrix2_count,rhs_path,rhs_count,solver_input_path,solver_input_count,outer_path,outer_count,final_path,final_count,ion_reconstruction_path,ion_reconstruction_count\n";
+                        "dense_matrix_path,dense_matrix_count,heating_matrix_path,heating_matrix_count,heating_matrix2_path,heating_matrix2_count,rhs_path,rhs_count,solver_input_path,solver_input_count,outer_path,outer_count,final_path,final_count,ion_reconstruction_path,ion_reconstruction_count,"
+                        "matrix_contribution_ints_path,matrix_contribution_int_rows,matrix_contribution_int_columns,"
+                        "matrix_contribution_reals_path,matrix_contribution_real_rows,matrix_contribution_real_columns\n";
             manifest << std::setprecision(17);
             const auto write_binary = [](const std::filesystem::path& path, const std::vector<double>& values) {
                 std::ofstream out(path, std::ios::binary);
@@ -4137,6 +4161,15 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                               static_cast<std::streamsize>(values.size() * sizeof(double)));
                 }
                 if (!out) throw std::runtime_error("failed writing all-element solve-system binary: " + path.string());
+            };
+            const auto write_int64_binary = [](const std::filesystem::path& path, const std::vector<std::int64_t>& values) {
+                std::ofstream out(path, std::ios::binary);
+                if (!out) throw std::runtime_error("cannot create matrix-contribution integer binary: " + path.string());
+                if (!values.empty()) {
+                    out.write(reinterpret_cast<const char*>(values.data()),
+                              static_cast<std::streamsize>(values.size() * sizeof(std::int64_t)));
+                }
+                if (!out) throw std::runtime_error("failed writing matrix-contribution integer binary: " + path.string());
             };
             for (const auto& diagnostic : context->last_element_diagnostics) {
                 if (!diagnostic.solve_response_captured) continue;
@@ -4167,6 +4200,34 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                 const auto outer_path = relative("outer");
                 const auto final_path = relative("final");
                 const auto ion_path = relative("ion_reconstruction");
+                const auto contribution_ints_path = relative("matrix_contribution_ints");
+                const auto contribution_reals_path = relative("matrix_contribution_reals");
+                constexpr std::size_t kContributionIntColumns = 14;
+                constexpr std::size_t kContributionRealColumns = 16;
+                std::vector<std::int64_t> contribution_ints;
+                std::vector<double> contribution_reals;
+                contribution_ints.reserve(diagnostic.committed_contributions.size() * kContributionIntColumns);
+                contribution_reals.reserve(diagnostic.committed_contributions.size() * kContributionRealColumns);
+                for (std::size_t contribution_index = 0;
+                     contribution_index < diagnostic.committed_contributions.size(); ++contribution_index) {
+                    const auto& c = diagnostic.committed_contributions[contribution_index];
+                    const std::array<std::int64_t, kContributionIntColumns> ints = {{
+                        static_cast<std::int64_t>(contribution_index + 1), c.source_position, c.record,
+                        static_cast<std::int64_t>(c.data_type), static_cast<std::int64_t>(c.rate_type),
+                        static_cast<std::int64_t>(c.ion_index), static_cast<std::int64_t>(c.ion_stage),
+                        static_cast<std::int64_t>(c.lower_row), static_cast<std::int64_t>(c.upper_row),
+                        0, 0, 0, 0, 0
+                    }};
+                    contribution_ints.insert(contribution_ints.end(), ints.begin(), ints.end());
+                    const double xpx = c.density_scale;
+                    const std::array<double, kContributionRealColumns> reals = {{
+                        c.ans1, c.ans2, 0.0, 0.0,
+                        c.ans2, c.ans1, 0.0, 0.0,
+                        -c.ans1, -c.ans1, c.ans4 * xpx, c.ans6 * xpx,
+                        -c.ans2, -c.ans2, -c.ans3 * xpx, -c.ans5 * xpx
+                    }};
+                    contribution_reals.insert(contribution_reals.end(), reals.begin(), reals.end());
+                }
                 write_binary(root / dense_path, diagnostic.dense_matrix);
                 write_binary(root / heat_path, diagnostic.heating_matrix);
                 write_binary(root / heat2_path, diagnostic.heating_matrix2);
@@ -4175,6 +4236,8 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                 write_binary(root / outer_path, diagnostic.active_final_outer_start_populations);
                 write_binary(root / final_path, diagnostic.active_final_populations);
                 write_binary(root / ion_path, diagnostic.active_ion_reconstruction);
+                write_int64_binary(root / contribution_ints_path, contribution_ints);
+                write_binary(root / contribution_reals_path, contribution_reals);
                 manifest << evaluation_ordinal << ',' << diagnostic.element_index << ',' << diagnostic.element_z << ','
                          << diagnostic.abundance << ',' << diagnostic.active.min_stage << ',' << diagnostic.active.max_stage << ','
                          << n << ',' << n_ions << ',' << diagnostic.active.element.normalization_row << ','
@@ -4188,7 +4251,10 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                          << input_path.string() << ',' << diagnostic.active_initial_populations.size() << ','
                          << outer_path.string() << ',' << diagnostic.active_final_outer_start_populations.size() << ','
                          << final_path.string() << ',' << diagnostic.active_final_populations.size() << ','
-                         << ion_path.string() << ',' << diagnostic.active_ion_reconstruction.size() << '\n';
+                         << ion_path.string() << ',' << diagnostic.active_ion_reconstruction.size() << ','
+                         << contribution_ints_path.string() << ',' << diagnostic.committed_contributions.size() << ','
+                         << kContributionIntColumns << ',' << contribution_reals_path.string() << ','
+                         << diagnostic.committed_contributions.size() << ',' << kContributionRealColumns << '\n';
             }
         }
 

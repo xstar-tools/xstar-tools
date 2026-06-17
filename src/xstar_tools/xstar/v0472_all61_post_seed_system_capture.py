@@ -20,7 +20,7 @@ from typing import Any
 
 from . import v0472_all61_fixed_state_capture as fixed
 
-RELEASE = "0.6.48.7.46.8"
+RELEASE = "0.6.48.7.46.9"
 SCHEMA = "xstar-tools-v06487467-v0472-all61-post-seed-system-capture-v1"
 VERIFY_SCHEMA = "xstar-tools-v06487467-v0472-all61-post-seed-system-oracle-v1"
 SYSTEM_MANIFEST_NAME = "v0472_all61_solve_system_manifest.csv"
@@ -38,6 +38,8 @@ ARRAY_NAMES = (
     "final",
     "ion_reconstruction",
 )
+CONTRIBUTION_INT_COLUMNS = 14
+CONTRIBUTION_REAL_COLUMNS = 16
 
 _SYSTEM_CAPTURE_CODE = r'''
 import csv as _v048746_csv
@@ -58,6 +60,8 @@ V048746_SYSTEM_FIELDS = [
  "outer_path","outer_count","outer_sha256",
  "final_path","final_count","final_sha256",
  "ion_reconstruction_path","ion_reconstruction_count","ion_reconstruction_sha256",
+ "matrix_contribution_ints_path","matrix_contribution_int_rows","matrix_contribution_int_columns","matrix_contribution_ints_sha256",
+ "matrix_contribution_reals_path","matrix_contribution_real_rows","matrix_contribution_real_columns","matrix_contribution_reals_sha256",
 ]
 _STATE.setdefault("all61_solve_systems", [])
 
@@ -74,6 +78,65 @@ def _v048746_write_array(directory, name, value):
     array.tofile(path)
     return path, int(array.size), _v048746_sha256(path)
 
+def _v048746_write_int64_array(directory, name, value):
+    array = _v048746_np.ascontiguousarray(_v048746_np.asarray(value, dtype=_v048746_np.int64).reshape(-1))
+    path = directory / (name + ".bin")
+    array.tofile(path)
+    return path, int(array.size), _v048746_sha256(path)
+
+def _v048746_pack_matrix_contributions(assembly):
+    terms = list(assembly.terms)
+    if len(terms) % 4 != 0:
+        raise RuntimeError(f"source matrix term stream is not four-term grouped: terms={len(terms)}")
+    ints = []
+    reals = []
+    expected_roles = ("forward_offdiag", "reverse_offdiag", "forward_diag_loss", "reverse_diag_loss")
+    for group_start in range(0, len(terms), 4):
+        group = terms[group_start:group_start + 4]
+        roles = tuple(str(term.role) for term in group)
+        if roles != expected_roles:
+            raise RuntimeError(
+                f"source matrix contribution role sequence mismatch at term {group_start + 1}: {roles}"
+            )
+        identity = tuple(
+            (int(term.record), int(term.data_type), int(term.rate_type),
+             int(term.ion_index), int(term.ion_stage))
+            for term in group
+        )
+        if len(set(identity)) != 1:
+            raise RuntimeError(f"source matrix contribution identity mismatch at term {group_start + 1}")
+        forward, reverse, lower_diag, upper_diag = group
+        lower_row = int(forward.column)
+        upper_row = int(forward.row)
+        expected_cells = (
+            (upper_row, lower_row), (lower_row, upper_row),
+            (lower_row, lower_row), (upper_row, upper_row),
+        )
+        actual_cells = tuple((int(term.row), int(term.column)) for term in group)
+        if actual_cells != expected_cells:
+            raise RuntimeError(
+                f"source matrix contribution cell sequence mismatch at term {group_start + 1}: "
+                f"actual={actual_cells} expected={expected_cells}"
+            )
+        record, data_type, rate_type, ion_index, ion_stage = identity[0]
+        ints.append([
+            group_start // 4 + 1, int(forward.term_index), record, data_type, rate_type,
+            ion_index, ion_stage, lower_row, upper_row,
+            int(any(bool(getattr(term, "source_ipmat_clamped", False)) for term in group)),
+            int(getattr(forward, "idest1", 0)), int(getattr(forward, "idest2", 0)),
+            int(getattr(forward, "lower_endpoint", 0)), int(getattr(forward, "upper_endpoint", 0)),
+        ])
+        reals.append([
+            float(forward.aj1), float(forward.aj2), float(forward.cj), float(forward.cj2),
+            float(reverse.aj1), float(reverse.aj2), float(reverse.cj), float(reverse.cj2),
+            float(lower_diag.aj1), float(lower_diag.aj2), float(lower_diag.cj), float(lower_diag.cj2),
+            float(upper_diag.aj1), float(upper_diag.aj2), float(upper_diag.cj), float(upper_diag.cj2),
+        ])
+    return (
+        _v048746_np.asarray(ints, dtype=_v048746_np.int64).reshape((-1, 14)),
+        _v048746_np.asarray(reals, dtype=_v048746_np.float64).reshape((-1, 16)),
+    )
+
 def _v048746_capture_solve_system(kind, call_id, evaluation_index, sequence, z, abundance, assembly, solve):
     sequence = _v048743_canonical_sequence(kind, call_id, evaluation_index)
     n = int(assembly.basis.n_rows)
@@ -82,6 +145,7 @@ def _v048746_capture_solve_system(kind, call_id, evaluation_index, sequence, z, 
     active_min = min(active_values) if active_values else 0
     active_max = max(active_values) if active_values else 0
     n_ions = int(assembly.basis.n_ions)
+    contribution_ints, contribution_reals = _v048746_pack_matrix_contributions(assembly)
     arrays = {
       "dense_matrix": _v048746_np.asarray(assembly.dense_matrix, dtype=_v048746_np.float64),
       "heating_matrix": _v048746_np.asarray(assembly.heating_matrix, dtype=_v048746_np.float64),
@@ -128,6 +192,22 @@ def _v048746_capture_solve_system(kind, call_id, evaluation_index, sequence, z, 
         row[name + "_path"] = str(path.relative_to(_OUT))
         row[name + "_count"] = int(count)
         row[name + "_sha256"] = str(digest)
+    ints_path, ints_count, ints_digest = _v048746_write_int64_array(
+        directory, "matrix_contribution_ints", contribution_ints
+    )
+    reals_path, reals_count, reals_digest = _v048746_write_array(
+        directory, "matrix_contribution_reals", contribution_reals
+    )
+    row["matrix_contribution_ints_path"] = str(ints_path.relative_to(_OUT))
+    row["matrix_contribution_int_rows"] = int(contribution_ints.shape[0])
+    row["matrix_contribution_int_columns"] = int(contribution_ints.shape[1])
+    row["matrix_contribution_ints_sha256"] = str(ints_digest)
+    row["matrix_contribution_reals_path"] = str(reals_path.relative_to(_OUT))
+    row["matrix_contribution_real_rows"] = int(contribution_reals.shape[0])
+    row["matrix_contribution_real_columns"] = int(contribution_reals.shape[1])
+    row["matrix_contribution_reals_sha256"] = str(reals_digest)
+    if ints_count != contribution_ints.size or reals_count != contribution_reals.size:
+        raise RuntimeError("matrix contribution binary count mismatch")
     _STATE["all61_solve_systems"].append(row)
 
 def _v048746_write_solve_system_manifest():
@@ -205,8 +285,36 @@ def probe_capture_behavioral_self_test(output_dir: Path | None = None) -> dict[s
                 ion_stage=np.asarray([0] + list(range(1, n + 1)), dtype=np.int32),
             )
             dense = np.arange(n * n, dtype=np.float64).reshape(n, n) + float(z)
+            terms = []
+            term_index = 1
+            for contribution_index in range(2):
+                lower = 1 + contribution_index
+                upper = min(n, lower + 1)
+                ans1 = float(z + contribution_index + 0.125)
+                ans2 = float(z + contribution_index + 0.25)
+                ans3 = float(z + contribution_index + 0.375)
+                ans4 = float(z + contribution_index + 0.5)
+                ans5 = float(z + contribution_index + 0.625)
+                ans6 = float(z + contribution_index + 0.75)
+                xpx = 10.0
+                specs = (
+                    ("forward_offdiag", upper, lower, ans1, ans2, 0.0, 0.0),
+                    ("reverse_offdiag", lower, upper, ans2, ans1, 0.0, 0.0),
+                    ("forward_diag_loss", lower, lower, -ans1, -ans1, ans4*xpx, ans6*xpx),
+                    ("reverse_diag_loss", upper, upper, -ans2, -ans2, -ans3*xpx, -ans5*xpx),
+                )
+                for role, row_index, column_index, aj1, aj2, cj, cj2 in specs:
+                    terms.append(SimpleNamespace(
+                        term_index=term_index, record=1000+contribution_index, data_type=53,
+                        rate_type=7, ion_index=1, ion_stage=1, role=role,
+                        row=row_index, column=column_index, aj1=aj1, aj2=aj2, cj=cj, cj2=cj2,
+                        idest1=1, idest2=2, lower_endpoint=1, upper_endpoint=2,
+                        source_ipmat_clamped=False,
+                    ))
+                    term_index += 1
             assembly = SimpleNamespace(
                 basis=basis,
+                terms=terms,
                 dense_matrix=dense,
                 heating_matrix=dense + 0.25,
                 heating_matrix2=dense + 0.5,
@@ -227,6 +335,10 @@ def probe_capture_behavioral_self_test(output_dir: Path | None = None) -> dict[s
             capture_fn("dsec", sequence, sequence, sequence, z, 1.0, assembly, solve)
             directory = root / SYSTEM_DIR_NAME / f"evaluation_{sequence:04d}" / f"element_{z:02d}"
             expected_files.extend(directory / f"{name}.bin" for name in ARRAY_NAMES)
+            expected_files.extend([
+                directory / "matrix_contribution_ints.bin",
+                directory / "matrix_contribution_reals.bin",
+            ])
         write_manifest()
 
         manifest = root / SYSTEM_MANIFEST_NAME
@@ -240,8 +352,17 @@ def probe_capture_behavioral_self_test(output_dir: Path | None = None) -> dict[s
         errors: list[str] = []
         if len(rows) != 3:
             errors.append(f"manifest_rows={len(rows)} expected=3")
-        if len(expected_files) != 24:
-            errors.append(f"expected_files={len(expected_files)} expected=24")
+        if len(expected_files) != 30:
+            errors.append(f"expected_files={len(expected_files)} expected=30")
+        contribution_shapes = {
+            (int(row.get("matrix_contribution_int_rows", 0)),
+             int(row.get("matrix_contribution_int_columns", 0)),
+             int(row.get("matrix_contribution_real_rows", 0)),
+             int(row.get("matrix_contribution_real_columns", 0)))
+            for row in rows
+        }
+        if contribution_shapes != {(2, 14, 2, 16)}:
+            errors.append(f"contribution_shapes={sorted(contribution_shapes)} expected=[(2,14,2,16)]")
         if missing:
             errors.append(f"missing_files={missing}")
         if wrong_sizes:
@@ -336,6 +457,39 @@ def verify(bundle: Path) -> dict[str, Any]:
                     continue
                 arrays += 1
                 bytes_total += actual_bytes
+            contribution_rows = int(row.get("matrix_contribution_int_rows", 0))
+            int_columns = int(row.get("matrix_contribution_int_columns", 0))
+            real_rows = int(row.get("matrix_contribution_real_rows", 0))
+            real_columns = int(row.get("matrix_contribution_real_columns", 0))
+            if contribution_rows <= 0 or contribution_rows != real_rows:
+                errors.append(
+                    f"contribution_rows:{row['sequence']}:{row['element_z']}:"
+                    f"ints={contribution_rows}:reals={real_rows}"
+                )
+            if int_columns != CONTRIBUTION_INT_COLUMNS or real_columns != CONTRIBUTION_REAL_COLUMNS:
+                errors.append(
+                    f"contribution_columns:{row['sequence']}:{row['element_z']}:"
+                    f"ints={int_columns}:reals={real_columns}"
+                )
+            for kind_name, item_rows, item_columns, dtype_size in (
+                ("matrix_contribution_ints", contribution_rows, int_columns, 8),
+                ("matrix_contribution_reals", real_rows, real_columns, 8),
+            ):
+                path = bundle / row[f"{kind_name}_path"]
+                expected_bytes = item_rows * item_columns * dtype_size
+                if not path.is_file():
+                    errors.append(f"missing_array:{path}")
+                    continue
+                if path.stat().st_size != expected_bytes:
+                    errors.append(
+                        f"size_mismatch:{path}:{path.stat().st_size}!={expected_bytes}"
+                    )
+                    continue
+                if _sha256(path) != row[f"{kind_name}_sha256"]:
+                    errors.append(f"sha256_mismatch:{path}")
+                    continue
+                arrays += 1
+                bytes_total += expected_bytes
     result = {
         "schema": VERIFY_SCHEMA,
         "release": RELEASE,

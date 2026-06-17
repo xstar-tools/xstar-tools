@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.48.7.46.9 — all-61 dense-matrix causal record attribution and hydrogen Type-53 correction - 2026-06-17
+
+- Committed the existing source-faithful Type-53 shadow for hydrogen under a qualification-only, replacement-guarded flag.
+- Added exact source and native record-level matrix-contribution streams for all 183 H/He/Mg systems.
+- Added bit-exact reconstruction gates for dense, primary-heating, and secondary-heating matrices before causal attribution.
+- Added per-cell and per-record classifications for rate-value, endpoint/orientation, presence, and accumulation-order residuals.
+- Added an all-61 gate requiring all 1,891 hydrogen Type-53 records to match source contributions and committed shadow diagnostics.
+- Preserved the accepted v0.6.48.7.46.8 basis, transformed-seed, RHS, and solver-input contracts.
+- Qualification only; fixed-state, Thermal, controller, product, and production gates remain blocked until downstream parity accepts.
+
 ## 0.6.48.7.46.8 — accepted source compact-basis/seed contract rebase - 2026-06-17
 
 - Restored the accepted v0.6.48.7.45 source compact-basis and transformed-seed implementation that was dropped by the 46.x packaging chain.
