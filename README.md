@@ -1,3 +1,7 @@
+## v0.6.48.7.46.9.4 Mg Type-49/53 source-faithful residual closure
+
+This qualification candidate reconstructs the mutable source-order `leveltemp` energy workspace used by the Fortran bound-free path. Mg Type-49 retains its signed threshold and exact nonpositive-threshold zero return; Mg Type-49 and Type-53 receive the retained destination energy that survives the per-ion workspace overwrite. A separate fail-closed audit requires complete live runtime context and classifies every canonical residual as bit-exact, bounded 1–2 ULP binary64 equivalence, or unexplained. Mg Type-50 remains unchanged and deferred. The production all-61 gate must be run with the actual `atdb.fits`. See `V064874694_MG_TYPE49_TYPE53_SOURCE_FAITHFUL_RESIDUAL_CLOSURE.md`.
+
 ## v0.6.48.7.46.9.3.1 hydrogen Type-53 binary64 IEEE-equivalence hotfix
 
 This qualification hotfix distinguishes bit identity from harmless host/compiler binary64 roundoff. The production v46.9.3 run has 1,885 bit-exact hydrogen Type-53 contribution vectors and six additional vectors whose nine differing fields are only one or two ULPs apart, with a maximum relative delta of `2.9533173658319817e-16`. The gate accepts those vectors only when all values are finite, same-sign, nonzero, within two ULPs, and within `4e-16` relative difference. There is no nonzero absolute tolerance. Source capture and native replay are reused without repeating physics. See `V0648746931_HYDROGEN_TYPE53_IEEE_EQUIVALENCE_HOTFIX.md`.

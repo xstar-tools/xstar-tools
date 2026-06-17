@@ -318,6 +318,8 @@ struct Type53SourceShadow {
     std::array<double,6> legacy_ans{};
     bool type49_semantics = false;
     bool phextrap_applied = false;
+    bool source_zero_gate = false;
+    bool source_faithful_mode = false;
     bool replacement_applied = false;
     bool legacy_nonfinite = false;
     bool legacy_implausible = false;
@@ -1990,7 +1992,7 @@ bool evaluate_type53_source_integral(
     contribution.ans6 *= (std::abs(contribution.ans4) - energy_difference * kErgPerEv * contribution.ans1) / den6;
     contribution.ans5 *= (std::abs(contribution.ans3) - energy_difference * kErgPerEv * contribution.ans2) / den5;
 
-    // v0.6.48.7.46.9.3.1 qualification-only IEEE closure.  The v0.6.47.2
+    // v0.6.48.7.46.9.4 qualification-only IEEE closure.  The v0.6.47.2
     // Python reference evaluates the same source expressions one operation at
     // a time.  Activating the live RRC escape state exposes seven isolated
     // one-ULP host/compiler differences among 1,891 hydrogen Type-53 records.
@@ -2229,6 +2231,11 @@ EvaluatedRecord evaluate_record(
             const bool magnesium_finite_state =
                 element.element_z == 12 &&
                 environment_flag("XSTAR_QUALIFICATION_MG_BOUND_FREE_FINITE_STATE");
+            const bool magnesium_source_faithful =
+                element.element_z == 12 &&
+                environment_flag("XSTAR_QUALIFICATION_MG_BOUND_FREE_SOURCE_FAITHFUL");
+            const bool magnesium_replacement =
+                magnesium_finite_state || magnesium_source_faithful;
             const auto pescv_source = [](double tau) {
                 return std::max(std::exp(-tau), 1.0e-12) / 2.0;
             };
@@ -2256,7 +2263,7 @@ EvaluatedRecord evaluate_record(
                 contract_ptmp2 = pescv_source(contract_tau_out) * (1.0 - contract_covering) +
                     2.0 * pescv_source(contract_tau_in + contract_tau_out) * contract_covering;
             }
-            if (magnesium_finite_state) {
+            if (magnesium_replacement) {
                 if (!environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
                     throw std::runtime_error(
                         "Mg Type-53 finite-state replacement requires XSTAR_QUALIFICATION_REPLACEMENT=1");
@@ -2366,7 +2373,7 @@ EvaluatedRecord evaluate_record(
                     throw std::runtime_error(
                         "hydrogen type53 source-faithful evaluator did not produce a result");
                 }
-                if (hydrogen_source_faithful || magnesium_finite_state) {
+                if (hydrogen_source_faithful || magnesium_replacement) {
                     out.type53_shadow.captured_state_anchor = false;
                     out.type53_shadow.tau_in = contract_tau_in;
                     out.type53_shadow.tau_out = contract_tau_out;
@@ -2385,14 +2392,14 @@ EvaluatedRecord evaluate_record(
                 const bool helium_source_faithful =
                     element.element_z == 2 &&
                     (record_context.valid || record.ion_stage == 2);
-                if (magnesium_finite_state && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
+                if (magnesium_replacement && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
                     throw std::runtime_error(
                         "Mg Type-53 finite-state replacement requires XSTAR_QUALIFICATION_REPLACEMENT=1");
                 }
-                if (magnesium_finite_state && !source_exact) {
+                if (magnesium_replacement && !source_exact) {
                     throw std::runtime_error("Mg Type-53 finite-state shadow did not produce a result");
                 }
-                if (source_exact && (hydrogen_source_faithful || helium_source_faithful || magnesium_finite_state)) {
+                if (source_exact && (hydrogen_source_faithful || helium_source_faithful || magnesium_replacement)) {
                     c.ans1 = source_shadow.ans1;
                     c.ans2 = source_shadow.ans2;
                     c.ans3 = source_shadow.ans3;
@@ -2415,8 +2422,9 @@ EvaluatedRecord evaluate_record(
                 constexpr double kImplausibleBoundFreeRate = 1.0e40;
                 out.type53_shadow.legacy_implausible = out.type53_shadow.legacy_max_abs > kImplausibleBoundFreeRate;
                 out.type53_shadow.committed_implausible = out.type53_shadow.committed_max_abs > kImplausibleBoundFreeRate;
-                out.type53_shadow.replacement_applied = magnesium_finite_state && source_exact;
-                if (magnesium_finite_state &&
+                out.type53_shadow.source_faithful_mode = magnesium_source_faithful;
+                out.type53_shadow.replacement_applied = magnesium_replacement && source_exact;
+                if (magnesium_replacement &&
                     (out.type53_shadow.committed_nonfinite || out.type53_shadow.committed_implausible)) {
                     throw std::runtime_error("Mg Type-53 finite-state replacement remained nonfinite or implausibly large");
                 }
@@ -2446,7 +2454,8 @@ EvaluatedRecord evaluate_record(
             }
             const std::size_t pair_real_count = record_context.valid ? record_context.pair_real_count : record.real_count;
             const std::size_t n = pair_real_count / 2;
-            const double threshold = std::max(record_context.valid ? record_context.threshold_ev : delta_ev, 1.0e-12);
+            const double source_threshold = record_context.valid ? record_context.threshold_ev : delta_ev;
+            const double threshold = std::max(source_threshold, 1.0e-12);
             double photo = 0.0;
             double heat = 0.0;
             const double* radiation_energy = input.dsec_radiation_energy_ev && input.dsec_bremsa && input.dsec_radiation_bin_count >= 3
@@ -2503,26 +2512,50 @@ EvaluatedRecord evaluate_record(
                     2.0 * pescv_source(tau_in + tau_out) * covering;
             }
             xstar_element_contribution_v1 source_shadow{};
-            const bool source_exact = evaluate_type53_source_integral(
-                r, pair_real_count, lower, upper, input, threshold, ptmp1 + ptmp2,
-                nullptr, record_context.valid ? &record_context : nullptr, record.record,
-                true, true, source_shadow, &out.type49_shadow);
+            const bool source_zero_gate = source_threshold <= 0.0;
+            bool source_exact = false;
+            if (source_zero_gate) {
+                source_exact = true;
+                out.type49_shadow.valid = true;
+                out.type49_shadow.ans = {{0.0, 0.0, 0.0, 0.0, 0.0, 0.0}};
+                out.type49_shadow.type49_semantics = true;
+                out.type49_shadow.phextrap_applied = false;
+                out.type49_shadow.source_zero_gate = true;
+                out.type49_shadow.threshold_ev = source_threshold;
+                out.type49_shadow.bound_energy_ev = record_context.bound_energy_ev;
+                out.type49_shadow.continuum_energy_ev = record_context.continuum_energy_ev;
+                out.type49_shadow.destination_energy_ev = record_context.leveltemp_destination_energy_ev;
+                out.type49_shadow.bound_statistical_weight = record_context.bound_statistical_weight;
+                out.type49_shadow.continuum_statistical_weight = record_context.continuum_statistical_weight;
+                out.type49_shadow.destination_statistical_weight = record_context.destination_statistical_weight;
+                out.type49_shadow.electron_density_cm3 = input.electron_density_cm3;
+                out.type49_shadow.hydrogen_density_cm3 = input.hydrogen_density_cm3;
+                out.type49_shadow.matrix_density_scale = static_cast<double>(input.hydrogen_density_cm3);
+            } else {
+                source_exact = evaluate_type53_source_integral(
+                    r, pair_real_count, lower, upper, input, source_threshold, ptmp1 + ptmp2,
+                    nullptr, record_context.valid ? &record_context : nullptr, record.record,
+                    true, true, source_shadow, &out.type49_shadow);
+            }
             const bool magnesium_finite_state = element.element_z == 12 &&
                 environment_flag("XSTAR_QUALIFICATION_MG_BOUND_FREE_FINITE_STATE");
-            if (magnesium_finite_state && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
+            const bool magnesium_source_faithful = element.element_z == 12 &&
+                environment_flag("XSTAR_QUALIFICATION_MG_BOUND_FREE_SOURCE_FAITHFUL");
+            const bool magnesium_replacement = magnesium_finite_state || magnesium_source_faithful;
+            if (magnesium_replacement && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
                 throw std::runtime_error(
                     "Mg Type-49 finite-state replacement requires XSTAR_QUALIFICATION_REPLACEMENT=1");
             }
-            if (magnesium_finite_state && !record_context.valid) {
+            if (magnesium_replacement && !record_context.valid) {
                 throw std::runtime_error("Mg Type-49 finite-state replacement requires lowered source context");
             }
-            if (magnesium_finite_state && !has_continuum_workspace) {
+            if (magnesium_replacement && !has_continuum_workspace) {
                 throw std::runtime_error("Mg Type-49 finite-state replacement requires canonical live continuum state");
             }
-            if (magnesium_finite_state && !source_exact) {
+            if (magnesium_replacement && !source_exact) {
                 throw std::runtime_error("Mg Type-49 finite-state shadow did not produce a result");
             }
-            if (magnesium_finite_state && source_exact) {
+            if (magnesium_replacement && source_exact) {
                 c.ans1 = source_shadow.ans1;
                 c.ans2 = source_shadow.ans2;
                 c.ans3 = source_shadow.ans3;
@@ -2545,7 +2578,8 @@ EvaluatedRecord evaluate_record(
             constexpr double kImplausibleBoundFreeRate = 1.0e40;
             out.type49_shadow.legacy_implausible = out.type49_shadow.legacy_max_abs > kImplausibleBoundFreeRate;
             out.type49_shadow.committed_implausible = out.type49_shadow.committed_max_abs > kImplausibleBoundFreeRate;
-            out.type49_shadow.replacement_applied = magnesium_finite_state && source_exact;
+            out.type49_shadow.source_faithful_mode = magnesium_source_faithful;
+            out.type49_shadow.replacement_applied = magnesium_replacement && source_exact;
             out.type49_shadow.tau_in = tau_in;
             out.type49_shadow.tau_out = tau_out;
             out.type49_shadow.ptmp1 = ptmp1;
@@ -2557,7 +2591,7 @@ EvaluatedRecord evaluate_record(
             out.type49_shadow.continuum_index_one_based = continuum_index;
             out.type49_shadow.dsec_radiation_bin_count = input.dsec_radiation_bin_count;
             out.type49_shadow.continuum_tau_count = input.continuum_tau_count;
-            if (magnesium_finite_state &&
+            if (magnesium_replacement &&
                 (out.type49_shadow.committed_nonfinite || out.type49_shadow.committed_implausible)) {
                 throw std::runtime_error("Mg Type-49 finite-state replacement remained nonfinite or implausibly large");
             }
@@ -4216,7 +4250,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
         });
         std::ofstream record_file(root / (stem + "_records.csv"));
         if (!record_file) throw std::runtime_error("cannot create record diagnostics CSV");
-        record_file << "evaluation_ordinal,source_position,record,element_index,element_z,data_type,rate_type,ion_index,ion_stage,lower_row,upper_row,matrix_enabled,active_stage,matrix_committed,spectral,ans1,ans2,ans3,ans4,ans5,ans6,density_scale,line_energy_ev,atomic_mass_amu,natural_width_ev,opakab,type56_upsilon,type53_shadow_valid,type53_shadow_ans1,type53_shadow_ans2,type53_shadow_ans3,type53_shadow_ans4,type53_shadow_ans5,type53_shadow_ans6,type53_delta_ans1,type53_delta_ans2,type53_delta_ans3,type53_delta_ans4,type53_delta_ans5,type53_delta_ans6,type53_shadow_threshold_ev,type53_shadow_bound_energy_ev,type53_shadow_continuum_energy_ev,type53_shadow_destination_energy_ev,type53_shadow_bound_g,type53_shadow_continuum_g,type53_shadow_destination_g,type53_shadow_rnist,type53_shadow_sumr,type53_shadow_sumi,type53_shadow_sumh,type53_shadow_sumh2,type53_shadow_sumc,type53_shadow_sumc2,type53_sumc_ieee_nextafter_applied,type53_shadow_nb1_one_based,type53_shadow_klmax_one_based,type53_row46_contract,type53_captured_state_anchor,type53_tau_in,type53_tau_out,type53_ptmp1,type53_ptmp2,type53_covering_fraction,type53_runtime_state_abi_used,type53_continuum_index_one_based,type53_dsec_radiation_bin_count,type53_continuum_tau_count,type50_shadow_valid,type50_shadow_ans1,type50_shadow_ans2,type50_shadow_ans3,type50_shadow_ans4,type50_shadow_ans5,type50_shadow_ans6,type50_stored_wavelength_a,type50_endpoint_energy_ev,type50_covering_fraction,type50_ptmp1,type50_ptmp2,type50_bremsa_nb1,type50_density_floor_s,type50_density_floor_applied,type50_photoexcitation_zero_covering,type50_used_dsec_covering,type50_used_dsec_radiation,type50_nb1_one_based,type99_shadow_valid,type99_shadow_ans1,type99_shadow_ans2,type99_shadow_ans3,type99_shadow_ans4,type99_shadow_ans5,type99_shadow_ans6,type99_threshold_ev,type99_destination_energy_ev,type99_bound_energy_ev,type99_swrat,type99_calt99_density_cm3,type99_phint53hunt_density_cm3,type99_rec_cm3_s,type99_milne_alpha_cm3_s,type99_cross_section_scale,type99_ans2d_unscaled_s,type99_phint_scale,type99_pirt_unscaled_s,type99_rrrt_unscaled_s,type99_piht_unscaled_erg_s,type99_rrcl_unscaled_erg_s,type99_piht2_unscaled_erg_s,type99_rrcl2_unscaled_erg_s,type99_nbinc_threshold_one_based,type99_nb1_one_based,type99_nphint_one_based,type99_ndelt,type99_npass,type99_last_pass_first_kl_one_based,type99_last_pass_last_kl_one_based,type99_cached_atmp22_stale_reuses,type99_used_dsec_radiation,mg_type53_legacy_max_abs,mg_type53_shadow_max_abs,mg_type53_committed_max_abs,mg_type53_legacy_nonfinite,mg_type53_legacy_implausible,mg_type53_replacement_applied,mg_type53_committed_nonfinite,mg_type53_committed_implausible,mg_type53_exponent_energy_ev,mg_type53_exponent_dimensionless,mg_type53_electron_density_cm3,mg_type53_hydrogen_density_cm3,mg_type53_matrix_density_scale,type49_shadow_valid,type49_shadow_ans1,type49_shadow_ans2,type49_shadow_ans3,type49_shadow_ans4,type49_shadow_ans5,type49_shadow_ans6,type49_legacy_max_abs,type49_shadow_max_abs,type49_committed_max_abs,type49_legacy_nonfinite,type49_legacy_implausible,type49_replacement_applied,type49_committed_nonfinite,type49_committed_implausible,type49_threshold_ev,type49_bound_energy_ev,type49_continuum_energy_ev,type49_destination_energy_ev,type49_bound_g,type49_continuum_g,type49_destination_g,type49_rnist,type49_exponent_energy_ev,type49_exponent_dimensionless,type49_electron_density_cm3,type49_hydrogen_density_cm3,type49_matrix_density_scale,type49_phextrap_applied,type49_runtime_state_abi_used,type49_continuum_index_one_based,type49_dsec_radiation_bin_count,type49_continuum_tau_count\n";
+        record_file << "evaluation_ordinal,source_position,record,element_index,element_z,data_type,rate_type,ion_index,ion_stage,lower_row,upper_row,matrix_enabled,active_stage,matrix_committed,spectral,ans1,ans2,ans3,ans4,ans5,ans6,density_scale,line_energy_ev,atomic_mass_amu,natural_width_ev,opakab,type56_upsilon,type53_shadow_valid,type53_shadow_ans1,type53_shadow_ans2,type53_shadow_ans3,type53_shadow_ans4,type53_shadow_ans5,type53_shadow_ans6,type53_delta_ans1,type53_delta_ans2,type53_delta_ans3,type53_delta_ans4,type53_delta_ans5,type53_delta_ans6,type53_shadow_threshold_ev,type53_shadow_bound_energy_ev,type53_shadow_continuum_energy_ev,type53_shadow_destination_energy_ev,type53_shadow_bound_g,type53_shadow_continuum_g,type53_shadow_destination_g,type53_shadow_rnist,type53_shadow_sumr,type53_shadow_sumi,type53_shadow_sumh,type53_shadow_sumh2,type53_shadow_sumc,type53_shadow_sumc2,type53_sumc_ieee_nextafter_applied,type53_shadow_nb1_one_based,type53_shadow_klmax_one_based,type53_row46_contract,type53_captured_state_anchor,type53_tau_in,type53_tau_out,type53_ptmp1,type53_ptmp2,type53_covering_fraction,type53_runtime_state_abi_used,type53_continuum_index_one_based,type53_dsec_radiation_bin_count,type53_continuum_tau_count,type50_shadow_valid,type50_shadow_ans1,type50_shadow_ans2,type50_shadow_ans3,type50_shadow_ans4,type50_shadow_ans5,type50_shadow_ans6,type50_stored_wavelength_a,type50_endpoint_energy_ev,type50_covering_fraction,type50_ptmp1,type50_ptmp2,type50_bremsa_nb1,type50_density_floor_s,type50_density_floor_applied,type50_photoexcitation_zero_covering,type50_used_dsec_covering,type50_used_dsec_radiation,type50_nb1_one_based,type99_shadow_valid,type99_shadow_ans1,type99_shadow_ans2,type99_shadow_ans3,type99_shadow_ans4,type99_shadow_ans5,type99_shadow_ans6,type99_threshold_ev,type99_destination_energy_ev,type99_bound_energy_ev,type99_swrat,type99_calt99_density_cm3,type99_phint53hunt_density_cm3,type99_rec_cm3_s,type99_milne_alpha_cm3_s,type99_cross_section_scale,type99_ans2d_unscaled_s,type99_phint_scale,type99_pirt_unscaled_s,type99_rrrt_unscaled_s,type99_piht_unscaled_erg_s,type99_rrcl_unscaled_erg_s,type99_piht2_unscaled_erg_s,type99_rrcl2_unscaled_erg_s,type99_nbinc_threshold_one_based,type99_nb1_one_based,type99_nphint_one_based,type99_ndelt,type99_npass,type99_last_pass_first_kl_one_based,type99_last_pass_last_kl_one_based,type99_cached_atmp22_stale_reuses,type99_used_dsec_radiation,mg_type53_legacy_max_abs,mg_type53_shadow_max_abs,mg_type53_committed_max_abs,mg_type53_legacy_nonfinite,mg_type53_legacy_implausible,mg_type53_replacement_applied,mg_type53_committed_nonfinite,mg_type53_committed_implausible,mg_type53_exponent_energy_ev,mg_type53_exponent_dimensionless,mg_type53_electron_density_cm3,mg_type53_hydrogen_density_cm3,mg_type53_matrix_density_scale,mg_type53_source_faithful_mode,type49_shadow_valid,type49_shadow_ans1,type49_shadow_ans2,type49_shadow_ans3,type49_shadow_ans4,type49_shadow_ans5,type49_shadow_ans6,type49_legacy_max_abs,type49_shadow_max_abs,type49_committed_max_abs,type49_legacy_nonfinite,type49_legacy_implausible,type49_replacement_applied,type49_committed_nonfinite,type49_committed_implausible,type49_threshold_ev,type49_bound_energy_ev,type49_continuum_energy_ev,type49_destination_energy_ev,type49_bound_g,type49_continuum_g,type49_destination_g,type49_rnist,type49_exponent_energy_ev,type49_exponent_dimensionless,type49_electron_density_cm3,type49_hydrogen_density_cm3,type49_matrix_density_scale,type49_phextrap_applied,type49_source_zero_gate,type49_source_faithful_mode,type49_runtime_state_abi_used,type49_continuum_index_one_based,type49_dsec_radiation_bin_count,type49_continuum_tau_count\n";
         record_file << std::setprecision(17);
 
         struct FamilySummary {
@@ -4327,6 +4361,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                         << ',' << item.type53_shadow.electron_density_cm3
                         << ',' << item.type53_shadow.hydrogen_density_cm3
                         << ',' << item.type53_shadow.matrix_density_scale
+                        << ',' << (item.type53_shadow.source_faithful_mode ? 1 : 0)
                         << ',' << (item.type49_shadow.valid ? 1 : 0);
             for (double value : item.type49_shadow.ans) record_file << ',' << value;
             record_file << ',' << item.type49_shadow.legacy_max_abs
@@ -4351,6 +4386,8 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                         << ',' << item.type49_shadow.hydrogen_density_cm3
                         << ',' << item.type49_shadow.matrix_density_scale
                         << ',' << (item.type49_shadow.phextrap_applied ? 1 : 0)
+                        << ',' << (item.type49_shadow.source_zero_gate ? 1 : 0)
+                        << ',' << (item.type49_shadow.source_faithful_mode ? 1 : 0)
                         << ',' << (item.type49_shadow.runtime_state_abi_used ? 1 : 0)
                         << ',' << item.type49_shadow.continuum_index_one_based
                         << ',' << item.type49_shadow.dsec_radiation_bin_count

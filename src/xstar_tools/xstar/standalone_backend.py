@@ -81,4 +81,4 @@ def run_batch(
 
 def echo_json(request: Any) -> Any:
     """Small JSON-bridge self-test callable."""
-    return {"backend": "python", "request": request, "version": "0.6.48.7.46.9.3.1"}
+    return {"backend": "python", "request": request, "version": "0.6.48.7.46.9.4"}

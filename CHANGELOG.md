@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 0.6.48.7.46.9.4 — Mg Type-49/53 source-faithful residual closure - 2026-06-17
+
+- Reconstructed the mutable Fortran `leveltemp` energy workspace used by source-order bound-free evaluation, including the retained higher-column state that survives each ion's `1:nlev` overwrite.
+- Lowered signed Mg Type-49 thresholds instead of silently flooring negative values to zero, and added the exact source zero-return branch for nonpositive thresholds.
+- Lowered retained mutable destination energies for Mg Type-49 and Type-53 while preserving the accepted hydrogen and helium payload behavior.
+- Added a separate qualification-only Mg bound-free source-faithful mode; the prior finite-state mode remains available and Mg Type-50 is unchanged.
+- Audits Type-49 `phextrap`, Type-49/53 thresholds, statistical weights, destination energies, exponent arguments, density state, matrix scaling, runtime workspaces, and committed answers.
+- Classifies every remaining canonical Mg Type-49/53 rate difference as bit-exact, bounded binary64 IEEE-equivalent, or unexplained; any material, presence, nonfinite, implausible, or incomplete-context residual rejects.
+- Preserves the accepted hydrogen Type-53 two-ULP envelope, all 20 exact helium systems, canonical indexed attribution, and fail-closed downstream gates.
+- Reuses the preserved v46.9 source capture and regenerates only the native replay when run against the production `atdb.fits`.
+- Qualification candidate only: production all-61 source-faithful closure must be confirmed by the included host runner.
+
 ## 0.6.48.7.46.9.3.1 — hydrogen Type-53 binary64 IEEE-equivalence hotfix - 2026-06-17
 
 - Retained strict bit-exact reporting: 1,885 of 1,891 hydrogen Type-53 contribution vectors are bit-exact in the production host run.

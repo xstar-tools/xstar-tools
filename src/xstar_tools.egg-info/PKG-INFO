@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: xstar-tools
-Version: 0.6.48.7.46.9.3.1
+Version: 0.6.48.7.46.9.4
 Summary: Source-faithful Python/C++ XSTAR tools, atomic-data utilities, benchmarks, and runtime
 Author: Ashkbiz Danehkar
 License-Expression: MIT
@@ -25,6 +25,10 @@ Provides-Extra: hdf5
 Requires-Dist: h5py>=3; extra == "hdf5"
 Provides-Extra: sparse
 Requires-Dist: scipy>=1.8; extra == "sparse"
+
+## v0.6.48.7.46.9.4 Mg Type-49/53 source-faithful residual closure
+
+This qualification candidate reconstructs the mutable source-order `leveltemp` energy workspace used by the Fortran bound-free path. Mg Type-49 retains its signed threshold and exact nonpositive-threshold zero return; Mg Type-49 and Type-53 receive the retained destination energy that survives the per-ion workspace overwrite. A separate fail-closed audit requires complete live runtime context and classifies every canonical residual as bit-exact, bounded 1–2 ULP binary64 equivalence, or unexplained. Mg Type-50 remains unchanged and deferred. The production all-61 gate must be run with the actual `atdb.fits`. See `V064874694_MG_TYPE49_TYPE53_SOURCE_FAITHFUL_RESIDUAL_CLOSURE.md`.
 
 ## v0.6.48.7.46.9.3.1 hydrogen Type-53 binary64 IEEE-equivalence hotfix
 

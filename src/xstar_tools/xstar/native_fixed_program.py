@@ -520,6 +520,57 @@ def _build_element_layout(master: Any, derived: Any, element_z: int, element_ind
     return element, rows, basis, blocks
 
 
+
+def _build_source_leveltemp_energy_snapshots(
+    master: Any, derived: Any, basis: Any
+) -> tuple[dict[int, dict[int, float]], dict[int, dict[int, dict[str, Any]]]]:
+    """Replay the two source ``leveltemp`` overwrite passes for one element.
+
+    ``levwkelement`` first writes every active ion into the shared fixed-width
+    workspace.  ``calc_hmc_element`` then visits the same ions in source order
+    and ``calc_hmc_ion`` overwrites only columns ``1:nlev`` before evaluating
+    that ion's records.  Higher columns retain the most recent earlier write.
+    Type-49/53 excited-parent energy corrections read that mutable column by
+    ``idest2``; they do not read the compact matrix alias or an unconditional
+    zero.
+    """
+    workspace: dict[int, float] = {}
+    owners: dict[int, dict[str, Any]] = {}
+    tables: dict[int, dict[int, float]] = {}
+    for block in basis.blocks:
+        ion_index = int(block.ion_index)
+        nlev = int(block.nlev)
+        tables[ion_index] = {
+            local: float(_level_payload(master, derived, ion_index, local)[1])
+            for local in range(1, nlev + 1)
+        }
+
+    def overwrite(block: Any, sequence: int, phase: str) -> None:
+        ion_index = int(block.ion_index)
+        stage = int(block.ion_stage)
+        table = tables[ion_index]
+        for local, energy in table.items():
+            workspace[local] = float(energy)
+            owners[local] = {
+                "ion_index": ion_index,
+                "ion_stage": stage,
+                "write_sequence": int(sequence),
+                "phase": str(phase),
+            }
+
+    for sequence, block in enumerate(basis.blocks, start=1):
+        overwrite(block, sequence, "levwkelement")
+
+    snapshots: dict[int, dict[int, float]] = {}
+    owner_snapshots: dict[int, dict[int, dict[str, Any]]] = {}
+    for sequence, block in enumerate(basis.blocks, start=1):
+        overwrite(block, sequence, "calc_hmc_ion")
+        snapshots[int(block.ion_index)] = dict(workspace)
+        owner_snapshots[int(block.ion_index)] = {
+            column: dict(owner) for column, owner in owners.items()
+        }
+    return snapshots, owner_snapshots
+
 def _compact_row_for_local(basis: Any, ion_index: int, local_level: int) -> int:
     key = (int(ion_index), int(local_level))
     if key not in basis.role_to_row:
@@ -550,9 +601,17 @@ def _row_l(rows: Sequence[Mapping[str, Any]], one_based: int) -> int:
     return int(rows[int(one_based) - 1].get("orbital_l", 0))
 
 
-def _lower_record(master: Any, derived: Any, rec: int, element_index: int, rows: Sequence[Mapping[str, Any]], basis: Any, blocks: Mapping[int, Any], subset: Any) -> dict[str, Any]:
+def _lower_record(
+    master: Any, derived: Any, rec: int, element_index: int,
+    rows: Sequence[Mapping[str, Any]], basis: Any, blocks: Mapping[int, Any],
+    subset: Any,
+    leveltemp_energy_snapshots: Mapping[int, Mapping[int, float]] | None = None,
+    leveltemp_owner_snapshots: Mapping[int, Mapping[int, Mapping[str, Any]]] | None = None,
+) -> dict[str, Any]:
     import numpy as np
 
+    leveltemp_energy_snapshots = leveltemp_energy_snapshots or {}
+    leveltemp_owner_snapshots = leveltemp_owner_snapshots or {}
     header = master.header(rec)
     dt, rt = int(header.data_type), int(header.rate_type)
     if dt not in ACTIVE_LOWERER_DATA_TYPES:
@@ -726,7 +785,10 @@ def _lower_record(master: Any, derived: Any, rec: int, element_index: int, rows:
         bound_ionization_potential = _level_ionization_potential(
             master, derived, ion_index, id1
         )
-        threshold_ev = max(0.0, float(bound_ionization_potential) - float(bound_energy))
+        # Preserve the signed source threshold.  Type-49 exits with six zero
+        # answers when ``eth <= 0``; clamping here and flooring in C++ caused
+        # those source-zero records to be integrated as real continua.
+        threshold_ev = float(bound_ionization_potential) - float(bound_energy)
         _, continuum_energy, continuum_weight, _clabel, _cn, _cl = _level_payload(
             master, derived, ion_index, int(block.nlev)
         )
@@ -748,7 +810,10 @@ def _lower_record(master: Any, derived: Any, rec: int, element_index: int, rows:
             _, _parent_excitation, destination_weight, _dlabel, _dn, _dl = _level_payload(
                 master, derived, int(destination_block.ion_index), destination_local_level
             )
-            leveltemp_destination_energy = 0.0
+            leveltemp_destination_energy = (
+                float(leveltemp_energy_snapshots.get(ion_index, {}).get(id2, 0.0))
+                if int(derived.ion_element_z[ion_index]) == 12 else 0.0
+            )
         pair_payload = [value * 1.0e-18 if i % 2 else value for i, value in enumerate(raw_reals)]
         payload_reals = pair_payload + [
             float(threshold_ev),
@@ -806,11 +871,14 @@ def _lower_record(master: Any, derived: Any, rec: int, element_index: int, rows:
             _, parent_excitation, destination_weight, _dlabel, _dn, _dl = _level_payload(
                 master, derived, int(destination_block.ion_index), destination_local_level
             )
-            # In calc_hmc_ion's first active-ion pass, higher leveltemp columns
-            # have not yet been written.  ucalc therefore reads the persistent
-            # zero workspace value for excited-parent destinations (record 651
-            # is the decisive row-2 example), while retaining the destination g.
-            leveltemp_destination_energy = 0.0
+            # Source ucalc reads ``leveltemp%rlev(1,idest2)`` after the
+            # levwkelement preload and the current ion's second-pass overwrite.
+            # Retain the exact mutable-workspace column; absent columns remain
+            # source-zero.
+            leveltemp_destination_energy = (
+                float(leveltemp_energy_snapshots.get(ion_index, {}).get(id2, 0.0))
+                if int(derived.ion_element_z[ion_index]) == 12 else 0.0
+            )
 
         threshold_ev = base_threshold_ev + (
             float(parent_excitation) if id2 > int(block.nlev) else 0.0
@@ -826,7 +894,7 @@ def _lower_record(master: Any, derived: Any, rec: int, element_index: int, rows:
             float(destination_weight),
             float(leveltemp_destination_energy),
         ]
-        # v0.6.48.7.46.9.3.1: calc_hmc_ion obtains the Type-53 RRC escape
+        # v0.6.48.7.46.9.4: calc_hmc_ion obtains the Type-53 RRC escape
         # factors from tauc(:, derivedpointers%npconi2(record)).  Preserve that
         # canonical one-based continuum identity in the lowered program so the
         # native evaluator can consume each call's live continuum-tau arrays.
@@ -1035,7 +1103,10 @@ def lower_active_atdb(
 
         element_table: list[dict[str, Any]] = []
         row_table: list[dict[str, Any]] = []
-        layouts: dict[int, tuple[Any, dict[int, Any], list[dict[str, Any]]]] = {}
+        layouts: dict[int, tuple[
+            Any, dict[int, Any], list[dict[str, Any]],
+            dict[int, dict[int, float]], dict[int, dict[int, dict[str, Any]]],
+        ]] = {}
         record_head = 0
         for element_index, z in enumerate(active):
             element, rows, basis, blocks = _build_element_layout(
@@ -1050,7 +1121,12 @@ def lower_active_atdb(
             record_head += count
             element_table.append(element)
             row_table.extend(rows)
-            layouts[z] = (basis, blocks, rows)
+            leveltemp_snapshots, leveltemp_owner_snapshots = _build_source_leveltemp_energy_snapshots(
+                built.master, built.derived, basis
+            )
+            layouts[z] = (
+                basis, blocks, rows, leveltemp_snapshots, leveltemp_owner_snapshots
+            )
 
         _write_csv(out / "elements.csv", element_table)
         _write_csv(out / "rows.csv", row_table)
@@ -1075,10 +1151,13 @@ def lower_active_atdb(
             writer = csv.DictWriter(records_handle, fieldnames=record_fields, lineterminator="\n")
             writer.writeheader()
             for element_index, z in enumerate(active):
-                basis, blocks, rows = layouts[z]
+                basis, blocks, rows, leveltemp_snapshots, leveltemp_owner_snapshots = layouts[z]
                 source_records = records_by_z[z]
                 for local_index, rec in enumerate(source_records):
-                    lowered = _lower_record(built.master, built.derived, rec, element_index, rows, basis, blocks, subset)
+                    lowered = _lower_record(
+                        built.master, built.derived, rec, element_index, rows, basis, blocks, subset,
+                        leveltemp_snapshots, leveltemp_owner_snapshots,
+                    )
                     payload_reals = lowered.pop("reals")
                     payload_ints = lowered.pop("ints")
                     native_types.add(int(lowered["data_type"]))
