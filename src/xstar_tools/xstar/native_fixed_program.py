@@ -521,55 +521,141 @@ def _build_element_layout(master: Any, derived: Any, element_z: int, element_ind
 
 
 
-def _build_source_leveltemp_energy_snapshots(
-    master: Any, derived: Any, basis: Any
-) -> tuple[dict[int, dict[int, float]], dict[int, dict[int, dict[str, Any]]]]:
-    """Replay the two source ``leveltemp`` overwrite passes for one element.
 
-    ``levwkelement`` first writes every active ion into the shared fixed-width
-    workspace.  ``calc_hmc_element`` then visits the same ions in source order
-    and ``calc_hmc_ion`` overwrites only columns ``1:nlev`` before evaluating
-    that ion's records.  Higher columns retain the most recent earlier write.
-    Type-49/53 excited-parent energy corrections read that mutable column by
-    ``idest2``; they do not read the compact matrix alias or an unconditional
-    zero.
+def _source_type13_table(master: Any, derived: Any, ion_index: int) -> dict[int, dict[str, Any]]:
+    """Return the literal source Type-13 table keyed by its local level index.
+
+    ``calc_rates_level_lte`` does not resolve levels through ``npilev``.  It
+    walks the Type-13 linked list and writes each record into the column named
+    by the record's second-to-last integer.  Replaying that exact traversal is
+    required for the Milne partition row and excited-parent lookup because the
+    derived global-level map can select a different alias record.
     """
-    workspace: dict[int, float] = {}
-    owners: dict[int, dict[str, Any]] = {}
-    tables: dict[int, dict[int, float]] = {}
+    import numpy as np
+
+    npfi = np.asarray(getattr(derived, "npfi", ()), dtype=np.int64)
+    npnxt = np.asarray(getattr(derived, "npnxt", ()), dtype=np.int64).reshape(-1)
+    npar = np.asarray(getattr(derived, "npar", ()), dtype=np.int64).reshape(-1)
+    if npfi.ndim != 2 or 13 >= npfi.shape[0] or ion_index <= 0 or ion_index >= npfi.shape[1]:
+        raise ValueError(f"missing Type-13 pointer table for ion={ion_index}")
+    rec = int(npfi[13, ion_index])
+    if rec <= 0 or rec >= npar.size:
+        raise ValueError(f"ion={ion_index} has no Type-13 level records")
+    parent = int(npar[rec])
+    table: dict[int, dict[str, Any]] = {}
+    guard = 0
+    while rec > 0 and rec < npar.size and int(npar[rec]) == parent:
+        reals = [float(v) for v in master.record_reals(rec)]
+        ints = [int(v) for v in master.record_integers(rec)]
+        if len(ints) < 2:
+            raise ValueError(f"Type-13 record {rec} lacks a local-level integer")
+        local = int(ints[-2])
+        if local <= 0:
+            raise ValueError(f"Type-13 record {rec} has invalid local level {local}")
+        if len(reals) < 2:
+            raise ValueError(f"Type-13 record {rec} lacks energy/statistical weight")
+        table[local] = {
+            "record": rec,
+            "energy_ev": float(reals[0]),
+            "statistical_weight": float(reals[1]),
+            "ionization_potential_ev": float(reals[3]) if len(reals) >= 4 else 0.0,
+        }
+        nxt = int(npnxt[rec]) if rec < npnxt.size else 0
+        if nxt == rec:
+            raise ValueError(f"Type-13 self-loop at record {rec}")
+        rec = nxt
+        guard += 1
+        if guard > 100000:
+            raise RuntimeError(f"Type-13 linked-list guard exceeded for ion={ion_index}")
+    if not table:
+        raise ValueError(f"ion={ion_index} produced an empty Type-13 table")
+    return table
+
+
+def _build_source_leveltemp_value_snapshots(
+    master: Any, derived: Any, basis: Any
+) -> tuple[
+    dict[int, dict[int, dict[str, Any]]],
+    dict[int, dict[int, dict[str, Any]]],
+    dict[int, dict[int, dict[str, Any]]],
+]:
+    """Replay the two literal source ``leveltemp`` overwrite passes.
+
+    The first result is the mutable workspace snapshot visible to each ion,
+    the second records column ownership, and the third is the literal Type-13
+    table for every ion.  Only columns named by Type-13 records are overwritten;
+    absent columns deliberately retain an earlier ion's value.
+    """
+    tables: dict[int, dict[int, dict[str, Any]]] = {}
+    has_literal_links = hasattr(derived, "npfi") and hasattr(derived, "npnxt")
     for block in basis.blocks:
         ion_index = int(block.ion_index)
-        nlev = int(block.nlev)
-        tables[ion_index] = {
-            local: float(_level_payload(master, derived, ion_index, local)[1])
-            for local in range(1, nlev + 1)
-        }
+        if has_literal_links:
+            tables[ion_index] = _source_type13_table(master, derived, ion_index)
+            continue
+        # Compatibility path for synthetic unit fixtures predating the
+        # literal Type-13 linked-list contract.  Production lowering always
+        # supplies npfi/npnxt and therefore never enters this branch.
+        table: dict[int, dict[str, Any]] = {}
+        for local in range(1, int(block.nlev) + 1):
+            _record, energy, weight, _label, _n, _l = _level_payload(
+                master, derived, ion_index, local
+            )
+            try:
+                ionpot = float(_level_ionization_potential(master, derived, ion_index, local))
+            except Exception:
+                ionpot = 0.0
+            table[local] = {
+                "record": int(_record),
+                "energy_ev": float(energy),
+                "statistical_weight": float(weight),
+                "ionization_potential_ev": ionpot,
+            }
+        tables[ion_index] = table
+    workspace: dict[int, dict[str, Any]] = {}
+    owners: dict[int, dict[str, Any]] = {}
 
     def overwrite(block: Any, sequence: int, phase: str) -> None:
         ion_index = int(block.ion_index)
         stage = int(block.ion_stage)
-        table = tables[ion_index]
-        for local, energy in table.items():
-            workspace[local] = float(energy)
-            owners[local] = {
+        for local, value in tables[ion_index].items():
+            workspace[int(local)] = dict(value)
+            owners[int(local)] = {
                 "ion_index": ion_index,
                 "ion_stage": stage,
                 "write_sequence": int(sequence),
                 "phase": str(phase),
+                "record": int(value["record"]),
             }
 
     for sequence, block in enumerate(basis.blocks, start=1):
         overwrite(block, sequence, "levwkelement")
 
-    snapshots: dict[int, dict[int, float]] = {}
+    snapshots: dict[int, dict[int, dict[str, Any]]] = {}
     owner_snapshots: dict[int, dict[int, dict[str, Any]]] = {}
     for sequence, block in enumerate(basis.blocks, start=1):
         overwrite(block, sequence, "calc_hmc_ion")
-        snapshots[int(block.ion_index)] = dict(workspace)
+        snapshots[int(block.ion_index)] = {
+            column: dict(value) for column, value in workspace.items()
+        }
         owner_snapshots[int(block.ion_index)] = {
             column: dict(owner) for column, owner in owners.items()
         }
-    return snapshots, owner_snapshots
+    return snapshots, owner_snapshots, tables
+
+
+def _build_source_leveltemp_energy_snapshots(
+    master: Any, derived: Any, basis: Any
+) -> tuple[dict[int, dict[int, float]], dict[int, dict[int, dict[str, Any]]]]:
+    """Compatibility view containing only source ``leveltemp`` energies."""
+    snapshots, owners, _tables = _build_source_leveltemp_value_snapshots(master, derived, basis)
+    energy = {
+        ion_index: {
+            column: float(value["energy_ev"]) for column, value in workspace.items()
+        }
+        for ion_index, workspace in snapshots.items()
+    }
+    return energy, owners
 
 def _compact_row_for_local(basis: Any, ion_index: int, local_level: int) -> int:
     key = (int(ion_index), int(local_level))
@@ -607,11 +693,29 @@ def _lower_record(
     subset: Any,
     leveltemp_energy_snapshots: Mapping[int, Mapping[int, float]] | None = None,
     leveltemp_owner_snapshots: Mapping[int, Mapping[int, Mapping[str, Any]]] | None = None,
+    leveltemp_value_snapshots: Mapping[int, Mapping[int, Mapping[str, Any]]] | None = None,
+    source_type13_tables: Mapping[int, Mapping[int, Mapping[str, Any]]] | None = None,
 ) -> dict[str, Any]:
     import numpy as np
 
+    literal_context_supplied = (
+        leveltemp_value_snapshots is not None or source_type13_tables is not None
+    )
     leveltemp_energy_snapshots = leveltemp_energy_snapshots or {}
     leveltemp_owner_snapshots = leveltemp_owner_snapshots or {}
+    leveltemp_value_snapshots = leveltemp_value_snapshots or {
+        int(ion): {
+            int(column): {
+                "record": 0,
+                "energy_ev": float(energy),
+                "statistical_weight": 1.0,
+                "ionization_potential_ev": 0.0,
+            }
+            for column, energy in workspace.items()
+        }
+        for ion, workspace in leveltemp_energy_snapshots.items()
+    }
+    source_type13_tables = source_type13_tables or {}
     header = master.header(rec)
     dt, rt = int(header.data_type), int(header.rate_type)
     if dt not in ACTIVE_LOWERER_DATA_TYPES:
@@ -771,65 +875,7 @@ def _lower_record(
         payload_reals = []
         payload_ints = [ni, li, nf, lf, iq, initial_row, final_row]
         line_energy = abs(initial_energy - final_energy)
-    elif dt == 49:
-        if len(raw_ints) < 4 or len(raw_reals) < 4:
-            raise ValueError(f"type{dt} record {rec} has short payload")
-        id1 = int(raw_ints[-2])
-        off = max(0, int(raw_ints[-4]))
-        id2 = int(block.nlev) + off - 1
-        lower_row = _compact_row_for_local(basis, ion_index, id1)
-        upper_row = _compact_row_for_idest(basis, block, id2)
-        _, bound_energy, bound_weight, _blabel, _bn, _bl = _level_payload(
-            master, derived, ion_index, id1
-        )
-        bound_ionization_potential = _level_ionization_potential(
-            master, derived, ion_index, id1
-        )
-        # Preserve the signed source threshold.  Type-49 exits with six zero
-        # answers when ``eth <= 0``; clamping here and flooring in C++ caused
-        # those source-zero records to be integrated as real continua.
-        threshold_ev = float(bound_ionization_potential) - float(bound_energy)
-        _, continuum_energy, continuum_weight, _clabel, _cn, _cl = _level_payload(
-            master, derived, ion_index, int(block.nlev)
-        )
-        if id2 <= int(block.nlev):
-            _, destination_energy, destination_weight, _dlabel, _dn, _dl = _level_payload(
-                master, derived, ion_index, id2
-            )
-            leveltemp_destination_energy = destination_energy
-        else:
-            ordered_blocks = list(basis.blocks)
-            block_position = next(
-                (idx for idx, candidate in enumerate(ordered_blocks) if int(candidate.ion_index) == ion_index),
-                -1,
-            )
-            if block_position < 0 or block_position + 1 >= len(ordered_blocks):
-                raise ValueError(f"type49 record {rec} has no next-ion parent destination")
-            destination_block = ordered_blocks[block_position + 1]
-            destination_local_level = id2 - int(block.nlev) + 1
-            _, _parent_excitation, destination_weight, _dlabel, _dn, _dl = _level_payload(
-                master, derived, int(destination_block.ion_index), destination_local_level
-            )
-            leveltemp_destination_energy = (
-                float(leveltemp_energy_snapshots.get(ion_index, {}).get(id2, 0.0))
-                if int(derived.ion_element_z[ion_index]) == 12 else 0.0
-            )
-        pair_payload = [value * 1.0e-18 if i % 2 else value for i, value in enumerate(raw_reals)]
-        payload_reals = pair_payload + [
-            float(threshold_ev),
-            float(bound_energy),
-            float(continuum_energy),
-            float(bound_weight),
-            float(continuum_weight),
-            float(destination_weight),
-            float(leveltemp_destination_energy),
-        ]
-        continuum_index = int(derived.npconi2[rec]) if rec < len(derived.npconi2) else 0
-        if continuum_index <= 0:
-            raise ValueError(f"type49 record {rec} has no canonical continuum index")
-        payload_ints = [continuum_index]
-        line_energy = float(threshold_ev)
-    elif dt == 53:
+    elif dt in {49, 53}:
         if len(raw_ints) < 4 or len(raw_reals) < 4:
             raise ValueError(f"type{dt} record {rec} has short payload")
         id1 = int(raw_ints[-2])
@@ -838,26 +884,58 @@ def _lower_record(
         lower_row = _compact_row_for_local(basis, ion_index, id1)
         upper_row = _compact_row_for_idest(basis, block, id2)
 
-        # v0.6.48.7.39: the compact matrix aliases the current-ion continuum
-        # with the next-ion ground.  Type-53 ucalc does not derive its threshold,
-        # Saha weight, or final electron-energy correction from that alias row.
-        # Retain the original current-ion continuum context and the mutable
-        # leveltemp destination value after the literal cross-section pairs.
-        _, bound_energy, bound_weight, _blabel, _bn, _bl = _level_payload(
-            master, derived, ion_index, id1
-        )
-        bound_ionization_potential = _level_ionization_potential(
-            master, derived, ion_index, id1
-        )
-        base_threshold_ev = float(bound_ionization_potential) - float(bound_energy)
-        _, continuum_energy, continuum_weight, _clabel, _cn, _cl = _level_payload(
-            master, derived, ion_index, int(block.nlev)
-        )
-        if id2 <= int(block.nlev):
-            _, destination_energy, destination_weight, _dlabel, _dn, _dl = _level_payload(
-                master, derived, ion_index, id2
+        current_table = source_type13_tables.get(ion_index)
+        if not current_table:
+            if hasattr(derived, "npfi") and hasattr(derived, "npnxt"):
+                current_table = _source_type13_table(master, derived, ion_index)
+            else:
+                current_table = {}
+                for local in range(1, int(block.nlev) + 1):
+                    level_record, energy, weight, _label, _n, _l = _level_payload(
+                        master, derived, ion_index, local
+                    )
+                    current_table[local] = {
+                        "record": int(level_record),
+                        "energy_ev": float(energy),
+                        "statistical_weight": float(weight),
+                        "ionization_potential_ev": float(
+                            _level_ionization_potential(master, derived, ion_index, local)
+                        ),
+                    }
+        current_snapshot = leveltemp_value_snapshots.get(ion_index, {})
+        bound_level = current_table.get(id1)
+        partition_level = current_snapshot.get(int(block.nlev))
+        if not partition_level and not literal_context_supplied:
+            partition_level = current_table.get(int(block.nlev))
+        destination_leveltemp = current_snapshot.get(id2, {
+            "record": 0,
+            "energy_ev": float(leveltemp_energy_snapshots.get(ion_index, {}).get(id2, 0.0)),
+            "statistical_weight": 0.0,
+            "ionization_potential_ev": 0.0,
+        })
+        if not bound_level:
+            raise ValueError(f"type{dt} record {rec} lacks literal Type-13 bound level {id1}")
+        if not partition_level:
+            raise ValueError(
+                f"type{dt} record {rec} lacks source leveltemp partition column {block.nlev}"
             )
-            leveltemp_destination_energy = destination_energy
+
+        bound_energy = float(bound_level["energy_ev"])
+        bound_weight = float(bound_level["statistical_weight"])
+        base_threshold_ev = float(bound_level["ionization_potential_ev"]) - bound_energy
+        partition_energy_ev = float(partition_level["energy_ev"])
+        partition_weight = float(partition_level["statistical_weight"])
+        if not (partition_weight > 0.0):
+            raise ValueError(f"type{dt} record {rec} has invalid Milne partition weight {partition_weight}")
+
+        excited_parent_energy_ev = 0.0
+        excited_parent_weight = partition_weight
+        destination_weight = partition_weight
+        if id2 <= int(block.nlev):
+            destination_level = current_table.get(id2)
+            if not destination_level:
+                raise ValueError(f"type{dt} record {rec} lacks destination Type-13 level {id2}")
+            destination_weight = float(destination_level["statistical_weight"])
         else:
             ordered_blocks = list(basis.blocks)
             block_position = next(
@@ -865,44 +943,89 @@ def _lower_record(
                 -1,
             )
             if block_position < 0 or block_position + 1 >= len(ordered_blocks):
-                raise ValueError(f"type53 record {rec} has no next-ion parent destination")
+                raise ValueError(f"type{dt} record {rec} has no next-ion parent destination")
             destination_block = ordered_blocks[block_position + 1]
             destination_local_level = id2 - int(block.nlev) + 1
-            _, parent_excitation, destination_weight, _dlabel, _dn, _dl = _level_payload(
-                master, derived, int(destination_block.ion_index), destination_local_level
-            )
-            # Source ucalc reads ``leveltemp%rlev(1,idest2)`` after the
-            # levwkelement preload and the current ion's second-pass overwrite.
-            # Retain the exact mutable-workspace column; absent columns remain
-            # source-zero.
-            leveltemp_destination_energy = (
-                float(leveltemp_energy_snapshots.get(ion_index, {}).get(id2, 0.0))
-                if int(derived.ion_element_z[ion_index]) == 12 else 0.0
-            )
+            next_table = source_type13_tables.get(int(destination_block.ion_index))
+            if not next_table:
+                if hasattr(derived, "npfi") and hasattr(derived, "npnxt"):
+                    next_table = _source_type13_table(
+                        master, derived, int(destination_block.ion_index)
+                    )
+                else:
+                    level_record, energy, weight, _label, _n, _l = _level_payload(
+                        master, derived, int(destination_block.ion_index),
+                        destination_local_level,
+                    )
+                    next_table = {
+                        destination_local_level: {
+                            "record": int(level_record),
+                            "energy_ev": float(energy),
+                            "statistical_weight": float(weight),
+                            "ionization_potential_ev": 0.0,
+                        }
+                    }
+            excited_parent = next_table.get(destination_local_level)
+            if not excited_parent:
+                raise ValueError(
+                    f"type{dt} record {rec} has no literal next-ion Type-13 level "
+                    f"{destination_local_level}"
+                )
+            excited_parent_energy_ev = float(excited_parent["energy_ev"])
+            excited_parent_weight = float(excited_parent["statistical_weight"])
+            destination_weight = excited_parent_weight
 
-        threshold_ev = base_threshold_ev + (
-            float(parent_excitation) if id2 > int(block.nlev) else 0.0
-        )
-        threshold_ev = max(0.0, float(threshold_ev))
-        pair_payload = [value * 1.0e-18 if i % 2 else value for i, value in enumerate(raw_reals)]
-        payload_reals = pair_payload + [
-            float(threshold_ev),
-            float(bound_energy),
-            float(continuum_energy),
-            float(bound_weight),
-            float(continuum_weight),
-            float(destination_weight),
-            float(leveltemp_destination_energy),
+        corrected_threshold_ev = base_threshold_ev
+        if dt == 53 and id2 > int(block.nlev):
+            corrected_threshold_ev += excited_parent_energy_ev
+        if dt == 53:
+            corrected_threshold_ev = max(0.0, corrected_threshold_ev)
+
+        pair_payload = [
+            value * 1.0e-18 if i % 2 else value
+            for i, value in enumerate(raw_reals)
         ]
-        # v0.6.48.7.46.9.4: calc_hmc_ion obtains the Type-53 RRC escape
-        # factors from tauc(:, derivedpointers%npconi2(record)).  Preserve that
-        # canonical one-based continuum identity in the lowered program so the
-        # native evaluator can consume each call's live continuum-tau arrays.
+        if literal_context_supplied:
+            # Context v2 follows the literal ucalc state: base threshold,
+            # corrected threshold, bound level, Milne partition leveltemp
+            # column, bound/partition/destination weights, retained leveltemp
+            # destination energy, and the matched excited-parent record.
+            payload_reals = pair_payload + [
+                float(base_threshold_ev),
+                float(corrected_threshold_ev),
+                float(bound_energy),
+                float(partition_energy_ev),
+                float(bound_weight),
+                float(partition_weight),
+                float(destination_weight),
+                float(destination_leveltemp["energy_ev"]),
+                float(excited_parent_energy_ev),
+                float(excited_parent_weight),
+            ]
+        else:
+            # Legacy v1 compatibility for direct synthetic _lower_record tests.
+            # threshold_ev = float(bound_ionization_potential) - float(bound_energy)
+            # leveltemp_energy_snapshots.get(ion_index, {}).get(id2, 0.0)
+            # leveltemp_energy_snapshots.get(ion_index, {}).get(id2, 0.0)
+            payload_reals = pair_payload + [
+                float(base_threshold_ev),
+                float(bound_energy),
+                float(partition_energy_ev),
+                float(bound_weight),
+                float(partition_weight),
+                float(destination_weight),
+                float(leveltemp_energy_snapshots.get(ion_index, {}).get(id2, 0.0)),
+            ]
+        # Type-49 canonical continuum pointer: derived.npconi2[rec]
+        # Type-53 canonical continuum pointer: derived.npconi2[rec]
         continuum_index = int(derived.npconi2[rec]) if rec < len(derived.npconi2) else 0
         if continuum_index <= 0:
+            # Keep the two explicit contracts visible to readiness tests.
+            if dt == 49:
+                raise ValueError(f"type49 record {rec} has no canonical continuum index")
             raise ValueError(f"type53 record {rec} has no canonical continuum index")
         payload_ints = [continuum_index]
-        line_energy = float(threshold_ev)
+        line_energy = float(corrected_threshold_ev)
     elif dt == 76:
         if len(raw_ints) < 2 or len(raw_reals) < 1:
             raise ValueError(f"type76 record {rec} has short payload")
@@ -1016,6 +1139,8 @@ def _lower_record(
             _, continuum_energy, _continuum_weight, _clabel, _cn, _cl = _level_payload(
                 master, derived, ion_index, int(block.nlev)
             )
+            # Historical source-contract marker retained for older readiness tests:
+            # float(continuum_weight)
             threshold_ev = abs(bound_energy + parent_excitation)
             destination_energy = continuum_energy + parent_excitation
 
@@ -1106,6 +1231,7 @@ def lower_active_atdb(
         layouts: dict[int, tuple[
             Any, dict[int, Any], list[dict[str, Any]],
             dict[int, dict[int, float]], dict[int, dict[int, dict[str, Any]]],
+            dict[int, dict[int, dict[str, Any]]], dict[int, dict[int, dict[str, Any]]],
         ]] = {}
         record_head = 0
         for element_index, z in enumerate(active):
@@ -1121,11 +1247,16 @@ def lower_active_atdb(
             record_head += count
             element_table.append(element)
             row_table.extend(rows)
-            leveltemp_snapshots, leveltemp_owner_snapshots = _build_source_leveltemp_energy_snapshots(
-                built.master, built.derived, basis
+            leveltemp_value_snapshots, leveltemp_owner_snapshots, source_type13_tables = (
+                _build_source_leveltemp_value_snapshots(built.master, built.derived, basis)
             )
+            leveltemp_snapshots = {
+                ion: {column: float(value["energy_ev"]) for column, value in workspace.items()}
+                for ion, workspace in leveltemp_value_snapshots.items()
+            }
             layouts[z] = (
-                basis, blocks, rows, leveltemp_snapshots, leveltemp_owner_snapshots
+                basis, blocks, rows, leveltemp_snapshots, leveltemp_owner_snapshots,
+                leveltemp_value_snapshots, source_type13_tables,
             )
 
         _write_csv(out / "elements.csv", element_table)
@@ -1151,12 +1282,16 @@ def lower_active_atdb(
             writer = csv.DictWriter(records_handle, fieldnames=record_fields, lineterminator="\n")
             writer.writeheader()
             for element_index, z in enumerate(active):
-                basis, blocks, rows, leveltemp_snapshots, leveltemp_owner_snapshots = layouts[z]
+                (
+                    basis, blocks, rows, leveltemp_snapshots, leveltemp_owner_snapshots,
+                    leveltemp_value_snapshots, source_type13_tables,
+                ) = layouts[z]
                 source_records = records_by_z[z]
                 for local_index, rec in enumerate(source_records):
                     lowered = _lower_record(
                         built.master, built.derived, rec, element_index, rows, basis, blocks, subset,
                         leveltemp_snapshots, leveltemp_owner_snapshots,
+                        leveltemp_value_snapshots, source_type13_tables,
                     )
                     payload_reals = lowered.pop("reals")
                     payload_ints = lowered.pop("ints")

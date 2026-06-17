@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 0.6.48.7.46.9.4.1 — Mg Type-49 Milne partition and Type-53 excited-threshold correction - 2026-06-17
+
+- Replayed the literal Type-13 linked lists into the mutable source-order `leveltemp` value workspace instead of resolving level payloads through the global `npilev` alias map.
+- Lowered a versioned ten-real Mg Type-49/53 runtime context containing the base and corrected thresholds, bound-level energy and weight, Milne partition energy and statistical weight, retained destination state, and excited-parent state.
+- Corrected Mg Type-49 detailed balance to use the literal mutable `leveltemp(2,nlev)` Milne partition denominator while preserving the signed threshold and source-zero branch.
+- Corrected Mg Type-53 excited-parent semantics by adding the matched Type-13 energy to the threshold before continuum-bin mapping, cross-section integration, heating/cooling construction, and the Milne exponent.
+- Preserved source-reference Type-49 extrapolation ordering used by the frozen v0.6.47.2 capture and added explicit input/output point-count diagnostics.
+- Added separate forward and reverse unexplained-residual gates for Mg Type-49 and Type-53, plus exact context gates for partition weights and corrected thresholds.
+- Preserved the accepted hydrogen Type-53 two-ULP envelope, all 20 exact helium systems, canonical indexed attribution, finite-state guards, and the deferred Mg Type-50 orientation correction.
+- Reuses the preserved source capture and regenerates the native replay when run against the production `atdb.fits`.
+- Qualification candidate only: production all-61 residual closure must be confirmed by the included host runner.
+
 ## 0.6.48.7.46.9.4 — Mg Type-49/53 source-faithful residual closure - 2026-06-17
 
 - Reconstructed the mutable Fortran `leveltemp` energy workspace used by source-order bound-free evaluation, including the retained higher-column state that survives each ion's `1:nlev` overwrite.

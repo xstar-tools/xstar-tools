@@ -4,7 +4,7 @@ from xstar_tools.xstar import v0472_all61_post_seed_system_capture as capture
 
 
 def test_injected_capture_block_is_runtime_self_contained() -> None:
-    assert capture.RELEASE == "0.6.48.7.46.9.4"
+    assert capture.RELEASE == "0.6.48.7.46.9.4.1"
     assert "from pathlib import Path as _v048746_Path" in capture._SYSTEM_CAPTURE_CODE
     assert "import numpy as _v048746_np" in capture._SYSTEM_CAPTURE_CODE
     assert "import csv as _v048746_csv" in capture._SYSTEM_CAPTURE_CODE

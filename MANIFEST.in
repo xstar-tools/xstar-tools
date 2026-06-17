@@ -713,3 +713,9 @@ include check_v04874694_mg_type49_type53_source_faithful.py
 include check_v04874694_mg_type49_type53_source_faithful_readiness.py
 include tests/test_v064874694_mg_bound_free_source_faithful.py
 
+# v0.6.48.7.46.9.4.1 Mg Type-49 Milne partition and Type-53 excited-threshold correction
+include V0648746941_MG_TYPE49_MILNE_PARTITION_AND_TYPE53_EXCITED_THRESHOLD.md
+include run_v048746941_mg_type49_milne_partition_and_type53_excited_threshold.sh
+include check_v048746941_mg_milne_excited_threshold.py
+include check_v048746941_mg_milne_excited_threshold_readiness.py
+include tests/test_v0648746941_mg_milne_excited_threshold.py

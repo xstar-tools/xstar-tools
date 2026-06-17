@@ -1,3 +1,7 @@
+## v0.6.48.7.46.9.4.1 Mg Type-49 Milne partition and Type-53 excited-threshold correction
+
+This qualification candidate follows the production v46.9.4 residual diagnosis. It replays literal Type-13 linked lists into the mutable Fortran `leveltemp` workspace, transports `leveltemp(1,nlev)` and `leveltemp(2,nlev)` as the Milne partition state, and transports the matched excited-parent energy and statistical weight. Mg Type-49 now uses the literal partition denominator. Mg Type-53 applies the excited-parent threshold correction before continuum-bin selection and integration. Forward and reverse residuals are gated separately; Mg Type-50 remains unchanged and deferred. The production all-61 gate must be run with the actual `atdb.fits`. See `V0648746941_MG_TYPE49_MILNE_PARTITION_AND_TYPE53_EXCITED_THRESHOLD.md`.
+
 ## v0.6.48.7.46.9.4 Mg Type-49/53 source-faithful residual closure
 
 This qualification candidate reconstructs the mutable source-order `leveltemp` energy workspace used by the Fortran bound-free path. Mg Type-49 retains its signed threshold and exact nonpositive-threshold zero return; Mg Type-49 and Type-53 receive the retained destination energy that survives the per-ion workspace overwrite. A separate fail-closed audit requires complete live runtime context and classifies every canonical residual as bit-exact, bounded 1–2 ULP binary64 equivalence, or unexplained. Mg Type-50 remains unchanged and deferred. The production all-61 gate must be run with the actual `atdb.fits`. See `V064874694_MG_TYPE49_TYPE53_SOURCE_FAITHFUL_RESIDUAL_CLOSURE.md`.
