@@ -1,4 +1,4 @@
-"""Indexed all-61 dense-matrix causal attribution for v0.6.48.7.46.9.2.
+"""Indexed all-61 dense-matrix causal attribution for v0.6.48.7.46.9.3.1.
 
 The audit consumes the exact source and native contribution streams captured by
 v0.6.48.7.46.9, but indexes those streams once by matrix cell instead of
@@ -24,8 +24,8 @@ from typing import Any, Iterable, Mapping
 
 import numpy as np
 
-RELEASE = "0.6.48.7.46.9.2"
-SCHEMA = "xstar-tools-v064874692-live-type53-canonical-attribution-v1"
+RELEASE = "0.6.48.7.46.9.3.1"
+SCHEMA = "xstar-tools-v0648746931-hydrogen-type53-ieee-equivalence-attribution-v1"
 SUMMARY_NAME = "all61_dense_matrix_causal_attribution_summary.json"
 CELL_NAME = "all61_dense_matrix_causal_cells.csv"
 RECORD_NAME = "all61_dense_matrix_causal_records.csv.gz"
@@ -511,11 +511,19 @@ def _new_hydrogen_type53_state() -> dict[str, Any]:
     return {
         "records_expected": 0,
         "contributions_exact": 0,
+        "contributions_ieee_equivalent": 0,
+        "roundoff_record_vectors": 0,
+        "roundoff_real_fields": 0,
+        "max_ulp_distance": 0,
+        "max_absolute_delta": 0.0,
+        "max_relative_delta": 0.0,
+        "roundoff_records": [],
         "endpoints_exact": 0,
         "diagnostics_seen": 0,
         "diagnostics_exact": 0,
         "affected_channel_exact": {"ans1": 0, "ans2": 0, "ans3": 0, "ans4": 0, "ans5": 0, "ans6": 0},
         "phase_exact": {"call3": 0, "call4": 0, "final_call3": 0, "final_call4": 0},
+        "phase_ieee_equivalent": {"call3": 0, "call4": 0, "final_call3": 0, "final_call4": 0},
         "errors": [],
     }
 
@@ -527,6 +535,125 @@ _HYDROGEN_TYPE53_PHASE_EXPECTED = {
     "final_call3": 8,
     "final_call4": 8,
 }
+
+# v0.6.48.7.46.9.3.1: accept only host/compiler binary64 roundoff.
+# A field must be finite, have the same sign, differ by no more than two ULPs,
+# and satisfy the relative guard.  There is deliberately no nonzero absolute
+# tolerance, so a small source value cannot be matched to zero.
+_HYDROGEN_TYPE53_MAX_ULPS = 2
+_HYDROGEN_TYPE53_MAX_RELATIVE_DELTA = 4.0e-16
+_HYDROGEN_TYPE53_REAL_LABELS = tuple(
+    f"{role}:{term}"
+    for role in ROLE_NAMES
+    for term in ("aj1", "aj2", "cj", "cj2")
+)
+
+
+def _binary64_ulp_distance(left: float, right: float) -> int:
+    left_bits = int(np.float64(left).view(np.uint64))
+    right_bits = int(np.float64(right).view(np.uint64))
+    return abs(left_bits - right_bits)
+
+
+def _binary64_ieee_equivalent(left: float, right: float) -> tuple[bool, int, float, float]:
+    if left == right:
+        return True, 0, 0.0, 0.0
+    if not math.isfinite(left) or not math.isfinite(right):
+        return False, 2**63 - 1, math.inf, math.inf
+    if left == 0.0 or right == 0.0 or math.copysign(1.0, left) != math.copysign(1.0, right):
+        return False, _binary64_ulp_distance(left, right), abs(right - left), math.inf
+    absolute_delta = abs(right - left)
+    relative_delta = absolute_delta / max(abs(left), abs(right))
+    ulps = _binary64_ulp_distance(left, right)
+    accepted = (
+        ulps <= _HYDROGEN_TYPE53_MAX_ULPS
+        and relative_delta <= _HYDROGEN_TYPE53_MAX_RELATIVE_DELTA
+    )
+    return accepted, ulps, absolute_delta, relative_delta
+
+
+def _hydrogen_type53_vector_equivalence(
+    source_reals: tuple[float, ...],
+    native_reals: tuple[float, ...],
+) -> dict[str, Any]:
+    fields: list[dict[str, Any]] = []
+    accepted = len(source_reals) == len(native_reals) == REAL_COLUMNS
+    max_ulps = 0
+    max_absolute_delta = 0.0
+    max_relative_delta = 0.0
+    for index, (source_value, native_value) in enumerate(zip(source_reals, native_reals)):
+        equivalent, ulps, absolute_delta, relative_delta = _binary64_ieee_equivalent(
+            source_value, native_value
+        )
+        accepted = accepted and equivalent
+        max_ulps = max(max_ulps, ulps)
+        max_absolute_delta = max(max_absolute_delta, absolute_delta)
+        max_relative_delta = max(max_relative_delta, relative_delta)
+        if source_value != native_value:
+            fields.append({
+                "field": _HYDROGEN_TYPE53_REAL_LABELS[index],
+                "source_value": source_value,
+                "native_value": native_value,
+                "delta": native_value - source_value,
+                "absolute_delta": absolute_delta,
+                "relative_delta": relative_delta,
+                "ulp_distance": ulps,
+                "accepted": equivalent,
+            })
+    return {
+        "accepted": accepted,
+        "bit_exact": source_reals == native_reals,
+        "differing_fields": fields,
+        "max_ulp_distance": max_ulps,
+        "max_absolute_delta": max_absolute_delta,
+        "max_relative_delta": max_relative_delta,
+    }
+
+
+def hydrogen_type53_ieee_equivalence_self_test() -> dict[str, Any]:
+    observed_pairs = (
+        (1.7648023082206567e-08, 1.7648023082206564e-08),
+        (2.2096863507018874e-13, 2.2096863507018870e-13),
+        (1.1937722916711257e-09, 1.1937722916711255e-09),
+        (2.1881659622280428e-11, 2.1881659622280434e-11),
+        (8.9060683811322620e-11, 8.9060683811322590e-11),
+        (2.1881371018023603e-11, 2.1881371018023600e-11),
+    )
+    errors: list[str] = []
+    max_ulps = 0
+    max_relative = 0.0
+    for source_value, native_value in observed_pairs:
+        accepted, ulps, _absolute, relative = _binary64_ieee_equivalent(
+            source_value, native_value
+        )
+        max_ulps = max(max_ulps, ulps)
+        max_relative = max(max_relative, relative)
+        if not accepted:
+            errors.append(f"observed_roundoff_rejected:{source_value!r}:{native_value!r}")
+    base = 1.0
+    three_ulps = float(np.nextafter(np.nextafter(np.nextafter(base, math.inf), math.inf), math.inf))
+    if _binary64_ieee_equivalent(base, three_ulps)[0]:
+        errors.append("three_ulp_difference_accepted")
+    if _binary64_ieee_equivalent(0.0, float(np.nextafter(0.0, 1.0)))[0]:
+        errors.append("zero_to_nonzero_difference_accepted")
+    if _binary64_ieee_equivalent(1.0, -1.0)[0]:
+        errors.append("opposite_sign_difference_accepted")
+    if _binary64_ieee_equivalent(math.nan, math.nan)[0]:
+        errors.append("nan_difference_accepted")
+    return {
+        "schema": "xstar-tools-v0648746931-hydrogen-type53-ieee-equivalence-self-test-v1",
+        "release": RELEASE,
+        "result": "ACCEPT" if not errors else "REJECT",
+        "errors": errors,
+        "observed_pairs": len(observed_pairs),
+        "max_ulp_distance": max_ulps,
+        "max_relative_delta": max_relative,
+        "limits": {
+            "max_ulps": _HYDROGEN_TYPE53_MAX_ULPS,
+            "max_relative_delta": _HYDROGEN_TYPE53_MAX_RELATIVE_DELTA,
+            "nonzero_absolute_tolerance": 0.0,
+        },
+    }
 
 
 def _hydrogen_type53_phase(sequence: int) -> str | None:
@@ -565,18 +692,49 @@ def _update_hydrogen_type53_state(
         )
         if endpoints_exact:
             state["endpoints_exact"] += 1
-        contribution_exact = (
+        metadata_exact = (
             source_contribution.record == native_contribution.record
             and source_contribution.data_type == native_contribution.data_type
             and source_contribution.rate_type == native_contribution.rate_type
             and source_contribution.ion_stage == native_contribution.ion_stage
             and endpoints_exact
-            and source_contribution.reals == native_contribution.reals
         )
+        vector = _hydrogen_type53_vector_equivalence(
+            source_contribution.reals, native_contribution.reals
+        )
+        contribution_exact = metadata_exact and vector["bit_exact"]
+        contribution_ieee_equivalent = metadata_exact and vector["accepted"]
         if contribution_exact:
             state["contributions_exact"] += 1
             if phase and identity[0] in _HYDROGEN_TYPE53_AFFECTED_RECORDS:
                 state["phase_exact"][phase] += 1
+        if contribution_ieee_equivalent:
+            state["contributions_ieee_equivalent"] += 1
+            if phase and identity[0] in _HYDROGEN_TYPE53_AFFECTED_RECORDS:
+                state["phase_ieee_equivalent"][phase] += 1
+        if contribution_ieee_equivalent and not contribution_exact:
+            state["roundoff_record_vectors"] += 1
+            state["roundoff_real_fields"] += len(vector["differing_fields"])
+            state["max_ulp_distance"] = max(state["max_ulp_distance"], vector["max_ulp_distance"])
+            state["max_absolute_delta"] = max(
+                state["max_absolute_delta"], vector["max_absolute_delta"]
+            )
+            state["max_relative_delta"] = max(
+                state["max_relative_delta"], vector["max_relative_delta"]
+            )
+            if len(state["roundoff_records"]) < 50:
+                state["roundoff_records"].append({
+                    "sequence": sequence,
+                    "record": identity[0],
+                    "phase": phase or "other",
+                    "differing_fields": vector["differing_fields"],
+                })
+        if metadata_exact and not vector["accepted"]:
+            errors.append(
+                f"type53_contribution_outside_ieee_tolerance:{sequence}:{identity[0]}:"
+                f"max_ulps={vector['max_ulp_distance']}:"
+                f"max_relative={vector['max_relative_delta']:.17g}"
+            )
     records_path = native_run / "qualification_diagnostics" / f"evaluation_{sequence:04d}_records.csv"
     if not records_path.is_file():
         errors.append(f"missing_record_diagnostics:{sequence}")
@@ -611,8 +769,11 @@ def _finalize_hydrogen_type53_state(state: dict[str, Any]) -> dict[str, Any]:
             f"hydrogen_type53_inventory={state['records_expected']} expected={expected_inventory}"
         )
     for phase, expected in _HYDROGEN_TYPE53_PHASE_EXPECTED.items():
-        if state["phase_exact"][phase] != expected:
-            errors.append(f"hydrogen_type53_{phase}_exact={state['phase_exact'][phase]} expected={expected}")
+        if state["phase_ieee_equivalent"][phase] != expected:
+            errors.append(
+                f"hydrogen_type53_{phase}_ieee_equivalent="
+                f"{state['phase_ieee_equivalent'][phase]} expected={expected}"
+            )
     affected_total = sum(_HYDROGEN_TYPE53_PHASE_EXPECTED.values())
     for channel in ("ans1", "ans2", "ans3", "ans4", "ans5", "ans6"):
         if state["affected_channel_exact"][channel] != affected_total:
@@ -621,7 +782,7 @@ def _finalize_hydrogen_type53_state(state: dict[str, Any]) -> dict[str, Any]:
             )
     result = "ACCEPT" if (
         not errors
-        and state["contributions_exact"] == state["records_expected"]
+        and state["contributions_ieee_equivalent"] == state["records_expected"]
         and state["endpoints_exact"] == state["records_expected"]
         and state["diagnostics_seen"] == state["records_expected"]
         and state["diagnostics_exact"] == state["records_expected"]
@@ -630,12 +791,27 @@ def _finalize_hydrogen_type53_state(state: dict[str, Any]) -> dict[str, Any]:
         "result": result,
         "records_expected": state["records_expected"],
         "contributions_exact": state["contributions_exact"],
+        "contributions_ieee_equivalent": state["contributions_ieee_equivalent"],
+        "roundoff_record_vectors": state["roundoff_record_vectors"],
+        "roundoff_real_fields": state["roundoff_real_fields"],
+        "max_ulp_distance": state["max_ulp_distance"],
+        "max_absolute_delta": state["max_absolute_delta"],
+        "max_relative_delta": state["max_relative_delta"],
+        "ieee_tolerance": {
+            "max_ulps": _HYDROGEN_TYPE53_MAX_ULPS,
+            "max_relative_delta": _HYDROGEN_TYPE53_MAX_RELATIVE_DELTA,
+            "nonzero_absolute_tolerance": 0.0,
+            "same_sign_required": True,
+            "finite_required": True,
+        },
+        "roundoff_records": state["roundoff_records"],
         "endpoints_exact": state["endpoints_exact"],
         "diagnostics_seen": state["diagnostics_seen"],
         "diagnostics_exact": state["diagnostics_exact"],
         "affected_records": sorted(_HYDROGEN_TYPE53_AFFECTED_RECORDS),
         "affected_channel_exact": state["affected_channel_exact"],
         "phase_exact": state["phase_exact"],
+        "phase_ieee_equivalent": state["phase_ieee_equivalent"],
         "phase_expected": dict(_HYDROGEN_TYPE53_PHASE_EXPECTED),
         "errors": errors[:50],
     }
@@ -782,11 +958,16 @@ def analyze(
         "ALL_61_DENSE_MATRIX_CAUSAL_RECORDS_ATTRIBUTED": "ACCEPT" if all_attributed else "REJECT",
         "ALL_61_HYDROGEN_TYPE53_SOURCE_FAITHFUL": h53["result"],
         "HYDROGEN_TYPE53_RECORDS_EXPECTED": "ACCEPT" if h53["records_expected"] == 1891 else "REJECT",
-        "HYDROGEN_TYPE53_CONTRIBUTIONS_EXACT": "ACCEPT" if h53["contributions_exact"] == 1891 else "REJECT",
-        "HYDROGEN_TYPE53_CALL3_EXACT": "ACCEPT" if h53["phase_exact"]["call3"] == 144 else "REJECT",
-        "HYDROGEN_TYPE53_CALL4_EXACT": "ACCEPT" if h53["phase_exact"]["call4"] == 136 else "REJECT",
-        "HYDROGEN_TYPE53_FINAL_CALL3_EXACT": "ACCEPT" if h53["phase_exact"]["final_call3"] == 8 else "REJECT",
-        "HYDROGEN_TYPE53_FINAL_CALL4_EXACT": "ACCEPT" if h53["phase_exact"]["final_call4"] == 8 else "REJECT",
+        "HYDROGEN_TYPE53_CONTRIBUTIONS_BIT_EXACT": "ACCEPT" if h53["contributions_exact"] == 1891 else "REJECT",
+        "HYDROGEN_TYPE53_CONTRIBUTIONS_IEEE_EQUIVALENT": "ACCEPT" if h53["contributions_ieee_equivalent"] == 1891 else "REJECT",
+        "HYDROGEN_TYPE53_CALL3_BIT_EXACT": "ACCEPT" if h53["phase_exact"]["call3"] == 144 else "REJECT",
+        "HYDROGEN_TYPE53_CALL4_BIT_EXACT": "ACCEPT" if h53["phase_exact"]["call4"] == 136 else "REJECT",
+        "HYDROGEN_TYPE53_FINAL_CALL3_BIT_EXACT": "ACCEPT" if h53["phase_exact"]["final_call3"] == 8 else "REJECT",
+        "HYDROGEN_TYPE53_FINAL_CALL4_BIT_EXACT": "ACCEPT" if h53["phase_exact"]["final_call4"] == 8 else "REJECT",
+        "HYDROGEN_TYPE53_CALL3_IEEE_EQUIVALENT": "ACCEPT" if h53["phase_ieee_equivalent"]["call3"] == 144 else "REJECT",
+        "HYDROGEN_TYPE53_CALL4_IEEE_EQUIVALENT": "ACCEPT" if h53["phase_ieee_equivalent"]["call4"] == 136 else "REJECT",
+        "HYDROGEN_TYPE53_FINAL_CALL3_IEEE_EQUIVALENT": "ACCEPT" if h53["phase_ieee_equivalent"]["final_call3"] == 8 else "REJECT",
+        "HYDROGEN_TYPE53_FINAL_CALL4_IEEE_EQUIVALENT": "ACCEPT" if h53["phase_ieee_equivalent"]["final_call4"] == 8 else "REJECT",
         "CANONICAL_RECORD_ALIGNMENT": "ACCEPT" if (
             attribution_metrics.get("canonical_record_pairs", 0) > 0
             and attribution_metrics.get("global_to_local_ion_index_pairs", 0) > 0

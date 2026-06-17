@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.48.7.46.9.3.1 — hydrogen Type-53 binary64 IEEE-equivalence hotfix - 2026-06-17
+
+- Retained strict bit-exact reporting: 1,885 of 1,891 hydrogen Type-53 contribution vectors are bit-exact in the production host run.
+- Added a separate IEEE-equivalence acceptance gate for the six remaining vectors and nine differing fields.
+- Limited equivalence to finite, same-sign, nonzero binary64 values within two ULPs and `4e-16` relative difference; no nonzero absolute tolerance is allowed.
+- Recorded the exact roundoff vectors, fields, ULP distances, absolute deltas, and relative deltas in the attribution summary.
+- Rejects three-ULP differences, zero-to-nonzero changes, sign changes, and nonfinite values.
+- Reuses the completed v46.9.3 source capture and native replay; no physics evaluation is repeated.
+- Preserves accepted Mg Type-49/53 finite-state protection, all 20 exact helium systems, canonical indexed attribution, and deferred Mg Type-50 orientation.
+- Keeps fixed-state, Thermal, controller, product, and production gates fail-closed.
+
 ## 0.6.48.7.46.9.2 — call-3/4 hydrogen Type-53 live-radiation transport and canonical record alignment - 2026-06-17
 
 - Lowered the canonical `npconi2` continuum pointer into every Type-53 record payload and consumed it in the native fixed-state evaluator.

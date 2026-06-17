@@ -1,3 +1,7 @@
+## v0.6.48.7.46.9.3.1 hydrogen Type-53 binary64 IEEE-equivalence hotfix
+
+This qualification hotfix distinguishes bit identity from harmless host/compiler binary64 roundoff. The production v46.9.3 run has 1,885 bit-exact hydrogen Type-53 contribution vectors and six additional vectors whose nine differing fields are only one or two ULPs apart, with a maximum relative delta of `2.9533173658319817e-16`. The gate accepts those vectors only when all values are finite, same-sign, nonzero, within two ULPs, and within `4e-16` relative difference. There is no nonzero absolute tolerance. Source capture and native replay are reused without repeating physics. See `V0648746931_HYDROGEN_TYPE53_IEEE_EQUIVALENCE_HOTFIX.md`.
+
 ## v0.6.48.7.23 Mg-primary and call-start workspace transport
 
 This qualification release applies the accepted v0.6.48.7.22 physical evidence: captured source Mg primary/secondary budgets are injected for the call-1 qualification states, and the four source call-start payloads are transported through fixed-state ABI 60487. A freshly lowered ATDB case maps source `global_xilevg` onto native compact rows. The complete controller parity run remains required; thermal and production promotion are blocked. See `V0648723_MG_PRIMARY_AND_CALL_START_WORKSPACE_TRANSPORT.md`.

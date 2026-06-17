@@ -693,3 +693,16 @@ include run_v04874692_hydrogen_type53_live_radiation_and_canonical_alignment.sh
 include check_v04874692_hydrogen_type53_live_radiation.py
 include check_v04874692_hydrogen_type53_live_radiation_readiness.py
 include tests/test_v064874692_hydrogen_type53_live_radiation.py
+
+# v0.6.48.7.46.9.3 Mg Type-49/53 finite-state attribution and exact-system regression protection
+include V064874693_MG_TYPE49_TYPE53_FINITE_STATE_AND_REGRESSION_PROTECTION.md
+include run_v04874693_mg_type49_type53_finite_state_and_regression_protection.sh
+include check_v04874693_mg_bound_free_finite_state.py
+include check_v04874693_mg_bound_free_finite_state_readiness.py
+
+# v0.6.48.7.46.9.3.1 hydrogen Type-53 binary64 IEEE-equivalence hotfix
+include V0648746931_HYDROGEN_TYPE53_IEEE_EQUIVALENCE_HOTFIX.md
+include run_v048746931_hydrogen_type53_ieee_equivalence_resume.sh
+include check_v048746931_hydrogen_type53_ieee_equivalence.py
+include check_v048746931_hydrogen_type53_ieee_equivalence_readiness.py
+include tests/test_v0648746931_hydrogen_type53_ieee_equivalence.py

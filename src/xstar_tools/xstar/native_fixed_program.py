@@ -720,9 +720,50 @@ def _lower_record(master: Any, derived: Any, rec: int, element_index: int, rows:
         id2 = int(block.nlev) + off - 1
         lower_row = _compact_row_for_local(basis, ion_index, id1)
         upper_row = _compact_row_for_idest(basis, block, id2)
-        payload_reals = [value * 1.0e-18 if i % 2 else value for i, value in enumerate(raw_reals)]
-        payload_ints = []
-        line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
+        _, bound_energy, bound_weight, _blabel, _bn, _bl = _level_payload(
+            master, derived, ion_index, id1
+        )
+        bound_ionization_potential = _level_ionization_potential(
+            master, derived, ion_index, id1
+        )
+        threshold_ev = max(0.0, float(bound_ionization_potential) - float(bound_energy))
+        _, continuum_energy, continuum_weight, _clabel, _cn, _cl = _level_payload(
+            master, derived, ion_index, int(block.nlev)
+        )
+        if id2 <= int(block.nlev):
+            _, destination_energy, destination_weight, _dlabel, _dn, _dl = _level_payload(
+                master, derived, ion_index, id2
+            )
+            leveltemp_destination_energy = destination_energy
+        else:
+            ordered_blocks = list(basis.blocks)
+            block_position = next(
+                (idx for idx, candidate in enumerate(ordered_blocks) if int(candidate.ion_index) == ion_index),
+                -1,
+            )
+            if block_position < 0 or block_position + 1 >= len(ordered_blocks):
+                raise ValueError(f"type49 record {rec} has no next-ion parent destination")
+            destination_block = ordered_blocks[block_position + 1]
+            destination_local_level = id2 - int(block.nlev) + 1
+            _, _parent_excitation, destination_weight, _dlabel, _dn, _dl = _level_payload(
+                master, derived, int(destination_block.ion_index), destination_local_level
+            )
+            leveltemp_destination_energy = 0.0
+        pair_payload = [value * 1.0e-18 if i % 2 else value for i, value in enumerate(raw_reals)]
+        payload_reals = pair_payload + [
+            float(threshold_ev),
+            float(bound_energy),
+            float(continuum_energy),
+            float(bound_weight),
+            float(continuum_weight),
+            float(destination_weight),
+            float(leveltemp_destination_energy),
+        ]
+        continuum_index = int(derived.npconi2[rec]) if rec < len(derived.npconi2) else 0
+        if continuum_index <= 0:
+            raise ValueError(f"type49 record {rec} has no canonical continuum index")
+        payload_ints = [continuum_index]
+        line_energy = float(threshold_ev)
     elif dt == 53:
         if len(raw_ints) < 4 or len(raw_reals) < 4:
             raise ValueError(f"type{dt} record {rec} has short payload")
@@ -785,7 +826,7 @@ def _lower_record(master: Any, derived: Any, rec: int, element_index: int, rows:
             float(destination_weight),
             float(leveltemp_destination_energy),
         ]
-        # v0.6.48.7.46.9.2: calc_hmc_ion obtains the Type-53 RRC escape
+        # v0.6.48.7.46.9.3.1: calc_hmc_ion obtains the Type-53 RRC escape
         # factors from tauc(:, derivedpointers%npconi2(record)).  Preserve that
         # canonical one-based continuum identity in the lowered program so the
         # native evaluator can consume each call's live continuum-tau arrays.

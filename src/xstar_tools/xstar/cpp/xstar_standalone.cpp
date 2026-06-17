@@ -1835,6 +1835,11 @@ int command_run_fixed_evaluation(const Options& options) {
     rc = xstar_fixed_state_write_last_diagnostics_v1(
         context, diagnostics_root.c_str(), static_cast<std::uint64_t>(options.evaluation), message.data(), message.size());
     if (rc != 0) { std::cerr << "evaluation diagnostics failed: " << message.data() << "\n"; xstar_fixed_state_context_destroy(context); return rc; }
+    const bool live_runtime_state_abi = input.dsec_radiation_energy_ev && input.dsec_bremsa &&
+        input.dsec_radiation_bin_count >= 3 && input.continuum_tau_in && input.continuum_tau_out &&
+        input.continuum_tau_count > 0;
+    const std::size_t live_dsec_radiation_bins = input.dsec_radiation_bin_count;
+    const std::size_t live_continuum_tau_count = input.continuum_tau_count;
     std::ofstream summary(output_root / "native_evaluation_summary.json");
     summary << std::setprecision(17)
             << "{\n  \"schema_version\": \"0.6.48.7.26\",\n"
@@ -1854,9 +1859,9 @@ int command_run_fixed_evaluation(const Options& options) {
             << "  \"native_hmctot\": " << output.hmctot << ",\n"
             << "  \"reference_hmctot\": " << row.reference_hmctot << ",\n"
             << "  \"hmctot_delta\": " << hmctot_delta << ",\n"
-            << "  \"dsec_runtime_state_abi\": " << ((!dsec_radiation.energy_ev.empty() && !continuum_tau.tau_in.empty()) ? "true" : "false") << ",\n"
-            << "  \"dsec_radiation_bins\": " << dsec_radiation.energy_ev.size() << ",\n"
-            << "  \"continuum_tau_count\": " << continuum_tau.tau_in.size() << ",\n"
+            << "  \"dsec_runtime_state_abi\": " << (live_runtime_state_abi ? "true" : "false") << ",\n"
+            << "  \"dsec_radiation_bins\": " << live_dsec_radiation_bins << ",\n"
+            << "  \"continuum_tau_count\": " << live_continuum_tau_count << ",\n"
             << "  \"diagnostics_directory\": \"" << std::filesystem::absolute(diagnostics_root).string() << "\"\n}\n";
     std::cout << std::setprecision(17)
               << "trajectory_row=" << options.evaluation << "\n"
@@ -1872,9 +1877,9 @@ int command_run_fixed_evaluation(const Options& options) {
               << "charge_residual_delta=" << charge_delta << "\n"
               << "native_hmctot=" << output.hmctot << "\n"
               << "hmctot_delta=" << hmctot_delta << "\n"
-              << "dsec_runtime_state_abi=" << ((!dsec_radiation.energy_ev.empty() && !continuum_tau.tau_in.empty()) ? "true" : "false") << "\n"
-              << "dsec_radiation_bins=" << dsec_radiation.energy_ev.size() << "\n"
-              << "continuum_tau_count=" << continuum_tau.tau_in.size() << "\n"
+              << "dsec_runtime_state_abi=" << (live_runtime_state_abi ? "true" : "false") << "\n"
+              << "dsec_radiation_bins=" << live_dsec_radiation_bins << "\n"
+              << "continuum_tau_count=" << live_continuum_tau_count << "\n"
               << "diagnostics_directory=" << std::filesystem::absolute(diagnostics_root).string() << "\n"
               << "RESULT=ACCEPT\n";
     xstar_fixed_state_context_destroy(context);
