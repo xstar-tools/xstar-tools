@@ -2,7 +2,7 @@ from pathlib import Path
 from xstar_tools.xstar import v0472_all61_fixed_state_capture as capture
 
 def test_release_and_unconditional_retention_wrapper():
-    assert capture.RELEASE == "0.6.48.7.46.7"
+    assert capture.RELEASE == "0.6.48.7.46.8"
     assert capture._PROBE.count('payload = {} if previous_factory is None else dict(previous_factory(current_state))') >= 2
     assert 'if previous_factory is not None:\n                def retained_factory' not in capture._PROBE
 

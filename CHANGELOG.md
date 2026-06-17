@@ -1,5 +1,22 @@
 # CHANGELOG
 
+## 0.6.48.7.46.8 — accepted source compact-basis/seed contract rebase - 2026-06-17
+
+- Restored the accepted v0.6.48.7.45 source compact-basis and transformed-seed implementation that was dropped by the 46.x packaging chain.
+- Restored source `critf=1e-7`, exact source active windows, exact unnormalized transformed seeds, zero normalization rows, and full-width ion reconstruction.
+- Canonicalized superlevel partition labels in the post-seed comparator while retaining strict ion-charge and seed comparisons.
+- Added a full release-specific runner and fail-closed readiness checks for the source oracle and comparator semantics.
+- Representative physical replays for all three Mg window shapes recover exact basis/seed rows; the first remaining divergence is the dense matrix.
+- Qualification only; fixed-state, Thermal, product, controller, and production gates remain blocked.
+
+
+- Replaced the fixture post-seed capture and decomposition modules with genuine implementations.
+- Added immutable all-61 source capture of 183 H/He/Mg solve systems and 1,464 raw float64 arrays.
+- Added native `XSTAR_QUALIFICATION_ALL_ELEMENT_SOLVE_SYSTEM` matrix/RHS/solve-response capture.
+- Added exact matrix, RHS, solver response, ion reconstruction, and global commit decomposition.
+- Strengthened readiness to reject fixture modules and verify generated probe and native writer contracts.
+- Kept fixed-state, Thermal, product, and production gates fail-closed.
+
 ## 0.6.48.7.46.7 - 2026-06-17
 
 - Replaced the fixture post-seed capture and decomposition modules with genuine implementations.

@@ -18,7 +18,7 @@ from typing import Any, Iterable
 
 import numpy as np
 
-RELEASE = "0.6.48.7.46.7"
+RELEASE = "0.6.48.7.46.8"
 SCHEMA = "xstar-tools-v06487466-all61-post-seed-system-decomposition-v1"
 SUMMARY_NAME = "all61_post_seed_system_decomposition_summary.json"
 SYSTEM_COMPARISON_NAME = "all61_post_seed_system_comparison.csv"
@@ -169,6 +169,23 @@ def _basis_seed_exact(
     }
     counters = Counter()
     all_exact = len(source) == len(native) and set(source) == set(native)
+
+    def canonical_superlevels(rows: dict[tuple[int, int, int], dict[str, str]]) -> dict[tuple[int, int, int], int]:
+        result: dict[tuple[int, int, int], int] = {}
+        grouped: dict[tuple[int, int], list[tuple[tuple[int, int, int], dict[str, str]]]] = {}
+        for key, row in rows.items():
+            grouped.setdefault((key[0], key[1]), []).append((key, row))
+        for items in grouped.values():
+            mapping: dict[int, int] = {}
+            for key, row in sorted(items, key=lambda item: item[0][2]):
+                raw = int(row["superlevel"])
+                if raw not in mapping:
+                    mapping[raw] = len(mapping) + 1
+                result[key] = mapping[raw]
+        return result
+
+    source_superlevels = canonical_superlevels(source)
+    native_superlevels = canonical_superlevels(native)
     for key in sorted(set(source) | set(native)):
         left = source.get(key)
         right = native.get(key)
@@ -182,7 +199,8 @@ def _basis_seed_exact(
             and int(left["active_max_stage"]) == int(right["active_max_stage"])
             and int(left["compact_row"]) == int(right["compact_row"])
             and int(left["ion"]) == int(right["ion"])
-            and int(left["superlevel"]) == int(right["superlevel"])
+            and int(left["ion_charge"]) == int(right["ion_charge"])
+            and source_superlevels[key] == native_superlevels[key]
             and int(left["is_normalization_row"]) == int(right["is_normalization_row"])
         )
         seed_exact = _float_exact(
