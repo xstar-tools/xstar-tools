@@ -18,7 +18,7 @@ from typing import Any
 
 from . import v0472_full_dsec_thermal_budget_capture as base
 
-RELEASE = "0.6.48.7.44"
+RELEASE = "0.6.48.7.46.5"
 SCHEMA = "xstar-tools-v0648744-v0472-all61-fixed-state-capture-v1"
 VERIFY_SCHEMA = "xstar-tools-v0648744-v0472-all61-fixed-state-oracle-v1"
 STATE_NAME = "v0472_all61_fixed_state_rows.csv"
@@ -403,6 +403,102 @@ def _v0487463_force_summary_retention(probe: str) -> str:
 
 
 _PROBE = _v0487463_force_summary_retention(_PROBE)
+
+
+
+# BEGIN V06487465 PROBE COMPONENT CONTRACT
+def _v0487465_probe_retention_report(probe: str | None = None) -> dict[str, int]:
+    text = _PROBE if probe is None else str(probe)
+    lines = text.splitlines()
+    reports: list[tuple[bool, bool, bool, bool]] = []
+    for index, line in enumerate(lines):
+        if line.strip() != "def retained_factory(current_state):":
+            continue
+        indent = len(line) - len(line.lstrip())
+        end = index + 1
+        while end < len(lines):
+            stripped = lines[end].strip()
+            current_indent = len(lines[end]) - len(lines[end].lstrip()) if stripped else indent + 4
+            if stripped and current_indent <= indent and end > index + 1:
+                break
+            if stripped == "return payload":
+                end += 1
+                break
+            end += 1
+        block = "\n".join(lines[index:end])
+        reports.append((
+            'profile = dict(payload.get("profile_control") or {})' in block,
+            'profile["diagnostics_mode"] = "summary"' in block and 'payload["profile_control"] = profile' in block,
+            'payload["retain_element_results"] = True' in block,
+            'payload["retain_diagnostic_arrays"] = True' in block,
+        ))
+    return {
+        "factory_blocks": len(reports),
+        "profile_copy_blocks": sum(int(row[0]) for row in reports),
+        "summary_blocks": sum(int(row[1]) for row in reports),
+        "element_retention_blocks": sum(int(row[2]) for row in reports),
+        "diagnostic_retention_blocks": sum(int(row[3]) for row in reports),
+    }
+
+
+def _v0487465_force_summary_retention(probe: str) -> str:
+    text = str(probe)
+    trailing_newline = text.endswith("\n")
+    lines = text.splitlines()
+    indices = [
+        index for index, line in enumerate(lines)
+        if line.strip() == "def retained_factory(current_state):"
+    ]
+    if len(indices) < 2:
+        raise RuntimeError(
+            f"expected at least two retained_factory blocks in generated probe; found {len(indices)}"
+        )
+    offset = 0
+    for original_index in indices:
+        index = original_index + offset
+        def_line = lines[index]
+        indent = def_line[: len(def_line) - len(def_line.lstrip())]
+        body_indent = indent + "    "
+        end = index + 1
+        while end < len(lines):
+            stripped = lines[end].strip()
+            current_indent = len(lines[end]) - len(lines[end].lstrip()) if stripped else len(body_indent)
+            if stripped and current_indent <= len(indent) and end > index + 1:
+                break
+            if stripped == "return payload":
+                end += 1
+                break
+            end += 1
+        canonical = [
+            body_indent + "payload = {} if previous_factory is None else dict(previous_factory(current_state))",
+            body_indent + "try:",
+            body_indent + '    profile = dict(payload.get("profile_control") or {})',
+            body_indent + "except Exception:",
+            body_indent + "    profile = {}",
+            body_indent + 'profile["diagnostics_mode"] = "summary"',
+            body_indent + 'payload["profile_control"] = profile',
+            body_indent + 'payload["retain_element_results"] = True',
+            body_indent + 'payload["retain_diagnostic_arrays"] = True',
+            body_indent + "return payload",
+        ]
+        old_count = end - (index + 1)
+        lines[index + 1:end] = canonical
+        offset += len(canonical) - old_count
+    updated = "\n".join(lines) + ("\n" if trailing_newline else "")
+    report = _v0487465_probe_retention_report(updated)
+    total = report["factory_blocks"]
+    required = (
+        "profile_copy_blocks", "summary_blocks",
+        "element_retention_blocks", "diagnostic_retention_blocks",
+    )
+    if total < 2 or any(report[key] != total for key in required):
+        raise RuntimeError(f"generated probe retention repair incomplete: {report}")
+    compile(updated, "<v0487465-probe>", "exec")
+    return updated
+
+
+_PROBE = _v0487465_force_summary_retention(_PROBE)
+# END V06487465 PROBE COMPONENT CONTRACT
 
 
 _DRIVER = base._DRIVER.replace("import v048726_full_probe_runtime as probe", "import v048744_all61_probe_runtime as probe")
