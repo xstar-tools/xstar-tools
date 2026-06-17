@@ -20,9 +20,9 @@ from typing import Any
 
 from . import v0472_all61_fixed_state_capture as fixed
 
-RELEASE = "0.6.48.7.46.6"
-SCHEMA = "xstar-tools-v06487466-v0472-all61-post-seed-system-capture-v1"
-VERIFY_SCHEMA = "xstar-tools-v06487466-v0472-all61-post-seed-system-oracle-v1"
+RELEASE = "0.6.48.7.46.7"
+SCHEMA = "xstar-tools-v06487467-v0472-all61-post-seed-system-capture-v1"
+VERIFY_SCHEMA = "xstar-tools-v06487467-v0472-all61-post-seed-system-oracle-v1"
 SYSTEM_MANIFEST_NAME = "v0472_all61_solve_system_manifest.csv"
 REPORT_NAME = "all61_post_seed_system_capture_report.json"
 VERIFY_NAME = "all61_post_seed_system_capture_verification.json"
@@ -40,7 +40,10 @@ ARRAY_NAMES = (
 )
 
 _SYSTEM_CAPTURE_CODE = r'''
+import csv as _v048746_csv
 import hashlib as _v048746_hashlib
+from pathlib import Path as _v048746_Path
+import numpy as _v048746_np
 
 V048746_SYSTEM_FIELDS = [
  "sequence","kind","dsec_call_id","evaluation_index","element_z","abundance",
@@ -66,7 +69,7 @@ def _v048746_sha256(path):
     return digest.hexdigest()
 
 def _v048746_write_array(directory, name, value):
-    array = np.ascontiguousarray(np.asarray(value, dtype=np.float64).reshape(-1))
+    array = _v048746_np.ascontiguousarray(_v048746_np.asarray(value, dtype=_v048746_np.float64).reshape(-1))
     path = directory / (name + ".bin")
     array.tofile(path)
     return path, int(array.size), _v048746_sha256(path)
@@ -74,20 +77,20 @@ def _v048746_write_array(directory, name, value):
 def _v048746_capture_solve_system(kind, call_id, evaluation_index, sequence, z, abundance, assembly, solve):
     sequence = _v048743_canonical_sequence(kind, call_id, evaluation_index)
     n = int(assembly.basis.n_rows)
-    stages = np.asarray(assembly.basis.ion_stage, dtype=np.int32)
+    stages = _v048746_np.asarray(assembly.basis.ion_stage, dtype=_v048746_np.int32)
     active_values = [int(stages[i]) for i in range(1, min(n + 1, stages.size))]
     active_min = min(active_values) if active_values else 0
     active_max = max(active_values) if active_values else 0
     n_ions = int(assembly.basis.n_ions)
     arrays = {
-      "dense_matrix": np.asarray(assembly.dense_matrix, dtype=np.float64),
-      "heating_matrix": np.asarray(assembly.heating_matrix, dtype=np.float64),
-      "heating_matrix2": np.asarray(assembly.heating_matrix2, dtype=np.float64),
-      "rhs": np.asarray(assembly.rhs, dtype=np.float64),
-      "solver_input": np.asarray(assembly.initial_populations[1:n+1], dtype=np.float64),
-      "outer": np.asarray(solve.final_outer_start_populations, dtype=np.float64),
-      "final": np.asarray(solve.populations, dtype=np.float64),
-      "ion_reconstruction": np.asarray(solve.ion_population_totals_final_vector, dtype=np.float64),
+      "dense_matrix": _v048746_np.asarray(assembly.dense_matrix, dtype=_v048746_np.float64),
+      "heating_matrix": _v048746_np.asarray(assembly.heating_matrix, dtype=_v048746_np.float64),
+      "heating_matrix2": _v048746_np.asarray(assembly.heating_matrix2, dtype=_v048746_np.float64),
+      "rhs": _v048746_np.asarray(assembly.rhs, dtype=_v048746_np.float64),
+      "solver_input": _v048746_np.asarray(assembly.initial_populations[1:n+1], dtype=_v048746_np.float64),
+      "outer": _v048746_np.asarray(solve.final_outer_start_populations, dtype=_v048746_np.float64),
+      "final": _v048746_np.asarray(solve.populations, dtype=_v048746_np.float64),
+      "ion_reconstruction": _v048746_np.asarray(solve.ion_population_totals_final_vector, dtype=_v048746_np.float64),
     }
     expected = {
       "dense_matrix": n * n,
@@ -105,7 +108,7 @@ def _v048746_capture_solve_system(kind, call_id, evaluation_index, sequence, z, 
                 f"invalid source solve-system {name} size z={z} n={n} "
                 f"n_ions={n_ions} size={array.size} expected={expected[name]}"
             )
-    relative = Path("v0472_all61_solve_systems") / f"evaluation_{int(sequence):04d}" / f"element_{int(z):02d}"
+    relative = _v048746_Path("v0472_all61_solve_systems") / f"evaluation_{int(sequence):04d}" / f"element_{int(z):02d}"
     directory = _OUT / relative
     directory.mkdir(parents=True, exist_ok=True)
     row = {
@@ -134,7 +137,7 @@ def _v048746_write_solve_system_manifest():
     )
     path = _OUT / "v0472_all61_solve_system_manifest.csv"
     with path.open("w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=V048746_SYSTEM_FIELDS, extrasaction="ignore")
+        writer = _v048746_csv.DictWriter(handle, fieldnames=V048746_SYSTEM_FIELDS, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
 '''
@@ -161,8 +164,109 @@ _PROBE = _PROBE.replace(
 )
 _DRIVER = fixed._DRIVER.replace(
     "import v048744_all61_probe_runtime as probe",
-    "import v0487466_all61_post_seed_probe_runtime as probe",
+    "import v0487467_all61_post_seed_probe_runtime as probe",
 )
+
+
+def probe_capture_behavioral_self_test(output_dir: Path | None = None) -> dict[str, Any]:
+    """Execute the injected system-capture block with three synthetic elements.
+
+    This catches runtime-only probe defects such as missing imports that ordinary
+    ``compile(_PROBE, ...)`` validation cannot detect.
+    """
+    import tempfile
+    from types import SimpleNamespace
+
+    import numpy as np
+
+    temporary: tempfile.TemporaryDirectory[str] | None = None
+    if output_dir is None:
+        temporary = tempfile.TemporaryDirectory(prefix="v0487467_probe_self_test_")
+        root = Path(temporary.name)
+    else:
+        root = Path(output_dir)
+        root.mkdir(parents=True, exist_ok=True)
+
+    namespace: dict[str, Any] = {
+        "_STATE": {},
+        "_OUT": root,
+        "_v048743_canonical_sequence": lambda kind, call_id, evaluation_index: int(evaluation_index),
+    }
+    try:
+        exec(_SYSTEM_CAPTURE_CODE, namespace)
+        capture_fn = namespace["_v048746_capture_solve_system"]
+        write_manifest = namespace["_v048746_write_solve_system_manifest"]
+        expected_files: list[Path] = []
+        for sequence, z, n, n_ions in ((1, 1, 3, 2), (2, 2, 4, 3), (3, 12, 5, 4)):
+            basis = SimpleNamespace(
+                n_rows=n,
+                n_ions=n_ions,
+                normalization_row=n,
+                ion_stage=np.asarray([0] + list(range(1, n + 1)), dtype=np.int32),
+            )
+            dense = np.arange(n * n, dtype=np.float64).reshape(n, n) + float(z)
+            assembly = SimpleNamespace(
+                basis=basis,
+                dense_matrix=dense,
+                heating_matrix=dense + 0.25,
+                heating_matrix2=dense + 0.5,
+                rhs=np.arange(n, dtype=np.float64) + 0.75,
+                initial_populations=np.arange(n + 1, dtype=np.float64) + 1.0,
+            )
+            solve = SimpleNamespace(
+                final_outer_start_populations=np.arange(n, dtype=np.float64) + 2.0,
+                populations=np.arange(n, dtype=np.float64) + 3.0,
+                ion_population_totals_final_vector=np.arange(n_ions, dtype=np.float64) + 4.0,
+                solver_method="synthetic",
+                converged=True,
+                outer_iterations=2,
+                fixed_point_iterations=3,
+                normalization=1.0,
+                normalization_error=0.0,
+            )
+            capture_fn("dsec", sequence, sequence, sequence, z, 1.0, assembly, solve)
+            directory = root / SYSTEM_DIR_NAME / f"evaluation_{sequence:04d}" / f"element_{z:02d}"
+            expected_files.extend(directory / f"{name}.bin" for name in ARRAY_NAMES)
+        write_manifest()
+
+        manifest = root / SYSTEM_MANIFEST_NAME
+        rows = _read_csv(manifest) if manifest.is_file() else []
+        missing = [str(path.relative_to(root)) for path in expected_files if not path.is_file()]
+        wrong_sizes = [
+            str(path.relative_to(root))
+            for path in expected_files
+            if path.is_file() and path.stat().st_size <= 0
+        ]
+        errors: list[str] = []
+        if len(rows) != 3:
+            errors.append(f"manifest_rows={len(rows)} expected=3")
+        if len(expected_files) != 24:
+            errors.append(f"expected_files={len(expected_files)} expected=24")
+        if missing:
+            errors.append(f"missing_files={missing}")
+        if wrong_sizes:
+            errors.append(f"empty_files={wrong_sizes}")
+        return {
+            "schema": "xstar-tools-v06487467-probe-behavioral-self-test-v1",
+            "release": RELEASE,
+            "result": "ACCEPT" if not errors else "REJECT",
+            "errors": errors,
+            "systems": len(rows),
+            "binary_arrays": len(expected_files) - len(missing),
+            "manifest": str(manifest),
+        }
+    except Exception as exc:
+        return {
+            "schema": "xstar-tools-v06487467-probe-behavioral-self-test-v1",
+            "release": RELEASE,
+            "result": "REJECT",
+            "errors": [f"{type(exc).__name__}: {exc}"],
+            "systems": 0,
+            "binary_arrays": 0,
+        }
+    finally:
+        if temporary is not None:
+            temporary.cleanup()
 
 
 def _write_json(path: Path, value: Any) -> None:
@@ -262,13 +366,13 @@ def capture(
     output_dir.mkdir(parents=True, exist_ok=True)
     if fixed.base.base._sha256(source_archive) != fixed.base.base.SOURCE_ARCHIVE_SHA256:
         raise ValueError("v0.6.47.2 source archive hash mismatch")
-    with tempfile.TemporaryDirectory(prefix="v0487466_") as raw:
+    with tempfile.TemporaryDirectory(prefix="v0487467_") as raw:
         temp = Path(raw)
         fixed.base.base._safe_extract(source_archive, temp / "source")
         root = fixed.base.base._source_root(temp / "source")
         probe_dir = temp / "probe"
         probe_dir.mkdir()
-        (probe_dir / "v0487466_all61_post_seed_probe_runtime.py").write_text(_PROBE)
+        (probe_dir / "v0487467_all61_post_seed_probe_runtime.py").write_text(_PROBE)
         (probe_dir / "probe_config.json").write_text(
             json.dumps({"output_dir": str(output_dir)}, indent=2)
         )
