@@ -430,6 +430,88 @@ struct ActiveElementView {
     int max_stage = 1;
 };
 
+struct SourceCompactSeedRow {
+    int compact_row = 0;
+    int ion = 0;
+    int ion_stage = 0;
+    int ion_charge = 0;
+    int superlevel = 0;
+    int is_normalization_row = 0;
+    int active_min_stage = 0;
+    int active_max_stage = 0;
+    double transformed_initial_population = 0.0;
+};
+
+struct SourceCompactSeedOracle {
+    int sequence = 0;
+    std::map<int, std::vector<SourceCompactSeedRow>> rows_by_z;
+};
+
+SourceCompactSeedOracle load_source_compact_seed_oracle(const std::string& path, int sequence) {
+    if (path.empty()) throw std::runtime_error("source compact-basis/seed oracle CSV path is empty");
+    if (sequence < 1 || sequence > 61) throw std::runtime_error("source compact-basis/seed oracle sequence must be in 1..61");
+    std::ifstream input(path);
+    if (!input) throw std::runtime_error("cannot open source compact-basis/seed oracle CSV");
+    std::string line;
+    if (!std::getline(input, line)) throw std::runtime_error("source compact-basis/seed oracle CSV is empty");
+    const auto header = split_csv(line);
+    std::unordered_map<std::string, std::size_t> columns;
+    for (std::size_t i = 0; i < header.size(); ++i) columns.emplace(header[i], i);
+    const auto col = [&](const char* name) -> std::size_t {
+        const auto it = columns.find(name);
+        if (it == columns.end()) throw std::runtime_error(std::string("source compact-basis/seed oracle missing column: ") + name);
+        return it->second;
+    };
+    const std::size_t sequence_col = col("sequence");
+    const std::size_t z_col = col("element_z");
+    const std::size_t compact_col = col("compact_row");
+    const std::size_t ion_col = col("ion");
+    const std::size_t stage_col = col("ion_stage");
+    const std::size_t charge_col = col("ion_charge");
+    const std::size_t superlevel_col = col("superlevel");
+    const std::size_t norm_col = col("is_normalization_row");
+    const std::size_t min_col = col("active_min_stage");
+    const std::size_t max_col = col("active_max_stage");
+    const std::size_t seed_col = col("transformed_initial_population");
+    SourceCompactSeedOracle oracle;
+    oracle.sequence = sequence;
+    while (std::getline(input, line)) {
+        if (trim(line).empty()) continue;
+        const auto fields = split_csv(line);
+        if (fields.size() != header.size()) throw std::runtime_error("source compact-basis/seed oracle row width mismatch");
+        if (parse_number<int>(fields[sequence_col], "sequence") != sequence) continue;
+        const int z = parse_number<int>(fields[z_col], "element_z");
+        if (z != 1 && z != 2 && z != 12) continue;
+        SourceCompactSeedRow row;
+        row.compact_row = parse_number<int>(fields[compact_col], "compact_row");
+        row.ion = parse_number<int>(fields[ion_col], "ion");
+        row.ion_stage = parse_number<int>(fields[stage_col], "ion_stage");
+        row.ion_charge = parse_number<int>(fields[charge_col], "ion_charge");
+        row.superlevel = parse_number<int>(fields[superlevel_col], "superlevel");
+        row.is_normalization_row = parse_number<int>(fields[norm_col], "is_normalization_row");
+        row.active_min_stage = parse_number<int>(fields[min_col], "active_min_stage");
+        row.active_max_stage = parse_number<int>(fields[max_col], "active_max_stage");
+        row.transformed_initial_population = parse_number<double>(fields[seed_col], "transformed_initial_population");
+        if (!std::isfinite(row.transformed_initial_population) || row.transformed_initial_population < 0.0) {
+            throw std::runtime_error("source compact-basis/seed oracle contains an invalid seed");
+        }
+        oracle.rows_by_z[z].push_back(row);
+    }
+    for (int z : {1, 2, 12}) {
+        auto& rows = oracle.rows_by_z[z];
+        if (rows.empty()) throw std::runtime_error("source compact-basis/seed oracle lacks an active element");
+        std::sort(rows.begin(), rows.end(), [](const auto& a, const auto& b) { return a.compact_row < b.compact_row; });
+        for (std::size_t i = 0; i < rows.size(); ++i) {
+            if (rows[i].compact_row != static_cast<int>(i) + 1) throw std::runtime_error("source compact-basis/seed oracle rows are not dense");
+        }
+        const int normalization_count = static_cast<int>(std::count_if(rows.begin(), rows.end(), [](const auto& r) { return r.is_normalization_row != 0; }));
+        if (normalization_count != 1 || rows.back().is_normalization_row == 0) {
+            throw std::runtime_error("source compact-basis/seed oracle normalization row is invalid");
+        }
+    }
+    return oracle;
+}
+
 struct NativeElementDiagnostic {
     int element_index = 0;
     int element_z = 0;
@@ -455,6 +537,7 @@ struct NativeElementDiagnostic {
     std::vector<double> active_initial_populations;
     std::vector<double> active_final_outer_start_populations;
     std::vector<double> active_final_populations;
+    std::vector<double> active_ion_population_final;
     std::vector<double> dense_matrix;
     std::vector<double> heating_matrix;
     std::vector<double> heating_matrix2;
@@ -598,6 +681,9 @@ struct xstar_fixed_state_context_impl {
     bool last_helium_unqualified_type99_ablation = false;
     bool last_helium_solve_response = false;
     bool last_all_element_solve_response = false;
+    bool last_all_element_solve_system = false;
+    bool last_source_compact_basis_seed = false;
+    int last_source_compact_sequence = 0;
     bool last_type53_row46_coupled_replacement = false;
     bool last_helium_source_insertion_order = false;
     std::map<int, std::array<double,4>> last_element_thermal_budget;
@@ -2692,7 +2778,7 @@ PreliminaryIonBalance build_preliminary_ion_balance(
     for (double value : result.fractions) sum += value;
     if (sum > 0.0) for (double& value : result.fractions) value /= sum;
 
-    constexpr double critf = 1.0e-8;
+    constexpr double critf = 1.0e-7;
     int lower = 0, upper = 0;
     for (int stage = 1; stage <= z + 1; ++stage) {
         if (result.fractions[static_cast<std::size_t>(stage - 1)] >= critf) {
@@ -2771,6 +2857,48 @@ ActiveElementView make_active_element_view(
     return view;
 }
 
+ActiveElementView make_source_compact_seed_view(
+    const ElementProgram& full,
+    const std::vector<SourceCompactSeedRow>& source_rows) {
+    if (source_rows.empty()) throw std::runtime_error("empty source compact-basis/seed element oracle");
+    ActiveElementView view;
+    view.min_stage = source_rows.front().active_min_stage;
+    view.max_stage = source_rows.front().active_max_stage;
+    for (const auto& source_row : source_rows) {
+        if (source_row.active_min_stage != view.min_stage || source_row.active_max_stage != view.max_stage) {
+            throw std::runtime_error("source compact-basis/seed oracle active window is inconsistent");
+        }
+    }
+    const int start = ground_row_for_stage(full, view.min_stage);
+    const int end = start + static_cast<int>(source_rows.size()) - 1;
+    if (start <= 0 || end > full.normalization_row) throw std::runtime_error("source compact-basis/seed oracle maps outside the lowered element");
+    view.full_row_start = start;
+    view.full_row_end = end;
+    view.element = full;
+    view.element.rows.clear();
+    view.element.n_rows = static_cast<int>(source_rows.size());
+    // The immutable source solve rows retain absolute XSTAR ion counters
+    // (H=1, He=1..2, Mg=5..12 for a truncated Mg window), rather than
+    // renumbering the active window onto 1..N.  Preserve the full element
+    // ion-vector width so those counters remain valid at the element ABI.
+    view.element.n_ions = full.n_ions;
+    view.element.normalization_row = view.element.n_rows;
+    int max_superlevel = 0;
+    for (std::size_t i = 0; i < source_rows.size(); ++i) {
+        ElementRow row = full.rows.at(static_cast<std::size_t>(start - 1) + i);
+        const auto& source_row = source_rows[i];
+        row.row = source_row.compact_row;
+        row.ion = source_row.ion;
+        row.ion_charge = source_row.ion_charge;
+        row.superlevel = source_row.superlevel;
+        row.initial_population = source_row.transformed_initial_population;
+        max_superlevel = std::max(max_superlevel, row.superlevel);
+        view.element.rows.push_back(row);
+    }
+    view.element.n_superlevels = max_superlevel;
+    return view;
+}
+
 struct RuntimeInitialSeed {
     int global_level_index = 0;
     double value = 0.0;
@@ -2817,7 +2945,10 @@ RuntimeInitialSeed source_faithful_runtime_initial_seed(
     return seed;
 }
 
-ElementBuffers make_buffers(const ElementProgram& e, const xstar_fixed_state_input_v1* runtime_input = nullptr) {
+ElementBuffers make_buffers(
+    const ElementProgram& e,
+    const xstar_fixed_state_input_v1* runtime_input = nullptr,
+    bool preserve_exact_initial = false) {
     ElementBuffers b;
     const std::size_t n = static_cast<std::size_t>(e.n_rows);
     const std::size_t ni = static_cast<std::size_t>(e.n_ions);
@@ -2827,7 +2958,9 @@ ElementBuffers make_buffers(const ElementProgram& e, const xstar_fixed_state_inp
     b.ion_population.resize(ni); b.ion_population_final.resize(ni); b.ionization.resize(ni); b.recombination.resize(ni);
     b.ionization_components.resize(3 * ni); b.recombination_components.resize(3 * ni);
     b.row_residual.resize(n); b.row_scale.resize(n); b.relative_residual.resize(n);
-    bool source_faithful_helium_runtime_seed = false;
+    const bool transported_workspace = runtime_input && runtime_input->global_xilevg && runtime_input->global_level_count > 0;
+    const bool source_faithful_helium_runtime_seed = transported_workspace && e.element_z == 2;
+    bool any_runtime_seed = false;
     for (std::size_t k = 0; k < n; ++k) {
         b.superlevels[k] = e.rows[k].superlevel;
         b.ions[k] = e.rows[k].ion;
@@ -2835,15 +2968,17 @@ ElementBuffers make_buffers(const ElementProgram& e, const xstar_fixed_state_inp
         const RuntimeInitialSeed seed = source_faithful_runtime_initial_seed(e, k, runtime_input);
         if (seed.loaded) {
             b.initial[k] = seed.value;
-            if (e.element_z == 2) source_faithful_helium_runtime_seed = true;
+            any_runtime_seed = true;
         }
     }
 
-    // The source passes the unnormalized helium compact vector into
-    // msolvelucy.  Number conservation is imposed by the solver normalization
-    // row; normalizing here changes every solve-state entry and duplicates the
-    // shared He I/He II boundary population.
-    if (!source_faithful_helium_runtime_seed) {
+    // Source msolvelucy consumes an unnormalized transported compact vector
+    // and starts the terminal normalization row at exact zero.  An all-zero
+    // transported workspace is still a real seed state, not a request to fall
+    // back to preliminary populations.
+    if (transported_workspace && !b.initial.empty()) b.initial.back() = 0.0;
+    // Legacy helium guard lineage: if (!source_faithful_helium_runtime_seed)
+    if (!preserve_exact_initial && !source_faithful_helium_runtime_seed && !transported_workspace && !any_runtime_seed) {
         double initial_total = 0.0;
         for (double value : b.initial) initial_total += value;
         if (initial_total > 0.0) for (double& value : b.initial) value /= initial_total;
@@ -2920,7 +3055,9 @@ int run_impl(
     const bool helium_unqualified_type71_ablation = environment_flag("XSTAR_HELIUM_ABLATE_UNQUALIFIED_TYPE71");
     const bool helium_unqualified_type99_ablation = environment_flag("XSTAR_HELIUM_ABLATE_UNQUALIFIED_TYPE99");
     const bool helium_solve_response = environment_flag("XSTAR_QUALIFICATION_SOLVE_RESPONSE");
-    const bool all_element_solve_response = environment_flag("XSTAR_QUALIFICATION_ALL_ELEMENT_SOLVE_RESPONSE");
+    const bool all_element_solve_system = environment_flag("XSTAR_QUALIFICATION_ALL_ELEMENT_SOLVE_SYSTEM");
+    const bool all_element_solve_response = environment_flag("XSTAR_QUALIFICATION_ALL_ELEMENT_SOLVE_RESPONSE") || all_element_solve_system;
+    const bool source_compact_basis_seed = environment_flag("XSTAR_QUALIFICATION_SOURCE_COMPACT_BASIS_SEED");
     const bool helium_source_insertion_order =
         environment_flag("XSTAR_QUALIFICATION_HELIUM_SOURCE_INSERTION_ORDER");
     const bool type53_two_state_promotion = environment_flag("XSTAR_QUALIFICATION_TYPE53_TWO_STATE_PROMOTION");
@@ -2935,6 +3072,9 @@ int run_impl(
     }
     if (all_element_solve_response && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
         throw std::runtime_error("all-element solve-response diagnostics require XSTAR_QUALIFICATION_REPLACEMENT=1");
+    }
+    if (source_compact_basis_seed && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
+        throw std::runtime_error("source compact-basis/seed restoration requires XSTAR_QUALIFICATION_REPLACEMENT=1");
     }
     if (helium_source_insertion_order && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
         throw std::runtime_error("helium source insertion-order restoration requires XSTAR_QUALIFICATION_REPLACEMENT=1");
@@ -2961,6 +3101,17 @@ int run_impl(
     ctx.last_helium_unqualified_type99_ablation = helium_unqualified_type99_ablation;
     ctx.last_helium_solve_response = helium_solve_response;
     ctx.last_all_element_solve_response = all_element_solve_response;
+    ctx.last_all_element_solve_system = all_element_solve_system;
+    ctx.last_source_compact_basis_seed = source_compact_basis_seed;
+    ctx.last_source_compact_sequence = 0;
+    std::optional<SourceCompactSeedOracle> source_compact_oracle;
+    if (source_compact_basis_seed) {
+        const char* oracle_csv = std::getenv("XSTAR_QUALIFICATION_SOURCE_SOLVE_ROWS_CSV");
+        const int sequence = environment_data_type("XSTAR_QUALIFICATION_SOURCE_SEQUENCE");
+        if (!oracle_csv || !*oracle_csv) throw std::runtime_error("XSTAR_QUALIFICATION_SOURCE_SOLVE_ROWS_CSV is required");
+        source_compact_oracle = load_source_compact_seed_oracle(oracle_csv, sequence);
+        ctx.last_source_compact_sequence = sequence;
+    }
     ctx.last_type53_row46_coupled_replacement = type53_row46_coupled_replacement;
     ctx.last_helium_source_insertion_order = helium_source_insertion_order;
     const auto total_start = clock_type::now();
@@ -3035,9 +3186,16 @@ int run_impl(
         // element while assigning a larger atomic number.  Source-style
         // stage-window selection requires a complete one-ground-row-per-stage
         // topology, so preserve the legacy full compact basis for such inputs.
-        const ActiveElementView active = element.n_ions == element.element_z
-            ? make_active_element_view(element, preliminary)
-            : make_full_element_view(element);
+        ActiveElementView active;
+        if (source_compact_oracle.has_value()) {
+            const auto it = source_compact_oracle->rows_by_z.find(element.element_z);
+            if (it == source_compact_oracle->rows_by_z.end()) throw std::runtime_error("source compact-basis/seed oracle element missing");
+            active = make_source_compact_seed_view(element, it->second);
+        } else {
+            active = element.n_ions == element.element_z
+                ? make_active_element_view(element, preliminary)
+                : make_full_element_view(element);
+        }
         std::vector<xstar_element_contribution_v1> contributions;
         contributions.reserve(evaluated.size());
         for (const auto& item : evaluated) {
@@ -3088,7 +3246,10 @@ int run_impl(
             reorder_type53_row46_coupled_contributions(contributions);
         }
         stats.contributions_constructed += contributions.size();
-        ElementBuffers buffers = make_buffers(active.element, &input);
+        ElementBuffers buffers = make_buffers(
+            active.element,
+            source_compact_oracle.has_value() ? nullptr : &input,
+            source_compact_oracle.has_value());
         xstar_element_input_v1 ein{};
         xstar_element_input_init_v1(&ein);
         ein.flags = XSTAR_ELEMENT_STRICT_SOURCE_ORDER | XSTAR_ELEMENT_ALLOW_DENSE_RESCUE;
@@ -3097,7 +3258,7 @@ int run_impl(
         if (capture_element_solve_response) {
             ein.flags |= XSTAR_ELEMENT_DIAGNOSTICS_SUMMARY;
         }
-        if (helium_solve_response && element.element_z == 2) {
+        if (all_element_solve_system || (helium_solve_response && element.element_z == 2)) {
             ein.flags |= XSTAR_ELEMENT_RETURN_MATRICES;
         }
         ein.element_z = active.element.element_z;
@@ -3211,7 +3372,7 @@ int run_impl(
         element_diagnostic.full_populations = full_populations;
         element_diagnostic.final_stage_fractions.assign(static_cast<std::size_t>(element.element_z + 1), 0.0);
         for (int ion_slot = 0; ion_slot < active.element.n_ions; ++ion_slot) {
-            const int stage = active.min_stage + ion_slot;
+            const int stage = source_compact_oracle.has_value() ? (ion_slot + 1) : (active.min_stage + ion_slot);
             if (stage >= 1 && stage <= element.element_z + 1) {
                 element_diagnostic.final_stage_fractions[static_cast<std::size_t>(stage - 1)] =
                     buffers.ion_population_final[static_cast<std::size_t>(ion_slot)];
@@ -3252,7 +3413,8 @@ int run_impl(
             element_diagnostic.active_initial_populations = buffers.initial;
             element_diagnostic.active_final_outer_start_populations = buffers.outer;
             element_diagnostic.active_final_populations = buffers.populations;
-            if (helium_solve_response && element.element_z == 2) {
+            element_diagnostic.active_ion_population_final = buffers.ion_population_final;
+            if (all_element_solve_system || (helium_solve_response && element.element_z == 2)) {
                 element_diagnostic.dense_matrix = buffers.dense;
                 element_diagnostic.heating_matrix = buffers.heat;
                 element_diagnostic.heating_matrix2 = buffers.heat2;
@@ -3942,6 +4104,60 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                                    << diagnostic.row_scale.at(index) << ','
                                    << diagnostic.relative_row_residual.at(index) << '\n';
                 }
+            }
+        }
+
+        if (context->last_all_element_solve_system) {
+            std::ofstream systems(root / (stem + "_all_element_solve_systems.csv"));
+            if (!systems) throw std::runtime_error("cannot create all-element solve-system manifest");
+            systems << "evaluation_ordinal,element_index,element_z,abundance,active_min_stage,active_max_stage,n_rows,normalization_row,dense_file,heating_file,heating2_file,rhs_file,initial_file,outer_file,final_file,ion_final_file,solver_method,solver_status_flags,outer_iterations,fixed_point_iterations,normalization,normalization_error,max_relative_row_residual\n";
+            systems << std::setprecision(17);
+            const auto write_binary = [&](const std::filesystem::path& path, const std::vector<double>& values) {
+                std::ofstream stream(path, std::ios::binary);
+                if (!stream) throw std::runtime_error("cannot create all-element solve-system binary");
+                if (!values.empty()) stream.write(reinterpret_cast<const char*>(values.data()), static_cast<std::streamsize>(values.size() * sizeof(double)));
+                if (!stream) throw std::runtime_error("cannot write all-element solve-system binary");
+            };
+            for (const auto& diagnostic : context->last_element_diagnostics) {
+                if (!diagnostic.solve_response_captured) continue;
+                const int n = diagnostic.active.element.n_rows;
+                if (diagnostic.dense_matrix.size() != static_cast<std::size_t>(n * n) ||
+                    diagnostic.heating_matrix.size() != static_cast<std::size_t>(n * n) ||
+                    diagnostic.heating_matrix2.size() != static_cast<std::size_t>(n * n) ||
+                    diagnostic.rhs.size() != static_cast<std::size_t>(n) ||
+                    diagnostic.active_initial_populations.size() != static_cast<std::size_t>(n) ||
+                    diagnostic.active_final_outer_start_populations.size() != static_cast<std::size_t>(n) ||
+                    diagnostic.active_final_populations.size() != static_cast<std::size_t>(n)) {
+                    throw std::runtime_error("all-element solve-system buffer dimensions are inconsistent");
+                }
+                std::ostringstream prefix_builder;
+                prefix_builder << stem << "_element_z" << std::setw(2) << std::setfill('0') << diagnostic.element_z;
+                const std::string prefix = prefix_builder.str();
+                const std::string dense_name = prefix + "_dense.bin";
+                const std::string heat_name = prefix + "_heating.bin";
+                const std::string heat2_name = prefix + "_heating2.bin";
+                const std::string rhs_name = prefix + "_rhs.bin";
+                const std::string initial_name = prefix + "_initial.bin";
+                const std::string outer_name = prefix + "_outer.bin";
+                const std::string final_name = prefix + "_final.bin";
+                const std::string ion_name = prefix + "_ion_final.bin";
+                write_binary(root / dense_name, diagnostic.dense_matrix);
+                write_binary(root / heat_name, diagnostic.heating_matrix);
+                write_binary(root / heat2_name, diagnostic.heating_matrix2);
+                write_binary(root / rhs_name, diagnostic.rhs);
+                write_binary(root / initial_name, diagnostic.active_initial_populations);
+                write_binary(root / outer_name, diagnostic.active_final_outer_start_populations);
+                write_binary(root / final_name, diagnostic.active_final_populations);
+                write_binary(root / ion_name, diagnostic.active_ion_population_final);
+                systems << evaluation_ordinal << ',' << diagnostic.element_index << ',' << diagnostic.element_z << ','
+                        << diagnostic.abundance << ',' << diagnostic.active.min_stage << ',' << diagnostic.active.max_stage << ','
+                        << n << ',' << diagnostic.active.element.normalization_row << ','
+                        << dense_name << ',' << heat_name << ',' << heat2_name << ',' << rhs_name << ','
+                        << initial_name << ',' << outer_name << ',' << final_name << ',' << ion_name << ','
+                        << diagnostic.solver_method << ',' << diagnostic.solver_status_flags << ','
+                        << diagnostic.outer_iterations << ',' << diagnostic.fixed_point_iterations << ','
+                        << diagnostic.normalization << ',' << diagnostic.normalization_error << ','
+                        << diagnostic.max_relative_row_residual << '\n';
             }
         }
 

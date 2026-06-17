@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.48.7.46.4 - 2026-06-16
+
+- Restored the complete 159-line all-61 post-seed system runner that v0.6.48.7.46.3 accidentally replaced with a 27-byte `exit 0` stub.
+- Added executable, size, marker, checksum, shell-syntax, usage-guard, and required-module readiness checks.
+- Retained the v0.6.48.7.46.3 generated-probe summary-retention correction without changing scientific arithmetic.
+- Kept fixed-state, Thermal, product, and production-promotion gates fail-closed.
+
 ## 0.6.48.7.46.3 - 2026-06-16
 
 - Normalized the materialized source qualification probe after all historical rewrites so every evaluator path receives a copied summary diagnostics profile and both retention flags.
