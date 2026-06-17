@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 0.6.48.7.46.3 - 2026-06-16
+
+- Normalized the materialized source qualification probe after all historical rewrites so every evaluator path receives a copied summary diagnostics profile and both retention flags.
+- Replaced source-token readiness checks with generated-probe block validation.
+- Preserved all scientific arithmetic and fail-closed downstream gates.
+
 ## 0.6.48.7.46.2 - 2026-06-16
 
 - Forced `diagnostics_mode=summary` in a copied source qualification profile so `msolvelucy` retains final outer-start populations and row diagnostics.

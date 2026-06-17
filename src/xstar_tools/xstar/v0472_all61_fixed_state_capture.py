@@ -18,7 +18,7 @@ from typing import Any
 
 from . import v0472_full_dsec_thermal_budget_capture as base
 
-RELEASE = "0.6.48.7.44"
+RELEASE = "0.6.48.7.46.3"
 SCHEMA = "xstar-tools-v0648744-v0472-all61-fixed-state-capture-v1"
 VERIFY_SCHEMA = "xstar-tools-v0648744-v0472-all61-fixed-state-oracle-v1"
 STATE_NAME = "v0472_all61_fixed_state_rows.csv"
@@ -322,6 +322,89 @@ _PROBE = _PROBE.replace(
 
 _PROBE = _PROBE.replace(f'"schema": "{base.SCHEMA}"', f'"schema": "{SCHEMA}"')
 _PROBE = _PROBE.replace(f'"release": "{base.RELEASE}"', f'"release": "{RELEASE}"')
+
+
+def _v0487463_probe_retention_report(probe: str | None = None) -> dict[str, int]:
+    text = _PROBE if probe is None else str(probe)
+    lines = text.splitlines()
+    header = "payload = {} if previous_factory is None else dict(previous_factory(current_state))"
+    reports = []
+    for index, line in enumerate(lines):
+        if line.strip() != header:
+            continue
+        end = index + 1
+        while end < len(lines) and end <= index + 32 and lines[end].strip() != "return payload":
+            end += 1
+        if end >= len(lines) or lines[end].strip() != "return payload":
+            reports.append((False, False, False, False))
+            continue
+        block = "\n".join(lines[index:end + 1])
+        reports.append((
+            'profile["diagnostics_mode"] = "summary"' in block,
+            'payload["profile_control"] = profile' in block,
+            'payload["retain_element_results"] = True' in block,
+            'payload["retain_diagnostic_arrays"] = True' in block,
+        ))
+    return {
+        "factory_blocks": len(reports),
+        "summary_blocks": sum(int(row[0]) for row in reports),
+        "profile_copy_blocks": sum(int(row[1]) for row in reports),
+        "element_retention_blocks": sum(int(row[2]) for row in reports),
+        "diagnostic_retention_blocks": sum(int(row[3]) for row in reports),
+    }
+
+
+def _v0487463_force_summary_retention(probe: str) -> str:
+    text = str(probe)
+    trailing_newline = text.endswith("\n")
+    lines = text.splitlines()
+    header = "payload = {} if previous_factory is None else dict(previous_factory(current_state))"
+    indices = [index for index, line in enumerate(lines) if line.strip() == header]
+    if len(indices) < 2:
+        raise RuntimeError(
+            f"expected at least two qualification factory blocks in generated probe; found {len(indices)}"
+        )
+    offset = 0
+    for original_index in indices:
+        index = original_index + offset
+        end = index + 1
+        while end < len(lines) and end <= index + 32 and lines[end].strip() != "return payload":
+            end += 1
+        if end >= len(lines) or lines[end].strip() != "return payload":
+            raise RuntimeError(f"qualification factory block at line {index + 1} has no return payload")
+        block = "\n".join(lines[index:end + 1])
+        complete = (
+            'profile["diagnostics_mode"] = "summary"' in block
+            and 'payload["profile_control"] = profile' in block
+            and 'payload["retain_element_results"] = True' in block
+            and 'payload["retain_diagnostic_arrays"] = True' in block
+        )
+        if complete:
+            continue
+        indent = lines[index][: len(lines[index]) - len(lines[index].lstrip())]
+        insertion = [
+            indent + "try:",
+            indent + '    profile = dict(payload.get("profile_control") or {})',
+            indent + "except Exception:",
+            indent + "    profile = {}",
+            indent + 'profile["diagnostics_mode"] = "summary"',
+            indent + 'payload["profile_control"] = profile',
+        ]
+        lines[index + 1:index + 1] = insertion
+        offset += len(insertion)
+    updated = "\n".join(lines) + ("\n" if trailing_newline else "")
+    report = _v0487463_probe_retention_report(updated)
+    required = report["factory_blocks"]
+    if required < 2 or any(report[key] != required for key in (
+        "summary_blocks", "profile_copy_blocks", "element_retention_blocks", "diagnostic_retention_blocks"
+    )):
+        raise RuntimeError(f"generated probe retention normalization incomplete: {report}")
+    return updated
+
+
+_PROBE = _v0487463_force_summary_retention(_PROBE)
+
+
 _DRIVER = base._DRIVER.replace("import v048726_full_probe_runtime as probe", "import v048744_all61_probe_runtime as probe")
 
 

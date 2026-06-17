@@ -672,10 +672,3 @@ include run_v048741_type77_helium_source_insertion_order_restoration.sh
 include check_v048741_type77_helium_source_insertion_order_restoration.py
 include check_v048741_type77_helium_source_insertion_order_readiness.py
 recursive-include v048741_checked_type77_source_order *.json *.csv
-
-# v0.6.48.7.46 all-61 post-seed system decomposition
-include V0648746_ALL61_POST_SEED_SYSTEM_DECOMPOSITION.md
-include run_v048746_all61_post_seed_system_decomposition.sh
-include check_v048746_all61_post_seed_system_decomposition.py
-include check_v048746_all61_post_seed_system_decomposition_readiness.py
-include tests/test_v0648746_all61_post_seed_system_decomposition.py
