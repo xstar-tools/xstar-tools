@@ -18,7 +18,7 @@ from typing import Any, Iterable
 
 import numpy as np
 
-RELEASE = "0.6.48.7.46.1"
+RELEASE = "0.6.48.7.46.2"
 SCHEMA = "xstar-tools-v0648746-all61-post-seed-system-decomposition-v1"
 SUMMARY_NAME = "all61_post_seed_system_decomposition_summary.json"
 INVENTORY_NAME = "all61_post_seed_system_inventory.csv"

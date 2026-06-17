@@ -257,6 +257,12 @@ _NEW_RETAINED = '''        if bool(getattr(self, "retain_fixed_state_results", T
             previous_factory = self.calc_kwargs_factory
             def retained_factory(current_state):
                 payload = {} if previous_factory is None else dict(previous_factory(current_state))
+                try:
+                    profile = dict(payload.get("profile_control") or {})
+                except Exception:
+                    profile = {}
+                profile["diagnostics_mode"] = "summary"
+                payload["profile_control"] = profile
                 payload["retain_element_results"] = True
                 payload["retain_diagnostic_arrays"] = True
                 return payload
@@ -296,6 +302,12 @@ _PROBE = _PROBE.replace(
 '''        previous_factory = self.calc_kwargs_factory
         def retained_factory(current_state):
             payload = {} if previous_factory is None else dict(previous_factory(current_state))
+            try:
+                profile = dict(payload.get("profile_control") or {})
+            except Exception:
+                profile = {}
+            profile["diagnostics_mode"] = "summary"
+            payload["profile_control"] = profile
             payload["retain_element_results"] = True
             payload["retain_diagnostic_arrays"] = True
             return payload

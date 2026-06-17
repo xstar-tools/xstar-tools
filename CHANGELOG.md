@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 0.6.48.7.46.2 - 2026-06-16
+
+- Forced `diagnostics_mode=summary` in a copied source qualification profile so `msolvelucy` retains final outer-start populations and row diagnostics.
+- Preserved the live v0.6.47.2 `state.control` mapping and all scientific arithmetic.
+- Kept fixed-state, Thermal, controller, product, and promotion gates fail-closed.
+
 ## 0.6.48.7.46.1 - 2026-06-16
 
 - Fixed the all-61 source solve-system capture when `calc_kwargs_factory` is null by installing the diagnostic-retention wrapper unconditionally.
