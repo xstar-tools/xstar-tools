@@ -18,7 +18,7 @@ from typing import Any
 
 from . import v0472_full_dsec_thermal_budget_capture as base
 
-RELEASE = "0.6.48.7.46.5"
+RELEASE = "0.6.48.7.46.6"
 SCHEMA = "xstar-tools-v0648744-v0472-all61-fixed-state-capture-v1"
 VERIFY_SCHEMA = "xstar-tools-v0648744-v0472-all61-fixed-state-oracle-v1"
 STATE_NAME = "v0472_all61_fixed_state_rows.csv"

@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.7.46.6 - 2026-06-17
+
+- Replaced the fixture post-seed capture and decomposition modules with genuine implementations.
+- Added immutable all-61 source capture of 183 H/He/Mg solve systems and 1,464 raw float64 arrays.
+- Added native `XSTAR_QUALIFICATION_ALL_ELEMENT_SOLVE_SYSTEM` matrix/RHS/solve-response capture.
+- Added exact matrix, RHS, solver response, ion reconstruction, and global commit decomposition.
+- Strengthened readiness to reject fixture modules and verify generated probe and native writer contracts.
+- Kept fixed-state, Thermal, product, and production gates fail-closed.
+
 ## 0.6.48.7.46.5 - 2026-06-16
 
 - Restored the complete 159-line all-61 post-seed system runner that v0.6.48.7.46.5 accidentally replaced with a 27-byte `exit 0` stub.

@@ -462,6 +462,7 @@ struct NativeElementDiagnostic {
     std::vector<double> row_residual;
     std::vector<double> row_scale;
     std::vector<double> relative_row_residual;
+    std::vector<double> active_ion_reconstruction;
     std::string solver_method;
     std::uint32_t solver_status_flags = 0;
     int outer_iterations = 0;
@@ -598,6 +599,7 @@ struct xstar_fixed_state_context_impl {
     bool last_helium_unqualified_type99_ablation = false;
     bool last_helium_solve_response = false;
     bool last_all_element_solve_response = false;
+    bool last_all_element_solve_system = false;
     bool last_type53_row46_coupled_replacement = false;
     bool last_helium_source_insertion_order = false;
     std::map<int, std::array<double,4>> last_element_thermal_budget;
@@ -2921,6 +2923,7 @@ int run_impl(
     const bool helium_unqualified_type99_ablation = environment_flag("XSTAR_HELIUM_ABLATE_UNQUALIFIED_TYPE99");
     const bool helium_solve_response = environment_flag("XSTAR_QUALIFICATION_SOLVE_RESPONSE");
     const bool all_element_solve_response = environment_flag("XSTAR_QUALIFICATION_ALL_ELEMENT_SOLVE_RESPONSE");
+    const bool all_element_solve_system = environment_flag("XSTAR_QUALIFICATION_ALL_ELEMENT_SOLVE_SYSTEM");
     const bool helium_source_insertion_order =
         environment_flag("XSTAR_QUALIFICATION_HELIUM_SOURCE_INSERTION_ORDER");
     const bool type53_two_state_promotion = environment_flag("XSTAR_QUALIFICATION_TYPE53_TWO_STATE_PROMOTION");
@@ -2935,6 +2938,9 @@ int run_impl(
     }
     if (all_element_solve_response && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
         throw std::runtime_error("all-element solve-response diagnostics require XSTAR_QUALIFICATION_REPLACEMENT=1");
+    }
+    if (all_element_solve_system && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
+        throw std::runtime_error("all-element solve-system diagnostics require XSTAR_QUALIFICATION_REPLACEMENT=1");
     }
     if (helium_source_insertion_order && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
         throw std::runtime_error("helium source insertion-order restoration requires XSTAR_QUALIFICATION_REPLACEMENT=1");
@@ -2960,7 +2966,8 @@ int run_impl(
     ctx.last_helium_unqualified_type71_ablation = helium_unqualified_type71_ablation;
     ctx.last_helium_unqualified_type99_ablation = helium_unqualified_type99_ablation;
     ctx.last_helium_solve_response = helium_solve_response;
-    ctx.last_all_element_solve_response = all_element_solve_response;
+    ctx.last_all_element_solve_response = all_element_solve_response || all_element_solve_system;
+    ctx.last_all_element_solve_system = all_element_solve_system;
     ctx.last_type53_row46_coupled_replacement = type53_row46_coupled_replacement;
     ctx.last_helium_source_insertion_order = helium_source_insertion_order;
     const auto total_start = clock_type::now();
@@ -3092,12 +3099,12 @@ int run_impl(
         xstar_element_input_v1 ein{};
         xstar_element_input_init_v1(&ein);
         ein.flags = XSTAR_ELEMENT_STRICT_SOURCE_ORDER | XSTAR_ELEMENT_ALLOW_DENSE_RESCUE;
-        const bool capture_element_solve_response = all_element_solve_response ||
+        const bool capture_element_solve_response = all_element_solve_response || all_element_solve_system ||
             (helium_solve_response && element.element_z == 2);
         if (capture_element_solve_response) {
             ein.flags |= XSTAR_ELEMENT_DIAGNOSTICS_SUMMARY;
         }
-        if (helium_solve_response && element.element_z == 2) {
+        if (all_element_solve_system || (helium_solve_response && element.element_z == 2)) {
             ein.flags |= XSTAR_ELEMENT_RETURN_MATRICES;
         }
         ein.element_z = active.element.element_z;
@@ -3252,7 +3259,7 @@ int run_impl(
             element_diagnostic.active_initial_populations = buffers.initial;
             element_diagnostic.active_final_outer_start_populations = buffers.outer;
             element_diagnostic.active_final_populations = buffers.populations;
-            if (helium_solve_response && element.element_z == 2) {
+            if (all_element_solve_system || (helium_solve_response && element.element_z == 2)) {
                 element_diagnostic.dense_matrix = buffers.dense;
                 element_diagnostic.heating_matrix = buffers.heat;
                 element_diagnostic.heating_matrix2 = buffers.heat2;
@@ -3261,6 +3268,7 @@ int run_impl(
             element_diagnostic.row_residual = buffers.row_residual;
             element_diagnostic.row_scale = buffers.row_scale;
             element_diagnostic.relative_row_residual = buffers.relative_residual;
+            element_diagnostic.active_ion_reconstruction = buffers.ion_population_final;
             element_diagnostic.solver_method = eout.solver_method;
             element_diagnostic.solver_status_flags = eout.status_flags;
             element_diagnostic.outer_iterations = eout.outer_iterations;
@@ -3942,6 +3950,79 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                                    << diagnostic.row_scale.at(index) << ','
                                    << diagnostic.relative_row_residual.at(index) << '\n';
                 }
+            }
+        }
+
+
+        if (context->last_all_element_solve_system) {
+            const std::filesystem::path system_relative = stem + "_all_element_solve_systems";
+            const std::filesystem::path system_root = root / system_relative;
+            std::filesystem::create_directories(system_root);
+            std::ofstream manifest(root / (stem + "_all_element_solve_system_manifest.csv"));
+            if (!manifest) throw std::runtime_error("cannot create all-element solve-system manifest");
+            manifest << "evaluation_ordinal,element_index,element_z,abundance,active_min_stage,active_max_stage,n_rows,n_ions,normalization_row,solver_method,solver_status_flags,outer_iterations,fixed_point_iterations,normalization,normalization_error,"
+                        "dense_matrix_path,dense_matrix_count,heating_matrix_path,heating_matrix_count,heating_matrix2_path,heating_matrix2_count,rhs_path,rhs_count,solver_input_path,solver_input_count,outer_path,outer_count,final_path,final_count,ion_reconstruction_path,ion_reconstruction_count\n";
+            manifest << std::setprecision(17);
+            const auto write_binary = [](const std::filesystem::path& path, const std::vector<double>& values) {
+                std::ofstream out(path, std::ios::binary);
+                if (!out) throw std::runtime_error("cannot create all-element solve-system binary: " + path.string());
+                if (!values.empty()) {
+                    out.write(reinterpret_cast<const char*>(values.data()),
+                              static_cast<std::streamsize>(values.size() * sizeof(double)));
+                }
+                if (!out) throw std::runtime_error("failed writing all-element solve-system binary: " + path.string());
+            };
+            for (const auto& diagnostic : context->last_element_diagnostics) {
+                if (!diagnostic.solve_response_captured) continue;
+                const int n = diagnostic.active.element.n_rows;
+                const int n_ions = diagnostic.active.element.n_ions;
+                const std::size_t matrix_count = static_cast<std::size_t>(n) * static_cast<std::size_t>(n);
+                if (diagnostic.dense_matrix.size() != matrix_count ||
+                    diagnostic.heating_matrix.size() != matrix_count ||
+                    diagnostic.heating_matrix2.size() != matrix_count ||
+                    diagnostic.rhs.size() != static_cast<std::size_t>(n) ||
+                    diagnostic.active_initial_populations.size() != static_cast<std::size_t>(n) ||
+                    diagnostic.active_final_outer_start_populations.size() != static_cast<std::size_t>(n) ||
+                    diagnostic.active_final_populations.size() != static_cast<std::size_t>(n) ||
+                    diagnostic.active_ion_reconstruction.size() != static_cast<std::size_t>(n_ions)) {
+                    throw std::runtime_error("all-element solve-system buffer dimensions are inconsistent");
+                }
+                std::ostringstream element_builder;
+                element_builder << "element_" << std::setw(2) << std::setfill('0') << diagnostic.element_z;
+                const std::string element_stem = element_builder.str();
+                const auto relative = [&](const char* suffix) {
+                    return system_relative / (element_stem + "_" + suffix + ".bin");
+                };
+                const auto dense_path = relative("dense_matrix");
+                const auto heat_path = relative("heating_matrix");
+                const auto heat2_path = relative("heating_matrix2");
+                const auto rhs_path = relative("rhs");
+                const auto input_path = relative("solver_input");
+                const auto outer_path = relative("outer");
+                const auto final_path = relative("final");
+                const auto ion_path = relative("ion_reconstruction");
+                write_binary(root / dense_path, diagnostic.dense_matrix);
+                write_binary(root / heat_path, diagnostic.heating_matrix);
+                write_binary(root / heat2_path, diagnostic.heating_matrix2);
+                write_binary(root / rhs_path, diagnostic.rhs);
+                write_binary(root / input_path, diagnostic.active_initial_populations);
+                write_binary(root / outer_path, diagnostic.active_final_outer_start_populations);
+                write_binary(root / final_path, diagnostic.active_final_populations);
+                write_binary(root / ion_path, diagnostic.active_ion_reconstruction);
+                manifest << evaluation_ordinal << ',' << diagnostic.element_index << ',' << diagnostic.element_z << ','
+                         << diagnostic.abundance << ',' << diagnostic.active.min_stage << ',' << diagnostic.active.max_stage << ','
+                         << n << ',' << n_ions << ',' << diagnostic.active.element.normalization_row << ','
+                         << diagnostic.solver_method << ',' << diagnostic.solver_status_flags << ','
+                         << diagnostic.outer_iterations << ',' << diagnostic.fixed_point_iterations << ','
+                         << diagnostic.normalization << ',' << diagnostic.normalization_error << ','
+                         << dense_path.string() << ',' << diagnostic.dense_matrix.size() << ','
+                         << heat_path.string() << ',' << diagnostic.heating_matrix.size() << ','
+                         << heat2_path.string() << ',' << diagnostic.heating_matrix2.size() << ','
+                         << rhs_path.string() << ',' << diagnostic.rhs.size() << ','
+                         << input_path.string() << ',' << diagnostic.active_initial_populations.size() << ','
+                         << outer_path.string() << ',' << diagnostic.active_final_outer_start_populations.size() << ','
+                         << final_path.string() << ',' << diagnostic.active_final_populations.size() << ','
+                         << ion_path.string() << ',' << diagnostic.active_ion_reconstruction.size() << '\n';
             }
         }
 
