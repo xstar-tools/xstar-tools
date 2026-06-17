@@ -1,31 +1,35 @@
-"""All-61 dense-matrix causal record attribution for v0.6.48.7.46.9.
+"""Indexed all-61 dense-matrix causal attribution for v0.6.48.7.46.9.1.
 
-The audit consumes exact source and native matrix-contribution streams.  Each
-stream stores one compact row per committed atomic record and all four matrix
-terms produced by that record.  The module first requires each stream to
-reconstruct its captured dense/heating matrices bit-for-bit; only then does it
-attribute every differing dense-matrix cell to rate-value, endpoint/orientation,
-presence, or accumulation-order causes.
+The audit consumes the exact source and native contribution streams captured by
+v0.6.48.7.46.9, but indexes those streams once by matrix cell instead of
+rescanning every committed record for every mismatch.  Output rows are streamed
+per system, and the large record table is gzip-compressed, so a completed 61-row
+capture can be resumed without repeating source capture or native replay.
 """
 from __future__ import annotations
 
 import argparse
 import csv
+import gzip
 import json
 import math
+import sys
 import tempfile
+import time
 from collections import Counter, defaultdict
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 import numpy as np
 
-RELEASE = "0.6.48.7.46.9"
-SCHEMA = "xstar-tools-v06487469-all61-dense-matrix-causal-attribution-v1"
+RELEASE = "0.6.48.7.46.9.1"
+SCHEMA = "xstar-tools-v064874691-indexed-dense-matrix-causal-attribution-v1"
 SUMMARY_NAME = "all61_dense_matrix_causal_attribution_summary.json"
 CELL_NAME = "all61_dense_matrix_causal_cells.csv"
-RECORD_NAME = "all61_dense_matrix_causal_records.csv"
+RECORD_NAME = "all61_dense_matrix_causal_records.csv.gz"
+LEGACY_RECORD_NAME = "all61_dense_matrix_causal_records.csv"
 SYSTEM_NAME = "all61_matrix_contribution_systems.csv"
 SOURCE_MANIFEST = "v0472_all61_solve_system_manifest.csv"
 INT_COLUMNS = 14
@@ -36,6 +40,25 @@ ROLE_NAMES = (
     "forward_diag_loss",
     "reverse_diag_loss",
 )
+
+SYSTEM_FIELDS = [
+    "sequence", "element_z", "n_rows", "source_contributions", "native_contributions",
+    "source_reconstruction_exact", "native_reconstruction_exact", "dense_matrix_exact",
+    "dense_mismatch_cells", "attributed_cells",
+]
+CELL_FIELDS = [
+    "sequence", "element_z", "row", "column", "source_value", "native_value", "delta",
+    "source_term_count", "native_term_count", "term_sequence_exact", "causal_record_count",
+    "causal_term_count", "causal_data_types", "causal_records", "primary_classification",
+    "direct_record_delta", "order_rounding_residual", "order_rounding_tolerance", "attributed",
+]
+RECORD_FIELDS = [
+    "sequence", "element_z", "row", "column", "record", "data_type", "rate_type",
+    "ion_index", "ion_stage", "role", "classification", "source_present", "native_present",
+    "source_order_index", "native_order_index", "source_lower_row", "source_upper_row",
+    "native_lower_row", "native_upper_row", "source_value", "native_value", "delta",
+]
+
 INT_FIELDS = (
     "source_order_index",
     "source_position",
@@ -138,6 +161,33 @@ def _write_csv(path: Path, fieldnames: list[str], rows: Iterable[Mapping[str, An
         writer = csv.DictWriter(handle, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
+
+
+@contextmanager
+def _atomic_csv_writer(
+    path: Path,
+    fieldnames: list[str],
+    *,
+    gzip_output: bool = False,
+):
+    """Stream a CSV to a temporary file and publish it atomically."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.unlink(missing_ok=True)
+    opener = (
+        (lambda: gzip.open(temporary, "wt", newline="", compresslevel=1))
+        if gzip_output
+        else (lambda: temporary.open("w", newline=""))
+    )
+    try:
+        with opener() as handle:
+            writer = csv.DictWriter(handle, fieldnames=fieldnames, extrasaction="ignore")
+            writer.writeheader()
+            yield writer
+        temporary.replace(path)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
 
 
 def _write_json(path: Path, value: Any) -> None:
@@ -269,8 +319,29 @@ def _classify_record(source: Contribution | None, native: Contribution | None) -
     return "EXACT_RECORD"
 
 
-def _term_sequence_for_cell(system: SystemData, row: int, column: int) -> list[tuple[tuple[int, int, int, int, int], int, float]]:
-    out: list[tuple[tuple[int, int, int, int, int], int, float]] = []
+TermEntry = tuple[tuple[int, int, int, int, int], int, float]
+
+
+def _index_terms_by_cell(contributions: list[Contribution]) -> dict[tuple[int, int], list[TermEntry]]:
+    """Index the source-ordered contribution stream by matrix cell.
+
+    The lists preserve the exact contribution order and role order used by the
+    original full scan.  Zero-valued terms are retained because they are part
+    of the source-order contract even when they do not change the matrix.
+    """
+    out: dict[tuple[int, int], list[TermEntry]] = defaultdict(list)
+    for contribution in contributions:
+        identity = contribution.identity
+        for role_index in range(4):
+            out[contribution.cell(role_index)].append(
+                (identity, role_index, contribution.term(role_index)[0])
+            )
+    return dict(out)
+
+
+def _term_sequence_for_cell(system: SystemData, row: int, column: int) -> list[TermEntry]:
+    """Reference full-scan implementation retained for regression tests."""
+    out: list[TermEntry] = []
     for contribution in system.contributions:
         for role_index in range(4):
             if contribution.cell(role_index) == (row, column):
@@ -286,6 +357,8 @@ def _ulp_tolerance(a: float, b: float, terms: int) -> float:
 def _attribute_system(
     source: SystemData,
     native: SystemData,
+    *,
+    metrics: dict[str, int] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], Counter[str], Counter[int]]:
     if source.n_rows != native.n_rows:
         raise ValueError(f"dimension mismatch sequence={source.sequence} z={source.element_z}")
@@ -296,18 +369,42 @@ def _attribute_system(
         identity: _classify_record(source_map.get(identity), native_map.get(identity))
         for identity in identities
     }
+    source_terms_by_cell = _index_terms_by_cell(source.contributions)
+    native_terms_by_cell = _index_terms_by_cell(native.contributions)
     cell_rows: list[dict[str, Any]] = []
     record_rows: list[dict[str, Any]] = []
     class_counts: Counter[str] = Counter()
     type_counts: Counter[int] = Counter()
     mismatch_indices = np.argwhere(source.dense != native.dense)
+    if metrics is not None:
+        metrics["systems"] = metrics.get("systems", 0) + 1
+        metrics["mismatch_cells"] = metrics.get("mismatch_cells", 0) + len(mismatch_indices)
+        metrics["record_identities"] = metrics.get("record_identities", 0) + len(identities)
+        metrics["full_identity_checks_avoided_baseline"] = (
+            metrics.get("full_identity_checks_avoided_baseline", 0)
+            + len(identities) * len(mismatch_indices)
+        )
     for zero_row, zero_col in mismatch_indices:
         row = int(zero_row) + 1
         column = int(zero_col) + 1
+        cell = (row, column)
         source_value = float(source.dense[zero_row, zero_col])
         native_value = float(native.dense[zero_row, zero_col])
+        source_sequence = source_terms_by_cell.get(cell, [])
+        native_sequence = native_terms_by_cell.get(cell, [])
+        relevant_identities = sorted(
+            {entry[0] for entry in source_sequence} | {entry[0] for entry in native_sequence}
+        )
+        if metrics is not None:
+            metrics["indexed_identity_checks"] = (
+                metrics.get("indexed_identity_checks", 0) + len(relevant_identities)
+            )
+            metrics["indexed_term_entries"] = (
+                metrics.get("indexed_term_entries", 0)
+                + len(source_sequence) + len(native_sequence)
+            )
         causal: list[dict[str, Any]] = []
-        for identity in identities:
+        for identity in relevant_identities:
             source_contribution = source_map.get(identity)
             native_contribution = native_map.get(identity)
             for role_index, role in enumerate(ROLE_NAMES):
@@ -344,8 +441,6 @@ def _attribute_system(
                 record_rows.append(causal_row)
                 class_counts[classification] += 1
                 type_counts[identity[1]] += 1
-        source_sequence = _term_sequence_for_cell(source, row, column)
-        native_sequence = _term_sequence_for_cell(native, row, column)
         sequence_exact = source_sequence == native_sequence
         if causal:
             primary = sorted(
@@ -393,72 +488,98 @@ def _attribute_system(
     return cell_rows, record_rows, class_counts, type_counts
 
 
-def _hydrogen_type53_gate(
-    source_systems: dict[tuple[int, int], SystemData],
-    native_systems: dict[tuple[int, int], SystemData],
+def _new_hydrogen_type53_state() -> dict[str, Any]:
+    return {
+        "records_expected": 0,
+        "contributions_exact": 0,
+        "endpoints_exact": 0,
+        "diagnostics_seen": 0,
+        "diagnostics_exact": 0,
+        "errors": [],
+    }
+
+
+def _update_hydrogen_type53_state(
+    state: dict[str, Any],
+    source: SystemData,
+    native: SystemData,
     native_run: Path,
-) -> dict[str, Any]:
-    expected = 0
-    contribution_exact = 0
-    endpoint_exact = 0
-    diagnostics_seen = 0
-    diagnostics_exact = 0
-    errors: list[str] = []
-    for sequence in range(1, 62):
-        source_map = _record_maps(source_systems[(sequence, 1)].contributions)
-        native_map = _record_maps(native_systems[(sequence, 1)].contributions)
-        for identity, source_contribution in source_map.items():
-            if identity[1] != 53:
-                continue
-            expected += 1
-            native_contribution = native_map.get(identity)
-            if native_contribution is None:
-                errors.append(f"missing_native_type53:{sequence}:{identity[0]}")
-                continue
-            if (source_contribution.lower, source_contribution.upper) == (
-                native_contribution.lower, native_contribution.upper
-            ):
-                endpoint_exact += 1
-            if source_contribution.ints[2:9] == native_contribution.ints[2:9] and source_contribution.reals == native_contribution.reals:
-                contribution_exact += 1
-        records_path = native_run / "qualification_diagnostics" / f"evaluation_{sequence:04d}_records.csv"
-        if not records_path.is_file():
-            errors.append(f"missing_record_diagnostics:{sequence}")
+) -> None:
+    sequence = source.sequence
+    source_map = _record_maps(source.contributions)
+    native_map = _record_maps(native.contributions)
+    errors: list[str] = state["errors"]
+    for identity, source_contribution in source_map.items():
+        if identity[1] != 53:
             continue
-        for row in _read_csv(records_path):
-            if int(row["element_z"]) != 1 or int(row["data_type"]) != 53:
-                continue
-            diagnostics_seen += 1
-            exact = (
-                int(row["matrix_committed"]) == 1
-                and int(row["type53_shadow_valid"]) == 1
-                and all(
-                    float(row[f"ans{index}"]) == float(row[f"type53_shadow_ans{index}"])
-                    for index in range(1, 7)
-                )
+        state["records_expected"] += 1
+        native_contribution = native_map.get(identity)
+        if native_contribution is None:
+            errors.append(f"missing_native_type53:{sequence}:{identity[0]}")
+            continue
+        if (source_contribution.lower, source_contribution.upper) == (
+            native_contribution.lower, native_contribution.upper
+        ):
+            state["endpoints_exact"] += 1
+        if (
+            source_contribution.ints[2:9] == native_contribution.ints[2:9]
+            and source_contribution.reals == native_contribution.reals
+        ):
+            state["contributions_exact"] += 1
+    records_path = native_run / "qualification_diagnostics" / f"evaluation_{sequence:04d}_records.csv"
+    if not records_path.is_file():
+        errors.append(f"missing_record_diagnostics:{sequence}")
+        return
+    for row in _read_csv(records_path):
+        if int(row["element_z"]) != 1 or int(row["data_type"]) != 53:
+            continue
+        state["diagnostics_seen"] += 1
+        exact = (
+            int(row["matrix_committed"]) == 1
+            and int(row["type53_shadow_valid"]) == 1
+            and all(
+                float(row[f"ans{index}"]) == float(row[f"type53_shadow_ans{index}"])
+                for index in range(1, 7)
             )
-            if exact:
-                diagnostics_exact += 1
-            else:
-                errors.append(f"type53_shadow_not_committed:{sequence}:{row['record']}")
-    if expected != 31 * 61:
-        errors.append(f"hydrogen_type53_inventory={expected} expected={31*61}")
+        )
+        if exact:
+            state["diagnostics_exact"] += 1
+        else:
+            errors.append(f"type53_shadow_not_committed:{sequence}:{row['record']}")
+
+
+def _finalize_hydrogen_type53_state(state: dict[str, Any]) -> dict[str, Any]:
+    expected_inventory = 31 * 61
+    errors: list[str] = state["errors"]
+    if state["records_expected"] != expected_inventory:
+        errors.append(
+            f"hydrogen_type53_inventory={state['records_expected']} expected={expected_inventory}"
+        )
     result = "ACCEPT" if (
-        not errors and contribution_exact == expected and endpoint_exact == expected
-        and diagnostics_seen == expected and diagnostics_exact == expected
+        not errors
+        and state["contributions_exact"] == state["records_expected"]
+        and state["endpoints_exact"] == state["records_expected"]
+        and state["diagnostics_seen"] == state["records_expected"]
+        and state["diagnostics_exact"] == state["records_expected"]
     ) else "REJECT"
     return {
         "result": result,
-        "records_expected": expected,
-        "contributions_exact": contribution_exact,
-        "endpoints_exact": endpoint_exact,
-        "diagnostics_seen": diagnostics_seen,
-        "diagnostics_exact": diagnostics_exact,
+        "records_expected": state["records_expected"],
+        "contributions_exact": state["contributions_exact"],
+        "endpoints_exact": state["endpoints_exact"],
+        "diagnostics_seen": state["diagnostics_seen"],
+        "diagnostics_exact": state["diagnostics_exact"],
         "errors": errors[:50],
     }
 
 
-def analyze(source_capture: Path, native_run: Path, output: Path) -> dict[str, Any]:
+def analyze(
+    source_capture: Path,
+    native_run: Path,
+    output: Path,
+    *,
+    progress_every: int = 10,
+) -> dict[str, Any]:
     output.mkdir(parents=True, exist_ok=True)
     errors: list[str] = []
     source_rows = _source_manifests(source_capture)
@@ -469,11 +590,14 @@ def analyze(source_capture: Path, native_run: Path, output: Path) -> dict[str, A
     if set(native_rows) != expected:
         errors.append(f"native_system_inventory={len(native_rows)} expected=183")
 
-    source_systems: dict[tuple[int, int], SystemData] = {}
-    native_systems: dict[tuple[int, int], SystemData] = {}
-    system_rows: list[dict[str, Any]] = []
-    cell_rows: list[dict[str, Any]] = []
-    record_rows: list[dict[str, Any]] = []
+    source_system_count = 0
+    native_system_count = 0
+    hydrogen_type53_state = _new_hydrogen_type53_state()
+    attribution_metrics: dict[str, int] = {}
+    started = time.perf_counter()
+    processed = 0
+    cell_rows_written = 0
+    record_rows_written = 0
     classification_counts: Counter[str] = Counter()
     data_type_counts: Counter[int] = Counter()
     source_reconstruction_exact = 0
@@ -482,88 +606,120 @@ def analyze(source_capture: Path, native_run: Path, output: Path) -> dict[str, A
     attributed_cells = 0
     total_mismatch_cells = 0
 
-    for key in sorted(expected):
-        if key not in source_rows or key not in native_rows:
-            continue
-        try:
-            source = _load_system(source_rows[key], source=True)
-            native = _load_system(native_rows[key], source=False)
-            source_systems[key] = source
-            native_systems[key] = native
-            source_reconstructed = _reconstruct(source)
-            native_reconstructed = _reconstruct(native)
-            source_exact = all(
-                np.array_equal(actual, expected_matrix)
-                for actual, expected_matrix in zip(source_reconstructed, (source.dense, source.heat, source.heat2))
-            )
-            native_exact = all(
-                np.array_equal(actual, expected_matrix)
-                for actual, expected_matrix in zip(native_reconstructed, (native.dense, native.heat, native.heat2))
-            )
-            source_reconstruction_exact += int(source_exact)
-            native_reconstruction_exact += int(native_exact)
-            if not source_exact:
-                errors.append(f"source_reconstruction:{key}")
-            if not native_exact:
-                errors.append(f"native_reconstruction:{key}")
-            dense_exact = np.array_equal(source.dense, native.dense)
-            dense_exact_systems += int(dense_exact)
-            local_cells: list[dict[str, Any]] = []
-            local_records: list[dict[str, Any]] = []
-            local_class = Counter()
-            local_types = Counter()
-            if source_exact and native_exact and not dense_exact:
-                local_cells, local_records, local_class, local_types = _attribute_system(source, native)
-                cell_rows.extend(local_cells)
-                record_rows.extend(local_records)
-                classification_counts.update(local_class)
-                data_type_counts.update(local_types)
-                total_mismatch_cells += len(local_cells)
-                attributed_cells += sum(int(row["attributed"]) for row in local_cells)
-            system_rows.append({
-                "sequence": key[0],
-                "element_z": key[1],
-                "n_rows": source.n_rows,
-                "source_contributions": len(source.contributions),
-                "native_contributions": len(native.contributions),
-                "source_reconstruction_exact": int(source_exact),
-                "native_reconstruction_exact": int(native_exact),
-                "dense_matrix_exact": int(dense_exact),
-                "dense_mismatch_cells": len(local_cells),
-                "attributed_cells": sum(int(row["attributed"]) for row in local_cells),
-            })
-        except Exception as exc:
-            errors.append(f"system:{key}:{type(exc).__name__}:{exc}")
+    (output / LEGACY_RECORD_NAME).unlink(missing_ok=True)
+    for stale in (
+        output / (SYSTEM_NAME + ".tmp"),
+        output / (CELL_NAME + ".tmp"),
+        output / (RECORD_NAME + ".tmp"),
+    ):
+        stale.unlink(missing_ok=True)
+    with (
+        _atomic_csv_writer(output / SYSTEM_NAME, SYSTEM_FIELDS) as system_writer,
+        _atomic_csv_writer(output / CELL_NAME, CELL_FIELDS) as cell_writer,
+        _atomic_csv_writer(output / RECORD_NAME, RECORD_FIELDS, gzip_output=True) as record_writer,
+    ):
+        for key in sorted(expected):
+            if key not in source_rows or key not in native_rows:
+                continue
+            try:
+                source = _load_system(source_rows[key], source=True)
+                native = _load_system(native_rows[key], source=False)
+                source_system_count += 1
+                native_system_count += 1
+                source_reconstructed = _reconstruct(source)
+                native_reconstructed = _reconstruct(native)
+                source_exact = all(
+                    np.array_equal(actual, expected_matrix)
+                    for actual, expected_matrix in zip(source_reconstructed, (source.dense, source.heat, source.heat2))
+                )
+                native_exact = all(
+                    np.array_equal(actual, expected_matrix)
+                    for actual, expected_matrix in zip(native_reconstructed, (native.dense, native.heat, native.heat2))
+                )
+                source_reconstruction_exact += int(source_exact)
+                native_reconstruction_exact += int(native_exact)
+                if not source_exact:
+                    errors.append(f"source_reconstruction:{key}")
+                if not native_exact:
+                    errors.append(f"native_reconstruction:{key}")
+                dense_exact = np.array_equal(source.dense, native.dense)
+                dense_exact_systems += int(dense_exact)
+                local_cells: list[dict[str, Any]] = []
+                local_records: list[dict[str, Any]] = []
+                local_class = Counter()
+                local_types = Counter()
+                if source_exact and native_exact and not dense_exact:
+                    local_cells, local_records, local_class, local_types = _attribute_system(
+                        source, native, metrics=attribution_metrics
+                    )
+                    cell_writer.writerows(local_cells)
+                    record_writer.writerows(local_records)
+                    cell_rows_written += len(local_cells)
+                    record_rows_written += len(local_records)
+                    classification_counts.update(local_class)
+                    data_type_counts.update(local_types)
+                    total_mismatch_cells += len(local_cells)
+                    attributed_cells += sum(int(row["attributed"]) for row in local_cells)
+                system_writer.writerow({
+                    "sequence": key[0],
+                    "element_z": key[1],
+                    "n_rows": source.n_rows,
+                    "source_contributions": len(source.contributions),
+                    "native_contributions": len(native.contributions),
+                    "source_reconstruction_exact": int(source_exact),
+                    "native_reconstruction_exact": int(native_exact),
+                    "dense_matrix_exact": int(dense_exact),
+                    "dense_mismatch_cells": len(local_cells),
+                    "attributed_cells": sum(int(row["attributed"]) for row in local_cells),
+                })
+                if key[1] == 1:
+                    _update_hydrogen_type53_state(hydrogen_type53_state, source, native, native_run)
+                processed += 1
+                if progress_every > 0 and (processed % progress_every == 0 or processed == len(expected)):
+                    elapsed = time.perf_counter() - started
+                    print(
+                        "V04874691_PROGRESS "
+                        f"systems={processed}/{len(expected)} "
+                        f"mismatch_cells={total_mismatch_cells} "
+                        f"attributed_cells={attributed_cells} "
+                        f"elapsed_seconds={elapsed:.3f}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+            except Exception as exc:
+                errors.append(f"system:{key}:{type(exc).__name__}:{exc}")
 
-    h53 = {
-        "result": "REJECT",
-        "records_expected": 0,
-        "contributions_exact": 0,
-        "endpoints_exact": 0,
-        "diagnostics_seen": 0,
-        "diagnostics_exact": 0,
-        "errors": ["incomplete systems"],
-    }
-    if len(source_systems) == 183 and len(native_systems) == 183:
-        h53 = _hydrogen_type53_gate(source_systems, native_systems, native_run)
-        errors.extend(f"hydrogen_type53:{value}" for value in h53["errors"])
+    h53 = _finalize_hydrogen_type53_state(hydrogen_type53_state)
+    errors.extend(f"hydrogen_type53:{value}" for value in h53["errors"])
 
     all_attributed = total_mismatch_cells > 0 and attributed_cells == total_mismatch_cells
-    capture_exact = len(source_systems) == 183 and len(native_systems) == 183
+    capture_exact = source_system_count == 183 and native_system_count == 183
     reconstruction_exact = source_reconstruction_exact == 183 and native_reconstruction_exact == 183
-    milestone = capture_exact and reconstruction_exact and all_attributed and h53["result"] == "ACCEPT"
+    baseline_checks = attribution_metrics.get("full_identity_checks_avoided_baseline", 0)
+    indexed_checks = attribution_metrics.get("indexed_identity_checks", 0)
+    reduction_factor = baseline_checks / max(1, indexed_checks)
+    indexed_performance_exact = baseline_checks > 0 and reduction_factor >= 10.0
+    performance_milestone = (
+        capture_exact and reconstruction_exact and all_attributed and indexed_performance_exact
+    )
+    scientific_milestone = performance_milestone and h53["result"] == "ACCEPT"
 
     post_seed_path = output / "all61_post_seed_system_decomposition_summary.json"
     post_seed = json.loads(post_seed_path.read_text()) if post_seed_path.is_file() else {}
     fixed_gate = str(post_seed.get("gates", {}).get("V06487_FIXED_STATE_PARITY", "REJECT"))
     gates = {
-        "ALL_61_SOURCE_MATRIX_CONTRIBUTIONS_CAPTURED": "ACCEPT" if len(source_systems) == 183 else "REJECT",
-        "ALL_61_NATIVE_MATRIX_CONTRIBUTIONS_CAPTURED": "ACCEPT" if len(native_systems) == 183 else "REJECT",
+        "ALL_61_SOURCE_MATRIX_CONTRIBUTIONS_CAPTURED": "ACCEPT" if source_system_count == 183 else "REJECT",
+        "ALL_61_NATIVE_MATRIX_CONTRIBUTIONS_CAPTURED": "ACCEPT" if native_system_count == 183 else "REJECT",
         "ALL_61_SOURCE_MATRIX_RECONSTRUCTION_EXACT": "ACCEPT" if source_reconstruction_exact == 183 else "REJECT",
         "ALL_61_NATIVE_MATRIX_RECONSTRUCTION_EXACT": "ACCEPT" if native_reconstruction_exact == 183 else "REJECT",
         "ALL_61_DENSE_MATRIX_CAUSAL_RECORDS_ATTRIBUTED": "ACCEPT" if all_attributed else "REJECT",
         "ALL_61_HYDROGEN_TYPE53_SOURCE_FAITHFUL": h53["result"],
-        "V06487469_DENSE_MATRIX_CAUSAL_ATTRIBUTION": "ACCEPT" if milestone else "REJECT",
+        "V064874691_INDEXED_CAUSAL_ATTRIBUTION_PERFORMANCE": (
+            "ACCEPT" if performance_milestone else "REJECT"
+        ),
+        "V06487469_DENSE_MATRIX_CAUSAL_ATTRIBUTION": (
+            "ACCEPT" if scientific_milestone else "REJECT"
+        ),
         "V06487_FIXED_STATE_PARITY": fixed_gate,
         "V06488_THERMAL_PARITY_READY": "ACCEPT" if fixed_gate == "ACCEPT" else "NO_FIXED_STATE_GATE_NOT_ACCEPTED",
         "THERMAL_PARITY": "NOT_RUN" if fixed_gate == "ACCEPT" else "BLOCKED",
@@ -574,52 +730,35 @@ def analyze(source_capture: Path, native_run: Path, output: Path) -> dict[str, A
     result = {
         "schema": SCHEMA,
         "release": RELEASE,
-        "result": "ACCEPT" if milestone else "REJECT",
+        "result": "ACCEPT" if performance_milestone else "REJECT",
+        "scientific_result": "ACCEPT" if scientific_milestone else "REJECT",
         "errors": errors[:200],
-        "source_systems": len(source_systems),
-        "native_systems": len(native_systems),
+        "source_systems": source_system_count,
+        "native_systems": native_system_count,
         "source_reconstruction_exact_systems": source_reconstruction_exact,
         "native_reconstruction_exact_systems": native_reconstruction_exact,
         "dense_exact_systems": dense_exact_systems,
         "dense_mismatch_cells": total_mismatch_cells,
         "dense_attributed_cells": attributed_cells,
+        "causal_cell_rows_written": cell_rows_written,
+        "causal_record_rows_written": record_rows_written,
+        "causal_record_output": RECORD_NAME,
+        "causal_record_output_compression": "gzip-level-1",
         "classification_counts": dict(sorted(classification_counts.items())),
         "causal_data_type_counts": {str(key): value for key, value in sorted(data_type_counts.items())},
         "hydrogen_type53": h53,
+        "indexed_attribution_metrics": {
+            **attribution_metrics,
+            "identity_check_reduction_factor": reduction_factor,
+            "performance_threshold": 10.0,
+            "performance_gate_exact": indexed_performance_exact,
+        },
+        "elapsed_seconds": time.perf_counter() - started,
         "gates": gates,
         "qualification_only": True,
         "production_promotion_ready": False,
         "thermal_parity_started": False,
     }
-    _write_csv(
-        output / SYSTEM_NAME,
-        [
-            "sequence", "element_z", "n_rows", "source_contributions", "native_contributions",
-            "source_reconstruction_exact", "native_reconstruction_exact", "dense_matrix_exact",
-            "dense_mismatch_cells", "attributed_cells",
-        ],
-        system_rows,
-    )
-    _write_csv(
-        output / CELL_NAME,
-        [
-            "sequence", "element_z", "row", "column", "source_value", "native_value", "delta",
-            "source_term_count", "native_term_count", "term_sequence_exact", "causal_record_count",
-            "causal_term_count", "causal_data_types", "causal_records", "primary_classification",
-            "direct_record_delta", "order_rounding_residual", "order_rounding_tolerance", "attributed",
-        ],
-        cell_rows,
-    )
-    _write_csv(
-        output / RECORD_NAME,
-        [
-            "sequence", "element_z", "row", "column", "record", "data_type", "rate_type",
-            "ion_index", "ion_stage", "role", "classification", "source_present", "native_present",
-            "source_order_index", "native_order_index", "source_lower_row", "source_upper_row",
-            "native_lower_row", "native_upper_row", "source_value", "native_value", "delta",
-        ],
-        record_rows,
-    )
     _write_json(output / SUMMARY_NAME, result)
     return result
 
@@ -643,7 +782,8 @@ def causal_attribution_self_test() -> dict[str, Any]:
     ], {})
     source.dense, source.heat, source.heat2 = _reconstruct(source)
     native.dense, native.heat, native.heat2 = _reconstruct(native)
-    cells, records, classes, types = _attribute_system(source, native)
+    metrics: dict[str, int] = {}
+    cells, records, classes, types = _attribute_system(source, native, metrics=metrics)
     errors: list[str] = []
     if not cells or not all(int(row["attributed"]) for row in cells):
         errors.append("cells_not_attributed")
@@ -652,7 +792,7 @@ def causal_attribution_self_test() -> dict[str, Any]:
     if types.get(50, 0) <= 0:
         errors.append("type50_not_attributed")
     return {
-        "schema": "xstar-tools-v06487469-causal-attribution-self-test-v1",
+        "schema": "xstar-tools-v064874691-indexed-causal-attribution-self-test-v1",
         "release": RELEASE,
         "result": "ACCEPT" if not errors else "REJECT",
         "errors": errors,
@@ -660,8 +800,84 @@ def causal_attribution_self_test() -> dict[str, Any]:
         "record_rows": len(records),
         "classification_counts": dict(classes),
         "data_type_counts": {str(key): value for key, value in types.items()},
+        "indexed_attribution_metrics": metrics,
     }
 
+
+
+def indexed_performance_self_test() -> dict[str, Any]:
+    """Exercise semantic equivalence and require a large index advantage."""
+    def make_contribution(order: int, *, delta: float = 0.0) -> Contribution:
+        n = 127
+        lower = (order % n) + 1
+        upper = ((order * 17 + 11) % n) + 1
+        if upper == lower:
+            upper = (upper % n) + 1
+        ints = (order, order * 4, 100000 + order, 50, 4, order % 13, order % 12 + 1,
+                lower, upper, 0, lower, upper, lower, upper)
+        base = float((order % 29) + 1) * 1.0e-6 + delta
+        reals = (
+            base, 0.0, 0.0, 0.0,
+            base * 0.5, 0.0, 0.0, 0.0,
+            -base, 0.0, 0.0, 0.0,
+            -base * 0.5, 0.0, 0.0, 0.0,
+        )
+        return Contribution(ints, reals)
+
+    source_contributions = [make_contribution(order) for order in range(1, 4001)]
+    native_contributions = [
+        make_contribution(order, delta=(1.0e-7 if order % 23 == 0 else 0.0))
+        for order in range(1, 4001)
+    ]
+    source = SystemData(1, 12, 127, np.zeros((127, 127)), np.zeros((127, 127)),
+                        np.zeros((127, 127)), source_contributions, {})
+    native = SystemData(1, 12, 127, np.zeros((127, 127)), np.zeros((127, 127)),
+                        np.zeros((127, 127)), native_contributions, {})
+    source.dense, source.heat, source.heat2 = _reconstruct(source)
+    native.dense, native.heat, native.heat2 = _reconstruct(native)
+    metrics: dict[str, int] = {}
+    started = time.perf_counter()
+    cells, records, _classes, _types = _attribute_system(source, native, metrics=metrics)
+    elapsed = time.perf_counter() - started
+
+    source_index = _index_terms_by_cell(source.contributions)
+    native_index = _index_terms_by_cell(native.contributions)
+    sequence_equivalence = True
+    for zero_row, zero_col in np.argwhere(source.dense != native.dense):
+        cell = (int(zero_row) + 1, int(zero_col) + 1)
+        if source_index.get(cell, []) != _term_sequence_for_cell(source, *cell):
+            sequence_equivalence = False
+            break
+        if native_index.get(cell, []) != _term_sequence_for_cell(native, *cell):
+            sequence_equivalence = False
+            break
+
+    baseline = metrics.get("full_identity_checks_avoided_baseline", 0)
+    indexed = metrics.get("indexed_identity_checks", 0)
+    reduction = baseline / max(1, indexed)
+    errors: list[str] = []
+    if not cells or not records:
+        errors.append("no_attribution_rows")
+    if not sequence_equivalence:
+        errors.append("indexed_term_sequence_differs_from_full_scan")
+    if reduction < 50.0:
+        errors.append(f"identity_check_reduction={reduction:.3f} expected>=50")
+    if any(not int(row["attributed"]) for row in cells):
+        errors.append("unattributed_cells")
+    return {
+        "schema": "xstar-tools-v064874691-indexed-performance-self-test-v1",
+        "release": RELEASE,
+        "result": "ACCEPT" if not errors else "REJECT",
+        "errors": errors,
+        "records": 4000,
+        "mismatch_cells": len(cells),
+        "causal_record_rows": len(records),
+        "term_sequence_equivalence": sequence_equivalence,
+        "full_identity_checks_baseline": baseline,
+        "indexed_identity_checks": indexed,
+        "identity_check_reduction_factor": reduction,
+        "elapsed_seconds": elapsed,
+    }
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
@@ -669,9 +885,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--native-run", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--output-json", type=Path)
+    parser.add_argument("--progress-every", type=int, default=10)
     args = parser.parse_args(argv)
     try:
-        result = analyze(args.source_capture, args.native_run, args.output)
+        result = analyze(
+            args.source_capture, args.native_run, args.output, progress_every=args.progress_every
+        )
     except Exception as exc:
         result = {
             "schema": SCHEMA,
@@ -679,6 +898,7 @@ def main(argv: list[str] | None = None) -> int:
             "result": "REJECT",
             "errors": [f"{type(exc).__name__}: {exc}"],
             "gates": {
+                "V064874691_INDEXED_CAUSAL_ATTRIBUTION_PERFORMANCE": "REJECT",
                 "V06487469_DENSE_MATRIX_CAUSAL_ATTRIBUTION": "REJECT",
                 "V06487_FIXED_STATE_PARITY": "REJECT",
                 "V06488_THERMAL_PARITY_READY": "NO_FIXED_STATE_GATE_NOT_ACCEPTED",

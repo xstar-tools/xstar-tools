@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.48.7.46.9.1 — indexed causal-attribution performance correction - 2026-06-17
+
+- Replaced the per-mismatched-cell scan over every committed record with a source-order-preserving `(row, column)` contribution index.
+- Reduced the uploaded all-61 attribution workload from approximately 4.56 billion candidate identity checks to 2.49 million indexed checks.
+- Streamed system and cell rows per element solve instead of retaining all causal rows in memory.
+- Changed the 1.78-million-row causal-record table to atomic gzip-compressed CSV output.
+- Added a resume-only runner that reuses the completed v0.6.48.7.46.9 source/native captures and never invokes source capture or `xstar_cpp`.
+- Added progress reporting, atomic temporary outputs, row-count validation, and a medium-sized indexed-performance readiness test.
+- Separated acceptance of the performance milestone from the still-rejected hydrogen Type-53 all-61 scientific gate.
+- Qualification only; no rate, matrix, RHS, solver, population, Thermal, controller, or product arithmetic changed.
+
 ## 0.6.48.7.46.9 — all-61 dense-matrix causal record attribution and hydrogen Type-53 correction - 2026-06-17
 
 - Committed the existing source-faithful Type-53 shadow for hydrogen under a qualification-only, replacement-guarded flag.

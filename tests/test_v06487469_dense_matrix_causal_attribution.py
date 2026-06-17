@@ -64,7 +64,7 @@ def test_readiness_accepts(tmp_path: Path) -> None:
     completed = subprocess.run(
         [
             sys.executable,
-            str(ROOT / "check_v0487469_all61_dense_matrix_causal_record_attribution_readiness.py"),
+            str(ROOT / "check_v04874691_indexed_causal_attribution_readiness.py"),
             "--package-dir",
             str(ROOT),
             "--output-json",
