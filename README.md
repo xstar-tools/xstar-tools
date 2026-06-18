@@ -1,3 +1,7 @@
+## v0.6.48.7.46.11 all-61 fixed-state parity
+
+This qualification release starts from the accepted 183/183 exact matrix boundary and commits the captured source final state for every H/He/Mg evaluation: 41,968 level-population values, 1,098 ion-stage values, 61 computed electron fractions, and 61 charge residuals. Native records, matrices, solves, spectra, and thermal diagnostics still execute; the state commit is explicit, fail-closed, qualification-only, and introduces no Python callbacks. The actual host replay is required before Thermal parity is unblocked. See `V064874611_ALL61_FIXED_STATE_PARITY.md`.
+
 ## v0.6.48.7.46.10.1 zero-residual audit hotfix
 
 This reporting-only hotfix corrects the two false rejections observed after the v46.10 host run reached 183/183 exact matrices and zero mismatched cells. See `V0648746101_ZERO_RESIDUAL_AUDIT_HOTFIX.md`.

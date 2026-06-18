@@ -748,3 +748,11 @@ include check_v04874610_matrix_construction_closure.py
 include check_v04874610_matrix_construction_closure_readiness.py
 
 include tests/test_v064874610_matrix_construction_closure.py
+
+# v0.6.48.7.46.11 all-61 fixed-state parity
+include V064874611_ALL61_FIXED_STATE_PARITY.md
+include run_v04874611_all61_fixed_state_parity.sh
+include check_v04874611_all61_fixed_state_parity.py
+include check_v04874611_all61_fixed_state_parity_readiness.py
+include project_v04874611_fixed_state_parity.py
+include tests/test_v064874611_fixed_state_parity_closure.py

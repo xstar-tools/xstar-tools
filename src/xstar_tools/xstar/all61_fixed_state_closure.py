@@ -9,7 +9,7 @@ import struct
 from pathlib import Path
 from typing import Any, Iterable
 
-RELEASE = "0.6.48.7.46.10.1"
+RELEASE = "0.6.48.7.46.11"
 SCHEMA = "xstar-tools-v0648744-all61-h-he-mg-fixed-state-closure-v1"
 SUMMARY_NAME = "all61_h_he_mg_fixed_state_closure_summary.json"
 STATE_DIFF_NAME = "all61_state_comparison.csv"

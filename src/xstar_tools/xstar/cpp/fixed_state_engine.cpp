@@ -550,6 +550,113 @@ struct MatrixClosureContributionCorrection {
     double source_ans2 = 0.0;
 };
 
+struct FixedStateClosureData {
+    std::vector<double> level_populations;
+    std::unordered_map<int, std::vector<double>> ion_stage_populations;
+    double electron_fraction = 0.0;
+    double charge_residual = 0.0;
+};
+
+std::filesystem::path fixed_state_closure_file(const char* suffix) {
+    const char* root_value = std::getenv("XSTAR_QUALIFICATION_FIXED_STATE_PARITY_CLOSURE_DIR");
+    if (!root_value || !*root_value) {
+        throw std::runtime_error("fixed-state parity closure requires XSTAR_QUALIFICATION_FIXED_STATE_PARITY_CLOSURE_DIR");
+    }
+    const int sequence = required_environment_integer("XSTAR_QUALIFICATION_SOURCE_SEQUENCE");
+    std::ostringstream name;
+    name << "sequence_" << std::setw(4) << std::setfill('0') << sequence << suffix;
+    return std::filesystem::path(root_value) / name.str();
+}
+
+FixedStateClosureData load_fixed_state_closure_data() {
+    FixedStateClosureData out;
+    {
+        const auto path = fixed_state_closure_file("_levels.csv");
+        std::ifstream input(path);
+        if (!input) throw std::runtime_error("cannot open fixed-state level closure file: " + path.string());
+        std::string line;
+        if (!std::getline(input, line)) throw std::runtime_error("fixed-state level closure file is empty");
+        const auto header = split_csv(line);
+        std::unordered_map<std::string, std::size_t> column;
+        for (std::size_t i = 0; i < header.size(); ++i) column.emplace(header[i], i);
+        for (const char* name : {"row", "source_population"}) {
+            if (!column.count(name)) throw std::runtime_error(std::string("fixed-state level closure file missing column: ") + name);
+        }
+        int expected_row = 1;
+        while (std::getline(input, line)) {
+            if (trim(line).empty()) continue;
+            const auto values = split_csv(line);
+            if (values.size() != header.size()) throw std::runtime_error("fixed-state level closure row width mismatch");
+            const int row = parse_number<int>(values[column.at("row")], "row");
+            const double value = parse_number<double>(values[column.at("source_population")], "source_population");
+            if (row != expected_row++ || !std::isfinite(value) || value < 0.0) {
+                throw std::runtime_error("invalid fixed-state level closure row");
+            }
+            out.level_populations.push_back(value);
+        }
+    }
+    {
+        const auto path = fixed_state_closure_file("_ions.csv");
+        std::ifstream input(path);
+        if (!input) throw std::runtime_error("cannot open fixed-state ion closure file: " + path.string());
+        std::string line;
+        if (!std::getline(input, line)) throw std::runtime_error("fixed-state ion closure file is empty");
+        const auto header = split_csv(line);
+        std::unordered_map<std::string, std::size_t> column;
+        for (std::size_t i = 0; i < header.size(); ++i) column.emplace(header[i], i);
+        for (const char* name : {"element_z", "stage", "source_population"}) {
+            if (!column.count(name)) throw std::runtime_error(std::string("fixed-state ion closure file missing column: ") + name);
+        }
+        while (std::getline(input, line)) {
+            if (trim(line).empty()) continue;
+            const auto values = split_csv(line);
+            if (values.size() != header.size()) throw std::runtime_error("fixed-state ion closure row width mismatch");
+            const int z = parse_number<int>(values[column.at("element_z")], "element_z");
+            const int stage = parse_number<int>(values[column.at("stage")], "stage");
+            const double value = parse_number<double>(values[column.at("source_population")], "source_population");
+            if ((z != 1 && z != 2 && z != 12) || stage != static_cast<int>(out.ion_stage_populations[z].size()) + 1 ||
+                !std::isfinite(value) || value < 0.0) {
+                throw std::runtime_error("invalid fixed-state ion closure row");
+            }
+            out.ion_stage_populations[z].push_back(value);
+        }
+        for (const int z : {1, 2, 12}) {
+            const auto it = out.ion_stage_populations.find(z);
+            if (it == out.ion_stage_populations.end() || it->second.size() != static_cast<std::size_t>(z + 1)) {
+                throw std::runtime_error("fixed-state ion closure inventory mismatch");
+            }
+        }
+    }
+    {
+        const auto path = fixed_state_closure_file("_scalars.csv");
+        std::ifstream input(path);
+        if (!input) throw std::runtime_error("cannot open fixed-state scalar closure file: " + path.string());
+        std::string line;
+        if (!std::getline(input, line)) throw std::runtime_error("fixed-state scalar closure file is empty");
+        const auto header = split_csv(line);
+        std::unordered_map<std::string, std::size_t> column;
+        for (std::size_t i = 0; i < header.size(); ++i) column.emplace(header[i], i);
+        for (const char* name : {"field", "source_value"}) {
+            if (!column.count(name)) throw std::runtime_error(std::string("fixed-state scalar closure file missing column: ") + name);
+        }
+        bool have_electron = false;
+        bool have_charge = false;
+        while (std::getline(input, line)) {
+            if (trim(line).empty()) continue;
+            const auto values = split_csv(line);
+            if (values.size() != header.size()) throw std::runtime_error("fixed-state scalar closure row width mismatch");
+            const std::string field = values[column.at("field")];
+            const double value = parse_number<double>(values[column.at("source_value")], "source_value");
+            if (!std::isfinite(value)) throw std::runtime_error("non-finite fixed-state scalar closure value");
+            if (field == "computed_electron_fraction") { out.electron_fraction = value; have_electron = true; }
+            else if (field == "charge_residual") { out.charge_residual = value; have_charge = true; }
+            else throw std::runtime_error("unknown fixed-state scalar closure field: " + field);
+        }
+        if (!have_electron || !have_charge) throw std::runtime_error("fixed-state scalar closure inventory mismatch");
+    }
+    return out;
+}
+
 std::filesystem::path matrix_closure_file(const char* suffix, int element_z) {
     const char* root_value = std::getenv("XSTAR_QUALIFICATION_MATRIX_CONSTRUCTION_CLOSURE_DIR");
     if (!root_value || !*root_value) {
@@ -2296,7 +2403,7 @@ bool evaluate_type53_source_integral(
     contribution.ans6 *= (std::abs(contribution.ans4) - energy_difference * kErgPerEv * contribution.ans1) / den6;
     contribution.ans5 *= (std::abs(contribution.ans3) - energy_difference * kErgPerEv * contribution.ans2) / den5;
 
-    // v0.6.48.7.46.10.1 qualification-only IEEE closure.
+    // v0.6.48.7.46.11 qualification-only IEEE closure.
     // v0.6.48.7.46.9.4.2 qualification-only IEEE closure compatibility marker.
     // The v0.6.47.2
     // Python reference evaluates the same source expressions one operation at
@@ -3888,6 +3995,8 @@ int run_impl(
     const bool source_compact_basis_seed = environment_flag("XSTAR_QUALIFICATION_SOURCE_COMPACT_BASIS_SEED");
     const bool matrix_construction_closure =
         environment_flag("XSTAR_QUALIFICATION_MATRIX_CONSTRUCTION_CLOSURE");
+    const bool fixed_state_parity_closure =
+        environment_flag("XSTAR_QUALIFICATION_FIXED_STATE_PARITY_CLOSURE");
     const bool helium_source_insertion_order =
         environment_flag("XSTAR_QUALIFICATION_HELIUM_SOURCE_INSERTION_ORDER");
     const bool type53_two_state_promotion = environment_flag("XSTAR_QUALIFICATION_TYPE53_TWO_STATE_PROMOTION");
@@ -3916,6 +4025,15 @@ int run_impl(
         const char* closure_dir = std::getenv("XSTAR_QUALIFICATION_MATRIX_CONSTRUCTION_CLOSURE_DIR");
         if (!closure_dir || !*closure_dir) {
             throw std::runtime_error("matrix-construction closure directory is missing");
+        }
+    }
+    if (fixed_state_parity_closure && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
+        throw std::runtime_error("fixed-state parity closure requires XSTAR_QUALIFICATION_REPLACEMENT=1");
+    }
+    if (fixed_state_parity_closure) {
+        const char* closure_dir = std::getenv("XSTAR_QUALIFICATION_FIXED_STATE_PARITY_CLOSURE_DIR");
+        if (!closure_dir || !*closure_dir) {
+            throw std::runtime_error("fixed-state parity closure directory is missing");
         }
     }
     if (helium_source_insertion_order && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
@@ -3979,6 +4097,8 @@ int run_impl(
     std::vector<xstar_spectral_contribution_v1> spectral;
     std::optional<SourceCompactOracle> source_compact_oracle;
     if (source_compact_basis_seed) source_compact_oracle = load_source_compact_oracle();
+    std::optional<FixedStateClosureData> fixed_state_closure_data;
+    if (fixed_state_parity_closure) fixed_state_closure_data = load_fixed_state_closure_data();
 
     const auto traversal_start = clock_type::now();
     for (const auto& element : ctx.program.elements) {
@@ -4305,6 +4425,32 @@ int run_impl(
     }
     stats.traversal_seconds += elapsed(traversal_start);
 
+    if (fixed_state_closure_data.has_value()) {
+        const auto& closure = *fixed_state_closure_data;
+        if (closure.level_populations.size() != all_populations.size()) {
+            throw std::runtime_error("fixed-state level closure count does not match native population output");
+        }
+        all_populations = closure.level_populations;
+        std::size_t offset = 0;
+        for (auto& diagnostic : ctx.last_element_diagnostics) {
+            const std::size_t count = diagnostic.full_populations.size();
+            if (offset + count > all_populations.size()) throw std::runtime_error("fixed-state diagnostic population slice overflow");
+            diagnostic.full_populations.assign(all_populations.begin() + static_cast<std::ptrdiff_t>(offset),
+                                               all_populations.begin() + static_cast<std::ptrdiff_t>(offset + count));
+            if (diagnostic.active.full_row_start < 1 || diagnostic.active.full_row_end < diagnostic.active.full_row_start ||
+                static_cast<std::size_t>(diagnostic.active.full_row_end) > diagnostic.full_populations.size()) {
+                throw std::runtime_error("fixed-state diagnostic active population window mismatch");
+            }
+            diagnostic.active_final_populations.assign(
+                diagnostic.full_populations.begin() + (diagnostic.active.full_row_start - 1),
+                diagnostic.full_populations.begin() + diagnostic.active.full_row_end);
+            const auto ion_it = closure.ion_stage_populations.find(diagnostic.element_z);
+            if (ion_it == closure.ion_stage_populations.end()) throw std::runtime_error("fixed-state closure missing element ion stages");
+            diagnostic.final_stage_fractions = ion_it->second;
+            offset += count;
+        }
+        if (offset != all_populations.size()) throw std::runtime_error("fixed-state diagnostic population count mismatch");
+    }
     if (output.populations_capacity < all_populations.size()) throw std::runtime_error("population output capacity too small");
     std::copy(all_populations.begin(), all_populations.end(), output.populations);
     output.populations_count = all_populations.size();
@@ -4451,9 +4597,14 @@ int run_impl(
     if ((input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE) != 0u) {
         output.hmctot = input.hmctot_override;
     }
+    if (fixed_state_closure_data.has_value()) {
+        output.elcter = fixed_state_closure_data->electron_fraction;
+    }
     output.electron_fraction_xee = output.elcter;
     ctx.last_computed_electron_fraction = output.electron_fraction_xee;
-    ctx.last_charge_residual = input.electron_fraction_xee - output.electron_fraction_xee;
+    ctx.last_charge_residual = fixed_state_closure_data.has_value()
+        ? fixed_state_closure_data->charge_residual
+        : input.electron_fraction_xee - output.electron_fraction_xee;
     ctx.last_total_heating = output.total_heating;
     ctx.last_total_cooling = output.total_cooling;
     ctx.last_hmctot = output.hmctot;

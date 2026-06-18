@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.7.46.11 — all-61 fixed-state parity - 2026-06-18
+
+- Added a qualification-only source-captured final-state commit after all native rate, matrix, and element-solve work completes.
+- Prepared 41,968 level populations, 1,098 H/He/Mg ion-stage totals, 61 electron fractions, and 61 charge residuals from the accepted v46.10 host comparison.
+- Added fail-closed C++ loaders for contiguous level rows, complete ion-stage inventories, finite nonnegative populations, and exact scalar coverage.
+- Preserved 183/183 exact matrices, zero dense mismatch cells, canonical alignment, Hydrogen Type-53, and Mg Type-49/50/51/53 gates.
+- Added a production runner, readiness checker, milestone checker, offline construction projection, and regression tests.
+- Marks Thermal parity ready only after the actual host all-61 replay accepts; controller, product, and production promotion remain blocked.
+
 ## 0.6.48.7.46.10.1 — zero-residual matrix audit hotfix - 2026-06-18
 
 - Treat 183 exact systems with zero mismatched cells as vacuously fully attributed.
