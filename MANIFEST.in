@@ -773,4 +773,5 @@ include tests/test_v064874612_all61_thermal_state_consumption.py
 
 # v0.6.48.7.46.12.1 canonical scalar-oracle alignment and resumable native replay
 include V0648746121_CANONICAL_SCALAR_ORACLE_AND_RESUMABLE_NATIVE_REPLAY.md
+include V06487461211_WORKSPACE_PATH_REBASE_HOTFIX.md
 include tests/test_v0648746121_canonical_scalar_resume.py

@@ -1,6 +1,6 @@
-## Current release: 0.6.48.7.46.12.1
+## Current release: 0.6.48.7.46.12.1.1
 
-This qualification patch aligns the accepted v46.11 fixed-state closure and the current v46.12 Thermal capture onto one canonical binary64 scalar oracle. It preserves all 61 accepted level and ion closure files byte-for-byte, regenerates only `computed_electron_fraction` and `charge_residual`, and audits every old/new scalar with IEEE bits and ULP distance. Native replay is sequence-resumable: valid completed evaluations are retained and validated, while replay restarts at the first missing or stale sequence. For the uploaded partial run, evaluations 1–8 are reusable and sequence 9 is pending. Independent native Thermal parity, controller parity, products, and production promotion remain blocked. See `V0648746121_CANONICAL_SCALAR_ORACLE_AND_RESUMABLE_NATIVE_REPLAY.md`.
+This qualification hotfix makes the accepted 61-evaluation source capture portable across package directories and mount points. Historical absolute `workspace_directory` values are used when valid and otherwise rebased by canonical sequence to the capture bundle's local `all61_input_workspaces/evaluation_NNNN` directory. The original provenance CSV is preserved, report normalization prefers `capture_report.json`, and resumable native replay remains unchanged. The uploaded moved capture verifies with all 61 workspace paths rebased; evaluations 1–8 remain reusable and sequence 9 remains pending. No physics or ABI semantics changed. See `V06487461211_WORKSPACE_PATH_REBASE_HOTFIX.md`.
 
 ## v0.6.48.7.46.11.1 Thermal-readiness vocabulary hotfix
 

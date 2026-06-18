@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.7.46.12.1.1 — source-workspace path rebase hotfix - 2026-06-18
+
+- Reclassifies the first v46.12.1 host failure as stale absolute workspace metadata rather than missing source-capture binaries.
+- Uses the recorded `workspace_directory` when valid and otherwise resolves `all61_input_workspaces/evaluation_NNNN` relative to the current capture bundle.
+- Reports rebased and still-valid recorded workspace-path counts without rewriting the provenance CSV.
+- Prefers the original `capture_report.json` during report normalization and refreshes the canonical fixed-state report from it.
+- Preserves the accepted source capture and native evaluations 1–8; sequence 9 remains the first pending native replay.
+- Changes no physics, matrices, populations, Thermal components, controller behavior, products, or ABI layouts.
+
 ## 0.6.48.7.46.12.1 — canonical fixed-state/Thermal scalar-oracle alignment and resumable native replay - 2026-06-18
 
 - Added a canonical closure that copies all accepted v46.11 level and ion files byte-for-byte and regenerates only the two scalar rows from the current v46.12 source capture.

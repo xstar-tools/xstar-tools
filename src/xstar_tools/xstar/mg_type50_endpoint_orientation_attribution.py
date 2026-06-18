@@ -10,7 +10,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-RELEASE = "0.6.48.7.46.12.1"
+RELEASE = "0.6.48.7.46.12.1.1"
 TARGET_RECORDS = (40066, 40095, 40108, 40134, 41209)
 EXPECTED_BASELINE_ROWS = 1124
 EXPECTED_RECORD_EVALUATIONS = 281

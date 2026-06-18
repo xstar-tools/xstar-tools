@@ -1,4 +1,4 @@
-"""Prepare and audit v0.6.48.7.46.12.1 all-61 Thermal component closure.
+"""Prepare and audit v0.6.48.7.46.12.1.1 all-61 Thermal component closure.
 
 This is a qualification-only source-captured boundary.  It does not replace the
 native evaluation: matrix construction, dense solves, state consumption, and
@@ -17,7 +17,7 @@ from typing import Any
 
 from .v0472_all61_thermal_state_capture import BUDGET_NAME
 
-RELEASE = "0.6.48.7.46.12.1"
+RELEASE = "0.6.48.7.46.12.1.1"
 SCHEMA = "xstar-tools-v064874612-all61-thermal-component-parity-closure-v1"
 REPORT_NAME = "v04874612_thermal_component_closure_report.json"
 OVERRIDE_DIRNAME = "v04874612_thermal_component_closure"

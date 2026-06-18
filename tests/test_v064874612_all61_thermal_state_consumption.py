@@ -134,7 +134,7 @@ def test_generated_probe_installs_nonrecursive_input_hook(tmp_path: Path) -> Non
 
 
 def test_release_and_cpp_contract() -> None:
-    assert xstar_tools.__version__ == "0.6.48.7.46.12.1"
+    assert xstar_tools.__version__ == "0.6.48.7.46.12.1.1"
     cpp = (root() / "src/xstar_tools/xstar/cpp/fixed_state_engine.cpp").read_text()
     assert "XSTAR_QUALIFICATION_THERMAL_COMPONENT_PARITY_CLOSURE" in cpp
     assert "XSTAR_QUALIFICATION_THERMAL_COMPONENT_PARITY_CLOSURE_DIR" in cpp
@@ -218,6 +218,12 @@ def test_runtime_report_normalization_preserves_capture_and_materializes_canonic
         "result": "ACCEPT",
         "actual_v0472_runtime_capture": True,
     }
+    dump(tmp_path / capture.base.REPORT_NAME, {
+        "schema": "stale-normalized-fixed-state-report",
+        "release": "0.6.48.7.46.12",
+        "result": "REJECT",
+        "actual_v0472_runtime_capture": False,
+    })
     dump(tmp_path / capture.RUNTIME_REPORT_NAME, runtime_report)
     write_csv(
         tmp_path / capture.BUDGET_NAME,
@@ -236,9 +242,24 @@ def test_runtime_report_normalization_preserves_capture_and_materializes_canonic
     assert thermal["all61_thermal_rows"] == 1
 
 
+def test_workspace_directory_rebases_after_capture_bundle_move(tmp_path: Path) -> None:
+    bundle = tmp_path / "moved_capture"
+    local = bundle / "all61_input_workspaces" / "evaluation_0009"
+    local.mkdir(parents=True)
+    row = {
+        "sequence": "9",
+        "workspace_directory": "/obsolete/host/xstar_tools-0.6.48.7.46.12/"
+        "v04874612_all61_thermal_state_consumption/v04874612_source_thermal_capture/"
+        "all61_input_workspaces/evaluation_0009",
+    }
+    resolved, rebased = capture.base._resolve_workspace_directory(bundle, row)
+    assert rebased is True
+    assert resolved == local.resolve()
+
+
 def test_runner_contains_source_capture_resume_and_preflight_contract() -> None:
     runner = (root() / "run_v04874612_all61_thermal_state_consumption_audit.sh").read_text()
-    assert "V048746121_RUNNER_REVISION=20260725-canonical-scalar-resume-v1" in runner
+    assert "V0487461211_RUNNER_REVISION=20260725-workspace-path-rebase-v1" in runner
     assert "V04874612_SOURCE_CAPTURE_REUSE=1" in runner
     assert "XSTAR_V04874612_FORCE_SOURCE_RECAPTURE" in runner
     assert "XSTAR_V04874612_SOURCE_CAPTURE_PREFLIGHT_ONLY" in runner

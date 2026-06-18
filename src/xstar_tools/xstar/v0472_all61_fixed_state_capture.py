@@ -18,7 +18,7 @@ from typing import Any
 
 from . import v0472_full_dsec_thermal_budget_capture as base
 
-RELEASE = "0.6.48.7.46.12.1"
+RELEASE = "0.6.48.7.46.12.1.1"
 SCHEMA = "xstar-tools-v0648744-v0472-all61-fixed-state-capture-v1"
 VERIFY_SCHEMA = "xstar-tools-v0648744-v0472-all61-fixed-state-oracle-v1"
 STATE_NAME = "v0472_all61_fixed_state_rows.csv"
@@ -514,6 +514,31 @@ def _read_csv(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(handle))
 
 
+def _resolve_workspace_directory(bundle: Path, row: dict[str, str]) -> tuple[Path, bool]:
+    """Resolve a captured workspace after moving the capture bundle.
+
+    ``workspace_directory`` is provenance metadata written as an absolute path
+    by the v0.6.47.2 runtime.  A source capture may later be copied into a new
+    package release or mounted at a different path.  Preserve the recorded path
+    when it remains valid; otherwise rebase by canonical sequence identity to
+    the local ``all61_input_workspaces/evaluation_NNNN`` directory.
+    """
+    bundle = bundle.resolve()
+    recorded_text = str(row.get("workspace_directory", "")).strip()
+    recorded = Path(recorded_text) if recorded_text else Path()
+    if recorded_text:
+        recorded_candidate = recorded if recorded.is_absolute() else bundle / recorded
+        if recorded_candidate.is_dir():
+            return recorded_candidate.resolve(), False
+    sequence = int(row["sequence"])
+    local = bundle / "all61_input_workspaces" / f"evaluation_{sequence:04d}"
+    if local.is_dir():
+        return local.resolve(), True
+    if recorded_text:
+        return (recorded if recorded.is_absolute() else bundle / recorded).resolve(), False
+    return local.resolve(), False
+
+
 def verify(bundle: Path) -> dict[str, Any]:
     errors: list[str] = []
     for name in (STATE_NAME, INPUT_NAME, ION_NAME, LEVEL_NAME, SOLVE_NAME, REPORT_NAME):
@@ -530,6 +555,8 @@ def verify(bundle: Path) -> dict[str, Any]:
     sequences = [int(row["sequence"]) for row in states]
     kinds = [row["kind"] for row in states]
     workspace_contract_exact = True
+    workspace_paths_rebased = 0
+    workspace_paths_recorded_valid = 0
     for row in inputs:
         try:
             expected_sequence = canonical_sequence(row["kind"], int(row["dsec_call_id"]), int(row["evaluation_index"]))
@@ -541,7 +568,11 @@ def verify(bundle: Path) -> dict[str, Any]:
         if actual_sequence != expected_sequence:
             errors.append(f"sequence_identity_mismatch:{actual_sequence}!={expected_sequence}")
             workspace_contract_exact = False
-        directory = Path(row["workspace_directory"])
+        directory, rebased = _resolve_workspace_directory(bundle, row)
+        if rebased:
+            workspace_paths_rebased += 1
+        else:
+            workspace_paths_recorded_valid += int(directory.is_dir())
         prefix = f"call_{int(row['dsec_call_id'])}_"
         for name in ("radiation_energy", "bremsa", "continuum_tau_in", "continuum_tau_out", "global_xilevg", "global_bilevg", "global_rnisg"):
             if not (directory / f"{prefix}{name}.bin").is_file():
@@ -575,6 +606,8 @@ def verify(bundle: Path) -> dict[str, Any]:
         "final_evaluations": kinds.count("final"), "ion_rows": len(ions), "level_rows": len(levels),
         "solve_rows": len(solve_rows), "solve_elements": len(solve_elements),
         "workspace_sequence_contract_exact": workspace_contract_exact,
+        "workspace_paths_rebased": workspace_paths_rebased,
+        "workspace_paths_recorded_valid": workspace_paths_recorded_valid,
         "qualification_only": True, "production_promotion_ready": False,
     }
 

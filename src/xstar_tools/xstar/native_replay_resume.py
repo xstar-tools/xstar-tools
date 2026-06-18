@@ -1,4 +1,4 @@
-"""Sequence-level resumable native replay for v0.6.48.7.46.12.1."""
+"""Sequence-level resumable native replay for v0.6.48.7.46.12.1.1."""
 from __future__ import annotations
 
 import argparse
@@ -11,8 +11,8 @@ from typing import Any
 
 from .all61_thermal_state_consumption_audit import COMMITTED_NATIVE_FIELD, COMPONENT_FIELDS
 
-RELEASE = "0.6.48.7.46.12.1"
-SCHEMA = "xstar-tools-v0648746121-native-replay-resume-manifest-v1"
+RELEASE = "0.6.48.7.46.12.1.1"
+SCHEMA = "xstar-tools-v06487461211-native-replay-resume-manifest-v1"
 MANIFEST_NAME = "v048746121_native_replay_resume_manifest.json"
 PLAN_NAME = "all61_native_replay_resume_plan.tsv"
 REQUIRED_EVALUATION_FILES = (

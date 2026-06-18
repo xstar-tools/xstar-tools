@@ -1,4 +1,4 @@
-"""Canonical fixed-state/Thermal scalar-oracle alignment for v0.6.48.7.46.12.1.
+"""Canonical fixed-state/Thermal scalar-oracle alignment for v0.6.48.7.46.12.1.1.
 
 The accepted v46.11 fixed-state closure and the current v46.12 source Thermal
 capture were produced by separate source-capture runs.  Level and ion
@@ -19,8 +19,8 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-RELEASE = "0.6.48.7.46.12.1"
-SCHEMA = "xstar-tools-v0648746121-canonical-fixed-thermal-scalar-oracle-v1"
+RELEASE = "0.6.48.7.46.12.1.1"
+SCHEMA = "xstar-tools-v06487461211-canonical-fixed-thermal-scalar-oracle-v1"
 REPORT_NAME = "v048746121_canonical_scalar_oracle_alignment_report.json"
 COMPARISON_NAME = "v048746121_scalar_oracle_comparison.csv"
 ALIGNED_DIRNAME = "v048746121_canonical_fixed_state_thermal_closure"

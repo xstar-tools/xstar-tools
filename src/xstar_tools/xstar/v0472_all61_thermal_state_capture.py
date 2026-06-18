@@ -20,7 +20,7 @@ from typing import Any
 
 from . import v0472_all61_fixed_state_capture as base
 
-RELEASE = "0.6.48.7.46.12.1"
+RELEASE = "0.6.48.7.46.12.1.1"
 SCHEMA = "xstar-tools-v064874612-v0472-all61-thermal-state-capture-v1"
 VERIFY_SCHEMA = "xstar-tools-v064874612-v0472-all61-thermal-state-oracle-v1"
 BUDGET_NAME = "v0472_all61_thermal_budget.csv"
@@ -238,7 +238,7 @@ def _normalize_capture_reports(bundle: Path) -> dict[str, Any]:
     runtime_path = bundle / RUNTIME_REPORT_NAME
     fixed_path = bundle / base.REPORT_NAME
     thermal_path = bundle / REPORT_NAME
-    source_path = next((path for path in (fixed_path, runtime_path, thermal_path) if path.is_file()), None)
+    source_path = next((path for path in (runtime_path, fixed_path, thermal_path) if path.is_file()), None)
     if source_path is None:
         return {
             "normalized": False,
@@ -247,7 +247,7 @@ def _normalize_capture_reports(bundle: Path) -> dict[str, Any]:
             "thermal_report": thermal_path.name,
         }
     report = json.loads(source_path.read_text(encoding="utf-8"))
-    if not fixed_path.is_file():
+    if source_path == runtime_path or not fixed_path.is_file():
         _write_json(fixed_path, report)
     thermal_report = dict(report)
     thermal_report.update({
@@ -309,6 +309,8 @@ def verify(bundle: Path) -> dict[str, Any]:
         "final_evaluations": kinds.count("final"),
         "thermal_fields": len(THERMAL_FIELDS),
         "fixed_state_capture_result": base_result.get("result", "REJECT"),
+        "workspace_paths_rebased": int(base_result.get("workspace_paths_rebased", 0)),
+        "workspace_paths_recorded_valid": int(base_result.get("workspace_paths_recorded_valid", 0)),
         "report_normalization": normalization,
         "qualification_only": True,
         "production_promotion_ready": False,

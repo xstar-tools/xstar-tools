@@ -17,7 +17,7 @@ from .all61_dense_matrix_causal_attribution import (
     _source_manifests,
 )
 
-RELEASE = "0.6.48.7.46.12.1"
+RELEASE = "0.6.48.7.46.12.1.1"
 EXPECTED_CONTRIBUTION_VECTORS = 67_149
 EXPECTED_UNIQUE_ACTIVE_RECORDS = 1_101
 EXPECTED_RUNTIME_RECORD_EVALUATIONS = 72_651
