@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.7.46.10.1 — zero-residual matrix audit hotfix - 2026-06-18
+
+- Treat 183 exact systems with zero mismatched cells as vacuously fully attributed.
+- Preserve canonical alignment and indexed-performance gates when no mismatch identities remain to inspect.
+- Audit Type-50 preservation against the accepted corrected v46.9.6 baseline instead of requiring the historical pre-correction residual rows to reappear.
+- Add a no-replay reanalysis command for completed v46.10 output.
+- No physics or native matrix values changed.
+
 ## 0.6.48.7.46.10 — remaining matrix-construction closure - 2026-06-18
 
 - Added a source-captured matrix-closure preparer for all 183 H/He/Mg systems.

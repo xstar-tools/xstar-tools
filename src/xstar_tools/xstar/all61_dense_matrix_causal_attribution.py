@@ -1,4 +1,4 @@
-"""Indexed all-61 dense-matrix causal attribution for v0.6.48.7.46.10.
+"""Indexed all-61 dense-matrix causal attribution for v0.6.48.7.46.10.1.
 
 The audit consumes the exact source and native contribution streams captured by
 v0.6.48.7.46.9, but indexes those streams once by matrix cell instead of
@@ -24,7 +24,7 @@ from typing import Any, Iterable, Mapping
 
 import numpy as np
 
-RELEASE = "0.6.48.7.46.10"
+RELEASE = "0.6.48.7.46.10.1"
 SCHEMA = "xstar-tools-v0648746931-hydrogen-type53-ieee-equivalence-attribution-v1"
 SUMMARY_NAME = "all61_dense_matrix_causal_attribution_summary.json"
 CELL_NAME = "all61_dense_matrix_causal_cells.csv"
@@ -536,7 +536,7 @@ _HYDROGEN_TYPE53_PHASE_EXPECTED = {
     "final_call4": 8,
 }
 
-# v0.6.48.7.46.10: accept only host/compiler binary64 roundoff.
+# v0.6.48.7.46.10.1: accept only host/compiler binary64 roundoff.
 # A field must be finite, have the same sign, differ by no more than two ULPs,
 # and satisfy the relative guard.  There is deliberately no nonzero absolute
 # tolerance, so a small source value cannot be matched to zero.
@@ -936,13 +936,23 @@ def analyze(
     h53 = _finalize_hydrogen_type53_state(hydrogen_type53_state)
     errors.extend(f"hydrogen_type53:{value}" for value in h53["errors"])
 
-    all_attributed = total_mismatch_cells > 0 and attributed_cells == total_mismatch_cells
     capture_exact = source_system_count == 183 and native_system_count == 183
     reconstruction_exact = source_reconstruction_exact == 183 and native_reconstruction_exact == 183
+    zero_residual_closure = total_mismatch_cells == 0 and capture_exact and reconstruction_exact
+    # A fully closed matrix has no causal rows left to attribute. Treat that
+    # state as vacuously complete rather than requiring a positive mismatch
+    # inventory and a nonzero identity-index workload.
+    all_attributed = zero_residual_closure or attributed_cells == total_mismatch_cells
     baseline_checks = attribution_metrics.get("full_identity_checks_avoided_baseline", 0)
     indexed_checks = attribution_metrics.get("indexed_identity_checks", 0)
     reduction_factor = baseline_checks / max(1, indexed_checks)
-    indexed_performance_exact = baseline_checks > 0 and reduction_factor >= 10.0
+    indexed_performance_exact = zero_residual_closure or (
+        baseline_checks > 0 and reduction_factor >= 10.0
+    )
+    canonical_alignment_exact = zero_residual_closure or (
+        attribution_metrics.get("canonical_record_pairs", 0) > 0
+        and attribution_metrics.get("global_to_local_ion_index_pairs", 0) > 0
+    )
     performance_milestone = (
         capture_exact and reconstruction_exact and all_attributed and indexed_performance_exact
     )
@@ -969,10 +979,7 @@ def analyze(
         "HYDROGEN_TYPE53_CALL4_IEEE_EQUIVALENT": "ACCEPT" if h53["phase_ieee_equivalent"]["call4"] == 136 else "REJECT",
         "HYDROGEN_TYPE53_FINAL_CALL3_IEEE_EQUIVALENT": "ACCEPT" if h53["phase_ieee_equivalent"]["final_call3"] == 8 else "REJECT",
         "HYDROGEN_TYPE53_FINAL_CALL4_IEEE_EQUIVALENT": "ACCEPT" if h53["phase_ieee_equivalent"]["final_call4"] == 8 else "REJECT",
-        "CANONICAL_RECORD_ALIGNMENT": "ACCEPT" if (
-            attribution_metrics.get("canonical_record_pairs", 0) > 0
-            and attribution_metrics.get("global_to_local_ion_index_pairs", 0) > 0
-        ) else "REJECT",
+        "CANONICAL_RECORD_ALIGNMENT": "ACCEPT" if canonical_alignment_exact else "REJECT",
         "V064874692_HYDROGEN_TYPE53_LIVE_RADIATION_AND_CANONICAL_ALIGNMENT": (
             "ACCEPT" if scientific_milestone else "REJECT"
         ),
@@ -1014,6 +1021,8 @@ def analyze(
             "identity_check_reduction_factor": reduction_factor,
             "performance_threshold": 10.0,
             "performance_gate_exact": indexed_performance_exact,
+            "zero_residual_closure": zero_residual_closure,
+            "canonical_alignment_vacuous": zero_residual_closure,
         },
         "elapsed_seconds": time.perf_counter() - started,
         "gates": gates,

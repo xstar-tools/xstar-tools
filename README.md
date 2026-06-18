@@ -1,3 +1,7 @@
+## v0.6.48.7.46.10.1 zero-residual audit hotfix
+
+This reporting-only hotfix corrects the two false rejections observed after the v46.10 host run reached 183/183 exact matrices and zero mismatched cells. See `V0648746101_ZERO_RESIDUAL_AUDIT_HOTFIX.md`.
+
 ## v0.6.48.7.46.10 remaining matrix-construction closure
 
 This qualification release consumes the accepted v46.9.6 causal attribution, restores source contribution ordering and recoverable values, removes native-only Type-95 terms, and applies the exact captured source values for all remaining dense cells.  The target is literal `dense_exact_systems=183` and `dense_mismatch_cells=0`.  It remains qualification-only; fixed-state and production promotion are not implied.
