@@ -1835,6 +1835,20 @@ int command_run_fixed_evaluation(const Options& options) {
     rc = xstar_fixed_state_write_last_diagnostics_v1(
         context, diagnostics_root.c_str(), static_cast<std::uint64_t>(options.evaluation), message.data(), message.size());
     if (rc != 0) { std::cerr << "evaluation diagnostics failed: " << message.data() << "\n"; xstar_fixed_state_context_destroy(context); return rc; }
+    {
+        std::ostringstream diagnostic_name;
+        diagnostic_name << "evaluation_" << std::setw(4) << std::setfill('0') << options.evaluation
+                        << "_thermal_compact_populations.csv";
+        const auto diagnostic_path = diagnostics_root / diagnostic_name.str();
+        if (!std::filesystem::is_regular_file(diagnostic_path)) {
+            std::cerr << "evaluation compact-population diagnostics missing: " << diagnostic_path << "\n";
+            xstar_fixed_state_context_destroy(context);
+            return 8;
+        }
+        std::filesystem::copy_file(
+            diagnostic_path, output_root / "native_thermal_compact_populations.csv",
+            std::filesystem::copy_options::overwrite_existing);
+    }
     const bool live_runtime_state_abi = input.dsec_radiation_energy_ev && input.dsec_bremsa &&
         input.dsec_radiation_bin_count >= 3 && input.continuum_tau_in && input.continuum_tau_out &&
         input.continuum_tau_count > 0;

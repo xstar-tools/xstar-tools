@@ -1,4 +1,4 @@
-"""Sequence-level resumable native replay for v0.6.48.7.46.12.1.2."""
+"""Sequence-level resumable native replay for v0.6.48.7.46.13."""
 from __future__ import annotations
 
 import argparse
@@ -11,7 +11,7 @@ from typing import Any
 
 from .all61_thermal_state_consumption_audit import COMMITTED_NATIVE_FIELD, COMPONENT_FIELDS
 
-RELEASE = "0.6.48.7.46.12.1.2"
+RELEASE = "0.6.48.7.46.13"
 SCHEMA = "xstar-tools-v06487461212-native-replay-resume-manifest-v1"
 MANIFEST_NAME = "v048746121_native_replay_resume_manifest.json"
 PLAN_NAME = "all61_native_replay_resume_plan.tsv"
@@ -64,6 +64,15 @@ def _thermal_values(thermal_closure: Path, sequence: int) -> dict[str, str]:
     return rows[0]
 
 
+def _compact_values(compact_closure: Path, sequence: int) -> list[dict[str, str]]:
+    path = compact_closure / f"sequence_{sequence:04d}_thermal_compact_populations.csv"
+    rows = _read_csv(path)
+    rows.sort(key=lambda row: (int(row["element_z"]), int(row["compact_row"])))
+    if not rows:
+        raise ValueError(f"invalid thermal compact-population closure: {path}")
+    return rows
+
+
 def _plan_rows(source_inputs: Path, trajectory: Path, workspaces: Path) -> list[dict[str, Any]]:
     inputs = _read_csv(source_inputs)
     trajectories = _read_csv(trajectory)
@@ -92,9 +101,13 @@ def validate_evaluation(
     plan: dict[str, Any],
     canonical_closure: Path,
     thermal_closure: Path,
+    compact_closure: Path | None = None,
 ) -> tuple[bool, list[str]]:
     reasons: list[str] = []
-    for name in REQUIRED_EVALUATION_FILES:
+    required_files = list(REQUIRED_EVALUATION_FILES)
+    if compact_closure is not None:
+        required_files.append("native_thermal_compact_populations.csv")
+    for name in required_files:
         path = evaluation_dir / name
         if not path.is_file() or path.stat().st_size == 0:
             reasons.append(f"missing:{name}")
@@ -154,8 +167,11 @@ def validate_evaluation(
         reasons.append("workspace_not_applied")
     if budget.get("thermal_component_closure_applied") != "1":
         reasons.append("thermal_closure_not_applied")
-    if budget.get("thermal_consumed_fixed_state_closure") != "1":
-        reasons.append("fixed_state_not_consumed")
+    if compact_closure is None:
+        if budget.get("thermal_consumed_fixed_state_closure") != "1":
+            reasons.append("fixed_state_not_consumed")
+    elif budget.get("thermal_consumed_compact_population_closure") != "1":
+        reasons.append("compact_population_closure_not_consumed")
 
     exact_checks = [
         ("summary_electron_fraction", summary.get("native_electron_fraction"), scalars["computed_electron_fraction"]),
@@ -184,6 +200,28 @@ def validate_evaluation(
             if len(reasons) >= 25:
                 break
 
+    if compact_closure is not None:
+        expected_rows = _compact_values(compact_closure, sequence)
+        native_rows = _read_csv(evaluation_dir / "native_thermal_compact_populations.csv")
+        native_rows.sort(key=lambda row: (int(row["element_z"]), int(row["compact_row"])))
+        if len(expected_rows) != len(native_rows):
+            reasons.append(f"compact_population_rows:{len(native_rows)}")
+        else:
+            identity_fields = (
+                "element_z", "active_min_stage", "active_max_stage", "compact_row", "ion",
+                "ion_stage", "ion_charge", "superlevel", "is_normalization_row",
+            )
+            for index, (expected, native) in enumerate(zip(expected_rows, native_rows), 1):
+                if any(str(expected[field]) != str(native.get(field, "")) for field in identity_fields):
+                    reasons.append(f"compact_population_topology:{index}")
+                    break
+                if native.get("closure_applied") != "1":
+                    reasons.append(f"compact_population_closure_flag:{index}")
+                    break
+                if not _exact(expected["final_population"], native.get("thermal_population", "nan")):
+                    reasons.append(f"compact_population_value:{index}")
+                    break
+
     population_rows = sum(1 for _ in (evaluation_dir / "native_evaluation_populations.csv").open()) - 1
     spectra_rows = sum(1 for _ in (evaluation_dir / "native_evaluation_spectra.csv").open()) - 1
     if population_rows != 688:
@@ -204,6 +242,7 @@ def build_manifest(
     plan_path: Path | None = None,
     failed_sequence: int | None = None,
     failed_returncode: int | None = None,
+    compact_closure: Path | None = None,
 ) -> dict[str, Any]:
     plans = _plan_rows(source_inputs, trajectory, workspaces)
     statuses: list[dict[str, Any]] = []
@@ -212,7 +251,9 @@ def build_manifest(
     for plan in plans:
         sequence = int(plan["sequence"])
         evaluation_dir = evaluations_dir / f"evaluation_{sequence:04d}"
-        valid, reasons = validate_evaluation(evaluation_dir, plan, canonical_closure, thermal_closure) if evaluation_dir.is_dir() else (False, ["evaluation_directory_absent"])
+        valid, reasons = validate_evaluation(
+            evaluation_dir, plan, canonical_closure, thermal_closure, compact_closure
+        ) if evaluation_dir.is_dir() else (False, ["evaluation_directory_absent"])
         action = "reuse" if valid else "run"
         reusable += int(valid)
         pending += int(not valid)
@@ -250,6 +291,7 @@ def build_manifest(
         "first_pending_sequence": first_pending,
         "failed_sequence": failed_sequence,
         "failed_returncode": failed_returncode,
+        "thermal_compact_population_closure": str(compact_closure) if compact_closure is not None else None,
         "statuses": statuses,
         "qualification_only": True,
         "production_promotion_ready": False,
@@ -266,6 +308,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--evaluations-dir", type=Path, required=True)
     parser.add_argument("--canonical-closure", type=Path, required=True)
     parser.add_argument("--thermal-closure", type=Path, required=True)
+    parser.add_argument("--compact-closure", type=Path)
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--plan", type=Path)
     parser.add_argument("--failed-sequence", type=int)
@@ -284,6 +327,7 @@ def main(argv: list[str] | None = None) -> int:
             args.plan,
             args.failed_sequence,
             args.failed_returncode,
+            compact_closure=args.compact_closure,
         )
     except Exception as exc:
         report = {

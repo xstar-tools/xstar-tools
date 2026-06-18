@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 0.6.48.7.46.13 — source-faithful Thermal compact-population state transport - 2026-06-18
+
+- Added a dedicated 61-sequence Thermal compact-population closure prepared from the v0.6.47.2 element-solve capture.
+- Transports and audits 40,149 binary64 population values: 2,013 Hydrogen, 4,758 Helium, and 33,378 Magnesium values.
+- Preserves absolute ion-stage identity, compact row and superlevel topology, normalization-row placement, and per-sequence FNV-1a population fingerprints.
+- Added a native compact-population loader and fail-closed topology checks for active H/He/Mg element windows.
+- Makes native Thermal consume only the source-faithful compact payload while preserving the accepted 688-row full-level fixed-state product and 18 ion-stage values per evaluation.
+- Emits `native_thermal_compact_populations.csv` per evaluation and an all-61 aggregate for row-level exactness audits.
+- Extends resumable native replay to validate compact topology, values, closure flags, and Thermal fingerprints before reusing an evaluation.
+- Adds a resumable all-61 runner, milestone checker, readiness checker, and exact compact-population closure audit.
+- Retains separate independently computed `computed_*` Thermal values; independent native Thermal parity and production promotion remain separate downstream gates.
+
 ## 0.6.48.7.46.12.1.2 - 2026-06-18
 
 - Decouple resumable native replay acceptance from historical standalone-summary `reference_charge_residual` and `reference_hmctot` fields.

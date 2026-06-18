@@ -1,4 +1,4 @@
-"""Prepare and audit v0.6.48.7.46.12.1.2 all-61 Thermal component closure.
+"""Prepare and audit v0.6.48.7.46.13 all-61 Thermal component closure.
 
 This is a qualification-only source-captured boundary.  It does not replace the
 native evaluation: matrix construction, dense solves, state consumption, and
@@ -17,7 +17,7 @@ from typing import Any
 
 from .v0472_all61_thermal_state_capture import BUDGET_NAME
 
-RELEASE = "0.6.48.7.46.12.1.2"
+RELEASE = "0.6.48.7.46.13"
 SCHEMA = "xstar-tools-v064874612-all61-thermal-component-parity-closure-v1"
 REPORT_NAME = "v04874612_thermal_component_closure_report.json"
 OVERRIDE_DIRNAME = "v04874612_thermal_component_closure"
@@ -134,6 +134,8 @@ def audit(audit_output: Path, preparation_report: Path | None = None) -> dict[st
         "PYTHON_CALLBACKS_ZERO",
         "V06488_THERMAL_PARITY",
     ]
+    if comparison_gates.get("THERMAL_COMPACT_POPULATION_CLOSURE_APPLIED_61") != "NOT_APPLICABLE_PRE_V064874613":
+        required.append("THERMAL_COMPACT_POPULATION_CLOSURE_APPLIED_61")
     gates = {name: "ACCEPT" if comparison_gates.get(name) == "ACCEPT" else "REJECT" for name in required}
     if preparation is not None:
         gates["THERMAL_CLOSURE_PREPARATION_ACCEPTED"] = "ACCEPT" if preparation.get("result") == "ACCEPT" else "REJECT"

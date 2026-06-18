@@ -23,7 +23,7 @@ from typing import Any
 from .all61_native_replay_aggregate import THERMAL_LEDGER_NAME
 from .v0472_all61_thermal_state_capture import BUDGET_NAME
 
-RELEASE = "0.6.48.7.46.12.1.2"
+RELEASE = "0.6.48.7.46.13"
 SCHEMA = "xstar-tools-v064874612-all61-thermal-state-consumption-audit-v1"
 SUMMARY_NAME = "v04874612_all61_thermal_state_consumption_summary.json"
 COMPONENT_DIFF_NAME = "v04874612_all61_thermal_component_comparison.csv"
@@ -143,6 +143,9 @@ def compare(source_capture: Path, native_run: Path, output: Path) -> dict[str, A
     source_by_sequence = {int(row["sequence"]): row for row in source_rows}
     native_by_sequence = {int(row["sequence"]): row for row in native_rows}
     native_summary = json.loads(native_summary_path.read_text())
+    compact_transport_present = any(
+        "thermal_consumed_compact_population_closure" in row for row in native_rows
+    )
     output.mkdir(parents=True, exist_ok=True)
 
     errors: list[str] = []
@@ -157,6 +160,7 @@ def compare(source_capture: Path, native_run: Path, output: Path) -> dict[str, A
     population_exact = 0
     closure_applied = 0
     fixed_state_consumed = 0
+    compact_population_consumed = 0
     identity_exact = 0
     for sequence in range(1, 62):
         source = source_by_sequence.get(sequence)
@@ -204,9 +208,17 @@ def compare(source_capture: Path, native_run: Path, output: Path) -> dict[str, A
         })
         closure_ok = native.get("thermal_component_closure_applied") == "1"
         consumed_ok = native.get("thermal_consumed_fixed_state_closure") == "1"
+        compact_consumed_ok = native.get("thermal_consumed_compact_population_closure") == "1"
         closure_applied += int(closure_ok)
         fixed_state_consumed += int(consumed_ok)
-        for field, ok in (("thermal_component_closure_applied", closure_ok), ("thermal_consumed_fixed_state_closure", consumed_ok)):
+        compact_population_consumed += int(compact_consumed_ok)
+        closure_state_fields = [
+            ("thermal_component_closure_applied", closure_ok),
+            ("thermal_consumed_fixed_state_closure", consumed_ok),
+        ]
+        if compact_transport_present:
+            closure_state_fields.append(("thermal_consumed_compact_population_closure", compact_consumed_ok))
+        for field, ok in closure_state_fields:
             state_rows.append({
                 "sequence": sequence, "kind": source.get("kind", ""), "call_index": source.get("call_index", ""),
                 "evaluation_index": source.get("evaluation_index", ""), "field": field,
@@ -273,7 +285,9 @@ def compare(source_capture: Path, native_run: Path, output: Path) -> dict[str, A
     all61 = len(source_by_sequence) == len(native_by_sequence) == int(native_summary.get("total_evaluations", 0)) == 61
     callbacks_zero = int(native_summary.get("python_callbacks", -1)) == 0
     state_ok = state_exact == state_total == 61 * len(STATE_FIELDS) and identity_exact == 61
-    populations_ok = population_exact == 61 and fixed_state_consumed == 61
+    populations_ok = population_exact == 61 and (
+        compact_population_consumed == 61 if compact_transport_present else fixed_state_consumed == 61
+    )
     component_groups_ok = {
         name: counts["exact"] == counts["total"] == 61 * len(GROUP_FIELDS[name])
         for name, counts in group_counts.items()
@@ -291,6 +305,10 @@ def compare(source_capture: Path, native_run: Path, output: Path) -> dict[str, A
         "ALL_61_HMCTOT_EXACT": "ACCEPT" if component_groups_ok["RESIDUAL"] else "REJECT",
         "ALL_61_THERMAL_ELCTER_RESIDUALS_EXACT": "ACCEPT" if component_groups_ok["ELCTER_RESIDUAL"] else "REJECT",
         "THERMAL_COMPONENT_CLOSURE_APPLIED_61": "ACCEPT" if closure_applied == 61 else "REJECT",
+        "THERMAL_COMPACT_POPULATION_CLOSURE_APPLIED_61": (
+            "ACCEPT" if compact_population_consumed == 61 else
+            "NOT_APPLICABLE_PRE_V064874613" if not compact_transport_present else "REJECT"
+        ),
         "PYTHON_CALLBACKS_ZERO": "ACCEPT" if callbacks_zero else "REJECT",
         "V06488_THERMAL_PARITY": "ACCEPT" if all61 and state_ok and populations_ok and committed_ok and closure_applied == 61 and callbacks_zero else "REJECT",
         "INDEPENDENT_NATIVE_THERMAL_PARITY": "ACCEPT" if independent_ok else "NOT_ACCEPTED",
@@ -303,8 +321,11 @@ def compare(source_capture: Path, native_run: Path, output: Path) -> dict[str, A
         "ALL_61_THERMAL_INPUT_STATE_FINGERPRINTS_EXACT", "ALL_61_THERMAL_POPULATION_STATE_EXACT",
         "ALL_61_H_HE_MG_COMPONENTS_EXACT", "ALL_61_CONTINUUM_COMPONENTS_EXACT",
         "ALL_61_THERMAL_TOTALS_EXACT", "ALL_61_HMCTOT_EXACT", "ALL_61_THERMAL_ELCTER_RESIDUALS_EXACT",
-        "THERMAL_COMPONENT_CLOSURE_APPLIED_61", "PYTHON_CALLBACKS_ZERO", "V06488_THERMAL_PARITY",
+        "THERMAL_COMPONENT_CLOSURE_APPLIED_61",
+        "PYTHON_CALLBACKS_ZERO", "V06488_THERMAL_PARITY",
     ]
+    if compact_transport_present:
+        required_gate_names.append("THERMAL_COMPACT_POPULATION_CLOSURE_APPLIED_61")
     result = {
         "schema": SCHEMA,
         "release": RELEASE,
@@ -318,6 +339,7 @@ def compare(source_capture: Path, native_run: Path, output: Path) -> dict[str, A
         "thermal_population_states_exact": population_exact,
         "thermal_component_closure_applied": closure_applied,
         "thermal_fixed_state_consumed": fixed_state_consumed,
+        "thermal_compact_population_consumed": compact_population_consumed,
         "thermal_component_values_exact": committed_exact,
         "thermal_component_values_total": component_total,
         "native_computed_values_exact": computed_exact,

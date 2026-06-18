@@ -667,6 +667,133 @@ FixedStateClosureData load_fixed_state_closure_data() {
     return out;
 }
 
+struct ThermalCompactPopulationRow {
+    int active_min_stage = 1;
+    int active_max_stage = 1;
+    int compact_row = 0;
+    int ion = 0;
+    int ion_stage = 0;
+    int ion_charge = 0;
+    int superlevel = 0;
+    bool normalization_row = false;
+    double final_population = 0.0;
+};
+
+struct ThermalCompactPopulationClosureData {
+    int sequence = 0;
+    std::unordered_map<int, std::vector<ThermalCompactPopulationRow>> rows_by_element_z;
+};
+
+std::filesystem::path thermal_compact_population_closure_file() {
+    const char* root_value = std::getenv("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE_DIR");
+    if (!root_value || !*root_value) {
+        throw std::runtime_error("thermal compact-population closure requires XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE_DIR");
+    }
+    const int sequence = required_environment_integer("XSTAR_QUALIFICATION_SOURCE_SEQUENCE");
+    std::ostringstream name;
+    name << "sequence_" << std::setw(4) << std::setfill('0') << sequence
+         << "_thermal_compact_populations.csv";
+    return std::filesystem::path(root_value) / name.str();
+}
+
+ThermalCompactPopulationClosureData load_thermal_compact_population_closure_data() {
+    ThermalCompactPopulationClosureData out;
+    out.sequence = required_environment_integer("XSTAR_QUALIFICATION_SOURCE_SEQUENCE");
+    const auto path = thermal_compact_population_closure_file();
+    std::ifstream input(path);
+    if (!input) throw std::runtime_error("cannot open thermal compact-population closure file: " + path.string());
+    std::string line;
+    if (!std::getline(input, line)) throw std::runtime_error("thermal compact-population closure file is empty");
+    const auto header = split_csv(line);
+    std::unordered_map<std::string, std::size_t> column;
+    for (std::size_t i = 0; i < header.size(); ++i) column.emplace(header[i], i);
+    const std::array<const char*, 11> required = {{
+        "sequence", "element_z", "active_min_stage", "active_max_stage", "compact_row",
+        "ion", "ion_stage", "ion_charge", "superlevel", "is_normalization_row",
+        "final_population"
+    }};
+    for (const char* name : required) {
+        if (!column.count(name)) throw std::runtime_error(std::string("thermal compact-population closure missing column: ") + name);
+    }
+    while (std::getline(input, line)) {
+        if (trim(line).empty()) continue;
+        const auto values = split_csv(line);
+        if (values.size() != header.size()) throw std::runtime_error("thermal compact-population closure row width mismatch");
+        const int sequence = parse_number<int>(values[column.at("sequence")], "sequence");
+        if (sequence != out.sequence) throw std::runtime_error("thermal compact-population closure sequence mismatch");
+        const int z = parse_number<int>(values[column.at("element_z")], "element_z");
+        if (z != 1 && z != 2 && z != 12) throw std::runtime_error("thermal compact-population closure element mismatch");
+        ThermalCompactPopulationRow row;
+        row.active_min_stage = parse_number<int>(values[column.at("active_min_stage")], "active_min_stage");
+        row.active_max_stage = parse_number<int>(values[column.at("active_max_stage")], "active_max_stage");
+        row.compact_row = parse_number<int>(values[column.at("compact_row")], "compact_row");
+        row.ion = parse_number<int>(values[column.at("ion")], "ion");
+        row.ion_stage = parse_number<int>(values[column.at("ion_stage")], "ion_stage");
+        row.ion_charge = parse_number<int>(values[column.at("ion_charge")], "ion_charge");
+        row.superlevel = parse_number<int>(values[column.at("superlevel")], "superlevel");
+        row.normalization_row = parse_number<int>(values[column.at("is_normalization_row")], "is_normalization_row") != 0;
+        row.final_population = parse_number<double>(values[column.at("final_population")], "final_population");
+        if (!std::isfinite(row.final_population) || row.final_population < 0.0) {
+            throw std::runtime_error("invalid thermal compact-population closure value");
+        }
+        out.rows_by_element_z[z].push_back(row);
+    }
+    for (const int z : {1, 2, 12}) {
+        auto it = out.rows_by_element_z.find(z);
+        if (it == out.rows_by_element_z.end() || it->second.empty()) {
+            throw std::runtime_error("thermal compact-population closure missing active element");
+        }
+        auto& rows = it->second;
+        std::sort(rows.begin(), rows.end(), [](const auto& a, const auto& b) { return a.compact_row < b.compact_row; });
+        const int min_stage = rows.front().active_min_stage;
+        const int max_stage = rows.front().active_max_stage;
+        for (std::size_t i = 0; i < rows.size(); ++i) {
+            const auto& row = rows[i];
+            if (row.compact_row != static_cast<int>(i) + 1 ||
+                row.active_min_stage != min_stage || row.active_max_stage != max_stage) {
+                throw std::runtime_error("thermal compact-population closure row sequence mismatch");
+            }
+            if (row.ion_stage != row.ion || row.ion < 1 || row.ion > z) {
+                throw std::runtime_error("thermal compact-population closure ion counter mismatch");
+            }
+            if (row.normalization_row != (i + 1 == rows.size())) {
+                throw std::runtime_error("thermal compact-population closure normalization-row mismatch");
+            }
+        }
+    }
+    return out;
+}
+
+std::vector<double> thermal_compact_population_values_for_element(
+    const ThermalCompactPopulationClosureData& closure,
+    const ActiveElementView& active
+) {
+    const int z = active.element.element_z;
+    const auto found = closure.rows_by_element_z.find(z);
+    if (found == closure.rows_by_element_z.end()) {
+        throw std::runtime_error("thermal compact-population closure missing element payload");
+    }
+    const auto& rows = found->second;
+    if (rows.size() != active.element.rows.size()) {
+        throw std::runtime_error("thermal compact-population closure row count mismatch");
+    }
+    std::vector<double> values;
+    values.reserve(rows.size());
+    for (std::size_t i = 0; i < rows.size(); ++i) {
+        const auto& source = rows[i];
+        const auto& native = active.element.rows[i];
+        const int expected_compact_ion = source.ion - active.min_stage + 1;
+        if (source.compact_row != native.row || expected_compact_ion != native.ion ||
+            source.ion_charge != native.ion_charge || source.superlevel != native.superlevel ||
+            source.active_min_stage != active.min_stage || source.active_max_stage != active.max_stage ||
+            source.normalization_row != (native.row == active.element.normalization_row)) {
+            throw std::runtime_error("thermal compact-population closure topology mismatch");
+        }
+        values.push_back(source.final_population);
+    }
+    return values;
+}
+
 struct ThermalComponentClosureData {
     std::array<double,4> h{{0.0,0.0,0.0,0.0}};
     std::array<double,4> he{{0.0,0.0,0.0,0.0}};
@@ -956,6 +1083,8 @@ struct NativeElementDiagnostic {
     std::vector<double> active_initial_populations;
     std::vector<double> active_final_outer_start_populations;
     std::vector<double> active_final_populations;
+    std::vector<double> thermal_compact_populations;
+    bool thermal_compact_population_closure_applied = false;
     std::vector<double> dense_matrix;
     std::vector<double> heating_matrix;
     std::vector<double> heating_matrix2;
@@ -1149,6 +1278,7 @@ struct xstar_fixed_state_context_impl {
     std::array<double,4> last_computed_helium_type53_budget{{0.0,0.0,0.0,0.0}};
     bool last_thermal_component_closure = false;
     bool last_thermal_consumed_fixed_state_closure = false;
+    bool last_thermal_consumed_compact_population_closure = false;
 };
 
 std::string join_path(const std::string& base, const std::string& name) {
@@ -2537,7 +2667,7 @@ bool evaluate_type53_source_integral(
     contribution.ans6 *= (std::abs(contribution.ans4) - energy_difference * kErgPerEv * contribution.ans1) / den6;
     contribution.ans5 *= (std::abs(contribution.ans3) - energy_difference * kErgPerEv * contribution.ans2) / den5;
 
-    // v0.6.48.7.46.12.1.2 qualification-only IEEE closure.
+    // v0.6.48.7.46.13 qualification-only IEEE closure.
     // v0.6.48.7.46.9.4.2 qualification-only IEEE closure compatibility marker.
     // The v0.6.47.2
     // Python reference evaluates the same source expressions one operation at
@@ -4111,6 +4241,7 @@ int run_impl(
     ctx.last_computed_helium_type53_budget = {{0.0,0.0,0.0,0.0}};
     ctx.last_thermal_component_closure = false;
     ctx.last_thermal_consumed_fixed_state_closure = false;
+    ctx.last_thermal_consumed_compact_population_closure = false;
     ctx.last_thermal_population_count = 0;
     ctx.last_thermal_population_fingerprint = 0;
     ctx.last_committed_population_count = 0;
@@ -4158,6 +4289,8 @@ int run_impl(
         environment_flag("XSTAR_QUALIFICATION_FIXED_STATE_PARITY_CLOSURE");
     const bool thermal_component_parity_closure =
         environment_flag("XSTAR_QUALIFICATION_THERMAL_COMPONENT_PARITY_CLOSURE");
+    const bool thermal_compact_population_closure =
+        environment_flag("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE");
     const bool helium_source_insertion_order =
         environment_flag("XSTAR_QUALIFICATION_HELIUM_SOURCE_INSERTION_ORDER");
     const bool type53_two_state_promotion = environment_flag("XSTAR_QUALIFICATION_TYPE53_TWO_STATE_PROMOTION");
@@ -4207,6 +4340,18 @@ int run_impl(
         const char* closure_dir = std::getenv("XSTAR_QUALIFICATION_THERMAL_COMPONENT_PARITY_CLOSURE_DIR");
         if (!closure_dir || !*closure_dir) {
             throw std::runtime_error("thermal component parity closure directory is missing");
+        }
+    }
+    if (thermal_compact_population_closure && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
+        throw std::runtime_error("thermal compact-population closure requires XSTAR_QUALIFICATION_REPLACEMENT=1");
+    }
+    if (thermal_compact_population_closure && !thermal_component_parity_closure) {
+        throw std::runtime_error("thermal compact-population closure requires thermal component parity closure");
+    }
+    if (thermal_compact_population_closure) {
+        const char* closure_dir = std::getenv("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE_DIR");
+        if (!closure_dir || !*closure_dir) {
+            throw std::runtime_error("thermal compact-population closure directory is missing");
         }
     }
     if (helium_source_insertion_order && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
@@ -4278,6 +4423,10 @@ int run_impl(
     if (fixed_state_parity_closure) fixed_state_closure_data = load_fixed_state_closure_data();
     std::optional<ThermalComponentClosureData> thermal_component_closure_data;
     if (thermal_component_parity_closure) thermal_component_closure_data = load_thermal_component_closure_data();
+    std::optional<ThermalCompactPopulationClosureData> thermal_compact_population_closure_data;
+    if (thermal_compact_population_closure) {
+        thermal_compact_population_closure_data = load_thermal_compact_population_closure_data();
+    }
 
     const auto traversal_start = clock_type::now();
     for (const auto& element : ctx.program.elements) {
@@ -4415,7 +4564,13 @@ int run_impl(
         // secondary totals remain diagnostic state and must not be folded into
         // the controller residual.
         std::vector<double> thermal_populations = buffers.populations;
-        if (thermal_component_closure_data.has_value()) {
+        bool element_thermal_compact_closure_applied = false;
+        if (thermal_compact_population_closure_data.has_value()) {
+            thermal_populations = thermal_compact_population_values_for_element(
+                *thermal_compact_population_closure_data, active);
+            element_thermal_compact_closure_applied = true;
+            ctx.last_thermal_consumed_compact_population_closure = true;
+        } else if (thermal_component_closure_data.has_value()) {
             const auto& closure = *fixed_state_closure_data;
             for (std::size_t row = 0; row < thermal_populations.size(); ++row) {
                 const std::size_t full_index = fixed_full_population_offset +
@@ -4563,6 +4718,8 @@ int run_impl(
         if (!buffers.populations.empty() && continuum_stage >= 1) {
             element_diagnostic.final_stage_fractions[static_cast<std::size_t>(continuum_stage - 1)] += buffers.populations.back();
         }
+        element_diagnostic.thermal_compact_populations = thermal_populations;
+        element_diagnostic.thermal_compact_population_closure_applied = element_thermal_compact_closure_applied;
         element_diagnostic.heating = element_heating;
         element_diagnostic.cooling = element_cooling;
         element_diagnostic.heating2 = element_heating2;
@@ -5090,7 +5247,7 @@ int xstar_fixed_state_write_last_thermal_budget_v1(
                    "input_radiation_count,input_radiation_fingerprint,input_dsec_radiation_count,input_dsec_radiation_fingerprint,input_bremsa_count,input_bremsa_fingerprint,"
                    "input_tau_count,input_tau_in_fingerprint,input_tau_out_fingerprint,input_global_level_count,input_xilevg_fingerprint,input_bilevg_fingerprint,input_rnisg_fingerprint,"
                    "thermal_population_count,thermal_population_fingerprint,committed_population_count,committed_population_fingerprint,"
-                   "thermal_consumed_fixed_state_closure,thermal_component_closure_applied,"
+                   "thermal_consumed_fixed_state_closure,thermal_consumed_compact_population_closure,thermal_component_closure_applied,"
                    "computed_h_heating,computed_h_cooling,computed_h_heating2,computed_h_cooling2,h_heating,h_cooling,h_heating2,h_cooling2,"
                    "computed_he_heating,computed_he_cooling,computed_he_heating2,computed_he_cooling2,he_heating,he_cooling,he_heating2,he_cooling2,"
                    "computed_he_type53_heating,computed_he_type53_cooling,computed_he_type53_heating2,computed_he_type53_cooling2,he_type53_heating,he_type53_cooling,he_type53_heating2,he_type53_cooling2,"
@@ -5136,7 +5293,9 @@ int xstar_fixed_state_write_last_thermal_budget_v1(
             << context->last_input_global_level_count << ',' << hex_u64(context->last_input_xilevg_fingerprint) << ',' << hex_u64(context->last_input_bilevg_fingerprint) << ',' << hex_u64(context->last_input_rnisg_fingerprint) << ','
             << context->last_thermal_population_count << ',' << hex_u64(context->last_thermal_population_fingerprint) << ','
             << context->last_committed_population_count << ',' << hex_u64(context->last_committed_population_fingerprint) << ','
-            << (context->last_thermal_consumed_fixed_state_closure ? 1 : 0) << ',' << (context->last_thermal_component_closure ? 1 : 0) << ','
+            << (context->last_thermal_consumed_fixed_state_closure ? 1 : 0) << ','
+            << (context->last_thermal_consumed_compact_population_closure ? 1 : 0) << ','
+            << (context->last_thermal_component_closure ? 1 : 0) << ','
             << ch[0] << ',' << ch[1] << ',' << ch[2] << ',' << ch[3] << ',' << h[0] << ',' << h[1] << ',' << h[2] << ',' << h[3] << ','
             << che[0] << ',' << che[1] << ',' << che[2] << ',' << che[3] << ',' << he[0] << ',' << he[1] << ',' << he[2] << ',' << he[3] << ','
             << che53[0] << ',' << che53[1] << ',' << che53[2] << ',' << che53[3] << ',' << he53[0] << ',' << he53[1] << ',' << he53[2] << ',' << he53[3] << ','
@@ -5432,13 +5591,19 @@ int xstar_fixed_state_write_last_diagnostics_v1(
         std::ofstream element_file(root / (stem + "_elements.csv"));
         std::ofstream ion_file(root / (stem + "_ion_balance.csv"));
         std::ofstream population_file(root / (stem + "_populations.csv"));
-        if (!element_file || !ion_file || !population_file) throw std::runtime_error("cannot create element diagnostics CSV files");
+        std::ofstream thermal_population_file(root / (stem + "_thermal_compact_populations.csv"));
+        if (!element_file || !ion_file || !population_file || !thermal_population_file) {
+            throw std::runtime_error("cannot create element diagnostics CSV files");
+        }
         element_file << "evaluation_ordinal,element_index,element_z,abundance,active_min_stage,active_max_stage,active_full_row_start,active_full_row_end,heating,cooling,heating2,cooling2,normalization,normalization_error,max_relative_row_residual,records_constructed,terms_constructed\n";
         ion_file << "evaluation_ordinal,element_index,element_z,stage,ion_charge,preliminary_ionization,preliminary_recombination,preliminary_fraction,final_fraction,active_stage\n";
         population_file << "evaluation_ordinal,global_population_row,element_index,element_z,element_row,superlevel,ion,ion_charge,energy_ev,statistical_weight,initial_population,final_population,active_row\n";
+        thermal_population_file << "sequence,kind,call_index,evaluation_index,element_index,element_z,active_min_stage,active_max_stage,compact_row,ion,ion_stage,ion_charge,superlevel,is_normalization_row,thermal_population,closure_applied\n";
         element_file << std::setprecision(17);
         ion_file << std::setprecision(17);
         population_file << std::setprecision(17);
+        thermal_population_file << std::setprecision(17);
+        const int source_sequence = required_environment_integer("XSTAR_QUALIFICATION_SOURCE_SEQUENCE");
         std::size_t global_offset = 0;
         for (const auto& diagnostic : context->last_element_diagnostics) {
             const auto& source = context->program.elements.at(static_cast<std::size_t>(diagnostic.element_index));
@@ -5456,6 +5621,20 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                 const bool active_stage = stage >= diagnostic.active.min_stage && stage <= diagnostic.active.max_stage + 1;
                 ion_file << evaluation_ordinal << ',' << diagnostic.element_index << ',' << diagnostic.element_z << ',' << stage << ',' << stage-1 << ','
                          << ionization << ',' << recombination << ',' << preliminary_fraction << ',' << final_fraction << ',' << (active_stage ? 1 : 0) << '\n';
+            }
+            if (diagnostic.thermal_compact_populations.size() != diagnostic.active.element.rows.size()) {
+                throw std::runtime_error("thermal compact-population diagnostic dimension mismatch");
+            }
+            for (std::size_t compact_index = 0; compact_index < diagnostic.active.element.rows.size(); ++compact_index) {
+                const auto& row = diagnostic.active.element.rows[compact_index];
+                const int absolute_ion_stage = row.ion + diagnostic.active.min_stage - 1;
+                thermal_population_file << source_sequence << ",replay,0,0,"
+                    << diagnostic.element_index << ',' << diagnostic.element_z << ','
+                    << diagnostic.active.min_stage << ',' << diagnostic.active.max_stage << ','
+                    << row.row << ',' << absolute_ion_stage << ',' << absolute_ion_stage << ',' << row.ion_charge << ','
+                    << row.superlevel << ',' << (row.row == diagnostic.active.element.normalization_row ? 1 : 0) << ','
+                    << diagnostic.thermal_compact_populations[compact_index] << ','
+                    << (diagnostic.thermal_compact_population_closure_applied ? 1 : 0) << '\n';
             }
             for (std::size_t row_index=0; row_index<source.rows.size(); ++row_index) {
                 const auto& row = source.rows[row_index];

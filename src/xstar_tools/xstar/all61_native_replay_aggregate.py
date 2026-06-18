@@ -1,4 +1,4 @@
-"""Aggregate 61 independent run-fixed-evaluation outputs for v0.6.48.7.46.12.1.2."""
+"""Aggregate 61 independent run-fixed-evaluation outputs for v0.6.48.7.46.13."""
 from __future__ import annotations
 
 import argparse
@@ -7,9 +7,10 @@ import json
 from pathlib import Path
 from typing import Any
 
-RELEASE = "0.6.48.7.46.12.1.2"
+RELEASE = "0.6.48.7.46.13"
 SCHEMA = "xstar-tools-v064874612-all61-native-replay-aggregate-v1"
 THERMAL_LEDGER_NAME = "native_all61_thermal_budget.csv"
+THERMAL_COMPACT_POPULATION_NAME = "native_all61_thermal_compact_populations.csv"
 
 
 def _read_csv(path: Path) -> list[dict[str, str]]:
@@ -25,13 +26,15 @@ def _write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, Any]]) ->
         writer.writerows(rows)
 
 
-def aggregate(source_inputs: Path, evaluations_dir: Path, output: Path) -> dict[str, Any]:
+def aggregate(source_inputs: Path, evaluations_dir: Path, output: Path, *, require_compact_populations: bool = False) -> dict[str, Any]:
     output.mkdir(parents=True, exist_ok=True)
     source = _read_csv(source_inputs)
     source.sort(key=lambda row: int(row["sequence"]))
     trajectory_rows: list[dict[str, Any]] = []
     thermal_rows: list[dict[str, Any]] = []
     thermal_fields: list[str] | None = None
+    compact_population_rows: list[dict[str, Any]] = []
+    compact_population_fields: list[str] | None = None
     callbacks = records = elements = 0
     errors: list[str] = []
     trajectory_fields = [
@@ -44,7 +47,11 @@ def aggregate(source_inputs: Path, evaluations_dir: Path, output: Path) -> dict[
         state_path = root / "native_evaluation.csv"
         summary_path = root / "native_evaluation_summary.json"
         thermal_path = root / "native_thermal_budget.csv"
-        missing = [str(path.name) for path in (state_path, summary_path, thermal_path) if not path.is_file()]
+        compact_population_path = root / "native_thermal_compact_populations.csv"
+        required_paths = [state_path, summary_path, thermal_path]
+        if require_compact_populations:
+            required_paths.append(compact_population_path)
+        missing = [str(path.name) for path in required_paths if not path.is_file()]
         if missing:
             errors.append(f"evaluation_{sequence:04d}:missing:{','.join(missing)}")
             continue
@@ -89,11 +96,33 @@ def aggregate(source_inputs: Path, evaluations_dir: Path, output: Path) -> dict[
             errors.append(f"evaluation_{sequence:04d}:thermal_schema_mismatch")
             continue
         thermal_rows.append(ledger)
+        if compact_population_path.is_file():
+            compact_rows = _read_csv(compact_population_path)
+            for compact in compact_rows:
+                compact.update({
+                    "sequence": str(sequence),
+                    "kind": kind,
+                    "call_index": str(call_index),
+                    "evaluation_index": str(evaluation_index),
+                })
+                if compact_population_fields is None:
+                    compact_population_fields = list(compact.keys())
+                elif list(compact.keys()) != compact_population_fields:
+                    errors.append(f"evaluation_{sequence:04d}:compact_population_schema_mismatch")
+                    break
+                compact_population_rows.append(compact)
 
     _write_csv(output / "native_dsec_trajectory.csv", trajectory_fields, trajectory_rows)
     if thermal_fields is None:
         thermal_fields = ["sequence", "kind", "call_index", "evaluation_index"]
     _write_csv(output / THERMAL_LEDGER_NAME, thermal_fields, thermal_rows)
+    if compact_population_fields is None:
+        compact_population_fields = [
+            "sequence", "kind", "call_index", "evaluation_index", "element_index", "element_z",
+            "active_min_stage", "active_max_stage", "compact_row", "ion", "ion_stage",
+            "ion_charge", "superlevel", "is_normalization_row", "thermal_population", "closure_applied",
+        ]
+    _write_csv(output / THERMAL_COMPACT_POPULATION_NAME, compact_population_fields, compact_population_rows)
     sequences = [int(row["sequence"]) for row in trajectory_rows]
     thermal_sequences = [int(row["sequence"]) for row in thermal_rows]
     canonical_inventory = sequences == list(range(1, 62)) and thermal_sequences == list(range(1, 62))
@@ -103,6 +132,8 @@ def aggregate(source_inputs: Path, evaluations_dir: Path, output: Path) -> dict[
         "trajectory_mode": "all61_independent_reference_input_state_qualification",
         "total_evaluations": len(trajectory_rows),
         "thermal_ledger_rows": len(thermal_rows),
+        "thermal_compact_population_rows": len(compact_population_rows),
+        "thermal_compact_population_required": require_compact_populations,
         "canonical_sequence_inventory": canonical_inventory,
         "python_callbacks": callbacks,
         "records_evaluated": records,
@@ -111,7 +142,8 @@ def aggregate(source_inputs: Path, evaluations_dir: Path, output: Path) -> dict[
         "qualification_only": True,
         "production_promotion_ready": False,
     }
-    summary["result"] = "ACCEPT" if len(trajectory_rows) == len(thermal_rows) == 61 and callbacks == 0 and canonical_inventory and not errors else "REJECT"
+    compact_ok = (not require_compact_populations) or len(compact_population_rows) == 40149
+    summary["result"] = "ACCEPT" if len(trajectory_rows) == len(thermal_rows) == 61 and compact_ok and callbacks == 0 and canonical_inventory and not errors else "REJECT"
     (output / "native_dsec_summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
     return summary
 
@@ -121,9 +153,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--source-inputs", type=Path, required=True)
     parser.add_argument("--evaluations-dir", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--require-compact-populations", action="store_true")
     args = parser.parse_args(argv)
     try:
-        result = aggregate(args.source_inputs, args.evaluations_dir, args.output)
+        result = aggregate(
+            args.source_inputs, args.evaluations_dir, args.output,
+            require_compact_populations=args.require_compact_populations,
+        )
     except Exception as exc:
         result = {
             "schema": SCHEMA, "release": RELEASE, "result": "REJECT", "errors": [str(exc)],

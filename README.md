@@ -1,6 +1,16 @@
-## Current release: 0.6.48.7.46.12.1.2
+## Current release: 0.6.48.7.46.13
 
-This qualification hotfix completes the all-61 Thermal audit after native replay. It decouples resume acceptance from the historical `reference_charge_residual` and `reference_hmctot` metadata embedded in final-call summaries, while retaining exact validation of native results against the canonical fixed-state/Thermal closures. All 61 evaluations are reusable; the recovered scientific audit has 2,440/2,440 committed Thermal values exact, but rejects on 0/61 compact-population fingerprints and only 1/2,440 independently computed native Thermal values exact. No physics or ABI semantics changed. See `V06487461212_FINAL_REFERENCE_DECOUPLING_HOTFIX.md`.
+This qualification release transports the exact compact H/He/Mg population state consumed by the source Thermal path. It prepares 40,149 source-faithful binary64 values across all 61 evaluations, validates their compact topology and normalization rows, and supplies them to native Thermal independently of the accepted 688-row fixed-state product. Each native evaluation emits a compact-state audit file, and resumable replay validates every row and fingerprint before reuse. The committed Thermal ledger remains distinct from independently computed `computed_*` values; controller, product/FITS, and production-promotion gates remain downstream. See `V064874613_SOURCE_FAITHFUL_THERMAL_COMPACT_POPULATION_STATE_TRANSPORT.md`.
+
+Run the all-61 qualification from an accepted v0.6.48.7.46.12.1.2 output:
+
+```bash
+./run_v04874613_thermal_compact_population_state_transport.sh \
+  ../xstar/data/atdb.fits \
+  ../xstar_tools-0.6.48.7.46.12.1.2/v04874612_all61_thermal_state_consumption \
+  v04874613_thermal_compact_population_state_transport \
+  10
+```
 
 ## v0.6.48.7.46.11.1 Thermal-readiness vocabulary hotfix
 
