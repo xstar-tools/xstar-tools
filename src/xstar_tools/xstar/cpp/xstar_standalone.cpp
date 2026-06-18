@@ -1848,6 +1848,18 @@ int command_run_fixed_evaluation(const Options& options) {
         std::filesystem::copy_file(
             diagnostic_path, output_root / "native_thermal_compact_populations.csv",
             std::filesystem::copy_options::overwrite_existing);
+        std::ostringstream diagonal_name;
+        diagonal_name << "evaluation_" << std::setw(4) << std::setfill('0') << options.evaluation
+                      << "_thermal_diagonal_ledger.csv";
+        const auto diagonal_path = diagnostics_root / diagonal_name.str();
+        if (!std::filesystem::is_regular_file(diagonal_path)) {
+            std::cerr << "evaluation thermal diagonal diagnostics missing: " << diagonal_path << "\n";
+            xstar_fixed_state_context_destroy(context);
+            return 8;
+        }
+        std::filesystem::copy_file(
+            diagonal_path, output_root / "native_thermal_diagonal_ledger.csv",
+            std::filesystem::copy_options::overwrite_existing);
     }
     const bool live_runtime_state_abi = input.dsec_radiation_energy_ev && input.dsec_bremsa &&
         input.dsec_radiation_bin_count >= 3 && input.continuum_tau_in && input.continuum_tau_out &&

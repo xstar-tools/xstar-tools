@@ -684,6 +684,32 @@ struct ThermalCompactPopulationClosureData {
     std::unordered_map<int, std::vector<ThermalCompactPopulationRow>> rows_by_element_z;
 };
 
+struct ThermalDiagonalDiagnostic {
+    int element_z = 0;
+    int active_min_stage = 1;
+    int active_max_stage = 1;
+    std::int64_t source_order_index = 0;
+    std::int64_t source_position = 0;
+    std::int64_t record = 0;
+    int data_type = 0;
+    int rate_type = 0;
+    int ion_index = 0;
+    int ion_stage = 0;
+    int compact_row = 0;
+    std::string role;
+    bool normalization_row = false;
+    bool source_domain_included = false;
+    double abundance = 0.0;
+    double compact_population = 0.0;
+    double weighted_population = 0.0;
+    double cj = 0.0;
+    double cj2 = 0.0;
+    double heating_contribution = 0.0;
+    double cooling_contribution = 0.0;
+    double heating2_contribution = 0.0;
+    double cooling2_contribution = 0.0;
+};
+
 std::filesystem::path thermal_compact_population_closure_file() {
     const char* root_value = std::getenv("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE_DIR");
     if (!root_value || !*root_value) {
@@ -1279,6 +1305,11 @@ struct xstar_fixed_state_context_impl {
     bool last_thermal_component_closure = false;
     bool last_thermal_consumed_fixed_state_closure = false;
     bool last_thermal_consumed_compact_population_closure = false;
+    bool last_thermal_diagonal_source_domain = false;
+    bool last_continuum_secondary_ledger_corrected = false;
+    std::size_t last_thermal_diagonal_rows_included = 0;
+    std::size_t last_thermal_diagonal_normalization_terms_included = 0;
+    std::vector<ThermalDiagonalDiagnostic> last_thermal_diagonal_diagnostics;
 };
 
 std::string join_path(const std::string& base, const std::string& name) {
@@ -2667,7 +2698,7 @@ bool evaluate_type53_source_integral(
     contribution.ans6 *= (std::abs(contribution.ans4) - energy_difference * kErgPerEv * contribution.ans1) / den6;
     contribution.ans5 *= (std::abs(contribution.ans3) - energy_difference * kErgPerEv * contribution.ans2) / den5;
 
-    // v0.6.48.7.46.13 qualification-only IEEE closure.
+    // v0.6.48.7.46.14 qualification-only IEEE closure.
     // v0.6.48.7.46.9.4.2 qualification-only IEEE closure compatibility marker.
     // The v0.6.47.2
     // Python reference evaluates the same source expressions one operation at
@@ -4242,6 +4273,11 @@ int run_impl(
     ctx.last_thermal_component_closure = false;
     ctx.last_thermal_consumed_fixed_state_closure = false;
     ctx.last_thermal_consumed_compact_population_closure = false;
+    ctx.last_thermal_diagonal_source_domain = false;
+    ctx.last_continuum_secondary_ledger_corrected = false;
+    ctx.last_thermal_diagonal_rows_included = 0;
+    ctx.last_thermal_diagonal_normalization_terms_included = 0;
+    ctx.last_thermal_diagonal_diagnostics.clear();
     ctx.last_thermal_population_count = 0;
     ctx.last_thermal_population_fingerprint = 0;
     ctx.last_committed_population_count = 0;
@@ -4291,6 +4327,8 @@ int run_impl(
         environment_flag("XSTAR_QUALIFICATION_THERMAL_COMPONENT_PARITY_CLOSURE");
     const bool thermal_compact_population_closure =
         environment_flag("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE");
+    const bool thermal_diagonal_source_domain =
+        environment_flag("XSTAR_QUALIFICATION_THERMAL_DIAGONAL_DOMAIN_SOURCE_FAITHFUL");
     const bool helium_source_insertion_order =
         environment_flag("XSTAR_QUALIFICATION_HELIUM_SOURCE_INSERTION_ORDER");
     const bool type53_two_state_promotion = environment_flag("XSTAR_QUALIFICATION_TYPE53_TWO_STATE_PROMOTION");
@@ -4311,6 +4349,10 @@ int run_impl(
     }
     if (source_compact_basis_seed && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
         throw std::runtime_error("source compact-basis/seed restoration requires XSTAR_QUALIFICATION_REPLACEMENT=1");
+    }
+    if (thermal_diagonal_source_domain &&
+        (!thermal_compact_population_closure || !thermal_component_parity_closure)) {
+        throw std::runtime_error("source-faithful thermal diagonal domain requires compact-population and thermal-component closures");
     }
     if (matrix_construction_closure && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
         throw std::runtime_error("matrix-construction closure requires XSTAR_QUALIFICATION_REPLACEMENT=1");
@@ -4593,15 +4635,87 @@ int run_impl(
             computed_element_heating = computed_element_cooling = 0.0;
             computed_element_heating2 = computed_element_cooling2 = 0.0;
             const std::size_t n = thermal_populations.size();
-            for (std::size_t row = 0; row < n; ++row) {
-                const double population = thermal_populations[row] * element.abundance;
-                const double cj = buffers.heat[row * n + row];
-                const double cj2 = buffers.heat2[row * n + row];
-                if (cj > 0.0) computed_element_cooling += population * cj;
-                else computed_element_heating -= population * cj;
-                if (cj2 > 0.0) computed_element_cooling2 += population * cj2;
-                else computed_element_heating2 -= population * cj2;
+            if (active.element.normalization_row < 1 ||
+                active.element.normalization_row > static_cast<int>(n)) {
+                throw std::runtime_error("thermal compact normalization row is outside the active basis");
             }
+            std::int64_t source_order_index = 0;
+            const auto accumulate_diagonal = [&](const xstar_element_contribution_v1& contribution,
+                                                 int compact_row,
+                                                 const char* role,
+                                                 double cj,
+                                                 double cj2) {
+                ++source_order_index;
+                if (compact_row < 1 || compact_row > static_cast<int>(n)) {
+                    throw std::runtime_error("thermal source-order diagonal row is outside the active basis");
+                }
+                const std::size_t row = static_cast<std::size_t>(compact_row - 1);
+                const bool normalization_row = compact_row == active.element.normalization_row;
+                const double compact_population = thermal_populations[row];
+                const double population = compact_population * element.abundance;
+                ThermalDiagonalDiagnostic diagonal;
+                diagonal.element_z = element.element_z;
+                diagonal.active_min_stage = active.min_stage;
+                diagonal.active_max_stage = active.max_stage;
+                diagonal.source_order_index = source_order_index;
+                diagonal.source_position = contribution.source_position;
+                diagonal.record = contribution.record;
+                diagonal.data_type = contribution.data_type;
+                diagonal.rate_type = contribution.rate_type;
+                diagonal.ion_index = contribution.ion_index;
+                diagonal.ion_stage = contribution.ion_stage;
+                diagonal.compact_row = compact_row;
+                diagonal.role = role;
+                diagonal.normalization_row = normalization_row;
+                diagonal.source_domain_included = true;
+                diagonal.abundance = element.abundance;
+                diagonal.compact_population = compact_population;
+                diagonal.weighted_population = population;
+                diagonal.cj = cj;
+                diagonal.cj2 = cj2;
+                ++ctx.last_thermal_diagonal_rows_included;
+                if (normalization_row) ++ctx.last_thermal_diagonal_normalization_terms_included;
+                if (cj > 0.0) {
+                    diagonal.cooling_contribution = population * cj;
+                    computed_element_cooling += diagonal.cooling_contribution;
+                } else {
+                    diagonal.heating_contribution = -population * cj;
+                    computed_element_heating += diagonal.heating_contribution;
+                }
+                if (cj2 > 0.0) {
+                    diagonal.cooling2_contribution = population * cj2;
+                    computed_element_cooling2 += diagonal.cooling2_contribution;
+                } else {
+                    diagonal.heating2_contribution = -population * cj2;
+                    computed_element_heating2 += diagonal.heating2_contribution;
+                }
+                ctx.last_thermal_diagonal_diagnostics.push_back(std::move(diagonal));
+            };
+            if (thermal_diagonal_source_domain) {
+                for (const auto& contribution : contributions) {
+                    const double scale = contribution.density_scale;
+                    accumulate_diagonal(
+                        contribution, contribution.lower_row, "forward_diag_loss",
+                        contribution.ans4 * scale, contribution.ans6 * scale);
+                    accumulate_diagonal(
+                        contribution, contribution.upper_row, "reverse_diag_loss",
+                        -contribution.ans3 * scale, -contribution.ans5 * scale);
+                }
+            } else {
+                for (std::size_t row = 0; row < n; ++row) {
+                    xstar_element_contribution_v1 aggregate{};
+                    aggregate.source_position = static_cast<std::int64_t>(row + 1);
+                    aggregate.record = 0;
+                    aggregate.data_type = 0;
+                    aggregate.rate_type = 0;
+                    aggregate.ion_index = 0;
+                    aggregate.ion_stage = 0;
+                    accumulate_diagonal(
+                        aggregate, static_cast<int>(row + 1), "aggregated_matrix_diagonal",
+                        buffers.heat[row * n + row], buffers.heat2[row * n + row]);
+                }
+            }
+            ctx.last_thermal_diagonal_source_domain = thermal_diagonal_source_domain;
         } else {
             const bool call1_leaf_oracle = (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE) != 0u;
             if (call1_leaf_oracle && element.element_z == 1) {
@@ -4989,8 +5103,14 @@ int run_impl(
     }
     ctx.last_computed_continuum_heating = output.continuum_heating;
     ctx.last_computed_continuum_cooling = output.continuum_cooling;
-    ctx.last_computed_continuum_heating2 = output.continuum_heating;
-    ctx.last_computed_continuum_cooling2 = output.continuum_cooling;
+    // Source calc_hmc_all carries separate secondary continuum ledger slots.
+    // In the current source continuum kernels those slots receive the same
+    // comp2/freef/bremem totals as the primary continuum pair, but compute
+    // them from the independent computed leaves instead of aliasing the
+    // already-committed primary output fields.
+    ctx.last_computed_continuum_heating2 = ctx.last_computed_htcomp + ctx.last_computed_htfreef;
+    ctx.last_computed_continuum_cooling2 = ctx.last_computed_clcomp + ctx.last_computed_clbrems;
+    ctx.last_continuum_secondary_ledger_corrected = true;
     ctx.last_computed_total_heating = computed_element_heating + ctx.last_computed_continuum_heating;
     ctx.last_computed_total_cooling = computed_element_cooling + ctx.last_computed_continuum_cooling;
     ctx.last_computed_total_heating2 = computed_element_heating2 + ctx.last_computed_continuum_heating2;
@@ -5047,8 +5167,8 @@ int run_impl(
         output.total_heating = output.element_heating + output.continuum_heating;
         output.total_cooling = output.element_cooling + output.continuum_cooling;
         output.hmctot = ctx.last_computed_hmctot;
-        ctx.last_total_heating2 = computed_element_heating2 + output.continuum_heating;
-        ctx.last_total_cooling2 = computed_element_cooling2 + output.continuum_cooling;
+        ctx.last_total_heating2 = computed_element_heating2 + ctx.last_computed_continuum_heating2;
+        ctx.last_total_cooling2 = computed_element_cooling2 + ctx.last_computed_continuum_cooling2;
     }
     if (fixed_state_closure_data.has_value()) {
         output.elcter = fixed_state_closure_data->electron_fraction;
@@ -5248,6 +5368,7 @@ int xstar_fixed_state_write_last_thermal_budget_v1(
                    "input_tau_count,input_tau_in_fingerprint,input_tau_out_fingerprint,input_global_level_count,input_xilevg_fingerprint,input_bilevg_fingerprint,input_rnisg_fingerprint,"
                    "thermal_population_count,thermal_population_fingerprint,committed_population_count,committed_population_fingerprint,"
                    "thermal_consumed_fixed_state_closure,thermal_consumed_compact_population_closure,thermal_component_closure_applied,"
+                   "thermal_diagonal_source_domain_applied,thermal_diagonal_rows_included,thermal_diagonal_normalization_rows_excluded,thermal_diagonal_terms_included,thermal_diagonal_normalization_terms_included,continuum_secondary_ledger_corrected,"
                    "computed_h_heating,computed_h_cooling,computed_h_heating2,computed_h_cooling2,h_heating,h_cooling,h_heating2,h_cooling2,"
                    "computed_he_heating,computed_he_cooling,computed_he_heating2,computed_he_cooling2,he_heating,he_cooling,he_heating2,he_cooling2,"
                    "computed_he_type53_heating,computed_he_type53_cooling,computed_he_type53_heating2,computed_he_type53_cooling2,he_type53_heating,he_type53_cooling,he_type53_heating2,he_type53_cooling2,"
@@ -5296,6 +5417,12 @@ int xstar_fixed_state_write_last_thermal_budget_v1(
             << (context->last_thermal_consumed_fixed_state_closure ? 1 : 0) << ','
             << (context->last_thermal_consumed_compact_population_closure ? 1 : 0) << ','
             << (context->last_thermal_component_closure ? 1 : 0) << ','
+            << (context->last_thermal_diagonal_source_domain ? 1 : 0) << ','
+            << context->last_thermal_diagonal_rows_included << ','
+            << 0 << ','
+            << context->last_thermal_diagonal_rows_included << ','
+            << context->last_thermal_diagonal_normalization_terms_included << ','
+            << (context->last_continuum_secondary_ledger_corrected ? 1 : 0) << ','
             << ch[0] << ',' << ch[1] << ',' << ch[2] << ',' << ch[3] << ',' << h[0] << ',' << h[1] << ',' << h[2] << ',' << h[3] << ','
             << che[0] << ',' << che[1] << ',' << che[2] << ',' << che[3] << ',' << he[0] << ',' << he[1] << ',' << he[2] << ',' << he[3] << ','
             << che53[0] << ',' << che53[1] << ',' << che53[2] << ',' << che53[3] << ',' << he53[0] << ',' << he53[1] << ',' << he53[2] << ',' << he53[3] << ','
@@ -5952,6 +6079,26 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                         << "  \"helium_source_insertion_order\": " << (context->last_helium_source_insertion_order ? "true" : "false") << ",\n"
                         << "  \"qualification_only\": true,\n"
                         << "  \"production_promotion_ready\": false\n}\n";
+        }
+
+        {
+            std::ofstream diagonal_file(root / (stem + "_thermal_diagonal_ledger.csv"));
+            if (!diagonal_file) throw std::runtime_error("cannot create thermal diagonal ledger CSV");
+            diagonal_file << "evaluation_ordinal,element_z,active_min_stage,active_max_stage,source_order_index,source_position,record,data_type,rate_type,ion_index,ion_stage,compact_row,role,is_normalization_row,source_domain_included,abundance,compact_population,weighted_population,cj,cj2,heating_contribution,cooling_contribution,heating2_contribution,cooling2_contribution\n";
+            diagonal_file << std::setprecision(17);
+            for (const auto& row : context->last_thermal_diagonal_diagnostics) {
+                diagonal_file << evaluation_ordinal << ',' << row.element_z << ','
+                              << row.active_min_stage << ',' << row.active_max_stage << ','
+                              << row.source_order_index << ',' << row.source_position << ','
+                              << row.record << ',' << row.data_type << ',' << row.rate_type << ','
+                              << row.ion_index << ',' << row.ion_stage << ',' << row.compact_row << ','
+                              << row.role << ',' << (row.normalization_row ? 1 : 0) << ','
+                              << (row.source_domain_included ? 1 : 0) << ',' << row.abundance << ','
+                              << row.compact_population << ',' << row.weighted_population << ','
+                              << row.cj << ',' << row.cj2 << ','
+                              << row.heating_contribution << ',' << row.cooling_contribution << ','
+                              << row.heating2_contribution << ',' << row.cooling2_contribution << '\n';
+            }
         }
 
         std::ofstream state_file(root / (stem + "_state.json"));

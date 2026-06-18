@@ -3,8 +3,8 @@ from xstar_tools.xstar import v0472_all61_fixed_state_capture as capture
 
 
 def test_v0487465_component_release_and_probe_contract():
-    assert __version__ == "0.6.48.7.46.13"
-    assert capture.RELEASE == "0.6.48.7.46.13"
+    assert __version__ == "0.6.48.7.46.14"
+    assert capture.RELEASE == "0.6.48.7.46.14"
     report = capture._v0487465_probe_retention_report()
     assert report["factory_blocks"] >= 2
     for key in (

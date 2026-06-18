@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.48.7.46.14 — Source-faithful Thermal diagonal-domain and secondary-ledger correction - 2026-06-18
+
+- Replaced aggregated matrix-cell Thermal reduction with source-ordered forward/reverse diagonal-term reduction and sign classification before accumulation.
+- Added a record-resolved native Thermal diagonal ledger carrying source position, record identity, compact row, normalization status, coefficient, population, and signed primary/secondary contribution.
+- Retained all 11,712 normalization-row terms, matching source term-stream semantics rather than excluding solver normalization rows from the physical record stream.
+- Corrected independent secondary continuum accounting to use explicit Compton and free-free secondary sums.
+- Accepted all 1,036,342 diagonal terms across 183 contiguous H/He/Mg source-order streams, with 61/61 secondary continuum ledgers exact.
+- Preserved 40,149 compact populations, 2,440 committed Thermal values, 41,968 full-level populations, 1,098 ion-stage values, 183 exact dense systems, zero dense mismatch cells, and zero Python callbacks.
+- Increased independently exact Thermal values from 171/2,440 to 342/2,440.
+- Isolated the dominant remaining defect to Mg Type-99 record 41154, reverse secondary diagonal loss at source position 12304; independent Thermal parity and production promotion remain blocked.
+
 ## 0.6.48.7.46.13 — source-faithful Thermal compact-population state transport - 2026-06-18
 
 - Added a dedicated 61-sequence Thermal compact-population closure prepared from the v0.6.47.2 element-solve capture.

@@ -1,3 +1,19 @@
+## Current release
+
+**0.6.48.7.46.14** replaces aggregated matrix-cell Thermal reduction with source-ordered forward/reverse diagonal-term reduction and corrects the independent secondary continuum ledger. The accepted all-61 qualification preserves 40,149 compact populations, 2,440 committed Thermal values, 41,968 full-level populations, 1,098 ion-stage values, 183 exact dense systems, and zero Python callbacks. It audits 1,036,342 record-resolved diagonal terms across 183 source-order streams and improves independently exact Thermal values from 171/2,440 to 342/2,440. Independent parity and production promotion remain blocked by the now-isolated Mg Type-99 secondary-energy defect. See `V064874614_SOURCE_FAITHFUL_THERMAL_DIAGONAL_DOMAIN_AND_SECONDARY_LEDGER_CORRECTION.md`.
+
+Run from an accepted v0.6.48.7.46.13 output:
+
+```bash
+./run_v04874614_thermal_diagonal_domain_secondary_ledger_correction.sh \
+  ../xstar/data/atdb.fits \
+  ../xstar_tools-0.6.48.7.46.13/v04874613_thermal_compact_population_state_transport \
+  v04874614_thermal_diagonal_domain_secondary_ledger_correction \
+  10
+```
+
+Use `XSTAR_V04874614_PREFLIGHT_ONLY=1` for a no-replay baseline/readiness preflight.
+
 ## Current release: 0.6.48.7.46.13
 
 This qualification release transports the exact compact H/He/Mg population state consumed by the source Thermal path. It prepares 40,149 source-faithful binary64 values across all 61 evaluations, validates their compact topology and normalization rows, and supplies them to native Thermal independently of the accepted 688-row fixed-state product. Each native evaluation emits a compact-state audit file, and resumable replay validates every row and fingerprint before reuse. The committed Thermal ledger remains distinct from independently computed `computed_*` values; controller, product/FITS, and production-promotion gates remain downstream. See `V064874613_SOURCE_FAITHFUL_THERMAL_COMPACT_POPULATION_STATE_TRANSPORT.md`.

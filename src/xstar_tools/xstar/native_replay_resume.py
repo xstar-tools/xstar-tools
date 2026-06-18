@@ -1,4 +1,4 @@
-"""Sequence-level resumable native replay for v0.6.48.7.46.13."""
+"""Sequence-level resumable native replay for v0.6.48.7.46.14."""
 from __future__ import annotations
 
 import argparse
@@ -11,7 +11,7 @@ from typing import Any
 
 from .all61_thermal_state_consumption_audit import COMMITTED_NATIVE_FIELD, COMPONENT_FIELDS
 
-RELEASE = "0.6.48.7.46.13"
+RELEASE = "0.6.48.7.46.14"
 SCHEMA = "xstar-tools-v06487461212-native-replay-resume-manifest-v1"
 MANIFEST_NAME = "v048746121_native_replay_resume_manifest.json"
 PLAN_NAME = "all61_native_replay_resume_plan.tsv"
@@ -102,11 +102,14 @@ def validate_evaluation(
     canonical_closure: Path,
     thermal_closure: Path,
     compact_closure: Path | None = None,
+    require_thermal_diagonal_ledger: bool = False,
 ) -> tuple[bool, list[str]]:
     reasons: list[str] = []
     required_files = list(REQUIRED_EVALUATION_FILES)
     if compact_closure is not None:
         required_files.append("native_thermal_compact_populations.csv")
+    if require_thermal_diagonal_ledger:
+        required_files.append("native_thermal_diagonal_ledger.csv")
     for name in required_files:
         path = evaluation_dir / name
         if not path.is_file() or path.stat().st_size == 0:
@@ -200,6 +203,33 @@ def validate_evaluation(
             if len(reasons) >= 25:
                 break
 
+    if require_thermal_diagonal_ledger:
+        if budget.get("thermal_diagonal_source_domain_applied") != "1":
+            reasons.append("thermal_diagonal_source_domain_not_applied")
+        if budget.get("continuum_secondary_ledger_corrected") != "1":
+            reasons.append("continuum_secondary_ledger_not_corrected")
+        diagonal_rows = _read_csv(evaluation_dir / "native_thermal_diagonal_ledger.csv")
+        required_columns = {
+            "source_order_index", "source_position", "record", "data_type", "rate_type",
+            "compact_row", "role", "is_normalization_row", "source_domain_included",
+            "compact_population", "cj", "cj2", "heating_contribution", "cooling_contribution",
+            "heating2_contribution", "cooling2_contribution",
+        }
+        if not diagonal_rows:
+            reasons.append("thermal_diagonal_ledger_empty")
+        elif not required_columns.issubset(diagonal_rows[0]):
+            reasons.append("thermal_diagonal_ledger_schema")
+        elif any(row.get("source_domain_included") != "1" for row in diagonal_rows):
+            reasons.append("thermal_diagonal_source_domain_incomplete")
+        else:
+            by_element: dict[int, list[int]] = {}
+            for row in diagonal_rows:
+                by_element.setdefault(int(row["element_z"]), []).append(int(row["source_order_index"]))
+            for element_z, indexes in by_element.items():
+                if indexes != list(range(1, len(indexes) + 1)):
+                    reasons.append(f"thermal_diagonal_source_order:{element_z}")
+                    break
+
     if compact_closure is not None:
         expected_rows = _compact_values(compact_closure, sequence)
         native_rows = _read_csv(evaluation_dir / "native_thermal_compact_populations.csv")
@@ -243,6 +273,7 @@ def build_manifest(
     failed_sequence: int | None = None,
     failed_returncode: int | None = None,
     compact_closure: Path | None = None,
+    require_thermal_diagonal_ledger: bool = False,
 ) -> dict[str, Any]:
     plans = _plan_rows(source_inputs, trajectory, workspaces)
     statuses: list[dict[str, Any]] = []
@@ -252,7 +283,8 @@ def build_manifest(
         sequence = int(plan["sequence"])
         evaluation_dir = evaluations_dir / f"evaluation_{sequence:04d}"
         valid, reasons = validate_evaluation(
-            evaluation_dir, plan, canonical_closure, thermal_closure, compact_closure
+            evaluation_dir, plan, canonical_closure, thermal_closure, compact_closure,
+            require_thermal_diagonal_ledger=require_thermal_diagonal_ledger,
         ) if evaluation_dir.is_dir() else (False, ["evaluation_directory_absent"])
         action = "reuse" if valid else "run"
         reusable += int(valid)
@@ -292,6 +324,7 @@ def build_manifest(
         "failed_sequence": failed_sequence,
         "failed_returncode": failed_returncode,
         "thermal_compact_population_closure": str(compact_closure) if compact_closure is not None else None,
+        "thermal_diagonal_ledger_required": require_thermal_diagonal_ledger,
         "statuses": statuses,
         "qualification_only": True,
         "production_promotion_ready": False,
@@ -314,6 +347,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--failed-sequence", type=int)
     parser.add_argument("--failed-returncode", type=int)
     parser.add_argument("--require-complete", action="store_true")
+    parser.add_argument("--require-thermal-diagonal-ledger", action="store_true")
     args = parser.parse_args(argv)
     try:
         report = build_manifest(
@@ -328,6 +362,7 @@ def main(argv: list[str] | None = None) -> int:
             args.failed_sequence,
             args.failed_returncode,
             compact_closure=args.compact_closure,
+            require_thermal_diagonal_ledger=args.require_thermal_diagonal_ledger,
         )
     except Exception as exc:
         report = {
