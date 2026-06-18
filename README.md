@@ -1,6 +1,6 @@
-## Current release: 0.6.48.7.46.12.1.1
+## Current release: 0.6.48.7.46.12.1.2
 
-This qualification hotfix makes the accepted 61-evaluation source capture portable across package directories and mount points. Historical absolute `workspace_directory` values are used when valid and otherwise rebased by canonical sequence to the capture bundle's local `all61_input_workspaces/evaluation_NNNN` directory. The original provenance CSV is preserved, report normalization prefers `capture_report.json`, and resumable native replay remains unchanged. The uploaded moved capture verifies with all 61 workspace paths rebased; evaluations 1–8 remain reusable and sequence 9 remains pending. No physics or ABI semantics changed. See `V06487461211_WORKSPACE_PATH_REBASE_HOTFIX.md`.
+This qualification hotfix completes the all-61 Thermal audit after native replay. It decouples resume acceptance from the historical `reference_charge_residual` and `reference_hmctot` metadata embedded in final-call summaries, while retaining exact validation of native results against the canonical fixed-state/Thermal closures. All 61 evaluations are reusable; the recovered scientific audit has 2,440/2,440 committed Thermal values exact, but rejects on 0/61 compact-population fingerprints and only 1/2,440 independently computed native Thermal values exact. No physics or ABI semantics changed. See `V06487461212_FINAL_REFERENCE_DECOUPLING_HOTFIX.md`.
 
 ## v0.6.48.7.46.11.1 Thermal-readiness vocabulary hotfix
 

@@ -134,7 +134,7 @@ def test_generated_probe_installs_nonrecursive_input_hook(tmp_path: Path) -> Non
 
 
 def test_release_and_cpp_contract() -> None:
-    assert xstar_tools.__version__ == "0.6.48.7.46.12.1.1"
+    assert xstar_tools.__version__ == "0.6.48.7.46.12.1.2"
     cpp = (root() / "src/xstar_tools/xstar/cpp/fixed_state_engine.cpp").read_text()
     assert "XSTAR_QUALIFICATION_THERMAL_COMPONENT_PARITY_CLOSURE" in cpp
     assert "XSTAR_QUALIFICATION_THERMAL_COMPONENT_PARITY_CLOSURE_DIR" in cpp
@@ -259,7 +259,11 @@ def test_workspace_directory_rebases_after_capture_bundle_move(tmp_path: Path) -
 
 def test_runner_contains_source_capture_resume_and_preflight_contract() -> None:
     runner = (root() / "run_v04874612_all61_thermal_state_consumption_audit.sh").read_text()
-    assert "V0487461211_RUNNER_REVISION=20260725-workspace-path-rebase-v1" in runner
+    assert "V0487461212_RUNNER_REVISION=20260725-final-reference-decoupling-v1" in runner
+    assert "THERMAL_AUDIT_RC=$?" in runner
+    assert "THERMAL_CLOSURE_RC=$?" in runner
+    assert "CHECKER_RC=$?" in runner
+    assert 'exit "$CHECKER_RC"' in runner
     assert "V04874612_SOURCE_CAPTURE_REUSE=1" in runner
     assert "XSTAR_V04874612_FORCE_SOURCE_RECAPTURE" in runner
     assert "XSTAR_V04874612_SOURCE_CAPTURE_PREFLIGHT_ONLY" in runner

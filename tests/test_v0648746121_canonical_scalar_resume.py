@@ -203,3 +203,23 @@ def test_resume_manifest_reuses_valid_sequence_and_rejects_stale_scalar(tmp_path
     assert stale["sequences_reusable"] == 0
     assert stale["first_pending_sequence"] == 1
     assert "summary_charge_residual" in stale["statuses"][0]["reasons"]
+
+
+def test_resume_accepts_historical_summary_reference_drift(tmp_path: Path) -> None:
+    baseline, source, thermal = make_oracles(tmp_path)
+    canonical = tmp_path / "canonical"
+    assert alignment.prepare(baseline, source, thermal, canonical)["result"] == "ACCEPT"
+    inputs, trajectory, workspaces, evaluations = make_resume_inputs(tmp_path, canonical, thermal)
+    summary_path = evaluations / "evaluation_0001" / "native_evaluation_summary.json"
+    summary = json.loads(summary_path.read_text())
+    summary["reference_charge_residual"] = 123.0
+    summary["reference_hmctot"] = -456.0
+    summary_path.write_text(json.dumps(summary))
+    manifest = resume.build_manifest(
+        inputs, trajectory, workspaces, evaluations, canonical, thermal,
+        tmp_path / "manifest-reference-drift.json",
+    )
+    assert manifest["sequences_reusable"] == 1
+    assert manifest["statuses"][0]["validation"] == "ACCEPT"
+    assert "summary_reference_charge" not in manifest["statuses"][0]["reasons"]
+    assert "summary_reference_hmctot" not in manifest["statuses"][0]["reasons"]

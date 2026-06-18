@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 0.6.48.7.46.12.1.2 - 2026-06-18
+
+- Decouple resumable native replay acceptance from historical standalone-summary `reference_charge_residual` and `reference_hmctot` fields.
+- Validate sequences 58–61 against the canonical fixed-state/Thermal closures, while retaining all strict native-result, component, identity, population, spectra, closure-consumption, and zero-callback gates.
+- Preserve all completed native evaluations and allow the all-61 aggregate, Thermal comparison, and milestone checker to run without replaying physics.
+
 ## 0.6.48.7.46.12.1.1 — source-workspace path rebase hotfix - 2026-06-18
 
 - Reclassifies the first v46.12.1 host failure as stale absolute workspace metadata rather than missing source-capture binaries.
