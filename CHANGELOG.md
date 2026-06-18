@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.48.7.46.14.1 — v46.13 fixed-state gate-vocabulary hotfix - 2026-06-18
+
+- Corrects the v46.14 runner preflight, which required the synthetic gate `V06487_FIXED_STATE_PARITY_PRESERVED` even though the accepted v46.13 checker reports the same contract through concrete full-level, ion-stage, and dense-system preservation gates.
+- Accepts either the aggregate alias or the complete fail-closed concrete gate set; all other v46.13 Thermal, compact-state, callback, and release gates remain mandatory.
+- Adds an explicit baseline-vocabulary validator and reports whether the aggregate or concrete vocabulary was used.
+- Changes no native physics, ABI, closures, or v46.14 scientific acceptance criteria.
+
 ## 0.6.48.7.46.14 — Source-faithful Thermal diagonal-domain and secondary-ledger correction - 2026-06-18
 
 - Replaced aggregated matrix-cell Thermal reduction with source-ordered forward/reverse diagonal-term reduction and sign classification before accumulation.

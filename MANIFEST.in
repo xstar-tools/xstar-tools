@@ -784,9 +784,13 @@ include check_v04874613_thermal_compact_population_state_transport.py
 include check_v04874613_thermal_compact_population_state_transport_readiness.py
 include tests/test_v064874613_thermal_compact_population_state_transport.py
 
-# v0.6.48.7.46.14 source-faithful Thermal diagonal-domain and secondary ledger
+# v0.6.48.7.46.14.1 source-faithful Thermal diagonal-domain and secondary ledger
 include V064874614_SOURCE_FAITHFUL_THERMAL_DIAGONAL_DOMAIN_AND_SECONDARY_LEDGER_CORRECTION.md
 include run_v04874614_thermal_diagonal_domain_secondary_ledger_correction.sh
 include check_v04874614_thermal_diagonal_domain_secondary_ledger_correction.py
 include check_v04874614_thermal_diagonal_domain_secondary_ledger_correction_readiness.py
 include tests/test_v064874614_thermal_diagonal_domain_secondary_ledger.py
+
+# v0.6.48.7.46.14.1 v46.13 baseline gate-vocabulary hotfix
+include V0648746141_V4613_FIXED_STATE_GATE_VOCABULARY_HOTFIX.md
+include tests/test_v0648746141_v4613_baseline_gate_vocabulary.py

@@ -20,7 +20,7 @@ from typing import Any
 
 from . import v0472_all61_fixed_state_capture as base
 
-RELEASE = "0.6.48.7.46.14"
+RELEASE = "0.6.48.7.46.14.1"
 SCHEMA = "xstar-tools-v064874612-v0472-all61-thermal-state-capture-v1"
 VERIFY_SCHEMA = "xstar-tools-v064874612-v0472-all61-thermal-state-oracle-v1"
 BUDGET_NAME = "v0472_all61_thermal_budget.csv"

@@ -1,6 +1,6 @@
 ## Current release
 
-**0.6.48.7.46.14** replaces aggregated matrix-cell Thermal reduction with source-ordered forward/reverse diagonal-term reduction and corrects the independent secondary continuum ledger. The accepted all-61 qualification preserves 40,149 compact populations, 2,440 committed Thermal values, 41,968 full-level populations, 1,098 ion-stage values, 183 exact dense systems, and zero Python callbacks. It audits 1,036,342 record-resolved diagonal terms across 183 source-order streams and improves independently exact Thermal values from 171/2,440 to 342/2,440. Independent parity and production promotion remain blocked by the now-isolated Mg Type-99 secondary-energy defect. See `V064874614_SOURCE_FAITHFUL_THERMAL_DIAGONAL_DOMAIN_AND_SECONDARY_LEDGER_CORRECTION.md`.
+**0.6.48.7.46.14.1** is a reporting-only preflight hotfix for the accepted v46.14 source-ordered Thermal diagonal correction. It accepts the v46.13 fixed-state preservation contract either through the aggregate `V06487_FIXED_STATE_PARITY_PRESERVED` alias or through the complete concrete gate set emitted by the production v46.13 checker. No native physics, ABI, closure, or scientific gate changes. See `V0648746141_V4613_FIXED_STATE_GATE_VOCABULARY_HOTFIX.md`.
 
 Run from an accepted v0.6.48.7.46.13 output:
 
