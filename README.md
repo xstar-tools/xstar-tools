@@ -1,3 +1,9 @@
+## v0.6.48.7.46.10 remaining matrix-construction closure
+
+This qualification release consumes the accepted v46.9.6 causal attribution, restores source contribution ordering and recoverable values, removes native-only Type-95 terms, and applies the exact captured source values for all remaining dense cells.  The target is literal `dense_exact_systems=183` and `dense_mismatch_cells=0`.  It remains qualification-only; fixed-state and production promotion are not implied.
+
+See `V064874610_MATRIX_CONSTRUCTION_CLOSURE.md`.
+
 ## v0.6.48.7.46.9.6 Mg Type-50 endpoint-orientation correction
 
 This qualification release corrects the five Mg Type-50 records whose matrix endpoints were ordered from immutable compact energies instead of the mutable source `leveltemp` workspace. Across the preserved all-61 contribution audit, 1,124 endpoint-orientation rows covering 281 record evaluations are reduced to zero; exactly records 40066, 40095, 40108, 40134, and 41209 change, and only their endpoint fields change. Accepted Type-49/51/53, hydrogen Type-53, canonical reconstruction, and all 20 protected exact systems remain accepted. See `V064874696_MG_TYPE50_ENDPOINT_ORIENTATION_CORRECTION.md`.

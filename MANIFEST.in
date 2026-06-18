@@ -740,3 +740,11 @@ include run_v04874696_mg_type50_endpoint_orientation_correction.sh
 include check_v04874696_mg_type50_endpoint_orientation.py
 include check_v04874696_mg_type50_endpoint_orientation_readiness.py
 include tests/test_v064874696_mg_type50_endpoint_orientation.py
+
+# v0.6.48.7.46.10 remaining matrix-construction closure
+include V064874610_MATRIX_CONSTRUCTION_CLOSURE.md
+include run_v04874610_matrix_construction_closure.sh
+include check_v04874610_matrix_construction_closure.py
+include check_v04874610_matrix_construction_closure_readiness.py
+
+include tests/test_v064874610_matrix_construction_closure.py

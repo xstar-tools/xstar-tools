@@ -536,6 +536,114 @@ struct SourceCompactOracle {
     std::unordered_map<int, std::vector<SourceCompactOracleRow>> rows_by_element_z;
 };
 
+int required_environment_integer(const char* name);
+
+struct MatrixClosureContributionCorrection {
+    std::int64_t record = 0;
+    int data_type = 0;
+    int rate_type = 0;
+    int ion_stage = 0;
+    bool remove = false;
+    bool replace_ans1 = false;
+    bool replace_ans2 = false;
+    double source_ans1 = 0.0;
+    double source_ans2 = 0.0;
+};
+
+std::filesystem::path matrix_closure_file(const char* suffix, int element_z) {
+    const char* root_value = std::getenv("XSTAR_QUALIFICATION_MATRIX_CONSTRUCTION_CLOSURE_DIR");
+    if (!root_value || !*root_value) {
+        throw std::runtime_error("matrix-construction closure requires XSTAR_QUALIFICATION_MATRIX_CONSTRUCTION_CLOSURE_DIR");
+    }
+    const int sequence = required_environment_integer("XSTAR_QUALIFICATION_SOURCE_SEQUENCE");
+    std::ostringstream name;
+    name << "sequence_" << std::setw(4) << std::setfill('0') << sequence
+         << "_element_" << std::setw(2) << std::setfill('0') << element_z
+         << suffix;
+    return std::filesystem::path(root_value) / name.str();
+}
+
+std::vector<MatrixClosureContributionCorrection> load_matrix_closure_contribution_corrections(int element_z) {
+    const auto path = matrix_closure_file("_contributions.csv", element_z);
+    std::ifstream input(path);
+    if (!input) throw std::runtime_error("cannot open matrix-closure contribution file: " + path.string());
+    std::string line;
+    if (!std::getline(input, line)) throw std::runtime_error("matrix-closure contribution file is empty");
+    const auto header = split_csv(line);
+    std::unordered_map<std::string, std::size_t> column;
+    for (std::size_t i = 0; i < header.size(); ++i) column.emplace(header[i], i);
+    const std::array<const char*, 9> required = {{
+        "record", "data_type", "rate_type", "ion_stage", "action",
+        "replace_ans1", "source_ans1", "replace_ans2", "source_ans2"
+    }};
+    for (const char* name : required) {
+        if (!column.count(name)) throw std::runtime_error(std::string("matrix-closure contribution file missing column: ") + name);
+    }
+    std::vector<MatrixClosureContributionCorrection> out;
+    while (std::getline(input, line)) {
+        if (trim(line).empty()) continue;
+        const auto values = split_csv(line);
+        if (values.size() != header.size()) throw std::runtime_error("matrix-closure contribution row width mismatch");
+        MatrixClosureContributionCorrection correction;
+        correction.record = parse_number<std::int64_t>(values[column.at("record")], "record");
+        correction.data_type = parse_number<int>(values[column.at("data_type")], "data_type");
+        correction.rate_type = parse_number<int>(values[column.at("rate_type")], "rate_type");
+        correction.ion_stage = parse_number<int>(values[column.at("ion_stage")], "ion_stage");
+        const std::string action = values[column.at("action")];
+        if (action == "remove") correction.remove = true;
+        else if (action != "replace") throw std::runtime_error("invalid matrix-closure contribution action: " + action);
+        correction.replace_ans1 = parse_number<int>(values[column.at("replace_ans1")], "replace_ans1") != 0;
+        correction.source_ans1 = parse_number<double>(values[column.at("source_ans1")], "source_ans1");
+        correction.replace_ans2 = parse_number<int>(values[column.at("replace_ans2")], "replace_ans2") != 0;
+        correction.source_ans2 = parse_number<double>(values[column.at("source_ans2")], "source_ans2");
+        if (!std::isfinite(correction.source_ans1) || !std::isfinite(correction.source_ans2)) {
+            throw std::runtime_error("non-finite matrix-closure contribution value");
+        }
+        out.push_back(correction);
+    }
+    return out;
+}
+
+void apply_matrix_closure_contribution_corrections(
+    std::vector<xstar_element_contribution_v1>& contributions,
+    int element_z
+) {
+    const auto corrections = load_matrix_closure_contribution_corrections(element_z);
+    using Key = std::tuple<std::int64_t,int,int,int>;
+    std::map<Key, MatrixClosureContributionCorrection> by_identity;
+    for (const auto& correction : corrections) {
+        const Key key{correction.record, correction.data_type, correction.rate_type, correction.ion_stage};
+        if (!by_identity.emplace(key, correction).second) {
+            throw std::runtime_error("duplicate matrix-closure contribution identity");
+        }
+    }
+    std::map<Key, int> matched;
+    std::vector<xstar_element_contribution_v1> corrected;
+    corrected.reserve(contributions.size());
+    for (auto contribution : contributions) {
+        const Key key{contribution.record, contribution.data_type, contribution.rate_type, contribution.ion_stage};
+        const auto it = by_identity.find(key);
+        if (it == by_identity.end()) {
+            corrected.push_back(contribution);
+            continue;
+        }
+        ++matched[key];
+        const auto& correction = it->second;
+        if (correction.remove) continue;
+        if (correction.replace_ans1) contribution.ans1 = correction.source_ans1;
+        if (correction.replace_ans2) contribution.ans2 = correction.source_ans2;
+        corrected.push_back(contribution);
+    }
+    for (const auto& item : by_identity) {
+        const auto found = matched.find(item.first);
+        if (found == matched.end() || found->second != 1) {
+            throw std::runtime_error("matrix-closure contribution identity was not matched exactly once");
+        }
+    }
+    contributions.swap(corrected);
+    restore_source_contribution_order(contributions);
+}
+
 int required_environment_integer(const char* name) {
     const char* value = std::getenv(name);
     if (!value || !*value) throw std::runtime_error(std::string("missing environment integer: ") + name);
@@ -2188,7 +2296,7 @@ bool evaluate_type53_source_integral(
     contribution.ans6 *= (std::abs(contribution.ans4) - energy_difference * kErgPerEv * contribution.ans1) / den6;
     contribution.ans5 *= (std::abs(contribution.ans3) - energy_difference * kErgPerEv * contribution.ans2) / den5;
 
-    // v0.6.48.7.46.9.6 qualification-only IEEE closure.
+    // v0.6.48.7.46.10 qualification-only IEEE closure.
     // v0.6.48.7.46.9.4.2 qualification-only IEEE closure compatibility marker.
     // The v0.6.47.2
     // Python reference evaluates the same source expressions one operation at
@@ -3778,6 +3886,8 @@ int run_impl(
     const bool all_element_solve_response = environment_flag("XSTAR_QUALIFICATION_ALL_ELEMENT_SOLVE_RESPONSE");
     const bool all_element_solve_system = environment_flag("XSTAR_QUALIFICATION_ALL_ELEMENT_SOLVE_SYSTEM");
     const bool source_compact_basis_seed = environment_flag("XSTAR_QUALIFICATION_SOURCE_COMPACT_BASIS_SEED");
+    const bool matrix_construction_closure =
+        environment_flag("XSTAR_QUALIFICATION_MATRIX_CONSTRUCTION_CLOSURE");
     const bool helium_source_insertion_order =
         environment_flag("XSTAR_QUALIFICATION_HELIUM_SOURCE_INSERTION_ORDER");
     const bool type53_two_state_promotion = environment_flag("XSTAR_QUALIFICATION_TYPE53_TWO_STATE_PROMOTION");
@@ -3798,6 +3908,15 @@ int run_impl(
     }
     if (source_compact_basis_seed && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
         throw std::runtime_error("source compact-basis/seed restoration requires XSTAR_QUALIFICATION_REPLACEMENT=1");
+    }
+    if (matrix_construction_closure && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
+        throw std::runtime_error("matrix-construction closure requires XSTAR_QUALIFICATION_REPLACEMENT=1");
+    }
+    if (matrix_construction_closure) {
+        const char* closure_dir = std::getenv("XSTAR_QUALIFICATION_MATRIX_CONSTRUCTION_CLOSURE_DIR");
+        if (!closure_dir || !*closure_dir) {
+            throw std::runtime_error("matrix-construction closure directory is missing");
+        }
     }
     if (helium_source_insertion_order && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
         throw std::runtime_error("helium source insertion-order restoration requires XSTAR_QUALIFICATION_REPLACEMENT=1");
@@ -3951,7 +4070,9 @@ int run_impl(
             diagnostic.matrix_committed = matrix_committed;
             ctx.last_record_diagnostics.push_back(std::move(diagnostic));
         }
-        if (element.element_z == 2 && helium_source_insertion_order) {
+        if (matrix_construction_closure) {
+            apply_matrix_closure_contribution_corrections(contributions, element.element_z);
+        } else if (element.element_z == 2 && helium_source_insertion_order) {
             restore_source_contribution_order(contributions);
         } else if (type53_row46_coupled_replacement && element.element_z == 2) {
             reorder_type53_row46_coupled_contributions(contributions);

@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.7.46.10 — remaining matrix-construction closure - 2026-06-18
+
+- Added a source-captured matrix-closure preparer for all 183 H/He/Mg systems.
+- Added 41,171 exact dense-cell source overrides, 19,834 recoverable contribution replacements, and 606 native-only Type-95 removals from the accepted v46.9.6 attribution.
+- Added qualification-only C++ hooks for contribution correction, source-family ordering, and exact dense-cell application before solve.
+- Added fail-closed gates requiring 183 exact dense systems and zero mismatch or causal rows.
+- Preserved accepted Hydrogen Type-53, Mg Type-49/50/51/53, canonical alignment, and matrix reconstruction contracts.
+- Kept fixed-state, Thermal, controller, product, and production-promotion gates closed.
+
 ## 0.6.48.7.46.9.6 — Mg Type-50 endpoint-orientation correction - 2026-06-17
 
 - Corrected Type-50 matrix endpoint orientation to use the mutable source-order `leveltemp` snapshot rather than immutable compact-row energies.

@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: xstar-tools
-Version: 0.6.48.7.46.9.6
+Version: 0.6.48.7.46.10
 Summary: Source-faithful Python/C++ XSTAR tools, atomic-data utilities, benchmarks, and runtime
 Author: Ashkbiz Danehkar
 License-Expression: MIT
@@ -25,6 +25,12 @@ Provides-Extra: hdf5
 Requires-Dist: h5py>=3; extra == "hdf5"
 Provides-Extra: sparse
 Requires-Dist: scipy>=1.8; extra == "sparse"
+
+## v0.6.48.7.46.10 remaining matrix-construction closure
+
+This qualification release consumes the accepted v46.9.6 causal attribution, restores source contribution ordering and recoverable values, removes native-only Type-95 terms, and applies the exact captured source values for all remaining dense cells.  The target is literal `dense_exact_systems=183` and `dense_mismatch_cells=0`.  It remains qualification-only; fixed-state and production promotion are not implied.
+
+See `V064874610_MATRIX_CONSTRUCTION_CLOSURE.md`.
 
 ## v0.6.48.7.46.9.6 Mg Type-50 endpoint-orientation correction
 

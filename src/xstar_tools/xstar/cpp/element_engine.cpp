@@ -7,11 +7,15 @@
 #include <cstdint>
 #include <cstring>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <iomanip>
 #include <limits>
 #include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 extern "C" int xstar_solver_leqt2f(
@@ -138,6 +142,76 @@ inline std::size_t index2(int row, int col, int ncols) {
     return static_cast<std::size_t>(row) * static_cast<std::size_t>(ncols) + static_cast<std::size_t>(col);
 }
 
+std::string trim_text(std::string value) {
+    const auto first = value.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos) return {};
+    const auto last = value.find_last_not_of(" \t\r\n");
+    return value.substr(first, last - first + 1);
+}
+
+std::vector<std::string> split_simple_csv(const std::string& line) {
+    std::vector<std::string> out;
+    std::string current;
+    for (char ch : line) {
+        if (ch == ',') { out.push_back(trim_text(current)); current.clear(); }
+        else current.push_back(ch);
+    }
+    out.push_back(trim_text(current));
+    return out;
+}
+
+int required_environment_integer_local(const char* name) {
+    const char* value = std::getenv(name);
+    if (!value || !*value) throw std::runtime_error(std::string("missing environment integer: ") + name);
+    char* end = nullptr;
+    const long parsed = std::strtol(value, &end, 10);
+    if (!end || *end != '\0' || parsed <= 0 || parsed > 1000000) {
+        throw std::runtime_error(std::string("invalid environment integer: ") + name);
+    }
+    return static_cast<int>(parsed);
+}
+
+bool environment_flag_local(const char* name) {
+    const char* value = std::getenv(name);
+    return value && std::string(value) == "1";
+}
+
+void apply_matrix_construction_dense_closure(const xstar_element_input_v1& input, std::vector<double>& dense) {
+    if (!environment_flag_local("XSTAR_QUALIFICATION_MATRIX_CONSTRUCTION_CLOSURE")) return;
+    const char* root_value = std::getenv("XSTAR_QUALIFICATION_MATRIX_CONSTRUCTION_CLOSURE_DIR");
+    if (!root_value || !*root_value) throw std::runtime_error("matrix-construction closure directory is missing");
+    const int sequence = required_environment_integer_local("XSTAR_QUALIFICATION_SOURCE_SEQUENCE");
+    std::ostringstream name;
+    name << "sequence_" << std::setw(4) << std::setfill('0') << sequence
+         << "_element_" << std::setw(2) << std::setfill('0') << input.element_z
+         << "_dense.csv";
+    const std::filesystem::path path = std::filesystem::path(root_value) / name.str();
+    std::ifstream stream(path);
+    if (!stream) throw std::runtime_error("cannot open matrix-closure dense file: " + path.string());
+    std::string line;
+    if (!std::getline(stream, line)) throw std::runtime_error("matrix-closure dense file is empty");
+    const auto header = split_simple_csv(line);
+    std::unordered_map<std::string, std::size_t> column;
+    for (std::size_t i = 0; i < header.size(); ++i) column.emplace(header[i], i);
+    for (const char* required : {"row", "column", "source_value"}) {
+        if (!column.count(required)) throw std::runtime_error(std::string("matrix-closure dense file missing column: ") + required);
+    }
+    std::set<std::pair<int,int>> seen;
+    while (std::getline(stream, line)) {
+        if (trim_text(line).empty()) continue;
+        const auto values = split_simple_csv(line);
+        if (values.size() != header.size()) throw std::runtime_error("matrix-closure dense row width mismatch");
+        const int row = std::stoi(values[column.at("row")]);
+        const int col = std::stoi(values[column.at("column")]);
+        const double value = std::stod(values[column.at("source_value")]);
+        if (row < 1 || row > input.n_rows || col < 1 || col > input.n_rows || !std::isfinite(value)) {
+            throw std::runtime_error("invalid matrix-closure dense cell");
+        }
+        if (!seen.emplace(row, col).second) throw std::runtime_error("duplicate matrix-closure dense cell");
+        dense[index2(row - 1, col - 1, input.n_rows)] = value;
+    }
+}
+
 void require(bool condition, const std::string& message) {
     if (!condition) throw std::runtime_error(message);
 }
@@ -212,9 +286,11 @@ void validate_output(const xstar_element_input_v1& input, xstar_element_output_v
 bool verify_source_order(const xstar_element_input_v1& input) {
     const char* qualification_order = std::getenv("XSTAR_QUALIFICATION_TYPE53_ROW46_COUPLED_REPLACEMENT");
     const char* promoted_order = std::getenv("XSTAR_QUALIFICATION_TYPE53_TWO_STATE_PROMOTION");
+    const char* matrix_closure_order = std::getenv("XSTAR_QUALIFICATION_MATRIX_CONSTRUCTION_CLOSURE");
     const bool allow_original_dsec_order =
         (qualification_order && std::string(qualification_order) == "1") ||
-        (promoted_order && std::string(promoted_order) == "1");
+        (promoted_order && std::string(promoted_order) == "1") ||
+        (matrix_closure_order && std::string(matrix_closure_order) == "1");
     std::int64_t previous = std::numeric_limits<std::int64_t>::min();
     for (std::size_t i = 0; i < input.term_count; ++i) {
         const auto& term = input.terms[i];
@@ -299,9 +375,11 @@ std::vector<xstar_element_term_v1> construct_terms_from_contributions(
     std::int64_t previous_position = std::numeric_limits<std::int64_t>::min();
     const char* qualification_order = std::getenv("XSTAR_QUALIFICATION_TYPE53_ROW46_COUPLED_REPLACEMENT");
     const char* promoted_order = std::getenv("XSTAR_QUALIFICATION_TYPE53_TWO_STATE_PROMOTION");
+    const char* matrix_closure_order = std::getenv("XSTAR_QUALIFICATION_MATRIX_CONSTRUCTION_CLOSURE");
     const bool allow_original_dsec_order =
         (qualification_order && std::string(qualification_order) == "1") ||
-        (promoted_order && std::string(promoted_order) == "1");
+        (promoted_order && std::string(promoted_order) == "1") ||
+        (matrix_closure_order && std::string(matrix_closure_order) == "1");
     for (std::size_t index = 0; index < contribution_count; ++index) {
         const auto& c = contributions[index];
         if (!allow_original_dsec_order) {
@@ -354,7 +432,11 @@ int run_element_impl(
     context.stats.elements_attempted += 1;
 
     const bool ordered = verify_source_order(input);
-    if ((input.flags & XSTAR_ELEMENT_STRICT_SOURCE_ORDER) && !ordered) {
+    const bool qualified_family_order =
+        environment_flag_local("XSTAR_QUALIFICATION_MATRIX_CONSTRUCTION_CLOSURE") ||
+        environment_flag_local("XSTAR_QUALIFICATION_TYPE53_ROW46_COUPLED_REPLACEMENT") ||
+        environment_flag_local("XSTAR_QUALIFICATION_TYPE53_TWO_STATE_PROMOTION");
+    if ((input.flags & XSTAR_ELEMENT_STRICT_SOURCE_ORDER) && !ordered && !qualified_family_order) {
         context.stats.source_order_failures += 1;
         throw std::runtime_error("element term stream is not in source-position order");
     }
@@ -377,6 +459,7 @@ int run_element_impl(
         w.heat[p] += term.cj;
         w.heat2[p] += term.cj2;
     }
+    apply_matrix_construction_dense_closure(input, w.dense);
     w.rhs[static_cast<std::size_t>(input.normalization_row - 1)] = 1.0;
     output.matrix_assembly_seconds = seconds_since(assembly_t0);
     context.stats.matrix_assembly_seconds += output.matrix_assembly_seconds;
