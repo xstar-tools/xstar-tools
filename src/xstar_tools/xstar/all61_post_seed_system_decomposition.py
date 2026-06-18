@@ -18,7 +18,7 @@ from typing import Any, Iterable
 
 import numpy as np
 
-RELEASE = "0.6.48.7.46.11"
+RELEASE = "0.6.48.7.46.11.1"
 SCHEMA = "xstar-tools-v06487466-all61-post-seed-system-decomposition-v1"
 SUMMARY_NAME = "all61_post_seed_system_decomposition_summary.json"
 SYSTEM_COMPARISON_NAME = "all61_post_seed_system_comparison.csv"
@@ -483,7 +483,7 @@ def decompose(
         "ALL_61_POST_SEED_DIVERGENCES_CLASSIFIED": "ACCEPT" if classified else "REJECT",
         "V06487_POST_SEED_SYSTEM_DECOMPOSITION": "ACCEPT" if decomposition_complete else "REJECT",
         "V06487_FIXED_STATE_PARITY": "ACCEPT" if fixed_state_exact else "REJECT",
-        "V06488_THERMAL_PARITY_READY": "YES" if fixed_state_exact else "NO_FIXED_STATE_GATE_NOT_ACCEPTED",
+        "V06488_THERMAL_PARITY_READY": "ACCEPT" if fixed_state_exact else "NO_FIXED_STATE_GATE_NOT_ACCEPTED",
         "THERMAL_PARITY": "NOT_RUN_V06488" if fixed_state_exact else "BLOCKED",
         "CONTROLLER_PARITY": "NOT_RUN_V06489",
         "PRODUCT_PARITY": "BLOCKED",

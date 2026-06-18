@@ -1,3 +1,7 @@
+## Current release: 0.6.48.7.46.11.1
+
+This reporting-only hotfix canonicalizes the successful Thermal-readiness gate as `ACCEPT` and can reclassify an already-completed v46.11 output without rerunning physics. All-61 fixed-state parity remains exact; Thermal parity has not yet run.
+
 ## v0.6.48.7.46.11 all-61 fixed-state parity
 
 This qualification release starts from the accepted 183/183 exact matrix boundary and commits the captured source final state for every H/He/Mg evaluation: 41,968 level-population values, 1,098 ion-stage values, 61 computed electron fractions, and 61 charge residuals. Native records, matrices, solves, spectra, and thermal diagnostics still execute; the state commit is explicit, fail-closed, qualification-only, and introduces no Python callbacks. The actual host replay is required before Thermal parity is unblocked. See `V064874611_ALL61_FIXED_STATE_PARITY.md`.

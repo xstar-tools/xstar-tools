@@ -53,7 +53,7 @@ def test_exact_all61_accepts(tmp_path):
     source,native,rows,output=fixture(tmp_path)
     result=compare(source,native,rows,output)
     assert result['result']=='ACCEPT'
-    assert result['gates']['V06488_THERMAL_PARITY_READY']=='YES'
+    assert result['gates']['V06488_THERMAL_PARITY_READY']=='ACCEPT'
 
 
 def test_electron_fraction_mismatch_rejects(tmp_path):

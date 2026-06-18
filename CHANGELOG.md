@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.7.46.11.1 — Thermal-readiness gate vocabulary hotfix - 2026-06-18
+
+- Normalizes successful `V06488_THERMAL_PARITY_READY` from `YES` to canonical `ACCEPT`.
+- Reanalyzes the completed v46.11 host output without replaying native evaluations.
+- Preserves 183/183 exact matrices, zero dense mismatches, 41,968/41,968 active levels, 1,098/1,098 ion stages, and 61/61 electron-fraction and charge-residual scalars.
+- Reports `THERMAL_PARITY=NOT_RUN_V06488`; no Thermal calculation or physics path is changed.
+- Keeps controller, product, and production promotion blocked.
+
 ## 0.6.48.7.46.11 — all-61 fixed-state parity - 2026-06-18
 
 - Added a qualification-only source-captured final-state commit after all native rate, matrix, and element-solve work completes.

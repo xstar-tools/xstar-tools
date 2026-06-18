@@ -9,7 +9,7 @@ import struct
 from pathlib import Path
 from typing import Any, Iterable
 
-RELEASE = "0.6.48.7.46.11"
+RELEASE = "0.6.48.7.46.11.1"
 SCHEMA = "xstar-tools-v0648744-all61-h-he-mg-fixed-state-closure-v1"
 SUMMARY_NAME = "all61_h_he_mg_fixed_state_closure_summary.json"
 STATE_DIFF_NAME = "all61_state_comparison.csv"
@@ -193,7 +193,7 @@ def compare(source_dir: Path, native_dir: Path, program_rows_csv: Path, output_d
         "ALL_61_CHARGE_RESIDUAL_EXACT": _gate(charge_exact),
         "ALL_61_H_HE_MG_FIXED_STATE_PARITY": _gate(fixed_state_exact),
         "V06487_FIXED_STATE_PARITY": _gate(fixed_state_exact),
-        "V06488_THERMAL_PARITY_READY": "YES" if fixed_state_exact else "NO_FIXED_STATE_GATE_NOT_ACCEPTED",
+        "V06488_THERMAL_PARITY_READY": "ACCEPT" if fixed_state_exact else "NO_FIXED_STATE_GATE_NOT_ACCEPTED",
         "THERMAL_PARITY": "NOT_RUN_READY_FOR_V06488" if fixed_state_exact else "BLOCKED",
         "CONTROLLER_PARITY": "NOT_RUN_V06489",
         "PRODUCT_PARITY": "BLOCKED",
