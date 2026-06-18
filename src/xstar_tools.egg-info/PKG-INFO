@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: xstar-tools
-Version: 0.6.48.7.46.9.4.1
+Version: 0.6.48.7.46.9.4.2
 Summary: Source-faithful Python/C++ XSTAR tools, atomic-data utilities, benchmarks, and runtime
 Author: Ashkbiz Danehkar
 License-Expression: MIT
@@ -25,6 +25,10 @@ Provides-Extra: hdf5
 Requires-Dist: h5py>=3; extra == "hdf5"
 Provides-Extra: sparse
 Requires-Dist: scipy>=1.8; extra == "sparse"
+
+## v0.6.48.7.46.9.4.2 Type-53 audit correction and Type-49 extrapolated-grid parity
+
+This qualification release corrects the Type-53 audit prefix error from v46.9.4.1 and reproduces the frozen v0.6.47.2 Type-49 extrapolation capacity. Type-49 `phextrap` now uses the reduced `ncn2m=999` workspace rather than the full 9,999-bin live radiation grid. Every Type-49 input/output energy and cross-section array is checked with exact binary64 hashes and point counts. In the preserved all-61 validation, Type-49 and Type-53 have zero unexplained material residuals; 234 remaining contribution rows are bounded to three ULPs and `4.5e-16` relative difference with no absolute tolerance. Mg Type-50 remains unchanged and deferred. See `V0648746942_TYPE53_AUDIT_AND_TYPE49_EXTRAPOLATED_GRID_PARITY.md`.
 
 ## v0.6.48.7.46.9.4.1 Mg Type-49 Milne partition and Type-53 excited-threshold correction
 

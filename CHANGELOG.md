@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 0.6.48.7.46.9.4.2 — Type-53 audit correction and Type-49 extrapolated-grid parity - 2026-06-17
+
+- Corrected the Type-53 qualification analyzer to use `type53_` for runtime context flags and pair counters while retaining `type53_shadow_` for numeric shadow values; the production v46.9.4.1 output now proves all 53,436 Type-53 records used the Milne context, all 53,436 applied the corrected threshold before mapping, and all 43,371 excited-parent records used the excited-threshold context.
+- Reproduced the frozen v0.6.47.2 Type-49 `phextrap` capacity contract: the physical runner maps the rate workspace onto `ncn2m=999`, so extrapolation is capped at 999 points rather than the 9,999-bin live radiation grid.
+- Lowered the Type-49 extrapolation capacity as a second integer payload and retained a legacy parser fallback of 999 for v46.9.4.1 lowered programs.
+- Added stable little-endian FNV-1a hashes over exact binary64 Type-49 input and output energy/cross-section arrays, plus count and capacity diagnostics for every record evaluation.
+- Added fail-closed all-61 gates requiring 49,349/49,349 exact Type-49 capacities, input hashes, output counts, and output hashes, with zero divergent record evaluations.
+- Closed all material Mg Type-49 and Type-53 causal residuals in the preserved all-61 validation. The remaining 234 rows are explicitly classified as same-sign, finite binary64 roundoff within three ULPs and `4.5e-16` relative difference; no nonzero absolute tolerance is allowed.
+- Preserved all 1,891 hydrogen Type-53 records, canonical indexed attribution, zero nonfinite/implausible Mg commits, exact-system regression protection, and the deferred Mg Type-50 orientation correction.
+- Reuses the preserved source capture and regenerates the native replay when run against the production `atdb.fits`.
+- Qualification only; fixed-state, Thermal, controller, product, and production gates remain fail-closed.
+
 ## 0.6.48.7.46.9.4.1 — Mg Type-49 Milne partition and Type-53 excited-threshold correction - 2026-06-17
 
 - Replayed the literal Type-13 linked lists into the mutable source-order `leveltemp` value workspace instead of resolving level payloads through the global `npilev` alias map.

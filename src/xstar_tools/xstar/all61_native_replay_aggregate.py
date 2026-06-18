@@ -1,4 +1,4 @@
-"""Aggregate 61 independent run-fixed-evaluation outputs for v0.6.48.7.46.9.4.1."""
+"""Aggregate 61 independent run-fixed-evaluation outputs for v0.6.48.7.46.9.4.2."""
 from __future__ import annotations
 import argparse, csv, json
 from pathlib import Path
@@ -24,7 +24,7 @@ def main(argv=None):
                      'computed_electron_fraction':state['native_electron_fraction'],'charge_residual':state['native_charge_residual'],'hmctot':state['native_hmctot']})
     with (a.output/'native_dsec_trajectory.csv').open('w',newline='') as f:
         w=csv.DictWriter(f,fieldnames=fields); w.writeheader(); w.writerows(rows)
-    summary={'schema_version':'0.6.48.7.46.9.4.1','trajectory_mode':'all61_independent_reference_input_state_qualification','total_evaluations':len(rows),
+    summary={'schema_version':'0.6.48.7.46.9.4.2','trajectory_mode':'all61_independent_reference_input_state_qualification','total_evaluations':len(rows),
              'python_callbacks':callbacks,'records_evaluated':records,'elements_solved':elements,'errors':errors,'production_promotion_ready':False}
     (a.output/'native_dsec_summary.json').write_text(json.dumps(summary,indent=2,sort_keys=True)+'\n')
     print(json.dumps(summary,indent=2,sort_keys=True)); return 0 if len(rows)==61 and callbacks==0 and not errors else 2

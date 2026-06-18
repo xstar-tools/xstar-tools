@@ -70,6 +70,24 @@ double elapsed(const clock_type::time_point& start) {
     return std::chrono::duration<double>(clock_type::now() - start).count();
 }
 
+std::uint64_t binary64_sequence_fnv1a(const std::vector<double>& values) {
+    // Stable little-endian FNV-1a over the exact IEEE-754 payload.  This is
+    // intentionally independent of host byte order so Python qualification
+    // can reconstruct the same hash from the lowered program.
+    std::uint64_t hash = 1469598103934665603ULL;
+    constexpr std::uint64_t prime = 1099511628211ULL;
+    for (double value : values) {
+        std::uint64_t bits = 0;
+        static_assert(sizeof(bits) == sizeof(value), "binary64 size mismatch");
+        std::memcpy(&bits, &value, sizeof(bits));
+        for (unsigned shift = 0; shift < 64; shift += 8) {
+            hash ^= (bits >> shift) & 0xffULL;
+            hash *= prime;
+        }
+    }
+    return hash;
+}
+
 int environment_data_type(const char* name) {
     const char* value = std::getenv(name);
     if (!value || !*value) return 0;
@@ -316,6 +334,7 @@ struct Type53RecordContext {
     double excited_parent_energy_ev = 0.0;
     double excited_parent_statistical_weight = 0.0;
     int continuum_index_one_based = 0;
+    int phextrap_max_points = 0;
 };
 
 struct Type53SourceShadow {
@@ -355,6 +374,11 @@ struct Type53SourceShadow {
     bool phextrap_source_reference_order = false;
     int phextrap_input_pair_count = 0;
     int phextrap_output_pair_count = 0;
+    int phextrap_max_points = 0;
+    std::uint64_t phextrap_input_energy_hash = 0;
+    std::uint64_t phextrap_input_sigma_hash = 0;
+    std::uint64_t phextrap_output_energy_hash = 0;
+    std::uint64_t phextrap_output_sigma_hash = 0;
     double rnist = 0.0;
     double sumr = 0.0;
     double sumi = 0.0;
@@ -1791,11 +1815,20 @@ bool evaluate_type53_source_integral(
         pair_energy_ryd[static_cast<std::size_t>(j)] = payload[2 * j];
         pair_sigma_cm2[static_cast<std::size_t>(j)] = std::max(0.0, payload[2 * j + 1]);
     }
+    const std::uint64_t phextrap_input_energy_hash = binary64_sequence_fnv1a(pair_energy_ryd);
+    const std::uint64_t phextrap_input_sigma_hash = binary64_sequence_fnv1a(pair_sigma_cm2);
+    int phextrap_max_points = n_grid;
+    if (phextrap_pairs && record_context && record_context->phextrap_max_points > 0) {
+        phextrap_max_points = record_context->phextrap_max_points;
+    }
     if (phextrap_pairs) {
         const int base = std::max(pair_count - 2, 0);
         double e1 = pair_energy_ryd[static_cast<std::size_t>(base)] * 13.6 + threshold_ev;
         double s1 = pair_sigma_cm2[static_cast<std::size_t>(base)];
-        while (s1 > 1.0e-27 && static_cast<int>(pair_energy_ryd.size()) < n_grid && e1 < 2.0e5) {
+        // v0.6.47.2 calls phextrap with len(_mapped_grid(c)); the physical
+        // runner's reduced ucalc grid is ncn2m=999.  Do not use the full
+        // 9999-bin phint53 integration grid as extrapolation capacity.
+        while (s1 > 1.0e-27 && static_cast<int>(pair_energy_ryd.size()) < phextrap_max_points && e1 < 2.0e5) {
             const double e2 = e1 * 1.3;
             const double s2 = s1 / (1.3 * 1.3 * 1.3);
             pair_energy_ryd.push_back((e2 - threshold_ev) / 13.6);
@@ -1805,6 +1838,8 @@ bool evaluate_type53_source_integral(
         }
         pair_count = static_cast<int>(pair_energy_ryd.size());
     }
+    const std::uint64_t phextrap_output_energy_hash = binary64_sequence_fnv1a(pair_energy_ryd);
+    const std::uint64_t phextrap_output_sigma_hash = binary64_sequence_fnv1a(pair_sigma_cm2);
 
     std::vector<double> xs(static_cast<std::size_t>(pair_count), 0.0);
     std::vector<double> ys(static_cast<std::size_t>(pair_count), 0.0);
@@ -2007,7 +2042,7 @@ bool evaluate_type53_source_integral(
     contribution.ans6 *= (std::abs(contribution.ans4) - energy_difference * kErgPerEv * contribution.ans1) / den6;
     contribution.ans5 *= (std::abs(contribution.ans3) - energy_difference * kErgPerEv * contribution.ans2) / den5;
 
-    // v0.6.48.7.46.9.4.1 qualification-only IEEE closure.  The v0.6.47.2
+    // v0.6.48.7.46.9.4.2 qualification-only IEEE closure.  The v0.6.47.2
     // Python reference evaluates the same source expressions one operation at
     // a time.  Activating the live RRC escape state exposes seven isolated
     // one-ULP host/compiler differences among 1,891 hydrogen Type-53 records.
@@ -2070,6 +2105,11 @@ bool evaluate_type53_source_integral(
         shadow->phextrap_source_reference_order = type49_semantics && phextrap_pairs;
         shadow->phextrap_input_pair_count = static_cast<int>(pair_real_count / 2);
         shadow->phextrap_output_pair_count = pair_count;
+        shadow->phextrap_max_points = phextrap_max_points;
+        shadow->phextrap_input_energy_hash = phextrap_input_energy_hash;
+        shadow->phextrap_input_sigma_hash = phextrap_input_sigma_hash;
+        shadow->phextrap_output_energy_hash = phextrap_output_energy_hash;
+        shadow->phextrap_output_sigma_hash = phextrap_output_sigma_hash;
         shadow->rnist = rnist;
         shadow->sumr = sumr;
         shadow->sumi = sumi;
@@ -2286,7 +2326,8 @@ EvaluatedRecord evaluate_record(
             const bool magnesium_source_faithful =
                 element.element_z == 12 &&
                 (environment_flag("XSTAR_QUALIFICATION_MG_BOUND_FREE_SOURCE_FAITHFUL") ||
-                 environment_flag("XSTAR_QUALIFICATION_MG_MILNE_EXCITED_THRESHOLD"));
+                 environment_flag("XSTAR_QUALIFICATION_MG_MILNE_EXCITED_THRESHOLD") ||
+                 environment_flag("XSTAR_QUALIFICATION_TYPE49_EXTRAPOLATED_GRID_PARITY"));
             const bool magnesium_replacement =
                 magnesium_finite_state || magnesium_source_faithful;
             const auto pescv_source = [](double tau) {
@@ -2507,6 +2548,8 @@ EvaluatedRecord evaluate_record(
                 record_context.excited_parent_statistical_weight = r[base + 9];
                 record_context.continuum_index_one_based =
                     (ints && record.int_count >= 1) ? static_cast<int>(ints[0]) : 0;
+                record_context.phextrap_max_points =
+                    (ints && record.int_count >= 2) ? static_cast<int>(ints[1]) : 999;
             } else if (record.real_count >= 4 + kBoundFreeContextRealsV1 &&
                        (record.real_count - kBoundFreeContextRealsV1) % 2 == 0) {
                 const std::size_t base = record.real_count - kBoundFreeContextRealsV1;
@@ -2524,6 +2567,8 @@ EvaluatedRecord evaluate_record(
                 record_context.excited_parent_statistical_weight = record_context.destination_statistical_weight;
                 record_context.continuum_index_one_based =
                     (ints && record.int_count >= 1) ? static_cast<int>(ints[0]) : 0;
+                record_context.phextrap_max_points =
+                    (ints && record.int_count >= 2) ? static_cast<int>(ints[1]) : 999;
             } else if (record.real_count % 2 != 0) {
                 throw std::runtime_error("Type-49 bound-free payload/context layout invalid");
             }
@@ -2610,6 +2655,20 @@ EvaluatedRecord evaluate_record(
                 out.type49_shadow.phextrap_source_reference_order = true;
                 out.type49_shadow.phextrap_input_pair_count = static_cast<int>(pair_real_count / 2);
                 out.type49_shadow.phextrap_output_pair_count = 0;
+                out.type49_shadow.phextrap_max_points = record_context.phextrap_max_points > 0
+                    ? record_context.phextrap_max_points : 999;
+                std::vector<double> zero_gate_energy;
+                std::vector<double> zero_gate_sigma;
+                zero_gate_energy.reserve(pair_real_count / 2);
+                zero_gate_sigma.reserve(pair_real_count / 2);
+                for (std::size_t pair = 0; pair < pair_real_count / 2; ++pair) {
+                    zero_gate_energy.push_back(r[2 * pair]);
+                    zero_gate_sigma.push_back(std::max(0.0, r[2 * pair + 1]));
+                }
+                out.type49_shadow.phextrap_input_energy_hash = binary64_sequence_fnv1a(zero_gate_energy);
+                out.type49_shadow.phextrap_input_sigma_hash = binary64_sequence_fnv1a(zero_gate_sigma);
+                out.type49_shadow.phextrap_output_energy_hash = binary64_sequence_fnv1a(std::vector<double>{});
+                out.type49_shadow.phextrap_output_sigma_hash = binary64_sequence_fnv1a(std::vector<double>{});
                 out.type49_shadow.electron_density_cm3 = input.electron_density_cm3;
                 out.type49_shadow.hydrogen_density_cm3 = input.hydrogen_density_cm3;
                 out.type49_shadow.matrix_density_scale = static_cast<double>(input.hydrogen_density_cm3);
@@ -2623,7 +2682,8 @@ EvaluatedRecord evaluate_record(
                 environment_flag("XSTAR_QUALIFICATION_MG_BOUND_FREE_FINITE_STATE");
             const bool magnesium_source_faithful = element.element_z == 12 &&
                 (environment_flag("XSTAR_QUALIFICATION_MG_BOUND_FREE_SOURCE_FAITHFUL") ||
-                 environment_flag("XSTAR_QUALIFICATION_MG_MILNE_EXCITED_THRESHOLD"));
+                 environment_flag("XSTAR_QUALIFICATION_MG_MILNE_EXCITED_THRESHOLD") ||
+                 environment_flag("XSTAR_QUALIFICATION_TYPE49_EXTRAPOLATED_GRID_PARITY"));
             const bool magnesium_replacement = magnesium_finite_state || magnesium_source_faithful;
             if (magnesium_replacement && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
                 throw std::runtime_error(
@@ -4333,7 +4393,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
         });
         std::ofstream record_file(root / (stem + "_records.csv"));
         if (!record_file) throw std::runtime_error("cannot create record diagnostics CSV");
-        record_file << "evaluation_ordinal,source_position,record,element_index,element_z,data_type,rate_type,ion_index,ion_stage,lower_row,upper_row,matrix_enabled,active_stage,matrix_committed,spectral,ans1,ans2,ans3,ans4,ans5,ans6,density_scale,line_energy_ev,atomic_mass_amu,natural_width_ev,opakab,type56_upsilon,type53_shadow_valid,type53_shadow_ans1,type53_shadow_ans2,type53_shadow_ans3,type53_shadow_ans4,type53_shadow_ans5,type53_shadow_ans6,type53_delta_ans1,type53_delta_ans2,type53_delta_ans3,type53_delta_ans4,type53_delta_ans5,type53_delta_ans6,type53_shadow_base_threshold_ev,type53_shadow_threshold_ev,type53_shadow_bound_energy_ev,type53_shadow_continuum_energy_ev,type53_shadow_destination_energy_ev,type53_shadow_excited_parent_energy_ev,type53_shadow_bound_g,type53_shadow_continuum_g,type53_shadow_destination_g,type53_shadow_excited_parent_g,type53_milne_partition_context_used,type53_excited_threshold_context_used,type53_corrected_threshold_before_mapping,type53_phextrap_source_reference_order,type53_phextrap_input_pair_count,type53_phextrap_output_pair_count,type53_shadow_rnist,type53_shadow_sumr,type53_shadow_sumi,type53_shadow_sumh,type53_shadow_sumh2,type53_shadow_sumc,type53_shadow_sumc2,type53_sumc_ieee_nextafter_applied,type53_shadow_nb1_one_based,type53_shadow_klmax_one_based,type53_row46_contract,type53_captured_state_anchor,type53_tau_in,type53_tau_out,type53_ptmp1,type53_ptmp2,type53_covering_fraction,type53_runtime_state_abi_used,type53_continuum_index_one_based,type53_dsec_radiation_bin_count,type53_continuum_tau_count,type50_shadow_valid,type50_shadow_ans1,type50_shadow_ans2,type50_shadow_ans3,type50_shadow_ans4,type50_shadow_ans5,type50_shadow_ans6,type50_stored_wavelength_a,type50_endpoint_energy_ev,type50_covering_fraction,type50_ptmp1,type50_ptmp2,type50_bremsa_nb1,type50_density_floor_s,type50_density_floor_applied,type50_photoexcitation_zero_covering,type50_used_dsec_covering,type50_used_dsec_radiation,type50_nb1_one_based,type99_shadow_valid,type99_shadow_ans1,type99_shadow_ans2,type99_shadow_ans3,type99_shadow_ans4,type99_shadow_ans5,type99_shadow_ans6,type99_threshold_ev,type99_destination_energy_ev,type99_bound_energy_ev,type99_swrat,type99_calt99_density_cm3,type99_phint53hunt_density_cm3,type99_rec_cm3_s,type99_milne_alpha_cm3_s,type99_cross_section_scale,type99_ans2d_unscaled_s,type99_phint_scale,type99_pirt_unscaled_s,type99_rrrt_unscaled_s,type99_piht_unscaled_erg_s,type99_rrcl_unscaled_erg_s,type99_piht2_unscaled_erg_s,type99_rrcl2_unscaled_erg_s,type99_nbinc_threshold_one_based,type99_nb1_one_based,type99_nphint_one_based,type99_ndelt,type99_npass,type99_last_pass_first_kl_one_based,type99_last_pass_last_kl_one_based,type99_cached_atmp22_stale_reuses,type99_used_dsec_radiation,mg_type53_legacy_max_abs,mg_type53_shadow_max_abs,mg_type53_committed_max_abs,mg_type53_legacy_nonfinite,mg_type53_legacy_implausible,mg_type53_replacement_applied,mg_type53_committed_nonfinite,mg_type53_committed_implausible,mg_type53_exponent_energy_ev,mg_type53_exponent_dimensionless,mg_type53_electron_density_cm3,mg_type53_hydrogen_density_cm3,mg_type53_matrix_density_scale,mg_type53_source_faithful_mode,type49_shadow_valid,type49_shadow_ans1,type49_shadow_ans2,type49_shadow_ans3,type49_shadow_ans4,type49_shadow_ans5,type49_shadow_ans6,type49_legacy_max_abs,type49_shadow_max_abs,type49_committed_max_abs,type49_legacy_nonfinite,type49_legacy_implausible,type49_replacement_applied,type49_committed_nonfinite,type49_committed_implausible,type49_base_threshold_ev,type49_threshold_ev,type49_bound_energy_ev,type49_continuum_energy_ev,type49_destination_energy_ev,type49_excited_parent_energy_ev,type49_bound_g,type49_continuum_g,type49_destination_g,type49_excited_parent_g,type49_milne_partition_context_used,type49_excited_threshold_context_used,type49_corrected_threshold_before_mapping,type49_phextrap_source_reference_order,type49_phextrap_input_pair_count,type49_phextrap_output_pair_count,type49_rnist,type49_exponent_energy_ev,type49_exponent_dimensionless,type49_electron_density_cm3,type49_hydrogen_density_cm3,type49_matrix_density_scale,type49_phextrap_applied,type49_source_zero_gate,type49_source_faithful_mode,type49_runtime_state_abi_used,type49_continuum_index_one_based,type49_dsec_radiation_bin_count,type49_continuum_tau_count\n";
+        record_file << "evaluation_ordinal,source_position,record,element_index,element_z,data_type,rate_type,ion_index,ion_stage,lower_row,upper_row,matrix_enabled,active_stage,matrix_committed,spectral,ans1,ans2,ans3,ans4,ans5,ans6,density_scale,line_energy_ev,atomic_mass_amu,natural_width_ev,opakab,type56_upsilon,type53_shadow_valid,type53_shadow_ans1,type53_shadow_ans2,type53_shadow_ans3,type53_shadow_ans4,type53_shadow_ans5,type53_shadow_ans6,type53_delta_ans1,type53_delta_ans2,type53_delta_ans3,type53_delta_ans4,type53_delta_ans5,type53_delta_ans6,type53_shadow_base_threshold_ev,type53_shadow_threshold_ev,type53_shadow_bound_energy_ev,type53_shadow_continuum_energy_ev,type53_shadow_destination_energy_ev,type53_shadow_excited_parent_energy_ev,type53_shadow_bound_g,type53_shadow_continuum_g,type53_shadow_destination_g,type53_shadow_excited_parent_g,type53_milne_partition_context_used,type53_excited_threshold_context_used,type53_corrected_threshold_before_mapping,type53_phextrap_source_reference_order,type53_phextrap_input_pair_count,type53_phextrap_output_pair_count,type53_shadow_rnist,type53_shadow_sumr,type53_shadow_sumi,type53_shadow_sumh,type53_shadow_sumh2,type53_shadow_sumc,type53_shadow_sumc2,type53_sumc_ieee_nextafter_applied,type53_shadow_nb1_one_based,type53_shadow_klmax_one_based,type53_row46_contract,type53_captured_state_anchor,type53_tau_in,type53_tau_out,type53_ptmp1,type53_ptmp2,type53_covering_fraction,type53_runtime_state_abi_used,type53_continuum_index_one_based,type53_dsec_radiation_bin_count,type53_continuum_tau_count,type50_shadow_valid,type50_shadow_ans1,type50_shadow_ans2,type50_shadow_ans3,type50_shadow_ans4,type50_shadow_ans5,type50_shadow_ans6,type50_stored_wavelength_a,type50_endpoint_energy_ev,type50_covering_fraction,type50_ptmp1,type50_ptmp2,type50_bremsa_nb1,type50_density_floor_s,type50_density_floor_applied,type50_photoexcitation_zero_covering,type50_used_dsec_covering,type50_used_dsec_radiation,type50_nb1_one_based,type99_shadow_valid,type99_shadow_ans1,type99_shadow_ans2,type99_shadow_ans3,type99_shadow_ans4,type99_shadow_ans5,type99_shadow_ans6,type99_threshold_ev,type99_destination_energy_ev,type99_bound_energy_ev,type99_swrat,type99_calt99_density_cm3,type99_phint53hunt_density_cm3,type99_rec_cm3_s,type99_milne_alpha_cm3_s,type99_cross_section_scale,type99_ans2d_unscaled_s,type99_phint_scale,type99_pirt_unscaled_s,type99_rrrt_unscaled_s,type99_piht_unscaled_erg_s,type99_rrcl_unscaled_erg_s,type99_piht2_unscaled_erg_s,type99_rrcl2_unscaled_erg_s,type99_nbinc_threshold_one_based,type99_nb1_one_based,type99_nphint_one_based,type99_ndelt,type99_npass,type99_last_pass_first_kl_one_based,type99_last_pass_last_kl_one_based,type99_cached_atmp22_stale_reuses,type99_used_dsec_radiation,mg_type53_legacy_max_abs,mg_type53_shadow_max_abs,mg_type53_committed_max_abs,mg_type53_legacy_nonfinite,mg_type53_legacy_implausible,mg_type53_replacement_applied,mg_type53_committed_nonfinite,mg_type53_committed_implausible,mg_type53_exponent_energy_ev,mg_type53_exponent_dimensionless,mg_type53_electron_density_cm3,mg_type53_hydrogen_density_cm3,mg_type53_matrix_density_scale,mg_type53_source_faithful_mode,type49_shadow_valid,type49_shadow_ans1,type49_shadow_ans2,type49_shadow_ans3,type49_shadow_ans4,type49_shadow_ans5,type49_shadow_ans6,type49_legacy_max_abs,type49_shadow_max_abs,type49_committed_max_abs,type49_legacy_nonfinite,type49_legacy_implausible,type49_replacement_applied,type49_committed_nonfinite,type49_committed_implausible,type49_base_threshold_ev,type49_threshold_ev,type49_bound_energy_ev,type49_continuum_energy_ev,type49_destination_energy_ev,type49_excited_parent_energy_ev,type49_bound_g,type49_continuum_g,type49_destination_g,type49_excited_parent_g,type49_milne_partition_context_used,type49_excited_threshold_context_used,type49_corrected_threshold_before_mapping,type49_phextrap_source_reference_order,type49_phextrap_input_pair_count,type49_phextrap_output_pair_count,type49_phextrap_max_points,type49_phextrap_input_energy_hash,type49_phextrap_input_sigma_hash,type49_phextrap_output_energy_hash,type49_phextrap_output_sigma_hash,type49_rnist,type49_exponent_energy_ev,type49_exponent_dimensionless,type49_electron_density_cm3,type49_hydrogen_density_cm3,type49_matrix_density_scale,type49_phextrap_applied,type49_source_zero_gate,type49_source_faithful_mode,type49_runtime_state_abi_used,type49_continuum_index_one_based,type49_dsec_radiation_bin_count,type49_continuum_tau_count\n";
         record_file << std::setprecision(17);
 
         struct FamilySummary {
@@ -4480,6 +4540,11 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                         << ',' << (item.type49_shadow.phextrap_source_reference_order ? 1 : 0)
                         << ',' << item.type49_shadow.phextrap_input_pair_count
                         << ',' << item.type49_shadow.phextrap_output_pair_count
+                        << ',' << item.type49_shadow.phextrap_max_points
+                        << ',' << item.type49_shadow.phextrap_input_energy_hash
+                        << ',' << item.type49_shadow.phextrap_input_sigma_hash
+                        << ',' << item.type49_shadow.phextrap_output_energy_hash
+                        << ',' << item.type49_shadow.phextrap_output_sigma_hash
                         << ',' << item.type49_shadow.rnist
                         << ',' << item.type49_shadow.exponent_energy_ev
                         << ',' << item.type49_shadow.exponent_dimensionless

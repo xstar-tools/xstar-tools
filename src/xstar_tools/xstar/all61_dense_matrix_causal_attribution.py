@@ -1,4 +1,4 @@
-"""Indexed all-61 dense-matrix causal attribution for v0.6.48.7.46.9.4.1.
+"""Indexed all-61 dense-matrix causal attribution for v0.6.48.7.46.9.4.2.
 
 The audit consumes the exact source and native contribution streams captured by
 v0.6.48.7.46.9, but indexes those streams once by matrix cell instead of
@@ -24,7 +24,7 @@ from typing import Any, Iterable, Mapping
 
 import numpy as np
 
-RELEASE = "0.6.48.7.46.9.4.1"
+RELEASE = "0.6.48.7.46.9.4.2"
 SCHEMA = "xstar-tools-v0648746931-hydrogen-type53-ieee-equivalence-attribution-v1"
 SUMMARY_NAME = "all61_dense_matrix_causal_attribution_summary.json"
 CELL_NAME = "all61_dense_matrix_causal_cells.csv"
@@ -536,7 +536,7 @@ _HYDROGEN_TYPE53_PHASE_EXPECTED = {
     "final_call4": 8,
 }
 
-# v0.6.48.7.46.9.4.1: accept only host/compiler binary64 roundoff.
+# v0.6.48.7.46.9.4.2: accept only host/compiler binary64 roundoff.
 # A field must be finite, have the same sign, differ by no more than two ULPs,
 # and satisfy the relative guard.  There is deliberately no nonzero absolute
 # tolerance, so a small source value cannot be matched to zero.
@@ -921,7 +921,8 @@ def analyze(
                 if progress_every > 0 and (processed % progress_every == 0 or processed == len(expected)):
                     elapsed = time.perf_counter() - started
                     print(
-                        "V04874692_PROGRESS "
+                        # Historical readiness marker: V04874692_PROGRESS
+                        "V048746942_PROGRESS "
                         f"systems={processed}/{len(expected)} "
                         f"mismatch_cells={total_mismatch_cells} "
                         f"attributed_cells={attributed_cells} "

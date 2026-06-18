@@ -96,4 +96,4 @@ def test_payload_probe_compiles_and_streams_four_npz_files() -> None:
 def test_release_version() -> None:
     import xstar_tools
 
-    assert xstar_tools.__version__ == "0.6.48.7.46.9.4.1"
+    assert xstar_tools.__version__ == "0.6.48.7.46.9.4.2"

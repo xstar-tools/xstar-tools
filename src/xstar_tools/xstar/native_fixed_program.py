@@ -22,6 +22,10 @@ from typing import Any, Iterable, Iterator, Mapping, Sequence
 
 PROGRAM_ABI = 60485
 QUALIFIED_XDEF_ABUNDANCES_BY_Z: dict[int, float] = {1: 1.0, 2: 0.1, 12: 3.5e-5}
+# v0.6.47.2 physical_runner.py constructs the reduced ucalc rate grid with
+# ncn2m=999.  Type-49 phextrap uses that reduced-grid length as its capacity
+# even though phint53 subsequently integrates on the full 9999-bin live grid.
+TYPE49_PHEXTRAP_MAX_POINTS = 999
 
 
 def _parse_abundance_spec(text: str) -> dict[int, float]:
@@ -1025,6 +1029,8 @@ def _lower_record(
                 raise ValueError(f"type49 record {rec} has no canonical continuum index")
             raise ValueError(f"type53 record {rec} has no canonical continuum index")
         payload_ints = [continuum_index]
+        if dt == 49:
+            payload_ints.append(TYPE49_PHEXTRAP_MAX_POINTS)
         line_energy = float(corrected_threshold_ev)
     elif dt == 76:
         if len(raw_ints) < 2 or len(raw_reals) < 1:

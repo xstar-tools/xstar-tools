@@ -15,9 +15,9 @@ def root() -> Path:
 
 
 def test_release_and_api_version() -> None:
-    assert xstar_tools.__version__ == "0.6.48.7.46.9.4.1"
+    assert xstar_tools.__version__ == "0.6.48.7.46.9.4.2"
     api = (root() / "src/xstar_tools/xstar/cpp/xstar_api.h").read_text()
-    assert 'XSTAR_API_VERSION_STRING "0.6.48.7.46.9.4.1"' in api
+    assert 'XSTAR_API_VERSION_STRING "0.6.48.7.46.9.4.2"' in api
     assert "XSTAR_API_ABI_VERSION 60487u" in api
 
 
@@ -99,7 +99,7 @@ def test_type49_context_v2_uses_milne_partition_and_signed_threshold() -> None:
     result = _synthetic_lowering(49)
     context = result["reals"][-10:]
     assert context == [15.0, 15.0, 5.0, 20.0, 2.0, 5.0, 4.0, 13.5, 3.0, 4.0]
-    assert result["ints"] == [77]
+    assert result["ints"] == [77, 999]
 
 
 def test_type53_context_v2_corrects_threshold_before_runtime() -> None:
