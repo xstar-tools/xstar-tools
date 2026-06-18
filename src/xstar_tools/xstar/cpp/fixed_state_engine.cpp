@@ -70,22 +70,32 @@ double elapsed(const clock_type::time_point& start) {
     return std::chrono::duration<double>(clock_type::now() - start).count();
 }
 
-std::uint64_t binary64_sequence_fnv1a(const std::vector<double>& values) {
+std::uint64_t binary64_sequence_fnv1a(const double* values, std::size_t count) {
     // Stable little-endian FNV-1a over the exact IEEE-754 payload.  This is
     // intentionally independent of host byte order so Python qualification
-    // can reconstruct the same hash from the lowered program.
+    // can reconstruct the same hash from source-captured arrays.
     std::uint64_t hash = 1469598103934665603ULL;
     constexpr std::uint64_t prime = 1099511628211ULL;
-    for (double value : values) {
+    for (std::size_t i = 0; i < count; ++i) {
         std::uint64_t bits = 0;
-        static_assert(sizeof(bits) == sizeof(value), "binary64 size mismatch");
-        std::memcpy(&bits, &value, sizeof(bits));
+        static_assert(sizeof(bits) == sizeof(values[i]), "binary64 size mismatch");
+        std::memcpy(&bits, values + i, sizeof(bits));
         for (unsigned shift = 0; shift < 64; shift += 8) {
             hash ^= (bits >> shift) & 0xffULL;
             hash *= prime;
         }
     }
     return hash;
+}
+
+std::uint64_t binary64_sequence_fnv1a(const std::vector<double>& values) {
+    return binary64_sequence_fnv1a(values.data(), values.size());
+}
+
+std::string hex_u64(std::uint64_t value) {
+    std::ostringstream out;
+    out << std::hex << std::setw(16) << std::setfill('0') << value;
+    return out.str();
 }
 
 int environment_data_type(const char* name) {
@@ -657,6 +667,91 @@ FixedStateClosureData load_fixed_state_closure_data() {
     return out;
 }
 
+struct ThermalComponentClosureData {
+    std::array<double,4> h{{0.0,0.0,0.0,0.0}};
+    std::array<double,4> he{{0.0,0.0,0.0,0.0}};
+    std::array<double,4> he_type53{{0.0,0.0,0.0,0.0}};
+    std::array<double,4> mg{{0.0,0.0,0.0,0.0}};
+    std::array<double,4> element{{0.0,0.0,0.0,0.0}};
+    std::array<double,4> continuum{{0.0,0.0,0.0,0.0}};
+    double cmp1 = 0.0;
+    double cmp2 = 0.0;
+    double htcomp = 0.0;
+    double clcomp = 0.0;
+    double htfreef = 0.0;
+    double clbrems = 0.0;
+    double httot = 0.0;
+    double cltot = 0.0;
+    double httot2 = 0.0;
+    double cltot2 = 0.0;
+    double hmctot = 0.0;
+    double elcter = 0.0;
+};
+
+std::filesystem::path thermal_component_closure_file() {
+    const char* root_value = std::getenv("XSTAR_QUALIFICATION_THERMAL_COMPONENT_PARITY_CLOSURE_DIR");
+    if (!root_value || !*root_value) {
+        throw std::runtime_error("thermal component parity closure requires XSTAR_QUALIFICATION_THERMAL_COMPONENT_PARITY_CLOSURE_DIR");
+    }
+    const int sequence = required_environment_integer("XSTAR_QUALIFICATION_SOURCE_SEQUENCE");
+    std::ostringstream name;
+    name << "sequence_" << std::setw(4) << std::setfill('0') << sequence << "_thermal.csv";
+    return std::filesystem::path(root_value) / name.str();
+}
+
+ThermalComponentClosureData load_thermal_component_closure_data() {
+    const auto path = thermal_component_closure_file();
+    std::ifstream input(path);
+    if (!input) throw std::runtime_error("cannot open thermal component closure file: " + path.string());
+    std::string line;
+    if (!std::getline(input, line)) throw std::runtime_error("thermal component closure file is empty");
+    const auto header = split_csv(line);
+    std::unordered_map<std::string, std::size_t> column;
+    for (std::size_t i = 0; i < header.size(); ++i) column.emplace(header[i], i);
+    const std::array<const char*, 39> required = {{
+        "h_heating","h_cooling","h_heating2","h_cooling2",
+        "he_heating","he_cooling","he_heating2","he_cooling2",
+        "he_type53_heating","he_type53_cooling","he_type53_heating2","he_type53_cooling2",
+        "mg_heating","mg_cooling","mg_heating2","mg_cooling2",
+        "element_heating","element_cooling","element_heating2","element_cooling2",
+        "continuum_heating","continuum_cooling","continuum_heating2","continuum_cooling2",
+        "cmp1","cmp2","htcomp","clcomp","htfreef","clbrems",
+        "httot","cltot","httot2","cltot2","hmctot","elcter",
+        "sequence","call_index","evaluation_index"
+    }};
+    for (const char* name : required) {
+        if (!column.count(name)) throw std::runtime_error(std::string("thermal component closure file missing column: ") + name);
+    }
+    std::vector<std::string> values;
+    while (std::getline(input, line)) {
+        if (trim(line).empty()) continue;
+        if (!values.empty()) throw std::runtime_error("thermal component closure file must contain exactly one data row");
+        values = split_csv(line);
+    }
+    if (values.size() != header.size()) throw std::runtime_error("thermal component closure row width mismatch");
+    const int sequence = parse_number<int>(values[column.at("sequence")], "sequence");
+    if (sequence != required_environment_integer("XSTAR_QUALIFICATION_SOURCE_SEQUENCE")) {
+        throw std::runtime_error("thermal component closure sequence mismatch");
+    }
+    const auto scalar = [&](const char* name) {
+        const double value = parse_number<double>(values[column.at(name)], name);
+        if (!std::isfinite(value)) throw std::runtime_error(std::string("non-finite thermal component closure value: ") + name);
+        return value;
+    };
+    ThermalComponentClosureData out;
+    out.h = {{scalar("h_heating"),scalar("h_cooling"),scalar("h_heating2"),scalar("h_cooling2")}};
+    out.he = {{scalar("he_heating"),scalar("he_cooling"),scalar("he_heating2"),scalar("he_cooling2")}};
+    out.he_type53 = {{scalar("he_type53_heating"),scalar("he_type53_cooling"),scalar("he_type53_heating2"),scalar("he_type53_cooling2")}};
+    out.mg = {{scalar("mg_heating"),scalar("mg_cooling"),scalar("mg_heating2"),scalar("mg_cooling2")}};
+    out.element = {{scalar("element_heating"),scalar("element_cooling"),scalar("element_heating2"),scalar("element_cooling2")}};
+    out.continuum = {{scalar("continuum_heating"),scalar("continuum_cooling"),scalar("continuum_heating2"),scalar("continuum_cooling2")}};
+    out.cmp1=scalar("cmp1"); out.cmp2=scalar("cmp2"); out.htcomp=scalar("htcomp"); out.clcomp=scalar("clcomp");
+    out.htfreef=scalar("htfreef"); out.clbrems=scalar("clbrems");
+    out.httot=scalar("httot"); out.cltot=scalar("cltot"); out.httot2=scalar("httot2"); out.cltot2=scalar("cltot2");
+    out.hmctot=scalar("hmctot"); out.elcter=scalar("elcter");
+    return out;
+}
+
 std::filesystem::path matrix_closure_file(const char* suffix, int element_z) {
     const char* root_value = std::getenv("XSTAR_QUALIFICATION_MATRIX_CONSTRUCTION_CLOSURE_DIR");
     if (!root_value || !*root_value) {
@@ -979,13 +1074,44 @@ struct xstar_fixed_state_context_impl {
     double last_electron_density_cm3 = 0.0;
     double last_hydrogen_density_cm3 = 0.0;
     double last_electron_fraction_input = 0.0;
+    double last_effective_covering_fraction = 0.0;
+    double last_turbulent_velocity_km_s = 0.0;
     std::size_t last_radiation_bin_count = 0;
     double last_computed_electron_fraction = 0.0;
+    double last_preclosure_electron_fraction = 0.0;
     double last_charge_residual = 0.0;
     double last_total_heating = 0.0;
     double last_total_cooling = 0.0;
+    double last_total_heating2 = 0.0;
+    double last_total_cooling2 = 0.0;
     double last_hmctot = 0.0;
     double last_legacy_hmctot = 0.0;
+    double last_computed_total_heating = 0.0;
+    double last_computed_total_cooling = 0.0;
+    double last_computed_total_heating2 = 0.0;
+    double last_computed_total_cooling2 = 0.0;
+    double last_computed_hmctot = 0.0;
+    double last_computed_continuum_heating = 0.0;
+    double last_computed_continuum_cooling = 0.0;
+    double last_computed_continuum_heating2 = 0.0;
+    double last_computed_continuum_cooling2 = 0.0;
+    std::size_t last_thermal_population_count = 0;
+    std::uint64_t last_thermal_population_fingerprint = 0;
+    std::size_t last_committed_population_count = 0;
+    std::uint64_t last_committed_population_fingerprint = 0;
+    std::size_t last_input_radiation_count = 0;
+    std::uint64_t last_input_radiation_fingerprint = 0;
+    std::size_t last_input_dsec_radiation_count = 0;
+    std::uint64_t last_input_dsec_radiation_fingerprint = 0;
+    std::size_t last_input_bremsa_count = 0;
+    std::uint64_t last_input_bremsa_fingerprint = 0;
+    std::size_t last_input_tau_count = 0;
+    std::uint64_t last_input_tau_in_fingerprint = 0;
+    std::uint64_t last_input_tau_out_fingerprint = 0;
+    std::size_t last_input_global_level_count = 0;
+    std::uint64_t last_input_xilevg_fingerprint = 0;
+    std::uint64_t last_input_bilevg_fingerprint = 0;
+    std::uint64_t last_input_rnisg_fingerprint = 0;
     // Historical diagnostic labels retained for lineage checks: native_compton_heating, native_compton_cooling.
     double last_continuum_compton_heating = 0.0;
     double last_continuum_compton_cooling = 0.0;
@@ -996,6 +1122,8 @@ struct xstar_fixed_state_context_impl {
     double last_computed_cmp2 = 0.0;
     double last_computed_htcomp = 0.0;
     double last_computed_clcomp = 0.0;
+    double last_computed_htfreef = 0.0;
+    double last_computed_clbrems = 0.0;
     double last_htfreef = 0.0;
     double last_clbrems = 0.0;
     bool last_call1_thermal_oracle = false;
@@ -1014,7 +1142,13 @@ struct xstar_fixed_state_context_impl {
     bool last_type53_row46_coupled_replacement = false;
     bool last_helium_source_insertion_order = false;
     std::map<int, std::array<double,4>> last_element_thermal_budget;
+    std::map<int, std::array<double,4>> last_computed_element_thermal_budget;
+    std::array<double,4> last_committed_element_thermal_budget{{0.0,0.0,0.0,0.0}};
+    std::array<double,4> last_committed_continuum_thermal_budget{{0.0,0.0,0.0,0.0}};
     std::array<double,4> last_helium_type53_budget{{0.0,0.0,0.0,0.0}};
+    std::array<double,4> last_computed_helium_type53_budget{{0.0,0.0,0.0,0.0}};
+    bool last_thermal_component_closure = false;
+    bool last_thermal_consumed_fixed_state_closure = false;
 };
 
 std::string join_path(const std::string& base, const std::string& name) {
@@ -2403,7 +2537,7 @@ bool evaluate_type53_source_integral(
     contribution.ans6 *= (std::abs(contribution.ans4) - energy_difference * kErgPerEv * contribution.ans1) / den6;
     contribution.ans5 *= (std::abs(contribution.ans3) - energy_difference * kErgPerEv * contribution.ans2) / den5;
 
-    // v0.6.48.7.46.11.1 qualification-only IEEE closure.
+    // v0.6.48.7.46.12 qualification-only IEEE closure.
     // v0.6.48.7.46.9.4.2 qualification-only IEEE closure compatibility marker.
     // The v0.6.47.2
     // Python reference evaluates the same source expressions one operation at
@@ -3972,12 +4106,37 @@ int run_impl(
     ctx.last_record_diagnostics.clear();
     ctx.last_element_diagnostics.clear();
     ctx.last_element_thermal_budget.clear();
+    ctx.last_computed_element_thermal_budget.clear();
     ctx.last_helium_type53_budget = {{0.0,0.0,0.0,0.0}};
+    ctx.last_computed_helium_type53_budget = {{0.0,0.0,0.0,0.0}};
+    ctx.last_thermal_component_closure = false;
+    ctx.last_thermal_consumed_fixed_state_closure = false;
+    ctx.last_thermal_population_count = 0;
+    ctx.last_thermal_population_fingerprint = 0;
+    ctx.last_committed_population_count = 0;
+    ctx.last_committed_population_fingerprint = 0;
     ctx.last_temperature_k = input.temperature_k;
     ctx.last_electron_density_cm3 = input.electron_density_cm3;
     ctx.last_hydrogen_density_cm3 = input.hydrogen_density_cm3;
     ctx.last_electron_fraction_input = input.electron_fraction_xee;
+    ctx.last_effective_covering_fraction =
+        (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_DSEC_COVERING_FRACTION) != 0u
+            ? input.dsec_covering_fraction : input.covering_fraction;
+    ctx.last_turbulent_velocity_km_s = input.turbulent_velocity_km_s;
     ctx.last_radiation_bin_count = input.radiation_bin_count;
+    ctx.last_input_radiation_count = input.radiation_bin_count;
+    ctx.last_input_radiation_fingerprint = binary64_sequence_fnv1a(input.radiation_energy_ev, input.radiation_bin_count);
+    ctx.last_input_dsec_radiation_count = input.dsec_radiation_bin_count;
+    ctx.last_input_dsec_radiation_fingerprint = binary64_sequence_fnv1a(input.dsec_radiation_energy_ev, input.dsec_radiation_bin_count);
+    ctx.last_input_bremsa_count = input.dsec_radiation_bin_count;
+    ctx.last_input_bremsa_fingerprint = binary64_sequence_fnv1a(input.dsec_bremsa, input.dsec_radiation_bin_count);
+    ctx.last_input_tau_count = input.continuum_tau_count;
+    ctx.last_input_tau_in_fingerprint = binary64_sequence_fnv1a(input.continuum_tau_in, input.continuum_tau_count);
+    ctx.last_input_tau_out_fingerprint = binary64_sequence_fnv1a(input.continuum_tau_out, input.continuum_tau_count);
+    ctx.last_input_global_level_count = input.global_level_count;
+    ctx.last_input_xilevg_fingerprint = binary64_sequence_fnv1a(input.global_xilevg, input.global_level_count);
+    ctx.last_input_bilevg_fingerprint = binary64_sequence_fnv1a(input.global_bilevg, input.global_level_count);
+    ctx.last_input_rnisg_fingerprint = binary64_sequence_fnv1a(input.global_rnisg, input.global_level_count);
     const int helium_matrix_ablation_type = environment_data_type("XSTAR_HELIUM_ABLATE_MATRIX_TYPE");
     const int helium_preliminary_ablation_type = environment_data_type("XSTAR_HELIUM_ABLATE_PRELIMINARY_TYPE");
     const int helium_source_position_ablation = environment_data_type("XSTAR_HELIUM_ABLATE_SOURCE_POSITION");
@@ -3997,6 +4156,8 @@ int run_impl(
         environment_flag("XSTAR_QUALIFICATION_MATRIX_CONSTRUCTION_CLOSURE");
     const bool fixed_state_parity_closure =
         environment_flag("XSTAR_QUALIFICATION_FIXED_STATE_PARITY_CLOSURE");
+    const bool thermal_component_parity_closure =
+        environment_flag("XSTAR_QUALIFICATION_THERMAL_COMPONENT_PARITY_CLOSURE");
     const bool helium_source_insertion_order =
         environment_flag("XSTAR_QUALIFICATION_HELIUM_SOURCE_INSERTION_ORDER");
     const bool type53_two_state_promotion = environment_flag("XSTAR_QUALIFICATION_TYPE53_TWO_STATE_PROMOTION");
@@ -4034,6 +4195,18 @@ int run_impl(
         const char* closure_dir = std::getenv("XSTAR_QUALIFICATION_FIXED_STATE_PARITY_CLOSURE_DIR");
         if (!closure_dir || !*closure_dir) {
             throw std::runtime_error("fixed-state parity closure directory is missing");
+        }
+    }
+    if (thermal_component_parity_closure && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
+        throw std::runtime_error("thermal component parity closure requires XSTAR_QUALIFICATION_REPLACEMENT=1");
+    }
+    if (thermal_component_parity_closure && !fixed_state_parity_closure) {
+        throw std::runtime_error("thermal component parity closure requires fixed-state parity closure");
+    }
+    if (thermal_component_parity_closure) {
+        const char* closure_dir = std::getenv("XSTAR_QUALIFICATION_THERMAL_COMPONENT_PARITY_CLOSURE_DIR");
+        if (!closure_dir || !*closure_dir) {
+            throw std::runtime_error("thermal component parity closure directory is missing");
         }
     }
     if (helium_source_insertion_order && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
@@ -4090,15 +4263,21 @@ int run_impl(
     ctx.last_continuum_compton_cooling = 0.0;
     ctx.last_continuum_free_free_cooling = 0.0;
     ctx.last_cmp1 = ctx.last_cmp2 = ctx.last_computed_cmp1 = ctx.last_computed_cmp2 = 0.0;
-    ctx.last_computed_htcomp = ctx.last_computed_clcomp = ctx.last_htfreef = ctx.last_clbrems = 0.0;
+    ctx.last_computed_htcomp = ctx.last_computed_clcomp = ctx.last_computed_htfreef = ctx.last_computed_clbrems = ctx.last_htfreef = ctx.last_clbrems = 0.0;
     ctx.last_call1_thermal_oracle = (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE) != 0u;
     output.elcter = 0.0;
+    ctx.last_preclosure_electron_fraction = 0.0;
+    ctx.last_computed_electron_fraction = 0.0;
     std::vector<double> all_populations;
+    std::vector<double> thermal_population_stream;
+    std::size_t fixed_full_population_offset = 0;
     std::vector<xstar_spectral_contribution_v1> spectral;
     std::optional<SourceCompactOracle> source_compact_oracle;
     if (source_compact_basis_seed) source_compact_oracle = load_source_compact_oracle();
     std::optional<FixedStateClosureData> fixed_state_closure_data;
     if (fixed_state_parity_closure) fixed_state_closure_data = load_fixed_state_closure_data();
+    std::optional<ThermalComponentClosureData> thermal_component_closure_data;
+    if (thermal_component_parity_closure) thermal_component_closure_data = load_thermal_component_closure_data();
 
     const auto traversal_start = clock_type::now();
     for (const auto& element : ctx.program.elements) {
@@ -4235,47 +4414,95 @@ int run_impl(
         // separate.  heatf/hmctot consumes only the primary httot/cltot pair;
         // secondary totals remain diagnostic state and must not be folded into
         // the controller residual.
-        double element_heating = eout.heating;
-        double element_cooling = eout.cooling;
-        double element_heating2 = eout.heating2;
-        double element_cooling2 = eout.cooling2;
-        const bool call1_leaf_oracle = (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE) != 0u;
-        if (call1_leaf_oracle && element.element_z == 1) {
-            element_heating = input.h_primary_heating_override;
-            element_cooling = input.h_primary_cooling_override;
-            element_heating2 = input.h_secondary_heating_override;
-            element_cooling2 = input.h_secondary_cooling_override;
-        } else if (call1_leaf_oracle && element.element_z == 2) {
-            element_heating = input.he_primary_heating_override;
-            element_cooling = input.he_primary_cooling_override;
-            element_heating2 = input.he_secondary_heating_override;
-            element_cooling2 = input.he_secondary_cooling_override;
+        std::vector<double> thermal_populations = buffers.populations;
+        if (thermal_component_closure_data.has_value()) {
+            const auto& closure = *fixed_state_closure_data;
+            for (std::size_t row = 0; row < thermal_populations.size(); ++row) {
+                const std::size_t full_index = fixed_full_population_offset +
+                    static_cast<std::size_t>(active.full_row_start - 1) + row;
+                if (full_index >= closure.level_populations.size()) {
+                    throw std::runtime_error("thermal fixed-state population slice overflow");
+                }
+                thermal_populations[row] = closure.level_populations[full_index];
+            }
+            ctx.last_thermal_consumed_fixed_state_closure = true;
         }
-        const bool mg_primary_correction = environment_flag("XSTAR_QUALIFICATION_MG_PRIMARY_THERMAL_CORRECTION");
-        if (mg_primary_correction && element.element_z == 12) {
-            element_heating *= element.abundance;
-            element_cooling *= element.abundance;
-            element_heating2 *= element.abundance;
-            element_cooling2 *= element.abundance;
-            if ((input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_MG_PRIMARY_OVERRIDE) != 0u) {
-                element_heating = input.mg_primary_heating_override;
-                element_cooling = input.mg_primary_cooling_override;
-                element_heating2 = input.mg_secondary_heating_override;
-                element_cooling2 = input.mg_secondary_cooling_override;
+        thermal_population_stream.insert(
+            thermal_population_stream.end(), thermal_populations.begin(), thermal_populations.end());
+
+        double computed_element_heating = eout.heating;
+        double computed_element_cooling = eout.cooling;
+        double computed_element_heating2 = eout.heating2;
+        double computed_element_cooling2 = eout.cooling2;
+        if (thermal_component_closure_data.has_value()) {
+            computed_element_heating = computed_element_cooling = 0.0;
+            computed_element_heating2 = computed_element_cooling2 = 0.0;
+            const std::size_t n = thermal_populations.size();
+            for (std::size_t row = 0; row < n; ++row) {
+                const double population = thermal_populations[row] * element.abundance;
+                const double cj = buffers.heat[row * n + row];
+                const double cj2 = buffers.heat2[row * n + row];
+                if (cj > 0.0) computed_element_cooling += population * cj;
+                else computed_element_heating -= population * cj;
+                if (cj2 > 0.0) computed_element_cooling2 += population * cj2;
+                else computed_element_heating2 -= population * cj2;
+            }
+        } else {
+            const bool call1_leaf_oracle = (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE) != 0u;
+            if (call1_leaf_oracle && element.element_z == 1) {
+                computed_element_heating = input.h_primary_heating_override;
+                computed_element_cooling = input.h_primary_cooling_override;
+                computed_element_heating2 = input.h_secondary_heating_override;
+                computed_element_cooling2 = input.h_secondary_cooling_override;
+            } else if (call1_leaf_oracle && element.element_z == 2) {
+                computed_element_heating = input.he_primary_heating_override;
+                computed_element_cooling = input.he_primary_cooling_override;
+                computed_element_heating2 = input.he_secondary_heating_override;
+                computed_element_cooling2 = input.he_secondary_cooling_override;
+            }
+            const bool mg_primary_correction = environment_flag("XSTAR_QUALIFICATION_MG_PRIMARY_THERMAL_CORRECTION");
+            if (mg_primary_correction && element.element_z == 12) {
+                computed_element_heating *= element.abundance;
+                computed_element_cooling *= element.abundance;
+                computed_element_heating2 *= element.abundance;
+                computed_element_cooling2 *= element.abundance;
+                if ((input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_MG_PRIMARY_OVERRIDE) != 0u) {
+                    computed_element_heating = input.mg_primary_heating_override;
+                    computed_element_cooling = input.mg_primary_cooling_override;
+                    computed_element_heating2 = input.mg_secondary_heating_override;
+                    computed_element_cooling2 = input.mg_secondary_cooling_override;
+                }
             }
         }
+        ctx.last_computed_element_thermal_budget[element.element_z] = {{
+            computed_element_heating, computed_element_cooling,
+            computed_element_heating2, computed_element_cooling2}};
+
+        std::array<double,4> committed_element{{
+            computed_element_heating, computed_element_cooling,
+            computed_element_heating2, computed_element_cooling2}};
+        if (thermal_component_closure_data.has_value()) {
+            if (element.element_z == 1) committed_element = thermal_component_closure_data->h;
+            else if (element.element_z == 2) committed_element = thermal_component_closure_data->he;
+            else if (element.element_z == 12) committed_element = thermal_component_closure_data->mg;
+            else throw std::runtime_error("thermal component closure contains unsupported element");
+        }
+        const double element_heating = committed_element[0];
+        const double element_cooling = committed_element[1];
+        const double element_heating2 = committed_element[2];
+        const double element_cooling2 = committed_element[3];
         output.element_heating += element_heating;
         output.element_cooling += element_cooling;
-        ctx.last_element_thermal_budget[element.element_z] = {{element_heating, element_cooling, element_heating2, element_cooling2}};
+        ctx.last_element_thermal_budget[element.element_z] = committed_element;
         if (element.element_z == 2) {
             double h53 = 0.0, c53 = 0.0, h253 = 0.0, c253 = 0.0;
             for (const auto& contribution : contributions) {
                 if (contribution.data_type != 53) continue;
                 const int lower = contribution.lower_row - 1;
                 const int upper = contribution.upper_row - 1;
-                if (lower < 0 || upper < 0 || lower >= static_cast<int>(buffers.populations.size()) || upper >= static_cast<int>(buffers.populations.size())) continue;
-                const double lower_pop = buffers.populations[static_cast<std::size_t>(lower)] * element.abundance;
-                const double upper_pop = buffers.populations[static_cast<std::size_t>(upper)] * element.abundance;
+                if (lower < 0 || upper < 0 || lower >= static_cast<int>(thermal_populations.size()) || upper >= static_cast<int>(thermal_populations.size())) continue;
+                const double lower_pop = thermal_populations[static_cast<std::size_t>(lower)] * element.abundance;
+                const double upper_pop = thermal_populations[static_cast<std::size_t>(upper)] * element.abundance;
                 const double lower_cj = contribution.ans4 * contribution.density_scale;
                 const double upper_cj = -contribution.ans3 * contribution.density_scale;
                 const double lower_cj2 = contribution.ans6 * contribution.density_scale;
@@ -4287,7 +4514,10 @@ int run_impl(
                     if (term.second > 0.0) c253 += term.first * term.second; else h253 -= term.first * term.second;
                 }
             }
-            ctx.last_helium_type53_budget = {{h53, c53, h253, c253}};
+            ctx.last_computed_helium_type53_budget = {{h53, c53, h253, c253}};
+            ctx.last_helium_type53_budget = thermal_component_closure_data.has_value()
+                ? thermal_component_closure_data->he_type53
+                : ctx.last_computed_helium_type53_budget;
         }
 
         std::vector<double> full_populations(static_cast<std::size_t>(element.n_rows), 0.0);
@@ -4295,6 +4525,7 @@ int run_impl(
             full_populations[static_cast<std::size_t>(active.full_row_start - 1) + row] = buffers.populations[row];
         }
         all_populations.insert(all_populations.end(), full_populations.begin(), full_populations.end());
+        fixed_full_population_offset += full_populations.size();
 
         // The selected compact normalization row is the continuum of the
         // highest active ion stage.  It therefore carries charge max_stage;
@@ -4424,6 +4655,8 @@ int run_impl(
         }
     }
     stats.traversal_seconds += elapsed(traversal_start);
+    ctx.last_thermal_population_count = thermal_population_stream.size();
+    ctx.last_thermal_population_fingerprint = binary64_sequence_fnv1a(thermal_population_stream);
 
     if (fixed_state_closure_data.has_value()) {
         const auto& closure = *fixed_state_closure_data;
@@ -4451,6 +4684,8 @@ int run_impl(
         }
         if (offset != all_populations.size()) throw std::runtime_error("fixed-state diagnostic population count mismatch");
     }
+    ctx.last_committed_population_count = all_populations.size();
+    ctx.last_committed_population_fingerprint = binary64_sequence_fnv1a(all_populations);
     if (output.populations_capacity < all_populations.size()) throw std::runtime_error("population output capacity too small");
     std::copy(all_populations.begin(), all_populations.end(), output.populations);
     output.populations_count = all_populations.size();
@@ -4465,7 +4700,9 @@ int run_impl(
         ctx.last_computed_cmp2 = comp.cmp2;
         ctx.last_computed_htcomp = comp.htcomp;
         ctx.last_computed_clcomp = comp.clcomp;
-        const bool call1_leaf_oracle = (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE) != 0u;
+        const bool call1_leaf_oracle =
+            (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE) != 0u &&
+            !thermal_component_closure_data.has_value();
         ctx.last_cmp1 = call1_leaf_oracle ? input.cmp1_override : comp.cmp1;
         ctx.last_cmp2 = call1_leaf_oracle ? input.cmp2_override : comp.cmp2;
         ctx.last_continuum_compton_heating = call1_leaf_oracle ? input.htcomp_override : comp.htcomp;
@@ -4473,6 +4710,8 @@ int run_impl(
         const double htfreef = call1_leaf_oracle ? input.htfreef_override : 0.0;
         const double clbrems = call1_leaf_oracle ? input.clbrems_override :
             1.426e-27 * std::sqrt(input.temperature_k) * input.electron_density_cm3 * input.ionized_h_density_cm3;
+        ctx.last_computed_htfreef = htfreef;
+        ctx.last_computed_clbrems = clbrems;
         ctx.last_htfreef = htfreef;
         ctx.last_clbrems = clbrems;
         ctx.last_continuum_free_free_cooling = clbrems;
@@ -4576,26 +4815,83 @@ int run_impl(
     }
     stats.spectral_seconds += elapsed(spectral_start);
 
-    if ((input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE) != 0u) {
+    if ((input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE) != 0u &&
+        !thermal_component_closure_data.has_value()) {
         output.elcter = input.electron_fraction_xee - input.charge_residual_override;
     }
-    output.total_heating = output.element_heating + output.continuum_heating;
-    output.total_cooling = output.element_cooling + output.continuum_cooling;
+
+    double computed_element_heating = 0.0;
+    double computed_element_cooling = 0.0;
+    double computed_element_heating2 = 0.0;
+    double computed_element_cooling2 = 0.0;
+    for (const auto& item : ctx.last_computed_element_thermal_budget) {
+        computed_element_heating += item.second[0];
+        computed_element_cooling += item.second[1];
+        computed_element_heating2 += item.second[2];
+        computed_element_cooling2 += item.second[3];
+    }
+    ctx.last_computed_continuum_heating = output.continuum_heating;
+    ctx.last_computed_continuum_cooling = output.continuum_cooling;
+    ctx.last_computed_continuum_heating2 = output.continuum_heating;
+    ctx.last_computed_continuum_cooling2 = output.continuum_cooling;
+    ctx.last_computed_total_heating = computed_element_heating + ctx.last_computed_continuum_heating;
+    ctx.last_computed_total_cooling = computed_element_cooling + ctx.last_computed_continuum_cooling;
+    ctx.last_computed_total_heating2 = computed_element_heating2 + ctx.last_computed_continuum_heating2;
+    ctx.last_computed_total_cooling2 = computed_element_cooling2 + ctx.last_computed_continuum_cooling2;
+    ctx.last_committed_element_thermal_budget = {{computed_element_heating, computed_element_cooling, computed_element_heating2, computed_element_cooling2}};
+    ctx.last_committed_continuum_thermal_budget = {{ctx.last_computed_continuum_heating, ctx.last_computed_continuum_cooling, ctx.last_computed_continuum_heating2, ctx.last_computed_continuum_cooling2}};
+
     // Literal heatf.f90 residual semantics use a REAL(4) factor of two and
-    // floor, with positive heating/cooling totals in the denominator.  The
-    // previous bounded residual omitted the factor of two and used abs(),
-    // which changed DSEC branch decisions even when the underlying totals
-    // were otherwise held fixed.
+    // floor, with positive heating/cooling totals in the denominator.
     constexpr double kHeatfResidualFactor = static_cast<double>(static_cast<float>(2.0));
     constexpr double kHeatfResidualFloor = static_cast<double>(static_cast<float>(1.0e-37));
-    const double legacy_denom = std::max(std::abs(output.total_heating) + std::abs(output.total_cooling), 1.0e-300);
-    ctx.last_legacy_hmctot = (output.total_heating - output.total_cooling) / legacy_denom;
-    const double source_denom = (kHeatfResidualFloor + output.total_heating) + output.total_cooling;
-    output.hmctot = source_denom != 0.0
-        ? kHeatfResidualFactor * (output.total_heating - output.total_cooling) / source_denom
+    const double computed_legacy_denom = std::max(
+        std::abs(ctx.last_computed_total_heating) + std::abs(ctx.last_computed_total_cooling), 1.0e-300);
+    ctx.last_legacy_hmctot =
+        (ctx.last_computed_total_heating - ctx.last_computed_total_cooling) / computed_legacy_denom;
+    const double computed_source_denom =
+        (kHeatfResidualFloor + ctx.last_computed_total_heating) + ctx.last_computed_total_cooling;
+    ctx.last_computed_hmctot = computed_source_denom != 0.0
+        ? kHeatfResidualFactor *
+            (ctx.last_computed_total_heating - ctx.last_computed_total_cooling) / computed_source_denom
         : 0.0;
-    if ((input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE) != 0u) {
-        output.hmctot = input.hmctot_override;
+    if ((input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE) != 0u &&
+        !thermal_component_closure_data.has_value()) {
+        ctx.last_computed_hmctot = input.hmctot_override;
+    }
+
+    ctx.last_preclosure_electron_fraction = output.elcter;
+
+    if (thermal_component_closure_data.has_value()) {
+        const auto& closure = *thermal_component_closure_data;
+        if (!fixed_state_closure_data.has_value() || closure.elcter != fixed_state_closure_data->charge_residual) {
+            throw std::runtime_error("thermal component closure elcter residual does not match fixed-state closure");
+        }
+        ctx.last_thermal_component_closure = true;
+        ctx.last_cmp1 = closure.cmp1;
+        ctx.last_cmp2 = closure.cmp2;
+        ctx.last_continuum_compton_heating = closure.htcomp;
+        ctx.last_continuum_compton_cooling = closure.clcomp;
+        ctx.last_htfreef = closure.htfreef;
+        ctx.last_clbrems = closure.clbrems;
+        ctx.last_continuum_free_free_cooling = closure.clbrems;
+        ctx.last_committed_element_thermal_budget = closure.element;
+        ctx.last_committed_continuum_thermal_budget = closure.continuum;
+        output.element_heating = closure.element[0];
+        output.element_cooling = closure.element[1];
+        output.continuum_heating = closure.continuum[0];
+        output.continuum_cooling = closure.continuum[1];
+        output.total_heating = closure.httot;
+        output.total_cooling = closure.cltot;
+        output.hmctot = closure.hmctot;
+        ctx.last_total_heating2 = closure.httot2;
+        ctx.last_total_cooling2 = closure.cltot2;
+    } else {
+        output.total_heating = output.element_heating + output.continuum_heating;
+        output.total_cooling = output.element_cooling + output.continuum_cooling;
+        output.hmctot = ctx.last_computed_hmctot;
+        ctx.last_total_heating2 = computed_element_heating2 + output.continuum_heating;
+        ctx.last_total_cooling2 = computed_element_cooling2 + output.continuum_cooling;
     }
     if (fixed_state_closure_data.has_value()) {
         output.elcter = fixed_state_closure_data->electron_fraction;
@@ -4790,51 +5086,76 @@ int xstar_fixed_state_write_last_thermal_budget_v1(
         std::ofstream out(path, std::ios::app);
         if (!out) throw std::runtime_error("cannot create native thermal-budget ledger");
         if (write_header) {
-            out << "sequence,kind,call_index,evaluation_index,temperature_k,electron_density_cm3,hydrogen_density_cm3,electron_fraction_input," 
-                   "h_heating,h_cooling,h_heating2,h_cooling2,he_heating,he_cooling,he_heating2,he_cooling2," 
-                   "he_type53_heating,he_type53_cooling,he_type53_heating2,he_type53_cooling2," 
-                   "he_non_type53_heating,he_non_type53_cooling,he_non_type53_heating2,he_non_type53_cooling2," 
-                   "mg_heating,mg_cooling,mg_heating2,mg_cooling2,element_heating,element_cooling,element_heating2,element_cooling2,continuum_heating,continuum_cooling,computed_cmp1,computed_cmp2,computed_htcomp,computed_clcomp,cmp1,cmp2,htcomp,clcomp,htfreef,clbrems,call1_thermal_oracle_applied,total_heating,total_cooling,legacy_hmctot,hmctot\n";
+            out << "sequence,kind,call_index,evaluation_index,temperature_k,electron_density_cm3,hydrogen_density_cm3,electron_fraction_input,covering_fraction,turbulent_velocity_km_s,"
+                   "input_radiation_count,input_radiation_fingerprint,input_dsec_radiation_count,input_dsec_radiation_fingerprint,input_bremsa_count,input_bremsa_fingerprint,"
+                   "input_tau_count,input_tau_in_fingerprint,input_tau_out_fingerprint,input_global_level_count,input_xilevg_fingerprint,input_bilevg_fingerprint,input_rnisg_fingerprint,"
+                   "thermal_population_count,thermal_population_fingerprint,committed_population_count,committed_population_fingerprint,"
+                   "thermal_consumed_fixed_state_closure,thermal_component_closure_applied,"
+                   "computed_h_heating,computed_h_cooling,computed_h_heating2,computed_h_cooling2,h_heating,h_cooling,h_heating2,h_cooling2,"
+                   "computed_he_heating,computed_he_cooling,computed_he_heating2,computed_he_cooling2,he_heating,he_cooling,he_heating2,he_cooling2,"
+                   "computed_he_type53_heating,computed_he_type53_cooling,computed_he_type53_heating2,computed_he_type53_cooling2,he_type53_heating,he_type53_cooling,he_type53_heating2,he_type53_cooling2,"
+                   "computed_he_non_type53_heating,computed_he_non_type53_cooling,computed_he_non_type53_heating2,computed_he_non_type53_cooling2,he_non_type53_heating,he_non_type53_cooling,he_non_type53_heating2,he_non_type53_cooling2,"
+                   "computed_mg_heating,computed_mg_cooling,computed_mg_heating2,computed_mg_cooling2,mg_heating,mg_cooling,mg_heating2,mg_cooling2,"
+                   "computed_element_heating,computed_element_cooling,computed_element_heating2,computed_element_cooling2,element_heating,element_cooling,element_heating2,element_cooling2,"
+                   "computed_continuum_heating,computed_continuum_cooling,computed_continuum_heating2,computed_continuum_cooling2,continuum_heating,continuum_cooling,continuum_heating2,continuum_cooling2,"
+                   "computed_cmp1,computed_cmp2,computed_htcomp,computed_clcomp,computed_htfreef,computed_clbrems,cmp1,cmp2,htcomp,clcomp,htfreef,clbrems,call1_thermal_oracle_applied,"
+                   "computed_total_heating,computed_total_cooling,computed_total_heating2,computed_total_cooling2,total_heating,total_cooling,total_heating2,total_cooling2,"
+                   "computed_hmctot,legacy_hmctot,hmctot,computed_charge_residual,computed_electron_fraction,charge_residual\n";
         }
-        const auto budget = [&](int z) {
-            const auto it = context->last_element_thermal_budget.find(z);
-            return it == context->last_element_thermal_budget.end() ? std::array<double,4>{{0.0,0.0,0.0,0.0}} : it->second;
+        const auto get_budget = [&](const std::map<int,std::array<double,4>>& source, int z) {
+            const auto it = source.find(z);
+            return it == source.end() ? std::array<double,4>{{0.0,0.0,0.0,0.0}} : it->second;
         };
-        const auto h = budget(1);
-        const auto he = budget(2);
-        const auto mg = budget(12);
+        const auto h = get_budget(context->last_element_thermal_budget, 1);
+        const auto he = get_budget(context->last_element_thermal_budget, 2);
+        const auto mg = get_budget(context->last_element_thermal_budget, 12);
+        const auto ch = get_budget(context->last_computed_element_thermal_budget, 1);
+        const auto che = get_budget(context->last_computed_element_thermal_budget, 2);
+        const auto cmg = get_budget(context->last_computed_element_thermal_budget, 12);
         const auto he53 = context->last_helium_type53_budget;
-        std::array<double,4> he_other{{
-            he[0]-he53[0], he[1]-he53[1], he[2]-he53[2], he[3]-he53[3]
-        }};
-        double element_heating = 0.0;
-        double element_cooling = 0.0;
-        double element_heating2 = 0.0;
-        double element_cooling2 = 0.0;
-        for (const auto& item : context->last_element_thermal_budget) {
-            element_heating += item.second[0];
-            element_cooling += item.second[1];
-            element_heating2 += item.second[2];
-            element_cooling2 += item.second[3];
+        const auto che53 = context->last_computed_helium_type53_budget;
+        const std::array<double,4> he_other{{he[0]-he53[0],he[1]-he53[1],he[2]-he53[2],he[3]-he53[3]}};
+        const std::array<double,4> che_other{{che[0]-che53[0],che[1]-che53[1],che[2]-che53[2],che[3]-che53[3]}};
+        const std::array<double,4> element = context->last_committed_element_thermal_budget;
+        std::array<double,4> computed_element{{0.0,0.0,0.0,0.0}};
+        for (const auto& item : context->last_computed_element_thermal_budget) {
+            for (std::size_t i=0;i<4;++i) computed_element[i]+=item.second[i];
         }
-        const double continuum_heating = context->last_total_heating - element_heating;
-        const double continuum_cooling = context->last_total_cooling - element_cooling;
+        const std::array<double,4> continuum = context->last_committed_continuum_thermal_budget;
+        const std::array<double,4> computed_continuum{{
+            context->last_computed_continuum_heating, context->last_computed_continuum_cooling,
+            context->last_computed_continuum_heating2, context->last_computed_continuum_cooling2}};
         out << std::setprecision(17)
             << sequence << ',' << (kind && *kind ? kind : "dsec") << ',' << call_index << ',' << evaluation_index << ','
             << context->last_temperature_k << ',' << context->last_electron_density_cm3 << ',' << context->last_hydrogen_density_cm3 << ',' << context->last_electron_fraction_input << ','
-            << h[0] << ',' << h[1] << ',' << h[2] << ',' << h[3] << ','
-            << he[0] << ',' << he[1] << ',' << he[2] << ',' << he[3] << ','
-            << he53[0] << ',' << he53[1] << ',' << he53[2] << ',' << he53[3] << ','
-            << he_other[0] << ',' << he_other[1] << ',' << he_other[2] << ',' << he_other[3] << ','
-            << mg[0] << ',' << mg[1] << ',' << mg[2] << ',' << mg[3] << ','
-            << element_heating << ',' << element_cooling << ',' << element_heating2 << ',' << element_cooling2 << ','
-            << continuum_heating << ',' << continuum_cooling << ','
-            << context->last_computed_cmp1 << ',' << context->last_computed_cmp2 << ','
-            << context->last_computed_htcomp << ',' << context->last_computed_clcomp << ','
-            << context->last_cmp1 << ',' << context->last_cmp2 << ','
-            << context->last_continuum_compton_heating << ',' << context->last_continuum_compton_cooling << ','
+            << context->last_effective_covering_fraction << ',' << context->last_turbulent_velocity_km_s << ','
+            << context->last_input_radiation_count << ',' << hex_u64(context->last_input_radiation_fingerprint) << ','
+            << context->last_input_dsec_radiation_count << ',' << hex_u64(context->last_input_dsec_radiation_fingerprint) << ','
+            << context->last_input_bremsa_count << ',' << hex_u64(context->last_input_bremsa_fingerprint) << ','
+            << context->last_input_tau_count << ',' << hex_u64(context->last_input_tau_in_fingerprint) << ',' << hex_u64(context->last_input_tau_out_fingerprint) << ','
+            << context->last_input_global_level_count << ',' << hex_u64(context->last_input_xilevg_fingerprint) << ',' << hex_u64(context->last_input_bilevg_fingerprint) << ',' << hex_u64(context->last_input_rnisg_fingerprint) << ','
+            << context->last_thermal_population_count << ',' << hex_u64(context->last_thermal_population_fingerprint) << ','
+            << context->last_committed_population_count << ',' << hex_u64(context->last_committed_population_fingerprint) << ','
+            << (context->last_thermal_consumed_fixed_state_closure ? 1 : 0) << ',' << (context->last_thermal_component_closure ? 1 : 0) << ','
+            << ch[0] << ',' << ch[1] << ',' << ch[2] << ',' << ch[3] << ',' << h[0] << ',' << h[1] << ',' << h[2] << ',' << h[3] << ','
+            << che[0] << ',' << che[1] << ',' << che[2] << ',' << che[3] << ',' << he[0] << ',' << he[1] << ',' << he[2] << ',' << he[3] << ','
+            << che53[0] << ',' << che53[1] << ',' << che53[2] << ',' << che53[3] << ',' << he53[0] << ',' << he53[1] << ',' << he53[2] << ',' << he53[3] << ','
+            << che_other[0] << ',' << che_other[1] << ',' << che_other[2] << ',' << che_other[3] << ',' << he_other[0] << ',' << he_other[1] << ',' << he_other[2] << ',' << he_other[3] << ','
+            << cmg[0] << ',' << cmg[1] << ',' << cmg[2] << ',' << cmg[3] << ',' << mg[0] << ',' << mg[1] << ',' << mg[2] << ',' << mg[3] << ','
+            << computed_element[0] << ',' << computed_element[1] << ',' << computed_element[2] << ',' << computed_element[3] << ','
+            << element[0] << ',' << element[1] << ',' << element[2] << ',' << element[3] << ','
+            << computed_continuum[0] << ',' << computed_continuum[1] << ',' << computed_continuum[2] << ',' << computed_continuum[3] << ','
+            << continuum[0] << ',' << continuum[1] << ',' << continuum[2] << ',' << continuum[3] << ','
+            << context->last_computed_cmp1 << ',' << context->last_computed_cmp2 << ',' << context->last_computed_htcomp << ',' << context->last_computed_clcomp << ','
+            << context->last_computed_htfreef << ',' << context->last_computed_clbrems << ','
+            << context->last_cmp1 << ',' << context->last_cmp2 << ',' << context->last_continuum_compton_heating << ',' << context->last_continuum_compton_cooling << ','
             << context->last_htfreef << ',' << context->last_clbrems << ',' << (context->last_call1_thermal_oracle ? 1 : 0) << ','
-            << context->last_total_heating << ',' << context->last_total_cooling << ',' << context->last_legacy_hmctot << ',' << context->last_hmctot << '\n';
+            << context->last_computed_total_heating << ',' << context->last_computed_total_cooling << ','
+            << context->last_computed_total_heating2 << ',' << context->last_computed_total_cooling2 << ','
+            << context->last_total_heating << ',' << context->last_total_cooling << ',' << context->last_total_heating2 << ',' << context->last_total_cooling2 << ','
+            << context->last_computed_hmctot << ',' << context->last_legacy_hmctot << ',' << context->last_hmctot << ','
+            << (context->last_electron_fraction_input - context->last_preclosure_electron_fraction) << ','
+            << context->last_computed_electron_fraction << ',' << context->last_charge_residual << '\n';
         copy_text(message, message_size, "native thermal-budget ledger written");
         return 0;
     } catch (const std::exception& exc) {

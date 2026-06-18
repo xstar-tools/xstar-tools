@@ -1,5 +1,23 @@
 # CHANGELOG
 
+## 0.6.48.7.46.12 — all-61 Thermal state-consumption audit and component parity - 2026-06-18
+
+- Added immutable all-61 v0.6.47.2 Thermal state and component capture.
+- Added input/workspace and compact consumed-population fingerprints.
+- Added a qualification-only all-61 Thermal component closure.
+- Preserved native pre-closure `computed_*` values separately from committed values.
+- Added all-61 Thermal state-consumption/component audit, checker, runner, and readiness checker.
+- Made the source/native `elcter` convention explicit and compare source `elcter` with the corresponding charge residual.
+- Rebinds stale absolute v46.10 pointers to the local `v04874610_matrix_construction_closure/v04874610_matrix_closure` output before replay.
+- Adds `XSTAR_V04874612_BASELINE_PREFLIGHT_ONLY=1` for no-replay validation of baseline paths.
+- Corrects the generated source-probe injection so the v46.12 Thermal fingerprint hook is installed in `_v048742_capture_input` rather than recursively in its own helper.
+- Adds generated-probe validation and a functional regression that records sequence 1 before any result callback can consume it.
+- Runs package readiness, including the generated-probe hook guard, before the expensive source/native replay.
+- Normalizes the runtime `capture_report.json` into canonical fixed-state and Thermal report names before verification.
+- Reuses a completed 61-evaluation source capture on rerun instead of deleting and recapturing it; set `XSTAR_V04874612_FORCE_SOURCE_RECAPTURE=1` to force a fresh capture.
+- Adds `XSTAR_V04874612_SOURCE_CAPTURE_PREFLIGHT_ONLY=1` to validate report repair and capture reuse before native replay.
+- Kept controller, product/FITS, and production promotion blocked.
+
 ## 0.6.48.7.46.11.1 — Thermal-readiness gate vocabulary hotfix - 2026-06-18
 
 - Normalizes successful `V06488_THERMAL_PARITY_READY` from `YES` to canonical `ACCEPT`.

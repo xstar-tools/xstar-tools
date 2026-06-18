@@ -761,4 +761,4 @@ include reanalyze_v048746111_thermal_readiness_gate_vocabulary_hotfix.py
 include check_v048746111_thermal_readiness_gate_vocabulary_hotfix.py
 include check_v048746111_thermal_readiness_gate_vocabulary_hotfix_readiness.py
 include run_v048746111_thermal_readiness_gate_vocabulary_hotfix.sh
-include xstar_tools_conversation_summary_through_v0.6.48.7.46.11.1.md
+include xstar_tools_conversation_summary_through_v0.6.48.7.46.12.md

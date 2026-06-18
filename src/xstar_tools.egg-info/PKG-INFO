@@ -1,6 +1,34 @@
+Metadata-Version: 2.4
+Name: xstar-tools
+Version: 0.6.48.7.46.12
+Summary: Source-faithful Python/C++ XSTAR tools, atomic-data utilities, benchmarks, and runtime
+Author: Ashkbiz Danehkar
+License-Expression: MIT
+Keywords: astronomy,atomic-data,xstar,fits,emissivity,x-ray
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Science/Research
+Classifier: Programming Language :: Python :: 3
+Classifier: Topic :: Scientific/Engineering :: Astronomy
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: numpy<2.4,>=1.23; python_version < "3.11"
+Requires-Dist: astropy>=5.0; python_version < "3.11"
+Requires-Dist: numpy>=1.24; python_version >= "3.11"
+Requires-Dist: astropy>=7.2; python_version >= "3.11"
+Provides-Extra: dev
+Requires-Dist: pytest>=7; extra == "dev"
+Requires-Dist: build>=1.0; extra == "dev"
+Provides-Extra: docs
+Requires-Dist: sphinx>=7; extra == "docs"
+Requires-Dist: sphinx-rtd-theme>=2; extra == "docs"
+Provides-Extra: hdf5
+Requires-Dist: h5py>=3; extra == "hdf5"
+Provides-Extra: sparse
+Requires-Dist: scipy>=1.8; extra == "sparse"
+
 ## Current release: 0.6.48.7.46.12
 
-This qualification release captures the complete all-61 v0.6.47.2 Thermal state and component budget, fingerprints every consumed radiation/optical-depth/global-workspace and compact-population input, and records native pre-closure `computed_*` values separately from source-committed values. It corrects the Thermal state-consumption order so the accepted fixed-state population slice is consumed before component accounting. The runner also rebases stale v46.10 absolute pointers to the local `v04874610_matrix_construction_closure/v04874610_matrix_closure` output. The source-probe hook is structurally and functionally validated before replay so the sequence fingerprint is captured before the corresponding result callback. Completed source captures are normalized from the historical `capture_report.json` name and automatically reused on rerun, avoiding another 61-evaluation Python capture. Exact committed parity does not imply independent native Thermal parity; controller, products, and production promotion remain blocked. See `V064874612_ALL61_THERMAL_STATE_CONSUMPTION_AUDIT.md`.
+This qualification release captures the complete all-61 v0.6.47.2 Thermal state and component budget, fingerprints every consumed radiation/optical-depth/global-workspace and compact-population input, and records native pre-closure `computed_*` values separately from source-committed values. It corrects the Thermal state-consumption order so the accepted fixed-state population slice is consumed before component accounting. The runner also rebases stale v46.10 absolute pointers to the local `v04874610_matrix_construction_closure/v04874610_matrix_closure` output. The source-probe hook is structurally and functionally validated before replay so the sequence fingerprint is captured before the corresponding result callback. Exact committed parity does not imply independent native Thermal parity; controller, products, and production promotion remain blocked. See `V064874612_ALL61_THERMAL_STATE_CONSUMPTION_AUDIT.md`.
 
 ## v0.6.48.7.46.11.1 Thermal-readiness vocabulary hotfix
 

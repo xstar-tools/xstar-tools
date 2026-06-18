@@ -15,9 +15,9 @@ def root() -> Path:
 
 
 def test_release_and_api_version() -> None:
-    assert xstar_tools.__version__ == "0.6.48.7.46.11.1"
+    assert xstar_tools.__version__ == "0.6.48.7.46.12"
     api = (root() / "src/xstar_tools/xstar/cpp/xstar_api.h").read_text()
-    assert 'XSTAR_API_VERSION_STRING "0.6.48.7.46.11.1"' in api
+    assert 'XSTAR_API_VERSION_STRING "0.6.48.7.46.12"' in api
     assert "XSTAR_API_ABI_VERSION 60487u" in api
 
 
@@ -236,6 +236,6 @@ def test_runner_enables_source_faithful_mode_and_defers_type50() -> None:
     assert "XSTAR_QUALIFICATION_MG_BOUND_FREE_SOURCE_FAITHFUL=1" in runner
     assert "source_capture_replayed=false" in runner
     assert "native_replay_replayed=true" in runner
-    assert '"release":"0.6.48.7.46.11.1"' in runner
+    assert '"release":"0.6.48.7.46.12"' in runner
     checker = (root() / "check_v04874694_mg_type49_type53_source_faithful.py").read_text()
     assert '"MG_TYPE50_ORIENTATION_CORRECTION": "DEFERRED"' in checker
