@@ -726,3 +726,10 @@ include run_v048746942_type53_audit_and_type49_extrapolated_grid_parity.sh
 include check_v048746942_type53_audit_type49_grid_parity.py
 include check_v048746942_type53_audit_type49_grid_parity_readiness.py
 include tests/test_v0648746942_type53_audit_type49_grid_parity.py
+
+# v0.6.48.7.46.9.5 Mg Type-51 source-faithful closure
+include V064874695_MG_TYPE51_SOURCE_FAITHFUL_CLOSURE.md
+include run_v04874695_mg_type51_source_faithful_closure.sh
+include check_v04874695_mg_type51_source_faithful.py
+include check_v04874695_mg_type51_source_faithful_readiness.py
+include tests/test_v064874695_mg_type51_source_faithful.py

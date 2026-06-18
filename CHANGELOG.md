@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 0.6.48.7.46.9.5 — Mg Type-51 source-faithful closure - 2026-06-17
+
+- Reproduced the literal Type-51 `ucalc.f90` temperature semantics: the physical temperature remains in the Maxwellian prefactor while the Burgess--Tully collision-strength fit receives `max(T, 2.8777e6 / wavelength_A)`.
+- Replaced the approximate five-point interpolation with the exact source `splinem.f90` polynomial and retained the literal `2.71828` Type-1 transform constant; the nine-point natural-spline path remains available.
+- Used the packed Type-51 record transition energy (`rdat1(1) * 13.605692`) in the Maxwellian and energy channels instead of the endpoint-derived level difference.
+- Added a qualification-only `XSTAR_QUALIFICATION_MG_TYPE51_SOURCE_FAITHFUL` replacement mode and complete per-record context diagnostics.
+- Verified all 67,149 active Mg Type-51 contribution vectors across 61 evaluations: 67,111 are bit-exact and all 67,149 are IEEE-equivalent under a demonstrated five-ULP, `6e-16` relative envelope with no nonzero absolute tolerance.
+- Verified zero presence, endpoint, record-order, sign, zero-transition, nonfinite, or unexplained Type-51 residuals; all 72,651 Type-51 runtime evaluations use the source-faithful path and finite context.
+- Reduced all-61 dense mismatch cells from 182,860 in v46.9.4.2 to 42,498 while preserving exact source/native reconstruction for all 183 systems.
+- Preserved accepted Type-49/53 grid and rate parity, all 1,891 hydrogen Type-53 vectors, canonical record alignment, and the 20-system helium regression envelope.
+- Left Mg Type-50 endpoint orientation unchanged and deferred; fixed-state, Thermal, controller, product, and production promotion remain blocked.
+
 ## 0.6.48.7.46.9.4.2 — Type-53 audit correction and Type-49 extrapolated-grid parity - 2026-06-17
 
 - Corrected the Type-53 qualification analyzer to use `type53_` for runtime context flags and pair counters while retaining `type53_shadow_` for numeric shadow values; the production v46.9.4.1 output now proves all 53,436 Type-53 records used the Milne context, all 53,436 applied the corrected threshold before mapping, and all 43,371 excited-parent records used the excited-threshold context.

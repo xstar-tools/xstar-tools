@@ -402,6 +402,34 @@ struct Type53SourceShadow {
     std::size_t continuum_tau_count = 0;
 };
 
+struct Type51SourceShadow {
+    bool valid = false;
+    bool source_faithful_mode = false;
+    bool replacement_applied = false;
+    bool endpoint_order_exact = false;
+    bool committed_nonfinite = false;
+    int bt_type = 0;
+    int point_count = 0;
+    double eij_ryd = 0.0;
+    double eij_ev = 0.0;
+    double scaling_c = 0.0;
+    double physical_temperature_k = 0.0;
+    double floor_temperature_k = 0.0;
+    double effective_temperature_k = 0.0;
+    bool temperature_floor_applied = false;
+    double scaled_temperature = 0.0;
+    double transformed_temperature = 0.0;
+    double scaled_upsilon = 0.0;
+    double upsilon = 0.0;
+    double lower_statistical_weight = 0.0;
+    double upper_statistical_weight = 0.0;
+    double electron_density_cm3 = 0.0;
+    double q_excitation_cm3_s = 0.0;
+    double q_deexcitation_cm3_s = 0.0;
+    std::array<double,6> ans{};
+    std::array<double,6> legacy_ans{};
+};
+
 struct Type50SourceShadow {
     bool valid = false;
     std::array<double,6> ans{};
@@ -461,6 +489,7 @@ struct EvaluatedRecord {
     double type56_upsilon = std::numeric_limits<double>::quiet_NaN();
     Type53SourceShadow type53_shadow{};
     Type53SourceShadow type49_shadow{};
+    Type51SourceShadow type51_shadow{};
     Type50SourceShadow type50_shadow{};
     Type99SourceShadow type99_shadow{};
 };
@@ -1075,7 +1104,44 @@ double natural_spline9(const double* y, double x) {
     return aa * y[k] + bb * y[k + 1] + ((aa * aa * aa - aa) * m[k] + (bb * bb * bb - bb) * m[k + 1]) * h * h / 6.0;
 }
 
-double type51_upsilon(const double* r, std::size_t n, const std::int64_t* ints, std::size_t ni, double temperature_k) {
+double type51_splinem5(const double* p, double x) {
+    const double s = 1.0 / 30.0;
+    const double s2 = 32.0 * s * (19.0*p[0] - 43.0*p[1] + 30.0*p[2] - 7.0*p[3] + p[4]);
+    const double s3 = 160.0 * s * (-p[0] + 7.0*p[1] - 12.0*p[2] + 7.0*p[3] - p[4]);
+    const double s4 = 32.0 * s * (p[0] - 7.0*p[1] + 30.0*p[2] - 43.0*p[3] + 19.0*p[4]);
+    double x0 = 0.0, t0 = 0.0, t1 = 0.0, t2 = 0.0, t3 = 0.0;
+    if (x <= 0.25) {
+        x0 = x - 0.125;
+        t3 = 0.0;
+        t2 = 0.5 * s2;
+        t1 = 4.0 * (p[1] - p[0]);
+        t0 = 0.5 * (p[0] + p[1]) - 0.015625 * t2;
+    } else if (x <= 0.5) {
+        x0 = x - 0.375;
+        t3 = 20.0 * s * (s3 - s2);
+        t2 = 0.25 * (s2 + s3);
+        t1 = 4.0 * (p[2] - p[1]) - 0.015625 * t3;
+        t0 = 0.5 * (p[1] + p[2]) - 0.015625 * t2;
+    } else if (x <= 0.75) {
+        x0 = x - 0.625;
+        t3 = 20.0 * s * (s4 - s3);
+        t2 = 0.25 * (s3 + s4);
+        t1 = 4.0 * (p[3] - p[2]) - 0.015625 * t3;
+        t0 = 0.5 * (p[2] + p[3]) - 0.015625 * t2;
+    } else {
+        x0 = x - 0.875;
+        t3 = 0.0;
+        t2 = 0.5 * s4;
+        t1 = 4.0 * (p[4] - p[3]);
+        t0 = 0.5 * (p[3] + p[4]) - 0.015625 * t2;
+    }
+    return t0 + x0 * (t1 + x0 * (t2 + x0 * t3));
+}
+
+double type51_upsilon_legacy(
+    const double* r, std::size_t n, const std::int64_t* ints,
+    std::size_t ni, double temperature_k
+) {
     if (!r || n < 7 || !ints || ni < 1 || r[0] <= 0.0 || r[1] <= 0.0) return -1.0;
     const int bt_type = static_cast<int>(ints[0]);
     const double eij_ryd = r[0], c = r[1];
@@ -1106,6 +1172,86 @@ double type51_upsilon(const double* r, std::size_t n, const std::int64_t* ints, 
         case 6: return std::pow(10.0, scaled);
         default: return -1.0;
     }
+}
+
+struct Type51UpsilonEvaluation {
+    bool valid = false;
+    int bt_type = 0;
+    int point_count = 0;
+    double eij_ryd = 0.0;
+    double eij_ev = 0.0;
+    double scaling_c = 0.0;
+    double physical_temperature_k = 0.0;
+    double floor_temperature_k = 0.0;
+    double effective_temperature_k = 0.0;
+    bool floor_applied = false;
+    double scaled_temperature = 0.0;
+    double transformed_temperature = 0.0;
+    double scaled_upsilon = 0.0;
+    double upsilon = 0.0;
+};
+
+Type51UpsilonEvaluation type51_upsilon(
+    const double* r, std::size_t n, const std::int64_t* ints,
+    std::size_t ni, double temperature_k
+) {
+    Type51UpsilonEvaluation result;
+    if (!r || n < 7 || !ints || ni < 1 || r[0] <= 0.0 || r[1] <= 0.0 || !(temperature_k > 0.0)) return result;
+    result.bt_type = static_cast<int>(ints[0]);
+    result.point_count = n == 7 ? 5 : (n >= 11 ? 9 : 0);
+    result.eij_ryd = r[0];
+    result.eij_ev = result.eij_ryd * 13.605692;
+    result.scaling_c = r[1];
+    result.physical_temperature_k = temperature_k;
+    const double wavelength_a = 12398.4016 / result.eij_ev;
+    result.floor_temperature_k = 2.8777e6 / wavelength_a;
+    result.effective_temperature_k = std::max(temperature_k, result.floor_temperature_k);
+    result.floor_applied = result.effective_temperature_k > temperature_k;
+    const double u = result.effective_temperature_k / (result.eij_ryd * 1.57888e5);
+    result.scaled_temperature = u;
+    if (!(u > 0.0)) return result;
+    double x = 0.0;
+    if (result.point_count == 5) {
+        if (result.bt_type == 1 || result.bt_type == 4) {
+            const double denom = std::log(u + result.scaling_c);
+            if (denom == 0.0 || !std::isfinite(denom)) return result;
+            x = std::log((u + result.scaling_c) / result.scaling_c) / denom;
+        } else if (result.bt_type == 2 || result.bt_type == 3) {
+            x = u / (u + result.scaling_c);
+        } else {
+            return result;
+        }
+        result.scaled_upsilon = type51_splinem5(r + 2, x);
+    } else if (result.point_count == 9) {
+        if (result.bt_type == 1 || result.bt_type == 4) {
+            const double denom = std::log(u + result.scaling_c);
+            if (denom == 0.0 || !std::isfinite(denom)) return result;
+            x = 1.0 - std::log(result.scaling_c) / denom;
+        } else if (result.bt_type == 2 || result.bt_type == 3 || result.bt_type == 5 || result.bt_type == 6) {
+            x = u / (u + result.scaling_c);
+        } else {
+            return result;
+        }
+        result.scaled_upsilon = natural_spline9(r + 2, x);
+    } else {
+        return result;
+    }
+    result.transformed_temperature = x;
+    switch (result.bt_type) {
+        case 1:
+            result.upsilon = result.scaled_upsilon * std::log(
+                u + (result.point_count == 5 ? 2.71828 : std::exp(1.0))
+            );
+            break;
+        case 2: result.upsilon = result.scaled_upsilon; break;
+        case 3: result.upsilon = result.scaled_upsilon / (u + 1.0); break;
+        case 4: result.upsilon = result.scaled_upsilon * std::log(u + result.scaling_c); break;
+        case 5: result.upsilon = result.scaled_upsilon / u; break;
+        case 6: result.upsilon = std::pow(10.0, result.scaled_upsilon); break;
+        default: return Type51UpsilonEvaluation{};
+    }
+    result.valid = std::isfinite(result.scaled_upsilon) && std::isfinite(result.upsilon) && result.upsilon >= 0.0;
+    return result;
 }
 
 double type56_upsilon(const double* r, std::size_t n, double temperature_k) {
@@ -2042,7 +2188,9 @@ bool evaluate_type53_source_integral(
     contribution.ans6 *= (std::abs(contribution.ans4) - energy_difference * kErgPerEv * contribution.ans1) / den6;
     contribution.ans5 *= (std::abs(contribution.ans3) - energy_difference * kErgPerEv * contribution.ans2) / den5;
 
-    // v0.6.48.7.46.9.4.2 qualification-only IEEE closure.  The v0.6.47.2
+    // v0.6.48.7.46.9.5 qualification-only IEEE closure.
+    // v0.6.48.7.46.9.4.2 qualification-only IEEE closure compatibility marker.
+    // The v0.6.47.2
     // Python reference evaluates the same source expressions one operation at
     // a time.  Activating the live RRC escape state exposes seven isolated
     // one-ULP host/compiler differences among 1,891 hydrogen Type-53 records.
@@ -2866,22 +3014,97 @@ EvaluatedRecord evaluate_record(
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE51_BT_COLLISION: {
-            const double ups = type51_upsilon(r, record.real_count, ints, record.int_count, input.temperature_k);
-            if (!(ups >= 0.0)) throw std::runtime_error("invalid type51 payload");
-            const double root_t = std::sqrt(input.temperature_k);
-            const double source_kt_ev =
+            const double legacy_ups = type51_upsilon_legacy(
+                r, record.real_count, ints, record.int_count, input.temperature_k
+            );
+            if (!(legacy_ups >= 0.0) || !std::isfinite(legacy_ups)) {
+                throw std::runtime_error("invalid legacy type51 payload");
+            }
+            const double legacy_root_t = std::sqrt(input.temperature_k);
+            const double legacy_kt_ev =
                 xstar_constants::kSourceCollisionBoltzmannEvPerK * input.temperature_k;
-            const double qex =
-                xstar_constants::kCollisionRateCoefficientPerSqrtK * ups *
-                std::exp(-delta_ev / source_kt_ev) /
-                (lower.statistical_weight * root_t);
+            const double legacy_qex =
+                xstar_constants::kCollisionRateCoefficientPerSqrtK * legacy_ups *
+                std::exp(-delta_ev / legacy_kt_ev) /
+                (lower.statistical_weight * legacy_root_t);
+            const double legacy_qde =
+                xstar_constants::kCollisionRateCoefficientPerSqrtK * legacy_ups /
+                (upper.statistical_weight * legacy_root_t);
+            const std::array<double,6> legacy_ans{{
+                legacy_qex * ne,
+                legacy_qde * ne,
+                0.0,
+                0.0,
+                legacy_qde * ne * delta_ev * xstar_constants::kLegacyCollisionErgPerEv,
+                legacy_qex * ne * delta_ev * xstar_constants::kLegacyCollisionErgPerEv,
+            }};
+
+            const auto bt = type51_upsilon(
+                r, record.real_count, ints, record.int_count, input.temperature_k
+            );
+            if (!bt.valid) throw std::runtime_error("invalid source-faithful type51 payload");
+            const double t_xstar = input.temperature_k / 1.0e4;
+            const double tsq = std::sqrt(t_xstar);
+            const double ekt_ev = xstar_constants::kLegacyBoltzmannEvPerT4 * t_xstar;
+            const double delt = bt.eij_ev / ekt_ev;
             const double qde =
-                xstar_constants::kCollisionRateCoefficientPerSqrtK * ups /
-                (upper.statistical_weight * root_t);
-            c.ans1 = qex * ne;
-            c.ans2 = qde * ne;
-            c.ans5 = c.ans2 * delta_ev * xstar_constants::kLegacyCollisionErgPerEv;
-            c.ans6 = c.ans1 * delta_ev * xstar_constants::kLegacyCollisionErgPerEv;
+                xstar_constants::kCollisionRateCoefficientPerSqrtT4 * bt.upsilon /
+                tsq / upper.statistical_weight;
+            const double qex =
+                qde * upper.statistical_weight * type53_expo(-delt) /
+                lower.statistical_weight;
+            // Preserve the source evaluator's explicit answer reuse: ans5 and
+            // ans6 are formed from the already-rounded density-scaled ans2 and
+            // ans1 values, rather than recomputing q*ne inside the energy
+            // expressions.  This removes avoidable cross-language rounding.
+            const double source_ans1 = qex * ne;
+            const double source_ans2 = qde * ne;
+            const std::array<double,6> source_ans{{
+                source_ans1,
+                source_ans2,
+                0.0,
+                0.0,
+                source_ans2 * bt.eij_ev * xstar_constants::kLegacyCollisionErgPerEv,
+                source_ans1 * bt.eij_ev * xstar_constants::kLegacyCollisionErgPerEv,
+            }};
+            const bool source_faithful =
+                element.element_z == 12 &&
+                environment_flag("XSTAR_QUALIFICATION_MG_TYPE51_SOURCE_FAITHFUL");
+            const auto& committed = source_faithful ? source_ans : legacy_ans;
+            c.ans1 = committed[0]; c.ans2 = committed[1];
+            c.ans3 = committed[2]; c.ans4 = committed[3];
+            c.ans5 = committed[4]; c.ans6 = committed[5];
+
+            auto& shadow = out.type51_shadow;
+            shadow.valid = true;
+            shadow.source_faithful_mode = source_faithful;
+            shadow.replacement_applied = source_faithful;
+            shadow.endpoint_order_exact = lower.energy_ev <= upper.energy_ev;
+            shadow.bt_type = bt.bt_type;
+            shadow.point_count = bt.point_count;
+            shadow.eij_ryd = bt.eij_ryd;
+            shadow.eij_ev = bt.eij_ev;
+            shadow.scaling_c = bt.scaling_c;
+            shadow.physical_temperature_k = bt.physical_temperature_k;
+            shadow.floor_temperature_k = bt.floor_temperature_k;
+            shadow.effective_temperature_k = bt.effective_temperature_k;
+            shadow.temperature_floor_applied = bt.floor_applied;
+            shadow.scaled_temperature = bt.scaled_temperature;
+            shadow.transformed_temperature = bt.transformed_temperature;
+            shadow.scaled_upsilon = bt.scaled_upsilon;
+            shadow.upsilon = bt.upsilon;
+            shadow.lower_statistical_weight = lower.statistical_weight;
+            shadow.upper_statistical_weight = upper.statistical_weight;
+            shadow.electron_density_cm3 = ne;
+            shadow.q_excitation_cm3_s = qex;
+            shadow.q_deexcitation_cm3_s = qde;
+            shadow.ans = source_ans;
+            shadow.legacy_ans = legacy_ans;
+            shadow.committed_nonfinite = !(
+                std::isfinite(c.ans1) && std::isfinite(c.ans2) &&
+                std::isfinite(c.ans3) && std::isfinite(c.ans4) &&
+                std::isfinite(c.ans5) && std::isfinite(c.ans6)
+            );
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE54_ANGULAR_REDIS: {
@@ -4393,7 +4616,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
         });
         std::ofstream record_file(root / (stem + "_records.csv"));
         if (!record_file) throw std::runtime_error("cannot create record diagnostics CSV");
-        record_file << "evaluation_ordinal,source_position,record,element_index,element_z,data_type,rate_type,ion_index,ion_stage,lower_row,upper_row,matrix_enabled,active_stage,matrix_committed,spectral,ans1,ans2,ans3,ans4,ans5,ans6,density_scale,line_energy_ev,atomic_mass_amu,natural_width_ev,opakab,type56_upsilon,type53_shadow_valid,type53_shadow_ans1,type53_shadow_ans2,type53_shadow_ans3,type53_shadow_ans4,type53_shadow_ans5,type53_shadow_ans6,type53_delta_ans1,type53_delta_ans2,type53_delta_ans3,type53_delta_ans4,type53_delta_ans5,type53_delta_ans6,type53_shadow_base_threshold_ev,type53_shadow_threshold_ev,type53_shadow_bound_energy_ev,type53_shadow_continuum_energy_ev,type53_shadow_destination_energy_ev,type53_shadow_excited_parent_energy_ev,type53_shadow_bound_g,type53_shadow_continuum_g,type53_shadow_destination_g,type53_shadow_excited_parent_g,type53_milne_partition_context_used,type53_excited_threshold_context_used,type53_corrected_threshold_before_mapping,type53_phextrap_source_reference_order,type53_phextrap_input_pair_count,type53_phextrap_output_pair_count,type53_shadow_rnist,type53_shadow_sumr,type53_shadow_sumi,type53_shadow_sumh,type53_shadow_sumh2,type53_shadow_sumc,type53_shadow_sumc2,type53_sumc_ieee_nextafter_applied,type53_shadow_nb1_one_based,type53_shadow_klmax_one_based,type53_row46_contract,type53_captured_state_anchor,type53_tau_in,type53_tau_out,type53_ptmp1,type53_ptmp2,type53_covering_fraction,type53_runtime_state_abi_used,type53_continuum_index_one_based,type53_dsec_radiation_bin_count,type53_continuum_tau_count,type50_shadow_valid,type50_shadow_ans1,type50_shadow_ans2,type50_shadow_ans3,type50_shadow_ans4,type50_shadow_ans5,type50_shadow_ans6,type50_stored_wavelength_a,type50_endpoint_energy_ev,type50_covering_fraction,type50_ptmp1,type50_ptmp2,type50_bremsa_nb1,type50_density_floor_s,type50_density_floor_applied,type50_photoexcitation_zero_covering,type50_used_dsec_covering,type50_used_dsec_radiation,type50_nb1_one_based,type99_shadow_valid,type99_shadow_ans1,type99_shadow_ans2,type99_shadow_ans3,type99_shadow_ans4,type99_shadow_ans5,type99_shadow_ans6,type99_threshold_ev,type99_destination_energy_ev,type99_bound_energy_ev,type99_swrat,type99_calt99_density_cm3,type99_phint53hunt_density_cm3,type99_rec_cm3_s,type99_milne_alpha_cm3_s,type99_cross_section_scale,type99_ans2d_unscaled_s,type99_phint_scale,type99_pirt_unscaled_s,type99_rrrt_unscaled_s,type99_piht_unscaled_erg_s,type99_rrcl_unscaled_erg_s,type99_piht2_unscaled_erg_s,type99_rrcl2_unscaled_erg_s,type99_nbinc_threshold_one_based,type99_nb1_one_based,type99_nphint_one_based,type99_ndelt,type99_npass,type99_last_pass_first_kl_one_based,type99_last_pass_last_kl_one_based,type99_cached_atmp22_stale_reuses,type99_used_dsec_radiation,mg_type53_legacy_max_abs,mg_type53_shadow_max_abs,mg_type53_committed_max_abs,mg_type53_legacy_nonfinite,mg_type53_legacy_implausible,mg_type53_replacement_applied,mg_type53_committed_nonfinite,mg_type53_committed_implausible,mg_type53_exponent_energy_ev,mg_type53_exponent_dimensionless,mg_type53_electron_density_cm3,mg_type53_hydrogen_density_cm3,mg_type53_matrix_density_scale,mg_type53_source_faithful_mode,type49_shadow_valid,type49_shadow_ans1,type49_shadow_ans2,type49_shadow_ans3,type49_shadow_ans4,type49_shadow_ans5,type49_shadow_ans6,type49_legacy_max_abs,type49_shadow_max_abs,type49_committed_max_abs,type49_legacy_nonfinite,type49_legacy_implausible,type49_replacement_applied,type49_committed_nonfinite,type49_committed_implausible,type49_base_threshold_ev,type49_threshold_ev,type49_bound_energy_ev,type49_continuum_energy_ev,type49_destination_energy_ev,type49_excited_parent_energy_ev,type49_bound_g,type49_continuum_g,type49_destination_g,type49_excited_parent_g,type49_milne_partition_context_used,type49_excited_threshold_context_used,type49_corrected_threshold_before_mapping,type49_phextrap_source_reference_order,type49_phextrap_input_pair_count,type49_phextrap_output_pair_count,type49_phextrap_max_points,type49_phextrap_input_energy_hash,type49_phextrap_input_sigma_hash,type49_phextrap_output_energy_hash,type49_phextrap_output_sigma_hash,type49_rnist,type49_exponent_energy_ev,type49_exponent_dimensionless,type49_electron_density_cm3,type49_hydrogen_density_cm3,type49_matrix_density_scale,type49_phextrap_applied,type49_source_zero_gate,type49_source_faithful_mode,type49_runtime_state_abi_used,type49_continuum_index_one_based,type49_dsec_radiation_bin_count,type49_continuum_tau_count\n";
+        record_file << "evaluation_ordinal,source_position,record,element_index,element_z,data_type,rate_type,ion_index,ion_stage,lower_row,upper_row,matrix_enabled,active_stage,matrix_committed,spectral,ans1,ans2,ans3,ans4,ans5,ans6,density_scale,line_energy_ev,atomic_mass_amu,natural_width_ev,opakab,type56_upsilon,type53_shadow_valid,type53_shadow_ans1,type53_shadow_ans2,type53_shadow_ans3,type53_shadow_ans4,type53_shadow_ans5,type53_shadow_ans6,type53_delta_ans1,type53_delta_ans2,type53_delta_ans3,type53_delta_ans4,type53_delta_ans5,type53_delta_ans6,type53_shadow_base_threshold_ev,type53_shadow_threshold_ev,type53_shadow_bound_energy_ev,type53_shadow_continuum_energy_ev,type53_shadow_destination_energy_ev,type53_shadow_excited_parent_energy_ev,type53_shadow_bound_g,type53_shadow_continuum_g,type53_shadow_destination_g,type53_shadow_excited_parent_g,type53_milne_partition_context_used,type53_excited_threshold_context_used,type53_corrected_threshold_before_mapping,type53_phextrap_source_reference_order,type53_phextrap_input_pair_count,type53_phextrap_output_pair_count,type53_shadow_rnist,type53_shadow_sumr,type53_shadow_sumi,type53_shadow_sumh,type53_shadow_sumh2,type53_shadow_sumc,type53_shadow_sumc2,type53_sumc_ieee_nextafter_applied,type53_shadow_nb1_one_based,type53_shadow_klmax_one_based,type53_row46_contract,type53_captured_state_anchor,type53_tau_in,type53_tau_out,type53_ptmp1,type53_ptmp2,type53_covering_fraction,type53_runtime_state_abi_used,type53_continuum_index_one_based,type53_dsec_radiation_bin_count,type53_continuum_tau_count,type50_shadow_valid,type50_shadow_ans1,type50_shadow_ans2,type50_shadow_ans3,type50_shadow_ans4,type50_shadow_ans5,type50_shadow_ans6,type50_stored_wavelength_a,type50_endpoint_energy_ev,type50_covering_fraction,type50_ptmp1,type50_ptmp2,type50_bremsa_nb1,type50_density_floor_s,type50_density_floor_applied,type50_photoexcitation_zero_covering,type50_used_dsec_covering,type50_used_dsec_radiation,type50_nb1_one_based,type99_shadow_valid,type99_shadow_ans1,type99_shadow_ans2,type99_shadow_ans3,type99_shadow_ans4,type99_shadow_ans5,type99_shadow_ans6,type99_threshold_ev,type99_destination_energy_ev,type99_bound_energy_ev,type99_swrat,type99_calt99_density_cm3,type99_phint53hunt_density_cm3,type99_rec_cm3_s,type99_milne_alpha_cm3_s,type99_cross_section_scale,type99_ans2d_unscaled_s,type99_phint_scale,type99_pirt_unscaled_s,type99_rrrt_unscaled_s,type99_piht_unscaled_erg_s,type99_rrcl_unscaled_erg_s,type99_piht2_unscaled_erg_s,type99_rrcl2_unscaled_erg_s,type99_nbinc_threshold_one_based,type99_nb1_one_based,type99_nphint_one_based,type99_ndelt,type99_npass,type99_last_pass_first_kl_one_based,type99_last_pass_last_kl_one_based,type99_cached_atmp22_stale_reuses,type99_used_dsec_radiation,mg_type53_legacy_max_abs,mg_type53_shadow_max_abs,mg_type53_committed_max_abs,mg_type53_legacy_nonfinite,mg_type53_legacy_implausible,mg_type53_replacement_applied,mg_type53_committed_nonfinite,mg_type53_committed_implausible,mg_type53_exponent_energy_ev,mg_type53_exponent_dimensionless,mg_type53_electron_density_cm3,mg_type53_hydrogen_density_cm3,mg_type53_matrix_density_scale,mg_type53_source_faithful_mode,type49_shadow_valid,type49_shadow_ans1,type49_shadow_ans2,type49_shadow_ans3,type49_shadow_ans4,type49_shadow_ans5,type49_shadow_ans6,type49_legacy_max_abs,type49_shadow_max_abs,type49_committed_max_abs,type49_legacy_nonfinite,type49_legacy_implausible,type49_replacement_applied,type49_committed_nonfinite,type49_committed_implausible,type49_base_threshold_ev,type49_threshold_ev,type49_bound_energy_ev,type49_continuum_energy_ev,type49_destination_energy_ev,type49_excited_parent_energy_ev,type49_bound_g,type49_continuum_g,type49_destination_g,type49_excited_parent_g,type49_milne_partition_context_used,type49_excited_threshold_context_used,type49_corrected_threshold_before_mapping,type49_phextrap_source_reference_order,type49_phextrap_input_pair_count,type49_phextrap_output_pair_count,type49_phextrap_max_points,type49_phextrap_input_energy_hash,type49_phextrap_input_sigma_hash,type49_phextrap_output_energy_hash,type49_phextrap_output_sigma_hash,type49_rnist,type49_exponent_energy_ev,type49_exponent_dimensionless,type49_electron_density_cm3,type49_hydrogen_density_cm3,type49_matrix_density_scale,type49_phextrap_applied,type49_source_zero_gate,type49_source_faithful_mode,type49_runtime_state_abi_used,type49_continuum_index_one_based,type49_dsec_radiation_bin_count,type49_continuum_tau_count,type51_shadow_valid,type51_source_faithful_mode,type51_replacement_applied,type51_endpoint_order_exact,type51_committed_nonfinite,type51_bt_type,type51_point_count,type51_eij_ryd,type51_eij_ev,type51_scaling_c,type51_physical_temperature_k,type51_floor_temperature_k,type51_effective_temperature_k,type51_temperature_floor_applied,type51_scaled_temperature,type51_transformed_temperature,type51_scaled_upsilon,type51_upsilon,type51_lower_g,type51_upper_g,type51_electron_density_cm3,type51_q_excitation_cm3_s,type51_q_deexcitation_cm3_s,type51_shadow_ans1,type51_shadow_ans2,type51_shadow_ans3,type51_shadow_ans4,type51_shadow_ans5,type51_shadow_ans6,type51_legacy_ans1,type51_legacy_ans2,type51_legacy_ans3,type51_legacy_ans4,type51_legacy_ans5,type51_legacy_ans6\n";
         record_file << std::setprecision(17);
 
         struct FamilySummary {
@@ -4557,7 +4780,33 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                         << ',' << (item.type49_shadow.runtime_state_abi_used ? 1 : 0)
                         << ',' << item.type49_shadow.continuum_index_one_based
                         << ',' << item.type49_shadow.dsec_radiation_bin_count
-                        << ',' << item.type49_shadow.continuum_tau_count << '\n';
+                        << ',' << item.type49_shadow.continuum_tau_count
+                        << ',' << (item.type51_shadow.valid ? 1 : 0)
+                        << ',' << (item.type51_shadow.source_faithful_mode ? 1 : 0)
+                        << ',' << (item.type51_shadow.replacement_applied ? 1 : 0)
+                        << ',' << (item.type51_shadow.endpoint_order_exact ? 1 : 0)
+                        << ',' << (item.type51_shadow.committed_nonfinite ? 1 : 0)
+                        << ',' << item.type51_shadow.bt_type
+                        << ',' << item.type51_shadow.point_count
+                        << ',' << item.type51_shadow.eij_ryd
+                        << ',' << item.type51_shadow.eij_ev
+                        << ',' << item.type51_shadow.scaling_c
+                        << ',' << item.type51_shadow.physical_temperature_k
+                        << ',' << item.type51_shadow.floor_temperature_k
+                        << ',' << item.type51_shadow.effective_temperature_k
+                        << ',' << (item.type51_shadow.temperature_floor_applied ? 1 : 0)
+                        << ',' << item.type51_shadow.scaled_temperature
+                        << ',' << item.type51_shadow.transformed_temperature
+                        << ',' << item.type51_shadow.scaled_upsilon
+                        << ',' << item.type51_shadow.upsilon
+                        << ',' << item.type51_shadow.lower_statistical_weight
+                        << ',' << item.type51_shadow.upper_statistical_weight
+                        << ',' << item.type51_shadow.electron_density_cm3
+                        << ',' << item.type51_shadow.q_excitation_cm3_s
+                        << ',' << item.type51_shadow.q_deexcitation_cm3_s;
+            for (double value : item.type51_shadow.ans) record_file << ',' << value;
+            for (double value : item.type51_shadow.legacy_ans) record_file << ',' << value;
+            record_file << '\n';
             auto& summary = summaries[c.data_type];
             if (summary.records == 0) summary.first_source_position = c.source_position;
             summary.last_source_position = c.source_position;

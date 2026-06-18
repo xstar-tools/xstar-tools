@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: xstar-tools
-Version: 0.6.48.7.46.9.4.2
+Version: 0.6.48.7.46.9.5
 Summary: Source-faithful Python/C++ XSTAR tools, atomic-data utilities, benchmarks, and runtime
 Author: Ashkbiz Danehkar
 License-Expression: MIT
@@ -26,7 +26,11 @@ Requires-Dist: h5py>=3; extra == "hdf5"
 Provides-Extra: sparse
 Requires-Dist: scipy>=1.8; extra == "sparse"
 
-## v0.6.48.7.46.9.4.2 Type-53 audit correction and Type-49 extrapolated-grid parity
+## v0.6.48.7.46.9.5 Mg Type-51 source-faithful closure
+
+This qualification release reproduces the literal XSTAR Type-51 Burgess--Tully path for Mg: the wavelength-dependent evaluation-temperature floor, the five-point `splinem` interpolator, the record Chianti transition energy in the Maxwellian and energy channels, and source-order record insertion. Across the preserved all-61 workload, all 67,149 active Type-51 contribution vectors are source-faithful: 67,111 are bit-exact and 38 are bounded same-sign binary64 differences within five ULPs and `6e-16` relative difference, with zero absolute tolerance and zero unexplained vectors. All 72,651 runtime record evaluations carry complete finite source context. Accepted Type-49/53 and hydrogen Type-53 work is preserved; Mg Type-50 remains unchanged and deferred. See `V064874695_MG_TYPE51_SOURCE_FAITHFUL_CLOSURE.md`.
+
+## v0.6.48.7.46.9.5 Type-53 audit correction and Type-49 extrapolated-grid parity
 
 This qualification release corrects the Type-53 audit prefix error from v46.9.4.1 and reproduces the frozen v0.6.47.2 Type-49 extrapolation capacity. Type-49 `phextrap` now uses the reduced `ncn2m=999` workspace rather than the full 9,999-bin live radiation grid. Every Type-49 input/output energy and cross-section array is checked with exact binary64 hashes and point counts. In the preserved all-61 validation, Type-49 and Type-53 have zero unexplained material residuals; 234 remaining contribution rows are bounded to three ULPs and `4.5e-16` relative difference with no absolute tolerance. Mg Type-50 remains unchanged and deferred. See `V0648746942_TYPE53_AUDIT_AND_TYPE49_EXTRAPOLATED_GRID_PARITY.md`.
 
