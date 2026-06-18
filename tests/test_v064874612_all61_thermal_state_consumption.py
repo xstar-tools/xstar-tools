@@ -134,7 +134,7 @@ def test_generated_probe_installs_nonrecursive_input_hook(tmp_path: Path) -> Non
 
 
 def test_release_and_cpp_contract() -> None:
-    assert xstar_tools.__version__ == "0.6.48.7.46.12"
+    assert xstar_tools.__version__ == "0.6.48.7.46.12.1"
     cpp = (root() / "src/xstar_tools/xstar/cpp/fixed_state_engine.cpp").read_text()
     assert "XSTAR_QUALIFICATION_THERMAL_COMPONENT_PARITY_CLOSURE" in cpp
     assert "XSTAR_QUALIFICATION_THERMAL_COMPONENT_PARITY_CLOSURE_DIR" in cpp
@@ -173,6 +173,18 @@ def test_prepare_and_audit_synthetic_all61(tmp_path: Path) -> None:
     dump(baseline, {
         "result": "ACCEPT", "dense_exact_systems": 183, "dense_mismatch_cells": 0,
         "gates": {"V06487_FIXED_STATE_PARITY": "ACCEPT"},
+    })
+    dump(output / "v048746121_canonical_scalar_oracle_alignment_report.json", {
+        "result": "ACCEPT", "scalar_values_rebased": 1, "scalar_sequences_rebased": 1,
+        "first_rebased_sequence": 9,
+        "gates": {
+            "ACCEPTED_V4611_LEVEL_POPULATIONS_PRESERVED_41968": "ACCEPT",
+            "ACCEPTED_V4611_ION_POPULATIONS_PRESERVED_1098": "ACCEPT",
+            "SOURCE_FIXED_THERMAL_CHARGE_BITS_EXACT_61": "ACCEPT",
+        },
+    })
+    dump(output / "v048746121_native_replay_resume_manifest.json", {
+        "result": "ACCEPT", "sequences_reusable": 61, "sequences_pending": 0,
     })
     checker = output / "checker.json"
     env = dict(os.environ, PYTHONPATH=str(root() / "src"))
@@ -226,8 +238,11 @@ def test_runtime_report_normalization_preserves_capture_and_materializes_canonic
 
 def test_runner_contains_source_capture_resume_and_preflight_contract() -> None:
     runner = (root() / "run_v04874612_all61_thermal_state_consumption_audit.sh").read_text()
-    assert "V04874612_RUNNER_REVISION=20260724-source-report-resume-v4" in runner
+    assert "V048746121_RUNNER_REVISION=20260725-canonical-scalar-resume-v1" in runner
     assert "V04874612_SOURCE_CAPTURE_REUSE=1" in runner
     assert "XSTAR_V04874612_FORCE_SOURCE_RECAPTURE" in runner
     assert "XSTAR_V04874612_SOURCE_CAPTURE_PREFLIGHT_ONLY" in runner
     assert "V04874612_SOURCE_CAPTURE_PREFLIGHT=ACCEPT" in runner
+    assert "canonical_scalar_oracle_alignment" in runner
+    assert "native_replay_resume" in runner
+    assert "CANONICAL_FIXED_DIR" in runner

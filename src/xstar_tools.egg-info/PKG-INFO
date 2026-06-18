@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: xstar-tools
-Version: 0.6.48.7.46.12
+Version: 0.6.48.7.46.12.1
 Summary: Source-faithful Python/C++ XSTAR tools, atomic-data utilities, benchmarks, and runtime
 Author: Ashkbiz Danehkar
 License-Expression: MIT
@@ -26,9 +26,9 @@ Requires-Dist: h5py>=3; extra == "hdf5"
 Provides-Extra: sparse
 Requires-Dist: scipy>=1.8; extra == "sparse"
 
-## Current release: 0.6.48.7.46.12
+## Current release: 0.6.48.7.46.12.1
 
-This qualification release captures the complete all-61 v0.6.47.2 Thermal state and component budget, fingerprints every consumed radiation/optical-depth/global-workspace and compact-population input, and records native pre-closure `computed_*` values separately from source-committed values. It corrects the Thermal state-consumption order so the accepted fixed-state population slice is consumed before component accounting. The runner also rebases stale v46.10 absolute pointers to the local `v04874610_matrix_construction_closure/v04874610_matrix_closure` output. The source-probe hook is structurally and functionally validated before replay so the sequence fingerprint is captured before the corresponding result callback. Exact committed parity does not imply independent native Thermal parity; controller, products, and production promotion remain blocked. See `V064874612_ALL61_THERMAL_STATE_CONSUMPTION_AUDIT.md`.
+This qualification patch aligns the accepted v46.11 fixed-state closure and the current v46.12 Thermal capture onto one canonical binary64 scalar oracle. It preserves all 61 accepted level and ion closure files byte-for-byte, regenerates only `computed_electron_fraction` and `charge_residual`, and audits every old/new scalar with IEEE bits and ULP distance. Native replay is sequence-resumable: valid completed evaluations are retained and validated, while replay restarts at the first missing or stale sequence. For the uploaded partial run, evaluations 1–8 are reusable and sequence 9 is pending. Independent native Thermal parity, controller parity, products, and production promotion remain blocked. See `V0648746121_CANONICAL_SCALAR_ORACLE_AND_RESUMABLE_NATIVE_REPLAY.md`.
 
 ## v0.6.48.7.46.11.1 Thermal-readiness vocabulary hotfix
 

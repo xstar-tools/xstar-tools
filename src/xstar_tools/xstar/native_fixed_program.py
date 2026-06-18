@@ -789,7 +789,7 @@ def _lower_record(
     elif dt == 50:
         if len(raw_ints) < 2 or len(raw_reals) < 3:
             raise ValueError(f"type50 record {rec} has short payload")
-        # v0.6.48.7.46.12: matrix endpoint orientation must follow the
+        # v0.6.48.7.46.12.1: matrix endpoint orientation must follow the
         # mutable source leveltemp workspace visible to the Type-50 evaluator,
         # not the immutable compact-row energies.  The v0.6.47.2 promoted
         # path returns the packed idest1/idest2 pair and then applies the

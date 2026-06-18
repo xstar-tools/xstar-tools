@@ -2,7 +2,7 @@
 from __future__ import annotations
 import argparse,csv,json
 from pathlib import Path
-RELEASE='0.6.48.7.46.12'
+RELEASE='0.6.48.7.46.12.1'
 KNOWN_ACCOUNTED={2,5,6,8,9,10,12,13,14,15,17,19,20}
 ALLOWED_TYPES={53,56,63,77,99}
 MAX_ACCOUNTED_DELTA=1.0e-6

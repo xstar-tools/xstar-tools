@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 0.6.48.7.46.12.1 — canonical fixed-state/Thermal scalar-oracle alignment and resumable native replay - 2026-06-18
+
+- Added a canonical closure that copies all accepted v46.11 level and ion files byte-for-byte and regenerates only the two scalar rows from the current v46.12 source capture.
+- Added a 122-row binary64 comparison with exact bit patterns and ULP distances for old and canonical scalar values.
+- Requires current fixed-state `charge_residual`, source Thermal `elcter`, and prepared Thermal-closure `elcter` to be bit-identical for all 61 evaluations.
+- Preserves the 41,968 accepted level values and 1,098 accepted ion-stage values without rebasing them.
+- Added sequence-level native replay validation and reuse, with a manifest that records reusable, pending, and failed evaluations.
+- Preserves valid native evaluation directories and resumes at the first incomplete or stale sequence instead of deleting prior work.
+- Added an exit-time manifest refresh and `XSTAR_V048746121_NATIVE_REPLAY_PREFLIGHT_ONLY=1`.
+- Runs the native-replay preflight before ATDB lowering or C++ rebuilding, so planning/reuse validation is inexpensive.
+- Keeps independent native Thermal parity, controller parity, product/FITS parity, and production promotion blocked.
+
 ## 0.6.48.7.46.12 — all-61 Thermal state-consumption audit and component parity - 2026-06-18
 
 - Added immutable all-61 v0.6.47.2 Thermal state and component capture.

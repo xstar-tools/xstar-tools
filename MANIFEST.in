@@ -762,3 +762,15 @@ include check_v048746111_thermal_readiness_gate_vocabulary_hotfix.py
 include check_v048746111_thermal_readiness_gate_vocabulary_hotfix_readiness.py
 include run_v048746111_thermal_readiness_gate_vocabulary_hotfix.sh
 include xstar_tools_conversation_summary_through_v0.6.48.7.46.12.md
+
+# v0.6.48.7.46.12 all-61 Thermal state-consumption audit
+include V064874612_ALL61_THERMAL_STATE_CONSUMPTION_AUDIT.md
+include V064874612_SOURCE_REPORT_NORMALIZATION_AND_RESUME_HOTFIX.md
+include run_v04874612_all61_thermal_state_consumption_audit.sh
+include check_v04874612_all61_thermal_state_consumption_audit.py
+include check_v04874612_all61_thermal_state_consumption_audit_readiness.py
+include tests/test_v064874612_all61_thermal_state_consumption.py
+
+# v0.6.48.7.46.12.1 canonical scalar-oracle alignment and resumable native replay
+include V0648746121_CANONICAL_SCALAR_ORACLE_AND_RESUMABLE_NATIVE_REPLAY.md
+include tests/test_v0648746121_canonical_scalar_resume.py

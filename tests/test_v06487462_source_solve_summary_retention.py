@@ -2,7 +2,7 @@ from pathlib import Path
 from xstar_tools.xstar import v0472_all61_fixed_state_capture as capture
 
 def test_v06487462_generated_probe_forces_summary_on_copied_profile():
-    assert capture.RELEASE == "0.6.48.7.46.12"
+    assert capture.RELEASE == "0.6.48.7.46.12.1"
     assert capture._PROBE.count('payload = {} if previous_factory is None else dict(previous_factory(current_state))') >= 2
     assert capture._PROBE.count('profile["diagnostics_mode"] = "summary"') >= 2
     assert capture._PROBE.count('payload["profile_control"] = profile') >= 2

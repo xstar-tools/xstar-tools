@@ -37,7 +37,7 @@ def _native_budget(value: float) -> dict[str, object]:
 
 
 def test_version_and_full_probe_contract() -> None:
-    assert xstar_tools.__version__ == "0.6.48.7.46.12"
+    assert xstar_tools.__version__ == "0.6.48.7.46.12.1"
     assert capture.BUDGET_NAME == "v0472_full_dsec_thermal_budget.csv"
     assert "retain the budget for every DSEC call" in capture._PROBE
     assert 'if call_id != 1:' not in capture._PROBE
