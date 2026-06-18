@@ -789,10 +789,32 @@ def _lower_record(
     elif dt == 50:
         if len(raw_ints) < 2 or len(raw_reals) < 3:
             raise ValueError(f"type50 record {rec} has short payload")
-        lower_row, upper_row = local_pair(int(raw_ints[0]), int(raw_ints[1]))
+        # v0.6.48.7.46.9.6: matrix endpoint orientation must follow the
+        # mutable source leveltemp workspace visible to the Type-50 evaluator,
+        # not the immutable compact-row energies.  The v0.6.47.2 promoted
+        # path returns the packed idest1/idest2 pair and then applies the
+        # source _lower_upper comparison to the live level workspace.  A few
+        # Mg columns retain earlier-ion values, so compact-energy sorting puts
+        # an otherwise exact decay in the opposite matrix cells.
+        idest1, idest2 = int(raw_ints[0]), int(raw_ints[1])
+        row1 = _compact_row_for_local(basis, ion_index, idest1)
+        row2 = _compact_row_for_local(basis, ion_index, idest2)
+        current_snapshot = leveltemp_value_snapshots.get(ion_index, {})
+        e1 = float(current_snapshot.get(idest1, {}).get("energy_ev", _row_energy(rows, row1)))
+        e2 = float(current_snapshot.get(idest2, {}).get("energy_ev", _row_energy(rows, row2)))
+        if (e1 / (1.0e-24 + e2) - 1.0) < 1.0e-8:
+            lower_row, upper_row = row1, row2
+        else:
+            lower_row, upper_row = row2, row1
+
+        # Keep the already-qualified Type-50 scalar arithmetic unchanged.
+        # Its oscillator-strength weights remain the compact-row private
+        # energy ordering used by v46.9.5; this release changes only matrix
+        # endpoint placement.
+        scalar_lower_row, scalar_upper_row = local_pair(idest1, idest2)
         wavelength = abs(raw_reals[0])
         aij = raw_reals[2]
-        gup, glo = _row_weight(rows, upper_row), _row_weight(rows, lower_row)
+        gup, glo = _row_weight(rows, scalar_upper_row), _row_weight(rows, scalar_lower_row)
         oscillator = 0.0 if wavelength <= 0.0 else 1.0e-16 * aij * gup * wavelength * wavelength / (0.667274 * glo)
         # v0.6.48.7.37: retain the literal stored wavelength in addition to
         # A and the source-derived oscillator strength.  Type-50 uses the

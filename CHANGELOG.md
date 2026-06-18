@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.48.7.46.9.6 — Mg Type-50 endpoint-orientation correction - 2026-06-17
+
+- Corrected Type-50 matrix endpoint orientation to use the mutable source-order `leveltemp` snapshot rather than immutable compact-row energies.
+- Kept oscillator-strength weights and the qualified Type-50 scalar payload on their existing private compact-energy ordering.
+- Closed all 1,124 baseline orientation rows across 281 evaluations for records 40066, 40095, 40108, 40134, and 41209.
+- Verified that only the lower/upper endpoint fields of those five lowered records change.
+- Reduced dense mismatch cells from 42,498 to 41,171 while preserving exact source/native reconstruction for all 183 systems and all 20 protected exact systems.
+- Preserved Mg Type-49/51/53 and hydrogen Type-53 source-faithful gates.
+- Kept fixed-state, Thermal, controller, product, and production gates fail-closed.
+
 ## 0.6.48.7.46.9.5 — Mg Type-51 source-faithful closure - 2026-06-17
 
 - Reproduced the literal Type-51 `ucalc.f90` temperature semantics: the physical temperature remains in the Maxwellian prefactor while the Burgess--Tully collision-strength fit receives `max(T, 2.8777e6 / wavelength_A)`.

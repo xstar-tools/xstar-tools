@@ -733,3 +733,10 @@ include run_v04874695_mg_type51_source_faithful_closure.sh
 include check_v04874695_mg_type51_source_faithful.py
 include check_v04874695_mg_type51_source_faithful_readiness.py
 include tests/test_v064874695_mg_type51_source_faithful.py
+
+# v0.6.48.7.46.9.6 Mg Type-50 endpoint-orientation correction
+include V064874696_MG_TYPE50_ENDPOINT_ORIENTATION_CORRECTION.md
+include run_v04874696_mg_type50_endpoint_orientation_correction.sh
+include check_v04874696_mg_type50_endpoint_orientation.py
+include check_v04874696_mg_type50_endpoint_orientation_readiness.py
+include tests/test_v064874696_mg_type50_endpoint_orientation.py

@@ -1,3 +1,7 @@
+## v0.6.48.7.46.9.6 Mg Type-50 endpoint-orientation correction
+
+This qualification release corrects the five Mg Type-50 records whose matrix endpoints were ordered from immutable compact energies instead of the mutable source `leveltemp` workspace. Across the preserved all-61 contribution audit, 1,124 endpoint-orientation rows covering 281 record evaluations are reduced to zero; exactly records 40066, 40095, 40108, 40134, and 41209 change, and only their endpoint fields change. Accepted Type-49/51/53, hydrogen Type-53, canonical reconstruction, and all 20 protected exact systems remain accepted. See `V064874696_MG_TYPE50_ENDPOINT_ORIENTATION_CORRECTION.md`.
+
 ## v0.6.48.7.46.9.5 Mg Type-51 source-faithful closure
 
 This qualification release reproduces the literal XSTAR Type-51 Burgess--Tully path for Mg: the wavelength-dependent evaluation-temperature floor, the five-point `splinem` interpolator, the record Chianti transition energy in the Maxwellian and energy channels, and source-order record insertion. Across the preserved all-61 workload, all 67,149 active Type-51 contribution vectors are source-faithful: 67,111 are bit-exact and 38 are bounded same-sign binary64 differences within five ULPs and `6e-16` relative difference, with zero absolute tolerance and zero unexplained vectors. All 72,651 runtime record evaluations carry complete finite source context. Accepted Type-49/53 and hydrogen Type-53 work is preserved; Mg Type-50 remains unchanged and deferred. See `V064874695_MG_TYPE51_SOURCE_FAITHFUL_CLOSURE.md`.
