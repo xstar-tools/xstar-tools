@@ -23,6 +23,7 @@
 #include <map>
 #include <optional>
 #include <sstream>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -336,7 +337,9 @@ const HydrogenType50EscapeStateV04874618& hydrogen_type50_escape_state_v04874618
 
 struct MagnesiumType50EscapeStateV04874619 {
     bool enabled = false;
+    int source_sequence = 0;
     std::map<std::int64_t, int> line_index_by_record;
+    std::set<std::int64_t> active_records;
     std::vector<double> tau_in;
     std::vector<double> tau_out;
 };
@@ -368,6 +371,12 @@ MagnesiumType50EscapeStateV04874619 load_magnesium_type50_escape_state_v04874619
         "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_LINE_TAU_IN_BIN"));
     const auto tau_out_path = std::filesystem::path(required_environment_path_v04874618(
         "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_LINE_TAU_OUT_BIN"));
+    const auto active_path = std::filesystem::path(required_environment_path_v04874618(
+        "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_ACTIVE_RECORDS_CSV"));
+    state.source_sequence = environment_data_type("XSTAR_QUALIFICATION_SOURCE_SEQUENCE");
+    if (state.source_sequence < 1 || state.source_sequence > 61) {
+        throw std::runtime_error("magnesium Type-50 source sequence must be in 1..61");
+    }
     std::ifstream mapping(map_path);
     if (!mapping) throw std::runtime_error("cannot open magnesium Type-50 line-index map: " + map_path.string());
     std::string line;
@@ -391,6 +400,39 @@ MagnesiumType50EscapeStateV04874619 load_magnesium_type50_escape_state_v04874619
     }
     if (state.line_index_by_record.size() != 2420) {
         throw std::runtime_error("magnesium Type-50 line-index map must contain exactly 2420 runtime-active records");
+    }
+    std::ifstream active(active_path);
+    if (!active) throw std::runtime_error("cannot open magnesium Type-50 active-record ledger: " + active_path.string());
+    if (!std::getline(active, line)) throw std::runtime_error("magnesium Type-50 active-record ledger is empty");
+    const auto active_header = split_csv(line);
+    std::map<std::string, std::size_t> active_columns;
+    for (std::size_t i = 0; i < active_header.size(); ++i) active_columns[active_header[i]] = i;
+    if (!active_columns.count("sequence") || !active_columns.count("record")) {
+        throw std::runtime_error("magnesium Type-50 active-record ledger is missing sequence or record");
+    }
+    while (std::getline(active, line)) {
+        if (trim(line).empty()) continue;
+        const auto values = split_csv(line);
+        if (values.size() != active_header.size()) {
+            throw std::runtime_error("magnesium Type-50 active-record ledger row width mismatch");
+        }
+        const int sequence = parse_number<int>(values.at(active_columns.at("sequence")), "sequence");
+        if (sequence != state.source_sequence) continue;
+        const auto record = parse_number<std::int64_t>(values.at(active_columns.at("record")), "record");
+        if (record <= 0) throw std::runtime_error("magnesium Type-50 active-record ledger contains non-positive record");
+        if (!state.active_records.insert(record).second) {
+            throw std::runtime_error("duplicate magnesium Type-50 active record for source sequence");
+        }
+    }
+    const std::size_t expected_active = state.source_sequence <= 4 ? 2196u :
+        (state.source_sequence <= 6 ? 2201u : 2420u);
+    if (state.active_records.size() != expected_active) {
+        throw std::runtime_error("magnesium Type-50 active-record count does not match source sequence contract");
+    }
+    for (const auto record : state.active_records) {
+        if (!state.line_index_by_record.count(record)) {
+            throw std::runtime_error("active magnesium Type-50 record is missing from source line-index map");
+        }
     }
     state.tau_in = read_binary64_payload_v04874619(tau_in_path);
     state.tau_out = read_binary64_payload_v04874619(tau_out_path);
@@ -1184,7 +1226,7 @@ void apply_matrix_closure_contribution_corrections(
         if (correction.remove) continue;
         if (correction.replace_ans1) contribution.ans1 = correction.source_ans1;
         if (correction.replace_ans2) contribution.ans2 = correction.source_ans2;
-        // v0.6.48.7.46.19.1: matrix closure originally corrected only the
+        // v0.6.48.7.46.19.2: matrix closure originally corrected only the
         // population-rate channels.  Type-50 thermal energy channels are
         // algebraically tied to those rates after the source post-swap:
         //   ans3 = -ans2 * |Eupper-Elower| * erg/eV
@@ -1213,13 +1255,14 @@ void apply_matrix_closure_contribution_corrections(
                 contribution.ans3 = -contribution.ans2 * endpoint_energy_ev * kErgPerEv;
             }
         }
-        // v0.6.48.7.46.19.1: Mg primary line cooling consumes the final
+        // v0.6.48.7.46.19.2: Mg primary line cooling consumes the final
         // matrix-closure reverse rate.  Reconstruct only ans3 from the
         // source-faithful Type-50 post-swap identity; secondary channels and
         // forward heating remain unchanged in this milestone.
         if (magnesium_type50_primary_cooling_reduction &&
             element_z == 12 && contribution.data_type == 50 &&
-            correction.replace_ans2) {
+            correction.replace_ans2 &&
+            magnesium_type50_escape_state_v04874619().active_records.count(contribution.record) != 0) {
             if (contribution.lower_row < 1 || contribution.upper_row < 1 ||
                 contribution.lower_row > active_element.n_rows ||
                 contribution.upper_row > active_element.n_rows) {
@@ -3225,7 +3268,7 @@ bool evaluate_type53_source_integral(
     contribution.ans6 *= (std::abs(contribution.ans4) - energy_difference * kErgPerEv * contribution.ans1) / den6;
     contribution.ans5 *= (std::abs(contribution.ans3) - energy_difference * kErgPerEv * contribution.ans2) / den5;
 
-    // v0.6.48.7.46.19.1 qualification-only IEEE closure.
+    // v0.6.48.7.46.19.2 qualification-only IEEE closure.
     // v0.6.48.7.46.9.4.2 qualification-only IEEE closure compatibility marker.
     // The v0.6.47.2
     // Python reference evaluates the same source expressions one operation at
@@ -3964,10 +4007,11 @@ EvaluatedRecord evaluate_record(
                 hydrogen_escape_state_applied = true;
             }
             const auto& magnesium_escape = magnesium_type50_escape_state_v04874619();
-            if (magnesium_escape.enabled && element.element_z == 12) {
+            if (magnesium_escape.enabled && element.element_z == 12 &&
+                magnesium_escape.active_records.count(record.record) != 0) {
                 const auto found = magnesium_escape.line_index_by_record.find(record.record);
                 if (found == magnesium_escape.line_index_by_record.end()) {
-                    throw std::runtime_error("magnesium Type-50 record is missing from source line-index map");
+                    throw std::runtime_error("active magnesium Type-50 record is missing from source line-index map");
                 }
                 line_index_one_based = found->second;
                 const std::size_t line_index = static_cast<std::size_t>(line_index_one_based - 1);

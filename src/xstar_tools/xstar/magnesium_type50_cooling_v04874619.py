@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-RELEASE = "0.6.48.7.46.19.1"
+RELEASE = "0.6.48.7.46.19.2"
 SCHEMA = "xstar-tools-v0648746191-magnesium-type50-primary-cooling-audit-v1"
 EXPECTED_EVALUATIONS = 61
 EXPECTED_UNIQUE_RECORDS = 2420
@@ -71,7 +71,9 @@ def audit(source_capture: Path, native_run: Path, component_comparison: Path,
             errors.append(f"missing_native_records:{sequence}")
             continue
         for row in _rows(path):
-            if int(row.get("element_z", "0")) == 12 and int(row.get("data_type", "0")) == 50:
+            if (int(row.get("element_z", "0")) == 12 and
+                    int(row.get("data_type", "0")) == 50 and
+                    row.get("type50_magnesium_escape_state_applied") == "1"):
                 key = (sequence, int(row["record"]))
                 native[key] = row
                 density_scale[key] = float(row["density_scale"])

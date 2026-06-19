@@ -1,5 +1,61 @@
 # CHANGELOG
 
+# v0.6.48.7.46.19.2 - 2026-06-19
+
+- Added exact per-sequence Mg Type-50 active-record transport.
+- Corrected the native static-program/source-runtime domain mismatch that stopped v46.19.1 at evaluation 1.
+- Reused the accepted v46.19 source capture; no source recapture or ABI change.
+- Restricted Mg escape and primary-cooling reduction to 146,286 source-active `(sequence, record)` rows.
+
+# Changelog
+
+## 0.6.48.7.46.19.2 — Magnesium Type-50 runtime-active inventory hotfix
+
+- Corrects the v46.19 source-capture contract, which incorrectly treated the 2,454 statically lowered Mg Type-50 records as executable in every evaluation.
+- Pins the actual v0.6.47.2 runtime domain to 2,420 unique records and 146,286 record evaluations, with exact per-sequence counts of 2,196 for sequences 1–4, 2,201 for sequences 5–6, and 2,420 for sequences 7–61.
+- Requires the source line-index map to contain exactly the 2,420 runtime-active records and updates the native loader to the same fail-closed domain.
+- Reuses the completed v46.19 source capture; no source recapture or physics change is required.
+- Retains the v46.19 Mg Type-50 escape and primary-cooling correction, the 146,286 committed reverse-cooling domain, ABI 60487, and the predicted 1,127/2,440 native Thermal exactness after host replay.
+
+## 0.6.48.7.46.19 — source-faithful magnesium primary cooling family attribution and reduction
+
+- Captures and transports live Magnesium Type-50 line optical depths and reconstructs the final primary cooling channel from the accepted matrix-closure reverse rate.
+- The initial readiness contract incorrectly predicted 2,454 records in every evaluation; production capture later established the runtime-active inventory corrected by v46.19.1.
+- Preserves Hydrogen cooling 61/61, continuum 610/610, fixed-state and matrix parity, compact populations, zero callbacks, ABI 60487, and production-promotion blocking.
+
+## 0.6.48.7.46.18.1 — Hydrogen Type-50 source-capture context hotfix
+
+- Corrects the v46.18 source probe, whose escape-factor hook received an `ElementEquilibriumContext` without UCalc `extras` and therefore skipped every Hydrogen Type-50 event.
+- Captures every rate-type-4 escape event first, then applies the authoritative Hydrogen/data-type-50 filter in the UCalc result hook.
+- Invalidates and rebuilds rejected partial source captures before the all-61 native replay.
+- Preserves the v46.18 physics correction, ABI 60487, continuum, matrices, populations, and production-promotion blocking.
+- Production-host acceptance closed 8,113 Hydrogen Type-50 records, all 61 `h_cooling` values, and raised independent exactness to 1,066/2,440.
+
+## 0.6.48.7.46.18 — source-faithful call-3/4 hydrogen Type-50 cooling attribution and reduction
+
+- Captures and transports the live all-61 Hydrogen line optical-depth workspace used by source Type-50 escape probabilities.
+- Replaces the call-3/4 optically thin Type-50 assumption with source-faithful binary64 `pescl` evaluation for 133 Hydrogen records per evaluation.
+- Adds an 8,113-record causal ledger requiring exact line indices, 16,226 optical-depth values, 16,226 escape factors, and all Type-50 answer vectors.
+- Requires calls 1–2 Hydrogen cooling to remain exact and calls 3–4 to close from 0/37 to 37/37.
+- Predicts independent native Thermal exactness of 1,066/2,440 after production-host replay while preserving continuum 610/610, fixed-state, matrix, compact-population, and zero-callback gates.
+- Keeps controller, products, performance promotion, and production default downstream.
+
+## 0.6.48.7.46.17.2.1 — continuum preservation-gate vocabulary hotfix
+
+- Corrects the v46.17.2 milestone checker, which consumed the v46.17.1 causal-baseline validator after that validator had intentionally omitted three already-accepted preservation aliases.
+- Restores `V06487_FIXED_STATE_PARITY_PRESERVED`, `DENSE_EXACT_SYSTEMS_183_PRESERVED`, and `DENSE_MISMATCH_CELLS_ZERO_PRESERVED` to the exported accepted-gate vocabulary.
+- Reanalyzes the completed v46.17.2 production output without rerunning native physics and accepts the continuum milestone at 610/610 bit-exact values and 1,029/2,440 independently exact Thermal values.
+- Requires the original v46.17.2 rejection list to contain exactly the three missing aliases, preventing the hotfix from masking any scientific failure.
+- Changes no physics, workspaces, matrices, populations, ABI, or production-promotion status.
+
+## 0.6.48.7.46.17.2 — source-faithful `freef` real-exponent power semantics hotfix
+
+- Added a qualification-scoped source-faithful `freef.f90` real-exponent power correction.
+- Replaced chained `epi*epi*epi` evaluation with `std::pow(epi, 3.0)` when `XSTAR_QUALIFICATION_FREEF_REAL_EXPONENT_POW=1`.
+- Closed the 13 remaining 1–2 ULP `htfreef` residuals in production-host replay.
+- Achieved all 610 continuum values bit-exact and independent native Thermal exactness of 1029/2440.
+- Preserved ABI 60487, fixed-state parity, all matrix/population closures, and production-promotion blocking.
+
 ## 0.6.48.7.46.19.1 — Magnesium Type-50 runtime-active inventory hotfix - 2026-06-19
 
 - Corrects the v46.19 source-capture contract, which incorrectly treated the 2,454 statically lowered Mg Type-50 records as executable in every evaluation.

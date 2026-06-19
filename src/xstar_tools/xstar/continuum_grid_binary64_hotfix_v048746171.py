@@ -13,7 +13,7 @@ import numpy as np
 
 from .all61_native_replay_aggregate import CONTINUUM_WORKSPACE_LEDGER_NAME, THERMAL_LEDGER_NAME
 
-RELEASE = "0.6.48.7.46.19.1"
+RELEASE = "0.6.48.7.46.19.2"
 SCHEMA = "xstar-tools-v0648746171-continuum-grid-binary64-hotfix-v1"
 COMPONENTS = (
     "cmp1", "cmp2", "htcomp", "clcomp", "htfreef", "clbrems",

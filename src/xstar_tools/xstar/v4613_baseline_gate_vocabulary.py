@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-RELEASE = "0.6.48.7.46.19.1"
+RELEASE = "0.6.48.7.46.19.2"
 BASELINE_RELEASE = "0.6.48.7.46.13"
 SCHEMA = "xstar-tools-v0648746141-v4613-baseline-gate-vocabulary-v1"
 

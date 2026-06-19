@@ -1,8 +1,8 @@
-"""Validate the accepted v0.6.48.7.46.19.1 baseline for v46.17."""
+"""Validate the accepted v0.6.48.7.46.19.2 baseline for v46.17."""
 from __future__ import annotations
 import argparse,json
 from pathlib import Path
-RELEASE="0.6.48.7.46.19.1";SCHEMA="xstar-tools-v064874617-v4616-baseline-v1"
+RELEASE="0.6.48.7.46.19.2";SCHEMA="xstar-tools-v064874617-v4616-baseline-v1"
 REQUIRED_GATES=("ALL_61_THERMAL_EVALUATIONS","THERMAL_COMPACT_POPULATION_VALUES_EXACT_40149","ALL_61_THERMAL_DIAGONAL_SOURCE_DOMAIN_APPLIED","THERMAL_DIAGONAL_SOURCE_ORDER_STREAMS_EXACT_183","HE_TYPE50_REVERSE_ENERGY_ROWS_CHANGED_554","HE_NON_TYPE53_COOLING_SOURCE_SCALE_61","PYTHON_CALLBACKS_ZERO","V06487_FIXED_STATE_PARITY_PRESERVED","V06488_THERMAL_PARITY","DENSE_EXACT_SYSTEMS_183_PRESERVED","DENSE_MISMATCH_CELLS_ZERO_PRESERVED","PRODUCTION_PROMOTION_BLOCKED")
 def main(argv=None):
  p=argparse.ArgumentParser();p.add_argument("checker",type=Path);p.add_argument("--output-json",type=Path,required=True);a=p.parse_args();errors=[]

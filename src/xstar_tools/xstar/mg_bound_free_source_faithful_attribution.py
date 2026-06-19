@@ -12,7 +12,7 @@ from typing import Any, Iterable
 
 from .all61_dense_matrix_causal_attribution import _binary64_ieee_equivalent
 
-RELEASE = "0.6.48.7.46.19.1"
+RELEASE = "0.6.48.7.46.19.2"
 EXPECTED = {49: 49_349, 53: 53_436}
 MAX_ULPS = 2
 MAX_RELATIVE_DELTA = 4.0e-16

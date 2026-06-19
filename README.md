@@ -1,6 +1,10 @@
+
+## v0.6.48.7.46.19.2
+
+Qualification-only Mg Type-50 runtime-active sequence-mask hotfix. It reuses the accepted 146,286-row v46.19 source capture and applies escape state only to the exact source-active records for each evaluation sequence.
 ## Current release
 
-**0.6.48.7.46.19.1** corrects the Magnesium Type-50 source-capture inventory from a static 2,454-record assumption to the exact runtime-active domain: 2,420 unique records and 146,286 all-61 record evaluations. It reuses the completed v46.19 capture without recapturing source physics, then runs the unchanged Mg primary-cooling correction. See `V0648746191_MAGNESIUM_TYPE50_RUNTIME_ACTIVE_INVENTORY_HOTFIX.md`.
+**0.6.48.7.46.19.2** corrects the Magnesium Type-50 source-capture inventory from a static 2,454-record assumption to the exact runtime-active domain: 2,420 unique records and 146,286 all-61 record evaluations. It reuses the completed v46.19 capture without recapturing source physics, then runs the unchanged Mg primary-cooling correction. See `V0648746191_MAGNESIUM_TYPE50_RUNTIME_ACTIVE_INVENTORY_HOTFIX.md`.
 
 ```bash
 ./run_v048746191_magnesium_runtime_active_inventory_hotfix.sh \
