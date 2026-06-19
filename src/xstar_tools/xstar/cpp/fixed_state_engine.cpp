@@ -1000,7 +1000,7 @@ void apply_matrix_closure_contribution_corrections(
         if (correction.remove) continue;
         if (correction.replace_ans1) contribution.ans1 = correction.source_ans1;
         if (correction.replace_ans2) contribution.ans2 = correction.source_ans2;
-        // v0.6.48.7.46.17: matrix closure originally corrected only the
+        // v0.6.48.7.46.17.1: matrix closure originally corrected only the
         // population-rate channels.  Type-50 thermal energy channels are
         // algebraically tied to those rates after the source post-swap:
         //   ans3 = -ans2 * |Eupper-Elower| * erg/eV
@@ -1299,11 +1299,13 @@ SourceContinuumWorkspace build_source_continuum_workspace(
     out.bremsam.assign(reduced_count, 0.0);
     out.bremsmap_index_one_based.assign(reduced_count, 0);
 
-    double ebnd1 = static_cast<double>(static_cast<float>(0.1));
-    double ebnd2 = static_cast<double>(static_cast<float>(4.0e5));
-    const double exponent1 = static_cast<double>(
-        static_cast<float>(1.0) / static_cast<float>(reduced_log_count - 1)
-    );
+    // The immutable v0.6.47.2 qualification reference constructs ener_grid
+    // with Python binary64 literals.  Preserve that accepted reference domain
+    // exactly; the original default-real reconstruction is retained only in
+    // the historical v46.17 audit module.
+    double ebnd1 = 0.1;
+    double ebnd2 = 4.0e5;
+    const double exponent1 = 1.0 / static_cast<double>(reduced_log_count - 1);
     const double ratio1 = std::pow(ebnd2 / ebnd1, exponent1);
     out.epim[0] = ebnd1;
     for (int i = 1; i < reduced_log_count; ++i) {
@@ -1311,11 +1313,9 @@ SourceContinuumWorkspace build_source_continuum_workspace(
     }
 
     const double ebnd2_old = ebnd2;
-    ebnd2 = static_cast<double>(static_cast<float>(1.0e6));
+    ebnd2 = 1.0e6;
     ebnd1 = ebnd2_old;
-    const double exponent2 = static_cast<double>(
-        static_cast<float>(1.0) / static_cast<float>(reduced_tail - 1)
-    );
+    const double exponent2 = 1.0 / static_cast<double>(reduced_tail - 1);
     const double ratio2 = std::pow(ebnd2 / ebnd1, exponent2);
     for (int i = reduced_log_count; i < reduced_count; ++i) {
         out.epim[static_cast<std::size_t>(i)] = out.epim[static_cast<std::size_t>(i - 1)] * ratio2;
@@ -3011,7 +3011,7 @@ bool evaluate_type53_source_integral(
     contribution.ans6 *= (std::abs(contribution.ans4) - energy_difference * kErgPerEv * contribution.ans1) / den6;
     contribution.ans5 *= (std::abs(contribution.ans3) - energy_difference * kErgPerEv * contribution.ans2) / den5;
 
-    // v0.6.48.7.46.17 qualification-only IEEE closure.
+    // v0.6.48.7.46.17.1 qualification-only IEEE closure.
     // v0.6.48.7.46.9.4.2 qualification-only IEEE closure compatibility marker.
     // The v0.6.47.2
     // Python reference evaluates the same source expressions one operation at

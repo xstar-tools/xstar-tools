@@ -1,5 +1,15 @@
 # CHANGELOG
 
+# 0.6.48.7.46.17.1 - 2026-06-19
+
+- Corrected the v46.17 reduced continuum grid to use the immutable v0.6.47.2 Python binary64 `ener_grid(999)` semantics rather than a default-real/binary32 reconstruction.
+- Preserved all 60,939 nearest-bin `bremsmap` indices and all 60,939 projected `bremsam` values; only the 999 energy values and their bin widths change.
+- Added a fail-closed v46.17 causal-baseline validator requiring the production result to have exactly the two diagnosed Compton/free-free rejection gates.
+- Added binary64 workspace and bit-exact gates for `cmp1`, `cmp2`, `htcomp`, `clcomp`, `htfreef`, `clbrems`, and the four continuum totals.
+- Offline replay against the production-host v46.17 ledgers reproduces 610/610 continuum values bit-for-bit and predicts 1,029/2,440 independently exact Thermal values after host replay.
+- Preserved ABI 60487, fixed-state parity, matrix parity, compact populations, committed Thermal closure, and zero Python callbacks.
+- Production promotion remains blocked pending the v46.17.1 host replay and completion of the remaining independent Thermal families.
+
 # 0.6.48.7.46.17 - 2026-06-19
 
 - Reconstructed the source 999-bin `epim` continuum grid and `bremsmap` nearest-bin projection from captured 9,999-bin `epi/bremsa` workspaces.

@@ -1,5 +1,21 @@
 ## Current release
 
+**0.6.48.7.46.17.1** is a narrow continuum-grid semantics hotfix. The v46.17 production replay proved that the 999-bin topology, all 60,939 `bremsmap` indices, all projected `bremsam` values, fixed-state products, compact populations, matrices, committed Thermal values, and zero-callback boundary were correct. The remaining Compton/free-free bias came from reconstructing the reduced grid through binary32 default-real boundaries instead of the immutable v0.6.47.2 Python binary64 `ener_grid`. Offline replay predicts all 610 continuum values will be bit-exact and independent native Thermal exactness will increase from 419/2,440 to 1,029/2,440. See `V0648746171_CANONICAL_V0472_CONTINUUM_GRID_BINARY64_SEMANTICS_HOTFIX.md`.
+
+Run from the completed v46.17 production output:
+
+```bash
+./run_v048746171_continuum_grid_binary64_semantics_hotfix.sh \
+  ../xstar/data/atdb.fits \
+  ../xstar_tools-0.6.48.7.46.17/v04874617_continuum_compton_free_free_workspace_reduction \
+  v048746171_continuum_grid_binary64_semantics_hotfix \
+  10
+```
+
+Use `XSTAR_V048746171_PREFLIGHT_ONLY=1` for causal-baseline and readiness validation without replay.
+
+## Current release
+
 **0.6.48.7.46.16** closes the dominant helium non-Type53 cooling residual by recomputing Type-50 energy-weighted Thermal channels from the accepted matrix-closure rate channels and exact source endpoint energy. The qualification-scoped correction changes 554 reverse-cooling rows across 16 records and brings helium non-Type53 cooling to source scale in all 61 evaluations while preserving all fixed-state, compact-population, dense-matrix, committed-Thermal, Mg Type-99, and zero-callback gates. See `V064874616_SOURCE_FAITHFUL_HELIUM_NON_TYPE53_COOLING_FAMILY_ATTRIBUTION_AND_REDUCTION.md`.
 
 Run from an accepted v0.6.48.7.46.15 output:
