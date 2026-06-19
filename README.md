@@ -1,6 +1,6 @@
 ## Current release
 
-**0.6.48.7.46.17.2** is a narrow continuum-grid semantics hotfix. The v46.17 production replay proved that the 999-bin topology, all 60,939 `bremsmap` indices, all projected `bremsam` values, fixed-state products, compact populations, matrices, committed Thermal values, and zero-callback boundary were correct. The remaining Compton/free-free bias came from reconstructing the reduced grid through binary32 default-real boundaries instead of the immutable v0.6.47.2 Python binary64 `ener_grid`. Offline replay predicts all 610 continuum values will be bit-exact and independent native Thermal exactness will increase from 419/2,440 to 1,029/2,440. See `V0648746171_CANONICAL_V0472_CONTINUUM_GRID_BINARY64_SEMANTICS_HOTFIX.md`.
+**0.6.48.7.46.17.2.1** is a narrow continuum-grid semantics hotfix. The v46.17 production replay proved that the 999-bin topology, all 60,939 `bremsmap` indices, all projected `bremsam` values, fixed-state products, compact populations, matrices, committed Thermal values, and zero-callback boundary were correct. The remaining Compton/free-free bias came from reconstructing the reduced grid through binary32 default-real boundaries instead of the immutable v0.6.47.2 Python binary64 `ener_grid`. Offline replay predicts all 610 continuum values will be bit-exact and independent native Thermal exactness will increase from 419/2,440 to 1,029/2,440. See `V0648746171_CANONICAL_V0472_CONTINUUM_GRID_BINARY64_SEMANTICS_HOTFIX.md`.
 
 Run from the completed v46.17 production output:
 

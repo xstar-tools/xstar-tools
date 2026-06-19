@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.7.46.17.2.1 — continuum preservation-gate vocabulary hotfix - 2026-06-19
+
+- Corrects the v46.17.2 milestone checker, which consumed the v46.17.1 causal-baseline validator after that validator had intentionally omitted three already-accepted preservation aliases.
+- Restores `V06487_FIXED_STATE_PARITY_PRESERVED`, `DENSE_EXACT_SYSTEMS_183_PRESERVED`, and `DENSE_MISMATCH_CELLS_ZERO_PRESERVED` to the exported accepted-gate vocabulary.
+- Reanalyzes the completed v46.17.2 production output without rerunning native physics and accepts the continuum milestone at 610/610 bit-exact values and 1,029/2,440 independently exact Thermal values.
+- Requires the original v46.17.2 rejection list to contain exactly the three missing aliases, preventing the hotfix from masking any scientific failure.
+- Changes no physics, workspaces, matrices, populations, ABI, or production-promotion status.
+
 ## 0.6.48.7.46.17.2 - 2026-06-19
 
 - Added a qualification-scoped source-faithful `freef.f90` real-exponent power correction.

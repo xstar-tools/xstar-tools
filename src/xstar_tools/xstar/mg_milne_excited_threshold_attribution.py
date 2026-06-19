@@ -14,7 +14,7 @@ from typing import Any, Iterable
 
 from .all61_dense_matrix_causal_attribution import _binary64_ieee_equivalent
 
-RELEASE = "0.6.48.7.46.17.2"
+RELEASE = "0.6.48.7.46.17.2.1"
 EXPECTED = {49: 49_349, 53: 53_436}
 EXPECTED_UNIQUE_TYPE49 = 809
 TYPE49_PHEXTRAP_MAX_POINTS = 999

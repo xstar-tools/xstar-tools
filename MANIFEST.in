@@ -816,7 +816,7 @@ include check_v04874617_continuum_compton_free_free_workspace_reduction.py
 include check_v04874617_continuum_compton_free_free_workspace_reduction_readiness.py
 include tests/test_v064874617_continuum_workspace_correction.py
 
-# v0.6.48.7.46.17.2 canonical binary64 grid hotfix
+# v0.6.48.7.46.17.2.1 canonical binary64 grid hotfix
 include V0648746171_CANONICAL_V0472_CONTINUUM_GRID_BINARY64_SEMANTICS_HOTFIX.md
 include V04874617_PRODUCTION_HOST_ASSESSMENT.md
 include V048746171_QUALIFICATION_ASSESSMENT.md
