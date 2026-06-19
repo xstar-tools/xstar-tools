@@ -45,7 +45,7 @@ def _synthetic_inventory() -> list[dict[str, object]]:
 
 
 def test_release_version_and_abi_are_stable() -> None:
-    assert xstar_tools.__version__ == "0.6.48.7.46.17.1"
+    assert xstar_tools.__version__ == "0.6.48.7.46.17.2"
     api = (ROOT / "src/xstar_tools/xstar/cpp/xstar_api.h").read_text()
     assert "60487" in api
 

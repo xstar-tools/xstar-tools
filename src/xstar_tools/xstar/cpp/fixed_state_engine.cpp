@@ -1000,7 +1000,7 @@ void apply_matrix_closure_contribution_corrections(
         if (correction.remove) continue;
         if (correction.replace_ans1) contribution.ans1 = correction.source_ans1;
         if (correction.replace_ans2) contribution.ans2 = correction.source_ans2;
-        // v0.6.48.7.46.17.1: matrix closure originally corrected only the
+        // v0.6.48.7.46.17.2: matrix closure originally corrected only the
         // population-rate channels.  Type-50 thermal energy channels are
         // algebraically tied to those rates after the source post-swap:
         //   ans3 = -ans2 * |Eupper-Elower| * erg/eV
@@ -1441,7 +1441,15 @@ SourceContinuumThermalResult source_continuum_thermal(
         double value = freef_cc * xnx;
         value = value * enz2;
         value = value / sqrt_t4;
-        value = value / (epi[k] * epi[k] * epi[k]);
+        // v46.17.2 qualification hotfix: freef.f90 uses epi(kk)**3. with
+        // a default-real exponent.  Preserve the accepted v0.6.47.2 libm
+        // pow semantics; chained multiplication differs by up to two ULP
+        // in the final htfreef sum.
+        const double epi_cube =
+            environment_flag("XSTAR_QUALIFICATION_FREEF_REAL_EXPONENT_POW")
+                ? std::pow(epi[k], 3.0)
+                : (epi[k] * epi[k] * epi[k]);
+        value = value / epi_cube;
         value = value * (1.0 - std::exp(-temp));
         opaff = value;
         auto& row = out.diagnostics[k];
@@ -3011,7 +3019,7 @@ bool evaluate_type53_source_integral(
     contribution.ans6 *= (std::abs(contribution.ans4) - energy_difference * kErgPerEv * contribution.ans1) / den6;
     contribution.ans5 *= (std::abs(contribution.ans3) - energy_difference * kErgPerEv * contribution.ans2) / den5;
 
-    // v0.6.48.7.46.17.1 qualification-only IEEE closure.
+    // v0.6.48.7.46.17.2 qualification-only IEEE closure.
     // v0.6.48.7.46.9.4.2 qualification-only IEEE closure compatibility marker.
     // The v0.6.47.2
     // Python reference evaluates the same source expressions one operation at

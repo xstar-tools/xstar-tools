@@ -1,4 +1,4 @@
-"""Audit the canonical v0.6.47.2 binary64 continuum-grid hotfix."""
+"""Audit the source-faithful freef real-exponent power hotfix."""
 from __future__ import annotations
 
 import argparse
@@ -14,7 +14,7 @@ import numpy as np
 from .all61_native_replay_aggregate import CONTINUUM_WORKSPACE_LEDGER_NAME, THERMAL_LEDGER_NAME
 
 RELEASE = "0.6.48.7.46.17.2"
-SCHEMA = "xstar-tools-v0648746171-continuum-grid-binary64-hotfix-v1"
+SCHEMA = "xstar-tools-v0648746172-continuum-freef-pow-hotfix-v1"
 COMPONENTS = (
     "cmp1", "cmp2", "htcomp", "clcomp", "htfreef", "clbrems",
     "continuum_heating", "continuum_cooling",
@@ -261,16 +261,16 @@ def compare(
     }
     output.mkdir(parents=True, exist_ok=True)
     write_csv(
-        output / "v048746171_continuum_workspace_summary.csv",
+        output / "v048746172_continuum_workspace_summary.csv",
         list(workspace_rows[0]) if workspace_rows else ["sequence"],
         workspace_rows,
     )
     write_csv(
-        output / "v048746171_continuum_component_summary.csv",
+        output / "v048746172_continuum_component_summary.csv",
         list(component_rows[0]) if component_rows else ["component"],
         component_rows,
     )
-    (output / "v048746171_continuum_grid_binary64_report.json").write_text(
+    (output / "v048746172_continuum_grid_binary64_report.json").write_text(
         json.dumps(report, indent=2, sort_keys=True) + "\n"
     )
     return report

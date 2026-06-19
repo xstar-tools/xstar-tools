@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.7.46.17.2 - 2026-06-19
+
+- Added a qualification-scoped source-faithful `freef.f90` real-exponent power correction.
+- Replaced chained `epi*epi*epi` evaluation with `std::pow(epi, 3.0)` when `XSTAR_QUALIFICATION_FREEF_REAL_EXPONENT_POW=1`.
+- Closed the 13 remaining 1–2 ULP `htfreef` residuals in offline replay of the v46.17.1 production workspace.
+- Predicted all 610 continuum values bit-exact and independent native Thermal exactness of 1029/2440.
+- Preserved ABI 60487, fixed-state parity, all matrix/population closures, and production-promotion blocking.
+
 # 0.6.48.7.46.17.1 - 2026-06-19
 
 - Corrected the v46.17 reduced continuum grid to use the immutable v0.6.47.2 Python binary64 `ener_grid(999)` semantics rather than a default-real/binary32 reconstruction.
