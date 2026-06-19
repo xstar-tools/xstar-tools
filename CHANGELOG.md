@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.48.7.46.18.1 — Hydrogen Type-50 source-capture context hotfix - 2026-06-19
+
+- Capture every rate-type-4 escape event in the ElementEquilibriumContext hook.
+- Retain the authoritative Hydrogen/data-type-50 filter in the UCalc result hook.
+- Rebuild rejected partial source captures instead of reusing them.
+- Add release-scoped runner, readiness checker, milestone wrapper, regression tests, and production-host failure assessment.
+
 ## 0.6.48.7.46.18 — source-faithful call-3/4 hydrogen Type-50 cooling attribution and reduction - 2026-06-19
 
 - Captures and transports the live all-61 Hydrogen line optical-depth workspace used by source Type-50 escape probabilities.

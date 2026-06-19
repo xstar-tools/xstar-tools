@@ -9,14 +9,14 @@ from xstar_tools.xstar.call2_helium_bound_free_residual_decomposition import REL
 
 
 def test_release_and_abi_are_unchanged() -> None:
-    assert xstar_tools.__version__ == "0.6.48.7.46.18"
+    assert xstar_tools.__version__ == "0.6.48.7.46.18.1"
     assert RELEASE == "0.6.48.7.35"
     assert TARGET_TYPES == (50, 53, 95, 99)
     api = Path("src/xstar_tools/xstar/cpp/xstar_api.h").read_text()
     assert "XSTAR_API_ABI_VERSION 60487u" in api
     fixed = Path("src/xstar_tools/xstar/cpp/xstar_fixed_state_engine.h").read_text()
     assert "XSTAR_FIXED_STATE_ENGINE_ABI_VERSION 60487u" in fixed
-    assert 'XSTAR_API_VERSION_STRING "0.6.48.7.46.18"' in api
+    assert 'XSTAR_API_VERSION_STRING "0.6.48.7.46.18.1"' in api
 
 
 def test_source_capture_adds_bound_free_record_ledger() -> None:

@@ -20,7 +20,7 @@ from typing import Any
 
 from . import v0472_all61_thermal_state_capture as base
 
-RELEASE = "0.6.48.7.46.18"
+RELEASE = "0.6.48.7.46.18.1"
 SCHEMA = "xstar-tools-v064874618-v0472-all61-hydrogen-type50-escape-capture-v1"
 VERIFY_SCHEMA = "xstar-tools-v064874618-v0472-all61-hydrogen-type50-escape-state-v1"
 ESCAPE_NAME = "v0472_all61_hydrogen_type50_escape.csv"
@@ -69,8 +69,11 @@ def _v04874618_install_hooks():
 
     def escape_factors(record, rate_type, derived, context):
         p1, p2, reason = original_escape(record, rate_type, derived, context)
-        extras = dict(getattr(context, "extras", {}) or {})
-        if int(rate_type) == 4 and int(extras.get("element_z", 0) or 0) == 1:
+        # ElementEquilibriumContext intentionally has no UCalc ``extras``.
+        # Capture every rate-type-4 escape event here; the result hook below
+        # performs the authoritative Hydrogen/data-type-50 filter once the
+        # UCalcContext and evaluated result are available.
+        if int(rate_type) == 4:
             ident = dict(_STATE.get("v04874618_current_identity") or {})
             if ident:
                 line_index = int(derived.nplini[record]) if int(record) < len(derived.nplini) else 0

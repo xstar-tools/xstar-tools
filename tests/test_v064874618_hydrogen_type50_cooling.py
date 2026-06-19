@@ -10,7 +10,7 @@ def write_csv(path,fields,rows):
  with path.open('w',newline='') as f:
   w=csv.DictWriter(f,fieldnames=fields); w.writeheader(); w.writerows(rows)
 def test_release_and_source_probe_contract():
- assert xstar_tools.__version__=='0.6.48.7.46.18'
+ assert xstar_tools.__version__=='0.6.48.7.46.18.1'
  assert capture.EXPECTED_ROWS==8113
  assert 'line_tau_in.bin' in capture._PROBE
  assert 'v04874618_escape_rows' in capture._PROBE

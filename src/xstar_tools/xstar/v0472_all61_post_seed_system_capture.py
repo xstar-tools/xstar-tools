@@ -20,7 +20,7 @@ from typing import Any
 
 from . import v0472_all61_fixed_state_capture as fixed
 
-RELEASE = "0.6.48.7.46.18"
+RELEASE = "0.6.48.7.46.18.1"
 SCHEMA = "xstar-tools-v06487467-v0472-all61-post-seed-system-capture-v1"
 VERIFY_SCHEMA = "xstar-tools-v06487467-v0472-all61-post-seed-system-oracle-v1"
 SYSTEM_MANIFEST_NAME = "v0472_all61_solve_system_manifest.csv"
