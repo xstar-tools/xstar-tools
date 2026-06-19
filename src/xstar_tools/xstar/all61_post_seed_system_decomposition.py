@@ -18,7 +18,7 @@ from typing import Any, Iterable
 
 import numpy as np
 
-RELEASE = "0.6.48.7.46.17.2.1"
+RELEASE = "0.6.48.7.46.18"
 SCHEMA = "xstar-tools-v06487466-all61-post-seed-system-decomposition-v1"
 SUMMARY_NAME = "all61_post_seed_system_decomposition_summary.json"
 SYSTEM_COMPARISON_NAME = "all61_post_seed_system_comparison.csv"

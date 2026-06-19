@@ -251,6 +251,108 @@ T parse_number(const std::string& text, const char* field) {
     return value;
 }
 
+
+struct HydrogenType50EscapeStateV04874618 {
+    bool enabled = false;
+    std::map<std::int64_t, int> line_index_by_record;
+    std::vector<double> tau_in;
+    std::vector<double> tau_out;
+};
+
+std::vector<double> read_binary64_payload_v04874618(const std::filesystem::path& path) {
+    std::ifstream input(path, std::ios::binary | std::ios::ate);
+    if (!input) throw std::runtime_error("cannot open hydrogen Type-50 line-tau payload: " + path.string());
+    const auto bytes = input.tellg();
+    if (bytes < 0 || bytes % static_cast<std::streamoff>(sizeof(double)) != 0) {
+        throw std::runtime_error("invalid hydrogen Type-50 line-tau payload size: " + path.string());
+    }
+    std::vector<double> values(static_cast<std::size_t>(bytes / static_cast<std::streamoff>(sizeof(double))));
+    input.seekg(0);
+    if (!values.empty()) input.read(reinterpret_cast<char*>(values.data()), bytes);
+    if (!input && !values.empty()) throw std::runtime_error("cannot read hydrogen Type-50 line-tau payload: " + path.string());
+    for (double value : values) {
+        if (!std::isfinite(value)) throw std::runtime_error("non-finite hydrogen Type-50 line optical depth");
+    }
+    return values;
+}
+
+std::string required_environment_path_v04874618(const char* name) {
+    const char* value = std::getenv(name);
+    if (!value || !*value) throw std::runtime_error(std::string("missing required environment path: ") + name);
+    return value;
+}
+
+HydrogenType50EscapeStateV04874618 load_hydrogen_type50_escape_state_v04874618() {
+    HydrogenType50EscapeStateV04874618 state;
+    state.enabled = environment_flag("XSTAR_QUALIFICATION_HYDROGEN_TYPE50_ESCAPE_STATE");
+    if (!state.enabled) return state;
+    const auto map_path = std::filesystem::path(required_environment_path_v04874618(
+        "XSTAR_QUALIFICATION_HYDROGEN_TYPE50_LINE_MAP_CSV"));
+    const auto tau_in_path = std::filesystem::path(required_environment_path_v04874618(
+        "XSTAR_QUALIFICATION_HYDROGEN_TYPE50_LINE_TAU_IN_BIN"));
+    const auto tau_out_path = std::filesystem::path(required_environment_path_v04874618(
+        "XSTAR_QUALIFICATION_HYDROGEN_TYPE50_LINE_TAU_OUT_BIN"));
+    std::ifstream mapping(map_path);
+    if (!mapping) throw std::runtime_error("cannot open hydrogen Type-50 line-index map: " + map_path.string());
+    std::string line;
+    if (!std::getline(mapping, line)) throw std::runtime_error("hydrogen Type-50 line-index map is empty");
+    const auto header = split_csv(line);
+    std::map<std::string, std::size_t> columns;
+    for (std::size_t i = 0; i < header.size(); ++i) columns[header[i]] = i;
+    if (!columns.count("record") || !columns.count("line_index")) {
+        throw std::runtime_error("hydrogen Type-50 line-index map is missing record or line_index");
+    }
+    while (std::getline(mapping, line)) {
+        if (trim(line).empty()) continue;
+        const auto values = split_csv(line);
+        if (values.size() != header.size()) throw std::runtime_error("hydrogen Type-50 line-index map row width mismatch");
+        const auto record = parse_number<std::int64_t>(values.at(columns.at("record")), "record");
+        const int line_index = parse_number<int>(values.at(columns.at("line_index")), "line_index");
+        if (record <= 0 || line_index <= 0) throw std::runtime_error("hydrogen Type-50 line-index map contains non-positive identity");
+        if (!state.line_index_by_record.emplace(record, line_index).second) {
+            throw std::runtime_error("duplicate hydrogen Type-50 line-index record");
+        }
+    }
+    if (state.line_index_by_record.size() != 133) {
+        throw std::runtime_error("hydrogen Type-50 line-index map must contain exactly 133 records");
+    }
+    state.tau_in = read_binary64_payload_v04874618(tau_in_path);
+    state.tau_out = read_binary64_payload_v04874618(tau_out_path);
+    if (state.tau_in.size() != state.tau_out.size() || state.tau_in.empty()) {
+        throw std::runtime_error("hydrogen Type-50 line-tau payload inventory mismatch");
+    }
+    for (const auto& item : state.line_index_by_record) {
+        if (static_cast<std::size_t>(item.second) > state.tau_in.size()) {
+            throw std::runtime_error("hydrogen Type-50 line index is outside transported tau0 arrays");
+        }
+    }
+    return state;
+}
+
+const HydrogenType50EscapeStateV04874618& hydrogen_type50_escape_state_v04874618() {
+    static const HydrogenType50EscapeStateV04874618 state = load_hydrogen_type50_escape_state_v04874618();
+    return state;
+}
+
+// Literal v0.6.47.2 Python translation of pescl.f90.  The accepted source
+// reference uses Python binary64 math.pi and libm exp/log/sqrt semantics.
+double pescl_v0472_binary64(double tau) {
+    double value = 0.0;
+    if (tau < 1.0) {
+        if (tau < 1.0e-5) {
+            value = 1.0;
+        } else {
+            const double aa = 2.0 * tau;
+            value = (1.0 - std::exp(-aa)) / aa;
+        }
+    } else {
+        const double bb = 0.5 * std::sqrt(std::max(std::log(tau), 0.0)) / (1.0 + tau / 1.0e5);
+        constexpr double kPythonPi = 3.141592653589793238462643383279502884;
+        value = 1.0 / (tau * std::sqrt(kPythonPi) * (1.2 + bb));
+    }
+    return value / 2.0;
+}
+
 std::unordered_map<std::string, std::string> read_manifest(const std::string& path) {
     std::ifstream input(path);
     if (!input) throw std::runtime_error("cannot open manifest: " + path);
@@ -455,6 +557,10 @@ struct Type50SourceShadow {
     bool used_dsec_covering = false;
     bool used_dsec_radiation = false;
     int nb1_one_based = 0;
+    bool hydrogen_escape_state_applied = false;
+    int line_index_one_based = 0;
+    double line_tau_in = 0.0;
+    double line_tau_out = 0.0;
 };
 
 struct Type99SourceShadow {
@@ -1000,7 +1106,7 @@ void apply_matrix_closure_contribution_corrections(
         if (correction.remove) continue;
         if (correction.replace_ans1) contribution.ans1 = correction.source_ans1;
         if (correction.replace_ans2) contribution.ans2 = correction.source_ans2;
-        // v0.6.48.7.46.17.2.1: matrix closure originally corrected only the
+        // v0.6.48.7.46.18: matrix closure originally corrected only the
         // population-rate channels.  Type-50 thermal energy channels are
         // algebraically tied to those rates after the source post-swap:
         //   ans3 = -ans2 * |Eupper-Elower| * erg/eV
@@ -3019,7 +3125,7 @@ bool evaluate_type53_source_integral(
     contribution.ans6 *= (std::abs(contribution.ans4) - energy_difference * kErgPerEv * contribution.ans1) / den6;
     contribution.ans5 *= (std::abs(contribution.ans3) - energy_difference * kErgPerEv * contribution.ans2) / den5;
 
-    // v0.6.48.7.46.17.2.1 qualification-only IEEE closure.
+    // v0.6.48.7.46.18 qualification-only IEEE closure.
     // v0.6.48.7.46.9.4.2 qualification-only IEEE closure compatibility marker.
     // The v0.6.47.2
     // Python reference evaluates the same source expressions one operation at
@@ -3731,13 +3837,31 @@ EvaluatedRecord evaluate_record(
             const double cfrac = std::clamp(
                 has_dsec_covering ? input.dsec_covering_fraction : input.covering_fraction, 0.0, 1.0);
 
-            // The call-2 fixed-state capture is on the optically thin line
-            // branch.  pescl(0)=1/2, hence the source directional factors are
-            // ptmp1=0.5*(1-cfrac), ptmp2=0.5*(1-cfrac)+cfrac and their sum is
-            // exactly one.  This restores the source post-swap convention
-            // without introducing a record oracle.
-            const double ptmp1 = 0.5 * (1.0 - cfrac);
-            const double ptmp2 = 0.5 * (1.0 - cfrac) + cfrac;
+            // Calls 1-2 are optically thin, but calls 3-4 consume the live
+            // line optical-depth workspace through calc_hmc_ion/pescl.
+            // v46.18 transports that state without replacing any Type-50
+            // answer or Thermal total.
+            double ptmp1 = 0.5 * (1.0 - cfrac);
+            double ptmp2 = 0.5 * (1.0 - cfrac) + cfrac;
+            bool hydrogen_escape_state_applied = false;
+            int line_index_one_based = 0;
+            double line_tau_in = 0.0;
+            double line_tau_out = 0.0;
+            const auto& hydrogen_escape = hydrogen_type50_escape_state_v04874618();
+            if (hydrogen_escape.enabled && element.element_z == 1) {
+                const auto found = hydrogen_escape.line_index_by_record.find(record.record);
+                if (found == hydrogen_escape.line_index_by_record.end()) {
+                    throw std::runtime_error("hydrogen Type-50 record is missing from source line-index map");
+                }
+                line_index_one_based = found->second;
+                const std::size_t line_index = static_cast<std::size_t>(line_index_one_based - 1);
+                line_tau_in = hydrogen_escape.tau_in.at(line_index);
+                line_tau_out = hydrogen_escape.tau_out.at(line_index);
+                ptmp1 = pescl_v0472_binary64(line_tau_in) * (1.0 - cfrac);
+                ptmp2 = pescl_v0472_binary64(line_tau_out) * (1.0 - cfrac) +
+                    2.0 * pescl_v0472_binary64(line_tau_in + line_tau_out) * cfrac;
+                hydrogen_escape_state_applied = true;
+            }
             const double escaped_raw = a * (ptmp1 + ptmp2);
             const double density_floor = 1.0e-20 * input.hydrogen_density_cm3;
             const double escaped = std::max(escaped_raw, density_floor);
@@ -3786,6 +3910,10 @@ EvaluatedRecord evaluate_record(
             out.type50_shadow.used_dsec_covering = has_dsec_covering;
             out.type50_shadow.used_dsec_radiation = used_dsec_radiation;
             out.type50_shadow.nb1_one_based = nb1_one_based;
+            out.type50_shadow.hydrogen_escape_state_applied = hydrogen_escape_state_applied;
+            out.type50_shadow.line_index_one_based = line_index_one_based;
+            out.type50_shadow.line_tau_in = line_tau_in;
+            out.type50_shadow.line_tau_out = line_tau_out;
 
             const bool use_fixed_type50_oracle = environment_flag("XSTAR_QUALIFICATION_TYPE50_MANIFOLD_ORACLE");
             const bool use_dsec_type50_oracle = environment_flag("XSTAR_QUALIFICATION_TYPE50_DSEC_RUNTIME_ORACLE");
@@ -5868,7 +5996,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
         });
         std::ofstream record_file(root / (stem + "_records.csv"));
         if (!record_file) throw std::runtime_error("cannot create record diagnostics CSV");
-        record_file << "evaluation_ordinal,source_position,record,element_index,element_z,data_type,rate_type,ion_index,ion_stage,lower_row,upper_row,matrix_enabled,active_stage,matrix_committed,spectral,ans1,ans2,ans3,ans4,ans5,ans6,density_scale,line_energy_ev,atomic_mass_amu,natural_width_ev,opakab,type56_upsilon,type53_shadow_valid,type53_shadow_ans1,type53_shadow_ans2,type53_shadow_ans3,type53_shadow_ans4,type53_shadow_ans5,type53_shadow_ans6,type53_delta_ans1,type53_delta_ans2,type53_delta_ans3,type53_delta_ans4,type53_delta_ans5,type53_delta_ans6,type53_shadow_base_threshold_ev,type53_shadow_threshold_ev,type53_shadow_bound_energy_ev,type53_shadow_continuum_energy_ev,type53_shadow_destination_energy_ev,type53_shadow_excited_parent_energy_ev,type53_shadow_bound_g,type53_shadow_continuum_g,type53_shadow_destination_g,type53_shadow_excited_parent_g,type53_milne_partition_context_used,type53_excited_threshold_context_used,type53_corrected_threshold_before_mapping,type53_phextrap_source_reference_order,type53_phextrap_input_pair_count,type53_phextrap_output_pair_count,type53_shadow_rnist,type53_shadow_sumr,type53_shadow_sumi,type53_shadow_sumh,type53_shadow_sumh2,type53_shadow_sumc,type53_shadow_sumc2,type53_sumc_ieee_nextafter_applied,type53_shadow_nb1_one_based,type53_shadow_klmax_one_based,type53_row46_contract,type53_captured_state_anchor,type53_tau_in,type53_tau_out,type53_ptmp1,type53_ptmp2,type53_covering_fraction,type53_runtime_state_abi_used,type53_continuum_index_one_based,type53_dsec_radiation_bin_count,type53_continuum_tau_count,type50_shadow_valid,type50_shadow_ans1,type50_shadow_ans2,type50_shadow_ans3,type50_shadow_ans4,type50_shadow_ans5,type50_shadow_ans6,type50_stored_wavelength_a,type50_endpoint_energy_ev,type50_covering_fraction,type50_ptmp1,type50_ptmp2,type50_bremsa_nb1,type50_density_floor_s,type50_density_floor_applied,type50_photoexcitation_zero_covering,type50_used_dsec_covering,type50_used_dsec_radiation,type50_nb1_one_based,type99_shadow_valid,type99_shadow_ans1,type99_shadow_ans2,type99_shadow_ans3,type99_shadow_ans4,type99_shadow_ans5,type99_shadow_ans6,type99_threshold_ev,type99_destination_energy_ev,type99_bound_energy_ev,type99_swrat,type99_calt99_density_cm3,type99_phint53hunt_density_cm3,type99_rec_cm3_s,type99_milne_alpha_cm3_s,type99_cross_section_scale,type99_ans2d_unscaled_s,type99_phint_scale,type99_pirt_unscaled_s,type99_rrrt_unscaled_s,type99_piht_unscaled_erg_s,type99_rrcl_unscaled_erg_s,type99_piht2_unscaled_erg_s,type99_rrcl2_unscaled_erg_s,type99_energy_difference_ev,type99_destination_threshold_identity,type99_ans5_pre_energy_correction,type99_ans6_pre_energy_correction,type99_ans5_energy_correction_numerator,type99_ans5_energy_correction_denominator,type99_ans5_energy_correction_factor,type99_ans6_energy_correction_numerator,type99_ans6_energy_correction_denominator,type99_ans6_energy_correction_factor,type99_destination_identity_correction_applied,type99_nbinc_threshold_one_based,type99_nb1_one_based,type99_nphint_one_based,type99_ndelt,type99_npass,type99_last_pass_first_kl_one_based,type99_last_pass_last_kl_one_based,type99_cached_atmp22_stale_reuses,type99_used_dsec_radiation,mg_type53_legacy_max_abs,mg_type53_shadow_max_abs,mg_type53_committed_max_abs,mg_type53_legacy_nonfinite,mg_type53_legacy_implausible,mg_type53_replacement_applied,mg_type53_committed_nonfinite,mg_type53_committed_implausible,mg_type53_exponent_energy_ev,mg_type53_exponent_dimensionless,mg_type53_electron_density_cm3,mg_type53_hydrogen_density_cm3,mg_type53_matrix_density_scale,mg_type53_source_faithful_mode,type49_shadow_valid,type49_shadow_ans1,type49_shadow_ans2,type49_shadow_ans3,type49_shadow_ans4,type49_shadow_ans5,type49_shadow_ans6,type49_legacy_max_abs,type49_shadow_max_abs,type49_committed_max_abs,type49_legacy_nonfinite,type49_legacy_implausible,type49_replacement_applied,type49_committed_nonfinite,type49_committed_implausible,type49_base_threshold_ev,type49_threshold_ev,type49_bound_energy_ev,type49_continuum_energy_ev,type49_destination_energy_ev,type49_excited_parent_energy_ev,type49_bound_g,type49_continuum_g,type49_destination_g,type49_excited_parent_g,type49_milne_partition_context_used,type49_excited_threshold_context_used,type49_corrected_threshold_before_mapping,type49_phextrap_source_reference_order,type49_phextrap_input_pair_count,type49_phextrap_output_pair_count,type49_phextrap_max_points,type49_phextrap_input_energy_hash,type49_phextrap_input_sigma_hash,type49_phextrap_output_energy_hash,type49_phextrap_output_sigma_hash,type49_rnist,type49_exponent_energy_ev,type49_exponent_dimensionless,type49_electron_density_cm3,type49_hydrogen_density_cm3,type49_matrix_density_scale,type49_phextrap_applied,type49_source_zero_gate,type49_source_faithful_mode,type49_runtime_state_abi_used,type49_continuum_index_one_based,type49_dsec_radiation_bin_count,type49_continuum_tau_count,type51_shadow_valid,type51_source_faithful_mode,type51_replacement_applied,type51_endpoint_order_exact,type51_committed_nonfinite,type51_bt_type,type51_point_count,type51_eij_ryd,type51_eij_ev,type51_scaling_c,type51_physical_temperature_k,type51_floor_temperature_k,type51_effective_temperature_k,type51_temperature_floor_applied,type51_scaled_temperature,type51_transformed_temperature,type51_scaled_upsilon,type51_upsilon,type51_lower_g,type51_upper_g,type51_electron_density_cm3,type51_q_excitation_cm3_s,type51_q_deexcitation_cm3_s,type51_shadow_ans1,type51_shadow_ans2,type51_shadow_ans3,type51_shadow_ans4,type51_shadow_ans5,type51_shadow_ans6,type51_legacy_ans1,type51_legacy_ans2,type51_legacy_ans3,type51_legacy_ans4,type51_legacy_ans5,type51_legacy_ans6\n";
+        record_file << "evaluation_ordinal,source_position,record,element_index,element_z,data_type,rate_type,ion_index,ion_stage,lower_row,upper_row,matrix_enabled,active_stage,matrix_committed,spectral,ans1,ans2,ans3,ans4,ans5,ans6,density_scale,line_energy_ev,atomic_mass_amu,natural_width_ev,opakab,type56_upsilon,type53_shadow_valid,type53_shadow_ans1,type53_shadow_ans2,type53_shadow_ans3,type53_shadow_ans4,type53_shadow_ans5,type53_shadow_ans6,type53_delta_ans1,type53_delta_ans2,type53_delta_ans3,type53_delta_ans4,type53_delta_ans5,type53_delta_ans6,type53_shadow_base_threshold_ev,type53_shadow_threshold_ev,type53_shadow_bound_energy_ev,type53_shadow_continuum_energy_ev,type53_shadow_destination_energy_ev,type53_shadow_excited_parent_energy_ev,type53_shadow_bound_g,type53_shadow_continuum_g,type53_shadow_destination_g,type53_shadow_excited_parent_g,type53_milne_partition_context_used,type53_excited_threshold_context_used,type53_corrected_threshold_before_mapping,type53_phextrap_source_reference_order,type53_phextrap_input_pair_count,type53_phextrap_output_pair_count,type53_shadow_rnist,type53_shadow_sumr,type53_shadow_sumi,type53_shadow_sumh,type53_shadow_sumh2,type53_shadow_sumc,type53_shadow_sumc2,type53_sumc_ieee_nextafter_applied,type53_shadow_nb1_one_based,type53_shadow_klmax_one_based,type53_row46_contract,type53_captured_state_anchor,type53_tau_in,type53_tau_out,type53_ptmp1,type53_ptmp2,type53_covering_fraction,type53_runtime_state_abi_used,type53_continuum_index_one_based,type53_dsec_radiation_bin_count,type53_continuum_tau_count,type50_shadow_valid,type50_shadow_ans1,type50_shadow_ans2,type50_shadow_ans3,type50_shadow_ans4,type50_shadow_ans5,type50_shadow_ans6,type50_stored_wavelength_a,type50_endpoint_energy_ev,type50_covering_fraction,type50_ptmp1,type50_ptmp2,type50_bremsa_nb1,type50_density_floor_s,type50_density_floor_applied,type50_photoexcitation_zero_covering,type50_used_dsec_covering,type50_used_dsec_radiation,type50_nb1_one_based,type50_hydrogen_escape_state_applied,type50_line_index_one_based,type50_line_tau_in,type50_line_tau_out,type99_shadow_valid,type99_shadow_ans1,type99_shadow_ans2,type99_shadow_ans3,type99_shadow_ans4,type99_shadow_ans5,type99_shadow_ans6,type99_threshold_ev,type99_destination_energy_ev,type99_bound_energy_ev,type99_swrat,type99_calt99_density_cm3,type99_phint53hunt_density_cm3,type99_rec_cm3_s,type99_milne_alpha_cm3_s,type99_cross_section_scale,type99_ans2d_unscaled_s,type99_phint_scale,type99_pirt_unscaled_s,type99_rrrt_unscaled_s,type99_piht_unscaled_erg_s,type99_rrcl_unscaled_erg_s,type99_piht2_unscaled_erg_s,type99_rrcl2_unscaled_erg_s,type99_energy_difference_ev,type99_destination_threshold_identity,type99_ans5_pre_energy_correction,type99_ans6_pre_energy_correction,type99_ans5_energy_correction_numerator,type99_ans5_energy_correction_denominator,type99_ans5_energy_correction_factor,type99_ans6_energy_correction_numerator,type99_ans6_energy_correction_denominator,type99_ans6_energy_correction_factor,type99_destination_identity_correction_applied,type99_nbinc_threshold_one_based,type99_nb1_one_based,type99_nphint_one_based,type99_ndelt,type99_npass,type99_last_pass_first_kl_one_based,type99_last_pass_last_kl_one_based,type99_cached_atmp22_stale_reuses,type99_used_dsec_radiation,mg_type53_legacy_max_abs,mg_type53_shadow_max_abs,mg_type53_committed_max_abs,mg_type53_legacy_nonfinite,mg_type53_legacy_implausible,mg_type53_replacement_applied,mg_type53_committed_nonfinite,mg_type53_committed_implausible,mg_type53_exponent_energy_ev,mg_type53_exponent_dimensionless,mg_type53_electron_density_cm3,mg_type53_hydrogen_density_cm3,mg_type53_matrix_density_scale,mg_type53_source_faithful_mode,type49_shadow_valid,type49_shadow_ans1,type49_shadow_ans2,type49_shadow_ans3,type49_shadow_ans4,type49_shadow_ans5,type49_shadow_ans6,type49_legacy_max_abs,type49_shadow_max_abs,type49_committed_max_abs,type49_legacy_nonfinite,type49_legacy_implausible,type49_replacement_applied,type49_committed_nonfinite,type49_committed_implausible,type49_base_threshold_ev,type49_threshold_ev,type49_bound_energy_ev,type49_continuum_energy_ev,type49_destination_energy_ev,type49_excited_parent_energy_ev,type49_bound_g,type49_continuum_g,type49_destination_g,type49_excited_parent_g,type49_milne_partition_context_used,type49_excited_threshold_context_used,type49_corrected_threshold_before_mapping,type49_phextrap_source_reference_order,type49_phextrap_input_pair_count,type49_phextrap_output_pair_count,type49_phextrap_max_points,type49_phextrap_input_energy_hash,type49_phextrap_input_sigma_hash,type49_phextrap_output_energy_hash,type49_phextrap_output_sigma_hash,type49_rnist,type49_exponent_energy_ev,type49_exponent_dimensionless,type49_electron_density_cm3,type49_hydrogen_density_cm3,type49_matrix_density_scale,type49_phextrap_applied,type49_source_zero_gate,type49_source_faithful_mode,type49_runtime_state_abi_used,type49_continuum_index_one_based,type49_dsec_radiation_bin_count,type49_continuum_tau_count,type51_shadow_valid,type51_source_faithful_mode,type51_replacement_applied,type51_endpoint_order_exact,type51_committed_nonfinite,type51_bt_type,type51_point_count,type51_eij_ryd,type51_eij_ev,type51_scaling_c,type51_physical_temperature_k,type51_floor_temperature_k,type51_effective_temperature_k,type51_temperature_floor_applied,type51_scaled_temperature,type51_transformed_temperature,type51_scaled_upsilon,type51_upsilon,type51_lower_g,type51_upper_g,type51_electron_density_cm3,type51_q_excitation_cm3_s,type51_q_deexcitation_cm3_s,type51_shadow_ans1,type51_shadow_ans2,type51_shadow_ans3,type51_shadow_ans4,type51_shadow_ans5,type51_shadow_ans6,type51_legacy_ans1,type51_legacy_ans2,type51_legacy_ans3,type51_legacy_ans4,type51_legacy_ans5,type51_legacy_ans6\n";
         record_file << std::setprecision(17);
 
         struct FamilySummary {
@@ -5947,6 +6075,10 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                         << ',' << (item.type50_shadow.used_dsec_covering ? 1 : 0)
                         << ',' << (item.type50_shadow.used_dsec_radiation ? 1 : 0)
                         << ',' << item.type50_shadow.nb1_one_based
+                        << ',' << (item.type50_shadow.hydrogen_escape_state_applied ? 1 : 0)
+                        << ',' << item.type50_shadow.line_index_one_based
+                        << ',' << item.type50_shadow.line_tau_in
+                        << ',' << item.type50_shadow.line_tau_out
                         << ',' << (item.type99_shadow.valid ? 1 : 0);
             for (double value : item.type99_shadow.ans) record_file << ',' << value;
             record_file << ',' << item.type99_shadow.threshold_ev

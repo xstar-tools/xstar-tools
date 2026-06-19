@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse, json
 from pathlib import Path
 
-RELEASE = "0.6.48.7.46.17.2.1"
+RELEASE = "0.6.48.7.46.18"
 SCHEMA = "xstar-tools-v0648746172-v46171-causal-baseline-v1"
 ACCEPTED_GATES = (
     "ALL_61_CONTINUUM_WORKSPACES_RECONSTRUCTED",

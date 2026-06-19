@@ -1,5 +1,19 @@
 ## Current release
 
+**0.6.48.7.46.18** transports the source call-3/4 Hydrogen line optical-depth state and applies the exact Type-50 `pescl` escape reduction. Calls 1–2 remain optically thin and exact; the candidate targets the 37 non-exact call-3/4 `h_cooling` values without changing matrices, populations, continuum kernels, or committed Thermal closure. See `V064874618_SOURCE_FAITHFUL_CALL34_HYDROGEN_TYPE50_COOLING_ATTRIBUTION_AND_REDUCTION.md`.
+
+```bash
+./run_v04874618_hydrogen_type50_cooling.sh \
+  ../xstar_tools-0.6.47.2.tar.gz \
+  ../xstar/data/atdb.fits \
+  ../xstar_tools-0.6.48.7.46.17.2.1/v0487461721_continuum_preservation_gate_vocabulary_hotfix \
+  v04874618_hydrogen_type50_cooling \
+  10
+```
+
+Use `XSTAR_V04874618_PREFLIGHT_ONLY=1` for baseline/readiness validation and `XSTAR_V04874618_SOURCE_CAPTURE_PREFLIGHT_ONLY=1` to stop after the source line-escape capture.
+
+
 **0.6.48.7.46.17.2.1** is a narrow continuum-grid semantics hotfix. The v46.17 production replay proved that the 999-bin topology, all 60,939 `bremsmap` indices, all projected `bremsam` values, fixed-state products, compact populations, matrices, committed Thermal values, and zero-callback boundary were correct. The remaining Compton/free-free bias came from reconstructing the reduced grid through binary32 default-real boundaries instead of the immutable v0.6.47.2 Python binary64 `ener_grid`. Offline replay predicts all 610 continuum values will be bit-exact and independent native Thermal exactness will increase from 419/2,440 to 1,029/2,440. See `V0648746171_CANONICAL_V0472_CONTINUUM_GRID_BINARY64_SEMANTICS_HOTFIX.md`.
 
 Run from the completed v46.17 production output:

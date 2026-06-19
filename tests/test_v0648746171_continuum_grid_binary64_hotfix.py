@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_release_version() -> None:
     import xstar_tools
 
-    assert xstar_tools.__version__ == "0.6.48.7.46.17.2.1"
+    assert xstar_tools.__version__ == "0.6.48.7.46.18"
 
 
 def test_canonical_binary64_grid_contract() -> None:

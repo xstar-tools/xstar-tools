@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.7.46.18 — source-faithful call-3/4 hydrogen Type-50 cooling attribution and reduction - 2026-06-19
+
+- Captures and transports the live all-61 Hydrogen line optical-depth workspace used by source Type-50 escape probabilities.
+- Replaces the call-3/4 optically thin Type-50 assumption with source-faithful binary64 `pescl` evaluation for 133 Hydrogen records per evaluation.
+- Adds an 8,113-record causal ledger requiring exact line indices, 16,226 optical-depth values, 16,226 escape factors, and all Type-50 answer vectors.
+- Requires calls 1–2 Hydrogen cooling to remain exact and calls 3–4 to close from 0/37 to 37/37.
+- Predicts independent native Thermal exactness of 1,066/2,440 after production-host replay while preserving continuum 610/610, fixed-state, matrix, compact-population, and zero-callback gates.
+- Keeps controller, products, performance promotion, and production default downstream.
+
 ## 0.6.48.7.46.17.2.1 — continuum preservation-gate vocabulary hotfix - 2026-06-19
 
 - Corrects the v46.17.2 milestone checker, which consumed the v46.17.1 causal-baseline validator after that validator had intentionally omitted three already-accepted preservation aliases.
