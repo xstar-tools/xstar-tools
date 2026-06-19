@@ -1,4 +1,4 @@
-"""Sequence-level resumable native replay for v0.6.48.7.46.16."""
+"""Sequence-level resumable native replay for v0.6.48.7.46.17."""
 from __future__ import annotations
 
 import argparse
@@ -11,7 +11,7 @@ from typing import Any
 
 from .all61_thermal_state_consumption_audit import COMMITTED_NATIVE_FIELD, COMPONENT_FIELDS
 
-RELEASE = "0.6.48.7.46.16"
+RELEASE = "0.6.48.7.46.17"
 SCHEMA = "xstar-tools-v06487461212-native-replay-resume-manifest-v1"
 MANIFEST_NAME = "v048746121_native_replay_resume_manifest.json"
 PLAN_NAME = "all61_native_replay_resume_plan.tsv"
@@ -103,6 +103,7 @@ def validate_evaluation(
     thermal_closure: Path,
     compact_closure: Path | None = None,
     require_thermal_diagonal_ledger: bool = False,
+    require_continuum_workspace: bool = False,
 ) -> tuple[bool, list[str]]:
     reasons: list[str] = []
     required_files = list(REQUIRED_EVALUATION_FILES)
@@ -110,6 +111,8 @@ def validate_evaluation(
         required_files.append("native_thermal_compact_populations.csv")
     if require_thermal_diagonal_ledger:
         required_files.append("native_thermal_diagonal_ledger.csv")
+    if require_continuum_workspace:
+        required_files.append("native_continuum_workspace.csv")
     for name in required_files:
         path = evaluation_dir / name
         if not path.is_file() or path.stat().st_size == 0:
@@ -203,6 +206,32 @@ def validate_evaluation(
             if len(reasons) >= 25:
                 break
 
+    if require_continuum_workspace:
+        if budget.get("continuum_workspace_source_faithful") != "1":
+            reasons.append("continuum_workspace_not_source_faithful")
+        for field in ("continuum_epim_count", "continuum_bremsam_count", "continuum_bremsmap_count"):
+            if budget.get(field) != "999":
+                reasons.append(f"{field}:{budget.get(field)}")
+        continuum_rows = _read_csv(evaluation_dir / "native_continuum_workspace.csv")
+        required_columns = {
+            "reduced_bin_one_based", "full_bin_one_based", "epim_ev", "bremsam",
+            "bin_width_ev", "cmp1_contribution", "cmp2_contribution",
+            "htcomp_contribution", "clcomp_contribution", "htfreef_contribution",
+            "clbrems_contribution", "running_cmp1", "running_cmp2",
+            "running_htcomp", "running_clcomp", "running_htfreef", "running_clbrems",
+        }
+        if len(continuum_rows) != 999:
+            reasons.append(f"continuum_workspace_rows:{len(continuum_rows)}")
+        elif not required_columns.issubset(continuum_rows[0]):
+            reasons.append("continuum_workspace_schema")
+        else:
+            indices = [int(row["reduced_bin_one_based"]) for row in continuum_rows]
+            mapped = [int(row["full_bin_one_based"]) for row in continuum_rows]
+            if indices != list(range(1, 1000)):
+                reasons.append("continuum_workspace_reduced_indices")
+            if mapped != sorted(mapped) or min(mapped) < 1:
+                reasons.append("continuum_workspace_bremsmap_indices")
+
     if require_thermal_diagonal_ledger:
         if budget.get("thermal_diagonal_source_domain_applied") != "1":
             reasons.append("thermal_diagonal_source_domain_not_applied")
@@ -274,6 +303,7 @@ def build_manifest(
     failed_returncode: int | None = None,
     compact_closure: Path | None = None,
     require_thermal_diagonal_ledger: bool = False,
+    require_continuum_workspace: bool = False,
 ) -> dict[str, Any]:
     plans = _plan_rows(source_inputs, trajectory, workspaces)
     statuses: list[dict[str, Any]] = []
@@ -285,6 +315,7 @@ def build_manifest(
         valid, reasons = validate_evaluation(
             evaluation_dir, plan, canonical_closure, thermal_closure, compact_closure,
             require_thermal_diagonal_ledger=require_thermal_diagonal_ledger,
+            require_continuum_workspace=require_continuum_workspace,
         ) if evaluation_dir.is_dir() else (False, ["evaluation_directory_absent"])
         action = "reuse" if valid else "run"
         reusable += int(valid)
@@ -325,6 +356,7 @@ def build_manifest(
         "failed_returncode": failed_returncode,
         "thermal_compact_population_closure": str(compact_closure) if compact_closure is not None else None,
         "thermal_diagonal_ledger_required": require_thermal_diagonal_ledger,
+        "continuum_workspace_required": require_continuum_workspace,
         "statuses": statuses,
         "qualification_only": True,
         "production_promotion_ready": False,
@@ -348,6 +380,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--failed-returncode", type=int)
     parser.add_argument("--require-complete", action="store_true")
     parser.add_argument("--require-thermal-diagonal-ledger", action="store_true")
+    parser.add_argument("--require-continuum-workspace", action="store_true")
     args = parser.parse_args(argv)
     try:
         report = build_manifest(
@@ -363,6 +396,7 @@ def main(argv: list[str] | None = None) -> int:
             args.failed_returncode,
             compact_closure=args.compact_closure,
             require_thermal_diagonal_ledger=args.require_thermal_diagonal_ledger,
+            require_continuum_workspace=args.require_continuum_workspace,
         )
     except Exception as exc:
         report = {

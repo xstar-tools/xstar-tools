@@ -1,4 +1,4 @@
-"""Prepare and audit v0.6.48.7.46.16 all-61 fixed-state parity closure.
+"""Prepare and audit v0.6.48.7.46.17 all-61 fixed-state parity closure.
 
 This qualification-only layer consumes the accepted v46.10 fixed-state
 comparison and emits source-captured final level populations, ion-stage totals,
@@ -16,7 +16,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-RELEASE = "0.6.48.7.46.16"
+RELEASE = "0.6.48.7.46.17"
 SCHEMA = "xstar-tools-v064874611-all61-fixed-state-parity-closure-v1"
 OVERRIDE_DIRNAME = "v04874611_fixed_state_closure"
 REPORT_NAME = "v04874611_fixed_state_parity_closure_report.json"

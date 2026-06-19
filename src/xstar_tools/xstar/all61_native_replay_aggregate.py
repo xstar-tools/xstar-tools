@@ -1,4 +1,4 @@
-"""Aggregate 61 independent run-fixed-evaluation outputs for v0.6.48.7.46.16."""
+"""Aggregate 61 independent run-fixed-evaluation outputs for v0.6.48.7.46.17."""
 from __future__ import annotations
 
 import argparse
@@ -7,11 +7,12 @@ import json
 from pathlib import Path
 from typing import Any
 
-RELEASE = "0.6.48.7.46.16"
+RELEASE = "0.6.48.7.46.17"
 SCHEMA = "xstar-tools-v064874612-all61-native-replay-aggregate-v1"
 THERMAL_LEDGER_NAME = "native_all61_thermal_budget.csv"
 THERMAL_COMPACT_POPULATION_NAME = "native_all61_thermal_compact_populations.csv"
 THERMAL_DIAGONAL_LEDGER_NAME = "native_all61_thermal_diagonal_ledger.csv"
+CONTINUUM_WORKSPACE_LEDGER_NAME = "native_all61_continuum_workspace.csv"
 
 
 def _read_csv(path: Path) -> list[dict[str, str]]:
@@ -27,7 +28,7 @@ def _write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, Any]]) ->
         writer.writerows(rows)
 
 
-def aggregate(source_inputs: Path, evaluations_dir: Path, output: Path, *, require_compact_populations: bool = False, require_thermal_diagonal_ledger: bool = False) -> dict[str, Any]:
+def aggregate(source_inputs: Path, evaluations_dir: Path, output: Path, *, require_compact_populations: bool = False, require_thermal_diagonal_ledger: bool = False, require_continuum_workspace: bool = False) -> dict[str, Any]:
     output.mkdir(parents=True, exist_ok=True)
     source = _read_csv(source_inputs)
     source.sort(key=lambda row: int(row["sequence"]))
@@ -38,6 +39,8 @@ def aggregate(source_inputs: Path, evaluations_dir: Path, output: Path, *, requi
     compact_population_fields: list[str] | None = None
     diagonal_rows_all: list[dict[str, Any]] = []
     diagonal_fields: list[str] | None = None
+    continuum_rows_all: list[dict[str, Any]] = []
+    continuum_fields: list[str] | None = None
     callbacks = records = elements = 0
     errors: list[str] = []
     trajectory_fields = [
@@ -52,11 +55,14 @@ def aggregate(source_inputs: Path, evaluations_dir: Path, output: Path, *, requi
         thermal_path = root / "native_thermal_budget.csv"
         compact_population_path = root / "native_thermal_compact_populations.csv"
         diagonal_path = root / "native_thermal_diagonal_ledger.csv"
+        continuum_path = root / "native_continuum_workspace.csv"
         required_paths = [state_path, summary_path, thermal_path]
         if require_compact_populations:
             required_paths.append(compact_population_path)
         if require_thermal_diagonal_ledger:
             required_paths.append(diagonal_path)
+        if require_continuum_workspace:
+            required_paths.append(continuum_path)
         missing = [str(path.name) for path in required_paths if not path.is_file()]
         if missing:
             errors.append(f"evaluation_{sequence:04d}:missing:{','.join(missing)}")
@@ -134,6 +140,25 @@ def aggregate(source_inputs: Path, evaluations_dir: Path, output: Path, *, requi
                 diagonal_rows_all.append(diagonal)
 
 
+        if continuum_path.is_file():
+            continuum_rows = _read_csv(continuum_path)
+            if require_continuum_workspace and len(continuum_rows) != 999:
+                errors.append(f"evaluation_{sequence:04d}:continuum_workspace_rows:{len(continuum_rows)}")
+            for continuum in continuum_rows:
+                continuum.update({
+                    "sequence": str(sequence),
+                    "kind": kind,
+                    "call_index": str(call_index),
+                    "evaluation_index": str(evaluation_index),
+                })
+                if continuum_fields is None:
+                    continuum_fields = list(continuum.keys())
+                elif list(continuum.keys()) != continuum_fields:
+                    errors.append(f"evaluation_{sequence:04d}:continuum_workspace_schema_mismatch")
+                    break
+                continuum_rows_all.append(continuum)
+
+
     _write_csv(output / "native_dsec_trajectory.csv", trajectory_fields, trajectory_rows)
     if thermal_fields is None:
         thermal_fields = ["sequence", "kind", "call_index", "evaluation_index"]
@@ -155,6 +180,16 @@ def aggregate(source_inputs: Path, evaluations_dir: Path, output: Path, *, requi
             "cooling2_contribution",
         ]
     _write_csv(output / THERMAL_DIAGONAL_LEDGER_NAME, diagonal_fields, diagonal_rows_all)
+    if continuum_fields is None:
+        continuum_fields = [
+            "sequence", "kind", "call_index", "evaluation_index", "evaluation_ordinal",
+            "reduced_bin_one_based", "full_bin_one_based", "epim_ev", "bremsam",
+            "bin_width_ev", "cmp1_contribution", "cmp2_contribution",
+            "htcomp_contribution", "clcomp_contribution", "htfreef_contribution",
+            "clbrems_contribution", "running_cmp1", "running_cmp2",
+            "running_htcomp", "running_clcomp", "running_htfreef", "running_clbrems",
+        ]
+    _write_csv(output / CONTINUUM_WORKSPACE_LEDGER_NAME, continuum_fields, continuum_rows_all)
     sequences = [int(row["sequence"]) for row in trajectory_rows]
     thermal_sequences = [int(row["sequence"]) for row in thermal_rows]
     canonical_inventory = sequences == list(range(1, 62)) and thermal_sequences == list(range(1, 62))
@@ -168,6 +203,8 @@ def aggregate(source_inputs: Path, evaluations_dir: Path, output: Path, *, requi
         "thermal_compact_population_required": require_compact_populations,
         "thermal_diagonal_ledger_rows": len(diagonal_rows_all),
         "thermal_diagonal_ledger_required": require_thermal_diagonal_ledger,
+        "continuum_workspace_rows": len(continuum_rows_all),
+        "continuum_workspace_required": require_continuum_workspace,
         "canonical_sequence_inventory": canonical_inventory,
         "python_callbacks": callbacks,
         "records_evaluated": records,
@@ -178,7 +215,8 @@ def aggregate(source_inputs: Path, evaluations_dir: Path, output: Path, *, requi
     }
     compact_ok = (not require_compact_populations) or len(compact_population_rows) == 40149
     diagonal_ok = (not require_thermal_diagonal_ledger) or len(diagonal_rows_all) > 0
-    summary["result"] = "ACCEPT" if len(trajectory_rows) == len(thermal_rows) == 61 and compact_ok and diagonal_ok and callbacks == 0 and canonical_inventory and not errors else "REJECT"
+    continuum_ok = (not require_continuum_workspace) or len(continuum_rows_all) == 60939
+    summary["result"] = "ACCEPT" if len(trajectory_rows) == len(thermal_rows) == 61 and compact_ok and diagonal_ok and continuum_ok and callbacks == 0 and canonical_inventory and not errors else "REJECT"
     (output / "native_dsec_summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
     return summary
 
@@ -190,12 +228,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--require-compact-populations", action="store_true")
     parser.add_argument("--require-thermal-diagonal-ledger", action="store_true")
+    parser.add_argument("--require-continuum-workspace", action="store_true")
     args = parser.parse_args(argv)
     try:
         result = aggregate(
             args.source_inputs, args.evaluations_dir, args.output,
             require_compact_populations=args.require_compact_populations,
             require_thermal_diagonal_ledger=args.require_thermal_diagonal_ledger,
+            require_continuum_workspace=args.require_continuum_workspace,
         )
     except Exception as exc:
         result = {

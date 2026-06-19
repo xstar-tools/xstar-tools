@@ -1000,7 +1000,7 @@ void apply_matrix_closure_contribution_corrections(
         if (correction.remove) continue;
         if (correction.replace_ans1) contribution.ans1 = correction.source_ans1;
         if (correction.replace_ans2) contribution.ans2 = correction.source_ans2;
-        // v0.6.48.7.46.16: matrix closure originally corrected only the
+        // v0.6.48.7.46.17: matrix closure originally corrected only the
         // population-rate channels.  Type-50 thermal energy channels are
         // algebraically tied to those rates after the source post-swap:
         //   ans3 = -ans2 * |Eupper-Elower| * erg/eV
@@ -1207,6 +1207,45 @@ struct SourceComp2Result {
     double clcomp = 0.0;
 };
 
+struct SourceContinuumWorkspace {
+    std::vector<double> epim;
+    std::vector<double> bremsam;
+    std::vector<int> bremsmap_index_one_based;
+};
+
+struct ContinuumWorkspaceDiagnostic {
+    std::size_t reduced_bin_one_based = 0;
+    int full_bin_one_based = 0;
+    double epim_ev = 0.0;
+    double bremsam = 0.0;
+    double bin_width_ev = 0.0;
+    double comp_sum1_contribution = 0.0;
+    double comp_sum2_contribution = 0.0;
+    double comp_sum3_contribution = 0.0;
+    double cmp1_contribution = 0.0;
+    double cmp2_contribution = 0.0;
+    double htcomp_contribution = 0.0;
+    double clcomp_contribution = 0.0;
+    double free_free_opacity_increment = 0.0;
+    double htfreef_contribution = 0.0;
+    double brcems = 0.0;
+    double clbrems_contribution = 0.0;
+    double running_cmp1 = 0.0;
+    double running_cmp2 = 0.0;
+    double running_htcomp = 0.0;
+    double running_clcomp = 0.0;
+    double running_htfreef = 0.0;
+    double running_clbrems = 0.0;
+};
+
+struct SourceContinuumThermalResult {
+    SourceContinuumWorkspace workspace;
+    SourceComp2Result compton;
+    double htfreef = 0.0;
+    double clbrems = 0.0;
+    std::vector<ContinuumWorkspaceDiagnostic> diagnostics;
+};
+
 std::size_t source_hunt3_one_based(const std::array<double,xstar_coheat_v048724::ncomp>& grid, double x) {
     const auto it = std::upper_bound(grid.begin(), grid.end(), x);
     std::size_t index = static_cast<std::size_t>(it - grid.begin());
@@ -1216,7 +1255,7 @@ std::size_t source_hunt3_one_based(const std::array<double,xstar_coheat_v048724:
 }
 
 double source_cmpfnc(double ee, double sxx) {
-    if (ee <= 1.0e-4) return 4.0 * sxx - ee;
+    if (ee <= static_cast<double>(static_cast<float>(1.0e-4))) return 4.0 * sxx - ee;
     const std::size_t n = xstar_coheat_v048724::ncomp;
     const std::size_t mm = std::max<std::size_t>(2, std::min<std::size_t>(n, source_hunt3_one_based(xstar_coheat_v048724::ecomp, ee)));
     const std::size_t ll = std::max<std::size_t>(2, std::min<std::size_t>(n, source_hunt3_one_based(xstar_coheat_v048724::sxcomp, sxx)));
@@ -1228,15 +1267,80 @@ double source_cmpfnc(double ee, double sxx) {
     return ddedsx*(sxx-sg[l0]) + ddede*(ee-eg[m0]) + xstar_coheat_v048724::de(l0,m0);
 }
 
+int source_huntf_one_based(const double* grid, std::size_t count, double x) {
+    if (!grid || count < 3) return 1;
+    const int n = static_cast<int>(count);
+    const double tiny = static_cast<double>(static_cast<float>(1.0e-34));
+    const double xtmp = std::max(x, grid[1]);
+    int jlo = 1;
+    if (x < tiny || grid[0] <= tiny || grid[count - 1] <= tiny) return jlo;
+    jlo = static_cast<int>((n - 1) * std::log(xtmp / grid[0]) / std::log(grid[count - 1] / grid[0])) + 1;
+    if (jlo < n) {
+        const double tst = std::abs(std::log(x / (tiny + grid[static_cast<std::size_t>(jlo - 1)])));
+        const double tst2 = std::abs(std::log(x / (tiny + grid[static_cast<std::size_t>(jlo)])));
+        if (tst2 < tst) ++jlo;
+    }
+    return std::max(1, std::min(n, jlo));
+}
+
+SourceContinuumWorkspace build_source_continuum_workspace(
+    const double* full_epi,
+    const double* full_bremsa,
+    std::size_t full_count
+) {
+    if (!full_epi || !full_bremsa || full_count < 4) {
+        throw std::runtime_error("source continuum workspace requires complete full-resolution radiation arrays");
+    }
+    constexpr int reduced_count = 999;
+    const int reduced_tail = std::max(2, reduced_count / 50);
+    const int reduced_log_count = reduced_count - reduced_tail;
+    SourceContinuumWorkspace out;
+    out.epim.assign(reduced_count, 0.0);
+    out.bremsam.assign(reduced_count, 0.0);
+    out.bremsmap_index_one_based.assign(reduced_count, 0);
+
+    double ebnd1 = static_cast<double>(static_cast<float>(0.1));
+    double ebnd2 = static_cast<double>(static_cast<float>(4.0e5));
+    const double exponent1 = static_cast<double>(
+        static_cast<float>(1.0) / static_cast<float>(reduced_log_count - 1)
+    );
+    const double ratio1 = std::pow(ebnd2 / ebnd1, exponent1);
+    out.epim[0] = ebnd1;
+    for (int i = 1; i < reduced_log_count; ++i) {
+        out.epim[static_cast<std::size_t>(i)] = out.epim[static_cast<std::size_t>(i - 1)] * ratio1;
+    }
+
+    const double ebnd2_old = ebnd2;
+    ebnd2 = static_cast<double>(static_cast<float>(1.0e6));
+    ebnd1 = ebnd2_old;
+    const double exponent2 = static_cast<double>(
+        static_cast<float>(1.0) / static_cast<float>(reduced_tail - 1)
+    );
+    const double ratio2 = std::pow(ebnd2 / ebnd1, exponent2);
+    for (int i = reduced_log_count; i < reduced_count; ++i) {
+        out.epim[static_cast<std::size_t>(i)] = out.epim[static_cast<std::size_t>(i - 1)] * ratio2;
+    }
+
+    const std::size_t full_tail = static_cast<std::size_t>(std::max(2, static_cast<int>(full_count / 50)));
+    const std::size_t full_log_count = full_count - full_tail;
+    if (full_log_count < 3) throw std::runtime_error("source continuum full grid has an invalid logarithmic domain");
+    for (int i = 0; i < reduced_count; ++i) {
+        const int mapped = source_huntf_one_based(full_epi, full_log_count, out.epim[static_cast<std::size_t>(i)]);
+        out.bremsmap_index_one_based[static_cast<std::size_t>(i)] = mapped;
+        out.bremsam[static_cast<std::size_t>(i)] = full_bremsa[static_cast<std::size_t>(mapped - 1)];
+    }
+    return out;
+}
+
 SourceComp2Result source_comp2(const double* epi, const double* bremsa, std::size_t n, double temperature_k, double hydrogen_density, double electron_fraction) {
     if (!epi || !bremsa || n < 2) throw std::runtime_error("source comp2 requires complete DSEC radiation workspace");
-    constexpr double emc2 = 5.11e5;
+    const double emc2 = static_cast<double>(static_cast<float>(5.11e5));
     const double kt_per_t4 = static_cast<double>(static_cast<float>(xstar_constants::kLegacyBoltzmannEvPerT4));
     const double sigma_t = static_cast<double>(static_cast<float>(6.6524587321e-25));
     const double erg_per_ev = static_cast<double>(static_cast<float>(xstar_constants::kModernErgPerEv));
     const double t4 = temperature_k / 1.0e4;
     const double ekt = t4 * kt_per_t4;
-    const double sxx = 1.0 / (emc2 / (ekt + 1.0e-10));
+    const double sxx = 1.0 / (emc2 / (ekt + static_cast<double>(static_cast<float>(1.0e-10))));
     double eee = epi[0], ee = eee / emc2;
     double tmp1 = bremsa[0] * source_cmpfnc(ee,sxx);
     double sum1=0.0, sum2=0.0, sum3=0.0;
@@ -1256,6 +1360,131 @@ SourceComp2Result source_comp2(const double* epi, const double* bremsa, std::siz
     const double xnx=hydrogen_density*electron_fraction;
     out.htcomp=out.cmp1*xnx*erg_per_ev;
     out.clcomp=ekt*out.cmp2*xnx*erg_per_ev;
+    return out;
+}
+
+SourceContinuumThermalResult source_continuum_thermal(
+    const double* full_epi,
+    const double* full_bremsa,
+    std::size_t full_count,
+    double temperature_k,
+    double hydrogen_density,
+    double electron_fraction
+) {
+    SourceContinuumThermalResult out;
+    out.workspace = build_source_continuum_workspace(full_epi, full_bremsa, full_count);
+    const auto& epi = out.workspace.epim;
+    const auto& bremsa = out.workspace.bremsam;
+    const std::size_t n = epi.size();
+    out.diagnostics.assign(n, ContinuumWorkspaceDiagnostic{});
+
+    const double emc2 = static_cast<double>(static_cast<float>(5.11e5));
+    const double kt_per_t4 = static_cast<double>(static_cast<float>(xstar_constants::kLegacyBoltzmannEvPerT4));
+    const double sigma_t = static_cast<double>(static_cast<float>(6.6524587321e-25));
+    const double erg_per_ev = static_cast<double>(static_cast<float>(xstar_constants::kModernErgPerEv));
+    const double t4 = temperature_k / 1.0e4;
+    const double ekt = t4 * kt_per_t4;
+    const double xnx = hydrogen_density * electron_fraction;
+    const double sxx = 1.0 / (emc2 / (ekt + static_cast<double>(static_cast<float>(1.0e-10))));
+
+    double eee = epi[0];
+    double ee = eee / emc2;
+    double tmp1 = bremsa[0] * source_cmpfnc(ee, sxx);
+    double sum1 = 0.0, sum2 = 0.0, sum3 = 0.0;
+    for (std::size_t k = 0; k < n; ++k) {
+        auto& row = out.diagnostics[k];
+        row.reduced_bin_one_based = k + 1;
+        row.full_bin_one_based = out.workspace.bremsmap_index_one_based[k];
+        row.epim_ev = epi[k];
+        row.bremsam = bremsa[k];
+        if (k == 0) continue;
+        const double tmp1o = tmp1;
+        const double eeeo = eee;
+        const double eeo = ee;
+        eee = epi[k];
+        ee = eee / emc2;
+        tmp1 = bremsa[k] * source_cmpfnc(ee, sxx);
+        const double width = eee - eeeo;
+        const double c1 = (tmp1 + tmp1o) * width / 2.0;
+        const double c2 = (bremsa[k] + bremsa[k - 1]) * width / 2.0;
+        const double c3 = (bremsa[k] * ee + bremsa[k - 1] * eeo) * width / 2.0;
+        sum1 += c1;
+        sum2 += c2;
+        sum3 += c3;
+        row.bin_width_ev = width;
+        row.comp_sum1_contribution = c1;
+        row.comp_sum2_contribution = c2;
+        row.comp_sum3_contribution = c3;
+        row.cmp1_contribution = c3 * sigma_t;
+        row.cmp2_contribution = (c1 * sigma_t + c3 * sigma_t) / ekt;
+        row.htcomp_contribution = row.cmp1_contribution * xnx * erg_per_ev;
+        row.clcomp_contribution = ekt * row.cmp2_contribution * xnx * erg_per_ev;
+        row.running_cmp1 = sum3 * sigma_t;
+        row.running_cmp2 = (sum1 * sigma_t + sum3 * sigma_t) / ekt;
+        row.running_htcomp = row.running_cmp1 * xnx * erg_per_ev;
+        row.running_clcomp = ekt * row.running_cmp2 * xnx * erg_per_ev;
+    }
+    out.compton.cmp1 = sum3 * sigma_t;
+    out.compton.cmp2 = (sum1 * sigma_t + sum3 * sigma_t) / ekt;
+    out.compton.htcomp = out.compton.cmp1 * xnx * erg_per_ev;
+    out.compton.clcomp = ekt * out.compton.cmp2 * xnx * erg_per_ev;
+
+    const double freef_cc = static_cast<double>(static_cast<float>(2.614e-37));
+    const double ion_z2_factor = static_cast<double>(static_cast<float>(1.4));
+    const double enz2 = ion_z2_factor * xnx;
+    const double sqrt_t4 = std::sqrt(t4);
+    double opaff = 0.0;
+    double htfreef = 0.0;
+    for (std::size_t k = 0; k < n; ++k) {
+        const double opaffo = opaff;
+        const double temp = epi[k] / ekt;
+        double value = freef_cc * xnx;
+        value = value * enz2;
+        value = value / sqrt_t4;
+        value = value / (epi[k] * epi[k] * epi[k]);
+        value = value * (1.0 - std::exp(-temp));
+        opaff = value;
+        auto& row = out.diagnostics[k];
+        row.free_free_opacity_increment = opaff;
+        if (k > 0) {
+            double contribution = bremsa[k] * opaff + bremsa[k - 1] * opaffo;
+            contribution = contribution * erg_per_ev;
+            contribution = contribution * (epi[k] - epi[k - 1]);
+            contribution = contribution / 2.0;
+            htfreef += contribution;
+            row.htfreef_contribution = contribution;
+        }
+        row.running_htfreef = htfreef;
+    }
+    out.htfreef = htfreef;
+
+    const double brem_cc = static_cast<double>(static_cast<float>(1.032e-13));
+    std::vector<double> brcems(n, 0.0);
+    for (std::size_t k = 0; k < n; ++k) {
+        const double temp = epi[k] / ekt;
+        double brtmp = brem_cc * xnx;
+        brtmp = brtmp * enz2;
+        brtmp = brtmp * std::exp(-temp);
+        brtmp = brtmp / sqrt_t4;
+        brcems[k] = brtmp;
+        out.diagnostics[k].brcems = brtmp;
+    }
+    double clbrems = 0.0;
+    double tmp2 = 0.0;
+    for (std::size_t k = 0; k < n; ++k) {
+        const double tmp2o = tmp2;
+        tmp2 = brcems[k];
+        auto& row = out.diagnostics[k];
+        if (k > 0) {
+            double contribution = (tmp2 + tmp2o) * (epi[k] - epi[k - 1]);
+            contribution = contribution * erg_per_ev;
+            contribution = contribution / 2.0;
+            clbrems += contribution;
+            row.clbrems_contribution = contribution;
+        }
+        row.running_clbrems = clbrems;
+    }
+    out.clbrems = clbrems;
     return out;
 }
 
@@ -1323,6 +1552,14 @@ struct xstar_fixed_state_context_impl {
     double last_computed_clbrems = 0.0;
     double last_htfreef = 0.0;
     double last_clbrems = 0.0;
+    bool last_continuum_workspace_source_faithful = false;
+    std::size_t last_continuum_epim_count = 0;
+    std::uint64_t last_continuum_epim_fingerprint = 0;
+    std::size_t last_continuum_bremsam_count = 0;
+    std::uint64_t last_continuum_bremsam_fingerprint = 0;
+    std::size_t last_continuum_bremsmap_count = 0;
+    std::uint64_t last_continuum_bremsmap_fingerprint = 0;
+    std::vector<ContinuumWorkspaceDiagnostic> last_continuum_workspace_diagnostics;
     bool last_call1_thermal_oracle = false;
     int last_helium_matrix_ablation_type = 0;
     int last_helium_preliminary_ablation_type = 0;
@@ -2774,7 +3011,7 @@ bool evaluate_type53_source_integral(
     contribution.ans6 *= (std::abs(contribution.ans4) - energy_difference * kErgPerEv * contribution.ans1) / den6;
     contribution.ans5 *= (std::abs(contribution.ans3) - energy_difference * kErgPerEv * contribution.ans2) / den5;
 
-    // v0.6.48.7.46.16 qualification-only IEEE closure.
+    // v0.6.48.7.46.17 qualification-only IEEE closure.
     // v0.6.48.7.46.9.4.2 qualification-only IEEE closure compatibility marker.
     // The v0.6.47.2
     // Python reference evaluates the same source expressions one operation at
@@ -4535,6 +4772,10 @@ int run_impl(
     ctx.last_continuum_free_free_cooling = 0.0;
     ctx.last_cmp1 = ctx.last_cmp2 = ctx.last_computed_cmp1 = ctx.last_computed_cmp2 = 0.0;
     ctx.last_computed_htcomp = ctx.last_computed_clcomp = ctx.last_computed_htfreef = ctx.last_computed_clbrems = ctx.last_htfreef = ctx.last_clbrems = 0.0;
+    ctx.last_continuum_workspace_source_faithful = false;
+    ctx.last_continuum_epim_count = ctx.last_continuum_bremsam_count = ctx.last_continuum_bremsmap_count = 0;
+    ctx.last_continuum_epim_fingerprint = ctx.last_continuum_bremsam_fingerprint = ctx.last_continuum_bremsmap_fingerprint = 0;
+    ctx.last_continuum_workspace_diagnostics.clear();
     ctx.last_call1_thermal_oracle = (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE) != 0u;
     output.elcter = 0.0;
     ctx.last_preclosure_electron_fraction = 0.0;
@@ -5052,11 +5293,47 @@ int run_impl(
         const double* comp_energy = input.dsec_radiation_bin_count >= 2 ? input.dsec_radiation_energy_ev : input.radiation_energy_ev;
         const double* comp_bremsa = input.dsec_radiation_bin_count >= 2 ? input.dsec_bremsa : input.radiation_flux;
         const std::size_t comp_n = input.dsec_radiation_bin_count >= 2 ? input.dsec_radiation_bin_count : input.radiation_bin_count;
-        const auto comp = source_comp2(comp_energy, comp_bremsa, comp_n, input.temperature_k, input.hydrogen_density_cm3, input.electron_fraction_xee);
+        const bool source_faithful_continuum =
+            environment_flag("XSTAR_QUALIFICATION_CONTINUUM_WORKSPACE_SOURCE_FAITHFUL");
+        SourceComp2Result comp;
+        double computed_htfreef = 0.0;
+        double computed_clbrems = 0.0;
+        if (source_faithful_continuum) {
+            const auto continuum = source_continuum_thermal(
+                comp_energy, comp_bremsa, comp_n,
+                input.temperature_k, input.hydrogen_density_cm3, input.electron_fraction_xee
+            );
+            comp = continuum.compton;
+            computed_htfreef = continuum.htfreef;
+            computed_clbrems = continuum.clbrems;
+            ctx.last_continuum_workspace_source_faithful = true;
+            ctx.last_continuum_epim_count = continuum.workspace.epim.size();
+            ctx.last_continuum_epim_fingerprint = binary64_sequence_fnv1a(continuum.workspace.epim);
+            ctx.last_continuum_bremsam_count = continuum.workspace.bremsam.size();
+            ctx.last_continuum_bremsam_fingerprint = binary64_sequence_fnv1a(continuum.workspace.bremsam);
+            std::vector<double> map_values;
+            map_values.reserve(continuum.workspace.bremsmap_index_one_based.size());
+            for (const int value : continuum.workspace.bremsmap_index_one_based) {
+                map_values.push_back(static_cast<double>(value));
+            }
+            ctx.last_continuum_bremsmap_count = map_values.size();
+            ctx.last_continuum_bremsmap_fingerprint = binary64_sequence_fnv1a(map_values);
+            ctx.last_continuum_workspace_diagnostics = continuum.diagnostics;
+        } else {
+            comp = source_comp2(
+                comp_energy, comp_bremsa, comp_n,
+                input.temperature_k, input.hydrogen_density_cm3, input.electron_fraction_xee
+            );
+            computed_clbrems =
+                1.426e-27 * std::sqrt(input.temperature_k) *
+                input.electron_density_cm3 * input.ionized_h_density_cm3;
+        }
         ctx.last_computed_cmp1 = comp.cmp1;
         ctx.last_computed_cmp2 = comp.cmp2;
         ctx.last_computed_htcomp = comp.htcomp;
         ctx.last_computed_clcomp = comp.clcomp;
+        ctx.last_computed_htfreef = computed_htfreef;
+        ctx.last_computed_clbrems = computed_clbrems;
         const bool call1_leaf_oracle =
             (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE) != 0u &&
             !thermal_component_closure_data.has_value();
@@ -5064,11 +5341,8 @@ int run_impl(
         ctx.last_cmp2 = call1_leaf_oracle ? input.cmp2_override : comp.cmp2;
         ctx.last_continuum_compton_heating = call1_leaf_oracle ? input.htcomp_override : comp.htcomp;
         ctx.last_continuum_compton_cooling = call1_leaf_oracle ? input.clcomp_override : comp.clcomp;
-        const double htfreef = call1_leaf_oracle ? input.htfreef_override : 0.0;
-        const double clbrems = call1_leaf_oracle ? input.clbrems_override :
-            1.426e-27 * std::sqrt(input.temperature_k) * input.electron_density_cm3 * input.ionized_h_density_cm3;
-        ctx.last_computed_htfreef = htfreef;
-        ctx.last_computed_clbrems = clbrems;
+        const double htfreef = call1_leaf_oracle ? input.htfreef_override : computed_htfreef;
+        const double clbrems = call1_leaf_oracle ? input.clbrems_override : computed_clbrems;
         ctx.last_htfreef = htfreef;
         ctx.last_clbrems = clbrems;
         ctx.last_continuum_free_free_cooling = clbrems;
@@ -5452,6 +5726,7 @@ int xstar_fixed_state_write_last_thermal_budget_v1(
             out << "sequence,kind,call_index,evaluation_index,temperature_k,electron_density_cm3,hydrogen_density_cm3,electron_fraction_input,covering_fraction,turbulent_velocity_km_s,"
                    "input_radiation_count,input_radiation_fingerprint,input_dsec_radiation_count,input_dsec_radiation_fingerprint,input_bremsa_count,input_bremsa_fingerprint,"
                    "input_tau_count,input_tau_in_fingerprint,input_tau_out_fingerprint,input_global_level_count,input_xilevg_fingerprint,input_bilevg_fingerprint,input_rnisg_fingerprint,"
+                   "continuum_workspace_source_faithful,continuum_epim_count,continuum_epim_fingerprint,continuum_bremsam_count,continuum_bremsam_fingerprint,continuum_bremsmap_count,continuum_bremsmap_fingerprint,"
                    "thermal_population_count,thermal_population_fingerprint,committed_population_count,committed_population_fingerprint,"
                    "thermal_consumed_fixed_state_closure,thermal_consumed_compact_population_closure,thermal_component_closure_applied,"
                    "thermal_diagonal_source_domain_applied,thermal_diagonal_rows_included,thermal_diagonal_normalization_rows_excluded,thermal_diagonal_terms_included,thermal_diagonal_normalization_terms_included,continuum_secondary_ledger_corrected,"
@@ -5498,6 +5773,10 @@ int xstar_fixed_state_write_last_thermal_budget_v1(
             << context->last_input_bremsa_count << ',' << hex_u64(context->last_input_bremsa_fingerprint) << ','
             << context->last_input_tau_count << ',' << hex_u64(context->last_input_tau_in_fingerprint) << ',' << hex_u64(context->last_input_tau_out_fingerprint) << ','
             << context->last_input_global_level_count << ',' << hex_u64(context->last_input_xilevg_fingerprint) << ',' << hex_u64(context->last_input_bilevg_fingerprint) << ',' << hex_u64(context->last_input_rnisg_fingerprint) << ','
+            << (context->last_continuum_workspace_source_faithful ? 1 : 0) << ','
+            << context->last_continuum_epim_count << ',' << hex_u64(context->last_continuum_epim_fingerprint) << ','
+            << context->last_continuum_bremsam_count << ',' << hex_u64(context->last_continuum_bremsam_fingerprint) << ','
+            << context->last_continuum_bremsmap_count << ',' << hex_u64(context->last_continuum_bremsmap_fingerprint) << ','
             << context->last_thermal_population_count << ',' << hex_u64(context->last_thermal_population_fingerprint) << ','
             << context->last_committed_population_count << ',' << hex_u64(context->last_committed_population_fingerprint) << ','
             << (context->last_thermal_consumed_fixed_state_closure ? 1 : 0) << ','
@@ -6198,6 +6477,26 @@ int xstar_fixed_state_write_last_diagnostics_v1(
             }
         }
 
+        {
+            std::ofstream continuum_file(root / (stem + "_continuum_workspace.csv"));
+            if (!continuum_file) throw std::runtime_error("cannot create continuum workspace CSV");
+            continuum_file << "evaluation_ordinal,reduced_bin_one_based,full_bin_one_based,epim_ev,bremsam,bin_width_ev,comp_sum1_contribution,comp_sum2_contribution,comp_sum3_contribution,cmp1_contribution,cmp2_contribution,htcomp_contribution,clcomp_contribution,free_free_opacity_increment,htfreef_contribution,brcems,clbrems_contribution,running_cmp1,running_cmp2,running_htcomp,running_clcomp,running_htfreef,running_clbrems\n";
+            continuum_file << std::setprecision(17);
+            for (const auto& row : context->last_continuum_workspace_diagnostics) {
+                continuum_file << evaluation_ordinal << ',' << row.reduced_bin_one_based << ','
+                               << row.full_bin_one_based << ',' << row.epim_ev << ',' << row.bremsam << ','
+                               << row.bin_width_ev << ',' << row.comp_sum1_contribution << ','
+                               << row.comp_sum2_contribution << ',' << row.comp_sum3_contribution << ','
+                               << row.cmp1_contribution << ',' << row.cmp2_contribution << ','
+                               << row.htcomp_contribution << ',' << row.clcomp_contribution << ','
+                               << row.free_free_opacity_increment << ',' << row.htfreef_contribution << ','
+                               << row.brcems << ',' << row.clbrems_contribution << ','
+                               << row.running_cmp1 << ',' << row.running_cmp2 << ','
+                               << row.running_htcomp << ',' << row.running_clcomp << ','
+                               << row.running_htfreef << ',' << row.running_clbrems << '\n';
+            }
+        }
+
         std::ofstream state_file(root / (stem + "_state.json"));
         if (!state_file) throw std::runtime_error("cannot create state diagnostics JSON");
         state_file << std::setprecision(17)
@@ -6226,6 +6525,10 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                    << "  \"helium_solve_response\": " << (context->last_helium_solve_response ? "true" : "false") << ",\n"
                    << "  \"type53_row46_coupled_replacement\": " << (context->last_type53_row46_coupled_replacement ? "true" : "false") << ",\n"
                    << "  \"helium_source_insertion_order\": " << (context->last_helium_source_insertion_order ? "true" : "false") << ",\n"
+                   << "  \"continuum_workspace_source_faithful\": " << (context->last_continuum_workspace_source_faithful ? "true" : "false") << ",\n"
+                   << "  \"continuum_epim_count\": " << context->last_continuum_epim_count << ",\n"
+                   << "  \"continuum_bremsam_count\": " << context->last_continuum_bremsam_count << ",\n"
+                   << "  \"continuum_bremsmap_count\": " << context->last_continuum_bremsmap_count << ",\n"
                    << "  \"record_diagnostic_count\": " << records.size() << ",\n"
                    << "  \"element_diagnostic_count\": " << context->last_element_diagnostics.size() << ",\n"
                    << "  \"production_promotion_ready\": false\n}\n";
