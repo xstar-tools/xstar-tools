@@ -15,9 +15,9 @@ def root() -> Path:
 
 
 def test_release_and_api_version() -> None:
-    assert xstar_tools.__version__ == "0.6.48.7.46.14.1"
+    assert xstar_tools.__version__ == "0.6.48.7.46.15"
     api = (root() / "src/xstar_tools/xstar/cpp/xstar_api.h").read_text()
-    assert 'XSTAR_API_VERSION_STRING "0.6.48.7.46.14.1"' in api
+    assert 'XSTAR_API_VERSION_STRING "0.6.48.7.46.15"' in api
     assert "XSTAR_API_ABI_VERSION 60487u" in api
 
 

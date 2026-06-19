@@ -1,18 +1,18 @@
 ## Current release
 
-**0.6.48.7.46.14.1** is a reporting-only preflight hotfix for the accepted v46.14 source-ordered Thermal diagonal correction. It accepts the v46.13 fixed-state preservation contract either through the aggregate `V06487_FIXED_STATE_PARITY_PRESERVED` alias or through the complete concrete gate set emitted by the production v46.13 checker. No native physics, ABI, closure, or scientific gate changes. See `V0648746141_V4613_FIXED_STATE_GATE_VOCABULARY_HOTFIX.md`.
+**0.6.48.7.46.15** corrects the source-faithful Mg Type-99 secondary-energy path. When the preserved destination satisfies `destination_energy - bound_energy == threshold` exactly, the source correction is the identity `x/x`; native qualification now keeps that factor exactly one instead of replacing a negative signed denominator with `1e-43`. The correction is qualification-scoped and changes only 166 `ans5` contributions from records 39855, 40060, and 41154. All accepted fixed-state, compact-population, source-order diagonal, committed Thermal, and zero-callback gates remain mandatory. See `V064874615_MG_TYPE99_SOURCE_FAITHFUL_DESTINATION_AND_SECONDARY_ENERGY_CORRECTION.md`.
 
-Run from an accepted v0.6.48.7.46.13 output:
+Run from an accepted v0.6.48.7.46.14.1 output:
 
 ```bash
-./run_v04874614_thermal_diagonal_domain_secondary_ledger_correction.sh \
+./run_v04874615_mg_type99_destination_secondary_energy_correction.sh \
   ../xstar/data/atdb.fits \
-  ../xstar_tools-0.6.48.7.46.13/v04874613_thermal_compact_population_state_transport \
-  v04874614_thermal_diagonal_domain_secondary_ledger_correction \
+  ../xstar_tools-0.6.48.7.46.14.1/v04874614_thermal_diagonal_domain_secondary_ledger_correction \
+  v04874615_mg_type99_destination_secondary_energy_correction \
   10
 ```
 
-Use `XSTAR_V04874614_PREFLIGHT_ONLY=1` for a no-replay baseline/readiness preflight.
+Use `XSTAR_V04874615_PREFLIGHT_ONLY=1` for baseline/readiness validation without native replay.
 
 ## Current release: 0.6.48.7.46.13
 

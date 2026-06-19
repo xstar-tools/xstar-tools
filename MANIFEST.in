@@ -794,3 +794,10 @@ include tests/test_v064874614_thermal_diagonal_domain_secondary_ledger.py
 # v0.6.48.7.46.14.1 v46.13 baseline gate-vocabulary hotfix
 include V0648746141_V4613_FIXED_STATE_GATE_VOCABULARY_HOTFIX.md
 include tests/test_v0648746141_v4613_baseline_gate_vocabulary.py
+
+# v0.6.48.7.46.15 Mg Type-99 destination and secondary-energy correction
+include V064874615_MG_TYPE99_SOURCE_FAITHFUL_DESTINATION_AND_SECONDARY_ENERGY_CORRECTION.md
+include run_v04874615_mg_type99_destination_secondary_energy_correction.sh
+include check_v04874615_mg_type99_destination_secondary_energy_correction.py
+include check_v04874615_mg_type99_destination_secondary_energy_correction_readiness.py
+include tests/test_v064874615_mg_type99_destination_secondary_energy.py

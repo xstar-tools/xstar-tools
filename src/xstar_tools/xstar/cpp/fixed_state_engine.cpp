@@ -477,6 +477,17 @@ struct Type99SourceShadow {
     double rrcl_unscaled_erg_s = 0.0;
     double piht2_unscaled_erg_s = 0.0;
     double rrcl2_unscaled_erg_s = 0.0;
+    double energy_difference_ev = 0.0;
+    bool destination_threshold_identity = false;
+    double ans5_pre_energy_correction = 0.0;
+    double ans6_pre_energy_correction = 0.0;
+    double ans5_energy_correction_numerator = 0.0;
+    double ans5_energy_correction_denominator = 0.0;
+    double ans5_energy_correction_factor = 0.0;
+    double ans6_energy_correction_numerator = 0.0;
+    double ans6_energy_correction_denominator = 0.0;
+    double ans6_energy_correction_factor = 0.0;
+    bool destination_identity_correction_applied = false;
     int nbinc_threshold_one_based = 0;
     int nb1_one_based = 0;
     int nphint_one_based = 0;
@@ -2387,10 +2398,33 @@ bool evaluate_type99_source_faithful(
     contribution.ans3 = -ans4_pre;
     contribution.ans4 = -ans3_pre;
     const double energy_difference = destination_energy_ev - lower.energy_ev;
-    contribution.ans6 *= (std::abs(contribution.ans4) - energy_difference * kErgPerEv * contribution.ans1) /
-        std::max(1.0e-43, std::abs(contribution.ans4) - threshold_ev * kErgPerEv * contribution.ans1);
-    contribution.ans5 *= (std::abs(contribution.ans3) - energy_difference * kErgPerEv * contribution.ans2) /
-        std::max(1.0e-43, std::abs(contribution.ans3) - threshold_ev * kErgPerEv * contribution.ans2);
+    const bool destination_threshold_identity = energy_difference == threshold_ev;
+    const bool destination_identity_correction_applied =
+        destination_threshold_identity && environment_flag("XSTAR_QUALIFICATION_MG_TYPE99_SECONDARY_ENERGY_CORRECTION");
+    const double ans6_energy_numerator =
+        std::abs(contribution.ans4) - energy_difference * kErgPerEv * contribution.ans1;
+    const double ans6_energy_denominator =
+        std::abs(contribution.ans4) - threshold_ev * kErgPerEv * contribution.ans1;
+    const double ans5_energy_numerator =
+        std::abs(contribution.ans3) - energy_difference * kErgPerEv * contribution.ans2;
+    const double ans5_energy_denominator =
+        std::abs(contribution.ans3) - threshold_ev * kErgPerEv * contribution.ans2;
+    // v0.6.48.7.46.15: when the preserved source destination satisfies
+    // destination_energy - bound_energy == threshold bit-for-bit, the source
+    // energy correction is the identity x/x.  Applying max(1e-43, x) to a
+    // negative x destroys that identity and creates catastrophic secondary
+    // heating.  Preserve the exact identity while retaining legacy behavior
+    // for all non-identity Type-99 records.
+    const double ans6_energy_factor = destination_identity_correction_applied
+        ? 1.0
+        : ans6_energy_numerator / std::max(1.0e-43, ans6_energy_denominator);
+    const double ans5_energy_factor = destination_identity_correction_applied
+        ? 1.0
+        : ans5_energy_numerator / std::max(1.0e-43, ans5_energy_denominator);
+    const double ans5_pre_energy_correction = contribution.ans5;
+    const double ans6_pre_energy_correction = contribution.ans6;
+    contribution.ans6 *= ans6_energy_factor;
+    contribution.ans5 *= ans5_energy_factor;
     const bool valid = std::isfinite(contribution.ans1) && std::isfinite(contribution.ans2) &&
         std::isfinite(contribution.ans3) && std::isfinite(contribution.ans4) &&
         std::isfinite(contribution.ans5) && std::isfinite(contribution.ans6);
@@ -2414,6 +2448,17 @@ bool evaluate_type99_source_faithful(
         shadow->rrcl_unscaled_erg_s = ph.rrcl;
         shadow->piht2_unscaled_erg_s = ph.piht2;
         shadow->rrcl2_unscaled_erg_s = ph.rrcl2;
+        shadow->energy_difference_ev = energy_difference;
+        shadow->destination_threshold_identity = destination_threshold_identity;
+        shadow->ans5_pre_energy_correction = ans5_pre_energy_correction;
+        shadow->ans6_pre_energy_correction = ans6_pre_energy_correction;
+        shadow->ans5_energy_correction_numerator = ans5_energy_numerator;
+        shadow->ans5_energy_correction_denominator = ans5_energy_denominator;
+        shadow->ans5_energy_correction_factor = ans5_energy_factor;
+        shadow->ans6_energy_correction_numerator = ans6_energy_numerator;
+        shadow->ans6_energy_correction_denominator = ans6_energy_denominator;
+        shadow->ans6_energy_correction_factor = ans6_energy_factor;
+        shadow->destination_identity_correction_applied = destination_identity_correction_applied;
         shadow->nbinc_threshold_one_based = ph.nbinc_threshold_one_based;
         shadow->nb1_one_based = ph.nb1_one_based;
         shadow->nphint_one_based = ph.nphint_one_based;
@@ -2698,7 +2743,7 @@ bool evaluate_type53_source_integral(
     contribution.ans6 *= (std::abs(contribution.ans4) - energy_difference * kErgPerEv * contribution.ans1) / den6;
     contribution.ans5 *= (std::abs(contribution.ans3) - energy_difference * kErgPerEv * contribution.ans2) / den5;
 
-    // v0.6.48.7.46.14.1 qualification-only IEEE closure.
+    // v0.6.48.7.46.15 qualification-only IEEE closure.
     // v0.6.48.7.46.9.4.2 qualification-only IEEE closure compatibility marker.
     // The v0.6.47.2
     // Python reference evaluates the same source expressions one operation at
@@ -5495,7 +5540,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
         });
         std::ofstream record_file(root / (stem + "_records.csv"));
         if (!record_file) throw std::runtime_error("cannot create record diagnostics CSV");
-        record_file << "evaluation_ordinal,source_position,record,element_index,element_z,data_type,rate_type,ion_index,ion_stage,lower_row,upper_row,matrix_enabled,active_stage,matrix_committed,spectral,ans1,ans2,ans3,ans4,ans5,ans6,density_scale,line_energy_ev,atomic_mass_amu,natural_width_ev,opakab,type56_upsilon,type53_shadow_valid,type53_shadow_ans1,type53_shadow_ans2,type53_shadow_ans3,type53_shadow_ans4,type53_shadow_ans5,type53_shadow_ans6,type53_delta_ans1,type53_delta_ans2,type53_delta_ans3,type53_delta_ans4,type53_delta_ans5,type53_delta_ans6,type53_shadow_base_threshold_ev,type53_shadow_threshold_ev,type53_shadow_bound_energy_ev,type53_shadow_continuum_energy_ev,type53_shadow_destination_energy_ev,type53_shadow_excited_parent_energy_ev,type53_shadow_bound_g,type53_shadow_continuum_g,type53_shadow_destination_g,type53_shadow_excited_parent_g,type53_milne_partition_context_used,type53_excited_threshold_context_used,type53_corrected_threshold_before_mapping,type53_phextrap_source_reference_order,type53_phextrap_input_pair_count,type53_phextrap_output_pair_count,type53_shadow_rnist,type53_shadow_sumr,type53_shadow_sumi,type53_shadow_sumh,type53_shadow_sumh2,type53_shadow_sumc,type53_shadow_sumc2,type53_sumc_ieee_nextafter_applied,type53_shadow_nb1_one_based,type53_shadow_klmax_one_based,type53_row46_contract,type53_captured_state_anchor,type53_tau_in,type53_tau_out,type53_ptmp1,type53_ptmp2,type53_covering_fraction,type53_runtime_state_abi_used,type53_continuum_index_one_based,type53_dsec_radiation_bin_count,type53_continuum_tau_count,type50_shadow_valid,type50_shadow_ans1,type50_shadow_ans2,type50_shadow_ans3,type50_shadow_ans4,type50_shadow_ans5,type50_shadow_ans6,type50_stored_wavelength_a,type50_endpoint_energy_ev,type50_covering_fraction,type50_ptmp1,type50_ptmp2,type50_bremsa_nb1,type50_density_floor_s,type50_density_floor_applied,type50_photoexcitation_zero_covering,type50_used_dsec_covering,type50_used_dsec_radiation,type50_nb1_one_based,type99_shadow_valid,type99_shadow_ans1,type99_shadow_ans2,type99_shadow_ans3,type99_shadow_ans4,type99_shadow_ans5,type99_shadow_ans6,type99_threshold_ev,type99_destination_energy_ev,type99_bound_energy_ev,type99_swrat,type99_calt99_density_cm3,type99_phint53hunt_density_cm3,type99_rec_cm3_s,type99_milne_alpha_cm3_s,type99_cross_section_scale,type99_ans2d_unscaled_s,type99_phint_scale,type99_pirt_unscaled_s,type99_rrrt_unscaled_s,type99_piht_unscaled_erg_s,type99_rrcl_unscaled_erg_s,type99_piht2_unscaled_erg_s,type99_rrcl2_unscaled_erg_s,type99_nbinc_threshold_one_based,type99_nb1_one_based,type99_nphint_one_based,type99_ndelt,type99_npass,type99_last_pass_first_kl_one_based,type99_last_pass_last_kl_one_based,type99_cached_atmp22_stale_reuses,type99_used_dsec_radiation,mg_type53_legacy_max_abs,mg_type53_shadow_max_abs,mg_type53_committed_max_abs,mg_type53_legacy_nonfinite,mg_type53_legacy_implausible,mg_type53_replacement_applied,mg_type53_committed_nonfinite,mg_type53_committed_implausible,mg_type53_exponent_energy_ev,mg_type53_exponent_dimensionless,mg_type53_electron_density_cm3,mg_type53_hydrogen_density_cm3,mg_type53_matrix_density_scale,mg_type53_source_faithful_mode,type49_shadow_valid,type49_shadow_ans1,type49_shadow_ans2,type49_shadow_ans3,type49_shadow_ans4,type49_shadow_ans5,type49_shadow_ans6,type49_legacy_max_abs,type49_shadow_max_abs,type49_committed_max_abs,type49_legacy_nonfinite,type49_legacy_implausible,type49_replacement_applied,type49_committed_nonfinite,type49_committed_implausible,type49_base_threshold_ev,type49_threshold_ev,type49_bound_energy_ev,type49_continuum_energy_ev,type49_destination_energy_ev,type49_excited_parent_energy_ev,type49_bound_g,type49_continuum_g,type49_destination_g,type49_excited_parent_g,type49_milne_partition_context_used,type49_excited_threshold_context_used,type49_corrected_threshold_before_mapping,type49_phextrap_source_reference_order,type49_phextrap_input_pair_count,type49_phextrap_output_pair_count,type49_phextrap_max_points,type49_phextrap_input_energy_hash,type49_phextrap_input_sigma_hash,type49_phextrap_output_energy_hash,type49_phextrap_output_sigma_hash,type49_rnist,type49_exponent_energy_ev,type49_exponent_dimensionless,type49_electron_density_cm3,type49_hydrogen_density_cm3,type49_matrix_density_scale,type49_phextrap_applied,type49_source_zero_gate,type49_source_faithful_mode,type49_runtime_state_abi_used,type49_continuum_index_one_based,type49_dsec_radiation_bin_count,type49_continuum_tau_count,type51_shadow_valid,type51_source_faithful_mode,type51_replacement_applied,type51_endpoint_order_exact,type51_committed_nonfinite,type51_bt_type,type51_point_count,type51_eij_ryd,type51_eij_ev,type51_scaling_c,type51_physical_temperature_k,type51_floor_temperature_k,type51_effective_temperature_k,type51_temperature_floor_applied,type51_scaled_temperature,type51_transformed_temperature,type51_scaled_upsilon,type51_upsilon,type51_lower_g,type51_upper_g,type51_electron_density_cm3,type51_q_excitation_cm3_s,type51_q_deexcitation_cm3_s,type51_shadow_ans1,type51_shadow_ans2,type51_shadow_ans3,type51_shadow_ans4,type51_shadow_ans5,type51_shadow_ans6,type51_legacy_ans1,type51_legacy_ans2,type51_legacy_ans3,type51_legacy_ans4,type51_legacy_ans5,type51_legacy_ans6\n";
+        record_file << "evaluation_ordinal,source_position,record,element_index,element_z,data_type,rate_type,ion_index,ion_stage,lower_row,upper_row,matrix_enabled,active_stage,matrix_committed,spectral,ans1,ans2,ans3,ans4,ans5,ans6,density_scale,line_energy_ev,atomic_mass_amu,natural_width_ev,opakab,type56_upsilon,type53_shadow_valid,type53_shadow_ans1,type53_shadow_ans2,type53_shadow_ans3,type53_shadow_ans4,type53_shadow_ans5,type53_shadow_ans6,type53_delta_ans1,type53_delta_ans2,type53_delta_ans3,type53_delta_ans4,type53_delta_ans5,type53_delta_ans6,type53_shadow_base_threshold_ev,type53_shadow_threshold_ev,type53_shadow_bound_energy_ev,type53_shadow_continuum_energy_ev,type53_shadow_destination_energy_ev,type53_shadow_excited_parent_energy_ev,type53_shadow_bound_g,type53_shadow_continuum_g,type53_shadow_destination_g,type53_shadow_excited_parent_g,type53_milne_partition_context_used,type53_excited_threshold_context_used,type53_corrected_threshold_before_mapping,type53_phextrap_source_reference_order,type53_phextrap_input_pair_count,type53_phextrap_output_pair_count,type53_shadow_rnist,type53_shadow_sumr,type53_shadow_sumi,type53_shadow_sumh,type53_shadow_sumh2,type53_shadow_sumc,type53_shadow_sumc2,type53_sumc_ieee_nextafter_applied,type53_shadow_nb1_one_based,type53_shadow_klmax_one_based,type53_row46_contract,type53_captured_state_anchor,type53_tau_in,type53_tau_out,type53_ptmp1,type53_ptmp2,type53_covering_fraction,type53_runtime_state_abi_used,type53_continuum_index_one_based,type53_dsec_radiation_bin_count,type53_continuum_tau_count,type50_shadow_valid,type50_shadow_ans1,type50_shadow_ans2,type50_shadow_ans3,type50_shadow_ans4,type50_shadow_ans5,type50_shadow_ans6,type50_stored_wavelength_a,type50_endpoint_energy_ev,type50_covering_fraction,type50_ptmp1,type50_ptmp2,type50_bremsa_nb1,type50_density_floor_s,type50_density_floor_applied,type50_photoexcitation_zero_covering,type50_used_dsec_covering,type50_used_dsec_radiation,type50_nb1_one_based,type99_shadow_valid,type99_shadow_ans1,type99_shadow_ans2,type99_shadow_ans3,type99_shadow_ans4,type99_shadow_ans5,type99_shadow_ans6,type99_threshold_ev,type99_destination_energy_ev,type99_bound_energy_ev,type99_swrat,type99_calt99_density_cm3,type99_phint53hunt_density_cm3,type99_rec_cm3_s,type99_milne_alpha_cm3_s,type99_cross_section_scale,type99_ans2d_unscaled_s,type99_phint_scale,type99_pirt_unscaled_s,type99_rrrt_unscaled_s,type99_piht_unscaled_erg_s,type99_rrcl_unscaled_erg_s,type99_piht2_unscaled_erg_s,type99_rrcl2_unscaled_erg_s,type99_energy_difference_ev,type99_destination_threshold_identity,type99_ans5_pre_energy_correction,type99_ans6_pre_energy_correction,type99_ans5_energy_correction_numerator,type99_ans5_energy_correction_denominator,type99_ans5_energy_correction_factor,type99_ans6_energy_correction_numerator,type99_ans6_energy_correction_denominator,type99_ans6_energy_correction_factor,type99_destination_identity_correction_applied,type99_nbinc_threshold_one_based,type99_nb1_one_based,type99_nphint_one_based,type99_ndelt,type99_npass,type99_last_pass_first_kl_one_based,type99_last_pass_last_kl_one_based,type99_cached_atmp22_stale_reuses,type99_used_dsec_radiation,mg_type53_legacy_max_abs,mg_type53_shadow_max_abs,mg_type53_committed_max_abs,mg_type53_legacy_nonfinite,mg_type53_legacy_implausible,mg_type53_replacement_applied,mg_type53_committed_nonfinite,mg_type53_committed_implausible,mg_type53_exponent_energy_ev,mg_type53_exponent_dimensionless,mg_type53_electron_density_cm3,mg_type53_hydrogen_density_cm3,mg_type53_matrix_density_scale,mg_type53_source_faithful_mode,type49_shadow_valid,type49_shadow_ans1,type49_shadow_ans2,type49_shadow_ans3,type49_shadow_ans4,type49_shadow_ans5,type49_shadow_ans6,type49_legacy_max_abs,type49_shadow_max_abs,type49_committed_max_abs,type49_legacy_nonfinite,type49_legacy_implausible,type49_replacement_applied,type49_committed_nonfinite,type49_committed_implausible,type49_base_threshold_ev,type49_threshold_ev,type49_bound_energy_ev,type49_continuum_energy_ev,type49_destination_energy_ev,type49_excited_parent_energy_ev,type49_bound_g,type49_continuum_g,type49_destination_g,type49_excited_parent_g,type49_milne_partition_context_used,type49_excited_threshold_context_used,type49_corrected_threshold_before_mapping,type49_phextrap_source_reference_order,type49_phextrap_input_pair_count,type49_phextrap_output_pair_count,type49_phextrap_max_points,type49_phextrap_input_energy_hash,type49_phextrap_input_sigma_hash,type49_phextrap_output_energy_hash,type49_phextrap_output_sigma_hash,type49_rnist,type49_exponent_energy_ev,type49_exponent_dimensionless,type49_electron_density_cm3,type49_hydrogen_density_cm3,type49_matrix_density_scale,type49_phextrap_applied,type49_source_zero_gate,type49_source_faithful_mode,type49_runtime_state_abi_used,type49_continuum_index_one_based,type49_dsec_radiation_bin_count,type49_continuum_tau_count,type51_shadow_valid,type51_source_faithful_mode,type51_replacement_applied,type51_endpoint_order_exact,type51_committed_nonfinite,type51_bt_type,type51_point_count,type51_eij_ryd,type51_eij_ev,type51_scaling_c,type51_physical_temperature_k,type51_floor_temperature_k,type51_effective_temperature_k,type51_temperature_floor_applied,type51_scaled_temperature,type51_transformed_temperature,type51_scaled_upsilon,type51_upsilon,type51_lower_g,type51_upper_g,type51_electron_density_cm3,type51_q_excitation_cm3_s,type51_q_deexcitation_cm3_s,type51_shadow_ans1,type51_shadow_ans2,type51_shadow_ans3,type51_shadow_ans4,type51_shadow_ans5,type51_shadow_ans6,type51_legacy_ans1,type51_legacy_ans2,type51_legacy_ans3,type51_legacy_ans4,type51_legacy_ans5,type51_legacy_ans6\n";
         record_file << std::setprecision(17);
 
         struct FamilySummary {
@@ -5593,6 +5638,17 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                         << ',' << item.type99_shadow.rrcl_unscaled_erg_s
                         << ',' << item.type99_shadow.piht2_unscaled_erg_s
                         << ',' << item.type99_shadow.rrcl2_unscaled_erg_s
+                        << ',' << item.type99_shadow.energy_difference_ev
+                        << ',' << (item.type99_shadow.destination_threshold_identity ? 1 : 0)
+                        << ',' << item.type99_shadow.ans5_pre_energy_correction
+                        << ',' << item.type99_shadow.ans6_pre_energy_correction
+                        << ',' << item.type99_shadow.ans5_energy_correction_numerator
+                        << ',' << item.type99_shadow.ans5_energy_correction_denominator
+                        << ',' << item.type99_shadow.ans5_energy_correction_factor
+                        << ',' << item.type99_shadow.ans6_energy_correction_numerator
+                        << ',' << item.type99_shadow.ans6_energy_correction_denominator
+                        << ',' << item.type99_shadow.ans6_energy_correction_factor
+                        << ',' << (item.type99_shadow.destination_identity_correction_applied ? 1 : 0)
                         << ',' << item.type99_shadow.nbinc_threshold_one_based
                         << ',' << item.type99_shadow.nb1_one_based
                         << ',' << item.type99_shadow.nphint_one_based

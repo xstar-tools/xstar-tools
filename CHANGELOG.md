@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.48.7.46.15 — Mg Type-99 source-faithful destination and secondary-energy correction - 2026-06-18
+
+- Preserves the source Type-99 destination identity `destination_energy - bound_energy == threshold` as an exact secondary-energy correction factor of one.
+- Prevents the legacy positive `max(1e-43, denominator)` guard from replacing a negative signed denominator and amplifying Mg `ans5` by 26–31 orders of magnitude.
+- Constrains changed native contributions to 166 evaluations of records 39855, 40060, and 41154; only `ans5` changes, while all other Mg Type-99 rows and contribution fields remain unchanged.
+- Adds record diagnostics for energy difference, signed numerators/denominators, pre-correction values, correction factors, destination identity, and whether the qualification correction was applied.
+- Corrects sequence-23 record 41154 from approximately `3.1e18` to `-9.16e-14`, restoring Mg `heating2` to source scale.
+- Preserves 2,440 committed Thermal values, 40,149 compact populations, 183 source-order streams, fixed-state parity, and zero Python callbacks.
+- Keeps independent native Thermal parity, controller parity, product parity, and production promotion blocked.
+
 ## 0.6.48.7.46.14.1 — v46.13 fixed-state gate-vocabulary hotfix - 2026-06-18
 
 - Corrects the v46.14 runner preflight, which required the synthetic gate `V06487_FIXED_STATE_PARITY_PRESERVED` even though the accepted v46.13 checker reports the same contract through concrete full-level, ion-stage, and dense-system preservation gates.
