@@ -1,17 +1,16 @@
 ## Current release
 
-**0.6.48.7.46.19** transports the exact source line optical-depth state consumed by Magnesium Type-50 radiative escape and reconstructs the final primary cooling energy channel from the accepted matrix-closure reverse rate. The candidate targets all 61 non-exact `mg_cooling` values, requires exact attribution for 149,694 Mg Type-50 records and 146,286 committed reverse-cooling rows, and preserves Hydrogen cooling, continuum, fixed-state, matrix, compact-population, and zero-callback contracts. See `V064874619_SOURCE_FAITHFUL_MAGNESIUM_PRIMARY_COOLING_FAMILY_ATTRIBUTION_AND_REDUCTION.md`.
+**0.6.48.7.46.19.1** corrects the Magnesium Type-50 source-capture inventory from a static 2,454-record assumption to the exact runtime-active domain: 2,420 unique records and 146,286 all-61 record evaluations. It reuses the completed v46.19 capture without recapturing source physics, then runs the unchanged Mg primary-cooling correction. See `V0648746191_MAGNESIUM_TYPE50_RUNTIME_ACTIVE_INVENTORY_HOTFIX.md`.
 
 ```bash
-./run_v04874619_magnesium_primary_cooling.sh \
-  ../xstar_tools-0.6.47.2.tar.gz \
-  ../xstar/data/atdb.fits \
+./run_v048746191_magnesium_runtime_active_inventory_hotfix.sh \
   ../xstar_tools-0.6.48.7.46.18.1/v048746181_hydrogen_type50_source_capture_context_hotfix \
-  v04874619_magnesium_primary_cooling \
+  ../xstar_tools-0.6.48.7.46.19/v04874619_magnesium_primary_cooling \
+  v048746191_magnesium_runtime_active_inventory_hotfix \
   10
 ```
 
-Use `XSTAR_V04874619_PREFLIGHT_ONLY=1` for baseline/readiness validation and `XSTAR_V04874619_SOURCE_CAPTURE_PREFLIGHT_ONLY=1` to stop after the Mg Type-50 source capture.
+Use `XSTAR_V048746191_PREFLIGHT_ONLY=1` for baseline/readiness validation and `XSTAR_V048746191_SOURCE_CAPTURE_PREFLIGHT_ONLY=1` to verify and reuse the completed v46.19 source capture without starting native replay.
 
 
 **0.6.48.7.46.17.2.1** is a narrow continuum-grid semantics hotfix. The v46.17 production replay proved that the 999-bin topology, all 60,939 `bremsmap` indices, all projected `bremsam` values, fixed-state products, compact populations, matrices, committed Thermal values, and zero-callback boundary were correct. The remaining Compton/free-free bias came from reconstructing the reduced grid through binary32 default-real boundaries instead of the immutable v0.6.47.2 Python binary64 `ener_grid`. Offline replay predicts all 610 continuum values will be bit-exact and independent native Thermal exactness will increase from 419/2,440 to 1,029/2,440. See `V0648746171_CANONICAL_V0472_CONTINUUM_GRID_BINARY64_SEMANTICS_HOTFIX.md`.

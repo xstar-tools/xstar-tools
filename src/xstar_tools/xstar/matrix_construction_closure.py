@@ -1,4 +1,4 @@
-"""Prepare and audit the v0.6.48.7.46.19 source-captured matrix closure.
+"""Prepare and audit the v0.6.48.7.46.19.1 source-captured matrix closure.
 
 The preparation step consumes a completed v46.9.6 causal-attribution directory.
 It emits per-evaluation contribution corrections and exact dense-cell source
@@ -16,7 +16,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-RELEASE = "0.6.48.7.46.19"
+RELEASE = "0.6.48.7.46.19.1"
 SCHEMA = "xstar-tools-v064874610-matrix-construction-closure-v1"
 OVERRIDE_DIRNAME = "v04874610_matrix_closure"
 REPORT_NAME = "v04874610_matrix_construction_closure_report.json"

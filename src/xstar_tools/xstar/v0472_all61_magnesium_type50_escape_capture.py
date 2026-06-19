@@ -20,17 +20,23 @@ from typing import Any
 
 from . import v0472_all61_thermal_state_capture as base
 
-RELEASE = "0.6.48.7.46.19"
-SCHEMA = "xstar-tools-v064874619-v0472-all61-magnesium-type50-escape-capture-v1"
-VERIFY_SCHEMA = "xstar-tools-v064874619-v0472-all61-magnesium-type50-escape-state-v1"
+RELEASE = "0.6.48.7.46.19.1"
+SCHEMA = "xstar-tools-v0648746191-v0472-all61-magnesium-type50-escape-capture-v1"
+VERIFY_SCHEMA = "xstar-tools-v0648746191-v0472-all61-magnesium-type50-escape-state-v1"
 ESCAPE_NAME = "v0472_all61_magnesium_type50_escape.csv"
 MAP_NAME = "v0472_magnesium_type50_line_index_map.csv"
 REPORT_NAME = "all61_magnesium_type50_escape_capture_report.json"
 VERIFY_NAME = "all61_magnesium_type50_escape_capture_verification.json"
 MANIFEST_NAME = "all61_magnesium_type50_escape_capture_manifest.json"
 EXPECTED_EVALUATIONS = 61
-EXPECTED_RECORDS_PER_EVALUATION = 2454
-EXPECTED_ROWS = EXPECTED_EVALUATIONS * EXPECTED_RECORDS_PER_EVALUATION
+EXPECTED_UNIQUE_RECORDS = 2420
+EXPECTED_SEQUENCE_COUNTS = {
+    **{sequence: 2196 for sequence in range(1, 5)},
+    **{sequence: 2201 for sequence in range(5, 7)},
+    **{sequence: 2420 for sequence in range(7, EXPECTED_EVALUATIONS + 1)},
+}
+EXPECTED_ROWS = sum(EXPECTED_SEQUENCE_COUNTS.values())
+EXPECTED_COUNT_SET = frozenset(EXPECTED_SEQUENCE_COUNTS.values())
 
 ESCAPE_FIELDS = [
     "sequence", "kind", "call_index", "evaluation_index", "record",
@@ -231,11 +237,18 @@ def verify(bundle: Path) -> dict[str, Any]:
         except Exception as exc:
             errors.append(f"invalid_escape_row:{sequence}:{row.get('record')}:{exc}")
             break
-    if counts and set(counts.values()) != {EXPECTED_RECORDS_PER_EVALUATION}:
-        errors.append(f"records_per_evaluation={sorted(set(counts.values()))}")
+    if counts != EXPECTED_SEQUENCE_COUNTS:
+        observed = {sequence: counts.get(sequence, 0) for sequence in range(1, EXPECTED_EVALUATIONS + 1)}
+        errors.append(f"records_by_sequence={observed}")
     mapping = {(int(row["record"]), int(row["line_index"])) for row in mapping_rows}
-    if len(mapping) != EXPECTED_RECORDS_PER_EVALUATION or len(mapping_rows) != EXPECTED_RECORDS_PER_EVALUATION:
+    source_records = {int(row["record"]) for row in rows}
+    mapping_records = {record for record, _ in mapping}
+    if len(mapping) != EXPECTED_UNIQUE_RECORDS or len(mapping_rows) != EXPECTED_UNIQUE_RECORDS:
         errors.append(f"line_map_rows={len(mapping_rows)} unique={len(mapping)}")
+    if source_records != mapping_records:
+        errors.append(
+            f"line_map_record_domain_mismatch=source:{len(source_records)},map:{len(mapping_records)}"
+        )
     input_rows = _read_csv(bundle / base.base.INPUT_NAME) if (bundle / base.base.INPUT_NAME).is_file() else []
     line_workspace_files = 0
     for row in input_rows:
@@ -253,7 +266,12 @@ def verify(bundle: Path) -> dict[str, Any]:
         "result": "ACCEPT" if not errors else "REJECT",
         "errors": errors,
         "evaluations": len(sequences),
-        "magnesium_type50_records_per_evaluation": EXPECTED_RECORDS_PER_EVALUATION,
+        "magnesium_type50_static_lowered_records": 2454,
+        "magnesium_type50_unique_runtime_records": len(source_records),
+        "magnesium_type50_expected_unique_runtime_records": EXPECTED_UNIQUE_RECORDS,
+        "magnesium_type50_runtime_record_count_set": sorted(set(counts.values())),
+        "magnesium_type50_expected_runtime_record_count_set": sorted(EXPECTED_COUNT_SET),
+        "magnesium_type50_records_by_sequence": {str(key): value for key, value in sorted(counts.items())},
         "magnesium_type50_escape_rows": len(rows),
         "line_index_map_rows": len(mapping_rows),
         "line_workspace_files": line_workspace_files,

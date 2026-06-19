@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.7.46.19.1 — Magnesium Type-50 runtime-active inventory hotfix - 2026-06-19
+
+- Corrects the v46.19 source-capture contract, which incorrectly treated the 2,454 statically lowered Mg Type-50 records as executable in every evaluation.
+- Pins the actual v0.6.47.2 runtime domain to 2,420 unique records and 146,286 record evaluations, with exact per-sequence counts of 2,196 for sequences 1–4, 2,201 for sequences 5–6, and 2,420 for sequences 7–61.
+- Requires the source line-index map to contain exactly the 2,420 runtime-active records and updates the native loader to the same fail-closed domain.
+- Reuses the completed v46.19 source capture; no source recapture or physics change is required.
+- Retains the v46.19 Mg Type-50 escape and primary-cooling correction, the 146,286 committed reverse-cooling domain, ABI 60487, and the predicted 1,127/2,440 native Thermal exactness after host replay.
+
 ## 0.6.48.7.46.19 — source-faithful magnesium primary cooling family attribution and reduction - 2026-06-19
 
 - Captures and transports the live all-61 Magnesium Type-50 line optical-depth workspace for 2,454 records per evaluation (149,694 records total).

@@ -3,8 +3,8 @@ import xstar_tools
 
 def root(): return Path(__file__).resolve().parents[1]
 def test_release_and_native_api_version():
-    assert xstar_tools.__version__=='0.6.48.7.46.19'
-    assert 'XSTAR_API_VERSION_STRING "0.6.48.7.46.19"' in (root()/'src/xstar_tools/xstar/cpp/xstar_api.h').read_text()
+    assert xstar_tools.__version__=='0.6.48.7.46.19.1'
+    assert 'XSTAR_API_VERSION_STRING "0.6.48.7.46.19.1"' in (root()/'src/xstar_tools/xstar/cpp/xstar_api.h').read_text()
 def test_mg_bound_free_source_contract_and_fail_closed_guards():
     text=(root()/'src/xstar_tools/xstar/cpp/fixed_state_engine.cpp').read_text()
     assert 'XSTAR_QUALIFICATION_MG_BOUND_FREE_FINITE_STATE' in text

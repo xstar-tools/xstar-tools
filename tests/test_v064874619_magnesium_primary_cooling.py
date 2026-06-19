@@ -21,9 +21,12 @@ def _write_csv(path: Path, fields, rows):
 
 
 def test_release_and_magnesium_source_probe_contract():
-    assert xstar_tools.__version__ == "0.6.48.7.46.19"
-    assert capture.EXPECTED_RECORDS_PER_EVALUATION == 2454
-    assert capture.EXPECTED_ROWS == 149694
+    assert xstar_tools.__version__ == "0.6.48.7.46.19.1"
+    assert capture.EXPECTED_UNIQUE_RECORDS == 2420
+    assert capture.EXPECTED_ROWS == 146286
+    assert capture.EXPECTED_SEQUENCE_COUNTS[1] == 2196
+    assert capture.EXPECTED_SEQUENCE_COUNTS[5] == 2201
+    assert capture.EXPECTED_SEQUENCE_COUNTS[7] == 2420
     assert "v04874619_pending_escape" in capture._PROBE
     assert "element_z\", 0) or 0) == 12" in capture._PROBE
     assert capture._pescl(0.0) == 0.5
@@ -72,7 +75,8 @@ def test_baseline_validator_accepts_v46181(tmp_path: Path):
 
 def test_synthetic_magnesium_audit_accepts(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(audit, "EXPECTED_EVALUATIONS", 2)
-    monkeypatch.setattr(audit, "EXPECTED_RECORDS_PER_EVALUATION", 3)
+    monkeypatch.setattr(audit, "EXPECTED_UNIQUE_RECORDS", 3)
+    monkeypatch.setattr(audit, "EXPECTED_SEQUENCE_COUNTS", {1: 3, 2: 3})
     monkeypatch.setattr(audit, "EXPECTED_ROWS", 6)
     monkeypatch.setattr(audit, "EXPECTED_COMMITTED_REVERSE_ROWS", 4)
     source = tmp_path / "source"
@@ -148,7 +152,7 @@ def test_synthetic_magnesium_audit_accepts(tmp_path: Path, monkeypatch):
 def test_readiness_accepts(tmp_path: Path):
     output = tmp_path / "readiness.json"
     completed = subprocess.run([
-        sys.executable, str(ROOT / "check_v04874619_magnesium_primary_cooling_readiness.py"),
+        sys.executable, str(ROOT / "check_v048746191_magnesium_runtime_active_inventory_hotfix_readiness.py"),
         "--package-dir", str(ROOT), "--output-json", str(output),
     ], cwd=ROOT, capture_output=True, text=True)
     assert completed.returncode == 0, completed.stdout + completed.stderr

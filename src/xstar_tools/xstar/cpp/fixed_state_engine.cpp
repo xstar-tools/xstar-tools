@@ -389,8 +389,8 @@ MagnesiumType50EscapeStateV04874619 load_magnesium_type50_escape_state_v04874619
             throw std::runtime_error("duplicate magnesium Type-50 line-index record");
         }
     }
-    if (state.line_index_by_record.size() != 2454) {
-        throw std::runtime_error("magnesium Type-50 line-index map must contain exactly 2454 records");
+    if (state.line_index_by_record.size() != 2420) {
+        throw std::runtime_error("magnesium Type-50 line-index map must contain exactly 2420 runtime-active records");
     }
     state.tau_in = read_binary64_payload_v04874619(tau_in_path);
     state.tau_out = read_binary64_payload_v04874619(tau_out_path);
@@ -1184,7 +1184,7 @@ void apply_matrix_closure_contribution_corrections(
         if (correction.remove) continue;
         if (correction.replace_ans1) contribution.ans1 = correction.source_ans1;
         if (correction.replace_ans2) contribution.ans2 = correction.source_ans2;
-        // v0.6.48.7.46.19: matrix closure originally corrected only the
+        // v0.6.48.7.46.19.1: matrix closure originally corrected only the
         // population-rate channels.  Type-50 thermal energy channels are
         // algebraically tied to those rates after the source post-swap:
         //   ans3 = -ans2 * |Eupper-Elower| * erg/eV
@@ -1213,7 +1213,7 @@ void apply_matrix_closure_contribution_corrections(
                 contribution.ans3 = -contribution.ans2 * endpoint_energy_ev * kErgPerEv;
             }
         }
-        // v0.6.48.7.46.19: Mg primary line cooling consumes the final
+        // v0.6.48.7.46.19.1: Mg primary line cooling consumes the final
         // matrix-closure reverse rate.  Reconstruct only ans3 from the
         // source-faithful Type-50 post-swap identity; secondary channels and
         // forward heating remain unchanged in this milestone.
@@ -3225,7 +3225,7 @@ bool evaluate_type53_source_integral(
     contribution.ans6 *= (std::abs(contribution.ans4) - energy_difference * kErgPerEv * contribution.ans1) / den6;
     contribution.ans5 *= (std::abs(contribution.ans3) - energy_difference * kErgPerEv * contribution.ans2) / den5;
 
-    // v0.6.48.7.46.19 qualification-only IEEE closure.
+    // v0.6.48.7.46.19.1 qualification-only IEEE closure.
     // v0.6.48.7.46.9.4.2 qualification-only IEEE closure compatibility marker.
     // The v0.6.47.2
     // Python reference evaluates the same source expressions one operation at

@@ -7,11 +7,16 @@ import json
 from pathlib import Path
 from typing import Any
 
-RELEASE = "0.6.48.7.46.19"
-SCHEMA = "xstar-tools-v064874619-magnesium-type50-primary-cooling-audit-v1"
+RELEASE = "0.6.48.7.46.19.1"
+SCHEMA = "xstar-tools-v0648746191-magnesium-type50-primary-cooling-audit-v1"
 EXPECTED_EVALUATIONS = 61
-EXPECTED_RECORDS_PER_EVALUATION = 2454
-EXPECTED_ROWS = EXPECTED_EVALUATIONS * EXPECTED_RECORDS_PER_EVALUATION
+EXPECTED_UNIQUE_RECORDS = 2420
+EXPECTED_SEQUENCE_COUNTS = {
+    **{sequence: 2196 for sequence in range(1, 5)},
+    **{sequence: 2201 for sequence in range(5, 7)},
+    **{sequence: 2420 for sequence in range(7, EXPECTED_EVALUATIONS + 1)},
+}
+EXPECTED_ROWS = sum(EXPECTED_SEQUENCE_COUNTS.values())
 EXPECTED_COMMITTED_REVERSE_ROWS = 146286
 
 
@@ -46,6 +51,18 @@ def audit(source_capture: Path, native_run: Path, component_comparison: Path,
 
     source_rows = _rows(source_path)
     source = {(int(row["sequence"]), int(row["record"])): row for row in source_rows}
+    source_counts: dict[int, int] = {}
+    for sequence, _record in source:
+        source_counts[sequence] = source_counts.get(sequence, 0) + 1
+    source_unique_records = {record for _sequence, record in source}
+    if len(source_rows) != len(source):
+        errors.append(f"duplicate_source_keys={len(source_rows) - len(source)}")
+    if source_counts != EXPECTED_SEQUENCE_COUNTS:
+        errors.append(f"source_records_by_sequence={source_counts}")
+    if len(source_unique_records) != EXPECTED_UNIQUE_RECORDS:
+        errors.append(
+            f"source_unique_records={len(source_unique_records)} expected={EXPECTED_UNIQUE_RECORDS}"
+        )
     native: dict[tuple[int, int], dict[str, str]] = {}
     density_scale: dict[tuple[int, int], float] = {}
     for sequence in range(1, EXPECTED_EVALUATIONS + 1):
@@ -58,6 +75,10 @@ def audit(source_capture: Path, native_run: Path, component_comparison: Path,
                 key = (sequence, int(row["record"]))
                 native[key] = row
                 density_scale[key] = float(row["density_scale"])
+    if set(native) != set(source):
+        missing = set(source) - set(native)
+        extra = set(native) - set(source)
+        errors.append(f"native_source_domain_mismatch=missing:{len(missing)},extra:{len(extra)}")
 
     fields = [
         "sequence", "call_index", "record", "source_position", "line_index",
@@ -175,12 +196,12 @@ def audit(source_capture: Path, native_run: Path, component_comparison: Path,
             for row in comparisons)
     )
     gates = {
-        "ALL_61_MAGNESIUM_TYPE50_ESCAPE_STATES_CAPTURED": "ACCEPT" if len(source) == EXPECTED_ROWS else "REJECT",
-        "ALL_61_MAGNESIUM_TYPE50_NATIVE_RECORDS_ATTRIBUTED": "ACCEPT" if len(native) == EXPECTED_ROWS else "REJECT",
-        "MAGNESIUM_TYPE50_LINE_INDICES_EXACT_149694": "ACCEPT" if counts["line"] == EXPECTED_ROWS else "REJECT",
-        "MAGNESIUM_TYPE50_LINE_TAU_VALUES_EXACT_299388": "ACCEPT" if counts["tau_in"] + counts["tau_out"] == 2 * EXPECTED_ROWS else "REJECT",
-        "MAGNESIUM_TYPE50_ESCAPE_FACTORS_EXACT_299388": "ACCEPT" if counts["ptmp1"] + counts["ptmp2"] == 2 * EXPECTED_ROWS else "REJECT",
-        "MAGNESIUM_TYPE50_ANSWERS_EXACT_149694": "ACCEPT" if counts["answers"] == EXPECTED_ROWS else "REJECT",
+        "ALL_61_MAGNESIUM_TYPE50_ESCAPE_STATES_CAPTURED": "ACCEPT" if len(source) == EXPECTED_ROWS and source_counts == EXPECTED_SEQUENCE_COUNTS and len(source_unique_records) == EXPECTED_UNIQUE_RECORDS else "REJECT",
+        "ALL_61_MAGNESIUM_TYPE50_NATIVE_RECORDS_ATTRIBUTED": "ACCEPT" if set(native) == set(source) and len(native) == EXPECTED_ROWS else "REJECT",
+        "MAGNESIUM_TYPE50_LINE_INDICES_EXACT_146286": "ACCEPT" if counts["line"] == EXPECTED_ROWS else "REJECT",
+        "MAGNESIUM_TYPE50_LINE_TAU_VALUES_EXACT_292572": "ACCEPT" if counts["tau_in"] + counts["tau_out"] == 2 * EXPECTED_ROWS else "REJECT",
+        "MAGNESIUM_TYPE50_ESCAPE_FACTORS_EXACT_292572": "ACCEPT" if counts["ptmp1"] + counts["ptmp2"] == 2 * EXPECTED_ROWS else "REJECT",
+        "MAGNESIUM_TYPE50_ANSWERS_EXACT_146286": "ACCEPT" if counts["answers"] == EXPECTED_ROWS else "REJECT",
         "MAGNESIUM_TYPE50_COMMITTED_REVERSE_CJ_EXACT_146286": "ACCEPT" if committed_rows == EXPECTED_COMMITTED_REVERSE_ROWS and committed_cj_exact == EXPECTED_COMMITTED_REVERSE_ROWS else "REJECT",
         "MAGNESIUM_TYPE50_COMMITTED_REVERSE_COOLING_EXACT_146286": "ACCEPT" if committed_rows == EXPECTED_COMMITTED_REVERSE_ROWS and committed_cooling_exact == EXPECTED_COMMITTED_REVERSE_ROWS else "REJECT",
         "MAGNESIUM_COOLING_ALL61_EXACT": "ACCEPT" if len(mg) == EXPECTED_EVALUATIONS and mg_exact == EXPECTED_EVALUATIONS else "REJECT",
@@ -199,6 +220,8 @@ def audit(source_capture: Path, native_run: Path, component_comparison: Path,
         "schema": SCHEMA, "release": RELEASE,
         "result": "ACCEPT" if not errors else "REJECT", "errors": errors,
         "gates": gates, "source_rows": len(source), "native_rows": len(native),
+        "source_unique_records": len(source_unique_records),
+        "source_records_by_sequence": {str(key): value for key, value in sorted(source_counts.items())},
         "comparison_rows": len(comparisons), "line_indices_exact": counts["line"],
         "tau_values_exact": counts["tau_in"] + counts["tau_out"],
         "escape_factors_exact": counts["ptmp1"] + counts["ptmp2"],
