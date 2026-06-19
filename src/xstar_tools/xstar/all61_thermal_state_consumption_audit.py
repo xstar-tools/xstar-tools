@@ -23,7 +23,7 @@ from typing import Any
 from .all61_native_replay_aggregate import THERMAL_LEDGER_NAME
 from .v0472_all61_thermal_state_capture import BUDGET_NAME
 
-RELEASE = "0.6.48.7.46.18.1"
+RELEASE = "0.6.48.7.46.19"
 SCHEMA = "xstar-tools-v064874612-all61-thermal-state-consumption-audit-v1"
 SUMMARY_NAME = "v04874612_all61_thermal_state_consumption_summary.json"
 COMPONENT_DIFF_NAME = "v04874612_all61_thermal_component_comparison.csv"

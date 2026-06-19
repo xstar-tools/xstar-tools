@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.7.46.19 — source-faithful magnesium primary cooling family attribution and reduction - 2026-06-19
+
+- Captures and transports the live all-61 Magnesium Type-50 line optical-depth workspace for 2,454 records per evaluation (149,694 records total).
+- Replaces the optically thin Mg Type-50 escape assumption with source-faithful binary64 `pescl(tau_in)`/`pescl(tau_out)` evaluation while preserving the accepted Hydrogen escape path.
+- Reconstructs the Mg Type-50 primary cooling energy channel from the final matrix-closure reverse rate and exact active-basis endpoint energy.
+- Adds exact gates for 299,388 optical-depth values, 299,388 escape factors, 149,694 Type-50 answer vectors, and 146,286 committed reverse-cooling rows.
+- Requires `mg_cooling` to close from 0/61 to 61/61 and predicts independent native Thermal exactness of 1,127/2,440 after production-host replay.
+- Preserves Hydrogen cooling 61/61, continuum 610/610, fixed-state and matrix parity, compact populations, zero callbacks, ABI 60487, and production-promotion blocking.
+
 ## 0.6.48.7.46.18.1 — Hydrogen Type-50 source-capture context hotfix - 2026-06-19
 
 - Capture every rate-type-4 escape event in the ElementEquilibriumContext hook.

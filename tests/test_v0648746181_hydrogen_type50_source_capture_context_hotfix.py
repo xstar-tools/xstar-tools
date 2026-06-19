@@ -20,7 +20,7 @@ def _blocks() -> tuple[str, str]:
 
 
 def test_release_and_context_filter_contract() -> None:
-    assert xstar_tools.__version__ == "0.6.48.7.46.18.1"
+    assert xstar_tools.__version__ == "0.6.48.7.46.19"
     escape_block, result_block = _blocks()
     assert "if int(rate_type) == 4:" in escape_block
     assert 'extras.get("element_z"' not in escape_block
