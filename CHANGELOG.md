@@ -1,5 +1,14 @@
 # CHANGELOG
 
+# v0.6.48.7.46.19.3 - 2026-06-19
+
+- Added an augmented all-61 v0.6.47.2 Mg Type-50 source capture retaining source-local endpoint IDs, both endpoint energies, and the exact binary64 endpoint-energy difference.
+- Classified the v46.19.2 host result as a narrow endpoint-energy defect: only `ans3` differed, in 50,955 rows across 857 records, while all 146,286 line identities and all 292,572 escape factors remained exact.
+- Added qualification-only endpoint-energy transport for the sequence-active Mg Type-50 domain.
+- Reconstructed initial Type-50 `ans3/ans4` and post-matrix-closure `ans3` from the same immutable source endpoint energy.
+- Requires exact endpoint state for 146,286 active rows, exact answer vectors for 877,716 scalar fields, exact 146,286 committed reverse-cooling rows, `mg_cooling=61/61`, and predicted independent Thermal exactness of 1,127/2,440.
+- Preserves ABI 60487, all fixed-state, matrix, continuum, compact-population, Hydrogen-cooling, zero-callback, and production-blocking contracts.
+
 # v0.6.48.7.46.19.2 - 2026-06-19
 
 - Added exact per-sequence Mg Type-50 active-record transport.

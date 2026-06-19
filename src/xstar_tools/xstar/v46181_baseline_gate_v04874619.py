@@ -5,7 +5,7 @@ import argparse
 import json
 from pathlib import Path
 
-RELEASE = "0.6.48.7.46.19.2"
+RELEASE = "0.6.48.7.46.19.3"
 SCHEMA = "xstar-tools-v064874619-v46181-baseline-v1"
 REQUIRED = (
     "ALL_CONTINUUM_COMPONENTS_BIT_EXACT_610_PRESERVED",

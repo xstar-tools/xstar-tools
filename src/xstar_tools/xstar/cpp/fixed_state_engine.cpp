@@ -335,10 +335,20 @@ const HydrogenType50EscapeStateV04874618& hydrogen_type50_escape_state_v04874618
     return state;
 }
 
+struct MagnesiumType50EndpointEnergyV048746193 {
+    int idest1 = 0;
+    int idest2 = 0;
+    double endpoint1_energy_ev = 0.0;
+    double endpoint2_energy_ev = 0.0;
+    double endpoint_energy_ev = 0.0;
+};
+
 struct MagnesiumType50EscapeStateV04874619 {
     bool enabled = false;
+    bool endpoint_energy_transport = false;
     int source_sequence = 0;
     std::map<std::int64_t, int> line_index_by_record;
+    std::map<std::int64_t, MagnesiumType50EndpointEnergyV048746193> endpoint_by_record;
     std::set<std::int64_t> active_records;
     std::vector<double> tau_in;
     std::vector<double> tau_out;
@@ -365,6 +375,8 @@ MagnesiumType50EscapeStateV04874619 load_magnesium_type50_escape_state_v04874619
     MagnesiumType50EscapeStateV04874619 state;
     state.enabled = environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_ESCAPE_STATE");
     if (!state.enabled) return state;
+    state.endpoint_energy_transport =
+        environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_ENDPOINT_ENERGY_TRANSPORT");
     const auto map_path = std::filesystem::path(required_environment_path_v04874618(
         "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_LINE_MAP_CSV"));
     const auto tau_in_path = std::filesystem::path(required_environment_path_v04874618(
@@ -373,6 +385,11 @@ MagnesiumType50EscapeStateV04874619 load_magnesium_type50_escape_state_v04874619
         "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_LINE_TAU_OUT_BIN"));
     const auto active_path = std::filesystem::path(required_environment_path_v04874618(
         "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_ACTIVE_RECORDS_CSV"));
+    std::filesystem::path endpoint_path;
+    if (state.endpoint_energy_transport) {
+        endpoint_path = std::filesystem::path(required_environment_path_v04874618(
+            "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_ENDPOINT_MAP_CSV"));
+    }
     state.source_sequence = environment_data_type("XSTAR_QUALIFICATION_SOURCE_SEQUENCE");
     if (state.source_sequence < 1 || state.source_sequence > 61) {
         throw std::runtime_error("magnesium Type-50 source sequence must be in 1..61");
@@ -400,6 +417,77 @@ MagnesiumType50EscapeStateV04874619 load_magnesium_type50_escape_state_v04874619
     }
     if (state.line_index_by_record.size() != 2420) {
         throw std::runtime_error("magnesium Type-50 line-index map must contain exactly 2420 runtime-active records");
+    }
+    if (state.endpoint_energy_transport) {
+        std::ifstream endpoint_input(endpoint_path);
+        if (!endpoint_input) {
+            throw std::runtime_error(
+                "cannot open magnesium Type-50 endpoint-energy map: " + endpoint_path.string());
+        }
+        if (!std::getline(endpoint_input, line)) {
+            throw std::runtime_error("magnesium Type-50 endpoint-energy map is empty");
+        }
+        const auto endpoint_header = split_csv(line);
+        std::map<std::string, std::size_t> endpoint_columns;
+        for (std::size_t i = 0; i < endpoint_header.size(); ++i) {
+            endpoint_columns[endpoint_header[i]] = i;
+        }
+        for (const char* required : {
+                 "record", "idest1", "idest2", "source_endpoint1_energy_ev",
+                 "source_endpoint2_energy_ev", "source_endpoint_energy_ev"}) {
+            if (!endpoint_columns.count(required)) {
+                throw std::runtime_error(
+                    std::string("magnesium Type-50 endpoint-energy map is missing ") + required);
+            }
+        }
+        while (std::getline(endpoint_input, line)) {
+            if (trim(line).empty()) continue;
+            const auto values = split_csv(line);
+            if (values.size() != endpoint_header.size()) {
+                throw std::runtime_error(
+                    "magnesium Type-50 endpoint-energy map row width mismatch");
+            }
+            const auto record = parse_number<std::int64_t>(
+                values.at(endpoint_columns.at("record")), "record");
+            MagnesiumType50EndpointEnergyV048746193 endpoint;
+            endpoint.idest1 = parse_number<int>(
+                values.at(endpoint_columns.at("idest1")), "idest1");
+            endpoint.idest2 = parse_number<int>(
+                values.at(endpoint_columns.at("idest2")), "idest2");
+            endpoint.endpoint1_energy_ev = parse_number<double>(
+                values.at(endpoint_columns.at("source_endpoint1_energy_ev")),
+                "source_endpoint1_energy_ev");
+            endpoint.endpoint2_energy_ev = parse_number<double>(
+                values.at(endpoint_columns.at("source_endpoint2_energy_ev")),
+                "source_endpoint2_energy_ev");
+            endpoint.endpoint_energy_ev = parse_number<double>(
+                values.at(endpoint_columns.at("source_endpoint_energy_ev")),
+                "source_endpoint_energy_ev");
+            if (record <= 0 || endpoint.idest1 <= 0 || endpoint.idest2 <= 0 ||
+                !(endpoint.endpoint_energy_ev > 0.0) ||
+                !std::isfinite(endpoint.endpoint1_energy_ev) ||
+                !std::isfinite(endpoint.endpoint2_energy_ev) ||
+                !std::isfinite(endpoint.endpoint_energy_ev) ||
+                std::abs(endpoint.endpoint1_energy_ev - endpoint.endpoint2_energy_ev)
+                    != endpoint.endpoint_energy_ev) {
+                throw std::runtime_error(
+                    "magnesium Type-50 endpoint-energy map contains invalid source state");
+            }
+            if (!state.endpoint_by_record.emplace(record, endpoint).second) {
+                throw std::runtime_error(
+                    "duplicate magnesium Type-50 endpoint-energy record");
+            }
+        }
+        if (state.endpoint_by_record.size() != 2420) {
+            throw std::runtime_error(
+                "magnesium Type-50 endpoint-energy map must contain exactly 2420 records");
+        }
+        for (const auto& item : state.line_index_by_record) {
+            if (!state.endpoint_by_record.count(item.first)) {
+                throw std::runtime_error(
+                    "magnesium Type-50 endpoint-energy map domain differs from line map");
+            }
+        }
     }
     std::ifstream active(active_path);
     if (!active) throw std::runtime_error("cannot open magnesium Type-50 active-record ledger: " + active_path.string());
@@ -677,6 +765,11 @@ struct Type50SourceShadow {
     int nb1_one_based = 0;
     bool hydrogen_escape_state_applied = false;
     bool magnesium_escape_state_applied = false;
+    bool magnesium_source_endpoint_energy_applied = false;
+    int source_idest1 = 0;
+    int source_idest2 = 0;
+    double source_endpoint1_energy_ev = 0.0;
+    double source_endpoint2_energy_ev = 0.0;
     int line_index_one_based = 0;
     double line_tau_in = 0.0;
     double line_tau_out = 0.0;
@@ -1226,7 +1319,7 @@ void apply_matrix_closure_contribution_corrections(
         if (correction.remove) continue;
         if (correction.replace_ans1) contribution.ans1 = correction.source_ans1;
         if (correction.replace_ans2) contribution.ans2 = correction.source_ans2;
-        // v0.6.48.7.46.19.2: matrix closure originally corrected only the
+        // v0.6.48.7.46.19.3: matrix closure originally corrected only the
         // population-rate channels.  Type-50 thermal energy channels are
         // algebraically tied to those rates after the source post-swap:
         //   ans3 = -ans2 * |Eupper-Elower| * erg/eV
@@ -1255,7 +1348,10 @@ void apply_matrix_closure_contribution_corrections(
                 contribution.ans3 = -contribution.ans2 * endpoint_energy_ev * kErgPerEv;
             }
         }
-        // v0.6.48.7.46.19.2: Mg primary line cooling consumes the final
+        // v0.6.48.7.46.19.3: Mg primary line cooling consumes the final
+        // matrix-closure reverse rate and the immutable source-local endpoint
+        // energy transported by the all-61 observational capture.
+        // v0.6.48.7.46.19.3: Mg primary line cooling consumes the final
         // matrix-closure reverse rate.  Reconstruct only ans3 from the
         // source-faithful Type-50 post-swap identity; secondary channels and
         // forward heating remain unchanged in this milestone.
@@ -1268,11 +1364,22 @@ void apply_matrix_closure_contribution_corrections(
                 contribution.upper_row > active_element.n_rows) {
                 throw std::runtime_error("magnesium Type-50 closure endpoint is outside the active basis");
             }
-            const auto& lower = active_element.rows.at(
-                static_cast<std::size_t>(contribution.lower_row - 1));
-            const auto& upper = active_element.rows.at(
-                static_cast<std::size_t>(contribution.upper_row - 1));
-            const double endpoint_energy_ev = std::abs(upper.energy_ev - lower.energy_ev);
+            double endpoint_energy_ev = 0.0;
+            const auto& magnesium_state = magnesium_type50_escape_state_v04874619();
+            if (magnesium_state.endpoint_energy_transport) {
+                const auto endpoint = magnesium_state.endpoint_by_record.find(contribution.record);
+                if (endpoint == magnesium_state.endpoint_by_record.end()) {
+                    throw std::runtime_error(
+                        "active magnesium Type-50 closure record is missing source endpoint energy");
+                }
+                endpoint_energy_ev = endpoint->second.endpoint_energy_ev;
+            } else {
+                const auto& lower = active_element.rows.at(
+                    static_cast<std::size_t>(contribution.lower_row - 1));
+                const auto& upper = active_element.rows.at(
+                    static_cast<std::size_t>(contribution.upper_row - 1));
+                endpoint_energy_ev = std::abs(upper.energy_ev - lower.energy_ev);
+            }
             if (!(endpoint_energy_ev > 0.0) || !std::isfinite(endpoint_energy_ev)) {
                 throw std::runtime_error("magnesium Type-50 closure energy is invalid");
             }
@@ -3268,7 +3375,7 @@ bool evaluate_type53_source_integral(
     contribution.ans6 *= (std::abs(contribution.ans4) - energy_difference * kErgPerEv * contribution.ans1) / den6;
     contribution.ans5 *= (std::abs(contribution.ans3) - energy_difference * kErgPerEv * contribution.ans2) / den5;
 
-    // v0.6.48.7.46.19.2 qualification-only IEEE closure.
+    // v0.6.48.7.46.19.3 qualification-only IEEE closure.
     // v0.6.48.7.46.9.4.2 qualification-only IEEE closure compatibility marker.
     // The v0.6.47.2
     // Python reference evaluates the same source expressions one operation at
@@ -3988,6 +4095,12 @@ EvaluatedRecord evaluate_record(
             double ptmp2 = 0.5 * (1.0 - cfrac) + cfrac;
             bool hydrogen_escape_state_applied = false;
             bool magnesium_escape_state_applied = false;
+            bool magnesium_source_endpoint_energy_applied = false;
+            int source_idest1 = 0;
+            int source_idest2 = 0;
+            double source_endpoint1_energy_ev = 0.0;
+            double source_endpoint2_energy_ev = 0.0;
+            double endpoint_energy_ev = delta_ev;
             int line_index_one_based = 0;
             double line_tau_in = 0.0;
             double line_tau_out = 0.0;
@@ -4021,6 +4134,20 @@ EvaluatedRecord evaluate_record(
                 ptmp2 = pescl_v0472_binary64(line_tau_out) * (1.0 - cfrac) +
                     2.0 * pescl_v0472_binary64(line_tau_in + line_tau_out) * cfrac;
                 magnesium_escape_state_applied = true;
+                if (magnesium_escape.endpoint_energy_transport) {
+                    const auto endpoint =
+                        magnesium_escape.endpoint_by_record.find(record.record);
+                    if (endpoint == magnesium_escape.endpoint_by_record.end()) {
+                        throw std::runtime_error(
+                            "active magnesium Type-50 record is missing source endpoint energy");
+                    }
+                    source_idest1 = endpoint->second.idest1;
+                    source_idest2 = endpoint->second.idest2;
+                    source_endpoint1_energy_ev = endpoint->second.endpoint1_energy_ev;
+                    source_endpoint2_energy_ev = endpoint->second.endpoint2_energy_ev;
+                    endpoint_energy_ev = endpoint->second.endpoint_energy_ev;
+                    magnesium_source_endpoint_energy_applied = true;
+                }
             }
             const double escaped_raw = a * (ptmp1 + ptmp2);
             const double density_floor = 1.0e-20 * input.hydrogen_density_cm3;
@@ -4051,15 +4178,15 @@ EvaluatedRecord evaluate_record(
             // Literal ucalc.f90 Type-50 post-swap answer convention.
             c.ans1 = photo;
             c.ans2 = escaped;
-            c.ans3 = -escaped * delta_ev * kErgPerEv;
-            c.ans4 = -photo * delta_ev * kErgPerEv;
+            c.ans3 = -escaped * endpoint_energy_ev * kErgPerEv;
+            c.ans4 = -photo * endpoint_energy_ev * kErgPerEv;
             c.ans5 = 0.0;
             c.ans6 = 0.0;
 
             out.type50_shadow.valid = true;
             out.type50_shadow.ans = {c.ans1,c.ans2,c.ans3,c.ans4,c.ans5,c.ans6};
             out.type50_shadow.stored_wavelength_a = stored_wavelength_a;
-            out.type50_shadow.endpoint_energy_ev = delta_ev;
+            out.type50_shadow.endpoint_energy_ev = endpoint_energy_ev;
             out.type50_shadow.covering_fraction = cfrac;
             out.type50_shadow.ptmp1 = ptmp1;
             out.type50_shadow.ptmp2 = ptmp2;
@@ -4072,6 +4199,12 @@ EvaluatedRecord evaluate_record(
             out.type50_shadow.nb1_one_based = nb1_one_based;
             out.type50_shadow.hydrogen_escape_state_applied = hydrogen_escape_state_applied;
             out.type50_shadow.magnesium_escape_state_applied = magnesium_escape_state_applied;
+            out.type50_shadow.magnesium_source_endpoint_energy_applied =
+                magnesium_source_endpoint_energy_applied;
+            out.type50_shadow.source_idest1 = source_idest1;
+            out.type50_shadow.source_idest2 = source_idest2;
+            out.type50_shadow.source_endpoint1_energy_ev = source_endpoint1_energy_ev;
+            out.type50_shadow.source_endpoint2_energy_ev = source_endpoint2_energy_ev;
             out.type50_shadow.line_index_one_based = line_index_one_based;
             out.type50_shadow.line_tau_in = line_tau_in;
             out.type50_shadow.line_tau_out = line_tau_out;
@@ -6167,7 +6300,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
         });
         std::ofstream record_file(root / (stem + "_records.csv"));
         if (!record_file) throw std::runtime_error("cannot create record diagnostics CSV");
-        record_file << "evaluation_ordinal,source_position,record,element_index,element_z,data_type,rate_type,ion_index,ion_stage,lower_row,upper_row,matrix_enabled,active_stage,matrix_committed,spectral,ans1,ans2,ans3,ans4,ans5,ans6,density_scale,line_energy_ev,atomic_mass_amu,natural_width_ev,opakab,type56_upsilon,type53_shadow_valid,type53_shadow_ans1,type53_shadow_ans2,type53_shadow_ans3,type53_shadow_ans4,type53_shadow_ans5,type53_shadow_ans6,type53_delta_ans1,type53_delta_ans2,type53_delta_ans3,type53_delta_ans4,type53_delta_ans5,type53_delta_ans6,type53_shadow_base_threshold_ev,type53_shadow_threshold_ev,type53_shadow_bound_energy_ev,type53_shadow_continuum_energy_ev,type53_shadow_destination_energy_ev,type53_shadow_excited_parent_energy_ev,type53_shadow_bound_g,type53_shadow_continuum_g,type53_shadow_destination_g,type53_shadow_excited_parent_g,type53_milne_partition_context_used,type53_excited_threshold_context_used,type53_corrected_threshold_before_mapping,type53_phextrap_source_reference_order,type53_phextrap_input_pair_count,type53_phextrap_output_pair_count,type53_shadow_rnist,type53_shadow_sumr,type53_shadow_sumi,type53_shadow_sumh,type53_shadow_sumh2,type53_shadow_sumc,type53_shadow_sumc2,type53_sumc_ieee_nextafter_applied,type53_shadow_nb1_one_based,type53_shadow_klmax_one_based,type53_row46_contract,type53_captured_state_anchor,type53_tau_in,type53_tau_out,type53_ptmp1,type53_ptmp2,type53_covering_fraction,type53_runtime_state_abi_used,type53_continuum_index_one_based,type53_dsec_radiation_bin_count,type53_continuum_tau_count,type50_shadow_valid,type50_shadow_ans1,type50_shadow_ans2,type50_shadow_ans3,type50_shadow_ans4,type50_shadow_ans5,type50_shadow_ans6,type50_stored_wavelength_a,type50_endpoint_energy_ev,type50_covering_fraction,type50_ptmp1,type50_ptmp2,type50_bremsa_nb1,type50_density_floor_s,type50_density_floor_applied,type50_photoexcitation_zero_covering,type50_used_dsec_covering,type50_used_dsec_radiation,type50_nb1_one_based,type50_hydrogen_escape_state_applied,type50_magnesium_escape_state_applied,type50_line_index_one_based,type50_line_tau_in,type50_line_tau_out,type99_shadow_valid,type99_shadow_ans1,type99_shadow_ans2,type99_shadow_ans3,type99_shadow_ans4,type99_shadow_ans5,type99_shadow_ans6,type99_threshold_ev,type99_destination_energy_ev,type99_bound_energy_ev,type99_swrat,type99_calt99_density_cm3,type99_phint53hunt_density_cm3,type99_rec_cm3_s,type99_milne_alpha_cm3_s,type99_cross_section_scale,type99_ans2d_unscaled_s,type99_phint_scale,type99_pirt_unscaled_s,type99_rrrt_unscaled_s,type99_piht_unscaled_erg_s,type99_rrcl_unscaled_erg_s,type99_piht2_unscaled_erg_s,type99_rrcl2_unscaled_erg_s,type99_energy_difference_ev,type99_destination_threshold_identity,type99_ans5_pre_energy_correction,type99_ans6_pre_energy_correction,type99_ans5_energy_correction_numerator,type99_ans5_energy_correction_denominator,type99_ans5_energy_correction_factor,type99_ans6_energy_correction_numerator,type99_ans6_energy_correction_denominator,type99_ans6_energy_correction_factor,type99_destination_identity_correction_applied,type99_nbinc_threshold_one_based,type99_nb1_one_based,type99_nphint_one_based,type99_ndelt,type99_npass,type99_last_pass_first_kl_one_based,type99_last_pass_last_kl_one_based,type99_cached_atmp22_stale_reuses,type99_used_dsec_radiation,mg_type53_legacy_max_abs,mg_type53_shadow_max_abs,mg_type53_committed_max_abs,mg_type53_legacy_nonfinite,mg_type53_legacy_implausible,mg_type53_replacement_applied,mg_type53_committed_nonfinite,mg_type53_committed_implausible,mg_type53_exponent_energy_ev,mg_type53_exponent_dimensionless,mg_type53_electron_density_cm3,mg_type53_hydrogen_density_cm3,mg_type53_matrix_density_scale,mg_type53_source_faithful_mode,type49_shadow_valid,type49_shadow_ans1,type49_shadow_ans2,type49_shadow_ans3,type49_shadow_ans4,type49_shadow_ans5,type49_shadow_ans6,type49_legacy_max_abs,type49_shadow_max_abs,type49_committed_max_abs,type49_legacy_nonfinite,type49_legacy_implausible,type49_replacement_applied,type49_committed_nonfinite,type49_committed_implausible,type49_base_threshold_ev,type49_threshold_ev,type49_bound_energy_ev,type49_continuum_energy_ev,type49_destination_energy_ev,type49_excited_parent_energy_ev,type49_bound_g,type49_continuum_g,type49_destination_g,type49_excited_parent_g,type49_milne_partition_context_used,type49_excited_threshold_context_used,type49_corrected_threshold_before_mapping,type49_phextrap_source_reference_order,type49_phextrap_input_pair_count,type49_phextrap_output_pair_count,type49_phextrap_max_points,type49_phextrap_input_energy_hash,type49_phextrap_input_sigma_hash,type49_phextrap_output_energy_hash,type49_phextrap_output_sigma_hash,type49_rnist,type49_exponent_energy_ev,type49_exponent_dimensionless,type49_electron_density_cm3,type49_hydrogen_density_cm3,type49_matrix_density_scale,type49_phextrap_applied,type49_source_zero_gate,type49_source_faithful_mode,type49_runtime_state_abi_used,type49_continuum_index_one_based,type49_dsec_radiation_bin_count,type49_continuum_tau_count,type51_shadow_valid,type51_source_faithful_mode,type51_replacement_applied,type51_endpoint_order_exact,type51_committed_nonfinite,type51_bt_type,type51_point_count,type51_eij_ryd,type51_eij_ev,type51_scaling_c,type51_physical_temperature_k,type51_floor_temperature_k,type51_effective_temperature_k,type51_temperature_floor_applied,type51_scaled_temperature,type51_transformed_temperature,type51_scaled_upsilon,type51_upsilon,type51_lower_g,type51_upper_g,type51_electron_density_cm3,type51_q_excitation_cm3_s,type51_q_deexcitation_cm3_s,type51_shadow_ans1,type51_shadow_ans2,type51_shadow_ans3,type51_shadow_ans4,type51_shadow_ans5,type51_shadow_ans6,type51_legacy_ans1,type51_legacy_ans2,type51_legacy_ans3,type51_legacy_ans4,type51_legacy_ans5,type51_legacy_ans6\n";
+        record_file << "evaluation_ordinal,source_position,record,element_index,element_z,data_type,rate_type,ion_index,ion_stage,lower_row,upper_row,matrix_enabled,active_stage,matrix_committed,spectral,ans1,ans2,ans3,ans4,ans5,ans6,density_scale,line_energy_ev,atomic_mass_amu,natural_width_ev,opakab,type56_upsilon,type53_shadow_valid,type53_shadow_ans1,type53_shadow_ans2,type53_shadow_ans3,type53_shadow_ans4,type53_shadow_ans5,type53_shadow_ans6,type53_delta_ans1,type53_delta_ans2,type53_delta_ans3,type53_delta_ans4,type53_delta_ans5,type53_delta_ans6,type53_shadow_base_threshold_ev,type53_shadow_threshold_ev,type53_shadow_bound_energy_ev,type53_shadow_continuum_energy_ev,type53_shadow_destination_energy_ev,type53_shadow_excited_parent_energy_ev,type53_shadow_bound_g,type53_shadow_continuum_g,type53_shadow_destination_g,type53_shadow_excited_parent_g,type53_milne_partition_context_used,type53_excited_threshold_context_used,type53_corrected_threshold_before_mapping,type53_phextrap_source_reference_order,type53_phextrap_input_pair_count,type53_phextrap_output_pair_count,type53_shadow_rnist,type53_shadow_sumr,type53_shadow_sumi,type53_shadow_sumh,type53_shadow_sumh2,type53_shadow_sumc,type53_shadow_sumc2,type53_sumc_ieee_nextafter_applied,type53_shadow_nb1_one_based,type53_shadow_klmax_one_based,type53_row46_contract,type53_captured_state_anchor,type53_tau_in,type53_tau_out,type53_ptmp1,type53_ptmp2,type53_covering_fraction,type53_runtime_state_abi_used,type53_continuum_index_one_based,type53_dsec_radiation_bin_count,type53_continuum_tau_count,type50_shadow_valid,type50_shadow_ans1,type50_shadow_ans2,type50_shadow_ans3,type50_shadow_ans4,type50_shadow_ans5,type50_shadow_ans6,type50_stored_wavelength_a,type50_endpoint_energy_ev,type50_covering_fraction,type50_ptmp1,type50_ptmp2,type50_bremsa_nb1,type50_density_floor_s,type50_density_floor_applied,type50_photoexcitation_zero_covering,type50_used_dsec_covering,type50_used_dsec_radiation,type50_nb1_one_based,type50_hydrogen_escape_state_applied,type50_magnesium_escape_state_applied,type50_magnesium_source_endpoint_energy_applied,type50_source_idest1,type50_source_idest2,type50_source_endpoint1_energy_ev,type50_source_endpoint2_energy_ev,type50_line_index_one_based,type50_line_tau_in,type50_line_tau_out,type99_shadow_valid,type99_shadow_ans1,type99_shadow_ans2,type99_shadow_ans3,type99_shadow_ans4,type99_shadow_ans5,type99_shadow_ans6,type99_threshold_ev,type99_destination_energy_ev,type99_bound_energy_ev,type99_swrat,type99_calt99_density_cm3,type99_phint53hunt_density_cm3,type99_rec_cm3_s,type99_milne_alpha_cm3_s,type99_cross_section_scale,type99_ans2d_unscaled_s,type99_phint_scale,type99_pirt_unscaled_s,type99_rrrt_unscaled_s,type99_piht_unscaled_erg_s,type99_rrcl_unscaled_erg_s,type99_piht2_unscaled_erg_s,type99_rrcl2_unscaled_erg_s,type99_energy_difference_ev,type99_destination_threshold_identity,type99_ans5_pre_energy_correction,type99_ans6_pre_energy_correction,type99_ans5_energy_correction_numerator,type99_ans5_energy_correction_denominator,type99_ans5_energy_correction_factor,type99_ans6_energy_correction_numerator,type99_ans6_energy_correction_denominator,type99_ans6_energy_correction_factor,type99_destination_identity_correction_applied,type99_nbinc_threshold_one_based,type99_nb1_one_based,type99_nphint_one_based,type99_ndelt,type99_npass,type99_last_pass_first_kl_one_based,type99_last_pass_last_kl_one_based,type99_cached_atmp22_stale_reuses,type99_used_dsec_radiation,mg_type53_legacy_max_abs,mg_type53_shadow_max_abs,mg_type53_committed_max_abs,mg_type53_legacy_nonfinite,mg_type53_legacy_implausible,mg_type53_replacement_applied,mg_type53_committed_nonfinite,mg_type53_committed_implausible,mg_type53_exponent_energy_ev,mg_type53_exponent_dimensionless,mg_type53_electron_density_cm3,mg_type53_hydrogen_density_cm3,mg_type53_matrix_density_scale,mg_type53_source_faithful_mode,type49_shadow_valid,type49_shadow_ans1,type49_shadow_ans2,type49_shadow_ans3,type49_shadow_ans4,type49_shadow_ans5,type49_shadow_ans6,type49_legacy_max_abs,type49_shadow_max_abs,type49_committed_max_abs,type49_legacy_nonfinite,type49_legacy_implausible,type49_replacement_applied,type49_committed_nonfinite,type49_committed_implausible,type49_base_threshold_ev,type49_threshold_ev,type49_bound_energy_ev,type49_continuum_energy_ev,type49_destination_energy_ev,type49_excited_parent_energy_ev,type49_bound_g,type49_continuum_g,type49_destination_g,type49_excited_parent_g,type49_milne_partition_context_used,type49_excited_threshold_context_used,type49_corrected_threshold_before_mapping,type49_phextrap_source_reference_order,type49_phextrap_input_pair_count,type49_phextrap_output_pair_count,type49_phextrap_max_points,type49_phextrap_input_energy_hash,type49_phextrap_input_sigma_hash,type49_phextrap_output_energy_hash,type49_phextrap_output_sigma_hash,type49_rnist,type49_exponent_energy_ev,type49_exponent_dimensionless,type49_electron_density_cm3,type49_hydrogen_density_cm3,type49_matrix_density_scale,type49_phextrap_applied,type49_source_zero_gate,type49_source_faithful_mode,type49_runtime_state_abi_used,type49_continuum_index_one_based,type49_dsec_radiation_bin_count,type49_continuum_tau_count,type51_shadow_valid,type51_source_faithful_mode,type51_replacement_applied,type51_endpoint_order_exact,type51_committed_nonfinite,type51_bt_type,type51_point_count,type51_eij_ryd,type51_eij_ev,type51_scaling_c,type51_physical_temperature_k,type51_floor_temperature_k,type51_effective_temperature_k,type51_temperature_floor_applied,type51_scaled_temperature,type51_transformed_temperature,type51_scaled_upsilon,type51_upsilon,type51_lower_g,type51_upper_g,type51_electron_density_cm3,type51_q_excitation_cm3_s,type51_q_deexcitation_cm3_s,type51_shadow_ans1,type51_shadow_ans2,type51_shadow_ans3,type51_shadow_ans4,type51_shadow_ans5,type51_shadow_ans6,type51_legacy_ans1,type51_legacy_ans2,type51_legacy_ans3,type51_legacy_ans4,type51_legacy_ans5,type51_legacy_ans6\n";
         record_file << std::setprecision(17);
 
         struct FamilySummary {
@@ -6248,6 +6381,11 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                         << ',' << item.type50_shadow.nb1_one_based
                         << ',' << (item.type50_shadow.hydrogen_escape_state_applied ? 1 : 0)
                         << ',' << (item.type50_shadow.magnesium_escape_state_applied ? 1 : 0)
+                        << ',' << (item.type50_shadow.magnesium_source_endpoint_energy_applied ? 1 : 0)
+                        << ',' << item.type50_shadow.source_idest1
+                        << ',' << item.type50_shadow.source_idest2
+                        << ',' << item.type50_shadow.source_endpoint1_energy_ev
+                        << ',' << item.type50_shadow.source_endpoint2_energy_ev
                         << ',' << item.type50_shadow.line_index_one_based
                         << ',' << item.type50_shadow.line_tau_in
                         << ',' << item.type50_shadow.line_tau_out

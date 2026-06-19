@@ -5,7 +5,7 @@ import argparse
 import json
 from pathlib import Path
 
-RELEASE = "0.6.48.7.46.19.2"
+RELEASE = "0.6.48.7.46.19.3"
 SCHEMA = "xstar-tools-v0648746171-v4617-causal-baseline-v1"
 ACCEPTED_GATES = (
     "ALL_61_CONTINUUM_WORKSPACES_RECONSTRUCTED",
