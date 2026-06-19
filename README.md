@@ -1,18 +1,18 @@
 ## Current release
 
-**0.6.48.7.46.15** corrects the source-faithful Mg Type-99 secondary-energy path. When the preserved destination satisfies `destination_energy - bound_energy == threshold` exactly, the source correction is the identity `x/x`; native qualification now keeps that factor exactly one instead of replacing a negative signed denominator with `1e-43`. The correction is qualification-scoped and changes only 166 `ans5` contributions from records 39855, 40060, and 41154. All accepted fixed-state, compact-population, source-order diagonal, committed Thermal, and zero-callback gates remain mandatory. See `V064874615_MG_TYPE99_SOURCE_FAITHFUL_DESTINATION_AND_SECONDARY_ENERGY_CORRECTION.md`.
+**0.6.48.7.46.16** closes the dominant helium non-Type53 cooling residual by recomputing Type-50 energy-weighted Thermal channels from the accepted matrix-closure rate channels and exact source endpoint energy. The qualification-scoped correction changes 554 reverse-cooling rows across 16 records and brings helium non-Type53 cooling to source scale in all 61 evaluations while preserving all fixed-state, compact-population, dense-matrix, committed-Thermal, Mg Type-99, and zero-callback gates. See `V064874616_SOURCE_FAITHFUL_HELIUM_NON_TYPE53_COOLING_FAMILY_ATTRIBUTION_AND_REDUCTION.md`.
 
-Run from an accepted v0.6.48.7.46.14.1 output:
+Run from an accepted v0.6.48.7.46.15 output:
 
 ```bash
-./run_v04874615_mg_type99_destination_secondary_energy_correction.sh \
+./run_v04874616_helium_non_type53_cooling_family_attribution_reduction.sh \
   ../xstar/data/atdb.fits \
-  ../xstar_tools-0.6.48.7.46.14.1/v04874614_thermal_diagonal_domain_secondary_ledger_correction \
-  v04874615_mg_type99_destination_secondary_energy_correction \
+  ../xstar_tools-0.6.48.7.46.15/v04874615_mg_type99_destination_secondary_energy_correction \
+  v04874616_helium_non_type53_cooling_family_attribution_reduction \
   10
 ```
 
-Use `XSTAR_V04874615_PREFLIGHT_ONLY=1` for baseline/readiness validation without native replay.
+Use `XSTAR_V04874616_PREFLIGHT_ONLY=1` for baseline/readiness validation without native replay.
 
 ## Current release: 0.6.48.7.46.13
 

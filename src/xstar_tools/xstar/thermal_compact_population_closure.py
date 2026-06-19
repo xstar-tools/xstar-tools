@@ -17,7 +17,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-RELEASE = "0.6.48.7.46.15"
+RELEASE = "0.6.48.7.46.16"
 SCHEMA = "xstar-tools-v064874613-thermal-compact-population-closure-v1"
 SOURCE_ROWS_NAME = "v0472_all61_element_solve_rows.csv"
 CLOSURE_DIRNAME = "v04874613_thermal_compact_population_closure"

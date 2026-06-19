@@ -972,8 +972,10 @@ std::vector<MatrixClosureContributionCorrection> load_matrix_closure_contributio
 
 void apply_matrix_closure_contribution_corrections(
     std::vector<xstar_element_contribution_v1>& contributions,
-    int element_z
+    const ElementProgram& active_element,
+    bool helium_non_type53_type50_energy_reduction
 ) {
+    const int element_z = active_element.element_z;
     const auto corrections = load_matrix_closure_contribution_corrections(element_z);
     using Key = std::tuple<std::int64_t,int,int,int>;
     std::map<Key, MatrixClosureContributionCorrection> by_identity;
@@ -998,6 +1000,35 @@ void apply_matrix_closure_contribution_corrections(
         if (correction.remove) continue;
         if (correction.replace_ans1) contribution.ans1 = correction.source_ans1;
         if (correction.replace_ans2) contribution.ans2 = correction.source_ans2;
+        // v0.6.48.7.46.16: matrix closure originally corrected only the
+        // population-rate channels.  Type-50 thermal energy channels are
+        // algebraically tied to those rates after the source post-swap:
+        //   ans3 = -ans2 * |Eupper-Elower| * erg/eV
+        //   ans4 = -ans1 * |Eupper-Elower| * erg/eV
+        // Keeping pre-closure ans3/ans4 therefore made helium line cooling
+        // use stale decay rates even though the dense matrix was exact.
+        if (helium_non_type53_type50_energy_reduction &&
+            element_z == 2 && contribution.data_type == 50) {
+            if (contribution.lower_row < 1 || contribution.upper_row < 1 ||
+                contribution.lower_row > active_element.n_rows ||
+                contribution.upper_row > active_element.n_rows) {
+                throw std::runtime_error("helium Type-50 closure endpoint is outside the active basis");
+            }
+            const auto& lower = active_element.rows.at(
+                static_cast<std::size_t>(contribution.lower_row - 1));
+            const auto& upper = active_element.rows.at(
+                static_cast<std::size_t>(contribution.upper_row - 1));
+            const double endpoint_energy_ev = std::abs(upper.energy_ev - lower.energy_ev);
+            if (!(endpoint_energy_ev > 0.0) || !std::isfinite(endpoint_energy_ev)) {
+                throw std::runtime_error("helium Type-50 closure energy is invalid");
+            }
+            if (correction.replace_ans1) {
+                contribution.ans4 = -contribution.ans1 * endpoint_energy_ev * kErgPerEv;
+            }
+            if (correction.replace_ans2) {
+                contribution.ans3 = -contribution.ans2 * endpoint_energy_ev * kErgPerEv;
+            }
+        }
         corrected.push_back(contribution);
     }
     for (const auto& item : by_identity) {
@@ -2743,7 +2774,7 @@ bool evaluate_type53_source_integral(
     contribution.ans6 *= (std::abs(contribution.ans4) - energy_difference * kErgPerEv * contribution.ans1) / den6;
     contribution.ans5 *= (std::abs(contribution.ans3) - energy_difference * kErgPerEv * contribution.ans2) / den5;
 
-    // v0.6.48.7.46.15 qualification-only IEEE closure.
+    // v0.6.48.7.46.16 qualification-only IEEE closure.
     // v0.6.48.7.46.9.4.2 qualification-only IEEE closure compatibility marker.
     // The v0.6.47.2
     // Python reference evaluates the same source expressions one operation at
@@ -4374,6 +4405,8 @@ int run_impl(
         environment_flag("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE");
     const bool thermal_diagonal_source_domain =
         environment_flag("XSTAR_QUALIFICATION_THERMAL_DIAGONAL_DOMAIN_SOURCE_FAITHFUL");
+    const bool helium_non_type53_type50_energy_reduction =
+        environment_flag("XSTAR_QUALIFICATION_HE_NON_TYPE53_TYPE50_ENERGY_REDUCTION");
     const bool helium_source_insertion_order =
         environment_flag("XSTAR_QUALIFICATION_HELIUM_SOURCE_INSERTION_ORDER");
     const bool type53_two_state_promotion = environment_flag("XSTAR_QUALIFICATION_TYPE53_TWO_STATE_PROMOTION");
@@ -4398,6 +4431,12 @@ int run_impl(
     if (thermal_diagonal_source_domain &&
         (!thermal_compact_population_closure || !thermal_component_parity_closure)) {
         throw std::runtime_error("source-faithful thermal diagonal domain requires compact-population and thermal-component closures");
+    }
+    if (helium_non_type53_type50_energy_reduction &&
+        (!matrix_construction_closure || !thermal_diagonal_source_domain ||
+         !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT"))) {
+        throw std::runtime_error(
+            "helium non-Type53 Type-50 energy reduction requires replacement, matrix closure, and source-order Thermal reduction");
     }
     if (matrix_construction_closure && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
         throw std::runtime_error("matrix-construction closure requires XSTAR_QUALIFICATION_REPLACEMENT=1");
@@ -4606,7 +4645,9 @@ int run_impl(
             ctx.last_record_diagnostics.push_back(std::move(diagnostic));
         }
         if (matrix_construction_closure) {
-            apply_matrix_closure_contribution_corrections(contributions, element.element_z);
+            apply_matrix_closure_contribution_corrections(
+                contributions, active.element,
+                helium_non_type53_type50_energy_reduction);
         } else if (element.element_z == 2 && helium_source_insertion_order) {
             restore_source_contribution_order(contributions);
         } else if (type53_row46_coupled_replacement && element.element_z == 2) {

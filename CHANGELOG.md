@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.7.46.16 — Source-faithful helium non-Type53 cooling family attribution and reduction - 2026-06-19
+
+- Recomputes helium Type-50 energy-weighted channels from accepted matrix-closure `ans1`/`ans2` rates and the exact active-basis endpoint-energy difference.
+- Constrains changes to 554 reverse-cooling ledger rows across 16 Type-50 records and 37 evaluations; only `cj` and its cooling contribution change.
+- Closes helium non-Type53 cooling to source scale in all 61 evaluations, with maximum absolute residual `2.117582368135751e-22`.
+- Preserves 2,440 committed Thermal values, 40,149 compact populations, 183 source-order streams, 183 exact dense systems, zero dense mismatch cells, the v46.15 Mg Type-99 correction, and zero Python callbacks.
+- Keeps independent native Thermal parity, controller parity, product parity, and production promotion blocked.
+
 ## 0.6.48.7.46.15 — Mg Type-99 source-faithful destination and secondary-energy correction - 2026-06-18
 
 - Preserves the source Type-99 destination identity `destination_energy - bound_energy == threshold` as an exact secondary-energy correction factor of one.
