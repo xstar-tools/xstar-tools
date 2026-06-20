@@ -144,7 +144,9 @@ typedef struct xstar_fixed_state_output_v1 {
     double total_heating;
     double total_cooling;
     double hmctot;
+    /* Computed electron contribution (source enelec), not the trial input. */
     double electron_fraction_xee;
+    /* Source charge residual: input electron_fraction_xee - computed enelec. */
     double elcter;
     double* populations;
     size_t populations_capacity;

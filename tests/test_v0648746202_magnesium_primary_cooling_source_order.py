@@ -20,7 +20,7 @@ def write_csv(path: Path, fields, rows):
 def test_v46202_source_probe_contract():
     from xstar_tools.xstar import v0472_all61_magnesium_primary_cooling_source_order_capture as module
 
-    assert module.RELEASE == "0.6.48.7.46.20.2"
+    assert module.RELEASE == "0.6.48.7.46.21.1"
     assert module.EXPECTED_EVALUATIONS == 61
     assert module.LEDGER_NAME.endswith("source_order_ledger.csv")
     assert "source_order_index" in module.LEDGER_FIELDS

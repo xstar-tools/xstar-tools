@@ -8,7 +8,7 @@ def test_endpoint_capture_contract():
         ROOT / "src/xstar_tools/xstar/"
         "v0472_all61_magnesium_type50_endpoint_capture.py"
     ).read_text()
-    assert 'RELEASE = "0.6.48.7.46.20.2"' in text
+    assert 'RELEASE = "0.6.48.7.46.21.1"' in text
     assert 'ENDPOINT_MAP_NAME = "v0472_magnesium_type50_endpoint_energy_map.csv"' in text
     assert '"source_endpoint1_energy_ev"' in text
     assert '"source_endpoint2_energy_ev"' in text

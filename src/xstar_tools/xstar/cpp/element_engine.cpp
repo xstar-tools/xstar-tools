@@ -1,4 +1,5 @@
 #include "xstar_element_engine.h"
+#include "source_order_thermal_reducer.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -583,20 +584,18 @@ int run_element_impl(
     std::fill(w.ionization_components.begin(), w.ionization_components.end(), 0.0);
     std::fill(w.recombination_components.begin(), w.recombination_components.end(), 0.0);
 
-    output.heating = 0.0;
-    output.cooling = 0.0;
-    output.heating2 = 0.0;
-    output.cooling2 = 0.0;
+    xstar_source_order_thermal::FourChannelAccumulator thermal_reducer;
     for (std::size_t k = 0; k < input.term_count; ++k) {
         const auto& term = input.terms[k];
-        if (term.row == term.column) {
-            const double population = w.x[static_cast<std::size_t>(term.row - 1)];
-            if (term.cj > 0.0) output.cooling += population * term.cj;
-            else output.heating -= population * term.cj;
-            if (term.cj2 > 0.0) output.cooling2 += population * term.cj2;
-            else output.heating2 -= population * term.cj2;
-        }
+        if (term.row != term.column) continue;
+        const double population = w.x[static_cast<std::size_t>(term.row - 1)];
+        thermal_reducer.accumulate(population, term.cj, term.cj2);
     }
+    const auto thermal_values = thermal_reducer.values();
+    output.heating = thermal_values[0];
+    output.cooling = thermal_values[1];
+    output.heating2 = thermal_values[2];
+    output.cooling2 = thermal_values[3];
 
     for (int i = 0; i < std::max(0, n - 1); ++i) {
         const int ion_slot = input.ion_by_row[i] - 1;

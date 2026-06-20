@@ -13,7 +13,7 @@ def _write(path: Path, fields, rows):
 
 
 def test_release_and_native_contracts():
-    assert xstar_tools.__version__ == '0.6.48.7.46.20.2'
+    assert xstar_tools.__version__ == '0.6.48.7.46.21.1'
     root=Path(__file__).resolve().parents[1]
     fixed=(root/'src/xstar_tools/xstar/cpp/fixed_state_engine.cpp').read_text()
     element=(root/'src/xstar_tools/xstar/cpp/element_engine.cpp').read_text()

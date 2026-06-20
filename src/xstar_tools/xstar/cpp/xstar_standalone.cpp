@@ -1403,8 +1403,8 @@ int command_fixed_state_self_test(const Options& options, bool batch_mode) {
               << "state_dependent=" << (changed ? "true" : "false") << "\n"
               << "first_hmctot=" << std::setprecision(17) << outputs[0].hmctot << "\n"
               << "last_hmctot=" << std::setprecision(17) << outputs.back().hmctot << "\n"
-              << "first_computed_electron_fraction=" << std::setprecision(17) << outputs[0].elcter << "\n"
-              << "last_computed_electron_fraction=" << std::setprecision(17) << outputs.back().elcter << "\n"
+              << "first_computed_electron_fraction=" << std::setprecision(17) << outputs[0].electron_fraction_xee << "\n"
+              << "last_computed_electron_fraction=" << std::setprecision(17) << outputs.back().electron_fraction_xee << "\n"
               << "total_seconds=" << stats.total_seconds << "\n";
     const bool accepted = finite && changed && stats.python_callbacks == 0 && stats.records_unsupported == 0 &&
         stats.active_program_records > 0 && stats.records_evaluated == stats.active_program_records * count &&
@@ -1656,19 +1656,19 @@ int command_run_fixed_trajectory(const Options& options) {
                 context, options.diagnostics_dir.c_str(), static_cast<std::uint64_t>(j + 1), message.data(), message.size());
             if (rc != 0) { std::cerr << "trajectory diagnostics " << j+1 << " failed: " << message.data() << "\n"; xstar_fixed_state_context_destroy(context); return rc; }
         }
-        const double native_charge_residual=in.electron_fraction_xee-out.elcter;
+        const double native_charge_residual = out.elcter;
         const double dh=out.hmctot-trajectory[j].reference_hmctot;
         const double de=native_charge_residual-trajectory[j].reference_elcter;
         max_hmc_delta=std::max(max_hmc_delta,std::abs(dh));
         max_charge_residual_delta=std::max(max_charge_residual_delta,std::abs(de));
         states << std::setprecision(17) << trajectory[j].sequence << ',' << trajectory[j].kind << ',' << trajectory[j].call_index << ',' << trajectory[j].evaluation_index << ','
-               << trajectory[j].temperature_t4 << ',' << trajectory[j].electron_fraction << ',' << out.hmctot << ',' << out.elcter << ',' << native_charge_residual << ',' << out.total_heating << ',' << out.total_cooling << ','
+               << trajectory[j].temperature_t4 << ',' << trajectory[j].electron_fraction << ',' << out.hmctot << ',' << out.electron_fraction_xee << ',' << native_charge_residual << ',' << out.total_heating << ',' << out.total_cooling << ','
                << out.element_heating << ',' << out.element_cooling << ',' << out.continuum_heating << ',' << out.continuum_cooling << ','
                << trajectory[j].reference_hmctot << ',' << trajectory[j].reference_elcter << ',' << trajectory[j].reference_lnerr << ',' << dh << ',' << de << '\n';
         for (std::size_t k=0;k<out.populations_count;++k) pops << trajectory[j].evaluation_index << ',' << k+1 << ',' << std::setprecision(17) << populations[k] << '\n';
         for (std::size_t k=0;k<bins;++k) spectra_file << trajectory[j].evaluation_index << ',' << k+1 << ',' << std::setprecision(17) << energy[k] << ',' << spectrum[k] << ',' << opacity[k] << '\n';
         step << "evaluation=" << trajectory[j].evaluation_index << " temperature_t4=" << trajectory[j].temperature_t4 << " xee_input=" << trajectory[j].electron_fraction
-             << " hmctot=" << out.hmctot << " computed_xee=" << out.elcter << " charge_residual=" << native_charge_residual
+             << " hmctot=" << out.hmctot << " computed_xee=" << out.electron_fraction_xee << " charge_residual=" << native_charge_residual
              << " heating=" << out.total_heating << " cooling=" << out.total_cooling << '\n';
     }
     rc=xstar_fixed_state_write_visited_report_v1(context,(std::filesystem::path(options.output_dir)/"visited_records.csv").c_str(),message.data(),message.size());
@@ -1810,13 +1810,13 @@ int command_run_fixed_evaluation(const Options& options) {
     const std::filesystem::path output_root(options.output_dir);
     std::ofstream state(output_root / "native_evaluation.csv");
     state << "trajectory_row,sequence,kind,call_index,evaluation_index,temperature_t4,electron_fraction_input,global_workspace_mode,replay_workspace_applied,native_hmctot,native_electron_fraction,native_charge_residual,total_heating,total_cooling,element_heating,element_cooling,continuum_heating,continuum_cooling,reference_hmctot,reference_charge_residual,hmctot_delta,charge_residual_delta\n";
-    const double charge_residual = input.electron_fraction_xee - output.elcter;
+    const double charge_residual = output.elcter;
     const double hmctot_delta = output.hmctot - row.reference_hmctot;
     const double charge_delta = charge_residual - row.reference_elcter;
     state << std::setprecision(17) << options.evaluation << ',' << row.sequence << ',' << row.kind << ','
           << row.call_index << ',' << row.evaluation_index << ',' << row.temperature_t4 << ',' << row.electron_fraction << ','
           << options.global_workspace_mode << ',' << (replay_workspace_applied ? 1 : 0) << ','
-          << output.hmctot << ',' << output.elcter << ',' << charge_residual << ',' << output.total_heating << ',' << output.total_cooling << ','
+          << output.hmctot << ',' << output.electron_fraction_xee << ',' << charge_residual << ',' << output.total_heating << ',' << output.total_cooling << ','
           << output.element_heating << ',' << output.element_cooling << ',' << output.continuum_heating << ',' << output.continuum_cooling << ','
           << row.reference_hmctot << ',' << row.reference_elcter << ',' << hmctot_delta << ',' << charge_delta << '\n';
     std::ofstream pop_file(output_root / "native_evaluation_populations.csv");
@@ -1890,7 +1890,7 @@ int command_run_fixed_evaluation(const Options& options) {
             << "  \"records_evaluated\": " << stats.records_evaluated << ",\n"
             << "  \"elements_solved\": " << stats.elements_solved << ",\n"
             << "  \"python_callbacks\": " << stats.python_callbacks << ",\n"
-            << "  \"native_electron_fraction\": " << output.elcter << ",\n"
+            << "  \"native_electron_fraction\": " << output.electron_fraction_xee << ",\n"
             << "  \"native_charge_residual\": " << charge_residual << ",\n"
             << "  \"reference_charge_residual\": " << row.reference_elcter << ",\n"
             << "  \"charge_residual_delta\": " << charge_delta << ",\n"
@@ -1910,7 +1910,7 @@ int command_run_fixed_evaluation(const Options& options) {
               << "records_evaluated=" << stats.records_evaluated << "\n"
               << "elements_solved=" << stats.elements_solved << "\n"
               << "python_callbacks=" << stats.python_callbacks << "\n"
-              << "native_electron_fraction=" << output.elcter << "\n"
+              << "native_electron_fraction=" << output.electron_fraction_xee << "\n"
               << "native_charge_residual=" << charge_residual << "\n"
               << "charge_residual_delta=" << charge_delta << "\n"
               << "native_hmctot=" << output.hmctot << "\n"
@@ -2239,8 +2239,8 @@ int fixed_dsec_evaluator(
         }
     }
 
-    snapshot.computed_electron_fraction = output.elcter;
-    snapshot.charge_residual = trial_state->electron_fraction_xee - output.elcter;
+    snapshot.computed_electron_fraction = output.electron_fraction_xee;
+    snapshot.charge_residual = output.elcter;
     snapshot.hmctot = output.hmctot;
     snapshot.total_heating = output.total_heating;
     snapshot.total_cooling = output.total_cooling;
@@ -2251,7 +2251,7 @@ int fixed_dsec_evaluator(
     data->snapshots->push_back(std::move(snapshot));
 
     evaluation->hmctot = output.hmctot;
-    evaluation->elcter = trial_state->electron_fraction_xee - output.elcter;
+    evaluation->elcter = output.elcter;
     // v0.6.48.7.25.1: the thermal controller owns the single source-faithful
     // T4 -> kelvin -> T4 state commit.  Returning input.temperature_k/1e4
     // here pre-committed the callback state and made the physical evaluator

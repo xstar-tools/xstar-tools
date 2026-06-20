@@ -1,4 +1,5 @@
 #include "xstar_fixed_state_engine.h"
+#include "source_order_thermal_reducer.hpp"
 #include "coheat_table_v048724.h"
 #include "xstar_element_engine.h"
 #include "xstar_spectral_engine.h"
@@ -1265,6 +1266,10 @@ struct ThermalDiagonalDiagnostic {
     double abundance = 0.0;
     double compact_population = 0.0;
     double weighted_population = 0.0;
+    double unweighted_heating_contribution = 0.0;
+    double unweighted_cooling_contribution = 0.0;
+    double unweighted_heating2_contribution = 0.0;
+    double unweighted_cooling2_contribution = 0.0;
     double cj = 0.0;
     double cj2 = 0.0;
     double native_cj = 0.0;
@@ -1558,7 +1563,7 @@ void apply_matrix_closure_contribution_corrections(
         if (correction.remove) continue;
         if (correction.replace_ans1) contribution.ans1 = correction.source_ans1;
         if (correction.replace_ans2) contribution.ans2 = correction.source_ans2;
-        // v0.6.48.7.46.20.2: matrix closure originally corrected only the
+        // v0.6.48.7.46.21.1: matrix closure originally corrected only the
         // population-rate channels.  Type-50 thermal energy channels are
         // algebraically tied to those rates after the source post-swap:
         //   ans3 = -ans2 * |Eupper-Elower| * erg/eV
@@ -1587,7 +1592,7 @@ void apply_matrix_closure_contribution_corrections(
                 contribution.ans3 = -contribution.ans2 * endpoint_energy_ev * kErgPerEv;
             }
         }
-        // v0.6.48.7.46.20.2: source matrix closure may replace the Type-50
+        // v0.6.48.7.46.21.1: source matrix closure may replace the Type-50
         // population-rate channels (ans1/ans2), but the Thermal ledger consumes
         // the pre-closure UCalc energy channels (ans3/ans4).  Preserve those
         // already source-exact values instead of recomputing them from the
@@ -2186,6 +2191,10 @@ struct xstar_fixed_state_context_impl {
     std::array<double,4> last_committed_continuum_thermal_budget{{0.0,0.0,0.0,0.0}};
     std::array<double,4> last_helium_type53_budget{{0.0,0.0,0.0,0.0}};
     std::array<double,4> last_computed_helium_type53_budget{{0.0,0.0,0.0,0.0}};
+    std::array<double,4> last_helium_non_type53_budget{{0.0,0.0,0.0,0.0}};
+    std::array<double,4> last_computed_helium_non_type53_budget{{0.0,0.0,0.0,0.0}};
+    bool last_independent_thermal_parity = false;
+    bool last_source_scalar_override_used = false;
     bool last_thermal_component_closure = false;
     bool last_thermal_consumed_fixed_state_closure = false;
     bool last_thermal_consumed_compact_population_closure = false;
@@ -3616,7 +3625,7 @@ bool evaluate_type53_source_integral(
     contribution.ans6 *= (std::abs(contribution.ans4) - energy_difference * kErgPerEv * contribution.ans1) / den6;
     contribution.ans5 *= (std::abs(contribution.ans3) - energy_difference * kErgPerEv * contribution.ans2) / den5;
 
-    // v0.6.48.7.46.20.2 qualification-only IEEE closure.
+    // v0.6.48.7.46.21.1 qualification-only IEEE closure.
     // v0.6.48.7.46.9.4.2 qualification-only IEEE closure compatibility marker.
     // The v0.6.47.2
     // Python reference evaluates the same source expressions one operation at
@@ -5254,6 +5263,10 @@ int run_impl(
     ctx.last_computed_element_thermal_budget.clear();
     ctx.last_helium_type53_budget = {{0.0,0.0,0.0,0.0}};
     ctx.last_computed_helium_type53_budget = {{0.0,0.0,0.0,0.0}};
+    ctx.last_helium_non_type53_budget = {{0.0,0.0,0.0,0.0}};
+    ctx.last_computed_helium_non_type53_budget = {{0.0,0.0,0.0,0.0}};
+    ctx.last_independent_thermal_parity = false;
+    ctx.last_source_scalar_override_used = false;
     ctx.last_thermal_component_closure = false;
     ctx.last_thermal_consumed_fixed_state_closure = false;
     ctx.last_thermal_consumed_compact_population_closure = false;
@@ -5313,6 +5326,14 @@ int run_impl(
         environment_flag("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE");
     const bool thermal_diagonal_source_domain =
         environment_flag("XSTAR_QUALIFICATION_THERMAL_DIAGONAL_DOMAIN_SOURCE_FAITHFUL");
+    const bool independent_thermal_parity =
+        environment_flag("XSTAR_QUALIFICATION_INDEPENDENT_THERMAL_PARITY");
+    // Retain the established qualification control as an explicit assertion.
+    // v46.21 generalizes its old Mg-only abundance correction to every element
+    // through the shared source-order reducer; the flag no longer owns a
+    // second multiplication.
+    const bool magnesium_primary_thermal_correction =
+        environment_flag("XSTAR_QUALIFICATION_MG_PRIMARY_THERMAL_CORRECTION");
     const bool helium_non_type53_type50_energy_reduction =
         environment_flag("XSTAR_QUALIFICATION_HE_NON_TYPE53_TYPE50_ENERGY_REDUCTION");
     const bool magnesium_type50_primary_cooling_reduction =
@@ -5341,8 +5362,27 @@ int run_impl(
         throw std::runtime_error("source compact-basis/seed restoration requires XSTAR_QUALIFICATION_REPLACEMENT=1");
     }
     if (thermal_diagonal_source_domain &&
-        (!thermal_compact_population_closure || !thermal_component_parity_closure)) {
-        throw std::runtime_error("source-faithful thermal diagonal domain requires compact-population and thermal-component closures");
+        (!matrix_construction_closure || !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT"))) {
+        throw std::runtime_error(
+            "source-faithful thermal diagonal domain requires replacement and matrix-construction closure");
+    }
+    if (independent_thermal_parity) {
+        const bool source_scalar_override = fixed_state_parity_closure ||
+            thermal_component_parity_closure || thermal_compact_population_closure ||
+            ((input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE) != 0u) ||
+            ((input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_MG_PRIMARY_OVERRIDE) != 0u);
+        if (source_scalar_override) {
+            throw std::runtime_error(
+                "independent Thermal parity forbids fixed-state, Thermal-component, compact-population, and scalar override inputs");
+        }
+        if (!thermal_diagonal_source_domain) {
+            throw std::runtime_error(
+                "independent Thermal parity requires the source-faithful diagonal term stream");
+        }
+        if (!magnesium_primary_thermal_correction) {
+            throw std::runtime_error(
+                "independent Thermal parity requires the generalized Mg primary Thermal correction contract");
+        }
     }
     if (helium_non_type53_type50_energy_reduction &&
         (!matrix_construction_closure || !thermal_diagonal_source_domain ||
@@ -5419,6 +5459,11 @@ int run_impl(
     if (any_helium_ablation && (!qualification_ablation || std::string(qualification_ablation) != "1")) {
         throw std::runtime_error("helium ablation requires XSTAR_QUALIFICATION_ABLATION=1");
     }
+    ctx.last_independent_thermal_parity = independent_thermal_parity;
+    ctx.last_source_scalar_override_used = fixed_state_parity_closure ||
+        thermal_component_parity_closure || thermal_compact_population_closure ||
+        ((input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE) != 0u) ||
+        ((input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_MG_PRIMARY_OVERRIDE) != 0u);
     ctx.last_helium_matrix_ablation_type = helium_matrix_ablation_type;
     ctx.last_helium_preliminary_ablation_type = helium_preliminary_ablation_type;
     ctx.last_helium_source_position_ablation = helium_source_position_ablation;
@@ -5465,9 +5510,13 @@ int run_impl(
     ctx.last_continuum_epim_fingerprint = ctx.last_continuum_bremsam_fingerprint = ctx.last_continuum_bremsmap_fingerprint = 0;
     ctx.last_continuum_workspace_diagnostics.clear();
     ctx.last_call1_thermal_oracle = (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE) != 0u;
+    output.electron_fraction_xee = 0.0;
     output.elcter = 0.0;
     ctx.last_preclosure_electron_fraction = 0.0;
     ctx.last_computed_electron_fraction = 0.0;
+    double computed_electron_fraction = 0.0;
+    std::array<double,4> computed_element_totals{{0.0,0.0,0.0,0.0}};
+    std::array<double,4> committed_element_totals{{0.0,0.0,0.0,0.0}};
     std::vector<double> all_populations;
     std::vector<double> thermal_population_stream;
     std::size_t fixed_full_population_offset = 0;
@@ -5644,13 +5693,12 @@ int run_impl(
         thermal_population_stream.insert(
             thermal_population_stream.end(), thermal_populations.begin(), thermal_populations.end());
 
-        double computed_element_heating = eout.heating;
-        double computed_element_cooling = eout.cooling;
-        double computed_element_heating2 = eout.heating2;
-        double computed_element_cooling2 = eout.cooling2;
-        if (thermal_component_closure_data.has_value()) {
-            computed_element_heating = computed_element_cooling = 0.0;
-            computed_element_heating2 = computed_element_cooling2 = 0.0;
+        double computed_element_heating = 0.0;
+        double computed_element_cooling = 0.0;
+        double computed_element_heating2 = 0.0;
+        double computed_element_cooling2 = 0.0;
+        xstar_source_order_thermal::TaggedFourChannelAccumulator thermal_reducer;
+        if (thermal_diagonal_source_domain) {
             const std::size_t n = thermal_populations.size();
             if (active.element.normalization_row < 1 ||
                 active.element.normalization_row > static_cast<int>(n)) {
@@ -5663,7 +5711,12 @@ int run_impl(
                 magnesium_primary_cooling_order_state_v048746202();
             std::set<std::pair<std::int64_t, std::string>>
                 magnesium_type99_primary_rows_matched;
-            std::map<std::pair<std::int64_t, std::string>, double>
+            struct PendingPrimaryCooling {
+                double population = 0.0;
+                double coefficient = 0.0;
+                bool type53 = false;
+            };
+            std::map<std::pair<std::int64_t, std::string>, PendingPrimaryCooling>
                 magnesium_primary_pending_cooling;
             const auto accumulate_diagonal = [&](const xstar_element_contribution_v1& contribution,
                                                  int compact_row,
@@ -5718,7 +5771,10 @@ int run_impl(
                 const std::size_t row = static_cast<std::size_t>(compact_row - 1);
                 const bool normalization_row = compact_row == active.element.normalization_row;
                 const double compact_population = thermal_populations[row];
-                const double population = compact_population * element.abundance;
+                const double weighted_population = compact_population * element.abundance;
+                const bool is_type53 = contribution.data_type == 53;
+                const double primary_unweighted = compact_population * cj;
+                const double secondary_unweighted = compact_population * cj2;
                 ThermalDiagonalDiagnostic diagonal;
                 diagonal.element_z = element.element_z;
                 diagonal.active_min_stage = active.min_stage;
@@ -5746,7 +5802,7 @@ int run_impl(
                 diagonal.source_domain_included = true;
                 diagonal.abundance = element.abundance;
                 diagonal.compact_population = compact_population;
-                diagonal.weighted_population = population;
+                diagonal.weighted_population = weighted_population;
                 diagonal.cj = cj;
                 diagonal.cj2 = cj2;
                 diagonal.native_cj = native_cj;
@@ -5754,78 +5810,90 @@ int run_impl(
                 ++ctx.last_thermal_diagonal_rows_included;
                 if (normalization_row) ++ctx.last_thermal_diagonal_normalization_terms_included;
                 if (cj > 0.0) {
-                    diagonal.cooling_contribution = population * cj;
+                    diagonal.unweighted_cooling_contribution = primary_unweighted;
+                    diagonal.cooling_contribution = primary_unweighted * element.abundance;
                     if (magnesium_primary_source_order_row != nullptr) {
-                        if (!magnesium_primary_pending_cooling.emplace(
-                                primary_key, diagonal.cooling_contribution).second) {
+                        PendingPrimaryCooling pending;
+                        pending.population = compact_population;
+                        pending.coefficient = cj;
+                        pending.type53 = is_type53;
+                        if (!magnesium_primary_pending_cooling.emplace(primary_key, pending).second) {
                             throw std::runtime_error(
                                 "duplicate magnesium primary-cooling native record/role");
                         }
                     } else {
-                        computed_element_cooling += diagonal.cooling_contribution;
+                        thermal_reducer.accumulate_primary(compact_population, cj, is_type53);
                     }
                 } else {
-                    diagonal.heating_contribution = -population * cj;
-                    computed_element_heating += diagonal.heating_contribution;
+                    diagonal.unweighted_heating_contribution = -primary_unweighted;
+                    diagonal.heating_contribution = (-primary_unweighted) * element.abundance;
+                    thermal_reducer.accumulate_primary(compact_population, cj, is_type53);
                 }
                 if (cj2 > 0.0) {
-                    diagonal.cooling2_contribution = population * cj2;
-                    computed_element_cooling2 += diagonal.cooling2_contribution;
+                    diagonal.unweighted_cooling2_contribution = secondary_unweighted;
+                    diagonal.cooling2_contribution = secondary_unweighted * element.abundance;
                 } else {
-                    diagonal.heating2_contribution = -population * cj2;
-                    computed_element_heating2 += diagonal.heating2_contribution;
+                    diagonal.unweighted_heating2_contribution = -secondary_unweighted;
+                    diagonal.heating2_contribution = (-secondary_unweighted) * element.abundance;
                 }
+                thermal_reducer.accumulate_secondary(compact_population, cj2, is_type53);
                 ctx.last_thermal_diagonal_diagnostics.push_back(std::move(diagonal));
             };
-            if (thermal_diagonal_source_domain) {
-                for (const auto& contribution : contributions) {
-                    const double scale = contribution.density_scale;
-                    accumulate_diagonal(
-                        contribution, contribution.lower_row, "forward_diag_loss",
-                        contribution.ans4 * scale, contribution.ans6 * scale);
-                    accumulate_diagonal(
-                        contribution, contribution.upper_row, "reverse_diag_loss",
-                        -contribution.ans3 * scale, -contribution.ans5 * scale);
-                }
-                if (magnesium_type99_primary_state.enabled && element.element_z == 12 &&
-                    magnesium_type99_primary_rows_matched.size() !=
-                        magnesium_type99_primary_state.rows.size()) {
+            for (const auto& contribution : contributions) {
+                const double scale = contribution.density_scale;
+                accumulate_diagonal(
+                    contribution, contribution.lower_row, "forward_diag_loss",
+                    contribution.ans4 * scale, contribution.ans6 * scale);
+                accumulate_diagonal(
+                    contribution, contribution.upper_row, "reverse_diag_loss",
+                    -contribution.ans3 * scale, -contribution.ans5 * scale);
+            }
+            if (magnesium_type99_primary_state.enabled && element.element_z == 12 &&
+                magnesium_type99_primary_rows_matched.size() !=
+                    magnesium_type99_primary_state.rows.size()) {
+                throw std::runtime_error(
+                    "magnesium Type-99 source primary-cooling ledger was not fully consumed");
+            }
+            if (magnesium_primary_order_state.enabled && element.element_z == 12) {
+                if (magnesium_primary_pending_cooling.size() !=
+                    magnesium_primary_order_state.rows.size()) {
                     throw std::runtime_error(
-                        "magnesium Type-99 source primary-cooling ledger was not fully consumed");
+                        "magnesium primary-cooling source-order ledger was not fully consumed");
                 }
-                if (magnesium_primary_order_state.enabled && element.element_z == 12) {
-                    if (magnesium_primary_pending_cooling.size() !=
-                        magnesium_primary_order_state.rows.size()) {
+                for (const auto& source_row : magnesium_primary_order_state.ordered_rows) {
+                    const auto key = std::make_pair(source_row.record, source_row.role);
+                    const auto pending_it = magnesium_primary_pending_cooling.find(key);
+                    if (pending_it == magnesium_primary_pending_cooling.end()) {
                         throw std::runtime_error(
-                            "magnesium primary-cooling source-order ledger was not fully consumed");
+                            "magnesium primary-cooling source-order key is missing from native stream");
                     }
-                    for (const auto& source_row : magnesium_primary_order_state.ordered_rows) {
-                        const auto key = std::make_pair(source_row.record, source_row.role);
-                        const auto pending_it = magnesium_primary_pending_cooling.find(key);
-                        if (pending_it == magnesium_primary_pending_cooling.end()) {
-                            throw std::runtime_error(
-                                "magnesium primary-cooling source-order key is missing from native stream");
-                        }
-                        computed_element_cooling += pending_it->second;
-                    }
-                }
-            } else {
-                for (std::size_t row = 0; row < n; ++row) {
-                    xstar_element_contribution_v1 aggregate{};
-                    aggregate.source_position = static_cast<std::int64_t>(row + 1);
-                    aggregate.record = 0;
-                    aggregate.data_type = 0;
-                    aggregate.rate_type = 0;
-                    aggregate.ion_index = 0;
-                    aggregate.ion_stage = 0;
-                    accumulate_diagonal(
-                        aggregate, static_cast<int>(row + 1), "aggregated_matrix_diagonal",
-                        buffers.heat[row * n + row], buffers.heat2[row * n + row]);
+                    const auto& pending = pending_it->second;
+                    thermal_reducer.accumulate_primary(
+                        pending.population, pending.coefficient, pending.type53);
                 }
             }
-            ctx.last_thermal_diagonal_source_domain = thermal_diagonal_source_domain;
+            const auto weighted = thermal_reducer.total.abundance_weighted(element.abundance);
+            computed_element_heating = weighted[0];
+            computed_element_cooling = weighted[1];
+            computed_element_heating2 = weighted[2];
+            computed_element_cooling2 = weighted[3];
+            if (element.element_z == 2) {
+                ctx.last_computed_helium_type53_budget =
+                    thermal_reducer.type53.abundance_weighted(element.abundance);
+                ctx.last_computed_helium_non_type53_budget =
+                    thermal_reducer.non_type53.abundance_weighted(element.abundance);
+            }
+            ctx.last_thermal_diagonal_source_domain = true;
         } else {
-            const bool call1_leaf_oracle = (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE) != 0u;
+            // The element engine returns source-order unweighted channels.
+            // Apply abundance once after each completed channel, matching
+            // calc_hmc_all, even in compact/scaffold operation.
+            computed_element_heating = eout.heating * element.abundance;
+            computed_element_cooling = eout.cooling * element.abundance;
+            computed_element_heating2 = eout.heating2 * element.abundance;
+            computed_element_cooling2 = eout.cooling2 * element.abundance;
+            const bool call1_leaf_oracle =
+                (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE) != 0u;
             if (call1_leaf_oracle && element.element_z == 1) {
                 computed_element_heating = input.h_primary_heating_override;
                 computed_element_cooling = input.h_primary_cooling_override;
@@ -5837,18 +5905,12 @@ int run_impl(
                 computed_element_heating2 = input.he_secondary_heating_override;
                 computed_element_cooling2 = input.he_secondary_cooling_override;
             }
-            const bool mg_primary_correction = environment_flag("XSTAR_QUALIFICATION_MG_PRIMARY_THERMAL_CORRECTION");
-            if (mg_primary_correction && element.element_z == 12) {
-                computed_element_heating *= element.abundance;
-                computed_element_cooling *= element.abundance;
-                computed_element_heating2 *= element.abundance;
-                computed_element_cooling2 *= element.abundance;
-                if ((input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_MG_PRIMARY_OVERRIDE) != 0u) {
-                    computed_element_heating = input.mg_primary_heating_override;
-                    computed_element_cooling = input.mg_primary_cooling_override;
-                    computed_element_heating2 = input.mg_secondary_heating_override;
-                    computed_element_cooling2 = input.mg_secondary_cooling_override;
-                }
+            if (element.element_z == 12 &&
+                (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_MG_PRIMARY_OVERRIDE) != 0u) {
+                computed_element_heating = input.mg_primary_heating_override;
+                computed_element_cooling = input.mg_primary_cooling_override;
+                computed_element_heating2 = input.mg_secondary_heating_override;
+                computed_element_cooling2 = input.mg_secondary_cooling_override;
             }
         }
         ctx.last_computed_element_thermal_budget[element.element_z] = {{
@@ -5868,33 +5930,33 @@ int run_impl(
         const double element_cooling = committed_element[1];
         const double element_heating2 = committed_element[2];
         const double element_cooling2 = committed_element[3];
-        output.element_heating += element_heating;
-        output.element_cooling += element_cooling;
+        const std::array<double,4> computed_element{{
+            computed_element_heating, computed_element_cooling,
+            computed_element_heating2, computed_element_cooling2}};
+        for (std::size_t channel = 0; channel < 4; ++channel) {
+            // Preserve calc_hmc_all element visitation order.  Do not rebuild
+            // the scientific totals later from an associative container.
+            computed_element_totals[channel] += computed_element[channel];
+            committed_element_totals[channel] += committed_element[channel];
+        }
+        output.element_heating = committed_element_totals[0];
+        output.element_cooling = committed_element_totals[1];
         ctx.last_element_thermal_budget[element.element_z] = committed_element;
         if (element.element_z == 2) {
-            double h53 = 0.0, c53 = 0.0, h253 = 0.0, c253 = 0.0;
-            for (const auto& contribution : contributions) {
-                if (contribution.data_type != 53) continue;
-                const int lower = contribution.lower_row - 1;
-                const int upper = contribution.upper_row - 1;
-                if (lower < 0 || upper < 0 || lower >= static_cast<int>(thermal_populations.size()) || upper >= static_cast<int>(thermal_populations.size())) continue;
-                const double lower_pop = thermal_populations[static_cast<std::size_t>(lower)] * element.abundance;
-                const double upper_pop = thermal_populations[static_cast<std::size_t>(upper)] * element.abundance;
-                const double lower_cj = contribution.ans4 * contribution.density_scale;
-                const double upper_cj = -contribution.ans3 * contribution.density_scale;
-                const double lower_cj2 = contribution.ans6 * contribution.density_scale;
-                const double upper_cj2 = -contribution.ans5 * contribution.density_scale;
-                for (const auto& term : {std::pair<double,double>{lower_pop, lower_cj}, std::pair<double,double>{upper_pop, upper_cj}}) {
-                    if (term.second > 0.0) c53 += term.first * term.second; else h53 -= term.first * term.second;
-                }
-                for (const auto& term : {std::pair<double,double>{lower_pop, lower_cj2}, std::pair<double,double>{upper_pop, upper_cj2}}) {
-                    if (term.second > 0.0) c253 += term.first * term.second; else h253 -= term.first * term.second;
-                }
-            }
-            ctx.last_computed_helium_type53_budget = {{h53, c53, h253, c253}};
             ctx.last_helium_type53_budget = thermal_component_closure_data.has_value()
                 ? thermal_component_closure_data->he_type53
                 : ctx.last_computed_helium_type53_budget;
+            if (thermal_component_closure_data.has_value()) {
+                const auto& closure_he = thermal_component_closure_data->he;
+                const auto& closure_he53 = thermal_component_closure_data->he_type53;
+                for (std::size_t channel = 0; channel < 4; ++channel) {
+                    ctx.last_helium_non_type53_budget[channel] =
+                        closure_he[channel] - closure_he53[channel];
+                }
+            } else {
+                ctx.last_helium_non_type53_budget =
+                    ctx.last_computed_helium_non_type53_budget;
+            }
         }
 
         std::vector<double> full_populations(static_cast<std::size_t>(element.n_rows), 0.0);
@@ -5904,21 +5966,25 @@ int run_impl(
         all_populations.insert(all_populations.end(), full_populations.begin(), full_populations.end());
         fixed_full_population_offset += full_populations.size();
 
-        // The selected compact normalization row is the continuum of the
-        // highest active ion stage.  It therefore carries charge max_stage;
-        // only a full-Z window makes it the fully stripped stage.
-        double charge_per_element = 0.0;
+        // Match local_zone.py exactly: accumulate explicit ion fractions
+        // using (stage - 1), then add the fully stripped fraction at charge Z.
+        // Keep this computed electron fraction distinct from elcter, which is
+        // the DSEC charge residual trial_xee - computed_xee.
+        double explicit_stage_sum = 0.0;
+        double element_electron_fraction = 0.0;
         for (int ion_slot = 0; ion_slot < active.element.n_ions; ++ion_slot) {
-            const double fraction = buffers.ion_population_final[static_cast<std::size_t>(ion_slot)];
-            int ion_charge = ion_slot;
-            for (const auto& row : active.element.rows) {
-                if (row.row == active.element.normalization_row) continue;
-                if (row.ion == ion_slot + 1) { ion_charge = row.ion_charge; break; }
-            }
-            charge_per_element += fraction * static_cast<double>(ion_charge);
+            const double fraction =
+                buffers.ion_population_final[static_cast<std::size_t>(ion_slot)];
+            const int stage = active.min_stage + ion_slot;
+            explicit_stage_sum += fraction;
+            element_electron_fraction +=
+                fraction * static_cast<double>(stage - 1) * element.abundance;
         }
-        charge_per_element += buffers.populations.back() * static_cast<double>(active.max_stage);
-        output.elcter += element.abundance * charge_per_element;
+        const double fully_stripped_fraction =
+            std::max(0.0, 1.0 - explicit_stage_sum);
+        element_electron_fraction +=
+            fully_stripped_fraction * static_cast<double>(element.element_z) * element.abundance;
+        computed_electron_fraction += element_electron_fraction;
 
         NativeElementDiagnostic element_diagnostic;
         element_diagnostic.committed_contributions = contributions;
@@ -5936,9 +6002,11 @@ int run_impl(
                     buffers.ion_population_final[static_cast<std::size_t>(ion_slot)];
             }
         }
-        const int continuum_stage = std::min(element.element_z + 1, active.max_stage + 1);
-        if (!buffers.populations.empty() && continuum_stage >= 1) {
-            element_diagnostic.final_stage_fractions[static_cast<std::size_t>(continuum_stage - 1)] += buffers.populations.back();
+        const int continuum_stage = element.element_z + 1;
+        if (continuum_stage >= 1) {
+            element_diagnostic.final_stage_fractions[
+                static_cast<std::size_t>(continuum_stage - 1)] =
+                fully_stripped_fraction;
         }
         element_diagnostic.thermal_compact_populations = thermal_populations;
         element_diagnostic.thermal_compact_population_closure_applied = element_thermal_compact_closure_applied;
@@ -6229,19 +6297,16 @@ int run_impl(
 
     if ((input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE) != 0u &&
         !thermal_component_closure_data.has_value()) {
-        output.elcter = input.electron_fraction_xee - input.charge_residual_override;
+        computed_electron_fraction =
+            input.electron_fraction_xee - input.charge_residual_override;
     }
 
-    double computed_element_heating = 0.0;
-    double computed_element_cooling = 0.0;
-    double computed_element_heating2 = 0.0;
-    double computed_element_cooling2 = 0.0;
-    for (const auto& item : ctx.last_computed_element_thermal_budget) {
-        computed_element_heating += item.second[0];
-        computed_element_cooling += item.second[1];
-        computed_element_heating2 += item.second[2];
-        computed_element_cooling2 += item.second[3];
-    }
+    // These totals were accumulated at the exact element commit points in
+    // source order.  Never reconstruct them from the per-element map.
+    const double computed_element_heating = computed_element_totals[0];
+    const double computed_element_cooling = computed_element_totals[1];
+    const double computed_element_heating2 = computed_element_totals[2];
+    const double computed_element_cooling2 = computed_element_totals[3];
     ctx.last_computed_continuum_heating = output.continuum_heating;
     ctx.last_computed_continuum_cooling = output.continuum_cooling;
     // Source calc_hmc_all carries separate secondary continuum ledger slots.
@@ -6256,7 +6321,7 @@ int run_impl(
     ctx.last_computed_total_cooling = computed_element_cooling + ctx.last_computed_continuum_cooling;
     ctx.last_computed_total_heating2 = computed_element_heating2 + ctx.last_computed_continuum_heating2;
     ctx.last_computed_total_cooling2 = computed_element_cooling2 + ctx.last_computed_continuum_cooling2;
-    ctx.last_committed_element_thermal_budget = {{computed_element_heating, computed_element_cooling, computed_element_heating2, computed_element_cooling2}};
+    ctx.last_committed_element_thermal_budget = committed_element_totals;
     ctx.last_committed_continuum_thermal_budget = {{ctx.last_computed_continuum_heating, ctx.last_computed_continuum_cooling, ctx.last_computed_continuum_heating2, ctx.last_computed_continuum_cooling2}};
 
     // Literal heatf.f90 residual semantics use a REAL(4) factor of two and
@@ -6278,7 +6343,7 @@ int run_impl(
         ctx.last_computed_hmctot = input.hmctot_override;
     }
 
-    ctx.last_preclosure_electron_fraction = output.elcter;
+    ctx.last_preclosure_electron_fraction = computed_electron_fraction;
 
     if (thermal_component_closure_data.has_value()) {
         const auto& closure = *thermal_component_closure_data;
@@ -6312,13 +6377,14 @@ int run_impl(
         ctx.last_total_cooling2 = computed_element_cooling2 + ctx.last_computed_continuum_cooling2;
     }
     if (fixed_state_closure_data.has_value()) {
-        output.elcter = fixed_state_closure_data->electron_fraction;
+        output.electron_fraction_xee = fixed_state_closure_data->electron_fraction;
+        output.elcter = fixed_state_closure_data->charge_residual;
+    } else {
+        output.electron_fraction_xee = computed_electron_fraction;
+        output.elcter = input.electron_fraction_xee - computed_electron_fraction;
     }
-    output.electron_fraction_xee = output.elcter;
-    ctx.last_computed_electron_fraction = output.electron_fraction_xee;
-    ctx.last_charge_residual = fixed_state_closure_data.has_value()
-        ? fixed_state_closure_data->charge_residual
-        : input.electron_fraction_xee - output.electron_fraction_xee;
+    ctx.last_computed_electron_fraction = computed_electron_fraction;
+    ctx.last_charge_residual = output.elcter;
     ctx.last_total_heating = output.total_heating;
     ctx.last_total_cooling = output.total_cooling;
     ctx.last_hmctot = output.hmctot;
@@ -6509,7 +6575,7 @@ int xstar_fixed_state_write_last_thermal_budget_v1(
                    "input_tau_count,input_tau_in_fingerprint,input_tau_out_fingerprint,input_global_level_count,input_xilevg_fingerprint,input_bilevg_fingerprint,input_rnisg_fingerprint,"
                    "continuum_workspace_source_faithful,continuum_epim_count,continuum_epim_fingerprint,continuum_bremsam_count,continuum_bremsam_fingerprint,continuum_bremsmap_count,continuum_bremsmap_fingerprint,"
                    "thermal_population_count,thermal_population_fingerprint,committed_population_count,committed_population_fingerprint,"
-                   "thermal_consumed_fixed_state_closure,thermal_consumed_compact_population_closure,thermal_component_closure_applied,"
+                   "thermal_consumed_fixed_state_closure,thermal_consumed_compact_population_closure,thermal_component_closure_applied,independent_thermal_parity,source_scalar_override_used,"
                    "thermal_diagonal_source_domain_applied,thermal_diagonal_rows_included,thermal_diagonal_normalization_rows_excluded,thermal_diagonal_terms_included,thermal_diagonal_normalization_terms_included,continuum_secondary_ledger_corrected,"
                    "computed_h_heating,computed_h_cooling,computed_h_heating2,computed_h_cooling2,h_heating,h_cooling,h_heating2,h_cooling2,"
                    "computed_he_heating,computed_he_cooling,computed_he_heating2,computed_he_cooling2,he_heating,he_cooling,he_heating2,he_cooling2,"
@@ -6534,13 +6600,14 @@ int xstar_fixed_state_write_last_thermal_budget_v1(
         const auto cmg = get_budget(context->last_computed_element_thermal_budget, 12);
         const auto he53 = context->last_helium_type53_budget;
         const auto che53 = context->last_computed_helium_type53_budget;
-        const std::array<double,4> he_other{{he[0]-he53[0],he[1]-he53[1],he[2]-he53[2],he[3]-he53[3]}};
-        const std::array<double,4> che_other{{che[0]-che53[0],che[1]-che53[1],che[2]-che53[2],che[3]-che53[3]}};
+        const auto he_other = context->last_helium_non_type53_budget;
+        const auto che_other = context->last_computed_helium_non_type53_budget;
         const std::array<double,4> element = context->last_committed_element_thermal_budget;
-        std::array<double,4> computed_element{{0.0,0.0,0.0,0.0}};
-        for (const auto& item : context->last_computed_element_thermal_budget) {
-            for (std::size_t i=0;i<4;++i) computed_element[i]+=item.second[i];
-        }
+        const std::array<double,4> computed_element{{
+            context->last_computed_total_heating - context->last_computed_continuum_heating,
+            context->last_computed_total_cooling - context->last_computed_continuum_cooling,
+            context->last_computed_total_heating2 - context->last_computed_continuum_heating2,
+            context->last_computed_total_cooling2 - context->last_computed_continuum_cooling2}};
         const std::array<double,4> continuum = context->last_committed_continuum_thermal_budget;
         const std::array<double,4> computed_continuum{{
             context->last_computed_continuum_heating, context->last_computed_continuum_cooling,
@@ -6563,6 +6630,8 @@ int xstar_fixed_state_write_last_thermal_budget_v1(
             << (context->last_thermal_consumed_fixed_state_closure ? 1 : 0) << ','
             << (context->last_thermal_consumed_compact_population_closure ? 1 : 0) << ','
             << (context->last_thermal_component_closure ? 1 : 0) << ','
+            << (context->last_independent_thermal_parity ? 1 : 0) << ','
+            << (context->last_source_scalar_override_used ? 1 : 0) << ','
             << (context->last_thermal_diagonal_source_domain ? 1 : 0) << ','
             << context->last_thermal_diagonal_rows_included << ','
             << 0 << ','
@@ -7251,7 +7320,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
         {
             std::ofstream diagonal_file(root / (stem + "_thermal_diagonal_ledger.csv"));
             if (!diagonal_file) throw std::runtime_error("cannot create thermal diagonal ledger CSV");
-            diagonal_file << "evaluation_ordinal,element_z,active_min_stage,active_max_stage,source_order_index,source_position,record,data_type,rate_type,ion_index,ion_stage,compact_row,native_compact_row,source_compact_row,role,is_normalization_row,source_domain_included,magnesium_type99_primary_cooling_reduction_applied,magnesium_primary_cooling_source_order_applied,magnesium_primary_cooling_source_order_index,abundance,compact_population,weighted_population,cj,cj2,native_cj,source_cj,heating_contribution,cooling_contribution,heating2_contribution,cooling2_contribution\n";
+            diagonal_file << "evaluation_ordinal,element_z,active_min_stage,active_max_stage,source_order_index,source_position,record,data_type,rate_type,ion_index,ion_stage,compact_row,native_compact_row,source_compact_row,role,is_normalization_row,source_domain_included,magnesium_type99_primary_cooling_reduction_applied,magnesium_primary_cooling_source_order_applied,magnesium_primary_cooling_source_order_index,abundance,compact_population,weighted_population,cj,cj2,native_cj,source_cj,unweighted_heating_contribution,unweighted_cooling_contribution,unweighted_heating2_contribution,unweighted_cooling2_contribution,heating_contribution,cooling_contribution,heating2_contribution,cooling2_contribution\n";
             diagonal_file << std::setprecision(17);
             for (const auto& row : context->last_thermal_diagonal_diagnostics) {
                 diagonal_file << evaluation_ordinal << ',' << row.element_z << ','
@@ -7268,6 +7337,10 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                               << row.abundance << ',' << row.compact_population << ','
                               << row.weighted_population << ',' << row.cj << ',' << row.cj2 << ','
                               << row.native_cj << ',' << row.source_cj << ','
+                              << row.unweighted_heating_contribution << ','
+                              << row.unweighted_cooling_contribution << ','
+                              << row.unweighted_heating2_contribution << ','
+                              << row.unweighted_cooling2_contribution << ','
                               << row.heating_contribution << ',' << row.cooling_contribution << ','
                               << row.heating2_contribution << ',' << row.cooling2_contribution << '\n';
             }
