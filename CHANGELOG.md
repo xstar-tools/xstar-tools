@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.7.46.21.3.1 — solve-stage diagnostic semantics hotfix - 2026-06-20
+
+- Compare source physical ion stage with native `ion_charge + 1`, while comparing the native local active-window ion ordinal separately.
+- Separate source total bound-ion count from the source-derived/native active-ion count; restore exact normalization metadata across all 183 systems.
+- Reconstruct each native fully stripped stage as `1.0 - sum(stage_1..stage_Z)`, completing the native ion inventory from 915 bound values to 1,098 comparison values.
+- Maintain independent source-capture, native-capture, and comparison-inventory errors so one side cannot invalidate the other side's completeness gate.
+- Reclassify the existing v21.3 production evidence without rerunning physics: milestone ACCEPT, scientific REJECT, topology and normalization ACCEPT, first captured divergence `outer_iteration_trajectory`, 11/183 fully exact systems, and 3,501/40,149 exact final compact populations.
+- Change no solver physics or Thermal arithmetic; retain ABI 60487 and block production promotion.
+
 ## 0.6.48.7.46.21.3 - 2026-06-20
 
 - Add an observational v0.6.47.2 all-61 source capture for compact solve stages.

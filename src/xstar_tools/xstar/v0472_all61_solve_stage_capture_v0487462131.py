@@ -1,4 +1,4 @@
-"""Capture all-61 v0.6.47.2 compact-population solve stages for v21.3.
+"""Capture all-61 v0.6.47.2 compact-population solve stages for v21.3.1.
 
 This qualification-only probe is observational.  It enables the existing Lucy
 iteration trace, records the final outer iteration, and reconstructs the
@@ -20,8 +20,8 @@ from typing import Any
 from . import v0472_all61_fixed_state_capture as base
 
 RELEASE = "0.6.48.7.46.21.3.1"
-SCHEMA = "xstar-tools-v0648746213-v0472-all61-solve-stage-capture-v1"
-VERIFY_SCHEMA = "xstar-tools-v0648746213-v0472-all61-solve-stage-oracle-v1"
+SCHEMA = "xstar-tools-v06487462131-v0472-all61-solve-stage-capture-v1"
+VERIFY_SCHEMA = "xstar-tools-v06487462131-v0472-all61-solve-stage-oracle-v1"
 ROW_NAME = "v0472_all61_solve_stage_rows.csv"
 SUPERLEVEL_NAME = "v0472_all61_solve_stage_superlevels.csv"
 MATRIX_NAME = "v0472_all61_solve_stage_condensed_matrix.csv"

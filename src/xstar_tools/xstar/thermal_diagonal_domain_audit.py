@@ -1,4 +1,4 @@
-"""Audit source-order Thermal diagonal reduction and secondary ledgers for v0.6.48.7.46.21.2."""
+"""Audit source-order Thermal diagonal reduction and secondary ledgers for v0.6.48.7.46.21.3.1."""
 from __future__ import annotations
 
 import argparse
@@ -10,7 +10,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-RELEASE = "0.6.48.7.46.21.2"
+RELEASE = "0.6.48.7.46.21.3.1"
 SCHEMA = "xstar-tools-v064874614-thermal-diagonal-domain-secondary-ledger-audit-v1"
 COMPONENT_FIELDS = (
     "h_heating", "h_cooling", "h_heating2", "h_cooling2",

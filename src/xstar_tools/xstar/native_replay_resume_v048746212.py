@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-RELEASE = "0.6.48.7.46.21.3"
+RELEASE = "0.6.48.7.46.21.3.1"
 SCHEMA = "xstar-tools-v0648746213-independent-native-replay-resume-v1"
 REQUIRED_OUTPUTS = (
     "native_evaluation.csv", "native_evaluation_summary.json", "native_thermal_budget.csv",

@@ -1,4 +1,4 @@
-"""Audit shared immutable canonical Thermal-term ownership for v0.6.48.7.46.21.2."""
+"""Audit shared immutable canonical Thermal-term ownership for v0.6.48.7.46.21.3.1."""
 from __future__ import annotations
 
 import argparse
@@ -9,8 +9,8 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-RELEASE = "0.6.48.7.46.21.2"
-SCHEMA = "xstar-tools-v0648746212-canonical-thermal-term-ownership-v1"
+RELEASE = "0.6.48.7.46.21.3.1"
+SCHEMA = "xstar-tools-v0648746213-canonical-thermal-term-ownership-v1"
 COMPARISON_NAME = "v048746212_canonical_thermal_term_comparison.csv"
 
 

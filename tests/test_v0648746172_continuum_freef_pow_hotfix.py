@@ -5,7 +5,7 @@ import xstar_tools
 ROOT=Path(__file__).resolve().parents[1]
 
 def test_release_version():
-    assert xstar_tools.__version__ == '0.6.48.7.46.21.2'
+    assert xstar_tools.__version__ == '0.6.48.7.46.21.3.1'
 
 def test_cpp_uses_qualification_scoped_real_exponent_pow():
     s=(ROOT/'src/xstar_tools/xstar/cpp/fixed_state_engine.cpp').read_text()

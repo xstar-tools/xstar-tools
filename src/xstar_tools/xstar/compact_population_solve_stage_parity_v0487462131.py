@@ -1,4 +1,4 @@
-"""All-61 compact-population solve-stage parity decomposition for v21.3.
+"""Solve-stage diagnostic-semantics hotfix for v21.3.1.
 
 The audit is deliberately earlier than Thermal accounting.  It compares the
 source and native compact solve at each numerical boundary, assigns every
@@ -18,10 +18,13 @@ from pathlib import Path
 from typing import Any, Iterable
 
 RELEASE = "0.6.48.7.46.21.3.1"
-SCHEMA = "xstar-tools-v0648746213-compact-population-solve-stage-parity-v1"
+SCHEMA = "xstar-tools-v06487462131-solve-stage-diagnostic-semantics-v1"
 EXPECTED_ROWS = 40149
 EXPECTED_SYSTEMS = 183
 EXPECTED_IONS = 1098
+EXPECTED_NATIVE_BOUND_IONS = 915
+EXPECTED_SUPERLEVELS = 1749
+EXPECTED_MATRIX_VALUES = 28207
 EXPECTED_BY_ELEMENT = {1: 2013, 2: 4758, 12: 33378}
 ELEMENTS = (1, 2, 12)
 SEQUENCES = tuple(range(1, 62))
@@ -32,12 +35,12 @@ MATRIX_SOURCE = "v0472_all61_solve_stage_condensed_matrix.csv"
 MANIFEST_SOURCE = "v0472_all61_solve_stage_manifest.csv"
 ION_SOURCE = "v0472_all61_ion_populations.csv"
 
-SYSTEM_COMPARISON = "v048746213_solve_stage_system_comparison.csv"
-FIRST_DIVERGENCE = "v048746213_solve_stage_first_divergence.csv"
-ROW_MISMATCHES = "v048746213_solve_stage_row_mismatches.csv"
-SUPER_MISMATCHES = "v048746213_solve_stage_superlevel_mismatches.csv"
-MATRIX_MISMATCHES = "v048746213_solve_stage_matrix_mismatches.csv"
-FINGERPRINTS = "v048746213_compact_population_fingerprints.csv"
+SYSTEM_COMPARISON = "v0487462131_solve_stage_system_comparison.csv"
+FIRST_DIVERGENCE = "v0487462131_solve_stage_first_divergence.csv"
+ROW_MISMATCHES = "v0487462131_solve_stage_row_mismatches.csv"
+SUPER_MISMATCHES = "v0487462131_solve_stage_superlevel_mismatches.csv"
+MATRIX_MISMATCHES = "v0487462131_solve_stage_matrix_mismatches.csv"
+FINGERPRINTS = "v0487462131_compact_population_fingerprints.csv"
 
 # This is also the precedence used to classify the first causal boundary.
 STAGE_ORDER = (
@@ -79,6 +82,14 @@ SUPER_STAGES = (
     ("refinement_correction", "refinement_correction"),
     ("refined_superlevel_solution", "refined_superlevel_solution"),
 )
+
+OUTER_TRAJECTORY_STAGES = {"final_outer_iteration_count", "final_outer_start_population"}
+
+
+def _captured_stage(stage: str) -> str:
+    if stage in OUTER_TRAJECTORY_STAGES:
+        return "outer_iteration_trajectory"
+    return stage
 
 
 def _read_csv(path: Path) -> list[dict[str, str]]:
@@ -180,26 +191,55 @@ def _value_mismatch(stage: str, key: tuple[int, ...], source: float, native: flo
     }
 
 
-def _load_native_ions(native_run: Path) -> dict[tuple[int, int, int], float]:
+def _load_native_ions(
+    native_run: Path,
+) -> tuple[dict[tuple[int, int, int], float], int, list[str]]:
+    """Load bound-ion populations and reconstruct the fully stripped stage.
+
+    The native solve-system payload owns stages 1..Z.  The source oracle also
+    records stage Z+1, so the comparison inventory is completed with the
+    source-faithful sequential operation ``1.0 - sum(stage_1..stage_Z)``.
+    """
     root = native_run / "qualification_diagnostics"
     values: dict[tuple[int, int, int], float] = {}
+    raw_count = 0
+    errors: list[str] = []
     for sequence in SEQUENCES:
         manifest_path = root / f"evaluation_{sequence:04d}_all_element_solve_system_manifest.csv"
         if not manifest_path.is_file():
-            raise FileNotFoundError(f"missing native solve-system manifest: {manifest_path}")
+            errors.append(f"missing_native_ion_manifest_sequence={sequence}")
+            continue
         for row in _read_csv(manifest_path):
-            z = int(row["element_z"]); count = int(row["ion_reconstruction_count"])
+            z = int(row["element_z"])
+            count = int(row["ion_reconstruction_count"])
             path = root / row["ion_reconstruction_path"]
+            if not path.is_file():
+                errors.append(f"missing_native_ion_payload_sequence={sequence}_element={z}")
+                continue
             payload = path.read_bytes()
             if len(payload) != count * 8:
-                raise RuntimeError(f"ion reconstruction size mismatch sequence={sequence} element={z}")
+                errors.append(f"native_ion_size_sequence={sequence}_element={z}_count={count}")
+                continue
             unpacked = struct.unpack("<" + "d" * count, payload)
+            raw_count += count
+            total = 0.0
             for stage, value in enumerate(unpacked, start=1):
                 key = (sequence, z, stage)
                 if key in values:
-                    raise RuntimeError(f"duplicate native ion reconstruction key: {key}")
-                values[key] = float(value)
-    return values
+                    errors.append(f"duplicate_native_ion_sequence={sequence}_element={z}_stage={stage}")
+                    continue
+                numeric = float(value)
+                values[key] = numeric
+                total += numeric
+            if count != z:
+                errors.append(f"native_bound_ion_count_sequence={sequence}_element={z}_count={count}")
+                continue
+            fully_stripped_key = (sequence, z, z + 1)
+            if fully_stripped_key in values:
+                errors.append(f"duplicate_native_fully_stripped_sequence={sequence}_element={z}")
+            else:
+                values[fully_stripped_key] = 1.0 - total
+    return values, raw_count, errors
 
 
 def audit(source_capture: Path, native_run: Path, output: Path) -> dict[str, Any]:
@@ -217,7 +257,7 @@ def audit(source_capture: Path, native_run: Path, output: Path) -> dict[str, Any
     source_manifest_rows = _read_csv(source_paths[3])
     source_ion_rows = _read_csv(source_paths[4])
     native_rows, native_super, native_matrix, native_manifest_rows = _load_native(native_run)
-    native_ions = _load_native_ions(native_run)
+    native_ions, native_bound_ion_values, native_ion_load_errors = _load_native_ions(native_run)
 
     row_key = lambda r: (int(r["sequence"]), int(r["element_z"]), int(r["compact_row"]))
     super_key = lambda r: (int(r["sequence"]), int(r["element_z"]), int(r["superlevel"]))
@@ -239,19 +279,39 @@ def audit(source_capture: Path, native_run: Path, output: Path) -> dict[str, Any
 
     expected_systems = {(seq, z) for seq in SEQUENCES for z in ELEMENTS}
     all_systems = set(src_manifest) | set(nat_manifest)
-    inventory_errors: list[str] = []
+    source_inventory_errors: list[str] = []
+    native_inventory_errors: list[str] = list(native_ion_load_errors)
+    comparison_inventory_errors: list[str] = []
     if set(src_manifest) != expected_systems:
-        inventory_errors.append(f"source_systems={len(src_manifest)}")
-    if set(nat_manifest) != expected_systems:
-        inventory_errors.append(f"native_systems={len(nat_manifest)}")
+        source_inventory_errors.append(f"source_systems={len(src_manifest)}")
     if len(src_rows) != EXPECTED_ROWS:
-        inventory_errors.append(f"source_rows={len(src_rows)}")
-    if len(nat_rows) != EXPECTED_ROWS:
-        inventory_errors.append(f"native_rows={len(nat_rows)}")
+        source_inventory_errors.append(f"source_rows={len(src_rows)}")
+    if len(src_super) != EXPECTED_SUPERLEVELS:
+        source_inventory_errors.append(f"source_superlevels={len(src_super)}")
+    if len(src_matrix) != EXPECTED_MATRIX_VALUES:
+        source_inventory_errors.append(f"source_matrix_values={len(src_matrix)}")
     if len(source_ions) != EXPECTED_IONS:
-        inventory_errors.append(f"source_ions={len(source_ions)}")
+        source_inventory_errors.append(f"source_ions={len(source_ions)}")
+    if set(nat_manifest) != expected_systems:
+        native_inventory_errors.append(f"native_systems={len(nat_manifest)}")
+    if len(nat_rows) != EXPECTED_ROWS:
+        native_inventory_errors.append(f"native_rows={len(nat_rows)}")
+    if len(nat_super) != EXPECTED_SUPERLEVELS:
+        native_inventory_errors.append(f"native_superlevels={len(nat_super)}")
+    if len(nat_matrix) != EXPECTED_MATRIX_VALUES:
+        native_inventory_errors.append(f"native_matrix_values={len(nat_matrix)}")
+    if native_bound_ion_values != EXPECTED_NATIVE_BOUND_IONS:
+        native_inventory_errors.append(f"native_bound_ions={native_bound_ion_values}")
     if len(native_ions) != EXPECTED_IONS:
-        inventory_errors.append(f"native_ions={len(native_ions)}")
+        native_inventory_errors.append(f"native_reconstructed_ions={len(native_ions)}")
+    if set(src_rows) != set(nat_rows):
+        comparison_inventory_errors.append("compact_row_key_sets_differ")
+    if set(src_super) != set(nat_super):
+        comparison_inventory_errors.append("superlevel_key_sets_differ")
+    if set(src_matrix) != set(nat_matrix):
+        comparison_inventory_errors.append("matrix_key_sets_differ")
+    if set(source_ions) != set(native_ions):
+        comparison_inventory_errors.append("ion_key_sets_differ_after_fully_stripped_reconstruction")
 
     stage_stats: dict[str, dict[str, int]] = defaultdict(lambda: {"compared": 0, "exact": 0, "mismatches": 0, "missing": 0})
     stage_first: dict[str, dict[str, Any]] = {}
@@ -260,8 +320,11 @@ def audit(source_capture: Path, native_run: Path, output: Path) -> dict[str, Any
     super_mismatches: list[dict[str, Any]] = []
     matrix_mismatches: list[dict[str, Any]] = []
 
-    # Topology and row-valued stages.
-    topology_fields = ("active_min_stage", "active_max_stage", "superlevel", "ion", "ion_charge", "is_normalization_row")
+    # Topology and row-valued stages.  The source ``ion``/``ion_stage`` is a
+    # physical stage, while native ``ion`` is a local active-window ordinal.
+    # Physical identity is therefore source stage == native charge + 1, and
+    # the local ordinal is derived from the source active window.
+    topology_fields = ("active_min_stage", "active_max_stage", "superlevel", "ion_charge", "is_normalization_row")
     for key in sorted(set(src_rows) | set(nat_rows)):
         src = src_rows.get(key); nat = nat_rows.get(key)
         if src is None or nat is None:
@@ -269,14 +332,34 @@ def audit(source_capture: Path, native_run: Path, output: Path) -> dict[str, Any
             system_stage_mismatch[key[:2]]["topology"] += 1
             continue
         stage_stats["topology"]["compared"] += 1
-        topology_ok = all(str(src.get(field, "")) == str(nat.get(field, "")) for field in topology_fields)
+        source_physical_stage = int(src.get("ion_stage", src.get("ion", "0")))
+        native_physical_stage = int(nat["ion_charge"]) + 1
+        source_local_ordinal = source_physical_stage - int(src["active_min_stage"]) + 1
+        native_local_ordinal = int(nat["ion"])
+        topology_ok = (
+            all(str(src.get(field, "")) == str(nat.get(field, "")) for field in topology_fields)
+            and source_physical_stage == native_physical_stage
+            and source_local_ordinal == native_local_ordinal
+        )
         if topology_ok:
             stage_stats["topology"]["exact"] += 1
         else:
             stage_stats["topology"]["mismatches"] += 1
             system_stage_mismatch[key[:2]]["topology"] += 1
             if "topology" not in stage_first:
-                stage_first["topology"] = {"sequence": key[0], "element_z": key[1], "compact_row": key[2], "source": {f: src.get(f) for f in topology_fields}, "native": {f: nat.get(f) for f in topology_fields}}
+                stage_first["topology"] = {
+                    "sequence": key[0], "element_z": key[1], "compact_row": key[2],
+                    "source": {
+                        **{f: src.get(f) for f in topology_fields},
+                        "physical_ion_stage": source_physical_stage,
+                        "derived_local_ion_ordinal": source_local_ordinal,
+                    },
+                    "native": {
+                        **{f: nat.get(f) for f in topology_fields},
+                        "physical_ion_stage_from_charge": native_physical_stage,
+                        "local_ion_ordinal": native_local_ordinal,
+                    },
+                }
         for stage, field in ROW_STAGES:
             stage_stats[stage]["compared"] += 1
             source_value = float(src[field]); native_value = float(nat[field])
@@ -289,24 +372,69 @@ def audit(source_capture: Path, native_run: Path, output: Path) -> dict[str, Any
                 row_mismatches.append(mismatch)
                 stage_first.setdefault(stage, mismatch)
 
-    # Manifest / iteration metadata.
+    # Manifest / iteration metadata.  Source ``n_ions`` is the total bound
+    # stage count (Z); native ``n_ions`` is the active-window count.  Preserve
+    # both meanings and compare the native count only with the source-derived
+    # active count.
     manifest_exact_fields = (
-        "active_min_stage", "active_max_stage", "n_rows", "n_superlevels", "n_ions", "normalization_row"
+        "active_min_stage", "active_max_stage", "n_rows", "n_superlevels", "normalization_row"
     )
     for key in sorted(all_systems):
         src = src_manifest.get(key); nat = nat_manifest.get(key)
         if src is None or nat is None:
-            for stage in ("normalization_metadata", "final_outer_iteration_count", "fixed_point_iteration_count"):
-                stage_stats[stage]["missing"] += 1; system_stage_mismatch[key][stage] += 1
+            for stage in ("normalization_metadata", "total_bound_ion_count_metadata", "active_ion_count", "final_outer_iteration_count", "fixed_point_iteration_count"):
+                stage_stats[stage]["missing"] += 1
+                if stage in ("normalization_metadata", "active_ion_count"):
+                    system_stage_mismatch[key]["normalization_metadata"] += 1
             continue
+        source_total_bound_ions = int(src["n_ions"])
+        source_active_ions = int(src["active_max_stage"]) - int(src["active_min_stage"]) + 1
+        native_active_ions = int(nat["n_ions"])
+
+        stage_stats["total_bound_ion_count_metadata"]["compared"] += 1
+        if source_total_bound_ions == key[1]:
+            stage_stats["total_bound_ion_count_metadata"]["exact"] += 1
+        else:
+            stage_stats["total_bound_ion_count_metadata"]["mismatches"] += 1
+            stage_first.setdefault("total_bound_ion_count_metadata", {
+                "sequence": key[0], "element_z": key[1],
+                "source_total_bound_ion_stages": source_total_bound_ions,
+                "expected_total_bound_ion_stages": key[1],
+            })
+
+        stage_stats["active_ion_count"]["compared"] += 1
+        active_count_ok = source_active_ions == native_active_ions
+        if active_count_ok:
+            stage_stats["active_ion_count"]["exact"] += 1
+        else:
+            stage_stats["active_ion_count"]["mismatches"] += 1
+            system_stage_mismatch[key]["normalization_metadata"] += 1
+            stage_first.setdefault("active_ion_count", {
+                "sequence": key[0], "element_z": key[1],
+                "source_total_bound_ion_stages": source_total_bound_ions,
+                "source_active_ion_stages": source_active_ions,
+                "native_active_ion_stages": native_active_ions,
+            })
+
         stage_stats["normalization_metadata"]["compared"] += 1
-        metadata_ok = all(int(src[f]) == int(nat[f]) for f in manifest_exact_fields)
+        metadata_ok = all(int(src[f]) == int(nat[f]) for f in manifest_exact_fields) and active_count_ok
         if metadata_ok:
             stage_stats["normalization_metadata"]["exact"] += 1
         else:
             stage_stats["normalization_metadata"]["mismatches"] += 1
             system_stage_mismatch[key]["normalization_metadata"] += 1
-            stage_first.setdefault("normalization_metadata", {"sequence": key[0], "element_z": key[1], "source": {f: src[f] for f in manifest_exact_fields}, "native": {f: nat[f] for f in manifest_exact_fields}})
+            stage_first.setdefault("normalization_metadata", {
+                "sequence": key[0], "element_z": key[1],
+                "source": {
+                    **{f: src[f] for f in manifest_exact_fields},
+                    "total_bound_ion_stages": source_total_bound_ions,
+                    "active_ion_stages": source_active_ions,
+                },
+                "native": {
+                    **{f: nat[f] for f in manifest_exact_fields},
+                    "active_ion_stages": native_active_ions,
+                },
+            })
         for stage, field in (("final_outer_iteration_count", "final_outer_iteration"), ("fixed_point_iteration_count", "total_fixed_point_iterations")):
             stage_stats[stage]["compared"] += 1
             if int(src[field]) == int(nat[field]):
@@ -377,9 +505,10 @@ def audit(source_capture: Path, native_run: Path, output: Path) -> dict[str, Any
     localized = 0
     fully_exact_systems = 0
     for key in sorted(expected_systems):
-        first = next((stage for stage in STAGE_ORDER if system_stage_mismatch[key].get(stage, 0) > 0), "FULLY_EXACT")
-        if first == "FULLY_EXACT": fully_exact_systems += 1
-        localized += int(first == "FULLY_EXACT" or first in STAGE_ORDER)
+        first_detailed = next((stage for stage in STAGE_ORDER if system_stage_mismatch[key].get(stage, 0) > 0), "FULLY_EXACT")
+        first = _captured_stage(first_detailed)
+        if first_detailed == "FULLY_EXACT": fully_exact_systems += 1
+        localized += int(first_detailed == "FULLY_EXACT" or first_detailed in STAGE_ORDER)
         sequence, z = key
         final_rows = [rkey for rkey in sorted(src_rows) if rkey[:2] == key]
         final_compared = final_exact = 0
@@ -393,16 +522,22 @@ def audit(source_capture: Path, native_run: Path, output: Path) -> dict[str, Any
             sequence_source[sequence].append(sv); sequence_native[sequence].append(nv)
         source_fp = _fnv1a(source_values); native_fp = _fnv1a(native_values)
         system_rows.append({
-            "sequence": sequence, "element_z": z, "first_divergence_stage": first,
+            "sequence": sequence, "element_z": z,
+            "first_captured_divergence_stage": first,
+            "first_detailed_divergence_stage": first_detailed,
+            "first_divergence_stage": first,
             "final_population_compared": final_compared, "final_population_exact": final_exact,
             "source_final_fingerprint": source_fp, "native_final_fingerprint": native_fp,
             "final_fingerprint_exact": int(source_fp == native_fp and final_compared == len(final_rows)),
             **{f"{stage}_mismatches": system_stage_mismatch[key].get(stage, 0) for stage in STAGE_ORDER},
         })
-        detail = stage_first.get(first, {}) if first != "FULLY_EXACT" else {}
+        detail = stage_first.get(first_detailed, {}) if first_detailed != "FULLY_EXACT" else {}
         divergence_rows.append({
-            "sequence": sequence, "element_z": z, "first_divergence_stage": first,
-            "mismatch_count_at_first_stage": system_stage_mismatch[key].get(first, 0),
+            "sequence": sequence, "element_z": z,
+            "first_captured_divergence_stage": first,
+            "first_detailed_divergence_stage": first_detailed,
+            "first_divergence_stage": first,
+            "mismatch_count_at_first_stage": system_stage_mismatch[key].get(first_detailed, 0),
             "first_global_example": json.dumps(detail, sort_keys=True) if detail else "",
         })
 
@@ -414,7 +549,11 @@ def audit(source_capture: Path, native_run: Path, output: Path) -> dict[str, Any
         fingerprint_rows.append({"sequence": seq, "population_count": len(sequence_source[seq]), "source_fingerprint": sfp, "native_fingerprint": nfp, "fingerprint_exact": int(exact)})
 
     _write_csv(output / SYSTEM_COMPARISON, list(system_rows[0].keys()) if system_rows else ["sequence", "element_z"], system_rows)
-    _write_csv(output / FIRST_DIVERGENCE, ["sequence", "element_z", "first_divergence_stage", "mismatch_count_at_first_stage", "first_global_example"], divergence_rows)
+    _write_csv(output / FIRST_DIVERGENCE, [
+        "sequence", "element_z", "first_captured_divergence_stage",
+        "first_detailed_divergence_stage", "first_divergence_stage",
+        "mismatch_count_at_first_stage", "first_global_example",
+    ], divergence_rows)
     mismatch_fields = ["stage", "sequence", "element_z", "index1", "index2", "source_value", "native_value", "ulp_distance", "absolute_residual", "relative_residual"]
     _write_csv(output / ROW_MISMATCHES, mismatch_fields, row_mismatches)
     _write_csv(output / SUPER_MISMATCHES, mismatch_fields, super_mismatches)
@@ -427,6 +566,8 @@ def audit(source_capture: Path, native_run: Path, output: Path) -> dict[str, Any
         "TRANSFORMED_INITIAL_POPULATIONS_EXACT_40149": "ACCEPT" if stage_stats["transformed_initial_population"]["exact"] == EXPECTED_ROWS else "REJECT",
         "FINAL_OUTER_START_POPULATIONS_EXACT_40149": "ACCEPT" if stage_stats["final_outer_start_population"]["exact"] == EXPECTED_ROWS else "REJECT",
         "COMPACT_RHS_EXACT_40149": "ACCEPT" if stage_stats["full_rhs"]["exact"] == EXPECTED_ROWS else "REJECT",
+        "SOURCE_TOTAL_BOUND_ION_COUNTS_VALID_183": "ACCEPT" if stage_stats["total_bound_ion_count_metadata"]["exact"] == EXPECTED_SYSTEMS else "REJECT",
+        "ACTIVE_ION_STAGE_COUNTS_EXACT_183": "ACCEPT" if stage_stats["active_ion_count"]["exact"] == EXPECTED_SYSTEMS else "REJECT",
         "NORMALIZATION_ROWS_EXACT_183": "ACCEPT" if stage_stats["normalization_metadata"]["exact"] == EXPECTED_SYSTEMS else "REJECT",
         "FINAL_OUTER_ITERATIONS_EXACT_183": "ACCEPT" if stage_stats["final_outer_iteration_count"]["exact"] == EXPECTED_SYSTEMS else "REJECT",
         "FIXED_POINT_ITERATION_COUNTS_EXACT_183": "ACCEPT" if stage_stats["fixed_point_iteration_count"]["exact"] == EXPECTED_SYSTEMS and stage_stats["final_fixed_iteration_count"]["exact"] == EXPECTED_SYSTEMS else "REJECT",
@@ -445,27 +586,47 @@ def audit(source_capture: Path, native_run: Path, output: Path) -> dict[str, Any
         "MAGNESIUM_FINAL_COMPACT_POPULATIONS_EXACT": "ACCEPT" if final_exact_by_element[12] == EXPECTED_BY_ELEMENT[12] else "REJECT",
         "FINAL_COMPACT_POPULATIONS_EXACT_40149": "ACCEPT" if final_exact == EXPECTED_ROWS else "REJECT",
         "ALL61_COMPACT_POPULATION_FINGERPRINTS_EXACT": "ACCEPT" if sequence_fingerprints_exact == len(SEQUENCES) else "REJECT",
+        "ION_RECONSTRUCTION_INVENTORY_COMPLETE_1098": "ACCEPT" if len(native_ions) == EXPECTED_IONS and len(source_ions) == EXPECTED_IONS else "REJECT",
         "ION_RECONSTRUCTION_EXACT_1098": "ACCEPT" if stage_stats["ion_reconstruction"]["exact"] == EXPECTED_IONS else "REJECT",
     }
     decomposition_gates = {
-        "SOURCE_SOLVE_STAGE_CAPTURE_COMPLETE": "ACCEPT" if not inventory_errors and len(src_manifest) == EXPECTED_SYSTEMS and len(src_rows) == EXPECTED_ROWS else "REJECT",
-        "NATIVE_SOLVE_STAGE_CAPTURE_COMPLETE": "ACCEPT" if not inventory_errors and len(nat_manifest) == EXPECTED_SYSTEMS and len(nat_rows) == EXPECTED_ROWS else "REJECT",
+        "SOURCE_SOLVE_STAGE_CAPTURE_COMPLETE": "ACCEPT" if not source_inventory_errors else "REJECT",
+        "NATIVE_SOLVE_STAGE_CAPTURE_COMPLETE": "ACCEPT" if not native_inventory_errors else "REJECT",
+        "SOURCE_NATIVE_COMPARISON_INVENTORY_ALIGNED": "ACCEPT" if not comparison_inventory_errors else "REJECT",
         "ALL_183_SYSTEMS_CLASSIFIED": "ACCEPT" if localized == EXPECTED_SYSTEMS else "REJECT",
         "FIRST_DIVERGENCE_LOCALIZED_ALL183": "ACCEPT" if localized == EXPECTED_SYSTEMS else "REJECT",
     }
     milestone = "ACCEPT" if all(v == "ACCEPT" for v in decomposition_gates.values()) else "REJECT"
-    scientific = "ACCEPT" if stage_gates["FINAL_COMPACT_POPULATIONS_EXACT_40149"] == "ACCEPT" and stage_gates["ALL61_COMPACT_POPULATION_FINGERPRINTS_EXACT"] == "ACCEPT" else "REJECT"
-    first_overall = next((stage for stage in STAGE_ORDER if stage_stats[stage]["mismatches"] or stage_stats[stage]["missing"]), "FULLY_EXACT")
+    scientific = "ACCEPT" if stage_gates["FINAL_COMPACT_POPULATIONS_EXACT_40149"] == "ACCEPT" and stage_gates["ALL61_COMPACT_POPULATION_FINGERPRINTS_EXACT"] == "ACCEPT" and stage_gates["ION_RECONSTRUCTION_EXACT_1098"] == "ACCEPT" else "REJECT"
+    first_overall_detailed = next((stage for stage in STAGE_ORDER if stage_stats[stage]["mismatches"] or stage_stats[stage]["missing"]), "FULLY_EXACT")
+    first_overall = _captured_stage(first_overall_detailed)
+    captured_divergence_counts: dict[str, int] = defaultdict(int)
+    detailed_divergence_counts: dict[str, int] = defaultdict(int)
+    for row in system_rows:
+        captured_divergence_counts[str(row["first_captured_divergence_stage"])] += 1
+        detailed_divergence_counts[str(row["first_detailed_divergence_stage"])] += 1
+    all_errors = [
+        *(f"source:{item}" for item in source_inventory_errors),
+        *(f"native:{item}" for item in native_inventory_errors),
+        *(f"comparison:{item}" for item in comparison_inventory_errors),
+    ]
     report = {
         "schema": SCHEMA, "release": RELEASE, "result": milestone,
         "milestone_result": milestone, "scientific_result": scientific,
-        "errors": inventory_errors,
+        "errors": all_errors,
+        "source_capture_inventory_errors": source_inventory_errors,
+        "native_capture_inventory_errors": native_inventory_errors,
+        "comparison_inventory_errors": comparison_inventory_errors,
         "decomposition_gates": decomposition_gates,
         "stage_gates": stage_gates,
+        "first_captured_divergence_stage": first_overall,
+        "first_detailed_divergence_stage": first_overall_detailed,
         "first_divergence_stage": first_overall,
-        "first_divergence_example": stage_first.get(first_overall),
+        "first_divergence_example": stage_first.get(first_overall_detailed),
         "systems_expected": EXPECTED_SYSTEMS, "systems_classified": localized,
         "systems_fully_exact": fully_exact_systems,
+        "captured_divergence_counts": dict(sorted(captured_divergence_counts.items())),
+        "detailed_divergence_counts": dict(sorted(detailed_divergence_counts.items())),
         "final_compact_population_values_expected": EXPECTED_ROWS,
         "final_compact_population_values_compared": final_total,
         "final_compact_population_values_exact": final_exact,
@@ -475,8 +636,17 @@ def audit(source_capture: Path, native_run: Path, output: Path) -> dict[str, Any
         },
         "sequence_fingerprints_exact": sequence_fingerprints_exact,
         "stage_statistics": {stage: dict(stage_stats[stage]) for stage in sorted(stage_stats)},
-        "source_inventory": {"rows": len(src_rows), "superlevels": len(src_super), "matrix_values": len(src_matrix), "systems": len(src_manifest), "ions": len(source_ions)},
-        "native_inventory": {"rows": len(nat_rows), "superlevels": len(nat_super), "matrix_values": len(nat_matrix), "systems": len(nat_manifest), "ions": len(native_ions)},
+        "source_inventory": {
+            "rows": len(src_rows), "superlevels": len(src_super), "matrix_values": len(src_matrix),
+            "systems": len(src_manifest), "ion_values": len(source_ions),
+            "ion_semantics": "physical stages 1..Z plus fully stripped stage Z+1",
+        },
+        "native_inventory": {
+            "rows": len(nat_rows), "superlevels": len(nat_super), "matrix_values": len(nat_matrix),
+            "systems": len(nat_manifest), "bound_ion_values": native_bound_ion_values,
+            "reconstructed_ion_values": len(native_ions),
+            "ion_semantics": "bound stages 1..Z plus reconstructed fully stripped stage Z+1",
+        },
         "downstream_thermal_science": "READY" if scientific == "ACCEPT" else "NOT_RUN_SOLVE_STAGE_PREREQUISITE",
         "qualification_only": True, "production_promotion_ready": False,
     }

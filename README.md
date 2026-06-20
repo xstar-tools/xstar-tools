@@ -1,10 +1,8 @@
 # xstar_tools
 
-## Current qualification milestone: v0.6.48.7.46.21.3
+## Current qualification milestone: v0.6.48.7.46.21.3.1
 
-v21.3 decomposes independent H/He/Mg compact-population parity at every solve boundary before Thermal accounting is judged. It captures the transformed initial state, final outer-start state, normalized condensed system, first LU solution, iterative-refinement residual/correction, fixed-point transition, final 40,149 compact populations, and 1,098 reconstructed ion populations across all 183 sequence-element systems.
-
-The milestone accepts a complete first-divergence classification even when scientific parity remains rejected. Downstream Thermal gates remain `NOT_RUN_SOLVE_STAGE_PREREQUISITE` until final populations are `40149/40149` exact and all 61 fingerprints match. Canonical Thermal-term ownership from v21.2 is preserved. See `V0648746213_COMPACT_POPULATION_SOLVE_STAGE_PARITY_DECOMPOSITION.md`. Production promotion remains blocked.
+v21.3.1 is a diagnostic-only hotfix over the completed v21.3 solve-stage replay. It corrects physical ion-stage versus local-ordinal comparisons, separates total and active ion counts, reconstructs the fully stripped native ion stage, and keeps source/native inventory failures independent. Reanalysis of the existing production artifacts yields milestone ACCEPT but scientific REJECT: topology and normalization are exact, the first captured divergence is the outer-iteration trajectory, 11/183 systems are fully exact, and 3,501/40,149 final compact populations are bit-exact. No solver physics or ABI changes are introduced. See `V06487462131_SOLVE_STAGE_DIAGNOSTIC_SEMANTICS_HOTFIX.md`.
 
 ## Current qualification milestone
 

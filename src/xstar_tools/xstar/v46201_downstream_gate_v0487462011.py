@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-RELEASE = "0.6.48.7.46.21.3"
+RELEASE = "0.6.48.7.46.21.3.1"
 SCHEMA = "xstar-tools-v06487462011-v46201-downstream-gate-causal-baseline-v1"
 EXPECTED_CHECKER_ERRORS = {
     "ALL_61_MAGNESIUM_TYPE99_SOURCE_STATES_CAPTURED",

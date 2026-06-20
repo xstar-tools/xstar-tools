@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-RELEASE = "0.6.48.7.46.21.2"
+RELEASE = "0.6.48.7.46.21.3.1"
 SCHEMA = "xstar-tools-v0648746202-magnesium-primary-cooling-source-order-audit-v1"
 COMPARISON_NAME = "v048746202_magnesium_primary_cooling_source_order_comparison.csv"
 SUMMARY_NAME = "v048746202_magnesium_primary_cooling_source_order_summary.csv"
