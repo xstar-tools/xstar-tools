@@ -1,5 +1,9 @@
 # xstar_tools
 
+## Current qualification milestone: v0.6.48.7.46.21.2
+
+v21.2 makes independent compact-population parity and immutable canonical Thermal-term ownership fail-first prerequisites. It requires exact H 2013/2013, He 4758/4758, Mg 33378/33378, all 40149 compact values, all 61 fingerprints, and identical canonical-ledger fingerprints for the element and fixed-state consumers before any downstream Thermal science is judged. See `V0648746212_INDEPENDENT_COMPACT_POPULATION_PARITY_AND_CANONICAL_THERMAL_TERM_OWNERSHIP.md`. Production promotion remains blocked.
+
 ## Current qualification milestone
 
 `v0.6.48.7.46.20.2` captures the complete v0.6.47.2 Magnesium primary-cooling addition stream and replays the independently computed native products in exact source `term_index` order. It targets the remaining 1–22 ULP `mg_cooling` residual after accepted Type-50 and Type-99 physical closure.

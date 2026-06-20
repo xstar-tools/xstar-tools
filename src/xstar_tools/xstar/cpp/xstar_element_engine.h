@@ -32,7 +32,8 @@ typedef enum xstar_element_status_flags_v1 {
     XSTAR_ELEMENT_STATUS_NATIVE_LUCY_SOLVE = 1u << 3,
     XSTAR_ELEMENT_STATUS_STATE_COMMITTED = 1u << 4,
     XSTAR_ELEMENT_STATUS_DENSE_RESCUE_USED = 1u << 5,
-    XSTAR_ELEMENT_STATUS_NATIVE_CONSTRUCTION = 1u << 6
+    XSTAR_ELEMENT_STATUS_NATIVE_CONSTRUCTION = 1u << 6,
+    XSTAR_ELEMENT_STATUS_CANONICAL_THERMAL_LEDGER = 1u << 7
 } xstar_element_status_flags_v1;
 
 typedef struct xstar_element_term_v1 {
@@ -52,6 +53,48 @@ typedef struct xstar_element_term_v1 {
     double cj;
     double cj2;
 } xstar_element_term_v1;
+
+typedef enum xstar_canonical_thermal_role_v1 {
+    XSTAR_CANONICAL_THERMAL_FORWARD_DIAG_LOSS = 1,
+    XSTAR_CANONICAL_THERMAL_REVERSE_DIAG_LOSS = 2
+} xstar_canonical_thermal_role_v1;
+
+typedef enum xstar_canonical_thermal_flags_v1 {
+    XSTAR_CANONICAL_THERMAL_TYPE53 = 1u << 0,
+    XSTAR_CANONICAL_THERMAL_NORMALIZATION_ROW = 1u << 1,
+    XSTAR_CANONICAL_THERMAL_SOURCE_DOMAIN_INCLUDED = 1u << 2,
+    XSTAR_CANONICAL_THERMAL_TYPE99_SOURCE_CORRECTED = 1u << 3,
+    XSTAR_CANONICAL_THERMAL_PRIMARY_SOURCE_ORDERED = 1u << 4,
+    XSTAR_CANONICAL_THERMAL_MATRIX_INSERTION_CAPTURED = 1u << 5
+} xstar_canonical_thermal_flags_v1;
+
+/*
+ * Immutable diagonal Thermal term whose coefficients are captured when a
+ * UCalc contribution enters the active matrix stream, before matrix-family
+ * closure may alter ans1/ans2.  Closure may filter or restore source order,
+ * but the same committed term objects are passed to the element and
+ * fixed-state Thermal consumers.
+ */
+typedef struct xstar_canonical_thermal_term_v1 {
+    int64_t source_position;
+    int64_t term_index;
+    int64_t record;
+    int64_t primary_source_order_index;
+    int32_t data_type;
+    int32_t rate_type;
+    int32_t ion_index;
+    int32_t ion_stage;
+    int32_t compact_row;
+    int32_t native_compact_row;
+    int32_t source_compact_row;
+    int32_t role;
+    uint32_t flags;
+    uint32_t reserved0;
+    double cj;
+    double cj2;
+    double native_cj;
+    double source_cj;
+} xstar_canonical_thermal_term_v1;
 
 typedef struct xstar_element_contribution_v1 {
     int64_t source_position;
@@ -229,6 +272,18 @@ XSTAR_ELEMENT_EXPORT int xstar_element_engine_run_construction_v1(
     const xstar_element_input_v1* input,
     const xstar_element_contribution_v1* contributions,
     size_t contribution_count,
+    xstar_element_output_v1* output,
+    char* message,
+    size_t message_size
+);
+XSTAR_ELEMENT_EXPORT int xstar_element_engine_run_construction_with_thermal_ledger_v1(
+    xstar_element_engine_context* context,
+    const xstar_element_input_v1* input,
+    const xstar_element_contribution_v1* contributions,
+    size_t contribution_count,
+    const xstar_canonical_thermal_term_v1* thermal_terms,
+    size_t thermal_term_count,
+    uint64_t* consumed_thermal_ledger_fingerprint,
     xstar_element_output_v1* output,
     char* message,
     size_t message_size

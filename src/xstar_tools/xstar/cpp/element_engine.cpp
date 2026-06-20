@@ -1,5 +1,6 @@
 #include "xstar_element_engine.h"
 #include "source_order_thermal_reducer.hpp"
+#include "canonical_thermal_term.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -426,7 +427,10 @@ int run_element_impl(
     xstar_element_engine_context_impl& context,
     const xstar_element_input_v1& input,
     xstar_element_output_v1& output,
-    std::string& status_message
+    std::string& status_message,
+    const xstar_canonical_thermal_term_v1* canonical_thermal_terms = nullptr,
+    std::size_t canonical_thermal_term_count = 0,
+    std::uint64_t* consumed_thermal_ledger_fingerprint = nullptr
 ) {
     validate_input(input);
     validate_output(input, output);
@@ -584,18 +588,36 @@ int run_element_impl(
     std::fill(w.ionization_components.begin(), w.ionization_components.end(), 0.0);
     std::fill(w.recombination_components.begin(), w.recombination_components.end(), 0.0);
 
-    xstar_source_order_thermal::FourChannelAccumulator thermal_reducer;
-    for (std::size_t k = 0; k < input.term_count; ++k) {
-        const auto& term = input.terms[k];
-        if (term.row != term.column) continue;
-        const double population = w.x[static_cast<std::size_t>(term.row - 1)];
-        thermal_reducer.accumulate(population, term.cj, term.cj2);
+    if (canonical_thermal_term_count > 0) {
+        const auto canonical = xstar_canonical_thermal::reduce(
+            canonical_thermal_terms, canonical_thermal_term_count,
+            w.x.data(), static_cast<std::size_t>(n), input.element_z);
+        const auto thermal_values = canonical.tagged.total.values();
+        output.heating = thermal_values[0];
+        output.cooling = thermal_values[1];
+        output.heating2 = thermal_values[2];
+        output.cooling2 = thermal_values[3];
+        output.status_flags |= XSTAR_ELEMENT_STATUS_CANONICAL_THERMAL_LEDGER;
+        if (consumed_thermal_ledger_fingerprint) {
+            *consumed_thermal_ledger_fingerprint = canonical.fingerprint;
+        }
+    } else {
+        xstar_source_order_thermal::FourChannelAccumulator thermal_reducer;
+        for (std::size_t k = 0; k < input.term_count; ++k) {
+            const auto& term = input.terms[k];
+            if (term.row != term.column) continue;
+            const double population = w.x[static_cast<std::size_t>(term.row - 1)];
+            thermal_reducer.accumulate(population, term.cj, term.cj2);
+        }
+        const auto thermal_values = thermal_reducer.values();
+        output.heating = thermal_values[0];
+        output.cooling = thermal_values[1];
+        output.heating2 = thermal_values[2];
+        output.cooling2 = thermal_values[3];
+        if (consumed_thermal_ledger_fingerprint) {
+            *consumed_thermal_ledger_fingerprint = 0;
+        }
     }
-    const auto thermal_values = thermal_reducer.values();
-    output.heating = thermal_values[0];
-    output.cooling = thermal_values[1];
-    output.heating2 = thermal_values[2];
-    output.cooling2 = thermal_values[3];
 
     for (int i = 0; i < std::max(0, n - 1); ++i) {
         const int ion_slot = input.ion_by_row[i] - 1;
@@ -698,9 +720,12 @@ int run_element_impl(
     }
     output.normalization_error = std::fabs(output.normalization - 1.0);
     output.condensed_dimension = nsp;
+    const std::uint32_t canonical_thermal_status =
+        output.status_flags & XSTAR_ELEMENT_STATUS_CANONICAL_THERMAL_LEDGER;
     output.status_flags = XSTAR_ELEMENT_STATUS_NATIVE_MATRIX_ASSEMBLY |
                           XSTAR_ELEMENT_STATUS_NATIVE_LUCY_SOLVE |
-                          XSTAR_ELEMENT_STATUS_STATE_COMMITTED;
+                          XSTAR_ELEMENT_STATUS_STATE_COMMITTED |
+                          canonical_thermal_status;
     if (ordered) output.status_flags |= XSTAR_ELEMENT_STATUS_SOURCE_ORDER_VERIFIED;
     if (outer_diff <= input.lucy_tolerance && fixed_diff < input.fixed_point_tolerance) {
         output.status_flags |= XSTAR_ELEMENT_STATUS_CONVERGED;
@@ -907,6 +932,60 @@ int xstar_element_engine_run_construction_v1(
         return 2;
     } catch (...) {
         copy_text(message, message_size, "unknown native element-construction exception");
+        return 3;
+    }
+}
+
+int xstar_element_engine_run_construction_with_thermal_ledger_v1(
+    xstar_element_engine_context* context,
+    const xstar_element_input_v1* input,
+    const xstar_element_contribution_v1* contributions,
+    size_t contribution_count,
+    const xstar_canonical_thermal_term_v1* thermal_terms,
+    size_t thermal_term_count,
+    uint64_t* consumed_thermal_ledger_fingerprint,
+    xstar_element_output_v1* output,
+    char* message,
+    size_t message_size
+) {
+    if (!context || !input || !output || !consumed_thermal_ledger_fingerprint) return 1;
+    try {
+        xstar_canonical_thermal::validate(thermal_terms, thermal_term_count, input->n_rows);
+        const auto construction_t0 = clock_type::now();
+        std::vector<xstar_element_term_v1> terms =
+            construct_terms_from_contributions(*input, contributions, contribution_count);
+        const double construction_seconds = seconds_since(construction_t0);
+        xstar_element_input_v1 expanded = *input;
+        expanded.terms = terms.empty() ? nullptr : terms.data();
+        expanded.term_count = terms.size();
+        std::string status;
+        const int rc = run_element_impl(
+            context->impl, expanded, *output, status,
+            thermal_terms, thermal_term_count, consumed_thermal_ledger_fingerprint);
+        if (rc == 0) {
+            output->status_flags |= XSTAR_ELEMENT_STATUS_NATIVE_CONSTRUCTION;
+            output->construction_seconds = construction_seconds;
+            output->records_constructed = contribution_count;
+            output->terms_constructed = terms.size();
+            context->impl.stats.construction_calls += 1;
+            context->impl.stats.records_constructed += contribution_count;
+            context->impl.stats.terms_constructed += terms.size();
+            context->impl.stats.construction_seconds += construction_seconds;
+            std::ostringstream text;
+            text << status << "; native_records=" << contribution_count
+                 << "; native_terms=" << terms.size()
+                 << "; canonical_thermal_terms=" << thermal_term_count;
+            status = text.str();
+            copy_text(output->message, sizeof(output->message), status);
+        }
+        copy_text(message, message_size, status);
+        return rc;
+    } catch (const std::exception& exc) {
+        copy_text(message, message_size, exc.what());
+        copy_text(output->message, sizeof(output->message), exc.what());
+        return 2;
+    } catch (...) {
+        copy_text(message, message_size, "unknown native canonical Thermal construction exception");
         return 3;
     }
 }

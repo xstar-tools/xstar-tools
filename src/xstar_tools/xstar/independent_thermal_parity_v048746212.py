@@ -12,12 +12,12 @@ from typing import Any
 
 from .all61_native_replay_aggregate import THERMAL_LEDGER_NAME, THERMAL_DIAGONAL_LEDGER_NAME
 from .v0472_all61_magnesium_primary_cooling_source_order_capture import LEDGER_NAME as MG_SOURCE_LEDGER_NAME
-from .v0472_all61_independent_thermal_capture_v048746211 import ANSWER_LEDGER_NAME
+from .v0472_all61_independent_thermal_capture_v048746212 import ANSWER_LEDGER_NAME
 
 RELEASE = "0.6.48.7.46.21.2"
-SCHEMA = "xstar-tools-v0648746211-independent-thermal-parity-audit-v1"
-ANSWER_COMPARISON_NAME = "v048746211_thermal_answer_channel_comparison.csv"
-COMPONENT_SUMMARY_NAME = "v048746211_independent_component_summary.csv"
+SCHEMA = "xstar-tools-v0648746212-independent-thermal-parity-audit-v1"
+ANSWER_COMPARISON_NAME = "v048746212_thermal_answer_channel_comparison.csv"
+COMPONENT_SUMMARY_NAME = "v048746212_independent_component_summary.csv"
 
 
 def _read_csv(path: Path) -> list[dict[str, str]]:

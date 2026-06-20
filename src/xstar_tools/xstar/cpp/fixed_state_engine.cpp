@@ -1,5 +1,6 @@
 #include "xstar_fixed_state_engine.h"
 #include "source_order_thermal_reducer.hpp"
+#include "canonical_thermal_term.hpp"
 #include "coheat_table_v048724.h"
 #include "xstar_element_engine.h"
 #include "xstar_spectral_engine.h"
@@ -1088,6 +1089,200 @@ struct ActiveElementView {
 };
 
 
+
+struct CanonicalThermalLedgerBuild {
+    std::vector<xstar_canonical_thermal_term_v1> terms;
+    std::uint64_t fingerprint = 0;
+};
+
+class CanonicalThermalLedgerBuilderV048746212 {
+public:
+    CanonicalThermalLedgerBuilderV048746212(
+        const ElementProgram& element,
+        const ActiveElementView& active
+    ) : element_(element), active_(active),
+        type99_state_(magnesium_type99_primary_cooling_state_v04874620()),
+        primary_order_state_(magnesium_primary_cooling_order_state_v048746202()) {}
+
+    void append_matrix_committed(const xstar_element_contribution_v1& contribution) {
+        const Identity identity = identity_of(contribution);
+        if (candidates_.count(identity) != 0u) {
+            throw std::runtime_error(
+                "duplicate canonical Thermal ledger matrix-commit identity");
+        }
+        Candidate candidate;
+        candidate.forward = make_term(
+            contribution, contribution.lower_row,
+            XSTAR_CANONICAL_THERMAL_FORWARD_DIAG_LOSS,
+            contribution.ans4 * contribution.density_scale,
+            contribution.ans6 * contribution.density_scale);
+        candidate.reverse = make_term(
+            contribution, contribution.upper_row,
+            XSTAR_CANONICAL_THERMAL_REVERSE_DIAG_LOSS,
+            -contribution.ans3 * contribution.density_scale,
+            -contribution.ans5 * contribution.density_scale);
+        candidates_.emplace(identity, candidate);
+    }
+
+    CanonicalThermalLedgerBuild finish(
+        const std::vector<xstar_element_contribution_v1>& committed_contributions
+    ) const {
+        CanonicalThermalLedgerBuild out;
+        out.terms.reserve(committed_contributions.size() * 2u);
+        std::set<Identity> consumed;
+        std::set<std::pair<std::int64_t, std::string>> type99_rows_matched;
+        std::set<std::pair<std::int64_t, std::string>> primary_rows_matched;
+        std::int64_t term_index = 0;
+
+        const auto commit_term = [&](const xstar_canonical_thermal_term_v1& candidate) {
+            xstar_canonical_thermal_term_v1 term = candidate;
+            term.term_index = ++term_index;
+            const char* role_name = term.role == XSTAR_CANONICAL_THERMAL_FORWARD_DIAG_LOSS
+                ? "forward_diag_loss" : "reverse_diag_loss";
+            const auto source_key = std::make_pair(term.record, std::string(role_name));
+            if (type99_state_.enabled && element_.element_z == 12 && term.data_type == 99) {
+                type99_rows_matched.insert(source_key);
+            }
+            if (primary_order_state_.enabled && element_.element_z == 12 && term.cj > 0.0) {
+                primary_rows_matched.insert(source_key);
+            }
+            out.terms.push_back(term);
+        };
+
+        // Matrix closure may remove a non-source contribution or restore source
+        // insertion order, but it must never rewrite the immutable Thermal
+        // coefficients captured when the UCalc result entered the matrix stream.
+        for (const auto& contribution : committed_contributions) {
+            const Identity identity = identity_of(contribution);
+            const auto it = candidates_.find(identity);
+            if (it == candidates_.end()) {
+                throw std::runtime_error(
+                    "canonical Thermal ledger committed identity was not captured at insertion");
+            }
+            if (!consumed.insert(identity).second) {
+                throw std::runtime_error(
+                    "canonical Thermal ledger committed identity was consumed more than once");
+            }
+            commit_term(it->second.forward);
+            commit_term(it->second.reverse);
+        }
+
+        if (type99_state_.enabled && element_.element_z == 12 &&
+            type99_rows_matched.size() != type99_state_.rows.size()) {
+            throw std::runtime_error(
+                "canonical Thermal ledger did not consume every Mg Type-99 source row");
+        }
+        if (primary_order_state_.enabled && element_.element_z == 12 &&
+            primary_rows_matched.size() != primary_order_state_.rows.size()) {
+            throw std::runtime_error(
+                "canonical Thermal ledger did not consume every Mg primary source-order row");
+        }
+        xstar_canonical_thermal::validate(
+            out.terms.data(), out.terms.size(), active_.element.n_rows);
+        out.fingerprint = xstar_canonical_thermal::fingerprint(out.terms);
+        return out;
+    }
+
+private:
+    using Identity = std::tuple<std::int64_t, int, int, int>;
+    struct Candidate {
+        xstar_canonical_thermal_term_v1 forward{};
+        xstar_canonical_thermal_term_v1 reverse{};
+    };
+
+    static Identity identity_of(const xstar_element_contribution_v1& contribution) {
+        return Identity{
+            contribution.record,
+            contribution.data_type,
+            contribution.rate_type,
+            contribution.ion_stage};
+    }
+
+    xstar_canonical_thermal_term_v1 make_term(
+        const xstar_element_contribution_v1& contribution,
+        int native_compact_row,
+        int role,
+        double native_cj,
+        double cj2
+    ) const {
+        const char* role_name = role == XSTAR_CANONICAL_THERMAL_FORWARD_DIAG_LOSS
+            ? "forward_diag_loss" : "reverse_diag_loss";
+        int compact_row = native_compact_row;
+        double cj = native_cj;
+        double source_cj = native_cj;
+        std::uint32_t flags = XSTAR_CANONICAL_THERMAL_SOURCE_DOMAIN_INCLUDED |
+            XSTAR_CANONICAL_THERMAL_MATRIX_INSERTION_CAPTURED;
+        if (contribution.data_type == 53) flags |= XSTAR_CANONICAL_THERMAL_TYPE53;
+        if (native_compact_row == active_.element.normalization_row) {
+            flags |= XSTAR_CANONICAL_THERMAL_NORMALIZATION_ROW;
+        }
+
+        const auto source_key = std::make_pair(contribution.record, std::string(role_name));
+        if (type99_state_.enabled && element_.element_z == 12 && contribution.data_type == 99) {
+            const auto it = type99_state_.rows.find(source_key);
+            if (it == type99_state_.rows.end()) {
+                throw std::runtime_error(
+                    "canonical Thermal ledger missing Mg Type-99 source row");
+            }
+            source_cj = it->second.cj;
+            if (it->second.cj > 0.0) {
+                compact_row = it->second.compact_row;
+                cj = it->second.cj;
+                flags |= XSTAR_CANONICAL_THERMAL_TYPE99_SOURCE_CORRECTED;
+            }
+        }
+
+        std::int64_t primary_source_order_index = 0;
+        if (primary_order_state_.enabled && element_.element_z == 12 && cj > 0.0) {
+            const auto it = primary_order_state_.rows.find(source_key);
+            if (it == primary_order_state_.rows.end()) {
+                throw std::runtime_error(
+                    "canonical Thermal ledger missing Mg primary source-order row");
+            }
+            const auto& source_row = it->second;
+            if (source_row.data_type != contribution.data_type ||
+                source_row.rate_type != contribution.rate_type ||
+                source_row.compact_row != compact_row) {
+                throw std::runtime_error(
+                    "canonical Thermal ledger Mg primary source-order metadata mismatch");
+            }
+            primary_source_order_index = source_row.source_order_index;
+            flags |= XSTAR_CANONICAL_THERMAL_PRIMARY_SOURCE_ORDERED;
+        }
+        if (compact_row < 1 || compact_row > active_.element.n_rows) {
+            throw std::runtime_error(
+                "canonical Thermal ledger compact row outside active basis");
+        }
+
+        xstar_canonical_thermal_term_v1 term{};
+        term.source_position = contribution.source_position +
+            (role == XSTAR_CANONICAL_THERMAL_FORWARD_DIAG_LOSS ? 2 : 3);
+        term.term_index = 0;  // Assigned only after closure membership/order is finalized.
+        term.record = contribution.record;
+        term.primary_source_order_index = primary_source_order_index;
+        term.data_type = contribution.data_type;
+        term.rate_type = contribution.rate_type;
+        term.ion_index = contribution.ion_index;
+        term.ion_stage = contribution.ion_stage;
+        term.compact_row = compact_row;
+        term.native_compact_row = native_compact_row;
+        term.source_compact_row = compact_row;
+        term.role = role;
+        term.flags = flags;
+        term.cj = cj;
+        term.cj2 = cj2;
+        term.native_cj = native_cj;
+        term.source_cj = source_cj;
+        return term;
+    }
+
+    const ElementProgram& element_;
+    const ActiveElementView& active_;
+    const MagnesiumType99PrimaryCoolingStateV04874620& type99_state_;
+    const MagnesiumPrimaryCoolingOrderStateV048746202& primary_order_state_;
+    std::map<Identity, Candidate> candidates_;
+};
+
 struct SourceCompactOracleRow {
     int active_min_stage = 1;
     int active_max_stage = 1;
@@ -1563,7 +1758,7 @@ void apply_matrix_closure_contribution_corrections(
         if (correction.remove) continue;
         if (correction.replace_ans1) contribution.ans1 = correction.source_ans1;
         if (correction.replace_ans2) contribution.ans2 = correction.source_ans2;
-        // v0.6.48.7.46.21.1: matrix closure originally corrected only the
+        // v0.6.48.7.46.21.2: matrix closure originally corrected only the
         // population-rate channels.  Type-50 thermal energy channels are
         // algebraically tied to those rates after the source post-swap:
         //   ans3 = -ans2 * |Eupper-Elower| * erg/eV
@@ -1592,7 +1787,7 @@ void apply_matrix_closure_contribution_corrections(
                 contribution.ans3 = -contribution.ans2 * endpoint_energy_ev * kErgPerEv;
             }
         }
-        // v0.6.48.7.46.21.1: source matrix closure may replace the Type-50
+        // v0.6.48.7.46.21.2: source matrix closure may replace the Type-50
         // population-rate channels (ans1/ans2), but the Thermal ledger consumes
         // the pre-closure UCalc energy channels (ans3/ans4).  Preserve those
         // already source-exact values instead of recomputing them from the
@@ -1768,6 +1963,11 @@ struct NativeElementDiagnostic {
     // beside the solve-system arrays so every mismatched matrix cell can be
     // attributed to one or more causal atomic records.
     std::vector<xstar_element_contribution_v1> committed_contributions;
+    std::vector<xstar_canonical_thermal_term_v1> canonical_thermal_terms;
+    std::uint64_t canonical_thermal_ledger_fingerprint = 0;
+    std::uint64_t element_thermal_ledger_fingerprint = 0;
+    std::uint64_t fixed_state_thermal_ledger_fingerprint = 0;
+    bool canonical_thermal_ledger_shared = false;
     std::string solver_method;
     std::uint32_t solver_status_flags = 0;
     int outer_iterations = 0;
@@ -3625,7 +3825,7 @@ bool evaluate_type53_source_integral(
     contribution.ans6 *= (std::abs(contribution.ans4) - energy_difference * kErgPerEv * contribution.ans1) / den6;
     contribution.ans5 *= (std::abs(contribution.ans3) - energy_difference * kErgPerEv * contribution.ans2) / den5;
 
-    // v0.6.48.7.46.21.1 qualification-only IEEE closure.
+    // v0.6.48.7.46.21.2 qualification-only IEEE closure.
     // v0.6.48.7.46.9.4.2 qualification-only IEEE closure compatibility marker.
     // The v0.6.47.2
     // Python reference evaluates the same source expressions one operation at
@@ -5580,6 +5780,7 @@ int run_impl(
                 : make_full_element_view(element));
         std::vector<xstar_element_contribution_v1> contributions;
         contributions.reserve(evaluated.size());
+        CanonicalThermalLedgerBuilderV048746212 canonical_thermal_builder(element, active);
         for (const auto& item : evaluated) {
             const auto& original = item.contribution;
             const bool active_stage = original.ion_stage >= active.min_stage && original.ion_stage <= active.max_stage;
@@ -5611,6 +5812,7 @@ int run_impl(
                 auto contribution = original;
                 contribution.lower_row -= active.full_row_start - 1;
                 contribution.upper_row -= active.full_row_start - 1;
+                canonical_thermal_builder.append_matrix_committed(contribution);
                 contributions.push_back(contribution);
                 matrix_committed = true;
             }
@@ -5633,6 +5835,8 @@ int run_impl(
         } else if (type53_row46_coupled_replacement && element.element_z == 2) {
             reorder_type53_row46_coupled_contributions(contributions);
         }
+        const auto canonical_thermal_ledger =
+            canonical_thermal_builder.finish(contributions);
         stats.contributions_constructed += contributions.size();
         ElementBuffers buffers = make_buffers(active.element, &input, source_compact_basis_seed);
         xstar_element_input_v1 ein{};
@@ -5662,10 +5866,18 @@ int run_impl(
         bind_output(eout, buffers, active.element.element_z);
         std::array<char, XSTAR_FIXED_STATE_MESSAGE_SIZE> error{};
         const auto element_start = clock_type::now();
-        const int rc = xstar_element_engine_run_construction_v1(
-            ctx.element_context, &ein, contributions.data(), contributions.size(), &eout, error.data(), error.size());
+        std::uint64_t element_consumed_thermal_ledger_fingerprint = 0;
+        const int rc = xstar_element_engine_run_construction_with_thermal_ledger_v1(
+            ctx.element_context, &ein, contributions.data(), contributions.size(),
+            canonical_thermal_ledger.terms.data(), canonical_thermal_ledger.terms.size(),
+            &element_consumed_thermal_ledger_fingerprint,
+            &eout, error.data(), error.size());
         stats.element_seconds += elapsed(element_start);
         if (rc != 0) throw std::runtime_error(std::string("native element solve failed z=") + std::to_string(element.element_z) + ": " + error.data());
+        if (element_consumed_thermal_ledger_fingerprint != canonical_thermal_ledger.fingerprint ||
+            (eout.status_flags & XSTAR_ELEMENT_STATUS_CANONICAL_THERMAL_LEDGER) == 0u) {
+            throw std::runtime_error("element engine did not consume the canonical Thermal ledger");
+        }
         ++stats.elements_solved;
         // Source calc_hmc_all keeps primary and secondary thermal totals
         // separate.  heatf/hmctot consumes only the primary httot/cltot pair;
@@ -5697,197 +5909,90 @@ int run_impl(
         double computed_element_cooling = 0.0;
         double computed_element_heating2 = 0.0;
         double computed_element_cooling2 = 0.0;
-        xstar_source_order_thermal::TaggedFourChannelAccumulator thermal_reducer;
         if (thermal_diagonal_source_domain) {
-            const std::size_t n = thermal_populations.size();
-            if (active.element.normalization_row < 1 ||
-                active.element.normalization_row > static_cast<int>(n)) {
-                throw std::runtime_error("thermal compact normalization row is outside the active basis");
-            }
-            std::int64_t source_order_index = 0;
-            const auto& magnesium_type99_primary_state =
-                magnesium_type99_primary_cooling_state_v04874620();
-            const auto& magnesium_primary_order_state =
-                magnesium_primary_cooling_order_state_v048746202();
-            std::set<std::pair<std::int64_t, std::string>>
-                magnesium_type99_primary_rows_matched;
-            struct PendingPrimaryCooling {
-                double population = 0.0;
-                double coefficient = 0.0;
-                bool type53 = false;
-            };
-            std::map<std::pair<std::int64_t, std::string>, PendingPrimaryCooling>
-                magnesium_primary_pending_cooling;
-            const auto accumulate_diagonal = [&](const xstar_element_contribution_v1& contribution,
-                                                 int compact_row,
-                                                 const char* role,
-                                                 double cj,
-                                                 double cj2) {
-                ++source_order_index;
-                const int native_compact_row = compact_row;
-                const double native_cj = cj;
-                double source_cj = cj;
-                bool magnesium_type99_primary_cooling_reduction_applied = false;
-                if (magnesium_type99_primary_state.enabled && element.element_z == 12 &&
-                    contribution.data_type == 99) {
-                    const auto key = std::make_pair(
-                        contribution.record, std::string(role));
-                    const auto source_it = magnesium_type99_primary_state.rows.find(key);
-                    if (source_it == magnesium_type99_primary_state.rows.end()) {
-                        throw std::runtime_error(
-                            "magnesium Type-99 native diagonal is missing from source primary-cooling ledger");
-                    }
-                    const auto& source_row = source_it->second;
-                    source_cj = source_row.cj;
-                    if (source_row.cj > 0.0) {
-                        compact_row = source_row.compact_row;
-                        cj = source_row.cj;
-                        magnesium_type99_primary_cooling_reduction_applied = true;
-                    }
-                    magnesium_type99_primary_rows_matched.insert(key);
-                }
-                const auto primary_key = std::make_pair(
-                    contribution.record, std::string(role));
-                const MagnesiumPrimaryCoolingOrderRowV048746202*
-                    magnesium_primary_source_order_row = nullptr;
-                if (magnesium_primary_order_state.enabled && element.element_z == 12 && cj > 0.0) {
-                    const auto source_it = magnesium_primary_order_state.rows.find(primary_key);
-                    if (source_it == magnesium_primary_order_state.rows.end()) {
-                        throw std::runtime_error(
-                            "magnesium native primary-cooling diagonal is missing from source-order ledger");
-                    }
-                    const auto& source_row = source_it->second;
-                    if (source_row.data_type != contribution.data_type ||
-                        source_row.rate_type != contribution.rate_type ||
-                        source_row.compact_row != compact_row) {
-                        throw std::runtime_error(
-                            "magnesium primary-cooling source-order metadata mismatch");
-                    }
-                    magnesium_primary_source_order_row = &source_row;
-                }
-                if (compact_row < 1 || compact_row > static_cast<int>(n)) {
-                    throw std::runtime_error("thermal source-order diagonal row is outside the active basis");
-                }
-                const std::size_t row = static_cast<std::size_t>(compact_row - 1);
-                const bool normalization_row = compact_row == active.element.normalization_row;
-                const double compact_population = thermal_populations[row];
-                const double weighted_population = compact_population * element.abundance;
-                const bool is_type53 = contribution.data_type == 53;
-                const double primary_unweighted = compact_population * cj;
-                const double secondary_unweighted = compact_population * cj2;
-                ThermalDiagonalDiagnostic diagonal;
-                diagonal.element_z = element.element_z;
-                diagonal.active_min_stage = active.min_stage;
-                diagonal.active_max_stage = active.max_stage;
-                diagonal.source_order_index = source_order_index;
-                diagonal.source_position = contribution.source_position;
-                diagonal.record = contribution.record;
-                diagonal.data_type = contribution.data_type;
-                diagonal.rate_type = contribution.rate_type;
-                diagonal.ion_index = contribution.ion_index;
-                diagonal.ion_stage = contribution.ion_stage;
-                diagonal.compact_row = compact_row;
-                diagonal.native_compact_row = native_compact_row;
-                diagonal.source_compact_row =
-                    magnesium_type99_primary_cooling_reduction_applied ? compact_row : native_compact_row;
-                diagonal.role = role;
-                diagonal.normalization_row = normalization_row;
-                diagonal.magnesium_type99_primary_cooling_reduction_applied =
-                    magnesium_type99_primary_cooling_reduction_applied;
-                diagonal.magnesium_primary_cooling_source_order_applied =
-                    magnesium_primary_source_order_row != nullptr;
-                diagonal.magnesium_primary_cooling_source_order_index =
-                    magnesium_primary_source_order_row ?
-                        magnesium_primary_source_order_row->source_order_index : 0;
-                diagonal.source_domain_included = true;
-                diagonal.abundance = element.abundance;
-                diagonal.compact_population = compact_population;
-                diagonal.weighted_population = weighted_population;
-                diagonal.cj = cj;
-                diagonal.cj2 = cj2;
-                diagonal.native_cj = native_cj;
-                diagonal.source_cj = source_cj;
-                ++ctx.last_thermal_diagonal_rows_included;
-                if (normalization_row) ++ctx.last_thermal_diagonal_normalization_terms_included;
-                if (cj > 0.0) {
-                    diagonal.unweighted_cooling_contribution = primary_unweighted;
-                    diagonal.cooling_contribution = primary_unweighted * element.abundance;
-                    if (magnesium_primary_source_order_row != nullptr) {
-                        PendingPrimaryCooling pending;
-                        pending.population = compact_population;
-                        pending.coefficient = cj;
-                        pending.type53 = is_type53;
-                        if (!magnesium_primary_pending_cooling.emplace(primary_key, pending).second) {
-                            throw std::runtime_error(
-                                "duplicate magnesium primary-cooling native record/role");
-                        }
-                    } else {
-                        thermal_reducer.accumulate_primary(compact_population, cj, is_type53);
-                    }
-                } else {
-                    diagonal.unweighted_heating_contribution = -primary_unweighted;
-                    diagonal.heating_contribution = (-primary_unweighted) * element.abundance;
-                    thermal_reducer.accumulate_primary(compact_population, cj, is_type53);
-                }
-                if (cj2 > 0.0) {
-                    diagonal.unweighted_cooling2_contribution = secondary_unweighted;
-                    diagonal.cooling2_contribution = secondary_unweighted * element.abundance;
-                } else {
-                    diagonal.unweighted_heating2_contribution = -secondary_unweighted;
-                    diagonal.heating2_contribution = (-secondary_unweighted) * element.abundance;
-                }
-                thermal_reducer.accumulate_secondary(compact_population, cj2, is_type53);
-                ctx.last_thermal_diagonal_diagnostics.push_back(std::move(diagonal));
-            };
-            for (const auto& contribution : contributions) {
-                const double scale = contribution.density_scale;
-                accumulate_diagonal(
-                    contribution, contribution.lower_row, "forward_diag_loss",
-                    contribution.ans4 * scale, contribution.ans6 * scale);
-                accumulate_diagonal(
-                    contribution, contribution.upper_row, "reverse_diag_loss",
-                    -contribution.ans3 * scale, -contribution.ans5 * scale);
-            }
-            if (magnesium_type99_primary_state.enabled && element.element_z == 12 &&
-                magnesium_type99_primary_rows_matched.size() !=
-                    magnesium_type99_primary_state.rows.size()) {
+            const auto canonical_reduction = xstar_canonical_thermal::reduce(
+                canonical_thermal_ledger.terms, thermal_populations, element.element_z);
+            if (canonical_reduction.fingerprint != canonical_thermal_ledger.fingerprint) {
                 throw std::runtime_error(
-                    "magnesium Type-99 source primary-cooling ledger was not fully consumed");
+                    "fixed-state consumer canonical Thermal ledger fingerprint mismatch");
             }
-            if (magnesium_primary_order_state.enabled && element.element_z == 12) {
-                if (magnesium_primary_pending_cooling.size() !=
-                    magnesium_primary_order_state.rows.size()) {
-                    throw std::runtime_error(
-                        "magnesium primary-cooling source-order ledger was not fully consumed");
-                }
-                for (const auto& source_row : magnesium_primary_order_state.ordered_rows) {
-                    const auto key = std::make_pair(source_row.record, source_row.role);
-                    const auto pending_it = magnesium_primary_pending_cooling.find(key);
-                    if (pending_it == magnesium_primary_pending_cooling.end()) {
-                        throw std::runtime_error(
-                            "magnesium primary-cooling source-order key is missing from native stream");
-                    }
-                    const auto& pending = pending_it->second;
-                    thermal_reducer.accumulate_primary(
-                        pending.population, pending.coefficient, pending.type53);
-                }
-            }
-            const auto weighted = thermal_reducer.total.abundance_weighted(element.abundance);
+            const auto weighted =
+                canonical_reduction.tagged.total.abundance_weighted(element.abundance);
             computed_element_heating = weighted[0];
             computed_element_cooling = weighted[1];
             computed_element_heating2 = weighted[2];
             computed_element_cooling2 = weighted[3];
             if (element.element_z == 2) {
                 ctx.last_computed_helium_type53_budget =
-                    thermal_reducer.type53.abundance_weighted(element.abundance);
+                    canonical_reduction.tagged.type53.abundance_weighted(element.abundance);
                 ctx.last_computed_helium_non_type53_budget =
-                    thermal_reducer.non_type53.abundance_weighted(element.abundance);
+                    canonical_reduction.tagged.non_type53.abundance_weighted(element.abundance);
+            }
+
+            for (const auto& term : canonical_thermal_ledger.terms) {
+                const std::size_t row = static_cast<std::size_t>(term.compact_row - 1);
+                const double compact_population = thermal_populations[row];
+                const double weighted_population = compact_population * element.abundance;
+                const double primary_unweighted = compact_population * term.cj;
+                const double secondary_unweighted = compact_population * term.cj2;
+                ThermalDiagonalDiagnostic diagonal;
+                diagonal.element_z = element.element_z;
+                diagonal.active_min_stage = active.min_stage;
+                diagonal.active_max_stage = active.max_stage;
+                diagonal.source_order_index = term.term_index;
+                diagonal.source_position = term.source_position;
+                diagonal.record = term.record;
+                diagonal.data_type = term.data_type;
+                diagonal.rate_type = term.rate_type;
+                diagonal.ion_index = term.ion_index;
+                diagonal.ion_stage = term.ion_stage;
+                diagonal.compact_row = term.compact_row;
+                diagonal.native_compact_row = term.native_compact_row;
+                diagonal.source_compact_row = term.source_compact_row;
+                diagonal.role = term.role == XSTAR_CANONICAL_THERMAL_FORWARD_DIAG_LOSS
+                    ? "forward_diag_loss" : "reverse_diag_loss";
+                diagonal.normalization_row =
+                    (term.flags & XSTAR_CANONICAL_THERMAL_NORMALIZATION_ROW) != 0u;
+                diagonal.magnesium_type99_primary_cooling_reduction_applied =
+                    (term.flags & XSTAR_CANONICAL_THERMAL_TYPE99_SOURCE_CORRECTED) != 0u;
+                diagonal.magnesium_primary_cooling_source_order_applied =
+                    (term.flags & XSTAR_CANONICAL_THERMAL_PRIMARY_SOURCE_ORDERED) != 0u;
+                diagonal.magnesium_primary_cooling_source_order_index =
+                    term.primary_source_order_index;
+                diagonal.source_domain_included =
+                    (term.flags & XSTAR_CANONICAL_THERMAL_SOURCE_DOMAIN_INCLUDED) != 0u;
+                diagonal.abundance = element.abundance;
+                diagonal.compact_population = compact_population;
+                diagonal.weighted_population = weighted_population;
+                diagonal.cj = term.cj;
+                diagonal.cj2 = term.cj2;
+                diagonal.native_cj = term.native_cj;
+                diagonal.source_cj = term.source_cj;
+                ++ctx.last_thermal_diagonal_rows_included;
+                if (diagonal.normalization_row) {
+                    ++ctx.last_thermal_diagonal_normalization_terms_included;
+                }
+                if (term.cj > 0.0) {
+                    diagonal.unweighted_cooling_contribution = primary_unweighted;
+                    diagonal.cooling_contribution = primary_unweighted * element.abundance;
+                } else {
+                    diagonal.unweighted_heating_contribution = -primary_unweighted;
+                    diagonal.heating_contribution = (-primary_unweighted) * element.abundance;
+                }
+                if (term.cj2 > 0.0) {
+                    diagonal.unweighted_cooling2_contribution = secondary_unweighted;
+                    diagonal.cooling2_contribution = secondary_unweighted * element.abundance;
+                } else {
+                    diagonal.unweighted_heating2_contribution = -secondary_unweighted;
+                    diagonal.heating2_contribution = (-secondary_unweighted) * element.abundance;
+                }
+                ctx.last_thermal_diagonal_diagnostics.push_back(std::move(diagonal));
             }
             ctx.last_thermal_diagonal_source_domain = true;
         } else {
-            // The element engine returns source-order unweighted channels.
-            // Apply abundance once after each completed channel, matching
-            // calc_hmc_all, even in compact/scaffold operation.
+            // The element engine consumed the same immutable canonical ledger
+            // and returned source-order unweighted channels. Apply abundance
+            // once after each complete channel.
             computed_element_heating = eout.heating * element.abundance;
             computed_element_cooling = eout.cooling * element.abundance;
             computed_element_heating2 = eout.heating2 * element.abundance;
@@ -5988,6 +6093,12 @@ int run_impl(
 
         NativeElementDiagnostic element_diagnostic;
         element_diagnostic.committed_contributions = contributions;
+        element_diagnostic.canonical_thermal_terms = canonical_thermal_ledger.terms;
+        element_diagnostic.canonical_thermal_ledger_fingerprint = canonical_thermal_ledger.fingerprint;
+        element_diagnostic.element_thermal_ledger_fingerprint = element_consumed_thermal_ledger_fingerprint;
+        element_diagnostic.fixed_state_thermal_ledger_fingerprint = canonical_thermal_ledger.fingerprint;
+        element_diagnostic.canonical_thermal_ledger_shared =
+            element_consumed_thermal_ledger_fingerprint == canonical_thermal_ledger.fingerprint;
         element_diagnostic.element_index = element.element_index;
         element_diagnostic.element_z = element.element_z;
         element_diagnostic.abundance = element.abundance;
@@ -7343,6 +7454,37 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                               << row.unweighted_cooling2_contribution << ','
                               << row.heating_contribution << ',' << row.cooling_contribution << ','
                               << row.heating2_contribution << ',' << row.cooling2_contribution << '\n';
+            }
+        }
+
+        {
+            std::ofstream canonical_file(root / (stem + "_canonical_thermal_terms.csv"));
+            if (!canonical_file) throw std::runtime_error("cannot create canonical Thermal term ledger CSV");
+            canonical_file << "evaluation_ordinal,element_index,element_z,ledger_fingerprint,element_consumer_fingerprint,fixed_state_consumer_fingerprint,shared_ownership,term_index,source_position,record,data_type,rate_type,ion_index,ion_stage,compact_row,native_compact_row,source_compact_row,role,is_type53,is_normalization_row,source_domain_included,matrix_insertion_captured,type99_source_corrected,primary_source_ordered,primary_source_order_index,cj,cj2,native_cj,source_cj\n";
+            canonical_file << std::setprecision(17);
+            for (const auto& diagnostic : context->last_element_diagnostics) {
+                for (const auto& term : diagnostic.canonical_thermal_terms) {
+                    canonical_file << evaluation_ordinal << ','
+                                   << diagnostic.element_index << ',' << diagnostic.element_z << ','
+                                   << hex_u64(diagnostic.canonical_thermal_ledger_fingerprint) << ','
+                                   << hex_u64(diagnostic.element_thermal_ledger_fingerprint) << ','
+                                   << hex_u64(diagnostic.fixed_state_thermal_ledger_fingerprint) << ','
+                                   << (diagnostic.canonical_thermal_ledger_shared ? 1 : 0) << ','
+                                   << term.term_index << ',' << term.source_position << ',' << term.record << ','
+                                   << term.data_type << ',' << term.rate_type << ',' << term.ion_index << ','
+                                   << term.ion_stage << ',' << term.compact_row << ',' << term.native_compact_row << ','
+                                   << term.source_compact_row << ','
+                                   << (term.role == XSTAR_CANONICAL_THERMAL_FORWARD_DIAG_LOSS
+                                       ? "forward_diag_loss" : "reverse_diag_loss") << ','
+                                   << ((term.flags & XSTAR_CANONICAL_THERMAL_TYPE53) != 0u ? 1 : 0) << ','
+                                   << ((term.flags & XSTAR_CANONICAL_THERMAL_NORMALIZATION_ROW) != 0u ? 1 : 0) << ','
+                                   << ((term.flags & XSTAR_CANONICAL_THERMAL_SOURCE_DOMAIN_INCLUDED) != 0u ? 1 : 0) << ','
+                                   << ((term.flags & XSTAR_CANONICAL_THERMAL_MATRIX_INSERTION_CAPTURED) != 0u ? 1 : 0) << ','
+                                   << ((term.flags & XSTAR_CANONICAL_THERMAL_TYPE99_SOURCE_CORRECTED) != 0u ? 1 : 0) << ','
+                                   << ((term.flags & XSTAR_CANONICAL_THERMAL_PRIMARY_SOURCE_ORDERED) != 0u ? 1 : 0) << ','
+                                   << term.primary_source_order_index << ','
+                                   << term.cj << ',' << term.cj2 << ',' << term.native_cj << ',' << term.source_cj << '\n';
+                }
             }
         }
 

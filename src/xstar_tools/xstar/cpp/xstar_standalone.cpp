@@ -1860,6 +1860,18 @@ int command_run_fixed_evaluation(const Options& options) {
         std::filesystem::copy_file(
             diagonal_path, output_root / "native_thermal_diagonal_ledger.csv",
             std::filesystem::copy_options::overwrite_existing);
+        std::ostringstream canonical_name;
+        canonical_name << "evaluation_" << std::setw(4) << std::setfill('0') << options.evaluation
+                       << "_canonical_thermal_terms.csv";
+        const auto canonical_path = diagnostics_root / canonical_name.str();
+        if (!std::filesystem::is_regular_file(canonical_path)) {
+            std::cerr << "evaluation canonical Thermal term diagnostics missing: " << canonical_path << "\n";
+            xstar_fixed_state_context_destroy(context);
+            return 8;
+        }
+        std::filesystem::copy_file(
+            canonical_path, output_root / "native_canonical_thermal_terms.csv",
+            std::filesystem::copy_options::overwrite_existing);
         std::ostringstream continuum_name;
         continuum_name << "evaluation_" << std::setw(4) << std::setfill('0') << options.evaluation
                        << "_continuum_workspace.csv";

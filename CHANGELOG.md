@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.7.46.21.2 - 2026-06-20
+
+- Add fail-first binary64 comparison for all 40,149 H/He/Mg compact populations and all 61 sequence fingerprints.
+- Add immutable `xstar_canonical_thermal_term_v1` ownership captured before matrix closure and shared by the element and fixed-state consumers.
+- Require identical ledger fingerprints and exact canonical/diagonal identity across all 183 sequence-element groups.
+- Mark shared-reducer, helium, `elcter`, global-total, and `ans3`–`ans6` science gates `NOT_RUN_PREREQUISITE` until population parity and canonical ownership both accept.
+- Keep scalar and compact-population closure disabled; preserve ABI 60487 and production-promotion blocking.
+
 ## 0.6.48.7.46.20.2 - 2026-06-20
 
 - Capture every positive Magnesium diagonal primary-cooling term with its exact source `term_index` across all 61 evaluations.

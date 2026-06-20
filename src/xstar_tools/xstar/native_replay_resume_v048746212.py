@@ -1,4 +1,4 @@
-"""Resumable all-61 replay manifest for v46.21 independent Thermal parity."""
+"""Resumable all-61 replay manifest for v46.21.2 compact-population and canonical-term prerequisites."""
 from __future__ import annotations
 
 import argparse
@@ -8,10 +8,11 @@ from pathlib import Path
 from typing import Any
 
 RELEASE = "0.6.48.7.46.21.2"
-SCHEMA = "xstar-tools-v064874621-independent-native-replay-resume-v1"
+SCHEMA = "xstar-tools-v0648746212-independent-native-replay-resume-v1"
 REQUIRED_OUTPUTS = (
     "native_evaluation.csv", "native_evaluation_summary.json", "native_thermal_budget.csv",
-    "native_thermal_diagonal_ledger.csv", "native_continuum_workspace.csv",
+    "native_thermal_compact_populations.csv", "native_thermal_diagonal_ledger.csv",
+    "native_canonical_thermal_terms.csv", "native_continuum_workspace.csv",
 )
 
 
@@ -41,6 +42,21 @@ def _valid_evaluation(root: Path, sequence: int) -> tuple[bool, list[str]]:
             ):
                 if row.get(field) != "0": reasons.append(f"closure_used:{field}")
             if row.get("thermal_diagonal_source_domain_applied") != "1": reasons.append("source_order_stream_missing")
+        compact = _read_csv(root / "native_thermal_compact_populations.csv")
+        canonical = _read_csv(root / "native_canonical_thermal_terms.csv")
+        if not compact: reasons.append("compact_population_rows_empty")
+        if not canonical: reasons.append("canonical_thermal_rows_empty")
+        else:
+            elements = {int(row["element_z"]) for row in canonical}
+            if elements != {1, 2, 12}: reasons.append(f"canonical_thermal_elements:{sorted(elements)}")
+            for row in canonical:
+                if row.get("shared_ownership") != "1":
+                    reasons.append("canonical_thermal_shared_ownership")
+                    break
+                fingerprint = row.get("ledger_fingerprint")
+                if fingerprint != row.get("element_consumer_fingerprint") or fingerprint != row.get("fixed_state_consumer_fingerprint"):
+                    reasons.append("canonical_thermal_fingerprint_mismatch")
+                    break
         if int(summary.get("python_callbacks", -1)) != 0: reasons.append("python_callbacks_nonzero")
         if int(summary.get("evaluation_index", sequence)) <= 0: reasons.append("invalid_evaluation_index")
     except Exception as exc:

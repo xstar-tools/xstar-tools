@@ -21,8 +21,8 @@ from typing import Any
 from . import v0472_all61_magnesium_primary_cooling_source_order_capture as legacy
 
 RELEASE = "0.6.48.7.46.21.2"
-SCHEMA = "xstar-tools-v0648746211-v0472-all61-independent-thermal-capture-v1"
-VERIFY_SCHEMA = "xstar-tools-v0648746211-v0472-all61-independent-thermal-state-v1"
+SCHEMA = "xstar-tools-v0648746212-v0472-all61-independent-thermal-capture-v1"
+VERIFY_SCHEMA = "xstar-tools-v0648746212-v0472-all61-independent-thermal-state-v1"
 ANSWER_LEDGER_NAME = "v0472_all61_thermal_answer_channels.csv"
 REPORT_NAME = "all61_independent_thermal_capture_report.json"
 VERIFY_NAME = "all61_independent_thermal_capture_verification.json"
@@ -36,9 +36,9 @@ ANSWER_FIELDS = [
 ]
 
 _EXTRA_CODE = r'''
-V048746211_ANSWER_FIELDS = __ANSWER_FIELDS__
+V048746212_ANSWER_FIELDS = __ANSWER_FIELDS__
 
-def _v048746211_install_answer_commit_hook():
+def _v048746212_install_answer_commit_hook():
     """Capture ans3--ans6 only when a UCalc result becomes matrix terms.
 
     Preliminary ion-balance calls may evaluate the same atomic record with a
@@ -90,7 +90,7 @@ def _v048746211_install_answer_commit_hook():
                 "ans6": float(getattr(result, "ans6", 0.0)),
             }
             key = (sequence, element_z, int(result.record))
-            sink = _STATE.setdefault("v048746211_answer_channels", {})
+            sink = _STATE.setdefault("v048746212_answer_channels", {})
             prior = sink.get(key)
             if prior is not None:
                 for name in (
@@ -124,9 +124,9 @@ def _v048746211_install_answer_commit_hook():
 
     eq._matrix_terms_for_result = matrix_terms_for_result
 
-def _v048746211_write_answer_channels():
+def _v048746212_write_answer_channels():
     rows = sorted(
-        _STATE.setdefault("v048746211_answer_channels", {}).values(),
+        _STATE.setdefault("v048746212_answer_channels", {}).values(),
         key=lambda row: (
             int(row["sequence"]),
             int(row["element_z"]),
@@ -137,7 +137,7 @@ def _v048746211_write_answer_channels():
     with (_OUT / "__ANSWER_LEDGER_NAME__").open("w", newline="") as handle:
         writer = csv.DictWriter(
             handle,
-            fieldnames=V048746211_ANSWER_FIELDS,
+            fieldnames=V048746212_ANSWER_FIELDS,
             extrasaction="ignore",
         )
         writer.writeheader()
@@ -154,17 +154,17 @@ if _PROBE.count(install_hook) != 1:
     raise RuntimeError("v46.21 source-probe UCalc install hook missing or ambiguous")
 _PROBE = _PROBE.replace(
     install_hook,
-    install_hook + "\n    _v048746211_install_answer_commit_hook()",
+    install_hook + "\n    _v048746212_install_answer_commit_hook()",
     1,
 )
 final_hook = "    _v048746202_write_magnesium_primary_source_order()"
 if _PROBE.count(final_hook) != 1:
     raise RuntimeError("v46.21 source-probe final hook missing or ambiguous")
-_PROBE = _PROBE.replace(final_hook, final_hook + "\n    _v048746211_write_answer_channels()", 1)
-compile(_PROBE, "<v048746211-all61-independent-thermal-probe>", "exec")
+_PROBE = _PROBE.replace(final_hook, final_hook + "\n    _v048746212_write_answer_channels()", 1)
+compile(_PROBE, "<v048746212-all61-independent-thermal-probe>", "exec")
 _DRIVER = legacy._DRIVER.replace(
     "import v048746202_all61_magnesium_primary_cooling_source_order_probe_runtime as probe",
-    "import v048746211_all61_independent_thermal_probe_runtime as probe",
+    "import v048746212_all61_independent_thermal_probe_runtime as probe",
 )
 
 
@@ -305,12 +305,12 @@ def capture(source_archive: Path, atdb_path: Path, output_dir: Path,
     root_base = legacy.base.base.base.base.base.base
     if root_base._sha256(source_archive) != root_base.SOURCE_ARCHIVE_SHA256:
         raise ValueError("v0.6.47.2 source archive hash mismatch")
-    with tempfile.TemporaryDirectory(prefix="v048746211_") as tmp:
+    with tempfile.TemporaryDirectory(prefix="v048746212_") as tmp:
         tmp_path = Path(tmp)
         root_base._safe_extract(source_archive, tmp_path / "source")
         root = root_base._source_root(tmp_path / "source")
         probe_dir = tmp_path / "probe"; probe_dir.mkdir()
-        (probe_dir / "v048746211_all61_independent_thermal_probe_runtime.py").write_text(_PROBE)
+        (probe_dir / "v048746212_all61_independent_thermal_probe_runtime.py").write_text(_PROBE)
         (probe_dir / "probe_config.json").write_text(json.dumps({"output_dir": str(output_dir)}, indent=2))
         (probe_dir / "driver.py").write_text(_DRIVER)
         env = dict(os.environ)

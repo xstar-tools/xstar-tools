@@ -5,7 +5,7 @@ import argparse
 import json
 from pathlib import Path
 
-RELEASE = "0.6.48.7.46.21.1"
+RELEASE = "0.6.48.7.46.21.2"
 SCHEMA = "xstar-tools-v0648746192-v46191-sequence-mask-causal-baseline-v1"
 EXPECTED_MESSAGE = "fixed evaluation failed: magnesium Type-50 record is missing from source line-index map"
 
