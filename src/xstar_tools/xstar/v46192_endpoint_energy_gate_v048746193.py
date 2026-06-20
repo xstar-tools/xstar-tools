@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-RELEASE = "0.6.48.7.46.20.1"
+RELEASE = "0.6.48.7.46.20.1.1"
 SCHEMA = "xstar-tools-v0648746193-v46192-endpoint-energy-causal-baseline-v1"
 EXPECTED_REJECTED_GATES = {
     "MAGNESIUM_TYPE50_ANSWERS_EXACT_146286",

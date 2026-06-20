@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.48.7.46.20.1.1 - 2026-06-20
+
+- Reclassify Magnesium Type-99 UCalc parity on the exact 661-row source runtime domain.
+- Classify 132 native-only static traversal rows across four records.
+- Preserve accepted Type-99 primary-cooling closure at 661/661 rows and 61/61 family totals.
+- Remove stale Type-50 downstream expectations from the preservation verdict.
+- Record the current downstream state as `mg_cooling=8/61` and native Thermal exactness `1080/2440`.
+- Require complete Magnesium primary-cooling source-order reduction as the next milestone.
+- Change no native physics, require no source recapture, and reuse the completed 61-evaluation replay.
+
 ## 0.6.48.7.46.20.1 - 2026-06-20
 
 - Correct the Magnesium Type-99 UCalc source inventory from a static 13-record assumption to the exact sequence-active 9/10/11 domain.

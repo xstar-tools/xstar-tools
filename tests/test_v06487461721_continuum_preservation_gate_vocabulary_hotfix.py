@@ -39,7 +39,7 @@ def baseline_checker_payload() -> dict:
 
 
 def test_package_version_and_corrected_alias_inventory() -> None:
-    assert xstar_tools.__version__ == "0.6.48.7.46.20.1"
+    assert xstar_tools.__version__ == "0.6.48.7.46.20.1.1"
     assert "V06487_FIXED_STATE_PARITY_PRESERVED" in v46171_baseline_gate_v048746172.ACCEPTED_GATES
     assert "DENSE_EXACT_SYSTEMS_183_PRESERVED" in v46171_baseline_gate_v048746172.ACCEPTED_GATES
     assert "DENSE_MISMATCH_CELLS_ZERO_PRESERVED" in v46171_baseline_gate_v048746172.ACCEPTED_GATES

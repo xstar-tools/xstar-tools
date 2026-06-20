@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_release_and_native_diagnostic_gate() -> None:
-    assert xstar_tools.__version__ == "0.6.48.7.46.20.1"
+    assert xstar_tools.__version__ == "0.6.48.7.46.20.1.1"
     assert RELEASE == "0.6.48.7.13"
     assert SCHEMA == "xstar-tools-v0648711-helium-solve-response-decomposition-v1"
     cpp = (ROOT / "src/xstar_tools/xstar/cpp/fixed_state_engine.cpp").read_text()
