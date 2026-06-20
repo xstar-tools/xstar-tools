@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse, json
 from pathlib import Path
 
-RELEASE = "0.6.48.7.46.19.3.1"
+RELEASE = "0.6.48.7.46.20"
 SCHEMA = "xstar-tools-v064874616-v4615-baseline-v1"
 REQUIRED_GATES = (
     "ALL_61_THERMAL_EVALUATIONS",

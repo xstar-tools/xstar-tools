@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.48.7.46.20 - 2026-06-20
+
+- Capture 793 source Magnesium Type-99 UCalc rows, 1,322 exact source-order diagonal Thermal rows, and 61 family budgets.
+- Apply source compact-row and `cj` state only to positive Type-99 primary-cooling terms while preserving negative primary heating and all secondary channels.
+- Require Type-99 family and overall `mg_cooling` parity across all 61 evaluations, with predicted independent native Thermal exactness 1127/2440.
+- Preserve the accepted v46.19.3.1 Type-50 closure, fixed-state/matrix/continuum/Hydrogen gates, ABI 60487, and production block.
+
 ## 0.6.48.7.46.19.3.1 - 2026-06-19
 
 - Preserve source-exact pre-closure Magnesium Type-50 `ans3/ans4` through matrix-only `ans1/ans2` replacement.

@@ -1,8 +1,20 @@
+# xstar_tools
 
 ## Current qualification milestone
 
-`v0.6.48.7.46.19.3.1` preserves source-exact Magnesium Type-50 Thermal energy channels through matrix-only population-rate closure. It is qualification-only and does not claim overall Magnesium cooling parity or production promotion.
+`v0.6.48.7.46.20` attributes and reduces the remaining Magnesium primary-cooling residual through an exact v0.6.47.2 Type-99 source ledger: 793 UCalc rows, 1,322 diagonal Thermal terms, and 61 family budgets. It preserves the accepted Type-50 closure and is expected to raise independent native Thermal exactness from 1066/2440 to 1127/2440 after production-host qualification.
 
+```bash
+./run_v04874620_magnesium_type99_primary_cooling.sh \
+  ../xstar_tools-0.6.47.2.tar.gz \
+  ../xstar/data/atdb.fits \
+  ../xstar_tools-0.6.48.7.46.18.1/v048746181_hydrogen_type50_source_capture_context_hotfix \
+  ../xstar_tools-0.6.48.7.46.19.3.1/v0487461931_magnesium_type50_thermal_channel_preservation_hotfix \
+  v04874620_magnesium_type99_primary_cooling \
+  10
+```
+
+See `V064874620_SOURCE_FAITHFUL_MAGNESIUM_TYPE99_PRIMARY_COOLING_ATTRIBUTION_AND_REDUCTION.md`. Production promotion remains blocked.
 
 ## v0.6.48.7.46.19.2
 

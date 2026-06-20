@@ -6,12 +6,12 @@ from xstar_tools.xstar.call2_helium_type50_source_faithful_correction import REL
 
 
 def test_release_and_abi_contract() -> None:
-    assert xstar_tools.__version__ == "0.6.48.7.46.19.3.1"
+    assert xstar_tools.__version__ == "0.6.48.7.46.20"
     assert RELEASE == "0.6.48.7.37"
     assert TARGET_RECORDS == (781,917)
     api=Path("src/xstar_tools/xstar/cpp/xstar_api.h").read_text()
     fixed=Path("src/xstar_tools/xstar/cpp/xstar_fixed_state_engine.h").read_text()
-    assert 'XSTAR_API_VERSION_STRING "0.6.48.7.46.19.3.1"' in api
+    assert 'XSTAR_API_VERSION_STRING "0.6.48.7.46.20"' in api
     assert "XSTAR_API_ABI_VERSION 60487u" in api
     assert "XSTAR_FIXED_STATE_ENGINE_ABI_VERSION 60487u" in fixed
 
