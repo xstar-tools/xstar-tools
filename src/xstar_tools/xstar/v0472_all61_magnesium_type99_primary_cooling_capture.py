@@ -20,9 +20,9 @@ from typing import Any
 
 from . import v0472_all61_magnesium_type50_endpoint_capture as base
 
-RELEASE = "0.6.48.7.46.20"
-SCHEMA = "xstar-tools-v064874620-v0472-all61-magnesium-type99-primary-cooling-capture-v1"
-VERIFY_SCHEMA = "xstar-tools-v064874620-v0472-all61-magnesium-type99-primary-cooling-state-v1"
+RELEASE = "0.6.48.7.46.20.1"
+SCHEMA = "xstar-tools-v0648746201-v0472-all61-magnesium-type99-primary-cooling-capture-v1"
+VERIFY_SCHEMA = "xstar-tools-v0648746201-v0472-all61-magnesium-type99-primary-cooling-state-v1"
 UCALC_NAME = "v0472_all61_magnesium_type99_ucalc.csv"
 LEDGER_NAME = "v0472_all61_magnesium_type99_primary_thermal_ledger.csv"
 FAMILY_NAME = "v0472_all61_magnesium_type99_family_budget.csv"
@@ -31,15 +31,15 @@ VERIFY_NAME = "all61_magnesium_type99_primary_cooling_capture_verification.json"
 MANIFEST_NAME = "all61_magnesium_type99_primary_cooling_capture_manifest.json"
 
 EXPECTED_EVALUATIONS = 61
-EXPECTED_UCALC_RECORDS_PER_EVALUATION = 13
-EXPECTED_UCALC_ROWS = EXPECTED_EVALUATIONS * EXPECTED_UCALC_RECORDS_PER_EVALUATION
-EXPECTED_UCALC_UNIQUE_RECORDS = 13
 EXPECTED_ACTIVE_RECORD_COUNTS = {
     **{sequence: 9 for sequence in range(1, 5)},
     **{sequence: 10 for sequence in range(5, 7)},
     **{sequence: 11 for sequence in range(7, EXPECTED_EVALUATIONS + 1)},
 }
 EXPECTED_ACTIVE_RECORD_UNION = 11
+EXPECTED_UCALC_RECORD_COUNTS = dict(EXPECTED_ACTIVE_RECORD_COUNTS)
+EXPECTED_UCALC_ROWS = sum(EXPECTED_UCALC_RECORD_COUNTS.values())
+EXPECTED_UCALC_UNIQUE_RECORDS = EXPECTED_ACTIVE_RECORD_UNION
 EXPECTED_DIAGONAL_ROWS = 2 * sum(EXPECTED_ACTIVE_RECORD_COUNTS.values())
 
 UCALC_FIELDS = [
@@ -268,7 +268,7 @@ def verify(bundle: Path) -> dict[str, Any]:
         except Exception as exc:
             errors.append(f"invalid_ucalc_row:{sequence}:{record}:{exc}")
             break
-    if ucalc_counts != {sequence: EXPECTED_UCALC_RECORDS_PER_EVALUATION for sequence in range(1, 62)}:
+    if ucalc_counts != EXPECTED_UCALC_RECORD_COUNTS:
         errors.append(f"ucalc_records_by_sequence={ucalc_counts}")
     if len(ucalc_records) != EXPECTED_UCALC_UNIQUE_RECORDS:
         errors.append(f"ucalc_unique_records={len(ucalc_records)}")

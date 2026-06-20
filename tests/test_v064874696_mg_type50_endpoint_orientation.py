@@ -46,9 +46,9 @@ def _lower(snapshot_e1: float, snapshot_e2: float) -> dict:
 
 
 def test_release_and_api_version() -> None:
-    assert xstar_tools.__version__ == "0.6.48.7.46.20"
+    assert xstar_tools.__version__ == "0.6.48.7.46.20.1"
     api = (root() / "src/xstar_tools/xstar/cpp/xstar_api.h").read_text()
-    assert 'XSTAR_API_VERSION_STRING "0.6.48.7.46.20"' in api
+    assert 'XSTAR_API_VERSION_STRING "0.6.48.7.46.20.1"' in api
     assert "XSTAR_API_ABI_VERSION 60487u" in api
 
 

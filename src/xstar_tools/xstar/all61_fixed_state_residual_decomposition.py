@@ -15,7 +15,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable
 
-RELEASE = "0.6.48.7.46.20"
+RELEASE = "0.6.48.7.46.20.1"
 SCHEMA = "xstar-tools-v0648744-all61-fixed-state-residual-decomposition-v1"
 SUMMARY_NAME = "all61_fixed_state_residual_decomposition_summary.json"
 BOUNDARY_NAME = "all61_element_boundary_decomposition.csv"

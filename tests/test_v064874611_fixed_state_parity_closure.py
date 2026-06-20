@@ -13,7 +13,7 @@ def _write(path: Path, fields, rows):
 
 
 def test_release_and_native_fixed_state_commit_contract():
-    assert xstar_tools.__version__ == '0.6.48.7.46.20'
+    assert xstar_tools.__version__ == '0.6.48.7.46.20.1'
     root=Path(__file__).resolve().parents[1]
     fixed=(root/'src/xstar_tools/xstar/cpp/fixed_state_engine.cpp').read_text()
     assert 'XSTAR_QUALIFICATION_FIXED_STATE_PARITY_CLOSURE' in fixed

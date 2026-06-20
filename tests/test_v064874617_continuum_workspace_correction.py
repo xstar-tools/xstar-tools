@@ -7,7 +7,7 @@ from xstar_tools.xstar.v4616_baseline_gate_v04874617 import REQUIRED_GATES
 ROOT=Path(__file__).resolve().parents[1]
 def test_release_version():
  import xstar_tools
- assert xstar_tools.__version__=="0.6.48.7.46.20"
+ assert xstar_tools.__version__=="0.6.48.7.46.20.1"
 def test_source_reduced_grid_contract():
  e=source_epim();assert len(e)==999;assert e[0]==float(np.float32(.1));assert np.all(np.diff(e)>0);assert 9.9e5<e[-1]<1.1e6
 def test_bremsmap_is_source_nearest_bin():

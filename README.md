@@ -2,7 +2,7 @@
 
 ## Current qualification milestone
 
-`v0.6.48.7.46.20` attributes and reduces the remaining Magnesium primary-cooling residual through an exact v0.6.47.2 Type-99 source ledger: 793 UCalc rows, 1,322 diagonal Thermal terms, and 61 family budgets. It preserves the accepted Type-50 closure and is expected to raise independent native Thermal exactness from 1066/2440 to 1127/2440 after production-host qualification.
+`v0.6.48.7.46.20.1` attributes and reduces the remaining Magnesium primary-cooling residual through an exact v0.6.47.2 Type-99 source ledger: 793 UCalc rows, 1,322 diagonal Thermal terms, and 61 family budgets. It preserves the accepted Type-50 closure and is expected to raise independent native Thermal exactness from 1066/2440 to 1127/2440 after production-host qualification.
 
 ```bash
 ./run_v04874620_magnesium_type99_primary_cooling.sh \

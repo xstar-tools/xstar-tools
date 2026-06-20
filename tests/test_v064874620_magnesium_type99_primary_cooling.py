@@ -12,8 +12,8 @@ def write_csv(path: Path, fields, rows):
 
 def test_v4620_source_probe_contract():
     from xstar_tools.xstar import v0472_all61_magnesium_type99_primary_cooling_capture as m
-    assert m.RELEASE=='0.6.48.7.46.20'
-    assert m.EXPECTED_UCALC_ROWS==793
+    assert m.RELEASE=='0.6.48.7.46.20.1'
+    assert m.EXPECTED_UCALC_ROWS==661
     assert m.EXPECTED_DIAGONAL_ROWS==1322
     assert m.EXPECTED_ACTIVE_RECORD_UNION==11
     compile(m._PROBE,'<probe>','exec')
@@ -42,12 +42,12 @@ def test_v4620_synthetic_source_verifier(monkeypatch,tmp_path):
     from xstar_tools.xstar import v0472_all61_magnesium_type99_primary_cooling_capture as m
     monkeypatch.setattr(m.base,'verify',lambda bundle:{'result':'ACCEPT','errors':[]})
     u=[]; ledger=[]; family=[]
-    all_records=list(range(100,113))
+    all_records=list(range(100,111))
     active_union=list(range(100,111))
     for seq in range(1,62):
-        for rec in all_records:
-            u.append({'sequence':seq,'kind':'dsec','call_index':1,'evaluation_index':seq,'record':rec,'data_type':99,'rate_type':7,'idest1':1,'idest2':2,'ans1':1.0,'ans2':2.0,'ans3':-3.0,'ans4':-4.0,'ans5':-5.0,'ans6':-6.0,'bound_energy_ev':10.0,'physical_destination_energy_ev':20.0,'leveltemp_destination_energy_ev':20.0,'threshold_ev':10.0,'swrat':1.0,'calt99_rec_cm3_s':1.0,'phint_scale':1.0,'pirt_unscaled_s':1.0,'rrrt_unscaled_s':2.0,'piht_unscaled_erg_s':4.0,'rrcl_unscaled_erg_s':3.0,'piht2_unscaled_erg_s':6.0,'rrcl2_unscaled_erg_s':5.0,'nb1_one_based':1,'nphint_one_based':1,'ndelt':1,'npass':1,'ucalc_status':'ok'})
         count=9 if seq<=4 else 10 if seq<=6 else 11
+        for rec in all_records[:count]:
+            u.append({'sequence':seq,'kind':'dsec','call_index':1,'evaluation_index':seq,'record':rec,'data_type':99,'rate_type':7,'idest1':1,'idest2':2,'ans1':1.0,'ans2':2.0,'ans3':-3.0,'ans4':-4.0,'ans5':-5.0,'ans6':-6.0,'bound_energy_ev':10.0,'physical_destination_energy_ev':20.0,'leveltemp_destination_energy_ev':20.0,'threshold_ev':10.0,'swrat':1.0,'calt99_rec_cm3_s':1.0,'phint_scale':1.0,'pirt_unscaled_s':1.0,'rrrt_unscaled_s':2.0,'piht_unscaled_erg_s':4.0,'rrcl_unscaled_erg_s':3.0,'piht2_unscaled_erg_s':6.0,'rrcl2_unscaled_erg_s':5.0,'nb1_one_based':1,'nphint_one_based':1,'ndelt':1,'npass':1,'ucalc_status':'ok'})
         sums=[0.,0.,0.,0.]
         idx=0
         for rec in active_union[:count]:
@@ -68,15 +68,15 @@ def test_v4620_synthetic_audit_accepts(tmp_path):
     lfields=['sequence','record','role','compact_row','cj','cj2','weighted_population','heating_contribution','cooling_contribution','heating2_contribution','cooling2_contribution']; lrows=[]; frows=[]
     recfields=['element_z','data_type','record','type99_shadow_valid']+[f'type99_shadow_ans{i}' for i in range(1,7)]
     diagfields=['element_z','data_type','record','role','compact_row','cj','cj2','weighted_population','heating_contribution','cooling_contribution','heating2_contribution','cooling2_contribution','magnesium_type99_primary_cooling_reduction_applied','native_cj','source_cj']
-    all_records=list(range(100,113)); active=list(range(100,111))
+    all_records=list(range(100,111)); active=list(range(100,111))
     for seq in range(1,62):
         rr=[]
-        for rec in all_records:
+        count=9 if seq<=4 else 10 if seq<=6 else 11
+        for rec in all_records[:count]:
             vals=[1.,2.,-3.,-4.,-5.,-6.]
             urows.append({'sequence':seq,'record':rec,**{f'ans{i+1}':v for i,v in enumerate(vals)}})
             rr.append({'element_z':12,'data_type':99,'record':rec,'type99_shadow_valid':1,**{f'type99_shadow_ans{i+1}':v for i,v in enumerate(vals)}})
         write_csv(native/'qualification_diagnostics'/f'evaluation_{seq:04d}_records.csv',recfields,rr)
-        count=9 if seq<=4 else 10 if seq<=6 else 11
         nd=[]; bd=[]; total=0.0
         for rec in active[:count]:
             for role,row in [('forward_diag_loss',1),('reverse_diag_loss',2)]:

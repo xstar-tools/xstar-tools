@@ -4,8 +4,8 @@ import argparse, csv, json, math
 from pathlib import Path
 from typing import Any
 
-RELEASE="0.6.48.7.46.20"
-SCHEMA="xstar-tools-v064874620-magnesium-type99-primary-cooling-audit-v1"
+RELEASE="0.6.48.7.46.20.1"
+SCHEMA="xstar-tools-v0648746201-magnesium-type99-primary-cooling-audit-v1"
 UCALC_OUT="v04874620_magnesium_type99_ucalc_comparison.csv"
 LEDGER_OUT="v04874620_magnesium_type99_primary_ledger_comparison.csv"
 FAMILY_OUT="v04874620_magnesium_type99_family_summary.csv"
@@ -70,7 +70,7 @@ def audit(source_capture: Path,native_run: Path,baseline_v461931: Path,
     type50=json.loads(type50_report.read_text())
 
     gates["ALL_61_MAGNESIUM_TYPE99_SOURCE_STATES_CAPTURED"]="ACCEPT" if source_report.get("result")=="ACCEPT" and source_report.get("evaluations")==61 else "REJECT"
-    gates["MAGNESIUM_TYPE99_UCALC_ROWS_EXACT_793"]="ACCEPT" if len(source_ucalc)==len(native_records)==793 else "REJECT"
+    gates["MAGNESIUM_TYPE99_UCALC_ROWS_EXACT_661"]="ACCEPT" if len(source_ucalc)==len(native_records)==661 else "REJECT"
     gates["MAGNESIUM_TYPE99_PRIMARY_THERMAL_ROWS_EXACT_1322"]="ACCEPT" if len(source_ledger)==len(native_ledger)==1322 else "REJECT"
     gates["MAGNESIUM_TYPE99_SOURCE_FAMILY_BUDGET_EXACT_61"]="ACCEPT" if len(source_family)==61 else "REJECT"
 
@@ -88,7 +88,7 @@ def audit(source_capture: Path,native_run: Path,baseline_v461931: Path,
             all_exact=all_exact and ex
         row["all_answers_exact"]=int(all_exact); ucmp.append(row)
     _write_csv(output/UCALC_OUT,ucmp)
-    gates["MAGNESIUM_TYPE99_UCALC_ANSWERS_EXACT_4758"]="ACCEPT" if answer_exact==4758 and len(ucmp)==793 else "REJECT"
+    gates["MAGNESIUM_TYPE99_UCALC_ANSWERS_EXACT_3966"]="ACCEPT" if answer_exact==3966 and len(ucmp)==661 else "REJECT"
 
     def key(r): return (int(r["sequence"]),int(r["record"]),r["role"])
     src={key(r):r for r in source_ledger}; nat={key(r):r for r in native_ledger}; old={key(r):r for r in baseline_ledger}

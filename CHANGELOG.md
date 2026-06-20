@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.7.46.20.1 - 2026-06-20
+
+- Correct the Magnesium Type-99 UCalc source inventory from a static 13-record assumption to the exact sequence-active 9/10/11 domain.
+- Accept 661 UCalc rows, 11 unique runtime records, 1,322 Thermal diagonal rows, and 61 family budgets.
+- Add exact v46.20 causal-failure classification and reuse the completed source capture without recapture.
+- Preserve Type-99 physics, Type-50 closure, ABI 60487, and production-promotion blocking.
+
+# Changelog
+
 ## 0.6.48.7.46.20 - 2026-06-20
 
 - Capture 793 source Magnesium Type-99 UCalc rows, 1,322 exact source-order diagonal Thermal rows, and 61 family budgets.
