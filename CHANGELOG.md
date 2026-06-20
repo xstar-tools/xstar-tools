@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.7.46.20.2 - 2026-06-20
+
+- Capture every positive Magnesium diagonal primary-cooling term with its exact source `term_index` across all 61 evaluations.
+- Defer only native positive Magnesium primary-cooling additions and replay their independently computed products in exact source binary64 order.
+- Reject missing, duplicate, or metadata-inconsistent source/native rows; inject no source family total or final Thermal scalar.
+- Preserve negative primary-heating terms, all secondary channels, Type-50 closure, Type-99 closure, Hydrogen cooling, fixed state, matrices, continuum, ABI 60487, and zero-callback requirements.
+- Target `mg_cooling=61/61` and independent native Thermal exactness `1127/2440`; production promotion remains blocked pending host replay and remaining Thermal closure.
+
 ## 0.6.48.7.46.20.1.1 - 2026-06-20
 
 - Reclassify Magnesium Type-99 UCalc parity on the exact 661-row source runtime domain.

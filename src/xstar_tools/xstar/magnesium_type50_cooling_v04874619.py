@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-RELEASE = "0.6.48.7.46.20.1.1"
+RELEASE = "0.6.48.7.46.20.2"
 SCHEMA = "xstar-tools-v0648746191-magnesium-type50-primary-cooling-audit-v1"
 EXPECTED_EVALUATIONS = 61
 EXPECTED_UNIQUE_RECORDS = 2420

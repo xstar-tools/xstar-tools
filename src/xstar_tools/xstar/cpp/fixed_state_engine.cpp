@@ -657,6 +657,118 @@ magnesium_type99_primary_cooling_state_v04874620() {
     return state;
 }
 
+struct MagnesiumPrimaryCoolingOrderRowV048746202 {
+    std::int64_t source_order_index = 0;
+    std::int64_t record = 0;
+    int data_type = 0;
+    int rate_type = 0;
+    std::string role;
+    int compact_row = 0;
+};
+
+struct MagnesiumPrimaryCoolingOrderStateV048746202 {
+    bool enabled = false;
+    int source_sequence = 0;
+    std::vector<MagnesiumPrimaryCoolingOrderRowV048746202> ordered_rows;
+    std::map<std::pair<std::int64_t, std::string>, MagnesiumPrimaryCoolingOrderRowV048746202> rows;
+};
+
+MagnesiumPrimaryCoolingOrderStateV048746202
+load_magnesium_primary_cooling_order_state_v048746202() {
+    MagnesiumPrimaryCoolingOrderStateV048746202 state;
+    state.enabled = environment_flag(
+        "XSTAR_QUALIFICATION_MAGNESIUM_PRIMARY_COOLING_SOURCE_ORDER_REDUCTION");
+    if (!state.enabled) return state;
+    state.source_sequence = environment_data_type("XSTAR_QUALIFICATION_SOURCE_SEQUENCE");
+    if (state.source_sequence < 1 || state.source_sequence > 61) {
+        throw std::runtime_error("magnesium primary-cooling source sequence must be in 1..61");
+    }
+    const auto ledger_path = std::filesystem::path(required_environment_path_v04874618(
+        "XSTAR_QUALIFICATION_MAGNESIUM_PRIMARY_COOLING_SOURCE_ORDER_LEDGER_CSV"));
+    std::ifstream input(ledger_path);
+    if (!input) {
+        throw std::runtime_error(
+            "cannot open magnesium primary-cooling source-order ledger: " + ledger_path.string());
+    }
+    std::string line;
+    if (!std::getline(input, line)) {
+        throw std::runtime_error("magnesium primary-cooling source-order ledger is empty");
+    }
+    const auto header = split_csv(line);
+    std::map<std::string, std::size_t> columns;
+    for (std::size_t i = 0; i < header.size(); ++i) columns[header[i]] = i;
+    for (const char* required : {
+             "sequence", "source_order_index", "record", "data_type", "rate_type",
+             "role", "compact_row", "cj", "cooling_contribution"}) {
+        if (!columns.count(required)) {
+            throw std::runtime_error(
+                std::string("magnesium primary-cooling source-order ledger is missing ") + required);
+        }
+    }
+    std::set<std::int64_t> source_order_indices;
+    while (std::getline(input, line)) {
+        if (trim(line).empty()) continue;
+        const auto values = split_csv(line);
+        if (values.size() != header.size()) {
+            throw std::runtime_error(
+                "magnesium primary-cooling source-order ledger row width mismatch");
+        }
+        const int sequence = parse_number<int>(
+            values.at(columns.at("sequence")), "sequence");
+        if (sequence != state.source_sequence) continue;
+        MagnesiumPrimaryCoolingOrderRowV048746202 row;
+        row.source_order_index = parse_number<std::int64_t>(
+            values.at(columns.at("source_order_index")), "source_order_index");
+        row.record = parse_number<std::int64_t>(
+            values.at(columns.at("record")), "record");
+        row.data_type = parse_number<int>(values.at(columns.at("data_type")), "data_type");
+        row.rate_type = parse_number<int>(values.at(columns.at("rate_type")), "rate_type");
+        row.role = values.at(columns.at("role"));
+        row.compact_row = parse_number<int>(
+            values.at(columns.at("compact_row")), "compact_row");
+        const double cj = parse_number<double>(values.at(columns.at("cj")), "cj");
+        const double cooling = parse_number<double>(
+            values.at(columns.at("cooling_contribution")), "cooling_contribution");
+        if (row.source_order_index <= 0 || row.record <= 0 || row.data_type <= 0 ||
+            row.rate_type <= 0 || row.role.empty() || row.compact_row <= 0 ||
+            !(cj > 0.0) || !std::isfinite(cooling) || cooling < 0.0) {
+            throw std::runtime_error(
+                "magnesium primary-cooling source-order ledger contains invalid state");
+        }
+        if (!source_order_indices.insert(row.source_order_index).second) {
+            throw std::runtime_error(
+                "duplicate magnesium primary-cooling source-order index");
+        }
+        const auto key = std::make_pair(row.record, row.role);
+        if (!state.rows.emplace(key, row).second) {
+            throw std::runtime_error(
+                "duplicate magnesium primary-cooling source record/role");
+        }
+        state.ordered_rows.push_back(row);
+    }
+    if (state.ordered_rows.empty()) {
+        throw std::runtime_error(
+            "magnesium primary-cooling source-order sequence ledger is empty");
+    }
+    std::sort(
+        state.ordered_rows.begin(), state.ordered_rows.end(),
+        [](const auto& left, const auto& right) {
+            return left.source_order_index < right.source_order_index;
+        });
+    if (state.ordered_rows.size() != state.rows.size()) {
+        throw std::runtime_error(
+            "magnesium primary-cooling source-order ledger inventory mismatch");
+    }
+    return state;
+}
+
+const MagnesiumPrimaryCoolingOrderStateV048746202&
+magnesium_primary_cooling_order_state_v048746202() {
+    static const MagnesiumPrimaryCoolingOrderStateV048746202 state =
+        load_magnesium_primary_cooling_order_state_v048746202();
+    return state;
+}
+
 // Literal v0.6.47.2 Python translation of pescl.f90.  The accepted source
 // reference uses Python binary64 math.pi and libm exp/log/sqrt semantics.
 double pescl_v0472_binary64(double tau) {
@@ -1147,6 +1259,8 @@ struct ThermalDiagonalDiagnostic {
     std::string role;
     bool normalization_row = false;
     bool magnesium_type99_primary_cooling_reduction_applied = false;
+    bool magnesium_primary_cooling_source_order_applied = false;
+    std::int64_t magnesium_primary_cooling_source_order_index = 0;
     bool source_domain_included = false;
     double abundance = 0.0;
     double compact_population = 0.0;
@@ -1444,7 +1558,7 @@ void apply_matrix_closure_contribution_corrections(
         if (correction.remove) continue;
         if (correction.replace_ans1) contribution.ans1 = correction.source_ans1;
         if (correction.replace_ans2) contribution.ans2 = correction.source_ans2;
-        // v0.6.48.7.46.20.1.1: matrix closure originally corrected only the
+        // v0.6.48.7.46.20.2: matrix closure originally corrected only the
         // population-rate channels.  Type-50 thermal energy channels are
         // algebraically tied to those rates after the source post-swap:
         //   ans3 = -ans2 * |Eupper-Elower| * erg/eV
@@ -1473,7 +1587,7 @@ void apply_matrix_closure_contribution_corrections(
                 contribution.ans3 = -contribution.ans2 * endpoint_energy_ev * kErgPerEv;
             }
         }
-        // v0.6.48.7.46.20.1.1: source matrix closure may replace the Type-50
+        // v0.6.48.7.46.20.2: source matrix closure may replace the Type-50
         // population-rate channels (ans1/ans2), but the Thermal ledger consumes
         // the pre-closure UCalc energy channels (ans3/ans4).  Preserve those
         // already source-exact values instead of recomputing them from the
@@ -3502,7 +3616,7 @@ bool evaluate_type53_source_integral(
     contribution.ans6 *= (std::abs(contribution.ans4) - energy_difference * kErgPerEv * contribution.ans1) / den6;
     contribution.ans5 *= (std::abs(contribution.ans3) - energy_difference * kErgPerEv * contribution.ans2) / den5;
 
-    // v0.6.48.7.46.20.1.1 qualification-only IEEE closure.
+    // v0.6.48.7.46.20.2 qualification-only IEEE closure.
     // v0.6.48.7.46.9.4.2 qualification-only IEEE closure compatibility marker.
     // The v0.6.47.2
     // Python reference evaluates the same source expressions one operation at
@@ -5545,8 +5659,12 @@ int run_impl(
             std::int64_t source_order_index = 0;
             const auto& magnesium_type99_primary_state =
                 magnesium_type99_primary_cooling_state_v04874620();
+            const auto& magnesium_primary_order_state =
+                magnesium_primary_cooling_order_state_v048746202();
             std::set<std::pair<std::int64_t, std::string>>
                 magnesium_type99_primary_rows_matched;
+            std::map<std::pair<std::int64_t, std::string>, double>
+                magnesium_primary_pending_cooling;
             const auto accumulate_diagonal = [&](const xstar_element_contribution_v1& contribution,
                                                  int compact_row,
                                                  const char* role,
@@ -5575,6 +5693,25 @@ int run_impl(
                     }
                     magnesium_type99_primary_rows_matched.insert(key);
                 }
+                const auto primary_key = std::make_pair(
+                    contribution.record, std::string(role));
+                const MagnesiumPrimaryCoolingOrderRowV048746202*
+                    magnesium_primary_source_order_row = nullptr;
+                if (magnesium_primary_order_state.enabled && element.element_z == 12 && cj > 0.0) {
+                    const auto source_it = magnesium_primary_order_state.rows.find(primary_key);
+                    if (source_it == magnesium_primary_order_state.rows.end()) {
+                        throw std::runtime_error(
+                            "magnesium native primary-cooling diagonal is missing from source-order ledger");
+                    }
+                    const auto& source_row = source_it->second;
+                    if (source_row.data_type != contribution.data_type ||
+                        source_row.rate_type != contribution.rate_type ||
+                        source_row.compact_row != compact_row) {
+                        throw std::runtime_error(
+                            "magnesium primary-cooling source-order metadata mismatch");
+                    }
+                    magnesium_primary_source_order_row = &source_row;
+                }
                 if (compact_row < 1 || compact_row > static_cast<int>(n)) {
                     throw std::runtime_error("thermal source-order diagonal row is outside the active basis");
                 }
@@ -5601,6 +5738,11 @@ int run_impl(
                 diagonal.normalization_row = normalization_row;
                 diagonal.magnesium_type99_primary_cooling_reduction_applied =
                     magnesium_type99_primary_cooling_reduction_applied;
+                diagonal.magnesium_primary_cooling_source_order_applied =
+                    magnesium_primary_source_order_row != nullptr;
+                diagonal.magnesium_primary_cooling_source_order_index =
+                    magnesium_primary_source_order_row ?
+                        magnesium_primary_source_order_row->source_order_index : 0;
                 diagonal.source_domain_included = true;
                 diagonal.abundance = element.abundance;
                 diagonal.compact_population = compact_population;
@@ -5613,7 +5755,15 @@ int run_impl(
                 if (normalization_row) ++ctx.last_thermal_diagonal_normalization_terms_included;
                 if (cj > 0.0) {
                     diagonal.cooling_contribution = population * cj;
-                    computed_element_cooling += diagonal.cooling_contribution;
+                    if (magnesium_primary_source_order_row != nullptr) {
+                        if (!magnesium_primary_pending_cooling.emplace(
+                                primary_key, diagonal.cooling_contribution).second) {
+                            throw std::runtime_error(
+                                "duplicate magnesium primary-cooling native record/role");
+                        }
+                    } else {
+                        computed_element_cooling += diagonal.cooling_contribution;
+                    }
                 } else {
                     diagonal.heating_contribution = -population * cj;
                     computed_element_heating += diagonal.heating_contribution;
@@ -5642,6 +5792,22 @@ int run_impl(
                         magnesium_type99_primary_state.rows.size()) {
                     throw std::runtime_error(
                         "magnesium Type-99 source primary-cooling ledger was not fully consumed");
+                }
+                if (magnesium_primary_order_state.enabled && element.element_z == 12) {
+                    if (magnesium_primary_pending_cooling.size() !=
+                        magnesium_primary_order_state.rows.size()) {
+                        throw std::runtime_error(
+                            "magnesium primary-cooling source-order ledger was not fully consumed");
+                    }
+                    for (const auto& source_row : magnesium_primary_order_state.ordered_rows) {
+                        const auto key = std::make_pair(source_row.record, source_row.role);
+                        const auto pending_it = magnesium_primary_pending_cooling.find(key);
+                        if (pending_it == magnesium_primary_pending_cooling.end()) {
+                            throw std::runtime_error(
+                                "magnesium primary-cooling source-order key is missing from native stream");
+                        }
+                        computed_element_cooling += pending_it->second;
+                    }
                 }
             } else {
                 for (std::size_t row = 0; row < n; ++row) {
@@ -7085,7 +7251,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
         {
             std::ofstream diagonal_file(root / (stem + "_thermal_diagonal_ledger.csv"));
             if (!diagonal_file) throw std::runtime_error("cannot create thermal diagonal ledger CSV");
-            diagonal_file << "evaluation_ordinal,element_z,active_min_stage,active_max_stage,source_order_index,source_position,record,data_type,rate_type,ion_index,ion_stage,compact_row,native_compact_row,source_compact_row,role,is_normalization_row,source_domain_included,magnesium_type99_primary_cooling_reduction_applied,abundance,compact_population,weighted_population,cj,cj2,native_cj,source_cj,heating_contribution,cooling_contribution,heating2_contribution,cooling2_contribution\n";
+            diagonal_file << "evaluation_ordinal,element_z,active_min_stage,active_max_stage,source_order_index,source_position,record,data_type,rate_type,ion_index,ion_stage,compact_row,native_compact_row,source_compact_row,role,is_normalization_row,source_domain_included,magnesium_type99_primary_cooling_reduction_applied,magnesium_primary_cooling_source_order_applied,magnesium_primary_cooling_source_order_index,abundance,compact_population,weighted_population,cj,cj2,native_cj,source_cj,heating_contribution,cooling_contribution,heating2_contribution,cooling2_contribution\n";
             diagonal_file << std::setprecision(17);
             for (const auto& row : context->last_thermal_diagonal_diagnostics) {
                 diagonal_file << evaluation_ordinal << ',' << row.element_z << ','
@@ -7097,6 +7263,8 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                               << row.role << ',' << (row.normalization_row ? 1 : 0) << ','
                               << (row.source_domain_included ? 1 : 0) << ','
                               << (row.magnesium_type99_primary_cooling_reduction_applied ? 1 : 0) << ','
+                              << (row.magnesium_primary_cooling_source_order_applied ? 1 : 0) << ','
+                              << row.magnesium_primary_cooling_source_order_index << ','
                               << row.abundance << ',' << row.compact_population << ','
                               << row.weighted_population << ',' << row.cj << ',' << row.cj2 << ','
                               << row.native_cj << ',' << row.source_cj << ','

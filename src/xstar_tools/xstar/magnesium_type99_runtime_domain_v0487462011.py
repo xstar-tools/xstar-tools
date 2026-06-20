@@ -8,7 +8,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-RELEASE = "0.6.48.7.46.20.1.1"
+RELEASE = "0.6.48.7.46.20.2"
 SCHEMA = "xstar-tools-v06487462011-magnesium-type99-runtime-domain-reanalysis-v1"
 CLASSIFICATION_CSV = "v0487462011_magnesium_type99_runtime_domain_classification.csv"
 EXPECTED_NATIVE_ONLY = {39813: 61, 39855: 61, 40060: 6, 40359: 4}

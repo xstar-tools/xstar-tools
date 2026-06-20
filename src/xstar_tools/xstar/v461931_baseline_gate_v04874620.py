@@ -4,7 +4,7 @@ import argparse, json
 from pathlib import Path
 from typing import Any
 
-RELEASE = "0.6.48.7.46.20.1.1"
+RELEASE = "0.6.48.7.46.20.2"
 SCHEMA = "xstar-tools-v064874620-v461931-baseline-v1"
 
 REQUIRED_GATES = (

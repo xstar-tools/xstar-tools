@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_v46201_corrected_inventory_contract():
     from xstar_tools.xstar import v0472_all61_magnesium_type99_primary_cooling_capture as capture
-    assert capture.RELEASE == "0.6.48.7.46.20.1.1"
+    assert capture.RELEASE == "0.6.48.7.46.20.2"
     assert capture.EXPECTED_UCALC_ROWS == 661
     assert capture.EXPECTED_UCALC_UNIQUE_RECORDS == 11
     assert capture.EXPECTED_UCALC_RECORD_COUNTS == capture.EXPECTED_ACTIVE_RECORD_COUNTS
