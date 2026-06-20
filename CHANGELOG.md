@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.48.7.46.21.3 - 2026-06-20
+
+- Add an observational v0.6.47.2 all-61 source capture for compact solve stages.
+- Add native trace ABI v1 for the final outer condensed system, first LU solution, `mprove` residual/correction, refined solution, and final fixed-point transition.
+- Compare 40,149 compact rows, every condensed matrix/solver intermediate, 183 normalization/iteration records, 61 final fingerprints, and 1,098 reconstructed ion populations.
+- Classify the earliest divergent stage for every sequence-element system.
+- Separate decomposition milestone acceptance from scientific population acceptance.
+- Defer all downstream Thermal conclusions until final compact-population prerequisites pass.
+- Preserve canonical Thermal-term ownership, ABI 60487, zero scalar/compact closure, and production blocking.
+
 ## 0.6.48.7.46.21.2 - 2026-06-20
 
 - Add fail-first binary64 comparison for all 40,149 H/He/Mg compact populations and all 61 sequence fingerprints.

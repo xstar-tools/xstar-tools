@@ -1,11 +1,11 @@
-"""Audit helium non-Type53 Type-50 cooling reduction for v0.6.48.7.46.21.2."""
+"""Audit helium non-Type53 Type-50 cooling reduction for v0.6.48.7.46.21.3."""
 from __future__ import annotations
 import argparse, csv, json, math, struct
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-RELEASE = "0.6.48.7.46.21.2"
+RELEASE = "0.6.48.7.46.21.3"
 SCHEMA = "xstar-tools-v064874616-helium-nontype53-cooling-reduction-v1"
 ERG_PER_EV = 1.602176634e-12
 EXPECTED_RECORD_COUNTS = {

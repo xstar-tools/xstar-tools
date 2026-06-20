@@ -4,7 +4,7 @@ import argparse, csv, json, math
 from pathlib import Path
 from typing import Any
 
-RELEASE="0.6.48.7.46.21.2"
+RELEASE="0.6.48.7.46.21.3"
 SCHEMA="xstar-tools-v0648746201-magnesium-type99-primary-cooling-audit-v1"
 UCALC_OUT="v04874620_magnesium_type99_ucalc_comparison.csv"
 LEDGER_OUT="v04874620_magnesium_type99_primary_ledger_comparison.csv"

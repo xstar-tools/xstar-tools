@@ -32,6 +32,22 @@ extern "C" int xstar_solver_leqt2f(
     size_t error_message_len
 );
 
+extern "C" int xstar_solver_leqt2f_trace_v1(
+    const double* a,
+    const double* b,
+    int n,
+    int clamp,
+    double* first_lu_solution,
+    double* refinement_residual,
+    double* refinement_correction,
+    double* refined_solution,
+    double* solution,
+    double* residual,
+    double* max_scaled_residual,
+    char* error_message,
+    size_t error_message_len
+);
+
 namespace {
 
 using clock_type = std::chrono::steady_clock;
@@ -59,6 +75,21 @@ struct Workspace {
     std::vector<double> xo;
     std::vector<double> outer_start;
     std::vector<double> final_outer_start;
+    std::vector<double> final_superlevel_before_solve;
+    std::vector<double> final_condensed_matrix;
+    std::vector<double> final_condensed_rhs;
+    std::vector<double> final_first_lu_solution;
+    std::vector<double> final_refinement_residual;
+    std::vector<double> final_refinement_correction;
+    std::vector<double> final_refined_superlevel_solution;
+    std::vector<double> final_population_after_condensed;
+    std::vector<double> final_fixed_point_population_before;
+    std::vector<double> final_fixed_point_population_after;
+    int final_outer_iteration = 0;
+    int final_fixed_iterations = 0;
+    int total_fixed_point_iterations_trace = 0;
+    int trace_element_z = 0;
+    bool solve_stage_trace_valid = false;
     std::vector<double> p;
     std::vector<double> rr;
     std::vector<double> condensed;
@@ -103,6 +134,21 @@ struct Workspace {
         xo.resize(static_cast<std::size_t>(n));
         outer_start.resize(static_cast<std::size_t>(n));
         final_outer_start.resize(static_cast<std::size_t>(n));
+        final_superlevel_before_solve.assign(static_cast<std::size_t>(nsp), 0.0);
+        final_condensed_matrix.assign(ss, 0.0);
+        final_condensed_rhs.assign(static_cast<std::size_t>(nsp), 0.0);
+        final_first_lu_solution.assign(static_cast<std::size_t>(nsp), 0.0);
+        final_refinement_residual.assign(static_cast<std::size_t>(nsp), 0.0);
+        final_refinement_correction.assign(static_cast<std::size_t>(nsp), 0.0);
+        final_refined_superlevel_solution.assign(static_cast<std::size_t>(nsp), 0.0);
+        final_population_after_condensed.assign(static_cast<std::size_t>(n), 0.0);
+        final_fixed_point_population_before.assign(static_cast<std::size_t>(n), 0.0);
+        final_fixed_point_population_after.assign(static_cast<std::size_t>(n), 0.0);
+        final_outer_iteration = 0;
+        final_fixed_iterations = 0;
+        total_fixed_point_iterations_trace = 0;
+        trace_element_z = 0;
+        solve_stage_trace_valid = false;
         p.resize(static_cast<std::size_t>(nsp));
         rr.resize(static_cast<std::size_t>(n));
         condensed.resize(ss);
@@ -313,7 +359,11 @@ void solve_normalized(
     std::vector<double>& rhs,
     std::vector<double>& result,
     std::vector<double>& residual,
-    const char* label
+    const char* label,
+    std::vector<double>* first_lu_solution = nullptr,
+    std::vector<double>* refinement_residual = nullptr,
+    std::vector<double>* refinement_correction = nullptr,
+    std::vector<double>* refined_solution = nullptr
 ) {
     std::fill(rhs.begin(), rhs.begin() + dimension, 0.0);
     const int row = normalization_row_one_based - 1;
@@ -321,9 +371,24 @@ void solve_normalized(
     rhs[static_cast<std::size_t>(row)] = 1.0;
     double max_scaled = 0.0;
     char error[1024] = {};
-    const int rc = xstar_solver_leqt2f(
-        matrix.data(), rhs.data(), dimension, 1, result.data(), residual.data(),
-        &max_scaled, error, sizeof(error));
+    const bool trace = first_lu_solution && refinement_residual &&
+        refinement_correction && refined_solution;
+    int rc = 0;
+    if (trace) {
+        first_lu_solution->resize(static_cast<std::size_t>(dimension));
+        refinement_residual->resize(static_cast<std::size_t>(dimension));
+        refinement_correction->resize(static_cast<std::size_t>(dimension));
+        refined_solution->resize(static_cast<std::size_t>(dimension));
+        rc = xstar_solver_leqt2f_trace_v1(
+            matrix.data(), rhs.data(), dimension, 1,
+            first_lu_solution->data(), refinement_residual->data(),
+            refinement_correction->data(), refined_solution->data(),
+            result.data(), residual.data(), &max_scaled, error, sizeof(error));
+    } else {
+        rc = xstar_solver_leqt2f(
+            matrix.data(), rhs.data(), dimension, 1, result.data(), residual.data(),
+            &max_scaled, error, sizeof(error));
+    }
     if (rc != 0) {
         std::ostringstream text;
         text << label << " solve failed: " << error;
@@ -478,6 +543,13 @@ int run_element_impl(
     int outer = 0;
     int total_fixed = 0;
     bool dense_rescue_used = false;
+    const bool capture_solve_stage_trace =
+        (input.flags & XSTAR_ELEMENT_DIAGNOSTICS_SUMMARY) != 0u;
+    w.solve_stage_trace_valid = false;
+    w.trace_element_z = input.element_z;
+    w.final_outer_iteration = 0;
+    w.final_fixed_iterations = 0;
+    w.total_fixed_point_iterations_trace = 0;
 
     while (outer_diff > input.lucy_tolerance && outer < input.max_lucy_iterations) {
         ++outer;
@@ -510,12 +582,29 @@ int run_element_impl(
                 w.condensed[index2(spm, spm, nsp)] -= term.aj2 * w.rr[static_cast<std::size_t>(mm)];
             }
         }
-        solve_normalized(w.condensed, nsp, nsp, w.solve_rhs, w.solve_result, w.solve_residual,
-                         "condensed Lucy");
+        if (capture_solve_stage_trace) {
+            w.final_superlevel_before_solve = w.p;
+        }
+        solve_normalized(
+            w.condensed, nsp, nsp, w.solve_rhs, w.solve_result, w.solve_residual,
+            "condensed Lucy",
+            capture_solve_stage_trace ? &w.final_first_lu_solution : nullptr,
+            capture_solve_stage_trace ? &w.final_refinement_residual : nullptr,
+            capture_solve_stage_trace ? &w.final_refinement_correction : nullptr,
+            capture_solve_stage_trace ? &w.final_refined_superlevel_solution : nullptr);
+        if (capture_solve_stage_trace) {
+            w.final_condensed_matrix = w.condensed;
+            std::copy(w.solve_rhs.begin(), w.solve_rhs.begin() + nsp,
+                      w.final_condensed_rhs.begin());
+            w.final_outer_iteration = outer;
+        }
         for (int i = 0; i < n; ++i) {
             const int sp = input.superlevel_by_row[i] - 1;
             w.x[static_cast<std::size_t>(i)] =
                 w.rr[static_cast<std::size_t>(i)] * w.solve_result[static_cast<std::size_t>(sp)];
+        }
+        if (capture_solve_stage_trace) {
+            w.final_population_after_condensed = w.x;
         }
 
         fixed_diff = 10.0;
@@ -525,6 +614,9 @@ int run_element_impl(
             ++fixed_iter;
             ++total_fixed;
             w.xold = w.x;
+            if (capture_solve_stage_trace) {
+                w.final_fixed_point_population_before = w.xold;
+            }
             std::fill(w.riu.begin(), w.riu.end(), 0.0);
             std::fill(w.rui.begin(), w.rui.end(), 0.0);
             std::fill(w.ril.begin(), w.ril.end(), 0.0);
@@ -562,11 +654,22 @@ int run_element_impl(
             }
             const double denominator = 1.0e-24 + total;
             for (double& value : w.x) value /= denominator;
+            if (capture_solve_stage_trace) {
+                w.final_fixed_point_population_after = w.x;
+                w.final_fixed_iterations = fixed_iter;
+                w.total_fixed_point_iterations_trace = total_fixed;
+            }
             fixed_diff = source_fixed_difference(w.xold, w.x);
             if (fixed_diff >= 1.0e3) break;
         }
         if (dense_rescue_used) break;
         outer_diff = source_outer_difference(w.xo, w.x);
+    }
+    if (capture_solve_stage_trace && outer > 0) {
+        w.solve_stage_trace_valid = true;
+        w.final_outer_start = w.outer_start;
+        w.final_outer_iteration = outer;
+        w.total_fixed_point_iterations_trace = total_fixed;
     }
 
     output.solver_seconds = seconds_since(solver_t0);
@@ -842,6 +945,116 @@ int xstar_element_engine_stats_init_v1(xstar_element_engine_stats_v1* stats) {
     stats->struct_size = sizeof(*stats);
     stats->abi_version = XSTAR_ELEMENT_ENGINE_ABI_VERSION;
     return 0;
+}
+
+int xstar_element_solve_stage_trace_init_v1(
+    xstar_element_solve_stage_trace_v1* trace
+) {
+    if (!trace) return 1;
+    std::memset(trace, 0, sizeof(*trace));
+    trace->struct_size = sizeof(*trace);
+    trace->abi_version = XSTAR_ELEMENT_SOLVE_STAGE_TRACE_ABI_VERSION;
+    return 0;
+}
+
+int xstar_element_engine_get_last_solve_stage_trace_v1(
+    const xstar_element_engine_context* context,
+    xstar_element_solve_stage_trace_v1* trace,
+    char* message,
+    size_t message_size
+) {
+    if (!context || !trace || trace->struct_size < sizeof(*trace) ||
+        trace->abi_version != XSTAR_ELEMENT_SOLVE_STAGE_TRACE_ABI_VERSION) {
+        copy_text(message, message_size, "solve-stage trace ABI mismatch");
+        return 1;
+    }
+    try {
+        const Workspace& w = context->impl.workspace;
+        trace->valid = w.solve_stage_trace_valid ? 1u : 0u;
+        trace->element_z = w.trace_element_z;
+        trace->n_rows = w.n;
+        trace->n_superlevels = w.nsp;
+        trace->final_outer_iteration = w.final_outer_iteration;
+        trace->final_fixed_iterations = w.final_fixed_iterations;
+        trace->total_fixed_point_iterations = w.total_fixed_point_iterations_trace;
+        if (!w.solve_stage_trace_valid) {
+            copy_text(message, message_size, "no solve-stage trace is available");
+            return 0;
+        }
+        const std::size_t n = static_cast<std::size_t>(w.n);
+        const std::size_t nsp = static_cast<std::size_t>(w.nsp);
+        const std::size_t nsp2 = nsp * nsp;
+        require(trace->final_outer_start_populations && trace->final_outer_start_capacity >= n,
+                "final outer-start trace buffer too small");
+        require(trace->final_superlevel_populations_before_solve &&
+                trace->final_superlevel_populations_before_solve_capacity >= nsp,
+                "final superlevel-before trace buffer too small");
+        require(trace->final_condensed_matrix && trace->final_condensed_matrix_capacity >= nsp2,
+                "final condensed-matrix trace buffer too small");
+        require(trace->final_condensed_rhs && trace->final_condensed_rhs_capacity >= nsp,
+                "final condensed-RHS trace buffer too small");
+        require(trace->final_first_lu_solution && trace->final_first_lu_solution_capacity >= nsp,
+                "first-LU trace buffer too small");
+        require(trace->final_refinement_residual && trace->final_refinement_residual_capacity >= nsp,
+                "refinement-residual trace buffer too small");
+        require(trace->final_refinement_correction && trace->final_refinement_correction_capacity >= nsp,
+                "refinement-correction trace buffer too small");
+        require(trace->final_refined_superlevel_solution &&
+                trace->final_refined_superlevel_solution_capacity >= nsp,
+                "refined-superlevel trace buffer too small");
+        require(trace->final_population_after_condensed &&
+                trace->final_population_after_condensed_capacity >= n,
+                "population-after-condensed trace buffer too small");
+        require(trace->final_fixed_point_population_before &&
+                trace->final_fixed_point_population_before_capacity >= n,
+                "fixed-point-before trace buffer too small");
+        require(trace->final_fixed_point_population_after &&
+                trace->final_fixed_point_population_after_capacity >= n,
+                "fixed-point-after trace buffer too small");
+
+        std::copy(w.final_outer_start.begin(), w.final_outer_start.end(),
+                  trace->final_outer_start_populations);
+        std::copy(w.final_superlevel_before_solve.begin(), w.final_superlevel_before_solve.end(),
+                  trace->final_superlevel_populations_before_solve);
+        std::copy(w.final_condensed_matrix.begin(), w.final_condensed_matrix.end(),
+                  trace->final_condensed_matrix);
+        std::copy(w.final_condensed_rhs.begin(), w.final_condensed_rhs.end(),
+                  trace->final_condensed_rhs);
+        std::copy(w.final_first_lu_solution.begin(), w.final_first_lu_solution.end(),
+                  trace->final_first_lu_solution);
+        std::copy(w.final_refinement_residual.begin(), w.final_refinement_residual.end(),
+                  trace->final_refinement_residual);
+        std::copy(w.final_refinement_correction.begin(), w.final_refinement_correction.end(),
+                  trace->final_refinement_correction);
+        std::copy(w.final_refined_superlevel_solution.begin(),
+                  w.final_refined_superlevel_solution.end(),
+                  trace->final_refined_superlevel_solution);
+        std::copy(w.final_population_after_condensed.begin(),
+                  w.final_population_after_condensed.end(),
+                  trace->final_population_after_condensed);
+        std::copy(w.final_fixed_point_population_before.begin(),
+                  w.final_fixed_point_population_before.end(),
+                  trace->final_fixed_point_population_before);
+        std::copy(w.final_fixed_point_population_after.begin(),
+                  w.final_fixed_point_population_after.end(),
+                  trace->final_fixed_point_population_after);
+        trace->final_outer_start_count = n;
+        trace->final_superlevel_populations_before_solve_count = nsp;
+        trace->final_condensed_matrix_count = nsp2;
+        trace->final_condensed_rhs_count = nsp;
+        trace->final_first_lu_solution_count = nsp;
+        trace->final_refinement_residual_count = nsp;
+        trace->final_refinement_correction_count = nsp;
+        trace->final_refined_superlevel_solution_count = nsp;
+        trace->final_population_after_condensed_count = n;
+        trace->final_fixed_point_population_before_count = n;
+        trace->final_fixed_point_population_after_count = n;
+        copy_text(message, message_size, "native final-outer solve-stage trace returned");
+        return 0;
+    } catch (const std::exception& exc) {
+        copy_text(message, message_size, exc.what());
+        return 2;
+    }
 }
 
 int xstar_element_engine_context_create_v1(

@@ -1,8 +1,10 @@
 # xstar_tools
 
-## Current qualification milestone: v0.6.48.7.46.21.2
+## Current qualification milestone: v0.6.48.7.46.21.3
 
-v21.2 makes independent compact-population parity and immutable canonical Thermal-term ownership fail-first prerequisites. It requires exact H 2013/2013, He 4758/4758, Mg 33378/33378, all 40149 compact values, all 61 fingerprints, and identical canonical-ledger fingerprints for the element and fixed-state consumers before any downstream Thermal science is judged. See `V0648746212_INDEPENDENT_COMPACT_POPULATION_PARITY_AND_CANONICAL_THERMAL_TERM_OWNERSHIP.md`. Production promotion remains blocked.
+v21.3 decomposes independent H/He/Mg compact-population parity at every solve boundary before Thermal accounting is judged. It captures the transformed initial state, final outer-start state, normalized condensed system, first LU solution, iterative-refinement residual/correction, fixed-point transition, final 40,149 compact populations, and 1,098 reconstructed ion populations across all 183 sequence-element systems.
+
+The milestone accepts a complete first-divergence classification even when scientific parity remains rejected. Downstream Thermal gates remain `NOT_RUN_SOLVE_STAGE_PREREQUISITE` until final populations are `40149/40149` exact and all 61 fingerprints match. Canonical Thermal-term ownership from v21.2 is preserved. See `V0648746213_COMPACT_POPULATION_SOLVE_STAGE_PARITY_DECOMPOSITION.md`. Production promotion remains blocked.
 
 ## Current qualification milestone
 

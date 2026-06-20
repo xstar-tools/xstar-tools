@@ -223,6 +223,56 @@ typedef struct xstar_element_output_v1 {
     char message[XSTAR_ELEMENT_MESSAGE_SIZE];
 } xstar_element_output_v1;
 
+
+#define XSTAR_ELEMENT_SOLVE_STAGE_TRACE_ABI_VERSION 1u
+
+typedef struct xstar_element_solve_stage_trace_v1 {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    int32_t element_z;
+    int32_t n_rows;
+    int32_t n_superlevels;
+    int32_t final_outer_iteration;
+    int32_t final_fixed_iterations;
+    int32_t total_fixed_point_iterations;
+    uint32_t valid;
+    uint32_t reserved0;
+
+    double* final_outer_start_populations;
+    size_t final_outer_start_capacity;
+    size_t final_outer_start_count;
+    double* final_superlevel_populations_before_solve;
+    size_t final_superlevel_populations_before_solve_capacity;
+    size_t final_superlevel_populations_before_solve_count;
+    double* final_condensed_matrix;
+    size_t final_condensed_matrix_capacity;
+    size_t final_condensed_matrix_count;
+    double* final_condensed_rhs;
+    size_t final_condensed_rhs_capacity;
+    size_t final_condensed_rhs_count;
+    double* final_first_lu_solution;
+    size_t final_first_lu_solution_capacity;
+    size_t final_first_lu_solution_count;
+    double* final_refinement_residual;
+    size_t final_refinement_residual_capacity;
+    size_t final_refinement_residual_count;
+    double* final_refinement_correction;
+    size_t final_refinement_correction_capacity;
+    size_t final_refinement_correction_count;
+    double* final_refined_superlevel_solution;
+    size_t final_refined_superlevel_solution_capacity;
+    size_t final_refined_superlevel_solution_count;
+    double* final_population_after_condensed;
+    size_t final_population_after_condensed_capacity;
+    size_t final_population_after_condensed_count;
+    double* final_fixed_point_population_before;
+    size_t final_fixed_point_population_before_capacity;
+    size_t final_fixed_point_population_before_count;
+    double* final_fixed_point_population_after;
+    size_t final_fixed_point_population_after_capacity;
+    size_t final_fixed_point_population_after_count;
+} xstar_element_solve_stage_trace_v1;
+
 typedef struct xstar_element_engine_stats_v1 {
     uint32_t struct_size;
     uint32_t abi_version;
@@ -250,6 +300,17 @@ XSTAR_ELEMENT_EXPORT int xstar_element_engine_feature_flags(void);
 XSTAR_ELEMENT_EXPORT int xstar_element_input_init_v1(xstar_element_input_v1* input);
 XSTAR_ELEMENT_EXPORT int xstar_element_output_init_v1(xstar_element_output_v1* output);
 XSTAR_ELEMENT_EXPORT int xstar_element_engine_stats_init_v1(xstar_element_engine_stats_v1* stats);
+
+XSTAR_ELEMENT_EXPORT int xstar_element_solve_stage_trace_init_v1(
+    xstar_element_solve_stage_trace_v1* trace
+);
+XSTAR_ELEMENT_EXPORT int xstar_element_engine_get_last_solve_stage_trace_v1(
+    const xstar_element_engine_context* context,
+    xstar_element_solve_stage_trace_v1* trace,
+    char* message,
+    size_t message_size
+);
+
 XSTAR_ELEMENT_EXPORT int xstar_element_engine_context_create_v1(
     xstar_element_engine_context** context,
     char* message,

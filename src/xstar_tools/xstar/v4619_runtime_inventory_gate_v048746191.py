@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-RELEASE = "0.6.48.7.46.21.2"
+RELEASE = "0.6.48.7.46.21.3"
 SCHEMA = "xstar-tools-v0648746191-v4619-runtime-inventory-causal-baseline-v1"
 EXPECTED_ROWS = 146286
 EXPECTED_UNIQUE_RECORDS = 2420

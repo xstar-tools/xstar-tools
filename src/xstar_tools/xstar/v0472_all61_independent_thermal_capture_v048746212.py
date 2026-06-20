@@ -20,9 +20,9 @@ from typing import Any
 
 from . import v0472_all61_magnesium_primary_cooling_source_order_capture as legacy
 
-RELEASE = "0.6.48.7.46.21.2"
-SCHEMA = "xstar-tools-v0648746212-v0472-all61-independent-thermal-capture-v1"
-VERIFY_SCHEMA = "xstar-tools-v0648746212-v0472-all61-independent-thermal-state-v1"
+RELEASE = "0.6.48.7.46.21.3"
+SCHEMA = "xstar-tools-v0648746213-v0472-all61-independent-thermal-capture-v1"
+VERIFY_SCHEMA = "xstar-tools-v0648746213-v0472-all61-independent-thermal-state-v1"
 ANSWER_LEDGER_NAME = "v0472_all61_thermal_answer_channels.csv"
 REPORT_NAME = "all61_independent_thermal_capture_report.json"
 VERIFY_NAME = "all61_independent_thermal_capture_verification.json"

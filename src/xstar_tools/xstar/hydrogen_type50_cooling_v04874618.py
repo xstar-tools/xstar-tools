@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse, csv, json, math
 from pathlib import Path
 from typing import Any
-RELEASE='0.6.48.7.46.21.2'
+RELEASE='0.6.48.7.46.21.3'
 SCHEMA='xstar-tools-v064874618-hydrogen-type50-cooling-audit-v1'
 EXPECTED_EVALUATIONS=61; EXPECTED_RECORDS=133; EXPECTED_ROWS=8113
 FIELDS=['sequence','call_index','record','source_position','line_index','native_line_index','tau_in','native_tau_in','tau_out','native_tau_out','ptmp1','native_ptmp1','ptmp2','native_ptmp2']+[f'ans{i}' for i in range(1,7)]+[f'native_ans{i}' for i in range(1,7)]+['line_index_exact','tau_in_exact','tau_out_exact','ptmp1_exact','ptmp2_exact','answers_exact']

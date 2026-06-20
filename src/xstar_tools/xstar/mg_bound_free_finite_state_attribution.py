@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse,csv,json,math
 from pathlib import Path
 from collections import Counter
-RELEASE='0.6.48.7.46.21.2'
+RELEASE='0.6.48.7.46.21.3'
 EXPECTED={49:49349,53:53436}
 
 def f(row,key):

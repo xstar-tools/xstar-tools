@@ -10,6 +10,10 @@
 namespace {
 
 struct SolveResult {
+    std::vector<double> first_lu_solution;
+    std::vector<double> refinement_residual;
+    std::vector<double> refinement_correction;
+    std::vector<double> refined_solution;
     std::vector<double> solution;
     std::vector<double> residual;
     double max_scaled_residual;
@@ -127,6 +131,7 @@ SolveResult leqt2f_kernel(const double* a_ptr, const double* b_ptr, int n, bool 
     };
 
     std::vector<double> x = lubksb(rhs);
+    const std::vector<double> first_lu_solution = x;
 
     std::vector<double> mprove_res(static_cast<size_t>(n), 0.0);
     for (int i = 0; i < n; ++i) {
@@ -140,6 +145,7 @@ SolveResult leqt2f_kernel(const double* a_ptr, const double* b_ptr, int n, bool 
     for (int i = 0; i < n; ++i) {
         x[static_cast<size_t>(i)] -= correction[static_cast<size_t>(i)];
     }
+    const std::vector<double> refined_solution = x;
 
     if (clamp) {
         for (int i = 0; i < n; ++i) {
@@ -165,7 +171,15 @@ SolveResult leqt2f_kernel(const double* a_ptr, const double* b_ptr, int n, bool 
         const double err = total / std::max(1.0e-24, tmpmx);
         max_scaled = std::max(max_scaled, std::fabs(err));
     }
-    return SolveResult{std::move(x), std::move(residual), max_scaled};
+    return SolveResult{
+        first_lu_solution,
+        mprove_res,
+        correction,
+        refined_solution,
+        std::move(x),
+        std::move(residual),
+        max_scaled
+    };
 }
 
 void write_error(char* err, size_t err_len, const std::string& msg) {
@@ -213,6 +227,49 @@ int xstar_solver_leqt2f(
         return 1;
     } catch (...) {
         write_error(error_message, error_message_len, "unknown C++ exception in xstar_solver_leqt2f");
+        return 2;
+    }
+}
+
+
+int xstar_solver_leqt2f_trace_v1(
+    const double* a,
+    const double* b,
+    int n,
+    int clamp,
+    double* first_lu_solution,
+    double* refinement_residual,
+    double* refinement_correction,
+    double* refined_solution,
+    double* solution,
+    double* residual,
+    double* max_scaled_residual,
+    char* error_message,
+    size_t error_message_len
+) {
+    try {
+        if (first_lu_solution == nullptr || refinement_residual == nullptr ||
+            refinement_correction == nullptr || refined_solution == nullptr ||
+            solution == nullptr || residual == nullptr || max_scaled_residual == nullptr) {
+            throw std::runtime_error("null trace output pointer in xstar_solver_leqt2f_trace_v1");
+        }
+        SolveResult result = leqt2f_kernel(a, b, n, clamp != 0);
+        const size_t bytes = result.solution.size() * sizeof(double);
+        std::memcpy(first_lu_solution, result.first_lu_solution.data(), bytes);
+        std::memcpy(refinement_residual, result.refinement_residual.data(), bytes);
+        std::memcpy(refinement_correction, result.refinement_correction.data(), bytes);
+        std::memcpy(refined_solution, result.refined_solution.data(), bytes);
+        std::memcpy(solution, result.solution.data(), bytes);
+        std::memcpy(residual, result.residual.data(), bytes);
+        *max_scaled_residual = result.max_scaled_residual;
+        write_error(error_message, error_message_len, "");
+        return 0;
+    } catch (const std::exception& exc) {
+        write_error(error_message, error_message_len, exc.what());
+        return 1;
+    } catch (...) {
+        write_error(error_message, error_message_len,
+                    "unknown C++ exception in xstar_solver_leqt2f_trace_v1");
         return 2;
     }
 }

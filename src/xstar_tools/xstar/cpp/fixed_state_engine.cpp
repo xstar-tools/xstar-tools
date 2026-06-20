@@ -1758,7 +1758,7 @@ void apply_matrix_closure_contribution_corrections(
         if (correction.remove) continue;
         if (correction.replace_ans1) contribution.ans1 = correction.source_ans1;
         if (correction.replace_ans2) contribution.ans2 = correction.source_ans2;
-        // v0.6.48.7.46.21.2: matrix closure originally corrected only the
+        // v0.6.48.7.46.21.3: matrix closure originally corrected only the
         // population-rate channels.  Type-50 thermal energy channels are
         // algebraically tied to those rates after the source post-swap:
         //   ans3 = -ans2 * |Eupper-Elower| * erg/eV
@@ -1787,7 +1787,7 @@ void apply_matrix_closure_contribution_corrections(
                 contribution.ans3 = -contribution.ans2 * endpoint_energy_ev * kErgPerEv;
             }
         }
-        // v0.6.48.7.46.21.2: source matrix closure may replace the Type-50
+        // v0.6.48.7.46.21.3: source matrix closure may replace the Type-50
         // population-rate channels (ans1/ans2), but the Thermal ledger consumes
         // the pre-closure UCalc energy channels (ans3/ans4).  Preserve those
         // already source-exact values instead of recomputing them from the
@@ -1948,6 +1948,19 @@ struct NativeElementDiagnostic {
     std::vector<double> active_initial_populations;
     std::vector<double> active_final_outer_start_populations;
     std::vector<double> active_final_populations;
+    std::vector<double> final_superlevel_populations_before_solve;
+    std::vector<double> final_condensed_matrix;
+    std::vector<double> final_condensed_rhs;
+    std::vector<double> final_first_lu_solution;
+    std::vector<double> final_refinement_residual;
+    std::vector<double> final_refinement_correction;
+    std::vector<double> final_refined_superlevel_solution;
+    std::vector<double> final_population_after_condensed;
+    std::vector<double> final_fixed_point_population_before;
+    std::vector<double> final_fixed_point_population_after;
+    bool solve_stage_trace_captured = false;
+    int final_outer_iteration = 0;
+    int final_fixed_iterations = 0;
     std::vector<double> thermal_compact_populations;
     bool thermal_compact_population_closure_applied = false;
     std::vector<double> dense_matrix;
@@ -3825,7 +3838,7 @@ bool evaluate_type53_source_integral(
     contribution.ans6 *= (std::abs(contribution.ans4) - energy_difference * kErgPerEv * contribution.ans1) / den6;
     contribution.ans5 *= (std::abs(contribution.ans3) - energy_difference * kErgPerEv * contribution.ans2) / den5;
 
-    // v0.6.48.7.46.21.2 qualification-only IEEE closure.
+    // v0.6.48.7.46.21.3 qualification-only IEEE closure.
     // v0.6.48.7.46.9.4.2 qualification-only IEEE closure compatibility marker.
     // The v0.6.47.2
     // Python reference evaluates the same source expressions one operation at
@@ -5878,6 +5891,75 @@ int run_impl(
             (eout.status_flags & XSTAR_ELEMENT_STATUS_CANONICAL_THERMAL_LEDGER) == 0u) {
             throw std::runtime_error("element engine did not consume the canonical Thermal ledger");
         }
+        std::vector<double> stage_final_outer_start;
+        std::vector<double> stage_superlevel_before;
+        std::vector<double> stage_condensed_matrix;
+        std::vector<double> stage_condensed_rhs;
+        std::vector<double> stage_first_lu;
+        std::vector<double> stage_refinement_residual;
+        std::vector<double> stage_refinement_correction;
+        std::vector<double> stage_refined_superlevel;
+        std::vector<double> stage_after_condensed;
+        std::vector<double> stage_fixed_before;
+        std::vector<double> stage_fixed_after;
+        int stage_final_outer_iteration = 0;
+        int stage_final_fixed_iterations = 0;
+        bool stage_trace_captured = false;
+        if (capture_element_solve_response) {
+            const std::size_t nrows = static_cast<std::size_t>(active.element.n_rows);
+            const std::size_t nsp = static_cast<std::size_t>(active.element.n_superlevels);
+            stage_final_outer_start.resize(nrows);
+            stage_superlevel_before.resize(nsp);
+            stage_condensed_matrix.resize(nsp * nsp);
+            stage_condensed_rhs.resize(nsp);
+            stage_first_lu.resize(nsp);
+            stage_refinement_residual.resize(nsp);
+            stage_refinement_correction.resize(nsp);
+            stage_refined_superlevel.resize(nsp);
+            stage_after_condensed.resize(nrows);
+            stage_fixed_before.resize(nrows);
+            stage_fixed_after.resize(nrows);
+            xstar_element_solve_stage_trace_v1 trace{};
+            xstar_element_solve_stage_trace_init_v1(&trace);
+            trace.final_outer_start_populations = stage_final_outer_start.data();
+            trace.final_outer_start_capacity = stage_final_outer_start.size();
+            trace.final_superlevel_populations_before_solve = stage_superlevel_before.data();
+            trace.final_superlevel_populations_before_solve_capacity = stage_superlevel_before.size();
+            trace.final_condensed_matrix = stage_condensed_matrix.data();
+            trace.final_condensed_matrix_capacity = stage_condensed_matrix.size();
+            trace.final_condensed_rhs = stage_condensed_rhs.data();
+            trace.final_condensed_rhs_capacity = stage_condensed_rhs.size();
+            trace.final_first_lu_solution = stage_first_lu.data();
+            trace.final_first_lu_solution_capacity = stage_first_lu.size();
+            trace.final_refinement_residual = stage_refinement_residual.data();
+            trace.final_refinement_residual_capacity = stage_refinement_residual.size();
+            trace.final_refinement_correction = stage_refinement_correction.data();
+            trace.final_refinement_correction_capacity = stage_refinement_correction.size();
+            trace.final_refined_superlevel_solution = stage_refined_superlevel.data();
+            trace.final_refined_superlevel_solution_capacity = stage_refined_superlevel.size();
+            trace.final_population_after_condensed = stage_after_condensed.data();
+            trace.final_population_after_condensed_capacity = stage_after_condensed.size();
+            trace.final_fixed_point_population_before = stage_fixed_before.data();
+            trace.final_fixed_point_population_before_capacity = stage_fixed_before.size();
+            trace.final_fixed_point_population_after = stage_fixed_after.data();
+            trace.final_fixed_point_population_after_capacity = stage_fixed_after.size();
+            std::array<char, XSTAR_FIXED_STATE_MESSAGE_SIZE> trace_message{};
+            const int trace_rc = xstar_element_engine_get_last_solve_stage_trace_v1(
+                ctx.element_context, &trace, trace_message.data(), trace_message.size());
+            if (trace_rc != 0 || trace.valid == 0u || trace.element_z != element.element_z ||
+                trace.final_outer_start_count != nrows ||
+                trace.final_superlevel_populations_before_solve_count != nsp ||
+                trace.final_condensed_matrix_count != nsp * nsp ||
+                trace.final_population_after_condensed_count != nrows ||
+                trace.final_fixed_point_population_after_count != nrows) {
+                throw std::runtime_error(
+                    std::string("native solve-stage trace unavailable z=") +
+                    std::to_string(element.element_z) + ": " + trace_message.data());
+            }
+            stage_final_outer_iteration = trace.final_outer_iteration;
+            stage_final_fixed_iterations = trace.final_fixed_iterations;
+            stage_trace_captured = true;
+        }
         ++stats.elements_solved;
         // Source calc_hmc_all keeps primary and secondary thermal totals
         // separate.  heatf/hmctot consumes only the primary httot/cltot pair;
@@ -6150,8 +6232,22 @@ int run_impl(
                 if (seed.loaded) element_diagnostic.active_loaded_call_start_xilevg[compact_index] = seed.value;
             }
             element_diagnostic.active_initial_populations = buffers.initial;
-            element_diagnostic.active_final_outer_start_populations = buffers.outer;
+            element_diagnostic.active_final_outer_start_populations =
+                stage_trace_captured ? std::move(stage_final_outer_start) : buffers.outer;
             element_diagnostic.active_final_populations = buffers.populations;
+            element_diagnostic.solve_stage_trace_captured = stage_trace_captured;
+            element_diagnostic.final_outer_iteration = stage_final_outer_iteration;
+            element_diagnostic.final_fixed_iterations = stage_final_fixed_iterations;
+            element_diagnostic.final_superlevel_populations_before_solve = std::move(stage_superlevel_before);
+            element_diagnostic.final_condensed_matrix = std::move(stage_condensed_matrix);
+            element_diagnostic.final_condensed_rhs = std::move(stage_condensed_rhs);
+            element_diagnostic.final_first_lu_solution = std::move(stage_first_lu);
+            element_diagnostic.final_refinement_residual = std::move(stage_refinement_residual);
+            element_diagnostic.final_refinement_correction = std::move(stage_refinement_correction);
+            element_diagnostic.final_refined_superlevel_solution = std::move(stage_refined_superlevel);
+            element_diagnostic.final_population_after_condensed = std::move(stage_after_condensed);
+            element_diagnostic.final_fixed_point_population_before = std::move(stage_fixed_before);
+            element_diagnostic.final_fixed_point_population_after = std::move(stage_fixed_after);
             if (all_element_solve_system || (helium_solve_response && element.element_z == 2)) {
                 element_diagnostic.dense_matrix = buffers.dense;
                 element_diagnostic.heating_matrix = buffers.heat;
@@ -7167,6 +7263,79 @@ int xstar_fixed_state_write_last_diagnostics_v1(
             }
         }
 
+
+        if (context->last_all_element_solve_response) {
+            std::ofstream stage_rows(root / (stem + "_all_element_solve_stage_rows.csv"));
+            std::ofstream stage_superlevels(root / (stem + "_all_element_solve_stage_superlevels.csv"));
+            std::ofstream stage_matrix(root / (stem + "_all_element_solve_stage_condensed_matrix.csv"));
+            std::ofstream stage_manifest(root / (stem + "_all_element_solve_stage_manifest.csv"));
+            if (!stage_rows || !stage_superlevels || !stage_matrix || !stage_manifest) {
+                throw std::runtime_error("cannot create all-element solve-stage diagnostics");
+            }
+            stage_rows << "evaluation_ordinal,element_index,element_z,active_min_stage,active_max_stage,compact_row,superlevel,ion,ion_charge,is_normalization_row,transformed_initial_population,final_outer_start_population,population_after_condensed,final_fixed_point_population_before,final_fixed_point_population_after,final_population,rhs\n";
+            stage_superlevels << "evaluation_ordinal,element_index,element_z,final_outer_iteration,superlevel,population_before_condensed_solve,condensed_rhs,first_lu_solution,refinement_residual,refinement_correction,refined_superlevel_solution\n";
+            stage_matrix << "evaluation_ordinal,element_index,element_z,final_outer_iteration,row_superlevel,column_superlevel,normalized_matrix_value\n";
+            stage_manifest << "evaluation_ordinal,element_index,element_z,active_min_stage,active_max_stage,n_rows,n_superlevels,n_ions,normalization_row,final_outer_iteration,final_fixed_iterations,total_fixed_point_iterations,solver_method,trace_captured\n";
+            stage_rows << std::setprecision(17);
+            stage_superlevels << std::setprecision(17);
+            stage_matrix << std::setprecision(17);
+            stage_manifest << std::setprecision(17);
+            for (const auto& diagnostic : context->last_element_diagnostics) {
+                if (!diagnostic.solve_response_captured || !diagnostic.solve_stage_trace_captured) continue;
+                const int n = diagnostic.active.element.n_rows;
+                const int nsp = diagnostic.active.element.n_superlevels;
+                if (diagnostic.final_population_after_condensed.size() != static_cast<std::size_t>(n) ||
+                    diagnostic.final_fixed_point_population_before.size() != static_cast<std::size_t>(n) ||
+                    diagnostic.final_fixed_point_population_after.size() != static_cast<std::size_t>(n) ||
+                    diagnostic.final_superlevel_populations_before_solve.size() != static_cast<std::size_t>(nsp) ||
+                    diagnostic.final_condensed_matrix.size() != static_cast<std::size_t>(nsp) * static_cast<std::size_t>(nsp) ||
+                    diagnostic.final_condensed_rhs.size() != static_cast<std::size_t>(nsp) ||
+                    diagnostic.final_first_lu_solution.size() != static_cast<std::size_t>(nsp) ||
+                    diagnostic.final_refinement_residual.size() != static_cast<std::size_t>(nsp) ||
+                    diagnostic.final_refinement_correction.size() != static_cast<std::size_t>(nsp) ||
+                    diagnostic.final_refined_superlevel_solution.size() != static_cast<std::size_t>(nsp)) {
+                    throw std::runtime_error("all-element solve-stage trace dimensions are inconsistent");
+                }
+                stage_manifest << evaluation_ordinal << ',' << diagnostic.element_index << ',' << diagnostic.element_z << ','
+                    << diagnostic.active.min_stage << ',' << diagnostic.active.max_stage << ',' << n << ',' << nsp << ','
+                    << diagnostic.active.element.n_ions << ',' << diagnostic.active.element.normalization_row << ','
+                    << diagnostic.final_outer_iteration << ',' << diagnostic.final_fixed_iterations << ','
+                    << diagnostic.fixed_point_iterations << ',' << diagnostic.solver_method << ",1\n";
+                for (int compact_row = 1; compact_row <= n; ++compact_row) {
+                    const std::size_t index = static_cast<std::size_t>(compact_row - 1);
+                    const auto& row = diagnostic.active.element.rows.at(index);
+                    stage_rows << evaluation_ordinal << ',' << diagnostic.element_index << ',' << diagnostic.element_z << ','
+                        << diagnostic.active.min_stage << ',' << diagnostic.active.max_stage << ',' << compact_row << ','
+                        << row.superlevel << ',' << row.ion << ',' << row.ion_charge << ','
+                        << (compact_row == diagnostic.active.element.normalization_row ? 1 : 0) << ','
+                        << diagnostic.active_initial_populations.at(index) << ','
+                        << diagnostic.active_final_outer_start_populations.at(index) << ','
+                        << diagnostic.final_population_after_condensed.at(index) << ','
+                        << diagnostic.final_fixed_point_population_before.at(index) << ','
+                        << diagnostic.final_fixed_point_population_after.at(index) << ','
+                        << diagnostic.active_final_populations.at(index) << ','
+                        << diagnostic.rhs.at(index) << '\n';
+                }
+                for (int sp = 1; sp <= nsp; ++sp) {
+                    const std::size_t index = static_cast<std::size_t>(sp - 1);
+                    stage_superlevels << evaluation_ordinal << ',' << diagnostic.element_index << ',' << diagnostic.element_z << ','
+                        << diagnostic.final_outer_iteration << ',' << sp << ','
+                        << diagnostic.final_superlevel_populations_before_solve.at(index) << ','
+                        << diagnostic.final_condensed_rhs.at(index) << ','
+                        << diagnostic.final_first_lu_solution.at(index) << ','
+                        << diagnostic.final_refinement_residual.at(index) << ','
+                        << diagnostic.final_refinement_correction.at(index) << ','
+                        << diagnostic.final_refined_superlevel_solution.at(index) << '\n';
+                    for (int col = 1; col <= nsp; ++col) {
+                        stage_matrix << evaluation_ordinal << ',' << diagnostic.element_index << ',' << diagnostic.element_z << ','
+                            << diagnostic.final_outer_iteration << ',' << sp << ',' << col << ','
+                            << diagnostic.final_condensed_matrix.at(
+                                static_cast<std::size_t>(sp - 1) * static_cast<std::size_t>(nsp) +
+                                static_cast<std::size_t>(col - 1)) << '\n';
+                    }
+                }
+            }
+        }
 
         if (context->last_all_element_solve_system) {
             const std::filesystem::path system_relative = stem + "_all_element_solve_systems";

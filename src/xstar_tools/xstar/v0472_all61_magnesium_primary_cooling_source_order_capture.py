@@ -20,7 +20,7 @@ from typing import Any
 
 from . import v0472_all61_magnesium_type99_primary_cooling_capture as base
 
-RELEASE = "0.6.48.7.46.21.2"
+RELEASE = "0.6.48.7.46.21.3"
 SCHEMA = "xstar-tools-v0648746202-v0472-all61-magnesium-primary-cooling-source-order-capture-v1"
 VERIFY_SCHEMA = "xstar-tools-v0648746202-v0472-all61-magnesium-primary-cooling-source-order-state-v1"
 LEDGER_NAME = "v0472_all61_magnesium_primary_cooling_source_order_ledger.csv"

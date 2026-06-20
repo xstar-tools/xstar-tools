@@ -8,7 +8,7 @@ import math
 from pathlib import Path
 from typing import Any
 
-RELEASE = "0.6.48.7.46.21.2"
+RELEASE = "0.6.48.7.46.21.3"
 SCHEMA = "xstar-tools-v0648746193-magnesium-type50-endpoint-energy-audit-v1"
 EXPECTED_EVALUATIONS = 61
 EXPECTED_UNIQUE_RECORDS = 2420
