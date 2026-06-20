@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_version_and_cpp_sequence_mask_contract():
-    assert xstar_tools.__version__ == "0.6.48.7.46.19.3"
+    assert xstar_tools.__version__ == "0.6.48.7.46.19.3.1"
     text = (ROOT / "src/xstar_tools/xstar/cpp/fixed_state_engine.cpp").read_text()
     assert "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_ACTIVE_RECORDS_CSV" in text
     assert "magnesium_escape.active_records.count(record.record) != 0" in text

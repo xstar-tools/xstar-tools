@@ -1292,7 +1292,8 @@ void apply_matrix_closure_contribution_corrections(
     std::vector<xstar_element_contribution_v1>& contributions,
     const ElementProgram& active_element,
     bool helium_non_type53_type50_energy_reduction,
-    bool magnesium_type50_primary_cooling_reduction
+    bool magnesium_type50_primary_cooling_reduction,
+    bool magnesium_type50_thermal_channel_preservation
 ) {
     const int element_z = active_element.element_z;
     const auto corrections = load_matrix_closure_contribution_corrections(element_z);
@@ -1308,6 +1309,8 @@ void apply_matrix_closure_contribution_corrections(
     std::vector<xstar_element_contribution_v1> corrected;
     corrected.reserve(contributions.size());
     for (auto contribution : contributions) {
+        const double pre_closure_ans3 = contribution.ans3;
+        const double pre_closure_ans4 = contribution.ans4;
         const Key key{contribution.record, contribution.data_type, contribution.rate_type, contribution.ion_stage};
         const auto it = by_identity.find(key);
         if (it == by_identity.end()) {
@@ -1319,7 +1322,7 @@ void apply_matrix_closure_contribution_corrections(
         if (correction.remove) continue;
         if (correction.replace_ans1) contribution.ans1 = correction.source_ans1;
         if (correction.replace_ans2) contribution.ans2 = correction.source_ans2;
-        // v0.6.48.7.46.19.3: matrix closure originally corrected only the
+        // v0.6.48.7.46.19.3.1: matrix closure originally corrected only the
         // population-rate channels.  Type-50 thermal energy channels are
         // algebraically tied to those rates after the source post-swap:
         //   ans3 = -ans2 * |Eupper-Elower| * erg/eV
@@ -1348,42 +1351,44 @@ void apply_matrix_closure_contribution_corrections(
                 contribution.ans3 = -contribution.ans2 * endpoint_energy_ev * kErgPerEv;
             }
         }
-        // v0.6.48.7.46.19.3: Mg primary line cooling consumes the final
-        // matrix-closure reverse rate and the immutable source-local endpoint
-        // energy transported by the all-61 observational capture.
-        // v0.6.48.7.46.19.3: Mg primary line cooling consumes the final
-        // matrix-closure reverse rate.  Reconstruct only ans3 from the
-        // source-faithful Type-50 post-swap identity; secondary channels and
-        // forward heating remain unchanged in this milestone.
+        // v0.6.48.7.46.19.3.1: source matrix closure may replace the Type-50
+        // population-rate channels (ans1/ans2), but the Thermal ledger consumes
+        // the pre-closure UCalc energy channels (ans3/ans4).  Preserve those
+        // already source-exact values instead of recomputing them from the
+        // matrix-only replacement rates.
         if (magnesium_type50_primary_cooling_reduction &&
             element_z == 12 && contribution.data_type == 50 &&
-            correction.replace_ans2 &&
             magnesium_type50_escape_state_v04874619().active_records.count(contribution.record) != 0) {
-            if (contribution.lower_row < 1 || contribution.upper_row < 1 ||
-                contribution.lower_row > active_element.n_rows ||
-                contribution.upper_row > active_element.n_rows) {
-                throw std::runtime_error("magnesium Type-50 closure endpoint is outside the active basis");
-            }
-            double endpoint_energy_ev = 0.0;
-            const auto& magnesium_state = magnesium_type50_escape_state_v04874619();
-            if (magnesium_state.endpoint_energy_transport) {
-                const auto endpoint = magnesium_state.endpoint_by_record.find(contribution.record);
-                if (endpoint == magnesium_state.endpoint_by_record.end()) {
-                    throw std::runtime_error(
-                        "active magnesium Type-50 closure record is missing source endpoint energy");
+            if (magnesium_type50_thermal_channel_preservation) {
+                contribution.ans3 = pre_closure_ans3;
+                contribution.ans4 = pre_closure_ans4;
+            } else if (correction.replace_ans2) {
+                if (contribution.lower_row < 1 || contribution.upper_row < 1 ||
+                    contribution.lower_row > active_element.n_rows ||
+                    contribution.upper_row > active_element.n_rows) {
+                    throw std::runtime_error("magnesium Type-50 closure endpoint is outside the active basis");
                 }
-                endpoint_energy_ev = endpoint->second.endpoint_energy_ev;
-            } else {
-                const auto& lower = active_element.rows.at(
-                    static_cast<std::size_t>(contribution.lower_row - 1));
-                const auto& upper = active_element.rows.at(
-                    static_cast<std::size_t>(contribution.upper_row - 1));
-                endpoint_energy_ev = std::abs(upper.energy_ev - lower.energy_ev);
+                double endpoint_energy_ev = 0.0;
+                const auto& magnesium_state = magnesium_type50_escape_state_v04874619();
+                if (magnesium_state.endpoint_energy_transport) {
+                    const auto endpoint = magnesium_state.endpoint_by_record.find(contribution.record);
+                    if (endpoint == magnesium_state.endpoint_by_record.end()) {
+                        throw std::runtime_error(
+                            "active magnesium Type-50 closure record is missing source endpoint energy");
+                    }
+                    endpoint_energy_ev = endpoint->second.endpoint_energy_ev;
+                } else {
+                    const auto& lower = active_element.rows.at(
+                        static_cast<std::size_t>(contribution.lower_row - 1));
+                    const auto& upper = active_element.rows.at(
+                        static_cast<std::size_t>(contribution.upper_row - 1));
+                    endpoint_energy_ev = std::abs(upper.energy_ev - lower.energy_ev);
+                }
+                if (!(endpoint_energy_ev > 0.0) || !std::isfinite(endpoint_energy_ev)) {
+                    throw std::runtime_error("magnesium Type-50 closure energy is invalid");
+                }
+                contribution.ans3 = -contribution.ans2 * endpoint_energy_ev * kErgPerEv;
             }
-            if (!(endpoint_energy_ev > 0.0) || !std::isfinite(endpoint_energy_ev)) {
-                throw std::runtime_error("magnesium Type-50 closure energy is invalid");
-            }
-            contribution.ans3 = -contribution.ans2 * endpoint_energy_ev * kErgPerEv;
         }
         corrected.push_back(contribution);
     }
@@ -3375,7 +3380,7 @@ bool evaluate_type53_source_integral(
     contribution.ans6 *= (std::abs(contribution.ans4) - energy_difference * kErgPerEv * contribution.ans1) / den6;
     contribution.ans5 *= (std::abs(contribution.ans3) - energy_difference * kErgPerEv * contribution.ans2) / den5;
 
-    // v0.6.48.7.46.19.3 qualification-only IEEE closure.
+    // v0.6.48.7.46.19.3.1 qualification-only IEEE closure.
     // v0.6.48.7.46.9.4.2 qualification-only IEEE closure compatibility marker.
     // The v0.6.47.2
     // Python reference evaluates the same source expressions one operation at
@@ -5076,6 +5081,8 @@ int run_impl(
         environment_flag("XSTAR_QUALIFICATION_HE_NON_TYPE53_TYPE50_ENERGY_REDUCTION");
     const bool magnesium_type50_primary_cooling_reduction =
         environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_PRIMARY_COOLING_REDUCTION");
+    const bool magnesium_type50_thermal_channel_preservation =
+        environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_THERMAL_CHANNEL_PRESERVATION");
     const bool helium_source_insertion_order =
         environment_flag("XSTAR_QUALIFICATION_HELIUM_SOURCE_INSERTION_ORDER");
     const bool type53_two_state_promotion = environment_flag("XSTAR_QUALIFICATION_TYPE53_TWO_STATE_PROMOTION");
@@ -5113,6 +5120,12 @@ int run_impl(
          !environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_ESCAPE_STATE"))) {
         throw std::runtime_error(
             "magnesium Type-50 primary cooling reduction requires replacement, matrix closure, source-order Thermal reduction, and live escape state");
+    }
+    if (magnesium_type50_thermal_channel_preservation &&
+        (!magnesium_type50_primary_cooling_reduction ||
+         !environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_ENDPOINT_ENERGY_TRANSPORT"))) {
+        throw std::runtime_error(
+            "magnesium Type-50 Thermal-channel preservation requires primary cooling reduction and source endpoint-energy transport");
     }
     if (matrix_construction_closure && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
         throw std::runtime_error("matrix-construction closure requires XSTAR_QUALIFICATION_REPLACEMENT=1");
@@ -5328,7 +5341,8 @@ int run_impl(
             apply_matrix_closure_contribution_corrections(
                 contributions, active.element,
                 helium_non_type53_type50_energy_reduction,
-                magnesium_type50_primary_cooling_reduction);
+                magnesium_type50_primary_cooling_reduction,
+                magnesium_type50_thermal_channel_preservation);
         } else if (element.element_z == 2 && helium_source_insertion_order) {
             restore_source_contribution_order(contributions);
         } else if (type53_row46_coupled_replacement && element.element_z == 2) {

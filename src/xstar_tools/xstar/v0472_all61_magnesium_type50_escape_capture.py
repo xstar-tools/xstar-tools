@@ -20,7 +20,7 @@ from typing import Any
 
 from . import v0472_all61_thermal_state_capture as base
 
-RELEASE = "0.6.48.7.46.19.3"
+RELEASE = "0.6.48.7.46.19.3.1"
 SCHEMA = "xstar-tools-v0648746191-v0472-all61-magnesium-type50-escape-capture-v1"
 VERIFY_SCHEMA = "xstar-tools-v0648746191-v0472-all61-magnesium-type50-escape-state-v1"
 ESCAPE_NAME = "v0472_all61_magnesium_type50_escape.csv"

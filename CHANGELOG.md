@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.7.46.19.3.1 - 2026-06-19
+
+- Preserve source-exact pre-closure Magnesium Type-50 `ans3/ans4` through matrix-only `ans1/ans2` replacement.
+- Add strict v46.19.3 causal classification for 8,044 `cj` and 8,037 cooling mismatches.
+- Reuse the accepted 2,420-record/146,286-row endpoint source capture without recapture.
+- Require Type-50 committed reverse cooling exactness while explicitly retaining overall `mg_cooling=0/61` and native Thermal exactness `1066/2440`.
+- Keep ABI 60487 and production promotion blocked.
+
 # v0.6.48.7.46.19.3 - 2026-06-19
 
 - Added an augmented all-61 v0.6.47.2 Mg Type-50 source capture retaining source-local endpoint IDs, both endpoint energies, and the exact binary64 endpoint-energy difference.

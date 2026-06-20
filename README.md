@@ -1,22 +1,8 @@
-## v0.6.48.7.46.19.3
 
-Qualification-only source-faithful Magnesium Type-50 endpoint-energy transport and matrix-closure cooling reconstruction.
+## Current qualification milestone
 
-The v46.19.2 production replay proved that the runtime-active sequence mask, line indices, line optical depths, and escape factors are exact for all 146,286 source-active Mg Type-50 rows. It isolated the remaining defect to the Type-50 post-swap cooling channel: `ans3` was non-exact for 50,955 rows across 857 records because the native element-basis row energies do not always reproduce the source-local UCalc endpoint-energy difference.
+`v0.6.48.7.46.19.3.1` preserves source-exact Magnesium Type-50 Thermal energy channels through matrix-only population-rate closure. It is qualification-only and does not claim overall Magnesium cooling parity or production promotion.
 
-v46.19.3 performs one augmented v0.6.47.2 observational capture, retains the two source-local endpoint energies and their exact binary64 difference for each of the 2,420 runtime-active records, and uses the transported endpoint energy both when constructing native Type-50 `ans3/ans4` and when reconstructing `ans3` after matrix-closure `ans2` replacement.
-
-```bash
-./run_v048746193_magnesium_type50_endpoint_energy_transport.sh \
-  ../xstar_tools-0.6.47.2.tar.gz \
-  ../xstar/data/atdb.fits \
-  ../xstar_tools-0.6.48.7.46.18.1/v048746181_hydrogen_type50_source_capture_context_hotfix \
-  ../xstar_tools-0.6.48.7.46.19.2/v048746192_magnesium_runtime_active_sequence_mask_hotfix \
-  v048746193_magnesium_type50_endpoint_energy_transport \
-  10
-```
-
-Use `XSTAR_V048746193_PREFLIGHT_ONLY=1` for baseline/readiness validation, `XSTAR_V048746193_SOURCE_CAPTURE_PREFLIGHT_ONLY=1` to stop after the augmented source capture, and `XSTAR_V048746193_NATIVE_REPLAY_PREFLIGHT_ONLY=1` to verify the replay plan without evaluating states.
 
 ## v0.6.48.7.46.19.2
 

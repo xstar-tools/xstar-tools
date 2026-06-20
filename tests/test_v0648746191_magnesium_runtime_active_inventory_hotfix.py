@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_runtime_active_inventory_contract():
-    assert xstar_tools.__version__ == "0.6.48.7.46.19.3"
+    assert xstar_tools.__version__ == "0.6.48.7.46.19.3.1"
     assert capture.EXPECTED_UNIQUE_RECORDS == 2420
     assert capture.EXPECTED_ROWS == 146286
     assert capture.EXPECTED_SEQUENCE_COUNTS == audit.EXPECTED_SEQUENCE_COUNTS

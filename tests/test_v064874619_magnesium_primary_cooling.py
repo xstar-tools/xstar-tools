@@ -21,7 +21,7 @@ def _write_csv(path: Path, fields, rows):
 
 
 def test_release_and_magnesium_source_probe_contract():
-    assert xstar_tools.__version__ == "0.6.48.7.46.19.3"
+    assert xstar_tools.__version__ == "0.6.48.7.46.19.3.1"
     assert capture.EXPECTED_UNIQUE_RECORDS == 2420
     assert capture.EXPECTED_ROWS == 146286
     assert capture.EXPECTED_SEQUENCE_COUNTS[1] == 2196
