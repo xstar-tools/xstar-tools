@@ -2093,6 +2093,9 @@ struct FixedDsecEvaluatorData {
     std::vector<CallStartWorkspace> call_start_workspaces;
     std::vector<MgPrimaryBudget> mg_primary_budget;
     std::vector<Call1ThermalOracle> call1_thermal_oracle;
+    std::array<std::vector<std::size_t>,4> dsec_source_sequences;
+    std::array<std::size_t,4> final_source_sequences{{0,0,0,0}};
+    std::array<std::size_t,4> final_evaluation_indices{{0,0,0,0}};
     std::size_t call1_thermal_oracle_evaluations = 0;
     std::size_t transported_workspace_evaluations = 0;
     std::size_t mg_primary_override_evaluations = 0;
@@ -2115,10 +2118,40 @@ int fixed_dsec_evaluator(
         return 1;
     }
     FixedDsecSnapshot snapshot;
-    snapshot.kind = "dsec";
-    snapshot.sequence = data->snapshots->size() + 1;
     snapshot.call_index = data->call_index;
-    snapshot.evaluation_index = ++data->evaluation_index;
+    if (snapshot.call_index < 1 || snapshot.call_index > 4) {
+        set_callback_error(error, error_size, "fixed-state DSEC evaluator call index is outside 1..4");
+        return 1;
+    }
+    const std::size_t call_slot = snapshot.call_index - 1;
+    if (data->writing_final_snapshot) {
+        snapshot.kind = "final";
+        snapshot.sequence = data->final_source_sequences[call_slot];
+        snapshot.evaluation_index = data->final_evaluation_indices[call_slot];
+    } else {
+        snapshot.kind = "dsec";
+        snapshot.evaluation_index = ++data->evaluation_index;
+        const auto& source_sequences = data->dsec_source_sequences[call_slot];
+        if (snapshot.evaluation_index == 0 || snapshot.evaluation_index > source_sequences.size()) {
+            set_callback_error(error, error_size, "fixed-state DSEC evaluation is outside the source trajectory inventory");
+            return 1;
+        }
+        snapshot.sequence = source_sequences[snapshot.evaluation_index - 1];
+    }
+    if (snapshot.sequence < 1 || snapshot.sequence > 61) {
+        set_callback_error(error, error_size, "fixed-state DSEC source sequence is outside 1..61");
+        return 1;
+    }
+    // The historical qualification path launched one process per source
+    // sequence. run-fixed-dsec owns one serial process for all 61 states, so
+    // bind the immutable trajectory ordinal before every fixed-state call.
+    // This standalone controller is single-threaded; the process environment
+    // remains the compatibility boundary for the existing qualification code.
+    const std::string source_sequence_text = std::to_string(snapshot.sequence);
+    if (::setenv("XSTAR_QUALIFICATION_SOURCE_SEQUENCE", source_sequence_text.c_str(), 1) != 0) {
+        set_callback_error(error, error_size, "cannot bind XSTAR_QUALIFICATION_SOURCE_SEQUENCE for fixed-state DSEC evaluation");
+        return 1;
+    }
     snapshot.temperature_t4 = trial_state->temperature_t4;
     snapshot.electron_fraction_input = trial_state->electron_fraction_xee;
     snapshot.populations.assign(static_cast<std::size_t>(data->program_info.population_rows), 0.0);
@@ -2294,9 +2327,10 @@ int append_final_fixed_snapshot(
     const int rc = fixed_dsec_evaluator(&data, &state, &ignored, message.data(), message.size());
     data.writing_final_snapshot = false;
     if (rc != 0) return rc;
-    snapshots.back().kind = "final";
-    snapshots.back().sequence = before + 1;
-    snapshots.back().evaluation_index = 1;
+    if (snapshots.size() != before + 1 || snapshots.back().kind != "final") {
+        std::snprintf(message.data(), message.size(), "%s", "final fixed-state snapshot identity was not preserved");
+        return 1;
+    }
     return 0;
 }
 
@@ -2366,6 +2400,43 @@ int command_run_fixed_dsec(const Options& options) {
     evaluator_data.program_info = info;
     evaluator_data.cumulative_stats = &cumulative;
     evaluator_data.snapshots = &snapshots;
+    try {
+        std::array<bool,61> seen_source_sequence{};
+        for (const auto& row : reference) {
+            const std::size_t source_sequence = static_cast<std::size_t>(std::stoull(row.sequence));
+            if (source_sequence < 1 || source_sequence > 61 || seen_source_sequence[source_sequence - 1]) {
+                throw std::runtime_error("reference trajectory source sequence inventory is invalid");
+            }
+            seen_source_sequence[source_sequence - 1] = true;
+            if (row.call_index < 1 || row.call_index > 4 || row.evaluation_index <= 0) {
+                throw std::runtime_error("reference trajectory call/evaluation identity is invalid");
+            }
+            const std::size_t call_slot = static_cast<std::size_t>(row.call_index - 1);
+            if (row.kind == "dsec") {
+                evaluator_data.dsec_source_sequences[call_slot].push_back(source_sequence);
+            } else if (row.kind == "final") {
+                if (evaluator_data.final_source_sequences[call_slot] != 0) {
+                    throw std::runtime_error("reference trajectory contains duplicate final call identity");
+                }
+                evaluator_data.final_source_sequences[call_slot] = source_sequence;
+                evaluator_data.final_evaluation_indices[call_slot] = static_cast<std::size_t>(row.evaluation_index);
+            } else {
+                throw std::runtime_error("reference trajectory contains unsupported kind");
+            }
+        }
+        for (std::size_t call_slot = 0; call_slot < 4; ++call_slot) {
+            if (evaluator_data.dsec_source_sequences[call_slot].size() != dsec_limits[call_slot] ||
+                evaluator_data.final_source_sequences[call_slot] == 0 ||
+                evaluator_data.final_evaluation_indices[call_slot] == 0) {
+                throw std::runtime_error("reference trajectory source-sequence mapping is incomplete");
+            }
+        }
+    } catch (const std::exception& exc) {
+        std::cerr << exc.what() << "\n";
+        xstar_thermal_context_destroy(thermal_context);
+        xstar_fixed_state_context_destroy(fixed_context);
+        return 6;
+    }
     RadiationField radiation;
     try { radiation=read_radiation_field(options.radiation_csv); }
     catch (const std::exception& exc) {
@@ -2625,9 +2696,16 @@ int command_run_fixed_dsec(const Options& options) {
     double max_electron_fraction_delta = 0.0;
     double max_charge_residual_delta = 0.0;
     double max_hmctot_delta = 0.0;
+    std::array<bool,61> emitted_source_sequence{};
     for (std::size_t index = 0; index < snapshots.size(); ++index) {
         auto& snapshot = snapshots[index];
-        snapshot.sequence = index + 1;
+        if (snapshot.sequence < 1 || snapshot.sequence > 61 || emitted_source_sequence[snapshot.sequence - 1]) {
+            std::cerr << "native DSEC snapshot source-sequence inventory is invalid\n";
+            xstar_thermal_context_destroy(thermal_context);
+            xstar_fixed_state_context_destroy(fixed_context);
+            return 9;
+        }
+        emitted_source_sequence[snapshot.sequence - 1] = true;
         const TrajectoryRow* reference_row = find_reference_row(reference, snapshot.kind, snapshot.call_index, snapshot.evaluation_index);
         const double ref_t = reference_row ? reference_row->temperature_t4 : std::numeric_limits<double>::quiet_NaN();
         const double ref_xee = reference_row ? reference_row->electron_fraction : std::numeric_limits<double>::quiet_NaN();

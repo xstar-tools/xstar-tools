@@ -157,3 +157,46 @@ def test_runner_autodiscovers_baselines_and_omits_scalar_oracles(tmp_path: Path)
     assert "V048746217_PREFLIGHT=ACCEPT" in process.stdout
     for name in names:
         assert str(paths[name].resolve()) in process.stderr
+
+
+def test_full_controller_binds_source_sequence_per_evaluation(tmp_path: Path) -> None:
+    cpp = ROOT / "src/xstar_tools/xstar/cpp"
+    program = ROOT / "src/xstar_tools/benchmarks/v06485_active_family_phase2_fixture"
+    trajectory = ROOT / "src/xstar_tools/benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8/trajectory.csv"
+    output = tmp_path / "controller"
+    diagnostics = tmp_path / "diagnostics"
+    process = subprocess.run(
+        [
+            str(cpp / "xstar_cpp"), "run-fixed-dsec",
+            "--case-dir", str(program),
+            "--trajectory-csv", str(trajectory),
+            "--diagnostics-dir", str(diagnostics),
+            "--skip-fits",
+            "--output-dir", str(output),
+        ],
+        cwd=cpp,
+        capture_output=True,
+        text=True,
+    )
+    # The development fixture is not expected to satisfy the 61-state science
+    # reference, so return code 20 is a valid completed diagnostic run.
+    assert process.returncode in {0, 20}, process.stdout + process.stderr
+    combined = process.stdout + process.stderr
+    assert "missing environment integer: XSTAR_QUALIFICATION_SOURCE_SEQUENCE" not in combined
+    rows = list(__import__("csv").DictReader((output / "native_dsec_trajectory.csv").open()))
+    assert len(rows) == 61
+    by_identity = {
+        (row["kind"], int(row["call_index"]), int(row["evaluation_index"])): int(row["sequence"])
+        for row in rows
+    }
+    assert by_identity[("dsec", 1, 1)] == 1
+    assert by_identity[("dsec", 2, 1)] == 22
+    assert by_identity[("dsec", 3, 1)] == 23
+    assert by_identity[("dsec", 4, 1)] == 41
+    assert by_identity[("final", 1, 22)] == 58
+    assert by_identity[("final", 2, 2)] == 59
+    assert by_identity[("final", 3, 19)] == 60
+    assert by_identity[("final", 4, 18)] == 61
+    assert sorted(int(row["sequence"]) for row in rows) == list(range(1, 62))
+    assert (diagnostics / "evaluation_0001_state.json").is_file()
+    assert (diagnostics / "evaluation_0061_state.json").is_file()

@@ -1,5 +1,13 @@
 # CHANGELOG
 
+# 0.6.48.7.46.21.7.2 - 2026-06-21
+
+- Bind `XSTAR_QUALIFICATION_SOURCE_SEQUENCE` dynamically inside each native DSEC fixed-state callback.
+- Derive all 57 DSEC and four final source ordinals from the immutable 61-row reference trajectory.
+- Preserve final identities as `(call,evaluation) = (1,22), (2,2), (3,19), (4,18)` with source sequences 58-61.
+- Add fail-closed source-sequence inventory validation and a full 57+4 diagnostic regression test.
+- Retain v21.7.1 recursive baseline autodiscovery and independent-Thermal scalar-override exclusion.
+
 # 0.6.48.7.46.21.7.1 - 2026-06-21
 
 - Added recursive autodiscovery for all historical baseline directories under configurable search roots.
