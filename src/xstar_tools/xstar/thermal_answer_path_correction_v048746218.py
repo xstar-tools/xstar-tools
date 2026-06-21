@@ -8,7 +8,7 @@ import struct
 from pathlib import Path
 from typing import Any, Iterable
 
-RELEASE = "0.6.48.7.46.21.8"
+RELEASE = "0.6.48.7.46.21.8.1"
 SCHEMA = "xstar-tools-v0648746218-focused-thermal-answer-correction-v1"
 H_TYPE51_RECORDS = tuple(range(469, 492))
 

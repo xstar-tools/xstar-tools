@@ -1,5 +1,12 @@
 # CHANGELOG
 
+# 0.6.48.7.46.21.8.1 - 2026-06-21
+
+- Persisted the auto-detected v46.20.1 and v46.19.3.1 baseline directories for the v21.8 milestone wrapper.
+- Added checked baseline-path reads with explicit missing, empty, and stale-directory diagnostics.
+- Added recursive-autodiscovery regression coverage for the two previously omitted path files.
+- Kept v21.8 physics corrections, canonical `.10e` comparison, and ABI 60487 unchanged.
+
 # 0.6.48.7.46.21.8 - 2026-06-21
 
 - Promoted the established source-faithful Type-51 evaluator for H, He, and Mg while retaining the Mg-only compatibility flag.

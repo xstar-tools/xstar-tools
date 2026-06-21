@@ -4,6 +4,10 @@ Source-faithful element convergence controls now match the Python/v0.6.47.2 cont
 
 # xstar_tools
 
+## v0.6.48.7.46.21.8.1 baseline-path persistence hotfix
+
+This hotfix persists the auto-detected v46.20.1 and v46.19.3.1 directories needed by the v21.8 full replay and validates every resolved baseline path before use. It does not change the v21.8 Thermal physics corrections or ABI 60487.
+
 ## v0.6.48.7.46.21.8 Thermal answer-path correction
 
 This release promotes source-faithful Type-51 answers for H/He/Mg and moves canonical Thermal coefficient capture to the final post-matrix-closure contribution stream. It regenerates all 61 native fixed evaluations before the canonical Thermal/controller audit and writes a focused report for Hydrogen records 469-491 and the Helium Type-50/non-Type-53 cooling domain. Use `run_v048746218_thermal_answer_path_corrections.sh`; direct v21.7 full runs without a fresh native-evaluation directory are rejected. ABI remains 60487.

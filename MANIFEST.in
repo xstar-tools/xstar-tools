@@ -861,3 +861,6 @@ include run_v048746218_native_fixed_replay.sh
 include run_v048746218_thermal_answer_path_corrections.sh
 include check_v048746218_thermal_answer_path_correction_readiness.py
 include tests/test_v0648746218_thermal_answer_path_corrections.py
+
+# v0.6.48.7.46.21.8.1 resolved baseline path persistence hotfix
+include V06487462181_RESOLVED_BASELINE_PATH_PERSISTENCE_HOTFIX.md

@@ -12,7 +12,7 @@ RUNNER = ROOT / "run_v048746217_canonical_thermal_controller_parity.sh"
 
 
 def test_release_version_and_abi() -> None:
-    assert xstar_tools.__version__ == "0.6.48.7.46.21.8"
+    assert xstar_tools.__version__ == "0.6.48.7.46.21.8.1"
     api = (ROOT / "src/xstar_tools/xstar/cpp/xstar_api.h").read_text()
     assert "XSTAR_API_ABI_VERSION 60487u" in api
 
@@ -77,6 +77,11 @@ def test_v218_runner_regenerates_all_fixed_evaluations() -> None:
     assert "run_v048746218_native_fixed_replay.sh" in milestone
     assert "XSTAR_V048746217_NATIVE_EVALUATIONS_DIR" in milestone
     assert "XSTAR_V048746217_PREFLIGHT_ONLY=1" in milestone
+    assert "read_resolved_dir" in milestone
+    assert "20260727-resolved-baseline-path-persistence-v2" in milestone
+    base_runner = RUNNER.read_text()
+    assert "v048746217_baseline_v048746201.txt" in base_runner
+    assert "v048746217_baseline_v0487461931.txt" in base_runner
 
 def test_readiness_accepts(tmp_path: Path) -> None:
     output = tmp_path / "readiness.json"
@@ -149,6 +154,12 @@ def test_v218_preflight_uses_recursive_baseline_discovery(tmp_path: Path) -> Non
     assert "V048746218_PREFLIGHT=ACCEPT" in process.stdout
     assert "V048746217_PREFLIGHT=ACCEPT" in process.stdout
     assert json.loads((output / "v048746218_readiness_report.json").read_text())["result"] == "ACCEPT"
+    assert (output / "v048746217_baseline_v048746201.txt").read_text().strip() == str(
+        paths["v048746201_magnesium_type99_runtime_active_inventory_hotfix"].resolve()
+    )
+    assert (output / "v048746217_baseline_v0487461931.txt").read_text().strip() == str(
+        paths["v0487461931_magnesium_type50_thermal_channel_preservation_hotfix"].resolve()
+    )
 
 
 def test_focused_analyzer_accepts_source_faithful_fixture(tmp_path: Path) -> None:
