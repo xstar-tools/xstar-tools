@@ -210,6 +210,11 @@ The downstream qualification compares canonical Thermal science and full control
 The v21.7.1 runner recursively discovers historical baseline workspaces under the current project roots and optional `XSTAR_V048746217_SEARCH_ROOTS`. It also removes source scalar-budget override arguments from the independent Thermal controller replay. The scientific comparator and ABI are unchanged. See `V06487462171_BASELINE_AUTODISCOVERY_AND_INDEPENDENT_CONTROLLER_HOTFIX.md`.
 
 
+
+## v0.6.48.7.46.21.7.3 per-sequence controller workspace transport
+
+The native `run-fixed-dsec` qualification now accepts `--runtime-state-workspace-dir` and selects the captured runtime workspace for each of the 61 immutable source sequences. The controller dynamically binds line optical depths and the source-faithful Hydrogen/Magnesium Type-50 and Magnesium Type-99/source-order ledgers used by the accepted v21.6 fixed evaluations. Large arrays are loaded one evaluation at a time. Canonical `.10e` comparison and ABI 60487 are unchanged.
+
 ## v0.6.48.7.46.21.7.2 controller source-sequence hotfix
 
 The full native `run-fixed-dsec` path now binds the source qualification sequence separately for every fixed-state callback. This is required because the controller executes all 61 source states in one process, while the historical fixed-evaluation qualification executed one process per sequence. The mapping is read from the 61-row trajectory rather than inferred from callback insertion order.

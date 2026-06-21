@@ -37,6 +37,7 @@ struct Options {
     std::string dsec_radiation_csv;
     std::string continuum_tau_csv;
     std::string call_start_workspace_dir;
+    std::string runtime_state_workspace_dir;
     std::string mg_primary_budget_csv;
     std::string call1_thermal_budget_csv;
     std::string global_workspace_mode = "all";
@@ -81,7 +82,7 @@ void usage(std::ostream& output) {
         "  xstar_cpp fixed-state-batch-self-test --case-dir RAW_PROGRAM_DIR [--batch N]\n"
         "  xstar_cpp run-fixed-trajectory --case-dir RAW_PROGRAM_DIR --trajectory-csv CSV [--radiation-csv CSV] [--dsec-radiation-csv CSV] [--continuum-tau-csv CSV] [--dsec-covering-fraction VALUE] [--temperature-k VALUE] [--diagnostics-dir DIR] --output-dir DIR\n"
         "  xstar_cpp run-fixed-evaluation --case-dir RAW_PROGRAM_DIR --trajectory-csv CSV --evaluation N [--radiation-csv CSV] [--dsec-radiation-csv CSV] [--continuum-tau-csv CSV] [--call-start-workspace-dir DIR] [--global-workspace-mode none|xilevg|xilevg-bilevg|xilevg-rnisg|all] [--dsec-covering-fraction VALUE] [--temperature-k VALUE] [--diagnostics-dir DIR] --output-dir DIR\n"
-        "  xstar_cpp run-fixed-dsec --case-dir RAW_PROGRAM_DIR --trajectory-csv CSV [--radiation-csv CSV] [--dsec-radiation-csv CSV] [--continuum-tau-csv CSV] [--dsec-covering-fraction VALUE] [--temperature-k VALUE] [--diagnostics-dir DIR] [--skip-fits] [--controller-smoke-evaluations N] [--controller-prefix-evaluations N] [--call-start-workspace-dir DIR] [--mg-primary-budget-csv CSV] [--call1-thermal-budget-csv CSV] --output-dir DIR\n"
+        "  xstar_cpp run-fixed-dsec --case-dir RAW_PROGRAM_DIR --trajectory-csv CSV [--radiation-csv CSV] [--dsec-radiation-csv CSV] [--continuum-tau-csv CSV] [--dsec-covering-fraction VALUE] [--temperature-k VALUE] [--diagnostics-dir DIR] [--skip-fits] [--controller-smoke-evaluations N] [--controller-prefix-evaluations N] [--call-start-workspace-dir DIR] [--runtime-state-workspace-dir DIR] [--mg-primary-budget-csv CSV] [--call1-thermal-budget-csv CSV] --output-dir DIR\n"
         "  xstar_cpp production-self-test --case-dir DIR\n"
         "  xstar_cpp production-batch-self-test --case-dir DIR [--batch N]\n"
         "  xstar_cpp run-compiled-case --case-dir DIR --output-dir DIR\n"
@@ -155,6 +156,10 @@ bool parse_options(int argc, char** argv, Options& options, std::string& error) 
             const char* value = require_value("--call-start-workspace-dir");
             if (!value) return false;
             options.call_start_workspace_dir = value;
+        } else if (arg == "--runtime-state-workspace-dir") {
+            const char* value = require_value("--runtime-state-workspace-dir");
+            if (!value) return false;
+            options.runtime_state_workspace_dir = value;
         } else if (arg == "--global-workspace-mode") {
             const char* value = require_value("--global-workspace-mode");
             if (!value) return false;
@@ -1970,6 +1975,13 @@ struct CallStartWorkspace {
     std::vector<double> global_rnisg;
 };
 
+struct RuntimeStateWorkspace {
+    int call_index = 0;
+    std::filesystem::path directory;
+    std::filesystem::path line_tau_in;
+    std::filesystem::path line_tau_out;
+};
+
 struct MgPrimaryBudget {
     double heating = 0.0;
     double cooling = 0.0;
@@ -2011,6 +2023,86 @@ std::vector<CallStartWorkspace> read_call_start_workspaces(const std::string& di
             throw std::runtime_error("call-start global-level payload size mismatch");
         }
         out.push_back(std::move(one));
+    }
+    return out;
+}
+
+CallStartWorkspace read_runtime_state_workspace_values(
+    const RuntimeStateWorkspace& workspace) {
+    const std::string prefix = "call_" + std::to_string(workspace.call_index) + "_";
+    CallStartWorkspace values;
+    values.radiation_energy = read_binary_double_vector(
+        workspace.directory / (prefix + "radiation_energy.bin"));
+    values.bremsa = read_binary_double_vector(
+        workspace.directory / (prefix + "bremsa.bin"));
+    values.continuum_tau_in = read_binary_double_vector(
+        workspace.directory / (prefix + "continuum_tau_in.bin"));
+    values.continuum_tau_out = read_binary_double_vector(
+        workspace.directory / (prefix + "continuum_tau_out.bin"));
+    values.global_xilevg = read_binary_double_vector(
+        workspace.directory / (prefix + "global_xilevg.bin"));
+    values.global_bilevg = read_binary_double_vector(
+        workspace.directory / (prefix + "global_bilevg.bin"));
+    values.global_rnisg = read_binary_double_vector(
+        workspace.directory / (prefix + "global_rnisg.bin"));
+    if (values.radiation_energy.size() != values.bremsa.size()) {
+        throw std::runtime_error("runtime-state radiation payload size mismatch");
+    }
+    if (values.continuum_tau_in.size() != values.continuum_tau_out.size()) {
+        throw std::runtime_error("runtime-state continuum tau payload size mismatch");
+    }
+    if (!(values.global_xilevg.size() == values.global_bilevg.size() &&
+          values.global_xilevg.size() == values.global_rnisg.size())) {
+        throw std::runtime_error("runtime-state global-level payload size mismatch");
+    }
+    return values;
+}
+
+std::vector<RuntimeStateWorkspace> read_runtime_state_workspaces(
+    const std::string& directory,
+    const std::vector<TrajectoryRow>& reference) {
+    std::vector<RuntimeStateWorkspace> out;
+    if (directory.empty()) return out;
+    out.resize(61);
+    std::array<bool, 61> seen{};
+    const std::filesystem::path root(directory);
+    for (const auto& row : reference) {
+        const std::size_t sequence = static_cast<std::size_t>(std::stoull(row.sequence));
+        if (sequence < 1 || sequence > 61 || seen[sequence - 1]) {
+            throw std::runtime_error("runtime-state workspace source sequence inventory is invalid");
+        }
+        if (row.call_index < 1 || row.call_index > 4) {
+            throw std::runtime_error("runtime-state workspace call identity is invalid");
+        }
+        seen[sequence - 1] = true;
+        RuntimeStateWorkspace one;
+        one.call_index = static_cast<int>(row.call_index);
+        char evaluation_name[32]{};
+        std::snprintf(evaluation_name, sizeof(evaluation_name), "evaluation_%04zu", sequence);
+        one.directory = root / evaluation_name;
+        const std::string prefix = "call_" + std::to_string(one.call_index) + "_";
+        for (const char* name : {
+                 "radiation_energy.bin", "bremsa.bin", "continuum_tau_in.bin",
+                 "continuum_tau_out.bin", "global_xilevg.bin", "global_bilevg.bin",
+                 "global_rnisg.bin"}) {
+            if (!std::filesystem::is_regular_file(one.directory / (prefix + name))) {
+                throw std::runtime_error(
+                    "runtime-state workspace is missing payload " + std::string(name) +
+                    ": " + one.directory.string());
+            }
+        }
+        one.line_tau_in = one.directory / (prefix + "line_tau_in.bin");
+        one.line_tau_out = one.directory / (prefix + "line_tau_out.bin");
+        if (!std::filesystem::is_regular_file(one.line_tau_in) ||
+            !std::filesystem::is_regular_file(one.line_tau_out)) {
+            throw std::runtime_error(
+                "runtime-state workspace is missing line optical-depth payloads: " +
+                one.directory.string());
+        }
+        out[sequence - 1] = std::move(one);
+    }
+    if (!std::all_of(seen.begin(), seen.end(), [](bool value) { return value; })) {
+        throw std::runtime_error("runtime-state workspace inventory does not cover all 61 source sequences");
     }
     return out;
 }
@@ -2091,6 +2183,8 @@ struct FixedDsecEvaluatorData {
     std::string thermal_budget_csv;
     bool writing_final_snapshot = false;
     std::vector<CallStartWorkspace> call_start_workspaces;
+    std::vector<RuntimeStateWorkspace> runtime_state_workspaces;
+    CallStartWorkspace current_runtime_state_workspace;
     std::vector<MgPrimaryBudget> mg_primary_budget;
     std::vector<Call1ThermalOracle> call1_thermal_oracle;
     std::array<std::vector<std::size_t>,4> dsec_source_sequences;
@@ -2098,6 +2192,7 @@ struct FixedDsecEvaluatorData {
     std::array<std::size_t,4> final_evaluation_indices{{0,0,0,0}};
     std::size_t call1_thermal_oracle_evaluations = 0;
     std::size_t transported_workspace_evaluations = 0;
+    std::size_t sequence_workspace_evaluations = 0;
     std::size_t mg_primary_override_evaluations = 0;
 };
 
@@ -2181,7 +2276,37 @@ int fixed_dsec_evaluator(
         input.temperature_k = data->workspace_anchor_temperature_k;
     }
     const CallStartWorkspace* call_workspace = nullptr;
-    if (data->call_index >= 1 && data->call_index <= data->call_start_workspaces.size()) {
+    if (!data->runtime_state_workspaces.empty()) {
+        if (data->runtime_state_workspaces.size() != 61) {
+            set_callback_error(error, error_size, "runtime-state workspace inventory is not 61 rows");
+            return 1;
+        }
+        const auto& runtime_workspace = data->runtime_state_workspaces[snapshot.sequence - 1];
+        if (runtime_workspace.call_index != static_cast<int>(snapshot.call_index)) {
+            set_callback_error(error, error_size, "runtime-state workspace call identity does not match source trajectory");
+            return 1;
+        }
+        const std::string tau_in_path = runtime_workspace.line_tau_in.string();
+        const std::string tau_out_path = runtime_workspace.line_tau_out.string();
+        if (::setenv("XSTAR_QUALIFICATION_HYDROGEN_TYPE50_LINE_TAU_IN_BIN", tau_in_path.c_str(), 1) != 0 ||
+            ::setenv("XSTAR_QUALIFICATION_HYDROGEN_TYPE50_LINE_TAU_OUT_BIN", tau_out_path.c_str(), 1) != 0 ||
+            ::setenv("XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_LINE_TAU_IN_BIN", tau_in_path.c_str(), 1) != 0 ||
+            ::setenv("XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_LINE_TAU_OUT_BIN", tau_out_path.c_str(), 1) != 0) {
+            set_callback_error(error, error_size, "cannot bind per-sequence Type-50 line optical-depth payloads");
+            return 1;
+        }
+        try {
+            data->current_runtime_state_workspace =
+                read_runtime_state_workspace_values(runtime_workspace);
+        } catch (const std::exception& exc) {
+            set_callback_error(
+                error, error_size,
+                std::string("cannot load per-sequence runtime-state workspace: ") + exc.what());
+            return 1;
+        }
+        call_workspace = &data->current_runtime_state_workspace;
+        ++data->sequence_workspace_evaluations;
+    } else if (data->call_index >= 1 && data->call_index <= data->call_start_workspaces.size()) {
         call_workspace = &data->call_start_workspaces[data->call_index - 1];
     }
     if (call_workspace) {
@@ -2197,7 +2322,9 @@ int fixed_dsec_evaluator(
         input.global_level_count = call_workspace->global_xilevg.size();
         input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_GLOBAL_LEVEL_WORKSPACES;
         snapshot.dsec_runtime_state_abi = true;
-        ++data->transported_workspace_evaluations;
+        if (data->runtime_state_workspaces.empty()) {
+            ++data->transported_workspace_evaluations;
+        }
     } else if (workspace_state_match && !data->dsec_energy.empty() && !data->continuum_tau_in.empty()) {
         input.dsec_radiation_energy_ev = data->dsec_energy.data();
         input.dsec_bremsa = data->dsec_bremsa.data();
@@ -2468,6 +2595,8 @@ int command_run_fixed_dsec(const Options& options) {
     }
     try {
         evaluator_data.call_start_workspaces = read_call_start_workspaces(options.call_start_workspace_dir);
+        evaluator_data.runtime_state_workspaces = read_runtime_state_workspaces(
+            options.runtime_state_workspace_dir, reference);
         evaluator_data.mg_primary_budget = read_mg_primary_budget(options.mg_primary_budget_csv);
         evaluator_data.call1_thermal_oracle = read_call1_thermal_oracle(options.call1_thermal_budget_csv);
     } catch (const std::exception& exc) {
@@ -2796,6 +2925,7 @@ int command_run_fixed_dsec(const Options& options) {
             << "  \"dsec_evaluations\": " << dsec_evaluations << ",\n  \"final_evaluations\": 4,\n"
             << "  \"total_evaluations\": " << snapshots.size() << ",\n  \"runtime_state_workspace_evaluations\": " << runtime_state_workspace_evaluations << ",\n"
             << "  \"call_start_workspace_evaluations\": " << evaluator_data.transported_workspace_evaluations << ",\n"
+            << "  \"sequence_runtime_workspace_evaluations\": " << evaluator_data.sequence_workspace_evaluations << ",\n"
             << "  \"mg_primary_override_evaluations\": " << evaluator_data.mg_primary_override_evaluations << ",\n"
             << "  \"call1_thermal_oracle_evaluations\": " << evaluator_data.call1_thermal_oracle_evaluations << ",\n  \"computed_from_raw_coefficients\": true,\n"
             << "  \"python_callbacks\": " << cumulative.python_callbacks << ",\n  \"records_evaluated\": " << cumulative.records_evaluated << ",\n"
@@ -2823,6 +2953,7 @@ int command_run_fixed_dsec(const Options& options) {
               << "\ndsec_calls=4\ndsec_evaluations=" << dsec_evaluations
               << "\nfinal_evaluations=4\ntotal_evaluations=" << snapshots.size()
               << "\nruntime_state_workspace_evaluations=" << runtime_state_workspace_evaluations
+              << "\nsequence_runtime_workspace_evaluations=" << evaluator_data.sequence_workspace_evaluations
               << "\nrecords_evaluated=" << cumulative.records_evaluated
               << "\nelements_solved=" << cumulative.elements_solved
               << "\npython_callbacks=" << cumulative.python_callbacks

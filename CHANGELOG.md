@@ -1,5 +1,12 @@
 # CHANGELOG
 
+# 0.6.48.7.46.21.7.3 - 2026-06-21
+
+- Added lazy per-sequence runtime workspaces to `xstar_cpp run-fixed-dsec`.
+- Bound source-sequence Type-50 line optical depths before every controller callback.
+- Restored dynamic Hydrogen/Magnesium Type-50 and Magnesium Type-99/source-order qualification contracts without scalar-oracle overrides.
+- Preserved ABI 60487 and canonical `.10e` science comparison.
+
 # 0.6.48.7.46.21.7.2 - 2026-06-21
 
 - Bind `XSTAR_QUALIFICATION_SOURCE_SEQUENCE` dynamically inside each native DSEC fixed-state callback.

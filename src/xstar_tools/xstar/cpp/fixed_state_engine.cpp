@@ -333,7 +333,28 @@ HydrogenType50EscapeStateV04874618 load_hydrogen_type50_escape_state_v04874618()
 }
 
 const HydrogenType50EscapeStateV04874618& hydrogen_type50_escape_state_v04874618() {
-    static const HydrogenType50EscapeStateV04874618 state = load_hydrogen_type50_escape_state_v04874618();
+    // The standalone all-61 controller transports a different line optical-depth
+    // workspace before each fixed-state callback.  Cache only the currently
+    // bound payload; the historical one-process-per-evaluation path still hits
+    // this cache once.  A thread-local cache preserves the existing reference
+    // lifetime throughout one fixed-state run without retaining 61 large tau
+    // arrays in memory.
+    const bool enabled = environment_flag("XSTAR_QUALIFICATION_HYDROGEN_TYPE50_ESCAPE_STATE");
+    std::string key = enabled ? "1" : "0";
+    if (enabled) {
+        key += "|" + required_environment_path_v04874618(
+            "XSTAR_QUALIFICATION_HYDROGEN_TYPE50_LINE_MAP_CSV");
+        key += "|" + required_environment_path_v04874618(
+            "XSTAR_QUALIFICATION_HYDROGEN_TYPE50_LINE_TAU_IN_BIN");
+        key += "|" + required_environment_path_v04874618(
+            "XSTAR_QUALIFICATION_HYDROGEN_TYPE50_LINE_TAU_OUT_BIN");
+    }
+    static thread_local std::string cached_key;
+    static thread_local HydrogenType50EscapeStateV04874618 state;
+    if (cached_key != key) {
+        state = load_hydrogen_type50_escape_state_v04874618();
+        cached_key = key;
+    }
     return state;
 }
 
@@ -538,10 +559,46 @@ MagnesiumType50EscapeStateV04874619 load_magnesium_type50_escape_state_v04874619
 }
 
 const MagnesiumType50EscapeStateV04874619& magnesium_type50_escape_state_v04874619() {
-    static const MagnesiumType50EscapeStateV04874619 state = load_magnesium_type50_escape_state_v04874619();
+    // Mg Type-50 activity and line optical depths are sequence-dependent.  The
+    // persistent controller binds the sequence and workspace paths before each
+    // callback, so reload the single current state whenever that identity
+    // changes.  Do not cache all 61 tau arrays.
+    const bool enabled = environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_ESCAPE_STATE");
+    std::string key = enabled ? "1" : "0";
+    if (enabled) {
+        key += "|seq=" + std::to_string(environment_data_type(
+            "XSTAR_QUALIFICATION_SOURCE_SEQUENCE"));
+        for (const char* name : {
+                 "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_LINE_MAP_CSV",
+                 "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_LINE_TAU_IN_BIN",
+                 "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_LINE_TAU_OUT_BIN",
+                 "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_ACTIVE_RECORDS_CSV"}) {
+            key += "|" + required_environment_path_v04874618(name);
+        }
+        if (environment_flag(
+                "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_ENDPOINT_ENERGY_TRANSPORT")) {
+            key += "|" + required_environment_path_v04874618(
+                "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_ENDPOINT_MAP_CSV");
+        }
+    }
+    static thread_local std::string cached_key;
+    static thread_local MagnesiumType50EscapeStateV04874619 state;
+    if (cached_key != key) {
+        state = load_magnesium_type50_escape_state_v04874619();
+        cached_key = key;
+    }
     return state;
 }
 
+
+constexpr const char* kMagnesiumType99PrimaryCoolingReductionEnv =
+    "XSTAR_QUALIFICATION_MAGNESIUM_TYPE99_PRIMARY_COOLING_REDUCTION";
+constexpr const char* kMagnesiumPrimaryCoolingSourceOrderReductionEnv =
+    "XSTAR_QUALIFICATION_MAGNESIUM_PRIMARY_COOLING_SOURCE_ORDER_REDUCTION";
+constexpr const char* kMagnesiumType99PrimaryCoolingLedgerEnv =
+    "XSTAR_QUALIFICATION_MAGNESIUM_TYPE99_PRIMARY_COOLING_LEDGER_CSV";
+constexpr const char* kMagnesiumPrimaryCoolingSourceOrderLedgerEnv =
+    "XSTAR_QUALIFICATION_MAGNESIUM_PRIMARY_COOLING_SOURCE_ORDER_LEDGER_CSV";
 
 struct MagnesiumType99PrimaryCoolingRowV04874620 {
     std::int64_t source_order_index = 0;
@@ -563,15 +620,14 @@ struct MagnesiumType99PrimaryCoolingStateV04874620 {
 
 MagnesiumType99PrimaryCoolingStateV04874620 load_magnesium_type99_primary_cooling_state_v04874620() {
     MagnesiumType99PrimaryCoolingStateV04874620 state;
-    state.enabled = environment_flag(
-        "XSTAR_QUALIFICATION_MAGNESIUM_TYPE99_PRIMARY_COOLING_REDUCTION");
+    state.enabled = environment_flag(kMagnesiumType99PrimaryCoolingReductionEnv);
     if (!state.enabled) return state;
     state.source_sequence = environment_data_type("XSTAR_QUALIFICATION_SOURCE_SEQUENCE");
     if (state.source_sequence < 1 || state.source_sequence > 61) {
         throw std::runtime_error("magnesium Type-99 source sequence must be in 1..61");
     }
     const auto ledger_path = std::filesystem::path(required_environment_path_v04874618(
-        "XSTAR_QUALIFICATION_MAGNESIUM_TYPE99_PRIMARY_COOLING_LEDGER_CSV"));
+        kMagnesiumType99PrimaryCoolingLedgerEnv));
     std::ifstream input(ledger_path);
     if (!input) {
         throw std::runtime_error(
@@ -654,9 +710,28 @@ MagnesiumType99PrimaryCoolingStateV04874620 load_magnesium_type99_primary_coolin
 
 const MagnesiumType99PrimaryCoolingStateV04874620&
 magnesium_type99_primary_cooling_state_v04874620() {
-    static const MagnesiumType99PrimaryCoolingStateV04874620 state =
-        load_magnesium_type99_primary_cooling_state_v04874620();
-    return state;
+    const bool enabled = environment_flag(kMagnesiumType99PrimaryCoolingReductionEnv);
+    if (!enabled) {
+        static const MagnesiumType99PrimaryCoolingStateV04874620 disabled{};
+        return disabled;
+    }
+    const int sequence = environment_data_type("XSTAR_QUALIFICATION_SOURCE_SEQUENCE");
+    const std::string ledger = required_environment_path_v04874618(
+        kMagnesiumType99PrimaryCoolingLedgerEnv);
+    // These ledgers are compact.  Cache one validated state per sequence so the
+    // controller does not rescan the all-61 CSV for every element callback.
+    static thread_local std::string cached_ledger;
+    static thread_local std::map<int, MagnesiumType99PrimaryCoolingStateV04874620> states;
+    if (cached_ledger != ledger) {
+        states.clear();
+        cached_ledger = ledger;
+    }
+    auto found = states.find(sequence);
+    if (found == states.end()) {
+        found = states.emplace(
+            sequence, load_magnesium_type99_primary_cooling_state_v04874620()).first;
+    }
+    return found->second;
 }
 
 struct MagnesiumPrimaryCoolingOrderRowV048746202 {
@@ -678,15 +753,14 @@ struct MagnesiumPrimaryCoolingOrderStateV048746202 {
 MagnesiumPrimaryCoolingOrderStateV048746202
 load_magnesium_primary_cooling_order_state_v048746202() {
     MagnesiumPrimaryCoolingOrderStateV048746202 state;
-    state.enabled = environment_flag(
-        "XSTAR_QUALIFICATION_MAGNESIUM_PRIMARY_COOLING_SOURCE_ORDER_REDUCTION");
+    state.enabled = environment_flag(kMagnesiumPrimaryCoolingSourceOrderReductionEnv);
     if (!state.enabled) return state;
     state.source_sequence = environment_data_type("XSTAR_QUALIFICATION_SOURCE_SEQUENCE");
     if (state.source_sequence < 1 || state.source_sequence > 61) {
         throw std::runtime_error("magnesium primary-cooling source sequence must be in 1..61");
     }
     const auto ledger_path = std::filesystem::path(required_environment_path_v04874618(
-        "XSTAR_QUALIFICATION_MAGNESIUM_PRIMARY_COOLING_SOURCE_ORDER_LEDGER_CSV"));
+        kMagnesiumPrimaryCoolingSourceOrderLedgerEnv));
     std::ifstream input(ledger_path);
     if (!input) {
         throw std::runtime_error(
@@ -766,9 +840,26 @@ load_magnesium_primary_cooling_order_state_v048746202() {
 
 const MagnesiumPrimaryCoolingOrderStateV048746202&
 magnesium_primary_cooling_order_state_v048746202() {
-    static const MagnesiumPrimaryCoolingOrderStateV048746202 state =
-        load_magnesium_primary_cooling_order_state_v048746202();
-    return state;
+    const bool enabled = environment_flag(kMagnesiumPrimaryCoolingSourceOrderReductionEnv);
+    if (!enabled) {
+        static const MagnesiumPrimaryCoolingOrderStateV048746202 disabled{};
+        return disabled;
+    }
+    const int sequence = environment_data_type("XSTAR_QUALIFICATION_SOURCE_SEQUENCE");
+    const std::string ledger = required_environment_path_v04874618(
+        kMagnesiumPrimaryCoolingSourceOrderLedgerEnv);
+    static thread_local std::string cached_ledger;
+    static thread_local std::map<int, MagnesiumPrimaryCoolingOrderStateV048746202> states;
+    if (cached_ledger != ledger) {
+        states.clear();
+        cached_ledger = ledger;
+    }
+    auto found = states.find(sequence);
+    if (found == states.end()) {
+        found = states.emplace(
+            sequence, load_magnesium_primary_cooling_order_state_v048746202()).first;
+    }
+    return found->second;
 }
 
 // Literal v0.6.47.2 Python translation of pescl.f90.  The accepted source
