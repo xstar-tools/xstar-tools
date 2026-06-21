@@ -1,5 +1,57 @@
 # CHANGELOG
 
+# 0.6.48.7.46.21.4 - 2026-06-20
+
+- Added iteration-resolved outer/fixed-point trajectory capture for selected H, He, and Mg systems.
+- Added aligned source/native comparison for every outer and fixed-point stage.
+- Added fail-closed first-iteration gates and milestone/scientific result separation.
+- Preserved ABI 60487 and kept final fixed-state/Thermal closures disabled.
+
+# Changelog
+
+## 0.6.48.7.46.21.4 — solve-stage diagnostic semantics hotfix
+
+- Compare source physical ion stage with native `ion_charge + 1`, while comparing the native local active-window ion ordinal separately.
+- Separate source total bound-ion count from the source-derived/native active-ion count; restore exact normalization metadata across all 183 systems.
+- Reconstruct each native fully stripped stage as `1.0 - sum(stage_1..stage_Z)`, completing the native ion inventory from 915 bound values to 1,098 comparison values.
+- Maintain independent source-capture, native-capture, and comparison-inventory errors so one side cannot invalidate the other side's completeness gate.
+- Reclassify the existing v21.3 production evidence without rerunning physics: milestone ACCEPT, scientific REJECT, topology and normalization ACCEPT, first captured divergence `outer_iteration_trajectory`, 11/183 fully exact systems, and 3,501/40,149 exact final compact populations.
+- Change no solver physics or Thermal arithmetic; retain ABI 60487 and block production promotion.
+
+## 0.6.48.7.46.20.2
+
+- Capture every positive Magnesium diagonal primary-cooling term with its exact source `term_index` across all 61 evaluations.
+- Defer only native positive Magnesium primary-cooling additions and replay their independently computed products in exact source binary64 order.
+- Reject missing, duplicate, or metadata-inconsistent source/native rows; inject no source family total or final Thermal scalar.
+- Preserve negative primary-heating terms, all secondary channels, Type-50 closure, Type-99 closure, Hydrogen cooling, fixed state, matrices, continuum, ABI 60487, and zero-callback requirements.
+- Target `mg_cooling=61/61` and independent native Thermal exactness `1127/2440`; production promotion remains blocked pending host replay and remaining Thermal closure.
+
+## 0.6.48.7.46.20.2
+
+- Reclassify Magnesium Type-99 UCalc parity on the exact 661-row source runtime domain.
+- Classify 132 native-only static traversal rows across four records.
+- Preserve accepted Type-99 primary-cooling closure at 661/661 rows and 61/61 family totals.
+- Remove stale Type-50 downstream expectations from the preservation verdict.
+- Record the current downstream state as `mg_cooling=8/61` and native Thermal exactness `1080/2440`.
+- Require complete Magnesium primary-cooling source-order reduction as the next milestone.
+- Change no native physics, require no source recapture, and reuse the completed 61-evaluation replay.
+
+## 0.6.48.7.46.20.2
+
+- Correct the Magnesium Type-99 UCalc source inventory from a static 13-record assumption to the exact sequence-active 9/10/11 domain.
+- Accept 661 UCalc rows, 11 unique runtime records, 1,322 Thermal diagonal rows, and 61 family budgets.
+- Add exact v46.20 causal-failure classification and reuse the completed source capture without recapture.
+- Preserve Type-99 physics, Type-50 closure, ABI 60487, and production-promotion blocking.
+
+# Changelog
+
+## 0.6.48.7.46.20.2
+
+- Capture 793 source Magnesium Type-99 UCalc rows, 1,322 exact source-order diagonal Thermal rows, and 61 family budgets.
+- Apply source compact-row and `cj` state only to positive Type-99 primary-cooling terms while preserving negative primary heating and all secondary channels.
+- Require Type-99 family and overall `mg_cooling` parity across all 61 evaluations, with predicted independent native Thermal exactness 1127/2440.
+- Preserve the accepted v46.19.3.1 Type-50 closure, fixed-state/matrix/continuum/Hydrogen gates, ABI 60487, and production block.
+
 ## 0.6.48.7.46.21.3.1 — solve-stage diagnostic semantics hotfix - 2026-06-20
 
 - Compare source physical ion stage with native `ion_charge + 1`, while comparing the native local active-window ion ordinal separately.

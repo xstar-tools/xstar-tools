@@ -134,7 +134,7 @@ def test_generated_probe_installs_nonrecursive_input_hook(tmp_path: Path) -> Non
 
 
 def test_release_and_cpp_contract() -> None:
-    assert xstar_tools.__version__ == "0.6.48.7.46.21.3.1"
+    assert xstar_tools.__version__ == "0.6.48.7.46.21.4"
     cpp = (root() / "src/xstar_tools/xstar/cpp/fixed_state_engine.cpp").read_text()
     assert "XSTAR_QUALIFICATION_THERMAL_COMPONENT_PARITY_CLOSURE" in cpp
     assert "XSTAR_QUALIFICATION_THERMAL_COMPONENT_PARITY_CLOSURE_DIR" in cpp

@@ -1,4 +1,4 @@
-"""Aggregate 61 independent run-fixed-evaluation outputs for v0.6.48.7.46.21.3.1."""
+"""Aggregate 61 independent run-fixed-evaluation outputs for v0.6.48.7.46.21.4."""
 from __future__ import annotations
 
 import argparse
@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-RELEASE = "0.6.48.7.46.21.3.1"
+RELEASE = "0.6.48.7.46.21.4"
 SCHEMA = "xstar-tools-v064874612-all61-native-replay-aggregate-v1"
 THERMAL_LEDGER_NAME = "native_all61_thermal_budget.csv"
 THERMAL_COMPACT_POPULATION_NAME = "native_all61_thermal_compact_populations.csv"

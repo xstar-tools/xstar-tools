@@ -17,7 +17,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable
 
-RELEASE = "0.6.48.7.46.21.3.1"
+RELEASE = "0.6.48.7.46.21.4"
 SCHEMA = "xstar-tools-v0648746213-compact-population-solve-stage-parity-v1"
 EXPECTED_ROWS = 40149
 EXPECTED_SYSTEMS = 183

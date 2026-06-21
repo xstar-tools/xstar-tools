@@ -63,6 +63,60 @@ double seconds_since(const clock_type::time_point& start) {
     return std::chrono::duration<double>(clock_type::now() - start).count();
 }
 
+
+enum IterationTraceTerminationReason : int {
+    ITERATION_TRACE_CONTINUE = 0,
+    ITERATION_TRACE_TOLERANCE = 1,
+    ITERATION_TRACE_DIVERGENCE = 2,
+    ITERATION_TRACE_MAX_ITERATIONS = 3,
+    ITERATION_TRACE_DENSE_RESCUE = 4
+};
+
+const char* iteration_trace_reason_text(int reason) {
+    switch (reason) {
+        case ITERATION_TRACE_TOLERANCE: return "tolerance";
+        case ITERATION_TRACE_DIVERGENCE: return "divergence_guard";
+        case ITERATION_TRACE_MAX_ITERATIONS: return "max_iterations";
+        case ITERATION_TRACE_DENSE_RESCUE: return "dense_rescue";
+        default: return "continue";
+    }
+}
+
+struct OuterIterationTraceRecord {
+    int outer_iteration = 0;
+    int fixed_iterations_this_outer = 0;
+    int total_fixed_iterations_after_outer = 0;
+    int fixed_termination_reason = ITERATION_TRACE_CONTINUE;
+    int outer_termination_reason = ITERATION_TRACE_CONTINUE;
+    double fixed_difference = 0.0;
+    double outer_difference = 0.0;
+    std::vector<double> outer_start;
+    std::vector<double> superlevel_before_solve;
+    std::vector<double> row_fraction;
+    std::vector<double> condensed_matrix;
+    std::vector<double> condensed_rhs;
+    std::vector<double> first_lu_solution;
+    std::vector<double> refinement_residual;
+    std::vector<double> refinement_correction;
+    std::vector<double> refined_superlevel_solution;
+    std::vector<double> population_after_condensed;
+    std::vector<double> population_after_fixed_point;
+};
+
+struct FixedIterationTraceRecord {
+    int outer_iteration = 0;
+    int fixed_iteration = 0;
+    int global_fixed_iteration = 0;
+    int termination_reason = ITERATION_TRACE_CONTINUE;
+    double fixed_difference = 0.0;
+    std::vector<double> population_before;
+    std::vector<double> riu;
+    std::vector<double> rui;
+    std::vector<double> ril;
+    std::vector<double> rli;
+    std::vector<double> population_after;
+};
+
 struct Workspace {
     int n = 0;
     int nsp = 0;
@@ -90,6 +144,8 @@ struct Workspace {
     int total_fixed_point_iterations_trace = 0;
     int trace_element_z = 0;
     bool solve_stage_trace_valid = false;
+    std::vector<OuterIterationTraceRecord> iteration_outer_trace;
+    std::vector<FixedIterationTraceRecord> iteration_fixed_trace;
     std::vector<double> p;
     std::vector<double> rr;
     std::vector<double> condensed;
@@ -149,6 +205,8 @@ struct Workspace {
         total_fixed_point_iterations_trace = 0;
         trace_element_z = 0;
         solve_stage_trace_valid = false;
+        iteration_outer_trace.clear();
+        iteration_fixed_trace.clear();
         p.resize(static_cast<std::size_t>(nsp));
         rr.resize(static_cast<std::size_t>(n));
         condensed.resize(ss);
@@ -222,6 +280,129 @@ int required_environment_integer_local(const char* name) {
 bool environment_flag_local(const char* name) {
     const char* value = std::getenv(name);
     return value && std::string(value) == "1";
+}
+
+bool iteration_trace_target(int sequence, int element_z) {
+    const char* raw = std::getenv("XSTAR_QUALIFICATION_ITERATION_TRACE_TARGETS");
+    const std::string targets = raw && *raw ? raw : "1:1,6:1,1:2,1:12";
+    if (targets == "all" || targets == "ALL") return true;
+    std::string token;
+    auto matches = [&](const std::string& value) {
+        const auto colon = value.find(':');
+        if (colon == std::string::npos) return false;
+        try {
+            const int target_sequence = std::stoi(trim_text(value.substr(0, colon)));
+            const int target_z = std::stoi(trim_text(value.substr(colon + 1)));
+            return target_sequence == sequence && target_z == element_z;
+        } catch (...) {
+            return false;
+        }
+    };
+    for (char ch : targets) {
+        if (ch == ',' || ch == ';') {
+            if (matches(token)) return true;
+            token.clear();
+        } else {
+            token.push_back(ch);
+        }
+    }
+    return matches(token);
+}
+
+void write_iteration_resolved_trace(
+    const xstar_element_input_v1& input,
+    const Workspace& w,
+    int sequence
+) {
+    const char* root_value = std::getenv("XSTAR_QUALIFICATION_ITERATION_TRACE_DIR");
+    if (!root_value || !*root_value) {
+        throw std::runtime_error("iteration-resolved trace requires XSTAR_QUALIFICATION_ITERATION_TRACE_DIR");
+    }
+    const std::filesystem::path root(root_value);
+    std::filesystem::create_directories(root);
+    std::ostringstream stem_builder;
+    stem_builder << "sequence_" << std::setw(4) << std::setfill('0') << sequence
+                 << "_element_" << std::setw(2) << std::setfill('0') << input.element_z;
+    const std::string stem = stem_builder.str();
+    std::ofstream manifest(root / (stem + "_manifest.csv"));
+    std::ofstream outer_rows(root / (stem + "_outer_rows.csv"));
+    std::ofstream superlevels(root / (stem + "_superlevels.csv"));
+    std::ofstream matrix(root / (stem + "_condensed_matrix.csv"));
+    std::ofstream fixed_rows(root / (stem + "_fixed_rows.csv"));
+    if (!manifest || !outer_rows || !superlevels || !matrix || !fixed_rows) {
+        throw std::runtime_error("cannot create iteration-resolved trace files");
+    }
+    manifest << "sequence,element_z,n_rows,n_superlevels,normalization_row,max_outer_iterations,max_fixed_iterations,lucy_tolerance,fixed_point_tolerance,outer_iterations,total_fixed_point_iterations,outer_trace_records,fixed_trace_records,trace_complete\n";
+    outer_rows << "sequence,element_z,outer_iteration,compact_row,superlevel,ion,outer_start_population,row_fraction,population_after_condensed,population_after_fixed_point,fixed_iterations_this_outer,total_fixed_iterations_after_outer,fixed_difference,outer_difference,fixed_termination_reason,outer_termination_reason\n";
+    superlevels << "sequence,element_z,outer_iteration,superlevel,population_before_condensed_solve,condensed_rhs,first_lu_solution,refinement_residual,refinement_correction,refined_superlevel_solution\n";
+    matrix << "sequence,element_z,outer_iteration,row_superlevel,column_superlevel,normalized_matrix_value\n";
+    fixed_rows << "sequence,element_z,outer_iteration,fixed_iteration,global_fixed_iteration,compact_row,superlevel,ion,population_before,riu,rui,ril,rli,population_after,fixed_difference,termination_reason\n";
+    manifest << std::setprecision(17);
+    outer_rows << std::setprecision(17);
+    superlevels << std::setprecision(17);
+    matrix << std::setprecision(17);
+    fixed_rows << std::setprecision(17);
+    const int total_fixed = w.iteration_fixed_trace.empty() ? 0 :
+        w.iteration_fixed_trace.back().global_fixed_iteration;
+    manifest << sequence << ',' << input.element_z << ',' << input.n_rows << ','
+             << input.n_superlevels << ',' << input.normalization_row << ','
+             << input.max_lucy_iterations << ',' << input.max_fixed_point_iterations << ','
+             << input.lucy_tolerance << ',' << input.fixed_point_tolerance << ','
+             << w.iteration_outer_trace.size() << ',' << total_fixed << ','
+             << w.iteration_outer_trace.size() << ',' << w.iteration_fixed_trace.size() << ",1\n";
+    for (const auto& record : w.iteration_outer_trace) {
+        if (record.outer_start.size() != static_cast<std::size_t>(input.n_rows) ||
+            record.row_fraction.size() != static_cast<std::size_t>(input.n_rows) ||
+            record.population_after_condensed.size() != static_cast<std::size_t>(input.n_rows) ||
+            record.population_after_fixed_point.size() != static_cast<std::size_t>(input.n_rows) ||
+            record.superlevel_before_solve.size() != static_cast<std::size_t>(input.n_superlevels) ||
+            record.condensed_matrix.size() != static_cast<std::size_t>(input.n_superlevels) * static_cast<std::size_t>(input.n_superlevels)) {
+            throw std::runtime_error("iteration-resolved outer trace dimension mismatch");
+        }
+        for (int row = 0; row < input.n_rows; ++row) {
+            outer_rows << sequence << ',' << input.element_z << ',' << record.outer_iteration << ','
+                       << row + 1 << ',' << input.superlevel_by_row[row] << ',' << input.ion_by_row[row] << ','
+                       << record.outer_start[static_cast<std::size_t>(row)] << ','
+                       << record.row_fraction[static_cast<std::size_t>(row)] << ','
+                       << record.population_after_condensed[static_cast<std::size_t>(row)] << ','
+                       << record.population_after_fixed_point[static_cast<std::size_t>(row)] << ','
+                       << record.fixed_iterations_this_outer << ','
+                       << record.total_fixed_iterations_after_outer << ','
+                       << record.fixed_difference << ',' << record.outer_difference << ','
+                       << iteration_trace_reason_text(record.fixed_termination_reason) << ','
+                       << iteration_trace_reason_text(record.outer_termination_reason) << '\n';
+        }
+        for (int sp = 0; sp < input.n_superlevels; ++sp) {
+            superlevels << sequence << ',' << input.element_z << ',' << record.outer_iteration << ','
+                        << sp + 1 << ',' << record.superlevel_before_solve[static_cast<std::size_t>(sp)] << ','
+                        << record.condensed_rhs[static_cast<std::size_t>(sp)] << ','
+                        << record.first_lu_solution[static_cast<std::size_t>(sp)] << ','
+                        << record.refinement_residual[static_cast<std::size_t>(sp)] << ','
+                        << record.refinement_correction[static_cast<std::size_t>(sp)] << ','
+                        << record.refined_superlevel_solution[static_cast<std::size_t>(sp)] << '\n';
+            for (int col = 0; col < input.n_superlevels; ++col) {
+                matrix << sequence << ',' << input.element_z << ',' << record.outer_iteration << ','
+                       << sp + 1 << ',' << col + 1 << ','
+                       << record.condensed_matrix[index2(sp, col, input.n_superlevels)] << '\n';
+            }
+        }
+    }
+    for (const auto& record : w.iteration_fixed_trace) {
+        if (record.population_before.size() != static_cast<std::size_t>(input.n_rows) ||
+            record.population_after.size() != static_cast<std::size_t>(input.n_rows)) {
+            throw std::runtime_error("iteration-resolved fixed trace dimension mismatch");
+        }
+        for (int row = 0; row < input.n_rows; ++row) {
+            const auto index = static_cast<std::size_t>(row);
+            fixed_rows << sequence << ',' << input.element_z << ',' << record.outer_iteration << ','
+                       << record.fixed_iteration << ',' << record.global_fixed_iteration << ','
+                       << row + 1 << ',' << input.superlevel_by_row[row] << ',' << input.ion_by_row[row] << ','
+                       << record.population_before[index] << ',' << record.riu[index] << ','
+                       << record.rui[index] << ',' << record.ril[index] << ',' << record.rli[index] << ','
+                       << record.population_after[index] << ',' << record.fixed_difference << ','
+                       << iteration_trace_reason_text(record.termination_reason) << '\n';
+        }
+    }
 }
 
 void apply_matrix_construction_dense_closure(const xstar_element_input_v1& input, std::vector<double>& dense) {
@@ -550,12 +731,22 @@ int run_element_impl(
     w.final_outer_iteration = 0;
     w.final_fixed_iterations = 0;
     w.total_fixed_point_iterations_trace = 0;
+    const bool capture_iteration_resolved_trace =
+        environment_flag_local("XSTAR_QUALIFICATION_ITERATION_RESOLVED_TRACE") &&
+        iteration_trace_target(required_environment_integer_local("XSTAR_QUALIFICATION_SOURCE_SEQUENCE"), input.element_z);
+    w.iteration_outer_trace.clear();
+    w.iteration_fixed_trace.clear();
 
     while (outer_diff > input.lucy_tolerance && outer < input.max_lucy_iterations) {
         ++outer;
         w.xo = w.x;
         w.outer_start = w.x;
         w.final_outer_start = w.outer_start;
+        OuterIterationTraceRecord iteration_outer_record;
+        if (capture_iteration_resolved_trace) {
+            iteration_outer_record.outer_iteration = outer;
+            iteration_outer_record.outer_start = w.outer_start;
+        }
         std::fill(w.p.begin(), w.p.end(), 0.0);
         for (int i = 0; i < n; ++i) {
             const int sp = input.superlevel_by_row[i] - 1;
@@ -569,6 +760,10 @@ int run_element_impl(
                     w.x[static_cast<std::size_t>(i)] /
                     (1.0e-48 + w.p[static_cast<std::size_t>(sp)]);
             }
+        }
+        if (capture_iteration_resolved_trace) {
+            iteration_outer_record.superlevel_before_solve = w.p;
+            iteration_outer_record.row_fraction = w.rr;
         }
         std::fill(w.condensed.begin(), w.condensed.end(), 0.0);
         for (std::size_t k = 0; k < input.term_count; ++k) {
@@ -585,18 +780,36 @@ int run_element_impl(
         if (capture_solve_stage_trace) {
             w.final_superlevel_before_solve = w.p;
         }
+        std::vector<double> iteration_first_lu;
+        std::vector<double> iteration_refinement_residual;
+        std::vector<double> iteration_refinement_correction;
+        std::vector<double> iteration_refined_solution;
+        const bool capture_linear_trace = capture_solve_stage_trace || capture_iteration_resolved_trace;
         solve_normalized(
             w.condensed, nsp, nsp, w.solve_rhs, w.solve_result, w.solve_residual,
             "condensed Lucy",
-            capture_solve_stage_trace ? &w.final_first_lu_solution : nullptr,
-            capture_solve_stage_trace ? &w.final_refinement_residual : nullptr,
-            capture_solve_stage_trace ? &w.final_refinement_correction : nullptr,
-            capture_solve_stage_trace ? &w.final_refined_superlevel_solution : nullptr);
+            capture_linear_trace ? &iteration_first_lu : nullptr,
+            capture_linear_trace ? &iteration_refinement_residual : nullptr,
+            capture_linear_trace ? &iteration_refinement_correction : nullptr,
+            capture_linear_trace ? &iteration_refined_solution : nullptr);
         if (capture_solve_stage_trace) {
             w.final_condensed_matrix = w.condensed;
             std::copy(w.solve_rhs.begin(), w.solve_rhs.begin() + nsp,
                       w.final_condensed_rhs.begin());
+            w.final_first_lu_solution = iteration_first_lu;
+            w.final_refinement_residual = iteration_refinement_residual;
+            w.final_refinement_correction = iteration_refinement_correction;
+            w.final_refined_superlevel_solution = iteration_refined_solution;
             w.final_outer_iteration = outer;
+        }
+        if (capture_iteration_resolved_trace) {
+            iteration_outer_record.condensed_matrix = w.condensed;
+            iteration_outer_record.condensed_rhs.assign(
+                w.solve_rhs.begin(), w.solve_rhs.begin() + nsp);
+            iteration_outer_record.first_lu_solution = iteration_first_lu;
+            iteration_outer_record.refinement_residual = iteration_refinement_residual;
+            iteration_outer_record.refinement_correction = iteration_refinement_correction;
+            iteration_outer_record.refined_superlevel_solution = iteration_refined_solution;
         }
         for (int i = 0; i < n; ++i) {
             const int sp = input.superlevel_by_row[i] - 1;
@@ -606,6 +819,9 @@ int run_element_impl(
         if (capture_solve_stage_trace) {
             w.final_population_after_condensed = w.x;
         }
+        if (capture_iteration_resolved_trace) {
+            iteration_outer_record.population_after_condensed = w.x;
+        }
 
         fixed_diff = 10.0;
         int fixed_iter = 0;
@@ -614,8 +830,15 @@ int run_element_impl(
             ++fixed_iter;
             ++total_fixed;
             w.xold = w.x;
+            FixedIterationTraceRecord iteration_fixed_record;
             if (capture_solve_stage_trace) {
                 w.final_fixed_point_population_before = w.xold;
+            }
+            if (capture_iteration_resolved_trace) {
+                iteration_fixed_record.outer_iteration = outer;
+                iteration_fixed_record.fixed_iteration = fixed_iter;
+                iteration_fixed_record.global_fixed_iteration = total_fixed;
+                iteration_fixed_record.population_before = w.xold;
             }
             std::fill(w.riu.begin(), w.riu.end(), 0.0);
             std::fill(w.rui.begin(), w.rui.end(), 0.0);
@@ -650,6 +873,16 @@ int run_element_impl(
                 dense_rescue_used = true;
                 fixed_diff = 0.0;
                 outer_diff = 0.0;
+                if (capture_iteration_resolved_trace) {
+                    iteration_fixed_record.riu = w.riu;
+                    iteration_fixed_record.rui = w.rui;
+                    iteration_fixed_record.ril = w.ril;
+                    iteration_fixed_record.rli = w.rli;
+                    iteration_fixed_record.population_after = w.x;
+                    iteration_fixed_record.fixed_difference = fixed_diff;
+                    iteration_fixed_record.termination_reason = ITERATION_TRACE_DENSE_RESCUE;
+                    w.iteration_fixed_trace.push_back(std::move(iteration_fixed_record));
+                }
                 break;
             }
             const double denominator = 1.0e-24 + total;
@@ -660,16 +893,68 @@ int run_element_impl(
                 w.total_fixed_point_iterations_trace = total_fixed;
             }
             fixed_diff = source_fixed_difference(w.xold, w.x);
+            if (capture_iteration_resolved_trace) {
+                iteration_fixed_record.riu = w.riu;
+                iteration_fixed_record.rui = w.rui;
+                iteration_fixed_record.ril = w.ril;
+                iteration_fixed_record.rli = w.rli;
+                iteration_fixed_record.population_after = w.x;
+                iteration_fixed_record.fixed_difference = fixed_diff;
+                if (fixed_diff >= 1.0e3) {
+                    iteration_fixed_record.termination_reason = ITERATION_TRACE_DIVERGENCE;
+                } else if (fixed_diff < input.fixed_point_tolerance) {
+                    iteration_fixed_record.termination_reason = ITERATION_TRACE_TOLERANCE;
+                } else if (fixed_iter >= input.max_fixed_point_iterations) {
+                    iteration_fixed_record.termination_reason = ITERATION_TRACE_MAX_ITERATIONS;
+                }
+                w.iteration_fixed_trace.push_back(std::move(iteration_fixed_record));
+            }
             if (fixed_diff >= 1.0e3) break;
         }
-        if (dense_rescue_used) break;
+        if (dense_rescue_used) {
+            if (capture_iteration_resolved_trace) {
+                iteration_outer_record.population_after_fixed_point = w.x;
+                iteration_outer_record.fixed_iterations_this_outer = fixed_iter;
+                iteration_outer_record.total_fixed_iterations_after_outer = total_fixed;
+                iteration_outer_record.fixed_difference = fixed_diff;
+                iteration_outer_record.outer_difference = 0.0;
+                iteration_outer_record.fixed_termination_reason = ITERATION_TRACE_DENSE_RESCUE;
+                iteration_outer_record.outer_termination_reason = ITERATION_TRACE_DENSE_RESCUE;
+                w.iteration_outer_trace.push_back(std::move(iteration_outer_record));
+            }
+            break;
+        }
         outer_diff = source_outer_difference(w.xo, w.x);
+        if (capture_iteration_resolved_trace) {
+            iteration_outer_record.population_after_fixed_point = w.x;
+            iteration_outer_record.fixed_iterations_this_outer = fixed_iter;
+            iteration_outer_record.total_fixed_iterations_after_outer = total_fixed;
+            iteration_outer_record.fixed_difference = fixed_diff;
+            iteration_outer_record.outer_difference = outer_diff;
+            if (fixed_diff >= 1.0e3) {
+                iteration_outer_record.fixed_termination_reason = ITERATION_TRACE_DIVERGENCE;
+            } else if (fixed_diff < input.fixed_point_tolerance) {
+                iteration_outer_record.fixed_termination_reason = ITERATION_TRACE_TOLERANCE;
+            } else if (fixed_iter >= input.max_fixed_point_iterations) {
+                iteration_outer_record.fixed_termination_reason = ITERATION_TRACE_MAX_ITERATIONS;
+            }
+            if (outer_diff <= input.lucy_tolerance) {
+                iteration_outer_record.outer_termination_reason = ITERATION_TRACE_TOLERANCE;
+            } else if (outer >= input.max_lucy_iterations) {
+                iteration_outer_record.outer_termination_reason = ITERATION_TRACE_MAX_ITERATIONS;
+            }
+            w.iteration_outer_trace.push_back(std::move(iteration_outer_record));
+        }
     }
     if (capture_solve_stage_trace && outer > 0) {
         w.solve_stage_trace_valid = true;
         w.final_outer_start = w.outer_start;
         w.final_outer_iteration = outer;
         w.total_fixed_point_iterations_trace = total_fixed;
+    }
+    if (capture_iteration_resolved_trace) {
+        const int sequence = required_environment_integer_local("XSTAR_QUALIFICATION_SOURCE_SEQUENCE");
+        write_iteration_resolved_trace(input, w, sequence);
     }
 
     output.solver_seconds = seconds_since(solver_t0);

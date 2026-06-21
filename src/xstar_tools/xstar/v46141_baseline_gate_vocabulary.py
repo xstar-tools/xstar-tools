@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse, json
 from pathlib import Path
 
-RELEASE = "0.6.48.7.46.21.3.1"
+RELEASE = "0.6.48.7.46.21.4"
 BASELINE_RELEASE = "0.6.48.7.46.14.1"
 REQUIRED = (
     "ALL_61_THERMAL_EVALUATIONS", "ALL_61_THERMAL_DIAGONAL_SOURCE_DOMAIN_APPLIED",

@@ -1,4 +1,4 @@
-"""Fail-first independent compact-population parity audit for v0.6.48.7.46.21.3.1."""
+"""Fail-first independent compact-population parity audit for v0.6.48.7.46.21.4."""
 from __future__ import annotations
 
 import argparse
@@ -10,7 +10,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable
 
-RELEASE = "0.6.48.7.46.21.3.1"
+RELEASE = "0.6.48.7.46.21.4"
 SCHEMA = "xstar-tools-v0648746213-independent-compact-population-parity-v1"
 COMPARISON_NAME = "v048746212_compact_population_comparison.csv"
 FINGERPRINT_NAME = "v048746212_compact_population_fingerprints.csv"

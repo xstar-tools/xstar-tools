@@ -1,6 +1,10 @@
+## Release 0.6.48.7.46.21.4
+
+Iteration-resolved qualification captures every selected outer and fixed-point step before downstream Thermal interpretation. See `V0648746214_ITERATION_RESOLVED_OUTER_FIXED_POINT_TRAJECTORY_PARITY.md`.
+
 # xstar_tools
 
-## Current qualification milestone: v0.6.48.7.46.21.3.1
+## Current qualification milestone: v0.6.48.7.46.21.4
 
 v21.3.1 is a diagnostic-only hotfix over the completed v21.3 solve-stage replay. It corrects physical ion-stage versus local-ordinal comparisons, separates total and active ion counts, reconstructs the fully stripped native ion stage, and keeps source/native inventory failures independent. Reanalysis of the existing production artifacts yields milestone ACCEPT but scientific REJECT: topology and normalization are exact, the first captured divergence is the outer-iteration trajectory, 11/183 systems are fully exact, and 3,501/40,149 final compact populations are bit-exact. No solver physics or ABI changes are introduced. See `V06487462131_SOLVE_STAGE_DIAGNOSTIC_SEMANTICS_HOTFIX.md`.
 

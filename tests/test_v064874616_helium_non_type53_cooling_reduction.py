@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_release_version() -> None:
     import xstar_tools
-    assert xstar_tools.__version__ == "0.6.48.7.46.21.3.1"
+    assert xstar_tools.__version__ == "0.6.48.7.46.21.4"
 
 def test_cpp_type50_energy_reduction_is_qualification_scoped() -> None:
     text=(ROOT/'src/xstar_tools/xstar/cpp/fixed_state_engine.cpp').read_text()
