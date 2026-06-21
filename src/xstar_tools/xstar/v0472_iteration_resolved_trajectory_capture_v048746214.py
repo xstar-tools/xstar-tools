@@ -18,7 +18,7 @@ from typing import Any
 
 from . import v0472_all61_solve_stage_capture_v0487462131 as base
 
-RELEASE = "0.6.48.7.46.21.4"
+RELEASE = "0.6.48.7.46.21.5"
 SCHEMA = "xstar-tools-v0648746214-v0472-iteration-resolved-trajectory-capture-v1"
 VERIFY_SCHEMA = "xstar-tools-v0648746214-v0472-iteration-resolved-trajectory-oracle-v1"
 DEFAULT_TARGETS = ((1, 1), (6, 1), (1, 2), (1, 12))
@@ -41,6 +41,8 @@ _PROBE = _PROBE.replace(
 )
 
 _FIELDS_AND_CAPTURE = r'''
+from xstar_tools.xstar import element_equilibrium as _v213_eq
+
 ITERATION_MANIFEST_FIELDS = [
  "sequence","kind","dsec_call_id","evaluation_index","element_z","n_rows","n_superlevels",
  "normalization_row","max_outer_iterations","max_fixed_iterations","lucy_tolerance",
@@ -268,7 +270,7 @@ _PROBE = _PROBE.replace(
     1,
 )
 _PROBE = _PROBE.replace(
-    '"schema": "xstar-tools-v06487462131-v0472-all61-solve-stage-capture-v1", "release": "0.6.48.7.46.21.4",',
+    '"schema": "xstar-tools-v06487462131-v0472-all61-solve-stage-capture-v1", "release": "0.6.48.7.46.21.5",',
     f'"schema": "{SCHEMA}", "release": "{RELEASE}",',
     1,
 )

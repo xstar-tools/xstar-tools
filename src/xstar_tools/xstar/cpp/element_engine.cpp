@@ -1209,7 +1209,7 @@ int xstar_element_input_init_v1(xstar_element_input_v1* input) {
     input->struct_size = sizeof(*input);
     input->abi_version = XSTAR_ELEMENT_ENGINE_ABI_VERSION;
     input->flags = XSTAR_ELEMENT_STRICT_SOURCE_ORDER;
-    input->max_lucy_iterations = 100;
+    input->max_lucy_iterations = 200;
     input->max_fixed_point_iterations = 200;
     input->lucy_tolerance = 1.0e-2;
     input->fixed_point_tolerance = 1.0e-2;

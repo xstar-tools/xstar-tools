@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from xstar_tools import __version__
 from xstar_tools.xstar import standalone_backend
 
 
@@ -35,5 +36,5 @@ def test_json_bridge_target() -> None:
     assert result == {
         "backend": "python",
         "request": {"value": 44},
-        "version": "0.6.46",
+        "version": __version__,
     }

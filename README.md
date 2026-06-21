@@ -1,12 +1,12 @@
-## Release 0.6.48.7.46.21.4
+## Release 0.6.48.7.46.21.5
 
-Iteration-resolved qualification captures every selected outer and fixed-point step before downstream Thermal interpretation. See `V0648746214_ITERATION_RESOLVED_OUTER_FIXED_POINT_TRAJECTORY_PARITY.md`.
+Source-faithful element convergence controls now match the Python/v0.6.47.2 contract at every native entry point. The v21.4 source-probe runtime import correction is included, and the trajectory analyzer now requires five all-target control gates before milestone acceptance. See `V0648746215_SOURCE_FAITHFUL_ELEMENT_CONVERGENCE_CONTRACT_RESTORATION.md`.
 
 # xstar_tools
 
-## Current qualification milestone: v0.6.48.7.46.21.4
+## Current qualification milestone: v0.6.48.7.46.21.5
 
-v21.3.1 is a diagnostic-only hotfix over the completed v21.3 solve-stage replay. It corrects physical ion-stage versus local-ordinal comparisons, separates total and active ion counts, reconstructs the fully stripped native ion stage, and keeps source/native inventory failures independent. Reanalysis of the existing production artifacts yields milestone ACCEPT but scientific REJECT: topology and normalization are exact, the first captured divergence is the outer-iteration trajectory, 11/183 systems are fully exact, and 3,501/40,149 final compact populations are bit-exact. No solver physics or ABI changes are introduced. See `V06487462131_SOLVE_STAGE_DIAGNOSTIC_SEMANTICS_HOTFIX.md`.
+v21.5 restores the production C++ element convergence contract to the Python/v0.6.47.2 values: 200 outer iterations, 200 fixed-point iterations, Lucy tolerance `1.0e-2`, and fixed-point tolerance `1.0e-2`. It also includes the v21.4 source-probe runtime import fix, applies the accepted physical-stage/local-ordinal diagnostic semantics to iteration traces, and requires five all-target control gates before milestone acceptance. ABI 60487 is unchanged and production promotion remains blocked pending the host trajectory replay. See `V0648746215_SOURCE_FAITHFUL_ELEMENT_CONVERGENCE_CONTRACT_RESTORATION.md`.
 
 ## Current qualification milestone
 

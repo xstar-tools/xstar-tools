@@ -1758,7 +1758,7 @@ void apply_matrix_closure_contribution_corrections(
         if (correction.remove) continue;
         if (correction.replace_ans1) contribution.ans1 = correction.source_ans1;
         if (correction.replace_ans2) contribution.ans2 = correction.source_ans2;
-        // v0.6.48.7.46.21.4: matrix closure originally corrected only the
+        // v0.6.48.7.46.21.5: matrix closure originally corrected only the
         // population-rate channels.  Type-50 thermal energy channels are
         // algebraically tied to those rates after the source post-swap:
         //   ans3 = -ans2 * |Eupper-Elower| * erg/eV
@@ -1787,7 +1787,7 @@ void apply_matrix_closure_contribution_corrections(
                 contribution.ans3 = -contribution.ans2 * endpoint_energy_ev * kErgPerEv;
             }
         }
-        // v0.6.48.7.46.21.4: source matrix closure may replace the Type-50
+        // v0.6.48.7.46.21.5: source matrix closure may replace the Type-50
         // population-rate channels (ans1/ans2), but the Thermal ledger consumes
         // the pre-closure UCalc energy channels (ans3/ans4).  Preserve those
         // already source-exact values instead of recomputing them from the
@@ -3838,7 +3838,7 @@ bool evaluate_type53_source_integral(
     contribution.ans6 *= (std::abs(contribution.ans4) - energy_difference * kErgPerEv * contribution.ans1) / den6;
     contribution.ans5 *= (std::abs(contribution.ans3) - energy_difference * kErgPerEv * contribution.ans2) / den5;
 
-    // v0.6.48.7.46.21.4 qualification-only IEEE closure.
+    // v0.6.48.7.46.21.5 qualification-only IEEE closure.
     // v0.6.48.7.46.9.4.2 qualification-only IEEE closure compatibility marker.
     // The v0.6.47.2
     // Python reference evaluates the same source expressions one operation at
@@ -5868,10 +5868,10 @@ int run_impl(
         ein.n_superlevels = active.element.n_superlevels;
         ein.n_ions = active.element.n_ions;
         ein.normalization_row = active.element.normalization_row;
-        ein.max_lucy_iterations = 100;
-        ein.max_fixed_point_iterations = 40;
-        ein.lucy_tolerance = 1.0e-12;
-        ein.fixed_point_tolerance = 1.0e-11;
+        ein.max_lucy_iterations = 200;
+        ein.max_fixed_point_iterations = 200;
+        ein.lucy_tolerance = 1.0e-2;
+        ein.fixed_point_tolerance = 1.0e-2;
         ein.superlevel_by_row = buffers.superlevels.data();
         ein.ion_by_row = buffers.ions.data();
         ein.initial_populations = buffers.initial.data();

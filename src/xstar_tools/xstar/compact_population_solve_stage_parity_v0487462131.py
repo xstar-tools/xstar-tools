@@ -17,7 +17,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable
 
-RELEASE = "0.6.48.7.46.21.4"
+RELEASE = "0.6.48.7.46.21.5"
 SCHEMA = "xstar-tools-v06487462131-solve-stage-diagnostic-semantics-v1"
 EXPECTED_ROWS = 40149
 EXPECTED_SYSTEMS = 183

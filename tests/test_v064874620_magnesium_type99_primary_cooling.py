@@ -12,7 +12,7 @@ def write_csv(path: Path, fields, rows):
 
 def test_v4620_source_probe_contract():
     from xstar_tools.xstar import v0472_all61_magnesium_type99_primary_cooling_capture as m
-    assert m.RELEASE=='0.6.48.7.46.21.4'
+    assert m.RELEASE=='0.6.48.7.46.21.5'
     assert m.EXPECTED_UCALC_ROWS==661
     assert m.EXPECTED_DIAGONAL_ROWS==1322
     assert m.EXPECTED_ACTIVE_RECORD_UNION==11

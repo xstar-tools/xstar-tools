@@ -490,7 +490,7 @@ void initialize_element(int element_z, ElementBuffers& b,
     input = {};
     input.struct_size = sizeof(input);
     input.abi_version = XSTAR_ELEMENT_ENGINE_ABI_VERSION;
-    input.max_lucy_iterations = 100;
+    input.max_lucy_iterations = 200;
     input.max_fixed_point_iterations = 200;
     input.lucy_tolerance = 1.0e-2;
     input.fixed_point_tolerance = 1.0e-2;

@@ -1,5 +1,14 @@
 # CHANGELOG
 
+# 0.6.48.7.46.21.5 - 2026-06-20
+
+- Restored the production native element convergence contract to 200 outer iterations, 200 fixed-point iterations, Lucy tolerance `1.0e-2`, and fixed-point tolerance `1.0e-2`.
+- Aligned the public element-input defaults and standalone native self-test input with the same source-faithful controls.
+- Included the v21.4 source iteration-probe `_v213_eq` runtime import hotfix.
+- Corrected iteration-trace ion comparison to map source physical stage onto the native local active-window ordinal.
+- Added five mandatory all-target solver-control gates and ranked first-divergence attribution.
+- Preserved ABI 60487, matrix closure, and production-promotion blocking.
+
 # 0.6.48.7.46.21.4 - 2026-06-20
 
 - Added iteration-resolved outer/fixed-point trajectory capture for selected H, He, and Mg systems.

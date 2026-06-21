@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-RELEASE = "0.6.48.7.46.21.4"
+RELEASE = "0.6.48.7.46.21.5"
 SCHEMA = "xstar-tools-v06487461931-v46193-thermal-channel-causal-baseline-v1"
 CLASSIFICATION = "MAGNESIUM_TYPE50_MATRIX_CLOSURE_THERMAL_CHANNEL_RECOMPUTATION"
 
