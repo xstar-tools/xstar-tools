@@ -1,5 +1,13 @@
 # CHANGELOG
 
+# 0.6.48.7.46.21.7.1 - 2026-06-21
+
+- Added recursive autodiscovery for all historical baseline directories under configurable search roots.
+- Preserved explicit per-baseline environment variables as highest-priority overrides.
+- Removed `--mg-primary-budget-csv` and `--call1-thermal-budget-csv` from the independent Thermal controller replay because they set forbidden scalar-override runtime flags.
+- Added readiness gates and regression coverage for baseline discovery and the independent-controller input contract.
+- Kept the `.10e` comparator, physics, ABI 60487, and all v21.7 scientific gates unchanged.
+
 # 0.6.48.7.46.21.7 - 2026-06-20
 
 - Added all-61 canonical Thermal and full-controller state qualification downstream of the accepted v21.6 element trajectory result.

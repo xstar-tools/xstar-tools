@@ -93,3 +93,67 @@ def test_checker_accepts_zero_rejection_contract(tmp_path: Path) -> None:
     assert result["result"] == "ACCEPT"
     assert result["product_level_parity"] == "NOT_RUN"
     assert result["production_promotion_status"] == "BLOCKED_PENDING_PRODUCT_PARITY"
+
+
+def test_runner_autodiscovers_baselines_and_omits_scalar_oracles(tmp_path: Path) -> None:
+    runner = ROOT / "run_v048746217_canonical_thermal_controller_parity.sh"
+    text = runner.read_text()
+    assert "find_baseline_dir()" in text
+    assert "resolve_named_dir()" in text
+    assert '--mg-primary-budget-csv "$MG_BUDGET"' not in text
+    assert '--call1-thermal-budget-csv "$MG_BUDGET"' not in text
+
+    search_root = tmp_path / "search"
+    search_root.mkdir()
+    names = [
+        "v048746216_all_sequence_ieee_e10_trajectory_parity",
+        "v0487461721_continuum_preservation_gate_vocabulary_hotfix",
+        "v048746172_continuum_freef_pow_semantics_hotfix",
+        "v04874613_thermal_compact_population_state_transport",
+        "v04874612_all61_thermal_state_consumption",
+        "v04874610_matrix_closure",
+        "v048746201_magnesium_type99_runtime_active_inventory_hotfix",
+        "v0487461931_magnesium_type50_thermal_channel_preservation_hotfix",
+    ]
+    paths = {name: search_root / f"container_{name}" / name for name in names}
+    for path in paths.values():
+        path.mkdir(parents=True)
+
+    (paths[names[0]] / "v048746216_checker_report.json").write_text(json.dumps({
+        "result": "ACCEPT",
+        "scientific_result": "ACCEPT",
+        "systems_classified": 183,
+        "systems_ieee_e10_acceptable": 183,
+        "rejected_differences": 0,
+    }))
+    case = paths["v04874613_thermal_compact_population_state_transport"] / "native_case_all61"
+    case.mkdir()
+    (case / "records.csv").write_text("data_type\n")
+
+    source_archive = tmp_path / "source.tar.gz"
+    atdb = tmp_path / "atdb.fits"
+    source_archive.write_bytes(b"")
+    atdb.write_bytes(b"")
+    base181 = tmp_path / "base181"
+    base2011 = tmp_path / "base2011"
+    base181.mkdir()
+    base2011.mkdir()
+    output = tmp_path / "out"
+
+    env = dict(__import__("os").environ)
+    env["XSTAR_V048746217_SEARCH_ROOTS"] = str(search_root)
+    env["XSTAR_V048746217_PREFLIGHT_ONLY"] = "1"
+    process = subprocess.run(
+        [
+            str(runner), str(source_archive), str(atdb), str(base181), str(base2011),
+            str(output), "10",
+        ],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert process.returncode == 0, process.stdout + process.stderr
+    assert "V048746217_PREFLIGHT=ACCEPT" in process.stdout
+    for name in names:
+        assert str(paths[name].resolve()) in process.stderr

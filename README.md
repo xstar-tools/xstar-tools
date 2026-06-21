@@ -205,4 +205,7 @@ The all-sequence trajectory qualification covers 61 sequences for H, He, and Mg 
 ## v0.6.48.7.46.21.7 qualification
 
 The downstream qualification compares canonical Thermal science and full controller state across all 61 evaluations. Numeric science fields preserve canonical `.10e` equality; structural identities, controller decisions, counters, and termination state remain exact. Bit differences, accepted roundoff, and true rejections are reported separately. Product-level parity remains explicitly `NOT_RUN`. See `V0648746217_ALL_SEQUENCE_CANONICAL_THERMAL_AND_CONTROLLER_QUALIFICATION.md`.
+## v0.6.48.7.46.21.7.1 runner hotfix
+
+The v21.7.1 runner recursively discovers historical baseline workspaces under the current project roots and optional `XSTAR_V048746217_SEARCH_ROOTS`. It also removes source scalar-budget override arguments from the independent Thermal controller replay. The scientific comparator and ABI are unchanged. See `V06487462171_BASELINE_AUTODISCOVERY_AND_INDEPENDENT_CONTROLLER_HOTFIX.md`.
 
