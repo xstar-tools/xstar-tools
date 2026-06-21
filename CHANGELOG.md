@@ -1,5 +1,14 @@
 # CHANGELOG
 
+# 0.6.48.7.46.21.10 - 2026-06-21
+
+- Serialize literal source-local Type-57 level energy and parent threshold into the native fixed program, preventing compact-row aliasing from zeroing Magnesium secondary energy channels.
+- Evaluate source-faithful Type-57 `ans5`/`ans6` with the named legacy collision eV-to-erg conversion from `constants.def`.
+- Centralize Type-60/62 benchmark arithmetic on `kLegacyBoltzmannEvPerT4`, `kCollisionRateCoefficientPerSqrtT4`, and `kModernErgPerEv`; remove duplicate Python eV-to-erg literals.
+- Require the Type-57 source-energy contract for independent Thermal parity and for both fresh fixed replay and guarded native-controller replay.
+- Add a focused all-61 Magnesium Type-57 audit while retaining the accepted Hydrogen Type-60/62 and Helium post-closure regression gates.
+- Keep ABI 60487 and canonical `.10e` comparison unchanged; production promotion remains blocked pending downstream Magnesium and controller closure.
+
 # 0.6.48.7.46.21.9 - 2026-06-21
 
 - Correct the Hydrogen Callaway Type-60/62 source path to use XSTAR's legacy `0.861707` eV-per-10^4-K Boltzmann constant for the temperature floor and excitation exponential.

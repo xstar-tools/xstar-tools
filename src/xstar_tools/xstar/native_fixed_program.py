@@ -562,6 +562,7 @@ def _source_type13_table(master: Any, derived: Any, ion_index: int) -> dict[int,
             "record": rec,
             "energy_ev": float(reals[0]),
             "statistical_weight": float(reals[1]),
+            "principal_n": int(ints[0]) if ints else 0,
             "ionization_potential_ev": float(reals[3]) if len(reals) >= 4 else 0.0,
         }
         nxt = int(npnxt[rec]) if rec < npnxt.size else 0
@@ -613,6 +614,7 @@ def _build_source_leveltemp_value_snapshots(
                 "record": int(_record),
                 "energy_ev": float(energy),
                 "statistical_weight": float(weight),
+                "principal_n": int(_n),
                 "ionization_potential_ev": ionpot,
             }
         tables[ion_index] = table
@@ -855,14 +857,51 @@ def _lower_record(
             raise ValueError(f"type57 record {rec} has short integer payload")
         i57 = int(raw_ints[0])
         local = int(raw_ints[-2])
+        parent_local = int(block.nlev)
         lower_row = _compact_row_for_local(basis, ion_index, local)
-        upper_row = _compact_row_for_local(basis, ion_index, int(block.nlev))
+        upper_row = _compact_row_for_local(basis, ion_index, parent_local)
         principal_n = _row_n(rows, lower_row) or i57
-        payload_reals = []
+
+        # ucalc.f90 label 57 reads both energies from the literal source-local
+        # Type-13 level table before compact-row aliasing:
+        #   e1  = rlev(1,idest1)
+        #   eth = max(0,rlev(1,nlevp)-e1)
+        # Compact rows may intentionally share an endpoint and therefore cannot
+        # carry this threshold.  Serialize e1 and eth explicitly into the native
+        # program.  Production lowering always has the literal Type-13 table;
+        # the row-based fallback keeps pre-contract synthetic fixtures readable.
+        current_table = source_type13_tables.get(ion_index)
+        if not current_table:
+            if hasattr(derived, "npfi") and hasattr(derived, "npnxt"):
+                current_table = _source_type13_table(master, derived, ion_index)
+            else:
+                current_table = {}
+        source_level = current_table.get(local) if current_table else None
+        source_parent = current_table.get(parent_local) if current_table else None
+        if source_level and source_parent:
+            source_e1_ev = float(source_level["energy_ev"])
+            source_parent_ev = float(source_parent["energy_ev"])
+            source_lower_weight = float(source_level["statistical_weight"])
+            source_parent_weight = float(source_parent["statistical_weight"])
+            principal_n = int(source_level.get("principal_n", 0)) or principal_n
+        elif literal_context_supplied:
+            raise ValueError(
+                f"type57 record {rec} lacks literal Type-13 levels "
+                f"idest1={local}, nlevp={parent_local}"
+            )
+        else:
+            source_e1_ev = _row_energy(rows, lower_row)
+            source_parent_ev = _row_energy(rows, upper_row)
+            source_lower_weight = _row_weight(rows, lower_row)
+            source_parent_weight = _row_weight(rows, upper_row)
+        source_eth_ev = max(source_parent_ev - source_e1_ev, 0.0)
+        payload_reals = [
+            source_e1_ev, source_eth_ev, source_lower_weight, source_parent_weight,
+        ]
         # Preserve the source-local level ordinal: ucalc Type-57 applies its
         # exact zero gate to idest1 before compact-row aliasing.
         payload_ints = [i57, principal_n, local]
-        line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
+        line_energy = source_eth_ev
     elif dt in {60, 62}:
         minimum_reals = 3 if dt == 60 else 6
         if len(raw_ints) < 2 or len(raw_reals) < minimum_reals:

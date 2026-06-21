@@ -1,5 +1,9 @@
 ## Release 0.6.48.7.46.21.5
 
+## v0.6.48.7.46.21.10 Magnesium Type-57 source-local Thermal closure
+
+This qualification release transports Type-57 source-local `e1` and parent-threshold `eth` values into the native fixed program, uses the legacy collision energy conversion for its secondary energy channels, and centralizes benchmark Boltzmann/collision constants through `constants.def`. It requires a fresh all-61 replay and preserves the accepted Hydrogen Type-60/62 and Helium post-closure gates. ABI 60487 is unchanged.
+
 Source-faithful element convergence controls now match the Python/v0.6.47.2 contract at every native entry point. The v21.4 source-probe runtime import correction is included, and the trajectory analyzer now requires five all-target control gates before milestone acceptance. See `V0648746215_SOURCE_FAITHFUL_ELEMENT_CONVERGENCE_CONTRACT_RESTORATION.md`.
 
 # xstar_tools

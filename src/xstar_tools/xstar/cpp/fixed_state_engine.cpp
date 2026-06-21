@@ -4970,14 +4970,34 @@ EvaluatedRecord evaluate_record(
             const int source_local_level = record.int_count >= 3
                 ? static_cast<int>(ints[2]) : record.lower_row;
             if (i57<=0 || source_local_level<=1) break;
-            const double e1=lower.energy_ev;
-            const double eth=std::max(upper.energy_ev-e1,0.0);
+            const bool source_faithful =
+                environment_flag("XSTAR_QUALIFICATION_TYPE57_SOURCE_ENERGY");
+            double e1=lower.energy_ev;
+            double eth=std::max(upper.energy_ev-e1,0.0);
+            if (source_faithful) {
+                if (!r || record.real_count < 4) {
+                    throw std::runtime_error(
+                        "source-faithful type57 requires literal e1/eth/g1/g2 payload");
+                }
+                e1=r[0];
+                eth=r[1];
+                if (!std::isfinite(e1) || !std::isfinite(eth) || eth < 0.0 ||
+                    !std::isfinite(r[2]) || !std::isfinite(r[3]) ||
+                    !(r[2] > 0.0) || !(r[3] > 0.0)) {
+                    throw std::runtime_error("source-faithful type57 has invalid e1/eth/g1/g2 payload");
+                }
+            }
             double cion=0.0,crec=0.0;
             if (!type57_coefficients(n,input.temperature_k,ne,e1,eth,cion,crec)) throw std::runtime_error("type57 coefficient evaluation failed");
             c.ans1=cion*ne;
-            c.ans2=crec*(lower.statistical_weight/std::max(upper.statistical_weight,1.0e-300))*ne*ne;
-            c.ans5=-c.ans2*eth*kErgPerEv;
-            c.ans6=-c.ans1*eth*kErgPerEv;
+            const double lower_weight = source_faithful ? r[2] : lower.statistical_weight;
+            const double upper_weight = source_faithful ? r[3] : upper.statistical_weight;
+            c.ans2=crec*(lower_weight/std::max(upper_weight,1.0e-300))*ne*ne;
+            const double energy_conversion = source_faithful
+                ? xstar_constants::kLegacyCollisionErgPerEv
+                : xstar_constants::kModernErgPerEv;
+            c.ans5=-c.ans2*eth*energy_conversion;
+            c.ans6=-c.ans1*eth*energy_conversion;
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE56_TABULATED_COLLISION: {
@@ -5096,10 +5116,11 @@ EvaluatedRecord evaluate_record(
                 c.ans1=collision_pair_upward(ups,delta_ev,input.temperature_k,ne,lower.statistical_weight);
                 c.ans2=collision_pair_downward(ups,input.temperature_k,ne,upper.statistical_weight);
             }
-            // The current XSTAR constants module defines ergsev with the
-            // modern exact eV-to-erg conversion used by the source capture.
-            c.ans5=c.ans2*delta_ev*kErgPerEv;
-            c.ans6=c.ans1*delta_ev*kErgPerEv;
+            // Keep benchmark constants centralized in constants.def.  The
+            // source Type-60/62 path uses the modern XSTAR ergsev value while
+            // retaining the legacy Boltzmann and collision-rate coefficients.
+            c.ans5=c.ans2*delta_ev*xstar_constants::kModernErgPerEv;
+            c.ans6=c.ans1*delta_ev*xstar_constants::kModernErgPerEv;
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE68_HELIKE_COLLISION: {
@@ -5750,6 +5771,10 @@ int run_impl(
         if (!environment_flag("XSTAR_QUALIFICATION_TYPE6062_SOURCE_FAITHFUL")) {
             throw std::runtime_error(
                 "independent Thermal parity requires the source-faithful Type-60/62 collision contract");
+        }
+        if (!environment_flag("XSTAR_QUALIFICATION_TYPE57_SOURCE_ENERGY")) {
+            throw std::runtime_error(
+                "independent Thermal parity requires source-local Type-57 energy transport");
         }
         if (!helium_non_type53_type50_energy_reduction) {
             throw std::runtime_error(
