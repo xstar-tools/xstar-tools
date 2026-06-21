@@ -10,7 +10,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable
 
-RELEASE = "0.6.48.7.46.21.4"
+RELEASE = "0.6.48.7.46.21.5"
 SCHEMA = "xstar-tools-v0648746214-iteration-resolved-trajectory-parity-v1"
 DEFAULT_TARGETS = ((1, 1), (6, 1), (1, 2), (1, 12))
 

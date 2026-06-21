@@ -1,5 +1,15 @@
 # CHANGELOG
 
+# 0.6.48.7.46.21.7 - 2026-06-20
+
+- Added all-61 canonical Thermal and full-controller state qualification downstream of the accepted v21.6 element trajectory result.
+- Preserved canonical `.10e` numerical acceptance while retaining bit equality and ULP distance as diagnostics.
+- Kept structural identity, inventory, controller decisions, counters, and termination metadata exact.
+- Separated bit differences, E10-accepted roundoff, and true rejection inventories for Thermal and controller domains.
+- Added committed-temperature, heating/cooling, canonical-term, compact-population, continuum-workspace, and controller gates.
+- Cleaned gate reporting to expose product parity and promotion status directly instead of reporting a successful-looking blocked gate.
+- Kept ABI 60487 and production promotion blocked pending zero Thermal/controller rejections and later product-level parity.
+
 # 0.6.48.7.46.21.6 - 2026-06-20
 
 - Qualify iteration-resolved trajectories across all 61 evaluation sequences for H, He, and Mg (183 systems).

@@ -19,7 +19,7 @@ from typing import Any
 
 from . import v0472_all61_fixed_state_capture as base
 
-RELEASE = "0.6.48.7.46.21.4"
+RELEASE = "0.6.48.7.46.21.5"
 SCHEMA = "xstar-tools-v06487462131-v0472-all61-solve-stage-capture-v1"
 VERIFY_SCHEMA = "xstar-tools-v06487462131-v0472-all61-solve-stage-oracle-v1"
 ROW_NAME = "v0472_all61_solve_stage_rows.csv"

@@ -8,7 +8,7 @@ from typing import Any
 
 from .magnesium_type50_endpoint_energy_v048746193 import audit as endpoint_audit
 
-RELEASE = "0.6.48.7.46.21.4"
+RELEASE = "0.6.48.7.46.21.5"
 SCHEMA = "xstar-tools-v06487461931-magnesium-type50-thermal-channel-preservation-audit-v1"
 
 

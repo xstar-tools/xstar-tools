@@ -2,7 +2,7 @@
 from __future__ import annotations
 import argparse, json
 from pathlib import Path
-RELEASE='0.6.48.7.46.21.4'
+RELEASE='0.6.48.7.46.21.5'
 SCHEMA='xstar-tools-v064874618-v461721-baseline-v1'
 REQUIRED=(
  'ALL_CONTINUUM_COMPONENTS_BIT_EXACT_610',

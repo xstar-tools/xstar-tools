@@ -202,3 +202,7 @@ refresh. This is qualification-only and does not promote the full controller.
 ## v0.6.48.7.46.21.6 qualification
 
 The all-sequence trajectory qualification covers 61 sequences for H, He, and Mg (183 systems). Numeric science fields use canonical `.10e` equality; structural and solver-control fields remain exact. See `V0648746216_ALL_SEQUENCE_IEEE_E10_TRAJECTORY_PARITY.md`.
+## v0.6.48.7.46.21.7 qualification
+
+The downstream qualification compares canonical Thermal science and full controller state across all 61 evaluations. Numeric science fields preserve canonical `.10e` equality; structural identities, controller decisions, counters, and termination state remain exact. Bit differences, accepted roundoff, and true rejections are reported separately. Product-level parity remains explicitly `NOT_RUN`. See `V0648746217_ALL_SEQUENCE_CANONICAL_THERMAL_AND_CONTROLLER_QUALIFICATION.md`.
+
