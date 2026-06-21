@@ -218,3 +218,8 @@ The native `run-fixed-dsec` qualification now accepts `--runtime-state-workspace
 ## v0.6.48.7.46.21.7.2 controller source-sequence hotfix
 
 The full native `run-fixed-dsec` path now binds the source qualification sequence separately for every fixed-state callback. This is required because the controller executes all 61 source states in one process, while the historical fixed-evaluation qualification executed one process per sequence. The mapping is read from the 61-row trajectory rather than inferred from callback insertion order.
+
+
+## v0.6.48.7.46.21.7.3.1 controller prefix-divergence reporting
+
+The full controller now uses `--source-trajectory-guard` when sequence-specific qualification workspaces and ledgers are active. Once the autonomous native state is no longer canonical-E10 identical to the corresponding source state, the controller stops before consuming the next source ledger and writes a structured prefix REJECT. This preserves strict ledger integrity and exposes the actual scientific divergence boundary.

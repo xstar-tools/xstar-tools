@@ -1,5 +1,13 @@
 # CHANGELOG
 
+# 0.6.48.7.46.21.7.3.1 - 2026-06-21
+
+- Added a canonical-E10 source-trajectory guard to the persistent native DSEC controller.
+- Stop before applying source-sequence-specific ledgers to a native state that has already diverged.
+- Preserve completed prefix snapshots and write structured controller trajectory, event, call-summary, and JSON outputs.
+- Classify source-trajectory divergence as a controlled scientific REJECT rather than an evaluator error.
+- Kept ABI 60487 and all physics arithmetic unchanged.
+
 # 0.6.48.7.46.21.7.3 - 2026-06-21
 
 - Added lazy per-sequence runtime workspaces to `xstar_cpp run-fixed-dsec`.

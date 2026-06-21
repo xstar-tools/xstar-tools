@@ -21,7 +21,7 @@ import numpy as np
 
 from .continuum_freef_pow_hotfix_v048746172 import reconstruct
 
-RELEASE = "0.6.48.7.46.21.7.3"
+RELEASE = "0.6.48.7.46.21.7.3.1"
 SCHEMA = "xstar-tools-v0648746217-canonical-thermal-controller-parity-v1"
 DIFFERENCES = "v048746217_thermal_controller_differences.csv"
 ACCEPTED_ROUNDOFF = "v048746217_thermal_controller_accepted_roundoff.csv"
@@ -388,9 +388,21 @@ def _compare_controller(source_capture: Path, native_controller: Path, recorder:
     summary = json.loads(summary_path.read_text())
     recorder.exact("controller_structure", 0, "summary", "python_callbacks", 0, summary.get("python_callbacks"))
     recorder.exact("controller_structure", 0, "summary", "total_evaluations", 61, summary.get("total_evaluations"))
+    source_trajectory_diverged = bool(summary.get("source_trajectory_diverged", False))
+    if source_trajectory_diverged:
+        recorder.exact(
+            "controller_termination", int(summary.get("divergence_sequence", 0)),
+            "source_trajectory_guard", "termination_reason",
+            "source_trajectory_identity", summary.get("termination_reason", "missing"),
+        )
     return {
-        "result": "ACCEPT", "call_rows": len(native_calls), "event_rows": len(native_events),
+        "result": "REJECT" if source_trajectory_diverged else "ACCEPT",
+        "call_rows": len(native_calls), "event_rows": len(native_events),
         "after_evaluation_rows": len(after), "trajectory_rows": len(native_trajectory),
+        "source_trajectory_diverged": source_trajectory_diverged,
+        "divergence_sequence": summary.get("divergence_sequence"),
+        "divergence_call_index": summary.get("divergence_call_index"),
+        "divergence_evaluation_index": summary.get("divergence_evaluation_index"),
         "call_comparison": call_rows,
     }
 

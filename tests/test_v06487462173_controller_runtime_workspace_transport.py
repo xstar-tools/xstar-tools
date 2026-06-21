@@ -7,7 +7,7 @@ def root() -> Path:
 
 def test_release_version_and_runner_revision():
     text=(root()/"run_v048746217_canonical_thermal_controller_parity.sh").read_text()
-    assert "per-sequence-runtime-workspace-ledger-transport-v4" in text
+    assert "source-trajectory-prefix-divergence-v5" in text
     assert '--runtime-state-workspace-dir "$RUNTIME_WORKSPACES"' in text
 
 
