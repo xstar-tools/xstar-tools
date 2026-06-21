@@ -1,5 +1,13 @@
 # CHANGELOG
 
+# 0.6.48.7.46.21.10.1 - 2026-06-21
+
+- Lower a fresh H/He/Mg native case with the current package before the v21.10 all-61 replay.
+- Validate every Type-57 literal `e1/eth/g1/g2` payload and the exact 368-record Magnesium inventory before native execution.
+- Bind the same verified case into both fixed evaluation and guarded native-controller execution.
+- Persist the selected native-case path and fail explicitly on stale or incomplete serialized programs.
+- Keep Type-57 arithmetic, benchmark constants, canonical `.10e` comparison, and ABI 60487 unchanged.
+
 # 0.6.48.7.46.21.10 - 2026-06-21
 
 - Serialize literal source-local Type-57 level energy and parent threshold into the native fixed program, preventing compact-row aliasing from zeroing Magnesium secondary energy channels.

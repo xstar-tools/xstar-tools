@@ -1,3 +1,7 @@
+## v0.6.48.7.46.21.10.1 Type-57 fresh-lowered-case hotfix
+
+This runner-only hotfix lowers the supplied ATDB with the current package, verifies the new Type-57 literal payload, and uses the same verified native case for fixed replay and controller execution. It prevents the stale v21.3 case from triggering `source-faithful type57 requires literal e1/eth/g1/g2 payload`. Physics and ABI 60487 are unchanged.
+
 ## Release 0.6.48.7.46.21.5
 
 ## v0.6.48.7.46.21.10 Magnesium Type-57 source-local Thermal closure

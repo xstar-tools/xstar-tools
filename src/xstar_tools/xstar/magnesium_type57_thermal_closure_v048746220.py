@@ -12,7 +12,7 @@ from typing import Any, Iterable
 
 from . import hydrogen_type6062_thermal_closure_v048746219 as v219
 
-RELEASE = "0.6.48.7.46.21.10"
+RELEASE = "0.6.48.7.46.21.10.1"
 SCHEMA = "xstar-tools-v0648746220-magnesium-type57-thermal-closure-v1"
 EXPECTED_TYPE57_PER_SEQUENCE = 368
 

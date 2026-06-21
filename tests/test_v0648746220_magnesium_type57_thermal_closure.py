@@ -18,7 +18,7 @@ MILESTONE = ROOT / "run_v048746220_magnesium_type57_thermal_closure.sh"
 
 
 def test_release_version_and_abi() -> None:
-    assert xstar_tools.__version__ == "0.6.48.7.46.21.10"
+    assert xstar_tools.__version__ == "0.6.48.7.46.21.10.1"
     assert "XSTAR_API_ABI_VERSION 60487u" in (ROOT / "src/xstar_tools/xstar/cpp/xstar_api.h").read_text()
 
 
@@ -60,7 +60,7 @@ def test_runners_enable_fresh_type57_replay() -> None:
     milestone = MILESTONE.read_text()
     assert "run_v048746220_native_fixed_replay.sh" in milestone
     assert "magnesium_type57_thermal_closure_v048746220" in milestone
-    assert "20260727-magnesium-type57-source-local-thermal-v1" in milestone
+    assert "20260727-type57-fresh-lowered-case-hotfix-v2" in milestone
 
 
 def test_readiness_accepts(tmp_path: Path) -> None:
@@ -153,3 +153,65 @@ def test_focused_analyzer_accepts_type57_and_prior_domains(tmp_path: Path) -> No
     assert report["magnesium_type57"]["ans1_ans2_rejections"] == 0
     assert report["magnesium_type57"]["ans5_ans6_rejections"] == 0
     assert report["v21_9_regression"]["result"] == "ACCEPT"
+
+
+def test_v2201_runner_builds_and_binds_verified_fresh_case() -> None:
+    milestone = MILESTONE.read_text()
+    controller = CONTROLLER.read_text()
+    assert "20260727-type57-fresh-lowered-case-hotfix-v2" in milestone
+    assert "xstar_tools.xstar.native_fixed_program lower-atdb" in milestone
+    assert "native_case_v0487462201" in milestone
+    assert "type57_case_contract_v0487462201" in milestone
+    assert 'XSTAR_V048746217_NATIVE_CASE_DIR="$CASE"' in milestone
+    assert "XSTAR_V048746217_NATIVE_CASE_DIR" in controller
+    assert "v048746217_native_case_dir.txt" in controller
+
+
+def _write_type57_case(root: Path, *, real_count: int = 4, int_count: int = 3) -> None:
+    root.mkdir(parents=True)
+    with (root / "elements.csv").open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["element_index", "element_z"])
+        writer.writeheader()
+        writer.writerow({"element_index": 0, "element_z": 12})
+    fields = [
+        "source_position", "record", "next_index", "element_index", "opcode", "data_type", "rate_type",
+        "ion_index", "ion_stage", "lower_row", "upper_row", "real_offset", "real_count", "int_offset",
+        "int_count", "density_scale", "line_energy_ev", "atomic_mass_amu", "matrix_enabled",
+    ]
+    with (root / "records.csv").open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        for index in range(368):
+            writer.writerow({
+                "source_position": index + 1, "record": 1000 + index, "next_index": 0,
+                "element_index": 0, "opcode": 57, "data_type": 57, "rate_type": 57,
+                "ion_index": 1, "ion_stage": 1, "lower_row": 2, "upper_row": 3,
+                "real_offset": index * real_count, "real_count": real_count,
+                "int_offset": index * int_count, "int_count": int_count,
+                "density_scale": 1.0, "line_energy_ev": 10.0,
+                "atomic_mass_amu": 24.0, "matrix_enabled": 1,
+            })
+    reals: list[str] = []
+    ints: list[str] = []
+    for _ in range(368):
+        reals.extend(["1.0", "10.0", "2.0", "4.0"][:real_count])
+        ints.extend(["1", "2", "3"][:int_count])
+    (root / "reals.txt").write_text("\n".join(reals) + "\n")
+    (root / "ints.txt").write_text("\n".join(ints) + "\n")
+
+
+def test_type57_fresh_case_contract_accepts_and_rejects_stale_case(tmp_path: Path) -> None:
+    from xstar_tools.xstar.type57_case_contract_v0487462201 import validate_case
+
+    current = tmp_path / "current"
+    _write_type57_case(current)
+    accepted = validate_case(current)
+    assert accepted["result"] == "ACCEPT"
+    assert accepted["magnesium_type57_records"] == 368
+    assert accepted["valid_type57_records"] == 368
+
+    stale = tmp_path / "stale"
+    _write_type57_case(stale, real_count=0, int_count=2)
+    rejected = validate_case(stale)
+    assert rejected["result"] == "REJECT"
+    assert any("short-payload" in error for error in rejected["errors"])

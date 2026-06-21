@@ -875,7 +875,7 @@ include run_v048746219_hydrogen_type6062_thermal_closure.sh
 include check_v048746219_hydrogen_type6062_thermal_closure_readiness.py
 include tests/test_v0648746219_hydrogen_type6062_thermal_closure.py
 
-# v0.6.48.7.46.21.10 Magnesium Type-57 source-local secondary Thermal closure
+# v0.6.48.7.46.21.10.1 Magnesium Type-57 source-local secondary Thermal closure
 include V0648746220_MAGNESIUM_TYPE57_SOURCE_LOCAL_SECONDARY_THERMAL_CLOSURE.md
 include V048746219_PRODUCTION_HOST_RESULT_ASSESSMENT.md
 include V048746220_PRODUCTION_HOST_COMMANDS.md
@@ -884,3 +884,10 @@ include run_v048746220_native_fixed_replay.sh
 include run_v048746220_magnesium_type57_thermal_closure.sh
 include check_v048746220_magnesium_type57_thermal_closure_readiness.py
 include tests/test_v0648746220_magnesium_type57_thermal_closure.py
+
+# v0.6.48.7.46.21.10.1 Type-57 fresh-lowered-case hotfix
+include V048746220_PRODUCTION_HOST_FAILURE_ASSESSMENT.md
+include V06487462201_TYPE57_FRESH_LOWERED_CASE_HOTFIX.md
+include V0487462201_PRODUCTION_HOST_COMMANDS.md
+include V0487462201_QUALIFICATION_ASSESSMENT.md
+include src/xstar_tools/xstar/type57_case_contract_v0487462201.py
