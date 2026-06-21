@@ -8,7 +8,7 @@ import math
 from pathlib import Path
 from typing import Any
 
-RELEASE = "0.6.48.7.46.21.10.1"
+RELEASE = "0.6.48.7.46.21.11"
 SCHEMA = "xstar-tools-v06487462201-type57-fresh-lowered-case-contract-v1"
 
 

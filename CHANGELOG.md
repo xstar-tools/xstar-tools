@@ -1,5 +1,14 @@
 # CHANGELOG
 
+# 0.6.48.7.46.21.11 - 2026-06-21
+
+- Serialize literal Type-13 destination-column candidates for all twelve Magnesium stages in the Type-53 v3 native context.
+- Reconstruct the persistent `leveltemp` owner after preliminary active-stage selection using the source first-pass/second-pass overwrite order.
+- Recompute Magnesium Type-53 `ans5`/`ans6` from native pre-energy sums and the selected source-local destination energy.
+- Preserve the incoming persistent value when no active stage owns the requested column; reject malformed or stale Type-53 cases before execution.
+- Fix the Type-57 focused analyzer so it does not request unavailable source `ans1`/`ans2` fields.
+- Retain ABI 60487, canonical `.10e` comparison, and all previously accepted H/He/Type-57 corrections.
+
 # 0.6.48.7.46.21.10.1 - 2026-06-21
 
 - Lower a fresh H/He/Mg native case with the current package before the v21.10 all-61 replay.

@@ -12,7 +12,7 @@ from typing import Any, Iterable
 
 from . import hydrogen_type6062_thermal_closure_v048746219 as v219
 
-RELEASE = "0.6.48.7.46.21.10.1"
+RELEASE = "0.6.48.7.46.21.11"
 SCHEMA = "xstar-tools-v0648746220-magnesium-type57-thermal-closure-v1"
 EXPECTED_TYPE57_PER_SEQUENCE = 368
 
@@ -117,7 +117,12 @@ def audit(
                     "source_e10": "", "native_e10": "", "bit_exact": 0,
                 })
             source = source_type57[key]
-            source_active = any(abs(float(source[field])) > 0.0 for field in ("ans1", "ans2", "ans5", "ans6"))
+            # The immutable v0.6.47.2 Thermal answer capture contains the
+            # matrix-committed energy channels ans3..ans6.  It deliberately
+            # does not contain ans1/ans2, so those rates cannot be promoted by
+            # this focused analyzer.  Keep them as finite native diagnostics
+            # and qualify only the captured Type-57 energy channels.
+            source_active = any(abs(float(source[field])) > 0.0 for field in ("ans5", "ans6"))
             try:
                 threshold_nonpositive = float(row.get("line_energy_ev", "0")) <= 0.0
             except ValueError:
@@ -125,10 +130,11 @@ def audit(
             if source_active and threshold_nonpositive:
                 nonpositive_active_threshold_rows += 1
             for field in ("ans1", "ans2"):
-                if not compare_numeric(
-                    differences, "magnesium_type57", sequence,
-                    f"record={key[1]}", field, source[field], row[field],
-                ):
+                try:
+                    value = float(row[field])
+                except (KeyError, TypeError, ValueError):
+                    value = math.nan
+                if not math.isfinite(value):
                     rate_rejections += 1
             for field in ("ans5", "ans6"):
                 if not compare_numeric(
@@ -174,7 +180,7 @@ def audit(
         "V21_9_HYDROGEN_HELIUM_REGRESSION": "ACCEPT" if baseline.get("result") == "ACCEPT" else "REJECT",
         "MAGNESIUM_TYPE57_SOURCE_DOMAIN_EXACT": "ACCEPT" if source_domain_exact else "REJECT",
         "MAGNESIUM_TYPE57_NATIVE_INVENTORY_EXACT": "ACCEPT" if native_inventory_exact else "REJECT",
-        "MAGNESIUM_TYPE57_ANS1_ANS2_IEEE_E10": "ACCEPT" if native_inventory_exact and rate_rejections == 0 else "REJECT",
+        "MAGNESIUM_TYPE57_ANS1_ANS2_NATIVE_FINITE": "ACCEPT" if native_inventory_exact and rate_rejections == 0 else "REJECT",
         "MAGNESIUM_TYPE57_ANS5_ANS6_IEEE_E10": "ACCEPT" if native_inventory_exact and energy_rejections == 0 else "REJECT",
         "MAGNESIUM_TYPE57_ACTIVE_SOURCE_THRESHOLDS_POSITIVE": "ACCEPT" if native_inventory_exact and nonpositive_active_threshold_rows == 0 else "REJECT",
     }

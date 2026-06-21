@@ -1,3 +1,7 @@
+## v0.6.48.7.46.21.11 Magnesium Type-53 persistent `leveltemp` closure
+
+This qualification release fixes the remaining dominant `mg_heating2` discrepancy by transporting literal Type-13 destination-column candidates for all twelve Mg stages and resolving the mutable `leveltemp` owner only after the active ion-stage interval is known. It recomputes Type-53 `ans5/ans6` from native pre-energy accumulators, preserves unowned persistent columns, and fails closed on stale serialized cases. The v21.10 Type-57 and earlier Hydrogen/Helium corrections remain enabled; ABI 60487 is unchanged.
+
 ## v0.6.48.7.46.21.10.1 Type-57 fresh-lowered-case hotfix
 
 This runner-only hotfix lowers the supplied ATDB with the current package, verifies the new Type-57 literal payload, and uses the same verified native case for fixed replay and controller execution. It prevents the stale v21.3 case from triggering `source-faithful type57 requires literal e1/eth/g1/g2 payload`. Physics and ABI 60487 are unchanged.
