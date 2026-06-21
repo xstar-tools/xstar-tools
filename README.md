@@ -198,3 +198,7 @@ Use `run_v048720_thermal_controller_state_trajectory_audit.sh` with an existing
 v0.6.48.7.19/19.1 output directory to identify workspace selection, first
 thermal branch divergence, early termination, and missing between-call state
 refresh. This is qualification-only and does not promote the full controller.
+
+## v0.6.48.7.46.21.6 qualification
+
+The all-sequence trajectory qualification covers 61 sequences for H, He, and Mg (183 systems). Numeric science fields use canonical `.10e` equality; structural and solver-control fields remain exact. See `V0648746216_ALL_SEQUENCE_IEEE_E10_TRAJECTORY_PARITY.md`.

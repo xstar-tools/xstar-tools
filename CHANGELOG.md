@@ -1,5 +1,13 @@
 # CHANGELOG
 
+# 0.6.48.7.46.21.6 - 2026-06-20
+
+- Qualify iteration-resolved trajectories across all 61 evaluation sequences for H, He, and Mg (183 systems).
+- Accept numeric science values when source and native round to the same canonical `.10e` representation.
+- Retain bit equality and ULP distance as diagnostics, while keeping topology, control values, iteration counts, and decisions exact.
+- Separate all bit differences, accepted roundoff, and true rejection inventories.
+- Order first rejection chronologically by outer iteration, stage, fixed iteration, and identity.
+
 # 0.6.48.7.46.21.5 - 2026-06-20
 
 - Restored the production native element convergence contract to 200 outer iterations, 200 fixed-point iterations, Lucy tolerance `1.0e-2`, and fixed-point tolerance `1.0e-2`.
