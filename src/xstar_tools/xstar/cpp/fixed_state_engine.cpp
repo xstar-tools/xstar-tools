@@ -1240,9 +1240,12 @@ public:
             out.terms.push_back(term);
         };
 
-        // Matrix closure may remove a non-source contribution or restore source
-        // insertion order, but it must never rewrite the immutable Thermal
-        // coefficients captured when the UCalc result entered the matrix stream.
+        // The candidates are captured from the final committed contribution
+        // stream, after source matrix-closure replacement/removal and source-
+        // order restoration.  This keeps the canonical Thermal coefficients
+        // synchronized with the rates actually consumed by the element solve,
+        // while element-specific preservation rules (notably Mg Type-50) remain
+        // encoded in the corrected contribution itself.
         for (const auto& contribution : committed_contributions) {
             const Identity identity = identity_of(contribution);
             const auto it = candidates_.find(identity);
@@ -4874,9 +4877,16 @@ EvaluatedRecord evaluate_record(
                 source_ans2 * bt.eij_ev * xstar_constants::kLegacyCollisionErgPerEv,
                 source_ans1 * bt.eij_ev * xstar_constants::kLegacyCollisionErgPerEv,
             }};
+            // v0.6.48.7.46.21.8: the source Type-51 evaluator contract is
+            // element-independent.  The earlier Mg-only promotion left the
+            // Hydrogen and Helium collision energy channels on the legacy
+            // constants/path even during independent Thermal qualification.
+            // Preserve the old Mg flag as a compatibility alias, while the
+            // general flag promotes the same source-faithful path for H/He/Mg.
             const bool source_faithful =
-                element.element_z == 12 &&
-                environment_flag("XSTAR_QUALIFICATION_MG_TYPE51_SOURCE_FAITHFUL");
+                environment_flag("XSTAR_QUALIFICATION_TYPE51_SOURCE_FAITHFUL") ||
+                (element.element_z == 12 &&
+                 environment_flag("XSTAR_QUALIFICATION_MG_TYPE51_SOURCE_FAITHFUL"));
             const auto& committed = source_faithful ? source_ans : legacy_ans;
             c.ans1 = committed[0]; c.ans2 = committed[1];
             c.ans3 = committed[2]; c.ans4 = committed[3];
@@ -5687,6 +5697,14 @@ int run_impl(
             throw std::runtime_error(
                 "independent Thermal parity requires the generalized Mg primary Thermal correction contract");
         }
+        if (!environment_flag("XSTAR_QUALIFICATION_TYPE51_SOURCE_FAITHFUL")) {
+            throw std::runtime_error(
+                "independent Thermal parity requires the all-element source-faithful Type-51 contract");
+        }
+        if (!helium_non_type53_type50_energy_reduction) {
+            throw std::runtime_error(
+                "independent Thermal parity requires post-closure He Type-50 Thermal energy reconstruction");
+        }
     }
     if (helium_non_type53_type50_energy_reduction &&
         (!matrix_construction_closure || !thermal_diagonal_source_domain ||
@@ -5916,7 +5934,6 @@ int run_impl(
                 auto contribution = original;
                 contribution.lower_row -= active.full_row_start - 1;
                 contribution.upper_row -= active.full_row_start - 1;
-                canonical_thermal_builder.append_matrix_committed(contribution);
                 contributions.push_back(contribution);
                 matrix_committed = true;
             }
@@ -5938,6 +5955,49 @@ int run_impl(
             restore_source_contribution_order(contributions);
         } else if (type53_row46_coupled_replacement && element.element_z == 2) {
             reorder_type53_row46_coupled_contributions(contributions);
+        }
+        // The source answer-channel capture is matrix-commit scoped.  Keep the
+        // native record diagnostics on that same semantic boundary by replacing
+        // raw pre-closure UCalc answers with the final committed contribution
+        // answers.  Removed native-only contributions are no longer marked as
+        // matrix committed.
+        using DiagnosticIdentity = std::tuple<std::int64_t, int, int, int>;
+        std::map<DiagnosticIdentity, const xstar_element_contribution_v1*> committed_by_identity;
+        for (const auto& contribution : contributions) {
+            const DiagnosticIdentity key{
+                contribution.record, contribution.data_type,
+                contribution.rate_type, contribution.ion_stage};
+            if (!committed_by_identity.emplace(key, &contribution).second) {
+                throw std::runtime_error(
+                    "duplicate final committed contribution identity for diagnostics");
+            }
+        }
+        for (auto& diagnostic : ctx.last_record_diagnostics) {
+            if (diagnostic.element_z != element.element_z || !diagnostic.matrix_committed) {
+                continue;
+            }
+            auto& answers = diagnostic.evaluated.contribution;
+            const DiagnosticIdentity key{
+                answers.record, answers.data_type, answers.rate_type, answers.ion_stage};
+            const auto committed = committed_by_identity.find(key);
+            if (committed == committed_by_identity.end()) {
+                diagnostic.matrix_committed = false;
+                continue;
+            }
+            answers.ans1 = committed->second->ans1;
+            answers.ans2 = committed->second->ans2;
+            answers.ans3 = committed->second->ans3;
+            answers.ans4 = committed->second->ans4;
+            answers.ans5 = committed->second->ans5;
+            answers.ans6 = committed->second->ans6;
+        }
+
+        // v0.6.48.7.46.21.8: capture canonical Thermal coefficients only
+        // after matrix closure and source-order correction.  The prior early
+        // capture froze stale pre-closure He Type-50 ans3/ans4 values and
+        // bypassed the accepted non-Type-53 cooling reconstruction.
+        for (const auto& contribution : contributions) {
+            canonical_thermal_builder.append_matrix_committed(contribution);
         }
         const auto canonical_thermal_ledger =
             canonical_thermal_builder.finish(contributions);

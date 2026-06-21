@@ -2884,7 +2884,7 @@ int command_run_fixed_dsec(const Options& options) {
                     snapshots.begin(), snapshots.end(), [](const FixedDsecSnapshot& one) { return one.dsec_runtime_state_abi; }));
                 std::ofstream summary(output_root / "native_dsec_summary.json");
                 summary << std::setprecision(17)
-                        << "{\n  \"schema_version\": \"0.6.48.7.46.21.7.3.1\",\n"
+                        << "{\n  \"schema_version\": \"0.6.48.7.46.21.8\",\n"
                         << "  \"trajectory_mode\": \"native_dsec_controller_source_trajectory_guard\",\n"
                         << "  \"result\": \"REJECT\",\n"
                         << "  \"source_trajectory_diverged\": true,\n"

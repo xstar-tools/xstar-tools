@@ -7,7 +7,7 @@ def root() -> Path:
 
 def test_runner_enables_source_trajectory_guard():
     text = (root() / "run_v048746217_canonical_thermal_controller_parity.sh").read_text()
-    assert "source-trajectory-prefix-divergence-v5" in text
+    assert "source-faithful-type51-post-closure-thermal-v6" in text
     assert "--source-trajectory-guard" in text
 
 

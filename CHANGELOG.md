@@ -1,5 +1,14 @@
 # CHANGELOG
 
+# 0.6.48.7.46.21.8 - 2026-06-21
+
+- Promoted the established source-faithful Type-51 evaluator for H, He, and Mg while retaining the Mg-only compatibility flag.
+- Captured canonical Thermal coefficients after matrix-closure correction and source-order restoration.
+- Synchronized native answer diagnostics from the final matrix-committed contribution stream.
+- Preserved accepted Magnesium Type-50 pre-closure Thermal energy channels.
+- Required a fresh all-61 native fixed replay and added a focused Hydrogen Type-51/Helium Type-50 correction audit.
+- Kept canonical `.10e` comparison, zero-source-scalar policy, and ABI 60487 unchanged.
+
 # 0.6.48.7.46.21.7.3.1 - 2026-06-21
 
 - Added a canonical-E10 source-trajectory guard to the persistent native DSEC controller.

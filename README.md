@@ -4,6 +4,11 @@ Source-faithful element convergence controls now match the Python/v0.6.47.2 cont
 
 # xstar_tools
 
+## v0.6.48.7.46.21.8 Thermal answer-path correction
+
+This release promotes source-faithful Type-51 answers for H/He/Mg and moves canonical Thermal coefficient capture to the final post-matrix-closure contribution stream. It regenerates all 61 native fixed evaluations before the canonical Thermal/controller audit and writes a focused report for Hydrogen records 469-491 and the Helium Type-50/non-Type-53 cooling domain. Use `run_v048746218_thermal_answer_path_corrections.sh`; direct v21.7 full runs without a fresh native-evaluation directory are rejected. ABI remains 60487.
+
+
 ## Current qualification milestone: v0.6.48.7.46.21.5
 
 v21.5 restores the production C++ element convergence contract to the Python/v0.6.47.2 values: 200 outer iterations, 200 fixed-point iterations, Lucy tolerance `1.0e-2`, and fixed-point tolerance `1.0e-2`. It also includes the v21.4 source-probe runtime import fix, applies the accepted physical-stage/local-ordinal diagnostic semantics to iteration traces, and requires five all-target control gates before milestone acceptance. ABI 60487 is unchanged and production promotion remains blocked pending the host trajectory replay. See `V0648746215_SOURCE_FAITHFUL_ELEMENT_CONVERGENCE_CONTRACT_RESTORATION.md`.

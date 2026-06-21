@@ -851,3 +851,13 @@ include v048746214_candidate_status.json
 include v048746214_validation_summary.json
 include v048746214_readiness_report.json
 include v048746214_archive_safety.json
+
+# v0.6.48.7.46.21.8 source-faithful Type-51 and post-closure Thermal correction
+include V0648746218_SOURCE_FAITHFUL_TYPE51_AND_POST_CLOSURE_HELIUM_THERMAL_CORRECTION.md
+include V04874621731_PRODUCTION_HOST_RESULT_ASSESSMENT.md
+include V048746218_PRODUCTION_HOST_COMMANDS.md
+include V048746218_QUALIFICATION_ASSESSMENT.md
+include run_v048746218_native_fixed_replay.sh
+include run_v048746218_thermal_answer_path_corrections.sh
+include check_v048746218_thermal_answer_path_correction_readiness.py
+include tests/test_v0648746218_thermal_answer_path_corrections.py
