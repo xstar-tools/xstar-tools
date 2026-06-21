@@ -1,5 +1,20 @@
 # CHANGELOG
 
+# 0.6.48.7.46.21.9 - 2026-06-21
+
+- Correct the Hydrogen Callaway Type-60/62 source path to use XSTAR's legacy `0.861707` eV-per-10^4-K Boltzmann constant for the temperature floor and excitation exponential.
+- Preserve the source `8.626e-8` collision coefficient, `1.d-16` statistical-weight guards, direct integer-power fit evaluation, and modern exact `ergsev`.
+- Replace the incorrect Type-51-focused Thermal audit with a data-type-driven Type-60/62 audit: 19 Type-60 and four Type-62 records per sequence.
+- Require a fresh all-61 fixed replay and retain the accepted post-closure Helium Type-50/non-Type-53 cooling gates.
+
+
+## 0.6.48.7.46.21.8.1
+
+- Persisted the auto-detected v46.20.1 and v46.19.3.1 baseline directories for the v21.8 milestone wrapper.
+- Added checked baseline-path reads with explicit missing, empty, and stale-directory diagnostics.
+- Added recursive-autodiscovery regression coverage for the two previously omitted path files.
+- Kept v21.8 physics corrections, canonical `.10e` comparison, and ABI 60487 unchanged.
+
 # 0.6.48.7.46.21.8.1 - 2026-06-21
 
 - Persisted the auto-detected v46.20.1 and v46.19.3.1 baseline directories for the v21.8 milestone wrapper.

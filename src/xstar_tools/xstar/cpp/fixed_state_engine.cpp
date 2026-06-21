@@ -3132,20 +3132,43 @@ double collision_pair_downward(double upsilon, double temperature_k, double ne, 
     return xstar_constants::kCollisionRateCoefficientPerSqrtT4*upsilon*ne/(std::sqrt(std::max(t4,1.0e-300))*std::max(gu,1.0e-300));
 }
 
-double callaway_upsilon(int data_type, const double* r, std::size_t nr, double temperature_k, double delta_ev) {
+double callaway_upsilon(
+    int data_type,
+    const double* r,
+    std::size_t nr,
+    double temperature_k,
+    double delta_ev,
+    bool source_faithful
+) {
     const std::size_t min_count=data_type==60?3u:6u;
     if (!r||nr<min_count||!(temperature_k>0.0)||!(delta_ev>0.0)) throw std::runtime_error("invalid type60/62 payload");
-    const double floor_k=0.02*delta_ev*1.0e4/xstar_constants::kModernBoltzmannEvPerT4;
+    // XSTAR ucalc label 60 uses 0.861707 eV per 10^4 K both in the
+    // excitation exponential and in the source temperature floor.  The
+    // earlier native path used the modern Boltzmann constant here, which
+    // accounts for the full Hydrogen ans6 / h_cooling2 residual.
+    const double kt_ev_per_t4 = source_faithful
+        ? xstar_constants::kLegacyBoltzmannEvPerT4
+        : xstar_constants::kModernBoltzmannEvPerT4;
+    const double floor_k=0.02*delta_ev*1.0e4/kt_ev_per_t4;
     const double teff=std::max(temperature_k,floor_k);
     const double t1=teff>1.0e9?6.33652e3:teff*6.33652e-6;
     const double tt=std::min(t1,1.0);
     double ups=0.0;
     if (data_type==60) {
-        double power=1.0;
-        for (std::size_t k=2;k<nr;++k) { ups+=r[k]*power; power*=tt; }
+        if (source_faithful) {
+            // Match calt6062.f90: each integer power is evaluated directly.
+            for (std::size_t k=2;k<nr;++k) ups += r[k]*std::pow(tt,static_cast<int>(k-2));
+        } else {
+            double power=1.0;
+            for (std::size_t k=2;k<nr;++k) { ups+=r[k]*power; power*=tt; }
+        }
     } else {
-        double power=1.0;
-        for (std::size_t k=2;k+3<nr;++k) { ups+=r[k]*power; power*=tt; }
+        if (source_faithful) {
+            for (std::size_t k=2;k+3<nr;++k) ups += r[k]*std::pow(tt,static_cast<int>(k-2));
+        } else {
+            double power=1.0;
+            for (std::size_t k=2;k+3<nr;++k) { ups+=r[k]*power; power*=tt; }
+        }
         const double arg=r[nr-2]*tt;
         if (!(arg>0.0)) throw std::runtime_error("type62 nonpositive log argument");
         ups+=r[nr-3]*std::log(arg)*limited_exp(-r[nr-1]*tt);
@@ -5049,9 +5072,32 @@ EvaluatedRecord evaluate_record(
         }
         case XSTAR_FIXED_OPCODE_TYPE60_CALLAWAY_COLLISION:
         case XSTAR_FIXED_OPCODE_TYPE62_CALLAWAY_COLLISION: {
-            const double ups=callaway_upsilon(record.data_type,r,record.real_count,input.temperature_k,delta_ev);
-            c.ans1=collision_pair_upward(ups,delta_ev,input.temperature_k,ne,lower.statistical_weight);
-            c.ans2=collision_pair_downward(ups,input.temperature_k,ne,upper.statistical_weight);
+            const bool source_faithful =
+                environment_flag("XSTAR_QUALIFICATION_TYPE6062_SOURCE_FAITHFUL");
+            const double ups=callaway_upsilon(
+                record.data_type,r,record.real_count,input.temperature_k,delta_ev,source_faithful
+            );
+            if (source_faithful) {
+                const double t_xstar = input.temperature_k / 1.0e4;
+                const double tsq = std::sqrt(t_xstar);
+                const double ekt_ev = xstar_constants::kLegacyBoltzmannEvPerT4 * t_xstar;
+                const double delt = delta_ev / ekt_ev;
+                // Preserve ucalc.f90 label 60 operation order and its explicit
+                // 1.d-16 statistical-weight guards.
+                const double cji =
+                    xstar_constants::kCollisionRateCoefficientPerSqrtT4 * ups /
+                    tsq / (1.0e-16 + upper.statistical_weight);
+                const double cij =
+                    cji * upper.statistical_weight * limited_exp(-delt) /
+                    (1.0e-16 + lower.statistical_weight);
+                c.ans1 = cij * ne;
+                c.ans2 = cji * ne;
+            } else {
+                c.ans1=collision_pair_upward(ups,delta_ev,input.temperature_k,ne,lower.statistical_weight);
+                c.ans2=collision_pair_downward(ups,input.temperature_k,ne,upper.statistical_weight);
+            }
+            // The current XSTAR constants module defines ergsev with the
+            // modern exact eV-to-erg conversion used by the source capture.
             c.ans5=c.ans2*delta_ev*kErgPerEv;
             c.ans6=c.ans1*delta_ev*kErgPerEv;
             break;
@@ -5700,6 +5746,10 @@ int run_impl(
         if (!environment_flag("XSTAR_QUALIFICATION_TYPE51_SOURCE_FAITHFUL")) {
             throw std::runtime_error(
                 "independent Thermal parity requires the all-element source-faithful Type-51 contract");
+        }
+        if (!environment_flag("XSTAR_QUALIFICATION_TYPE6062_SOURCE_FAITHFUL")) {
+            throw std::runtime_error(
+                "independent Thermal parity requires the source-faithful Type-60/62 collision contract");
         }
         if (!helium_non_type53_type50_energy_reduction) {
             throw std::runtime_error(
