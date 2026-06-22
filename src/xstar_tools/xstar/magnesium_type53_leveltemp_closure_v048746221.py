@@ -12,7 +12,7 @@ from typing import Any, Iterable
 
 from . import magnesium_type57_thermal_closure_v048746220 as v220
 
-RELEASE = "0.6.48.7.46.21.12"
+RELEASE = "0.6.48.7.46.21.13"
 SCHEMA = "xstar-tools-v0648746221-magnesium-type53-persistent-leveltemp-closure-v1"
 
 

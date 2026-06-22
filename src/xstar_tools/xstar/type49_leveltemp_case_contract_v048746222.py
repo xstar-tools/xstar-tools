@@ -7,7 +7,7 @@ import math
 from pathlib import Path
 from typing import Any
 
-RELEASE = "0.6.48.7.46.21.12"
+RELEASE = "0.6.48.7.46.21.13"
 SCHEMA = "xstar-tools-v0648746222-type49-leveltemp-case-contract-v1"
 EXPECTED_MAGNESIUM_TYPE49_RECORDS = 809
 LAYOUT_MAGIC = 222

@@ -28,6 +28,7 @@ QUALIFIED_XDEF_ABUNDANCES_BY_Z: dict[int, float] = {1: 1.0, 2: 0.1, 12: 3.5e-5}
 TYPE49_PHEXTRAP_MAX_POINTS = 999
 TYPE53_LEVELTEMP_LAYOUT_MAGIC_V048746221 = 221
 TYPE49_LEVELTEMP_LAYOUT_MAGIC_V048746222 = 222
+TYPE99_LEVELTEMP_LAYOUT_MAGIC_V048746223 = 223
 
 
 def _parse_abundance_spec(text: str) -> dict[int, float]:
@@ -1207,51 +1208,128 @@ def _lower_record(
         lower_row = _compact_row_for_local(basis, ion_index, id1)
         upper_row = _compact_row_for_idest(basis, block, id2)
 
-        # v0.6.48.7.36: Type-99 must retain the mutable source leveltemp
-        # destination workspace rather than re-reading the compact alias row.
-        # At an ion boundary the next-ion ground overwrites the previous-ion
-        # continuum in the compact matrix, but ucalc.f90 still uses the original
-        # destination energy/statistical weight when deriving ett, swrat, and the
-        # final heating corrections.  Append backward-compatible metadata after
-        # the literal calt99 payload: destination energy, threshold, destination g.
-        _, bound_energy, _bound_weight, _bound_label, _bound_n, _bound_l = _level_payload(
-            master, derived, ion_index, id1
-        )
+        current_table = source_type13_tables.get(ion_index)
+        if not current_table:
+            current_table = _source_type13_table(master, derived, ion_index)
+        current_snapshot = leveltemp_value_snapshots.get(ion_index, {})
+        bound_literal = current_table.get(id1)
+        parent_literal = current_table.get(int(block.nlev))
+        if not bound_literal or not parent_literal:
+            raise ValueError(f"type99 record {rec} lacks literal bound/parent Type-13 levels")
+
+        bound_energy = float(bound_literal["energy_ev"])
+        bound_weight = float(bound_literal["statistical_weight"])
+        parent_energy = float(parent_literal["energy_ev"])
+        parent_weight = float(parent_literal["statistical_weight"])
+        destination_energy = parent_energy
+        destination_weight = parent_weight
+        excited_parent_energy = 0.0
+        excited_parent_weight = 0.0
+        excited_parent_mode = 0
         if id2 <= int(block.nlev):
-            destination_ion_index = ion_index
-            destination_local_level = id2
-            _, destination_energy, destination_weight, _label, _n, _l = _level_payload(
-                master, derived, destination_ion_index, destination_local_level
-            )
-            threshold_ev = abs(bound_energy - destination_energy)
+            destination_literal = current_table.get(id2)
+            if not destination_literal:
+                raise ValueError(f"type99 record {rec} lacks destination Type-13 level {id2}")
+            destination_energy = float(destination_literal["energy_ev"])
+            destination_weight = float(destination_literal["statistical_weight"])
+            threshold_ev = abs(bound_energy - parent_energy)
         else:
             ordered_blocks = list(basis.blocks)
             block_position = next(
-                (idx for idx, candidate in enumerate(ordered_blocks) if int(candidate.ion_index) == ion_index),
-                -1,
+                (idx for idx, candidate in enumerate(ordered_blocks)
+                 if int(candidate.ion_index) == ion_index), -1,
             )
             if block_position < 0 or block_position + 1 >= len(ordered_blocks):
                 raise ValueError(f"type99 record {rec} has no next-ion parent destination")
             destination_block = ordered_blocks[block_position + 1]
-            destination_ion_index = int(destination_block.ion_index)
             destination_local_level = id2 - int(block.nlev) + 1
-            _, parent_excitation, destination_weight, _label, _n, _l = _level_payload(
-                master, derived, destination_ion_index, destination_local_level
-            )
-            _, continuum_energy, _continuum_weight, _clabel, _cn, _cl = _level_payload(
-                master, derived, ion_index, int(block.nlev)
-            )
-            # Historical source-contract marker retained for older readiness tests:
-            # float(continuum_weight)
-            threshold_ev = abs(bound_energy + parent_excitation)
-            destination_energy = continuum_energy + parent_excitation
+            next_table = source_type13_tables.get(int(destination_block.ion_index))
+            if not next_table:
+                next_table = _source_type13_table(master, derived, int(destination_block.ion_index))
+            excited_parent = next_table.get(destination_local_level)
+            if not excited_parent:
+                raise ValueError(
+                    f"type99 record {rec} lacks next-ion Type-13 destination level "
+                    f"{destination_local_level}"
+                )
+            excited_parent_mode = 1
+            excited_parent_energy = float(excited_parent["energy_ev"])
+            excited_parent_weight = float(excited_parent["statistical_weight"])
+            destination_weight = excited_parent_weight
+            threshold_ev = abs(bound_energy + excited_parent_energy)
+            destination_energy = parent_energy + excited_parent_energy
 
+        # Preserve the v0.6.48.7.36 legacy context for preliminary ion-window
+        # construction.  The v21.13 tail below is consumed only after the
+        # active stage interval is known, matching calc_hmc_element's second
+        # pass without changing the already-qualified preliminary balance.
         payload_reals = list(raw_reals) + [
             float(destination_energy),
             float(threshold_ev),
             float(destination_weight),
         ]
         payload_ints = list(raw_ints)
+
+        if literal_context_supplied and int(block.element_z) == 12:
+            stage_to_block = {
+                int(candidate.ion_stage): candidate for candidate in basis.blocks
+            }
+
+            def incoming_value(column: int) -> tuple[float, float]:
+                value = current_snapshot.get(column)
+                if value is None:
+                    return 0.0, 0.0
+                return (float(value["energy_ev"]), float(value["statistical_weight"]))
+
+            def candidate_values(column: int) -> tuple[int, list[float], list[float]]:
+                mask = 0
+                energies: list[float] = []
+                weights: list[float] = []
+                for candidate_stage in range(1, 13):
+                    candidate_block = stage_to_block.get(candidate_stage)
+                    candidate_level = None
+                    if candidate_block is not None:
+                        candidate_table = source_type13_tables.get(
+                            int(candidate_block.ion_index), {}
+                        )
+                        candidate_level = candidate_table.get(column)
+                    if candidate_level is None:
+                        energies.append(0.0)
+                        weights.append(0.0)
+                    else:
+                        energies.append(float(candidate_level["energy_ev"]))
+                        weights.append(float(candidate_level["statistical_weight"]))
+                        mask |= 1 << (candidate_stage - 1)
+                return mask, energies, weights
+
+            bound_column = int(id1)
+            parent_column = int(block.nlev)
+            destination_column = int(id2)
+            bound_mask, bound_candidate_energy, bound_candidate_weight = candidate_values(bound_column)
+            parent_mask, parent_candidate_energy, parent_candidate_weight = candidate_values(parent_column)
+            destination_mask, destination_candidate_energy, destination_candidate_weight = candidate_values(destination_column)
+            incoming_bound_energy, incoming_bound_weight = incoming_value(bound_column)
+            incoming_parent_energy, incoming_parent_weight = incoming_value(parent_column)
+            incoming_destination_energy, incoming_destination_weight = incoming_value(destination_column)
+
+            # v21.13 fixed layout after the three v36 compatibility values:
+            # six incoming energy/weight values, optional literal excited-parent
+            # energy/weight, then 12-stage energy/weight arrays for bound,
+            # parent/continuum, and destination columns.
+            payload_reals.extend([
+                incoming_bound_energy, incoming_bound_weight,
+                incoming_parent_energy, incoming_parent_weight,
+                incoming_destination_energy, incoming_destination_weight,
+                excited_parent_energy, excited_parent_weight,
+                *bound_candidate_energy, *bound_candidate_weight,
+                *parent_candidate_energy, *parent_candidate_weight,
+                *destination_candidate_energy, *destination_candidate_weight,
+            ])
+            payload_ints.extend([
+                bound_column, parent_column, destination_column,
+                bound_mask, parent_mask, destination_mask,
+                excited_parent_mode, TYPE99_LEVELTEMP_LAYOUT_MAGIC_V048746223,
+            ])
         line_energy = float(threshold_ev)
     else:  # pragma: no cover - guarded above
         raise ValueError(f"unhandled active-lowerer type {dt}")
