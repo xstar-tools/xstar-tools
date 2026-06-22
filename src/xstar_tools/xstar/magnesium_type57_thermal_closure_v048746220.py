@@ -12,7 +12,7 @@ from typing import Any, Iterable
 
 from . import hydrogen_type6062_thermal_closure_v048746219 as v219
 
-RELEASE = "0.6.48.7.46.21.11"
+RELEASE = "0.6.48.7.46.21.12"
 SCHEMA = "xstar-tools-v0648746220-magnesium-type57-thermal-closure-v1"
 EXPECTED_TYPE57_PER_SEQUENCE = 368
 
@@ -143,15 +143,20 @@ def audit(
                 ):
                     energy_rejections += 1
 
+    # The source answer-channel capture is matrix-committed and therefore
+    # contains only the active Type-57 domain.  The complete serialized
+    # inventory (368 Mg Type-57 records) is enforced independently by the
+    # fresh-case contract before this analyzer runs.  Do not confuse those
+    # two domains: qualify exact identity on the active source key set here.
     source_domain_exact = (
-        len(source_type57) == len(selected) * EXPECTED_TYPE57_PER_SEQUENCE
-        and all(source_counts[sequence] == EXPECTED_TYPE57_PER_SEQUENCE for sequence in selected)
+        bool(source_type57)
+        and all(source_counts[sequence] > 0 for sequence in selected)
     )
     native_inventory_exact = (
         source_domain_exact
         and set(source_type57) == native_keys
         and native_type_mismatches == 0
-        and all(native_counts[sequence] == EXPECTED_TYPE57_PER_SEQUENCE for sequence in selected)
+        and all(native_counts[sequence] == source_counts[sequence] for sequence in selected)
     )
 
     source_budget = {
@@ -211,7 +216,8 @@ def audit(
         "focused_scientific_result": focused_result,
         "required_gates": required_gates,
         "magnesium_type57": {
-            "expected_records_per_sequence": EXPECTED_TYPE57_PER_SEQUENCE,
+            "serialized_case_records_per_sequence": EXPECTED_TYPE57_PER_SEQUENCE,
+            "answer_capture_domain": "active_matrix_committed",
             "source_rows": len(source_type57),
             "native_rows": len(native_keys),
             "source_counts_by_sequence": dict(sorted(source_counts.items())),

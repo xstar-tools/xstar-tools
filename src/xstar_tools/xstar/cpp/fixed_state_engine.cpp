@@ -4498,10 +4498,46 @@ EvaluatedRecord evaluate_record(
         }
         case XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE: {
             if (!r || record.real_count < 4) throw std::runtime_error("Type-49 bound-free payload requires energy/sigma pairs");
+            constexpr std::size_t kBoundFreeContextRealsV3 = 22;
             constexpr std::size_t kBoundFreeContextRealsV2 = 10;
             constexpr std::size_t kBoundFreeContextRealsV1 = 7;
+            constexpr std::int64_t kType49LeveltempLayoutMagicV048746222 = 222;
             Type53RecordContext record_context{};
-            if (record.real_count >= 4 + kBoundFreeContextRealsV2 &&
+            const bool type49_v3 = ints && record.int_count >= 5 &&
+                ints[4] == kType49LeveltempLayoutMagicV048746222;
+            if (type49_v3 && record.real_count >= 4 + kBoundFreeContextRealsV3 &&
+                (record.real_count - kBoundFreeContextRealsV3) % 2 == 0) {
+                const std::size_t base = record.real_count - kBoundFreeContextRealsV3;
+                record_context.valid = true;
+                record_context.layout_version = 3;
+                record_context.pair_real_count = base;
+                record_context.base_threshold_ev = r[base + 0];
+                record_context.threshold_ev = r[base + 1];
+                record_context.bound_energy_ev = r[base + 2];
+                record_context.continuum_energy_ev = r[base + 3];
+                record_context.bound_statistical_weight = r[base + 4];
+                record_context.continuum_statistical_weight = r[base + 5];
+                record_context.destination_statistical_weight = r[base + 6];
+                record_context.leveltemp_destination_energy_ev = r[base + 7];
+                record_context.excited_parent_energy_ev = r[base + 8];
+                record_context.excited_parent_statistical_weight = r[base + 9];
+                record_context.continuum_index_one_based = static_cast<int>(ints[0]);
+                record_context.phextrap_max_points = static_cast<int>(ints[1]);
+                record_context.leveltemp_destination_column = static_cast<int>(ints[2]);
+                record_context.leveltemp_candidate_mask = static_cast<std::uint32_t>(ints[3]);
+                if (record_context.leveltemp_destination_column <= 0 ||
+                    (record_context.leveltemp_candidate_mask & ~0x0fffu) != 0u) {
+                    throw std::runtime_error("Mg Type-49 persistent leveltemp metadata invalid");
+                }
+                for (std::size_t stage = 0; stage < 12; ++stage) {
+                    record_context.leveltemp_candidate_energy_ev[stage] = r[base + 10 + stage];
+                    if ((record_context.leveltemp_candidate_mask & (1u << stage)) != 0u &&
+                        !std::isfinite(record_context.leveltemp_candidate_energy_ev[stage])) {
+                        throw std::runtime_error("Mg Type-49 persistent leveltemp candidate non-finite");
+                    }
+                }
+                record_context.persistent_leveltemp_candidates_valid = true;
+            } else if (record.real_count >= 4 + kBoundFreeContextRealsV2 &&
                 (record.real_count - kBoundFreeContextRealsV2) % 2 == 0) {
                 const std::size_t base = record.real_count - kBoundFreeContextRealsV2;
                 record_context.valid = true;
@@ -5366,17 +5402,17 @@ int ground_row_for_stage(const ElementProgram& element, int stage) {
     return found;
 }
 
-double source_leveltemp_destination_energy_v048746221(
+double source_persistent_leveltemp_destination_energy_v048746222(
     const ActiveElementView& active,
     const xstar_element_contribution_v1& contribution,
     const Type53SourceShadow& shadow) {
     if (!shadow.persistent_leveltemp_candidates_valid ||
         shadow.leveltemp_destination_column <= 0) {
         throw std::runtime_error(
-            "source-faithful Mg Type-53 requires persistent leveltemp candidate payload");
+            "source-faithful Mg bound-free record requires persistent leveltemp candidate payload");
     }
     if ((shadow.leveltemp_candidate_mask & ~0x0fffu) != 0u) {
-        throw std::runtime_error("Mg Type-53 persistent leveltemp candidate mask is invalid");
+        throw std::runtime_error("Mg bound-free persistent leveltemp candidate mask is invalid");
     }
 
     const auto candidate_present = [&](int stage) {
@@ -5389,7 +5425,7 @@ double source_leveltemp_destination_energy_v048746221(
             static_cast<std::size_t>(stage - 1)];
         if (!std::isfinite(value)) {
             throw std::runtime_error(
-                "Mg Type-53 persistent leveltemp candidate energy is non-finite");
+                "Mg bound-free persistent leveltemp candidate energy is non-finite");
         }
         return value;
     };
@@ -5433,7 +5469,7 @@ void apply_magnesium_type53_persistent_leveltemp_v048746221(
             contribution.ion_stage < active.min_stage || contribution.ion_stage > active.max_stage) {
             continue;
         }
-        const double destination_energy = source_leveltemp_destination_energy_v048746221(
+        const double destination_energy = source_persistent_leveltemp_destination_energy_v048746222(
             active, contribution, shadow);
         if (!std::isfinite(destination_energy)) {
             continue;
@@ -5453,6 +5489,56 @@ void apply_magnesium_type53_persistent_leveltemp_v048746221(
             (std::abs(contribution.ans3) - energy_difference * kErgPerEv * contribution.ans2) / den5;
         if (!std::isfinite(contribution.ans5) || !std::isfinite(contribution.ans6)) {
             throw std::runtime_error("non-finite Mg Type-53 persistent-leveltemp correction");
+        }
+        shadow.destination_energy_ev = destination_energy;
+        shadow.ans[4] = contribution.ans5;
+        shadow.ans[5] = contribution.ans6;
+        shadow.shadow_max_abs = 0.0;
+        shadow.committed_max_abs = 0.0;
+        for (double value : shadow.ans) {
+            shadow.shadow_max_abs = std::max(shadow.shadow_max_abs, std::abs(value));
+            shadow.committed_max_abs = std::max(shadow.committed_max_abs, std::abs(value));
+        }
+        shadow.committed_nonfinite = false;
+        shadow.committed_implausible = shadow.committed_max_abs > 1.0e40;
+    }
+}
+
+void apply_magnesium_type49_persistent_leveltemp_v048746222(
+    const ElementProgram& element,
+    const ActiveElementView& active,
+    std::vector<EvaluatedRecord>& evaluated) {
+    if (element.element_z != 12 ||
+        !environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE49_PERSISTENT_LEVELTEMP")) {
+        return;
+    }
+    for (auto& item : evaluated) {
+        auto& contribution = item.contribution;
+        auto& shadow = item.type49_shadow;
+        if (contribution.data_type != 49 || !shadow.valid || !shadow.type49_semantics ||
+            contribution.ion_stage < active.min_stage || contribution.ion_stage > active.max_stage) {
+            continue;
+        }
+        const double destination_energy = source_persistent_leveltemp_destination_energy_v048746222(
+            active, contribution, shadow);
+        if (!std::isfinite(destination_energy)) {
+            continue;
+        }
+        const double energy_difference = std::abs(destination_energy - shadow.bound_energy_ev);
+        const double den6 = std::max(
+            1.0e-43,
+            std::abs(contribution.ans4) - shadow.threshold_ev * kErgPerEv * contribution.ans1);
+        const double den5 = std::max(
+            1.0e-43,
+            std::abs(contribution.ans3) - shadow.threshold_ev * kErgPerEv * contribution.ans2);
+        const double ans6_pre = -shadow.sumh2 * kErgPerEv;
+        const double ans5_pre = -shadow.sumc2 * kErgPerEv;
+        contribution.ans6 = ans6_pre *
+            (std::abs(contribution.ans4) - energy_difference * kErgPerEv * contribution.ans1) / den6;
+        contribution.ans5 = ans5_pre *
+            (std::abs(contribution.ans3) - energy_difference * kErgPerEv * contribution.ans2) / den5;
+        if (!std::isfinite(contribution.ans5) || !std::isfinite(contribution.ans6)) {
+            throw std::runtime_error("non-finite Mg Type-49 persistent-leveltemp correction");
         }
         shadow.destination_energy_ev = destination_energy;
         shadow.ans[4] = contribution.ans5;
@@ -5938,6 +6024,10 @@ int run_impl(
             throw std::runtime_error(
                 "independent Thermal parity requires Mg Type-53 persistent leveltemp semantics");
         }
+        if (!environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE49_PERSISTENT_LEVELTEMP")) {
+            throw std::runtime_error(
+                "independent Thermal parity requires Mg Type-49 persistent leveltemp semantics");
+        }
         if (!helium_non_type53_type50_energy_reduction) {
             throw std::runtime_error(
                 "independent Thermal parity requires post-closure He Type-50 Thermal energy reconstruction");
@@ -6137,6 +6227,8 @@ int run_impl(
             : (element.n_ions == element.element_z
                 ? make_active_element_view(element, preliminary)
                 : make_full_element_view(element));
+        apply_magnesium_type49_persistent_leveltemp_v048746222(
+            element, active, evaluated);
         apply_magnesium_type53_persistent_leveltemp_v048746221(
             element, active, evaluated);
         std::vector<xstar_element_contribution_v1> contributions;

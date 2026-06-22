@@ -8,9 +8,9 @@ from pathlib import Path
 from typing import Any
 
 RELEASE = "0.6.48.7.46.21.12"
-SCHEMA = "xstar-tools-v0648746221-type53-leveltemp-case-contract-v1"
-EXPECTED_MAGNESIUM_TYPE53_RECORDS = 876
-LAYOUT_MAGIC = 221
+SCHEMA = "xstar-tools-v0648746222-type49-leveltemp-case-contract-v1"
+EXPECTED_MAGNESIUM_TYPE49_RECORDS = 809
+LAYOUT_MAGIC = 222
 CONTEXT_REALS = 22
 CANDIDATE_COUNT = 12
 
@@ -29,19 +29,13 @@ def audit_case(case_dir: Path) -> dict[str, Any]:
     required = ("elements.csv", "records.csv", "reals.txt", "ints.txt")
     errors = [f"missing {name}" for name in required if not (case_dir / name).is_file()]
     if errors:
-        return {
-            "schema": SCHEMA, "release": RELEASE, "result": "REJECT",
-            "errors": errors, "case_dir": str(case_dir),
-        }
+        return {"schema": SCHEMA, "release": RELEASE, "result": "REJECT", "errors": errors, "case_dir": str(case_dir)}
 
     with (case_dir / "elements.csv").open(newline="") as handle:
         elements = list(csv.DictReader(handle))
     mg = next((row for row in elements if int(row["element_z"]) == 12), None)
     if mg is None:
-        return {
-            "schema": SCHEMA, "release": RELEASE, "result": "REJECT",
-            "errors": ["native case has no Magnesium element"], "case_dir": str(case_dir),
-        }
+        return {"schema": SCHEMA, "release": RELEASE, "result": "REJECT", "errors": ["native case has no Magnesium element"], "case_dir": str(case_dir)}
     element_index = int(mg["element_index"])
     reals = _read_vector(case_dir / "reals.txt", float)
     ints = _read_vector(case_dir / "ints.txt", int)
@@ -56,7 +50,7 @@ def audit_case(case_dir: Path) -> dict[str, Any]:
     errors = []
     with (case_dir / "records.csv").open(newline="") as handle:
         for row in csv.DictReader(handle):
-            if int(row["element_index"]) != element_index or int(row["data_type"]) != 53:
+            if int(row["element_index"]) != element_index or int(row["data_type"]) != 49:
                 continue
             total += 1
             record = int(row["record"])
@@ -67,20 +61,23 @@ def audit_case(case_dir: Path) -> dict[str, Any]:
             real_counts.add(real_count)
             int_counts.add(int_count)
             record_errors: list[str] = []
-            if int_count < 4 or int_offset + int_count > len(ints):
+            if int_count < 5 or int_offset + int_count > len(ints):
                 record_errors.append("short integer payload")
             if real_count < 4 + CONTEXT_REALS or real_offset + real_count > len(reals):
                 record_errors.append("short real payload")
             if real_count >= CONTEXT_REALS and (real_count - CONTEXT_REALS) % 2 != 0:
-                record_errors.append("non-paired Type-53 cross-section payload")
+                record_errors.append("non-paired Type-49 cross-section payload")
             if not record_errors:
-                magic = int(ints[int_offset + 3])
-                destination_column = int(ints[int_offset + 1])
-                mask = int(ints[int_offset + 2])
+                magic = int(ints[int_offset + 4])
+                destination_column = int(ints[int_offset + 2])
+                mask = int(ints[int_offset + 3])
+                phextrap_max_points = int(ints[int_offset + 1])
                 if magic != LAYOUT_MAGIC:
                     record_errors.append(f"layout magic {magic} != {LAYOUT_MAGIC}")
                 if destination_column <= 0:
                     record_errors.append("non-positive destination column")
+                if phextrap_max_points != 999:
+                    record_errors.append(f"phextrap maximum {phextrap_max_points} != 999")
                 if mask < 0 or mask > 0x0FFF:
                     record_errors.append("candidate mask outside 12 stages")
                 context_base = real_offset + real_count - CONTEXT_REALS
@@ -102,12 +99,10 @@ def audit_case(case_dir: Path) -> dict[str, Any]:
             else:
                 valid += 1
 
-    if total != EXPECTED_MAGNESIUM_TYPE53_RECORDS:
-        errors.append(
-            f"Magnesium Type-53 inventory {total} != {EXPECTED_MAGNESIUM_TYPE53_RECORDS}"
-        )
+    if total != EXPECTED_MAGNESIUM_TYPE49_RECORDS:
+        errors.append(f"Magnesium Type-49 inventory {total} != {EXPECTED_MAGNESIUM_TYPE49_RECORDS}")
     if valid != total:
-        errors.append(f"valid Magnesium Type-53 payloads {valid} != inventory {total}")
+        errors.append(f"valid Magnesium Type-49 payloads {valid} != inventory {total}")
 
     return {
         "schema": SCHEMA,
@@ -115,9 +110,9 @@ def audit_case(case_dir: Path) -> dict[str, Any]:
         "result": "ACCEPT" if not errors else "REJECT",
         "errors": errors,
         "case_dir": str(case_dir),
-        "magnesium_type53_records": total,
-        "valid_type53_records": valid,
-        "expected_magnesium_type53_records": EXPECTED_MAGNESIUM_TYPE53_RECORDS,
+        "magnesium_type49_records": total,
+        "valid_type49_records": valid,
+        "expected_magnesium_type49_records": EXPECTED_MAGNESIUM_TYPE49_RECORDS,
         "layout_magic": LAYOUT_MAGIC,
         "candidate_slots": CANDIDATE_COUNT,
         "candidate_presence_counts": sorted(candidate_counts),

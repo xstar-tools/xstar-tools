@@ -1,5 +1,13 @@
 # CHANGELOG
 
+# 0.6.48.7.46.21.12 - 2026-06-21
+
+- Serialize a twelve-stage literal Type-13 candidate table for every Magnesium Type-49 record using layout magic 222.
+- Reconstruct the source-visible persistent `leveltemp` destination energy after active-stage selection and recompute Type-49 `ans5`/`ans6` from native pre-energy sums.
+- Correct the nested Type-57 regression audit to compare the active matrix-committed answer domain while retaining the exact 368-record serialized-case contract.
+- Retain the accepted Type-53, Type-57, Hydrogen Type-60/62, Helium, fixed-state, and continuum gates.
+- Keep Type-99 unchanged as the next independently attributable Magnesium secondary-cooling boundary; ABI remains 60487.
+
 # 0.6.48.7.46.21.11 - 2026-06-21
 
 - Serialize literal Type-13 destination-column candidates for all twelve Magnesium stages in the Type-53 v3 native context.

@@ -27,6 +27,7 @@ QUALIFIED_XDEF_ABUNDANCES_BY_Z: dict[int, float] = {1: 1.0, 2: 0.1, 12: 3.5e-5}
 # even though phint53 subsequently integrates on the full 9999-bin live grid.
 TYPE49_PHEXTRAP_MAX_POINTS = 999
 TYPE53_LEVELTEMP_LAYOUT_MAGIC_V048746221 = 221
+TYPE49_LEVELTEMP_LAYOUT_MAGIC_V048746222 = 222
 
 
 def _parse_abundance_spec(text: str) -> dict[int, float]:
@@ -1068,12 +1069,13 @@ def _lower_record(
                 float(excited_parent_energy_ev),
                 float(excited_parent_weight),
             ]
-            if dt == 53 and int(block.element_z) == 12:
+            if dt in {49, 53} and int(block.element_z) == 12:
                 # Context v3 carries the literal Type-13 value visible at the
                 # requested mutable leveltemp column for every Mg ion stage.
                 # Runtime active-stage selection then replays the exact
                 # levwkelement + calc_hmc_ion overwrite order without relying
-                # on a single all-ion snapshot.
+                # on a single all-ion snapshot.  Type 49 and Type 53 share
+                # this mutable source workspace but use distinct layout magic.
                 stage_to_block = {
                     int(candidate.ion_stage): candidate for candidate in basis.blocks
                 }
@@ -1116,14 +1118,15 @@ def _lower_record(
                 raise ValueError(f"type49 record {rec} has no canonical continuum index")
             raise ValueError(f"type53 record {rec} has no canonical continuum index")
         payload_ints = [continuum_index]
-        if dt == 53 and literal_context_supplied and int(block.element_z) == 12:
+        if dt == 49:
+            payload_ints.append(TYPE49_PHEXTRAP_MAX_POINTS)
+        if dt in {49, 53} and literal_context_supplied and int(block.element_z) == 12:
             payload_ints.extend([
                 int(id2),
                 int(candidate_mask),
-                TYPE53_LEVELTEMP_LAYOUT_MAGIC_V048746221,
+                TYPE49_LEVELTEMP_LAYOUT_MAGIC_V048746222 if dt == 49
+                else TYPE53_LEVELTEMP_LAYOUT_MAGIC_V048746221,
             ])
-        if dt == 49:
-            payload_ints.append(TYPE49_PHEXTRAP_MAX_POINTS)
         line_energy = float(corrected_threshold_ev)
     elif dt == 76:
         if len(raw_ints) < 2 or len(raw_reals) < 1:

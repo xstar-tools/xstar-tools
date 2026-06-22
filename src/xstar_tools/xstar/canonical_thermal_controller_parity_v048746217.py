@@ -21,7 +21,7 @@ import numpy as np
 
 from .continuum_freef_pow_hotfix_v048746172 import reconstruct
 
-RELEASE = "0.6.48.7.46.21.11"
+RELEASE = "0.6.48.7.46.21.12"
 SCHEMA = "xstar-tools-v0648746217-canonical-thermal-controller-parity-v1"
 DIFFERENCES = "v048746217_thermal_controller_differences.csv"
 ACCEPTED_ROUNDOFF = "v048746217_thermal_controller_accepted_roundoff.csv"

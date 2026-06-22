@@ -10,10 +10,10 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable
 
-from . import magnesium_type57_thermal_closure_v048746220 as v220
+from . import magnesium_type49_leveltemp_closure_v048746222 as v221
 
 RELEASE = "0.6.48.7.46.21.12"
-SCHEMA = "xstar-tools-v0648746221-magnesium-type53-persistent-leveltemp-closure-v1"
+SCHEMA = "xstar-tools-v0648746222-magnesium-type49-persistent-leveltemp-closure-v1"
 
 
 def canonical_e10(value: Any) -> str:
@@ -64,7 +64,7 @@ def _read_numeric_vector(path: Path, cast: type[float] | type[int]) -> list[floa
     return values
 
 
-def _case_type53_candidates(native_case: Path) -> dict[int, dict[str, Any]]:
+def _case_type49_candidates(native_case: Path) -> dict[int, dict[str, Any]]:
     elements = read_csv(native_case / "elements.csv")
     mg = next((row for row in elements if int(row["element_z"]) == 12), None)
     if mg is None:
@@ -74,28 +74,28 @@ def _case_type53_candidates(native_case: Path) -> dict[int, dict[str, Any]]:
     ints = _read_numeric_vector(native_case / "ints.txt", int)
     result: dict[int, dict[str, Any]] = {}
     for row in read_csv(native_case / "records.csv"):
-        if int(row["element_index"]) != element_index or int(row["data_type"]) != 53:
+        if int(row["element_index"]) != element_index or int(row["data_type"]) != 49:
             continue
         record = int(row["record"])
         real_offset = int(row["real_offset"])
         real_count = int(row["real_count"])
         int_offset = int(row["int_offset"])
         int_count = int(row["int_count"])
-        if int_count < 4 or int(ints[int_offset + 3]) != 221:
-            raise ValueError(f"Mg Type-53 record {record} lacks v21.11 leveltemp layout magic")
+        if int_count < 5 or int(ints[int_offset + 4]) != 222:
+            raise ValueError(f"Mg Type-49 record {record} lacks v21.12 leveltemp layout magic")
         if real_count < 26 or (real_count - 22) % 2 != 0:
-            raise ValueError(f"Mg Type-53 record {record} has malformed v21.11 real payload")
-        destination_column = int(ints[int_offset + 1])
-        candidate_mask = int(ints[int_offset + 2])
+            raise ValueError(f"Mg Type-49 record {record} has malformed v21.12 real payload")
+        destination_column = int(ints[int_offset + 2])
+        candidate_mask = int(ints[int_offset + 3])
         if destination_column <= 0 or candidate_mask < 0 or candidate_mask > 0x0FFF:
-            raise ValueError(f"Mg Type-53 record {record} has invalid leveltemp metadata")
+            raise ValueError(f"Mg Type-49 record {record} has invalid leveltemp metadata")
         context_base = real_offset + real_count - 22
         incoming_energy = float(reals[context_base + 7])
         candidates = tuple(float(reals[context_base + 10 + stage]) for stage in range(12))
         for stage, value in enumerate(candidates, start=1):
             if candidate_mask & (1 << (stage - 1)) and not math.isfinite(value):
                 raise ValueError(
-                    f"Mg Type-53 record {record} has non-finite stage-{stage} candidate energy"
+                    f"Mg Type-49 record {record} has non-finite stage-{stage} candidate energy"
                 )
         result[record] = {
             "destination_column": destination_column,
@@ -104,7 +104,7 @@ def _case_type53_candidates(native_case: Path) -> dict[int, dict[str, Any]]:
             "incoming_energy_ev": incoming_energy,
         }
     if not result:
-        raise ValueError("native case has no Magnesium Type-53 v21.11 candidates")
+        raise ValueError("native case has no Magnesium Type-49 v21.12 candidates")
     return result
 
 
@@ -116,9 +116,9 @@ def source_leveltemp_destination_energy(
     if not 1 <= ion_stage <= 12:
         raise ValueError(f"invalid current ion stage {ion_stage}")
     if destination_column <= 0 or len(candidate_energy_ev) != 12:
-        raise ValueError("invalid Type-53 persistent leveltemp candidate layout")
+        raise ValueError("invalid Type-49 persistent leveltemp candidate layout")
     if candidate_mask < 0 or candidate_mask > 0x0FFF:
-        raise ValueError("invalid Type-53 persistent leveltemp candidate mask")
+        raise ValueError("invalid Type-49 persistent leveltemp candidate mask")
 
     def present(stage: int) -> bool:
         return 1 <= stage <= 12 and bool(candidate_mask & (1 << (stage - 1)))
@@ -135,7 +135,7 @@ def source_leveltemp_destination_energy(
         return float(incoming_energy_ev), 0, destination_column
     value = float(candidate_energy_ev[owner - 1])
     if not math.isfinite(value):
-        raise ValueError(f"non-finite Type-53 stage-{owner} candidate energy")
+        raise ValueError(f"non-finite Type-49 stage-{owner} candidate energy")
     return value, owner, destination_column
 
 def audit(
@@ -151,28 +151,28 @@ def audit(
     selected_set = set(selected)
     differences: list[dict[str, Any]] = []
 
-    with tempfile.TemporaryDirectory(prefix="v048746221_v220_") as tmp:
-        baseline_csv = Path(tmp) / "v220_differences.csv"
-        baseline = v220.audit(
-            source_capture, native_evaluations, controller, canonical_report,
+    with tempfile.TemporaryDirectory(prefix="v048746222_v221_") as tmp:
+        baseline_csv = Path(tmp) / "v221_differences.csv"
+        baseline = v221.audit(
+            source_capture, native_evaluations, native_case, controller, canonical_report,
             baseline_csv, selected,
         )
         if baseline_csv.is_file():
             differences.extend(read_csv(baseline_csv))
 
-    source_type53: dict[tuple[int, int], dict[str, str]] = {}
+    source_type49: dict[tuple[int, int], dict[str, str]] = {}
     source_counts: dict[int, int] = defaultdict(int)
     with (source_capture / "v0472_all61_thermal_answer_channels.csv").open(newline="") as handle:
         for row in csv.DictReader(handle):
             sequence = int(row["sequence"])
             if sequence not in selected_set:
                 continue
-            if int(row["element_z"]) == 12 and int(row["data_type"]) == 53:
+            if int(row["element_z"]) == 12 and int(row["data_type"]) == 49:
                 key = (sequence, int(row["record"]))
-                source_type53[key] = row
+                source_type49[key] = row
                 source_counts[sequence] += 1
 
-    type53_candidates = _case_type53_candidates(native_case)
+    type49_candidates = _case_type49_candidates(native_case)
     native_keys: set[tuple[int, int]] = set()
     native_counts: dict[int, int] = defaultdict(int)
     type_mismatches = 0
@@ -199,36 +199,36 @@ def audit(
         for row in record_rows:
             record = int(row.get("record", "0"))
             key = (sequence, record)
-            if key not in source_type53:
+            if key not in source_type49:
                 continue
             native_keys.add(key)
             native_counts[sequence] += 1
             native_type = int(row.get("data_type", "0"))
-            if native_type != 53:
+            if native_type != 49:
                 type_mismatches += 1
                 differences.append({
-                    "domain": "magnesium_type53", "sequence": sequence,
+                    "domain": "magnesium_type49", "sequence": sequence,
                     "identity": f"record={record}", "field": "data_type",
-                    "source_value": 53, "native_value": native_type,
+                    "source_value": 49, "native_value": native_type,
                     "source_e10": "", "native_e10": "", "bit_exact": 0,
                 })
                 continue
-            source = source_type53[key]
+            source = source_type49[key]
             for field in ("ans3", "ans4"):
                 if not compare_numeric(
-                    differences, "magnesium_type53", sequence,
+                    differences, "magnesium_type49", sequence,
                     f"record={record}", field, source[field], row[field],
                 ):
                     ans34_rejections += 1
             for field in ("ans5", "ans6"):
                 if not compare_numeric(
-                    differences, "magnesium_type53", sequence,
+                    differences, "magnesium_type49", sequence,
                     f"record={record}", field, source[field], row[field],
                 ):
                     ans56_rejections += 1
-            case_context = type53_candidates.get(record)
+            case_context = type49_candidates.get(record)
             if case_context is None:
-                raise ValueError(f"native case has no Mg Type-53 context for record {record}")
+                raise ValueError(f"native case has no Mg Type-49 context for record {record}")
             expected_energy, owner_stage, destination_column = source_leveltemp_destination_energy(
                 ion_stage=int(row["ion_stage"]),
                 active_min_stage=active_min,
@@ -240,11 +240,11 @@ def audit(
             )
             owner_stages[owner_stage] += 1
             destination_columns[destination_column] += 1
-            native_energy = float(row["type53_shadow_destination_energy_ev"])
+            native_energy = float(row["type49_destination_energy_ev"])
             if not bit_exact(expected_energy, native_energy):
                 owner_energy_mismatches += 1
                 differences.append({
-                    "domain": "magnesium_type53_leveltemp", "sequence": sequence,
+                    "domain": "magnesium_type49_leveltemp", "sequence": sequence,
                     "identity": f"record={record};owner_stage={owner_stage};column={destination_column}",
                     "field": "destination_energy_ev",
                     "source_value": expected_energy, "native_value": native_energy,
@@ -253,9 +253,9 @@ def audit(
                     "bit_exact": 0,
                 })
 
-    source_domain_exact = bool(source_type53) and all(source_counts[sequence] > 0 for sequence in selected)
+    source_domain_exact = bool(source_type49) and all(source_counts[sequence] > 0 for sequence in selected)
     native_inventory_exact = (
-        source_domain_exact and set(source_type53) == native_keys and type_mismatches == 0 and
+        source_domain_exact and set(source_type49) == native_keys and type_mismatches == 0 and
         all(native_counts[sequence] == source_counts[sequence] for sequence in selected)
     )
 
@@ -282,12 +282,12 @@ def audit(
                 budget_counts[field]["rejected"] += 1
 
     required_gates = {
-        "V21_10_TYPE57_AND_V21_9_REGRESSION": "ACCEPT" if baseline.get("result") == "ACCEPT" else "REJECT",
-        "MAGNESIUM_TYPE53_SOURCE_DOMAIN_PRESENT": "ACCEPT" if source_domain_exact else "REJECT",
-        "MAGNESIUM_TYPE53_NATIVE_INVENTORY_EXACT": "ACCEPT" if native_inventory_exact else "REJECT",
-        "MAGNESIUM_TYPE53_ANS3_ANS4_IEEE_E10": "ACCEPT" if native_inventory_exact and ans34_rejections == 0 else "REJECT",
-        "MAGNESIUM_TYPE53_ANS5_ANS6_IEEE_E10": "ACCEPT" if native_inventory_exact and ans56_rejections == 0 else "REJECT",
-        "MAGNESIUM_TYPE53_LEVELTEMP_DESTINATION_ENERGY_BIT_EXACT": "ACCEPT" if native_inventory_exact and owner_energy_mismatches == 0 else "REJECT",
+        "V21_11_TYPE53_TYPE57_AND_V21_9_REGRESSION": "ACCEPT" if baseline.get("result") == "ACCEPT" else "REJECT",
+        "MAGNESIUM_TYPE49_SOURCE_DOMAIN_PRESENT": "ACCEPT" if source_domain_exact else "REJECT",
+        "MAGNESIUM_TYPE49_NATIVE_INVENTORY_EXACT": "ACCEPT" if native_inventory_exact else "REJECT",
+        "MAGNESIUM_TYPE49_ANS3_ANS4_IEEE_E10": "ACCEPT" if native_inventory_exact and ans34_rejections == 0 else "REJECT",
+        "MAGNESIUM_TYPE49_ANS5_ANS6_IEEE_E10": "ACCEPT" if native_inventory_exact and ans56_rejections == 0 else "REJECT",
+        "MAGNESIUM_TYPE49_LEVELTEMP_DESTINATION_ENERGY_BIT_EXACT": "ACCEPT" if native_inventory_exact and owner_energy_mismatches == 0 else "REJECT",
     }
     focused_result = "ACCEPT" if all(value == "ACCEPT" for value in required_gates.values()) else "REJECT"
 
@@ -315,8 +315,8 @@ def audit(
         "result": focused_result,
         "focused_scientific_result": focused_result,
         "required_gates": required_gates,
-        "magnesium_type53": {
-            "source_rows": len(source_type53),
+        "magnesium_type49": {
+            "source_rows": len(source_type49),
             "native_rows": len(native_keys),
             "source_counts_by_sequence": dict(sorted(source_counts.items())),
             "native_counts_by_sequence": dict(sorted(native_counts.items())),
@@ -327,7 +327,7 @@ def audit(
             "leveltemp_owner_stage_counts": dict(sorted(owner_stages.items())),
             "destination_column_counts": dict(sorted(destination_columns.items())),
         },
-        "v21_10_regression": {
+        "v21_11_regression": {
             "result": baseline.get("result", "REJECT"),
             "required_gates": baseline.get("required_gates", {}),
         },
