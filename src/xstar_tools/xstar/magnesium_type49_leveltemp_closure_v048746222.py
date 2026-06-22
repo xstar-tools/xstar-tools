@@ -281,8 +281,18 @@ def audit(
             ):
                 budget_counts[field]["rejected"] += 1
 
+    v21_11_gates = baseline.get("required_gates", {})
+    v21_11_required = (
+        "V21_10_TYPE57_AND_V21_9_REGRESSION",
+        "MAGNESIUM_TYPE53_SOURCE_DOMAIN_PRESENT",
+        "MAGNESIUM_TYPE53_NATIVE_INVENTORY_EXACT",
+        "MAGNESIUM_TYPE53_ANS3_ANS4_IEEE_E10",
+        "MAGNESIUM_TYPE53_ANS5_ANS6_IEEE_E10",
+        "MAGNESIUM_TYPE53_LEVELTEMP_DESTINATION_ENERGY_BIT_EXACT",
+    )
+    v21_11_ok = all(v21_11_gates.get(name) == "ACCEPT" for name in v21_11_required)
     required_gates = {
-        "V21_11_TYPE53_TYPE57_AND_V21_9_REGRESSION": "ACCEPT" if baseline.get("result") == "ACCEPT" else "REJECT",
+        "V21_11_TYPE53_TYPE57_AND_V21_9_REGRESSION": "ACCEPT" if v21_11_ok else "REJECT",
         "MAGNESIUM_TYPE49_SOURCE_DOMAIN_PRESENT": "ACCEPT" if source_domain_exact else "REJECT",
         "MAGNESIUM_TYPE49_NATIVE_INVENTORY_EXACT": "ACCEPT" if native_inventory_exact else "REJECT",
         "MAGNESIUM_TYPE49_ANS3_ANS4_IEEE_E10": "ACCEPT" if native_inventory_exact and ans34_rejections == 0 else "REJECT",

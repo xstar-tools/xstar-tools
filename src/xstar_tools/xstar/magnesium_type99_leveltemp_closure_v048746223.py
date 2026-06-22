@@ -328,7 +328,16 @@ def audit(
             cooling_rejections += 1
 
     case_report = audit_case(native_case)
-    baseline_ok = baseline.get("result") == "ACCEPT"
+    v21_12_gates = baseline.get("required_gates", {})
+    v21_12_required = (
+        "V21_11_TYPE53_TYPE57_AND_V21_9_REGRESSION",
+        "MAGNESIUM_TYPE49_SOURCE_DOMAIN_PRESENT",
+        "MAGNESIUM_TYPE49_NATIVE_INVENTORY_EXACT",
+        "MAGNESIUM_TYPE49_ANS3_ANS4_IEEE_E10",
+        "MAGNESIUM_TYPE49_ANS5_ANS6_IEEE_E10",
+        "MAGNESIUM_TYPE49_LEVELTEMP_DESTINATION_ENERGY_BIT_EXACT",
+    )
+    baseline_ok = all(v21_12_gates.get(name) == "ACCEPT" for name in v21_12_required)
     analyzer_completed = True
     required_gates = {
         "V21_12_TYPE49_REGRESSION": "ACCEPT" if baseline_ok else "REJECT",

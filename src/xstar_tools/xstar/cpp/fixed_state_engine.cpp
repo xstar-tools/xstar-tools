@@ -5384,10 +5384,33 @@ EvaluatedRecord evaluate_record(
             if (!ints||record.int_count<1) throw std::runtime_error("type68 payload requires Z");
             const double wav=delta_ev>0.0?12398.4016/delta_ev:0.0;
             const double ups=type68_upsilon(r,record.real_count,static_cast<int>(ints[0]),input.temperature_k,wav);
-            c.ans1=collision_pair_upward(ups,delta_ev,input.temperature_k,ne,lower.statistical_weight);
-            c.ans2=collision_pair_downward(ups,input.temperature_k,ne,upper.statistical_weight);
-            c.ans5=c.ans2*delta_ev*kErgPerEv;
-            c.ans6=c.ans1*delta_ev*kErgPerEv;
+            const bool source_constants =
+                environment_flag("XSTAR_QUALIFICATION_TYPE68_SOURCE_CONSTANTS");
+            if (source_constants) {
+                // Frozen v0.6.47.2 ucalc Type-68 combines the legacy XSTAR
+                // Boltzmann coefficient and collision-channel eV-to-erg
+                // conversion.  Preserve the source operation order rather
+                // than routing through the modern generic collision helper.
+                const double t4 = input.temperature_k / 1.0e4;
+                const double tsq = std::sqrt(std::max(t4, 1.0e-300));
+                const double ekt_ev = xstar_constants::kLegacyBoltzmannEvPerT4 * t4;
+                const double cji =
+                    xstar_constants::kCollisionRateCoefficientPerSqrtT4 * ups /
+                    tsq / std::max(upper.statistical_weight, 1.0e-300);
+                const double cij =
+                    cji * upper.statistical_weight *
+                    limited_exp(-delta_ev / std::max(ekt_ev, 1.0e-300)) /
+                    std::max(lower.statistical_weight, 1.0e-300);
+                c.ans1 = cij * ne;
+                c.ans2 = cji * ne;
+                c.ans5 = c.ans2 * delta_ev * xstar_constants::kLegacyCollisionErgPerEv;
+                c.ans6 = c.ans1 * delta_ev * xstar_constants::kLegacyCollisionErgPerEv;
+            } else {
+                c.ans1=collision_pair_upward(ups,delta_ev,input.temperature_k,ne,lower.statistical_weight);
+                c.ans2=collision_pair_downward(ups,input.temperature_k,ne,upper.statistical_weight);
+                c.ans5=c.ans2*delta_ev*kErgPerEv;
+                c.ans6=c.ans1*delta_ev*kErgPerEv;
+            }
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE63_ALGORITHMIC_COLLISION: {
