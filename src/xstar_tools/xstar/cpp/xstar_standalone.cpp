@@ -2210,12 +2210,16 @@ struct FixedDsecEvaluatorData {
     std::size_t mg_primary_override_evaluations = 0;
 };
 
-constexpr double kCanonicalComparisonZeroFloorV048746225 = 1.0e-30;
+constexpr double kCanonicalComparisonZeroFloorV048746226 = 1.0e-30;
+
+double canonical_numeric_v048746226(double value) {
+    if (std::isfinite(value) && std::abs(value) < kCanonicalComparisonZeroFloorV048746226) return 0.0;
+    return value;
+}
 
 std::string canonical_e7(double value) {
-    const double normalized = std::abs(value) < kCanonicalComparisonZeroFloorV048746225 ? 0.0 : value;
     std::ostringstream stream;
-    stream << std::scientific << std::setprecision(7) << normalized;
+    stream << std::scientific << std::setprecision(7) << canonical_numeric_v048746226(value);
     return stream.str();
 }
 

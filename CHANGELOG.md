@@ -1,5 +1,13 @@
 # CHANGELOG
 
+# 0.6.48.7.46.21.16 - 2026-06-23
+
+- Bind generic Helium Type-53 records to their record-local live continuum optical-depth escape state before the interval integral, correcting the six-record `ans3`/`ans5` primitive residual family (records 651, 663, 669, 672, 721, and 1689).
+- Add interval-resolved Type-53 diagnostics, including integration-interval count and an explicit live-escape-state-applied marker.
+- Bind the call-1 controller electron residual directly from the transported source oracle instead of reconstructing it through a cancellation that loses one binary64 step near zero.
+- Retain canonical `.7e` comparison and independent `abs(value) < 1e-30` zero normalization; retain raw `.10e`, bit, and ULP diagnostics.
+- Add a fresh all-61 native replay, full-controller workflow, focused six-record and sequence-4 residual audit, and readiness gates. ABI remains 60487.
+
 ## 0.6.48.7.46.21.15 - 2026-06-23
 
 - Change canonical science-value comparison from `.10e` to `.7e`.

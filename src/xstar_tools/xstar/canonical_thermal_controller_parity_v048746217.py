@@ -1,11 +1,10 @@
 """All-sequence canonical Thermal and controller-state qualification for v21.7.
 
 Numerical science values are accepted when their canonical normalized scientific
-notation with seven digits after the decimal point is identical (``.7e``).
-Finite values with absolute magnitude below ``1e-30`` are normalized to zero
-before that comparison. Raw binary64 equality, raw ``.10e`` formatting, and ULP
-distance are retained as diagnostics. Structural identity, row keys, controller
-counters, and termination metadata remain exact.
+notation with seven digits after the decimal point is identical (``.7e``) after
+finite values with ``abs(value) < 1e-30`` are normalized independently to zero.
+Raw ``.10e`` formatting, binary64 equality, and ULP distance remain diagnostics.  Structural
+identity, row keys, controller counters, and termination metadata remain exact.
 """
 from __future__ import annotations
 
@@ -23,8 +22,8 @@ import numpy as np
 
 from .continuum_freef_pow_hotfix_v048746172 import reconstruct
 
-RELEASE = "0.6.48.7.46.21.15"
-SCHEMA = "xstar-tools-v06487462115-canonical-e7-zero-floor-parity-v1"
+RELEASE = "0.6.48.7.46.21.16"
+SCHEMA = "xstar-tools-v06487462116-helium-type53-controller-residual-parity-v1"
 DIFFERENCES = "v048746217_thermal_controller_differences.csv"
 ACCEPTED_ROUNDOFF = "v048746217_thermal_controller_accepted_roundoff.csv"
 REJECTIONS = "v048746217_thermal_controller_rejections.csv"
@@ -56,9 +55,6 @@ BUDGET_FIELDS: tuple[tuple[str, str], ...] = (
     ("httot2", "total_heating2"), ("cltot2", "total_cooling2"),
     ("hmctot", "hmctot"), ("elcter", "charge_residual"),
 )
-
-CANONICAL_DIGITS = 7
-CANONICAL_ZERO_FLOOR = 1.0e-30
 
 DIFF_FIELDS = [
     "category", "sequence", "identity", "field", "source_value", "native_value",
@@ -97,28 +93,25 @@ def _ulp(left: float, right: float) -> int:
     return abs(_ordered_int(left) - _ordered_int(right))
 
 
+def canonical_numeric(value: Any) -> float:
+    numeric = float(value)
+    if math.isfinite(numeric) and abs(numeric) < 1.0e-30:
+        return 0.0
+    return numeric
+
+
+def canonical_e7(value: Any) -> str:
+    numeric = canonical_numeric(value)
+    if not math.isfinite(numeric):
+        return str(numeric).lower()
+    return format(numeric, ".7e")
+
+
 def canonical_e10(value: Any) -> str:
-    """Raw ten-decimal diagnostic retained for historical comparison."""
     numeric = float(value)
     if not math.isfinite(numeric):
         return str(numeric).lower()
     return format(numeric, ".10e")
-
-
-def canonical_numeric(value: Any) -> tuple[float, bool]:
-    """Return the E7 comparison value and whether the zero floor was applied."""
-    numeric = float(value)
-    if not math.isfinite(numeric):
-        return numeric, False
-    zeroed = abs(numeric) < CANONICAL_ZERO_FLOOR
-    return (0.0 if zeroed else numeric), zeroed
-
-
-def canonical_e7(value: Any) -> str:
-    numeric, _ = canonical_numeric(value)
-    if not math.isfinite(numeric):
-        return str(numeric).lower()
-    return format(numeric, f".{CANONICAL_DIGITS}e")
 
 
 class Recorder:
@@ -137,9 +130,8 @@ class Recorder:
             row = {
                 "category": category, "sequence": sequence, "identity": identity,
                 "field": field, "source_value": source, "native_value": native,
-                "source_e7": "", "native_e7": "", "bit_exact": 0,
-                "e7_equal": 0, "source_zero_normalized": 0,
-                "native_zero_normalized": 0,
+                "source_e7": "", "native_e7": "", "bit_exact": 0, "e7_equal": 0,
+                "source_zero_normalized": 0, "native_zero_normalized": 0,
                 "source_e10": "", "native_e10": "", "e10_equal": 0,
                 "ulp_distance": "", "classification": "STRUCTURAL_REJECT",
                 "detail": detail,
@@ -153,28 +145,26 @@ class Recorder:
             left = float(source); right = float(native)
             finite = math.isfinite(left) and math.isfinite(right)
             bit_equal = finite and _bits(left) == _bits(right)
-            left_cmp, left_zeroed = canonical_numeric(left)
-            right_cmp, right_zeroed = canonical_numeric(right)
+            left_zero = finite and abs(left) < 1.0e-30
+            right_zero = finite and abs(right) < 1.0e-30
             left_e7 = canonical_e7(left); right_e7 = canonical_e7(right)
             left_e10 = canonical_e10(left); right_e10 = canonical_e10(right)
             acceptable = finite and left_e7 == right_e7
-            e10_equal = finite and left_e10 == right_e10
+            raw_e10_equal = finite and left_e10 == right_e10
             distance = _ulp(left, right)
         except Exception:
             left_e7 = right_e7 = left_e10 = right_e10 = ""
-            left_zeroed = right_zeroed = False
-            bit_equal = acceptable = e10_equal = False
+            bit_equal = acceptable = raw_e10_equal = False
+            left_zero = right_zero = False
             distance = 2**63 - 1
         if bit_equal:
             self.counts[category]["bit_exact"] += 1
             self.counts[category]["e7_acceptable"] += 1
             return True
-        if acceptable:
-            classification = (
-                "E7_ZERO_FLOOR_ACCEPTED"
-                if left_zeroed or right_zeroed
-                else "E7_ACCEPTED_ROUNDOFF"
-            )
+        if acceptable and (left_zero or right_zero):
+            classification = "E7_ZERO_FLOOR_ACCEPTED"
+        elif acceptable:
+            classification = "E7_ACCEPTED_ROUNDOFF"
         else:
             classification = "NUMERIC_REJECT"
         row = {
@@ -182,18 +172,19 @@ class Recorder:
             "field": field, "source_value": source, "native_value": native,
             "source_e7": left_e7, "native_e7": right_e7,
             "bit_exact": int(bit_equal), "e7_equal": int(acceptable),
-            "source_zero_normalized": int(left_zeroed),
-            "native_zero_normalized": int(right_zeroed),
+            "source_zero_normalized": int(left_zero),
+            "native_zero_normalized": int(right_zero),
             "source_e10": left_e10, "native_e10": right_e10,
-            "e10_equal": int(e10_equal), "ulp_distance": distance,
+            "e10_equal": int(raw_e10_equal), "ulp_distance": distance,
             "classification": classification, "detail": detail,
         }
         self.differences.append(row)
         if acceptable:
             self.counts[category]["e7_acceptable"] += 1
-            self.counts[category]["accepted_roundoff"] += 1
-            if left_zeroed or right_zeroed:
+            if left_zero or right_zero:
                 self.counts[category]["accepted_zero_floor"] += 1
+            else:
+                self.counts[category]["accepted_roundoff"] += 1
             self.accepted_roundoff.append(row)
         else:
             self.counts[category]["rejected"] += 1
@@ -211,8 +202,8 @@ class Recorder:
                 "category": category, "values_total": total,
                 "values_bit_or_structural_exact": bit_exact,
                 "values_e7_or_structural_acceptable": acceptable,
-                "accepted_zero_floor": count["accepted_zero_floor"],
                 "accepted_roundoff": count["accepted_roundoff"],
+                "accepted_zero_floor": count["accepted_zero_floor"],
                 "rejected": count["rejected"],
                 "result": "ACCEPT" if total > 0 and count["rejected"] == 0 else "REJECT",
             })
@@ -504,9 +495,9 @@ def audit(source_capture: Path, native_evaluations: Path, native_controller: Pat
     return {
         "schema": SCHEMA, "release": RELEASE, "result": scientific_result,
         "scientific_result": scientific_result,
+        "canonical_digits_after_decimal": 7,
+        "canonical_zero_floor": 1.0e-30,
         "comparison_semantics": "canonical normalized E-notation with 7 digits after decimal (.7e), after abs(value) < 1e-30 normalization to zero",
-        "canonical_zero_floor": CANONICAL_ZERO_FLOOR,
-        "canonical_digits_after_decimal": CANONICAL_DIGITS,
         "structural_semantics": "exact identity and control metadata",
         "gates": gates, "category_summary": category_rows,
         "fixed_evaluation_summary": fixed, "controller_summary": {k: v for k, v in controller.items() if k != "call_comparison"},

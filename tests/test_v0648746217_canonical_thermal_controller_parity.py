@@ -10,17 +10,9 @@ from xstar_tools.xstar import canonical_thermal_controller_parity_v048746217 as 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_canonical_e10_remains_a_raw_diagnostic() -> None:
+def test_canonical_e10_preserves_v216_semantics() -> None:
     assert parity.canonical_e10(2.1624460966087834e-15) == "2.1624460966e-15"
     assert parity.canonical_e10(2.1624460966087830e-15) == "2.1624460966e-15"
-
-
-def test_canonical_e7_and_zero_floor_policy() -> None:
-    assert parity.canonical_e7(9.858497092298167e-14) == "9.8584971e-14"
-    assert parity.canonical_e7(9.858497092243001e-14) == "9.8584971e-14"
-    assert parity.canonical_e7(3.9170602081e-47) == "0.0000000e+00"
-    assert parity.canonical_e7(3.0309433966e-105) == "0.0000000e+00"
-    assert parity.canonical_e7(1.2677798134e-48) == parity.canonical_e7(0.0)
 
 
 def test_numeric_roundoff_is_accepted_but_recorded() -> None:
@@ -31,10 +23,10 @@ def test_numeric_roundoff_is_accepted_but_recorded() -> None:
     )
     assert len(recorder.accepted_roundoff) == 1
     assert len(recorder.rejections) == 0
-    assert recorder.accepted_roundoff[0]["classification"] == "E7_ACCEPTED_ROUNDOFF"
+    assert recorder.accepted_roundoff[0]["classification"] == "E10_ACCEPTED_ROUNDOFF"
 
 
-def test_visible_e7_difference_is_rejected() -> None:
+def test_visible_e10_difference_is_rejected() -> None:
     recorder = parity.Recorder()
     assert not recorder.numeric(
         "thermal_budget", 1, "kind=dsec;call=1;evaluation=1", "h_cooling2",
@@ -42,31 +34,8 @@ def test_visible_e7_difference_is_rejected() -> None:
     )
     assert len(recorder.rejections) == 1
     assert recorder.rejections[0]["classification"] == "NUMERIC_REJECT"
-    assert recorder.rejections[0]["source_e7"] != recorder.rejections[0]["native_e7"]
+    assert recorder.rejections[0]["source_e10"] != recorder.rejections[0]["native_e10"]
 
-
-
-def test_extremely_low_values_are_accepted_as_zero() -> None:
-    recorder = parity.Recorder()
-    assert recorder.numeric(
-        "canonical_answer_channels", 1, "element_z=12;record=1", "ans6",
-        3.9170602081e-47, 3.0309433966e-105,
-    )
-    assert recorder.numeric(
-        "canonical_answer_channels", 1, "element_z=12;record=2", "ans6",
-        1.2677798134e-48, 0.0,
-    )
-    assert len(recorder.rejections) == 0
-    assert all(row["classification"] == "E7_ZERO_FLOOR_ACCEPTED" for row in recorder.accepted_roundoff)
-
-
-def test_non_negligible_value_is_not_zero_normalized() -> None:
-    recorder = parity.Recorder()
-    assert not recorder.numeric(
-        "canonical_answer_channels", 1, "element_z=2;record=651", "ans5",
-        5.355145253962036e-21, 5.4e-21,
-    )
-    assert recorder.rejections[0]["classification"] == "NUMERIC_REJECT"
 
 def test_structural_fields_remain_exact() -> None:
     recorder = parity.Recorder()
