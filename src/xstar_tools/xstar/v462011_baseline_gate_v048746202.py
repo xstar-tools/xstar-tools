@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse, json
 from pathlib import Path
 
-RELEASE = "0.6.48.7.46.21.5"
+RELEASE = "0.6.48.7.46.21"
 SCHEMA = "xstar-tools-v0648746202-v462011-baseline-v1"
 
 

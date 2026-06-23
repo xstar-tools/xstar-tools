@@ -14,10 +14,7 @@ def test_shared_source_order_reducer_is_used_by_both_engines() -> None:
     assert '#include "source_order_thermal_reducer.hpp"' in element
     assert '#include "source_order_thermal_reducer.hpp"' in fixed
     assert "FourChannelAccumulator thermal_reducer" in element
-    assert (
-        "TaggedFourChannelAccumulator thermal_reducer" in fixed
-        or "xstar_canonical_thermal::reduce" in fixed
-    )
+    assert "TaggedFourChannelAccumulator thermal_reducer" in fixed
     assert "last_computed_helium_non_type53_budget" in fixed
     assert "double h53 = 0.0" not in fixed
 

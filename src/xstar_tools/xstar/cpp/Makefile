@@ -67,10 +67,10 @@ $(OPACITY_TARGET): opacity_kernels.cpp xstar_backend_common.hpp compact_arrays.h
 $(THERMAL_TARGET): thermal_kernels.cpp xstar_thermal_engine.h
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(THERMAL_STRICT_FP_FLAGS) $(SO_LDFLAGS) -o $@ thermal_kernels.cpp
 
-$(ENGINE_TARGET): xstar_engine.cpp element_engine.cpp source_order_thermal_reducer.hpp canonical_thermal_term.hpp xstar_element_engine.h xstar_backend_common.hpp compact_arrays.hpp error_codes.hpp $(SOLVER_TARGET)
+$(ENGINE_TARGET): xstar_engine.cpp element_engine.cpp source_order_thermal_reducer.hpp xstar_element_engine.h xstar_backend_common.hpp compact_arrays.hpp error_codes.hpp $(SOLVER_TARGET)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(ELEMENT_STRICT_FP_FLAGS) $(SO_LDFLAGS) -o $@ xstar_engine.cpp element_engine.cpp -L. -lxstar_solver $(RPATH_ORIGIN)
 
-$(FIXED_STATE_TARGET): fixed_state_engine.cpp source_order_thermal_reducer.hpp canonical_thermal_term.hpp xstar_fixed_state_engine.h xstar_element_engine.h xstar_spectral_engine.h $(ENGINE_TARGET) $(EMISSIVITY_TARGET)
+$(FIXED_STATE_TARGET): fixed_state_engine.cpp source_order_thermal_reducer.hpp xstar_fixed_state_engine.h xstar_element_engine.h xstar_spectral_engine.h $(ENGINE_TARGET) $(EMISSIVITY_TARGET)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(THERMAL_STRICT_FP_FLAGS) $(SO_LDFLAGS) -o $@ fixed_state_engine.cpp -L. -lxstar_engine -lxstar_emissivity $(RPATH_ORIGIN)
 
 $(API_TARGET): xstar_api.cpp compiled_case.cpp xstar_api.h xstar_backend_plugin.h xstar_standalone_internal.hpp

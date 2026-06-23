@@ -12,7 +12,7 @@ def write_csv(path: Path, fields, rows):
 
 def test_v4620_source_probe_contract():
     from xstar_tools.xstar import v0472_all61_magnesium_type99_primary_cooling_capture as m
-    assert m.RELEASE=='0.6.48.7.46.21.5'
+    assert m.RELEASE=='0.6.48.7.46.21'
     assert m.EXPECTED_UCALC_ROWS==661
     assert m.EXPECTED_DIAGONAL_ROWS==1322
     assert m.EXPECTED_ACTIVE_RECORD_UNION==11
@@ -22,8 +22,8 @@ def test_v4620_cpp_contract():
     text=(ROOT/'src/xstar_tools/xstar/cpp/fixed_state_engine.cpp').read_text()
     assert text.count('XSTAR_QUALIFICATION_MAGNESIUM_TYPE99_PRIMARY_COOLING_REDUCTION')==1
     assert text.count('XSTAR_QUALIFICATION_MAGNESIUM_TYPE99_PRIMARY_COOLING_LEDGER_CSV')==1
-    assert 'it->second.cj > 0.0' in text
-    assert 'canonical Thermal ledger did not consume every Mg Type-99 source row' in text
+    assert 'source_row.cj > 0.0' in text
+    assert 'magnesium Type-99 source primary-cooling ledger was not fully consumed' in text
     assert 'magnesium_type99_primary_cooling_reduction_applied' in text
 
 def test_v4620_baseline_accepts_actual_host_result(tmp_path):

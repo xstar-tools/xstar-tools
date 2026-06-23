@@ -20,11 +20,11 @@ def dump(path: Path, payload: dict) -> None:
 
 
 def test_version_and_source_vocabulary() -> None:
-    assert xstar_tools.__version__ == "0.6.48.7.46.21.5"
+    assert xstar_tools.__version__ == "0.6.48.7.46.21"
     source = (root() / "src/xstar_tools/xstar/all61_fixed_state_closure.py").read_text()
     assert '"V06488_THERMAL_PARITY_READY": "ACCEPT" if fixed_state_exact' in source
     assert '"V06488_THERMAL_PARITY_READY": "YES" if fixed_state_exact' not in source
-    assert all61_fixed_state_closure.RELEASE == "0.6.48.7.46.21.5"
+    assert all61_fixed_state_closure.RELEASE == "0.6.48.7.46.21"
 
 
 def synthetic_v46_11(path: Path) -> None:

@@ -12,7 +12,7 @@ def test_fixed_state_runtime_contract_and_mg_correction_present():
     for field in ('global_xilevg','global_bilevg','global_rnisg','mg_primary_heating_override'):
         assert field in header
     assert 'XSTAR_QUALIFICATION_MG_PRIMARY_THERMAL_CORRECTION' in engine
-    assert 'canonical_reduction.tagged.total.abundance_weighted(element.abundance)' in engine
+    assert 'thermal_reducer.total.abundance_weighted(element.abundance)' in engine
     assert 'element_heating *= element.abundance' not in engine
     assert '--call-start-workspace-dir' in standalone
     assert '--mg-primary-budget-csv' in standalone

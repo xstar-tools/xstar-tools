@@ -20,7 +20,7 @@ from typing import Any
 
 from . import v0472_all61_magnesium_type50_endpoint_capture as base
 
-RELEASE = "0.6.48.7.46.21.5"
+RELEASE = "0.6.48.7.46.21"
 SCHEMA = "xstar-tools-v0648746201-v0472-all61-magnesium-type99-primary-cooling-capture-v1"
 VERIFY_SCHEMA = "xstar-tools-v0648746201-v0472-all61-magnesium-type99-primary-cooling-state-v1"
 UCALC_NAME = "v0472_all61_magnesium_type99_ucalc.csv"

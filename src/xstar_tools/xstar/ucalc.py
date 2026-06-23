@@ -19,8 +19,6 @@ from .constants import (
     BOLTZMANN_ERG_PER_K,
     COLLISION_RATE_COEFFICIENT_PER_SQRT_T4,
     LEGACY_BOLTZMANN_EV_PER_T4,
-    LEGACY_COLLISION_ERG_PER_EV,
-    MODERN_ERG_PER_EV,
 )
 
 from dataclasses import dataclass, field, replace
@@ -32,13 +30,13 @@ import numpy as np
 
 from .atomic_database import XSTARMasterData
 
-ERG_PER_EV = LEGACY_COLLISION_ERG_PER_EV
+ERG_PER_EV = 1.602197e-12
 XSTAR_KT_EV_PER_1E4K = LEGACY_BOLTZMANN_EV_PER_T4
 
 # Current XSTAR ``constants.f90`` values used by the continuum-integration
 # routines.  Keep these separate from historical formulas that literally use
 # the older rounded coefficients above.
-XSTAR_SOURCE_ERG_PER_EV = MODERN_ERG_PER_EV
+XSTAR_SOURCE_ERG_PER_EV = 1.602176634e-12
 XSTAR_SOURCE_BOLTZMANN_ERG_K = BOLTZMANN_ERG_PER_K
 XSTAR_SOURCE_KT_EV_PER_1E4K = (
     XSTAR_SOURCE_BOLTZMANN_ERG_K * 1.0e4 / XSTAR_SOURCE_ERG_PER_EV
