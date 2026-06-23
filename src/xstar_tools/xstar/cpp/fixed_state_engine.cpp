@@ -3246,7 +3246,7 @@ double type73_rate(const double* r, std::size_t nr, int z, double temperature_k)
     if (!(wav>0.0)) return 0.0;
     const double tused=std::max(temperature_k,2.8777e6/wav);
     const double y=static_cast<double>(z*z)*r[0]*1.578876e5/tused;
-    if (y>40.0||!(y>0.0)) return 0.0;
+    if (y>40.0) return 0.0;
     const double z2s=r[1], aa=r[2], co=r[3], cr=r[4], cr1=r[5], rr=r[6];
     const double gam=z2s>=0.1?-0.2:(z2s>0.01?0.0:0.2);
     const double zeff=static_cast<double>(z)-gam;
@@ -3259,7 +3259,7 @@ double type73_rate(const double* r, std::size_t nr, int z, double temperature_k)
     else if (rr==2.0) { er=ee2; er1=ee3; }
     double qij=co*limited_exp(-y)+1.55*z2s*e1;
     if (y*aa+y<=40.0) qij+=y*limited_exp(y*aa)*(cr*er/std::pow(aa+1.0,rr-1.0)+cr1*er1/std::pow(aa+1.0,rr));
-    const double crate=qij*1.578876e5/tused*std::sqrt(tused)/std::max(zeff*zeff,1.0e-300)*5.46538e-11;
+    const double crate=qij*1.578876e5/tused*std::sqrt(tused)/std::max(zeff*zeff,1.0e-48)*5.46538e-11;
     return std::max(0.0,crate);
 }
 
@@ -5492,24 +5492,43 @@ EvaluatedRecord evaluate_record(
         }
         case XSTAR_FIXED_OPCODE_TYPE72_DIELECTRONIC_CAPTURE: {
             if (!r||record.real_count<2||!ints||record.int_count<2) throw std::runtime_error("type72 payload too short");
-            const double scale=3.3e-11*std::pow(13.6/std::max(xstar_constants::kModernBoltzmannEvPerT4*t4,1.0e-300),1.5);
+            // Match ucalc.py::_calt72_rate literally.  Type 72 is one of the
+            // historical collision branches that uses the rounded XSTAR
+            // 0.861707 eV per 10^4 K coefficient, not the modern constant.
+            const double source_ekt_ev = xstar_constants::kLegacyBoltzmannEvPerT4 * t4;
+            const double scale=3.3e-11*std::pow(13.6/source_ekt_ev,1.5);
             const double rtmp=record.real_count>=3?r[2]:1.0;
-            const double rate=scale*limited_exp(-r[1]/std::max(xstar_constants::kModernBoltzmannEvPerT4*t4,1.0e-300))*(r[0]/1.0e13)*rtmp;
+            const double rate=scale*limited_exp(-r[1]/source_ekt_ev)*(r[0]/1.0e13)*rtmp;
             const auto& ground=row_at(element,static_cast<int>(ints[0]));
             const auto& parent=row_at(element,static_cast<int>(ints[1]));
-            const double rinf=2.08e-22*ground.statistical_weight/std::max(parent.statistical_weight,1.0e-300)/std::max(t4*sqrt_t4,1.0e-300);
+            const double rinf=2.08e-22*ground.statistical_weight/std::max(parent.statistical_weight,1.0e-48)/std::max(t4*sqrt_t4,1.0e-48);
             c.ans2=rate*ne;
-            c.ans1=rate*ne*rinf*ne*limited_exp(r[1]/std::max(input.temperature_k,1.0e-300));
+            c.ans1=rate*ne*rinf*ne*limited_exp(r[1]/input.temperature_k);
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE73_HELIKE_COLLISION: {
-            if (!ints||record.int_count<1) throw std::runtime_error("type73 payload requires Z");
-            const double crate=type73_rate(r,record.real_count,static_cast<int>(ints[0]),input.temperature_k);
-            const double omega=crate/std::max(lower.statistical_weight,1.0e-300);
-            c.ans1=collision_pair_upward(omega,delta_ev,input.temperature_k,ne,lower.statistical_weight);
-            c.ans2=collision_pair_downward(omega,input.temperature_k,ne,upper.statistical_weight);
-            c.ans5=c.ans2*delta_ev*kErgPerEv;
-            c.ans6=c.ans1*delta_ev*kErgPerEv;
+            if (!r||record.real_count<7||!ints||record.int_count<1) throw std::runtime_error("type73 payload too short");
+            // native_fixed_program.py compacts the raw Type-73 integer
+            // payload [level1, level2, Z] to [Z]; the record rows retain the
+            // two endpoints.  From this point onward preserve the exact
+            // ucalc.py::_eval_type73 operation order and historical constants.
+            const double wavelength_a=std::abs(r[0]);
+            if (!(wavelength_a>0.0)) break;
+            const double source_energy_ev=12398.4016/std::max(wavelength_a,1.0e-48);
+            const double crate=type73_rate(
+                r,record.real_count,static_cast<int>(ints[0]),input.temperature_k);
+            const double gl=lower.statistical_weight;
+            const double gu=upper.statistical_weight;
+            const double omega=crate/std::max(gl,1.0e-48);
+            const double excitation_factor=limited_exp(
+                -source_energy_ev/(xstar_constants::kLegacyBoltzmannEvPerT4*t4));
+            const double qd=xstar_constants::kCollisionRateCoefficientPerSqrtT4*
+                omega/sqrt_t4/std::max(gu,1.0e-48);
+            const double qe=qd*gu*excitation_factor/std::max(gl,1.0e-48);
+            c.ans1=qe*ne;
+            c.ans2=qd*ne;
+            c.ans5=c.ans2*source_energy_ev*xstar_constants::kLegacyCollisionErgPerEv;
+            c.ans6=c.ans1*source_energy_ev*xstar_constants::kLegacyCollisionErgPerEv;
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE76_TWO_PHOTON: {

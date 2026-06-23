@@ -1,5 +1,14 @@
 # CHANGELOG
 
+# 0.6.48.7.46.21.14 - 2026-06-22
+
+- Reimplement the native Type-73 branch from `ucalc.py` rather than the generic compact collision helper.
+- Use the literal packed wavelength energy `12398.4016/abs(r[0])` for the Type-73 excitation exponential and `ans5`/`ans6`, preserving the source operation order and legacy collision constants.
+- Retain the lowerer's valid compact Type-73 integer payload `[Z]`; endpoint rows remain stored in `lower_row` and `upper_row`.
+- Correct the adjacent Type-72 branch to use the same legacy `0.861707` eV-per-10^4-K coefficient as `ucalc.py`.
+- Audit the active Type-60/62, Type-68, Type-69, Type-76, Type-77, and Type-95 constant domains and preserve their existing source-faithful implementations.
+- Add focused `.10e` and `.8e` Magnesium Type-73 `ans5`/`ans6` qualification gates; ABI remains 60487.
+
 # 0.6.48.7.46.21.13.2.1 - 2026-06-22
 
 - Replace the Type-57 diagnostic threshold bit-identity gate with canonical normalized `.10e` comparison semantics.
