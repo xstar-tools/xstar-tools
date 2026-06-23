@@ -1,5 +1,13 @@
 # CHANGELOG
 
+# 0.6.48.7.46.21.13.2.1 - 2026-06-22
+
+- Replace the Type-57 diagnostic threshold bit-identity gate with canonical normalized `.10e` comparison semantics.
+- Treat the variable 342–346-row source answer domain as a valid subset of the complete 368-record-per-sequence native diagnostic inventory.
+- Decouple source-domain, native-inventory, E10-value, and active-positive gates so direct evidence is not overwritten by an unrelated structural gate.
+- Preserve all accepted Type-68, Type-99, Type-49, Type-53, Type-57, Hydrogen, Helium, continuum, and fixed-state calculations; ABI remains 60487.
+- Keep production promotion blocked by the independent canonical Thermal/controller residuals.
+
 # 0.6.48.7.46.21.13.2 - 2026-06-22
 
 - Export serialized `line_energy_ev`, `atomic_mass_amu`, and `natural_width_ev` metadata for every native opcode, correcting the Type-57 diagnostic threshold omission without changing evaluated physics.

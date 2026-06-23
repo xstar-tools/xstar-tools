@@ -18,7 +18,7 @@ MILESTONE = ROOT / "run_v048746220_magnesium_type57_thermal_closure.sh"
 
 
 def test_release_version_and_abi() -> None:
-    assert xstar_tools.__version__ == "0.6.48.7.46.21.13.2"
+    assert xstar_tools.__version__ == "0.6.48.7.46.21.13.2.1"
     assert "XSTAR_API_ABI_VERSION 60487u" in (ROOT / "src/xstar_tools/xstar/cpp/xstar_api.h").read_text()
 
 

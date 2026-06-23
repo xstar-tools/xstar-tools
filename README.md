@@ -1,3 +1,7 @@
+## v0.6.48.7.46.21.13.2.1 Type-57 diagnostic-threshold E10 gate-semantics hotfix
+
+This diagnostic-only hotfix replaces the Type-57 threshold bit-exact gate with canonical `.10e` equivalence and separates the valid variable-size source answer domain from the complete 368-record native diagnostic inventory. It changes no physics, Thermal totals, controller logic, radiation grids, or ABI. Use `run_v04874622321_type57_diagnostic_threshold_e10_gate_semantics_hotfix.sh`.
+
 ## v0.6.48.7.46.21.11 Magnesium Type-53 persistent `leveltemp` closure
 
 This qualification release fixes the remaining dominant `mg_heating2` discrepancy by transporting literal Type-13 destination-column candidates for all twelve Mg stages and resolving the mutable `leveltemp` owner only after the active ion-stage interval is known. It recomputes Type-53 `ans5/ans6` from native pre-energy accumulators, preserves unowned persistent columns, and fails closed on stale serialized cases. The v21.10 Type-57 and earlier Hydrogen/Helium corrections remain enabled; ABI 60487 is unchanged.
