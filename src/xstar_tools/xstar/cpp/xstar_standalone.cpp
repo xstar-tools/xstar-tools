@@ -37,6 +37,7 @@ struct Options {
     std::string dsec_radiation_csv;
     std::string continuum_tau_csv;
     std::string call_start_workspace_dir;
+    std::string runtime_state_workspace_dir;
     std::string mg_primary_budget_csv;
     std::string call1_thermal_budget_csv;
     std::string global_workspace_mode = "all";
@@ -56,6 +57,7 @@ struct Options {
     std::size_t evaluation = 61;
     bool allow_scaffold = false;
     bool skip_fits = false;
+    bool source_trajectory_guard = false;
     std::size_t controller_smoke_evaluations = 0;
     std::size_t controller_prefix_evaluations = 0;
 };
@@ -81,7 +83,7 @@ void usage(std::ostream& output) {
         "  xstar_cpp fixed-state-batch-self-test --case-dir RAW_PROGRAM_DIR [--batch N]\n"
         "  xstar_cpp run-fixed-trajectory --case-dir RAW_PROGRAM_DIR --trajectory-csv CSV [--radiation-csv CSV] [--dsec-radiation-csv CSV] [--continuum-tau-csv CSV] [--dsec-covering-fraction VALUE] [--temperature-k VALUE] [--diagnostics-dir DIR] --output-dir DIR\n"
         "  xstar_cpp run-fixed-evaluation --case-dir RAW_PROGRAM_DIR --trajectory-csv CSV --evaluation N [--radiation-csv CSV] [--dsec-radiation-csv CSV] [--continuum-tau-csv CSV] [--call-start-workspace-dir DIR] [--global-workspace-mode none|xilevg|xilevg-bilevg|xilevg-rnisg|all] [--dsec-covering-fraction VALUE] [--temperature-k VALUE] [--diagnostics-dir DIR] --output-dir DIR\n"
-        "  xstar_cpp run-fixed-dsec --case-dir RAW_PROGRAM_DIR --trajectory-csv CSV [--radiation-csv CSV] [--dsec-radiation-csv CSV] [--continuum-tau-csv CSV] [--dsec-covering-fraction VALUE] [--temperature-k VALUE] [--diagnostics-dir DIR] [--skip-fits] [--controller-smoke-evaluations N] [--controller-prefix-evaluations N] [--call-start-workspace-dir DIR] [--mg-primary-budget-csv CSV] [--call1-thermal-budget-csv CSV] --output-dir DIR\n"
+        "  xstar_cpp run-fixed-dsec --case-dir RAW_PROGRAM_DIR --trajectory-csv CSV [--radiation-csv CSV] [--dsec-radiation-csv CSV] [--continuum-tau-csv CSV] [--dsec-covering-fraction VALUE] [--temperature-k VALUE] [--diagnostics-dir DIR] [--skip-fits] [--controller-smoke-evaluations N] [--controller-prefix-evaluations N] [--call-start-workspace-dir DIR] [--runtime-state-workspace-dir DIR] [--source-trajectory-guard] [--mg-primary-budget-csv CSV] [--call1-thermal-budget-csv CSV] --output-dir DIR\n"
         "  xstar_cpp production-self-test --case-dir DIR\n"
         "  xstar_cpp production-batch-self-test --case-dir DIR [--batch N]\n"
         "  xstar_cpp run-compiled-case --case-dir DIR --output-dir DIR\n"
@@ -155,6 +157,10 @@ bool parse_options(int argc, char** argv, Options& options, std::string& error) 
             const char* value = require_value("--call-start-workspace-dir");
             if (!value) return false;
             options.call_start_workspace_dir = value;
+        } else if (arg == "--runtime-state-workspace-dir") {
+            const char* value = require_value("--runtime-state-workspace-dir");
+            if (!value) return false;
+            options.runtime_state_workspace_dir = value;
         } else if (arg == "--global-workspace-mode") {
             const char* value = require_value("--global-workspace-mode");
             if (!value) return false;
@@ -243,6 +249,8 @@ bool parse_options(int argc, char** argv, Options& options, std::string& error) 
             options.allow_scaffold = true;
         } else if (arg == "--skip-fits") {
             options.skip_fits = true;
+        } else if (arg == "--source-trajectory-guard") {
+            options.source_trajectory_guard = true;
         } else if (arg == "--controller-smoke-evaluations") {
             const char* value = require_value("--controller-smoke-evaluations");
             if (!value || !parse_size(value, options.controller_smoke_evaluations)) {
@@ -490,7 +498,7 @@ void initialize_element(int element_z, ElementBuffers& b,
     input = {};
     input.struct_size = sizeof(input);
     input.abi_version = XSTAR_ELEMENT_ENGINE_ABI_VERSION;
-    input.max_lucy_iterations = 100;
+    input.max_lucy_iterations = 200;
     input.max_fixed_point_iterations = 200;
     input.lucy_tolerance = 1.0e-2;
     input.fixed_point_tolerance = 1.0e-2;
@@ -1860,6 +1868,18 @@ int command_run_fixed_evaluation(const Options& options) {
         std::filesystem::copy_file(
             diagonal_path, output_root / "native_thermal_diagonal_ledger.csv",
             std::filesystem::copy_options::overwrite_existing);
+        std::ostringstream canonical_name;
+        canonical_name << "evaluation_" << std::setw(4) << std::setfill('0') << options.evaluation
+                       << "_canonical_thermal_terms.csv";
+        const auto canonical_path = diagnostics_root / canonical_name.str();
+        if (!std::filesystem::is_regular_file(canonical_path)) {
+            std::cerr << "evaluation canonical Thermal term diagnostics missing: " << canonical_path << "\n";
+            xstar_fixed_state_context_destroy(context);
+            return 8;
+        }
+        std::filesystem::copy_file(
+            canonical_path, output_root / "native_canonical_thermal_terms.csv",
+            std::filesystem::copy_options::overwrite_existing);
         std::ostringstream continuum_name;
         continuum_name << "evaluation_" << std::setw(4) << std::setfill('0') << options.evaluation
                        << "_continuum_workspace.csv";
@@ -1958,6 +1978,13 @@ struct CallStartWorkspace {
     std::vector<double> global_rnisg;
 };
 
+struct RuntimeStateWorkspace {
+    int call_index = 0;
+    std::filesystem::path directory;
+    std::filesystem::path line_tau_in;
+    std::filesystem::path line_tau_out;
+};
+
 struct MgPrimaryBudget {
     double heating = 0.0;
     double cooling = 0.0;
@@ -1999,6 +2026,86 @@ std::vector<CallStartWorkspace> read_call_start_workspaces(const std::string& di
             throw std::runtime_error("call-start global-level payload size mismatch");
         }
         out.push_back(std::move(one));
+    }
+    return out;
+}
+
+CallStartWorkspace read_runtime_state_workspace_values(
+    const RuntimeStateWorkspace& workspace) {
+    const std::string prefix = "call_" + std::to_string(workspace.call_index) + "_";
+    CallStartWorkspace values;
+    values.radiation_energy = read_binary_double_vector(
+        workspace.directory / (prefix + "radiation_energy.bin"));
+    values.bremsa = read_binary_double_vector(
+        workspace.directory / (prefix + "bremsa.bin"));
+    values.continuum_tau_in = read_binary_double_vector(
+        workspace.directory / (prefix + "continuum_tau_in.bin"));
+    values.continuum_tau_out = read_binary_double_vector(
+        workspace.directory / (prefix + "continuum_tau_out.bin"));
+    values.global_xilevg = read_binary_double_vector(
+        workspace.directory / (prefix + "global_xilevg.bin"));
+    values.global_bilevg = read_binary_double_vector(
+        workspace.directory / (prefix + "global_bilevg.bin"));
+    values.global_rnisg = read_binary_double_vector(
+        workspace.directory / (prefix + "global_rnisg.bin"));
+    if (values.radiation_energy.size() != values.bremsa.size()) {
+        throw std::runtime_error("runtime-state radiation payload size mismatch");
+    }
+    if (values.continuum_tau_in.size() != values.continuum_tau_out.size()) {
+        throw std::runtime_error("runtime-state continuum tau payload size mismatch");
+    }
+    if (!(values.global_xilevg.size() == values.global_bilevg.size() &&
+          values.global_xilevg.size() == values.global_rnisg.size())) {
+        throw std::runtime_error("runtime-state global-level payload size mismatch");
+    }
+    return values;
+}
+
+std::vector<RuntimeStateWorkspace> read_runtime_state_workspaces(
+    const std::string& directory,
+    const std::vector<TrajectoryRow>& reference) {
+    std::vector<RuntimeStateWorkspace> out;
+    if (directory.empty()) return out;
+    out.resize(61);
+    std::array<bool, 61> seen{};
+    const std::filesystem::path root(directory);
+    for (const auto& row : reference) {
+        const std::size_t sequence = static_cast<std::size_t>(std::stoull(row.sequence));
+        if (sequence < 1 || sequence > 61 || seen[sequence - 1]) {
+            throw std::runtime_error("runtime-state workspace source sequence inventory is invalid");
+        }
+        if (row.call_index < 1 || row.call_index > 4) {
+            throw std::runtime_error("runtime-state workspace call identity is invalid");
+        }
+        seen[sequence - 1] = true;
+        RuntimeStateWorkspace one;
+        one.call_index = static_cast<int>(row.call_index);
+        char evaluation_name[32]{};
+        std::snprintf(evaluation_name, sizeof(evaluation_name), "evaluation_%04zu", sequence);
+        one.directory = root / evaluation_name;
+        const std::string prefix = "call_" + std::to_string(one.call_index) + "_";
+        for (const char* name : {
+                 "radiation_energy.bin", "bremsa.bin", "continuum_tau_in.bin",
+                 "continuum_tau_out.bin", "global_xilevg.bin", "global_bilevg.bin",
+                 "global_rnisg.bin"}) {
+            if (!std::filesystem::is_regular_file(one.directory / (prefix + name))) {
+                throw std::runtime_error(
+                    "runtime-state workspace is missing payload " + std::string(name) +
+                    ": " + one.directory.string());
+            }
+        }
+        one.line_tau_in = one.directory / (prefix + "line_tau_in.bin");
+        one.line_tau_out = one.directory / (prefix + "line_tau_out.bin");
+        if (!std::filesystem::is_regular_file(one.line_tau_in) ||
+            !std::filesystem::is_regular_file(one.line_tau_out)) {
+            throw std::runtime_error(
+                "runtime-state workspace is missing line optical-depth payloads: " +
+                one.directory.string());
+        }
+        out[sequence - 1] = std::move(one);
+    }
+    if (!std::all_of(seen.begin(), seen.end(), [](bool value) { return value; })) {
+        throw std::runtime_error("runtime-state workspace inventory does not cover all 61 source sequences");
     }
     return out;
 }
@@ -2079,12 +2186,42 @@ struct FixedDsecEvaluatorData {
     std::string thermal_budget_csv;
     bool writing_final_snapshot = false;
     std::vector<CallStartWorkspace> call_start_workspaces;
+    std::vector<RuntimeStateWorkspace> runtime_state_workspaces;
+    CallStartWorkspace current_runtime_state_workspace;
     std::vector<MgPrimaryBudget> mg_primary_budget;
     std::vector<Call1ThermalOracle> call1_thermal_oracle;
+    std::array<std::vector<std::size_t>,4> dsec_source_sequences;
+    std::array<std::size_t,4> final_source_sequences{{0,0,0,0}};
+    std::array<std::size_t,4> final_evaluation_indices{{0,0,0,0}};
+    std::array<double,61> source_temperature_t4{};
+    std::array<double,61> source_electron_fraction{};
+    bool source_trajectory_guard = false;
+    bool source_trajectory_diverged = false;
+    std::size_t divergence_sequence = 0;
+    std::size_t divergence_call_index = 0;
+    std::size_t divergence_evaluation_index = 0;
+    double divergence_expected_temperature_t4 = 0.0;
+    double divergence_actual_temperature_t4 = 0.0;
+    double divergence_expected_electron_fraction = 0.0;
+    double divergence_actual_electron_fraction = 0.0;
     std::size_t call1_thermal_oracle_evaluations = 0;
     std::size_t transported_workspace_evaluations = 0;
+    std::size_t sequence_workspace_evaluations = 0;
     std::size_t mg_primary_override_evaluations = 0;
 };
+
+constexpr double kCanonicalComparisonZeroFloorV048746225 = 1.0e-30;
+
+std::string canonical_e7(double value) {
+    const double normalized = std::abs(value) < kCanonicalComparisonZeroFloorV048746225 ? 0.0 : value;
+    std::ostringstream stream;
+    stream << std::scientific << std::setprecision(7) << normalized;
+    return stream.str();
+}
+
+bool canonical_e7_equal(double left, double right) {
+    return std::isfinite(left) && std::isfinite(right) && canonical_e7(left) == canonical_e7(right);
+}
 
 void set_callback_error(char* error, std::size_t error_size, const std::string& message) {
     if (!error || error_size == 0) return;
@@ -2103,12 +2240,67 @@ int fixed_dsec_evaluator(
         return 1;
     }
     FixedDsecSnapshot snapshot;
-    snapshot.kind = "dsec";
-    snapshot.sequence = data->snapshots->size() + 1;
     snapshot.call_index = data->call_index;
-    snapshot.evaluation_index = ++data->evaluation_index;
+    if (snapshot.call_index < 1 || snapshot.call_index > 4) {
+        set_callback_error(error, error_size, "fixed-state DSEC evaluator call index is outside 1..4");
+        return 1;
+    }
+    const std::size_t call_slot = snapshot.call_index - 1;
+    if (data->writing_final_snapshot) {
+        snapshot.kind = "final";
+        snapshot.sequence = data->final_source_sequences[call_slot];
+        snapshot.evaluation_index = data->final_evaluation_indices[call_slot];
+    } else {
+        snapshot.kind = "dsec";
+        snapshot.evaluation_index = ++data->evaluation_index;
+        const auto& source_sequences = data->dsec_source_sequences[call_slot];
+        if (snapshot.evaluation_index == 0 || snapshot.evaluation_index > source_sequences.size()) {
+            set_callback_error(error, error_size, "fixed-state DSEC evaluation is outside the source trajectory inventory");
+            return 1;
+        }
+        snapshot.sequence = source_sequences[snapshot.evaluation_index - 1];
+    }
+    if (snapshot.sequence < 1 || snapshot.sequence > 61) {
+        set_callback_error(error, error_size, "fixed-state DSEC source sequence is outside 1..61");
+        return 1;
+    }
     snapshot.temperature_t4 = trial_state->temperature_t4;
     snapshot.electron_fraction_input = trial_state->electron_fraction_xee;
+    if (data->source_trajectory_guard) {
+        const std::size_t slot = snapshot.sequence - 1;
+        const double expected_t4 = data->source_temperature_t4[slot];
+        const double expected_xee = data->source_electron_fraction[slot];
+        if (!canonical_e7_equal(snapshot.temperature_t4, expected_t4) ||
+            !canonical_e7_equal(snapshot.electron_fraction_input, expected_xee)) {
+            data->source_trajectory_diverged = true;
+            data->divergence_sequence = snapshot.sequence;
+            data->divergence_call_index = snapshot.call_index;
+            data->divergence_evaluation_index = snapshot.evaluation_index;
+            data->divergence_expected_temperature_t4 = expected_t4;
+            data->divergence_actual_temperature_t4 = snapshot.temperature_t4;
+            data->divergence_expected_electron_fraction = expected_xee;
+            data->divergence_actual_electron_fraction = snapshot.electron_fraction_input;
+            std::ostringstream detail;
+            detail << std::setprecision(17)
+                   << "source trajectory diverged before sequence " << snapshot.sequence
+                   << ": expected_temperature_t4=" << expected_t4
+                   << " actual_temperature_t4=" << snapshot.temperature_t4
+                   << " expected_electron_fraction=" << expected_xee
+                   << " actual_electron_fraction=" << snapshot.electron_fraction_input;
+            set_callback_error(error, error_size, detail.str());
+            return 1;
+        }
+    }
+    // The historical qualification path launched one process per source
+    // sequence. run-fixed-dsec owns one serial process for all 61 states, so
+    // bind the immutable trajectory ordinal before every fixed-state call.
+    // This standalone controller is single-threaded; the process environment
+    // remains the compatibility boundary for the existing qualification code.
+    const std::string source_sequence_text = std::to_string(snapshot.sequence);
+    if (::setenv("XSTAR_QUALIFICATION_SOURCE_SEQUENCE", source_sequence_text.c_str(), 1) != 0) {
+        set_callback_error(error, error_size, "cannot bind XSTAR_QUALIFICATION_SOURCE_SEQUENCE for fixed-state DSEC evaluation");
+        return 1;
+    }
     snapshot.populations.assign(static_cast<std::size_t>(data->program_info.population_rows), 0.0);
     snapshot.continuum_spectrum.assign(data->energy.size(), 0.0);
     snapshot.spectrum.assign(data->energy.size(), 0.0);
@@ -2136,7 +2328,37 @@ int fixed_dsec_evaluator(
         input.temperature_k = data->workspace_anchor_temperature_k;
     }
     const CallStartWorkspace* call_workspace = nullptr;
-    if (data->call_index >= 1 && data->call_index <= data->call_start_workspaces.size()) {
+    if (!data->runtime_state_workspaces.empty()) {
+        if (data->runtime_state_workspaces.size() != 61) {
+            set_callback_error(error, error_size, "runtime-state workspace inventory is not 61 rows");
+            return 1;
+        }
+        const auto& runtime_workspace = data->runtime_state_workspaces[snapshot.sequence - 1];
+        if (runtime_workspace.call_index != static_cast<int>(snapshot.call_index)) {
+            set_callback_error(error, error_size, "runtime-state workspace call identity does not match source trajectory");
+            return 1;
+        }
+        const std::string tau_in_path = runtime_workspace.line_tau_in.string();
+        const std::string tau_out_path = runtime_workspace.line_tau_out.string();
+        if (::setenv("XSTAR_QUALIFICATION_HYDROGEN_TYPE50_LINE_TAU_IN_BIN", tau_in_path.c_str(), 1) != 0 ||
+            ::setenv("XSTAR_QUALIFICATION_HYDROGEN_TYPE50_LINE_TAU_OUT_BIN", tau_out_path.c_str(), 1) != 0 ||
+            ::setenv("XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_LINE_TAU_IN_BIN", tau_in_path.c_str(), 1) != 0 ||
+            ::setenv("XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_LINE_TAU_OUT_BIN", tau_out_path.c_str(), 1) != 0) {
+            set_callback_error(error, error_size, "cannot bind per-sequence Type-50 line optical-depth payloads");
+            return 1;
+        }
+        try {
+            data->current_runtime_state_workspace =
+                read_runtime_state_workspace_values(runtime_workspace);
+        } catch (const std::exception& exc) {
+            set_callback_error(
+                error, error_size,
+                std::string("cannot load per-sequence runtime-state workspace: ") + exc.what());
+            return 1;
+        }
+        call_workspace = &data->current_runtime_state_workspace;
+        ++data->sequence_workspace_evaluations;
+    } else if (data->call_index >= 1 && data->call_index <= data->call_start_workspaces.size()) {
         call_workspace = &data->call_start_workspaces[data->call_index - 1];
     }
     if (call_workspace) {
@@ -2152,7 +2374,9 @@ int fixed_dsec_evaluator(
         input.global_level_count = call_workspace->global_xilevg.size();
         input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_GLOBAL_LEVEL_WORKSPACES;
         snapshot.dsec_runtime_state_abi = true;
-        ++data->transported_workspace_evaluations;
+        if (data->runtime_state_workspaces.empty()) {
+            ++data->transported_workspace_evaluations;
+        }
     } else if (workspace_state_match && !data->dsec_energy.empty() && !data->continuum_tau_in.empty()) {
         input.dsec_radiation_energy_ev = data->dsec_energy.data();
         input.dsec_bremsa = data->dsec_bremsa.data();
@@ -2282,9 +2506,10 @@ int append_final_fixed_snapshot(
     const int rc = fixed_dsec_evaluator(&data, &state, &ignored, message.data(), message.size());
     data.writing_final_snapshot = false;
     if (rc != 0) return rc;
-    snapshots.back().kind = "final";
-    snapshots.back().sequence = before + 1;
-    snapshots.back().evaluation_index = 1;
+    if (snapshots.size() != before + 1 || snapshots.back().kind != "final") {
+        std::snprintf(message.data(), message.size(), "%s", "final fixed-state snapshot identity was not preserved");
+        return 1;
+    }
     return 0;
 }
 
@@ -2354,6 +2579,45 @@ int command_run_fixed_dsec(const Options& options) {
     evaluator_data.program_info = info;
     evaluator_data.cumulative_stats = &cumulative;
     evaluator_data.snapshots = &snapshots;
+    try {
+        std::array<bool,61> seen_source_sequence{};
+        for (const auto& row : reference) {
+            const std::size_t source_sequence = static_cast<std::size_t>(std::stoull(row.sequence));
+            if (source_sequence < 1 || source_sequence > 61 || seen_source_sequence[source_sequence - 1]) {
+                throw std::runtime_error("reference trajectory source sequence inventory is invalid");
+            }
+            seen_source_sequence[source_sequence - 1] = true;
+            evaluator_data.source_temperature_t4[source_sequence - 1] = row.temperature_t4;
+            evaluator_data.source_electron_fraction[source_sequence - 1] = row.electron_fraction;
+            if (row.call_index < 1 || row.call_index > 4 || row.evaluation_index <= 0) {
+                throw std::runtime_error("reference trajectory call/evaluation identity is invalid");
+            }
+            const std::size_t call_slot = static_cast<std::size_t>(row.call_index - 1);
+            if (row.kind == "dsec") {
+                evaluator_data.dsec_source_sequences[call_slot].push_back(source_sequence);
+            } else if (row.kind == "final") {
+                if (evaluator_data.final_source_sequences[call_slot] != 0) {
+                    throw std::runtime_error("reference trajectory contains duplicate final call identity");
+                }
+                evaluator_data.final_source_sequences[call_slot] = source_sequence;
+                evaluator_data.final_evaluation_indices[call_slot] = static_cast<std::size_t>(row.evaluation_index);
+            } else {
+                throw std::runtime_error("reference trajectory contains unsupported kind");
+            }
+        }
+        for (std::size_t call_slot = 0; call_slot < 4; ++call_slot) {
+            if (evaluator_data.dsec_source_sequences[call_slot].size() != dsec_limits[call_slot] ||
+                evaluator_data.final_source_sequences[call_slot] == 0 ||
+                evaluator_data.final_evaluation_indices[call_slot] == 0) {
+                throw std::runtime_error("reference trajectory source-sequence mapping is incomplete");
+            }
+        }
+    } catch (const std::exception& exc) {
+        std::cerr << exc.what() << "\n";
+        xstar_thermal_context_destroy(thermal_context);
+        xstar_fixed_state_context_destroy(fixed_context);
+        return 6;
+    }
     RadiationField radiation;
     try { radiation=read_radiation_field(options.radiation_csv); }
     catch (const std::exception& exc) {
@@ -2385,6 +2649,8 @@ int command_run_fixed_dsec(const Options& options) {
     }
     try {
         evaluator_data.call_start_workspaces = read_call_start_workspaces(options.call_start_workspace_dir);
+        evaluator_data.runtime_state_workspaces = read_runtime_state_workspaces(
+            options.runtime_state_workspace_dir, reference);
         evaluator_data.mg_primary_budget = read_mg_primary_budget(options.mg_primary_budget_csv);
         evaluator_data.call1_thermal_oracle = read_call1_thermal_oracle(options.call1_thermal_budget_csv);
     } catch (const std::exception& exc) {
@@ -2395,6 +2661,7 @@ int command_run_fixed_dsec(const Options& options) {
     }
     evaluator_data.has_dsec_covering_fraction = options.has_dsec_covering_fraction;
     evaluator_data.dsec_covering_fraction = options.dsec_covering_fraction;
+    evaluator_data.source_trajectory_guard = options.source_trajectory_guard;
     if (options.has_temperature_k_override && reference.size() >= 60) {
         evaluator_data.has_workspace_anchor = true;
         evaluator_data.workspace_anchor_temperature_k = options.temperature_k_override;
@@ -2533,6 +2800,128 @@ int command_run_fixed_dsec(const Options& options) {
             thermal_context, &config, &state, fixed_dsec_evaluator, &evaluator_data,
             trace.data(), trace.size(), &trace_count, &stats, message.data(), message.size());
         if (rc != 0) {
+            if (evaluator_data.source_trajectory_diverged) {
+                dsec_evaluations += static_cast<std::size_t>(stats.evaluations_completed);
+                call_stats.push_back(stats);
+                const std::size_t retained_trace_count = std::min(trace_count, trace.size());
+                controller_call_traces.emplace_back(trace.begin(), trace.begin() + retained_trace_count);
+                std::filesystem::create_directories(options.output_dir);
+                const std::filesystem::path output_root(options.output_dir);
+
+                std::ofstream states(output_root / "native_dsec_trajectory.csv");
+                states << "sequence,kind,call_index,evaluation_index,temperature_t4,electron_fraction_input,computed_electron_fraction,charge_residual,hmctot,element_heating,element_cooling,continuum_heating,continuum_cooling,total_heating,total_cooling,dsec_runtime_state_abi,reference_temperature_t4,reference_electron_fraction,reference_charge_residual,reference_hmctot,temperature_delta,electron_fraction_delta,charge_residual_delta,hmctot_delta\n";
+                for (const auto& snapshot : snapshots) {
+                    const auto* ref = find_reference_row(reference, snapshot.kind, snapshot.call_index, snapshot.evaluation_index);
+                    const double ref_t4 = ref ? ref->temperature_t4 : 0.0;
+                    const double ref_xee = ref ? ref->electron_fraction : 0.0;
+                    const double ref_elcter = ref ? ref->reference_elcter : 0.0;
+                    const double ref_hmctot = ref ? ref->reference_hmctot : 0.0;
+                    states << snapshot.sequence << ',' << snapshot.kind << ',' << snapshot.call_index << ','
+                           << snapshot.evaluation_index << ',' << std::setprecision(17)
+                           << snapshot.temperature_t4 << ',' << snapshot.electron_fraction_input << ','
+                           << snapshot.computed_electron_fraction << ',' << snapshot.charge_residual << ','
+                           << snapshot.hmctot << ',' << snapshot.element_heating << ',' << snapshot.element_cooling << ','
+                           << snapshot.continuum_heating << ',' << snapshot.continuum_cooling << ','
+                           << snapshot.total_heating << ',' << snapshot.total_cooling << ','
+                           << (snapshot.dsec_runtime_state_abi ? 1 : 0) << ','
+                           << ref_t4 << ',' << ref_xee << ',' << ref_elcter << ',' << ref_hmctot << ','
+                           << snapshot.temperature_t4 - ref_t4 << ','
+                           << snapshot.electron_fraction_input - ref_xee << ','
+                           << snapshot.charge_residual - ref_elcter << ','
+                           << snapshot.hmctot - ref_hmctot << '\n';
+                }
+
+                const auto event_name_prefix = [](uint32_t code) -> const char* {
+                    switch (code) {
+                        case XSTAR_THERMAL_EVENT_BEGIN: return "begin";
+                        case XSTAR_THERMAL_EVENT_AFTER_EVALUATION: return "after_evaluation";
+                        case XSTAR_THERMAL_EVENT_CHARGE_MULTIPLY: return "charge_multiply";
+                        case XSTAR_THERMAL_EVENT_CHARGE_DIVIDE: return "charge_divide";
+                        case XSTAR_THERMAL_EVENT_CHARGE_SECANT: return "charge_secant";
+                        case XSTAR_THERMAL_EVENT_CHARGE_EXIT: return "charge_exit";
+                        case XSTAR_THERMAL_EVENT_TEMPERATURE_MULTIPLY: return "temperature_multiply";
+                        case XSTAR_THERMAL_EVENT_TEMPERATURE_DIVIDE: return "temperature_divide";
+                        case XSTAR_THERMAL_EVENT_TEMPERATURE_SECANT: return "temperature_secant";
+                        case XSTAR_THERMAL_EVENT_TEMPERATURE_STAGNATION: return "temperature_stagnation";
+                        case XSTAR_THERMAL_EVENT_FINISH: return "finish";
+                        default: return "unknown";
+                    }
+                };
+                std::ofstream controller_events(output_root / "native_dsec_controller_events.csv");
+                controller_events << "call_index,event_sequence,event_code,event_name,evaluation_index,ntotit,nnt,nntt,nnx,nnxx,lnerr,temperature_t4,electron_fraction_xee,hmctot,elcter,normalized_charge_residual,temperature_stagnation_metric\n";
+                for (std::size_t call_slot = 0; call_slot < controller_call_traces.size(); ++call_slot) {
+                    const auto& events = controller_call_traces[call_slot];
+                    for (std::size_t index = 0; index < events.size(); ++index) {
+                        const auto& event = events[index];
+                        controller_events << call_slot + 1 << ',' << index + 1 << ',' << event.event_code << ','
+                                          << event_name_prefix(event.event_code) << ',' << event.evaluation_index << ','
+                                          << event.ntotit << ',' << event.nnt << ',' << event.nntt << ',' << event.nnx << ','
+                                          << event.nnxx << ',' << event.lnerr << ',' << std::setprecision(17)
+                                          << event.temperature_t4 << ',' << event.electron_fraction_xee << ',' << event.hmctot << ','
+                                          << event.elcter << ',' << event.normalized_charge_residual << ','
+                                          << event.temperature_stagnation_metric << '\n';
+                    }
+                }
+
+                std::ofstream controller_calls(output_root / "native_dsec_call_summary.csv");
+                controller_calls << "call_index,expected_evaluations,actual_evaluations,charge_converged,thermal_converged,prefix_terminated,lnerr,final_temperature_t4,final_electron_fraction_xee,final_hmctot,final_elcter,termination_reason\n";
+                for (std::size_t call_slot = 0; call_slot < call_stats.size(); ++call_slot) {
+                    const auto& one = call_stats[call_slot];
+                    const bool divergent_call = call_slot + 1 == evaluator_data.divergence_call_index;
+                    const char* termination_reason = divergent_call ? "source_trajectory_diverged" :
+                        (one.prefix_terminated ? "maximum_evaluations" :
+                         (one.thermal_converged ? "thermal_tolerance" :
+                          (one.lnerr == -2 ? "temperature_stagnation" :
+                           (one.lnerr == 2 ? "temperature_iteration_limit" : "other"))));
+                    controller_calls << call_slot + 1 << ',' << dsec_limits[call_slot] << ','
+                                     << one.evaluations_completed << ',' << one.charge_converged << ','
+                                     << one.thermal_converged << ',' << (divergent_call ? 1 : one.prefix_terminated) << ','
+                                     << one.lnerr << ',' << std::setprecision(17) << one.final_temperature_t4 << ','
+                                     << one.final_electron_fraction_xee << ',' << one.final_hmctot << ','
+                                     << one.final_elcter << ',' << termination_reason << '\n';
+                }
+
+                const std::size_t final_evaluations = static_cast<std::size_t>(std::count_if(
+                    snapshots.begin(), snapshots.end(), [](const FixedDsecSnapshot& one) { return one.kind == "final"; }));
+                const std::size_t workspace_evaluations = static_cast<std::size_t>(std::count_if(
+                    snapshots.begin(), snapshots.end(), [](const FixedDsecSnapshot& one) { return one.dsec_runtime_state_abi; }));
+                std::ofstream summary(output_root / "native_dsec_summary.json");
+                summary << std::setprecision(17)
+                        << "{\n  \"schema_version\": \"0.6.48.7.46.21.9\",\n"
+                        << "  \"trajectory_mode\": \"native_dsec_controller_source_trajectory_guard\",\n"
+                        << "  \"result\": \"REJECT\",\n"
+                        << "  \"source_trajectory_diverged\": true,\n"
+                        << "  \"termination_reason\": \"source_trajectory_diverged\",\n"
+                        << "  \"divergence_sequence\": " << evaluator_data.divergence_sequence << ",\n"
+                        << "  \"divergence_call_index\": " << evaluator_data.divergence_call_index << ",\n"
+                        << "  \"divergence_evaluation_index\": " << evaluator_data.divergence_evaluation_index << ",\n"
+                        << "  \"expected_temperature_t4\": " << evaluator_data.divergence_expected_temperature_t4 << ",\n"
+                        << "  \"actual_temperature_t4\": " << evaluator_data.divergence_actual_temperature_t4 << ",\n"
+                        << "  \"expected_electron_fraction\": " << evaluator_data.divergence_expected_electron_fraction << ",\n"
+                        << "  \"actual_electron_fraction\": " << evaluator_data.divergence_actual_electron_fraction << ",\n"
+                        << "  \"dsec_calls_started\": " << call_stats.size() << ",\n"
+                        << "  \"dsec_evaluations\": " << dsec_evaluations << ",\n"
+                        << "  \"final_evaluations\": " << final_evaluations << ",\n"
+                        << "  \"total_evaluations\": " << snapshots.size() << ",\n"
+                        << "  \"runtime_state_workspace_evaluations\": " << workspace_evaluations << ",\n"
+                        << "  \"sequence_runtime_workspace_evaluations\": " << evaluator_data.sequence_workspace_evaluations << ",\n"
+                        << "  \"python_callbacks\": " << cumulative.python_callbacks << ",\n"
+                        << "  \"production_promotion_ready\": false\n}\n";
+                std::cerr << "native DSEC source trajectory diverged before sequence "
+                          << evaluator_data.divergence_sequence << "; wrote prefix qualification outputs\n";
+                std::cout << "dsec_evaluations=" << dsec_evaluations
+                          << "\nfinal_evaluations=" << final_evaluations
+                          << "\ntotal_evaluations=" << snapshots.size()
+                          << "\nruntime_state_workspace_evaluations=" << workspace_evaluations
+                          << "\nsequence_runtime_workspace_evaluations=" << evaluator_data.sequence_workspace_evaluations
+                          << "\npython_callbacks=" << cumulative.python_callbacks
+                          << "\nsource_trajectory_diverged=true"
+                          << "\ndivergence_sequence=" << evaluator_data.divergence_sequence
+                          << "\nRESULT=REJECT\n";
+                xstar_thermal_context_destroy(thermal_context);
+                xstar_fixed_state_context_destroy(fixed_context);
+                return 20;
+            }
             std::cerr << "native DSEC call " << call << " failed: " << message.data() << "\n";
             xstar_thermal_context_destroy(thermal_context);
             xstar_fixed_state_context_destroy(fixed_context);
@@ -2613,9 +3002,16 @@ int command_run_fixed_dsec(const Options& options) {
     double max_electron_fraction_delta = 0.0;
     double max_charge_residual_delta = 0.0;
     double max_hmctot_delta = 0.0;
+    std::array<bool,61> emitted_source_sequence{};
     for (std::size_t index = 0; index < snapshots.size(); ++index) {
         auto& snapshot = snapshots[index];
-        snapshot.sequence = index + 1;
+        if (snapshot.sequence < 1 || snapshot.sequence > 61 || emitted_source_sequence[snapshot.sequence - 1]) {
+            std::cerr << "native DSEC snapshot source-sequence inventory is invalid\n";
+            xstar_thermal_context_destroy(thermal_context);
+            xstar_fixed_state_context_destroy(fixed_context);
+            return 9;
+        }
+        emitted_source_sequence[snapshot.sequence - 1] = true;
         const TrajectoryRow* reference_row = find_reference_row(reference, snapshot.kind, snapshot.call_index, snapshot.evaluation_index);
         const double ref_t = reference_row ? reference_row->temperature_t4 : std::numeric_limits<double>::quiet_NaN();
         const double ref_xee = reference_row ? reference_row->electron_fraction : std::numeric_limits<double>::quiet_NaN();
@@ -2706,6 +3102,7 @@ int command_run_fixed_dsec(const Options& options) {
             << "  \"dsec_evaluations\": " << dsec_evaluations << ",\n  \"final_evaluations\": 4,\n"
             << "  \"total_evaluations\": " << snapshots.size() << ",\n  \"runtime_state_workspace_evaluations\": " << runtime_state_workspace_evaluations << ",\n"
             << "  \"call_start_workspace_evaluations\": " << evaluator_data.transported_workspace_evaluations << ",\n"
+            << "  \"sequence_runtime_workspace_evaluations\": " << evaluator_data.sequence_workspace_evaluations << ",\n"
             << "  \"mg_primary_override_evaluations\": " << evaluator_data.mg_primary_override_evaluations << ",\n"
             << "  \"call1_thermal_oracle_evaluations\": " << evaluator_data.call1_thermal_oracle_evaluations << ",\n  \"computed_from_raw_coefficients\": true,\n"
             << "  \"python_callbacks\": " << cumulative.python_callbacks << ",\n  \"records_evaluated\": " << cumulative.records_evaluated << ",\n"
@@ -2733,6 +3130,7 @@ int command_run_fixed_dsec(const Options& options) {
               << "\ndsec_calls=4\ndsec_evaluations=" << dsec_evaluations
               << "\nfinal_evaluations=4\ntotal_evaluations=" << snapshots.size()
               << "\nruntime_state_workspace_evaluations=" << runtime_state_workspace_evaluations
+              << "\nsequence_runtime_workspace_evaluations=" << evaluator_data.sequence_workspace_evaluations
               << "\nrecords_evaluated=" << cumulative.records_evaluated
               << "\nelements_solved=" << cumulative.elements_solved
               << "\npython_callbacks=" << cumulative.python_callbacks

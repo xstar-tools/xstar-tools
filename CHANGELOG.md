@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.7.46.21.15 - 2026-06-23
+
+- Change canonical science-value comparison from `.10e` to `.7e`.
+- Normalize finite values with `abs(value) < 1e-30` to zero before canonical comparison.
+- Apply the same E7/zero-floor policy to the C++ controller source-trajectory guard.
+- Retain raw binary64, ULP, and `.10e` diagnostics; preserve exact structural/control comparisons.
+- Add offline reclassification and residual-family assessment for the v21.14 production inventory.
+- Preserve `fixed_state_engine.cpp` and ABI 60487 unchanged from v21.14.
+
 ## 0.6.48.7.46.21.14 - 2026-06-22
 
 - Reimplement the native Type-73 branch from `ucalc.py` rather than the generic compact collision helper.

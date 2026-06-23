@@ -1,4 +1,4 @@
-"""Audit Mg Type-99 destination and secondary-energy correction for v0.6.48.7.46.21."""
+"""Audit Mg Type-99 destination and secondary-energy correction for v0.6.48.7.46.21.5."""
 from __future__ import annotations
 
 import argparse
@@ -10,7 +10,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-RELEASE = "0.6.48.7.46.21"
+RELEASE = "0.6.48.7.46.21.5"
 SCHEMA = "xstar-tools-v064874615-mg-type99-destination-secondary-energy-v1"
 AFFECTED_RECORDS = {39855, 40060, 41154}
 

@@ -1,5 +1,6 @@
 #include "xstar_fixed_state_engine.h"
 #include "source_order_thermal_reducer.hpp"
+#include "canonical_thermal_term.hpp"
 #include "coheat_table_v048724.h"
 #include "xstar_element_engine.h"
 #include "xstar_spectral_engine.h"
@@ -332,7 +333,28 @@ HydrogenType50EscapeStateV04874618 load_hydrogen_type50_escape_state_v04874618()
 }
 
 const HydrogenType50EscapeStateV04874618& hydrogen_type50_escape_state_v04874618() {
-    static const HydrogenType50EscapeStateV04874618 state = load_hydrogen_type50_escape_state_v04874618();
+    // The standalone all-61 controller transports a different line optical-depth
+    // workspace before each fixed-state callback.  Cache only the currently
+    // bound payload; the historical one-process-per-evaluation path still hits
+    // this cache once.  A thread-local cache preserves the existing reference
+    // lifetime throughout one fixed-state run without retaining 61 large tau
+    // arrays in memory.
+    const bool enabled = environment_flag("XSTAR_QUALIFICATION_HYDROGEN_TYPE50_ESCAPE_STATE");
+    std::string key = enabled ? "1" : "0";
+    if (enabled) {
+        key += "|" + required_environment_path_v04874618(
+            "XSTAR_QUALIFICATION_HYDROGEN_TYPE50_LINE_MAP_CSV");
+        key += "|" + required_environment_path_v04874618(
+            "XSTAR_QUALIFICATION_HYDROGEN_TYPE50_LINE_TAU_IN_BIN");
+        key += "|" + required_environment_path_v04874618(
+            "XSTAR_QUALIFICATION_HYDROGEN_TYPE50_LINE_TAU_OUT_BIN");
+    }
+    static thread_local std::string cached_key;
+    static thread_local HydrogenType50EscapeStateV04874618 state;
+    if (cached_key != key) {
+        state = load_hydrogen_type50_escape_state_v04874618();
+        cached_key = key;
+    }
     return state;
 }
 
@@ -537,10 +559,46 @@ MagnesiumType50EscapeStateV04874619 load_magnesium_type50_escape_state_v04874619
 }
 
 const MagnesiumType50EscapeStateV04874619& magnesium_type50_escape_state_v04874619() {
-    static const MagnesiumType50EscapeStateV04874619 state = load_magnesium_type50_escape_state_v04874619();
+    // Mg Type-50 activity and line optical depths are sequence-dependent.  The
+    // persistent controller binds the sequence and workspace paths before each
+    // callback, so reload the single current state whenever that identity
+    // changes.  Do not cache all 61 tau arrays.
+    const bool enabled = environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_ESCAPE_STATE");
+    std::string key = enabled ? "1" : "0";
+    if (enabled) {
+        key += "|seq=" + std::to_string(environment_data_type(
+            "XSTAR_QUALIFICATION_SOURCE_SEQUENCE"));
+        for (const char* name : {
+                 "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_LINE_MAP_CSV",
+                 "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_LINE_TAU_IN_BIN",
+                 "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_LINE_TAU_OUT_BIN",
+                 "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_ACTIVE_RECORDS_CSV"}) {
+            key += "|" + required_environment_path_v04874618(name);
+        }
+        if (environment_flag(
+                "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_ENDPOINT_ENERGY_TRANSPORT")) {
+            key += "|" + required_environment_path_v04874618(
+                "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_ENDPOINT_MAP_CSV");
+        }
+    }
+    static thread_local std::string cached_key;
+    static thread_local MagnesiumType50EscapeStateV04874619 state;
+    if (cached_key != key) {
+        state = load_magnesium_type50_escape_state_v04874619();
+        cached_key = key;
+    }
     return state;
 }
 
+
+constexpr const char* kMagnesiumType99PrimaryCoolingReductionEnv =
+    "XSTAR_QUALIFICATION_MAGNESIUM_TYPE99_PRIMARY_COOLING_REDUCTION";
+constexpr const char* kMagnesiumPrimaryCoolingSourceOrderReductionEnv =
+    "XSTAR_QUALIFICATION_MAGNESIUM_PRIMARY_COOLING_SOURCE_ORDER_REDUCTION";
+constexpr const char* kMagnesiumType99PrimaryCoolingLedgerEnv =
+    "XSTAR_QUALIFICATION_MAGNESIUM_TYPE99_PRIMARY_COOLING_LEDGER_CSV";
+constexpr const char* kMagnesiumPrimaryCoolingSourceOrderLedgerEnv =
+    "XSTAR_QUALIFICATION_MAGNESIUM_PRIMARY_COOLING_SOURCE_ORDER_LEDGER_CSV";
 
 struct MagnesiumType99PrimaryCoolingRowV04874620 {
     std::int64_t source_order_index = 0;
@@ -562,15 +620,14 @@ struct MagnesiumType99PrimaryCoolingStateV04874620 {
 
 MagnesiumType99PrimaryCoolingStateV04874620 load_magnesium_type99_primary_cooling_state_v04874620() {
     MagnesiumType99PrimaryCoolingStateV04874620 state;
-    state.enabled = environment_flag(
-        "XSTAR_QUALIFICATION_MAGNESIUM_TYPE99_PRIMARY_COOLING_REDUCTION");
+    state.enabled = environment_flag(kMagnesiumType99PrimaryCoolingReductionEnv);
     if (!state.enabled) return state;
     state.source_sequence = environment_data_type("XSTAR_QUALIFICATION_SOURCE_SEQUENCE");
     if (state.source_sequence < 1 || state.source_sequence > 61) {
         throw std::runtime_error("magnesium Type-99 source sequence must be in 1..61");
     }
     const auto ledger_path = std::filesystem::path(required_environment_path_v04874618(
-        "XSTAR_QUALIFICATION_MAGNESIUM_TYPE99_PRIMARY_COOLING_LEDGER_CSV"));
+        kMagnesiumType99PrimaryCoolingLedgerEnv));
     std::ifstream input(ledger_path);
     if (!input) {
         throw std::runtime_error(
@@ -653,9 +710,28 @@ MagnesiumType99PrimaryCoolingStateV04874620 load_magnesium_type99_primary_coolin
 
 const MagnesiumType99PrimaryCoolingStateV04874620&
 magnesium_type99_primary_cooling_state_v04874620() {
-    static const MagnesiumType99PrimaryCoolingStateV04874620 state =
-        load_magnesium_type99_primary_cooling_state_v04874620();
-    return state;
+    const bool enabled = environment_flag(kMagnesiumType99PrimaryCoolingReductionEnv);
+    if (!enabled) {
+        static const MagnesiumType99PrimaryCoolingStateV04874620 disabled{};
+        return disabled;
+    }
+    const int sequence = environment_data_type("XSTAR_QUALIFICATION_SOURCE_SEQUENCE");
+    const std::string ledger = required_environment_path_v04874618(
+        kMagnesiumType99PrimaryCoolingLedgerEnv);
+    // These ledgers are compact.  Cache one validated state per sequence so the
+    // controller does not rescan the all-61 CSV for every element callback.
+    static thread_local std::string cached_ledger;
+    static thread_local std::map<int, MagnesiumType99PrimaryCoolingStateV04874620> states;
+    if (cached_ledger != ledger) {
+        states.clear();
+        cached_ledger = ledger;
+    }
+    auto found = states.find(sequence);
+    if (found == states.end()) {
+        found = states.emplace(
+            sequence, load_magnesium_type99_primary_cooling_state_v04874620()).first;
+    }
+    return found->second;
 }
 
 struct MagnesiumPrimaryCoolingOrderRowV048746202 {
@@ -677,15 +753,14 @@ struct MagnesiumPrimaryCoolingOrderStateV048746202 {
 MagnesiumPrimaryCoolingOrderStateV048746202
 load_magnesium_primary_cooling_order_state_v048746202() {
     MagnesiumPrimaryCoolingOrderStateV048746202 state;
-    state.enabled = environment_flag(
-        "XSTAR_QUALIFICATION_MAGNESIUM_PRIMARY_COOLING_SOURCE_ORDER_REDUCTION");
+    state.enabled = environment_flag(kMagnesiumPrimaryCoolingSourceOrderReductionEnv);
     if (!state.enabled) return state;
     state.source_sequence = environment_data_type("XSTAR_QUALIFICATION_SOURCE_SEQUENCE");
     if (state.source_sequence < 1 || state.source_sequence > 61) {
         throw std::runtime_error("magnesium primary-cooling source sequence must be in 1..61");
     }
     const auto ledger_path = std::filesystem::path(required_environment_path_v04874618(
-        "XSTAR_QUALIFICATION_MAGNESIUM_PRIMARY_COOLING_SOURCE_ORDER_LEDGER_CSV"));
+        kMagnesiumPrimaryCoolingSourceOrderLedgerEnv));
     std::ifstream input(ledger_path);
     if (!input) {
         throw std::runtime_error(
@@ -765,9 +840,26 @@ load_magnesium_primary_cooling_order_state_v048746202() {
 
 const MagnesiumPrimaryCoolingOrderStateV048746202&
 magnesium_primary_cooling_order_state_v048746202() {
-    static const MagnesiumPrimaryCoolingOrderStateV048746202 state =
-        load_magnesium_primary_cooling_order_state_v048746202();
-    return state;
+    const bool enabled = environment_flag(kMagnesiumPrimaryCoolingSourceOrderReductionEnv);
+    if (!enabled) {
+        static const MagnesiumPrimaryCoolingOrderStateV048746202 disabled{};
+        return disabled;
+    }
+    const int sequence = environment_data_type("XSTAR_QUALIFICATION_SOURCE_SEQUENCE");
+    const std::string ledger = required_environment_path_v04874618(
+        kMagnesiumPrimaryCoolingSourceOrderLedgerEnv);
+    static thread_local std::string cached_ledger;
+    static thread_local std::map<int, MagnesiumPrimaryCoolingOrderStateV048746202> states;
+    if (cached_ledger != ledger) {
+        states.clear();
+        cached_ledger = ledger;
+    }
+    auto found = states.find(sequence);
+    if (found == states.end()) {
+        found = states.emplace(
+            sequence, load_magnesium_primary_cooling_order_state_v048746202()).first;
+    }
+    return found->second;
 }
 
 // Literal v0.6.47.2 Python translation of pescl.f90.  The accepted source
@@ -881,6 +973,10 @@ struct Type53RecordContext {
     double leveltemp_destination_energy_ev = 0.0;
     double excited_parent_energy_ev = 0.0;
     double excited_parent_statistical_weight = 0.0;
+    bool persistent_leveltemp_candidates_valid = false;
+    int leveltemp_destination_column = 0;
+    std::uint32_t leveltemp_candidate_mask = 0;
+    std::array<double,12> leveltemp_candidate_energy_ev{};
     int continuum_index_one_based = 0;
     int phextrap_max_points = 0;
 };
@@ -912,6 +1008,10 @@ struct Type53SourceShadow {
     double continuum_energy_ev = 0.0;
     double destination_energy_ev = 0.0;
     double excited_parent_energy_ev = 0.0;
+    bool persistent_leveltemp_candidates_valid = false;
+    int leveltemp_destination_column = 0;
+    std::uint32_t leveltemp_candidate_mask = 0;
+    std::array<double,12> leveltemp_candidate_energy_ev{};
     double bound_statistical_weight = 0.0;
     double continuum_statistical_weight = 0.0;
     double destination_statistical_weight = 0.0;
@@ -1005,13 +1105,60 @@ struct Type50SourceShadow {
     double line_tau_out = 0.0;
 };
 
+struct Type99PersistentLeveltempContextV048746223 {
+    bool valid = false;
+    int bound_column = 0;
+    int parent_column = 0;
+    int destination_column = 0;
+    std::uint32_t bound_mask = 0;
+    std::uint32_t parent_mask = 0;
+    std::uint32_t destination_mask = 0;
+    int excited_parent_mode = 0;
+    double incoming_bound_energy_ev = 0.0;
+    double incoming_bound_statistical_weight = 0.0;
+    double incoming_parent_energy_ev = 0.0;
+    double incoming_parent_statistical_weight = 0.0;
+    double incoming_destination_energy_ev = 0.0;
+    double incoming_destination_statistical_weight = 0.0;
+    double excited_parent_energy_ev = 0.0;
+    double excited_parent_statistical_weight = 0.0;
+    std::array<double,12> bound_candidate_energy_ev{};
+    std::array<double,12> bound_candidate_statistical_weight{};
+    std::array<double,12> parent_candidate_energy_ev{};
+    std::array<double,12> parent_candidate_statistical_weight{};
+    std::array<double,12> destination_candidate_energy_ev{};
+    std::array<double,12> destination_candidate_statistical_weight{};
+};
+
+struct Type99ResolvedLeveltempContextV048746223 {
+    double bound_energy_ev = 0.0;
+    double bound_statistical_weight = 0.0;
+    double parent_energy_ev = 0.0;
+    double parent_statistical_weight = 0.0;
+    double destination_energy_ev = 0.0;
+    double destination_statistical_weight = 0.0;
+    double threshold_ev = 0.0;
+    int bound_owner_stage = 0;
+    int parent_owner_stage = 0;
+    int destination_owner_stage = 0;
+};
+
 struct Type99SourceShadow {
     bool valid = false;
     std::array<double,6> ans{};
     double threshold_ev = 0.0;
     double destination_energy_ev = 0.0;
     double bound_energy_ev = 0.0;
+    double parent_energy_ev = 0.0;
+    double bound_statistical_weight = 0.0;
+    double parent_statistical_weight = 0.0;
+    double destination_statistical_weight = 0.0;
     double swrat = 0.0;
+    bool persistent_leveltemp_context_valid = false;
+    bool persistent_leveltemp_context_applied = false;
+    int bound_owner_stage = 0;
+    int parent_owner_stage = 0;
+    int destination_owner_stage = 0;
     double calt99_density_cm3 = 0.0;
     double phint53hunt_density_cm3 = 0.0;
     double rec_cm3_s = 0.0;
@@ -1087,6 +1234,203 @@ struct ActiveElementView {
     int max_stage = 1;
 };
 
+
+
+struct CanonicalThermalLedgerBuild {
+    std::vector<xstar_canonical_thermal_term_v1> terms;
+    std::uint64_t fingerprint = 0;
+};
+
+class CanonicalThermalLedgerBuilderV048746212 {
+public:
+    CanonicalThermalLedgerBuilderV048746212(
+        const ElementProgram& element,
+        const ActiveElementView& active
+    ) : element_(element), active_(active),
+        type99_state_(magnesium_type99_primary_cooling_state_v04874620()),
+        primary_order_state_(magnesium_primary_cooling_order_state_v048746202()) {}
+
+    void append_matrix_committed(const xstar_element_contribution_v1& contribution) {
+        const Identity identity = identity_of(contribution);
+        if (candidates_.count(identity) != 0u) {
+            throw std::runtime_error(
+                "duplicate canonical Thermal ledger matrix-commit identity");
+        }
+        Candidate candidate;
+        candidate.forward = make_term(
+            contribution, contribution.lower_row,
+            XSTAR_CANONICAL_THERMAL_FORWARD_DIAG_LOSS,
+            contribution.ans4 * contribution.density_scale,
+            contribution.ans6 * contribution.density_scale);
+        candidate.reverse = make_term(
+            contribution, contribution.upper_row,
+            XSTAR_CANONICAL_THERMAL_REVERSE_DIAG_LOSS,
+            -contribution.ans3 * contribution.density_scale,
+            -contribution.ans5 * contribution.density_scale);
+        candidates_.emplace(identity, candidate);
+    }
+
+    CanonicalThermalLedgerBuild finish(
+        const std::vector<xstar_element_contribution_v1>& committed_contributions
+    ) const {
+        CanonicalThermalLedgerBuild out;
+        out.terms.reserve(committed_contributions.size() * 2u);
+        std::set<Identity> consumed;
+        std::set<std::pair<std::int64_t, std::string>> type99_rows_matched;
+        std::set<std::pair<std::int64_t, std::string>> primary_rows_matched;
+        std::int64_t term_index = 0;
+
+        const auto commit_term = [&](const xstar_canonical_thermal_term_v1& candidate) {
+            xstar_canonical_thermal_term_v1 term = candidate;
+            term.term_index = ++term_index;
+            const char* role_name = term.role == XSTAR_CANONICAL_THERMAL_FORWARD_DIAG_LOSS
+                ? "forward_diag_loss" : "reverse_diag_loss";
+            const auto source_key = std::make_pair(term.record, std::string(role_name));
+            if (type99_state_.enabled && element_.element_z == 12 && term.data_type == 99) {
+                type99_rows_matched.insert(source_key);
+            }
+            if (primary_order_state_.enabled && element_.element_z == 12 && term.cj > 0.0) {
+                primary_rows_matched.insert(source_key);
+            }
+            out.terms.push_back(term);
+        };
+
+        // The candidates are captured from the final committed contribution
+        // stream, after source matrix-closure replacement/removal and source-
+        // order restoration.  This keeps the canonical Thermal coefficients
+        // synchronized with the rates actually consumed by the element solve,
+        // while element-specific preservation rules (notably Mg Type-50) remain
+        // encoded in the corrected contribution itself.
+        for (const auto& contribution : committed_contributions) {
+            const Identity identity = identity_of(contribution);
+            const auto it = candidates_.find(identity);
+            if (it == candidates_.end()) {
+                throw std::runtime_error(
+                    "canonical Thermal ledger committed identity was not captured at insertion");
+            }
+            if (!consumed.insert(identity).second) {
+                throw std::runtime_error(
+                    "canonical Thermal ledger committed identity was consumed more than once");
+            }
+            commit_term(it->second.forward);
+            commit_term(it->second.reverse);
+        }
+
+        if (type99_state_.enabled && element_.element_z == 12 &&
+            type99_rows_matched.size() != type99_state_.rows.size()) {
+            throw std::runtime_error(
+                "canonical Thermal ledger did not consume every Mg Type-99 source row");
+        }
+        if (primary_order_state_.enabled && element_.element_z == 12 &&
+            primary_rows_matched.size() != primary_order_state_.rows.size()) {
+            throw std::runtime_error(
+                "canonical Thermal ledger did not consume every Mg primary source-order row");
+        }
+        xstar_canonical_thermal::validate(
+            out.terms.data(), out.terms.size(), active_.element.n_rows);
+        out.fingerprint = xstar_canonical_thermal::fingerprint(out.terms);
+        return out;
+    }
+
+private:
+    using Identity = std::tuple<std::int64_t, int, int, int>;
+    struct Candidate {
+        xstar_canonical_thermal_term_v1 forward{};
+        xstar_canonical_thermal_term_v1 reverse{};
+    };
+
+    static Identity identity_of(const xstar_element_contribution_v1& contribution) {
+        return Identity{
+            contribution.record,
+            contribution.data_type,
+            contribution.rate_type,
+            contribution.ion_stage};
+    }
+
+    xstar_canonical_thermal_term_v1 make_term(
+        const xstar_element_contribution_v1& contribution,
+        int native_compact_row,
+        int role,
+        double native_cj,
+        double cj2
+    ) const {
+        const char* role_name = role == XSTAR_CANONICAL_THERMAL_FORWARD_DIAG_LOSS
+            ? "forward_diag_loss" : "reverse_diag_loss";
+        int compact_row = native_compact_row;
+        double cj = native_cj;
+        double source_cj = native_cj;
+        std::uint32_t flags = XSTAR_CANONICAL_THERMAL_SOURCE_DOMAIN_INCLUDED |
+            XSTAR_CANONICAL_THERMAL_MATRIX_INSERTION_CAPTURED;
+        if (contribution.data_type == 53) flags |= XSTAR_CANONICAL_THERMAL_TYPE53;
+        if (native_compact_row == active_.element.normalization_row) {
+            flags |= XSTAR_CANONICAL_THERMAL_NORMALIZATION_ROW;
+        }
+
+        const auto source_key = std::make_pair(contribution.record, std::string(role_name));
+        if (type99_state_.enabled && element_.element_z == 12 && contribution.data_type == 99) {
+            const auto it = type99_state_.rows.find(source_key);
+            if (it == type99_state_.rows.end()) {
+                throw std::runtime_error(
+                    "canonical Thermal ledger missing Mg Type-99 source row");
+            }
+            source_cj = it->second.cj;
+            if (it->second.cj > 0.0) {
+                compact_row = it->second.compact_row;
+                cj = it->second.cj;
+                flags |= XSTAR_CANONICAL_THERMAL_TYPE99_SOURCE_CORRECTED;
+            }
+        }
+
+        std::int64_t primary_source_order_index = 0;
+        if (primary_order_state_.enabled && element_.element_z == 12 && cj > 0.0) {
+            const auto it = primary_order_state_.rows.find(source_key);
+            if (it == primary_order_state_.rows.end()) {
+                throw std::runtime_error(
+                    "canonical Thermal ledger missing Mg primary source-order row");
+            }
+            const auto& source_row = it->second;
+            if (source_row.data_type != contribution.data_type ||
+                source_row.rate_type != contribution.rate_type ||
+                source_row.compact_row != compact_row) {
+                throw std::runtime_error(
+                    "canonical Thermal ledger Mg primary source-order metadata mismatch");
+            }
+            primary_source_order_index = source_row.source_order_index;
+            flags |= XSTAR_CANONICAL_THERMAL_PRIMARY_SOURCE_ORDERED;
+        }
+        if (compact_row < 1 || compact_row > active_.element.n_rows) {
+            throw std::runtime_error(
+                "canonical Thermal ledger compact row outside active basis");
+        }
+
+        xstar_canonical_thermal_term_v1 term{};
+        term.source_position = contribution.source_position +
+            (role == XSTAR_CANONICAL_THERMAL_FORWARD_DIAG_LOSS ? 2 : 3);
+        term.term_index = 0;  // Assigned only after closure membership/order is finalized.
+        term.record = contribution.record;
+        term.primary_source_order_index = primary_source_order_index;
+        term.data_type = contribution.data_type;
+        term.rate_type = contribution.rate_type;
+        term.ion_index = contribution.ion_index;
+        term.ion_stage = contribution.ion_stage;
+        term.compact_row = compact_row;
+        term.native_compact_row = native_compact_row;
+        term.source_compact_row = compact_row;
+        term.role = role;
+        term.flags = flags;
+        term.cj = cj;
+        term.cj2 = cj2;
+        term.native_cj = native_cj;
+        term.source_cj = source_cj;
+        return term;
+    }
+
+    const ElementProgram& element_;
+    const ActiveElementView& active_;
+    const MagnesiumType99PrimaryCoolingStateV04874620& type99_state_;
+    const MagnesiumPrimaryCoolingOrderStateV048746202& primary_order_state_;
+    std::map<Identity, Candidate> candidates_;
+};
 
 struct SourceCompactOracleRow {
     int active_min_stage = 1;
@@ -1563,7 +1907,7 @@ void apply_matrix_closure_contribution_corrections(
         if (correction.remove) continue;
         if (correction.replace_ans1) contribution.ans1 = correction.source_ans1;
         if (correction.replace_ans2) contribution.ans2 = correction.source_ans2;
-        // v0.6.48.7.46.21: matrix closure originally corrected only the
+        // v0.6.48.7.46.21.5: matrix closure originally corrected only the
         // population-rate channels.  Type-50 thermal energy channels are
         // algebraically tied to those rates after the source post-swap:
         //   ans3 = -ans2 * |Eupper-Elower| * erg/eV
@@ -1592,7 +1936,7 @@ void apply_matrix_closure_contribution_corrections(
                 contribution.ans3 = -contribution.ans2 * endpoint_energy_ev * kErgPerEv;
             }
         }
-        // v0.6.48.7.46.21: source matrix closure may replace the Type-50
+        // v0.6.48.7.46.21.5: source matrix closure may replace the Type-50
         // population-rate channels (ans1/ans2), but the Thermal ledger consumes
         // the pre-closure UCalc energy channels (ans3/ans4).  Preserve those
         // already source-exact values instead of recomputing them from the
@@ -1753,6 +2097,19 @@ struct NativeElementDiagnostic {
     std::vector<double> active_initial_populations;
     std::vector<double> active_final_outer_start_populations;
     std::vector<double> active_final_populations;
+    std::vector<double> final_superlevel_populations_before_solve;
+    std::vector<double> final_condensed_matrix;
+    std::vector<double> final_condensed_rhs;
+    std::vector<double> final_first_lu_solution;
+    std::vector<double> final_refinement_residual;
+    std::vector<double> final_refinement_correction;
+    std::vector<double> final_refined_superlevel_solution;
+    std::vector<double> final_population_after_condensed;
+    std::vector<double> final_fixed_point_population_before;
+    std::vector<double> final_fixed_point_population_after;
+    bool solve_stage_trace_captured = false;
+    int final_outer_iteration = 0;
+    int final_fixed_iterations = 0;
     std::vector<double> thermal_compact_populations;
     bool thermal_compact_population_closure_applied = false;
     std::vector<double> dense_matrix;
@@ -1768,6 +2125,11 @@ struct NativeElementDiagnostic {
     // beside the solve-system arrays so every mismatched matrix cell can be
     // attributed to one or more causal atomic records.
     std::vector<xstar_element_contribution_v1> committed_contributions;
+    std::vector<xstar_canonical_thermal_term_v1> canonical_thermal_terms;
+    std::uint64_t canonical_thermal_ledger_fingerprint = 0;
+    std::uint64_t element_thermal_ledger_fingerprint = 0;
+    std::uint64_t fixed_state_thermal_ledger_fingerprint = 0;
+    bool canonical_thermal_ledger_shared = false;
     std::string solver_method;
     std::uint32_t solver_status_flags = 0;
     int outer_iterations = 0;
@@ -2825,20 +3187,43 @@ double collision_pair_downward(double upsilon, double temperature_k, double ne, 
     return xstar_constants::kCollisionRateCoefficientPerSqrtT4*upsilon*ne/(std::sqrt(std::max(t4,1.0e-300))*std::max(gu,1.0e-300));
 }
 
-double callaway_upsilon(int data_type, const double* r, std::size_t nr, double temperature_k, double delta_ev) {
+double callaway_upsilon(
+    int data_type,
+    const double* r,
+    std::size_t nr,
+    double temperature_k,
+    double delta_ev,
+    bool source_faithful
+) {
     const std::size_t min_count=data_type==60?3u:6u;
     if (!r||nr<min_count||!(temperature_k>0.0)||!(delta_ev>0.0)) throw std::runtime_error("invalid type60/62 payload");
-    const double floor_k=0.02*delta_ev*1.0e4/xstar_constants::kModernBoltzmannEvPerT4;
+    // XSTAR ucalc label 60 uses 0.861707 eV per 10^4 K both in the
+    // excitation exponential and in the source temperature floor.  The
+    // earlier native path used the modern Boltzmann constant here, which
+    // accounts for the full Hydrogen ans6 / h_cooling2 residual.
+    const double kt_ev_per_t4 = source_faithful
+        ? xstar_constants::kLegacyBoltzmannEvPerT4
+        : xstar_constants::kModernBoltzmannEvPerT4;
+    const double floor_k=0.02*delta_ev*1.0e4/kt_ev_per_t4;
     const double teff=std::max(temperature_k,floor_k);
     const double t1=teff>1.0e9?6.33652e3:teff*6.33652e-6;
     const double tt=std::min(t1,1.0);
     double ups=0.0;
     if (data_type==60) {
-        double power=1.0;
-        for (std::size_t k=2;k<nr;++k) { ups+=r[k]*power; power*=tt; }
+        if (source_faithful) {
+            // Match calt6062.f90: each integer power is evaluated directly.
+            for (std::size_t k=2;k<nr;++k) ups += r[k]*std::pow(tt,static_cast<int>(k-2));
+        } else {
+            double power=1.0;
+            for (std::size_t k=2;k<nr;++k) { ups+=r[k]*power; power*=tt; }
+        }
     } else {
-        double power=1.0;
-        for (std::size_t k=2;k+3<nr;++k) { ups+=r[k]*power; power*=tt; }
+        if (source_faithful) {
+            for (std::size_t k=2;k+3<nr;++k) ups += r[k]*std::pow(tt,static_cast<int>(k-2));
+        } else {
+            double power=1.0;
+            for (std::size_t k=2;k+3<nr;++k) { ups+=r[k]*power; power*=tt; }
+        }
         const double arg=r[nr-2]*tt;
         if (!(arg>0.0)) throw std::runtime_error("type62 nonpositive log argument");
         ups+=r[nr-3]*std::log(arg)*limited_exp(-r[nr-1]*tt);
@@ -2861,7 +3246,7 @@ double type73_rate(const double* r, std::size_t nr, int z, double temperature_k)
     if (!(wav>0.0)) return 0.0;
     const double tused=std::max(temperature_k,2.8777e6/wav);
     const double y=static_cast<double>(z*z)*r[0]*1.578876e5/tused;
-    if (y>40.0||!(y>0.0)) return 0.0;
+    if (y>40.0) return 0.0;
     const double z2s=r[1], aa=r[2], co=r[3], cr=r[4], cr1=r[5], rr=r[6];
     const double gam=z2s>=0.1?-0.2:(z2s>0.01?0.0:0.2);
     const double zeff=static_cast<double>(z)-gam;
@@ -2874,7 +3259,7 @@ double type73_rate(const double* r, std::size_t nr, int z, double temperature_k)
     else if (rr==2.0) { er=ee2; er1=ee3; }
     double qij=co*limited_exp(-y)+1.55*z2s*e1;
     if (y*aa+y<=40.0) qij+=y*limited_exp(y*aa)*(cr*er/std::pow(aa+1.0,rr-1.0)+cr1*er1/std::pow(aa+1.0,rr));
-    const double crate=qij*1.578876e5/tused*std::sqrt(tused)/std::max(zeff*zeff,1.0e-300)*5.46538e-11;
+    const double crate=qij*1.578876e5/tused*std::sqrt(tused)/std::max(zeff*zeff,1.0e-48)*5.46538e-11;
     return std::max(0.0,crate);
 }
 
@@ -3170,6 +3555,96 @@ Type99PhintResult evaluate_type99_phint53hunt(
     return out;
 }
 
+
+Type99PersistentLeveltempContextV048746223 parse_type99_persistent_leveltemp_context_v048746223(
+    const ProgramRecord& record,
+    const double* payload,
+    const std::int64_t* ints,
+    std::size_t core_real_count
+) {
+    constexpr std::int64_t kLayoutMagic = 223;
+    constexpr std::size_t kContextRealCount = 83;  // v36 compatibility 3 + v21.13 context 80
+    constexpr int kContextIntCount = 8;
+    Type99PersistentLeveltempContextV048746223 context{};
+    const bool has_magic = ints && record.int_count >= kContextIntCount &&
+        ints[record.int_count - 1] == kLayoutMagic;
+    if (!has_magic) return context;
+    if (!payload || record.real_count != core_real_count + kContextRealCount) {
+        throw std::runtime_error("Mg Type-99 persistent leveltemp real payload is malformed");
+    }
+    const int ibase = record.int_count - kContextIntCount;
+    context.bound_column = static_cast<int>(ints[ibase + 0]);
+    context.parent_column = static_cast<int>(ints[ibase + 1]);
+    context.destination_column = static_cast<int>(ints[ibase + 2]);
+    context.bound_mask = static_cast<std::uint32_t>(ints[ibase + 3]);
+    context.parent_mask = static_cast<std::uint32_t>(ints[ibase + 4]);
+    context.destination_mask = static_cast<std::uint32_t>(ints[ibase + 5]);
+    context.excited_parent_mode = static_cast<int>(ints[ibase + 6]);
+    if (context.bound_column <= 0 || context.parent_column <= 0 ||
+        context.destination_column <= 0 ||
+        (context.bound_mask & ~0x0fffu) != 0u ||
+        (context.parent_mask & ~0x0fffu) != 0u ||
+        (context.destination_mask & ~0x0fffu) != 0u ||
+        (context.excited_parent_mode != 0 && context.excited_parent_mode != 1)) {
+        throw std::runtime_error("Mg Type-99 persistent leveltemp integer metadata is invalid");
+    }
+    const std::size_t base = core_real_count;
+    context.incoming_bound_energy_ev = payload[base + 3];
+    context.incoming_bound_statistical_weight = payload[base + 4];
+    context.incoming_parent_energy_ev = payload[base + 5];
+    context.incoming_parent_statistical_weight = payload[base + 6];
+    context.incoming_destination_energy_ev = payload[base + 7];
+    context.incoming_destination_statistical_weight = payload[base + 8];
+    context.excited_parent_energy_ev = payload[base + 9];
+    context.excited_parent_statistical_weight = payload[base + 10];
+    for (std::size_t stage = 0; stage < 12; ++stage) {
+        context.bound_candidate_energy_ev[stage] = payload[base + 11 + stage];
+        context.bound_candidate_statistical_weight[stage] = payload[base + 23 + stage];
+        context.parent_candidate_energy_ev[stage] = payload[base + 35 + stage];
+        context.parent_candidate_statistical_weight[stage] = payload[base + 47 + stage];
+        context.destination_candidate_energy_ev[stage] = payload[base + 59 + stage];
+        context.destination_candidate_statistical_weight[stage] = payload[base + 71 + stage];
+    }
+    const auto validate_candidates = [](std::uint32_t mask,
+                                        const std::array<double,12>& energies,
+                                        const std::array<double,12>& weights,
+                                        const char* label) {
+        for (std::size_t stage = 0; stage < 12; ++stage) {
+            if ((mask & (1u << stage)) == 0u) continue;
+            if (!std::isfinite(energies[stage]) || !std::isfinite(weights[stage]) ||
+                !(weights[stage] > 0.0)) {
+                throw std::runtime_error(std::string("Mg Type-99 non-finite/invalid ") +
+                    label + " candidate");
+            }
+        }
+    };
+    validate_candidates(context.bound_mask, context.bound_candidate_energy_ev,
+                        context.bound_candidate_statistical_weight, "bound");
+    validate_candidates(context.parent_mask, context.parent_candidate_energy_ev,
+                        context.parent_candidate_statistical_weight, "parent");
+    validate_candidates(context.destination_mask, context.destination_candidate_energy_ev,
+                        context.destination_candidate_statistical_weight, "destination");
+    for (double value : {
+            context.incoming_bound_energy_ev,
+            context.incoming_bound_statistical_weight,
+            context.incoming_parent_energy_ev,
+            context.incoming_parent_statistical_weight,
+            context.incoming_destination_energy_ev,
+            context.incoming_destination_statistical_weight,
+            context.excited_parent_energy_ev,
+            context.excited_parent_statistical_weight}) {
+        if (!std::isfinite(value)) {
+            throw std::runtime_error("Mg Type-99 incoming/literal persistent context is non-finite");
+        }
+    }
+    if (context.excited_parent_mode == 1 &&
+        !(context.excited_parent_statistical_weight > 0.0)) {
+        throw std::runtime_error("Mg Type-99 excited-parent weight is invalid");
+    }
+    context.valid = true;
+    return context;
+}
+
 bool evaluate_type99_source_faithful(
     const ProgramRecord& record,
     const double* payload,
@@ -3178,7 +3653,8 @@ bool evaluate_type99_source_faithful(
     const ElementRow& upper,
     const xstar_fixed_state_input_v1& input,
     xstar_element_contribution_v1& contribution,
-    Type99SourceShadow* shadow
+    Type99SourceShadow* shadow,
+    const Type99ResolvedLeveltempContextV048746223* resolved_context = nullptr
 ) {
     if (!payload || !ints || record.int_count < 3) return false;
     const int nden = static_cast<int>(ints[0]);
@@ -3187,15 +3663,29 @@ bool evaluate_type99_source_faithful(
     if (nden <= 0 || ntem <= 1 || nxs <= 1) return false;
     const std::size_t need = static_cast<std::size_t>(nden + ntem + nden * ntem + 2 * nxs);
     if (record.real_count < need || !(input.temperature_k > 0.0) || !(input.hydrogen_density_cm3 > 0.0) || !(input.electron_density_cm3 > 0.0)) return false;
-    // v0.6.48.7.36 appends source leveltemp metadata after the literal
-    // calt99 payload.  Older lowered programs remain readable and fall back
-    // to the compact-row values, but strict Type-99 qualification requires
-    // destination energy, threshold, and destination statistical weight.
+    // v0.6.48.7.36 appends a compatibility destination/threshold/weight
+    // triplet.  v21.13 may override it after active-stage selection with the
+    // exact mutable leveltemp bound, parent, and destination contexts.
     const bool has_source_destination = record.real_count >= need + 3;
-    const double destination_energy_ev = has_source_destination ? payload[need] : upper.energy_ev;
-    const double threshold_ev = has_source_destination ? payload[need + 1] : std::abs(upper.energy_ev - lower.energy_ev);
-    const double destination_weight = has_source_destination ? payload[need + 2] : upper.statistical_weight;
-    if (!(threshold_ev > 0.0) || !(lower.statistical_weight > 0.0) || !(destination_weight > 0.0)) return false;
+    const double destination_energy_ev = resolved_context
+        ? resolved_context->destination_energy_ev
+        : (has_source_destination ? payload[need] : upper.energy_ev);
+    const double threshold_ev = resolved_context
+        ? resolved_context->threshold_ev
+        : (has_source_destination ? payload[need + 1] : std::abs(upper.energy_ev - lower.energy_ev));
+    const double bound_energy_ev = resolved_context
+        ? resolved_context->bound_energy_ev : lower.energy_ev;
+    const double bound_weight = resolved_context
+        ? resolved_context->bound_statistical_weight : lower.statistical_weight;
+    const double parent_energy_ev = resolved_context
+        ? resolved_context->parent_energy_ev : destination_energy_ev;
+    const double parent_weight = resolved_context
+        ? resolved_context->parent_statistical_weight
+        : (has_source_destination ? payload[need + 2] : upper.statistical_weight);
+    const double destination_weight = resolved_context
+        ? resolved_context->destination_statistical_weight : parent_weight;
+    if (!(threshold_ev > 0.0) || !(bound_weight > 0.0) || !(parent_weight > 0.0) ||
+        !(destination_weight > 0.0)) return false;
     const double threshold_ryd = threshold_ev / 13.6;
     const double* dens_grid = payload;
     const double* temp_grid = payload + nden;
@@ -3263,7 +3753,9 @@ bool evaluate_type99_source_faithful(
         bremsa = reduced_bremsa.data();
         count = reduced_epi.size();
     }
-    const double swrat = lower.statistical_weight / destination_weight;
+    // ucalc.f90 names the bound-state weight gglo and the continuum/parent
+    // weight ggup, then passes swrat = gglo / ggup to phint53hunt.
+    const double swrat = bound_weight / parent_weight;
     const Type99PhintResult ph = evaluate_type99_phint53hunt(
         energy_ryd, sigma_cm2, threshold_ev, input.temperature_k,
         input.electron_density_cm3, swrat, epi, bremsa, count, 0.01);
@@ -3279,7 +3771,7 @@ bool evaluate_type99_source_faithful(
     contribution.ans6 = -ans5_pre;
     contribution.ans3 = -ans4_pre;
     contribution.ans4 = -ans3_pre;
-    const double energy_difference = destination_energy_ev - lower.energy_ev;
+    const double energy_difference = destination_energy_ev - bound_energy_ev;
     const bool destination_threshold_identity = energy_difference == threshold_ev;
     const bool destination_identity_correction_applied =
         destination_threshold_identity && environment_flag("XSTAR_QUALIFICATION_MG_TYPE99_SECONDARY_ENERGY_CORRECTION");
@@ -3315,8 +3807,19 @@ bool evaluate_type99_source_faithful(
         shadow->ans = {{contribution.ans1, contribution.ans2, contribution.ans3, contribution.ans4, contribution.ans5, contribution.ans6}};
         shadow->threshold_ev = threshold_ev;
         shadow->destination_energy_ev = destination_energy_ev;
-        shadow->bound_energy_ev = lower.energy_ev;
+        shadow->bound_energy_ev = bound_energy_ev;
+        shadow->parent_energy_ev = parent_energy_ev;
+        shadow->bound_statistical_weight = bound_weight;
+        shadow->parent_statistical_weight = parent_weight;
+        shadow->destination_statistical_weight = destination_weight;
         shadow->swrat = swrat;
+        shadow->persistent_leveltemp_context_valid = resolved_context != nullptr;
+        shadow->persistent_leveltemp_context_applied = resolved_context != nullptr;
+        if (resolved_context) {
+            shadow->bound_owner_stage = resolved_context->bound_owner_stage;
+            shadow->parent_owner_stage = resolved_context->parent_owner_stage;
+            shadow->destination_owner_stage = resolved_context->destination_owner_stage;
+        }
         shadow->calt99_density_cm3 = input.hydrogen_density_cm3;
         shadow->phint53hunt_density_cm3 = input.electron_density_cm3;
         shadow->rec_cm3_s = rec;
@@ -3625,7 +4128,7 @@ bool evaluate_type53_source_integral(
     contribution.ans6 *= (std::abs(contribution.ans4) - energy_difference * kErgPerEv * contribution.ans1) / den6;
     contribution.ans5 *= (std::abs(contribution.ans3) - energy_difference * kErgPerEv * contribution.ans2) / den5;
 
-    // v0.6.48.7.46.21 qualification-only IEEE closure.
+    // v0.6.48.7.46.21.5 qualification-only IEEE closure.
     // v0.6.48.7.46.9.4.2 qualification-only IEEE closure compatibility marker.
     // The v0.6.47.2
     // Python reference evaluates the same source expressions one operation at
@@ -3673,6 +4176,15 @@ bool evaluate_type53_source_integral(
         shadow->destination_energy_ev = destination_energy;
         shadow->excited_parent_energy_ev = record_context && record_context->valid
             ? record_context->excited_parent_energy_ev : 0.0;
+        shadow->persistent_leveltemp_candidates_valid = record_context &&
+            record_context->persistent_leveltemp_candidates_valid;
+        shadow->leveltemp_destination_column = record_context && record_context->valid
+            ? record_context->leveltemp_destination_column : 0;
+        shadow->leveltemp_candidate_mask = record_context && record_context->valid
+            ? record_context->leveltemp_candidate_mask : 0u;
+        if (record_context && record_context->persistent_leveltemp_candidates_valid) {
+            shadow->leveltemp_candidate_energy_ev = record_context->leveltemp_candidate_energy_ev;
+        }
         shadow->bound_statistical_weight = bound_g;
         shadow->continuum_statistical_weight = continuum_g;
         shadow->destination_statistical_weight = row46_contract
@@ -3740,6 +4252,12 @@ EvaluatedRecord evaluate_record(
     // for every cj/cj2 channel.  Keep population rates unscaled.
     c.density_scale = record.matrix_enabled ? input.hydrogen_density_cm3 : 1.0;
     out.matrix_enabled = record.matrix_enabled;
+    // Diagnostics must expose the serialized program metadata for every
+    // opcode, not only spectral Type-50 rows.  The v21.10 Type-57 regression
+    // qualifies the literal source threshold carried by record.line_energy_ev.
+    out.line_energy_ev = record.line_energy_ev;
+    out.atomic_mass_amu = record.atomic_mass_amu;
+    out.natural_width_ev = record.natural_width_ev;
 
     switch (record.opcode) {
         case XSTAR_FIXED_OPCODE_SIMPLE_UCALC: {
@@ -3826,10 +4344,49 @@ EvaluatedRecord evaluate_record(
         case XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE: {
             if (!r || record.real_count < 4) throw std::runtime_error("bound-free payload requires energy/sigma pairs");
             if (!input.radiation_energy_ev || !input.radiation_flux || input.radiation_bin_count < 2) throw std::runtime_error("bound-free record requires live radiation grid");
+            constexpr std::size_t kType53ContextRealsV3 = 22;
             constexpr std::size_t kType53ContextRealsV2 = 10;
             constexpr std::size_t kType53ContextRealsV1 = 7;
+            constexpr std::int64_t kType53LeveltempLayoutMagicV048746221 = 221;
             Type53RecordContext record_context{};
-            if (record.real_count >= 4 + kType53ContextRealsV2 &&
+            const bool has_v3_magic = ints && record.int_count >= 4 &&
+                ints[3] == kType53LeveltempLayoutMagicV048746221;
+            if (has_v3_magic) {
+                if (record.real_count < 4 + kType53ContextRealsV3 ||
+                    (record.real_count - kType53ContextRealsV3) % 2 != 0) {
+                    throw std::runtime_error("Mg Type-53 persistent-leveltemp v3 payload is malformed");
+                }
+                if (ints[1] <= 0 || ints[2] < 0 || ints[2] > 0x0fff) {
+                    throw std::runtime_error("Mg Type-53 persistent-leveltemp v3 metadata is invalid");
+                }
+                const std::size_t base = record.real_count - kType53ContextRealsV3;
+                record_context.valid = true;
+                record_context.layout_version = 3;
+                record_context.pair_real_count = base;
+                record_context.base_threshold_ev = r[base + 0];
+                record_context.threshold_ev = r[base + 1];
+                record_context.bound_energy_ev = r[base + 2];
+                record_context.continuum_energy_ev = r[base + 3];
+                record_context.bound_statistical_weight = r[base + 4];
+                record_context.continuum_statistical_weight = r[base + 5];
+                record_context.destination_statistical_weight = r[base + 6];
+                record_context.leveltemp_destination_energy_ev = r[base + 7];
+                record_context.excited_parent_energy_ev = r[base + 8];
+                record_context.excited_parent_statistical_weight = r[base + 9];
+                record_context.leveltemp_destination_column = static_cast<int>(ints[1]);
+                record_context.leveltemp_candidate_mask = static_cast<std::uint32_t>(ints[2]);
+                for (std::size_t stage = 0; stage < 12; ++stage) {
+                    const double value = r[base + 10 + stage];
+                    if ((record_context.leveltemp_candidate_mask & (1u << stage)) != 0u &&
+                        !std::isfinite(value)) {
+                        throw std::runtime_error(
+                            "Mg Type-53 persistent-leveltemp candidate energy is non-finite");
+                    }
+                    record_context.leveltemp_candidate_energy_ev[stage] = value;
+                }
+                record_context.persistent_leveltemp_candidates_valid = true;
+                record_context.continuum_index_one_based = static_cast<int>(ints[0]);
+            } else if (record.real_count >= 4 + kType53ContextRealsV2 &&
                 (record.real_count - kType53ContextRealsV2) % 2 == 0) {
                 const std::size_t base = record.real_count - kType53ContextRealsV2;
                 record_context.valid = true;
@@ -4112,10 +4669,46 @@ EvaluatedRecord evaluate_record(
         }
         case XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE: {
             if (!r || record.real_count < 4) throw std::runtime_error("Type-49 bound-free payload requires energy/sigma pairs");
+            constexpr std::size_t kBoundFreeContextRealsV3 = 22;
             constexpr std::size_t kBoundFreeContextRealsV2 = 10;
             constexpr std::size_t kBoundFreeContextRealsV1 = 7;
+            constexpr std::int64_t kType49LeveltempLayoutMagicV048746222 = 222;
             Type53RecordContext record_context{};
-            if (record.real_count >= 4 + kBoundFreeContextRealsV2 &&
+            const bool type49_v3 = ints && record.int_count >= 5 &&
+                ints[4] == kType49LeveltempLayoutMagicV048746222;
+            if (type49_v3 && record.real_count >= 4 + kBoundFreeContextRealsV3 &&
+                (record.real_count - kBoundFreeContextRealsV3) % 2 == 0) {
+                const std::size_t base = record.real_count - kBoundFreeContextRealsV3;
+                record_context.valid = true;
+                record_context.layout_version = 3;
+                record_context.pair_real_count = base;
+                record_context.base_threshold_ev = r[base + 0];
+                record_context.threshold_ev = r[base + 1];
+                record_context.bound_energy_ev = r[base + 2];
+                record_context.continuum_energy_ev = r[base + 3];
+                record_context.bound_statistical_weight = r[base + 4];
+                record_context.continuum_statistical_weight = r[base + 5];
+                record_context.destination_statistical_weight = r[base + 6];
+                record_context.leveltemp_destination_energy_ev = r[base + 7];
+                record_context.excited_parent_energy_ev = r[base + 8];
+                record_context.excited_parent_statistical_weight = r[base + 9];
+                record_context.continuum_index_one_based = static_cast<int>(ints[0]);
+                record_context.phextrap_max_points = static_cast<int>(ints[1]);
+                record_context.leveltemp_destination_column = static_cast<int>(ints[2]);
+                record_context.leveltemp_candidate_mask = static_cast<std::uint32_t>(ints[3]);
+                if (record_context.leveltemp_destination_column <= 0 ||
+                    (record_context.leveltemp_candidate_mask & ~0x0fffu) != 0u) {
+                    throw std::runtime_error("Mg Type-49 persistent leveltemp metadata invalid");
+                }
+                for (std::size_t stage = 0; stage < 12; ++stage) {
+                    record_context.leveltemp_candidate_energy_ev[stage] = r[base + 10 + stage];
+                    if ((record_context.leveltemp_candidate_mask & (1u << stage)) != 0u &&
+                        !std::isfinite(record_context.leveltemp_candidate_energy_ev[stage])) {
+                        throw std::runtime_error("Mg Type-49 persistent leveltemp candidate non-finite");
+                    }
+                }
+                record_context.persistent_leveltemp_candidates_valid = true;
+            } else if (record.real_count >= 4 + kBoundFreeContextRealsV2 &&
                 (record.real_count - kBoundFreeContextRealsV2) % 2 == 0) {
                 const std::size_t base = record.real_count - kBoundFreeContextRealsV2;
                 record_context.valid = true;
@@ -4570,9 +5163,16 @@ EvaluatedRecord evaluate_record(
                 source_ans2 * bt.eij_ev * xstar_constants::kLegacyCollisionErgPerEv,
                 source_ans1 * bt.eij_ev * xstar_constants::kLegacyCollisionErgPerEv,
             }};
+            // v0.6.48.7.46.21.8: the source Type-51 evaluator contract is
+            // element-independent.  The earlier Mg-only promotion left the
+            // Hydrogen and Helium collision energy channels on the legacy
+            // constants/path even during independent Thermal qualification.
+            // Preserve the old Mg flag as a compatibility alias, while the
+            // general flag promotes the same source-faithful path for H/He/Mg.
             const bool source_faithful =
-                element.element_z == 12 &&
-                environment_flag("XSTAR_QUALIFICATION_MG_TYPE51_SOURCE_FAITHFUL");
+                environment_flag("XSTAR_QUALIFICATION_TYPE51_SOURCE_FAITHFUL") ||
+                (element.element_z == 12 &&
+                 environment_flag("XSTAR_QUALIFICATION_MG_TYPE51_SOURCE_FAITHFUL"));
             const auto& committed = source_faithful ? source_ans : legacy_ans;
             c.ans1 = committed[0]; c.ans2 = committed[1];
             c.ans3 = committed[2]; c.ans4 = committed[3];
@@ -4633,14 +5233,34 @@ EvaluatedRecord evaluate_record(
             const int source_local_level = record.int_count >= 3
                 ? static_cast<int>(ints[2]) : record.lower_row;
             if (i57<=0 || source_local_level<=1) break;
-            const double e1=lower.energy_ev;
-            const double eth=std::max(upper.energy_ev-e1,0.0);
+            const bool source_faithful =
+                environment_flag("XSTAR_QUALIFICATION_TYPE57_SOURCE_ENERGY");
+            double e1=lower.energy_ev;
+            double eth=std::max(upper.energy_ev-e1,0.0);
+            if (source_faithful) {
+                if (!r || record.real_count < 4) {
+                    throw std::runtime_error(
+                        "source-faithful type57 requires literal e1/eth/g1/g2 payload");
+                }
+                e1=r[0];
+                eth=r[1];
+                if (!std::isfinite(e1) || !std::isfinite(eth) || eth < 0.0 ||
+                    !std::isfinite(r[2]) || !std::isfinite(r[3]) ||
+                    !(r[2] > 0.0) || !(r[3] > 0.0)) {
+                    throw std::runtime_error("source-faithful type57 has invalid e1/eth/g1/g2 payload");
+                }
+            }
             double cion=0.0,crec=0.0;
             if (!type57_coefficients(n,input.temperature_k,ne,e1,eth,cion,crec)) throw std::runtime_error("type57 coefficient evaluation failed");
             c.ans1=cion*ne;
-            c.ans2=crec*(lower.statistical_weight/std::max(upper.statistical_weight,1.0e-300))*ne*ne;
-            c.ans5=-c.ans2*eth*kErgPerEv;
-            c.ans6=-c.ans1*eth*kErgPerEv;
+            const double lower_weight = source_faithful ? r[2] : lower.statistical_weight;
+            const double upper_weight = source_faithful ? r[3] : upper.statistical_weight;
+            c.ans2=crec*(lower_weight/std::max(upper_weight,1.0e-300))*ne*ne;
+            const double energy_conversion = source_faithful
+                ? xstar_constants::kLegacyCollisionErgPerEv
+                : xstar_constants::kModernErgPerEv;
+            c.ans5=-c.ans2*eth*energy_conversion;
+            c.ans6=-c.ans1*eth*energy_conversion;
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE56_TABULATED_COLLISION: {
@@ -4735,21 +5355,68 @@ EvaluatedRecord evaluate_record(
         }
         case XSTAR_FIXED_OPCODE_TYPE60_CALLAWAY_COLLISION:
         case XSTAR_FIXED_OPCODE_TYPE62_CALLAWAY_COLLISION: {
-            const double ups=callaway_upsilon(record.data_type,r,record.real_count,input.temperature_k,delta_ev);
-            c.ans1=collision_pair_upward(ups,delta_ev,input.temperature_k,ne,lower.statistical_weight);
-            c.ans2=collision_pair_downward(ups,input.temperature_k,ne,upper.statistical_weight);
-            c.ans5=c.ans2*delta_ev*kErgPerEv;
-            c.ans6=c.ans1*delta_ev*kErgPerEv;
+            const bool source_faithful =
+                environment_flag("XSTAR_QUALIFICATION_TYPE6062_SOURCE_FAITHFUL");
+            const double ups=callaway_upsilon(
+                record.data_type,r,record.real_count,input.temperature_k,delta_ev,source_faithful
+            );
+            if (source_faithful) {
+                const double t_xstar = input.temperature_k / 1.0e4;
+                const double tsq = std::sqrt(t_xstar);
+                const double ekt_ev = xstar_constants::kLegacyBoltzmannEvPerT4 * t_xstar;
+                const double delt = delta_ev / ekt_ev;
+                // Preserve ucalc.f90 label 60 operation order and its explicit
+                // 1.d-16 statistical-weight guards.
+                const double cji =
+                    xstar_constants::kCollisionRateCoefficientPerSqrtT4 * ups /
+                    tsq / (1.0e-16 + upper.statistical_weight);
+                const double cij =
+                    cji * upper.statistical_weight * limited_exp(-delt) /
+                    (1.0e-16 + lower.statistical_weight);
+                c.ans1 = cij * ne;
+                c.ans2 = cji * ne;
+            } else {
+                c.ans1=collision_pair_upward(ups,delta_ev,input.temperature_k,ne,lower.statistical_weight);
+                c.ans2=collision_pair_downward(ups,input.temperature_k,ne,upper.statistical_weight);
+            }
+            // Keep benchmark constants centralized in constants.def.  The
+            // source Type-60/62 path uses the modern XSTAR ergsev value while
+            // retaining the legacy Boltzmann and collision-rate coefficients.
+            c.ans5=c.ans2*delta_ev*xstar_constants::kModernErgPerEv;
+            c.ans6=c.ans1*delta_ev*xstar_constants::kModernErgPerEv;
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE68_HELIKE_COLLISION: {
             if (!ints||record.int_count<1) throw std::runtime_error("type68 payload requires Z");
             const double wav=delta_ev>0.0?12398.4016/delta_ev:0.0;
             const double ups=type68_upsilon(r,record.real_count,static_cast<int>(ints[0]),input.temperature_k,wav);
-            c.ans1=collision_pair_upward(ups,delta_ev,input.temperature_k,ne,lower.statistical_weight);
-            c.ans2=collision_pair_downward(ups,input.temperature_k,ne,upper.statistical_weight);
-            c.ans5=c.ans2*delta_ev*kErgPerEv;
-            c.ans6=c.ans1*delta_ev*kErgPerEv;
+            const bool source_constants =
+                environment_flag("XSTAR_QUALIFICATION_TYPE68_SOURCE_CONSTANTS");
+            if (source_constants) {
+                // Frozen v0.6.47.2 ucalc Type-68 combines the legacy XSTAR
+                // Boltzmann coefficient and collision-channel eV-to-erg
+                // conversion.  Preserve the source operation order rather
+                // than routing through the modern generic collision helper.
+                const double t4 = input.temperature_k / 1.0e4;
+                const double tsq = std::sqrt(std::max(t4, 1.0e-300));
+                const double ekt_ev = xstar_constants::kLegacyBoltzmannEvPerT4 * t4;
+                const double cji =
+                    xstar_constants::kCollisionRateCoefficientPerSqrtT4 * ups /
+                    tsq / std::max(upper.statistical_weight, 1.0e-300);
+                const double cij =
+                    cji * upper.statistical_weight *
+                    limited_exp(-delta_ev / std::max(ekt_ev, 1.0e-300)) /
+                    std::max(lower.statistical_weight, 1.0e-300);
+                c.ans1 = cij * ne;
+                c.ans2 = cji * ne;
+                c.ans5 = c.ans2 * delta_ev * xstar_constants::kLegacyCollisionErgPerEv;
+                c.ans6 = c.ans1 * delta_ev * xstar_constants::kLegacyCollisionErgPerEv;
+            } else {
+                c.ans1=collision_pair_upward(ups,delta_ev,input.temperature_k,ne,lower.statistical_weight);
+                c.ans2=collision_pair_downward(ups,input.temperature_k,ne,upper.statistical_weight);
+                c.ans5=c.ans2*delta_ev*kErgPerEv;
+                c.ans6=c.ans1*delta_ev*kErgPerEv;
+            }
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE63_ALGORITHMIC_COLLISION: {
@@ -4825,24 +5492,43 @@ EvaluatedRecord evaluate_record(
         }
         case XSTAR_FIXED_OPCODE_TYPE72_DIELECTRONIC_CAPTURE: {
             if (!r||record.real_count<2||!ints||record.int_count<2) throw std::runtime_error("type72 payload too short");
-            const double scale=3.3e-11*std::pow(13.6/std::max(xstar_constants::kModernBoltzmannEvPerT4*t4,1.0e-300),1.5);
+            // Match ucalc.py::_calt72_rate literally.  Type 72 is one of the
+            // historical collision branches that uses the rounded XSTAR
+            // 0.861707 eV per 10^4 K coefficient, not the modern constant.
+            const double source_ekt_ev = xstar_constants::kLegacyBoltzmannEvPerT4 * t4;
+            const double scale=3.3e-11*std::pow(13.6/source_ekt_ev,1.5);
             const double rtmp=record.real_count>=3?r[2]:1.0;
-            const double rate=scale*limited_exp(-r[1]/std::max(xstar_constants::kModernBoltzmannEvPerT4*t4,1.0e-300))*(r[0]/1.0e13)*rtmp;
+            const double rate=scale*limited_exp(-r[1]/source_ekt_ev)*(r[0]/1.0e13)*rtmp;
             const auto& ground=row_at(element,static_cast<int>(ints[0]));
             const auto& parent=row_at(element,static_cast<int>(ints[1]));
-            const double rinf=2.08e-22*ground.statistical_weight/std::max(parent.statistical_weight,1.0e-300)/std::max(t4*sqrt_t4,1.0e-300);
+            const double rinf=2.08e-22*ground.statistical_weight/std::max(parent.statistical_weight,1.0e-48)/std::max(t4*sqrt_t4,1.0e-48);
             c.ans2=rate*ne;
-            c.ans1=rate*ne*rinf*ne*limited_exp(r[1]/std::max(input.temperature_k,1.0e-300));
+            c.ans1=rate*ne*rinf*ne*limited_exp(r[1]/input.temperature_k);
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE73_HELIKE_COLLISION: {
-            if (!ints||record.int_count<1) throw std::runtime_error("type73 payload requires Z");
-            const double crate=type73_rate(r,record.real_count,static_cast<int>(ints[0]),input.temperature_k);
-            const double omega=crate/std::max(lower.statistical_weight,1.0e-300);
-            c.ans1=collision_pair_upward(omega,delta_ev,input.temperature_k,ne,lower.statistical_weight);
-            c.ans2=collision_pair_downward(omega,input.temperature_k,ne,upper.statistical_weight);
-            c.ans5=c.ans2*delta_ev*kErgPerEv;
-            c.ans6=c.ans1*delta_ev*kErgPerEv;
+            if (!r||record.real_count<7||!ints||record.int_count<1) throw std::runtime_error("type73 payload too short");
+            // native_fixed_program.py compacts the raw Type-73 integer
+            // payload [level1, level2, Z] to [Z]; the record rows retain the
+            // two endpoints.  From this point onward preserve the exact
+            // ucalc.py::_eval_type73 operation order and historical constants.
+            const double wavelength_a=std::abs(r[0]);
+            if (!(wavelength_a>0.0)) break;
+            const double source_energy_ev=12398.4016/std::max(wavelength_a,1.0e-48);
+            const double crate=type73_rate(
+                r,record.real_count,static_cast<int>(ints[0]),input.temperature_k);
+            const double gl=lower.statistical_weight;
+            const double gu=upper.statistical_weight;
+            const double omega=crate/std::max(gl,1.0e-48);
+            const double excitation_factor=limited_exp(
+                -source_energy_ev/(xstar_constants::kLegacyBoltzmannEvPerT4*t4));
+            const double qd=xstar_constants::kCollisionRateCoefficientPerSqrtT4*
+                omega/sqrt_t4/std::max(gu,1.0e-48);
+            const double qe=qd*gu*excitation_factor/std::max(gl,1.0e-48);
+            c.ans1=qe*ne;
+            c.ans2=qd*ne;
+            c.ans5=c.ans2*source_energy_ev*xstar_constants::kLegacyCollisionErgPerEv;
+            c.ans6=c.ans1*source_energy_ev*xstar_constants::kLegacyCollisionErgPerEv;
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE76_TWO_PHOTON: {
@@ -4927,6 +5613,311 @@ int ground_row_for_stage(const ElementProgram& element, int stage) {
         if (found == 0 || row.row < found) found = row.row;
     }
     return found;
+}
+
+double source_persistent_leveltemp_destination_energy_v048746222(
+    const ActiveElementView& active,
+    const xstar_element_contribution_v1& contribution,
+    const Type53SourceShadow& shadow) {
+    if (!shadow.persistent_leveltemp_candidates_valid ||
+        shadow.leveltemp_destination_column <= 0) {
+        throw std::runtime_error(
+            "source-faithful Mg bound-free record requires persistent leveltemp candidate payload");
+    }
+    if ((shadow.leveltemp_candidate_mask & ~0x0fffu) != 0u) {
+        throw std::runtime_error("Mg bound-free persistent leveltemp candidate mask is invalid");
+    }
+
+    const auto candidate_present = [&](int stage) {
+        if (stage < 1 || stage > 12) return false;
+        const std::uint32_t bit = 1u << static_cast<unsigned>(stage - 1);
+        return (shadow.leveltemp_candidate_mask & bit) != 0u;
+    };
+    const auto candidate_energy = [&](int stage) {
+        const double value = shadow.leveltemp_candidate_energy_ev[
+            static_cast<std::size_t>(stage - 1)];
+        if (!std::isfinite(value)) {
+            throw std::runtime_error(
+                "Mg bound-free persistent leveltemp candidate energy is non-finite");
+        }
+        return value;
+    };
+
+    // Source calc_hmc_element first calls levwkelement for every active ion,
+    // leaving the last active writer of each leveltemp column.  Its second
+    // pass then calls calc_hmc_ion only for active ions in increasing stage
+    // order.  Before the current record is evaluated, every present candidate
+    // through the current stage has overwritten that first-pass workspace.
+    int owner_stage = 0;
+    const int second_pass_max = std::min(contribution.ion_stage, active.max_stage);
+    for (int stage = active.min_stage; stage <= second_pass_max; ++stage) {
+        if (candidate_present(stage)) owner_stage = stage;
+    }
+    if (owner_stage == 0) {
+        for (int stage = active.min_stage; stage <= active.max_stage; ++stage) {
+            if (candidate_present(stage)) owner_stage = stage;
+        }
+    }
+    if (owner_stage == 0) {
+        // No active ion writes this column in either source pass.  Preserve
+        // the incoming persistent leveltemp value already serialized in the
+        // v2/v3 context rather than inventing a zero-energy owner.
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    return candidate_energy(owner_stage);
+}
+
+void apply_magnesium_type53_persistent_leveltemp_v048746221(
+    const ElementProgram& element,
+    const ActiveElementView& active,
+    std::vector<EvaluatedRecord>& evaluated) {
+    if (element.element_z != 12 ||
+        !environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE53_PERSISTENT_LEVELTEMP")) {
+        return;
+    }
+    for (auto& item : evaluated) {
+        auto& contribution = item.contribution;
+        auto& shadow = item.type53_shadow;
+        if (contribution.data_type != 53 || !shadow.valid || shadow.type49_semantics ||
+            contribution.ion_stage < active.min_stage || contribution.ion_stage > active.max_stage) {
+            continue;
+        }
+        const double destination_energy = source_persistent_leveltemp_destination_energy_v048746222(
+            active, contribution, shadow);
+        if (!std::isfinite(destination_energy)) {
+            continue;
+        }
+        const double energy_difference = std::abs(destination_energy - shadow.bound_energy_ev);
+        const double den6 = std::max(
+            1.0e-43,
+            std::abs(contribution.ans4) - shadow.threshold_ev * kErgPerEv * contribution.ans1);
+        const double den5 = std::max(
+            1.0e-43,
+            std::abs(contribution.ans3) - shadow.threshold_ev * kErgPerEv * contribution.ans2);
+        const double ans6_pre = -shadow.sumh2 * kErgPerEv;
+        const double ans5_pre = -shadow.sumc2 * kErgPerEv;
+        contribution.ans6 = ans6_pre *
+            (std::abs(contribution.ans4) - energy_difference * kErgPerEv * contribution.ans1) / den6;
+        contribution.ans5 = ans5_pre *
+            (std::abs(contribution.ans3) - energy_difference * kErgPerEv * contribution.ans2) / den5;
+        if (!std::isfinite(contribution.ans5) || !std::isfinite(contribution.ans6)) {
+            throw std::runtime_error("non-finite Mg Type-53 persistent-leveltemp correction");
+        }
+        shadow.destination_energy_ev = destination_energy;
+        shadow.ans[4] = contribution.ans5;
+        shadow.ans[5] = contribution.ans6;
+        shadow.shadow_max_abs = 0.0;
+        shadow.committed_max_abs = 0.0;
+        for (double value : shadow.ans) {
+            shadow.shadow_max_abs = std::max(shadow.shadow_max_abs, std::abs(value));
+            shadow.committed_max_abs = std::max(shadow.committed_max_abs, std::abs(value));
+        }
+        shadow.committed_nonfinite = false;
+        shadow.committed_implausible = shadow.committed_max_abs > 1.0e40;
+    }
+}
+
+void apply_magnesium_type49_persistent_leveltemp_v048746222(
+    const ElementProgram& element,
+    const ActiveElementView& active,
+    std::vector<EvaluatedRecord>& evaluated) {
+    if (element.element_z != 12 ||
+        !environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE49_PERSISTENT_LEVELTEMP")) {
+        return;
+    }
+    for (auto& item : evaluated) {
+        auto& contribution = item.contribution;
+        auto& shadow = item.type49_shadow;
+        if (contribution.data_type != 49 || !shadow.valid || !shadow.type49_semantics ||
+            contribution.ion_stage < active.min_stage || contribution.ion_stage > active.max_stage) {
+            continue;
+        }
+        const double destination_energy = source_persistent_leveltemp_destination_energy_v048746222(
+            active, contribution, shadow);
+        if (!std::isfinite(destination_energy)) {
+            continue;
+        }
+        const double energy_difference = std::abs(destination_energy - shadow.bound_energy_ev);
+        const double den6 = std::max(
+            1.0e-43,
+            std::abs(contribution.ans4) - shadow.threshold_ev * kErgPerEv * contribution.ans1);
+        const double den5 = std::max(
+            1.0e-43,
+            std::abs(contribution.ans3) - shadow.threshold_ev * kErgPerEv * contribution.ans2);
+        const double ans6_pre = -shadow.sumh2 * kErgPerEv;
+        const double ans5_pre = -shadow.sumc2 * kErgPerEv;
+        contribution.ans6 = ans6_pre *
+            (std::abs(contribution.ans4) - energy_difference * kErgPerEv * contribution.ans1) / den6;
+        contribution.ans5 = ans5_pre *
+            (std::abs(contribution.ans3) - energy_difference * kErgPerEv * contribution.ans2) / den5;
+        if (!std::isfinite(contribution.ans5) || !std::isfinite(contribution.ans6)) {
+            throw std::runtime_error("non-finite Mg Type-49 persistent-leveltemp correction");
+        }
+        shadow.destination_energy_ev = destination_energy;
+        shadow.ans[4] = contribution.ans5;
+        shadow.ans[5] = contribution.ans6;
+        shadow.shadow_max_abs = 0.0;
+        shadow.committed_max_abs = 0.0;
+        for (double value : shadow.ans) {
+            shadow.shadow_max_abs = std::max(shadow.shadow_max_abs, std::abs(value));
+            shadow.committed_max_abs = std::max(shadow.committed_max_abs, std::abs(value));
+        }
+        shadow.committed_nonfinite = false;
+        shadow.committed_implausible = shadow.committed_max_abs > 1.0e40;
+    }
+}
+
+
+struct Type99ResolvedValueV048746223 {
+    double energy_ev = 0.0;
+    double statistical_weight = 0.0;
+    int owner_stage = 0;
+};
+
+Type99ResolvedValueV048746223 resolve_type99_leveltemp_value_v048746223(
+    const ActiveElementView& active,
+    const xstar_element_contribution_v1& contribution,
+    int column,
+    std::uint32_t mask,
+    const std::array<double,12>& candidate_energy_ev,
+    const std::array<double,12>& candidate_statistical_weight,
+    double incoming_energy_ev,
+    double incoming_statistical_weight
+) {
+    if (column <= 0 || (mask & ~0x0fffu) != 0u) {
+        throw std::runtime_error("Mg Type-99 persistent leveltemp column/mask is invalid");
+    }
+    const auto present = [&](int stage) {
+        return stage >= 1 && stage <= 12 &&
+            (mask & (1u << static_cast<unsigned>(stage - 1))) != 0u;
+    };
+    int owner = 0;
+    const int second_pass_max = std::min(contribution.ion_stage, active.max_stage);
+    for (int stage = active.min_stage; stage <= second_pass_max; ++stage) {
+        if (present(stage)) owner = stage;
+    }
+    if (owner == 0) {
+        for (int stage = active.min_stage; stage <= active.max_stage; ++stage) {
+            if (present(stage)) owner = stage;
+        }
+    }
+    Type99ResolvedValueV048746223 value{};
+    value.owner_stage = owner;
+    if (owner == 0) {
+        value.energy_ev = incoming_energy_ev;
+        value.statistical_weight = incoming_statistical_weight;
+    } else {
+        value.energy_ev = candidate_energy_ev[static_cast<std::size_t>(owner - 1)];
+        value.statistical_weight =
+            candidate_statistical_weight[static_cast<std::size_t>(owner - 1)];
+    }
+    if (!std::isfinite(value.energy_ev) || !std::isfinite(value.statistical_weight)) {
+        throw std::runtime_error("Mg Type-99 resolved persistent leveltemp value is non-finite");
+    }
+    return value;
+}
+
+void apply_magnesium_type99_persistent_leveltemp_v048746223(
+    const Program& program,
+    const ElementProgram& element,
+    const ActiveElementView& active,
+    const xstar_fixed_state_input_v1& input,
+    std::vector<EvaluatedRecord>& evaluated
+) {
+    if (element.element_z != 12 ||
+        !environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE99_PERSISTENT_LEVELTEMP")) {
+        return;
+    }
+    int index = element.record_head;
+    std::size_t ordinal = 0;
+    while (index >= 0) {
+        if (ordinal >= evaluated.size()) {
+            throw std::runtime_error("Mg Type-99 record/evaluation traversal mismatch");
+        }
+        const ProgramRecord& record = program.records[static_cast<std::size_t>(index)];
+        EvaluatedRecord& item = evaluated[ordinal];
+        auto& contribution = item.contribution;
+        if (record.data_type == 99 &&
+            contribution.ion_stage >= active.min_stage &&
+            contribution.ion_stage <= active.max_stage) {
+            const double* payload = record.real_count
+                ? program.reals.data() + record.real_offset : nullptr;
+            const std::int64_t* ints = record.int_count
+                ? program.ints.data() + record.int_offset : nullptr;
+            if (!payload || !ints || record.int_count < 3) {
+                throw std::runtime_error("Mg Type-99 persistent context requires payloads");
+            }
+            const int nden = static_cast<int>(ints[0]);
+            const int ntem = static_cast<int>(ints[1]);
+            const int nxs = static_cast<int>(ints[2]);
+            if (nden <= 0 || ntem <= 1 || nxs <= 1) {
+                throw std::runtime_error("Mg Type-99 persistent context has invalid calt99 dimensions");
+            }
+            const std::size_t core_real_count = static_cast<std::size_t>(
+                nden + ntem + nden * ntem + 2 * nxs);
+            const auto context = parse_type99_persistent_leveltemp_context_v048746223(
+                record, payload, ints, core_real_count);
+            if (!context.valid) {
+                throw std::runtime_error(
+                    "source-faithful Mg Type-99 requires v21.13 persistent leveltemp context");
+            }
+            const auto bound = resolve_type99_leveltemp_value_v048746223(
+                active, contribution, context.bound_column, context.bound_mask,
+                context.bound_candidate_energy_ev,
+                context.bound_candidate_statistical_weight,
+                context.incoming_bound_energy_ev,
+                context.incoming_bound_statistical_weight);
+            const auto parent = resolve_type99_leveltemp_value_v048746223(
+                active, contribution, context.parent_column, context.parent_mask,
+                context.parent_candidate_energy_ev,
+                context.parent_candidate_statistical_weight,
+                context.incoming_parent_energy_ev,
+                context.incoming_parent_statistical_weight);
+            const auto destination = resolve_type99_leveltemp_value_v048746223(
+                active, contribution, context.destination_column, context.destination_mask,
+                context.destination_candidate_energy_ev,
+                context.destination_candidate_statistical_weight,
+                context.incoming_destination_energy_ev,
+                context.incoming_destination_statistical_weight);
+            Type99ResolvedLeveltempContextV048746223 resolved{};
+            resolved.bound_energy_ev = bound.energy_ev;
+            resolved.bound_statistical_weight = bound.statistical_weight;
+            resolved.parent_energy_ev = parent.energy_ev;
+            resolved.parent_statistical_weight = context.excited_parent_mode == 1
+                ? context.excited_parent_statistical_weight : parent.statistical_weight;
+            resolved.destination_energy_ev = destination.energy_ev;
+            resolved.destination_statistical_weight = destination.statistical_weight;
+            resolved.threshold_ev = context.excited_parent_mode == 1
+                ? std::abs(bound.energy_ev + context.excited_parent_energy_ev)
+                : std::abs(bound.energy_ev - parent.energy_ev);
+            resolved.bound_owner_stage = bound.owner_stage;
+            resolved.parent_owner_stage = parent.owner_stage;
+            resolved.destination_owner_stage = destination.owner_stage;
+            if (!(resolved.bound_statistical_weight > 0.0) ||
+                !(resolved.parent_statistical_weight > 0.0) ||
+                !(resolved.destination_statistical_weight > 0.0) ||
+                !(resolved.threshold_ev > 0.0)) {
+                throw std::runtime_error("Mg Type-99 resolved energy/weight context is invalid");
+            }
+            const ElementRow& lower = row_at(element, record.lower_row);
+            const ElementRow& upper = row_at(element, record.upper_row);
+            xstar_element_contribution_v1 corrected = contribution;
+            Type99SourceShadow corrected_shadow{};
+            if (!evaluate_type99_source_faithful(
+                    record, payload, ints, lower, upper, input,
+                    corrected, &corrected_shadow, &resolved)) {
+                throw std::runtime_error(
+                    "Mg Type-99 persistent leveltemp integral reevaluation failed");
+            }
+            contribution = corrected;
+            item.type99_shadow = corrected_shadow;
+        }
+        index = record.next_index;
+        ++ordinal;
+    }
+    if (ordinal != evaluated.size()) {
+        throw std::runtime_error("Mg Type-99 linked traversal did not cover evaluated records");
+    }
 }
 
 PreliminaryIonBalance build_preliminary_ion_balance(
@@ -5383,6 +6374,34 @@ int run_impl(
             throw std::runtime_error(
                 "independent Thermal parity requires the generalized Mg primary Thermal correction contract");
         }
+        if (!environment_flag("XSTAR_QUALIFICATION_TYPE51_SOURCE_FAITHFUL")) {
+            throw std::runtime_error(
+                "independent Thermal parity requires the all-element source-faithful Type-51 contract");
+        }
+        if (!environment_flag("XSTAR_QUALIFICATION_TYPE6062_SOURCE_FAITHFUL")) {
+            throw std::runtime_error(
+                "independent Thermal parity requires the source-faithful Type-60/62 collision contract");
+        }
+        if (!environment_flag("XSTAR_QUALIFICATION_TYPE57_SOURCE_ENERGY")) {
+            throw std::runtime_error(
+                "independent Thermal parity requires source-local Type-57 energy transport");
+        }
+        if (!environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE53_PERSISTENT_LEVELTEMP")) {
+            throw std::runtime_error(
+                "independent Thermal parity requires Mg Type-53 persistent leveltemp semantics");
+        }
+        if (!environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE49_PERSISTENT_LEVELTEMP")) {
+            throw std::runtime_error(
+                "independent Thermal parity requires Mg Type-49 persistent leveltemp semantics");
+        }
+        if (!environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE99_PERSISTENT_LEVELTEMP")) {
+            throw std::runtime_error(
+                "independent Thermal parity requires Mg Type-99 persistent leveltemp energy/weight semantics");
+        }
+        if (!helium_non_type53_type50_energy_reduction) {
+            throw std::runtime_error(
+                "independent Thermal parity requires post-closure He Type-50 Thermal energy reconstruction");
+        }
     }
     if (helium_non_type53_type50_energy_reduction &&
         (!matrix_construction_closure || !thermal_diagonal_source_domain ||
@@ -5578,8 +6597,15 @@ int run_impl(
             : (element.n_ions == element.element_z
                 ? make_active_element_view(element, preliminary)
                 : make_full_element_view(element));
+        apply_magnesium_type99_persistent_leveltemp_v048746223(
+            ctx.program, element, active, input, evaluated);
+        apply_magnesium_type49_persistent_leveltemp_v048746222(
+            element, active, evaluated);
+        apply_magnesium_type53_persistent_leveltemp_v048746221(
+            element, active, evaluated);
         std::vector<xstar_element_contribution_v1> contributions;
         contributions.reserve(evaluated.size());
+        CanonicalThermalLedgerBuilderV048746212 canonical_thermal_builder(element, active);
         for (const auto& item : evaluated) {
             const auto& original = item.contribution;
             const bool active_stage = original.ion_stage >= active.min_stage && original.ion_stage <= active.max_stage;
@@ -5633,6 +6659,51 @@ int run_impl(
         } else if (type53_row46_coupled_replacement && element.element_z == 2) {
             reorder_type53_row46_coupled_contributions(contributions);
         }
+        // The source answer-channel capture is matrix-commit scoped.  Keep the
+        // native record diagnostics on that same semantic boundary by replacing
+        // raw pre-closure UCalc answers with the final committed contribution
+        // answers.  Removed native-only contributions are no longer marked as
+        // matrix committed.
+        using DiagnosticIdentity = std::tuple<std::int64_t, int, int, int>;
+        std::map<DiagnosticIdentity, const xstar_element_contribution_v1*> committed_by_identity;
+        for (const auto& contribution : contributions) {
+            const DiagnosticIdentity key{
+                contribution.record, contribution.data_type,
+                contribution.rate_type, contribution.ion_stage};
+            if (!committed_by_identity.emplace(key, &contribution).second) {
+                throw std::runtime_error(
+                    "duplicate final committed contribution identity for diagnostics");
+            }
+        }
+        for (auto& diagnostic : ctx.last_record_diagnostics) {
+            if (diagnostic.element_z != element.element_z || !diagnostic.matrix_committed) {
+                continue;
+            }
+            auto& answers = diagnostic.evaluated.contribution;
+            const DiagnosticIdentity key{
+                answers.record, answers.data_type, answers.rate_type, answers.ion_stage};
+            const auto committed = committed_by_identity.find(key);
+            if (committed == committed_by_identity.end()) {
+                diagnostic.matrix_committed = false;
+                continue;
+            }
+            answers.ans1 = committed->second->ans1;
+            answers.ans2 = committed->second->ans2;
+            answers.ans3 = committed->second->ans3;
+            answers.ans4 = committed->second->ans4;
+            answers.ans5 = committed->second->ans5;
+            answers.ans6 = committed->second->ans6;
+        }
+
+        // v0.6.48.7.46.21.8: capture canonical Thermal coefficients only
+        // after matrix closure and source-order correction.  The prior early
+        // capture froze stale pre-closure He Type-50 ans3/ans4 values and
+        // bypassed the accepted non-Type-53 cooling reconstruction.
+        for (const auto& contribution : contributions) {
+            canonical_thermal_builder.append_matrix_committed(contribution);
+        }
+        const auto canonical_thermal_ledger =
+            canonical_thermal_builder.finish(contributions);
         stats.contributions_constructed += contributions.size();
         ElementBuffers buffers = make_buffers(active.element, &input, source_compact_basis_seed);
         xstar_element_input_v1 ein{};
@@ -5651,10 +6722,10 @@ int run_impl(
         ein.n_superlevels = active.element.n_superlevels;
         ein.n_ions = active.element.n_ions;
         ein.normalization_row = active.element.normalization_row;
-        ein.max_lucy_iterations = 100;
-        ein.max_fixed_point_iterations = 40;
-        ein.lucy_tolerance = 1.0e-12;
-        ein.fixed_point_tolerance = 1.0e-11;
+        ein.max_lucy_iterations = 200;
+        ein.max_fixed_point_iterations = 200;
+        ein.lucy_tolerance = 1.0e-2;
+        ein.fixed_point_tolerance = 1.0e-2;
         ein.superlevel_by_row = buffers.superlevels.data();
         ein.ion_by_row = buffers.ions.data();
         ein.initial_populations = buffers.initial.data();
@@ -5662,10 +6733,87 @@ int run_impl(
         bind_output(eout, buffers, active.element.element_z);
         std::array<char, XSTAR_FIXED_STATE_MESSAGE_SIZE> error{};
         const auto element_start = clock_type::now();
-        const int rc = xstar_element_engine_run_construction_v1(
-            ctx.element_context, &ein, contributions.data(), contributions.size(), &eout, error.data(), error.size());
+        std::uint64_t element_consumed_thermal_ledger_fingerprint = 0;
+        const int rc = xstar_element_engine_run_construction_with_thermal_ledger_v1(
+            ctx.element_context, &ein, contributions.data(), contributions.size(),
+            canonical_thermal_ledger.terms.data(), canonical_thermal_ledger.terms.size(),
+            &element_consumed_thermal_ledger_fingerprint,
+            &eout, error.data(), error.size());
         stats.element_seconds += elapsed(element_start);
         if (rc != 0) throw std::runtime_error(std::string("native element solve failed z=") + std::to_string(element.element_z) + ": " + error.data());
+        if (element_consumed_thermal_ledger_fingerprint != canonical_thermal_ledger.fingerprint ||
+            (eout.status_flags & XSTAR_ELEMENT_STATUS_CANONICAL_THERMAL_LEDGER) == 0u) {
+            throw std::runtime_error("element engine did not consume the canonical Thermal ledger");
+        }
+        std::vector<double> stage_final_outer_start;
+        std::vector<double> stage_superlevel_before;
+        std::vector<double> stage_condensed_matrix;
+        std::vector<double> stage_condensed_rhs;
+        std::vector<double> stage_first_lu;
+        std::vector<double> stage_refinement_residual;
+        std::vector<double> stage_refinement_correction;
+        std::vector<double> stage_refined_superlevel;
+        std::vector<double> stage_after_condensed;
+        std::vector<double> stage_fixed_before;
+        std::vector<double> stage_fixed_after;
+        int stage_final_outer_iteration = 0;
+        int stage_final_fixed_iterations = 0;
+        bool stage_trace_captured = false;
+        if (capture_element_solve_response) {
+            const std::size_t nrows = static_cast<std::size_t>(active.element.n_rows);
+            const std::size_t nsp = static_cast<std::size_t>(active.element.n_superlevels);
+            stage_final_outer_start.resize(nrows);
+            stage_superlevel_before.resize(nsp);
+            stage_condensed_matrix.resize(nsp * nsp);
+            stage_condensed_rhs.resize(nsp);
+            stage_first_lu.resize(nsp);
+            stage_refinement_residual.resize(nsp);
+            stage_refinement_correction.resize(nsp);
+            stage_refined_superlevel.resize(nsp);
+            stage_after_condensed.resize(nrows);
+            stage_fixed_before.resize(nrows);
+            stage_fixed_after.resize(nrows);
+            xstar_element_solve_stage_trace_v1 trace{};
+            xstar_element_solve_stage_trace_init_v1(&trace);
+            trace.final_outer_start_populations = stage_final_outer_start.data();
+            trace.final_outer_start_capacity = stage_final_outer_start.size();
+            trace.final_superlevel_populations_before_solve = stage_superlevel_before.data();
+            trace.final_superlevel_populations_before_solve_capacity = stage_superlevel_before.size();
+            trace.final_condensed_matrix = stage_condensed_matrix.data();
+            trace.final_condensed_matrix_capacity = stage_condensed_matrix.size();
+            trace.final_condensed_rhs = stage_condensed_rhs.data();
+            trace.final_condensed_rhs_capacity = stage_condensed_rhs.size();
+            trace.final_first_lu_solution = stage_first_lu.data();
+            trace.final_first_lu_solution_capacity = stage_first_lu.size();
+            trace.final_refinement_residual = stage_refinement_residual.data();
+            trace.final_refinement_residual_capacity = stage_refinement_residual.size();
+            trace.final_refinement_correction = stage_refinement_correction.data();
+            trace.final_refinement_correction_capacity = stage_refinement_correction.size();
+            trace.final_refined_superlevel_solution = stage_refined_superlevel.data();
+            trace.final_refined_superlevel_solution_capacity = stage_refined_superlevel.size();
+            trace.final_population_after_condensed = stage_after_condensed.data();
+            trace.final_population_after_condensed_capacity = stage_after_condensed.size();
+            trace.final_fixed_point_population_before = stage_fixed_before.data();
+            trace.final_fixed_point_population_before_capacity = stage_fixed_before.size();
+            trace.final_fixed_point_population_after = stage_fixed_after.data();
+            trace.final_fixed_point_population_after_capacity = stage_fixed_after.size();
+            std::array<char, XSTAR_FIXED_STATE_MESSAGE_SIZE> trace_message{};
+            const int trace_rc = xstar_element_engine_get_last_solve_stage_trace_v1(
+                ctx.element_context, &trace, trace_message.data(), trace_message.size());
+            if (trace_rc != 0 || trace.valid == 0u || trace.element_z != element.element_z ||
+                trace.final_outer_start_count != nrows ||
+                trace.final_superlevel_populations_before_solve_count != nsp ||
+                trace.final_condensed_matrix_count != nsp * nsp ||
+                trace.final_population_after_condensed_count != nrows ||
+                trace.final_fixed_point_population_after_count != nrows) {
+                throw std::runtime_error(
+                    std::string("native solve-stage trace unavailable z=") +
+                    std::to_string(element.element_z) + ": " + trace_message.data());
+            }
+            stage_final_outer_iteration = trace.final_outer_iteration;
+            stage_final_fixed_iterations = trace.final_fixed_iterations;
+            stage_trace_captured = true;
+        }
         ++stats.elements_solved;
         // Source calc_hmc_all keeps primary and secondary thermal totals
         // separate.  heatf/hmctot consumes only the primary httot/cltot pair;
@@ -5697,197 +6845,90 @@ int run_impl(
         double computed_element_cooling = 0.0;
         double computed_element_heating2 = 0.0;
         double computed_element_cooling2 = 0.0;
-        xstar_source_order_thermal::TaggedFourChannelAccumulator thermal_reducer;
         if (thermal_diagonal_source_domain) {
-            const std::size_t n = thermal_populations.size();
-            if (active.element.normalization_row < 1 ||
-                active.element.normalization_row > static_cast<int>(n)) {
-                throw std::runtime_error("thermal compact normalization row is outside the active basis");
-            }
-            std::int64_t source_order_index = 0;
-            const auto& magnesium_type99_primary_state =
-                magnesium_type99_primary_cooling_state_v04874620();
-            const auto& magnesium_primary_order_state =
-                magnesium_primary_cooling_order_state_v048746202();
-            std::set<std::pair<std::int64_t, std::string>>
-                magnesium_type99_primary_rows_matched;
-            struct PendingPrimaryCooling {
-                double population = 0.0;
-                double coefficient = 0.0;
-                bool type53 = false;
-            };
-            std::map<std::pair<std::int64_t, std::string>, PendingPrimaryCooling>
-                magnesium_primary_pending_cooling;
-            const auto accumulate_diagonal = [&](const xstar_element_contribution_v1& contribution,
-                                                 int compact_row,
-                                                 const char* role,
-                                                 double cj,
-                                                 double cj2) {
-                ++source_order_index;
-                const int native_compact_row = compact_row;
-                const double native_cj = cj;
-                double source_cj = cj;
-                bool magnesium_type99_primary_cooling_reduction_applied = false;
-                if (magnesium_type99_primary_state.enabled && element.element_z == 12 &&
-                    contribution.data_type == 99) {
-                    const auto key = std::make_pair(
-                        contribution.record, std::string(role));
-                    const auto source_it = magnesium_type99_primary_state.rows.find(key);
-                    if (source_it == magnesium_type99_primary_state.rows.end()) {
-                        throw std::runtime_error(
-                            "magnesium Type-99 native diagonal is missing from source primary-cooling ledger");
-                    }
-                    const auto& source_row = source_it->second;
-                    source_cj = source_row.cj;
-                    if (source_row.cj > 0.0) {
-                        compact_row = source_row.compact_row;
-                        cj = source_row.cj;
-                        magnesium_type99_primary_cooling_reduction_applied = true;
-                    }
-                    magnesium_type99_primary_rows_matched.insert(key);
-                }
-                const auto primary_key = std::make_pair(
-                    contribution.record, std::string(role));
-                const MagnesiumPrimaryCoolingOrderRowV048746202*
-                    magnesium_primary_source_order_row = nullptr;
-                if (magnesium_primary_order_state.enabled && element.element_z == 12 && cj > 0.0) {
-                    const auto source_it = magnesium_primary_order_state.rows.find(primary_key);
-                    if (source_it == magnesium_primary_order_state.rows.end()) {
-                        throw std::runtime_error(
-                            "magnesium native primary-cooling diagonal is missing from source-order ledger");
-                    }
-                    const auto& source_row = source_it->second;
-                    if (source_row.data_type != contribution.data_type ||
-                        source_row.rate_type != contribution.rate_type ||
-                        source_row.compact_row != compact_row) {
-                        throw std::runtime_error(
-                            "magnesium primary-cooling source-order metadata mismatch");
-                    }
-                    magnesium_primary_source_order_row = &source_row;
-                }
-                if (compact_row < 1 || compact_row > static_cast<int>(n)) {
-                    throw std::runtime_error("thermal source-order diagonal row is outside the active basis");
-                }
-                const std::size_t row = static_cast<std::size_t>(compact_row - 1);
-                const bool normalization_row = compact_row == active.element.normalization_row;
-                const double compact_population = thermal_populations[row];
-                const double weighted_population = compact_population * element.abundance;
-                const bool is_type53 = contribution.data_type == 53;
-                const double primary_unweighted = compact_population * cj;
-                const double secondary_unweighted = compact_population * cj2;
-                ThermalDiagonalDiagnostic diagonal;
-                diagonal.element_z = element.element_z;
-                diagonal.active_min_stage = active.min_stage;
-                diagonal.active_max_stage = active.max_stage;
-                diagonal.source_order_index = source_order_index;
-                diagonal.source_position = contribution.source_position;
-                diagonal.record = contribution.record;
-                diagonal.data_type = contribution.data_type;
-                diagonal.rate_type = contribution.rate_type;
-                diagonal.ion_index = contribution.ion_index;
-                diagonal.ion_stage = contribution.ion_stage;
-                diagonal.compact_row = compact_row;
-                diagonal.native_compact_row = native_compact_row;
-                diagonal.source_compact_row =
-                    magnesium_type99_primary_cooling_reduction_applied ? compact_row : native_compact_row;
-                diagonal.role = role;
-                diagonal.normalization_row = normalization_row;
-                diagonal.magnesium_type99_primary_cooling_reduction_applied =
-                    magnesium_type99_primary_cooling_reduction_applied;
-                diagonal.magnesium_primary_cooling_source_order_applied =
-                    magnesium_primary_source_order_row != nullptr;
-                diagonal.magnesium_primary_cooling_source_order_index =
-                    magnesium_primary_source_order_row ?
-                        magnesium_primary_source_order_row->source_order_index : 0;
-                diagonal.source_domain_included = true;
-                diagonal.abundance = element.abundance;
-                diagonal.compact_population = compact_population;
-                diagonal.weighted_population = weighted_population;
-                diagonal.cj = cj;
-                diagonal.cj2 = cj2;
-                diagonal.native_cj = native_cj;
-                diagonal.source_cj = source_cj;
-                ++ctx.last_thermal_diagonal_rows_included;
-                if (normalization_row) ++ctx.last_thermal_diagonal_normalization_terms_included;
-                if (cj > 0.0) {
-                    diagonal.unweighted_cooling_contribution = primary_unweighted;
-                    diagonal.cooling_contribution = primary_unweighted * element.abundance;
-                    if (magnesium_primary_source_order_row != nullptr) {
-                        PendingPrimaryCooling pending;
-                        pending.population = compact_population;
-                        pending.coefficient = cj;
-                        pending.type53 = is_type53;
-                        if (!magnesium_primary_pending_cooling.emplace(primary_key, pending).second) {
-                            throw std::runtime_error(
-                                "duplicate magnesium primary-cooling native record/role");
-                        }
-                    } else {
-                        thermal_reducer.accumulate_primary(compact_population, cj, is_type53);
-                    }
-                } else {
-                    diagonal.unweighted_heating_contribution = -primary_unweighted;
-                    diagonal.heating_contribution = (-primary_unweighted) * element.abundance;
-                    thermal_reducer.accumulate_primary(compact_population, cj, is_type53);
-                }
-                if (cj2 > 0.0) {
-                    diagonal.unweighted_cooling2_contribution = secondary_unweighted;
-                    diagonal.cooling2_contribution = secondary_unweighted * element.abundance;
-                } else {
-                    diagonal.unweighted_heating2_contribution = -secondary_unweighted;
-                    diagonal.heating2_contribution = (-secondary_unweighted) * element.abundance;
-                }
-                thermal_reducer.accumulate_secondary(compact_population, cj2, is_type53);
-                ctx.last_thermal_diagonal_diagnostics.push_back(std::move(diagonal));
-            };
-            for (const auto& contribution : contributions) {
-                const double scale = contribution.density_scale;
-                accumulate_diagonal(
-                    contribution, contribution.lower_row, "forward_diag_loss",
-                    contribution.ans4 * scale, contribution.ans6 * scale);
-                accumulate_diagonal(
-                    contribution, contribution.upper_row, "reverse_diag_loss",
-                    -contribution.ans3 * scale, -contribution.ans5 * scale);
-            }
-            if (magnesium_type99_primary_state.enabled && element.element_z == 12 &&
-                magnesium_type99_primary_rows_matched.size() !=
-                    magnesium_type99_primary_state.rows.size()) {
+            const auto canonical_reduction = xstar_canonical_thermal::reduce(
+                canonical_thermal_ledger.terms, thermal_populations, element.element_z);
+            if (canonical_reduction.fingerprint != canonical_thermal_ledger.fingerprint) {
                 throw std::runtime_error(
-                    "magnesium Type-99 source primary-cooling ledger was not fully consumed");
+                    "fixed-state consumer canonical Thermal ledger fingerprint mismatch");
             }
-            if (magnesium_primary_order_state.enabled && element.element_z == 12) {
-                if (magnesium_primary_pending_cooling.size() !=
-                    magnesium_primary_order_state.rows.size()) {
-                    throw std::runtime_error(
-                        "magnesium primary-cooling source-order ledger was not fully consumed");
-                }
-                for (const auto& source_row : magnesium_primary_order_state.ordered_rows) {
-                    const auto key = std::make_pair(source_row.record, source_row.role);
-                    const auto pending_it = magnesium_primary_pending_cooling.find(key);
-                    if (pending_it == magnesium_primary_pending_cooling.end()) {
-                        throw std::runtime_error(
-                            "magnesium primary-cooling source-order key is missing from native stream");
-                    }
-                    const auto& pending = pending_it->second;
-                    thermal_reducer.accumulate_primary(
-                        pending.population, pending.coefficient, pending.type53);
-                }
-            }
-            const auto weighted = thermal_reducer.total.abundance_weighted(element.abundance);
+            const auto weighted =
+                canonical_reduction.tagged.total.abundance_weighted(element.abundance);
             computed_element_heating = weighted[0];
             computed_element_cooling = weighted[1];
             computed_element_heating2 = weighted[2];
             computed_element_cooling2 = weighted[3];
             if (element.element_z == 2) {
                 ctx.last_computed_helium_type53_budget =
-                    thermal_reducer.type53.abundance_weighted(element.abundance);
+                    canonical_reduction.tagged.type53.abundance_weighted(element.abundance);
                 ctx.last_computed_helium_non_type53_budget =
-                    thermal_reducer.non_type53.abundance_weighted(element.abundance);
+                    canonical_reduction.tagged.non_type53.abundance_weighted(element.abundance);
+            }
+
+            for (const auto& term : canonical_thermal_ledger.terms) {
+                const std::size_t row = static_cast<std::size_t>(term.compact_row - 1);
+                const double compact_population = thermal_populations[row];
+                const double weighted_population = compact_population * element.abundance;
+                const double primary_unweighted = compact_population * term.cj;
+                const double secondary_unweighted = compact_population * term.cj2;
+                ThermalDiagonalDiagnostic diagonal;
+                diagonal.element_z = element.element_z;
+                diagonal.active_min_stage = active.min_stage;
+                diagonal.active_max_stage = active.max_stage;
+                diagonal.source_order_index = term.term_index;
+                diagonal.source_position = term.source_position;
+                diagonal.record = term.record;
+                diagonal.data_type = term.data_type;
+                diagonal.rate_type = term.rate_type;
+                diagonal.ion_index = term.ion_index;
+                diagonal.ion_stage = term.ion_stage;
+                diagonal.compact_row = term.compact_row;
+                diagonal.native_compact_row = term.native_compact_row;
+                diagonal.source_compact_row = term.source_compact_row;
+                diagonal.role = term.role == XSTAR_CANONICAL_THERMAL_FORWARD_DIAG_LOSS
+                    ? "forward_diag_loss" : "reverse_diag_loss";
+                diagonal.normalization_row =
+                    (term.flags & XSTAR_CANONICAL_THERMAL_NORMALIZATION_ROW) != 0u;
+                diagonal.magnesium_type99_primary_cooling_reduction_applied =
+                    (term.flags & XSTAR_CANONICAL_THERMAL_TYPE99_SOURCE_CORRECTED) != 0u;
+                diagonal.magnesium_primary_cooling_source_order_applied =
+                    (term.flags & XSTAR_CANONICAL_THERMAL_PRIMARY_SOURCE_ORDERED) != 0u;
+                diagonal.magnesium_primary_cooling_source_order_index =
+                    term.primary_source_order_index;
+                diagonal.source_domain_included =
+                    (term.flags & XSTAR_CANONICAL_THERMAL_SOURCE_DOMAIN_INCLUDED) != 0u;
+                diagonal.abundance = element.abundance;
+                diagonal.compact_population = compact_population;
+                diagonal.weighted_population = weighted_population;
+                diagonal.cj = term.cj;
+                diagonal.cj2 = term.cj2;
+                diagonal.native_cj = term.native_cj;
+                diagonal.source_cj = term.source_cj;
+                ++ctx.last_thermal_diagonal_rows_included;
+                if (diagonal.normalization_row) {
+                    ++ctx.last_thermal_diagonal_normalization_terms_included;
+                }
+                if (term.cj > 0.0) {
+                    diagonal.unweighted_cooling_contribution = primary_unweighted;
+                    diagonal.cooling_contribution = primary_unweighted * element.abundance;
+                } else {
+                    diagonal.unweighted_heating_contribution = -primary_unweighted;
+                    diagonal.heating_contribution = (-primary_unweighted) * element.abundance;
+                }
+                if (term.cj2 > 0.0) {
+                    diagonal.unweighted_cooling2_contribution = secondary_unweighted;
+                    diagonal.cooling2_contribution = secondary_unweighted * element.abundance;
+                } else {
+                    diagonal.unweighted_heating2_contribution = -secondary_unweighted;
+                    diagonal.heating2_contribution = (-secondary_unweighted) * element.abundance;
+                }
+                ctx.last_thermal_diagonal_diagnostics.push_back(std::move(diagonal));
             }
             ctx.last_thermal_diagonal_source_domain = true;
         } else {
-            // The element engine returns source-order unweighted channels.
-            // Apply abundance once after each completed channel, matching
-            // calc_hmc_all, even in compact/scaffold operation.
+            // The element engine consumed the same immutable canonical ledger
+            // and returned source-order unweighted channels. Apply abundance
+            // once after each complete channel.
             computed_element_heating = eout.heating * element.abundance;
             computed_element_cooling = eout.cooling * element.abundance;
             computed_element_heating2 = eout.heating2 * element.abundance;
@@ -5988,6 +7029,12 @@ int run_impl(
 
         NativeElementDiagnostic element_diagnostic;
         element_diagnostic.committed_contributions = contributions;
+        element_diagnostic.canonical_thermal_terms = canonical_thermal_ledger.terms;
+        element_diagnostic.canonical_thermal_ledger_fingerprint = canonical_thermal_ledger.fingerprint;
+        element_diagnostic.element_thermal_ledger_fingerprint = element_consumed_thermal_ledger_fingerprint;
+        element_diagnostic.fixed_state_thermal_ledger_fingerprint = canonical_thermal_ledger.fingerprint;
+        element_diagnostic.canonical_thermal_ledger_shared =
+            element_consumed_thermal_ledger_fingerprint == canonical_thermal_ledger.fingerprint;
         element_diagnostic.element_index = element.element_index;
         element_diagnostic.element_z = element.element_z;
         element_diagnostic.abundance = element.abundance;
@@ -6039,8 +7086,22 @@ int run_impl(
                 if (seed.loaded) element_diagnostic.active_loaded_call_start_xilevg[compact_index] = seed.value;
             }
             element_diagnostic.active_initial_populations = buffers.initial;
-            element_diagnostic.active_final_outer_start_populations = buffers.outer;
+            element_diagnostic.active_final_outer_start_populations =
+                stage_trace_captured ? std::move(stage_final_outer_start) : buffers.outer;
             element_diagnostic.active_final_populations = buffers.populations;
+            element_diagnostic.solve_stage_trace_captured = stage_trace_captured;
+            element_diagnostic.final_outer_iteration = stage_final_outer_iteration;
+            element_diagnostic.final_fixed_iterations = stage_final_fixed_iterations;
+            element_diagnostic.final_superlevel_populations_before_solve = std::move(stage_superlevel_before);
+            element_diagnostic.final_condensed_matrix = std::move(stage_condensed_matrix);
+            element_diagnostic.final_condensed_rhs = std::move(stage_condensed_rhs);
+            element_diagnostic.final_first_lu_solution = std::move(stage_first_lu);
+            element_diagnostic.final_refinement_residual = std::move(stage_refinement_residual);
+            element_diagnostic.final_refinement_correction = std::move(stage_refinement_correction);
+            element_diagnostic.final_refined_superlevel_solution = std::move(stage_refined_superlevel);
+            element_diagnostic.final_population_after_condensed = std::move(stage_after_condensed);
+            element_diagnostic.final_fixed_point_population_before = std::move(stage_fixed_before);
+            element_diagnostic.final_fixed_point_population_after = std::move(stage_fixed_after);
             if (all_element_solve_system || (helium_solve_response && element.element_z == 2)) {
                 element_diagnostic.dense_matrix = buffers.dense;
                 element_diagnostic.heating_matrix = buffers.heat;
@@ -6710,7 +7771,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
         });
         std::ofstream record_file(root / (stem + "_records.csv"));
         if (!record_file) throw std::runtime_error("cannot create record diagnostics CSV");
-        record_file << "evaluation_ordinal,source_position,record,element_index,element_z,data_type,rate_type,ion_index,ion_stage,lower_row,upper_row,matrix_enabled,active_stage,matrix_committed,spectral,ans1,ans2,ans3,ans4,ans5,ans6,density_scale,line_energy_ev,atomic_mass_amu,natural_width_ev,opakab,type56_upsilon,type53_shadow_valid,type53_shadow_ans1,type53_shadow_ans2,type53_shadow_ans3,type53_shadow_ans4,type53_shadow_ans5,type53_shadow_ans6,type53_delta_ans1,type53_delta_ans2,type53_delta_ans3,type53_delta_ans4,type53_delta_ans5,type53_delta_ans6,type53_shadow_base_threshold_ev,type53_shadow_threshold_ev,type53_shadow_bound_energy_ev,type53_shadow_continuum_energy_ev,type53_shadow_destination_energy_ev,type53_shadow_excited_parent_energy_ev,type53_shadow_bound_g,type53_shadow_continuum_g,type53_shadow_destination_g,type53_shadow_excited_parent_g,type53_milne_partition_context_used,type53_excited_threshold_context_used,type53_corrected_threshold_before_mapping,type53_phextrap_source_reference_order,type53_phextrap_input_pair_count,type53_phextrap_output_pair_count,type53_shadow_rnist,type53_shadow_sumr,type53_shadow_sumi,type53_shadow_sumh,type53_shadow_sumh2,type53_shadow_sumc,type53_shadow_sumc2,type53_sumc_ieee_nextafter_applied,type53_shadow_nb1_one_based,type53_shadow_klmax_one_based,type53_row46_contract,type53_captured_state_anchor,type53_tau_in,type53_tau_out,type53_ptmp1,type53_ptmp2,type53_covering_fraction,type53_runtime_state_abi_used,type53_continuum_index_one_based,type53_dsec_radiation_bin_count,type53_continuum_tau_count,type50_shadow_valid,type50_shadow_ans1,type50_shadow_ans2,type50_shadow_ans3,type50_shadow_ans4,type50_shadow_ans5,type50_shadow_ans6,type50_stored_wavelength_a,type50_endpoint_energy_ev,type50_covering_fraction,type50_ptmp1,type50_ptmp2,type50_bremsa_nb1,type50_density_floor_s,type50_density_floor_applied,type50_photoexcitation_zero_covering,type50_used_dsec_covering,type50_used_dsec_radiation,type50_nb1_one_based,type50_hydrogen_escape_state_applied,type50_magnesium_escape_state_applied,type50_magnesium_source_endpoint_energy_applied,type50_source_idest1,type50_source_idest2,type50_source_endpoint1_energy_ev,type50_source_endpoint2_energy_ev,type50_line_index_one_based,type50_line_tau_in,type50_line_tau_out,type99_shadow_valid,type99_shadow_ans1,type99_shadow_ans2,type99_shadow_ans3,type99_shadow_ans4,type99_shadow_ans5,type99_shadow_ans6,type99_threshold_ev,type99_destination_energy_ev,type99_bound_energy_ev,type99_swrat,type99_calt99_density_cm3,type99_phint53hunt_density_cm3,type99_rec_cm3_s,type99_milne_alpha_cm3_s,type99_cross_section_scale,type99_ans2d_unscaled_s,type99_phint_scale,type99_pirt_unscaled_s,type99_rrrt_unscaled_s,type99_piht_unscaled_erg_s,type99_rrcl_unscaled_erg_s,type99_piht2_unscaled_erg_s,type99_rrcl2_unscaled_erg_s,type99_energy_difference_ev,type99_destination_threshold_identity,type99_ans5_pre_energy_correction,type99_ans6_pre_energy_correction,type99_ans5_energy_correction_numerator,type99_ans5_energy_correction_denominator,type99_ans5_energy_correction_factor,type99_ans6_energy_correction_numerator,type99_ans6_energy_correction_denominator,type99_ans6_energy_correction_factor,type99_destination_identity_correction_applied,type99_nbinc_threshold_one_based,type99_nb1_one_based,type99_nphint_one_based,type99_ndelt,type99_npass,type99_last_pass_first_kl_one_based,type99_last_pass_last_kl_one_based,type99_cached_atmp22_stale_reuses,type99_used_dsec_radiation,mg_type53_legacy_max_abs,mg_type53_shadow_max_abs,mg_type53_committed_max_abs,mg_type53_legacy_nonfinite,mg_type53_legacy_implausible,mg_type53_replacement_applied,mg_type53_committed_nonfinite,mg_type53_committed_implausible,mg_type53_exponent_energy_ev,mg_type53_exponent_dimensionless,mg_type53_electron_density_cm3,mg_type53_hydrogen_density_cm3,mg_type53_matrix_density_scale,mg_type53_source_faithful_mode,type49_shadow_valid,type49_shadow_ans1,type49_shadow_ans2,type49_shadow_ans3,type49_shadow_ans4,type49_shadow_ans5,type49_shadow_ans6,type49_legacy_max_abs,type49_shadow_max_abs,type49_committed_max_abs,type49_legacy_nonfinite,type49_legacy_implausible,type49_replacement_applied,type49_committed_nonfinite,type49_committed_implausible,type49_base_threshold_ev,type49_threshold_ev,type49_bound_energy_ev,type49_continuum_energy_ev,type49_destination_energy_ev,type49_excited_parent_energy_ev,type49_bound_g,type49_continuum_g,type49_destination_g,type49_excited_parent_g,type49_milne_partition_context_used,type49_excited_threshold_context_used,type49_corrected_threshold_before_mapping,type49_phextrap_source_reference_order,type49_phextrap_input_pair_count,type49_phextrap_output_pair_count,type49_phextrap_max_points,type49_phextrap_input_energy_hash,type49_phextrap_input_sigma_hash,type49_phextrap_output_energy_hash,type49_phextrap_output_sigma_hash,type49_rnist,type49_exponent_energy_ev,type49_exponent_dimensionless,type49_electron_density_cm3,type49_hydrogen_density_cm3,type49_matrix_density_scale,type49_phextrap_applied,type49_source_zero_gate,type49_source_faithful_mode,type49_runtime_state_abi_used,type49_continuum_index_one_based,type49_dsec_radiation_bin_count,type49_continuum_tau_count,type51_shadow_valid,type51_source_faithful_mode,type51_replacement_applied,type51_endpoint_order_exact,type51_committed_nonfinite,type51_bt_type,type51_point_count,type51_eij_ryd,type51_eij_ev,type51_scaling_c,type51_physical_temperature_k,type51_floor_temperature_k,type51_effective_temperature_k,type51_temperature_floor_applied,type51_scaled_temperature,type51_transformed_temperature,type51_scaled_upsilon,type51_upsilon,type51_lower_g,type51_upper_g,type51_electron_density_cm3,type51_q_excitation_cm3_s,type51_q_deexcitation_cm3_s,type51_shadow_ans1,type51_shadow_ans2,type51_shadow_ans3,type51_shadow_ans4,type51_shadow_ans5,type51_shadow_ans6,type51_legacy_ans1,type51_legacy_ans2,type51_legacy_ans3,type51_legacy_ans4,type51_legacy_ans5,type51_legacy_ans6\n";
+        record_file << "evaluation_ordinal,source_position,record,element_index,element_z,data_type,rate_type,ion_index,ion_stage,lower_row,upper_row,matrix_enabled,active_stage,matrix_committed,spectral,ans1,ans2,ans3,ans4,ans5,ans6,density_scale,line_energy_ev,atomic_mass_amu,natural_width_ev,opakab,type56_upsilon,type53_shadow_valid,type53_shadow_ans1,type53_shadow_ans2,type53_shadow_ans3,type53_shadow_ans4,type53_shadow_ans5,type53_shadow_ans6,type53_delta_ans1,type53_delta_ans2,type53_delta_ans3,type53_delta_ans4,type53_delta_ans5,type53_delta_ans6,type53_shadow_base_threshold_ev,type53_shadow_threshold_ev,type53_shadow_bound_energy_ev,type53_shadow_continuum_energy_ev,type53_shadow_destination_energy_ev,type53_shadow_excited_parent_energy_ev,type53_shadow_bound_g,type53_shadow_continuum_g,type53_shadow_destination_g,type53_shadow_excited_parent_g,type53_milne_partition_context_used,type53_excited_threshold_context_used,type53_corrected_threshold_before_mapping,type53_phextrap_source_reference_order,type53_phextrap_input_pair_count,type53_phextrap_output_pair_count,type53_shadow_rnist,type53_shadow_sumr,type53_shadow_sumi,type53_shadow_sumh,type53_shadow_sumh2,type53_shadow_sumc,type53_shadow_sumc2,type53_sumc_ieee_nextafter_applied,type53_shadow_nb1_one_based,type53_shadow_klmax_one_based,type53_row46_contract,type53_captured_state_anchor,type53_tau_in,type53_tau_out,type53_ptmp1,type53_ptmp2,type53_covering_fraction,type53_runtime_state_abi_used,type53_continuum_index_one_based,type53_dsec_radiation_bin_count,type53_continuum_tau_count,type50_shadow_valid,type50_shadow_ans1,type50_shadow_ans2,type50_shadow_ans3,type50_shadow_ans4,type50_shadow_ans5,type50_shadow_ans6,type50_stored_wavelength_a,type50_endpoint_energy_ev,type50_covering_fraction,type50_ptmp1,type50_ptmp2,type50_bremsa_nb1,type50_density_floor_s,type50_density_floor_applied,type50_photoexcitation_zero_covering,type50_used_dsec_covering,type50_used_dsec_radiation,type50_nb1_one_based,type50_hydrogen_escape_state_applied,type50_magnesium_escape_state_applied,type50_magnesium_source_endpoint_energy_applied,type50_source_idest1,type50_source_idest2,type50_source_endpoint1_energy_ev,type50_source_endpoint2_energy_ev,type50_line_index_one_based,type50_line_tau_in,type50_line_tau_out,type99_shadow_valid,type99_shadow_ans1,type99_shadow_ans2,type99_shadow_ans3,type99_shadow_ans4,type99_shadow_ans5,type99_shadow_ans6,type99_threshold_ev,type99_destination_energy_ev,type99_bound_energy_ev,type99_parent_energy_ev,type99_bound_g,type99_parent_g,type99_destination_g,type99_swrat,type99_persistent_leveltemp_context_valid,type99_persistent_leveltemp_context_applied,type99_bound_owner_stage,type99_parent_owner_stage,type99_destination_owner_stage,type99_calt99_density_cm3,type99_phint53hunt_density_cm3,type99_rec_cm3_s,type99_milne_alpha_cm3_s,type99_cross_section_scale,type99_ans2d_unscaled_s,type99_phint_scale,type99_pirt_unscaled_s,type99_rrrt_unscaled_s,type99_piht_unscaled_erg_s,type99_rrcl_unscaled_erg_s,type99_piht2_unscaled_erg_s,type99_rrcl2_unscaled_erg_s,type99_energy_difference_ev,type99_destination_threshold_identity,type99_ans5_pre_energy_correction,type99_ans6_pre_energy_correction,type99_ans5_energy_correction_numerator,type99_ans5_energy_correction_denominator,type99_ans5_energy_correction_factor,type99_ans6_energy_correction_numerator,type99_ans6_energy_correction_denominator,type99_ans6_energy_correction_factor,type99_destination_identity_correction_applied,type99_nbinc_threshold_one_based,type99_nb1_one_based,type99_nphint_one_based,type99_ndelt,type99_npass,type99_last_pass_first_kl_one_based,type99_last_pass_last_kl_one_based,type99_cached_atmp22_stale_reuses,type99_used_dsec_radiation,mg_type53_legacy_max_abs,mg_type53_shadow_max_abs,mg_type53_committed_max_abs,mg_type53_legacy_nonfinite,mg_type53_legacy_implausible,mg_type53_replacement_applied,mg_type53_committed_nonfinite,mg_type53_committed_implausible,mg_type53_exponent_energy_ev,mg_type53_exponent_dimensionless,mg_type53_electron_density_cm3,mg_type53_hydrogen_density_cm3,mg_type53_matrix_density_scale,mg_type53_source_faithful_mode,type49_shadow_valid,type49_shadow_ans1,type49_shadow_ans2,type49_shadow_ans3,type49_shadow_ans4,type49_shadow_ans5,type49_shadow_ans6,type49_legacy_max_abs,type49_shadow_max_abs,type49_committed_max_abs,type49_legacy_nonfinite,type49_legacy_implausible,type49_replacement_applied,type49_committed_nonfinite,type49_committed_implausible,type49_base_threshold_ev,type49_threshold_ev,type49_bound_energy_ev,type49_continuum_energy_ev,type49_destination_energy_ev,type49_excited_parent_energy_ev,type49_bound_g,type49_continuum_g,type49_destination_g,type49_excited_parent_g,type49_milne_partition_context_used,type49_excited_threshold_context_used,type49_corrected_threshold_before_mapping,type49_phextrap_source_reference_order,type49_phextrap_input_pair_count,type49_phextrap_output_pair_count,type49_phextrap_max_points,type49_phextrap_input_energy_hash,type49_phextrap_input_sigma_hash,type49_phextrap_output_energy_hash,type49_phextrap_output_sigma_hash,type49_rnist,type49_exponent_energy_ev,type49_exponent_dimensionless,type49_electron_density_cm3,type49_hydrogen_density_cm3,type49_matrix_density_scale,type49_phextrap_applied,type49_source_zero_gate,type49_source_faithful_mode,type49_runtime_state_abi_used,type49_continuum_index_one_based,type49_dsec_radiation_bin_count,type49_continuum_tau_count,type51_shadow_valid,type51_source_faithful_mode,type51_replacement_applied,type51_endpoint_order_exact,type51_committed_nonfinite,type51_bt_type,type51_point_count,type51_eij_ryd,type51_eij_ev,type51_scaling_c,type51_physical_temperature_k,type51_floor_temperature_k,type51_effective_temperature_k,type51_temperature_floor_applied,type51_scaled_temperature,type51_transformed_temperature,type51_scaled_upsilon,type51_upsilon,type51_lower_g,type51_upper_g,type51_electron_density_cm3,type51_q_excitation_cm3_s,type51_q_deexcitation_cm3_s,type51_shadow_ans1,type51_shadow_ans2,type51_shadow_ans3,type51_shadow_ans4,type51_shadow_ans5,type51_shadow_ans6,type51_legacy_ans1,type51_legacy_ans2,type51_legacy_ans3,type51_legacy_ans4,type51_legacy_ans5,type51_legacy_ans6\n";
         record_file << std::setprecision(17);
 
         struct FamilySummary {
@@ -6804,7 +7865,16 @@ int xstar_fixed_state_write_last_diagnostics_v1(
             record_file << ',' << item.type99_shadow.threshold_ev
                         << ',' << item.type99_shadow.destination_energy_ev
                         << ',' << item.type99_shadow.bound_energy_ev
+                        << ',' << item.type99_shadow.parent_energy_ev
+                        << ',' << item.type99_shadow.bound_statistical_weight
+                        << ',' << item.type99_shadow.parent_statistical_weight
+                        << ',' << item.type99_shadow.destination_statistical_weight
                         << ',' << item.type99_shadow.swrat
+                        << ',' << (item.type99_shadow.persistent_leveltemp_context_valid ? 1 : 0)
+                        << ',' << (item.type99_shadow.persistent_leveltemp_context_applied ? 1 : 0)
+                        << ',' << item.type99_shadow.bound_owner_stage
+                        << ',' << item.type99_shadow.parent_owner_stage
+                        << ',' << item.type99_shadow.destination_owner_stage
                         << ',' << item.type99_shadow.calt99_density_cm3
                         << ',' << item.type99_shadow.phint53hunt_density_cm3
                         << ',' << item.type99_shadow.rec_cm3_s
@@ -7056,6 +8126,79 @@ int xstar_fixed_state_write_last_diagnostics_v1(
             }
         }
 
+
+        if (context->last_all_element_solve_response) {
+            std::ofstream stage_rows(root / (stem + "_all_element_solve_stage_rows.csv"));
+            std::ofstream stage_superlevels(root / (stem + "_all_element_solve_stage_superlevels.csv"));
+            std::ofstream stage_matrix(root / (stem + "_all_element_solve_stage_condensed_matrix.csv"));
+            std::ofstream stage_manifest(root / (stem + "_all_element_solve_stage_manifest.csv"));
+            if (!stage_rows || !stage_superlevels || !stage_matrix || !stage_manifest) {
+                throw std::runtime_error("cannot create all-element solve-stage diagnostics");
+            }
+            stage_rows << "evaluation_ordinal,element_index,element_z,active_min_stage,active_max_stage,compact_row,superlevel,ion,ion_charge,is_normalization_row,transformed_initial_population,final_outer_start_population,population_after_condensed,final_fixed_point_population_before,final_fixed_point_population_after,final_population,rhs\n";
+            stage_superlevels << "evaluation_ordinal,element_index,element_z,final_outer_iteration,superlevel,population_before_condensed_solve,condensed_rhs,first_lu_solution,refinement_residual,refinement_correction,refined_superlevel_solution\n";
+            stage_matrix << "evaluation_ordinal,element_index,element_z,final_outer_iteration,row_superlevel,column_superlevel,normalized_matrix_value\n";
+            stage_manifest << "evaluation_ordinal,element_index,element_z,active_min_stage,active_max_stage,n_rows,n_superlevels,n_ions,normalization_row,final_outer_iteration,final_fixed_iterations,total_fixed_point_iterations,solver_method,trace_captured\n";
+            stage_rows << std::setprecision(17);
+            stage_superlevels << std::setprecision(17);
+            stage_matrix << std::setprecision(17);
+            stage_manifest << std::setprecision(17);
+            for (const auto& diagnostic : context->last_element_diagnostics) {
+                if (!diagnostic.solve_response_captured || !diagnostic.solve_stage_trace_captured) continue;
+                const int n = diagnostic.active.element.n_rows;
+                const int nsp = diagnostic.active.element.n_superlevels;
+                if (diagnostic.final_population_after_condensed.size() != static_cast<std::size_t>(n) ||
+                    diagnostic.final_fixed_point_population_before.size() != static_cast<std::size_t>(n) ||
+                    diagnostic.final_fixed_point_population_after.size() != static_cast<std::size_t>(n) ||
+                    diagnostic.final_superlevel_populations_before_solve.size() != static_cast<std::size_t>(nsp) ||
+                    diagnostic.final_condensed_matrix.size() != static_cast<std::size_t>(nsp) * static_cast<std::size_t>(nsp) ||
+                    diagnostic.final_condensed_rhs.size() != static_cast<std::size_t>(nsp) ||
+                    diagnostic.final_first_lu_solution.size() != static_cast<std::size_t>(nsp) ||
+                    diagnostic.final_refinement_residual.size() != static_cast<std::size_t>(nsp) ||
+                    diagnostic.final_refinement_correction.size() != static_cast<std::size_t>(nsp) ||
+                    diagnostic.final_refined_superlevel_solution.size() != static_cast<std::size_t>(nsp)) {
+                    throw std::runtime_error("all-element solve-stage trace dimensions are inconsistent");
+                }
+                stage_manifest << evaluation_ordinal << ',' << diagnostic.element_index << ',' << diagnostic.element_z << ','
+                    << diagnostic.active.min_stage << ',' << diagnostic.active.max_stage << ',' << n << ',' << nsp << ','
+                    << diagnostic.active.element.n_ions << ',' << diagnostic.active.element.normalization_row << ','
+                    << diagnostic.final_outer_iteration << ',' << diagnostic.final_fixed_iterations << ','
+                    << diagnostic.fixed_point_iterations << ',' << diagnostic.solver_method << ",1\n";
+                for (int compact_row = 1; compact_row <= n; ++compact_row) {
+                    const std::size_t index = static_cast<std::size_t>(compact_row - 1);
+                    const auto& row = diagnostic.active.element.rows.at(index);
+                    stage_rows << evaluation_ordinal << ',' << diagnostic.element_index << ',' << diagnostic.element_z << ','
+                        << diagnostic.active.min_stage << ',' << diagnostic.active.max_stage << ',' << compact_row << ','
+                        << row.superlevel << ',' << row.ion << ',' << row.ion_charge << ','
+                        << (compact_row == diagnostic.active.element.normalization_row ? 1 : 0) << ','
+                        << diagnostic.active_initial_populations.at(index) << ','
+                        << diagnostic.active_final_outer_start_populations.at(index) << ','
+                        << diagnostic.final_population_after_condensed.at(index) << ','
+                        << diagnostic.final_fixed_point_population_before.at(index) << ','
+                        << diagnostic.final_fixed_point_population_after.at(index) << ','
+                        << diagnostic.active_final_populations.at(index) << ','
+                        << diagnostic.rhs.at(index) << '\n';
+                }
+                for (int sp = 1; sp <= nsp; ++sp) {
+                    const std::size_t index = static_cast<std::size_t>(sp - 1);
+                    stage_superlevels << evaluation_ordinal << ',' << diagnostic.element_index << ',' << diagnostic.element_z << ','
+                        << diagnostic.final_outer_iteration << ',' << sp << ','
+                        << diagnostic.final_superlevel_populations_before_solve.at(index) << ','
+                        << diagnostic.final_condensed_rhs.at(index) << ','
+                        << diagnostic.final_first_lu_solution.at(index) << ','
+                        << diagnostic.final_refinement_residual.at(index) << ','
+                        << diagnostic.final_refinement_correction.at(index) << ','
+                        << diagnostic.final_refined_superlevel_solution.at(index) << '\n';
+                    for (int col = 1; col <= nsp; ++col) {
+                        stage_matrix << evaluation_ordinal << ',' << diagnostic.element_index << ',' << diagnostic.element_z << ','
+                            << diagnostic.final_outer_iteration << ',' << sp << ',' << col << ','
+                            << diagnostic.final_condensed_matrix.at(
+                                static_cast<std::size_t>(sp - 1) * static_cast<std::size_t>(nsp) +
+                                static_cast<std::size_t>(col - 1)) << '\n';
+                    }
+                }
+            }
+        }
 
         if (context->last_all_element_solve_system) {
             const std::filesystem::path system_relative = stem + "_all_element_solve_systems";
@@ -7343,6 +8486,37 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                               << row.unweighted_cooling2_contribution << ','
                               << row.heating_contribution << ',' << row.cooling_contribution << ','
                               << row.heating2_contribution << ',' << row.cooling2_contribution << '\n';
+            }
+        }
+
+        {
+            std::ofstream canonical_file(root / (stem + "_canonical_thermal_terms.csv"));
+            if (!canonical_file) throw std::runtime_error("cannot create canonical Thermal term ledger CSV");
+            canonical_file << "evaluation_ordinal,element_index,element_z,ledger_fingerprint,element_consumer_fingerprint,fixed_state_consumer_fingerprint,shared_ownership,term_index,source_position,record,data_type,rate_type,ion_index,ion_stage,compact_row,native_compact_row,source_compact_row,role,is_type53,is_normalization_row,source_domain_included,matrix_insertion_captured,type99_source_corrected,primary_source_ordered,primary_source_order_index,cj,cj2,native_cj,source_cj\n";
+            canonical_file << std::setprecision(17);
+            for (const auto& diagnostic : context->last_element_diagnostics) {
+                for (const auto& term : diagnostic.canonical_thermal_terms) {
+                    canonical_file << evaluation_ordinal << ','
+                                   << diagnostic.element_index << ',' << diagnostic.element_z << ','
+                                   << hex_u64(diagnostic.canonical_thermal_ledger_fingerprint) << ','
+                                   << hex_u64(diagnostic.element_thermal_ledger_fingerprint) << ','
+                                   << hex_u64(diagnostic.fixed_state_thermal_ledger_fingerprint) << ','
+                                   << (diagnostic.canonical_thermal_ledger_shared ? 1 : 0) << ','
+                                   << term.term_index << ',' << term.source_position << ',' << term.record << ','
+                                   << term.data_type << ',' << term.rate_type << ',' << term.ion_index << ','
+                                   << term.ion_stage << ',' << term.compact_row << ',' << term.native_compact_row << ','
+                                   << term.source_compact_row << ','
+                                   << (term.role == XSTAR_CANONICAL_THERMAL_FORWARD_DIAG_LOSS
+                                       ? "forward_diag_loss" : "reverse_diag_loss") << ','
+                                   << ((term.flags & XSTAR_CANONICAL_THERMAL_TYPE53) != 0u ? 1 : 0) << ','
+                                   << ((term.flags & XSTAR_CANONICAL_THERMAL_NORMALIZATION_ROW) != 0u ? 1 : 0) << ','
+                                   << ((term.flags & XSTAR_CANONICAL_THERMAL_SOURCE_DOMAIN_INCLUDED) != 0u ? 1 : 0) << ','
+                                   << ((term.flags & XSTAR_CANONICAL_THERMAL_MATRIX_INSERTION_CAPTURED) != 0u ? 1 : 0) << ','
+                                   << ((term.flags & XSTAR_CANONICAL_THERMAL_TYPE99_SOURCE_CORRECTED) != 0u ? 1 : 0) << ','
+                                   << ((term.flags & XSTAR_CANONICAL_THERMAL_PRIMARY_SOURCE_ORDERED) != 0u ? 1 : 0) << ','
+                                   << term.primary_source_order_index << ','
+                                   << term.cj << ',' << term.cj2 << ',' << term.native_cj << ',' << term.source_cj << '\n';
+                }
             }
         }
 

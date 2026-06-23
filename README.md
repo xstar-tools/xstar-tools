@@ -1,4 +1,37 @@
+## v0.6.48.7.46.21.13.2.1 Type-57 diagnostic-threshold E10 gate-semantics hotfix
+
+This diagnostic-only hotfix replaces the Type-57 threshold bit-exact gate with canonical `.10e` equivalence and separates the valid variable-size source answer domain from the complete 368-record native diagnostic inventory. It changes no physics, Thermal totals, controller logic, radiation grids, or ABI. Use `run_v04874622321_type57_diagnostic_threshold_e10_gate_semantics_hotfix.sh`.
+
+## v0.6.48.7.46.21.11 Magnesium Type-53 persistent `leveltemp` closure
+
+This qualification release fixes the remaining dominant `mg_heating2` discrepancy by transporting literal Type-13 destination-column candidates for all twelve Mg stages and resolving the mutable `leveltemp` owner only after the active ion-stage interval is known. It recomputes Type-53 `ans5/ans6` from native pre-energy accumulators, preserves unowned persistent columns, and fails closed on stale serialized cases. The v21.10 Type-57 and earlier Hydrogen/Helium corrections remain enabled; ABI 60487 is unchanged.
+
+## v0.6.48.7.46.21.10.1 Type-57 fresh-lowered-case hotfix
+
+This runner-only hotfix lowers the supplied ATDB with the current package, verifies the new Type-57 literal payload, and uses the same verified native case for fixed replay and controller execution. It prevents the stale v21.3 case from triggering `source-faithful type57 requires literal e1/eth/g1/g2 payload`. Physics and ABI 60487 are unchanged.
+
+## Release 0.6.48.7.46.21.5
+
+## v0.6.48.7.46.21.10 Magnesium Type-57 source-local Thermal closure
+
+This qualification release transports Type-57 source-local `e1` and parent-threshold `eth` values into the native fixed program, uses the legacy collision energy conversion for its secondary energy channels, and centralizes benchmark Boltzmann/collision constants through `constants.def`. It requires a fresh all-61 replay and preserves the accepted Hydrogen Type-60/62 and Helium post-closure gates. ABI 60487 is unchanged.
+
+Source-faithful element convergence controls now match the Python/v0.6.47.2 contract at every native entry point. The v21.4 source-probe runtime import correction is included, and the trajectory analyzer now requires five all-target control gates before milestone acceptance. See `V0648746215_SOURCE_FAITHFUL_ELEMENT_CONVERGENCE_CONTRACT_RESTORATION.md`.
+
 # xstar_tools
+
+## v0.6.48.7.46.21.8.1 baseline-path persistence hotfix
+
+This hotfix persists the auto-detected v46.20.1 and v46.19.3.1 directories needed by the v21.8 full replay and validates every resolved baseline path before use. It does not change the v21.8 Thermal physics corrections or ABI 60487.
+
+## v0.6.48.7.46.21.8 Thermal answer-path correction
+
+This release promotes source-faithful Type-51 answers for H/He/Mg and moves canonical Thermal coefficient capture to the final post-matrix-closure contribution stream. It regenerates all 61 native fixed evaluations before the canonical Thermal/controller audit and writes a focused report for Hydrogen records 469-491 and the Helium Type-50/non-Type-53 cooling domain. Use `run_v048746218_thermal_answer_path_corrections.sh`; direct v21.7 full runs without a fresh native-evaluation directory are rejected. ABI remains 60487.
+
+
+## Current qualification milestone: v0.6.48.7.46.21.5
+
+v21.5 restores the production C++ element convergence contract to the Python/v0.6.47.2 values: 200 outer iterations, 200 fixed-point iterations, Lucy tolerance `1.0e-2`, and fixed-point tolerance `1.0e-2`. It also includes the v21.4 source-probe runtime import fix, applies the accepted physical-stage/local-ordinal diagnostic semantics to iteration traces, and requires five all-target control gates before milestone acceptance. ABI 60487 is unchanged and production promotion remains blocked pending the host trajectory replay. See `V0648746215_SOURCE_FAITHFUL_ELEMENT_CONVERGENCE_CONTRACT_RESTORATION.md`.
 
 ## Current qualification milestone
 
@@ -190,3 +223,28 @@ Use `run_v048720_thermal_controller_state_trajectory_audit.sh` with an existing
 v0.6.48.7.19/19.1 output directory to identify workspace selection, first
 thermal branch divergence, early termination, and missing between-call state
 refresh. This is qualification-only and does not promote the full controller.
+
+## v0.6.48.7.46.21.6 qualification
+
+The all-sequence trajectory qualification covers 61 sequences for H, He, and Mg (183 systems). Numeric science fields use canonical `.10e` equality; structural and solver-control fields remain exact. See `V0648746216_ALL_SEQUENCE_IEEE_E10_TRAJECTORY_PARITY.md`.
+## v0.6.48.7.46.21.7 qualification
+
+The downstream qualification compares canonical Thermal science and full controller state across all 61 evaluations. Numeric science fields preserve canonical `.10e` equality; structural identities, controller decisions, counters, and termination state remain exact. Bit differences, accepted roundoff, and true rejections are reported separately. Product-level parity remains explicitly `NOT_RUN`. See `V0648746217_ALL_SEQUENCE_CANONICAL_THERMAL_AND_CONTROLLER_QUALIFICATION.md`.
+## v0.6.48.7.46.21.7.1 runner hotfix
+
+The v21.7.1 runner recursively discovers historical baseline workspaces under the current project roots and optional `XSTAR_V048746217_SEARCH_ROOTS`. It also removes source scalar-budget override arguments from the independent Thermal controller replay. The scientific comparator and ABI are unchanged. See `V06487462171_BASELINE_AUTODISCOVERY_AND_INDEPENDENT_CONTROLLER_HOTFIX.md`.
+
+
+
+## v0.6.48.7.46.21.7.3 per-sequence controller workspace transport
+
+The native `run-fixed-dsec` qualification now accepts `--runtime-state-workspace-dir` and selects the captured runtime workspace for each of the 61 immutable source sequences. The controller dynamically binds line optical depths and the source-faithful Hydrogen/Magnesium Type-50 and Magnesium Type-99/source-order ledgers used by the accepted v21.6 fixed evaluations. Large arrays are loaded one evaluation at a time. Canonical `.10e` comparison and ABI 60487 are unchanged.
+
+## v0.6.48.7.46.21.7.2 controller source-sequence hotfix
+
+The full native `run-fixed-dsec` path now binds the source qualification sequence separately for every fixed-state callback. This is required because the controller executes all 61 source states in one process, while the historical fixed-evaluation qualification executed one process per sequence. The mapping is read from the 61-row trajectory rather than inferred from callback insertion order.
+
+
+## v0.6.48.7.46.21.7.3.1 controller prefix-divergence reporting
+
+The full controller now uses `--source-trajectory-guard` when sequence-specific qualification workspaces and ledgers are active. Once the autonomous native state is no longer canonical-E10 identical to the corresponding source state, the controller stops before consuming the next source ledger and writes a structured prefix REJECT. This preserves strict ledger integrity and exposes the actual scientific divergence boundary.

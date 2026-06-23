@@ -7,6 +7,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 
 def write_csv(path: Path, fields, rows):
@@ -20,7 +22,7 @@ def write_csv(path: Path, fields, rows):
 def test_v46202_source_probe_contract():
     from xstar_tools.xstar import v0472_all61_magnesium_primary_cooling_source_order_capture as module
 
-    assert module.RELEASE == "0.6.48.7.46.21"
+    assert module.RELEASE == "0.6.48.7.46.21.5"
     assert module.EXPECTED_EVALUATIONS == 61
     assert module.LEDGER_NAME.endswith("source_order_ledger.csv")
     assert "source_order_index" in module.LEDGER_FIELDS
@@ -31,10 +33,11 @@ def test_v46202_cpp_contract():
     text = (ROOT / "src/xstar_tools/xstar/cpp/fixed_state_engine.cpp").read_text()
     assert text.count("XSTAR_QUALIFICATION_MAGNESIUM_PRIMARY_COOLING_SOURCE_ORDER_REDUCTION") == 1
     assert text.count("XSTAR_QUALIFICATION_MAGNESIUM_PRIMARY_COOLING_SOURCE_ORDER_LEDGER_CSV") == 1
-    assert "magnesium_primary_pending_cooling" in text
-    assert "magnesium_primary_order_state.ordered_rows" in text
+    assert "primary_source_order_index" in text
+    assert "primary_order_state_.rows" in text
+    assert "CanonicalThermalLedgerBuilderV048746212" in text
     assert "magnesium_primary_cooling_source_order_applied" in text
-    assert "magnesium primary-cooling source-order ledger was not fully consumed" in text
+    assert "canonical Thermal ledger did not consume every Mg primary source-order row" in text
 
 
 def test_v46202_baseline_gate_accepts_synthetic(tmp_path):

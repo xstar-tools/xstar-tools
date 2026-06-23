@@ -1,4 +1,4 @@
-"""Aggregate 61 independent run-fixed-evaluation outputs for v0.6.48.7.46.21."""
+"""Aggregate 61 independent run-fixed-evaluation outputs for v0.6.48.7.46.21.5."""
 from __future__ import annotations
 
 import argparse
@@ -7,12 +7,13 @@ import json
 from pathlib import Path
 from typing import Any
 
-RELEASE = "0.6.48.7.46.21"
+RELEASE = "0.6.48.7.46.21.5"
 SCHEMA = "xstar-tools-v064874612-all61-native-replay-aggregate-v1"
 THERMAL_LEDGER_NAME = "native_all61_thermal_budget.csv"
 THERMAL_COMPACT_POPULATION_NAME = "native_all61_thermal_compact_populations.csv"
 THERMAL_DIAGONAL_LEDGER_NAME = "native_all61_thermal_diagonal_ledger.csv"
 CONTINUUM_WORKSPACE_LEDGER_NAME = "native_all61_continuum_workspace.csv"
+CANONICAL_THERMAL_TERM_LEDGER_NAME = "native_all61_canonical_thermal_terms.csv"
 
 
 def _read_csv(path: Path) -> list[dict[str, str]]:
@@ -28,7 +29,7 @@ def _write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, Any]]) ->
         writer.writerows(rows)
 
 
-def aggregate(source_inputs: Path, evaluations_dir: Path, output: Path, *, require_compact_populations: bool = False, require_thermal_diagonal_ledger: bool = False, require_continuum_workspace: bool = False) -> dict[str, Any]:
+def aggregate(source_inputs: Path, evaluations_dir: Path, output: Path, *, require_compact_populations: bool = False, require_thermal_diagonal_ledger: bool = False, require_continuum_workspace: bool = False, require_canonical_thermal_ledger: bool = False) -> dict[str, Any]:
     output.mkdir(parents=True, exist_ok=True)
     source = _read_csv(source_inputs)
     source.sort(key=lambda row: int(row["sequence"]))
@@ -41,6 +42,8 @@ def aggregate(source_inputs: Path, evaluations_dir: Path, output: Path, *, requi
     diagonal_fields: list[str] | None = None
     continuum_rows_all: list[dict[str, Any]] = []
     continuum_fields: list[str] | None = None
+    canonical_rows_all: list[dict[str, Any]] = []
+    canonical_fields: list[str] | None = None
     callbacks = records = elements = 0
     errors: list[str] = []
     trajectory_fields = [
@@ -56,6 +59,7 @@ def aggregate(source_inputs: Path, evaluations_dir: Path, output: Path, *, requi
         compact_population_path = root / "native_thermal_compact_populations.csv"
         diagonal_path = root / "native_thermal_diagonal_ledger.csv"
         continuum_path = root / "native_continuum_workspace.csv"
+        canonical_path = root / "native_canonical_thermal_terms.csv"
         required_paths = [state_path, summary_path, thermal_path]
         if require_compact_populations:
             required_paths.append(compact_population_path)
@@ -63,6 +67,8 @@ def aggregate(source_inputs: Path, evaluations_dir: Path, output: Path, *, requi
             required_paths.append(diagonal_path)
         if require_continuum_workspace:
             required_paths.append(continuum_path)
+        if require_canonical_thermal_ledger:
+            required_paths.append(canonical_path)
         missing = [str(path.name) for path in required_paths if not path.is_file()]
         if missing:
             errors.append(f"evaluation_{sequence:04d}:missing:{','.join(missing)}")
@@ -140,6 +146,32 @@ def aggregate(source_inputs: Path, evaluations_dir: Path, output: Path, *, requi
                 diagonal_rows_all.append(diagonal)
 
 
+        if canonical_path.is_file():
+            canonical_rows = _read_csv(canonical_path)
+            seen_elements: set[int] = set()
+            for canonical in canonical_rows:
+                canonical.update({
+                    "sequence": str(sequence),
+                    "kind": kind,
+                    "call_index": str(call_index),
+                    "evaluation_index": str(evaluation_index),
+                })
+                if canonical_fields is None:
+                    canonical_fields = list(canonical.keys())
+                elif list(canonical.keys()) != canonical_fields:
+                    errors.append(f"evaluation_{sequence:04d}:canonical_thermal_schema_mismatch")
+                    break
+                if canonical.get("shared_ownership") != "1" or (
+                    canonical.get("ledger_fingerprint") != canonical.get("element_consumer_fingerprint") or
+                    canonical.get("ledger_fingerprint") != canonical.get("fixed_state_consumer_fingerprint")
+                ):
+                    errors.append(f"evaluation_{sequence:04d}:canonical_thermal_ownership_mismatch")
+                    break
+                seen_elements.add(int(canonical["element_z"]))
+                canonical_rows_all.append(canonical)
+            if require_canonical_thermal_ledger and seen_elements != {1, 2, 12}:
+                errors.append(f"evaluation_{sequence:04d}:canonical_thermal_elements:{sorted(seen_elements)}")
+
         if continuum_path.is_file():
             continuum_rows = _read_csv(continuum_path)
             if require_continuum_workspace and len(continuum_rows) != 999:
@@ -189,6 +221,19 @@ def aggregate(source_inputs: Path, evaluations_dir: Path, output: Path, *, requi
             "clbrems_contribution", "running_cmp1", "running_cmp2",
             "running_htcomp", "running_clcomp", "running_htfreef", "running_clbrems",
         ]
+    if canonical_fields is None:
+        canonical_fields = [
+            "sequence", "kind", "call_index", "evaluation_index", "evaluation_ordinal",
+            "element_index", "element_z", "ledger_fingerprint",
+            "element_consumer_fingerprint", "fixed_state_consumer_fingerprint",
+            "shared_ownership", "term_index", "source_position", "record",
+            "data_type", "rate_type", "ion_index", "ion_stage", "compact_row",
+            "native_compact_row", "source_compact_row", "role", "is_type53",
+            "is_normalization_row", "source_domain_included", "matrix_insertion_captured",
+            "type99_source_corrected", "primary_source_ordered", "primary_source_order_index", "cj", "cj2",
+            "native_cj", "source_cj",
+        ]
+    _write_csv(output / CANONICAL_THERMAL_TERM_LEDGER_NAME, canonical_fields, canonical_rows_all)
     _write_csv(output / CONTINUUM_WORKSPACE_LEDGER_NAME, continuum_fields, continuum_rows_all)
     sequences = [int(row["sequence"]) for row in trajectory_rows]
     thermal_sequences = [int(row["sequence"]) for row in thermal_rows]
@@ -205,6 +250,8 @@ def aggregate(source_inputs: Path, evaluations_dir: Path, output: Path, *, requi
         "thermal_diagonal_ledger_required": require_thermal_diagonal_ledger,
         "continuum_workspace_rows": len(continuum_rows_all),
         "continuum_workspace_required": require_continuum_workspace,
+        "canonical_thermal_term_rows": len(canonical_rows_all),
+        "canonical_thermal_ledger_required": require_canonical_thermal_ledger,
         "canonical_sequence_inventory": canonical_inventory,
         "python_callbacks": callbacks,
         "records_evaluated": records,
@@ -216,7 +263,8 @@ def aggregate(source_inputs: Path, evaluations_dir: Path, output: Path, *, requi
     compact_ok = (not require_compact_populations) or len(compact_population_rows) == 40149
     diagonal_ok = (not require_thermal_diagonal_ledger) or len(diagonal_rows_all) > 0
     continuum_ok = (not require_continuum_workspace) or len(continuum_rows_all) == 60939
-    summary["result"] = "ACCEPT" if len(trajectory_rows) == len(thermal_rows) == 61 and compact_ok and diagonal_ok and continuum_ok and callbacks == 0 and canonical_inventory and not errors else "REJECT"
+    canonical_ok = (not require_canonical_thermal_ledger) or len(canonical_rows_all) > 0
+    summary["result"] = "ACCEPT" if len(trajectory_rows) == len(thermal_rows) == 61 and compact_ok and diagonal_ok and continuum_ok and canonical_ok and callbacks == 0 and canonical_inventory and not errors else "REJECT"
     (output / "native_dsec_summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
     return summary
 
@@ -229,6 +277,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--require-compact-populations", action="store_true")
     parser.add_argument("--require-thermal-diagonal-ledger", action="store_true")
     parser.add_argument("--require-continuum-workspace", action="store_true")
+    parser.add_argument("--require-canonical-thermal-ledger", action="store_true")
     args = parser.parse_args(argv)
     try:
         result = aggregate(
@@ -236,6 +285,7 @@ def main(argv: list[str] | None = None) -> int:
             require_compact_populations=args.require_compact_populations,
             require_thermal_diagonal_ledger=args.require_thermal_diagonal_ledger,
             require_continuum_workspace=args.require_continuum_workspace,
+            require_canonical_thermal_ledger=args.require_canonical_thermal_ledger,
         )
     except Exception as exc:
         result = {
