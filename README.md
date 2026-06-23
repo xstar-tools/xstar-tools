@@ -1,3 +1,7 @@
+## v0.6.48.7.46.21.16.2 Type-57 fresh-lowered-case hotfix
+
+This runner-only hotfix replaces the stale v21.3 serialized fixture with a current H/He/Mg case lowered from the supplied ATDB. It validates the Type-57 literal `e1/eth/g1/g2` payload together with the promoted Type-53, Type-49, and Type-99 contexts, then uses the same verified case for fixed replay and controller execution. Physics, canonical `.7e`, the `1e-30` zero floor, and ABI 60487 are unchanged.
+
 ## v0.6.48.7.46.21.13.2.1 Type-57 diagnostic-threshold E10 gate-semantics hotfix
 
 This diagnostic-only hotfix replaces the Type-57 threshold bit-exact gate with canonical `.10e` equivalence and separates the valid variable-size source answer domain from the complete 368-record native diagnostic inventory. It changes no physics, Thermal totals, controller logic, radiation grids, or ABI. Use `run_v04874622321_type57_diagnostic_threshold_e10_gate_semantics_hotfix.sh`.

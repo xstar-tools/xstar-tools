@@ -1,5 +1,13 @@
 # CHANGELOG
 
+# 0.6.48.7.46.21.16.2 - 2026-06-23
+
+- Replace the stale v21.3 `native_case_all61` default with a fresh H/He/Mg case lowered from the supplied ATDB by the current package.
+- Validate Type-57 literal `e1/eth/g1/g2`, Type-53, Type-49, and Type-99 serialized payload contracts before any native evaluation.
+- Atomically promote the staged case and bind the same verified path into both fixed replay and full controller execution.
+- Strengthen readiness to reject stale-case reuse or replay/controller case divergence.
+- Preserve Helium Type-53 and electron-residual corrections, canonical `.7e`, the `1e-30` zero floor, physics arithmetic, and ABI 60487.
+
 # 0.6.48.7.46.21.16.1 - 2026-06-23
 
 - Restore the source-local Type-57 energy transport flag in the v21.16 fresh fixed replay; independent Thermal parity now reaches the Helium Type-53 correction instead of failing closed at sequence 1.
