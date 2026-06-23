@@ -9,8 +9,8 @@ import struct
 from pathlib import Path
 from typing import Any
 
-RELEASE = "0.6.48.7.46.21.17.1"
-SCHEMA = "xstar-tools-v06487462271-source-order-electron-controller-closure-audit-v2"
+RELEASE = "0.6.48.7.46.21.17.2"
+SCHEMA = "xstar-tools-v06487462272-source-order-electron-controller-closure-audit-v2"
 ZERO_FLOOR = 1.0e-30
 
 

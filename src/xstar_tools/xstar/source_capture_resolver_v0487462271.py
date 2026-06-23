@@ -17,8 +17,8 @@ from typing import Any, Iterable
 
 from xstar_tools.xstar import v0472_all61_independent_thermal_capture_v048746212 as capture_mod
 
-RELEASE = "0.6.48.7.46.21.17.1"
-SCHEMA = "xstar-tools-v06487462271-source-capture-resolver-v1"
+RELEASE = "0.6.48.7.46.21.17.2"
+SCHEMA = "xstar-tools-v06487462272-source-capture-resolver-v2"
 CAPTURE_BASENAME = "v0472_all61_independent_thermal_capture"
 
 
@@ -103,46 +103,57 @@ def resolve(
 ) -> dict[str, Any]:
     generated_dir = generated_dir.resolve()
     explicit = _dedupe(candidates)
-    attempts: list[dict[str, Any]] = []
+    skipped_candidates: list[dict[str, Any]] = []
+    rejected_candidates: list[dict[str, Any]] = []
+
+    def compact_rejection(candidate: Path, verification: dict[str, Any]) -> dict[str, Any]:
+        errors = list(verification.get("errors", []))
+        return {
+            "path": str(candidate),
+            "result": verification.get("result", "REJECT"),
+            "evaluations": int(verification.get("evaluations", 0) or 0),
+            "type99_capture_result": verification.get("type99_capture_result", "MISSING"),
+            "error_count": len(errors),
+            "first_error": errors[0] if errors else "verification_rejected",
+        }
+
+    def accepted_report(candidate: Path, mode: str, recaptured: bool) -> dict[str, Any]:
+        return {
+            "schema": SCHEMA,
+            "release": RELEASE,
+            "result": "ACCEPT",
+            "selected_dir": str(candidate.resolve()),
+            "selected_mode": mode,
+            "recaptured": recaptured,
+            "skipped_candidates": skipped_candidates,
+            "rejected_candidates": rejected_candidates,
+            "errors": [],
+            "qualification_only": True,
+            "product_level_parity": "NOT_IN_SCOPE",
+            "production_promotion_ready": False,
+        }
 
     def try_candidates(paths: Iterable[Path]) -> dict[str, Any] | None:
         for candidate in _dedupe(paths):
+            if not candidate.is_dir():
+                skipped_candidates.append({"path": str(candidate), "reason": "not_present"})
+                continue
             verification = _verify(candidate)
-            attempts.append({
-                "path": str(candidate),
-                "result": verification.get("result", "REJECT"),
-                "errors": verification.get("errors", []),
-                "evaluations": int(verification.get("evaluations", 0) or 0),
-                "type99_capture_result": verification.get("type99_capture_result", "MISSING"),
-            })
             if verification.get("result") == "ACCEPT" and int(verification.get("evaluations", 0)) == 61:
-                return {
-                    "schema": SCHEMA,
-                    "release": RELEASE,
-                    "result": "ACCEPT",
-                    "selected_dir": str(candidate.resolve()),
-                    "selected_mode": "verified_reuse",
-                    "recaptured": False,
-                    "attempts": attempts,
-                    "qualification_only": True,
-                    "product_level_parity": "NOT_IN_SCOPE",
-                    "production_promotion_ready": False,
-                }
+                return accepted_report(candidate, "verified_reuse", False)
+            rejected_candidates.append(compact_rejection(candidate, verification))
         return None
 
     if not force_recapture:
-        # Fast path: persistent/current and explicitly named lineage candidates.
-        selected = try_candidates([generated_dir, *explicit])
+        # Explicit candidates are authoritative and cheap.  The generated cache
+        # is checked next, then bounded discovery is used only as a fallback.
+        selected = try_candidates([*explicit, generated_dir])
         if selected is not None:
             return selected
-        # Recursive discovery is a last reuse attempt; it is never allowed to
-        # delay verification of an explicit candidate or hide a failed one.
         selected = try_candidates(_discovered_candidates(search_roots))
         if selected is not None:
             return selected
 
-    # Build into a sibling temporary directory and promote only after the
-    # current verifier accepts all 61 evaluations and Type-99 state.
     generated_dir.parent.mkdir(parents=True, exist_ok=True)
     temp_parent = generated_dir.parent
     temp_dir = Path(tempfile.mkdtemp(prefix=f".{generated_dir.name}.", dir=temp_parent))
@@ -152,70 +163,43 @@ def resolve(
             source_archive.resolve(), atdb_path.resolve(), temp_dir,
             parameters_json.resolve(), coheat_path.resolve() if coheat_path else None,
         )
-        attempts.append({
-            "path": str(temp_dir),
-            "result": captured.get("result", "REJECT"),
-            "errors": captured.get("errors", []),
-            "evaluations": int(captured.get("evaluations", 0) or 0),
-            "type99_capture_result": captured.get("type99_capture_result", "MISSING"),
-            "mode": "fresh_capture",
-        })
         if captured.get("result") != "ACCEPT" or int(captured.get("evaluations", 0)) != 61:
+            rejected_candidates.append(compact_rejection(temp_dir, captured))
             return {
-                "schema": SCHEMA,
-                "release": RELEASE,
-                "result": "REJECT",
+                "schema": SCHEMA, "release": RELEASE, "result": "REJECT",
                 "errors": ["fresh source capture did not satisfy the v21.2 all-61 contract"],
-                "attempts": attempts,
-                "qualification_only": True,
-                "product_level_parity": "NOT_IN_SCOPE",
+                "skipped_candidates": skipped_candidates,
+                "rejected_candidates": rejected_candidates,
+                "qualification_only": True, "product_level_parity": "NOT_IN_SCOPE",
                 "production_promotion_ready": False,
             }
         verified = _verify(temp_dir)
         if verified.get("result") != "ACCEPT" or int(verified.get("evaluations", 0)) != 61:
+            rejected_candidates.append(compact_rejection(temp_dir, verified))
             return {
-                "schema": SCHEMA,
-                "release": RELEASE,
-                "result": "REJECT",
+                "schema": SCHEMA, "release": RELEASE, "result": "REJECT",
                 "errors": ["fresh source capture failed post-capture verification"],
-                "attempts": attempts,
-                "qualification_only": True,
-                "product_level_parity": "NOT_IN_SCOPE",
+                "skipped_candidates": skipped_candidates,
+                "rejected_candidates": rejected_candidates,
+                "qualification_only": True, "product_level_parity": "NOT_IN_SCOPE",
                 "production_promotion_ready": False,
             }
-        if backup_dir.exists():
-            shutil.rmtree(backup_dir)
-        if generated_dir.exists():
-            generated_dir.rename(backup_dir)
+        if backup_dir.exists(): shutil.rmtree(backup_dir)
+        if generated_dir.exists(): generated_dir.rename(backup_dir)
         temp_dir.rename(generated_dir)
-        if backup_dir.exists():
-            shutil.rmtree(backup_dir)
-        return {
-            "schema": SCHEMA,
-            "release": RELEASE,
-            "result": "ACCEPT",
-            "selected_dir": str(generated_dir.resolve()),
-            "selected_mode": "fresh_atomic_recapture",
-            "recaptured": True,
-            "attempts": attempts,
-            "qualification_only": True,
-            "product_level_parity": "NOT_IN_SCOPE",
-            "production_promotion_ready": False,
-        }
+        if backup_dir.exists(): shutil.rmtree(backup_dir)
+        return accepted_report(generated_dir, "fresh_atomic_recapture", True)
     except Exception as exc:
         return {
-            "schema": SCHEMA,
-            "release": RELEASE,
-            "result": "REJECT",
+            "schema": SCHEMA, "release": RELEASE, "result": "REJECT",
             "errors": [f"{type(exc).__name__}: {exc}"],
-            "attempts": attempts,
-            "qualification_only": True,
-            "product_level_parity": "NOT_IN_SCOPE",
+            "skipped_candidates": skipped_candidates,
+            "rejected_candidates": rejected_candidates,
+            "qualification_only": True, "product_level_parity": "NOT_IN_SCOPE",
             "production_promotion_ready": False,
         }
     finally:
-        if temp_dir.exists():
-            shutil.rmtree(temp_dir, ignore_errors=True)
+        if temp_dir.exists(): shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 def main(argv: list[str] | None = None) -> int:

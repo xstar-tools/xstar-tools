@@ -1,5 +1,13 @@
 # CHANGELOG
 
+# 0.6.48.7.46.21.17.2 - 2026-06-23
+
+- Build the 61-state qualification trajectory from the selected verified source capture.
+- Use the same trajectory for fixed replay and the live DSEC controller.
+- Add fail-closed `.7e` source-state alignment for qualification mode only.
+- Correct fixed replay input-state reporting and compact source-capture resolver diagnostics.
+- Retain ABI 60487 and the `abs(value) < 1e-30` zero floor.
+
 # 0.6.48.7.46.21.17 - 2026-06-23
 
 - Replace the per-element electron-fraction subtotal with one global `computed_electron_fraction` accumulator that follows the literal `calc_hmc_all.f90` element/ion visitation order.

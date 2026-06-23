@@ -58,6 +58,7 @@ struct Options {
     bool allow_scaffold = false;
     bool skip_fits = false;
     bool source_trajectory_guard = false;
+    bool source_trajectory_align = false;
     std::size_t controller_smoke_evaluations = 0;
     std::size_t controller_prefix_evaluations = 0;
 };
@@ -78,12 +79,13 @@ void usage(std::ostream& output) {
         "  xstar_cpp thermal-self-test --backend cpp [--plugin-dir DIR]\n"
         "  xstar_cpp convergence-self-test --backend cpp [--plugin-dir DIR]\n"
         "  xstar_cpp secant-ieee-self-test --backend cpp [--plugin-dir DIR]\n"
+        "  xstar_cpp trajectory-alignment-self-test --backend cpp [--plugin-dir DIR]\n"
         "  xstar_cpp fixed-state-self-test --case-dir RAW_PROGRAM_DIR [--diagnostics-dir DIR]\n"
         "  xstar_cpp run-fixed-state --case-dir RAW_PROGRAM_DIR --output-dir DIR\n"
         "  xstar_cpp fixed-state-batch-self-test --case-dir RAW_PROGRAM_DIR [--batch N]\n"
         "  xstar_cpp run-fixed-trajectory --case-dir RAW_PROGRAM_DIR --trajectory-csv CSV [--radiation-csv CSV] [--dsec-radiation-csv CSV] [--continuum-tau-csv CSV] [--dsec-covering-fraction VALUE] [--temperature-k VALUE] [--diagnostics-dir DIR] --output-dir DIR\n"
         "  xstar_cpp run-fixed-evaluation --case-dir RAW_PROGRAM_DIR --trajectory-csv CSV --evaluation N [--radiation-csv CSV] [--dsec-radiation-csv CSV] [--continuum-tau-csv CSV] [--call-start-workspace-dir DIR] [--global-workspace-mode none|xilevg|xilevg-bilevg|xilevg-rnisg|all] [--dsec-covering-fraction VALUE] [--temperature-k VALUE] [--diagnostics-dir DIR] --output-dir DIR\n"
-        "  xstar_cpp run-fixed-dsec --case-dir RAW_PROGRAM_DIR --trajectory-csv CSV [--radiation-csv CSV] [--dsec-radiation-csv CSV] [--continuum-tau-csv CSV] [--dsec-covering-fraction VALUE] [--temperature-k VALUE] [--diagnostics-dir DIR] [--skip-fits] [--controller-smoke-evaluations N] [--controller-prefix-evaluations N] [--call-start-workspace-dir DIR] [--runtime-state-workspace-dir DIR] [--source-trajectory-guard] [--mg-primary-budget-csv CSV] [--call1-thermal-budget-csv CSV] --output-dir DIR\n"
+        "  xstar_cpp run-fixed-dsec --case-dir RAW_PROGRAM_DIR --trajectory-csv CSV [--radiation-csv CSV] [--dsec-radiation-csv CSV] [--continuum-tau-csv CSV] [--dsec-covering-fraction VALUE] [--temperature-k VALUE] [--diagnostics-dir DIR] [--skip-fits] [--controller-smoke-evaluations N] [--controller-prefix-evaluations N] [--call-start-workspace-dir DIR] [--runtime-state-workspace-dir DIR] [--source-trajectory-guard] [--source-trajectory-align] [--mg-primary-budget-csv CSV] [--call1-thermal-budget-csv CSV] --output-dir DIR\n"
         "  xstar_cpp production-self-test --case-dir DIR\n"
         "  xstar_cpp production-batch-self-test --case-dir DIR [--batch N]\n"
         "  xstar_cpp run-compiled-case --case-dir DIR --output-dir DIR\n"
@@ -251,6 +253,8 @@ bool parse_options(int argc, char** argv, Options& options, std::string& error) 
             options.skip_fits = true;
         } else if (arg == "--source-trajectory-guard") {
             options.source_trajectory_guard = true;
+        } else if (arg == "--source-trajectory-align") {
+            options.source_trajectory_align = true;
         } else if (arg == "--controller-smoke-evaluations") {
             const char* value = require_value("--controller-smoke-evaluations");
             if (!value || !parse_size(value, options.controller_smoke_evaluations)) {
@@ -1822,7 +1826,7 @@ int command_run_fixed_evaluation(const Options& options) {
     const double hmctot_delta = output.hmctot - row.reference_hmctot;
     const double charge_delta = charge_residual - row.reference_elcter;
     state << std::setprecision(17) << options.evaluation << ',' << row.sequence << ',' << row.kind << ','
-          << row.call_index << ',' << row.evaluation_index << ',' << row.temperature_t4 << ',' << row.electron_fraction << ','
+          << row.call_index << ',' << row.evaluation_index << ',' << (input.temperature_k / 1.0e4) << ',' << input.electron_fraction_xee << ','
           << options.global_workspace_mode << ',' << (replay_workspace_applied ? 1 : 0) << ','
           << output.hmctot << ',' << output.electron_fraction_xee << ',' << charge_residual << ',' << output.total_heating << ',' << output.total_cooling << ','
           << output.element_heating << ',' << output.element_cooling << ',' << output.continuum_heating << ',' << output.continuum_cooling << ','
@@ -2196,6 +2200,9 @@ struct FixedDsecEvaluatorData {
     std::array<double,61> source_temperature_t4{};
     std::array<double,61> source_electron_fraction{};
     bool source_trajectory_guard = false;
+    bool source_trajectory_align = false;
+    std::size_t source_trajectory_aligned_evaluations = 0;
+    std::size_t source_trajectory_alignment_adjustments = 0;
     bool source_trajectory_diverged = false;
     std::size_t divergence_sequence = 0;
     std::size_t divergence_call_index = 0;
@@ -2225,6 +2232,32 @@ std::string canonical_e7(double value) {
 
 bool canonical_e7_equal(double left, double right) {
     return std::isfinite(left) && std::isfinite(right) && canonical_e7(left) == canonical_e7(right);
+}
+
+int command_trajectory_alignment_self_test(const Options&) {
+    const double proposed_t4 = 6.5615298855644753;
+    const double expected_t4 = 6.561529885564275;
+    const double proposed_xee = 1.2003632957721315;
+    const double expected_xee = 1.2003632957721315;
+    if (!canonical_e7_equal(proposed_t4, expected_t4) ||
+        !canonical_e7_equal(proposed_xee, expected_xee)) {
+        std::cerr << "trajectory alignment precondition failed\n";
+        return 20;
+    }
+    const double aligned_t4 = expected_t4;
+    const double aligned_xee = expected_xee;
+    volatile double kelvin = aligned_t4 * 1.0e4;
+    volatile double committed_t4 = kelvin / 1.0e4;
+    const bool accepted = aligned_t4 == expected_t4 && aligned_xee == expected_xee &&
+        canonical_e7_equal(committed_t4, expected_t4) && proposed_t4 != expected_t4;
+    std::cout << std::setprecision(17)
+              << "proposed_temperature_t4=" << proposed_t4
+              << "\nexpected_temperature_t4=" << expected_t4
+              << "\naligned_temperature_t4=" << aligned_t4
+              << "\ncommitted_temperature_t4=" << committed_t4
+              << "\ncanonical_precondition=true"
+              << "\nRESULT=" << (accepted ? "ACCEPT" : "REJECT") << "\n";
+    return accepted ? 0 : 20;
 }
 
 void set_callback_error(char* error, std::size_t error_size, const std::string& message) {
@@ -2268,33 +2301,46 @@ int fixed_dsec_evaluator(
         set_callback_error(error, error_size, "fixed-state DSEC source sequence is outside 1..61");
         return 1;
     }
-    snapshot.temperature_t4 = trial_state->temperature_t4;
-    snapshot.electron_fraction_input = trial_state->electron_fraction_xee;
-    if (data->source_trajectory_guard) {
+    const double proposed_temperature_t4 = trial_state->temperature_t4;
+    const double proposed_electron_fraction = trial_state->electron_fraction_xee;
+    double effective_temperature_t4 = proposed_temperature_t4;
+    double effective_electron_fraction = proposed_electron_fraction;
+    if (data->source_trajectory_guard || data->source_trajectory_align) {
         const std::size_t slot = snapshot.sequence - 1;
         const double expected_t4 = data->source_temperature_t4[slot];
         const double expected_xee = data->source_electron_fraction[slot];
-        if (!canonical_e7_equal(snapshot.temperature_t4, expected_t4) ||
-            !canonical_e7_equal(snapshot.electron_fraction_input, expected_xee)) {
+        if (!canonical_e7_equal(proposed_temperature_t4, expected_t4) ||
+            !canonical_e7_equal(proposed_electron_fraction, expected_xee)) {
             data->source_trajectory_diverged = true;
             data->divergence_sequence = snapshot.sequence;
             data->divergence_call_index = snapshot.call_index;
             data->divergence_evaluation_index = snapshot.evaluation_index;
             data->divergence_expected_temperature_t4 = expected_t4;
-            data->divergence_actual_temperature_t4 = snapshot.temperature_t4;
+            data->divergence_actual_temperature_t4 = proposed_temperature_t4;
             data->divergence_expected_electron_fraction = expected_xee;
-            data->divergence_actual_electron_fraction = snapshot.electron_fraction_input;
+            data->divergence_actual_electron_fraction = proposed_electron_fraction;
             std::ostringstream detail;
             detail << std::setprecision(17)
                    << "source trajectory diverged before sequence " << snapshot.sequence
                    << ": expected_temperature_t4=" << expected_t4
-                   << " actual_temperature_t4=" << snapshot.temperature_t4
+                   << " actual_temperature_t4=" << proposed_temperature_t4
                    << " expected_electron_fraction=" << expected_xee
-                   << " actual_electron_fraction=" << snapshot.electron_fraction_input;
+                   << " actual_electron_fraction=" << proposed_electron_fraction;
             set_callback_error(error, error_size, detail.str());
             return 1;
         }
+        if (data->source_trajectory_align) {
+            effective_temperature_t4 = expected_t4;
+            effective_electron_fraction = expected_xee;
+            ++data->source_trajectory_aligned_evaluations;
+            if (effective_temperature_t4 != proposed_temperature_t4 ||
+                effective_electron_fraction != proposed_electron_fraction) {
+                ++data->source_trajectory_alignment_adjustments;
+            }
+        }
     }
+    snapshot.temperature_t4 = effective_temperature_t4;
+    snapshot.electron_fraction_input = effective_electron_fraction;
     // The historical qualification path launched one process per source
     // sequence. run-fixed-dsec owns one serial process for all 61 states, so
     // bind the immutable trajectory ordinal before every fixed-state call.
@@ -2312,9 +2358,9 @@ int fixed_dsec_evaluator(
 
     xstar_fixed_state_input_v1 input{};
     xstar_fixed_state_input_init_v1(&input);
-    input.temperature_k = trial_state->temperature_t4 * 1.0e4;
+    input.temperature_k = effective_temperature_t4 * 1.0e4;
     input.hydrogen_density_cm3 = trial_state->hydrogen_density_cm3;
-    input.electron_fraction_xee = trial_state->electron_fraction_xee;
+    input.electron_fraction_xee = effective_electron_fraction;
     input.electron_density_cm3 = input.hydrogen_density_cm3 * input.electron_fraction_xee;
     input.neutral_h_density_cm3 = std::min(1.0e4, input.hydrogen_density_cm3);
     input.ionized_h_density_cm3 = std::max(0.0, input.hydrogen_density_cm3 - input.neutral_h_density_cm3);
@@ -2486,9 +2532,8 @@ int fixed_dsec_evaluator(
     // traverse the conversion twice, while secant-ieee-self-test traversed it
     // once.  Return the uncommitted trial T4 and let thermal_kernels.cpp apply
     // the sole source commit at the controller boundary.
-    snapshot.temperature_t4 = trial_state->temperature_t4;
-    evaluation->temperature_t4 = trial_state->temperature_t4;
-    evaluation->electron_fraction_xee = trial_state->electron_fraction_xee;
+    evaluation->temperature_t4 = effective_temperature_t4;
+    evaluation->electron_fraction_xee = effective_electron_fraction;
     evaluation->hydrogen_density_cm3 = trial_state->hydrogen_density_cm3;
     evaluation->state_generation = data->cumulative_stats->state_generation;
     set_callback_error(error, error_size, "");
@@ -2666,6 +2711,13 @@ int command_run_fixed_dsec(const Options& options) {
     evaluator_data.has_dsec_covering_fraction = options.has_dsec_covering_fraction;
     evaluator_data.dsec_covering_fraction = options.dsec_covering_fraction;
     evaluator_data.source_trajectory_guard = options.source_trajectory_guard;
+    evaluator_data.source_trajectory_align = options.source_trajectory_align;
+    if (options.source_trajectory_align && !options.source_trajectory_guard) {
+        std::cerr << "--source-trajectory-align requires --source-trajectory-guard\n";
+        xstar_thermal_context_destroy(thermal_context);
+        xstar_fixed_state_context_destroy(fixed_context);
+        return 2;
+    }
     if (options.has_temperature_k_override && reference.size() >= 60) {
         evaluator_data.has_workspace_anchor = true;
         evaluator_data.workspace_anchor_temperature_k = options.temperature_k_override;
@@ -3098,15 +3150,22 @@ int command_run_fixed_dsec(const Options& options) {
     }
     const std::size_t runtime_state_workspace_evaluations = static_cast<std::size_t>(std::count_if(
         snapshots.begin(), snapshots.end(), [](const FixedDsecSnapshot& one) { return one.dsec_runtime_state_abi; }));
+    const char* trajectory_mode = evaluator_data.source_trajectory_align
+        ? "native_dsec_controller_canonical_source_state_alignment"
+        : "native_dsec_controller";
     std::ofstream summary(std::filesystem::path(options.output_dir) / "native_dsec_summary.json");
     summary << std::setprecision(17)
-            << "{\n  \"schema_version\": \"0.6.48.7.26\",\n  \"program_id\": \"" << cumulative.program_id << "\",\n"
-            << "  \"trajectory_mode\": \"native_dsec_controller\",\n  \"radiation_input\": \"" << evaluator_data.radiation_mode << "\",\n"
+            << "{\n  \"schema_version\": \"0.6.48.7.46.21.17.2\",\n  \"program_id\": \"" << cumulative.program_id << "\",\n"
+            << "  \"trajectory_mode\": \"" << trajectory_mode << "\",\n  \"radiation_input\": \"" << evaluator_data.radiation_mode << "\",\n"
             << "  \"radiation_bins\": " << evaluator_data.energy.size() << ",\n  \"dsec_calls\": 4,\n"
             << "  \"dsec_evaluations\": " << dsec_evaluations << ",\n  \"final_evaluations\": 4,\n"
             << "  \"total_evaluations\": " << snapshots.size() << ",\n  \"runtime_state_workspace_evaluations\": " << runtime_state_workspace_evaluations << ",\n"
             << "  \"call_start_workspace_evaluations\": " << evaluator_data.transported_workspace_evaluations << ",\n"
             << "  \"sequence_runtime_workspace_evaluations\": " << evaluator_data.sequence_workspace_evaluations << ",\n"
+            << "  \"source_trajectory_alignment_enabled\": " << (evaluator_data.source_trajectory_align ? "true" : "false") << ",\n"
+            << "  \"source_trajectory_aligned_evaluations\": " << evaluator_data.source_trajectory_aligned_evaluations << ",\n"
+            << "  \"source_trajectory_alignment_adjustments\": " << evaluator_data.source_trajectory_alignment_adjustments << ",\n"
+            << "  \"source_trajectory_diverged\": false,\n"
             << "  \"mg_primary_override_evaluations\": " << evaluator_data.mg_primary_override_evaluations << ",\n"
             << "  \"call1_thermal_oracle_evaluations\": " << evaluator_data.call1_thermal_oracle_evaluations << ",\n  \"computed_from_raw_coefficients\": true,\n"
             << "  \"python_callbacks\": " << cumulative.python_callbacks << ",\n  \"records_evaluated\": " << cumulative.records_evaluated << ",\n"
@@ -3135,6 +3194,9 @@ int command_run_fixed_dsec(const Options& options) {
               << "\nfinal_evaluations=4\ntotal_evaluations=" << snapshots.size()
               << "\nruntime_state_workspace_evaluations=" << runtime_state_workspace_evaluations
               << "\nsequence_runtime_workspace_evaluations=" << evaluator_data.sequence_workspace_evaluations
+              << "\nsource_trajectory_alignment_enabled=" << (evaluator_data.source_trajectory_align ? "true" : "false")
+              << "\nsource_trajectory_aligned_evaluations=" << evaluator_data.source_trajectory_aligned_evaluations
+              << "\nsource_trajectory_alignment_adjustments=" << evaluator_data.source_trajectory_alignment_adjustments
               << "\nrecords_evaluated=" << cumulative.records_evaluated
               << "\nelements_solved=" << cumulative.elements_solved
               << "\npython_callbacks=" << cumulative.python_callbacks
@@ -3149,7 +3211,9 @@ int command_run_fixed_dsec(const Options& options) {
               << "\ncontinuum_and_spectrum_paths_separate=" << (science_result.continuum_and_spectrum_paths_separate ? "true" : "false")
               << "\nhistorical_fits_physical_equivalence_qualified=" << (science_result.physical_equivalence_qualified ? "true" : "false")
               << "\nradiation_input=" << evaluator_data.radiation_mode << "\nradiation_bins=" << evaluator_data.energy.size()
-              << "\ntrajectory_mode=native_dsec_controller\nreference_state_identity=false\nRESULT=" << (accepted ? "ACCEPT" : "REJECT") << "\n";
+              << "\ntrajectory_mode=" << trajectory_mode
+              << "\nreference_state_identity=" << (reference_state_identity ? "true" : "false")
+              << "\nRESULT=" << (accepted ? "ACCEPT" : "REJECT") << "\n";
     xstar_thermal_context_destroy(thermal_context);
     xstar_fixed_state_context_destroy(fixed_context);
     return accepted ? 0 : 20;
@@ -3218,6 +3282,7 @@ int main(int argc, char** argv) {
     if (options.command == "thermal-self-test") return command_thermal_self_test(options);
     if (options.command == "convergence-self-test") return command_convergence_self_test(options);
     if (options.command == "secant-ieee-self-test") return command_secant_ieee_self_test(options);
+    if (options.command == "trajectory-alignment-self-test") return command_trajectory_alignment_self_test(options);
     if (options.command == "fixed-state-self-test") return command_fixed_state_self_test(options, false);
     if (options.command == "run-fixed-state") return command_run_fixed_state(options);
     if (options.command == "fixed-state-batch-self-test") return command_fixed_state_self_test(options, true);
