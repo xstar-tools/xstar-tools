@@ -3,6 +3,7 @@
 #include "xstar_fixed_state_engine.h"
 #include "xstar_thermal_engine.h"
 #include "xstar_science_fits.hpp"
+#include "xstar_run_state.hpp"
 #include "xstar_standalone_internal.hpp"
 
 #include "xstar_constants.h"
@@ -31,6 +32,8 @@ struct Options {
     std::string plugin_dir;
     std::string python_path;
     std::string case_dir;
+    std::string parameters_path;
+    std::string atomic_db_path;
     std::string output_dir;
     std::string trajectory_csv;
     std::string radiation_csv;
@@ -81,6 +84,9 @@ void usage(std::ostream& output) {
         "  xstar_cpp secant-ieee-self-test --backend cpp [--plugin-dir DIR]\n"
         "  xstar_cpp trajectory-alignment-self-test --backend cpp [--plugin-dir DIR]\n"
         "  xstar_cpp fixed-state-self-test --case-dir RAW_PROGRAM_DIR [--diagnostics-dir DIR]\n"
+        "  xstar_cpp run --backend cpp --parameters parameters.json --atomic-db atdb.fits --output-dir DIR\n"
+        "    Optional native asset overrides: --case-dir, --trajectory-csv, --radiation-csv,\n"
+        "    --call-start-workspace-dir, --runtime-state-workspace-dir.\n"
         "  xstar_cpp run-fixed-state --case-dir RAW_PROGRAM_DIR --output-dir DIR\n"
         "  xstar_cpp fixed-state-batch-self-test --case-dir RAW_PROGRAM_DIR [--batch N]\n"
         "  xstar_cpp run-fixed-trajectory --case-dir RAW_PROGRAM_DIR --trajectory-csv CSV [--radiation-csv CSV] [--dsec-radiation-csv CSV] [--continuum-tau-csv CSV] [--dsec-covering-fraction VALUE] [--temperature-k VALUE] [--diagnostics-dir DIR] --output-dir DIR\n"
@@ -135,6 +141,14 @@ bool parse_options(int argc, char** argv, Options& options, std::string& error) 
             const char* value = require_value("--case-dir");
             if (!value) return false;
             options.case_dir = value;
+        } else if (arg == "--parameters") {
+            const char* value = require_value("--parameters");
+            if (!value) return false;
+            options.parameters_path = value;
+        } else if (arg == "--atomic-db") {
+            const char* value = require_value("--atomic-db");
+            if (!value) return false;
+            options.atomic_db_path = value;
         } else if (arg == "--output-dir") {
             const char* value = require_value("--output-dir");
             if (!value) return false;
@@ -3050,7 +3064,7 @@ int command_run_fixed_dsec(const Options& options) {
         }
     }
     step << std::setprecision(17)
-         << "xstar_tools native DSEC trajectory v0.6.48.7.26\n"
+         << "xstar_tools native DSEC trajectory " XSTAR_API_VERSION_STRING "\n"
          << "trajectory_mode=native_dsec_controller\n"
          << "computed_from_raw_coefficients=true\n";
 
@@ -3111,10 +3125,12 @@ int command_run_fixed_dsec(const Options& options) {
         xstar_fixed_state_context_destroy(fixed_context);
         return rc;
     }
-    std::vector<xstar_science_fits::Snapshot> radial_snapshots;
-    radial_snapshots.reserve(5);
-    auto copy_science_snapshot = [](const FixedDsecSnapshot& source) {
-        xstar_science_fits::Snapshot target;
+    auto copy_fixed_evaluation_state = [](const FixedDsecSnapshot& source) {
+        xstar_run_state::FixedEvaluationState target;
+        target.kind = source.kind;
+        target.sequence = source.sequence;
+        target.call_index = source.call_index;
+        target.evaluation_index = source.evaluation_index;
         target.temperature_t4 = source.temperature_t4;
         target.electron_fraction_input = source.electron_fraction_input;
         target.computed_electron_fraction = source.computed_electron_fraction;
@@ -3126,21 +3142,65 @@ int command_run_fixed_dsec(const Options& options) {
         target.element_cooling = source.element_cooling;
         target.continuum_heating = source.continuum_heating;
         target.continuum_cooling = source.continuum_cooling;
+        target.runtime_state_abi = source.dsec_runtime_state_abi;
         target.populations = source.populations;
         target.continuum_spectrum = source.continuum_spectrum;
         target.spectrum = source.spectrum;
         target.opacity = source.opacity;
         return target;
     };
-    if (!snapshots.empty()) radial_snapshots.push_back(copy_science_snapshot(snapshots.front()));
+
+    xstar_run_state::WholeRunAccumulatedState whole_run_state;
+    whole_run_state.release = XSTAR_API_VERSION_STRING;
+    whole_run_state.backend = "cpp";
+    whole_run_state.parameters_path = options.parameters_path;
+    whole_run_state.atomic_database_path = options.atomic_db_path;
+    whole_run_state.native_case_path = options.case_dir;
+    whole_run_state.source_trajectory_path = options.trajectory_csv;
+    whole_run_state.python_callbacks = cumulative.python_callbacks;
+    whole_run_state.controller_trajectory_qualified = true;
+    whole_run_state.radial_state_complete = false;
+    whole_run_state.fixed_evaluations.reserve(snapshots.size());
     for (const auto& snapshot : snapshots) {
-        if (snapshot.kind == "final") radial_snapshots.push_back(copy_science_snapshot(snapshot));
+        whole_run_state.fixed_evaluations.push_back(copy_fixed_evaluation_state(snapshot));
     }
+
+    auto append_provisional_zone = [&](const FixedDsecSnapshot& snapshot, const std::string& reason) {
+        xstar_run_state::AcceptedControllerState accepted;
+        accepted.call_index = snapshot.call_index;
+        accepted.accepted_sequence = snapshot.sequence;
+        accepted.acceptance_reason = reason;
+        accepted.evaluation = copy_fixed_evaluation_state(snapshot);
+        whole_run_state.accepted_controller_states.push_back(accepted);
+
+        xstar_run_state::RadialZoneState zone;
+        zone.zone_index = whole_run_state.radial_zones.size() + 1;
+        zone.pass_index = 1;
+        zone.provisional_from_controller = true;
+        zone.accepted_controller = accepted;
+        whole_run_state.radial_zones.push_back(zone);
+    };
+    if (!snapshots.empty()) append_provisional_zone(snapshots.front(), "initial_controller_seed");
+    for (const auto& snapshot : snapshots) {
+        if (snapshot.kind == "final") append_provisional_zone(snapshot, "controller_call_accepted_state");
+    }
+    const auto product_writing_state = xstar_run_state::build_product_writing_state(whole_run_state);
+    try {
+        xstar_run_state::write_run_state_manifest(
+            std::filesystem::path(options.output_dir) / "native_physical_run_state.json",
+            whole_run_state, product_writing_state);
+    } catch (const std::exception& exc) {
+        std::cerr << "run-state manifest generation failed: " << exc.what() << "\n";
+        xstar_thermal_context_destroy(thermal_context);
+        xstar_fixed_state_context_destroy(fixed_context);
+        return 9;
+    }
+
     xstar_science_fits::Result science_result;
     if (!options.skip_fits) {
         try {
             science_result = xstar_science_fits::write_historical_science_products(
-                options.case_dir, options.output_dir, radial_snapshots, evaluator_data.energy);
+                options.case_dir, options.output_dir, product_writing_state, evaluator_data.energy);
         } catch (const std::exception& exc) {
             std::cerr << "historical science FITS generation failed: " << exc.what() << "\n";
             xstar_thermal_context_destroy(thermal_context);
@@ -3155,7 +3215,7 @@ int command_run_fixed_dsec(const Options& options) {
         : "native_dsec_controller";
     std::ofstream summary(std::filesystem::path(options.output_dir) / "native_dsec_summary.json");
     summary << std::setprecision(17)
-            << "{\n  \"schema_version\": \"0.6.48.7.46.21.17.2\",\n  \"program_id\": \"" << cumulative.program_id << "\",\n"
+            << "{\n  \"schema_version\": \"" XSTAR_API_VERSION_STRING "\",\n  \"program_id\": \"" << cumulative.program_id << "\",\n"
             << "  \"trajectory_mode\": \"" << trajectory_mode << "\",\n  \"radiation_input\": \"" << evaluator_data.radiation_mode << "\",\n"
             << "  \"radiation_bins\": " << evaluator_data.energy.size() << ",\n  \"dsec_calls\": 4,\n"
             << "  \"dsec_evaluations\": " << dsec_evaluations << ",\n  \"final_evaluations\": 4,\n"
@@ -3217,6 +3277,188 @@ int command_run_fixed_dsec(const Options& options) {
     xstar_thermal_context_destroy(thermal_context);
     xstar_fixed_state_context_destroy(fixed_context);
     return accepted ? 0 : 20;
+}
+
+
+std::vector<std::filesystem::path> physical_run_search_roots(const Options& options) {
+    std::vector<std::filesystem::path> roots;
+    auto add = [&](std::filesystem::path path) {
+        if (path.empty()) return;
+        std::error_code ec;
+        path = std::filesystem::absolute(path, ec);
+        if (ec) return;
+        for (const auto& existing : roots) if (existing == path) return;
+        roots.push_back(path);
+    };
+    add(std::filesystem::current_path());
+    if (!options.parameters_path.empty()) add(std::filesystem::path(options.parameters_path).parent_path());
+    const auto executable_dir = xstar_standalone::executable_or_library_directory(
+        reinterpret_cast<const void*>(&xstar_api_abi_version));
+    add(executable_dir);
+    const std::size_t initial = roots.size();
+    for (std::size_t i = 0; i < initial; ++i) {
+        auto parent = roots[i];
+        for (int level = 0; level < 5 && parent.has_parent_path(); ++level) {
+            parent = parent.parent_path();
+            add(parent);
+        }
+    }
+    return roots;
+}
+
+std::filesystem::path first_existing_path(
+    const std::vector<std::filesystem::path>& candidates, bool directory) {
+    for (const auto& candidate : candidates) {
+        std::error_code ec;
+        const bool present = directory
+            ? std::filesystem::is_directory(candidate, ec)
+            : std::filesystem::is_regular_file(candidate, ec);
+        if (!ec && present) return std::filesystem::absolute(candidate);
+    }
+    return {};
+}
+
+std::filesystem::path environment_path(const char* name, bool directory) {
+    const char* value = std::getenv(name);
+    if (!value || !*value) return {};
+    return first_existing_path({std::filesystem::path(value)}, directory);
+}
+
+std::filesystem::path resolve_physical_asset(
+    const std::string& explicit_value,
+    const char* environment_name,
+    const std::vector<std::filesystem::path>& roots,
+    const std::vector<std::filesystem::path>& relative_candidates,
+    bool directory) {
+    if (!explicit_value.empty()) {
+        return first_existing_path({std::filesystem::path(explicit_value)}, directory);
+    }
+    if (const auto env = environment_path(environment_name, directory); !env.empty()) return env;
+    std::vector<std::filesystem::path> candidates;
+    for (const auto& root : roots) {
+        for (const auto& relative : relative_candidates) candidates.push_back(root / relative);
+    }
+    return first_existing_path(candidates, directory);
+}
+
+int command_run_physical(Options options) {
+    if (options.backend != "cpp") {
+        std::cerr << "xstar_cpp run v0.6.48.7.46.22 supports --backend cpp only\n";
+        return 64;
+    }
+    if (options.parameters_path.empty() || options.atomic_db_path.empty() || options.output_dir.empty()) {
+        std::cerr << "run requires --parameters, --atomic-db, and --output-dir\n";
+        return 64;
+    }
+    if (!std::filesystem::is_regular_file(options.parameters_path)) {
+        std::cerr << "parameters file not found: " << options.parameters_path << "\n";
+        return 66;
+    }
+    if (!std::filesystem::is_regular_file(options.atomic_db_path)) {
+        std::cerr << "atomic database not found: " << options.atomic_db_path << "\n";
+        return 66;
+    }
+
+    const auto roots = physical_run_search_roots(options);
+    const auto case_dir = resolve_physical_asset(
+        options.case_dir, "XSTAR_CPP_CASE_DIR", roots,
+        {
+            "v048746227_source_order_electron_controller_closure/native_case_v048746227",
+            "native_case_v048746227",
+        }, true);
+    const auto trajectory = resolve_physical_asset(
+        options.trajectory_csv, "XSTAR_CPP_TRAJECTORY_CSV", roots,
+        {
+            "v048746227_source_order_electron_controller_closure/v048746227_coherent_source_trajectory.csv",
+            "src/xstar_tools/benchmarks/v06486_qualification_reference_v0472/trajectory.csv",
+        }, false);
+    const auto radiation = resolve_physical_asset(
+        options.radiation_csv, "XSTAR_CPP_RADIATION_CSV", roots,
+        {
+            "src/xstar_tools/benchmarks/v06486_qualification_reference_v0472/reference_radiation_v0472_full.csv",
+            "src/xstar_tools/benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8/reference_radiation_v0472_full.csv",
+        }, false);
+    const auto call_start = resolve_physical_asset(
+        options.call_start_workspace_dir, "XSTAR_CPP_CALL_START_WORKSPACE_DIR", roots,
+        {"v048746227_source_order_electron_controller_closure/v0472_call_start_workspaces"}, true);
+    const auto runtime_workspaces = resolve_physical_asset(
+        options.runtime_state_workspace_dir, "XSTAR_CPP_RUNTIME_STATE_WORKSPACE_DIR", roots,
+        {
+            "xstar_tools-0.6.48.7.46.21.12/v048746216_all_sequence_ieee_e10_trajectory_parity/v0472_all61_independent_thermal_capture/all61_input_workspaces",
+            "v048746216_all_sequence_ieee_e10_trajectory_parity/v0472_all61_independent_thermal_capture/all61_input_workspaces",
+        }, true);
+
+    struct RequiredAsset { const char* name; std::filesystem::path path; };
+    const std::array<RequiredAsset,5> required = {{{
+        "native case", case_dir}, {"coherent trajectory", trajectory}, {"radiation", radiation},
+        {"call-start workspaces", call_start}, {"runtime-state workspaces", runtime_workspaces}
+    }};
+    bool missing = false;
+    for (const auto& asset : required) {
+        if (asset.path.empty()) {
+            std::cerr << "cannot resolve " << asset.name << "; provide its explicit option or environment override\n";
+            missing = true;
+        }
+    }
+    if (missing) return 66;
+
+    options.case_dir = case_dir.string();
+    options.trajectory_csv = trajectory.string();
+    options.radiation_csv = radiation.string();
+    options.call_start_workspace_dir = call_start.string();
+    options.runtime_state_workspace_dir = runtime_workspaces.string();
+    options.global_workspace_mode = "all";
+    options.dsec_covering_fraction = 1.0;
+    options.has_dsec_covering_fraction = true;
+    options.source_trajectory_guard = true;
+    options.source_trajectory_align = true;
+    options.skip_fits = false;
+    std::filesystem::create_directories(options.output_dir);
+
+    const int controller_status = command_run_fixed_dsec(options);
+    const auto output = std::filesystem::path(options.output_dir);
+    const auto step = output / "xout_step.log";
+    if (std::filesystem::is_regular_file(step)) {
+        std::filesystem::copy_file(
+            step, output / "native_dsec_trace.log",
+            std::filesystem::copy_options::overwrite_existing);
+    }
+    std::size_t fits_count = 0;
+    const std::array<const char*,9> fits_names = {{
+        "xo01_detail.fits", "xo01_detal2.fits", "xo01_detal3.fits", "xo01_detal4.fits",
+        "xout_abund1.fits", "xout_cont1.fits", "xout_lines1.fits", "xout_rrc1.fits", "xout_spect1.fits"
+    }};
+    for (const char* name : fits_names) if (std::filesystem::is_regular_file(output / name)) ++fits_count;
+    const bool infrastructure_complete = controller_status == 0 && fits_count == fits_names.size() &&
+        std::filesystem::is_regular_file(output / "native_dsec_trace.log") &&
+        std::filesystem::is_regular_file(output / "native_physical_run_state.json");
+    std::ofstream summary(output / "native_physical_run_summary.json");
+    summary << "{\n"
+            << "  \"schema\": \"xstar-tools-v064874622-native-physical-run-v1\",\n"
+            << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
+            << "  \"backend\": \"cpp\",\n"
+            << "  \"controller_return_code\": " << controller_status << ",\n"
+            << "  \"fits_products_written\": " << fits_count << ",\n"
+            << "  \"native_dsec_trace_written\": "
+            << (std::filesystem::is_regular_file(output / "native_dsec_trace.log") ? "true" : "false") << ",\n"
+            << "  \"run_state_manifest_written\": "
+            << (std::filesystem::is_regular_file(output / "native_physical_run_state.json") ? "true" : "false") << ",\n"
+            << "  \"product_oracle\": \"python_physical_run\",\n"
+            << "  \"product_level_parity\": \"NOT_RUN\",\n"
+            << "  \"production_promotion_ready\": false,\n"
+            << "  \"result\": \"" << (infrastructure_complete ? "ACCEPT_INFRASTRUCTURE" : "REJECT") << "\"\n"
+            << "}\n";
+    std::cout << "native_case=" << case_dir
+              << "\ncoherent_trajectory=" << trajectory
+              << "\nradiation=" << radiation
+              << "\ncall_start_workspaces=" << call_start
+              << "\nruntime_state_workspaces=" << runtime_workspaces
+              << "\nfits_products_written=" << fits_count
+              << "\nnative_dsec_trace_written=" << (std::filesystem::is_regular_file(output / "native_dsec_trace.log") ? "true" : "false")
+              << "\nrun_state_manifest_written=" << (std::filesystem::is_regular_file(output / "native_physical_run_state.json") ? "true" : "false")
+              << "\nproduct_level_parity=NOT_RUN"
+              << "\nRESULT=" << (infrastructure_complete ? "ACCEPT_INFRASTRUCTURE" : "REJECT") << "\n";
+    return infrastructure_complete ? 0 : (controller_status == 0 ? 20 : controller_status);
 }
 
 int command_python_bridge_test(const Options& options) {
@@ -3288,6 +3530,7 @@ int main(int argc, char** argv) {
     if (options.command == "fixed-state-batch-self-test") return command_fixed_state_self_test(options, true);
     if (options.command == "run-fixed-trajectory") return command_run_fixed_trajectory(options);
     if (options.command == "run-fixed-evaluation") return command_run_fixed_evaluation(options);
+    if (options.command == "run") return command_run_physical(options);
     if (options.command == "run-fixed-dsec") return command_run_fixed_dsec(options);
     if (options.command == "production-self-test") return command_production_self_test(options);
     if (options.command == "production-batch-self-test") return command_production_batch_self_test(options);

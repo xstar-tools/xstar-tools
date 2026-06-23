@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 0.6.48.7.46.22 - 2026-06-23
+
+Native physical run-state and product-oracle infrastructure. Product parity remains NOT_RUN/REJECT until the standalone products match the frozen Python oracle.
+
 # 0.6.48.7.46.21.17.2 - 2026-06-23
 
 - Build the 61-state qualification trajectory from the selected verified source capture.

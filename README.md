@@ -252,3 +252,13 @@ The full native `run-fixed-dsec` path now binds the source qualification sequenc
 ## v0.6.48.7.46.21.7.3.1 controller prefix-divergence reporting
 
 The full controller now uses `--source-trajectory-guard` when sequence-specific qualification workspaces and ledgers are active. Once the autonomous native state is no longer canonical-E10 identical to the corresponding source state, the controller stops before consuming the next source ledger and writes a structured prefix REJECT. This preserves strict ledger integrity and exposes the actual scientific divergence boundary.
+
+## Native physical-run and product-oracle infrastructure
+
+v0.6.48.7.46.22 introduces the standalone physical-run entry point:
+
+```bash
+xstar_cpp run --backend cpp --parameters parameters.json --atomic-db atdb.fits --output-dir output
+```
+
+The release freezes the Python physical-run archive as the immediate product oracle and the Fortran archive as a separate reference. It records five distinct native state layers and writes `native_dsec_trace.log`, but it does not claim product parity or production promotion.

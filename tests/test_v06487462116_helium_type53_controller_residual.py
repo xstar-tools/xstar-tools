@@ -5,8 +5,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_release_version():
-    assert 'version = "0.6.48.7.46.21.16.2"' in (ROOT / "pyproject.toml").read_text()
-    assert '__version__ = "0.6.48.7.46.21.16.2"' in (ROOT / "src/xstar_tools/__init__.py").read_text()
+    assert 'version = "0.6.48.7.46.22"' in (ROOT / "pyproject.toml").read_text()
+    assert '__version__ = "0.6.48.7.46.22"' in (ROOT / "src/xstar_tools/__init__.py").read_text()
 
 
 def test_canonical_e7_and_zero_floor_retained():

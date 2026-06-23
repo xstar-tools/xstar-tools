@@ -639,4 +639,23 @@ Result write_historical_science_products(
     return result;
 }
 
+
+Result write_historical_science_products(
+    const std::filesystem::path& program_dir,
+    const std::filesystem::path& output_dir,
+    const xstar_run_state::ProductWritingState& product_state,
+    const std::vector<double>& native_energy_ev) {
+    std::vector<Snapshot> snapshots;
+    snapshots.reserve(product_state.radial_zones.size());
+    for (const auto& zone : product_state.radial_zones) {
+        snapshots.push_back(zone.accepted_controller.evaluation);
+    }
+    Result result = write_historical_science_products(
+        program_dir, output_dir, snapshots, native_energy_ev);
+    // v0.6.48.7.46.22 establishes the product-state boundary but does not
+    // claim physical product equivalence.
+    result.physical_equivalence_qualified = product_state.product_parity_qualified;
+    return result;
+}
+
 } // namespace xstar_science_fits

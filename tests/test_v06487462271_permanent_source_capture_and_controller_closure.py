@@ -56,7 +56,8 @@ def test_resolver_reuses_only_verified_candidate(tmp_path: Path, monkeypatch) ->
     assert result["result"] == "ACCEPT"
     assert result["selected_dir"] == str(good.resolve())
     assert result["recaptured"] is False
-    assert [attempt["result"] for attempt in result["attempts"]][-2:] == ["REJECT", "ACCEPT"]
+    assert [candidate["result"] for candidate in result["rejected_candidates"]] == ["REJECT"]
+    assert "attempts" not in result
 
 
 def test_resolver_atomically_recaptures_when_all_candidates_are_stale(tmp_path: Path, monkeypatch) -> None:
@@ -168,5 +169,5 @@ def test_canonical_checker_missing_report_is_structured(tmp_path: Path) -> None:
 
 def test_public_cpp_version_label_and_abi() -> None:
     text = (root() / "src/xstar_tools/xstar/cpp/xstar_api.h").read_text()
-    assert '#define XSTAR_API_VERSION_STRING "0.6.48.7.46.21.17.1"' in text
+    assert '#define XSTAR_API_VERSION_STRING "0.6.48.7.46.22"' in text
     assert "60487" in text

@@ -7,25 +7,11 @@
 #include <string>
 #include <vector>
 
+#include "xstar_run_state.hpp"
+
 namespace xstar_science_fits {
 
-struct Snapshot {
-    double temperature_t4 = 0.0;
-    double electron_fraction_input = 0.0;
-    double computed_electron_fraction = 0.0;
-    double charge_residual = 0.0;
-    double hmctot = 0.0;
-    double total_heating = 0.0;
-    double total_cooling = 0.0;
-    double element_heating = 0.0;
-    double element_cooling = 0.0;
-    double continuum_heating = 0.0;
-    double continuum_cooling = 0.0;
-    std::vector<double> populations;
-    std::vector<double> continuum_spectrum;
-    std::vector<double> spectrum;
-    std::vector<double> opacity;
-};
+using Snapshot = xstar_run_state::FixedEvaluationState;
 
 struct Result {
     std::size_t files_written = 0;
@@ -40,6 +26,12 @@ Result write_historical_science_products(
     const std::filesystem::path& program_dir,
     const std::filesystem::path& output_dir,
     const std::vector<Snapshot>& radial_snapshots,
+    const std::vector<double>& native_energy_ev);
+
+Result write_historical_science_products(
+    const std::filesystem::path& program_dir,
+    const std::filesystem::path& output_dir,
+    const xstar_run_state::ProductWritingState& product_state,
     const std::vector<double>& native_energy_ev);
 
 } // namespace xstar_science_fits
