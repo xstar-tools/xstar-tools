@@ -7,7 +7,7 @@ def root() -> Path:
 
 def test_release_version_and_runner_revision():
     text=(root()/"run_v048746217_canonical_thermal_controller_parity.sh").read_text()
-    assert "20260729-helium-type53-controller-residual-e7-v13" in text
+    assert "source-faithful-type51-post-closure-thermal-v6" in text
     assert '--runtime-state-workspace-dir "$RUNTIME_WORKSPACES"' in text
 
 

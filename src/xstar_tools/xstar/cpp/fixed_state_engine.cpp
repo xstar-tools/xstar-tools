@@ -7049,17 +7049,10 @@ int run_impl(
         all_populations.insert(all_populations.end(), full_populations.begin(), full_populations.end());
         fixed_full_population_offset += full_populations.size();
 
-        // Match calc_hmc_all.f90 exactly: add every represented ion charge
-        // contribution directly into the one global enelec accumulator in
-        // element/ion source order, then add the fully stripped contribution
-        // for this element.  Do not form a per-element charge subtotal: that
-        // reassociation changes binary64 rounding and displaced the call-1
-        // controller trajectory by one ULP.
-        //
-        // Keep explicit binary64 stores between the source operations.  The
-        // fixed-state target is already compiled with -ffp-contract=off; the
-        // volatile temporaries additionally prevent local reassociation of
-        // xii * charge * abundance and accumulator + term.
+        // Match local_zone.py exactly: accumulate explicit ion fractions
+        // using (stage - 1), then add the fully stripped fraction at charge Z.
+        // Keep this computed electron fraction distinct from elcter, which is
+        // the DSEC charge residual trial_xee - computed_xee.
         double explicit_stage_sum = 0.0;
         for (int ion_slot = 0; ion_slot < active.element.n_ions; ++ion_slot) {
             const double fraction =
@@ -7067,8 +7060,12 @@ int run_impl(
             const int stage = active.min_stage + ion_slot;
             explicit_stage_sum += fraction;
 
-            volatile double charge = static_cast<double>(stage - 1);
-            volatile double weighted_fraction = fraction * charge;
+            // XSTAR heatf accumulates every represented ion charge term
+            // directly into one global ENELEC scalar.  Do not regroup these
+            // contributions into per-element subtotals: that changes the
+            // binary64 result and the controller secant trajectory.
+            volatile double source_charge = static_cast<double>(stage - 1);
+            volatile double weighted_fraction = fraction * source_charge;
             volatile double source_term = weighted_fraction * element.abundance;
             volatile double next_electron_fraction =
                 computed_electron_fraction + source_term;
@@ -7078,12 +7075,12 @@ int run_impl(
             std::max(0.0, 1.0 - explicit_stage_sum);
         volatile double fully_stripped_charge =
             static_cast<double>(element.element_z);
-        volatile double fully_stripped_weighted =
+        volatile double fully_stripped_weighted_fraction =
             fully_stripped_fraction * fully_stripped_charge;
-        volatile double fully_stripped_term =
-            fully_stripped_weighted * element.abundance;
+        volatile double fully_stripped_source_term =
+            fully_stripped_weighted_fraction * element.abundance;
         volatile double next_electron_fraction =
-            computed_electron_fraction + fully_stripped_term;
+            computed_electron_fraction + fully_stripped_source_term;
         computed_electron_fraction = next_electron_fraction;
 
         NativeElementDiagnostic element_diagnostic;
