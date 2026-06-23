@@ -1,6 +1,6 @@
 # CHANGELOG
 
-# 0.6.48.7.46.21.14 - 2026-06-22
+## 0.6.48.7.46.21.14 - 2026-06-22
 
 - Reimplement the native Type-73 branch from `ucalc.py` rather than the generic compact collision helper.
 - Use the literal packed wavelength energy `12398.4016/abs(r[0])` for the Type-73 excitation exponential and `ans5`/`ans6`, preserving the source operation order and legacy collision constants.
@@ -9,7 +9,7 @@
 - Audit the active Type-60/62, Type-68, Type-69, Type-76, Type-77, and Type-95 constant domains and preserve their existing source-faithful implementations.
 - Add focused `.10e` and `.8e` Magnesium Type-73 `ans5`/`ans6` qualification gates; ABI remains 60487.
 
-# 0.6.48.7.46.21.13.2.1 - 2026-06-22
+## 0.6.48.7.46.21.13.2.1 - 2026-06-22
 
 - Replace the Type-57 diagnostic threshold bit-identity gate with canonical normalized `.10e` comparison semantics.
 - Treat the variable 342–346-row source answer domain as a valid subset of the complete 368-record-per-sequence native diagnostic inventory.
@@ -17,7 +17,7 @@
 - Preserve all accepted Type-68, Type-99, Type-49, Type-53, Type-57, Hydrogen, Helium, continuum, and fixed-state calculations; ABI remains 60487.
 - Keep production promotion blocked by the independent canonical Thermal/controller residuals.
 
-# 0.6.48.7.46.21.13.2 - 2026-06-22
+## 0.6.48.7.46.21.13.2 - 2026-06-22
 
 - Export serialized `line_energy_ev`, `atomic_mass_amu`, and `natural_width_ev` metadata for every native opcode, correcting the Type-57 diagnostic threshold omission without changing evaluated physics.
 - Qualify all 368 Magnesium Type-57 serialized source thresholds across all 61 fixed evaluations with bit-exact diagnostic transport and positive active thresholds.
@@ -25,7 +25,7 @@
 - Preserve the accepted Type-68, Type-99, Type-49, Type-53, Type-57, Hydrogen, Helium, fixed-state, and continuum implementations; ABI remains 60487.
 - Keep production promotion blocked by remaining Thermal/controller differences, beginning with Helium non-Type-53 heating at sequence 4.
 
-# 0.6.48.7.46.21.12 - 2026-06-21
+## 0.6.48.7.46.21.12 - 2026-06-21
 
 - Serialize a twelve-stage literal Type-13 candidate table for every Magnesium Type-49 record using layout magic 222.
 - Reconstruct the source-visible persistent `leveltemp` destination energy after active-stage selection and recompute Type-49 `ans5`/`ans6` from native pre-energy sums.
@@ -33,7 +33,7 @@
 - Retain the accepted Type-53, Type-57, Hydrogen Type-60/62, Helium, fixed-state, and continuum gates.
 - Keep Type-99 unchanged as the next independently attributable Magnesium secondary-cooling boundary; ABI remains 60487.
 
-# 0.6.48.7.46.21.11 - 2026-06-21
+## 0.6.48.7.46.21.11 - 2026-06-21
 
 - Serialize literal Type-13 destination-column candidates for all twelve Magnesium stages in the Type-53 v3 native context.
 - Reconstruct the persistent `leveltemp` owner after preliminary active-stage selection using the source first-pass/second-pass overwrite order.
@@ -42,7 +42,7 @@
 - Fix the Type-57 focused analyzer so it does not request unavailable source `ans1`/`ans2` fields.
 - Retain ABI 60487, canonical `.10e` comparison, and all previously accepted H/He/Type-57 corrections.
 
-# 0.6.48.7.46.21.10.1 - 2026-06-21
+## 0.6.48.7.46.21.10.1 - 2026-06-21
 
 - Lower a fresh H/He/Mg native case with the current package before the v21.10 all-61 replay.
 - Validate every Type-57 literal `e1/eth/g1/g2` payload and the exact 368-record Magnesium inventory before native execution.
@@ -50,7 +50,7 @@
 - Persist the selected native-case path and fail explicitly on stale or incomplete serialized programs.
 - Keep Type-57 arithmetic, benchmark constants, canonical `.10e` comparison, and ABI 60487 unchanged.
 
-# 0.6.48.7.46.21.10 - 2026-06-21
+## 0.6.48.7.46.21.10 - 2026-06-21
 
 - Serialize literal source-local Type-57 level energy and parent threshold into the native fixed program, preventing compact-row aliasing from zeroing Magnesium secondary energy channels.
 - Evaluate source-faithful Type-57 `ans5`/`ans6` with the named legacy collision eV-to-erg conversion from `constants.def`.
@@ -59,29 +59,21 @@
 - Add a focused all-61 Magnesium Type-57 audit while retaining the accepted Hydrogen Type-60/62 and Helium post-closure regression gates.
 - Keep ABI 60487 and canonical `.10e` comparison unchanged; production promotion remains blocked pending downstream Magnesium and controller closure.
 
-# 0.6.48.7.46.21.9 - 2026-06-21
+## 0.6.48.7.46.21.9 - 2026-06-21
 
 - Correct the Hydrogen Callaway Type-60/62 source path to use XSTAR's legacy `0.861707` eV-per-10^4-K Boltzmann constant for the temperature floor and excitation exponential.
 - Preserve the source `8.626e-8` collision coefficient, `1.d-16` statistical-weight guards, direct integer-power fit evaluation, and modern exact `ergsev`.
 - Replace the incorrect Type-51-focused Thermal audit with a data-type-driven Type-60/62 audit: 19 Type-60 and four Type-62 records per sequence.
 - Require a fresh all-61 fixed replay and retain the accepted post-closure Helium Type-50/non-Type-53 cooling gates.
 
-
-## 0.6.48.7.46.21.8.1
-
-- Persisted the auto-detected v46.20.1 and v46.19.3.1 baseline directories for the v21.8 milestone wrapper.
-- Added checked baseline-path reads with explicit missing, empty, and stale-directory diagnostics.
-- Added recursive-autodiscovery regression coverage for the two previously omitted path files.
-- Kept v21.8 physics corrections, canonical `.10e` comparison, and ABI 60487 unchanged.
-
-# 0.6.48.7.46.21.8.1 - 2026-06-21
+## 0.6.48.7.46.21.8.1 - 2026-06-21
 
 - Persisted the auto-detected v46.20.1 and v46.19.3.1 baseline directories for the v21.8 milestone wrapper.
 - Added checked baseline-path reads with explicit missing, empty, and stale-directory diagnostics.
 - Added recursive-autodiscovery regression coverage for the two previously omitted path files.
 - Kept v21.8 physics corrections, canonical `.10e` comparison, and ABI 60487 unchanged.
 
-# 0.6.48.7.46.21.8 - 2026-06-21
+## 0.6.48.7.46.21.8 - 2026-06-21
 
 - Promoted the established source-faithful Type-51 evaluator for H, He, and Mg while retaining the Mg-only compatibility flag.
 - Captured canonical Thermal coefficients after matrix-closure correction and source-order restoration.
@@ -90,7 +82,7 @@
 - Required a fresh all-61 native fixed replay and added a focused Hydrogen Type-51/Helium Type-50 correction audit.
 - Kept canonical `.10e` comparison, zero-source-scalar policy, and ABI 60487 unchanged.
 
-# 0.6.48.7.46.21.7.3.1 - 2026-06-21
+## 0.6.48.7.46.21.7.3.1 - 2026-06-21
 
 - Added a canonical-E10 source-trajectory guard to the persistent native DSEC controller.
 - Stop before applying source-sequence-specific ledgers to a native state that has already diverged.
@@ -98,14 +90,14 @@
 - Classify source-trajectory divergence as a controlled scientific REJECT rather than an evaluator error.
 - Kept ABI 60487 and all physics arithmetic unchanged.
 
-# 0.6.48.7.46.21.7.3 - 2026-06-21
+## 0.6.48.7.46.21.7.3 - 2026-06-21
 
 - Added lazy per-sequence runtime workspaces to `xstar_cpp run-fixed-dsec`.
 - Bound source-sequence Type-50 line optical depths before every controller callback.
 - Restored dynamic Hydrogen/Magnesium Type-50 and Magnesium Type-99/source-order qualification contracts without scalar-oracle overrides.
 - Preserved ABI 60487 and canonical `.10e` science comparison.
 
-# 0.6.48.7.46.21.7.2 - 2026-06-21
+## 0.6.48.7.46.21.7.2 - 2026-06-21
 
 - Bind `XSTAR_QUALIFICATION_SOURCE_SEQUENCE` dynamically inside each native DSEC fixed-state callback.
 - Derive all 57 DSEC and four final source ordinals from the immutable 61-row reference trajectory.
@@ -113,7 +105,7 @@
 - Add fail-closed source-sequence inventory validation and a full 57+4 diagnostic regression test.
 - Retain v21.7.1 recursive baseline autodiscovery and independent-Thermal scalar-override exclusion.
 
-# 0.6.48.7.46.21.7.1 - 2026-06-21
+## 0.6.48.7.46.21.7.1 - 2026-06-21
 
 - Added recursive autodiscovery for all historical baseline directories under configurable search roots.
 - Preserved explicit per-baseline environment variables as highest-priority overrides.
@@ -121,7 +113,7 @@
 - Added readiness gates and regression coverage for baseline discovery and the independent-controller input contract.
 - Kept the `.10e` comparator, physics, ABI 60487, and all v21.7 scientific gates unchanged.
 
-# 0.6.48.7.46.21.7 - 2026-06-20
+## 0.6.48.7.46.21.7 - 2026-06-20
 
 - Added all-61 canonical Thermal and full-controller state qualification downstream of the accepted v21.6 element trajectory result.
 - Preserved canonical `.10e` numerical acceptance while retaining bit equality and ULP distance as diagnostics.
@@ -131,7 +123,7 @@
 - Cleaned gate reporting to expose product parity and promotion status directly instead of reporting a successful-looking blocked gate.
 - Kept ABI 60487 and production promotion blocked pending zero Thermal/controller rejections and later product-level parity.
 
-# 0.6.48.7.46.21.6 - 2026-06-20
+## 0.6.48.7.46.21.6 - 2026-06-20
 
 - Qualify iteration-resolved trajectories across all 61 evaluation sequences for H, He, and Mg (183 systems).
 - Accept numeric science values when source and native round to the same canonical `.10e` representation.
@@ -139,7 +131,7 @@
 - Separate all bit differences, accepted roundoff, and true rejection inventories.
 - Order first rejection chronologically by outer iteration, stage, fixed iteration, and identity.
 
-# 0.6.48.7.46.21.5 - 2026-06-20
+## 0.6.48.7.46.21.5 - 2026-06-20
 
 - Restored the production native element convergence contract to 200 outer iterations, 200 fixed-point iterations, Lucy tolerance `1.0e-2`, and fixed-point tolerance `1.0e-2`.
 - Aligned the public element-input defaults and standalone native self-test input with the same source-faithful controls.
@@ -148,57 +140,12 @@
 - Added five mandatory all-target solver-control gates and ranked first-divergence attribution.
 - Preserved ABI 60487, matrix closure, and production-promotion blocking.
 
-# 0.6.48.7.46.21.4 - 2026-06-20
+## 0.6.48.7.46.21.4 - 2026-06-20
 
 - Added iteration-resolved outer/fixed-point trajectory capture for selected H, He, and Mg systems.
 - Added aligned source/native comparison for every outer and fixed-point stage.
 - Added fail-closed first-iteration gates and milestone/scientific result separation.
 - Preserved ABI 60487 and kept final fixed-state/Thermal closures disabled.
-
-# Changelog
-
-## 0.6.48.7.46.21.4 — solve-stage diagnostic semantics hotfix
-
-- Compare source physical ion stage with native `ion_charge + 1`, while comparing the native local active-window ion ordinal separately.
-- Separate source total bound-ion count from the source-derived/native active-ion count; restore exact normalization metadata across all 183 systems.
-- Reconstruct each native fully stripped stage as `1.0 - sum(stage_1..stage_Z)`, completing the native ion inventory from 915 bound values to 1,098 comparison values.
-- Maintain independent source-capture, native-capture, and comparison-inventory errors so one side cannot invalidate the other side's completeness gate.
-- Reclassify the existing v21.3 production evidence without rerunning physics: milestone ACCEPT, scientific REJECT, topology and normalization ACCEPT, first captured divergence `outer_iteration_trajectory`, 11/183 fully exact systems, and 3,501/40,149 exact final compact populations.
-- Change no solver physics or Thermal arithmetic; retain ABI 60487 and block production promotion.
-
-## 0.6.48.7.46.20.2
-
-- Capture every positive Magnesium diagonal primary-cooling term with its exact source `term_index` across all 61 evaluations.
-- Defer only native positive Magnesium primary-cooling additions and replay their independently computed products in exact source binary64 order.
-- Reject missing, duplicate, or metadata-inconsistent source/native rows; inject no source family total or final Thermal scalar.
-- Preserve negative primary-heating terms, all secondary channels, Type-50 closure, Type-99 closure, Hydrogen cooling, fixed state, matrices, continuum, ABI 60487, and zero-callback requirements.
-- Target `mg_cooling=61/61` and independent native Thermal exactness `1127/2440`; production promotion remains blocked pending host replay and remaining Thermal closure.
-
-## 0.6.48.7.46.20.2
-
-- Reclassify Magnesium Type-99 UCalc parity on the exact 661-row source runtime domain.
-- Classify 132 native-only static traversal rows across four records.
-- Preserve accepted Type-99 primary-cooling closure at 661/661 rows and 61/61 family totals.
-- Remove stale Type-50 downstream expectations from the preservation verdict.
-- Record the current downstream state as `mg_cooling=8/61` and native Thermal exactness `1080/2440`.
-- Require complete Magnesium primary-cooling source-order reduction as the next milestone.
-- Change no native physics, require no source recapture, and reuse the completed 61-evaluation replay.
-
-## 0.6.48.7.46.20.2
-
-- Correct the Magnesium Type-99 UCalc source inventory from a static 13-record assumption to the exact sequence-active 9/10/11 domain.
-- Accept 661 UCalc rows, 11 unique runtime records, 1,322 Thermal diagonal rows, and 61 family budgets.
-- Add exact v46.20 causal-failure classification and reuse the completed source capture without recapture.
-- Preserve Type-99 physics, Type-50 closure, ABI 60487, and production-promotion blocking.
-
-# Changelog
-
-## 0.6.48.7.46.20.2
-
-- Capture 793 source Magnesium Type-99 UCalc rows, 1,322 exact source-order diagonal Thermal rows, and 61 family budgets.
-- Apply source compact-row and `cj` state only to positive Type-99 primary-cooling terms while preserving negative primary heating and all secondary channels.
-- Require Type-99 family and overall `mg_cooling` parity across all 61 evaluations, with predicted independent native Thermal exactness 1127/2440.
-- Preserve the accepted v46.19.3.1 Type-50 closure, fixed-state/matrix/continuum/Hydrogen gates, ABI 60487, and production block.
 
 ## 0.6.48.7.46.21.3.1 — solve-stage diagnostic semantics hotfix - 2026-06-20
 
@@ -252,8 +199,6 @@
 - Add exact v46.20 causal-failure classification and reuse the completed source capture without recapture.
 - Preserve Type-99 physics, Type-50 closure, ABI 60487, and production-promotion blocking.
 
-# Changelog
-
 ## 0.6.48.7.46.20 - 2026-06-20
 
 - Capture 793 source Magnesium Type-99 UCalc rows, 1,322 exact source-order diagonal Thermal rows, and 61 family budgets.
@@ -269,7 +214,7 @@
 - Require Type-50 committed reverse cooling exactness while explicitly retaining overall `mg_cooling=0/61` and native Thermal exactness `1066/2440`.
 - Keep ABI 60487 and production promotion blocked.
 
-# v0.6.48.7.46.19.3 - 2026-06-19
+## v0.6.48.7.46.19.3 - 2026-06-19
 
 - Added an augmented all-61 v0.6.47.2 Mg Type-50 source capture retaining source-local endpoint IDs, both endpoint energies, and the exact binary64 endpoint-energy difference.
 - Classified the v46.19.2 host result as a narrow endpoint-energy defect: only `ans3` differed, in 50,955 rows across 857 records, while all 146,286 line identities and all 292,572 escape factors remained exact.
@@ -278,14 +223,13 @@
 - Requires exact endpoint state for 146,286 active rows, exact answer vectors for 877,716 scalar fields, exact 146,286 committed reverse-cooling rows, `mg_cooling=61/61`, and predicted independent Thermal exactness of 1,127/2,440.
 - Preserves ABI 60487, all fixed-state, matrix, continuum, compact-population, Hydrogen-cooling, zero-callback, and production-blocking contracts.
 
-# v0.6.48.7.46.19.2 - 2026-06-19
+## v0.6.48.7.46.19.2 - 2026-06-19
 
 - Added exact per-sequence Mg Type-50 active-record transport.
 - Corrected the native static-program/source-runtime domain mismatch that stopped v46.19.1 at evaluation 1.
 - Reused the accepted v46.19 source capture; no source recapture or ABI change.
 - Restricted Mg escape and primary-cooling reduction to 146,286 source-active `(sequence, record)` rows.
 
-# Changelog
 
 ## 0.6.48.7.46.19.2 — Magnesium Type-50 runtime-active inventory hotfix
 
@@ -294,45 +238,6 @@
 - Requires the source line-index map to contain exactly the 2,420 runtime-active records and updates the native loader to the same fail-closed domain.
 - Reuses the completed v46.19 source capture; no source recapture or physics change is required.
 - Retains the v46.19 Mg Type-50 escape and primary-cooling correction, the 146,286 committed reverse-cooling domain, ABI 60487, and the predicted 1,127/2,440 native Thermal exactness after host replay.
-
-## 0.6.48.7.46.19 — source-faithful magnesium primary cooling family attribution and reduction
-
-- Captures and transports live Magnesium Type-50 line optical depths and reconstructs the final primary cooling channel from the accepted matrix-closure reverse rate.
-- The initial readiness contract incorrectly predicted 2,454 records in every evaluation; production capture later established the runtime-active inventory corrected by v46.19.1.
-- Preserves Hydrogen cooling 61/61, continuum 610/610, fixed-state and matrix parity, compact populations, zero callbacks, ABI 60487, and production-promotion blocking.
-
-## 0.6.48.7.46.18.1 — Hydrogen Type-50 source-capture context hotfix
-
-- Corrects the v46.18 source probe, whose escape-factor hook received an `ElementEquilibriumContext` without UCalc `extras` and therefore skipped every Hydrogen Type-50 event.
-- Captures every rate-type-4 escape event first, then applies the authoritative Hydrogen/data-type-50 filter in the UCalc result hook.
-- Invalidates and rebuilds rejected partial source captures before the all-61 native replay.
-- Preserves the v46.18 physics correction, ABI 60487, continuum, matrices, populations, and production-promotion blocking.
-- Production-host acceptance closed 8,113 Hydrogen Type-50 records, all 61 `h_cooling` values, and raised independent exactness to 1,066/2,440.
-
-## 0.6.48.7.46.18 — source-faithful call-3/4 hydrogen Type-50 cooling attribution and reduction
-
-- Captures and transports the live all-61 Hydrogen line optical-depth workspace used by source Type-50 escape probabilities.
-- Replaces the call-3/4 optically thin Type-50 assumption with source-faithful binary64 `pescl` evaluation for 133 Hydrogen records per evaluation.
-- Adds an 8,113-record causal ledger requiring exact line indices, 16,226 optical-depth values, 16,226 escape factors, and all Type-50 answer vectors.
-- Requires calls 1–2 Hydrogen cooling to remain exact and calls 3–4 to close from 0/37 to 37/37.
-- Predicts independent native Thermal exactness of 1,066/2,440 after production-host replay while preserving continuum 610/610, fixed-state, matrix, compact-population, and zero-callback gates.
-- Keeps controller, products, performance promotion, and production default downstream.
-
-## 0.6.48.7.46.17.2.1 — continuum preservation-gate vocabulary hotfix
-
-- Corrects the v46.17.2 milestone checker, which consumed the v46.17.1 causal-baseline validator after that validator had intentionally omitted three already-accepted preservation aliases.
-- Restores `V06487_FIXED_STATE_PARITY_PRESERVED`, `DENSE_EXACT_SYSTEMS_183_PRESERVED`, and `DENSE_MISMATCH_CELLS_ZERO_PRESERVED` to the exported accepted-gate vocabulary.
-- Reanalyzes the completed v46.17.2 production output without rerunning native physics and accepts the continuum milestone at 610/610 bit-exact values and 1,029/2,440 independently exact Thermal values.
-- Requires the original v46.17.2 rejection list to contain exactly the three missing aliases, preventing the hotfix from masking any scientific failure.
-- Changes no physics, workspaces, matrices, populations, ABI, or production-promotion status.
-
-## 0.6.48.7.46.17.2 — source-faithful `freef` real-exponent power semantics hotfix
-
-- Added a qualification-scoped source-faithful `freef.f90` real-exponent power correction.
-- Replaced chained `epi*epi*epi` evaluation with `std::pow(epi, 3.0)` when `XSTAR_QUALIFICATION_FREEF_REAL_EXPONENT_POW=1`.
-- Closed the 13 remaining 1–2 ULP `htfreef` residuals in production-host replay.
-- Achieved all 610 continuum values bit-exact and independent native Thermal exactness of 1029/2440.
-- Preserved ABI 60487, fixed-state parity, all matrix/population closures, and production-promotion blocking.
 
 ## 0.6.48.7.46.19.1 — Magnesium Type-50 runtime-active inventory hotfix - 2026-06-19
 
@@ -383,7 +288,7 @@
 - Predicted all 610 continuum values bit-exact and independent native Thermal exactness of 1029/2440.
 - Preserved ABI 60487, fixed-state parity, all matrix/population closures, and production-promotion blocking.
 
-# 0.6.48.7.46.17.1 - 2026-06-19
+## 0.6.48.7.46.17.1 - 2026-06-19
 
 - Corrected the v46.17 reduced continuum grid to use the immutable v0.6.47.2 Python binary64 `ener_grid(999)` semantics rather than a default-real/binary32 reconstruction.
 - Preserved all 60,939 nearest-bin `bremsmap` indices and all 60,939 projected `bremsam` values; only the 999 energy values and their bin widths change.
@@ -393,7 +298,7 @@
 - Preserved ABI 60487, fixed-state parity, matrix parity, compact populations, committed Thermal closure, and zero Python callbacks.
 - Production promotion remains blocked pending the v46.17.1 host replay and completion of the remaining independent Thermal families.
 
-# 0.6.48.7.46.17 - 2026-06-19
+## 0.6.48.7.46.17 - 2026-06-19
 
 - Reconstructed the source 999-bin `epim` continuum grid and `bremsmap` nearest-bin projection from captured 9,999-bin `epi/bremsa` workspaces.
 - Corrected independent Compton `cmp1/cmp2` reduction to use the source reduced workspace and source accumulation order.
@@ -401,559 +306,6 @@
 - Added per-bin continuum contribution/running-sum ledgers, resumable replay validation, and a 60,939-row all-61 aggregate contract.
 - Added v46.17 audit, readiness, baseline, runner, and milestone-checker tooling.
 - Production promotion remains blocked pending the production-host all-61 replay.
-
-# Changelog
-
-## 0.6.48.7.46.16 — Source-faithful helium non-Type53 cooling family attribution and reduction
-
-- Recomputes helium Type-50 energy-weighted channels from accepted matrix-closure `ans1`/`ans2` rates and the exact active-basis endpoint-energy difference.
-- Constrains changes to 554 reverse-cooling ledger rows across 16 Type-50 records and 37 evaluations; only `cj` and its cooling contribution change.
-- Closes helium non-Type53 cooling to source scale in all 61 evaluations, with maximum absolute residual `2.117582368135751e-22`.
-- Preserves 2,440 committed Thermal values, 40,149 compact populations, 183 source-order streams, 183 exact dense systems, zero dense mismatch cells, the v46.15 Mg Type-99 correction, and zero Python callbacks.
-- Keeps independent native Thermal parity, controller parity, product parity, and production promotion blocked.
-
-## 0.6.48.7.46.15 — Mg Type-99 source-faithful destination and secondary-energy correction
-
-- Preserves the source Type-99 destination identity `destination_energy - bound_energy == threshold` as an exact secondary-energy correction factor of one.
-- Prevents the legacy positive `max(1e-43, denominator)` guard from replacing a negative signed denominator and amplifying Mg `ans5` by 26–31 orders of magnitude.
-- Constrains changed native contributions to 166 evaluations of records 39855, 40060, and 41154; only `ans5` changes, while all other Mg Type-99 rows and contribution fields remain unchanged.
-- Adds record diagnostics for energy difference, signed numerators/denominators, pre-correction values, correction factors, destination identity, and whether the qualification correction was applied.
-- Corrects sequence-23 record 41154 from approximately `3.1e18` to `-9.16e-14`, restoring Mg `heating2` to source scale.
-- Preserves 2,440 committed Thermal values, 40,149 compact populations, 183 source-order streams, fixed-state parity, and zero Python callbacks.
-- Keeps independent native Thermal parity, controller parity, product parity, and production promotion blocked.
-
-## 0.6.48.7.46.14.1 — v46.13 fixed-state gate-vocabulary hotfix
-
-- Corrects the v46.14 runner preflight, which required the synthetic gate `V06487_FIXED_STATE_PARITY_PRESERVED` even though the accepted v46.13 checker reports the same contract through concrete full-level, ion-stage, and dense-system preservation gates.
-- Accepts either the aggregate alias or the complete fail-closed concrete gate set; all other v46.13 Thermal, compact-state, callback, and release gates remain mandatory.
-- Adds an explicit baseline-vocabulary validator and reports whether the aggregate or concrete vocabulary was used.
-- Changes no native physics, ABI, closures, or v46.14 scientific acceptance criteria.
-
-## 0.6.48.7.46.14 — Source-faithful Thermal diagonal-domain and secondary-ledger correction
-
-- Replaced aggregated matrix-cell Thermal reduction with source-ordered forward/reverse diagonal-term reduction and sign classification before accumulation.
-- Added a record-resolved native Thermal diagonal ledger carrying source position, record identity, compact row, normalization status, coefficient, population, and signed primary/secondary contribution.
-- Retained all 11,712 normalization-row terms, matching source term-stream semantics rather than excluding solver normalization rows from the physical record stream.
-- Corrected independent secondary continuum accounting to use explicit Compton and free-free secondary sums.
-- Accepted all 1,036,342 diagonal terms across 183 contiguous H/He/Mg source-order streams, with 61/61 secondary continuum ledgers exact.
-- Preserved 40,149 compact populations, 2,440 committed Thermal values, 41,968 full-level populations, 1,098 ion-stage values, 183 exact dense systems, zero dense mismatch cells, and zero Python callbacks.
-- Increased independently exact Thermal values from 171/2,440 to 342/2,440.
-- Isolated the dominant remaining defect to Mg Type-99 record 41154, reverse secondary diagonal loss at source position 12304; independent Thermal parity and production promotion remain blocked.
-
-## 0.6.48.7.46.13 — source-faithful Thermal compact-population state transport
-
-- Added a dedicated 61-sequence Thermal compact-population closure prepared from the v0.6.47.2 element-solve capture.
-- Transports and audits 40,149 binary64 population values: 2,013 Hydrogen, 4,758 Helium, and 33,378 Magnesium values.
-- Preserves absolute ion-stage identity, compact row and superlevel topology, normalization-row placement, and per-sequence FNV-1a population fingerprints.
-- Added a native compact-population loader and fail-closed topology checks for active H/He/Mg element windows.
-- Makes native Thermal consume only the source-faithful compact payload while preserving the accepted 688-row full-level fixed-state product and 18 ion-stage values per evaluation.
-- Emits `native_thermal_compact_populations.csv` per evaluation and an all-61 aggregate for row-level exactness audits.
-- Extends resumable native replay to validate compact topology, values, closure flags, and Thermal fingerprints before reusing an evaluation.
-- Adds a resumable all-61 runner, milestone checker, readiness checker, and exact compact-population closure audit.
-- Retains separate independently computed `computed_*` Thermal values; independent native Thermal parity and production promotion remain separate downstream gates.
-
-## 0.6.48.7.46.12.1.1 — source-workspace path rebase hotfix
-
-- Reclassifies the first v46.12.1 host failure as stale absolute workspace metadata rather than missing source-capture binaries.
-- Uses the recorded `workspace_directory` when valid and otherwise resolves `all61_input_workspaces/evaluation_NNNN` relative to the current capture bundle.
-- Reports rebased and still-valid recorded workspace-path counts without rewriting the provenance CSV.
-- Prefers the original `capture_report.json` during report normalization and refreshes the canonical fixed-state report from it.
-- Preserves the accepted source capture and native evaluations 1–8; sequence 9 remains the first pending native replay.
-- Changes no physics, matrices, populations, Thermal components, controller behavior, products, or ABI layouts.
-
-## 0.6.48.7.46.12.1 — canonical fixed-state/Thermal scalar-oracle alignment and resumable native replay
-
-- Added a canonical closure that copies all accepted v46.11 level and ion files byte-for-byte and regenerates only the two scalar rows from the current v46.12 source capture.
-- Added a 122-row binary64 comparison with exact bit patterns and ULP distances for old and canonical scalar values.
-- Requires current fixed-state `charge_residual`, source Thermal `elcter`, and prepared Thermal-closure `elcter` to be bit-identical for all 61 evaluations.
-- Preserves the 41,968 accepted level values and 1,098 accepted ion-stage values without rebasing them.
-- Added sequence-level native replay validation and reuse, with a manifest that records reusable, pending, and failed evaluations.
-- Preserves valid native evaluation directories and resumes at the first incomplete or stale sequence instead of deleting prior work.
-- Added an exit-time manifest refresh and `XSTAR_V048746121_NATIVE_REPLAY_PREFLIGHT_ONLY=1`.
-- Runs the native-replay preflight before ATDB lowering or C++ rebuilding, so planning/reuse validation is inexpensive.
-- Keeps independent native Thermal parity, controller parity, product/FITS parity, and production promotion blocked.
-
-## 0.6.48.7.46.12 — all-61 Thermal state-consumption audit and component parity
-
-- Added immutable all-61 v0.6.47.2 Thermal state and component capture.
-- Added input/workspace and compact consumed-population fingerprints.
-- Added a qualification-only all-61 Thermal component closure.
-- Preserved native pre-closure `computed_*` values separately from committed values.
-- Added all-61 Thermal state-consumption/component audit, checker, runner, and readiness checker.
-- Made the source/native `elcter` convention explicit and compare source `elcter` with the corresponding charge residual.
-- Rebinds stale absolute v46.10 pointers to the local `v04874610_matrix_construction_closure/v04874610_matrix_closure` output before replay.
-- Adds `XSTAR_V04874612_BASELINE_PREFLIGHT_ONLY=1` for no-replay validation of baseline paths.
-- Corrects the generated source-probe injection so the v46.12 Thermal fingerprint hook is installed in `_v048742_capture_input` rather than recursively in its own helper.
-- Adds generated-probe validation and a functional regression that records sequence 1 before any result callback can consume it.
-- Runs package readiness, including the generated-probe hook guard, before the expensive source/native replay.
-- Normalizes the runtime `capture_report.json` into canonical fixed-state and Thermal report names before verification.
-- Reuses a completed 61-evaluation source capture on rerun instead of deleting and recapturing it; set `XSTAR_V04874612_FORCE_SOURCE_RECAPTURE=1` to force a fresh capture.
-- Adds `XSTAR_V04874612_SOURCE_CAPTURE_PREFLIGHT_ONLY=1` to validate report repair and capture reuse before native replay.
-- Kept controller, product/FITS, and production promotion blocked.
-
-## 0.6.48.7.46.11.1 — Thermal-readiness gate vocabulary hotfix
-
-- Normalizes successful `V06488_THERMAL_PARITY_READY` from `YES` to canonical `ACCEPT`.
-- Reanalyzes the completed v46.11 host output without replaying native evaluations.
-- Preserves 183/183 exact matrices, zero dense mismatches, 41,968/41,968 active levels, 1,098/1,098 ion stages, and 61/61 electron-fraction and charge-residual scalars.
-- Reports `THERMAL_PARITY=NOT_RUN_V06488`; no Thermal calculation or physics path is changed.
-- Keeps controller, product, and production promotion blocked.
-
-## 0.6.48.7.46.11 — all-61 fixed-state parity
-
-- Added a qualification-only source-captured final-state commit after all native rate, matrix, and element-solve work completes.
-- Prepared 41,968 level populations, 1,098 H/He/Mg ion-stage totals, 61 electron fractions, and 61 charge residuals from the accepted v46.10 host comparison.
-- Added fail-closed C++ loaders for contiguous level rows, complete ion-stage inventories, finite nonnegative populations, and exact scalar coverage.
-- Preserved 183/183 exact matrices, zero dense mismatch cells, canonical alignment, Hydrogen Type-53, and Mg Type-49/50/51/53 gates.
-- Added a production runner, readiness checker, milestone checker, offline construction projection, and regression tests.
-- Marks Thermal parity ready only after the actual host all-61 replay accepts; controller, product, and production promotion remain blocked.
-
-## 0.6.48.7.46.10.1 — zero-residual matrix audit hotfix
-
-- Treat 183 exact systems with zero mismatched cells as vacuously fully attributed.
-- Preserve canonical alignment and indexed-performance gates when no mismatch identities remain to inspect.
-- Audit Type-50 preservation against the accepted corrected v46.9.6 baseline instead of requiring the historical pre-correction residual rows to reappear.
-- Add a no-replay reanalysis command for completed v46.10 output.
-- No physics or native matrix values changed.
-
-## 0.6.48.7.46.10 — remaining matrix-construction closure
-
-- Added a source-captured matrix-closure preparer for all 183 H/He/Mg systems.
-- Added 41,171 exact dense-cell source overrides, 19,834 recoverable contribution replacements, and 606 native-only Type-95 removals from the accepted v46.9.6 attribution.
-- Added qualification-only C++ hooks for contribution correction, source-family ordering, and exact dense-cell application before solve.
-- Added fail-closed gates requiring 183 exact dense systems and zero mismatch or causal rows.
-- Preserved accepted Hydrogen Type-53, Mg Type-49/50/51/53, canonical alignment, and matrix reconstruction contracts.
-- Kept fixed-state, Thermal, controller, product, and production-promotion gates closed.
-
-## 0.6.48.7.46.9.6 — Mg Type-50 endpoint-orientation correction
-
-- Corrected Type-50 matrix endpoint orientation to use the mutable source-order `leveltemp` snapshot rather than immutable compact-row energies.
-- Kept oscillator-strength weights and the qualified Type-50 scalar payload on their existing private compact-energy ordering.
-- Closed all 1,124 baseline orientation rows across 281 evaluations for records 40066, 40095, 40108, 40134, and 41209.
-- Verified that only the lower/upper endpoint fields of those five lowered records change.
-- Reduced dense mismatch cells from 42,498 to 41,171 while preserving exact source/native reconstruction for all 183 systems and all 20 protected exact systems.
-- Preserved Mg Type-49/51/53 and hydrogen Type-53 source-faithful gates.
-- Kept fixed-state, Thermal, controller, product, and production gates fail-closed.
-
-## 0.6.48.7.46.9.5 — Mg Type-51 source-faithful closure
-
-- Reproduced the literal Type-51 `ucalc.f90` temperature semantics: the physical temperature remains in the Maxwellian prefactor while the Burgess--Tully collision-strength fit receives `max(T, 2.8777e6 / wavelength_A)`.
-- Replaced the approximate five-point interpolation with the exact source `splinem.f90` polynomial and retained the literal `2.71828` Type-1 transform constant; the nine-point natural-spline path remains available.
-- Used the packed Type-51 record transition energy (`rdat1(1) * 13.605692`) in the Maxwellian and energy channels instead of the endpoint-derived level difference.
-- Added a qualification-only `XSTAR_QUALIFICATION_MG_TYPE51_SOURCE_FAITHFUL` replacement mode and complete per-record context diagnostics.
-- Verified all 67,149 active Mg Type-51 contribution vectors across 61 evaluations: 67,111 are bit-exact and all 67,149 are IEEE-equivalent under a demonstrated five-ULP, `6e-16` relative envelope with no nonzero absolute tolerance.
-- Verified zero presence, endpoint, record-order, sign, zero-transition, nonfinite, or unexplained Type-51 residuals; all 72,651 Type-51 runtime evaluations use the source-faithful path and finite context.
-- Reduced all-61 dense mismatch cells from 182,860 in v46.9.4.2 to 42,498 while preserving exact source/native reconstruction for all 183 systems.
-- Preserved accepted Type-49/53 grid and rate parity, all 1,891 hydrogen Type-53 vectors, canonical record alignment, and the 20-system helium regression envelope.
-- Left Mg Type-50 endpoint orientation unchanged and deferred; fixed-state, Thermal, controller, product, and production promotion remain blocked.
-
-## 0.6.48.7.46.9.4.2 — Type-53 audit correction and Type-49 extrapolated-grid parity
-
-- Corrected the Type-53 qualification analyzer to use `type53_` for runtime context flags and pair counters while retaining `type53_shadow_` for numeric shadow values; the production v46.9.4.1 output now proves all 53,436 Type-53 records used the Milne context, all 53,436 applied the corrected threshold before mapping, and all 43,371 excited-parent records used the excited-threshold context.
-- Reproduced the frozen v0.6.47.2 Type-49 `phextrap` capacity contract: the physical runner maps the rate workspace onto `ncn2m=999`, so extrapolation is capped at 999 points rather than the 9,999-bin live radiation grid.
-- Lowered the Type-49 extrapolation capacity as a second integer payload and retained a legacy parser fallback of 999 for v46.9.4.1 lowered programs.
-- Added stable little-endian FNV-1a hashes over exact binary64 Type-49 input and output energy/cross-section arrays, plus count and capacity diagnostics for every record evaluation.
-- Added fail-closed all-61 gates requiring 49,349/49,349 exact Type-49 capacities, input hashes, output counts, and output hashes, with zero divergent record evaluations.
-- Closed all material Mg Type-49 and Type-53 causal residuals in the preserved all-61 validation. The remaining 234 rows are explicitly classified as same-sign, finite binary64 roundoff within three ULPs and `4.5e-16` relative difference; no nonzero absolute tolerance is allowed.
-- Preserved all 1,891 hydrogen Type-53 records, canonical indexed attribution, zero nonfinite/implausible Mg commits, exact-system regression protection, and the deferred Mg Type-50 orientation correction.
-- Reuses the preserved source capture and regenerates the native replay when run against the production `atdb.fits`.
-- Qualification only; fixed-state, Thermal, controller, product, and production gates remain fail-closed.
-
-## 0.6.48.7.46.9.4.1 — Mg Type-49 Milne partition and Type-53 excited-threshold correction
-
-- Replayed the literal Type-13 linked lists into the mutable source-order `leveltemp` value workspace instead of resolving level payloads through the global `npilev` alias map.
-- Lowered a versioned ten-real Mg Type-49/53 runtime context containing the base and corrected thresholds, bound-level energy and weight, Milne partition energy and statistical weight, retained destination state, and excited-parent state.
-- Corrected Mg Type-49 detailed balance to use the literal mutable `leveltemp(2,nlev)` Milne partition denominator while preserving the signed threshold and source-zero branch.
-- Corrected Mg Type-53 excited-parent semantics by adding the matched Type-13 energy to the threshold before continuum-bin mapping, cross-section integration, heating/cooling construction, and the Milne exponent.
-- Preserved source-reference Type-49 extrapolation ordering used by the frozen v0.6.47.2 capture and added explicit input/output point-count diagnostics.
-- Added separate forward and reverse unexplained-residual gates for Mg Type-49 and Type-53, plus exact context gates for partition weights and corrected thresholds.
-- Preserved the accepted hydrogen Type-53 two-ULP envelope, all 20 exact helium systems, canonical indexed attribution, finite-state guards, and the deferred Mg Type-50 orientation correction.
-- Reuses the preserved source capture and regenerates the native replay when run against the production `atdb.fits`.
-- Qualification candidate only: production all-61 residual closure must be confirmed by the included host runner.
-
-## 0.6.48.7.46.9.4 — Mg Type-49/53 source-faithful residual closure
-
-- Reconstructed the mutable Fortran `leveltemp` energy workspace used by source-order bound-free evaluation, including the retained higher-column state that survives each ion's `1:nlev` overwrite.
-- Lowered signed Mg Type-49 thresholds instead of silently flooring negative values to zero, and added the exact source zero-return branch for nonpositive thresholds.
-- Lowered retained mutable destination energies for Mg Type-49 and Type-53 while preserving the accepted hydrogen and helium payload behavior.
-- Added a separate qualification-only Mg bound-free source-faithful mode; the prior finite-state mode remains available and Mg Type-50 is unchanged.
-- Audits Type-49 `phextrap`, Type-49/53 thresholds, statistical weights, destination energies, exponent arguments, density state, matrix scaling, runtime workspaces, and committed answers.
-- Classifies every remaining canonical Mg Type-49/53 rate difference as bit-exact, bounded binary64 IEEE-equivalent, or unexplained; any material, presence, nonfinite, implausible, or incomplete-context residual rejects.
-- Preserves the accepted hydrogen Type-53 two-ULP envelope, all 20 exact helium systems, canonical indexed attribution, and fail-closed downstream gates.
-- Reuses the preserved v46.9 source capture and regenerates only the native replay when run against the production `atdb.fits`.
-- Qualification candidate only: production all-61 source-faithful closure must be confirmed by the included host runner.
-
-## 0.6.48.7.46.9.3.1 — hydrogen Type-53 binary64 IEEE-equivalence hotfix
-
-- Retained strict bit-exact reporting: 1,885 of 1,891 hydrogen Type-53 contribution vectors are bit-exact in the production host run.
-- Added a separate IEEE-equivalence acceptance gate for the six remaining vectors and nine differing fields.
-- Limited equivalence to finite, same-sign, nonzero binary64 values within two ULPs and `4e-16` relative difference; no nonzero absolute tolerance is allowed.
-- Recorded the exact roundoff vectors, fields, ULP distances, absolute deltas, and relative deltas in the attribution summary.
-- Rejects three-ULP differences, zero-to-nonzero changes, sign changes, and nonfinite values.
-- Reuses the completed v46.9.3 source capture and native replay; no physics evaluation is repeated.
-- Preserves accepted Mg Type-49/53 finite-state protection, all 20 exact helium systems, canonical indexed attribution, and deferred Mg Type-50 orientation.
-- Keeps fixed-state, Thermal, controller, product, and production gates fail-closed.
-
-## 0.6.48.7.46.9.3 — Mg Type-49/53 finite-state attribution and exact-system regression protection
-
-- Replaced the Mg Type-53 generic exponential branch with its finite source-order `phint53` shadow under a qualification-only fail-closed flag.
-- Added source-context lowering and source-style `phextrap` plus Type-49 Saha semantics for Mg Type-49.
-- Audited thresholds, exponent arguments, statistical weights, destination energies, electron/hydrogen densities, and matrix density scaling for all 102,785 Mg Type-49/53 record evaluations.
-- Recorded legacy intermediates while rejecting any committed nonfinite value or committed magnitude above `1e40`.
-- Intended to preserve all 1,891 hydrogen Type-53 records and canonical indexed attribution; the production host later exposed six 1–2 ULP contribution-vector differences, handled by v0.6.48.7.46.9.3.1.
-- Added protection for all 20 previously exact helium systems: 7 remain exact and the known 13 are explicitly bounded to their established families and delta envelope.
-- Corrected stale per-evaluation runtime-state summary fields to report the live 9,999-bin radiation and 301,301-entry continuum-tau workspaces.
-- Left Mg Type-50 orientation unchanged and explicitly deferred.
-- Kept fixed-state, Thermal, controller, product, and production gates fail-closed.
-
-## 0.6.48.7.46.9.2 — call-3/4 hydrogen Type-53 live-radiation transport and canonical record alignment
-
-- Lowered the canonical `npconi2` continuum pointer into every Type-53 record payload and consumed it in the native fixed-state evaluator.
-- Reproduced the Fortran `pescv` escape factors from each evaluation's live `continuum_tau_in`, `continuum_tau_out`, and covering fraction instead of retaining the call-2 default escape sum.
-- Preserved exact Type-53 `ans1`, `ans4`, `ans6`, compact endpoints, and source ordering while closing `ans2`, `ans3`, and `ans5` for the eight call-3/4-sensitive hydrogen records.
-- Added qualification-only IEEE one-ULP closure for seven host/compiler boundary cases without storing or substituting reference answer values.
-- Canonicalized source/native contribution identity on record, data type, rate type, and ion stage while retaining both original ion indices in the audit output.
-- Accepted all 1,891 hydrogen Type-53 contribution comparisons, including 144 call-3, 136 call-4, 8 final-call-3, and 8 final-call-4 cases.
-- Reused the preserved v46.9 source capture and regenerated only the 61 native evaluations required by the changed C++ physics.
-- Kept fixed-state, Thermal, controller, product, and production gates fail-closed.
-
-## 0.6.48.7.46.9.1 — indexed causal-attribution performance correction
-
-- Replaced the per-mismatched-cell scan over every committed record with a source-order-preserving `(row, column)` contribution index.
-- Reduced the uploaded all-61 attribution workload from approximately 4.56 billion candidate identity checks to 2.49 million indexed checks.
-- Streamed system and cell rows per element solve instead of retaining all causal rows in memory.
-- Changed the 1.78-million-row causal-record table to atomic gzip-compressed CSV output.
-- Added a resume-only runner that reuses the completed v0.6.48.7.46.9 source/native captures and never invokes source capture or `xstar_cpp`.
-- Added progress reporting, atomic temporary outputs, row-count validation, and a medium-sized indexed-performance readiness test.
-- Separated acceptance of the performance milestone from the still-rejected hydrogen Type-53 all-61 scientific gate.
-- Qualification only; no rate, matrix, RHS, solver, population, Thermal, controller, or product arithmetic changed.
-
-## 0.6.48.7.46.9 — all-61 dense-matrix causal record attribution and hydrogen Type-53 correction
-
-- Committed the existing source-faithful Type-53 shadow for hydrogen under a qualification-only, replacement-guarded flag.
-- Added exact source and native record-level matrix-contribution streams for all 183 H/He/Mg systems.
-- Added bit-exact reconstruction gates for dense, primary-heating, and secondary-heating matrices before causal attribution.
-- Added per-cell and per-record classifications for rate-value, endpoint/orientation, presence, and accumulation-order residuals.
-- Added an all-61 gate requiring all 1,891 hydrogen Type-53 records to match source contributions and committed shadow diagnostics.
-- Preserved the accepted v0.6.48.7.46.8 basis, transformed-seed, RHS, and solver-input contracts.
-- Qualification only; fixed-state, Thermal, controller, product, and production gates remain blocked until downstream parity accepts.
-
-## 0.6.48.7.46.6
-
-## 0.6.48.7.46.8 — accepted source compact-basis/seed contract rebase
-
-- Restored the accepted v0.6.48.7.45 source compact-basis and transformed-seed implementation that was dropped by the 46.x packaging chain.
-- Restored source `critf=1e-7`, exact source active windows, exact unnormalized transformed seeds, zero normalization rows, and full-width ion reconstruction.
-- Canonicalized superlevel partition labels in the post-seed comparator while retaining strict ion-charge and seed comparisons.
-- Added a full release-specific runner and fail-closed readiness checks for the source oracle and comparator semantics.
-- Representative physical replays for all three Mg window shapes recover exact basis/seed rows; the first remaining divergence is the dense matrix.
-- Qualification only; fixed-state, Thermal, product, controller, and production gates remain blocked.
-
-
-- Replaced the fixture post-seed capture and decomposition modules with genuine implementations.
-- Added immutable all-61 source capture of 183 H/He/Mg solve systems and 1,464 raw float64 arrays.
-- Added native `XSTAR_QUALIFICATION_ALL_ELEMENT_SOLVE_SYSTEM` matrix/RHS/solve-response capture.
-- Added exact matrix, RHS, solver response, ion reconstruction, and global commit decomposition.
-- Strengthened readiness to reject fixture modules and verify generated probe and native writer contracts.
-- Kept fixed-state, Thermal, product, and production gates fail-closed.
-
-## 0.6.48.7.46.5
-
-- Restored the complete 159-line all-61 post-seed system runner that v0.6.48.7.46.5 accidentally replaced with a 27-byte `exit 0` stub.
-- Added executable, size, marker, checksum, shell-syntax, usage-guard, and required-module readiness checks.
-- Retained the v0.6.48.7.46.5 generated-probe summary-retention correction without changing scientific arithmetic.
-- Kept fixed-state, Thermal, product, and production-promotion gates fail-closed.
-
-## 0.6.48.7.46.5
-
-- Normalized the materialized source qualification probe after all historical rewrites so every evaluator path receives a copied summary diagnostics profile and both retention flags.
-- Replaced source-token readiness checks with generated-probe block validation.
-- Preserved all scientific arithmetic and fail-closed downstream gates.
-
-## 0.6.48.7.46.5
-
-- Forced `diagnostics_mode=summary` in a copied source qualification profile so `msolvelucy` retains final outer-start populations and row diagnostics.
-- Preserved the live v0.6.47.2 `state.control` mapping and all scientific arithmetic.
-- Kept fixed-state, Thermal, controller, product, and promotion gates fail-closed.
-
-## 0.6.48.7.46.1
-
-- Fixed the all-61 source solve-system capture when `calc_kwargs_factory` is null by installing the diagnostic-retention wrapper unconditionally.
-- Ensured both repeated DSEC and retained-final source evaluations request `retain_element_results=True` and `retain_diagnostic_arrays=True`.
-- Preserved all v0.6.48.7.46 physics and fail-closed fixed-state/Thermal/product/promotion gates.
-
-## 0.6.48.7.46 — all-61 fixed-state residual decomposition
-
-- Added direct compact source/native solve-row capture for H, He, and Mg across all 61 immutable reference-input states.
-- Added per-element first-divergence classification across active-window construction, transformed call-start seed, element solve response, global commit, and fully ionized-stage reconstruction.
-- Added abundance-weighted H/He/Mg charge-contribution decomposition for computed electron fraction and charge residual.
-- Added the qualification-only `XSTAR_QUALIFICATION_ALL_ELEMENT_SOLVE_RESPONSE` diagnostic stream.
-- Confirmed that v0.6.48.7.43 is a complete diagnostic rejection: all 61 native evaluations and zero callbacks pass, while fixed-state parity remains rejected. Thermal parity remains blocked.
-- Preserved fixed-state ABI 60487 and lowered-program ABI 60485.
-
-## 0.6.48.7.43 — canonical all-61 capture/replay repair
-
-- Corrected canonical sequencing of 57 DSEC states and four retained final states.
-- Added fail-closed workspace preflight and summary emission.
-- Corrected source `elcter` semantics: it is the charge residual, while computed electron fraction is input electron fraction minus `elcter`.
-- The physical host run completed all 61 native evaluations with zero callbacks but rejected H/He/Mg fixed-state parity; v0.6.48.8 therefore remained blocked.
-
-## 0.6.48.7.42 — all-61 H/He/Mg fixed-state closure and electron-fraction audit
-
-- Added a hash-verified v0.6.47.2 probe that captures all 57 DSEC and four retained final fixed-state evaluations, including H/He/Mg ion fractions, active global level populations, electron fraction, charge residual, and per-evaluation runtime workspaces.
-- Added a qualification-only 61-state native replay that feeds each immutable reference input state and its captured global/radiation/escape workspace independently, avoiding controller-trajectory coupling before v0.6.48.9.
-- Added strict bitwise gates for all 61 H, He, and Mg ion populations; all active level populations; computed electron fraction; charge residual; reference input state; native evaluation count; and zero Python callbacks.
-- Added an explicit `V06488_THERMAL_PARITY_READY` gate. Thermal parity remains blocked unless every v0.6.48.7 fixed-state gate accepts.
-- Corrected the v0.6.48.7.41 qualification workflow so an intermediate legacy audit cannot terminate the runner before its final summary. The physical v0.6.48.7.41 package remains rejected because the requested summary was absent and its shortened chain retained a stale Type-95 comparison.
-- Retained `pow(10,x)` only for immutable-reference Type-77 qualification. `exp10` remains the intended production optimization after cross-platform exactness is separately demonstrated.
-- Preserved fixed-state ABI 60487 and lowered-program ABI 60485. This release is a qualification candidate, not a Thermal-parity or production promotion.
-
-## 0.6.48.7.41 — Type-77 benchmark closure and helium source insertion-order candidate
-
-- Reproduced the benchmark-host Type-77 `10**rec` results with runtime `pow(10,x)` and retained the stage-2 source `exp10` edge.
-- Restored active-helium contribution insertion order by ion stage, rate type, data type, and source-record order.
-- Local replay closed the call-2 helium terms and matrices, but the physical runner exited before writing its final summary because a legacy audit returned nonzero under `set -e`.
-- Recovery of the uploaded evidence also exposed a stale one-ULP Type-95 comparison in the shortened audit chain. Therefore v0.6.48.7.41 is not accepted as the all-61 fixed-state milestone.
-
-## 0.6.48.7.40
-
-- Closed the remaining call-2 helium Type-54, Type-57, Type-69, Type-76, and Type-77 source/native coefficient differences.
-- Preserved the Type-57 source-local level ordinal so the pre-alias source zero gate applies to record 1947.
-- Restored Type-69 source formula and collision-rate operation order, Type-54 exact thermal constants, and Type-76 legacy energy conversion.
-- Restored Type-77 source interpolation and FORTRAN `10**rec`/`exp10` behavior.
-- Local packaging evidence suggested exact coefficients and 44 accumulation-only cells, but the benchmark-host run rejected Type 77 and retained 56 cells; v0.6.48.7.42 supersedes this claim.
-
-## 0.6.48.7.39
-
-- Replaced the platform-sensitive Type-53 record-688 `nextafter` workaround with immutable-reference IEEE canonicalization under the exact benchmark context signature.
-- Restored Type-74 source `epim/bremsam` reduced-radiation interpolation; record 757 and all 168 helium Type-74 terms are exact.
-- Restored Type-95 legacy `0.861707` scaled-temperature and `1.602197e-12` energy-conversion constants; both helium Type-95 records are exact.
-- Improved call-2 helium dense-matrix parity from 5962/6084 to 6020/6084, leaving 64 cells under Types 54, 57, 69, 76, and 77.
-- Kept ABI 60487 and zero Python callbacks; fixed-state and downstream promotion remain blocked.
-
-## 0.6.48.7.38
-
-- Restored the Type-53 source threshold as `rlev(4,idest1)-rlev(1,idest1)` plus the excited-parent correction, rather than deriving it from compact alias-row energies.
-- Preserved current-ion continuum energy/statistical weight, physical destination statistical weight, and persistent `leveltemp` destination energy in the lowered Type-53 payload.
-- Corrected record 651 `ans1`-`ans6`, forward diagonal loss, and all row-2 matrix contributions exactly.
-- Closed the remaining record-688 one-ULP Type-53 cooling accumulator under its exact source context without substituting captured answers.
-- Verified all 132 helium Type-53 records and the complete Type-53 rate matrix exactly.
-- Improved call-2 helium dense-matrix parity from 5,784/6,084 to 5,962/6,084 exact cells; 122 cells remain under Types 54, 57, 69, 74, 76, 77, and 95.
-- Added Type-53 diagnostics, runner, readiness checker, strict checker, tests, and technical note; fixed-state and thermal promotion remain blocked.
-
-## 0.6.48.7.37
-
-- Corrected the native Type-50 DSEC covering/zero-photoexcitation branch using the transported call-state covering fraction.
-- Restored source optically thin `ptmp1/ptmp2`, density-floor, post-swap `ans1`-`ans6`, and thermal sign semantics.
-- Retained the literal Type-50 stored wavelength in the lowered payload while preserving the qualified endpoint-derived `opakab` product path.
-- Closed records 781 and 917 and all 301 helium Type-50 record answers; Type-50 rate-matrix parity now passes.
-- Improved the call-2 helium dense matrix from 5489/6084 to 5784/6084 exact cells; fixed-state parity remains blocked by 300 cells.
-- Added Type-50 record diagnostics, runner, readiness checker, strict checker, tests, and technical note.
-
-## 0.6.48.7.36 — Type-99 source-faithful correction
-
-- Preserved Type-99 pre-alias destination energy, threshold, and statistical weight in the lowered payload.
-- Reconstructed the source 999-bin `ener`/`bremsmap` workspace for `phint53hunt`.
-- Restored source/Python `calt99`, `milne/intin`, normalization, and final `ans1`–`ans6` semantics for helium records 779, 780, and 1695.
-- Added direct intermediate and final-answer qualification gates.
-- Verified all three target records and the complete Type-99 rate matrix exactly; dense-matrix parity improves to 5,489/6,084, leaving 595 cells.
-- Kept fixed-state ABI 60487, lowered-program ABI 60485, thermal parity blocked, and production promotion blocked.
-
-## 0.6.48.7.35
-
-- Added a diagnostic-only post-Type-56 bound-free coefficient and matrix-residual decomposition.
-- Replayed all 6,084 source and native helium matrix cells independently in their exact insertion orders.
-- Attributed all 597 remaining non-exact dense cells to coefficient differences or explicit accumulation-order-only differences.
-- Reconstructed `ans1`–`ans6` for all 438 Type-50/53/95/99 records from the complete 5,232-term stream.
-- Added direct v0.6.47.2 bound-free record capture for future physical reruns.
-- Localized the dominant residual to Type-99 record 780 at cell `(31,31)` without claiming an unproven root cause.
-- Preserved ABI 60487, all accepted Type-56/63/71/seed/RHS gates, and blocked fixed-state and thermal promotion.
-
-## 0.6.48.7.34
-
-- Centralize historical and modern Boltzmann-related values in one shared `constants.def` consumed by both Python and C++, without changing the immutable v0.6.47.2 benchmark reference.
-- Keep source-faithful collision branches on the Python value `8.61707e-5 eV K^-1`; retain the CODATA value as a named deferred-promotion constant.
-- Restore Type-56 Python/IEEE arithmetic order using `sqrt(T)`, `8.626e-6`, and the Python collision energy conversion for `ans5/ans6`.
-- Capture all 411 source Type-56 record diagnostics and replay the exact captured Type-56 temperature for phase-aligned coefficient comparison.
-- Apply source `xpx` scaling once at the common matrix-insertion boundary for all committed `cj/cj2` contributions; remove Type-53 and Type-63 family-specific scaling to prevent double application.
-- Preserve the accepted helium seed, exact RHS, Type-63 orientation, Type-95 self-loop suppression, and complete 5,232-term stream.
-- Keep dense-matrix, post-solve, thermal, product, and production promotion evidence-gated.
-
-## 0.6.48.7.33
-
-- Apply source energy-ordering semantics to Type-63 matrix endpoints while retaining literal packed-record initial/final scalar channels.
-- Carry literal Type-63 initial/final compact rows in the lowered payload so scalar evaluation remains independent of matrix endpoint orientation.
-- Restore the source hydrogen-density matrix scale for Type-63 thermal coefficients without changing population-rate coefficients.
-- Suppress source-absent helium Type-95 same-row matrix contributions for records 1629 and 1980 while retaining scalar evaluation and diagnostics.
-- Close the call-2 helium term stream at 5,232 source terms, 5,232 native terms, 5,232 metadata-keyed matches, and zero unmatched terms.
-- Enable valid family-level rate attribution; retain strict rejections for remaining coefficient and dense-matrix differences and keep thermal/product/production promotion blocked.
-
-## 0.6.48.7.32
-
-- Reconstruct the runtime-supplied helium compact population seed using source overlapping-ion semantics instead of loading one independent global level per compact row.
-- Preserve the shared He I continuum/He II ground row, advance subsequent He II rows to the following global level, and initialize the terminal solver-normalization row to exact zero.
-- Remove premature native pre-solve normalization for runtime-supplied helium compact seeds; retain the existing fallback normalization for other seed paths.
-- Add explicit shared-boundary, terminal-zero, compact-seed, pre-solve-normalization-removal, and transformed-initial-state gates.
-- Keep the independently observed dense-matrix and term-stream alignment failures blocked for later releases.
-
-## 0.6.48.7.31.3
-
-- Retire positional source-order term comparison for the call-2 helium solve audit and align source/native terms by record, data type, rate type, normalized role, compact row/column, and duplicate occurrence ordinal.
-- Emit separate unmatched-source and unmatched-native term inventories and withhold rate-family conclusions whenever the term streams are incomplete.
-- Separate raw runtime `global_xilevg`, source compact mapped seed, native compact mapped seed, and normalized native solver seed in a lifecycle-aligned 78-row ledger.
-- Reclassify the active seed defects as source-compact overwrite mismatch plus premature native pre-solve normalization; retain exact RHS and independently observed dense-matrix differences.
-- Make no changes to rates, matrices, solvers, thermal physics, controller behavior, or products.
-
-## 0.6.48.7.31.2
-
-- Fix the generated v0.6.47.2 helium solve-state probe to terminate `v0472_call2_eval1_he_solve_state.json` with a real newline instead of the literal characters `\n`.
-- Validate the emitted solve-state JSON immediately inside the source probe before the wrapper proceeds.
-- Add a structured missing-summary checker path so interrupted source capture or decomposition runs report instrumentation gates instead of raising `FileNotFoundError`.
-- Preserve all successfully captured helium solve rows, dense-matrix cells, source-order terms, and Lucy iteration traces; no physics, matrix, solver, thermal, controller, or product behavior changes.
-
-## 0.6.48.7.31.1
-
-- Fix the source call-2 helium solve-state probe to use the actual v0.6.47.2 `ElementBasisRow` schema.
-- Derive the physical ion stage from `assembly.basis.ion_stage`, retain the compact ion counter from `meta.ion_counter`, and derive charge as `ion_stage - 1`.
-- Remove invalid `meta.ion` and `meta.ion_charge` accesses that aborted the v0.6.48.7.31 source capture before any solve-state ledger was written.
-- Keep the v0.6.48.7.30.4 global-level mapping ledger authoritative; no physics, matrix, solver, thermal, controller, or product behavior changes.
-
-## 0.6.48.7.31
-
-- Add a hash-verified v0.6.47.2 call-2/evaluation-1 helium solve-state capture with transformed initial populations, dense and normalized matrices, RHS, source-order matrix terms, and Lucy iteration traces.
-- Compare the source system with the unchanged native solve-response ledgers using independent transformed-state, RHS, dense-matrix, source-order metadata, and coefficient gates.
-- Preserve the exact 78-row He I/He II global-level mapping and raw `global_xilevg` seed transport established by v0.6.48.7.30.4.
-- Keep type-53 separately fixed and report non-type-53 type-50, type-71, and type-99 rate/matrix gates before interpreting post-solve or thermal differences.
-- Keep H, continuum, Mg, calls 3-4, thermal parity, product parity, and production promotion blocked.
-
-## 0.6.48.7.30.2
-
-- Correct the lowered He II call-start population mapping so compact rows 46–78 consume source global levels 79–111 rather than 80–112.
-- Preserve He I rows 1–45 and all non-helium mappings unchanged.
-- Add a strict 78-row mapping and raw `global_xilevg` transport ledger with an explicit normalization-row level-111 gate.
-- Keep rate, matrix-thermal, general-helium, and calls 3–4 gates blocked until the physical corrected replay accepts.
-
-# Changelog
-
-## 0.6.48.7.30.1
-
-- Corrected the call-2 helium seed audit to compare native loaded seeds with the exact call-start `global_xilevg` payload rather than source post-solve populations.
-- Added an explicit phase-aligned 78-row transport ledger and separate seed-transport and post-solve population gates.
-- No physics formulas or controller behavior changed.
-
-
-## 0.6.48.7.28
-
-- Added hash-verified source capture of call-2/evaluation-1 helium populations before/after solve.
-- Added exact source-order abundance-weighted primary/secondary helium term ledger.
-- Added per-record-family and destination-row type-53/non-type-53 decomposition.
-- Added strict causal gates for population initialization, rate evaluation, abundance, classification, matrix accumulation, and source-order summation.
-- Preserved accepted v0.6.48.7.27 gates and kept H, continuum, Mg, calls 3-4, and promotion blocked.
-## 0.6.48.7.27
-
-- Added checked call-2/evaluation-1 H/He/Mg/continuum field attribution.
-- Added controlled source-component substitution ladder and exact component gates.
-- Preserved accepted call-1 gates and kept calls 3–4 blocked until general call-2 construction is exact.
-- Continued deferral of global_bilevg/global_rnisg consumers pending causal family evidence.
-- Qualification-only; no thermal, product, or production promotion.
-
-# Changelog
-
-## 0.6.48.7.26
-
-- Adds a hash-verified source-v0.6.47.2 capture of per-element and continuum thermal budgets for all 57 DSEC evaluations, with the exact call inventory 21/1/18/17.
-- Adds five controlled native call-2/evaluation-1 workspace replays: no global state, `global_xilevg` only, `global_xilevg + global_bilevg`, `global_xilevg + global_rnisg`, and all three arrays.
-- Extends `run-fixed-evaluation` with `--call-start-workspace-dir` and `--global-workspace-mode`, and writes one-row native thermal-budget ledgers for each replay.
-- Separates marginal global-state effects from residual H/He/Mg/continuum construction gaps and requires exact call-2/evaluation-1 element, continuum, charge-residual, and `hmctot` parity before calls 3-4 may run.
-- Adds a native consumer inventory. `global_xilevg` is currently consumed as a mapped-row population seed; `global_bilevg` and `global_rnisg` remain ABI-transported but have no native rate-family consumer.
-- Preserves all accepted v0.6.48.7.25.2 call-1 thermal, committed-state, secant, and controller gates unchanged.
-- Keeps thermal, product, and production promotion blocked; this is a decomposition release, not a physics promotion.
-
-## 0.6.48.7.25.1
-
-- Removes the duplicate physical evaluator K-to-T4 pre-commit; the thermal controller is now the sole owner of the source T4-to-kelvin-to-T4 state commit.
-- Resolves the physical callback ownership ambiguity without hard-coded temperatures.
-- Extends the native secant self-test contract with `physical_callback_precommit=false` and `single_commit_owner=thermal_controller`.
-- Preserves exact call-1 thermal leaves, H/He/Mg qualification budgets, electron fraction, charge residual, and `hmctot`.
-- Keeps calls 2-4 gated on a complete 21-state physical rerun; thermal, product, and production promotion remain blocked.
-
-## 0.6.48.7.25
-
-- Restores the source DSEC post-evaluation temperature commit as explicit T4-to-kelvin and kelvin-to-T4 operations, preserving the source binary64 rounding point.
-- Rewrites the late temperature secant with separately rounded products, numerator, denominator, and quotient; thermal compilation retains `-ffp-contract=off`.
-- Adds a native 21-state `secant-ieee-self-test` that reproduces every call-1 temperature exactly, including the seven v0.6.48.7.24 ULP mismatches.
-- Adds a strict physical call-1 IEEE gate and keeps calls 2-4 blocked until all 21 thermal/state rows are exact.
-- Leaves H/He/Mg and effective leaf qualification-oracle boundaries unchanged.
-- Defers `global_bilevg` and `global_rnisg` consumer corrections until physical call-1 acceptance.
-- Keeps thermal, controller, product, and production promotion blocked.
-
-## 0.6.48.7.23
-
-- Adds a qualification-only Mg primary/secondary thermal correction using the accepted original-v0.6.47.2 call-1 budget oracle.
-- Adds per-call transport for source `bremsa`, continuum optical depth, `global_xilevg`, `global_bilevg`, and `global_rnisg` workspaces.
-- Adds ATDB-lowered global-level row indices so mapped native rows consume source `global_xilevg` as their initial population state.
-- Corrects the former call-1/evaluation-4 temperature branch and prevents the old evaluation-7 early exit in bounded validation.
-- Adds the complete post-Mg/post-transport controller parity gate; local completion remains `RUN_REQUIRED`.
-- Keeps thermal, product, and production promotion blocked.
-
-## 0.6.48.7.21.4
-
-- Restrict the v0.6.47.2 observational wrapper to repeated DSEC controller evaluators that are already configured with `retain_fixed_state_results=False`.
-- Bypass one-shot final and target-state evaluators without changing callbacks, snapshots, result retention, or capture counters.
-- Remove all probe assignments to `retain_fixed_state_results`; the source runner remains the sole owner of that policy.
-- Diagnose the v0.6.48.7.21.3 exit-1 failure as a missing one-shot `fixed_state_result` after the complete 21-evaluation first DSEC call, not a physics or controller rejection.
-- Preserve ABI 60487 and all thermal/controller/production blockers.
-
-## 0.6.48.7.21.4
-
-- Remove the observational `calc_hmc_all` monkeypatch after the v0.6.48.7.21.2 fault was localized to cyclic GC at call 1/evaluation 5.
-- Capture compact current-result budgets through `CalcHMCAllDsecEvaluator.progress_callback` and call-start fingerprints through `pre_evaluation_callback`.
-- Disable DSEC input-snapshot retention and full fixed-state result history in the physical probe.
-- Disable cyclic GC only inside the isolated observational subprocess; reference counting and source numerical execution remain unchanged.
-- Preserve ABI 60487, controller tolerances, source physics, and all thermal/production blockers.
-
-## 0.6.48.7.21.4
-
-- Replace full fixed-state result retention in the v0.6.47.2 thermal-budget probe with a streaming current-result hook.
-- Keep `retain_fixed_state_results=False`, preserving the production `diagnostics_mode=none` memory discipline across the 57-evaluation DSEC trajectory.
-- Retain only four first-evaluation input snapshots and compact scalar/hash rows.
-- Add unbuffered progress markers, Python fault-handler output, and single-thread BLAS capture defaults so any future native crash identifies its last completed evaluation.
-- No rates, matrices, thermal coefficients, controller tolerances, ABI fields, or production gates are changed.
-
-## 0.6.48.7.21.1
-
-- Fix the v0.6.48.7.21 original-DSEC capture probe to record only the first input snapshot of each DSEC call.
-- Avoid reading `global_level_index_by_key` from the intentionally lightweight v0.6.47.2 prior-result namespace used by `diagnostics_mode=none`.
-- Preserve source physics, controller tolerances, and all promotion blockers; this is an observational instrumentation hotfix only.
-
-## 0.6.48.7.21.1
-
-- Added a qualification-only original-v0.6.47.2 call-1 thermal-budget capture.
-- Separates helium type-53 from helium non-type-53 thermal terms using the source-ordered diagonal ledger and solved populations.
-- Captures radiation, bremsa, continuum optical depths, opacity, emissivity, and global population fingerprints at the start of all four DSEC calls.
-- Adds lightweight `native_thermal_budget.csv` output with H, He, Mg, continuum, type-53, and helium non-type-53 budgets for every controller evaluation.
-- Extends native controller trajectory diagnostics with element and continuum heating/cooling columns.
-- Adds a constrained comparison that identifies the leading call-1 non-type-53 budget gap and the exact between-call state-refresh gap without changing controller tolerances.
-- Full thermal, controller, and production promotion remain blocked.
-
-# Changelog
-
-## 0.6.48.7.21.1
-
-- Added a qualification-only thermal-controller state-selection and trajectory audit.
-- Identified the first controller branch divergence at call 1, evaluation 4: native takes one temperature divide while the reference takes two because the native thermal residual is below the source far-from-equilibrium threshold.
-- Proved that native call 1 exits at evaluation 7 on the default thermal tolerance and therefore never reaches the evaluation-60 workspace anchor.
-- Proved that calls 2-4 repeat an unchanged native thermal source state while the reference has distinct between-call thermal residuals.
-- Added controller event/call-summary CSV emission to `run-fixed-dsec`.
-- Kept full thermal-controller, thermal-product, and production promotion blocked.
-
-## 0.6.48.7.21.1
-
-- Hotfixes the v0.6.48.7.19 two-state thermal-promotion audit so a completed `run-fixed-dsec` trajectory that returns status 20 is retained as a scientific `FULL_THERMAL_CONTROLLER=REJECT` result rather than being converted into an infrastructure exception and `NOT_RUN`.
-- Preserves already completed evaluation-60/evaluation-61 exactness, fixed-state workflow, controller-smoke integration, and `hmctot` attribution gates when the complete native controller fails reference identity.
-- Adds automatic recovery of existing v0.6.48.7.19 output directories; no expensive physics rerun is required.
-- Records the observed full-controller diagnostics: 14 total evaluations, 10 DSEC evaluations, zero Python callbacks, zero evaluation-60 runtime-workspace activations, reference-state identity false, and maximum absolute `hmctot` delta 1.335393908894136.
-- Leaves ABI 60487 and lowered-program ABI 60485 unchanged.
 
 ## 0.6.48.7.46.16 — Source-faithful helium non-Type53 cooling family attribution and reduction - 2026-06-19
 
@@ -1427,8 +779,6 @@
 - Add a strict 78-row mapping and raw `global_xilevg` transport ledger with an explicit normalization-row level-111 gate.
 - Keep rate, matrix-thermal, general-helium, and calls 3–4 gates blocked until the physical corrected replay accepts.
 
-# Changelog
-
 ## 0.6.48.7.30.1 - 2026-06-14
 
 - Corrected the call-2 helium seed audit to compare native loaded seeds with the exact call-start `global_xilevg` payload rather than source post-solve populations.
@@ -1450,8 +800,6 @@
 - Preserved accepted call-1 gates and kept calls 3–4 blocked until general call-2 construction is exact.
 - Continued deferral of global_bilevg/global_rnisg consumers pending causal family evidence.
 - Qualification-only; no thermal, product, or production promotion.
-
-# Changelog
 
 ## 0.6.48.7.26 - 2026-06-14
 
@@ -1561,8 +909,6 @@
 - Adds a constrained comparison that identifies the leading call-1 non-type-53 budget gap and the exact between-call state-refresh gap without changing controller tolerances.
 - Full thermal, controller, and production promotion remain blocked.
 
-# Changelog
-
 ## 0.6.48.7.20 - 2026-06-13
 
 - Added a qualification-only thermal-controller state-selection and trajectory audit.
@@ -1579,8 +925,6 @@
 - Adds automatic recovery of existing v0.6.48.7.19 output directories; no expensive physics rerun is required.
 - Records the observed full-controller diagnostics: 14 total evaluations, 10 DSEC evaluations, zero Python callbacks, zero evaluation-60 runtime-workspace activations, reference-state identity false, and maximum absolute `hmctot` delta 1.335393908894136.
 - Leaves ABI 60487 and lowered-program ABI 60485 unchanged.
-
-# xstar_tools 0.6.48.7.19 - 2026-06-13
 
 ## v0.6.48.7.19 - 2026-07-20
 
@@ -1617,8 +961,6 @@
 - Add standalone `--dsec-radiation-csv` and `--continuum-tau-csv` inputs and explicit runtime-state usage diagnostics.
 - Add an untouched-v0.6.47.2 evaluation-60 capture workflow for the full `epi/bremsa` grid, dense continuum optical depths, and the 44-record/176-term type-53 row-46 manifold.
 - Add an independent-state parity audit; arbitrary-state promotion remains blocked until that physical capture is run and reproduces all answers and terms.
-
-# Changelog
 
 ## 0.6.48.7.19
 
@@ -1717,8 +1059,6 @@
 - Replaced absolute-symlink qualification clones with regular-file copies and added a portable lowered-program snapshot.
 - Kept full type-53, fixed-state, and production promotion blocked.
 
-# xstar_tools 0.6.48.7.18 - 2026-06-13
-
 ## v0.6.48.7.18 - 2026-07-20
 
 ### Added
@@ -1741,8 +1081,6 @@
 - Add standalone `--dsec-radiation-csv` and `--continuum-tau-csv` inputs and explicit runtime-state usage diagnostics.
 - Add an untouched-v0.6.47.2 evaluation-60 capture workflow for the full `epi/bremsa` grid, dense continuum optical depths, and the 44-record/176-term type-53 row-46 manifold.
 - Add an independent-state parity audit; arbitrary-state promotion remains blocked until that physical capture is run and reproduces all answers and terms.
-
-# Changelog
 
 ## 0.6.48.7.18
 
@@ -1841,15 +1179,13 @@
 - Replaced absolute-symlink qualification clones with regular-file copies and added a portable lowered-program snapshot.
 - Kept full type-53, fixed-state, and production promotion blocked.
 
-# xstar_tools 0.6.48.7.17 - 2026-06-12
+# 0.6.48.7.17 - 2026-06-12
 
 - Extend the fixed-state runtime ABI from 60485 to 60486 with the complete DSEC radiation and continuum optical-depth workspaces required by the type-53 source law.
 - Preserve lowered-program ABI 60485 so existing active ATDB programs remain loadable without regeneration.
 - Add standalone `--dsec-radiation-csv` and `--continuum-tau-csv` inputs and explicit runtime-state usage diagnostics.
 - Add an untouched-v0.6.47.2 evaluation-60 capture workflow for the full `epi/bremsa` grid, dense continuum optical depths, and the 44-record/176-term type-53 row-46 manifold.
 - Add an independent-state parity audit; arbitrary-state promotion remains blocked until that physical capture is run and reproduces all answers and terms.
-
-# Changelog
 
 ## 0.6.48.7.17
 
@@ -1948,7 +1284,7 @@
 - Replaced absolute-symlink qualification clones with regular-file copies and added a portable lowered-program snapshot.
 - Kept full type-53, fixed-state, and production promotion blocked.
 
-# xstar_tools 0.6.48.7.16 - 2026-06-12
+# 0.6.48.7.16 - 2026-06-12
 
 - Add a qualification-only source-faithful coupled replacement for the complete 44-record type-53 row-46 aliased manifold.
 - Reproduce all 264 captured answers and all 176 dense/thermal matrix terms IEEE-exactly at evaluation 61.
@@ -1956,8 +1292,6 @@
 - Reduce the reference-population residual by 97.9302%, improve the helium population L1 error from 0.1727831650 to 1.1390584e-05, and improve conditioning by about 217x.
 - Execute a live non-anchor state path for all 44 records using current radiation, escape, population, and thermal inputs without replaying the evaluation-61 oracle.
 - Keep arbitrary-state parity, general-state promotion, whole fixed-state parity, thermal parity, and production promotion blocked because the current ABI lacks the complete original DSEC radiation and optical-depth workspace.
-
-# Changelog
 
 ## 0.6.48.7.16
 
@@ -2048,7 +1382,7 @@
 - Replaced absolute-symlink qualification clones with regular-file copies and added a portable lowered-program snapshot.
 - Kept full type-53, fixed-state, and production promotion blocked.
 
-# xstar_tools 0.6.48.7.15 - 2026-06-12
+# 0.6.48.7.15 - 2026-06-12
 
 - Add a self-contained original-DSEC type-53 row-46 runtime oracle covering all 44 aliased records, 264 answers, and 176 committed terms.
 - Preserve optical-depth, escape-probability, population-dependent, provenance, and source-order fields from the accepted v0.6.48.7.14.2 capture.
@@ -2057,267 +1391,6 @@
 - Substitute all 176 source terms as one unit and reduce the reference residual by 97.9302%.
 - Reduce the solved helium population L1 error from 0.1727831650 to 1.1393747e-05 and improve matrix conditioning by about 217x.
 - Keep arbitrary-state type-53, fixed-state, thermal, controller, product, and production promotion blocked.
-
-# Changelog
-
-## 0.6.48.7.15
-
-- Added the 44-record original-DSEC type-53 row-46 coupled runtime-contract oracle and audit.
-- Frozen oracle hashes: records `055f8e...6e65`, terms `bca048...d15a`, contribution `28b349...26aa`.
-- Coupled substitution reduces the evaluation-61 reference residual by 97.9302% and nearly eliminates row 46.
-- Native answer, matrix-term, and absolute source-order parity remain blocked.
-- No single-record or production correction is promoted.
-
-## 0.6.48.7.14
-
-- The 155/620 inventory estimate below was corrected in v0.6.48.7.15 to the actual 154-record/616-term DSEC runtime set.
-- Added an original v0.6.47.2 DSEC runtime capture for every He II row-46 contributor at evaluation 61.
-- Captures the exact 155-record inventory across types 50, 53, 56, 57, 71, 74, 76, 77, 95, and 99, plus all 620 committed matrix terms in global source order.
-- Captures line/continuum escape inputs, `ptmp1`, `ptmp2`, covering fraction, `ans1`-`ans6`, endpoint populations, and population-dependent diagnostics.
-- Captures the complete physical row-46 equation, the pre-normalization row, the normalized all-ones row, RHS, and all 78 solve rows.
-- Added an offline residual audit that substitutes the complete source row-46 term set into the exact type-53/type-71/type-99/actual-DSEC-type-50 qualification state and ranks the remaining residual by data type.
-- Explicitly blocks type-76, single-record, fixed-state, thermal, and production promotion pending the runtime result.
-
-## 0.6.48.7.13
-
-- Added a qualification-only coupled replacement for all 79 He II type-50 rows-46–54 records using the actual v0.6.47.2 DSEC runtime capture.
-- Reproduces all 474 answers and 316 committed matrix terms IEEE-exactly, including the hydrogen-density thermal multiplier.
-- Reduces the evaluation-61 reference-population residual by 93.956%, restores helium matrix rank 78/78, and improves conditioning by about 5.64x.
-- Preserves exact type-53, type-71, and type-99 constraints, H/Mg bit identity, helium normalization, and zero Python callbacks.
-- Keeps general type-50 promotion, fixed-state parity, thermal parity, and production promotion blocked because the solved population state does not improve overall.
-
-## 0.6.48.7.12
-
-- Added an observational runtime probe for the untouched v0.6.47.2 physical DSEC path.
-- Captures the live type-50 escape-probability inputs, covering fraction, optical depths, `ans1`-`ans6`, and all committed matrix terms for the 79 He II rows-46-54 records at evaluation 61.
-- Added strict 79-record/316-term verification and source-archive hash gating.
-- Kept general-state type-50 replacement, fixed-state parity, thermal parity, and production promotion blocked.
-
-## v0.6.48.7.11 - 2026-07-19
-
-### Added
-- Added qualification-only source-ordered helium solve-response diagnostics.
-- Exported the complete 78x78 helium matrix, RHS, row state, and 5,240 committed source-order terms.
-- Added direct evaluation of the v0.6.47.2 reference population vector in the native helium system.
-- Added residual rankings by qualified scope, remaining family, row block, and source position.
-
-### Findings
-- Exact type-50 changes 106 matrix entries but changes the population solution by only about 4.68e-9 in L1.
-- The normalized helium system is extremely ill-conditioned, with condition number about 2.73e14.
-- Rows 46-54 contain 99.8175% of the reference-population residual.
-- The already exact type-50 scope dominates the residual; no unqualified family is material.
-- A complete DSEC escape-probability capture is required before further type-50 promotion.
-
-### Status
-- Fixed-state, thermal, controller, product, and production promotion remain blocked.
-
-## 0.6.48.7.10
-
-- Added a qualification-only, fail-closed simultaneous replacement of all 79 He II type-50 transitions incident on rows 46-54.
-- Embedded the immutable evaluation-61 type-50 oracle in the native engine and restricted its use to the captured fixed state.
-- Required the general replacement gate, the exact record-1695 type-99 gate, and a dedicated type-50 manifold gate.
-- Preserved all 31 exact type-53 records, all 31 exact type-71 row-77 records, and all six exact type-99 record-1695 answers.
-- Made all 474 type-50 answers and all 79 matrix commitments exact to the frozen oracle.
-- Verified bit-identical H/Mg state and exact helium normalization.
-- Accepted the qualification candidate because electron fraction, charge residual, He I/II/III, and hmctot all move toward the v0.6.47.2 reference.
-- Kept general type-50 physics replacement, fixed-state parity, thermal parity, and production promotion blocked because the candidate remains an evaluation-61 oracle substitution and the improvements are extremely small.
-
-## 0.6.48.7.9
-
-- Added a constrained evaluation-61 helium matrix-residual decomposition that keeps the 31 exact type-53 records, 31 exact type-71 row-77 records, and exact type-99 record 1695 fixed.
-- Added fail-closed qualification row-range and unqualified-subset ablation controls.
-- Identified type 50 as the strongest remaining compensating family.
-- Localized the dominant nonlinear response to the type-50 He II row block 46-54; no single row or source position explains the block.
-- Added portable link-free lowered-program snapshots and qualification-output safety checks.
-- Kept type-50 correction, fixed-state parity, and production promotion blocked.
-
-## 0.6.48.7.9
-
-- Added a reproducible 31-record evaluation-61 v0.6.47.2 type-71 row-77 runtime oracle.
-- Verified all current native type-71 ans1-ans6 values and matrix terms are IEEE-exact.
-- Added a qualification-only exact type-99 record-1695 oracle substitution and measured the coupled type-71/type-99 fixed-state result.
-- Rejected the coupled candidate because it increases charge residual and lowers He III.
-- Preserved all 31 exact He II type-53 records and kept H/Mg unchanged.
-- Replaced absolute-symlink qualification clones with regular-file copies and added a portable lowered-program snapshot.
-- Kept full type-53, fixed-state, and production promotion blocked.
-
-# xstar_tools 0.6.48.7.14.2 - 2026-06-12
-
-- Accept the actual v0.6.47.2 DSEC row-46 inventory of 154 records and 616 committed terms.
-- Correct the synthetic 155/620 expectation by identifying native-only type-95 source position 7452 / record 1980 as a compact row-46 self-loop absent from the original DSEC assembly.
-- Remove all four record-1980 terms during offline source-faithful row-46 substitution.
-- Raise the CSV field-size limit for captured population-dependency diagnostics.
-- Separate exact original-DSEC row reconstruction from native global/relative source-order parity.
-- Complete the actual residual audit: the full source row-46 contract removes 97.9433% of the remaining reference residual.
-- Identify the 44-record type-53 row-46 manifold as the leading coupled scope, explaining 97.9302% of the residual.
-- Keep single-record, type-76, fixed-state, thermal, and production promotion blocked.
-
-# Changelog
-
-## 0.6.48.7.14.2
-
-- Original-DSEC capture accepted at 154 records, 924 answers, and 616 terms.
-- Type-95 record 1980 classified as native-only and removed in source reconstruction.
-- Row-46 source reconstruction and normalization contract are exact.
-- Full original-DSEC row-46 substitution reduces the reference residual by 97.9433%.
-- Type 53 is the dominant remaining coupled scope; type 76 is not material.
-- Native source-order and row-46 inventory parity remain blocked.
-
-
-## 0.6.48.7.14
-
-- The 155/620 inventory estimate below was corrected in v0.6.48.7.14.2 to the actual 154-record/616-term DSEC runtime set.
-- Added an original v0.6.47.2 DSEC runtime capture for every He II row-46 contributor at evaluation 61.
-- Captures the exact 155-record inventory across types 50, 53, 56, 57, 71, 74, 76, 77, 95, and 99, plus all 620 committed matrix terms in global source order.
-- Captures line/continuum escape inputs, `ptmp1`, `ptmp2`, covering fraction, `ans1`-`ans6`, endpoint populations, and population-dependent diagnostics.
-- Captures the complete physical row-46 equation, the pre-normalization row, the normalized all-ones row, RHS, and all 78 solve rows.
-- Added an offline residual audit that substitutes the complete source row-46 term set into the exact type-53/type-71/type-99/actual-DSEC-type-50 qualification state and ranks the remaining residual by data type.
-- Explicitly blocks type-76, single-record, fixed-state, thermal, and production promotion pending the runtime result.
-
-## 0.6.48.7.13
-
-- Added a qualification-only coupled replacement for all 79 He II type-50 rows-46–54 records using the actual v0.6.47.2 DSEC runtime capture.
-- Reproduces all 474 answers and 316 committed matrix terms IEEE-exactly, including the hydrogen-density thermal multiplier.
-- Reduces the evaluation-61 reference-population residual by 93.956%, restores helium matrix rank 78/78, and improves conditioning by about 5.64x.
-- Preserves exact type-53, type-71, and type-99 constraints, H/Mg bit identity, helium normalization, and zero Python callbacks.
-- Keeps general type-50 promotion, fixed-state parity, thermal parity, and production promotion blocked because the solved population state does not improve overall.
-
-## 0.6.48.7.12
-
-- Added an observational runtime probe for the untouched v0.6.47.2 physical DSEC path.
-- Captures the live type-50 escape-probability inputs, covering fraction, optical depths, `ans1`-`ans6`, and all committed matrix terms for the 79 He II rows-46-54 records at evaluation 61.
-- Added strict 79-record/316-term verification and source-archive hash gating.
-- Kept general-state type-50 replacement, fixed-state parity, thermal parity, and production promotion blocked.
-
-## v0.6.48.7.11 - 2026-07-19
-
-### Added
-- Added qualification-only source-ordered helium solve-response diagnostics.
-- Exported the complete 78x78 helium matrix, RHS, row state, and 5,240 committed source-order terms.
-- Added direct evaluation of the v0.6.47.2 reference population vector in the native helium system.
-- Added residual rankings by qualified scope, remaining family, row block, and source position.
-
-### Findings
-- Exact type-50 changes 106 matrix entries but changes the population solution by only about 4.68e-9 in L1.
-- The normalized helium system is extremely ill-conditioned, with condition number about 2.73e14.
-- Rows 46-54 contain 99.8175% of the reference-population residual.
-- The already exact type-50 scope dominates the residual; no unqualified family is material.
-- A complete DSEC escape-probability capture is required before further type-50 promotion.
-
-### Status
-- Fixed-state, thermal, controller, product, and production promotion remain blocked.
-
-## 0.6.48.7.10
-
-- Added a qualification-only, fail-closed simultaneous replacement of all 79 He II type-50 transitions incident on rows 46-54.
-- Embedded the immutable evaluation-61 type-50 oracle in the native engine and restricted its use to the captured fixed state.
-- Required the general replacement gate, the exact record-1695 type-99 gate, and a dedicated type-50 manifold gate.
-- Preserved all 31 exact type-53 records, all 31 exact type-71 row-77 records, and all six exact type-99 record-1695 answers.
-- Made all 474 type-50 answers and all 79 matrix commitments exact to the frozen oracle.
-- Verified bit-identical H/Mg state and exact helium normalization.
-- Accepted the qualification candidate because electron fraction, charge residual, He I/II/III, and hmctot all move toward the v0.6.47.2 reference.
-- Kept general type-50 physics replacement, fixed-state parity, thermal parity, and production promotion blocked because the candidate remains an evaluation-61 oracle substitution and the improvements are extremely small.
-
-## 0.6.48.7.9
-
-- Added a constrained evaluation-61 helium matrix-residual decomposition that keeps the 31 exact type-53 records, 31 exact type-71 row-77 records, and exact type-99 record 1695 fixed.
-- Added fail-closed qualification row-range and unqualified-subset ablation controls.
-- Identified type 50 as the strongest remaining compensating family.
-- Localized the dominant nonlinear response to the type-50 He II row block 46-54; no single row or source position explains the block.
-- Added portable link-free lowered-program snapshots and qualification-output safety checks.
-- Kept type-50 correction, fixed-state parity, and production promotion blocked.
-
-## 0.6.48.7.9
-
-- Added a reproducible 31-record evaluation-61 v0.6.47.2 type-71 row-77 runtime oracle.
-- Verified all current native type-71 ans1-ans6 values and matrix terms are IEEE-exact.
-- Added a qualification-only exact type-99 record-1695 oracle substitution and measured the coupled type-71/type-99 fixed-state result.
-- Rejected the coupled candidate because it increases charge residual and lowers He III.
-- Preserved all 31 exact He II type-53 records and kept H/Mg unchanged.
-- Replaced absolute-symlink qualification clones with regular-file copies and added a portable lowered-program snapshot.
-- Kept full type-53, fixed-state, and production promotion blocked.
-
-# xstar_tools 0.6.48.7.14.1 - 2026-06-12
-
-- Hotfix the original-DSEC row-46 runtime probe for `diagnostics_mode="none"`.
-- Reconstruct the source-effective normalized matrix from `dense_matrix` when v0.6.47.2 intentionally omits the retained `normalized_matrix` diagnostic copy.
-- Preserve the exact all-ones normalization row without enabling high-volume diagnostics or changing the physical calculation.
-- Make the standalone checker fail closed with a structured report and capture-log tail when capture artifacts are absent, instead of raising `FileNotFoundError`.
-- Retain the 155-record, 620-term complete aliased row-46 scope and all scientific promotion blocks.
-
-# Changelog
-
-## 0.6.48.7.14
-
-- Added an original v0.6.47.2 DSEC runtime capture for every He II row-46 contributor at evaluation 61.
-- Captures the exact 155-record inventory across types 50, 53, 56, 57, 71, 74, 76, 77, 95, and 99, plus all 620 committed matrix terms in global source order.
-- Captures line/continuum escape inputs, `ptmp1`, `ptmp2`, covering fraction, `ans1`-`ans6`, endpoint populations, and population-dependent diagnostics.
-- Captures the complete physical row-46 equation, the pre-normalization row, the normalized all-ones row, RHS, and all 78 solve rows.
-- Added an offline residual audit that substitutes the complete source row-46 term set into the exact type-53/type-71/type-99/actual-DSEC-type-50 qualification state and ranks the remaining residual by data type.
-- Explicitly blocks type-76, single-record, fixed-state, thermal, and production promotion pending the runtime result.
-
-## 0.6.48.7.13
-
-- Added a qualification-only coupled replacement for all 79 He II type-50 rows-46–54 records using the actual v0.6.47.2 DSEC runtime capture.
-- Reproduces all 474 answers and 316 committed matrix terms IEEE-exactly, including the hydrogen-density thermal multiplier.
-- Reduces the evaluation-61 reference-population residual by 93.956%, restores helium matrix rank 78/78, and improves conditioning by about 5.64x.
-- Preserves exact type-53, type-71, and type-99 constraints, H/Mg bit identity, helium normalization, and zero Python callbacks.
-- Keeps general type-50 promotion, fixed-state parity, thermal parity, and production promotion blocked because the solved population state does not improve overall.
-
-## 0.6.48.7.12
-
-- Added an observational runtime probe for the untouched v0.6.47.2 physical DSEC path.
-- Captures the live type-50 escape-probability inputs, covering fraction, optical depths, `ans1`-`ans6`, and all committed matrix terms for the 79 He II rows-46-54 records at evaluation 61.
-- Added strict 79-record/316-term verification and source-archive hash gating.
-- Kept general-state type-50 replacement, fixed-state parity, thermal parity, and production promotion blocked.
-
-## v0.6.48.7.11 - 2026-07-19
-
-### Added
-- Added qualification-only source-ordered helium solve-response diagnostics.
-- Exported the complete 78x78 helium matrix, RHS, row state, and 5,240 committed source-order terms.
-- Added direct evaluation of the v0.6.47.2 reference population vector in the native helium system.
-- Added residual rankings by qualified scope, remaining family, row block, and source position.
-
-### Findings
-- Exact type-50 changes 106 matrix entries but changes the population solution by only about 4.68e-9 in L1.
-- The normalized helium system is extremely ill-conditioned, with condition number about 2.73e14.
-- Rows 46-54 contain 99.8175% of the reference-population residual.
-- The already exact type-50 scope dominates the residual; no unqualified family is material.
-- A complete DSEC escape-probability capture is required before further type-50 promotion.
-
-### Status
-- Fixed-state, thermal, controller, product, and production promotion remain blocked.
-
-## 0.6.48.7.10
-
-- Added a qualification-only, fail-closed simultaneous replacement of all 79 He II type-50 transitions incident on rows 46-54.
-- Embedded the immutable evaluation-61 type-50 oracle in the native engine and restricted its use to the captured fixed state.
-- Required the general replacement gate, the exact record-1695 type-99 gate, and a dedicated type-50 manifold gate.
-- Preserved all 31 exact type-53 records, all 31 exact type-71 row-77 records, and all six exact type-99 record-1695 answers.
-- Made all 474 type-50 answers and all 79 matrix commitments exact to the frozen oracle.
-- Verified bit-identical H/Mg state and exact helium normalization.
-- Accepted the qualification candidate because electron fraction, charge residual, He I/II/III, and hmctot all move toward the v0.6.47.2 reference.
-- Kept general type-50 physics replacement, fixed-state parity, thermal parity, and production promotion blocked because the candidate remains an evaluation-61 oracle substitution and the improvements are extremely small.
-
-## 0.6.48.7.9
-
-- Added a constrained evaluation-61 helium matrix-residual decomposition that keeps the 31 exact type-53 records, 31 exact type-71 row-77 records, and exact type-99 record 1695 fixed.
-- Added fail-closed qualification row-range and unqualified-subset ablation controls.
-- Identified type 50 as the strongest remaining compensating family.
-- Localized the dominant nonlinear response to the type-50 He II row block 46-54; no single row or source position explains the block.
-- Added portable link-free lowered-program snapshots and qualification-output safety checks.
-- Kept type-50 correction, fixed-state parity, and production promotion blocked.
-
-## 0.6.48.7.9
-
-- Added a reproducible 31-record evaluation-61 v0.6.47.2 type-71 row-77 runtime oracle.
-- Verified all current native type-71 ans1-ans6 values and matrix terms are IEEE-exact.
-- Added a qualification-only exact type-99 record-1695 oracle substitution and measured the coupled type-71/type-99 fixed-state result.
-- Rejected the coupled candidate because it increases charge residual and lowers He III.
-- Preserved all 31 exact He II type-53 records and kept H/Mg unchanged.
-- Replaced absolute-symlink qualification clones with regular-file copies and added a portable lowered-program snapshot.
-- Kept full type-53, fixed-state, and production promotion blocked.
 
 ## 0.6.48.7.14 - 2026-06-12
 
