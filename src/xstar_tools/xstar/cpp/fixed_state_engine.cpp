@@ -4252,6 +4252,12 @@ EvaluatedRecord evaluate_record(
     // for every cj/cj2 channel.  Keep population rates unscaled.
     c.density_scale = record.matrix_enabled ? input.hydrogen_density_cm3 : 1.0;
     out.matrix_enabled = record.matrix_enabled;
+    // Diagnostics must expose the serialized program metadata for every
+    // opcode, not only spectral Type-50 rows.  The v21.10 Type-57 regression
+    // qualifies the literal source threshold carried by record.line_energy_ev.
+    out.line_energy_ev = record.line_energy_ev;
+    out.atomic_mass_amu = record.atomic_mass_amu;
+    out.natural_width_ev = record.natural_width_ev;
 
     switch (record.opcode) {
         case XSTAR_FIXED_OPCODE_SIMPLE_UCALC: {

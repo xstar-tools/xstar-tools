@@ -1,5 +1,13 @@
 # CHANGELOG
 
+# 0.6.48.7.46.21.13.2 - 2026-06-22
+
+- Export serialized `line_energy_ev`, `atomic_mass_amu`, and `natural_width_ev` metadata for every native opcode, correcting the Type-57 diagnostic threshold omission without changing evaluated physics.
+- Qualify all 368 Magnesium Type-57 serialized source thresholds across all 61 fixed evaluations with bit-exact diagnostic transport and positive active thresholds.
+- Restore historical v21.10-v21.12 analyzer release identities and make the v21.9 through v21.13.1 regression chain explicit and auditable.
+- Preserve the accepted Type-68, Type-99, Type-49, Type-53, Type-57, Hydrogen, Helium, fixed-state, and continuum implementations; ABI remains 60487.
+- Keep production promotion blocked by remaining Thermal/controller differences, beginning with Helium non-Type-53 heating at sequence 4.
+
 # 0.6.48.7.46.21.12 - 2026-06-21
 
 - Serialize a twelve-stage literal Type-13 candidate table for every Magnesium Type-49 record using layout magic 222.
