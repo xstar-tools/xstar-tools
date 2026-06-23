@@ -7049,25 +7049,42 @@ int run_impl(
         all_populations.insert(all_populations.end(), full_populations.begin(), full_populations.end());
         fixed_full_population_offset += full_populations.size();
 
-        // Match local_zone.py exactly: accumulate explicit ion fractions
-        // using (stage - 1), then add the fully stripped fraction at charge Z.
-        // Keep this computed electron fraction distinct from elcter, which is
-        // the DSEC charge residual trial_xee - computed_xee.
+        // Match calc_hmc_all.f90 exactly: add every represented ion charge
+        // contribution directly into the one global enelec accumulator in
+        // element/ion source order, then add the fully stripped contribution
+        // for this element.  Do not form a per-element charge subtotal: that
+        // reassociation changes binary64 rounding and displaced the call-1
+        // controller trajectory by one ULP.
+        //
+        // Keep explicit binary64 stores between the source operations.  The
+        // fixed-state target is already compiled with -ffp-contract=off; the
+        // volatile temporaries additionally prevent local reassociation of
+        // xii * charge * abundance and accumulator + term.
         double explicit_stage_sum = 0.0;
-        double element_electron_fraction = 0.0;
         for (int ion_slot = 0; ion_slot < active.element.n_ions; ++ion_slot) {
             const double fraction =
                 buffers.ion_population_final[static_cast<std::size_t>(ion_slot)];
             const int stage = active.min_stage + ion_slot;
             explicit_stage_sum += fraction;
-            element_electron_fraction +=
-                fraction * static_cast<double>(stage - 1) * element.abundance;
+
+            volatile double charge = static_cast<double>(stage - 1);
+            volatile double weighted_fraction = fraction * charge;
+            volatile double source_term = weighted_fraction * element.abundance;
+            volatile double next_electron_fraction =
+                computed_electron_fraction + source_term;
+            computed_electron_fraction = next_electron_fraction;
         }
         const double fully_stripped_fraction =
             std::max(0.0, 1.0 - explicit_stage_sum);
-        element_electron_fraction +=
-            fully_stripped_fraction * static_cast<double>(element.element_z) * element.abundance;
-        computed_electron_fraction += element_electron_fraction;
+        volatile double fully_stripped_charge =
+            static_cast<double>(element.element_z);
+        volatile double fully_stripped_weighted =
+            fully_stripped_fraction * fully_stripped_charge;
+        volatile double fully_stripped_term =
+            fully_stripped_weighted * element.abundance;
+        volatile double next_electron_fraction =
+            computed_electron_fraction + fully_stripped_term;
+        computed_electron_fraction = next_electron_fraction;
 
         NativeElementDiagnostic element_diagnostic;
         element_diagnostic.committed_contributions = contributions;

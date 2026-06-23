@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import importlib.util
 import subprocess
 import sys
 from pathlib import Path
@@ -23,7 +24,7 @@ def test_numeric_roundoff_is_accepted_but_recorded() -> None:
     )
     assert len(recorder.accepted_roundoff) == 1
     assert len(recorder.rejections) == 0
-    assert recorder.accepted_roundoff[0]["classification"] == "E10_ACCEPTED_ROUNDOFF"
+    assert recorder.accepted_roundoff[0]["classification"] == "E7_ACCEPTED_ROUNDOFF"
 
 
 def test_visible_e10_difference_is_rejected() -> None:
@@ -65,10 +66,11 @@ def test_gate_reporting_cleanup_and_readiness() -> None:
 
 
 def test_checker_accepts_zero_rejection_contract(tmp_path: Path) -> None:
-    checker_module = __import__(
-        "check_v048746217_canonical_thermal_controller_parity",
-        fromlist=["check"],
-    )
+    checker_path = ROOT / "check_v048746217_canonical_thermal_controller_parity.py"
+    spec = importlib.util.spec_from_file_location("v048746217_checker", checker_path)
+    assert spec is not None and spec.loader is not None
+    checker_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(checker_module)
     audit_dir = tmp_path / "audit"
     audit_dir.mkdir()
     audit = {

@@ -1,5 +1,14 @@
 # CHANGELOG
 
+# 0.6.48.7.46.21.17 - 2026-06-23
+
+- Replace the per-element electron-fraction subtotal with one global `computed_electron_fraction` accumulator that follows the literal `calc_hmc_all.f90` element/ion visitation order.
+- Add every represented ion-stage charge term directly to the global accumulator, followed by the fully stripped contribution for that element; retain explicit binary64 stores and `-ffp-contract=off` for the fixed-state target.
+- Add a focused source-order/controller audit with the required sequence-4 fixed residual, call-1 charge-secant electron fraction, sequence-4 controller residual, and call-3/evaluation-6 `hmctot` gates.
+- Make the focused residual reader schema-compatible with both `elcter` and `charge_residual` field names.
+- Retain canonical `.7e`, independent `abs(value) < 1e-30` zero normalization, raw `.10e`/bit/ULP diagnostics, fresh H/He/Mg lowering, Type-57/53/49/99 case contracts, and ABI 60487.
+- Production promotion remains blocked pending the authoritative all-61 host replay and later product-level qualification.
+
 # 0.6.48.7.46.21.16.2 - 2026-06-23
 
 - Replace the stale v21.3 `native_case_all61` default with a fresh H/He/Mg case lowered from the supplied ATDB by the current package.

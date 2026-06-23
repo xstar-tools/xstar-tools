@@ -13,8 +13,8 @@ PROMOTED_FLAGS = (
 )
 
 def test_hotfix_release_version():
-    assert 'version = "0.6.48.7.46.21.16.2"' in (ROOT / "pyproject.toml").read_text()
-    assert '__version__ = "0.6.48.7.46.21.16.2"' in (ROOT / "src/xstar_tools/__init__.py").read_text()
+    assert 'version = "0.6.48.7.46.21.17"' in (ROOT / "pyproject.toml").read_text()
+    assert '__version__ = "0.6.48.7.46.21.17"' in (ROOT / "src/xstar_tools/__init__.py").read_text()
 
 def test_fixed_replay_restores_all_promoted_runtime_flags_once():
     text = REPLAY.read_text()
