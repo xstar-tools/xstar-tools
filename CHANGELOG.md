@@ -1,5 +1,12 @@
 # CHANGELOG
 
+# 0.6.48.7.46.21.16.1 - 2026-06-23
+
+- Restore the source-local Type-57 energy transport flag in the v21.16 fresh fixed replay; independent Thermal parity now reaches the Helium Type-53 correction instead of failing closed at sequence 1.
+- Restore the adjacent promoted Type-68 source-constant and Magnesium Type-53/49/99 persistent-leveltemp runtime contracts that were also omitted from the v21.16 replay environment.
+- Strengthen v21.16 readiness so every inherited promoted replay flag is required exactly once before host execution.
+- Preserve the Helium Type-53 live escape correction, exact call-1 electron-residual binding, canonical `.7e` comparison, `abs(value) < 1e-30` zero floor, physics arithmetic, and ABI 60487.
+
 # 0.6.48.7.46.21.16 - 2026-06-23
 
 - Bind generic Helium Type-53 records to their record-local live continuum optical-depth escape state before the interval integral, correcting the six-record `ans3`/`ans5` primitive residual family (records 651, 663, 669, 672, 721, and 1689).
