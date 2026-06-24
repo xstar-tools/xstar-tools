@@ -166,8 +166,8 @@ void write_retention_report(const WholeRunAccumulatedState& state,
         profile += ws.line_profile_workspace_exact ? 1 : 0;
     }
     out << "{\n"
-        << "  \"schema\": \"xstar-tools-v06487462551-source-workspace-retention-v1\",\n"
-        << "  \"release\": \"0.6.48.7.46.25.5.1\",\n"
+        << "  \"schema\": \"xstar-tools-v06487462552-source-workspace-retention-v1\",\n"
+        << "  \"release\": \"0.6.48.7.46.25.5.2\",\n"
         << "  \"selected_product_states\": " << selected << ",\n"
         << "  \"metadata_levels\": " << state.level_identities.size() << ",\n"
         << "  \"metadata_lines\": " << state.line_identities.size() << ",\n"
@@ -238,7 +238,7 @@ void prepare_native_product_state(
     state.embedded_full_xout_step_payload_absent = true;
 
     write_retention_report(
-        state, diagnostics_path.parent_path() / "v0487462551_source_workspace_retention.json");
+        state, diagnostics_path.parent_path() / "v0487462552_source_workspace_retention.json");
 
     if (!state.native_product_inputs_complete) {
         throw std::runtime_error(
@@ -292,7 +292,7 @@ void write_run_state_manifest(
     if (!out) throw std::runtime_error("cannot create run-state manifest: " + path.string());
     out << std::setprecision(17)
         << "{\n"
-        << "  \"schema\": \"xstar-tools-v06487462551-native-source-state-v1\",\n"
+        << "  \"schema\": \"xstar-tools-v06487462552-native-source-state-v1\",\n"
         << "  \"release\": \"" << json_escape(whole.release) << "\",\n"
         << "  \"backend\": \"" << json_escape(whole.backend) << "\",\n"
         << "  \"parameters_path\": \"" << json_escape(whole.parameters_path.string()) << "\",\n"

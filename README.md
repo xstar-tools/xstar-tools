@@ -1,6 +1,6 @@
-## v0.6.48.7.46.25.5.1 exact-source retention foundation
+## v0.6.48.7.46.25.5.2 exact-source retention foundation
 
-This release retains native committed line/RRC/continuum/profile workspaces and ATDB-derived public identities, but deliberately blocks public FITS and `xout_step.log` writing until all exact radial-transfer and legacy-print state is retained. See `V06487462551_NATIVE_SOURCE_WORKSPACE_RETENTION_FOUNDATION.md`.
+This release retains native committed line/RRC/continuum/profile workspaces and ATDB-derived public identities, but deliberately blocks public FITS and `xout_step.log` writing until all exact radial-transfer and legacy-print state is retained. Its metadata exporter uses `PprintElementMetadata.element_label` and the canonical normalized `vturbi` parameter. See `V06487462552_NATIVE_SOURCE_WORKSPACE_RETENTION_FOUNDATION.md`.
 
 ## v0.6.48.7.46.25.4 native output-grid depth closure
 

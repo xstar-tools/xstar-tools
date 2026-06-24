@@ -1,5 +1,18 @@
 # CHANGELOG
 
+# v0.6.48.7.46.25.5.2 - 2026-06-24
+
+- Correct metadata export to read `PprintElementMetadata.element_label` while preserving the `symbol` CSV column.
+- Correct turbulent-velocity metadata to use normalized `vturbi`, not nonexistent `rlv`.
+- Validate metadata numeric parameters as present and finite before serialization.
+- Add focused host-path regressions and static readiness gates for both metadata field corrections.
+
+- Retain committed native line, RRC, continuum, and profile workspaces through the fixed-state ABI.
+- Retain transported `tau0` line-depth workspaces while keeping the 301301-value DSEC continuum transport workspace distinct from public RRC `tauc` and output-grid `dpthc`.
+- Export and load source identities plus the literal 56-row parameter table from the supplied ATDB and parameters.
+- Remove equal-shell radial and opacity-trapezoid product-state fabrication from the public writer path.
+- Retain the source-faithful LTE population vector in the exact-workspace sidecar and block CFITSIO and legacy log writing until radial accumulation, accepted boundaries, and legacy `pprint` state are exact.
+
 # v0.6.48.7.46.25.5.1 - 2026-06-24
 
 - Correct metadata export to read `PprintElementMetadata.element_label` while preserving the `symbol` CSV column.
