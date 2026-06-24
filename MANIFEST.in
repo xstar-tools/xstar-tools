@@ -917,3 +917,8 @@ include run_v04874622_native_physical_run_state_product_oracle.sh
 include check_v04874622_native_physical_run_state_product_oracle_readiness.py
 include tests/test_v064874622_native_physical_run_state_product_oracle.py
 include compare_v04874622_product_oracle.py
+
+# v0.6.48.7.46.22.1 qualified predecessor asset-resolution hotfix
+include V0648746221_QUALIFIED_PREDECESSOR_ASSET_RESOLUTION_HOTFIX.md
+include V048746221_PRODUCTION_HOST_COMMANDS.md
+include V048746221_QUALIFICATION_ASSESSMENT.md

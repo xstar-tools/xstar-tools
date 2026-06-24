@@ -25,11 +25,11 @@ def sha256(path: Path) -> str:
 
 
 def test_release_and_abi_are_retained() -> None:
-    assert RELEASE == "0.6.48.7.46.22"
-    assert 'version = "0.6.48.7.46.22"' in (ROOT / "pyproject.toml").read_text()
+    assert RELEASE == "0.6.48.7.46.22.1"
+    assert 'version = "0.6.48.7.46.22.1"' in (ROOT / "pyproject.toml").read_text()
     api = (ROOT / "src/xstar_tools/xstar/cpp/xstar_api.h").read_text()
     assert '#define XSTAR_API_ABI_VERSION 60487u' in api
-    assert '#define XSTAR_API_VERSION_STRING "0.6.48.7.46.22"' in api
+    assert '#define XSTAR_API_VERSION_STRING "0.6.48.7.46.22.1"' in api
 
 
 def test_oracles_are_frozen_separately() -> None:
@@ -103,3 +103,16 @@ def test_native_state_layers_and_run_command_are_real_source_boundaries() -> Non
     assert "native_dsec_trace.log" in source
     assert "native_physical_run_state.json" in source
     assert "product_level_parity=NOT_RUN" in source
+
+
+def test_physical_run_resolves_accepted_sibling_assets_without_manual_overrides() -> None:
+    source = (ROOT / "src/xstar_tools/xstar/cpp/xstar_standalone.cpp").read_text()
+    runner = (ROOT / "run_v04874622_native_physical_run_state_product_oracle.sh").read_text()
+    assert "sibling_release_roots" in source
+    assert "xstar_tools-0.6.48.7.46.21.17.2/v048746227_source_order_electron_controller_closure/native_case_v048746227" in source
+    assert "xstar_tools-0.6.48.7.46.21.17.2/v048746227_source_order_electron_controller_closure/v0472_call_start_workspaces" in source
+    assert "xstar_tools-0.6.48.7.46.21.17.2/v048746227_source_order_electron_controller_closure/v048746227_coherent_source_trajectory.csv" in source
+    assert 'arg == "--resolve-only"' in source
+    assert "native_physical_run_asset_resolution.json" in source
+    assert "--resolve-only" in runner
+    assert "asset_resolution_return_code" in runner

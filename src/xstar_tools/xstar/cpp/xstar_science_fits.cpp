@@ -652,7 +652,7 @@ Result write_historical_science_products(
     }
     Result result = write_historical_science_products(
         program_dir, output_dir, snapshots, native_energy_ev);
-    // v0.6.48.7.46.22 establishes the product-state boundary but does not
+    // v0.6.48.7.46.22.1 establishes the product-state boundary but does not
     // claim physical product equivalence.
     result.physical_equivalence_qualified = product_state.product_parity_qualified;
     return result;

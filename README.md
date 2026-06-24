@@ -255,10 +255,14 @@ The full controller now uses `--source-trajectory-guard` when sequence-specific 
 
 ## Native physical-run and product-oracle infrastructure
 
-v0.6.48.7.46.22 introduces the standalone physical-run entry point:
+v0.6.48.7.46.22.1 introduces the standalone physical-run entry point:
 
 ```bash
 xstar_cpp run --backend cpp --parameters parameters.json --atomic-db atdb.fits --output-dir output
 ```
 
 The release freezes the Python physical-run archive as the immediate product oracle and the Fortran archive as a separate reference. It records five distinct native state layers and writes `native_dsec_trace.log`, but it does not claim product parity or production promotion.
+
+## v0.6.48.7.46.22.1 qualified predecessor asset resolution
+
+The standalone physical-run command now discovers the accepted v21.17.2 closure artifacts in sibling release directories and provides a fail-fast `--resolve-only` mode. The generated `native_physical_run_asset_resolution.json` records the native case, coherent trajectory, radiation input, call-start workspaces, and sequence runtime workspaces selected for the product-oracle run. Product parity remains a separate, unclaimed gate.

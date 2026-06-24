@@ -62,6 +62,7 @@ struct Options {
     bool skip_fits = false;
     bool source_trajectory_guard = false;
     bool source_trajectory_align = false;
+    bool resolve_only = false;
     std::size_t controller_smoke_evaluations = 0;
     std::size_t controller_prefix_evaluations = 0;
 };
@@ -84,7 +85,7 @@ void usage(std::ostream& output) {
         "  xstar_cpp secant-ieee-self-test --backend cpp [--plugin-dir DIR]\n"
         "  xstar_cpp trajectory-alignment-self-test --backend cpp [--plugin-dir DIR]\n"
         "  xstar_cpp fixed-state-self-test --case-dir RAW_PROGRAM_DIR [--diagnostics-dir DIR]\n"
-        "  xstar_cpp run --backend cpp --parameters parameters.json --atomic-db atdb.fits --output-dir DIR\n"
+        "  xstar_cpp run --backend cpp --parameters parameters.json --atomic-db atdb.fits --output-dir DIR [--resolve-only]\n"
         "    Optional native asset overrides: --case-dir, --trajectory-csv, --radiation-csv,\n"
         "    --call-start-workspace-dir, --runtime-state-workspace-dir.\n"
         "  xstar_cpp run-fixed-state --case-dir RAW_PROGRAM_DIR --output-dir DIR\n"
@@ -265,6 +266,8 @@ bool parse_options(int argc, char** argv, Options& options, std::string& error) 
             options.allow_scaffold = true;
         } else if (arg == "--skip-fits") {
             options.skip_fits = true;
+        } else if (arg == "--resolve-only") {
+            options.resolve_only = true;
         } else if (arg == "--source-trajectory-guard") {
             options.source_trajectory_guard = true;
         } else if (arg == "--source-trajectory-align") {
@@ -3324,6 +3327,26 @@ std::filesystem::path environment_path(const char* name, bool directory) {
     return first_existing_path({std::filesystem::path(value)}, directory);
 }
 
+std::vector<std::filesystem::path> sibling_release_roots(
+    const std::vector<std::filesystem::path>& roots) {
+    std::vector<std::filesystem::path> packages;
+    for (const auto& root : roots) {
+        std::error_code ec;
+        if (!std::filesystem::is_directory(root, ec) || ec) continue;
+        for (std::filesystem::directory_iterator it(root, ec), end; !ec && it != end; it.increment(ec)) {
+            if (ec || !it->is_directory(ec) || ec) continue;
+            const std::string name = it->path().filename().string();
+            if (name.rfind("xstar_tools-", 0) != 0) continue;
+            packages.push_back(std::filesystem::absolute(it->path()));
+        }
+    }
+    std::sort(packages.begin(), packages.end(), [](const auto& left, const auto& right) {
+        return left.filename().string() > right.filename().string();
+    });
+    packages.erase(std::unique(packages.begin(), packages.end()), packages.end());
+    return packages;
+}
+
 std::filesystem::path resolve_physical_asset(
     const std::string& explicit_value,
     const char* environment_name,
@@ -3335,15 +3358,23 @@ std::filesystem::path resolve_physical_asset(
     }
     if (const auto env = environment_path(environment_name, directory); !env.empty()) return env;
     std::vector<std::filesystem::path> candidates;
-    for (const auto& root : roots) {
-        for (const auto& relative : relative_candidates) candidates.push_back(root / relative);
+    // Candidate priority is semantic: test every search root for the preferred
+    // source before considering a lower-priority fallback source.
+    for (const auto& relative : relative_candidates) {
+        for (const auto& root : roots) candidates.push_back(root / relative);
+    }
+    // Product qualification depends on artifacts produced by the accepted predecessor
+    // release.  Search sibling xstar_tools-* trees deterministically so a clean source
+    // release can consume the qualified v21.17.2 closure without manual overrides.
+    for (const auto& package_root : sibling_release_roots(roots)) {
+        for (const auto& relative : relative_candidates) candidates.push_back(package_root / relative);
     }
     return first_existing_path(candidates, directory);
 }
 
 int command_run_physical(Options options) {
     if (options.backend != "cpp") {
-        std::cerr << "xstar_cpp run v0.6.48.7.46.22 supports --backend cpp only\n";
+        std::cerr << "xstar_cpp run v0.6.48.7.46.22.1 supports --backend cpp only\n";
         return 64;
     }
     if (options.parameters_path.empty() || options.atomic_db_path.empty() || options.output_dir.empty()) {
@@ -3364,12 +3395,14 @@ int command_run_physical(Options options) {
         options.case_dir, "XSTAR_CPP_CASE_DIR", roots,
         {
             "v048746227_source_order_electron_controller_closure/native_case_v048746227",
+            "xstar_tools-0.6.48.7.46.21.17.2/v048746227_source_order_electron_controller_closure/native_case_v048746227",
             "native_case_v048746227",
         }, true);
     const auto trajectory = resolve_physical_asset(
         options.trajectory_csv, "XSTAR_CPP_TRAJECTORY_CSV", roots,
         {
             "v048746227_source_order_electron_controller_closure/v048746227_coherent_source_trajectory.csv",
+            "xstar_tools-0.6.48.7.46.21.17.2/v048746227_source_order_electron_controller_closure/v048746227_coherent_source_trajectory.csv",
             "src/xstar_tools/benchmarks/v06486_qualification_reference_v0472/trajectory.csv",
         }, false);
     const auto radiation = resolve_physical_asset(
@@ -3380,7 +3413,10 @@ int command_run_physical(Options options) {
         }, false);
     const auto call_start = resolve_physical_asset(
         options.call_start_workspace_dir, "XSTAR_CPP_CALL_START_WORKSPACE_DIR", roots,
-        {"v048746227_source_order_electron_controller_closure/v0472_call_start_workspaces"}, true);
+        {
+            "v048746227_source_order_electron_controller_closure/v0472_call_start_workspaces",
+            "xstar_tools-0.6.48.7.46.21.17.2/v048746227_source_order_electron_controller_closure/v0472_call_start_workspaces",
+        }, true);
     const auto runtime_workspaces = resolve_physical_asset(
         options.runtime_state_workspace_dir, "XSTAR_CPP_RUNTIME_STATE_WORKSPACE_DIR", roots,
         {
@@ -3393,6 +3429,7 @@ int command_run_physical(Options options) {
         "native case", case_dir}, {"coherent trajectory", trajectory}, {"radiation", radiation},
         {"call-start workspaces", call_start}, {"runtime-state workspaces", runtime_workspaces}
     }};
+    std::filesystem::create_directories(options.output_dir);
     bool missing = false;
     for (const auto& asset : required) {
         if (asset.path.empty()) {
@@ -3400,7 +3437,30 @@ int command_run_physical(Options options) {
             missing = true;
         }
     }
+    {
+        std::ofstream resolution(std::filesystem::path(options.output_dir) / "native_physical_run_asset_resolution.json");
+        resolution << "{\n"
+                   << "  \"schema\": \"xstar-tools-v0648746221-native-physical-run-asset-resolution-v1\",\n"
+                   << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
+                   << "  \"native_case\": \"" << case_dir.string() << "\",\n"
+                   << "  \"coherent_trajectory\": \"" << trajectory.string() << "\",\n"
+                   << "  \"radiation\": \"" << radiation.string() << "\",\n"
+                   << "  \"call_start_workspaces\": \"" << call_start.string() << "\",\n"
+                   << "  \"runtime_state_workspaces\": \"" << runtime_workspaces.string() << "\",\n"
+                   << "  \"sibling_release_search_enabled\": true,\n"
+                   << "  \"result\": \"" << (missing ? "REJECT" : "ACCEPT") << "\"\n"
+                   << "}\n";
+    }
     if (missing) return 66;
+    std::cout << "native_case=" << case_dir
+              << "\ncoherent_trajectory=" << trajectory
+              << "\nradiation=" << radiation
+              << "\ncall_start_workspaces=" << call_start
+              << "\nruntime_state_workspaces=" << runtime_workspaces << "\n";
+    if (options.resolve_only) {
+        std::cout << "RESULT=ACCEPT_ASSET_RESOLUTION\n";
+        return 0;
+    }
 
     options.case_dir = case_dir.string();
     options.trajectory_csv = trajectory.string();
@@ -3413,7 +3473,6 @@ int command_run_physical(Options options) {
     options.source_trajectory_guard = true;
     options.source_trajectory_align = true;
     options.skip_fits = false;
-    std::filesystem::create_directories(options.output_dir);
 
     const int controller_status = command_run_fixed_dsec(options);
     const auto output = std::filesystem::path(options.output_dir);
@@ -3434,7 +3493,7 @@ int command_run_physical(Options options) {
         std::filesystem::is_regular_file(output / "native_physical_run_state.json");
     std::ofstream summary(output / "native_physical_run_summary.json");
     summary << "{\n"
-            << "  \"schema\": \"xstar-tools-v064874622-native-physical-run-v1\",\n"
+            << "  \"schema\": \"xstar-tools-v0648746221-native-physical-run-v1\",\n"
             << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
             << "  \"backend\": \"cpp\",\n"
             << "  \"controller_return_code\": " << controller_status << ",\n"

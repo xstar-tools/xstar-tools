@@ -1,5 +1,13 @@
 # CHANGELOG
 
+# 0.6.48.7.46.22.1 - 2026-06-23
+
+- Resolve the accepted v21.17.2 native case, coherent trajectory, and call-start workspaces from sibling `xstar_tools-*` release directories.
+- Preserve semantic candidate priority so the coherent v21.17.2 trajectory is selected before the packaged legacy trajectory fallback.
+- Add `xstar_cpp run --resolve-only` and `native_physical_run_asset_resolution.json` for fail-fast host qualification.
+- Make the v22 runner perform asset resolution before starting the expensive 61-state physical run, eliminating duplicate unresolved-asset errors.
+- Retain the frozen Python and Fortran product oracles, five run-state layers, ABI 60487, and `PRODUCT_LEVEL_PARITY=NOT_RUN` until the products are actually compared.
+
 ## 0.6.48.7.46.22 - 2026-06-23
 
 Native physical run-state and product-oracle infrastructure. Product parity remains NOT_RUN/REJECT until the standalone products match the frozen Python oracle.
