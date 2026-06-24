@@ -1,5 +1,22 @@
 # CHANGELOG
 
+# v0.6.48.7.46.25.2 - 2026-06-24
+
+- Invalidated the v25/v25.1 claim that public products were generated genuinely
+  from native state.
+- Classified `xo01_detail.fits`, `xo01_detal2.fits`, `xo01_detal3.fits`, and
+  `xo01_detal4.fits` as public products for anti-copy qualification.
+- Removed embedded exact FITS files, FITS header blocks, XSTAR_RADIAL data
+  blocks, stored public-log prefixes, and historical product-oracle log files.
+- Replaced benchmark-backed public FITS and `xout_step.log` writers with explicit
+  fail-closed stubs.
+- Added package-wide provenance readiness checking.
+- Changed the release runner to execute the native controller with `--skip-fits`
+  and to reject native-product parity explicitly.
+- Retained the v25.1 Makefile correction that links `xstar_cpp` directly with
+  `libxstar_emissivity.so`.
+- ABI remains 60487.
+
 # v0.6.48.7.46.25.1 - 2026-06-24
 
 - Carry the permanent Makefile correction that adds `$(EMISSIVITY_TARGET)` as

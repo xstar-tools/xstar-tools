@@ -3588,7 +3588,7 @@ std::filesystem::path resolve_physical_asset(
 
 int command_run_physical(Options options) {
     if (options.backend != "cpp") {
-        std::cerr << "xstar_cpp run v0.6.48.7.46.25.1 supports --backend cpp only\n";
+        std::cerr << "xstar_cpp run v0.6.48.7.46.25.2 supports --backend cpp only\n";
         return 64;
     }
     if (options.parameters_path.empty() || options.atomic_db_path.empty() || options.output_dir.empty()) {
@@ -3641,7 +3641,7 @@ int command_run_physical(Options options) {
         options.product_schema_dir, "XSTAR_CPP_PRODUCT_SCHEMA_DIR", roots,
         {
             "src/xstar_tools/benchmarks/v064874625_native_product_state",
-            "xstar_tools-0.6.48.7.46.25.1/src/xstar_tools/benchmarks/v064874625_native_product_state",
+            "xstar_tools-0.6.48.7.46.25.2/src/xstar_tools/benchmarks/v064874625_native_product_state",
             "src/xstar_tools/benchmarks/v0648746231_python_fits_schema",
             "xstar_tools-0.6.48.7.46.23.1/src/xstar_tools/benchmarks/v0648746231_python_fits_schema",
         }, true);
