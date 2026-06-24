@@ -42,7 +42,7 @@ struct Options {
     std::string continuum_tau_csv;
     std::string call_start_workspace_dir;
     std::string runtime_state_workspace_dir;
-    std::string product_schema_dir;
+    std::string product_metadata_dir;
     std::string mg_primary_budget_csv;
     std::string call1_thermal_budget_csv;
     std::string global_workspace_mode = "all";
@@ -181,10 +181,10 @@ bool parse_options(int argc, char** argv, Options& options, std::string& error) 
             const char* value = require_value("--runtime-state-workspace-dir");
             if (!value) return false;
             options.runtime_state_workspace_dir = value;
-        } else if (arg == "--product-schema-dir") {
-            const char* value = require_value("--product-schema-dir");
+        } else if (arg == "--product-metadata-dir" || arg == "--product-schema-dir") {
+            const char* value = require_value("--product-metadata-dir");
             if (!value) return false;
-            options.product_schema_dir = value;
+            options.product_metadata_dir = value;
         } else if (arg == "--global-workspace-mode") {
             const char* value = require_value("--global-workspace-mode");
             if (!value) return false;
@@ -1360,8 +1360,23 @@ int command_fixed_state_self_test(const Options& options, bool batch_mode) {
     }
     std::vector<std::array<double, 64>> energies(count), fluxes(count), spectra(count), opacities(count);
     std::vector<std::vector<double>> populations(count, std::vector<double>(static_cast<std::size_t>(program_info.population_rows), 0.0));
+    std::vector<std::vector<double>> lte_populations(count, std::vector<double>(static_cast<std::size_t>(program_info.population_rows), 0.0));
+    const std::size_t line_capacity = static_cast<std::size_t>(program_info.record_count) + 1;
+    std::vector<std::vector<double>> rcem(count, std::vector<double>(2 * line_capacity));
+    std::vector<std::vector<double>> oplin(count, std::vector<double>(line_capacity));
+    std::vector<std::vector<double>> cemab(count, std::vector<double>(128));
+    std::vector<std::vector<double>> cabab(count, std::vector<double>(64));
+    std::vector<std::vector<double>> opakab(count, std::vector<double>(64));
+    std::vector<std::vector<double>> rccemis(count, std::vector<double>(128));
+    std::vector<std::vector<double>> opakc(count, std::vector<double>(64));
+    std::vector<std::vector<double>> opakcont(count, std::vector<double>(64));
+    std::vector<std::vector<double>> fline(count, std::vector<double>(2 * line_capacity));
+    std::vector<std::vector<double>> flinel(count, std::vector<double>(64));
+    std::vector<std::vector<double>> elum(count, std::vector<double>(2 * line_capacity));
+    std::vector<std::vector<double>> profile(count, std::vector<double>(320));
     std::vector<xstar_fixed_state_input_v1> inputs(count);
     std::vector<xstar_fixed_state_output_v1> outputs(count);
+    std::vector<xstar_fixed_source_workspace_output_v1> workspace_outputs(count);
     for (std::size_t z = 0; z < count; ++z) {
         for (std::size_t k = 0; k < 64; ++k) {
             energies[z][k] = 1.0 + static_cast<double>(k);
@@ -1386,14 +1401,34 @@ int command_fixed_state_self_test(const Options& options, bool batch_mode) {
         outputs[z].spectrum_capacity = spectra[z].size();
         outputs[z].opacity = opacities[z].data();
         outputs[z].opacity_capacity = opacities[z].size();
+        xstar_fixed_source_workspace_output_init_v1(&workspace_outputs[z]);
+        workspace_outputs[z].lte_populations = lte_populations[z].data();
+        workspace_outputs[z].lte_populations_capacity = lte_populations[z].size();
+        workspace_outputs[z].rcem = rcem[z].data(); workspace_outputs[z].rcem_capacity = rcem[z].size();
+        workspace_outputs[z].oplin = oplin[z].data(); workspace_outputs[z].oplin_capacity = oplin[z].size();
+        workspace_outputs[z].cemab = cemab[z].data(); workspace_outputs[z].cemab_capacity = cemab[z].size();
+        workspace_outputs[z].cabab = cabab[z].data(); workspace_outputs[z].cabab_capacity = cabab[z].size();
+        workspace_outputs[z].opakab = opakab[z].data(); workspace_outputs[z].opakab_capacity = opakab[z].size();
+        workspace_outputs[z].rccemis = rccemis[z].data(); workspace_outputs[z].rccemis_capacity = rccemis[z].size();
+        workspace_outputs[z].opakc = opakc[z].data(); workspace_outputs[z].opakc_capacity = opakc[z].size();
+        workspace_outputs[z].opakcont = opakcont[z].data(); workspace_outputs[z].opakcont_capacity = opakcont[z].size();
+        workspace_outputs[z].fline = fline[z].data(); workspace_outputs[z].fline_capacity = fline[z].size();
+        workspace_outputs[z].flinel = flinel[z].data(); workspace_outputs[z].flinel_capacity = flinel[z].size();
+        workspace_outputs[z].elum = elum[z].data(); workspace_outputs[z].elum_capacity = elum[z].size();
+        workspace_outputs[z].line_profile_workspace = profile[z].data();
+        workspace_outputs[z].line_profile_workspace_capacity = profile[z].size();
     }
     xstar_fixed_state_stats_v1 stats{};
     xstar_fixed_state_stats_init_v1(&stats);
     if (batch_mode) {
         rc = xstar_fixed_state_run_batch_v1(context, inputs.data(), inputs.size(), outputs.data(), &stats, message.data(), message.size());
     } else {
-        rc = xstar_fixed_state_run_v1(context, &inputs[0], &outputs[0], &stats, message.data(), message.size());
-        if (rc == 0) rc = xstar_fixed_state_run_v1(context, &inputs[1], &outputs[1], &stats, message.data(), message.size());
+        rc = xstar_fixed_state_run_with_source_workspaces_v1(
+            context, &inputs[0], &outputs[0], &workspace_outputs[0], &stats, message.data(), message.size());
+        if (rc == 0) {
+            rc = xstar_fixed_state_run_with_source_workspaces_v1(
+                context, &inputs[1], &outputs[1], &workspace_outputs[1], &stats, message.data(), message.size());
+        }
     }
     if (rc != 0) {
         std::cerr << "fixed-state evaluation failed: " << message.data() << "\n";
@@ -1412,9 +1447,21 @@ int command_fixed_state_self_test(const Options& options, bool batch_mode) {
     bool changed = batch_mode || std::abs(outputs[0].hmctot - outputs[1].hmctot) > 1.0e-15 ||
         std::abs(outputs[0].populations[0] - outputs[1].populations[0]) > 1.0e-15;
     bool finite = true;
-    for (const auto& output : outputs) {
+    for (std::size_t z = 0; z < outputs.size(); ++z) {
+        const auto& output = outputs[z];
         finite = finite && std::isfinite(output.hmctot) && std::isfinite(output.total_heating) &&
             std::isfinite(output.total_cooling) && output.populations_count > 0 && output.spectrum_count == 64;
+        if (!batch_mode) {
+            const auto& workspace = workspace_outputs[z];
+            finite = finite && workspace.lte_populations_count == program_info.population_rows &&
+                (workspace.exact_source_workspace_flags & XSTAR_FIXED_EXACT_WORKSPACE_LTE_POPULATIONS) != 0u &&
+                workspace.rcem_count > 0 && workspace.oplin_count > 0 &&
+                workspace.cemab_count == 128 && workspace.cabab_count == 64 &&
+                workspace.opakab_count == 64 && workspace.rccemis_count == 128 &&
+                workspace.opakc_count == 64 && workspace.elum_count > 0 &&
+                workspace.line_profile_workspace_count == 320 &&
+                (workspace.exact_source_workspace_flags & XSTAR_FIXED_EXACT_WORKSPACE_LINE_PROFILE) != 0u;
+        }
     }
     std::cout << "program_id=" << stats.program_id << "\n"
               << "program_elements=" << program_info.element_count << "\n"
@@ -1433,6 +1480,13 @@ int command_fixed_state_self_test(const Options& options, bool batch_mode) {
               << "visited_data_types=" << stats.visited_data_types << "\n"
               << "elements_solved=" << stats.elements_solved << "\n"
               << "spectral_contributions=" << stats.spectral_contributions << "\n"
+              << "exact_source_workspace_retention=" << (finite ? "true" : "false") << "\n"
+              << "lte_populations_count=" << (batch_mode ? 0 : workspace_outputs.back().lte_populations_count) << "\n"
+              << "rcem_count=" << (batch_mode ? 0 : workspace_outputs.back().rcem_count) << "\n"
+              << "oplin_count=" << (batch_mode ? 0 : workspace_outputs.back().oplin_count) << "\n"
+              << "cemab_count=" << (batch_mode ? 0 : workspace_outputs.back().cemab_count) << "\n"
+              << "rccemis_count=" << (batch_mode ? 0 : workspace_outputs.back().rccemis_count) << "\n"
+              << "line_profile_workspace_count=" << (batch_mode ? 0 : workspace_outputs.back().line_profile_workspace_count) << "\n"
               << "continuum_bins=" << stats.continuum_bins << "\n"
               << "python_callbacks=" << stats.python_callbacks << "\n"
               << "state_generation=" << stats.state_generation << "\n"
@@ -2000,6 +2054,7 @@ struct FixedDsecSnapshot {
     bool thermal_families_native = false;
     bool dsec_runtime_state_abi = false;
     std::vector<double> populations;
+    std::vector<double> lte_populations;
     std::vector<double> radiation_energy_ev;
     std::vector<double> radiation_flux;
     std::size_t source_continuum_tau_workspace_count = 0;
@@ -2008,6 +2063,23 @@ struct FixedDsecSnapshot {
     std::vector<double> continuum_spectrum;
     std::vector<double> spectrum;
     std::vector<double> opacity;
+    std::vector<double> rcem;
+    std::vector<double> oplin;
+    std::vector<double> tau0;
+    std::vector<double> elum;
+    std::vector<double> cemab;
+    std::vector<double> cabab;
+    std::vector<double> opakab;
+    std::vector<double> tauc;
+    std::vector<double> rccemis;
+    std::vector<double> opakc;
+    std::vector<double> opakcont;
+    std::vector<double> fline;
+    std::vector<double> flinel;
+    std::vector<double> line_profile_workspace;
+    std::size_t native_line_count = 0;
+    std::size_t native_continuum_count = 0;
+    std::uint32_t exact_source_workspace_flags = 0;
 };
 
 
@@ -2464,9 +2536,24 @@ int fixed_dsec_evaluator(
         return 1;
     }
     snapshot.populations.assign(static_cast<std::size_t>(data->program_info.population_rows), 0.0);
+    snapshot.lte_populations.assign(static_cast<std::size_t>(data->program_info.population_rows), 0.0);
     snapshot.continuum_spectrum.assign(data->energy.size(), 0.0);
     snapshot.spectrum.assign(data->energy.size(), 0.0);
     snapshot.opacity.assign(data->energy.size(), 0.0);
+    const std::size_t maximum_line_capacity =
+        static_cast<std::size_t>(data->program_info.record_count) + 1;
+    snapshot.rcem.assign(2 * maximum_line_capacity, 0.0);
+    snapshot.oplin.assign(maximum_line_capacity, 0.0);
+    snapshot.elum.assign(2 * maximum_line_capacity, 0.0);
+    snapshot.cemab.assign(2 * data->energy.size(), 0.0);
+    snapshot.cabab.assign(data->energy.size(), 0.0);
+    snapshot.opakab.assign(data->energy.size(), 0.0);
+    snapshot.rccemis.assign(2 * data->energy.size(), 0.0);
+    snapshot.opakc.assign(data->energy.size(), 0.0);
+    snapshot.opakcont.assign(data->energy.size(), 0.0);
+    snapshot.fline.assign(2 * maximum_line_capacity, 0.0);
+    snapshot.flinel.assign(data->energy.size(), 0.0);
+    snapshot.line_profile_workspace.assign(5 * data->energy.size(), 0.0);
 
     xstar_fixed_state_input_v1 input{};
     xstar_fixed_state_input_init_v1(&input);
@@ -2579,6 +2666,19 @@ int fixed_dsec_evaluator(
     // output grid.  Retain its provenance/count for the physics call but do
     // not relabel or serialize those bytes as per-bin continuum depths.
     snapshot.source_continuum_tau_workspace_count = input.continuum_tau_count;
+    const bool retain_exact_product_workspace = snapshot.sequence == 1 || snapshot.kind == "final";
+    if (retain_exact_product_workspace && !data->runtime_state_workspaces.empty()) {
+        const auto& runtime_workspace = data->runtime_state_workspaces[snapshot.sequence - 1];
+        const auto tau_in = read_binary_double_vector(runtime_workspace.line_tau_in);
+        const auto tau_out = read_binary_double_vector(runtime_workspace.line_tau_out);
+        if (tau_in.size() != tau_out.size()) {
+            set_callback_error(error, error_size, "source line tau workspace size mismatch");
+            return 1;
+        }
+        snapshot.tau0.reserve(tau_in.size() + tau_out.size());
+        snapshot.tau0.insert(snapshot.tau0.end(), tau_in.begin(), tau_in.end());
+        snapshot.tau0.insert(snapshot.tau0.end(), tau_out.begin(), tau_out.end());
+    }
 
     // Persist the free-free continuum as its own computed product before the
     // line/RRC/profile commit augments output.spectrum.  This duplicates the
@@ -2600,19 +2700,53 @@ int fixed_dsec_evaluator(
 
     xstar_fixed_state_output_v1 output{};
     xstar_fixed_state_output_init_v1(&output);
+    xstar_fixed_source_workspace_output_v1 source_output{};
+    xstar_fixed_source_workspace_output_init_v1(&source_output);
     output.populations = snapshot.populations.data();
     output.populations_capacity = snapshot.populations.size();
     output.spectrum = snapshot.spectrum.data();
     output.spectrum_capacity = snapshot.spectrum.size();
     output.opacity = snapshot.opacity.data();
     output.opacity_capacity = snapshot.opacity.size();
+    source_output.lte_populations = snapshot.lte_populations.data();
+    source_output.lte_populations_capacity = snapshot.lte_populations.size();
+    source_output.rcem = snapshot.rcem.data(); source_output.rcem_capacity = snapshot.rcem.size();
+    source_output.oplin = snapshot.oplin.data(); source_output.oplin_capacity = snapshot.oplin.size();
+    source_output.cemab = snapshot.cemab.data(); source_output.cemab_capacity = snapshot.cemab.size();
+    source_output.cabab = snapshot.cabab.data(); source_output.cabab_capacity = snapshot.cabab.size();
+    source_output.opakab = snapshot.opakab.data(); source_output.opakab_capacity = snapshot.opakab.size();
+    source_output.rccemis = snapshot.rccemis.data(); source_output.rccemis_capacity = snapshot.rccemis.size();
+    source_output.opakc = snapshot.opakc.data(); source_output.opakc_capacity = snapshot.opakc.size();
+    source_output.opakcont = snapshot.opakcont.data(); source_output.opakcont_capacity = snapshot.opakcont.size();
+    source_output.fline = snapshot.fline.data(); source_output.fline_capacity = snapshot.fline.size();
+    source_output.flinel = snapshot.flinel.data(); source_output.flinel_capacity = snapshot.flinel.size();
+    source_output.elum = snapshot.elum.data(); source_output.elum_capacity = snapshot.elum.size();
+    source_output.line_profile_workspace = snapshot.line_profile_workspace.data();
+    source_output.line_profile_workspace_capacity = snapshot.line_profile_workspace.size();
     std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> message{};
-    const int rc = xstar_fixed_state_run_v1(
-        data->fixed_context, &input, &output, data->cumulative_stats, message.data(), message.size());
+    const int rc = xstar_fixed_state_run_with_source_workspaces_v1(
+        data->fixed_context, &input, &output, &source_output,
+        data->cumulative_stats, message.data(), message.size());
     if (rc != 0) {
         set_callback_error(error, error_size, std::string("fixed-state evaluator failed: ") + message.data());
         return rc;
     }
+    snapshot.lte_populations.resize(source_output.lte_populations_count);
+    snapshot.rcem.resize(source_output.rcem_count);
+    snapshot.oplin.resize(source_output.oplin_count);
+    snapshot.cemab.resize(source_output.cemab_count);
+    snapshot.cabab.resize(source_output.cabab_count);
+    snapshot.opakab.resize(source_output.opakab_count);
+    snapshot.rccemis.resize(source_output.rccemis_count);
+    snapshot.opakc.resize(source_output.opakc_count);
+    snapshot.opakcont.resize(source_output.opakcont_count);
+    snapshot.fline.resize(source_output.fline_count);
+    snapshot.flinel.resize(source_output.flinel_count);
+    snapshot.elum.resize(source_output.elum_count);
+    snapshot.line_profile_workspace.resize(source_output.line_profile_workspace_count);
+    snapshot.native_line_count = source_output.native_line_count;
+    snapshot.native_continuum_count = source_output.native_continuum_count;
+    snapshot.exact_source_workspace_flags = source_output.exact_source_workspace_flags;
     const bool retain_native_product_diagnostics = snapshot.sequence == 1 || snapshot.kind == "final";
     if (!data->diagnostics_dir.empty() && retain_native_product_diagnostics) {
         const int diagnostic_rc = xstar_fixed_state_write_last_diagnostics_v1(
@@ -3284,6 +3418,37 @@ int command_run_fixed_dsec(const Options& options) {
         target.continuum_spectrum = source.continuum_spectrum;
         target.spectrum = source.spectrum;
         target.opacity = source.opacity;
+        target.source_workspace.lte_populations = source.lte_populations;
+        target.source_workspace.rcem = source.rcem;
+        target.source_workspace.oplin = source.oplin;
+        target.source_workspace.tau0 = source.tau0;
+        target.source_workspace.elum = source.elum;
+        target.source_workspace.cemab = source.cemab;
+        target.source_workspace.cabab = source.cabab;
+        target.source_workspace.opakab = source.opakab;
+        target.source_workspace.tauc = source.tauc;
+        target.source_workspace.rccemis = source.rccemis;
+        target.source_workspace.opakc = source.opakc;
+        target.source_workspace.line_profile_workspace = source.line_profile_workspace;
+        target.source_workspace.native_line_count = source.native_line_count;
+        target.source_workspace.native_continuum_count = source.native_continuum_count;
+        target.source_workspace.lte_populations_exact =
+            (source.exact_source_workspace_flags & XSTAR_FIXED_EXACT_WORKSPACE_LTE_POPULATIONS) != 0u &&
+            source.lte_populations.size() == source.populations.size();
+        target.source_workspace.line_workspace_exact =
+            (source.exact_source_workspace_flags & XSTAR_FIXED_EXACT_WORKSPACE_LINE) != 0u;
+        target.source_workspace.line_tau_workspace_exact = !source.tau0.empty();
+        target.source_workspace.rrc_workspace_exact =
+            (source.exact_source_workspace_flags & XSTAR_FIXED_EXACT_WORKSPACE_RRC) != 0u;
+        target.source_workspace.rrc_tau_workspace_exact = false;
+        target.source_workspace.continuum_workspace_exact =
+            (source.exact_source_workspace_flags & XSTAR_FIXED_EXACT_WORKSPACE_CONTINUUM) != 0u;
+        target.source_workspace.line_profile_workspace_exact =
+            (source.exact_source_workspace_flags & XSTAR_FIXED_EXACT_WORKSPACE_LINE_PROFILE) != 0u;
+        // Radial accumulation (zrems/elumab/dpthc/dpthcont/zremsz) and
+        // accepted radial boundaries are intentionally not
+        // synthesized here. Their exact flags remain false until the native
+        // controller owns those source workspaces.
         return target;
     };
 
@@ -3294,6 +3459,7 @@ int command_run_fixed_dsec(const Options& options) {
     whole_run_state.atomic_database_path = options.atomic_db_path;
     whole_run_state.native_case_path = options.case_dir;
     whole_run_state.source_trajectory_path = options.trajectory_csv;
+    whole_run_state.product_metadata_path = options.product_metadata_dir;
     whole_run_state.python_callbacks = cumulative.python_callbacks;
     whole_run_state.controller_trajectory_qualified = true;
     whole_run_state.radial_state_complete = false;
@@ -3329,7 +3495,7 @@ int command_run_fixed_dsec(const Options& options) {
             std::cerr << "native ProductWritingState preparation failed: " << exc.what() << "\n";
             xstar_thermal_context_destroy(thermal_context);
             xstar_fixed_state_context_destroy(fixed_context);
-            return 9;
+            return std::string(exc.what()).find("exact source state is incomplete") != std::string::npos ? 20 : 9;
         }
     }
     auto product_writing_state = xstar_run_state::build_product_writing_state(whole_run_state);
@@ -3589,7 +3755,7 @@ std::filesystem::path resolve_physical_asset(
 
 int command_run_physical(Options options) {
     if (options.backend != "cpp") {
-        std::cerr << "xstar_cpp run v0.6.48.7.46.25.4 supports --backend cpp only\n";
+        std::cerr << "xstar_cpp run v0.6.48.7.46.25.5.1 supports --backend cpp only\n";
         return 64;
     }
     if (options.parameters_path.empty() || options.atomic_db_path.empty() || options.output_dir.empty()) {
@@ -3638,7 +3804,9 @@ int command_run_physical(Options options) {
             "xstar_tools-0.6.48.7.46.21.12/v048746216_all_sequence_ieee_e10_trajectory_parity/v0472_all61_independent_thermal_capture/all61_input_workspaces",
             "v048746216_all_sequence_ieee_e10_trajectory_parity/v0472_all61_independent_thermal_capture/all61_input_workspaces",
         }, true);
-    const std::filesystem::path product_schema{};
+    const auto product_metadata = resolve_physical_asset(
+        options.product_metadata_dir, "XSTAR_CPP_PRODUCT_METADATA_DIR", roots,
+        {}, true);
 
 
     // The accepted v21.17.2 controller was not just a case/trajectory pair.  It
@@ -3678,6 +3846,7 @@ int command_run_physical(Options options) {
     const std::vector<RequiredAsset> required = {
         {"native case", case_dir}, {"coherent trajectory", trajectory}, {"radiation", radiation},
         {"call-start workspaces", call_start}, {"runtime-state workspaces", runtime_workspaces},
+        {"product metadata", product_metadata},
         {"source solve rows", source_solve_rows}, {"hydrogen Type-50 line map", hydrogen_line_map},
         {"magnesium Type-50 line map", magnesium_line_map},
         {"magnesium Type-50 active records", magnesium_active_records},
@@ -3704,7 +3873,7 @@ int command_run_physical(Options options) {
                    << "  \"radiation\": \"" << radiation.string() << "\",\n"
                    << "  \"call_start_workspaces\": \"" << call_start.string() << "\",\n"
                    << "  \"runtime_state_workspaces\": \"" << runtime_workspaces.string() << "\",\n"
-                   << "  \"product_schema\": \"" << product_schema.string() << "\",\n"
+                   << "  \"product_metadata\": \"" << product_metadata.string() << "\",\n"
                    << "  \"source_capture\": \"" << source_capture.string() << "\",\n"
                    << "  \"source_solve_rows\": \"" << source_solve_rows.string() << "\",\n"
                    << "  \"hydrogen_type50_line_map\": \"" << hydrogen_line_map.string() << "\",\n"
@@ -3725,7 +3894,7 @@ int command_run_physical(Options options) {
               << "\nradiation=" << radiation
               << "\ncall_start_workspaces=" << call_start
               << "\nruntime_state_workspaces=" << runtime_workspaces
-              << "\nproduct_schema=" << product_schema
+              << "\nproduct_metadata=" << product_metadata
               << "\nsource_capture=" << source_capture
               << "\nsource_solve_rows=" << source_solve_rows
               << "\nhydrogen_type50_line_map=" << hydrogen_line_map
@@ -3746,7 +3915,7 @@ int command_run_physical(Options options) {
     options.radiation_csv = radiation.string();
     options.call_start_workspace_dir = call_start.string();
     options.runtime_state_workspace_dir = runtime_workspaces.string();
-    options.product_schema_dir.clear();
+    options.product_metadata_dir = product_metadata.string();
     options.global_workspace_mode = "all";
     options.dsec_covering_fraction = 1.0;
     options.has_dsec_covering_fraction = true;

@@ -6268,6 +6268,105 @@ void bind_output(xstar_element_output_v1& out, ElementBuffers& b, int element_z)
     out.relative_row_residual = b.relative_residual.data(); out.relative_row_residual_capacity = b.relative_residual.size();
 }
 
+
+std::vector<double> compute_exact_lte_populations(
+    const Program& program,
+    const xstar_fixed_state_input_v1& input
+) {
+    if (!(input.temperature_k > 0.0) || !(input.electron_density_cm3 >= 0.0)) {
+        throw std::runtime_error("LTE population inputs are invalid");
+    }
+    std::vector<double> all;
+    std::size_t total_rows = 0;
+    for (const auto& element : program.elements) total_rows += static_cast<std::size_t>(element.n_rows);
+    all.reserve(total_rows);
+    const double bktm = xstar_constants::kSourceCollisionBoltzmannEvPerK * input.temperature_k;
+    const double q2 = 2.07e-16 * input.electron_density_cm3 * std::pow(input.temperature_k, -1.5);
+    for (const auto& element : program.elements) {
+        if (element.rows.empty() || element.n_rows <= 0) {
+            throw std::runtime_error("LTE population construction requires element rows");
+        }
+        std::vector<int> block_starts;
+        block_starts.push_back(1);
+        int previous_ion = element.rows.front().ion;
+        for (const auto& row : element.rows) {
+            if (row.ion != previous_ion) {
+                block_starts.push_back(row.row);
+                previous_ion = row.ion;
+            }
+        }
+        std::vector<double> rnise(static_cast<std::size_t>(element.n_rows) + 1, 0.0);
+        int ipmatsv = 0;
+        std::vector<double> last_rnisi;
+        int last_nlev = 0;
+        const int min_ion = element.rows.front().ion;
+        for (std::size_t block_index = 0; block_index < block_starts.size(); ++block_index) {
+            const int start = block_starts[block_index];
+            const int end = block_index + 1 < block_starts.size()
+                ? block_starts[block_index + 1]
+                : element.n_rows;
+            const int nlev = end - start + 1;
+            if (nlev < 1 || start < 1 || end > element.n_rows) {
+                throw std::runtime_error("LTE compact ion block is invalid");
+            }
+            const auto& continuum = element.rows.at(static_cast<std::size_t>(end - 1));
+            if (!(continuum.statistical_weight > 0.0)) {
+                throw std::runtime_error("LTE continuum statistical weight is non-positive");
+            }
+            const double rs = q2 / continuum.statistical_weight;
+            const double ethion = continuum.energy_ev;
+            std::vector<double> rnisi(static_cast<std::size_t>(nlev) + 1, 0.0);
+            rnisi[static_cast<std::size_t>(nlev)] = 1.0;
+            double bb = 1.0;
+            for (int local = 1; local < nlev; ++local) {
+                const auto& level = element.rows.at(static_cast<std::size_t>(start + local - 2));
+                const double ethsht = std::max((ethion - level.energy_ev) / std::max(bktm, 1.0e-300), 0.0);
+                const double explev2 = std::exp(std::max(-ethsht, -60.0));
+                rnisi[static_cast<std::size_t>(local)] =
+                    level.statistical_weight / (explev2 / std::max(rs, 1.0e-300));
+                bb += rnisi[static_cast<std::size_t>(local)];
+            }
+            for (int local = 1; local <= nlev; ++local) {
+                rnisi[static_cast<std::size_t>(local)] /= std::max(bb, 1.0e-300);
+            }
+            const int ion = element.rows.at(static_cast<std::size_t>(start - 1)).ion;
+            if (ion == min_ion) rnise[static_cast<std::size_t>(1 + ipmatsv)] = rnisi[1];
+            for (int local = 2; local <= nlev; ++local) {
+                const int target = local + ipmatsv;
+                if (ion > min_ion) {
+                    rnise[static_cast<std::size_t>(target)] = std::min(
+                        1.0e66,
+                        rnise[static_cast<std::size_t>(target - 1)] *
+                            rnisi[static_cast<std::size_t>(local)] /
+                            (1.0e-37 + rnisi[static_cast<std::size_t>(local - 1)])
+                    );
+                } else {
+                    rnise[static_cast<std::size_t>(target)] = rnisi[static_cast<std::size_t>(local)];
+                }
+            }
+            ipmatsv += nlev - 1;
+            last_rnisi = std::move(rnisi);
+            last_nlev = nlev;
+        }
+        if (last_nlev < 2 || ipmatsv + 1 != element.n_rows) {
+            throw std::runtime_error("LTE fully stripped compact row is invalid");
+        }
+        rnise[static_cast<std::size_t>(ipmatsv + 1)] =
+            rnise[static_cast<std::size_t>(ipmatsv)] *
+            last_rnisi[static_cast<std::size_t>(last_nlev)] /
+            (1.0e-97 + last_rnisi[static_cast<std::size_t>(last_nlev - 1)]);
+        double total = 0.0;
+        for (int row = 1; row <= element.n_rows; ++row) total += rnise[static_cast<std::size_t>(row)];
+        if (!(total > 0.0) || !std::isfinite(total)) {
+            throw std::runtime_error("LTE population normalization is non-positive");
+        }
+        for (int row = 1; row <= element.n_rows; ++row) {
+            all.push_back(rnise[static_cast<std::size_t>(row)] / total);
+        }
+    }
+    return all;
+}
+
 void validate_io(const xstar_fixed_state_input_v1& in, xstar_fixed_state_output_v1& out) {
     if (in.struct_size < sizeof(in) || in.abi_version != XSTAR_FIXED_STATE_ENGINE_ABI_VERSION) throw std::runtime_error("fixed-state input ABI mismatch");
     if (out.struct_size < sizeof(out) || out.abi_version != XSTAR_FIXED_STATE_ENGINE_ABI_VERSION) throw std::runtime_error("fixed-state output ABI mismatch");
@@ -6287,7 +6386,8 @@ int run_impl(
     xstar_fixed_state_context_impl& ctx,
     const xstar_fixed_state_input_v1& input,
     xstar_fixed_state_output_v1& output,
-    xstar_fixed_state_stats_v1& stats
+    xstar_fixed_state_stats_v1& stats,
+    xstar_fixed_source_workspace_output_v1* source_workspaces = nullptr
 ) {
     validate_io(input, output);
     ctx.last_record_diagnostics.clear();
@@ -7254,6 +7354,22 @@ int run_impl(
     std::copy(all_populations.begin(), all_populations.end(), output.populations);
     output.populations_count = all_populations.size();
 
+    if (source_workspaces) {
+        if (source_workspaces->struct_size < sizeof(*source_workspaces) ||
+            source_workspaces->abi_version != XSTAR_FIXED_STATE_ENGINE_ABI_VERSION) {
+            throw std::runtime_error("fixed-state source-workspace ABI mismatch");
+        }
+        const auto lte_populations = compute_exact_lte_populations(ctx.program, input);
+        source_workspaces->lte_populations_count = lte_populations.size();
+        if (source_workspaces->lte_populations) {
+            if (source_workspaces->lte_populations_capacity < lte_populations.size()) {
+                throw std::runtime_error("LTE population output capacity too small");
+            }
+            std::copy(lte_populations.begin(), lte_populations.end(), source_workspaces->lte_populations);
+        }
+        source_workspaces->exact_source_workspace_flags |= XSTAR_FIXED_EXACT_WORKSPACE_LTE_POPULATIONS;
+    }
+
     const auto continuum_start = clock_type::now();
     if (input.radiation_bin_count > 0) {
         const double* comp_energy = input.dsec_radiation_bin_count >= 2 ? input.dsec_radiation_energy_ev : input.radiation_energy_ev;
@@ -7402,6 +7518,63 @@ int run_impl(
             natural_rate.data(),auger_width.data(),auger_rate.data(),profiled.data(),profile_stats.data(),
             profile_error.data(),profile_error.size());
         if (prc!=0) throw std::runtime_error(std::string("native line emissivity profile failed: ")+profile_error.data());
+
+        // Capture the exact source workspaces before the public-product
+        // reduction mutates or combines any of them.  The optional sidecar
+        // preserves the original xstar_fixed_state_output_v1 ABI layout.
+        if (source_workspaces) {
+            if (source_workspaces->struct_size < sizeof(*source_workspaces) ||
+                source_workspaces->abi_version != XSTAR_FIXED_STATE_ENGINE_ABI_VERSION) {
+                throw std::runtime_error("fixed-state source-workspace ABI mismatch");
+            }
+            const std::vector<double> opakc_exact(output.opacity, output.opacity + continuum_capacity);
+            auto copy_workspace = [](const std::vector<double>& source, double* destination,
+                                     std::size_t capacity, std::size_t& count,
+                                     const char* label) {
+                count = source.size();
+                if (!destination) return;
+                if (capacity < source.size()) {
+                    throw std::runtime_error(std::string(label) + " output capacity too small");
+                }
+                std::copy(source.begin(), source.end(), destination);
+            };
+            copy_workspace(rcem, source_workspaces->rcem, source_workspaces->rcem_capacity,
+                           source_workspaces->rcem_count, "rcem");
+            copy_workspace(oplin, source_workspaces->oplin, source_workspaces->oplin_capacity,
+                           source_workspaces->oplin_count, "oplin");
+            copy_workspace(cemab, source_workspaces->cemab, source_workspaces->cemab_capacity,
+                           source_workspaces->cemab_count, "cemab");
+            copy_workspace(cabab, source_workspaces->cabab, source_workspaces->cabab_capacity,
+                           source_workspaces->cabab_count, "cabab");
+            copy_workspace(opakab, source_workspaces->opakab, source_workspaces->opakab_capacity,
+                           source_workspaces->opakab_count, "opakab");
+            copy_workspace(rccemis, source_workspaces->rccemis, source_workspaces->rccemis_capacity,
+                           source_workspaces->rccemis_count, "rccemis");
+            copy_workspace(opakc_exact, source_workspaces->opakc, source_workspaces->opakc_capacity,
+                           source_workspaces->opakc_count, "opakc");
+            copy_workspace(opakcont, source_workspaces->opakcont, source_workspaces->opakcont_capacity,
+                           source_workspaces->opakcont_count, "opakcont");
+            copy_workspace(fline, source_workspaces->fline, source_workspaces->fline_capacity,
+                           source_workspaces->fline_count, "fline");
+            copy_workspace(flinel, source_workspaces->flinel, source_workspaces->flinel_capacity,
+                           source_workspaces->flinel_count, "flinel");
+            copy_workspace(elum, source_workspaces->elum, source_workspaces->elum_capacity,
+                           source_workspaces->elum_count, "elum");
+            copy_workspace(profiled, source_workspaces->line_profile_workspace,
+                           source_workspaces->line_profile_workspace_capacity,
+                           source_workspaces->line_profile_workspace_count,
+                           "line profile workspace");
+            source_workspaces->native_line_count = nlines;
+            source_workspaces->native_continuum_count = continuum_capacity;
+            source_workspaces->exact_source_workspace_flags |=
+                XSTAR_FIXED_EXACT_WORKSPACE_LINE |
+                XSTAR_FIXED_EXACT_WORKSPACE_RRC |
+                XSTAR_FIXED_EXACT_WORKSPACE_CONTINUUM |
+                XSTAR_FIXED_EXACT_WORKSPACE_LINE_PROFILE;
+            copy_text(source_workspaces->message, sizeof(source_workspaces->message),
+                      "exact committed source workspaces retained");
+        }
+
         for (std::size_t k = 0; k < continuum_capacity; ++k) {
             output.spectrum[k] += cemab[k] + cemab[continuum_capacity + k]
                 + rccemis[k] + rccemis[continuum_capacity + k]
@@ -7568,6 +7741,15 @@ int xstar_fixed_state_output_init_v1(xstar_fixed_state_output_v1* output) {
     return 0;
 }
 
+int xstar_fixed_source_workspace_output_init_v1(
+    xstar_fixed_source_workspace_output_v1* output) {
+    if (!output) return 1;
+    std::memset(output, 0, sizeof(*output));
+    output->struct_size = sizeof(*output);
+    output->abi_version = XSTAR_FIXED_STATE_ENGINE_ABI_VERSION;
+    return 0;
+}
+
 int xstar_fixed_state_stats_init_v1(xstar_fixed_state_stats_v1* stats) {
     if (!stats) return 1;
     std::memset(stats, 0, sizeof(*stats));
@@ -7670,6 +7852,36 @@ int xstar_fixed_state_run_v1(xstar_fixed_state_context* context, const xstar_fix
         return rc;
     } catch (const std::exception& exc) {
         copy_text(output->message, sizeof(output->message), exc.what());
+        copy_text(stats->message, sizeof(stats->message), exc.what());
+        copy_text(message, message_size, exc.what());
+        return 7;
+    }
+}
+
+int xstar_fixed_state_run_with_source_workspaces_v1(
+    xstar_fixed_state_context* context,
+    const xstar_fixed_state_input_v1* input,
+    xstar_fixed_state_output_v1* output,
+    xstar_fixed_source_workspace_output_v1* source_workspaces,
+    xstar_fixed_state_stats_v1* stats,
+    char* message,
+    size_t message_size) {
+    if (!context || !input || !output || !source_workspaces || !stats) return 1;
+    try {
+        if (stats->struct_size < sizeof(*stats) ||
+            stats->abi_version != XSTAR_FIXED_STATE_ENGINE_ABI_VERSION) {
+            throw std::runtime_error("fixed-state stats ABI mismatch");
+        }
+        if (source_workspaces->struct_size < sizeof(*source_workspaces) ||
+            source_workspaces->abi_version != XSTAR_FIXED_STATE_ENGINE_ABI_VERSION) {
+            throw std::runtime_error("fixed-state source-workspace ABI mismatch");
+        }
+        const int rc = run_impl(*context, *input, *output, *stats, source_workspaces);
+        copy_text(message, message_size, output->message);
+        return rc;
+    } catch (const std::exception& exc) {
+        copy_text(output->message, sizeof(output->message), exc.what());
+        copy_text(source_workspaces->message, sizeof(source_workspaces->message), exc.what());
         copy_text(stats->message, sizeof(stats->message), exc.what());
         copy_text(message, message_size, exc.what());
         return 7;

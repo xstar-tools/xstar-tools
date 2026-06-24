@@ -858,7 +858,9 @@ Result write_historical_science_products(
     const std::vector<double>& native_energy_ev) {
     (void)native_energy_ev;
     if (!state.product_state_complete || !state.native_detail_state_retained ||
-        !state.continuum_depths_derived_from_native_opacity ||
+        !state.exact_source_metadata_retained || !state.exact_source_workspaces_retained ||
+        !state.exact_accepted_radial_boundaries_retained ||
+        !state.exact_legacy_pprint_state_retained ||
         !state.embedded_public_fits_payloads_absent || !state.embedded_full_xout_step_payload_absent) {
         throw std::runtime_error("native product state or anti-copy provenance is incomplete");
     }

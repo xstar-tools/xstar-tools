@@ -65,6 +65,15 @@ typedef enum xstar_fixed_state_status_flags_v1 {
     XSTAR_FIXED_STATE_STATUS_DSEC_RUNTIME_STATE_ABI = 1u << 9
 } xstar_fixed_state_status_flags_v1;
 
+typedef enum xstar_fixed_exact_workspace_flags_v1 {
+    XSTAR_FIXED_EXACT_WORKSPACE_NONE = 0u,
+    XSTAR_FIXED_EXACT_WORKSPACE_LINE = 1u << 0,
+    XSTAR_FIXED_EXACT_WORKSPACE_RRC = 1u << 1,
+    XSTAR_FIXED_EXACT_WORKSPACE_CONTINUUM = 1u << 2,
+    XSTAR_FIXED_EXACT_WORKSPACE_LINE_PROFILE = 1u << 3,
+    XSTAR_FIXED_EXACT_WORKSPACE_LTE_POPULATIONS = 1u << 4
+} xstar_fixed_exact_workspace_flags_v1;
+
 typedef enum xstar_fixed_runtime_state_flags_v1 {
     XSTAR_FIXED_RUNTIME_STATE_NONE = 0u,
     XSTAR_FIXED_RUNTIME_STATE_DSEC_COVERING_FRACTION = 1u << 0,
@@ -160,6 +169,59 @@ typedef struct xstar_fixed_state_output_v1 {
     char message[XSTAR_FIXED_STATE_MESSAGE_SIZE];
 } xstar_fixed_state_output_v1;
 
+/* Optional exact source-workspace sidecar.  It is deliberately separate from
+ * xstar_fixed_state_output_v1 so ABI 60487 callers compiled before v25.5 keep
+ * the original structure size and layout unchanged.
+ */
+typedef struct xstar_fixed_source_workspace_output_v1 {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    uint32_t exact_source_workspace_flags;
+    uint32_t reserved0;
+    double* lte_populations;
+    size_t lte_populations_capacity;
+    size_t lte_populations_count;
+    double* rcem;
+    size_t rcem_capacity;
+    size_t rcem_count;
+    double* oplin;
+    size_t oplin_capacity;
+    size_t oplin_count;
+    double* cemab;
+    size_t cemab_capacity;
+    size_t cemab_count;
+    double* cabab;
+    size_t cabab_capacity;
+    size_t cabab_count;
+    double* opakab;
+    size_t opakab_capacity;
+    size_t opakab_count;
+    double* rccemis;
+    size_t rccemis_capacity;
+    size_t rccemis_count;
+    double* opakc;
+    size_t opakc_capacity;
+    size_t opakc_count;
+    double* opakcont;
+    size_t opakcont_capacity;
+    size_t opakcont_count;
+    double* fline;
+    size_t fline_capacity;
+    size_t fline_count;
+    double* flinel;
+    size_t flinel_capacity;
+    size_t flinel_count;
+    double* elum;
+    size_t elum_capacity;
+    size_t elum_count;
+    double* line_profile_workspace;
+    size_t line_profile_workspace_capacity;
+    size_t line_profile_workspace_count;
+    size_t native_line_count;
+    size_t native_continuum_count;
+    char message[XSTAR_FIXED_STATE_MESSAGE_SIZE];
+} xstar_fixed_source_workspace_output_v1;
+
 typedef struct xstar_fixed_state_stats_v1 {
     uint32_t struct_size;
     uint32_t abi_version;
@@ -212,6 +274,8 @@ XSTAR_FIXED_STATE_EXPORT const char* xstar_fixed_state_engine_backend_name(void)
 XSTAR_FIXED_STATE_EXPORT uint32_t xstar_fixed_state_engine_feature_flags(void);
 XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_input_init_v1(xstar_fixed_state_input_v1* input);
 XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_output_init_v1(xstar_fixed_state_output_v1* output);
+XSTAR_FIXED_STATE_EXPORT int xstar_fixed_source_workspace_output_init_v1(
+    xstar_fixed_source_workspace_output_v1* output);
 XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_stats_init_v1(xstar_fixed_state_stats_v1* stats);
 XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_program_info_init_v1(xstar_fixed_state_program_info_v1* info);
 XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_context_create_v1(
@@ -236,6 +300,15 @@ XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_run_v1(
     xstar_fixed_state_context* context,
     const xstar_fixed_state_input_v1* input,
     xstar_fixed_state_output_v1* output,
+    xstar_fixed_state_stats_v1* stats,
+    char* message,
+    size_t message_size
+);
+XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_run_with_source_workspaces_v1(
+    xstar_fixed_state_context* context,
+    const xstar_fixed_state_input_v1* input,
+    xstar_fixed_state_output_v1* output,
+    xstar_fixed_source_workspace_output_v1* source_workspaces,
     xstar_fixed_state_stats_v1* stats,
     char* message,
     size_t message_size

@@ -9,6 +9,102 @@
 
 namespace xstar_run_state {
 
+
+struct LevelIdentityState {
+    std::int32_t global_index = 0;
+    std::int16_t ion_index = 0;
+    double excitation_ev = 0.0;
+    std::string ion_label;
+    std::int16_t atomic_number = 0;
+    std::string level_label;
+    std::int16_t upper_index = 0;
+};
+
+struct LineIdentityState {
+    std::int32_t line_index = 0;
+    double wavelength_angstrom = 0.0;
+    std::string ion_label;
+    std::string lower_level;
+    std::string upper_level;
+    std::int32_t rate_type = 0;
+    std::int32_t data_type = 0;
+    double atomic_mass = 0.0;
+    double natural_rate_s = 0.0;
+    double auger_width_ev = 0.0;
+    double auger_rate_s = 0.0;
+};
+
+struct RrcIdentityState {
+    std::int32_t continuum_index = 0;
+    std::int32_t level_global_index = 0;
+    double threshold_ev = 0.0;
+    std::string ion_label;
+    std::string lower_level;
+    std::string upper_level;
+    std::int32_t lower_local_index = 0;
+    std::int32_t upper_local_index = 0;
+};
+
+struct ExactSourceWorkspaceState {
+    std::vector<double> lte_populations;
+    std::vector<double> rcem;
+    std::vector<double> oplin;
+    std::vector<double> tau0;
+    std::vector<double> elum;
+    std::vector<double> cemab;
+    std::vector<double> cabab;
+    std::vector<double> opakab;
+    std::vector<double> tauc;
+    std::vector<double> elumab;
+    std::vector<double> zrems;
+    std::vector<double> opakc;
+    std::vector<double> rccemis;
+    std::vector<double> dpthc;
+    std::vector<double> dpthcont;
+    std::vector<double> zremsz;
+    std::vector<double> line_profile_workspace;
+    std::size_t native_line_count = 0;
+    std::size_t native_continuum_count = 0;
+    bool level_identity_exact = false;
+    bool lte_populations_exact = false;
+    bool line_workspace_exact = false;
+    bool line_tau_workspace_exact = false;
+    bool rrc_workspace_exact = false;
+    bool rrc_tau_workspace_exact = false;
+    bool continuum_workspace_exact = false;
+    bool accumulated_output_workspace_exact = false;
+    bool line_profile_workspace_exact = false;
+
+    bool complete() const {
+        return level_identity_exact && lte_populations_exact && line_workspace_exact &&
+            line_tau_workspace_exact && rrc_workspace_exact && rrc_tau_workspace_exact &&
+            continuum_workspace_exact &&
+            accumulated_output_workspace_exact && line_profile_workspace_exact;
+    }
+};
+
+struct LegacyPprintEventState {
+    std::size_t ordinal = 0;
+    std::size_t option = 0;
+    std::size_t pass_index = 0;
+    std::size_t zone_index = 0;
+    std::string phase;
+    std::string payload;
+};
+
+struct LegacyPprintState {
+    std::vector<LegacyPprintEventState> events;
+    std::vector<std::string> buffered_lines;
+    bool initialized_from_native_controller = false;
+    bool option_sequence_exact = false;
+    bool finalized_from_native_controller = false;
+
+    bool complete() const {
+        return initialized_from_native_controller && option_sequence_exact &&
+            finalized_from_native_controller;
+    }
+};
+
 struct FixedEvaluationState {
     std::string kind;
     std::size_t sequence = 0;
@@ -50,6 +146,7 @@ struct FixedEvaluationState {
     std::vector<double> continuum_spectrum;
     std::vector<double> spectrum;
     std::vector<double> opacity;
+    ExactSourceWorkspaceState source_workspace;
 };
 
 struct AcceptedControllerState {
@@ -94,6 +191,8 @@ struct RadialZoneState {
     double temperature_t4 = 0.0;
     double electron_fraction = 0.0;
     bool provisional_from_controller = false;
+    bool accepted_boundary_exact = false;
+    std::string boundary_provenance;
     AcceptedControllerState accepted_controller;
 };
 
@@ -106,6 +205,7 @@ struct WholeRunAccumulatedState {
     std::filesystem::path native_case_path;
     std::filesystem::path source_trajectory_path;
     std::filesystem::path product_schema_path;
+    std::filesystem::path product_metadata_path;
     std::filesystem::path native_diagnostics_path;
     std::string native_run_id;
     std::vector<FixedEvaluationState> fixed_evaluations;
@@ -113,6 +213,10 @@ struct WholeRunAccumulatedState {
     std::vector<RadialZoneState> radial_zones;
     std::vector<ParameterRowState> parameter_rows;
     std::vector<AbundanceRadialRowState> abundance_radial_rows;
+    std::vector<LevelIdentityState> level_identities;
+    std::vector<LineIdentityState> line_identities;
+    std::vector<RrcIdentityState> rrc_identities;
+    LegacyPprintState legacy_pprint;
     bool embedded_public_fits_payloads_absent = false;
     bool embedded_full_xout_step_payload_absent = false;
     std::size_t python_callbacks = 0;
@@ -122,6 +226,10 @@ struct WholeRunAccumulatedState {
     bool native_product_inputs_complete = false;
     bool native_detail_state_retained = false;
     bool continuum_depths_derived_from_native_opacity = false;
+    bool exact_source_metadata_retained = false;
+    bool exact_source_workspaces_retained = false;
+    bool exact_accepted_radial_boundaries_retained = false;
+    bool exact_legacy_pprint_state_retained = false;
 };
 
 struct ProductWritingState {
@@ -130,12 +238,17 @@ struct ProductWritingState {
     std::filesystem::path parameters_path;
     std::filesystem::path atomic_database_path;
     std::filesystem::path schema_path;
+    std::filesystem::path product_metadata_path;
     std::filesystem::path native_diagnostics_path;
     std::string native_run_id;
     std::vector<FixedEvaluationState> fixed_evaluations;
     std::vector<RadialZoneState> radial_zones;
     std::vector<ParameterRowState> parameter_rows;
     std::vector<AbundanceRadialRowState> abundance_radial_rows;
+    std::vector<LevelIdentityState> level_identities;
+    std::vector<LineIdentityState> line_identities;
+    std::vector<RrcIdentityState> rrc_identities;
+    LegacyPprintState legacy_pprint;
     bool embedded_public_fits_payloads_absent = false;
     bool embedded_full_xout_step_payload_absent = false;
     bool run_state_layers_distinct = true;
@@ -144,6 +257,10 @@ struct ProductWritingState {
     bool native_product_inputs_complete = false;
     bool native_detail_state_retained = false;
     bool continuum_depths_derived_from_native_opacity = false;
+    bool exact_source_metadata_retained = false;
+    bool exact_source_workspaces_retained = false;
+    bool exact_accepted_radial_boundaries_retained = false;
+    bool exact_legacy_pprint_state_retained = false;
     bool product_state_complete = false;
     bool product_parity_qualified = false;
     bool xout_abund1_computed_from_native_state = false;

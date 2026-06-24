@@ -1,3 +1,7 @@
+## v0.6.48.7.46.25.5.1 exact-source retention foundation
+
+This release retains native committed line/RRC/continuum/profile workspaces and ATDB-derived public identities, but deliberately blocks public FITS and `xout_step.log` writing until all exact radial-transfer and legacy-print state is retained. See `V06487462551_NATIVE_SOURCE_WORKSPACE_RETENTION_FOUNDATION.md`.
+
 ## v0.6.48.7.46.25.4 native output-grid depth closure
 
 This release fixes the v25.3 state-finalization failure that prevented every public product from being written.  The native controller's 301,301-value internal continuum workspace is retained only as source-state provenance; it is no longer treated as a 9,999-bin FITS depth array.  `xstar_cpp` derives output-grid inward and outward continuum depths from native opacity across the five accepted radial boundaries, then writes all nine FITS products and `xout_step.log`.  The runner accepts no public-product oracle path and prints its internal native log on any failure.  Native construction is qualified separately from scientific parity.

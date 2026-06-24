@@ -988,3 +988,14 @@ include check_v048746254_native_product_output.py
 include compare_v048746254_native_products.py
 include test_v048746254_native_public_product_construction.py
 include tests/test_v0648746254_native_public_products.py
+
+# v0.6.48.7.46.25.5.1 exact-source workspace retention foundation
+include export_v0487462551_native_product_metadata.py
+include prepare_v0487462551_runtime_assets.py
+include check_v0487462551_native_source_workspace_readiness.py
+include run_v0487462551_native_source_workspace_retention.sh
+include V06487462551_NATIVE_SOURCE_WORKSPACE_RETENTION_FOUNDATION.md
+include V0487462551_QUALIFICATION_ASSESSMENT.md
+include V0487462551_PRODUCTION_HOST_COMMANDS.md
+include test_v0487462551_metadata_element_label_hotfix.py
+include V0487462551_METADATA_ELEMENT_LABEL_HOTFIX.md
