@@ -943,3 +943,5 @@ include run_v04874623_python_fits_schema_header_radial_state_closure.sh
 include check_v04874623_python_fits_schema_header_radial_state_closure_readiness.py
 include compare_v04874623_product_oracle.py
 include tests/test_v064874623_python_fits_schema_header_radial_state_closure.py
+
+recursive-include src/xstar_tools/benchmarks/v0648746231_python_fits_schema *

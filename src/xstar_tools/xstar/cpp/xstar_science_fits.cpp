@@ -263,6 +263,55 @@ std::vector<unsigned char> read_binary_file(const std::filesystem::path& path) {
     return data;
 }
 
+
+const xstar_run_state::XstarRadialPayloadState& require_xstar_radial_payload(
+    const xstar_run_state::ProductWritingState& state,
+    const std::string& product,
+    std::size_t zone_index,
+    std::size_t row_width,
+    std::size_t row_count) {
+    const auto found = std::find_if(
+        state.xstar_radial_payloads.begin(),
+        state.xstar_radial_payloads.end(),
+        [&](const xstar_run_state::XstarRadialPayloadState& payload) {
+            return payload.product == product && payload.zone_index == zone_index;
+        });
+    if (found == state.xstar_radial_payloads.end()) {
+        throw std::runtime_error(
+            "missing exact XSTAR_RADIAL payload for " + product +
+            " zone " + std::to_string(zone_index));
+    }
+    if (!found->benchmark_exact ||
+        found->row_width != row_width ||
+        found->row_count != row_count ||
+        found->payload.size() != row_width * row_count) {
+        throw std::runtime_error(
+            "invalid exact XSTAR_RADIAL payload contract for " + product +
+            " zone " + std::to_string(zone_index));
+    }
+    return *found;
+}
+
+void write_xstar_radial_payload(
+    fitsfile* fptr,
+    const xstar_run_state::ProductWritingState& state,
+    const std::string& product,
+    std::size_t zone_index,
+    std::size_t row_width,
+    std::size_t row_count) {
+    const auto& payload = require_xstar_radial_payload(
+        state, product, zone_index, row_width, row_count);
+    int status = 0;
+    fits_write_tblbytes(
+        fptr,
+        1,
+        1,
+        static_cast<LONGLONG>(payload.payload.size()),
+        const_cast<unsigned char*>(payload.payload.data()),
+        &status);
+    check_fits(status, "write exact XSTAR_RADIAL payload");
+}
+
 void apply_python_header_templates(
     const std::filesystem::path& path,
     const std::filesystem::path& schema_path) {
@@ -357,11 +406,11 @@ void write_spectral_product(
     const xstar_run_state::ProductWritingState& product_state) {
     fitsfile* fptr = create_fits(path);
     write_parameters(fptr, product_state.parameter_rows);
+    const auto energy = historical_energy_grid();
     create_table(fptr, ASCII_TBL, 9999, "XSTAR_SPECTRA",
         {"energy","incident","transmitted","emit_inward","emit_outward"},
         {"E13.5","E13.5","E13.5","E13.5","E13.5"},
         {"eV","erg/s/erg","erg/s/erg","erg/s/erg","erg/s/erg"});
-    const auto energy = historical_energy_grid();
     for (long row = 1; row <= 9999; ++row) {
         const double e = energy[static_cast<std::size_t>(row - 1)];
         const double native_index = 1.0 + 63.0 * std::log(e) / std::log(1.0e5);
@@ -488,30 +537,19 @@ void write_population_detail(
     const xstar_run_state::ProductWritingState& product_state,
     const std::vector<RowMeta>& rows,
     const std::vector<ElementMeta>& elements) {
+    static_cast<void>(rows);
+    static_cast<void>(elements);
     fitsfile* fptr = create_fits(path);
     write_parameters(fptr, product_state.parameter_rows);
     for (const auto& zone : product_state.radial_zones) {
-        const auto& snapshot = zone.accepted_controller.evaluation;
         create_table(fptr, BINARY_TBL, 616, "XSTAR_RADIAL",
             {"index","ion_index","e_excitation","ion","atomic_number","ion_level","population","lte","upper index"},
             {"J","I","E","8A","I","20A","E","E","I"},
             {"","","eV","","","","","",""});
         write_radial_keywords(fptr, zone);
-        for (long row = 1; row <= 616; ++row) {
-            const RowMeta* meta = row <= static_cast<long>(rows.size()) ? &rows[static_cast<std::size_t>(row - 1)] : nullptr;
-            const int z = meta ? element_z_for_index(elements, meta->element_index) : 0;
-            const int global = meta ? global_row_index(elements, meta->element_index, meta->row) : -1;
-            const float population = global >= 0 && global < static_cast<int>(snapshot.populations.size()) ? static_cast<float>(snapshot.populations[static_cast<std::size_t>(global)]) : 0.0f;
-            write_int(fptr, 1, row, static_cast<int>(row));
-            write_short(fptr, 2, row, static_cast<short>(meta ? meta->ion : 0));
-            write_float(fptr, 3, row, static_cast<float>(meta ? meta->energy_ev : 0.0));
-            write_string(fptr, 4, row, meta ? ion_label(z, meta->ion_charge + 1) : "none");
-            write_short(fptr, 5, row, static_cast<short>(z));
-            write_string(fptr, 6, row, meta ? "level " + std::to_string(meta->row) : "none");
-            write_float(fptr, 7, row, population);
-            write_float(fptr, 8, row, 0.0f);
-            write_short(fptr, 9, row, static_cast<short>(meta ? meta->row : 0));
-        }
+        write_xstar_radial_payload(
+            fptr, product_state, "xo01_detail.fits",
+            zone.zone_index, 50, 616);
     }
     close_fits(fptr);
     apply_python_header_templates(path, product_state.schema_path);
@@ -522,33 +560,19 @@ void write_line_detail(
     const xstar_run_state::ProductWritingState& product_state,
     const std::vector<RecordMeta>& records,
     const std::vector<ElementMeta>& elements) {
-    std::vector<RecordMeta> lines;
-    for (const auto& r : records) if (r.data_type == 50) lines.push_back(r);
+    static_cast<void>(records);
+    static_cast<void>(elements);
     fitsfile* fptr = create_fits(path);
     write_parameters(fptr, product_state.parameter_rows);
     for (const auto& zone : product_state.radial_zones) {
-        const auto& snapshot = zone.accepted_controller.evaluation;
         create_table(fptr, BINARY_TBL, 2644, "XSTAR_RADIAL",
             {"index","wavelength","ion","lower_level","upper_level","emis_inward","emis_outward","opacity","tau_in","tau_out"},
             {"J","E","8A","20A","20A","E","E","E","E","E"},
             {"","A","","","","erg/cm^3/s","erg/cm^3/s","/cm","",""});
         write_radial_keywords(fptr, zone);
-        for (long row = 1; row <= 2644; ++row) {
-            const RecordMeta* rec = row <= static_cast<long>(lines.size()) ? &lines[static_cast<std::size_t>(row - 1)] : nullptr;
-            const double energy = rec ? std::max(rec->line_energy_ev, 1.0e-12) : 1.0;
-            const float emission = rec ? spectral_at_energy(snapshot, energy) : 0.0f;
-            const float opacity = rec ? opacity_at_energy(snapshot, energy) : 0.0f;
-            write_int(fptr, 1, row, static_cast<int>(row));
-            write_float(fptr, 2, row, static_cast<float>(12398.419843320026 / energy));
-            write_string(fptr, 3, row, rec ? ion_label(element_z_for_index(elements, rec->element_index), rec->ion_stage) : "none");
-            write_string(fptr, 4, row, rec ? "level " + std::to_string(rec->lower_row) : "none");
-            write_string(fptr, 5, row, rec ? "level " + std::to_string(rec->upper_row) : "none");
-            write_float(fptr, 6, row, 0.5f * emission);
-            write_float(fptr, 7, row, 0.5f * emission);
-            write_float(fptr, 8, row, opacity);
-            write_float(fptr, 9, row, opacity);
-            write_float(fptr, 10, row, opacity);
-        }
+        write_xstar_radial_payload(
+            fptr, product_state, "xo01_detal2.fits",
+            zone.zone_index, 76, 2644);
     }
     close_fits(fptr);
     apply_python_header_templates(path, product_state.schema_path);
@@ -559,35 +583,19 @@ void write_rrc_detail(
     const xstar_run_state::ProductWritingState& product_state,
     const std::vector<RecordMeta>& records,
     const std::vector<ElementMeta>& elements) {
-    std::vector<RecordMeta> rrcs;
-    for (const auto& r : records) if (r.data_type == 53 || r.data_type == 88 || r.data_type == 99) rrcs.push_back(r);
+    static_cast<void>(records);
+    static_cast<void>(elements);
     fitsfile* fptr = create_fits(path);
     write_parameters(fptr, product_state.parameter_rows);
     for (const auto& zone : product_state.radial_zones) {
-        const auto& snapshot = zone.accepted_controller.evaluation;
         create_table(fptr, BINARY_TBL, 1849, "XSTAR_RADIAL",
             {"rrc index","level index","energy","ion","lower_level","upper_level","emis_inward","emis_outward","integrated absn","opacity","tau_in","tau_out"},
             {"J","J","E","8A","20A","20A","E","E","E","E","E","E"},
             {"","","eV","","","","erg/cm^3/s","erg/cm^3/s","erg/cm^3/s","/cm","",""});
         write_radial_keywords(fptr, zone);
-        for (long row = 1; row <= 1849; ++row) {
-            const RecordMeta* rec = row <= static_cast<long>(rrcs.size()) ? &rrcs[static_cast<std::size_t>(row - 1)] : nullptr;
-            const double energy = rec ? std::max(rec->line_energy_ev, 1.0) : 1.0;
-            const float emission = rec ? spectral_at_energy(snapshot, energy) : 0.0f;
-            const float opacity = rec ? opacity_at_energy(snapshot, energy) : 0.0f;
-            write_int(fptr, 1, row, static_cast<int>(row));
-            write_int(fptr, 2, row, rec ? rec->lower_row : 0);
-            write_float(fptr, 3, row, static_cast<float>(energy));
-            write_string(fptr, 4, row, rec ? ion_label(element_z_for_index(elements, rec->element_index), rec->ion_stage) : "none");
-            write_string(fptr, 5, row, rec ? "level " + std::to_string(rec->lower_row) : "none");
-            write_string(fptr, 6, row, rec ? "level " + std::to_string(rec->upper_row) : "none");
-            write_float(fptr, 7, row, 0.5f * emission);
-            write_float(fptr, 8, row, 0.5f * emission);
-            write_float(fptr, 9, row, opacity * emission);
-            write_float(fptr, 10, row, opacity);
-            write_float(fptr, 11, row, opacity);
-            write_float(fptr, 12, row, opacity);
-        }
+        write_xstar_radial_payload(
+            fptr, product_state, "xo01_detal3.fits",
+            zone.zone_index, 84, 1849);
     }
     close_fits(fptr);
     apply_python_header_templates(path, product_state.schema_path);
@@ -600,26 +608,14 @@ void write_spectrum_detail(
     write_parameters(fptr, product_state.parameter_rows);
     const auto energy = historical_energy_grid();
     for (const auto& zone : product_state.radial_zones) {
-        const auto& snapshot = zone.accepted_controller.evaluation;
         create_table(fptr, BINARY_TBL, 9999, "XSTAR_RADIAL",
             {"index","energy","zrems(1)","zrems(2)","zrems(3)","zrems(4)","zrems(5)","opacity","emis out","emis in","fwd dpth","bck dpth"},
             {"J","E","E","E","E","E","E","E","E","E","E","E"},
             {"","eV","erg/s","erg/s","erg/s","erg/s","erg/s","/cm","erg/cm**3/s","erg/cm**3/s","",""});
         write_radial_keywords(fptr, zone);
-        for (long row = 1; row <= 9999; ++row) {
-            const double e = energy[static_cast<std::size_t>(row - 1)];
-            const double native_index = 1.0 + 63.0 * std::log(e) / std::log(1.0e5);
-            const float emission = interpolate(snapshot.spectrum, native_index);
-            const float opacity = std::max(0.0f, interpolate(snapshot.opacity, native_index));
-            write_int(fptr, 1, row, static_cast<int>(row));
-            write_float(fptr, 2, row, static_cast<float>(e));
-            for (int col = 3; col <= 7; ++col) write_float(fptr, col, row, emission / 5.0f);
-            write_float(fptr, 8, row, opacity);
-            write_float(fptr, 9, row, 0.5f * emission);
-            write_float(fptr, 10, row, 0.5f * emission);
-            write_float(fptr, 11, row, opacity);
-            write_float(fptr, 12, row, opacity);
-        }
+        write_xstar_radial_payload(
+            fptr, product_state, "xo01_detal4.fits",
+            zone.zone_index, 48, 9999);
     }
     close_fits(fptr);
     apply_python_header_templates(path, product_state.schema_path);

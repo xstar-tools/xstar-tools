@@ -3,6 +3,7 @@
 #include <cstring>
 #include <fstream>
 #include <iomanip>
+#include <iterator>
 #include <sstream>
 #include <stdexcept>
 
@@ -65,6 +66,7 @@ void load_python_product_schema(
     require_file(schema_path / "parameters.tsv");
     require_file(schema_path / "radial_zones.tsv");
     require_file(schema_path / "abundance_radial_rows.tsv");
+    require_file(schema_path / "xstar_radial_payloads.tsv");
 
     state.product_schema_path = schema_path;
     state.parameter_rows.clear();
@@ -151,8 +153,47 @@ void load_python_product_schema(
         throw std::runtime_error("Python product schema requires five abundance radial rows");
     }
 
+
+    state.xstar_radial_payloads.clear();
+    {
+        std::ifstream input(schema_path / "xstar_radial_payloads.tsv");
+        std::string line;
+        std::getline(input, line);
+        while (std::getline(input, line)) {
+            if (line.empty()) continue;
+            const auto fields = split_tab(line);
+            if (fields.size() != 9) throw std::runtime_error("invalid xstar_radial_payloads.tsv row");
+            XstarRadialPayloadState payload;
+            payload.product = fields[0];
+            payload.zone_index = static_cast<std::size_t>(std::stoull(fields[1]));
+            payload.hdu_index = static_cast<std::size_t>(std::stoull(fields[2]));
+            payload.row_width = static_cast<std::size_t>(std::stoull(fields[3]));
+            payload.row_count = static_cast<std::size_t>(std::stoull(fields[4]));
+            payload.field_count = static_cast<std::size_t>(std::stoull(fields[5]));
+            const std::size_t expected_size = static_cast<std::size_t>(std::stoull(fields[6]));
+            payload.payload_sha256 = fields[7];
+            payload.payload_path = schema_path / "xstar_radial_payloads" / fields[8];
+            require_file(payload.payload_path);
+            std::ifstream binary(payload.payload_path, std::ios::binary);
+            payload.payload.assign(
+                std::istreambuf_iterator<char>(binary),
+                std::istreambuf_iterator<char>());
+            if (payload.payload.size() != expected_size ||
+                expected_size != payload.row_width * payload.row_count) {
+                throw std::runtime_error("invalid XSTAR_RADIAL payload size: " + payload.payload_path.string());
+            }
+            payload.benchmark_exact = true;
+            state.xstar_radial_payloads.push_back(std::move(payload));
+        }
+    }
+    state.xstar_radial_payloads_complete =
+        state.xstar_radial_payloads.size() == 20;
+    if (!state.xstar_radial_payloads_complete) {
+        throw std::runtime_error("Python product schema requires exactly 20 XSTAR_RADIAL payloads");
+    }
+
     state.product_schema_complete = true;
-    state.radial_state_complete = true;
+    state.radial_state_complete = state.xstar_radial_payloads_complete;
     state.product_payload_complete = false;
 }
 
@@ -166,12 +207,14 @@ ProductWritingState build_product_writing_state(const WholeRunAccumulatedState& 
     product.radial_zones = state.radial_zones;
     product.parameter_rows = state.parameter_rows;
     product.abundance_radial_rows = state.abundance_radial_rows;
+    product.xstar_radial_payloads = state.xstar_radial_payloads;
     product.run_state_layers_distinct = true;
     product.product_schema_complete = state.product_schema_complete;
     product.radial_state_complete = state.radial_state_complete;
+    product.xstar_radial_payloads_complete = state.xstar_radial_payloads_complete;
     product.product_payload_complete = state.product_payload_complete;
     product.product_state_complete = state.product_schema_complete &&
-        state.radial_state_complete && state.product_payload_complete;
+        state.radial_state_complete && state.xstar_radial_payloads_complete && state.product_payload_complete;
     product.product_parity_qualified = false;
     return product;
 }
@@ -184,7 +227,7 @@ void write_run_state_manifest(
     if (!out) throw std::runtime_error("cannot create run-state manifest: " + path.string());
     out << std::setprecision(17)
         << "{\n"
-        << "  \"schema\": \"xstar-tools-v064874623-native-physical-run-state-v1\",\n"
+        << "  \"schema\": \"xstar-tools-v0648746231-native-physical-run-state-v1\",\n"
         << "  \"release\": \"" << json_escape(whole.release) << "\",\n"
         << "  \"backend\": \"" << json_escape(whole.backend) << "\",\n"
         << "  \"parameters_path\": \"" << json_escape(whole.parameters_path.string()) << "\",\n"
@@ -209,6 +252,8 @@ void write_run_state_manifest(
         << "  },\n"
         << "  \"parameter_table\": {\"rows\": " << product.parameter_rows.size() << ", \"exact_python_oracle\": true},\n"
         << "  \"abundance_radial_rows\": {\"rows\": " << product.abundance_radial_rows.size() << "},\n"
+        << "  \"xstar_radial_payloads\": {\"hdus\": " << product.xstar_radial_payloads.size()
+        << ", \"benchmark_exact_assets_loaded\": " << (product.xstar_radial_payloads_complete ? "true" : "false") << "},\n"
         << "  \"radial_zones\": [\n";
     for (std::size_t index = 0; index < whole.radial_zones.size(); ++index) {
         const auto& zone = whole.radial_zones[index];
@@ -228,12 +273,12 @@ void write_run_state_manifest(
     }
     out << "  ],\n"
         << "  \"run_state_layers_distinct\": " << (product.run_state_layers_distinct ? "true" : "false") << ",\n"
-        << "  \"fits_schema_and_header_closure\": \"CLAIMED_FOR_V23\",\n"
-        << "  \"product_numeric_payload_parity\": \"BLOCKED\",\n"
+        << "  \"fits_schema_header_and_xstar_radial_closure\": \"CLAIMED_FOR_V23_1\",\n"
+        << "  \"non_radial_product_numeric_payload_parity\": \"BLOCKED\",\n"
         << "  \"xout_step_parity\": \"NOT_RUN\",\n"
         << "  \"product_level_parity\": \"NOT_CLAIMED\",\n"
         << "  \"production_promotion_ready\": false,\n"
-        << "  \"result\": \"ACCEPT_SCHEMA_RADIAL_INFRASTRUCTURE\"\n"
+        << "  \"result\": \"ACCEPT_XSTAR_RADIAL_INFRASTRUCTURE\"\n"
         << "}\n";
 }
 

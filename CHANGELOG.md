@@ -1,5 +1,14 @@
 # CHANGELOG
 
+# v0.6.48.7.46.23.1 - 2026-06-24
+
+- Freeze `physical_run_benchmark.tar.gz` (`8fe3e43f149492166683941ec5414243b0e8a878a4bf6c6ece3fcbe9592bbbfb`) as the Python product oracle.
+- Close all 20 `XSTAR_RADIAL` HDU payloads exactly from `ProductWritingState`.
+- Add per-cell raw/decoded/IEEE first-difference diagnostics without NumPy dtype failures.
+- Restrict allowed numerical differences to non-radial HDUs.
+- Add fail-fast CFITSIO compile/runtime ABI probing and pkg-config Makefile selection.
+- Preserve ABI 60487 and the accepted v22.3 controller trajectory.
+
 # 0.6.48.7.46.23 - 2026-06-24
 
 - Freeze 45 Python-oracle FITS header templates, 56 exact parameter rows, five exact radial-zone states, and five abundance radial base rows.

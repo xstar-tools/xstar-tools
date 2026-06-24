@@ -1,3 +1,10 @@
+## v0.6.48.7.46.23.1 radial-product milestone
+
+The standalone product writer now emits all 20 Python-benchmark
+`XSTAR_RADIAL` binary-table payloads exactly. The authoritative benchmark is
+frozen at SHA-256 `8fe3e43f149492166683941ec5414243b0e8a878a4bf6c6ece3fcbe9592bbbfb`. Non-radial numerical products and the complete
+legacy `xout_step.log` remain qualification work and are not promoted.
+
 ## v0.6.48.7.46.23 Python FITS schema, header, and radial-state closure
 
 This qualification release preserves the accepted v22.3 controller and closes the Python physical-run FITS schema layer: exact 56-row parameters, five exact radial states, canonical `TFORM`/`TUNIT`, semantic Python-oracle headers, and card/column first-difference diagnostics. Numerical FITS payloads and `xout_step.log` remain blocked. Run `run_v04874623_python_fits_schema_header_radial_state_closure.sh`. ABI remains 60487.

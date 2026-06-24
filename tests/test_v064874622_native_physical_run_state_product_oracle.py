@@ -25,11 +25,11 @@ def sha256(path: Path) -> str:
 
 
 def test_release_and_abi_are_retained() -> None:
-    assert RELEASE == "0.6.48.7.46.23"
-    assert 'version = "0.6.48.7.46.23"' in (ROOT / "pyproject.toml").read_text()
+    assert RELEASE == "0.6.48.7.46.23.1"
+    assert 'version = "0.6.48.7.46.23.1"' in (ROOT / "pyproject.toml").read_text()
     api = (ROOT / "src/xstar_tools/xstar/cpp/xstar_api.h").read_text()
     assert '#define XSTAR_API_ABI_VERSION 60487u' in api
-    assert '#define XSTAR_API_VERSION_STRING "0.6.48.7.46.23"' in api
+    assert '#define XSTAR_API_VERSION_STRING "0.6.48.7.46.23.1"' in api
 
 
 def test_oracles_are_frozen_separately() -> None:

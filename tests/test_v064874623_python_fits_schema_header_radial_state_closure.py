@@ -24,10 +24,10 @@ def table_rows(name: str) -> list[dict[str, str]]:
 
 
 def test_release_version_and_abi() -> None:
-    assert 'version = "0.6.48.7.46.23"' in (ROOT / "pyproject.toml").read_text()
-    assert '__version__ = "0.6.48.7.46.23"' in (ROOT / "src/xstar_tools/__init__.py").read_text()
+    assert 'version = "0.6.48.7.46.23.1"' in (ROOT / "pyproject.toml").read_text()
+    assert '__version__ = "0.6.48.7.46.23.1"' in (ROOT / "src/xstar_tools/__init__.py").read_text()
     api = (ROOT / "src/xstar_tools/xstar/cpp/xstar_api.h").read_text()
-    assert '#define XSTAR_API_VERSION_STRING "0.6.48.7.46.23"' in api
+    assert '#define XSTAR_API_VERSION_STRING "0.6.48.7.46.23.1"' in api
     assert '#define XSTAR_API_ABI_VERSION 60487u' in api
 
 
@@ -64,7 +64,7 @@ def test_exact_parameter_and_radial_state_layers_are_real() -> None:
     assert "radial_state_complete" in source
     assert "product_payload_complete" in source
     assert "--product-schema-dir" in standalone
-    assert "v064874623_python_fits_schema" in standalone
+    assert "v0648746231_python_fits_schema" in standalone
 
 
 def test_writer_uses_canonical_schema_and_no_development_cards() -> None:

@@ -15,11 +15,12 @@ import os
 from pathlib import Path
 import re
 import shutil
+import struct
 import tarfile
 from typing import Any, Iterable
 
-RELEASE = "0.6.48.7.46.23"
-SCHEMA = "xstar-tools-v064874623-product-oracle-v4"
+RELEASE = "0.6.48.7.46.23.1"
+SCHEMA = "xstar-tools-v0648746231-product-oracle-v5"
 EXPECTED_PRODUCTS = (
     "xo01_detail.fits",
     "xo01_detal2.fits",
@@ -409,6 +410,182 @@ def _oracle_payloads(oracle_dir: Path, manifest: dict[str, Any]) -> dict[str, by
     return result
 
 
+
+_TFORM_RE = re.compile(r"^\s*(\d*)([A-Z])(?:\([^)]*\))?\s*$")
+_TFORM_WIDTH = {"A": 1, "B": 1, "L": 1, "I": 2, "J": 4, "K": 8, "E": 4, "D": 8}
+
+
+def _tform_layout(columns: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    offset = 0
+    layout: list[dict[str, Any]] = []
+    for index, column in enumerate(columns, start=1):
+        form = str(column.get("TFORM", "") or "")
+        match = _TFORM_RE.match(form)
+        if not match or match.group(2) not in _TFORM_WIDTH:
+            raise ValueError(f"unsupported TFORM for XSTAR_RADIAL comparison: {form!r}")
+        count = int(match.group(1) or "1")
+        code = match.group(2)
+        width = count * _TFORM_WIDTH[code]
+        layout.append({
+            "column_index": index,
+            "name": column.get("TTYPE"),
+            "form": form,
+            "count": count,
+            "code": code,
+            "offset": offset,
+            "width": width,
+        })
+        offset += width
+    return layout
+
+
+def _decode_cell(raw: bytes, code: str, count: int) -> dict[str, Any]:
+    if code == "A":
+        return {
+            "text": raw.decode("ascii", errors="replace"),
+            "trimmed": raw.decode("ascii", errors="replace").rstrip(),
+            "hex": raw.hex(),
+        }
+    if code == "L":
+        return {"values": [chr(value) for value in raw], "hex": raw.hex()}
+    formats = {"B": "B", "I": "h", "J": "i", "K": "q", "E": "f", "D": "d"}
+    fmt = ">" + formats[code] * count
+    values = list(struct.unpack(fmt, raw))
+    result: dict[str, Any] = {"values": values, "hex": raw.hex()}
+    if code in {"E", "D"}:
+        unit = 4 if code == "E" else 8
+        result["bit_patterns"] = [
+            "0x" + raw[index * unit : (index + 1) * unit].hex()
+            for index in range(count)
+        ]
+    return result
+
+
+def _hdu_unpadded_payload(file_bytes: bytes, hdu: dict[str, Any]) -> bytes:
+    start = int(hdu["offset"]) + int(hdu["header_bytes"])
+    end = start + int(hdu["data_bytes_unpadded"])
+    return file_bytes[start:end]
+
+
+def _first_radial_cell_difference(
+    expected_payload: bytes,
+    actual_payload: bytes,
+    expected_hdu: dict[str, Any],
+    actual_hdu: dict[str, Any],
+) -> dict[str, Any] | None:
+    columns = expected_hdu.get("columns", [])
+    if columns != actual_hdu.get("columns", []):
+        return None
+    layout = _tform_layout(columns)
+    row_width = int(expected_hdu["structural_keys"].get("NAXIS1", 0) or 0)
+    row_count = int(expected_hdu["structural_keys"].get("NAXIS2", 0) or 0)
+    if row_width <= 0 or len(expected_payload) != row_width * row_count:
+        return None
+    if len(actual_payload) != len(expected_payload):
+        return None
+    for row_index in range(row_count):
+        row_start = row_index * row_width
+        for column in layout:
+            start = row_start + int(column["offset"])
+            end = start + int(column["width"])
+            expected_raw = expected_payload[start:end]
+            actual_raw = actual_payload[start:end]
+            if expected_raw != actual_raw:
+                return {
+                    "row_index": row_index + 1,
+                    "column_index": column["column_index"],
+                    "column_name": column["name"],
+                    "tform": column["form"],
+                    "expected": _decode_cell(expected_raw, column["code"], column["count"]),
+                    "actual": _decode_cell(actual_raw, column["code"], column["count"]),
+                }
+    return None
+
+
+def _compare_xstar_radial_payloads(
+    oracle_payloads: dict[str, bytes],
+    output_dir: Path,
+) -> dict[str, Any]:
+    expected_set: list[dict[str, Any]] = []
+    actual_set: list[dict[str, Any]] = []
+    hdu_reports: list[dict[str, Any]] = []
+    first_cell_difference: dict[str, Any] | None = None
+    radial_products = sorted(
+        name for name in FITS_PRODUCTS
+        if any(
+            hdu.get("structural_keys", {}).get("EXTNAME") == "XSTAR_RADIAL"
+            for hdu in inspect_fits_bytes(oracle_payloads[name])
+        )
+    )
+    for name in radial_products:
+        expected_bytes = oracle_payloads[name]
+        actual_path = output_dir / name
+        expected_hdus = [
+            hdu for hdu in inspect_fits_bytes(expected_bytes, include_cards=True)
+            if hdu.get("structural_keys", {}).get("EXTNAME") == "XSTAR_RADIAL"
+        ]
+        actual_bytes = actual_path.read_bytes() if actual_path.is_file() else b""
+        actual_hdus = [
+            hdu for hdu in inspect_fits_bytes(actual_bytes, include_cards=True)
+            if hdu.get("structural_keys", {}).get("EXTNAME") == "XSTAR_RADIAL"
+        ] if actual_bytes else []
+        for ordinal, hdu in enumerate(expected_hdus, start=1):
+            expected_set.append({"file": name, "ordinal": ordinal, "hdu_index": hdu["index"]})
+        for ordinal, hdu in enumerate(actual_hdus, start=1):
+            actual_set.append({"file": name, "ordinal": ordinal, "hdu_index": hdu["index"]})
+        count = max(len(expected_hdus), len(actual_hdus))
+        for ordinal in range(count):
+            expected_hdu = expected_hdus[ordinal] if ordinal < len(expected_hdus) else None
+            actual_hdu = actual_hdus[ordinal] if ordinal < len(actual_hdus) else None
+            expected_payload = _hdu_unpadded_payload(expected_bytes, expected_hdu) if expected_hdu else b""
+            actual_payload = _hdu_unpadded_payload(actual_bytes, actual_hdu) if actual_hdu else b""
+            columns_exact = bool(expected_hdu and actual_hdu and expected_hdu["columns"] == actual_hdu["columns"])
+            row_counts_exact = bool(
+                expected_hdu and actual_hdu
+                and expected_hdu["structural_keys"].get("NAXIS2") == actual_hdu["structural_keys"].get("NAXIS2")
+                and expected_hdu["structural_keys"].get("NAXIS1") == actual_hdu["structural_keys"].get("NAXIS1")
+            )
+            payload_exact = bool(expected_hdu and actual_hdu and expected_payload == actual_payload)
+            one = {
+                "file": name,
+                "ordinal": ordinal + 1,
+                "hdu_index_expected": expected_hdu["index"] if expected_hdu else None,
+                "hdu_index_actual": actual_hdu["index"] if actual_hdu else None,
+                "column_metadata_exact": columns_exact,
+                "row_counts_exact": row_counts_exact,
+                "payload_exact": payload_exact,
+                "payload_sha256_expected": sha256_bytes(expected_payload) if expected_hdu else None,
+                "payload_sha256_actual": sha256_bytes(actual_payload) if actual_hdu else None,
+            }
+            if (
+                first_cell_difference is None
+                and expected_hdu and actual_hdu and columns_exact and row_counts_exact
+                and not payload_exact
+            ):
+                diff = _first_radial_cell_difference(
+                    expected_payload, actual_payload, expected_hdu, actual_hdu)
+                if diff is not None:
+                    first_cell_difference = {"file": name, "ordinal": ordinal + 1, **diff}
+                    one["first_cell_difference"] = diff
+            hdu_reports.append(one)
+    hdu_set_exact = expected_set == actual_set
+    column_metadata_exact = hdu_set_exact and all(item["column_metadata_exact"] for item in hdu_reports)
+    row_counts_exact = hdu_set_exact and all(item["row_counts_exact"] for item in hdu_reports)
+    payload_exact = hdu_set_exact and all(item["payload_exact"] for item in hdu_reports)
+    products_exact = payload_exact and len(radial_products) == 4
+    return {
+        "expected_hdu_set": expected_set,
+        "actual_hdu_set": actual_set,
+        "hdu_set_exact": hdu_set_exact,
+        "column_metadata_exact": column_metadata_exact,
+        "row_counts_exact": row_counts_exact,
+        "payload_exact": payload_exact,
+        "all_products_exact": products_exact,
+        "first_cell_difference": first_cell_difference,
+        "hdus": hdu_reports,
+    }
+
+
 def compare_output(output_dir: Path, oracle: Path, output_json: Path | None = None) -> dict[str, Any]:
     manifest, oracle_dir = _read_oracle_manifest(oracle)
     oracle_payloads = _oracle_payloads(oracle_dir, manifest)
@@ -478,6 +655,7 @@ def compare_output(output_dir: Path, oracle: Path, output_json: Path | None = No
             report["result"] = "ACCEPT" if report["byte_exact"] else "REJECT"
         files_report[name] = report
 
+    radial_comparison = _compare_xstar_radial_payloads(oracle_payloads, output_dir)
     fits_reports = [files_report[name].get("fits", {}) for name in FITS_PRODUCTS]
     hdu_counts_exact = all(item.get("hdu_count_exact", False) for item in fits_reports)
     extension_order_exact = all(item.get("extension_order_exact", False) for item in fits_reports)
@@ -488,9 +666,17 @@ def compare_output(output_dir: Path, oracle: Path, output_json: Path | None = No
     fits_headers_exact = all(item.get("all_headers_exact", False) for item in fits_reports)
     fits_header_bytes_exact = all(item.get("all_header_bytes_exact", False) for item in fits_reports)
     fits_data_exact = all(item.get("all_data_exact", False) for item in fits_reports)
+    non_radial_numeric_hdus = [
+        hdu
+        for name in FITS_PRODUCTS
+        for hdu in files_report[name].get("fits", {}).get("hdus", [])
+        if hdu.get("extension_name_expected") not in {"PRIMARY", "PARAMETERS", "XSTAR_RADIAL"}
+    ]
+    non_radial_numeric_exact = bool(non_radial_numeric_hdus) and all(
+        hdu.get("data_exact", False) for hdu in non_radial_numeric_hdus)
     parameter_table_exact = bool(parameter_hdus) and all(parameter_hdus) and len(parameter_hdus) == 8
 
-    radial_state_complete = False
+    in_memory_radial_state_complete = False
     radial_state_detail: dict[str, Any] = {"manifest_present": False}
     state_path = output_dir / "native_physical_run_state.json"
     if state_path.is_file():
@@ -499,7 +685,7 @@ def compare_output(output_dir: Path, oracle: Path, output_json: Path | None = No
             state = json.loads(state_path.read_text())
             radial_layer = state.get("layers", {}).get("radial_zone_state", {})
             zones = state.get("radial_zones", [])
-            radial_state_complete = (
+            in_memory_radial_state_complete = (
                 radial_layer.get("count") == 5
                 and radial_layer.get("complete") is True
                 and len(zones) == 5
@@ -513,9 +699,16 @@ def compare_output(output_dir: Path, oracle: Path, output_json: Path | None = No
         except Exception as exc:
             radial_state_detail["error"] = f"{type(exc).__name__}: {exc}"
 
+    radial_state_complete = (
+        in_memory_radial_state_complete
+        and radial_comparison["all_products_exact"]
+    )
+    radial_state_detail["in_memory_complete"] = in_memory_radial_state_complete
+    radial_state_detail["emitted_xstar_radial_exact"] = radial_comparison["all_products_exact"]
+
     all_byte_exact = not missing and all(files_report[name].get("byte_exact", False) for name in EXPECTED_PRODUCTS)
     report = {
-        "schema": "xstar-tools-v064874623-strict-product-comparison-v2",
+        "schema": "xstar-tools-v0648746231-strict-product-comparison-v3",
         "release": RELEASE,
         "oracle_name": manifest["oracle_name"],
         "oracle_source_kind": manifest["source_kind"],
@@ -531,6 +724,7 @@ def compare_output(output_dir: Path, oracle: Path, output_json: Path | None = No
         "first_header_card_difference": first_header_difference,
         "first_column_difference": first_column_difference,
         "radial_state": radial_state_detail,
+        "xstar_radial": radial_comparison,
         "files": files_report,
         "gates": {
             "TEN_PRODUCTS_PRESENT": "ACCEPT" if not missing else "REJECT",
@@ -543,8 +737,14 @@ def compare_output(output_dir: Path, oracle: Path, output_json: Path | None = No
             "FITS_HEADERS_EXACT": "ACCEPT" if fits_headers_exact else "REJECT",
             "FITS_HEADER_BYTES_EXACT": "ACCEPT" if fits_header_bytes_exact else "REJECT_ALLOWED",
             "PARAMETER_TABLE_EXACT": "ACCEPT" if parameter_table_exact else "REJECT",
+            "XSTAR_RADIAL_HDU_SET_EXACT": "ACCEPT" if radial_comparison["hdu_set_exact"] else "REJECT",
+            "XSTAR_RADIAL_COLUMN_METADATA_EXACT": "ACCEPT" if radial_comparison["column_metadata_exact"] else "REJECT",
+            "XSTAR_RADIAL_ROW_COUNTS_EXACT": "ACCEPT" if radial_comparison["row_counts_exact"] else "REJECT",
+            "XSTAR_RADIAL_PAYLOAD_EXACT": "ACCEPT" if radial_comparison["payload_exact"] else "REJECT",
+            "XSTAR_RADIAL_ALL_PRODUCTS_EXACT": "ACCEPT" if radial_comparison["all_products_exact"] else "REJECT",
             "RADIAL_ZONE_STATE_COMPLETE": "ACCEPT" if radial_state_complete else "REJECT",
-            "FITS_NUMERIC_ARRAYS_EXACT": "ACCEPT" if fits_data_exact else "REJECT_ALLOWED",
+            "FITS_NUMERIC_ARRAYS_EXACT": "ACCEPT" if non_radial_numeric_exact else "REJECT_ALLOWED",
+            "NON_RADIAL_NUMERIC_ARRAYS_EXACT": "ACCEPT" if non_radial_numeric_exact else "REJECT_ALLOWED",
             "XOUT_STEP_PARITY": "NOT_RUN",
             "XOUT_STEP_RAW_DIAGNOSTIC": "ACCEPT" if files_report["xout_step.log"].get("byte_exact") else "REJECT_DIAGNOSTIC",
             "XOUT_STEP_NORMALIZED_DIAGNOSTIC": "ACCEPT" if files_report["xout_step.log"].get("normalized_exact") else "REJECT_DIAGNOSTIC",
@@ -559,6 +759,11 @@ def compare_output(output_dir: Path, oracle: Path, output_json: Path | None = No
             column_metadata_exact,
             fits_headers_exact,
             parameter_table_exact,
+            radial_comparison["hdu_set_exact"],
+            radial_comparison["column_metadata_exact"],
+            radial_comparison["row_counts_exact"],
+            radial_comparison["payload_exact"],
+            radial_comparison["all_products_exact"],
             radial_state_complete,
         )) else "REJECT",
         "product_level_parity": "ACCEPT" if all_byte_exact else "REJECT",

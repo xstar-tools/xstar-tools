@@ -7,7 +7,17 @@ OPACITY_STRICT_FP_FLAGS ?= -ffp-contract=off
 THERMAL_STRICT_FP_FLAGS ?= -ffp-contract=off
 ELEMENT_STRICT_FP_FLAGS ?= -ffp-contract=off
 COMMON_LIBS ?= -ldl -pthread
-CFITSIO_LIBS ?= -lcfitsio
+CFITSIO_CFLAGS ?= $(shell pkg-config --cflags cfitsio 2>/dev/null)
+CFITSIO_LIBDIR ?= $(shell pkg-config --variable=libdir cfitsio 2>/dev/null)
+CFITSIO_LIBS ?= $(shell pkg-config --libs cfitsio 2>/dev/null)
+ifeq ($(strip $(CFITSIO_LIBS)),)
+CFITSIO_LIBS := -lcfitsio
+endif
+CFITSIO_RPATH :=
+ifneq ($(strip $(CFITSIO_LIBDIR)),)
+CFITSIO_RPATH := -Wl,-rpath,$(CFITSIO_LIBDIR)
+endif
+override CPPFLAGS += $(CFITSIO_CFLAGS)
 PYTHON_INCLUDES := $(shell $(PYTHON_CONFIG) --includes)
 PYTHON_LIBS := $(shell $(PYTHON_CONFIG) --embed --ldflags)
 PYTHON_LIBDIRS := $(patsubst -L%,%,$(filter -L%,$(PYTHON_LIBS)))
@@ -87,7 +97,7 @@ $(PYTHON_BACKEND_TARGET): xstar_backend_python.cpp xstar_api.h xstar_backend_plu
 
 $(EXECUTABLE_TARGET): xstar_standalone.cpp xstar_science_fits.cpp xstar_science_fits.hpp xstar_run_state.cpp xstar_run_state.hpp xstar_api.h xstar_api.hpp xstar_python_bridge.h xstar_fixed_state_engine.h xstar_thermal_engine.h $(API_TARGET) $(FIXED_STATE_TARGET) $(THERMAL_TARGET)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -o $@ xstar_standalone.cpp xstar_science_fits.cpp xstar_run_state.cpp \
-		-L. -lxstar_api -lxstar_fixed_state -lxstar_thermal $(CFITSIO_LIBS) $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
+		-L. -lxstar_api -lxstar_fixed_state -lxstar_thermal $(CFITSIO_LIBS) $(CFITSIO_RPATH) $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
 
 print-config:
 	@echo CXX=$(CXX)

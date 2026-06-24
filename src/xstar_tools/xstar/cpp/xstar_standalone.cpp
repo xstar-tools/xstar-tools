@@ -3491,8 +3491,8 @@ int command_run_physical(Options options) {
     const auto product_schema = resolve_physical_asset(
         options.product_schema_dir, "XSTAR_CPP_PRODUCT_SCHEMA_DIR", roots,
         {
-            "src/xstar_tools/benchmarks/v064874623_python_fits_schema",
-            "xstar_tools-0.6.48.7.46.23/src/xstar_tools/benchmarks/v064874623_python_fits_schema",
+            "src/xstar_tools/benchmarks/v0648746231_python_fits_schema",
+            "xstar_tools-0.6.48.7.46.23.1/src/xstar_tools/benchmarks/v0648746231_python_fits_schema",
         }, true);
 
     // The accepted v21.17.2 controller was not just a case/trajectory pair.  It
@@ -3552,7 +3552,7 @@ int command_run_physical(Options options) {
     {
         std::ofstream resolution(std::filesystem::path(options.output_dir) / "native_physical_run_asset_resolution.json");
         resolution << "{\n"
-                   << "  \"schema\": \"xstar-tools-v064874623-native-physical-run-asset-resolution-v4\",\n"
+                   << "  \"schema\": \"xstar-tools-v0648746231-native-physical-run-asset-resolution-v5\",\n"
                    << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
                    << "  \"native_case\": \"" << case_dir.string() << "\",\n"
                    << "  \"coherent_trajectory\": \"" << trajectory.string() << "\",\n"
@@ -3693,7 +3693,7 @@ int command_run_physical(Options options) {
         std::filesystem::is_regular_file(output / "native_physical_run_state.json");
     std::ofstream summary(output / "native_physical_run_summary.json");
     summary << "{\n"
-            << "  \"schema\": \"xstar-tools-v064874623-native-physical-run-v4\",\n"
+            << "  \"schema\": \"xstar-tools-v0648746231-native-physical-run-v5\",\n"
             << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
             << "  \"backend\": \"cpp\",\n"
             << "  \"controller_return_code\": " << controller_status << ",\n"

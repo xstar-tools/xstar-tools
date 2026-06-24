@@ -78,6 +78,20 @@ struct RadialZoneState {
     AcceptedControllerState accepted_controller;
 };
 
+
+struct XstarRadialPayloadState {
+    std::string product;
+    std::size_t zone_index = 0;
+    std::size_t hdu_index = 0;
+    std::size_t row_width = 0;
+    std::size_t row_count = 0;
+    std::size_t field_count = 0;
+    std::string payload_sha256;
+    std::filesystem::path payload_path;
+    std::vector<unsigned char> payload;
+    bool benchmark_exact = false;
+};
+
 struct WholeRunAccumulatedState {
     std::string release;
     std::string backend;
@@ -91,10 +105,12 @@ struct WholeRunAccumulatedState {
     std::vector<RadialZoneState> radial_zones;
     std::vector<ParameterRowState> parameter_rows;
     std::vector<AbundanceRadialRowState> abundance_radial_rows;
+    std::vector<XstarRadialPayloadState> xstar_radial_payloads;
     std::size_t python_callbacks = 0;
     bool controller_trajectory_qualified = false;
     bool product_schema_complete = false;
     bool radial_state_complete = false;
+    bool xstar_radial_payloads_complete = false;
     bool product_payload_complete = false;
 };
 
@@ -107,9 +123,11 @@ struct ProductWritingState {
     std::vector<RadialZoneState> radial_zones;
     std::vector<ParameterRowState> parameter_rows;
     std::vector<AbundanceRadialRowState> abundance_radial_rows;
+    std::vector<XstarRadialPayloadState> xstar_radial_payloads;
     bool run_state_layers_distinct = true;
     bool product_schema_complete = false;
     bool radial_state_complete = false;
+    bool xstar_radial_payloads_complete = false;
     bool product_payload_complete = false;
     bool product_state_complete = false;
     bool product_parity_qualified = false;
