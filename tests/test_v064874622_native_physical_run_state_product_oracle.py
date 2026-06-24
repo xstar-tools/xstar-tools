@@ -25,11 +25,11 @@ def sha256(path: Path) -> str:
 
 
 def test_release_and_abi_are_retained() -> None:
-    assert RELEASE == "0.6.48.7.46.22.2"
-    assert 'version = "0.6.48.7.46.22.2"' in (ROOT / "pyproject.toml").read_text()
+    assert RELEASE == "0.6.48.7.46.22.3"
+    assert 'version = "0.6.48.7.46.22.3"' in (ROOT / "pyproject.toml").read_text()
     api = (ROOT / "src/xstar_tools/xstar/cpp/xstar_api.h").read_text()
     assert '#define XSTAR_API_ABI_VERSION 60487u' in api
-    assert '#define XSTAR_API_VERSION_STRING "0.6.48.7.46.22.2"' in api
+    assert '#define XSTAR_API_VERSION_STRING "0.6.48.7.46.22.3"' in api
 
 
 def test_oracles_are_frozen_separately() -> None:
@@ -142,3 +142,18 @@ def test_physical_run_activates_complete_accepted_controller_profile() -> None:
         assert asset in source
     assert "qualification_flags" in source
     assert "qualification_paths" in source
+
+
+def test_controller_qualification_uses_canonical_e7_and_separates_product_reject() -> None:
+    source = (ROOT / "src/xstar_tools/xstar/cpp/xstar_standalone.cpp").read_text()
+    runner = (ROOT / "run_v04874622_native_physical_run_state_product_oracle.sh").read_text()
+    assert "reference_state_canonical_e7" in source
+    assert "controller_qualification_result" in source
+    assert "canonical_digits_after_decimal=7" in source
+    assert "canonical_zero_floor=1e-30" in source
+    assert "controller-canonical-e7-self-test" in source
+    assert '[ "$COMPARE_RC" -eq 2 ]' in runner
+    assert "COMPARE_EXECUTED" in runner
+    assert "product_comparison_return_code_semantics" in runner
+    assert 'NATIVE_PHYSICAL_RUN_INFRASTRUCTURE=$INFRA' in runner
+    assert 'PRODUCT_LEVEL_PARITY=$PRODUCT_LEVEL_PARITY' in runner

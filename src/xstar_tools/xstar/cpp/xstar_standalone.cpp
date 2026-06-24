@@ -84,6 +84,7 @@ void usage(std::ostream& output) {
         "  xstar_cpp convergence-self-test --backend cpp [--plugin-dir DIR]\n"
         "  xstar_cpp secant-ieee-self-test --backend cpp [--plugin-dir DIR]\n"
         "  xstar_cpp trajectory-alignment-self-test --backend cpp [--plugin-dir DIR]\n"
+        "  xstar_cpp controller-canonical-e7-self-test --backend cpp [--plugin-dir DIR]\n"
         "  xstar_cpp fixed-state-self-test --case-dir RAW_PROGRAM_DIR [--diagnostics-dir DIR]\n"
         "  xstar_cpp run --backend cpp --parameters parameters.json --atomic-db atdb.fits --output-dir DIR [--resolve-only]\n"
         "    Optional native asset overrides: --case-dir, --trajectory-csv, --radiation-csv,\n"
@@ -2282,6 +2283,27 @@ void set_callback_error(char* error, std::size_t error_size, const std::string& 
     std::snprintf(error, error_size, "%s", message.c_str());
 }
 
+int command_controller_canonical_e7_self_test(const Options&) {
+    const double accepted_source = 3.317273715112183e-09;
+    const double accepted_native = 3.3172737151121832e-09;
+    const double rejected_source = -0.003891367149827865;
+    const double rejected_native = -0.0038913671500162127;
+    const double zero_left = 4.0e-31;
+    const double zero_right = -7.0e-31;
+    const bool accepted_roundoff = accepted_source != accepted_native &&
+        canonical_e7_equal(accepted_source, accepted_native);
+    const bool rejected_boundary = !canonical_e7_equal(rejected_source, rejected_native);
+    const bool zero_floor = canonical_e7_equal(zero_left, zero_right);
+    const bool accepted = accepted_roundoff && rejected_boundary && zero_floor;
+    std::cout << "accepted_roundoff=" << (accepted_roundoff ? "true" : "false")
+              << "\nrejected_boundary=" << (rejected_boundary ? "true" : "false")
+              << "\nzero_floor=" << (zero_floor ? "true" : "false")
+              << "\ncanonical_digits_after_decimal=7"
+              << "\ncanonical_zero_floor=1e-30"
+              << "\nRESULT=" << (accepted ? "ACCEPT" : "REJECT") << "\n";
+    return accepted ? 0 : 20;
+}
+
 int fixed_dsec_evaluator(
     void* user_data,
     const xstar_thermal_state_v1* trial_state,
@@ -3075,6 +3097,8 @@ int command_run_fixed_dsec(const Options& options) {
     double max_electron_fraction_delta = 0.0;
     double max_charge_residual_delta = 0.0;
     double max_hmctot_delta = 0.0;
+    std::size_t reference_rows_classified = 0;
+    bool reference_state_canonical_e7 = true;
     std::array<bool,61> emitted_source_sequence{};
     for (std::size_t index = 0; index < snapshots.size(); ++index) {
         auto& snapshot = snapshots[index];
@@ -3095,10 +3119,18 @@ int command_run_fixed_dsec(const Options& options) {
         const double de = snapshot.charge_residual - ref_elcter;
         const double dh = snapshot.hmctot - ref_hmc;
         if (reference_row) {
+            ++reference_rows_classified;
             max_temperature_delta = std::max(max_temperature_delta, std::abs(dt));
             max_electron_fraction_delta = std::max(max_electron_fraction_delta, std::abs(dx));
             max_charge_residual_delta = std::max(max_charge_residual_delta, std::abs(de));
             max_hmctot_delta = std::max(max_hmctot_delta, std::abs(dh));
+            reference_state_canonical_e7 = reference_state_canonical_e7 &&
+                canonical_e7_equal(snapshot.temperature_t4, ref_t) &&
+                canonical_e7_equal(snapshot.electron_fraction_input, ref_xee) &&
+                canonical_e7_equal(snapshot.charge_residual, ref_elcter) &&
+                canonical_e7_equal(snapshot.hmctot, ref_hmc);
+        } else {
+            reference_state_canonical_e7 = false;
         }
         states << std::setprecision(17) << snapshot.sequence << ',' << snapshot.kind << ',' << snapshot.call_index << ',' << snapshot.evaluation_index << ','
                << snapshot.temperature_t4 << ',' << snapshot.electron_fraction_input << ',' << snapshot.computed_electron_fraction << ','
@@ -3244,10 +3276,18 @@ int command_run_fixed_dsec(const Options& options) {
             << "  \"historical_fits_physical_equivalence_qualified\": " << (science_result.physical_equivalence_qualified ? "true" : "false") << ",\n";
     const bool reference_state_identity = max_temperature_delta == 0.0 && max_electron_fraction_delta == 0.0 &&
         max_charge_residual_delta == 0.0 && max_hmctot_delta == 0.0 && dsec_evaluations == 57 && snapshots.size() == 61;
-    summary << "  \"reference_state_identity\": " << (reference_state_identity ? "true" : "false")
-            << ",\n  \"production_promotion_ready\": false\n}\n";
+    const bool controller_qualification_complete = reference_state_canonical_e7 && reference_rows_classified == 61 &&
+        dsec_evaluations == 57 && snapshots.size() == 61;
+    summary << "  \"reference_rows_classified\": " << reference_rows_classified << ",\n"
+            << "  \"reference_state_identity\": " << (reference_state_identity ? "true" : "false") << ",\n"
+            << "  \"reference_state_canonical_e7\": " << (reference_state_canonical_e7 ? "true" : "false") << ",\n"
+            << "  \"canonical_digits_after_decimal\": 7,\n"
+            << "  \"canonical_zero_floor\": 1e-30,\n"
+            << "  \"controller_qualification_result\": \""
+            << (controller_qualification_complete ? "ACCEPT" : "REJECT") << "\",\n"
+            << "  \"production_promotion_ready\": false\n}\n";
 
-    const bool accepted = reference_state_identity && dsec_evaluations == 57 && snapshots.size() == 61 && cumulative.calls == 61 &&
+    const bool accepted = controller_qualification_complete && cumulative.calls == 61 &&
         cumulative.records_unsupported == 0 && cumulative.python_callbacks == 0 &&
         cumulative.records_evaluated == 61 * info.record_count && cumulative.elements_solved == 61 * info.element_count &&
         (options.skip_fits || (science_result.files_written == 9 && science_result.schema_complete &&
@@ -3275,7 +3315,12 @@ int command_run_fixed_dsec(const Options& options) {
               << "\nhistorical_fits_physical_equivalence_qualified=" << (science_result.physical_equivalence_qualified ? "true" : "false")
               << "\nradiation_input=" << evaluator_data.radiation_mode << "\nradiation_bins=" << evaluator_data.energy.size()
               << "\ntrajectory_mode=" << trajectory_mode
+              << "\nreference_rows_classified=" << reference_rows_classified
               << "\nreference_state_identity=" << (reference_state_identity ? "true" : "false")
+              << "\nreference_state_canonical_e7=" << (reference_state_canonical_e7 ? "true" : "false")
+              << "\ncanonical_digits_after_decimal=7"
+              << "\ncanonical_zero_floor=1e-30"
+              << "\ncontroller_qualification_result=" << (controller_qualification_complete ? "ACCEPT" : "REJECT")
               << "\nRESULT=" << (accepted ? "ACCEPT" : "REJECT") << "\n";
     xstar_thermal_context_destroy(thermal_context);
     xstar_fixed_state_context_destroy(fixed_context);
@@ -3374,7 +3419,7 @@ std::filesystem::path resolve_physical_asset(
 
 int command_run_physical(Options options) {
     if (options.backend != "cpp") {
-        std::cerr << "xstar_cpp run v0.6.48.7.46.22.2 supports --backend cpp only\n";
+        std::cerr << "xstar_cpp run v0.6.48.7.46.22.3 supports --backend cpp only\n";
         return 64;
     }
     if (options.parameters_path.empty() || options.atomic_db_path.empty() || options.output_dir.empty()) {
@@ -3480,7 +3525,7 @@ int command_run_physical(Options options) {
     {
         std::ofstream resolution(std::filesystem::path(options.output_dir) / "native_physical_run_asset_resolution.json");
         resolution << "{\n"
-                   << "  \"schema\": \"xstar-tools-v0648746222-native-physical-run-asset-resolution-v2\",\n"
+                   << "  \"schema\": \"xstar-tools-v0648746223-native-physical-run-asset-resolution-v3\",\n"
                    << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
                    << "  \"native_case\": \"" << case_dir.string() << "\",\n"
                    << "  \"coherent_trajectory\": \"" << trajectory.string() << "\",\n"
@@ -3618,7 +3663,7 @@ int command_run_physical(Options options) {
         std::filesystem::is_regular_file(output / "native_physical_run_state.json");
     std::ofstream summary(output / "native_physical_run_summary.json");
     summary << "{\n"
-            << "  \"schema\": \"xstar-tools-v0648746222-native-physical-run-v2\",\n"
+            << "  \"schema\": \"xstar-tools-v0648746223-native-physical-run-v3\",\n"
             << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
             << "  \"backend\": \"cpp\",\n"
             << "  \"controller_return_code\": " << controller_status << ",\n"
@@ -3709,6 +3754,7 @@ int main(int argc, char** argv) {
     if (options.command == "convergence-self-test") return command_convergence_self_test(options);
     if (options.command == "secant-ieee-self-test") return command_secant_ieee_self_test(options);
     if (options.command == "trajectory-alignment-self-test") return command_trajectory_alignment_self_test(options);
+    if (options.command == "controller-canonical-e7-self-test") return command_controller_canonical_e7_self_test(options);
     if (options.command == "fixed-state-self-test") return command_fixed_state_self_test(options, false);
     if (options.command == "run-fixed-state") return command_run_fixed_state(options);
     if (options.command == "fixed-state-batch-self-test") return command_fixed_state_self_test(options, true);

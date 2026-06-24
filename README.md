@@ -270,3 +270,8 @@ The standalone physical-run command now discovers the accepted v21.17.2 closure 
 ## v0.6.48.7.46.22.2 accepted controller profile
 
 `xstar_cpp run` now activates the same source-faithful native feature profile and source-ledger paths used by the accepted v21.17.2 canonical controller. Asset resolution fails before evaluation 1 if any required matrix closure, solve-row, Type-50 map, or magnesium thermal ledger is unavailable. Product parity remains a separate comparison gate.
+
+
+## v0.6.48.7.46.22.3 canonical controller and infrastructure separation
+
+The physical-run infrastructure now uses the accepted `.7e` scientific comparison contract for all 61 controller rows. Bit identity remains diagnostic. A strict product comparison that executes successfully and returns product parity `REJECT` no longer invalidates the native run-state/product-oracle infrastructure milestone.

@@ -1,5 +1,12 @@
 # CHANGELOG
 
+# 0.6.48.7.46.22.3 - 2026-06-23
+
+- Classify the completed 61-state controller with canonical `.7e` equality and the `1e-30` zero floor instead of obsolete bit identity for `hmctot`.
+- Record bit identity and canonical controller qualification separately.
+- Treat strict product-comparator return code 2 as a successfully executed parity rejection, not an infrastructure failure.
+- Preserve product contents, frozen oracles, physics arithmetic, ABI 60487, and blocked production promotion.
+
 # 0.6.48.7.46.22.2 - 2026-06-23
 
 - Activate the complete accepted v21.17.2 source-faithful controller profile inside `xstar_cpp run`.
