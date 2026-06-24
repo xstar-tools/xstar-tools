@@ -350,11 +350,13 @@ fitsfile* create_fits(const std::filesystem::path& path, const xstar_run_state::
     std::string origin = "xstar_tools native C++";
     std::string atdata = read_atdata(state.atomic_database_path);
     std::string mode = "NATIVE_CPP_LIVE_STATE";
+    std::string tau_mode = "NATIVE_OPACITY_TRAPEZOID";
     std::string run_id = state.native_run_id;
     fits_update_key(fptr, TSTRING, const_cast<char*>("CREATOR"), creator.data(), const_cast<char*>("native executable"), &status);
     fits_update_key(fptr, TSTRING, const_cast<char*>("ORIGIN"), origin.data(), nullptr, &status);
     fits_update_key(fptr, TSTRING, const_cast<char*>("ATDATA"), atdata.data(), const_cast<char*>("supplied atomic database metadata"), &status);
     fits_update_key(fptr, TSTRING, const_cast<char*>("DATAMODE"), mode.data(), const_cast<char*>("no benchmark payloads"), &status);
+    fits_update_key(fptr, TSTRING, const_cast<char*>("TAUMODE"), tau_mode.data(), const_cast<char*>("output-grid depths from native opacity"), &status);
     fits_update_key(fptr, TSTRING, const_cast<char*>("RUNID"), run_id.data(), const_cast<char*>("native writer run identity"), &status);
     fits_write_date(fptr, &status);
     check_fits(status, "write native primary metadata");
@@ -856,6 +858,7 @@ Result write_historical_science_products(
     const std::vector<double>& native_energy_ev) {
     (void)native_energy_ev;
     if (!state.product_state_complete || !state.native_detail_state_retained ||
+        !state.continuum_depths_derived_from_native_opacity ||
         !state.embedded_public_fits_payloads_absent || !state.embedded_full_xout_step_payload_absent) {
         throw std::runtime_error("native product state or anti-copy provenance is incomplete");
     }

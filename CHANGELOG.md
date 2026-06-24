@@ -1,5 +1,19 @@
 # CHANGELOG
 
+# v0.6.48.7.46.25.4 - 2026-06-24
+
+- Corrected the v25.3 five-zone `ProductWritingState` rejection.
+- Separated the 301,301-value source continuum workspace from the 9,999-bin public-product depth arrays.
+- Derived inward and outward output-grid continuum depths by trapezoidal integration of native opacity across four radial intervals.
+- Added explicit finite/grid-consistency validation and detailed state-finalization errors.
+- Added `TAUMODE=NATIVE_OPACITY_TRAPEZOID` to current-run FITS headers.
+- Made the runner print and archive `xstar_cpp_run.log` whenever the native process fails.
+- Made preflight explicitly limited to build and asset resolution.
+- Required all nine FITS files and `xout_step.log` in the post-run native provenance checker.
+- Excluded the current output directory from the package-embedding scan, so freshly generated products are not misclassified as embedded payloads.
+- Retained ABI 60487 and direct emissivity build/link inputs.
+- Numerical/byte parity and production promotion remain unqualified.
+
 # v0.6.48.7.46.25.3 - 2026-06-24
 
 - Restored all nine FITS products and `xout_step.log` as native `xstar_cpp` outputs.

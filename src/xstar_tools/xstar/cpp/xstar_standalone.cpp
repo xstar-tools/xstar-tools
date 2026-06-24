@@ -2002,6 +2002,7 @@ struct FixedDsecSnapshot {
     std::vector<double> populations;
     std::vector<double> radiation_energy_ev;
     std::vector<double> radiation_flux;
+    std::size_t source_continuum_tau_workspace_count = 0;
     std::vector<double> continuum_tau_in;
     std::vector<double> continuum_tau_out;
     std::vector<double> continuum_spectrum;
@@ -2573,12 +2574,11 @@ int fixed_dsec_evaluator(
 
     snapshot.radiation_energy_ev.assign(input.radiation_energy_ev, input.radiation_energy_ev + input.radiation_bin_count);
     snapshot.radiation_flux.assign(input.radiation_flux, input.radiation_flux + input.radiation_bin_count);
-    if (input.continuum_tau_in && input.continuum_tau_count) {
-        snapshot.continuum_tau_in.assign(input.continuum_tau_in, input.continuum_tau_in + input.continuum_tau_count);
-    }
-    if (input.continuum_tau_out && input.continuum_tau_count) {
-        snapshot.continuum_tau_out.assign(input.continuum_tau_out, input.continuum_tau_out + input.continuum_tau_count);
-    }
+    // The runtime continuum payload is the source internal workspace
+    // (301301 binary64 values for this benchmark), not the ncn2=9999 dpthc
+    // output grid.  Retain its provenance/count for the physics call but do
+    // not relabel or serialize those bytes as per-bin continuum depths.
+    snapshot.source_continuum_tau_workspace_count = input.continuum_tau_count;
 
     // Persist the free-free continuum as its own computed product before the
     // line/RRC/profile commit augments output.spectrum.  This duplicates the
@@ -3278,6 +3278,7 @@ int command_run_fixed_dsec(const Options& options) {
         target.populations = source.populations;
         target.radiation_energy_ev = source.radiation_energy_ev;
         target.radiation_flux = source.radiation_flux;
+        target.source_continuum_tau_workspace_count = source.source_continuum_tau_workspace_count;
         target.continuum_tau_in = source.continuum_tau_in;
         target.continuum_tau_out = source.continuum_tau_out;
         target.continuum_spectrum = source.continuum_spectrum;
@@ -3588,7 +3589,7 @@ std::filesystem::path resolve_physical_asset(
 
 int command_run_physical(Options options) {
     if (options.backend != "cpp") {
-        std::cerr << "xstar_cpp run v0.6.48.7.46.25.3 supports --backend cpp only\n";
+        std::cerr << "xstar_cpp run v0.6.48.7.46.25.4 supports --backend cpp only\n";
         return 64;
     }
     if (options.parameters_path.empty() || options.atomic_db_path.empty() || options.output_dir.empty()) {
@@ -3832,7 +3833,7 @@ int command_run_physical(Options options) {
         std::filesystem::is_regular_file(output / "native_physical_run_state.json");
     std::ofstream summary(output / "native_physical_run_summary.json");
     summary << "{\n"
-            << "  \"schema\": \"xstar-tools-v0648746253-native-physical-run-v1\",\n"
+            << "  \"schema\": \"xstar-tools-v0648746254-native-physical-run-v1\",\n"
             << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
             << "  \"backend\": \"cpp\",\n"
             << "  \"controller_return_code\": " << controller_status << ",\n"

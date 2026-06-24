@@ -37,6 +37,7 @@ Result write_native_step_log(
     const std::filesystem::path& output_dir,
     xstar_run_state::ProductWritingState& state) {
     if (!state.product_state_complete || !state.native_detail_state_retained ||
+        !state.continuum_depths_derived_from_native_opacity ||
         !state.embedded_public_fits_payloads_absent || !state.embedded_full_xout_step_payload_absent) {
         throw std::runtime_error("native xout_step.log state or provenance is incomplete");
     }
@@ -53,6 +54,7 @@ Result write_native_step_log(
     out << "embedded public FITS payloads absent true\n";
     out << "embedded full xout_step payload absent true\n";
     out << "native detail state retained true\n";
+    out << "continuum depths derived from native opacity true\n";
     out << "native fixed evaluations " << state.fixed_evaluations.size() << '\n';
     out << "accepted radial zones " << state.radial_zones.size() << '\n';
     out << "parameter rows " << state.parameter_rows.size() << '\n';
@@ -105,6 +107,7 @@ Result write_native_step_log(
     out << "  radial geometry derived from input column, density, and initial radius\n";
     out << "  line and RRC rows derived from native per-record diagnostics\n";
     out << "  continuum and spectrum rows derived from native accepted snapshots\n";
+    out << "  output-grid continuum depths integrated from native opacity; source workspace not relabeled\n";
     out.flush();
 
     const double formatter_seconds = std::chrono::duration<double>(

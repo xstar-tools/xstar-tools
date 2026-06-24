@@ -39,6 +39,12 @@ struct FixedEvaluationState {
     std::vector<double> populations;
     std::vector<double> radiation_energy_ev;
     std::vector<double> radiation_flux;
+    // Size of the source-faithful internal continuum workspace supplied to
+    // the fixed-state engine.  This workspace is not the ncn2 output-grid
+    // dpthc array and must never be serialized as one.
+    std::size_t source_continuum_tau_workspace_count = 0;
+    // Output-grid continuum depths derived from the accepted native opacity
+    // snapshots during WholeRunAccumulatedState finalization.
     std::vector<double> continuum_tau_in;
     std::vector<double> continuum_tau_out;
     std::vector<double> continuum_spectrum;
@@ -115,6 +121,7 @@ struct WholeRunAccumulatedState {
     bool radial_state_complete = false;
     bool native_product_inputs_complete = false;
     bool native_detail_state_retained = false;
+    bool continuum_depths_derived_from_native_opacity = false;
 };
 
 struct ProductWritingState {
@@ -136,6 +143,7 @@ struct ProductWritingState {
     bool radial_state_complete = false;
     bool native_product_inputs_complete = false;
     bool native_detail_state_retained = false;
+    bool continuum_depths_derived_from_native_opacity = false;
     bool product_state_complete = false;
     bool product_parity_qualified = false;
     bool xout_abund1_computed_from_native_state = false;

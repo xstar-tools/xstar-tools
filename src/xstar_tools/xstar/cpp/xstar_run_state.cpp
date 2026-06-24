@@ -1,6 +1,7 @@
 #include "xstar_run_state.hpp"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstring>
@@ -59,23 +60,121 @@ std::uint32_t float_bits(float value) {
     return bits;
 }
 
-bool diagnostics_complete(
+bool finite_vector(const std::vector<double>& values) {
+    return std::all_of(values.begin(), values.end(), [](double value) {
+        return std::isfinite(value);
+    });
+}
+
+void derive_output_grid_continuum_depths(std::vector<RadialZoneState>& zones) {
+    if (zones.size() != 5) {
+        throw std::runtime_error("native continuum-depth reduction requires five accepted boundary states");
+    }
+    const std::size_t bins = zones.front().accepted_controller.evaluation.radiation_energy_ev.size();
+    if (bins == 0) {
+        throw std::runtime_error("native continuum-depth reduction has an empty radiation grid");
+    }
+    for (const auto& zone : zones) {
+        const auto& evaluation = zone.accepted_controller.evaluation;
+        if (evaluation.radiation_energy_ev.size() != bins ||
+            evaluation.radiation_flux.size() != bins ||
+            evaluation.continuum_spectrum.size() != bins ||
+            evaluation.spectrum.size() != bins || evaluation.opacity.size() != bins) {
+            throw std::runtime_error("accepted native snapshots do not share one complete output radiation grid");
+        }
+        if (evaluation.source_continuum_tau_workspace_count == 0) {
+            throw std::runtime_error("accepted native snapshot did not consume the source continuum workspace");
+        }
+        if (!finite_vector(evaluation.radiation_energy_ev) || !finite_vector(evaluation.radiation_flux) ||
+            !finite_vector(evaluation.continuum_spectrum) || !finite_vector(evaluation.spectrum) ||
+            !finite_vector(evaluation.opacity)) {
+            throw std::runtime_error("accepted native snapshot contains non-finite output-grid state");
+        }
+        const auto& reference_grid = zones.front().accepted_controller.evaluation.radiation_energy_ev;
+        if (!std::equal(evaluation.radiation_energy_ev.begin(), evaluation.radiation_energy_ev.end(),
+                        reference_grid.begin())) {
+            throw std::runtime_error("accepted native snapshots use different output radiation grids");
+        }
+    }
+
+    for (auto& zone : zones) {
+        auto& evaluation = zone.accepted_controller.evaluation;
+        evaluation.continuum_tau_in.assign(bins, 0.0);
+        evaluation.continuum_tau_out.assign(bins, 0.0);
+    }
+
+    // The five retained controller states represent radial boundaries, hence
+    // four physical intervals.  Integrate the native per-bin opacity across
+    // each interval with a trapezoidal rule.  This constructs dpthc on the
+    // output grid from live C++ state and never truncates or reinterprets the
+    // 301301-value source workspace.
+    for (std::size_t bin = 0; bin < bins; ++bin) {
+        std::array<double,4> interval_tau{};
+        for (std::size_t interval = 0; interval < 4; ++interval) {
+            const auto& left = zones[interval];
+            const auto& right = zones[interval + 1];
+            const double width = std::max(0.0, right.radius_cm - left.radius_cm);
+            const double opacity_left = left.accepted_controller.evaluation.opacity[bin];
+            const double opacity_right = right.accepted_controller.evaluation.opacity[bin];
+            interval_tau[interval] = 0.5 * (opacity_left + opacity_right) * width;
+            if (!std::isfinite(interval_tau[interval])) {
+                throw std::runtime_error("native continuum-depth integration produced a non-finite value");
+            }
+        }
+        double forward = 0.0;
+        zones[0].accepted_controller.evaluation.continuum_tau_in[bin] = 0.0;
+        for (std::size_t boundary = 1; boundary < zones.size(); ++boundary) {
+            forward += interval_tau[boundary - 1];
+            zones[boundary].accepted_controller.evaluation.continuum_tau_in[bin] = forward;
+        }
+        double backward = 0.0;
+        zones.back().accepted_controller.evaluation.continuum_tau_out[bin] = 0.0;
+        for (std::size_t boundary = zones.size() - 1; boundary-- > 0;) {
+            backward += interval_tau[boundary];
+            zones[boundary].accepted_controller.evaluation.continuum_tau_out[bin] = backward;
+        }
+    }
+}
+
+std::string diagnostics_incomplete_reason(
     const std::filesystem::path& root,
     const std::vector<RadialZoneState>& zones) {
-    if (!std::filesystem::is_directory(root) || zones.size() != 5) return false;
+    if (!std::filesystem::is_directory(root)) return "native diagnostics directory is missing";
+    if (zones.size() != 5) return "accepted radial-state count is not five";
     for (const auto& zone : zones) {
         std::ostringstream stem;
         stem << "evaluation_" << std::setw(4) << std::setfill('0')
              << zone.accepted_controller.accepted_sequence;
-        if (!std::filesystem::is_regular_file(root / (stem.str() + "_records.csv"))) return false;
+        const auto records = root / (stem.str() + "_records.csv");
+        if (!std::filesystem::is_regular_file(records)) {
+            return "record diagnostics missing for sequence " +
+                std::to_string(zone.accepted_controller.accepted_sequence);
+        }
         const auto& evaluation = zone.accepted_controller.evaluation;
-        if (evaluation.populations.empty() || evaluation.radiation_energy_ev.empty() ||
-            evaluation.spectrum.size() != evaluation.radiation_energy_ev.size() ||
-            evaluation.opacity.size() != evaluation.radiation_energy_ev.size() ||
-            evaluation.continuum_tau_in.size() != evaluation.radiation_energy_ev.size() ||
-            evaluation.continuum_tau_out.size() != evaluation.radiation_energy_ev.size()) return false;
+        const std::size_t bins = evaluation.radiation_energy_ev.size();
+        if (evaluation.populations.empty()) {
+            return "population state missing for sequence " +
+                std::to_string(zone.accepted_controller.accepted_sequence);
+        }
+        if (bins == 0 || evaluation.radiation_flux.size() != bins ||
+            evaluation.continuum_spectrum.size() != bins || evaluation.spectrum.size() != bins ||
+            evaluation.opacity.size() != bins || evaluation.continuum_tau_in.size() != bins ||
+            evaluation.continuum_tau_out.size() != bins) {
+            std::ostringstream detail;
+            detail << "output-grid state incomplete for sequence "
+                   << zone.accepted_controller.accepted_sequence
+                   << " bins=" << bins
+                   << " flux=" << evaluation.radiation_flux.size()
+                   << " continuum=" << evaluation.continuum_spectrum.size()
+                   << " spectrum=" << evaluation.spectrum.size()
+                   << " opacity=" << evaluation.opacity.size()
+                   << " tau_in=" << evaluation.continuum_tau_in.size()
+                   << " tau_out=" << evaluation.continuum_tau_out.size()
+                   << " source_tau_workspace=" << evaluation.source_continuum_tau_workspace_count;
+            return detail.str();
+        }
     }
-    return true;
+    return {};
 }
 
 } // namespace
@@ -156,6 +255,9 @@ void prepare_native_product_state(
         state.parameter_rows.push_back(std::move(row));
     }
 
+    derive_output_grid_continuum_depths(state.radial_zones);
+    state.continuum_depths_derived_from_native_opacity = true;
+
     state.product_schema_path.clear();
     state.native_diagnostics_path = diagnostics_path;
     const auto run_ticks = std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -165,11 +267,13 @@ void prepare_native_product_state(
     state.embedded_full_xout_step_payload_absent = true;
     state.product_schema_complete = true;
     state.radial_state_complete = true;
-    state.native_detail_state_retained = diagnostics_complete(diagnostics_path, state.radial_zones);
+    const std::string diagnostic_error = diagnostics_incomplete_reason(diagnostics_path, state.radial_zones);
+    state.native_detail_state_retained = diagnostic_error.empty();
     state.native_product_inputs_complete = state.native_detail_state_retained &&
+        state.continuum_depths_derived_from_native_opacity &&
         state.embedded_public_fits_payloads_absent && state.embedded_full_xout_step_payload_absent;
     if (!state.native_detail_state_retained) {
-        throw std::runtime_error("native detail-state diagnostics are incomplete for the five accepted zones");
+        throw std::runtime_error("native detail-state diagnostics are incomplete: " + diagnostic_error);
     }
 }
 
@@ -192,9 +296,12 @@ ProductWritingState build_product_writing_state(const WholeRunAccumulatedState& 
     product.product_schema_complete = state.product_schema_complete;
     product.radial_state_complete = state.radial_state_complete;
     product.native_detail_state_retained = state.native_detail_state_retained;
+    product.continuum_depths_derived_from_native_opacity =
+        state.continuum_depths_derived_from_native_opacity;
     product.native_product_inputs_complete = state.native_product_inputs_complete;
     product.product_state_complete = state.product_schema_complete && state.radial_state_complete &&
-        state.native_detail_state_retained && state.native_product_inputs_complete;
+        state.native_detail_state_retained && state.continuum_depths_derived_from_native_opacity &&
+        state.native_product_inputs_complete;
     product.product_parity_qualified = false;
     return product;
 }
@@ -207,7 +314,7 @@ void write_run_state_manifest(
     if (!out) throw std::runtime_error("cannot create run-state manifest: " + path.string());
     out << std::setprecision(17)
         << "{\n"
-        << "  \"schema\": \"xstar-tools-v0648746253-native-product-state-v1\",\n"
+        << "  \"schema\": \"xstar-tools-v0648746254-native-product-state-v1\",\n"
         << "  \"release\": \"" << json_escape(whole.release) << "\",\n"
         << "  \"backend\": \"" << json_escape(whole.backend) << "\",\n"
         << "  \"parameters_path\": \"" << json_escape(whole.parameters_path.string()) << "\",\n"
@@ -219,6 +326,8 @@ void write_run_state_manifest(
         << "  \"accepted_controller_states\": " << whole.accepted_controller_states.size() << ",\n"
         << "  \"radial_zones\": " << whole.radial_zones.size() << ",\n"
         << "  \"native_detail_state_retained\": " << (product.native_detail_state_retained ? "true" : "false") << ",\n"
+        << "  \"continuum_depths_derived_from_native_opacity\": "
+        << (product.continuum_depths_derived_from_native_opacity ? "true" : "false") << ",\n"
         << "  \"embedded_public_fits_payloads_absent\": " << (product.embedded_public_fits_payloads_absent ? "true" : "false") << ",\n"
         << "  \"embedded_full_xout_step_payload_absent\": " << (product.embedded_full_xout_step_payload_absent ? "true" : "false") << ",\n"
         << "  \"public_product_runtime_reads_benchmark_bytes\": false,\n"
