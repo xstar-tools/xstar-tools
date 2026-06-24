@@ -9,7 +9,7 @@ from xstar_tools.xstar import source_capture_trajectory_v0487462272 as trajector
 from xstar_tools.xstar import source_capture_resolver_v0487462271 as resolver
 
 ROOT = Path(__file__).resolve().parents[1]
-RELEASE = "0.6.48.7.46.23.1"
+RELEASE = "0.6.48.7.46.23.2"
 
 
 def _identity(sequence: int) -> tuple[str, int, int]:

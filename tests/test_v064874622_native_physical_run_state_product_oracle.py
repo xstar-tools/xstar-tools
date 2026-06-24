@@ -25,11 +25,11 @@ def sha256(path: Path) -> str:
 
 
 def test_release_and_abi_are_retained() -> None:
-    assert RELEASE == "0.6.48.7.46.23.1"
-    assert 'version = "0.6.48.7.46.23.1"' in (ROOT / "pyproject.toml").read_text()
+    assert RELEASE == "0.6.48.7.46.23.2"
+    assert 'version = "0.6.48.7.46.23.2"' in (ROOT / "pyproject.toml").read_text()
     api = (ROOT / "src/xstar_tools/xstar/cpp/xstar_api.h").read_text()
     assert '#define XSTAR_API_ABI_VERSION 60487u' in api
-    assert '#define XSTAR_API_VERSION_STRING "0.6.48.7.46.23.1"' in api
+    assert '#define XSTAR_API_VERSION_STRING "0.6.48.7.46.23.2"' in api
 
 
 def test_oracles_are_frozen_separately() -> None:
@@ -64,7 +64,7 @@ def test_python_oracle_self_comparison_accepts(tmp_path: Path) -> None:
     assert report["gates"]["FITS_HEADERS_EXACT"] == "ACCEPT"
     assert report["gates"]["PARAMETER_TABLE_EXACT"] == "ACCEPT"
     assert report["gates"]["FITS_NUMERIC_ARRAYS_EXACT"] == "ACCEPT"
-    assert report["gates"]["XOUT_STEP_PARITY"] == "NOT_RUN"
+    assert report["gates"]["XOUT_STEP_PARITY"] == "ACCEPT"
 
 
 def test_fortran_is_not_substituted_for_python_oracle(tmp_path: Path) -> None:

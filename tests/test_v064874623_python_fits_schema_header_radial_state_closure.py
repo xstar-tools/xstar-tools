@@ -24,10 +24,10 @@ def table_rows(name: str) -> list[dict[str, str]]:
 
 
 def test_release_version_and_abi() -> None:
-    assert 'version = "0.6.48.7.46.23.1"' in (ROOT / "pyproject.toml").read_text()
-    assert '__version__ = "0.6.48.7.46.23.1"' in (ROOT / "src/xstar_tools/__init__.py").read_text()
+    assert 'version = "0.6.48.7.46.23.2"' in (ROOT / "pyproject.toml").read_text()
+    assert '__version__ = "0.6.48.7.46.23.2"' in (ROOT / "src/xstar_tools/__init__.py").read_text()
     api = (ROOT / "src/xstar_tools/xstar/cpp/xstar_api.h").read_text()
-    assert '#define XSTAR_API_VERSION_STRING "0.6.48.7.46.23.1"' in api
+    assert '#define XSTAR_API_VERSION_STRING "0.6.48.7.46.23.2"' in api
     assert '#define XSTAR_API_ABI_VERSION 60487u' in api
 
 

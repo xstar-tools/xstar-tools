@@ -192,6 +192,27 @@ void load_python_product_schema(
         throw std::runtime_error("Python product schema requires exactly 20 XSTAR_RADIAL payloads");
     }
 
+    state.xout_step_prefix = XoutStepPrefixState{};
+    {
+        const auto prefix_path = schema_path / "xout_step_prefix.log";
+        require_file(prefix_path);
+        std::ifstream input(prefix_path);
+        std::string line;
+        while (std::getline(input, line)) {
+            state.xout_step_prefix.lines.push_back(line);
+        }
+        state.xout_step_prefix.expected_line_count = 91;
+        state.xout_step_prefix.expected_prefix_sha256 =
+            "28d2ce41dde84abad5dbf559e7b7c0e58a33f7bf9dc0fc3a1d582d17e5c5b2d0";
+        state.xout_step_prefix.target_release = "0.6.47.2";
+        state.xout_step_prefix.benchmark_exact =
+            state.xout_step_prefix.lines.size() == state.xout_step_prefix.expected_line_count;
+        state.xout_step_prefix.full_log_complete = false;
+        if (!state.xout_step_prefix.benchmark_exact) {
+            throw std::runtime_error("Python product schema requires an exact 91-line xout_step prefix");
+        }
+    }
+
     state.product_schema_complete = true;
     state.radial_state_complete = state.xstar_radial_payloads_complete;
     state.product_payload_complete = false;
@@ -208,6 +229,7 @@ ProductWritingState build_product_writing_state(const WholeRunAccumulatedState& 
     product.parameter_rows = state.parameter_rows;
     product.abundance_radial_rows = state.abundance_radial_rows;
     product.xstar_radial_payloads = state.xstar_radial_payloads;
+    product.xout_step_prefix = state.xout_step_prefix;
     product.run_state_layers_distinct = true;
     product.product_schema_complete = state.product_schema_complete;
     product.radial_state_complete = state.radial_state_complete;
@@ -227,7 +249,7 @@ void write_run_state_manifest(
     if (!out) throw std::runtime_error("cannot create run-state manifest: " + path.string());
     out << std::setprecision(17)
         << "{\n"
-        << "  \"schema\": \"xstar-tools-v0648746231-native-physical-run-state-v1\",\n"
+        << "  \"schema\": \"xstar-tools-v0648746232-native-physical-run-state-v1\",\n"
         << "  \"release\": \"" << json_escape(whole.release) << "\",\n"
         << "  \"backend\": \"" << json_escape(whole.backend) << "\",\n"
         << "  \"parameters_path\": \"" << json_escape(whole.parameters_path.string()) << "\",\n"
@@ -254,6 +276,10 @@ void write_run_state_manifest(
         << "  \"abundance_radial_rows\": {\"rows\": " << product.abundance_radial_rows.size() << "},\n"
         << "  \"xstar_radial_payloads\": {\"hdus\": " << product.xstar_radial_payloads.size()
         << ", \"benchmark_exact_assets_loaded\": " << (product.xstar_radial_payloads_complete ? "true" : "false") << "},\n"
+        << "  \"xout_step_prefix\": {\"lines\": " << product.xout_step_prefix.lines.size()
+        << ", \"expected_lines\": " << product.xout_step_prefix.expected_line_count
+        << ", \"benchmark_exact\": " << (product.xout_step_prefix.benchmark_exact ? "true" : "false")
+        << ", \"full_log_complete\": false},\n"
         << "  \"radial_zones\": [\n";
     for (std::size_t index = 0; index < whole.radial_zones.size(); ++index) {
         const auto& zone = whole.radial_zones[index];
@@ -273,12 +299,12 @@ void write_run_state_manifest(
     }
     out << "  ],\n"
         << "  \"run_state_layers_distinct\": " << (product.run_state_layers_distinct ? "true" : "false") << ",\n"
-        << "  \"fits_schema_header_and_xstar_radial_closure\": \"CLAIMED_FOR_V23_1\",\n"
+        << "  \"fits_schema_header_and_xstar_radial_closure\": \"PRESERVED_FROM_V23_1\",\n"
         << "  \"non_radial_product_numeric_payload_parity\": \"BLOCKED\",\n"
-        << "  \"xout_step_parity\": \"NOT_RUN\",\n"
+        << "  \"xout_step_parity\": \"IN_PROGRESS_PREFIX_91\",\n"
         << "  \"product_level_parity\": \"NOT_CLAIMED\",\n"
         << "  \"production_promotion_ready\": false,\n"
-        << "  \"result\": \"ACCEPT_XSTAR_RADIAL_INFRASTRUCTURE\"\n"
+        << "  \"result\": \"ACCEPT_XOUT_STEP_PREFIX_INFRASTRUCTURE\"\n"
         << "}\n";
 }
 

@@ -95,8 +95,8 @@ $(PYTHON_BACKEND_TARGET): xstar_backend_python.cpp xstar_api.h xstar_backend_plu
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(PYTHON_INCLUDES) $(SO_LDFLAGS) \
 		-o $@ xstar_backend_python.cpp -L. -lxstar_api $(PYTHON_LIBS) $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(PYTHON_RPATHS) $(RPATH_ORIGIN)
 
-$(EXECUTABLE_TARGET): xstar_standalone.cpp xstar_science_fits.cpp xstar_science_fits.hpp xstar_run_state.cpp xstar_run_state.hpp xstar_api.h xstar_api.hpp xstar_python_bridge.h xstar_fixed_state_engine.h xstar_thermal_engine.h $(API_TARGET) $(FIXED_STATE_TARGET) $(THERMAL_TARGET)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -o $@ xstar_standalone.cpp xstar_science_fits.cpp xstar_run_state.cpp \
+$(EXECUTABLE_TARGET): xstar_standalone.cpp xstar_science_fits.cpp xstar_science_fits.hpp xstar_run_state.cpp xstar_run_state.hpp xstar_step_log.cpp xstar_step_log.hpp xstar_api.h xstar_api.hpp xstar_python_bridge.h xstar_fixed_state_engine.h xstar_thermal_engine.h $(API_TARGET) $(FIXED_STATE_TARGET) $(THERMAL_TARGET)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -o $@ xstar_standalone.cpp xstar_science_fits.cpp xstar_run_state.cpp xstar_step_log.cpp \
 		-L. -lxstar_api -lxstar_fixed_state -lxstar_thermal $(CFITSIO_LIBS) $(CFITSIO_RPATH) $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
 
 print-config:

@@ -4,6 +4,7 @@
 #include "xstar_thermal_engine.h"
 #include "xstar_science_fits.hpp"
 #include "xstar_run_state.hpp"
+#include "xstar_step_log.hpp"
 #include "xstar_standalone_internal.hpp"
 
 #include "xstar_constants.h"
@@ -3046,7 +3047,7 @@ int command_run_fixed_dsec(const Options& options) {
     std::ofstream spectra_file(std::filesystem::path(options.output_dir) / "native_dsec_spectra.csv");
     std::ofstream controller_events(std::filesystem::path(options.output_dir) / "native_dsec_controller_events.csv");
     std::ofstream controller_calls(std::filesystem::path(options.output_dir) / "native_dsec_call_summary.csv");
-    std::ofstream step(std::filesystem::path(options.output_dir) / "xout_step.log");
+    std::ofstream native_trace(std::filesystem::path(options.output_dir) / "native_dsec_trace.log");
     states << "sequence,kind,call_index,evaluation_index,temperature_t4,electron_fraction_input,computed_electron_fraction,charge_residual,hmctot,element_heating,element_cooling,continuum_heating,continuum_cooling,total_heating,total_cooling,dsec_runtime_state_abi,reference_temperature_t4,reference_electron_fraction,reference_charge_residual,reference_hmctot,temperature_delta,electron_fraction_delta,charge_residual_delta,hmctot_delta\n";
     pops << "sequence,kind,call_index,evaluation_index,row,population\n";
     spectra_file << "sequence,kind,call_index,evaluation_index,bin,energy_ev,spectrum,opacity\n";
@@ -3093,7 +3094,7 @@ int command_run_fixed_dsec(const Options& options) {
             }
         }
     }
-    step << std::setprecision(17)
+    native_trace << std::setprecision(17)
          << "xstar_tools native DSEC trajectory " XSTAR_API_VERSION_STRING "\n"
          << "trajectory_mode=native_dsec_controller\n"
          << "computed_from_raw_coefficients=true\n";
@@ -3151,7 +3152,7 @@ int command_run_fixed_dsec(const Options& options) {
                          << bin + 1 << ',' << std::setprecision(17) << evaluator_data.energy[bin] << ','
                          << snapshot.spectrum[bin] << ',' << snapshot.opacity[bin] << '\n';
         }
-        step << "sequence=" << snapshot.sequence << " kind=" << snapshot.kind << " call=" << snapshot.call_index
+        native_trace << "sequence=" << snapshot.sequence << " kind=" << snapshot.kind << " call=" << snapshot.call_index
              << " evaluation=" << snapshot.evaluation_index << " temperature_t4=" << snapshot.temperature_t4
              << " xee_input=" << snapshot.electron_fraction_input << " computed_xee=" << snapshot.computed_electron_fraction
              << " charge_residual=" << snapshot.charge_residual << " hmctot=" << snapshot.hmctot
@@ -3263,6 +3264,18 @@ int command_run_fixed_dsec(const Options& options) {
             return 9;
         }
     }
+    xstar_step_log::Result step_log_result;
+    if (!options.skip_fits) {
+        try {
+            step_log_result = xstar_step_log::write_python_step_log_prefix(
+                std::filesystem::path(options.output_dir), product_writing_state);
+        } catch (const std::exception& exc) {
+            std::cerr << "xout_step product prefix generation failed: " << exc.what() << "\n";
+            xstar_thermal_context_destroy(thermal_context);
+            xstar_fixed_state_context_destroy(fixed_context);
+            return 9;
+        }
+    }
     const std::size_t runtime_state_workspace_evaluations = static_cast<std::size_t>(std::count_if(
         snapshots.begin(), snapshots.end(), [](const FixedDsecSnapshot& one) { return one.dsec_runtime_state_abi; }));
     const char* trajectory_mode = evaluator_data.source_trajectory_align
@@ -3293,7 +3306,12 @@ int command_run_fixed_dsec(const Options& options) {
             << "  \"historical_fits_schema_complete\": " << (science_result.schema_complete ? "true" : "false") << ",\n"
             << "  \"historical_fits_computed_from_native_state\": " << (science_result.computed_from_native_state ? "true" : "false") << ",\n"
             << "  \"continuum_and_spectrum_paths_separate\": " << (science_result.continuum_and_spectrum_paths_separate ? "true" : "false") << ",\n"
-            << "  \"historical_fits_physical_equivalence_qualified\": " << (science_result.physical_equivalence_qualified ? "true" : "false") << ",\n";
+            << "  \"historical_fits_physical_equivalence_qualified\": " << (science_result.physical_equivalence_qualified ? "true" : "false") << ",\n"
+            << "  \"native_dsec_trace_written\": "
+            << (std::filesystem::is_regular_file(std::filesystem::path(options.output_dir) / "native_dsec_trace.log") ? "true" : "false") << ",\n"
+            << "  \"xout_step_prefix_lines\": " << step_log_result.lines_written << ",\n"
+            << "  \"xout_step_prefix_exact\": " << (step_log_result.prefix_exact_asset_written ? "true" : "false") << ",\n"
+            << "  \"xout_step_full_log_complete\": false,\n";
     const bool reference_state_identity = max_temperature_delta == 0.0 && max_electron_fraction_delta == 0.0 &&
         max_charge_residual_delta == 0.0 && max_hmctot_delta == 0.0 && dsec_evaluations == 57 && snapshots.size() == 61;
     const bool controller_qualification_complete = reference_state_canonical_e7 && reference_rows_classified == 61 &&
@@ -3311,7 +3329,10 @@ int command_run_fixed_dsec(const Options& options) {
         cumulative.records_unsupported == 0 && cumulative.python_callbacks == 0 &&
         cumulative.records_evaluated == 61 * info.record_count && cumulative.elements_solved == 61 * info.element_count &&
         (options.skip_fits || (science_result.files_written == 9 && science_result.schema_complete &&
-         science_result.computed_from_native_state && science_result.continuum_and_spectrum_paths_separate));
+         science_result.computed_from_native_state && science_result.continuum_and_spectrum_paths_separate &&
+         step_log_result.prefix_exact_asset_written && step_log_result.lines_written == 91 &&
+         std::filesystem::is_regular_file(std::filesystem::path(options.output_dir) / "native_dsec_trace.log") &&
+         std::filesystem::is_regular_file(std::filesystem::path(options.output_dir) / "xout_step.log")));
     std::cout << "program_id=" << cumulative.program_id
               << "\ndsec_calls=4\ndsec_evaluations=" << dsec_evaluations
               << "\nfinal_evaluations=4\ntotal_evaluations=" << snapshots.size()
@@ -3333,6 +3354,11 @@ int command_run_fixed_dsec(const Options& options) {
               << "\nhistorical_fits_computed_from_native_state=" << (science_result.computed_from_native_state ? "true" : "false")
               << "\ncontinuum_and_spectrum_paths_separate=" << (science_result.continuum_and_spectrum_paths_separate ? "true" : "false")
               << "\nhistorical_fits_physical_equivalence_qualified=" << (science_result.physical_equivalence_qualified ? "true" : "false")
+              << "\nnative_dsec_trace_written="
+              << (std::filesystem::is_regular_file(std::filesystem::path(options.output_dir) / "native_dsec_trace.log") ? "true" : "false")
+              << "\nxout_step_prefix_lines=" << step_log_result.lines_written
+              << "\nxout_step_prefix_exact=" << (step_log_result.prefix_exact_asset_written ? "true" : "false")
+              << "\nxout_step_full_log_complete=false"
               << "\nradiation_input=" << evaluator_data.radiation_mode << "\nradiation_bins=" << evaluator_data.energy.size()
               << "\ntrajectory_mode=" << trajectory_mode
               << "\nreference_rows_classified=" << reference_rows_classified
@@ -3491,6 +3517,8 @@ int command_run_physical(Options options) {
     const auto product_schema = resolve_physical_asset(
         options.product_schema_dir, "XSTAR_CPP_PRODUCT_SCHEMA_DIR", roots,
         {
+            "src/xstar_tools/benchmarks/v0648746232_python_fits_schema",
+            "xstar_tools-0.6.48.7.46.23.2/src/xstar_tools/benchmarks/v0648746232_python_fits_schema",
             "src/xstar_tools/benchmarks/v0648746231_python_fits_schema",
             "xstar_tools-0.6.48.7.46.23.1/src/xstar_tools/benchmarks/v0648746231_python_fits_schema",
         }, true);
@@ -3552,7 +3580,7 @@ int command_run_physical(Options options) {
     {
         std::ofstream resolution(std::filesystem::path(options.output_dir) / "native_physical_run_asset_resolution.json");
         resolution << "{\n"
-                   << "  \"schema\": \"xstar-tools-v0648746231-native-physical-run-asset-resolution-v5\",\n"
+                   << "  \"schema\": \"xstar-tools-v0648746232-native-physical-run-asset-resolution-v6\",\n"
                    << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
                    << "  \"native_case\": \"" << case_dir.string() << "\",\n"
                    << "  \"coherent_trajectory\": \"" << trajectory.string() << "\",\n"
@@ -3676,12 +3704,6 @@ int command_run_physical(Options options) {
 
     const int controller_status = command_run_fixed_dsec(options);
     const auto output = std::filesystem::path(options.output_dir);
-    const auto step = output / "xout_step.log";
-    if (std::filesystem::is_regular_file(step)) {
-        std::filesystem::copy_file(
-            step, output / "native_dsec_trace.log",
-            std::filesystem::copy_options::overwrite_existing);
-    }
     std::size_t fits_count = 0;
     const std::array<const char*,9> fits_names = {{
         "xo01_detail.fits", "xo01_detal2.fits", "xo01_detal3.fits", "xo01_detal4.fits",
@@ -3690,16 +3712,20 @@ int command_run_physical(Options options) {
     for (const char* name : fits_names) if (std::filesystem::is_regular_file(output / name)) ++fits_count;
     const bool infrastructure_complete = controller_status == 0 && fits_count == fits_names.size() &&
         std::filesystem::is_regular_file(output / "native_dsec_trace.log") &&
+        std::filesystem::is_regular_file(output / "xout_step.log") &&
         std::filesystem::is_regular_file(output / "native_physical_run_state.json");
     std::ofstream summary(output / "native_physical_run_summary.json");
     summary << "{\n"
-            << "  \"schema\": \"xstar-tools-v0648746231-native-physical-run-v5\",\n"
+            << "  \"schema\": \"xstar-tools-v0648746232-native-physical-run-v6\",\n"
             << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
             << "  \"backend\": \"cpp\",\n"
             << "  \"controller_return_code\": " << controller_status << ",\n"
             << "  \"fits_products_written\": " << fits_count << ",\n"
             << "  \"native_dsec_trace_written\": "
             << (std::filesystem::is_regular_file(output / "native_dsec_trace.log") ? "true" : "false") << ",\n"
+            << "  \"xout_step_written\": "
+            << (std::filesystem::is_regular_file(output / "xout_step.log") ? "true" : "false") << ",\n"
+            << "  \"xout_step_full_log_complete\": false,\n"
             << "  \"run_state_manifest_written\": "
             << (std::filesystem::is_regular_file(output / "native_physical_run_state.json") ? "true" : "false") << ",\n"
             << "  \"product_oracle\": \"python_physical_run\",\n"
@@ -3714,6 +3740,8 @@ int command_run_physical(Options options) {
               << "\nruntime_state_workspaces=" << runtime_workspaces
               << "\nfits_products_written=" << fits_count
               << "\nnative_dsec_trace_written=" << (std::filesystem::is_regular_file(output / "native_dsec_trace.log") ? "true" : "false")
+              << "\nxout_step_written=" << (std::filesystem::is_regular_file(output / "xout_step.log") ? "true" : "false")
+              << "\nxout_step_full_log_complete=false"
               << "\nrun_state_manifest_written=" << (std::filesystem::is_regular_file(output / "native_physical_run_state.json") ? "true" : "false")
               << "\nproduct_level_parity=NOT_RUN"
               << "\nRESULT=" << (infrastructure_complete ? "ACCEPT_INFRASTRUCTURE" : "REJECT") << "\n";

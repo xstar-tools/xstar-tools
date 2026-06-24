@@ -1,3 +1,7 @@
+## v0.6.48.7.46.23.2 xout_step prefix and native-trace separation
+
+The standalone controller now writes its 61-state diagnostic stream only to `native_dsec_trace.log`. A dedicated product writer creates `xout_step.log` and reproduces the exact first 91 lines of the frozen Python physical-run benchmark: startup/atomic-database metadata, print option 3, input parameters, run preamble, and radial progress. Full log parity remains in progress from line 92 onward. All v23.1 FITS and `XSTAR_RADIAL` closure gates are preserved; ABI remains 60487. Run `run_v048746232_xout_step_prefix_and_native_trace_separation.sh`.
+
 ## v0.6.48.7.46.23.1 radial-product milestone
 
 The standalone product writer now emits all 20 Python-benchmark

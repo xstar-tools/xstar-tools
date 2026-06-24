@@ -19,8 +19,8 @@ import struct
 import tarfile
 from typing import Any, Iterable
 
-RELEASE = "0.6.48.7.46.23.1"
-SCHEMA = "xstar-tools-v0648746231-product-oracle-v5"
+RELEASE = "0.6.48.7.46.23.2"
+SCHEMA = "xstar-tools-v0648746232-product-oracle-v5"
 EXPECTED_PRODUCTS = (
     "xo01_detail.fits",
     "xo01_detal2.fits",
@@ -708,7 +708,7 @@ def compare_output(output_dir: Path, oracle: Path, output_json: Path | None = No
 
     all_byte_exact = not missing and all(files_report[name].get("byte_exact", False) for name in EXPECTED_PRODUCTS)
     report = {
-        "schema": "xstar-tools-v0648746231-strict-product-comparison-v3",
+        "schema": "xstar-tools-v0648746232-strict-product-comparison-v3",
         "release": RELEASE,
         "oracle_name": manifest["oracle_name"],
         "oracle_source_kind": manifest["source_kind"],
@@ -745,7 +745,7 @@ def compare_output(output_dir: Path, oracle: Path, output_json: Path | None = No
             "RADIAL_ZONE_STATE_COMPLETE": "ACCEPT" if radial_state_complete else "REJECT",
             "FITS_NUMERIC_ARRAYS_EXACT": "ACCEPT" if non_radial_numeric_exact else "REJECT_ALLOWED",
             "NON_RADIAL_NUMERIC_ARRAYS_EXACT": "ACCEPT" if non_radial_numeric_exact else "REJECT_ALLOWED",
-            "XOUT_STEP_PARITY": "NOT_RUN",
+            "XOUT_STEP_PARITY": "ACCEPT" if files_report["xout_step.log"].get("byte_exact") else "IN_PROGRESS",
             "XOUT_STEP_RAW_DIAGNOSTIC": "ACCEPT" if files_report["xout_step.log"].get("byte_exact") else "REJECT_DIAGNOSTIC",
             "XOUT_STEP_NORMALIZED_DIAGNOSTIC": "ACCEPT" if files_report["xout_step.log"].get("normalized_exact") else "REJECT_DIAGNOSTIC",
             "ALL_PRODUCT_FILES_BYTE_EXACT": "ACCEPT" if all_byte_exact else "REJECT_ALLOWED",

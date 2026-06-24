@@ -1,5 +1,14 @@
 # CHANGELOG
 
+# v0.6.48.7.46.23.2 - 2026-06-24
+
+- Separate the native 61-state diagnostic stream from the historical product log: `native_dsec_trace.log` is retained and the duplicate diagnostic `xout_step.log` is removed.
+- Add a dedicated product-log writer and reproduce the exact first 91 lines of the Python/v0.6.47.2 `xout_step.log`.
+- Close the startup/atomic-database, print-option-3, input-parameter, run-preamble, and radial-progress sections byte-for-byte.
+- Add section-level raw and normalized log comparison, first-line diagnostics, and explicit blocked-section reporting.
+- Preserve all v23.1 FITS schema/header/parameter/XSTAR_RADIAL gates, controller physics, ABI 60487, and blocked production promotion.
+- Leave full `xout_step.log` parity in progress; the first blocked line is benchmark line 92 (`print option:22`).
+
 # v0.6.48.7.46.23.1 - 2026-06-24
 
 - Freeze `physical_run_benchmark.tar.gz` (`8fe3e43f149492166683941ec5414243b0e8a878a4bf6c6ece3fcbe9592bbbfb`) as the Python product oracle.

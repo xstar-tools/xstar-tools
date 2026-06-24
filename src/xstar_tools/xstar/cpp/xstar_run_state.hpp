@@ -92,6 +92,15 @@ struct XstarRadialPayloadState {
     bool benchmark_exact = false;
 };
 
+struct XoutStepPrefixState {
+    std::vector<std::string> lines;
+    std::size_t expected_line_count = 0;
+    std::string expected_prefix_sha256;
+    std::string target_release;
+    bool benchmark_exact = false;
+    bool full_log_complete = false;
+};
+
 struct WholeRunAccumulatedState {
     std::string release;
     std::string backend;
@@ -106,6 +115,7 @@ struct WholeRunAccumulatedState {
     std::vector<ParameterRowState> parameter_rows;
     std::vector<AbundanceRadialRowState> abundance_radial_rows;
     std::vector<XstarRadialPayloadState> xstar_radial_payloads;
+    XoutStepPrefixState xout_step_prefix;
     std::size_t python_callbacks = 0;
     bool controller_trajectory_qualified = false;
     bool product_schema_complete = false;
@@ -124,6 +134,7 @@ struct ProductWritingState {
     std::vector<ParameterRowState> parameter_rows;
     std::vector<AbundanceRadialRowState> abundance_radial_rows;
     std::vector<XstarRadialPayloadState> xstar_radial_payloads;
+    XoutStepPrefixState xout_step_prefix;
     bool run_state_layers_distinct = true;
     bool product_schema_complete = false;
     bool radial_state_complete = false;
