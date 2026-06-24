@@ -266,3 +266,7 @@ The release freezes the Python physical-run archive as the immediate product ora
 ## v0.6.48.7.46.22.1 qualified predecessor asset resolution
 
 The standalone physical-run command now discovers the accepted v21.17.2 closure artifacts in sibling release directories and provides a fail-fast `--resolve-only` mode. The generated `native_physical_run_asset_resolution.json` records the native case, coherent trajectory, radiation input, call-start workspaces, and sequence runtime workspaces selected for the product-oracle run. Product parity remains a separate, unclaimed gate.
+
+## v0.6.48.7.46.22.2 accepted controller profile
+
+`xstar_cpp run` now activates the same source-faithful native feature profile and source-ledger paths used by the accepted v21.17.2 canonical controller. Asset resolution fails before evaluation 1 if any required matrix closure, solve-row, Type-50 map, or magnesium thermal ledger is unavailable. Product parity remains a separate comparison gate.

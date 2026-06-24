@@ -25,11 +25,11 @@ def sha256(path: Path) -> str:
 
 
 def test_release_and_abi_are_retained() -> None:
-    assert RELEASE == "0.6.48.7.46.22.1"
-    assert 'version = "0.6.48.7.46.22.1"' in (ROOT / "pyproject.toml").read_text()
+    assert RELEASE == "0.6.48.7.46.22.2"
+    assert 'version = "0.6.48.7.46.22.2"' in (ROOT / "pyproject.toml").read_text()
     api = (ROOT / "src/xstar_tools/xstar/cpp/xstar_api.h").read_text()
     assert '#define XSTAR_API_ABI_VERSION 60487u' in api
-    assert '#define XSTAR_API_VERSION_STRING "0.6.48.7.46.22.1"' in api
+    assert '#define XSTAR_API_VERSION_STRING "0.6.48.7.46.22.2"' in api
 
 
 def test_oracles_are_frozen_separately() -> None:
@@ -116,3 +116,29 @@ def test_physical_run_resolves_accepted_sibling_assets_without_manual_overrides(
     assert "native_physical_run_asset_resolution.json" in source
     assert "--resolve-only" in runner
     assert "asset_resolution_return_code" in runner
+
+
+def test_physical_run_activates_complete_accepted_controller_profile() -> None:
+    source = (ROOT / "src/xstar_tools/xstar/cpp/xstar_standalone.cpp").read_text()
+    assert "accepted-v21.17.2-source-faithful-controller" in source
+    for flag in (
+        "XSTAR_QUALIFICATION_REPLACEMENT",
+        "XSTAR_QUALIFICATION_ALL_ELEMENT_SOLVE_SYSTEM",
+        "XSTAR_QUALIFICATION_INDEPENDENT_THERMAL_PARITY",
+        "XSTAR_QUALIFICATION_CONTINUUM_WORKSPACE_SOURCE_FAITHFUL",
+        "XSTAR_QUALIFICATION_MAGNESIUM_PRIMARY_COOLING_SOURCE_ORDER_REDUCTION",
+    ):
+        assert flag in source
+    for asset in (
+        "v0472_all61_element_solve_rows.csv",
+        "v0472_hydrogen_type50_line_index_map.csv",
+        "v0472_magnesium_type50_line_index_map.csv",
+        "v0472_all61_magnesium_type50_endpoint_escape.csv",
+        "v0472_magnesium_type50_endpoint_energy_map.csv",
+        "v0472_all61_magnesium_type99_primary_thermal_ledger.csv",
+        "v0472_all61_magnesium_primary_cooling_source_order_ledger.csv",
+        "v04874610_matrix_construction_closure/v04874610_matrix_closure",
+    ):
+        assert asset in source
+    assert "qualification_flags" in source
+    assert "qualification_paths" in source

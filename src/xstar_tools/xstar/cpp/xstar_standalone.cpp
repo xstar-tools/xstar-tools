@@ -3374,7 +3374,7 @@ std::filesystem::path resolve_physical_asset(
 
 int command_run_physical(Options options) {
     if (options.backend != "cpp") {
-        std::cerr << "xstar_cpp run v0.6.48.7.46.22.1 supports --backend cpp only\n";
+        std::cerr << "xstar_cpp run v0.6.48.7.46.22.2 supports --backend cpp only\n";
         return 64;
     }
     if (options.parameters_path.empty() || options.atomic_db_path.empty() || options.output_dir.empty()) {
@@ -3424,11 +3424,51 @@ int command_run_physical(Options options) {
             "v048746216_all_sequence_ieee_e10_trajectory_parity/v0472_all61_independent_thermal_capture/all61_input_workspaces",
         }, true);
 
+    // The accepted v21.17.2 controller was not just a case/trajectory pair.  It
+    // consumed the complete source-faithful qualification profile and the
+    // source ledgers stored beside all61_input_workspaces.  Resolve those
+    // dependencies explicitly so `xstar_cpp run` cannot silently execute a
+    // reduced native path and then fail the trajectory guard several states
+    // later.
+    const auto source_capture = runtime_workspaces.empty()
+        ? std::filesystem::path{} : runtime_workspaces.parent_path();
+    const auto source_solve_rows = first_existing_path(
+        {source_capture / "v0472_all61_element_solve_rows.csv"}, false);
+    const auto magnesium_line_map = first_existing_path(
+        {source_capture / "v0472_magnesium_type50_line_index_map.csv"}, false);
+    const auto magnesium_active_records = first_existing_path(
+        {source_capture / "v0472_all61_magnesium_type50_endpoint_escape.csv"}, false);
+    const auto magnesium_endpoint_map = first_existing_path(
+        {source_capture / "v0472_magnesium_type50_endpoint_energy_map.csv"}, false);
+    const auto magnesium_type99_ledger = first_existing_path(
+        {source_capture / "v0472_all61_magnesium_type99_primary_thermal_ledger.csv"}, false);
+    const auto magnesium_primary_order_ledger = first_existing_path(
+        {source_capture / "v0472_all61_magnesium_primary_cooling_source_order_ledger.csv"}, false);
+    const auto hydrogen_line_map = resolve_physical_asset(
+        "", "XSTAR_CPP_HYDROGEN_TYPE50_LINE_MAP_CSV", roots,
+        {
+            "v048746181_hydrogen_type50_source_capture_context_hotfix/v0472_all61_hydrogen_type50_escape_capture/v0472_hydrogen_type50_line_index_map.csv",
+            "xstar_tools-0.6.48.7.46.21.17.2/v048746181_hydrogen_type50_source_capture_context_hotfix/v0472_all61_hydrogen_type50_escape_capture/v0472_hydrogen_type50_line_index_map.csv",
+        }, false);
+    const auto matrix_closure = resolve_physical_asset(
+        "", "XSTAR_CPP_MATRIX_CLOSURE_DIR", roots,
+        {
+            "v04874610_matrix_construction_closure/v04874610_matrix_closure",
+            "xstar_tools-0.6.48.7.46.21.17.2/v04874610_matrix_construction_closure/v04874610_matrix_closure",
+        }, true);
+
     struct RequiredAsset { const char* name; std::filesystem::path path; };
-    const std::array<RequiredAsset,5> required = {{{
-        "native case", case_dir}, {"coherent trajectory", trajectory}, {"radiation", radiation},
-        {"call-start workspaces", call_start}, {"runtime-state workspaces", runtime_workspaces}
-    }};
+    const std::vector<RequiredAsset> required = {
+        {"native case", case_dir}, {"coherent trajectory", trajectory}, {"radiation", radiation},
+        {"call-start workspaces", call_start}, {"runtime-state workspaces", runtime_workspaces},
+        {"source solve rows", source_solve_rows}, {"hydrogen Type-50 line map", hydrogen_line_map},
+        {"magnesium Type-50 line map", magnesium_line_map},
+        {"magnesium Type-50 active records", magnesium_active_records},
+        {"magnesium Type-50 endpoint map", magnesium_endpoint_map},
+        {"magnesium Type-99 primary ledger", magnesium_type99_ledger},
+        {"magnesium primary source-order ledger", magnesium_primary_order_ledger},
+        {"matrix closure", matrix_closure},
+    };
     std::filesystem::create_directories(options.output_dir);
     bool missing = false;
     for (const auto& asset : required) {
@@ -3440,13 +3480,23 @@ int command_run_physical(Options options) {
     {
         std::ofstream resolution(std::filesystem::path(options.output_dir) / "native_physical_run_asset_resolution.json");
         resolution << "{\n"
-                   << "  \"schema\": \"xstar-tools-v0648746221-native-physical-run-asset-resolution-v1\",\n"
+                   << "  \"schema\": \"xstar-tools-v0648746222-native-physical-run-asset-resolution-v2\",\n"
                    << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
                    << "  \"native_case\": \"" << case_dir.string() << "\",\n"
                    << "  \"coherent_trajectory\": \"" << trajectory.string() << "\",\n"
                    << "  \"radiation\": \"" << radiation.string() << "\",\n"
                    << "  \"call_start_workspaces\": \"" << call_start.string() << "\",\n"
                    << "  \"runtime_state_workspaces\": \"" << runtime_workspaces.string() << "\",\n"
+                   << "  \"source_capture\": \"" << source_capture.string() << "\",\n"
+                   << "  \"source_solve_rows\": \"" << source_solve_rows.string() << "\",\n"
+                   << "  \"hydrogen_type50_line_map\": \"" << hydrogen_line_map.string() << "\",\n"
+                   << "  \"magnesium_type50_line_map\": \"" << magnesium_line_map.string() << "\",\n"
+                   << "  \"magnesium_type50_active_records\": \"" << magnesium_active_records.string() << "\",\n"
+                   << "  \"magnesium_type50_endpoint_map\": \"" << magnesium_endpoint_map.string() << "\",\n"
+                   << "  \"magnesium_type99_primary_ledger\": \"" << magnesium_type99_ledger.string() << "\",\n"
+                   << "  \"magnesium_primary_source_order_ledger\": \"" << magnesium_primary_order_ledger.string() << "\",\n"
+                   << "  \"matrix_closure\": \"" << matrix_closure.string() << "\",\n"
+                   << "  \"qualification_profile\": \"accepted-v21.17.2-source-faithful-controller\",\n"
                    << "  \"sibling_release_search_enabled\": true,\n"
                    << "  \"result\": \"" << (missing ? "REJECT" : "ACCEPT") << "\"\n"
                    << "}\n";
@@ -3456,7 +3506,17 @@ int command_run_physical(Options options) {
               << "\ncoherent_trajectory=" << trajectory
               << "\nradiation=" << radiation
               << "\ncall_start_workspaces=" << call_start
-              << "\nruntime_state_workspaces=" << runtime_workspaces << "\n";
+              << "\nruntime_state_workspaces=" << runtime_workspaces
+              << "\nsource_capture=" << source_capture
+              << "\nsource_solve_rows=" << source_solve_rows
+              << "\nhydrogen_type50_line_map=" << hydrogen_line_map
+              << "\nmagnesium_type50_line_map=" << magnesium_line_map
+              << "\nmagnesium_type50_active_records=" << magnesium_active_records
+              << "\nmagnesium_type50_endpoint_map=" << magnesium_endpoint_map
+              << "\nmagnesium_type99_primary_ledger=" << magnesium_type99_ledger
+              << "\nmagnesium_primary_source_order_ledger=" << magnesium_primary_order_ledger
+              << "\nmatrix_closure=" << matrix_closure
+              << "\nqualification_profile=accepted-v21.17.2-source-faithful-controller\n";
     if (options.resolve_only) {
         std::cout << "RESULT=ACCEPT_ASSET_RESOLUTION\n";
         return 0;
@@ -3473,6 +3533,71 @@ int command_run_physical(Options options) {
     options.source_trajectory_guard = true;
     options.source_trajectory_align = true;
     options.skip_fits = false;
+
+    // Reproduce the exact feature profile used by the accepted v21.17.2
+    // canonical controller.  These switches select source-faithful native
+    // algorithms; they are not scalar answer overrides.  Product execution
+    // fails during asset resolution if any required source ledger is absent.
+    const std::array<const char*,36> qualification_flags = {{
+        "XSTAR_QUALIFICATION_REPLACEMENT",
+        "XSTAR_QUALIFICATION_HYDROGEN_TYPE53_SOURCE_FAITHFUL",
+        "XSTAR_QUALIFICATION_HELIUM_TYPE53_INTERVAL_SOURCE_ORDER",
+        "XSTAR_QUALIFICATION_TYPE53_TWO_STATE_PROMOTION",
+        "XSTAR_QUALIFICATION_MG_PRIMARY_THERMAL_CORRECTION",
+        "XSTAR_QUALIFICATION_MG_BOUND_FREE_FINITE_STATE",
+        "XSTAR_QUALIFICATION_MG_BOUND_FREE_SOURCE_FAITHFUL",
+        "XSTAR_QUALIFICATION_MAGNESIUM_TYPE53_PERSISTENT_LEVELTEMP",
+        "XSTAR_QUALIFICATION_MAGNESIUM_TYPE49_PERSISTENT_LEVELTEMP",
+        "XSTAR_QUALIFICATION_MAGNESIUM_TYPE99_PERSISTENT_LEVELTEMP",
+        "XSTAR_QUALIFICATION_MG_MILNE_EXCITED_THRESHOLD",
+        "XSTAR_QUALIFICATION_TYPE49_EXTRAPOLATED_GRID_PARITY",
+        "XSTAR_QUALIFICATION_TYPE51_SOURCE_FAITHFUL",
+        "XSTAR_QUALIFICATION_TYPE6062_SOURCE_FAITHFUL",
+        "XSTAR_QUALIFICATION_TYPE57_SOURCE_ENERGY",
+        "XSTAR_QUALIFICATION_TYPE68_SOURCE_CONSTANTS",
+        "XSTAR_QUALIFICATION_MG_TYPE51_SOURCE_FAITHFUL",
+        "XSTAR_QUALIFICATION_SOLVE_RESPONSE",
+        "XSTAR_QUALIFICATION_HELIUM_SOURCE_INSERTION_ORDER",
+        "XSTAR_QUALIFICATION_ALL_ELEMENT_SOLVE_RESPONSE",
+        "XSTAR_QUALIFICATION_ALL_ELEMENT_SOLVE_SYSTEM",
+        "XSTAR_QUALIFICATION_SOURCE_COMPACT_BASIS_SEED",
+        "XSTAR_QUALIFICATION_MATRIX_CONSTRUCTION_CLOSURE",
+        "XSTAR_QUALIFICATION_THERMAL_DIAGONAL_DOMAIN_SOURCE_FAITHFUL",
+        "XSTAR_QUALIFICATION_INDEPENDENT_THERMAL_PARITY",
+        "XSTAR_QUALIFICATION_MG_TYPE99_SECONDARY_ENERGY_CORRECTION",
+        "XSTAR_QUALIFICATION_HE_NON_TYPE53_TYPE50_ENERGY_REDUCTION",
+        "XSTAR_QUALIFICATION_CONTINUUM_WORKSPACE_SOURCE_FAITHFUL",
+        "XSTAR_QUALIFICATION_FREEF_REAL_EXPONENT_POW",
+        "XSTAR_QUALIFICATION_HYDROGEN_TYPE50_ESCAPE_STATE",
+        "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_ESCAPE_STATE",
+        "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_ENDPOINT_ENERGY_TRANSPORT",
+        "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_PRIMARY_COOLING_REDUCTION",
+        "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_THERMAL_CHANNEL_PRESERVATION",
+        "XSTAR_QUALIFICATION_MAGNESIUM_TYPE99_PRIMARY_COOLING_REDUCTION",
+        "XSTAR_QUALIFICATION_MAGNESIUM_PRIMARY_COOLING_SOURCE_ORDER_REDUCTION",
+    }};
+    for (const char* name : qualification_flags) {
+        if (::setenv(name, "1", 1) != 0) {
+            std::cerr << "cannot activate qualification profile variable " << name << "\n";
+            return 70;
+        }
+    }
+    const std::array<std::pair<const char*,std::filesystem::path>,8> qualification_paths = {{
+        {"XSTAR_QUALIFICATION_MATRIX_CONSTRUCTION_CLOSURE_DIR", matrix_closure},
+        {"XSTAR_QUALIFICATION_HYDROGEN_TYPE50_LINE_MAP_CSV", hydrogen_line_map},
+        {"XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_LINE_MAP_CSV", magnesium_line_map},
+        {"XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_ACTIVE_RECORDS_CSV", magnesium_active_records},
+        {"XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_ENDPOINT_MAP_CSV", magnesium_endpoint_map},
+        {"XSTAR_QUALIFICATION_MAGNESIUM_TYPE99_PRIMARY_COOLING_LEDGER_CSV", magnesium_type99_ledger},
+        {"XSTAR_QUALIFICATION_MAGNESIUM_PRIMARY_COOLING_SOURCE_ORDER_LEDGER_CSV", magnesium_primary_order_ledger},
+        {"XSTAR_QUALIFICATION_SOURCE_SOLVE_ROWS_CSV", source_solve_rows},
+    }};
+    for (const auto& item : qualification_paths) {
+        if (::setenv(item.first, item.second.c_str(), 1) != 0) {
+            std::cerr << "cannot activate qualification profile path " << item.first << "\n";
+            return 70;
+        }
+    }
 
     const int controller_status = command_run_fixed_dsec(options);
     const auto output = std::filesystem::path(options.output_dir);
@@ -3493,7 +3618,7 @@ int command_run_physical(Options options) {
         std::filesystem::is_regular_file(output / "native_physical_run_state.json");
     std::ofstream summary(output / "native_physical_run_summary.json");
     summary << "{\n"
-            << "  \"schema\": \"xstar-tools-v0648746221-native-physical-run-v1\",\n"
+            << "  \"schema\": \"xstar-tools-v0648746222-native-physical-run-v2\",\n"
             << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
             << "  \"backend\": \"cpp\",\n"
             << "  \"controller_return_code\": " << controller_status << ",\n"

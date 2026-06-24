@@ -1,5 +1,12 @@
 # CHANGELOG
 
+# 0.6.48.7.46.22.2 - 2026-06-23
+
+- Activate the complete accepted v21.17.2 source-faithful controller profile inside `xstar_cpp run`.
+- Resolve and fail closed on matrix closure, source solve rows, H/Mg Type-50 maps, and Mg primary thermal ledgers before physical execution.
+- Extend the asset-resolution report so a reduced native path cannot masquerade as product qualification.
+- Retain ABI 60487 and leave product parity unclaimed.
+
 # 0.6.48.7.46.22.1 - 2026-06-23
 
 - Resolve the accepted v21.17.2 native case, coherent trajectory, and call-start workspaces from sibling `xstar_tools-*` release directories.
