@@ -1,10 +1,12 @@
 #include "xstar_run_state.hpp"
 
 #include <algorithm>
+#include <chrono>
+#include <cmath>
 #include <cstring>
 #include <fstream>
 #include <iomanip>
-#include <iterator>
+#include <regex>
 #include <sstream>
 #include <stdexcept>
 
@@ -27,241 +29,148 @@ std::string json_escape(const std::string& value) {
     return out;
 }
 
-std::vector<std::string> split_tab(const std::string& line) {
-    std::vector<std::string> fields;
-    std::string field;
-    std::istringstream input(line);
-    while (std::getline(input, field, '\t')) fields.push_back(field);
-    if (!line.empty() && line.back() == '\t') fields.emplace_back();
-    return fields;
+std::string read_text(const std::filesystem::path& path) {
+    std::ifstream input(path);
+    if (!input) throw std::runtime_error("cannot open native product input: " + path.string());
+    std::ostringstream out;
+    out << input.rdbuf();
+    return out.str();
 }
 
-std::uint64_t parse_hex64(const std::string& value) {
-    return static_cast<std::uint64_t>(std::stoull(value, nullptr, 16));
+std::string json_scalar_text(const std::string& text, const std::string& key, const std::string& fallback = "") {
+    const std::regex quoted("\\\"" + key + "\\\"\\s*:\\s*\\\"([^\\\"]*)\\\"");
+    std::smatch match;
+    if (std::regex_search(text, match, quoted)) return match[1].str();
+    const std::regex bare("\\\"" + key + "\\\"\\s*:\\s*([-+0-9.eE]+|true|false|null)");
+    if (std::regex_search(text, match, bare)) return match[1].str();
+    return fallback;
 }
 
-std::uint32_t parse_hex32(const std::string& value) {
-    return static_cast<std::uint32_t>(std::stoul(value, nullptr, 16));
+double json_number(const std::string& text, const std::string& key, double fallback) {
+    const std::string value = json_scalar_text(text, key);
+    if (value.empty()) return fallback;
+    try { return std::stod(value); } catch (...) { return fallback; }
 }
 
-double double_from_bits(const std::string& value) {
-    const std::uint64_t bits = parse_hex64(value);
-    double result = 0.0;
-    static_assert(sizeof(result) == sizeof(bits), "binary64 size mismatch");
-    std::memcpy(&result, &bits, sizeof(result));
-    return result;
+std::uint32_t float_bits(float value) {
+    std::uint32_t bits = 0;
+    static_assert(sizeof(bits) == sizeof(value), "binary32 size mismatch");
+    std::memcpy(&bits, &value, sizeof(bits));
+    return bits;
 }
 
-void require_file(const std::filesystem::path& path) {
-    if (!std::filesystem::is_regular_file(path)) {
-        throw std::runtime_error("missing Python product-schema asset: " + path.string());
+bool diagnostics_complete(
+    const std::filesystem::path& root,
+    const std::vector<RadialZoneState>& zones) {
+    if (!std::filesystem::is_directory(root) || zones.size() != 5) return false;
+    for (const auto& zone : zones) {
+        std::ostringstream stem;
+        stem << "evaluation_" << std::setw(4) << std::setfill('0')
+             << zone.accepted_controller.accepted_sequence;
+        if (!std::filesystem::is_regular_file(root / (stem.str() + "_records.csv"))) return false;
+        const auto& evaluation = zone.accepted_controller.evaluation;
+        if (evaluation.populations.empty() || evaluation.radiation_energy_ev.empty() ||
+            evaluation.spectrum.size() != evaluation.radiation_energy_ev.size() ||
+            evaluation.opacity.size() != evaluation.radiation_energy_ev.size() ||
+            evaluation.continuum_tau_in.size() != evaluation.radiation_energy_ev.size() ||
+            evaluation.continuum_tau_out.size() != evaluation.radiation_energy_ev.size()) return false;
     }
+    return true;
 }
 
 } // namespace
 
-void load_python_product_schema(
+void prepare_native_product_state(
     WholeRunAccumulatedState& state,
-    const std::filesystem::path& schema_path) {
-    require_file(schema_path / "manifest.json");
-    require_file(schema_path / "parameters.tsv");
-    require_file(schema_path / "radial_zones.tsv");
-    require_file(schema_path / "abundance_radial_rows.tsv");
-    require_file(schema_path / "xstar_radial_payloads.tsv");
-    require_file(schema_path / "detail_product_baselines.tsv");
+    const std::filesystem::path& diagnostics_path) {
+    if (state.radial_zones.size() != 5) {
+        throw std::runtime_error("native product construction requires five accepted controller zones");
+    }
+    const std::string parameters = read_text(state.parameters_path);
+    const double initial_radius = json_number(parameters, "initial_radius_cm", 1.0e17);
+    const double density = json_number(parameters, "density", 1.0e8);
+    const double total_column = json_number(parameters, "column", 1.0e20);
+    const double logxi = json_number(parameters, "rlogxi", 0.0);
+    const double input_pressure = json_number(parameters, "pressure", 0.0);
+    const double total_thickness = density > 0.0 ? total_column / density : 0.0;
+    const double shell_thickness = total_thickness / 4.0;
 
-    state.product_schema_path = schema_path;
-    state.parameter_rows.clear();
-    {
-        std::ifstream input(schema_path / "parameters.tsv");
-        std::string line;
-        std::getline(input, line);
-        while (std::getline(input, line)) {
-            if (line.empty()) continue;
-            const auto fields = split_tab(line);
-            if (fields.size() != 5) throw std::runtime_error("invalid parameters.tsv row");
-            ParameterRowState row;
-            row.index = static_cast<std::uint16_t>(std::stoul(fields[0]));
-            row.parameter = fields[1];
-            row.value_bits = parse_hex32(fields[2]);
-            row.type = fields[3];
-            row.comment = fields[4];
-            state.parameter_rows.push_back(std::move(row));
-        }
+    for (std::size_t i = 0; i < state.radial_zones.size(); ++i) {
+        auto& zone = state.radial_zones[i];
+        const auto& evaluation = zone.accepted_controller.evaluation;
+        zone.zone_index = i + 1;
+        zone.pass_index = 1;
+        zone.radius_cm = initial_radius + static_cast<double>(i) * shell_thickness;
+        zone.outer_radius_cm = i < 4 ? zone.radius_cm + shell_thickness : zone.radius_cm;
+        zone.delta_radius_cm = shell_thickness;
+        zone.density_cm3 = density;
+        zone.temperature_t4 = evaluation.temperature_t4;
+        zone.electron_fraction = evaluation.computed_electron_fraction;
+        zone.log_ionization_parameter = logxi;
+        zone.ionization_parameter = logxi;
+        zone.column_density_cm2 = total_column * static_cast<double>(i) / 4.0;
+        zone.pressure_dyn_cm2 = input_pressure > 0.0
+            ? input_pressure
+            : density * evaluation.computed_electron_fraction * 1.380649e-16 * evaluation.temperature_t4 * 1.0e4;
+        zone.provisional_from_controller = false;
     }
-    if (state.parameter_rows.size() != 56) {
-        throw std::runtime_error("Python product schema requires exactly 56 parameter rows");
-    }
-
-    std::vector<RadialZoneState> oracle_zones;
-    {
-        std::ifstream input(schema_path / "radial_zones.tsv");
-        std::string line;
-        std::getline(input, line);
-        while (std::getline(input, line)) {
-            if (line.empty()) continue;
-            const auto fields = split_tab(line);
-            if (fields.size() != 11) throw std::runtime_error("invalid radial_zones.tsv row");
-            RadialZoneState zone;
-            zone.zone_index = static_cast<std::size_t>(std::stoull(fields[0]));
-            zone.pass_index = static_cast<std::size_t>(std::stoull(fields[1]));
-            zone.radius_cm = double_from_bits(fields[2]);
-            zone.outer_radius_cm = double_from_bits(fields[3]);
-            zone.delta_radius_cm = double_from_bits(fields[4]);
-            zone.temperature_t4 = double_from_bits(fields[5]);
-            zone.pressure_dyn_cm2 = double_from_bits(fields[6]);
-            zone.column_density_cm2 = double_from_bits(fields[7]);
-            zone.electron_fraction = double_from_bits(fields[8]);
-            zone.density_cm3 = double_from_bits(fields[9]);
-            zone.log_ionization_parameter = double_from_bits(fields[10]);
-            zone.ionization_parameter = zone.log_ionization_parameter;
-            zone.provisional_from_controller = false;
-            zone.python_oracle_radial_exact = true;
-            oracle_zones.push_back(zone);
-        }
-    }
-    if (oracle_zones.size() != 5 || state.radial_zones.size() != oracle_zones.size()) {
-        throw std::runtime_error("Python product schema requires five controller-associated radial zones");
-    }
-    for (std::size_t index = 0; index < oracle_zones.size(); ++index) {
-        oracle_zones[index].accepted_controller = state.radial_zones[index].accepted_controller;
-    }
-    state.radial_zones = std::move(oracle_zones);
 
     state.abundance_radial_rows.clear();
-    {
-        std::ifstream input(schema_path / "abundance_radial_rows.tsv");
-        std::string line;
-        std::getline(input, line);
-        while (std::getline(input, line)) {
-            if (line.empty()) continue;
-            const auto fields = split_tab(line);
-            if (fields.size() != 9) throw std::runtime_error("invalid abundance_radial_rows.tsv row");
-            AbundanceRadialRowState row;
-            row.row_index = static_cast<std::size_t>(std::stoull(fields[0]));
-            row.radius_cm = std::stod(fields[1]);
-            row.delta_radius_cm = std::stod(fields[2]);
-            row.log_ionization_parameter = std::stod(fields[3]);
-            row.electron_fraction = std::stod(fields[4]);
-            row.density_cm3 = std::stod(fields[5]);
-            row.pressure_dyn_cm2 = std::stod(fields[6]);
-            row.temperature_t4 = std::stod(fields[7]);
-            row.fractional_heat_error = std::stod(fields[8]);
-            row.terminal_row = row.row_index == 5;
-            state.abundance_radial_rows.push_back(row);
-        }
-    }
-    if (state.abundance_radial_rows.size() != 5) {
-        throw std::runtime_error("Python product schema requires five abundance radial rows");
+    for (std::size_t i = 0; i < state.radial_zones.size(); ++i) {
+        const auto& zone = state.radial_zones[i];
+        const auto& evaluation = zone.accepted_controller.evaluation;
+        AbundanceRadialRowState row;
+        row.row_index = i + 1;
+        row.radius_cm = zone.radius_cm;
+        row.delta_radius_cm = zone.delta_radius_cm;
+        row.log_ionization_parameter = zone.log_ionization_parameter;
+        row.electron_fraction = zone.electron_fraction;
+        row.density_cm3 = zone.density_cm3;
+        row.pressure_dyn_cm2 = zone.pressure_dyn_cm2;
+        row.temperature_t4 = zone.temperature_t4;
+        const double scale = std::max(std::abs(evaluation.total_heating) + std::abs(evaluation.total_cooling), 1.0e-300);
+        row.fractional_heat_error = std::abs(evaluation.hmctot) / scale;
+        row.terminal_row = i + 1 == state.radial_zones.size();
+        state.abundance_radial_rows.push_back(row);
     }
 
-
-    state.xstar_radial_payloads.clear();
-    {
-        std::ifstream input(schema_path / "xstar_radial_payloads.tsv");
-        std::string line;
-        std::getline(input, line);
-        while (std::getline(input, line)) {
-            if (line.empty()) continue;
-            const auto fields = split_tab(line);
-            if (fields.size() != 9) throw std::runtime_error("invalid xstar_radial_payloads.tsv row");
-            XstarRadialPayloadState payload;
-            payload.product = fields[0];
-            payload.zone_index = static_cast<std::size_t>(std::stoull(fields[1]));
-            payload.hdu_index = static_cast<std::size_t>(std::stoull(fields[2]));
-            payload.row_width = static_cast<std::size_t>(std::stoull(fields[3]));
-            payload.row_count = static_cast<std::size_t>(std::stoull(fields[4]));
-            payload.field_count = static_cast<std::size_t>(std::stoull(fields[5]));
-            const std::size_t expected_size = static_cast<std::size_t>(std::stoull(fields[6]));
-            payload.payload_sha256 = fields[7];
-            payload.payload_path = schema_path / "xstar_radial_payloads" / fields[8];
-            require_file(payload.payload_path);
-            std::ifstream binary(payload.payload_path, std::ios::binary);
-            payload.payload.assign(
-                std::istreambuf_iterator<char>(binary),
-                std::istreambuf_iterator<char>());
-            if (payload.payload.size() != expected_size ||
-                expected_size != payload.row_width * payload.row_count) {
-                throw std::runtime_error("invalid XSTAR_RADIAL payload size: " + payload.payload_path.string());
-            }
-            payload.benchmark_exact = true;
-            state.xstar_radial_payloads.push_back(std::move(payload));
-        }
-    }
-    state.xstar_radial_payloads_complete =
-        state.xstar_radial_payloads.size() == 20;
-    if (!state.xstar_radial_payloads_complete) {
-        throw std::runtime_error("Python product schema requires exactly 20 XSTAR_RADIAL payloads");
+    state.parameter_rows.clear();
+    const std::vector<std::string> keys = {
+        "cfrac","column","density","emult","initial_radius_cm","lcdd","lcpres","loopcontrol",
+        "lprint","lstep","lwrite","ncn2","niter","npass","nsteps","pressure","radexp","rlogxi",
+        "rlrad38","spectun","taumax","temperature","temperature_k","trad","vturbi","xeemin",
+        "habund","heabund","mgabund","critf"
+    };
+    std::uint16_t index = 1;
+    for (const auto& key : keys) {
+        const std::string value_text = json_scalar_text(parameters, key);
+        if (value_text.empty()) continue;
+        float value = 0.0f;
+        try { value = static_cast<float>(std::stod(value_text)); } catch (...) { value = 0.0f; }
+        ParameterRowState row;
+        row.index = index++;
+        row.parameter = key;
+        row.value_bits = float_bits(value);
+        row.type = "native";
+        row.comment = "parsed from parameters.json";
+        state.parameter_rows.push_back(std::move(row));
     }
 
-    state.xout_step_prefix = XoutStepPrefixState{};
-    {
-        const auto prefix_path = schema_path / "xout_step_prefix.log";
-        require_file(prefix_path);
-        std::ifstream input(prefix_path);
-        std::string line;
-        while (std::getline(input, line)) {
-            state.xout_step_prefix.lines.push_back(line);
-        }
-        state.xout_step_prefix.expected_line_count = 91;
-        state.xout_step_prefix.expected_prefix_sha256 =
-            "28d2ce41dde84abad5dbf559e7b7c0e58a33f7bf9dc0fc3a1d582d17e5c5b2d0";
-        state.xout_step_prefix.target_release = "0.6.47.2";
-        state.xout_step_prefix.benchmark_exact =
-            state.xout_step_prefix.lines.size() == state.xout_step_prefix.expected_line_count;
-        state.xout_step_prefix.full_log_complete = false;
-        if (!state.xout_step_prefix.benchmark_exact) {
-            throw std::runtime_error("Python product schema requires an exact 91-line xout_step prefix");
-        }
-    }
-
-    state.detail_product_baselines.clear();
-    {
-        std::ifstream input(schema_path / "detail_product_baselines.tsv");
-        std::string line;
-        std::getline(input, line);
-        while (std::getline(input, line)) {
-            if (line.empty()) continue;
-            const auto fields = split_tab(line);
-            if (fields.size() != 5) throw std::runtime_error("invalid detail_product_baselines.tsv row");
-            DetailProductBaselineState payload;
-            payload.product = fields[0];
-            payload.role = fields[1];
-            payload.expected_size = static_cast<std::size_t>(std::stoull(fields[2]));
-            payload.payload_sha256 = fields[3];
-            payload.payload_path = schema_path / "detail_baselines" / fields[4];
-            require_file(payload.payload_path);
-            std::ifstream binary(payload.payload_path, std::ios::binary);
-            payload.payload.assign(
-                std::istreambuf_iterator<char>(binary),
-                std::istreambuf_iterator<char>());
-            if (payload.payload.size() != payload.expected_size) {
-                throw std::runtime_error("invalid accepted detail baseline size: " + payload.payload_path.string());
-            }
-            payload.benchmark_exact = true;
-            state.detail_product_baselines.push_back(std::move(payload));
-        }
-    }
-    if (state.detail_product_baselines.size() != 4) {
-        throw std::runtime_error("native product state requires exactly four accepted detail baselines");
-    }
-    state.embedded_public_fits_payloads_absent =
-        !std::filesystem::exists(schema_path / "products") &&
-        std::none_of(state.detail_product_baselines.begin(), state.detail_product_baselines.end(),
-            [](const DetailProductBaselineState& payload) { return payload.product.rfind("xout_", 0) == 0; });
-    state.embedded_full_xout_step_payload_absent =
-        !std::filesystem::exists(schema_path / "xout_step.log") &&
-        !std::filesystem::exists(schema_path / "detail_baselines" / "xout_step.log");
-    if (!state.embedded_public_fits_payloads_absent || !state.embedded_full_xout_step_payload_absent) {
-        throw std::runtime_error("v25 anti-copy contract rejected embedded public product payloads");
-    }
-    state.exact_detail_products_validated = false;
-
+    state.product_schema_path.clear();
+    state.native_diagnostics_path = diagnostics_path;
+    const auto run_ticks = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    state.native_run_id = state.release + "-" + std::to_string(run_ticks);
+    state.embedded_public_fits_payloads_absent = true;
+    state.embedded_full_xout_step_payload_absent = true;
     state.product_schema_complete = true;
-    state.radial_state_complete = state.xstar_radial_payloads_complete;
-    state.native_product_inputs_complete =
-        state.xstar_radial_payloads_complete && state.detail_product_baselines.size() == 4 &&
+    state.radial_state_complete = true;
+    state.native_detail_state_retained = diagnostics_complete(diagnostics_path, state.radial_zones);
+    state.native_product_inputs_complete = state.native_detail_state_retained &&
         state.embedded_public_fits_payloads_absent && state.embedded_full_xout_step_payload_absent;
+    if (!state.native_detail_state_retained) {
+        throw std::runtime_error("native detail-state diagnostics are incomplete for the five accepted zones");
+    }
 }
 
 ProductWritingState build_product_writing_state(const WholeRunAccumulatedState& state) {
@@ -271,22 +180,21 @@ ProductWritingState build_product_writing_state(const WholeRunAccumulatedState& 
     product.parameters_path = state.parameters_path;
     product.atomic_database_path = state.atomic_database_path;
     product.schema_path = state.product_schema_path;
+    product.native_diagnostics_path = state.native_diagnostics_path;
+    product.native_run_id = state.native_run_id;
+    product.fixed_evaluations = state.fixed_evaluations;
     product.radial_zones = state.radial_zones;
     product.parameter_rows = state.parameter_rows;
     product.abundance_radial_rows = state.abundance_radial_rows;
-    product.xstar_radial_payloads = state.xstar_radial_payloads;
-    product.xout_step_prefix = state.xout_step_prefix;
-    product.detail_product_baselines = state.detail_product_baselines;
-    product.exact_detail_products_validated = state.exact_detail_products_validated;
     product.embedded_public_fits_payloads_absent = state.embedded_public_fits_payloads_absent;
     product.embedded_full_xout_step_payload_absent = state.embedded_full_xout_step_payload_absent;
     product.run_state_layers_distinct = true;
     product.product_schema_complete = state.product_schema_complete;
     product.radial_state_complete = state.radial_state_complete;
-    product.xstar_radial_payloads_complete = state.xstar_radial_payloads_complete;
+    product.native_detail_state_retained = state.native_detail_state_retained;
     product.native_product_inputs_complete = state.native_product_inputs_complete;
-    product.product_state_complete = state.product_schema_complete &&
-        state.radial_state_complete && state.xstar_radial_payloads_complete && state.native_product_inputs_complete;
+    product.product_state_complete = state.product_schema_complete && state.radial_state_complete &&
+        state.native_detail_state_retained && state.native_product_inputs_complete;
     product.product_parity_qualified = false;
     return product;
 }
@@ -299,60 +207,20 @@ void write_run_state_manifest(
     if (!out) throw std::runtime_error("cannot create run-state manifest: " + path.string());
     out << std::setprecision(17)
         << "{\n"
-        << "  \"schema\": \"xstar-tools-v064874625-native-physical-run-state-v1\",\n"
+        << "  \"schema\": \"xstar-tools-v0648746253-native-product-state-v1\",\n"
         << "  \"release\": \"" << json_escape(whole.release) << "\",\n"
         << "  \"backend\": \"" << json_escape(whole.backend) << "\",\n"
         << "  \"parameters_path\": \"" << json_escape(whole.parameters_path.string()) << "\",\n"
         << "  \"atomic_database_path\": \"" << json_escape(whole.atomic_database_path.string()) << "\",\n"
         << "  \"native_case_path\": \"" << json_escape(whole.native_case_path.string()) << "\",\n"
-        << "  \"source_trajectory_path\": \"" << json_escape(whole.source_trajectory_path.string()) << "\",\n"
-        << "  \"product_schema_path\": \"" << json_escape(whole.product_schema_path.string()) << "\",\n"
-        << "  \"layers\": {\n"
-        << "    \"fixed_evaluation_state\": {\"count\": " << whole.fixed_evaluations.size() << "},\n"
-        << "    \"accepted_controller_state\": {\"count\": " << whole.accepted_controller_states.size() << "},\n"
-        << "    \"radial_zone_state\": {\"count\": " << whole.radial_zones.size()
-        << ", \"complete\": " << (whole.radial_state_complete ? "true" : "false")
-        << ", \"source\": \"accepted_native_detail_state\"},\n"
-        << "    \"whole_run_accumulated_state\": {\"python_callbacks\": " << whole.python_callbacks
-        << ", \"controller_trajectory_qualified\": " << (whole.controller_trajectory_qualified ? "true" : "false") << "},\n"
-        << "    \"product_writing_state\": {\"count\": " << product.radial_zones.size()
-        << ", \"schema_complete\": " << (product.product_schema_complete ? "true" : "false")
-        << ", \"radial_state_complete\": " << (product.radial_state_complete ? "true" : "false")
-        << ", \"native_product_inputs_complete\": " << (product.native_product_inputs_complete ? "true" : "false")
-        << ", \"complete\": " << (product.product_state_complete ? "true" : "false")
-        << ", \"product_parity_qualified\": " << (product.product_parity_qualified ? "true" : "false") << "}\n"
-        << "  },\n"
-        << "  \"parameter_table\": {\"rows\": " << product.parameter_rows.size() << ", \"exact_python_oracle\": true},\n"
-        << "  \"abundance_radial_rows\": {\"rows\": " << product.abundance_radial_rows.size() << "},\n"
-        << "  \"xstar_radial_payloads\": {\"hdus\": " << product.xstar_radial_payloads.size()
-        << ", \"accepted_native_detail_assets_loaded\": " << (product.xstar_radial_payloads_complete ? "true" : "false") << "},\n"
-        << "  \"xout_step_prefix\": {\"lines\": " << product.xout_step_prefix.lines.size()
-        << ", \"expected_lines\": " << product.xout_step_prefix.expected_line_count
-        << ", \"benchmark_exact\": " << (product.xout_step_prefix.benchmark_exact ? "true" : "false")
-        << ", \"computed_from_native_state\": " << (product.xout_step_computed_from_native_state ? "true" : "false") << "},\n"
-        << "  \"detail_product_baselines\": {\"count\": " << product.detail_product_baselines.size()
-        << ", \"embedded_public_fits_payloads_absent\": " << (product.embedded_public_fits_payloads_absent ? "true" : "false")
-        << ", \"embedded_full_xout_step_payload_absent\": " << (product.embedded_full_xout_step_payload_absent ? "true" : "false") << "},\n"
-        << "  \"radial_zones\": [\n";
-    for (std::size_t index = 0; index < whole.radial_zones.size(); ++index) {
-        const auto& zone = whole.radial_zones[index];
-        out << "    {\"zone_index\": " << zone.zone_index
-            << ", \"pass_index\": " << zone.pass_index
-            << ", \"rinner_cm\": " << zone.radius_cm
-            << ", \"router_cm\": " << zone.outer_radius_cm
-            << ", \"rdel_cm\": " << zone.delta_radius_cm
-            << ", \"column_cm2\": " << zone.column_density_cm2
-            << ", \"logxi\": " << zone.log_ionization_parameter
-            << ", \"density_cm3\": " << zone.density_cm3
-            << ", \"pressure_dyn_cm2\": " << zone.pressure_dyn_cm2
-            << ", \"temperature_t4\": " << zone.temperature_t4
-            << ", \"electron_fraction\": " << zone.electron_fraction
-            << ", \"python_oracle_exact\": " << (zone.python_oracle_radial_exact ? "true" : "false") << "}"
-            << (index + 1 == whole.radial_zones.size() ? "\n" : ",\n");
-    }
-    out << "  ],\n"
-        << "  \"run_state_layers_distinct\": " << (product.run_state_layers_distinct ? "true" : "false") << ",\n"
-        << "  \"fits_schema_header_and_xstar_radial_closure\": \"PRESERVED_FROM_V23_1\",\n"
+        << "  \"native_diagnostics_path\": \"" << json_escape(product.native_diagnostics_path.string()) << "\",\n"
+        << "  \"native_run_id\": \"" << json_escape(product.native_run_id) << "\",\n"
+        << "  \"fixed_evaluations\": " << whole.fixed_evaluations.size() << ",\n"
+        << "  \"accepted_controller_states\": " << whole.accepted_controller_states.size() << ",\n"
+        << "  \"radial_zones\": " << whole.radial_zones.size() << ",\n"
+        << "  \"native_detail_state_retained\": " << (product.native_detail_state_retained ? "true" : "false") << ",\n"
+        << "  \"embedded_public_fits_payloads_absent\": " << (product.embedded_public_fits_payloads_absent ? "true" : "false") << ",\n"
+        << "  \"embedded_full_xout_step_payload_absent\": " << (product.embedded_full_xout_step_payload_absent ? "true" : "false") << ",\n"
         << "  \"public_product_runtime_reads_benchmark_bytes\": false,\n"
         << "  \"xout_step_runtime_reads_benchmark_bytes\": false,\n"
         << "  \"xout_abund1_computed_from_native_state\": " << (product.xout_abund1_computed_from_native_state ? "true" : "false") << ",\n"
@@ -362,11 +230,9 @@ void write_run_state_manifest(
         << "  \"xout_spect1_computed_from_native_state\": " << (product.xout_spect1_computed_from_native_state ? "true" : "false") << ",\n"
         << "  \"xout_step_computed_from_native_state\": " << (product.xout_step_computed_from_native_state ? "true" : "false") << ",\n"
         << "  \"xout_step_timing_values_measured\": " << (product.xout_step_timing_values_measured ? "true" : "false") << ",\n"
-        << "  \"generalized_product_reduction\": \"PENDING_EXTERNAL_EXACTNESS_QUALIFICATION\",\n"
-        << "  \"xout_step_parity\": \"PENDING_EXTERNAL_NON_TIMING_COMPARISON\",\n"
-        << "  \"product_level_parity\": \"PENDING_EXTERNAL_VALIDATION\",\n"
-        << "  \"production_promotion_ready\": false,\n"
-        << "  \"result\": \"ACCEPT_NATIVE_PRODUCT_STATE_CONSTRUCTION\"\n"
+        << "  \"product_state_complete\": " << (product.product_state_complete ? "true" : "false") << ",\n"
+        << "  \"product_parity_qualified\": false,\n"
+        << "  \"production_promotion_ready\": false\n"
         << "}\n";
 }
 

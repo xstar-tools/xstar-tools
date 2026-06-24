@@ -44,6 +44,7 @@ API_TARGET := libxstar_api.so
 CPP_BACKEND_TARGET := libxstar_backend_cpp.so
 PYTHON_BACKEND_TARGET := libxstar_backend_python.so
 EXECUTABLE_TARGET := xstar_cpp
+EXECUTABLE_OBJECTS := xstar_standalone.o xstar_science_fits.o xstar_run_state.o xstar_step_log.o
 
 PHYSICS_TARGETS := $(SOLVER_TARGET) $(RATES_TARGET) $(MATRIX_TARGET) \
 	$(EMISSIVITY_TARGET) $(OPACITY_TARGET) $(THERMAL_TARGET) $(ENGINE_TARGET) $(FIXED_STATE_TARGET)
@@ -95,8 +96,20 @@ $(PYTHON_BACKEND_TARGET): xstar_backend_python.cpp xstar_api.h xstar_backend_plu
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(PYTHON_INCLUDES) $(SO_LDFLAGS) \
 		-o $@ xstar_backend_python.cpp -L. -lxstar_api $(PYTHON_LIBS) $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(PYTHON_RPATHS) $(RPATH_ORIGIN)
 
-$(EXECUTABLE_TARGET): xstar_standalone.cpp xstar_science_fits.cpp xstar_science_fits.hpp xstar_run_state.cpp xstar_run_state.hpp xstar_step_log.cpp xstar_step_log.hpp xstar_api.h xstar_api.hpp xstar_python_bridge.h xstar_fixed_state_engine.h xstar_thermal_engine.h xstar_spectral_engine.h $(API_TARGET) $(FIXED_STATE_TARGET) $(EMISSIVITY_TARGET) $(THERMAL_TARGET)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -o $@ xstar_standalone.cpp xstar_science_fits.cpp xstar_run_state.cpp xstar_step_log.cpp \
+xstar_standalone.o: xstar_standalone.cpp xstar_science_fits.hpp xstar_run_state.hpp xstar_step_log.hpp xstar_api.h xstar_api.hpp xstar_python_bridge.h xstar_fixed_state_engine.h xstar_thermal_engine.h xstar_spectral_engine.h
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $<
+
+xstar_science_fits.o: xstar_science_fits.cpp xstar_science_fits.hpp xstar_run_state.hpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $<
+
+xstar_run_state.o: xstar_run_state.cpp xstar_run_state.hpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $<
+
+xstar_step_log.o: xstar_step_log.cpp xstar_step_log.hpp xstar_run_state.hpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -c -o $@ $<
+
+$(EXECUTABLE_TARGET): $(EXECUTABLE_OBJECTS) $(API_TARGET) $(FIXED_STATE_TARGET) $(EMISSIVITY_TARGET) $(THERMAL_TARGET) $(CPP_BACKEND_TARGET)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -o $@ $(EXECUTABLE_OBJECTS) \
 		-L. -lxstar_api -lxstar_fixed_state -lxstar_emissivity -lxstar_thermal $(CFITSIO_LIBS) $(CFITSIO_RPATH) $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
 
 print-config:

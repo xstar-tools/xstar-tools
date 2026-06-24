@@ -966,3 +966,14 @@ include v048746251_validation_summary.json
 include v048746251_readiness_report.json
 include v048746251_native_product_static_readiness_report.json
 include v048746251_local_build.log
+
+# v0.6.48.7.46.25.3 genuine native public-product construction
+include V0648746253_GENUINE_NATIVE_PUBLIC_PRODUCT_CONSTRUCTION.md
+include V048746253_PRODUCTION_HOST_COMMANDS.md
+include V048746253_QUALIFICATION_ASSESSMENT.md
+include run_v048746253_native_public_product_construction.sh
+include prepare_v048746253_runtime_assets.py
+include check_v048746253_native_public_product_readiness.py
+include check_v048746253_native_product_output.py
+include compare_v048746253_native_products.py
+include tests/test_v0648746253_native_public_products.py

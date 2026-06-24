@@ -1,5 +1,16 @@
 # CHANGELOG
 
+# v0.6.48.7.46.25.3 - 2026-06-24
+
+- Restored all nine FITS products and `xout_step.log` as native `xstar_cpp` outputs.
+- Removed all runtime use of benchmark FITS bytes, header templates, radial payloads, and stored log content.
+- Added current CFITSIO-generated headers with supplied-ATDB `ATDATA`, current `DATE`, native `CREATOR`, and shared `RUNID`.
+- Added fail-closed ten-product construction and provenance checking.
+- Changed the native runner to accept no public-product oracle argument and to scrub oracle-related environment variables.
+- Retained direct `libxstar_emissivity.so` linkage and ABI 60487.
+- Builds the required `libxstar_backend_cpp.so` whenever the `xstar_cpp` target is requested.
+- Scientific byte/numerical parity and production promotion remain unqualified.
+
 # v0.6.48.7.46.25.2 - 2026-06-24
 
 - Invalidated the v25/v25.1 claim that public products were generated genuinely

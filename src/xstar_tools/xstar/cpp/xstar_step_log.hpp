@@ -18,6 +18,10 @@ struct Result {
     bool product_parity_qualified = false;
 };
 
+Result write_native_step_log(
+    const std::filesystem::path& output_dir,
+    xstar_run_state::ProductWritingState& state);
+
 Result write_python_step_log(
     const std::filesystem::path& output_dir,
     xstar_run_state::ProductWritingState& state);

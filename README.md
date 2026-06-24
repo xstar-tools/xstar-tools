@@ -1,3 +1,12 @@
+## v0.6.48.7.46.25.3 genuine native public products
+
+This release creates all nine public FITS files and `xout_step.log` inside the
+native `xstar_cpp` process.  The native runner accepts no public-product oracle
+argument.  FITS headers are generated during the current run and share a native
+run ID; `ATDATA` is read from the supplied atomic database.  Construction and
+anti-copy provenance are locally accepted, while numerical/byte parity and
+production promotion remain separate, unaccepted gates.
+
 ## v0.6.48.7.46.25.2 public-product provenance closure
 
 This corrective release invalidates the v25/v25.1 native-public-product claim.

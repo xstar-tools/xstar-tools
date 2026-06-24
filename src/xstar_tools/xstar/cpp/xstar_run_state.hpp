@@ -77,9 +77,9 @@ struct AbundanceRadialRowState {
 struct RadialZoneState {
     std::size_t zone_index = 0;
     std::size_t pass_index = 0;
-    double radius_cm = 0.0;             // Python-oracle RINNER
-    double outer_radius_cm = 0.0;       // Python-oracle ROUTER
-    double delta_radius_cm = 0.0;       // Python-oracle RDEL
+    double radius_cm = 0.0;
+    double outer_radius_cm = 0.0;
+    double delta_radius_cm = 0.0;
     double density_cm3 = 0.0;
     double pressure_dyn_cm2 = 0.0;
     double ionization_parameter = 0.0;  // retained compatibility alias for LOGXI
@@ -88,43 +88,9 @@ struct RadialZoneState {
     double temperature_t4 = 0.0;
     double electron_fraction = 0.0;
     bool provisional_from_controller = false;
-    bool python_oracle_radial_exact = false;
     AcceptedControllerState accepted_controller;
 };
 
-
-struct XstarRadialPayloadState {
-    std::string product;
-    std::size_t zone_index = 0;
-    std::size_t hdu_index = 0;
-    std::size_t row_width = 0;
-    std::size_t row_count = 0;
-    std::size_t field_count = 0;
-    std::string payload_sha256;
-    std::filesystem::path payload_path;
-    std::vector<unsigned char> payload;
-    bool benchmark_exact = false;
-};
-
-
-struct DetailProductBaselineState {
-    std::string product;
-    std::string role;
-    std::size_t expected_size = 0;
-    std::string payload_sha256;
-    std::filesystem::path payload_path;
-    std::vector<unsigned char> payload;
-    bool benchmark_exact = false;
-};
-
-struct XoutStepPrefixState {
-    std::vector<std::string> lines;
-    std::size_t expected_line_count = 0;
-    std::string expected_prefix_sha256;
-    std::string target_release;
-    bool benchmark_exact = false;
-    bool full_log_complete = false;
-};
 
 struct WholeRunAccumulatedState {
     std::string release;
@@ -134,23 +100,21 @@ struct WholeRunAccumulatedState {
     std::filesystem::path native_case_path;
     std::filesystem::path source_trajectory_path;
     std::filesystem::path product_schema_path;
+    std::filesystem::path native_diagnostics_path;
+    std::string native_run_id;
     std::vector<FixedEvaluationState> fixed_evaluations;
     std::vector<AcceptedControllerState> accepted_controller_states;
     std::vector<RadialZoneState> radial_zones;
     std::vector<ParameterRowState> parameter_rows;
     std::vector<AbundanceRadialRowState> abundance_radial_rows;
-    std::vector<XstarRadialPayloadState> xstar_radial_payloads;
-    XoutStepPrefixState xout_step_prefix;
-    std::vector<DetailProductBaselineState> detail_product_baselines;
-    bool exact_detail_products_validated = false;
     bool embedded_public_fits_payloads_absent = false;
     bool embedded_full_xout_step_payload_absent = false;
     std::size_t python_callbacks = 0;
     bool controller_trajectory_qualified = false;
     bool product_schema_complete = false;
     bool radial_state_complete = false;
-    bool xstar_radial_payloads_complete = false;
     bool native_product_inputs_complete = false;
+    bool native_detail_state_retained = false;
 };
 
 struct ProductWritingState {
@@ -159,20 +123,19 @@ struct ProductWritingState {
     std::filesystem::path parameters_path;
     std::filesystem::path atomic_database_path;
     std::filesystem::path schema_path;
+    std::filesystem::path native_diagnostics_path;
+    std::string native_run_id;
+    std::vector<FixedEvaluationState> fixed_evaluations;
     std::vector<RadialZoneState> radial_zones;
     std::vector<ParameterRowState> parameter_rows;
     std::vector<AbundanceRadialRowState> abundance_radial_rows;
-    std::vector<XstarRadialPayloadState> xstar_radial_payloads;
-    XoutStepPrefixState xout_step_prefix;
-    std::vector<DetailProductBaselineState> detail_product_baselines;
-    bool exact_detail_products_validated = false;
     bool embedded_public_fits_payloads_absent = false;
     bool embedded_full_xout_step_payload_absent = false;
     bool run_state_layers_distinct = true;
     bool product_schema_complete = false;
     bool radial_state_complete = false;
-    bool xstar_radial_payloads_complete = false;
     bool native_product_inputs_complete = false;
+    bool native_detail_state_retained = false;
     bool product_state_complete = false;
     bool product_parity_qualified = false;
     bool xout_abund1_computed_from_native_state = false;
@@ -185,9 +148,9 @@ struct ProductWritingState {
     double measured_run_seconds = 0.0;
 };
 
-void load_python_product_schema(
+void prepare_native_product_state(
     WholeRunAccumulatedState& state,
-    const std::filesystem::path& schema_path);
+    const std::filesystem::path& diagnostics_path);
 ProductWritingState build_product_writing_state(const WholeRunAccumulatedState& state);
 void write_run_state_manifest(
     const std::filesystem::path& path,
