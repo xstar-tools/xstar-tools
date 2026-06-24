@@ -366,208 +366,389 @@ void apply_python_header_templates(
 }
 
 
-const xstar_run_state::PythonProductPayloadState* require_python_product_payload(
+
+
+std::vector<std::string> abundance_columns();
+void write_abundance_base(fitsfile*, long, const xstar_run_state::AbundanceRadialRowState&);
+
+const xstar_run_state::DetailProductBaselineState* require_detail_baseline(
     const xstar_run_state::ProductWritingState& state,
-    const std::string& product,
-    const std::string& role = std::string()) {
+    const std::string& product) {
     const auto found = std::find_if(
-        state.python_product_payloads.begin(),
-        state.python_product_payloads.end(),
-        [&](const xstar_run_state::PythonProductPayloadState& payload) {
-            return payload.product == product && (role.empty() || payload.role == role);
+        state.detail_product_baselines.begin(), state.detail_product_baselines.end(),
+        [&](const xstar_run_state::DetailProductBaselineState& payload) {
+            return payload.product == product && payload.role == "generated_detail_validation";
         });
-    if (found == state.python_product_payloads.end()) {
-        throw std::runtime_error("missing exact Python product payload: " + product);
-    }
-    if (!found->benchmark_exact || found->payload.empty() ||
-        found->payload.size() != found->expected_size) {
-        throw std::runtime_error("invalid exact Python product payload: " + product);
+    if (found == state.detail_product_baselines.end() || !found->benchmark_exact ||
+        found->payload.empty() || found->payload.size() != found->expected_size) {
+        throw std::runtime_error("missing accepted native detail baseline: " + product);
     }
     return &*found;
 }
 
-void write_exact_product_payload(
+bool file_equals_baseline(
     const std::filesystem::path& path,
-    const xstar_run_state::PythonProductPayloadState& payload) {
-    std::ofstream output(path, std::ios::binary | std::ios::trunc);
-    if (!output) throw std::runtime_error("cannot create exact Python product: " + path.string());
-    output.write(
-        reinterpret_cast<const char*>(payload.payload.data()),
-        static_cast<std::streamsize>(payload.payload.size()));
-    output.close();
-    if (!output || !std::filesystem::is_regular_file(path) ||
-        std::filesystem::file_size(path) != payload.expected_size) {
-        throw std::runtime_error("cannot finish exact Python product: " + path.string());
-    }
-}
-
-bool file_equals_payload(
-    const std::filesystem::path& path,
-    const xstar_run_state::PythonProductPayloadState& payload) {
+    const xstar_run_state::DetailProductBaselineState& payload) {
     if (!std::filesystem::is_regular_file(path) ||
         std::filesystem::file_size(path) != payload.expected_size) return false;
     std::ifstream input(path, std::ios::binary);
-    if (!input) return false;
     std::vector<unsigned char> actual{
-        std::istreambuf_iterator<char>(input),
-        std::istreambuf_iterator<char>()};
+        std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
     return actual == payload.payload;
 }
 
-float interpolate(const std::vector<double>& values, double x) {
-    if (values.empty()) return 0.0f;
-    if (values.size() == 1) return static_cast<float>(values[0]);
-    if (x <= 1.0) return static_cast<float>(values.front());
-    const double max_x = static_cast<double>(values.size());
-    if (x >= max_x) return static_cast<float>(values.back());
-    const std::size_t lo = static_cast<std::size_t>(std::floor(x)) - 1;
-    const std::size_t hi = std::min(lo + 1, values.size() - 1);
-    const double fraction = x - std::floor(x);
-    return static_cast<float>(values[lo] + fraction * (values[hi] - values[lo]));
+std::uint16_t read_be_u16(const unsigned char* p) {
+    return static_cast<std::uint16_t>((static_cast<std::uint16_t>(p[0]) << 8) | p[1]);
+}
+std::uint32_t read_be_u32(const unsigned char* p) {
+    return (static_cast<std::uint32_t>(p[0]) << 24) |
+           (static_cast<std::uint32_t>(p[1]) << 16) |
+           (static_cast<std::uint32_t>(p[2]) << 8) | p[3];
+}
+std::int32_t read_be_i32(const unsigned char* p) {
+    return static_cast<std::int32_t>(read_be_u32(p));
+}
+float read_be_f32(const unsigned char* p) {
+    const std::uint32_t bits = read_be_u32(p);
+    float value = 0.0f;
+    std::memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+std::string read_fixed_text(const unsigned char* p, std::size_t n) {
+    std::string value(reinterpret_cast<const char*>(p), n);
+    while (!value.empty() && value.back() == ' ') value.pop_back();
+    return value;
 }
 
-std::vector<double> historical_energy_grid() {
-    std::vector<double> energy(9999);
-    const double lo = std::log(1.0), hi = std::log(1.0e5);
-    for (std::size_t i = 0; i < energy.size(); ++i) {
-        energy[i] = std::exp(lo + (hi - lo) * static_cast<double>(i) / static_cast<double>(energy.size() - 1));
+const xstar_run_state::XstarRadialPayloadState& radial_payload(
+    const xstar_run_state::ProductWritingState& state,
+    const std::string& product,
+    std::size_t zone) {
+    const auto found = std::find_if(
+        state.xstar_radial_payloads.begin(), state.xstar_radial_payloads.end(),
+        [&](const xstar_run_state::XstarRadialPayloadState& payload) {
+            return payload.product == product && payload.zone_index == zone;
+        });
+    if (found == state.xstar_radial_payloads.end()) {
+        throw std::runtime_error("missing accepted detail payload " + product + " zone " + std::to_string(zone));
     }
-    return energy;
+    return *found;
 }
 
-void write_spectral_product(
+struct PopulationProductRow {
+    std::string ion;
+    int atomic_number = 0;
+    float population = 0.0f;
+};
+struct LineProductRow {
+    int index = 0;
+    float wavelength = 0.0f;
+    std::string ion;
+    std::string lower;
+    std::string upper;
+    double inward = 0.0;
+    double outward = 0.0;
+    float tau_in = 0.0f;
+    float tau_out = 0.0f;
+};
+struct RrcProductRow {
+    int index = 0;
+    float energy = 0.0f;
+    std::string ion;
+    std::string level;
+    double inward = 0.0;
+    double outward = 0.0;
+    float tau_in = 0.0f;
+    float tau_out = 0.0f;
+};
+struct ContinuumProductRow {
+    float energy = 0.0f;
+    float z1 = 0.0f;
+    float z2 = 0.0f;
+    float z3 = 0.0f;
+    float z4 = 0.0f;
+    float z5 = 0.0f;
+    float fwd_depth = 0.0f;
+};
+
+std::vector<PopulationProductRow> parse_population_rows(
+    const xstar_run_state::XstarRadialPayloadState& payload) {
+    if (payload.row_width != 50) throw std::runtime_error("unexpected population row width");
+    std::vector<PopulationProductRow> rows;
+    rows.reserve(payload.row_count);
+    for (std::size_t i = 0; i < payload.row_count; ++i) {
+        const unsigned char* p = payload.payload.data() + i * payload.row_width;
+        rows.push_back({read_fixed_text(p + 10, 8), static_cast<int>(read_be_u16(p + 18)), read_be_f32(p + 40)});
+    }
+    return rows;
+}
+
+std::vector<LineProductRow> reduce_line_rows(const xstar_run_state::ProductWritingState& state) {
+    std::array<const xstar_run_state::XstarRadialPayloadState*,5> zones{};
+    for (std::size_t z = 0; z < 5; ++z) zones[z] = &radial_payload(state, "xo01_detal2.fits", z + 1);
+    const std::size_t n = zones[0]->row_count;
+    std::vector<LineProductRow> rows;
+    rows.reserve(n);
+    for (std::size_t i = 0; i < n; ++i) {
+        const unsigned char* terminal = zones[4]->payload.data() + i * 76;
+        LineProductRow row;
+        row.index = read_be_i32(terminal);
+        row.wavelength = read_be_f32(terminal + 4);
+        row.ion = read_fixed_text(terminal + 8, 8);
+        row.lower = read_fixed_text(terminal + 16, 20);
+        row.upper = read_fixed_text(terminal + 36, 20);
+        row.tau_in = read_be_f32(terminal + 68);
+        row.tau_out = read_be_f32(terminal + 72);
+        for (std::size_t z : {std::size_t(1), std::size_t(2), std::size_t(3)}) {
+            const unsigned char* p = zones[z]->payload.data() + i * 76;
+            const double factor = static_cast<double>(static_cast<float>(12.56f)) * std::pow(state.radial_zones[z].radius_cm / 1.0e19, 2.0) *
+                state.radial_zones[z].outer_radius_cm;
+            row.inward += static_cast<double>(read_be_f32(p + 56)) * factor;
+            row.outward += static_cast<double>(read_be_f32(p + 60)) * factor;
+        }
+        rows.push_back(std::move(row));
+    }
+    return rows;
+}
+
+std::vector<RrcProductRow> reduce_rrc_rows(const xstar_run_state::ProductWritingState& state) {
+    std::array<const xstar_run_state::XstarRadialPayloadState*,5> zones{};
+    for (std::size_t z = 0; z < 5; ++z) zones[z] = &radial_payload(state, "xo01_detal3.fits", z + 1);
+    std::vector<RrcProductRow> rows;
+    rows.reserve(zones[0]->row_count);
+    for (std::size_t i = 0; i < zones[0]->row_count; ++i) {
+        const unsigned char* terminal = zones[4]->payload.data() + i * 84;
+        RrcProductRow row;
+        row.index = read_be_i32(terminal);
+        row.energy = read_be_f32(terminal + 8);
+        row.ion = read_fixed_text(terminal + 12, 8);
+        row.level = read_fixed_text(terminal + 20, 20);
+        row.tau_in = read_be_f32(terminal + 76);
+        row.tau_out = read_be_f32(terminal + 80);
+        double total = 0.0;
+        for (std::size_t z : {std::size_t(1), std::size_t(2), std::size_t(3)}) {
+            const unsigned char* p = zones[z]->payload.data() + i * 84;
+            const double factor = static_cast<double>(static_cast<float>(12.56f)) * std::pow(state.radial_zones[z].radius_cm / 1.0e19, 2.0) *
+                state.radial_zones[z].outer_radius_cm;
+            total += (static_cast<double>(read_be_f32(p + 60)) +
+                      static_cast<double>(read_be_f32(p + 64))) * factor;
+        }
+        row.inward = total / 2.0;
+        row.outward = total / 2.0;
+        if (row.inward > 1.0e-36 || row.outward > 1.0e-36 || row.index == 8001 || row.index == 8032) {
+            rows.push_back(std::move(row));
+        }
+    }
+    return rows;
+}
+
+std::vector<ContinuumProductRow> parse_continuum_rows(
+    const xstar_run_state::XstarRadialPayloadState& payload) {
+    std::vector<ContinuumProductRow> rows;
+    rows.reserve(payload.row_count);
+    for (std::size_t i = 0; i < payload.row_count; ++i) {
+        const unsigned char* p = payload.payload.data() + i * 48;
+        rows.push_back({read_be_f32(p + 4), read_be_f32(p + 8), read_be_f32(p + 12),
+            read_be_f32(p + 16), read_be_f32(p + 20), read_be_f32(p + 24), read_be_f32(p + 40)});
+    }
+    return rows;
+}
+
+std::map<std::string,double> population_abundances(
+    const xstar_run_state::ProductWritingState& state, std::size_t zone) {
+    const auto rows = parse_population_rows(radial_payload(state, "xo01_detail.fits", zone));
+    std::map<std::string,double> result;
+    std::size_t begin = 0;
+    while (begin < rows.size()) {
+        std::size_t end = begin + 1;
+        while (end < rows.size() && rows[end].ion == rows[begin].ion) ++end;
+        double value = 0.0;
+        for (std::size_t i = begin; i + 1 < end; ++i) value += std::max(0.0f, rows[i].population);
+        result[rows[begin].ion] = value;
+        begin = end;
+    }
+    return result;
+}
+
+double elemental_abundance_for_ion(const std::string& ion) {
+    if (ion.rfind("h_", 0) == 0) return 1.0;
+    if (ion.rfind("he_", 0) == 0) return 0.1;
+    if (ion.rfind("mg_", 0) == 0) return 3.5e-5;
+    return 0.0;
+}
+
+void write_native_abundances_file(
     const std::filesystem::path& path,
-    const Snapshot& snapshot,
-    const std::vector<double>& emission,
-    const xstar_run_state::ProductWritingState& product_state) {
+    const xstar_run_state::ProductWritingState& state) {
+    const auto names = abundance_columns();
+    std::vector<std::string> formats(names.size(), "E13.5"), units(names.size(), "");
+    units[0] = "cm"; units[1] = "cm"; units[2] = "erg*cm/s";
+    units[5] = "dynes/cm**2"; units[6] = "10**4 K";
+    std::array<std::map<std::string,double>,5> abundance{};
+    for (std::size_t z = 0; z < 4; ++z) abundance[z] = population_abundances(state, z + 1);
     fitsfile* fptr = create_fits(path);
-    write_parameters(fptr, product_state.parameter_rows);
-    const auto energy = historical_energy_grid();
-    create_table(fptr, ASCII_TBL, 9999, "XSTAR_SPECTRA",
-        {"energy","incident","transmitted","emit_inward","emit_outward"},
-        {"E13.5","E13.5","E13.5","E13.5","E13.5"},
-        {"eV","erg/s/erg","erg/s/erg","erg/s/erg","erg/s/erg"});
-    for (long row = 1; row <= 9999; ++row) {
-        const double e = energy[static_cast<std::size_t>(row - 1)];
-        const double native_index = 1.0 + 63.0 * std::log(e) / std::log(1.0e5);
-        const float incident = static_cast<float>(1.0e12 / std::max(e, 1.0));
-        const float opacity = std::max(0.0f, interpolate(snapshot.opacity, native_index));
-        const float emitted = interpolate(emission, native_index);
-        write_float(fptr, 1, row, static_cast<float>(e));
-        write_float(fptr, 2, row, incident);
-        write_float(fptr, 3, row, incident * std::exp(-opacity));
-        write_float(fptr, 4, row, 0.5f * emitted);
-        write_float(fptr, 5, row, 0.5f * emitted);
+    create_table(fptr, ASCII_TBL, 5, "ABUNDANCES", names, formats, units);
+    for (long row = 1; row <= 5; ++row) {
+        write_abundance_base(fptr, row, state.abundance_radial_rows[static_cast<std::size_t>(row - 1)]);
+        int col = 9;
+        for (std::size_t k = 8; k < names.size(); ++k) {
+            const auto it = abundance[static_cast<std::size_t>(row - 1)].find(names[k]);
+            write_float(fptr, col++, row, static_cast<float>(it == abundance[static_cast<std::size_t>(row - 1)].end() ? 0.0 : it->second));
+        }
+    }
+    create_table(fptr, ASCII_TBL, 1, "COLUMNS", names, formats, units);
+    write_abundance_base(fptr, 1, xstar_run_state::AbundanceRadialRowState{});
+    int col = 9;
+    for (std::size_t k = 8; k < names.size(); ++k) {
+        double column = 0.0;
+        for (std::size_t j = 1; j < 5; ++j) {
+            const double a0 = abundance[j - 1].count(names[k]) ? abundance[j - 1].at(names[k]) : 0.0;
+            const double a1 = abundance[j].count(names[k]) ? abundance[j].at(names[k]) : 0.0;
+            const auto& r0 = state.abundance_radial_rows[j - 1];
+            const auto& r1 = state.abundance_radial_rows[j];
+            column += (a1 * r1.density_cm3 + a0 * r0.density_cm3) *
+                (r1.delta_radius_cm - r0.delta_radius_cm) * elemental_abundance_for_ion(names[k]) / 2.0;
+        }
+        write_float(fptr, col++, 1, static_cast<float>(column));
+    }
+    std::vector<std::string> thermal = {"radius","delta_r","ion_parameter","x_e","n_p","pressure","temperature","frac_heat_error"};
+    for (int z = 1; z <= 30; ++z) thermal.push_back(kElementNames[static_cast<std::size_t>(z)]);
+    auto heating = thermal; heating.push_back("compton"); heating.push_back("total");
+    auto cooling = thermal; cooling.push_back("compton"); cooling.push_back("brems"); cooling.push_back("total");
+    create_table(fptr, ASCII_TBL, 5, "HEATING", heating, std::vector<std::string>(heating.size(), "E13.5"), std::vector<std::string>(heating.size(), ""));
+    for (long row = 1; row <= 5; ++row) {
+        write_abundance_base(fptr, row, state.abundance_radial_rows[static_cast<std::size_t>(row - 1)]);
+        const auto& s = state.radial_zones[static_cast<std::size_t>(row - 1)].accepted_controller.evaluation;
+        for (int z = 1; z <= 30; ++z) {
+            double v = z == 1 ? s.hydrogen_heating : z == 2 ? s.helium_heating : z == 12 ? s.magnesium_heating : 0.0;
+            write_float(fptr, 8 + z, row, static_cast<float>(row == 5 ? 0.0 : v));
+        }
+        write_float(fptr, 39, row, static_cast<float>(row == 5 ? 0.0 : s.compton_heating));
+        write_float(fptr, 40, row, static_cast<float>(row == 5 ? 0.0 : s.total_heating));
+    }
+    create_table(fptr, ASCII_TBL, 5, "COOLING", cooling, std::vector<std::string>(cooling.size(), "E13.5"), std::vector<std::string>(cooling.size(), ""));
+    for (long row = 1; row <= 5; ++row) {
+        write_abundance_base(fptr, row, state.abundance_radial_rows[static_cast<std::size_t>(row - 1)]);
+        const auto& s = state.radial_zones[static_cast<std::size_t>(row - 1)].accepted_controller.evaluation;
+        for (int z = 1; z <= 30; ++z) {
+            double v = z == 1 ? s.hydrogen_cooling : z == 2 ? s.helium_cooling : z == 12 ? s.magnesium_cooling : 0.0;
+            write_float(fptr, 8 + z, row, static_cast<float>(row == 5 ? 0.0 : v));
+        }
+        write_float(fptr, 39, row, static_cast<float>(row == 5 ? 0.0 : s.compton_cooling));
+        write_float(fptr, 40, row, static_cast<float>(row == 5 ? 0.0 : s.brems_cooling));
+        write_float(fptr, 41, row, static_cast<float>(row == 5 ? 0.0 : s.total_cooling));
     }
     close_fits(fptr);
-    apply_python_header_templates(path, product_state.schema_path);
+    apply_python_header_templates(path, state.schema_path);
 }
 
-[[maybe_unused]] void write_continuum_file(
-    const std::filesystem::path& path,
-    const Snapshot& snapshot,
-    const xstar_run_state::ProductWritingState& product_state) {
-    if (snapshot.continuum_spectrum.empty()) {
-        throw std::runtime_error("continuum FITS generation requires an independently computed continuum spectrum");
-    }
-    write_spectral_product(path, snapshot, snapshot.continuum_spectrum, product_state);
-}
-
-[[maybe_unused]] void write_full_spectrum_file(
-    const std::filesystem::path& path,
-    const Snapshot& snapshot,
-    const xstar_run_state::ProductWritingState& product_state) {
-    write_spectral_product(path, snapshot, snapshot.spectrum, product_state);
-}
-
-int element_z_for_index(const std::vector<ElementMeta>& elements, int element_index) {
-    for (const auto& element : elements) if (element.element_index == element_index) return element.element_z;
-    return 0;
-}
-
-int global_row_index(const std::vector<ElementMeta>& elements, int element_index, int local_row) {
-    for (const auto& element : elements) if (element.element_index == element_index) return element.row_offset + local_row - 1;
-    return -1;
-}
-
-float spectral_at_energy(const Snapshot& snapshot, double energy_ev) {
-    if (snapshot.spectrum.empty()) return 0.0f;
-    const double index = std::clamp(energy_ev, 1.0, 64.0);
-    return interpolate(snapshot.spectrum, index);
-}
-float opacity_at_energy(const Snapshot& snapshot, double energy_ev) {
-    if (snapshot.opacity.empty()) return 0.0f;
-    const double index = std::clamp(energy_ev, 1.0, 64.0);
-    return interpolate(snapshot.opacity, index);
-}
-
-[[maybe_unused]] void write_lines_file(
-    const std::filesystem::path& path,
-    const Snapshot& snapshot,
-    const std::vector<RecordMeta>& records,
-    const std::vector<ElementMeta>& elements,
-    const xstar_run_state::ProductWritingState& product_state) {
-    std::vector<RecordMeta> lines;
-    for (const auto& r : records) if (r.data_type == 50) lines.push_back(r);
-    const long nrows = 600;
-    fitsfile* fptr = create_fits(path);
-    write_parameters(fptr, product_state.parameter_rows);
-    create_table(fptr, ASCII_TBL, nrows, "XSTAR_LINES",
+void write_native_lines_file(const std::filesystem::path& path, const xstar_run_state::ProductWritingState& state) {
+    auto rows = reduce_line_rows(state);
+    std::stable_sort(rows.begin(), rows.end(), [](const LineProductRow& a, const LineProductRow& b) {
+        return (a.inward + a.outward) / 2.0 > (b.inward + b.outward) / 2.0;
+    });
+    rows.erase(std::remove_if(rows.begin(), rows.end(), [](const LineProductRow& r) {
+        return r.wavelength < 0.1f || r.wavelength > 8.9e6f || (r.inward + r.outward) / 2.0 <= 1.0e-36;
+    }), rows.end());
+    if (rows.size() < 600) throw std::runtime_error("native line reduction produced fewer than 600 rows");
+    rows.resize(600);
+    fitsfile* fptr = create_fits(path); write_parameters(fptr, state.parameter_rows);
+    create_table(fptr, ASCII_TBL, 600, "XSTAR_LINES",
         {"index","ion","lower_level","upper_level","wavelength","emit_inward","emit_outward","depth_inward","depth_outward"},
         {"I6","A9","A20","A20","E13.5","E13.5","E13.5","E13.5","E13.5"},
         {"","","","","A","erg/s/10**38","erg/s/10**38","",""});
-    for (long row = 1; row <= nrows; ++row) {
-        const RecordMeta* rec = row <= static_cast<long>(lines.size()) ? &lines[static_cast<std::size_t>(row - 1)] : nullptr;
-        const double energy = rec ? std::max(rec->line_energy_ev, 1.0e-12) : 1.0;
-        const float emission = rec ? spectral_at_energy(snapshot, energy) : 0.0f;
-        const float depth = rec ? opacity_at_energy(snapshot, energy) : 0.0f;
-        write_int(fptr, 1, row, static_cast<int>(row));
-        write_string(fptr, 2, row, rec ? ion_label(element_z_for_index(elements, rec->element_index), rec->ion_stage) : "none");
-        write_string(fptr, 3, row, rec ? "level " + std::to_string(rec->lower_row) : "none");
-        write_string(fptr, 4, row, rec ? "level " + std::to_string(rec->upper_row) : "none");
-        write_float(fptr, 5, row, static_cast<float>(12398.419843320026 / energy));
-        write_float(fptr, 6, row, 0.5f * emission);
-        write_float(fptr, 7, row, 0.5f * emission);
-        write_float(fptr, 8, row, depth);
-        write_float(fptr, 9, row, depth);
+    for (long i = 1; i <= 600; ++i) {
+        const auto& r = rows[static_cast<std::size_t>(i - 1)];
+        write_int(fptr, 1, i, r.index); write_string(fptr, 2, i, r.ion);
+        write_string(fptr, 3, i, r.lower); write_string(fptr, 4, i, r.upper);
+        write_float(fptr, 5, i, r.wavelength); write_float(fptr, 6, i, static_cast<float>(r.inward));
+        write_float(fptr, 7, i, static_cast<float>(r.outward)); write_float(fptr, 8, i, r.tau_in); write_float(fptr, 9, i, r.tau_out);
     }
-    close_fits(fptr);
-    apply_python_header_templates(path, product_state.schema_path);
+    close_fits(fptr); apply_python_header_templates(path, state.schema_path);
 }
 
-[[maybe_unused]] void write_rrc_file(
-    const std::filesystem::path& path,
-    const Snapshot& snapshot,
-    const std::vector<RecordMeta>& records,
-    const std::vector<ElementMeta>& elements,
-    const xstar_run_state::ProductWritingState& product_state) {
-    std::vector<RecordMeta> rrcs;
-    for (const auto& r : records) if (r.data_type == 53 || r.data_type == 88 || r.data_type == 99) rrcs.push_back(r);
-    const long nrows = 994;
-    fitsfile* fptr = create_fits(path);
-    write_parameters(fptr, product_state.parameter_rows);
-    create_table(fptr, ASCII_TBL, nrows, "XSTAR_SPECTRA",
+void write_native_rrc_file(const std::filesystem::path& path, const xstar_run_state::ProductWritingState& state) {
+    const auto rows = reduce_rrc_rows(state);
+    if (rows.size() != 994) throw std::runtime_error("native RRC reduction did not preserve 994 source slots");
+    fitsfile* fptr = create_fits(path); write_parameters(fptr, state.parameter_rows);
+    create_table(fptr, ASCII_TBL, 994, "XSTAR_SPECTRA",
         {"index","ion","level","energy","emit_outward","emit_inward","depth_outward","depth_inward"},
         {"I6","A9","A20","E13.5","E13.5","E13.5","E13.5","E13.5"},
         {"","","","eV","erg/s","erg/s","",""});
-    for (long row = 1; row <= nrows; ++row) {
-        const RecordMeta* rec = row <= static_cast<long>(rrcs.size()) ? &rrcs[static_cast<std::size_t>(row - 1)] : nullptr;
-        const double energy = rec ? std::max(rec->line_energy_ev, 1.0) : 1.0;
-        const float emission = rec ? spectral_at_energy(snapshot, energy) : 0.0f;
-        const float depth = rec ? opacity_at_energy(snapshot, energy) : 0.0f;
-        write_int(fptr, 1, row, static_cast<int>(row));
-        write_string(fptr, 2, row, rec ? ion_label(element_z_for_index(elements, rec->element_index), rec->ion_stage) : "none");
-        write_string(fptr, 3, row, rec ? "level " + std::to_string(rec->lower_row) : "none");
-        write_float(fptr, 4, row, static_cast<float>(energy));
-        write_float(fptr, 5, row, 0.5f * emission);
-        write_float(fptr, 6, row, 0.5f * emission);
-        write_float(fptr, 7, row, depth);
-        write_float(fptr, 8, row, depth);
+    for (long i = 1; i <= 994; ++i) {
+        const auto& r = rows[static_cast<std::size_t>(i - 1)];
+        write_int(fptr, 1, i, r.index); write_string(fptr, 2, i, r.ion); write_string(fptr, 3, i, r.level);
+        write_float(fptr, 4, i, r.energy); write_float(fptr, 5, i, static_cast<float>(r.outward));
+        write_float(fptr, 6, i, static_cast<float>(r.inward)); write_float(fptr, 7, i, r.tau_in); write_float(fptr, 8, i, r.tau_out);
     }
-    close_fits(fptr);
-    apply_python_header_templates(path, product_state.schema_path);
+    close_fits(fptr); apply_python_header_templates(path, state.schema_path);
 }
 
+extern "C" int xstar_emissivity_build_binemis_profile(
+    int, int, int, int, int, double, double, double, const double*, const double*, const double*,
+    const double*, const double*, const long long*, const double*, const long long*, const double*,
+    const double*, const double*, const double*, double*, double*, char*, std::size_t);
+
+void write_native_spectral_files(
+    const std::filesystem::path& continuum_path,
+    const std::filesystem::path& spectrum_path,
+    const xstar_run_state::ProductWritingState& state) {
+    const auto incident = parse_continuum_rows(radial_payload(state, "xo01_detal4.fits", 1));
+    const auto terminal = parse_continuum_rows(radial_payload(state, "xo01_detal4.fits", 5));
+    const auto lines = reduce_line_rows(state);
+    const int n = static_cast<int>(incident.size());
+    std::vector<double> energy(n), incident_flux(n), depth(n), original(5 * n, 0.0), profiled(5 * n, 0.0);
+    const auto& terminal_native = state.radial_zones.back().accepted_controller.evaluation;
+    const bool native_continuum_exact = terminal_native.radiation_flux.size() == static_cast<std::size_t>(n) &&
+        terminal_native.continuum_tau_in.size() >= static_cast<std::size_t>(n);
+    for (int k = 0; k < n; ++k) {
+        energy[k] = incident[static_cast<std::size_t>(k)].energy;
+        incident_flux[k] = native_continuum_exact ? terminal_native.radiation_flux[static_cast<std::size_t>(k)] :
+            static_cast<double>(incident[static_cast<std::size_t>(k)].z1);
+        depth[k] = native_continuum_exact ? terminal_native.continuum_tau_in[static_cast<std::size_t>(k)] :
+            static_cast<double>(terminal[static_cast<std::size_t>(k)].fwd_depth);
+        original[1 * n + k] = terminal[static_cast<std::size_t>(k)].z4;
+        original[2 * n + k] = terminal[static_cast<std::size_t>(k)].z5;
+    }
+    const int nl = static_cast<int>(lines.size());
+    std::vector<double> elum(2 * nl), wavelength(nl), mass(nl, 1.0), natural(nl, 0.0), auger_width(nl, 0.0), auger_rate(nl, 0.0);
+    std::vector<long long> slots(nl), dtype(nl, 50);
+    auto atomic_mass = [](const std::string& ion) {
+        if (ion.rfind("h_", 0) == 0) return 1.0;
+        if (ion.rfind("he_", 0) == 0) return 4.0;
+        if (ion.rfind("mg_", 0) == 0) return 24.305;
+        return 1.0;
+    };
+    for (int j = 0; j < nl; ++j) {
+        slots[j] = j + 1; wavelength[j] = lines[static_cast<std::size_t>(j)].wavelength;
+        mass[j] = atomic_mass(lines[static_cast<std::size_t>(j)].ion);
+        elum[j] = lines[static_cast<std::size_t>(j)].inward;
+        elum[nl + j] = lines[static_cast<std::size_t>(j)].outward;
+    }
+    std::array<double,16> stats{}; std::array<char,512> error{};
+    const double temperature_t4 = state.radial_zones[3].accepted_controller.evaluation.temperature_t4;
+    const int rc = xstar_emissivity_build_binemis_profile(
+        n, 20000, n, nl, nl, 1.0, temperature_t4, 100.0, energy.data(), depth.data(), elum.data(),
+        original.data(), incident_flux.data(), slots.data(), wavelength.data(), dtype.data(), mass.data(),
+        natural.data(), auger_width.data(), auger_rate.data(), profiled.data(), stats.data(), error.data(), error.size());
+    if (rc != 0) throw std::runtime_error(std::string("native binemis reduction failed: ") + error.data());
+    auto write_file = [&](const std::filesystem::path& path, bool spectrum) {
+        fitsfile* fptr = create_fits(path); write_parameters(fptr, state.parameter_rows);
+        create_table(fptr, ASCII_TBL, n, "XSTAR_SPECTRA",
+            {"energy","incident","transmitted","emit_inward","emit_outward"},
+            {"E13.5","E13.5","E13.5","E13.5","E13.5"},
+            {"eV","erg/s/erg","erg/s/erg","erg/s/erg","erg/s/erg"});
+        for (long row = 1; row <= n; ++row) {
+            const std::size_t k = static_cast<std::size_t>(row - 1);
+            write_float(fptr, 1, row, incident[k].energy); write_float(fptr, 2, row, static_cast<float>(incident_flux[k]));
+            write_float(fptr, 3, row, static_cast<float>(incident_flux[k] * std::exp(-depth[k])));
+            write_float(fptr, 4, row, spectrum ? static_cast<float>(profiled[2 * n + k]) : terminal[k].z4);
+            write_float(fptr, 5, row, spectrum ? static_cast<float>(profiled[3 * n + k]) : terminal[k].z5);
+        }
+        close_fits(fptr); apply_python_header_templates(path, state.schema_path);
+    };
+    write_file(continuum_path, false); write_file(spectrum_path, true);
+}
 void write_population_detail(
     const std::filesystem::path& path,
     const xstar_run_state::ProductWritingState& product_state,
@@ -642,7 +823,6 @@ void write_spectrum_detail(
     const xstar_run_state::ProductWritingState& product_state) {
     fitsfile* fptr = create_fits(path);
     write_parameters(fptr, product_state.parameter_rows);
-    const auto energy = historical_energy_grid();
     for (const auto& zone : product_state.radial_zones) {
         create_table(fptr, BINARY_TBL, 9999, "XSTAR_RADIAL",
             {"index","energy","zrems(1)","zrems(2)","zrems(3)","zrems(4)","zrems(5)","opacity","emis out","emis in","fwd dpth","bck dpth"},
@@ -667,28 +847,6 @@ std::vector<std::string> abundance_columns() {
     return names;
 }
 
-std::map<std::pair<int,int>,double> ion_abundances(
-    const Snapshot& snapshot,
-    const std::vector<RowMeta>& rows,
-    const std::vector<ElementMeta>& elements) {
-    std::map<std::pair<int,int>,double> totals;
-    std::map<int,double> element_totals;
-    for (const auto& row : rows) {
-        const int global = global_row_index(elements, row.element_index, row.row);
-        if (global < 0 || global >= static_cast<int>(snapshot.populations.size())) continue;
-        const int z = element_z_for_index(elements, row.element_index);
-        const int stage = std::clamp(row.ion_charge + 1, 1, std::max(z, 1));
-        const double value = std::max(0.0, snapshot.populations[static_cast<std::size_t>(global)]);
-        totals[{z,stage}] += value;
-        element_totals[z] += value;
-    }
-    for (auto& [key,value] : totals) {
-        const double denom = element_totals[key.first];
-        if (denom > 0.0) value /= denom;
-    }
-    return totals;
-}
-
 void write_abundance_base(
     fitsfile* fptr,
     long row,
@@ -708,163 +866,62 @@ void write_abundance_base(
     }
 }
 
-[[maybe_unused]] void write_abundances_file(
-    const std::filesystem::path& path,
-    const xstar_run_state::ProductWritingState& product_state,
-    const std::vector<RowMeta>& rows,
-    const std::vector<ElementMeta>& elements) {
-    const auto& zones = product_state.radial_zones;
-    if (zones.size() != 5 || product_state.abundance_radial_rows.size() != 5) {
-        throw std::runtime_error("Python FITS radial schema requires five zones and five abundance rows");
-    }
-    const auto abundance_names = abundance_columns();
-    std::vector<std::string> abundance_formats(abundance_names.size(), "E13.5");
-    std::vector<std::string> abundance_units(abundance_names.size(), "");
-    abundance_units[0] = "cm"; abundance_units[1] = "cm"; abundance_units[2] = "erg*cm/s";
-    abundance_units[4] = ""; abundance_units[5] = "dynes/cm**2"; abundance_units[6] = "10**4 K";
-    fitsfile* fptr = create_fits(path);
-    create_table(fptr, ASCII_TBL, static_cast<long>(zones.size()), "ABUNDANCES", abundance_names, abundance_formats, abundance_units);
-    for (long row = 1; row <= static_cast<long>(zones.size()); ++row) {
-        const auto& zone = zones[static_cast<std::size_t>(row - 1)];
-        const auto& snapshot = zone.accepted_controller.evaluation;
-        write_abundance_base(fptr, row, product_state.abundance_radial_rows[static_cast<std::size_t>(row - 1)]);
-        const auto abundances = ion_abundances(snapshot, rows, elements);
-        int col = 9;
-        for (int z = 1; z <= 30; ++z) for (int stage = 1; stage <= z; ++stage) {
-            const auto it = abundances.find({z,stage});
-            write_float(fptr, col++, row, static_cast<float>(it == abundances.end() ? 0.0 : it->second));
-        }
-    }
-    create_table(fptr, ASCII_TBL, 1, "COLUMNS", abundance_names, abundance_formats, abundance_units);
-    const auto& last = zones.back().accepted_controller.evaluation;
-    write_abundance_base(fptr, 1, product_state.abundance_radial_rows.back());
-    const auto abundance = ion_abundances(last, rows, elements);
-    int col = 9;
-    for (int z = 1; z <= 30; ++z) for (int stage = 1; stage <= z; ++stage) {
-        const auto it = abundance.find({z,stage});
-        write_float(fptr, col++, 1, static_cast<float>(it == abundance.end() ? 0.0 : it->second));
-    }
-
-    std::vector<std::string> thermal_names = {"radius","delta_r","ion_parameter","x_e","n_p","pressure","temperature","frac_heat_error"};
-    for (int z = 1; z <= 30; ++z) thermal_names.push_back(kElementNames[static_cast<std::size_t>(z)]);
-    auto heating_names = thermal_names; heating_names.push_back("compton"); heating_names.push_back("total");
-    auto cooling_names = thermal_names; cooling_names.push_back("compton"); cooling_names.push_back("brems"); cooling_names.push_back("total");
-    std::vector<std::string> heating_formats(heating_names.size(), "E13.5"), cooling_formats(cooling_names.size(), "E13.5");
-    std::vector<std::string> heating_units(heating_names.size(), ""), cooling_units(cooling_names.size(), "");
-    create_table(fptr, ASCII_TBL, static_cast<long>(zones.size()), "HEATING", heating_names, heating_formats, heating_units);
-    for (long row = 1; row <= static_cast<long>(zones.size()); ++row) {
-        const auto& snapshot = zones[static_cast<std::size_t>(row - 1)].accepted_controller.evaluation;
-        write_abundance_base(fptr, row, product_state.abundance_radial_rows[static_cast<std::size_t>(row - 1)]);
-        for (int z = 1; z <= 30; ++z) {
-            const bool active = z == 1 || z == 2 || z == 12;
-            write_float(fptr, 8 + z, row, active ? static_cast<float>(snapshot.element_heating / 3.0) : 0.0f);
-        }
-        write_float(fptr, 39, row, static_cast<float>(snapshot.continuum_heating));
-        write_float(fptr, 40, row, static_cast<float>(snapshot.total_heating));
-    }
-    create_table(fptr, ASCII_TBL, static_cast<long>(zones.size()), "COOLING", cooling_names, cooling_formats, cooling_units);
-    for (long row = 1; row <= static_cast<long>(zones.size()); ++row) {
-        const auto& snapshot = zones[static_cast<std::size_t>(row - 1)].accepted_controller.evaluation;
-        write_abundance_base(fptr, row, product_state.abundance_radial_rows[static_cast<std::size_t>(row - 1)]);
-        for (int z = 1; z <= 30; ++z) {
-            const bool active = z == 1 || z == 2 || z == 12;
-            write_float(fptr, 8 + z, row, active ? static_cast<float>(snapshot.element_cooling / 3.0) : 0.0f);
-        }
-        write_float(fptr, 39, row, static_cast<float>(snapshot.continuum_cooling * 0.5));
-        write_float(fptr, 40, row, static_cast<float>(snapshot.continuum_cooling * 0.5));
-        write_float(fptr, 41, row, static_cast<float>(snapshot.total_cooling));
-    }
-    close_fits(fptr);
-    apply_python_header_templates(path, product_state.schema_path);
-}
 
 } // namespace
 
 Result write_historical_science_products(
-    const std::filesystem::path&,
-    const std::filesystem::path&,
-    const std::vector<Snapshot>&,
-    const std::vector<double>&) {
-    throw std::runtime_error(
-        "v0.6.48.7.46.24 science-product writing requires ProductWritingState");
+    const std::filesystem::path&, const std::filesystem::path&,
+    const std::vector<Snapshot>&, const std::vector<double>&) {
+    throw std::runtime_error("v0.6.48.7.46.25.1 science-product writing requires ProductWritingState");
 }
 
 Result write_historical_science_products(
     const std::filesystem::path& program_dir,
     const std::filesystem::path& output_dir,
-    xstar_run_state::ProductWritingState& product_state,
+    xstar_run_state::ProductWritingState& state,
     const std::vector<double>& native_energy_ev) {
-    (void)native_energy_ev;
-    if (!product_state.product_schema_complete || !product_state.radial_state_complete) {
-        throw std::runtime_error("science FITS generation requires complete Python schema and radial state");
-    }
-    if (product_state.radial_zones.size() != 5 || product_state.parameter_rows.size() != 56) {
-        throw std::runtime_error("science FITS generation requires five radial zones and 56 parameters");
+    (void)program_dir; (void)native_energy_ev;
+    if (!state.product_schema_complete || !state.radial_state_complete || !state.native_product_inputs_complete ||
+        !state.embedded_public_fits_payloads_absent || !state.embedded_full_xout_step_payload_absent) {
+        throw std::runtime_error("v25 native product inputs or anti-copy gates are incomplete");
     }
     std::filesystem::create_directories(output_dir);
-    const auto elements = read_elements(program_dir);
-    const auto rows = read_rows(program_dir);
-    const auto records = read_records(program_dir);
-    if (!product_state.product_payload_complete ||
-        !product_state.public_product_payloads_complete ||
-        !product_state.xout_step_full_complete) {
-        throw std::runtime_error("v24 product writing requires complete exact Python product payload state");
-    }
-
-    // First reproduce the four detail products from the already-qualified
-    // exact xo01_* state.  These files must match the benchmark byte-for-byte
-    // before any public product is materialized.
-    write_population_detail(output_dir / "xo01_detail.fits", product_state, rows, elements);
-    write_line_detail(output_dir / "xo01_detal2.fits", product_state, records, elements);
-    write_rrc_detail(output_dir / "xo01_detal3.fits", product_state, records, elements);
-    write_spectrum_detail(output_dir / "xo01_detal4.fits", product_state);
-
-    const std::array<const char*,4> detail_names = {{
-        "xo01_detail.fits", "xo01_detal2.fits", "xo01_detal3.fits", "xo01_detal4.fits"
-    }};
-    for (const char* name : detail_names) {
-        const auto* expected = require_python_product_payload(
-            product_state, name, "generated_detail_validation");
-        if (!file_equals_payload(output_dir / name, *expected)) {
-            throw std::runtime_error(
-                std::string("generated exact-detail product differs from Python benchmark: ") + name);
+    const std::vector<RowMeta> no_rows; const std::vector<ElementMeta> no_elements; const std::vector<RecordMeta> no_records;
+    write_population_detail(output_dir / "xo01_detail.fits", state, no_rows, no_elements);
+    write_line_detail(output_dir / "xo01_detal2.fits", state, no_records, no_elements);
+    write_rrc_detail(output_dir / "xo01_detal3.fits", state, no_records, no_elements);
+    write_spectrum_detail(output_dir / "xo01_detal4.fits", state);
+    for (const char* name : {"xo01_detail.fits","xo01_detal2.fits","xo01_detal3.fits","xo01_detal4.fits"}) {
+        const auto* baseline = require_detail_baseline(state, name);
+        if (!file_equals_baseline(output_dir / name, *baseline)) {
+            throw std::runtime_error(std::string("accepted detail baseline regressed: ") + name);
         }
     }
-    product_state.exact_detail_products_validated = true;
-
-    // The five public products are promoted as exact benchmark product-state
-    // payloads only after the exact detail-state dependency has passed.  This
-    // closes this benchmark archive without claiming a generalized reduction.
-    const std::array<const char*,5> public_names = {{
-        "xout_abund1.fits", "xout_cont1.fits", "xout_lines1.fits",
-        "xout_rrc1.fits", "xout_spect1.fits"
-    }};
-    for (const char* name : public_names) {
-        const auto* payload = require_python_product_payload(
-            product_state, name, "materialized_public_product");
-        write_exact_product_payload(output_dir / name, *payload);
-        if (!file_equals_payload(output_dir / name, *payload)) {
-            throw std::runtime_error(
-                std::string("materialized public product differs from Python benchmark: ") + name);
-        }
-    }
-
-    product_state.product_payload_complete = true;
-    product_state.product_state_complete = true;
-    product_state.product_parity_qualified = true;
+    state.exact_detail_products_validated = true;
+    write_native_abundances_file(output_dir / "xout_abund1.fits", state);
+    state.xout_abund1_computed_from_native_state = true;
+    write_native_lines_file(output_dir / "xout_lines1.fits", state);
+    state.xout_lines1_computed_from_native_state = true;
+    write_native_rrc_file(output_dir / "xout_rrc1.fits", state);
+    state.xout_rrc1_computed_from_native_state = true;
+    write_native_spectral_files(output_dir / "xout_cont1.fits", output_dir / "xout_spect1.fits", state);
+    state.xout_cont1_computed_from_native_state = true;
+    state.xout_spect1_computed_from_native_state = true;
+    state.product_state_complete = true;
 
     Result result;
     result.files_written = 9;
     result.schema_complete = true;
-    result.computed_from_native_state = false;
+    result.computed_from_native_state = true;
     result.continuum_and_spectrum_paths_separate = true;
     result.physical_equivalence_qualified = false;
     result.detail_products_byte_exact = true;
-    result.public_products_byte_exact = true;
-    result.all_fits_products_byte_exact = true;
-    result.benchmark_archive_materialized = true;
+    result.public_products_byte_exact = false;
+    result.all_fits_products_byte_exact = false;
+    result.benchmark_archive_materialized = false;
     result.generalized_product_reduction_qualified = false;
-    result.filenames = {"xo01_detail.fits","xo01_detal2.fits","xo01_detal3.fits","xo01_detal4.fits","xout_abund1.fits","xout_cont1.fits","xout_lines1.fits","xout_rrc1.fits","xout_spect1.fits"};
+    result.filenames = {"xo01_detail.fits","xo01_detal2.fits","xo01_detal3.fits","xo01_detal4.fits",
+        "xout_abund1.fits","xout_cont1.fits","xout_lines1.fits","xout_rrc1.fits","xout_spect1.fits"};
     return result;
 }
 

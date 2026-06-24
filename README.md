@@ -1,6 +1,24 @@
-## v0.6.48.7.46.24 complete benchmark archive reproduction
+## v0.6.48.7.46.25.1 native product runtime-asset closure
 
-The standalone qualification path now reproduces all nine FITS products and the complete 5,524-line Python `xout_step.log` byte-for-byte for the frozen `mg11_ne1e8` benchmark. The four `xo01_*` products are generated and validated first. Public products and the full log are then materialized from frozen benchmark payload state; generalized reduction remains unqualified and production promotion is false. Run `run_v04874624_complete_python_product_archive_closure.sh`.
+This hotfix carries the corrected C++ link contract from v25: `xstar_cpp` now
+links `libxstar_emissivity.so` directly because `xstar_science_fits.cpp` calls
+`xstar_emissivity_build_binemis_profile`.
+
+The production runner also closes the two missing runtime inputs that prevented
+v25 from producing any FITS files or `xout_step.log`:
+
+- a fresh H/He/Mg native case is lowered from the supplied `atdb.fits`;
+- the four call-start workspaces are derived from the accepted all-61 source
+  capture selected from the installed predecessor release;
+- the coherent controller trajectory is regenerated from that same capture;
+- all generated/resolved paths are passed explicitly to `xstar_cpp`;
+- preflight now compiles, prepares the runtime assets, and executes
+  `xstar_cpp run --resolve-only` before reporting `ACCEPT`.
+
+Use `run_v048746251_native_public_product_runtime_asset_closure.sh`.  The
+anti-copy and product exactness contracts from v25 are unchanged, ABI remains
+60487, and production promotion remains blocked until the full external-oracle
+comparison accepts.
 
 ## v0.6.48.7.46.23.2 xout_step prefix and native-trace separation
 

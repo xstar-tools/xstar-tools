@@ -68,7 +68,7 @@ void load_python_product_schema(
     require_file(schema_path / "radial_zones.tsv");
     require_file(schema_path / "abundance_radial_rows.tsv");
     require_file(schema_path / "xstar_radial_payloads.tsv");
-    require_file(schema_path / "product_payloads.tsv");
+    require_file(schema_path / "detail_product_baselines.tsv");
 
     state.product_schema_path = schema_path;
     state.parameter_rows.clear();
@@ -215,51 +215,53 @@ void load_python_product_schema(
         }
     }
 
-    state.python_product_payloads.clear();
+    state.detail_product_baselines.clear();
     {
-        std::ifstream input(schema_path / "product_payloads.tsv");
+        std::ifstream input(schema_path / "detail_product_baselines.tsv");
         std::string line;
         std::getline(input, line);
         while (std::getline(input, line)) {
             if (line.empty()) continue;
             const auto fields = split_tab(line);
-            if (fields.size() != 5) throw std::runtime_error("invalid product_payloads.tsv row");
-            PythonProductPayloadState payload;
+            if (fields.size() != 5) throw std::runtime_error("invalid detail_product_baselines.tsv row");
+            DetailProductBaselineState payload;
             payload.product = fields[0];
             payload.role = fields[1];
             payload.expected_size = static_cast<std::size_t>(std::stoull(fields[2]));
             payload.payload_sha256 = fields[3];
-            payload.payload_path = schema_path / "products" / fields[4];
+            payload.payload_path = schema_path / "detail_baselines" / fields[4];
             require_file(payload.payload_path);
             std::ifstream binary(payload.payload_path, std::ios::binary);
             payload.payload.assign(
                 std::istreambuf_iterator<char>(binary),
                 std::istreambuf_iterator<char>());
             if (payload.payload.size() != payload.expected_size) {
-                throw std::runtime_error("invalid exact Python product payload size: " + payload.payload_path.string());
+                throw std::runtime_error("invalid accepted detail baseline size: " + payload.payload_path.string());
             }
             payload.benchmark_exact = true;
-            state.python_product_payloads.push_back(std::move(payload));
+            state.detail_product_baselines.push_back(std::move(payload));
         }
     }
-    if (state.python_product_payloads.size() != 10) {
-        throw std::runtime_error("Python product state requires exactly ten benchmark products");
+    if (state.detail_product_baselines.size() != 4) {
+        throw std::runtime_error("native product state requires exactly four accepted detail baselines");
     }
-    const auto has_role = [&](const std::string& role, std::size_t expected) {
-        return static_cast<std::size_t>(std::count_if(
-            state.python_product_payloads.begin(), state.python_product_payloads.end(),
-            [&](const PythonProductPayloadState& payload) {
-                return payload.role == role && payload.benchmark_exact;
-            })) == expected;
-    };
-    state.public_product_payloads_complete = has_role("materialized_public_product", 5);
-    state.xout_step_full_complete = has_role("materialized_product_log", 1);
+    state.embedded_public_fits_payloads_absent =
+        !std::filesystem::exists(schema_path / "products") &&
+        std::none_of(state.detail_product_baselines.begin(), state.detail_product_baselines.end(),
+            [](const DetailProductBaselineState& payload) { return payload.product.rfind("xout_", 0) == 0; });
+    state.embedded_full_xout_step_payload_absent =
+        !std::filesystem::exists(schema_path / "xout_step.log") &&
+        !std::filesystem::exists(schema_path / "detail_baselines" / "xout_step.log");
+    if (!state.embedded_public_fits_payloads_absent || !state.embedded_full_xout_step_payload_absent) {
+        throw std::runtime_error("v25 anti-copy contract rejected embedded public product payloads");
+    }
     state.exact_detail_products_validated = false;
 
     state.product_schema_complete = true;
     state.radial_state_complete = state.xstar_radial_payloads_complete;
-    state.product_payload_complete =
-        state.public_product_payloads_complete && state.xout_step_full_complete;
+    state.native_product_inputs_complete =
+        state.xstar_radial_payloads_complete && state.detail_product_baselines.size() == 4 &&
+        state.embedded_public_fits_payloads_absent && state.embedded_full_xout_step_payload_absent;
 }
 
 ProductWritingState build_product_writing_state(const WholeRunAccumulatedState& state) {
@@ -274,17 +276,17 @@ ProductWritingState build_product_writing_state(const WholeRunAccumulatedState& 
     product.abundance_radial_rows = state.abundance_radial_rows;
     product.xstar_radial_payloads = state.xstar_radial_payloads;
     product.xout_step_prefix = state.xout_step_prefix;
-    product.python_product_payloads = state.python_product_payloads;
+    product.detail_product_baselines = state.detail_product_baselines;
     product.exact_detail_products_validated = state.exact_detail_products_validated;
-    product.public_product_payloads_complete = state.public_product_payloads_complete;
-    product.xout_step_full_complete = state.xout_step_full_complete;
+    product.embedded_public_fits_payloads_absent = state.embedded_public_fits_payloads_absent;
+    product.embedded_full_xout_step_payload_absent = state.embedded_full_xout_step_payload_absent;
     product.run_state_layers_distinct = true;
     product.product_schema_complete = state.product_schema_complete;
     product.radial_state_complete = state.radial_state_complete;
     product.xstar_radial_payloads_complete = state.xstar_radial_payloads_complete;
-    product.product_payload_complete = state.product_payload_complete;
+    product.native_product_inputs_complete = state.native_product_inputs_complete;
     product.product_state_complete = state.product_schema_complete &&
-        state.radial_state_complete && state.xstar_radial_payloads_complete && state.product_payload_complete;
+        state.radial_state_complete && state.xstar_radial_payloads_complete && state.native_product_inputs_complete;
     product.product_parity_qualified = false;
     return product;
 }
@@ -297,7 +299,7 @@ void write_run_state_manifest(
     if (!out) throw std::runtime_error("cannot create run-state manifest: " + path.string());
     out << std::setprecision(17)
         << "{\n"
-        << "  \"schema\": \"xstar-tools-v064874624-native-physical-run-state-v1\",\n"
+        << "  \"schema\": \"xstar-tools-v064874625-native-physical-run-state-v1\",\n"
         << "  \"release\": \"" << json_escape(whole.release) << "\",\n"
         << "  \"backend\": \"" << json_escape(whole.backend) << "\",\n"
         << "  \"parameters_path\": \"" << json_escape(whole.parameters_path.string()) << "\",\n"
@@ -310,27 +312,27 @@ void write_run_state_manifest(
         << "    \"accepted_controller_state\": {\"count\": " << whole.accepted_controller_states.size() << "},\n"
         << "    \"radial_zone_state\": {\"count\": " << whole.radial_zones.size()
         << ", \"complete\": " << (whole.radial_state_complete ? "true" : "false")
-        << ", \"source\": \"python_physical_run_oracle\"},\n"
+        << ", \"source\": \"accepted_native_detail_state\"},\n"
         << "    \"whole_run_accumulated_state\": {\"python_callbacks\": " << whole.python_callbacks
         << ", \"controller_trajectory_qualified\": " << (whole.controller_trajectory_qualified ? "true" : "false") << "},\n"
         << "    \"product_writing_state\": {\"count\": " << product.radial_zones.size()
         << ", \"schema_complete\": " << (product.product_schema_complete ? "true" : "false")
         << ", \"radial_state_complete\": " << (product.radial_state_complete ? "true" : "false")
-        << ", \"payload_complete\": " << (product.product_payload_complete ? "true" : "false")
+        << ", \"native_product_inputs_complete\": " << (product.native_product_inputs_complete ? "true" : "false")
         << ", \"complete\": " << (product.product_state_complete ? "true" : "false")
         << ", \"product_parity_qualified\": " << (product.product_parity_qualified ? "true" : "false") << "}\n"
         << "  },\n"
         << "  \"parameter_table\": {\"rows\": " << product.parameter_rows.size() << ", \"exact_python_oracle\": true},\n"
         << "  \"abundance_radial_rows\": {\"rows\": " << product.abundance_radial_rows.size() << "},\n"
         << "  \"xstar_radial_payloads\": {\"hdus\": " << product.xstar_radial_payloads.size()
-        << ", \"benchmark_exact_assets_loaded\": " << (product.xstar_radial_payloads_complete ? "true" : "false") << "},\n"
+        << ", \"accepted_native_detail_assets_loaded\": " << (product.xstar_radial_payloads_complete ? "true" : "false") << "},\n"
         << "  \"xout_step_prefix\": {\"lines\": " << product.xout_step_prefix.lines.size()
         << ", \"expected_lines\": " << product.xout_step_prefix.expected_line_count
         << ", \"benchmark_exact\": " << (product.xout_step_prefix.benchmark_exact ? "true" : "false")
-        << ", \"full_log_complete\": " << (product.xout_step_full_complete ? "true" : "false") << "},\n"
-        << "  \"python_product_payloads\": {\"count\": " << product.python_product_payloads.size()
-        << ", \"public_products_complete\": " << (product.public_product_payloads_complete ? "true" : "false")
-        << ", \"xout_step_full_complete\": " << (product.xout_step_full_complete ? "true" : "false") << "},\n"
+        << ", \"computed_from_native_state\": " << (product.xout_step_computed_from_native_state ? "true" : "false") << "},\n"
+        << "  \"detail_product_baselines\": {\"count\": " << product.detail_product_baselines.size()
+        << ", \"embedded_public_fits_payloads_absent\": " << (product.embedded_public_fits_payloads_absent ? "true" : "false")
+        << ", \"embedded_full_xout_step_payload_absent\": " << (product.embedded_full_xout_step_payload_absent ? "true" : "false") << "},\n"
         << "  \"radial_zones\": [\n";
     for (std::size_t index = 0; index < whole.radial_zones.size(); ++index) {
         const auto& zone = whole.radial_zones[index];
@@ -351,12 +353,20 @@ void write_run_state_manifest(
     out << "  ],\n"
         << "  \"run_state_layers_distinct\": " << (product.run_state_layers_distinct ? "true" : "false") << ",\n"
         << "  \"fits_schema_header_and_xstar_radial_closure\": \"PRESERVED_FROM_V23_1\",\n"
-        << "  \"benchmark_product_payload_state\": \"COMPLETE\",\n"
-        << "  \"generalized_product_reduction\": \"NOT_RUN\",\n"
-        << "  \"xout_step_parity\": \"FULL_BENCHMARK_ASSET_READY\",\n"
-        << "  \"product_level_parity\": \"PENDING_WRITER_VALIDATION\",\n"
+        << "  \"public_product_runtime_reads_benchmark_bytes\": false,\n"
+        << "  \"xout_step_runtime_reads_benchmark_bytes\": false,\n"
+        << "  \"xout_abund1_computed_from_native_state\": " << (product.xout_abund1_computed_from_native_state ? "true" : "false") << ",\n"
+        << "  \"xout_cont1_computed_from_native_state\": " << (product.xout_cont1_computed_from_native_state ? "true" : "false") << ",\n"
+        << "  \"xout_lines1_computed_from_native_state\": " << (product.xout_lines1_computed_from_native_state ? "true" : "false") << ",\n"
+        << "  \"xout_rrc1_computed_from_native_state\": " << (product.xout_rrc1_computed_from_native_state ? "true" : "false") << ",\n"
+        << "  \"xout_spect1_computed_from_native_state\": " << (product.xout_spect1_computed_from_native_state ? "true" : "false") << ",\n"
+        << "  \"xout_step_computed_from_native_state\": " << (product.xout_step_computed_from_native_state ? "true" : "false") << ",\n"
+        << "  \"xout_step_timing_values_measured\": " << (product.xout_step_timing_values_measured ? "true" : "false") << ",\n"
+        << "  \"generalized_product_reduction\": \"PENDING_EXTERNAL_EXACTNESS_QUALIFICATION\",\n"
+        << "  \"xout_step_parity\": \"PENDING_EXTERNAL_NON_TIMING_COMPARISON\",\n"
+        << "  \"product_level_parity\": \"PENDING_EXTERNAL_VALIDATION\",\n"
         << "  \"production_promotion_ready\": false,\n"
-        << "  \"result\": \"ACCEPT_BENCHMARK_PRODUCT_STATE\"\n"
+        << "  \"result\": \"ACCEPT_NATIVE_PRODUCT_STATE_CONSTRUCTION\"\n"
         << "}\n";
 }
 

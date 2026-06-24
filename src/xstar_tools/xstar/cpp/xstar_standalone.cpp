@@ -1988,13 +1988,79 @@ struct FixedDsecSnapshot {
     double element_cooling = 0.0;
     double continuum_heating = 0.0;
     double continuum_cooling = 0.0;
+    double hydrogen_heating = 0.0;
+    double hydrogen_cooling = 0.0;
+    double helium_heating = 0.0;
+    double helium_cooling = 0.0;
+    double magnesium_heating = 0.0;
+    double magnesium_cooling = 0.0;
+    double compton_heating = 0.0;
+    double compton_cooling = 0.0;
+    double brems_cooling = 0.0;
+    bool thermal_families_native = false;
     bool dsec_runtime_state_abi = false;
     std::vector<double> populations;
+    std::vector<double> radiation_energy_ev;
+    std::vector<double> radiation_flux;
+    std::vector<double> continuum_tau_in;
+    std::vector<double> continuum_tau_out;
     std::vector<double> continuum_spectrum;
     std::vector<double> spectrum;
     std::vector<double> opacity;
 };
 
+
+
+std::vector<std::string> split_csv_simple(const std::string& line) {
+    std::vector<std::string> fields;
+    std::string field;
+    std::istringstream input(line);
+    while (std::getline(input, field, ',')) fields.push_back(field);
+    return fields;
+}
+
+void attach_native_thermal_families(
+    std::vector<FixedDsecSnapshot>& snapshots,
+    const std::filesystem::path& path) {
+    std::ifstream input(path);
+    if (!input) throw std::runtime_error("cannot open native thermal-family ledger: " + path.string());
+    std::string header;
+    std::getline(input, header);
+    const auto names = split_csv_simple(header);
+    std::map<std::string,std::size_t> columns;
+    for (std::size_t i = 0; i < names.size(); ++i) columns[names[i]] = i;
+    for (const char* required : {"sequence","h_heating","h_cooling","he_heating","he_cooling",
+             "mg_heating","mg_cooling","htcomp","clcomp","clbrems"}) {
+        if (!columns.count(required)) throw std::runtime_error(std::string("thermal ledger missing column: ") + required);
+    }
+    std::map<std::size_t,FixedDsecSnapshot*> by_sequence;
+    for (auto& snapshot : snapshots) by_sequence[snapshot.sequence] = &snapshot;
+    std::string line;
+    std::size_t attached = 0;
+    while (std::getline(input, line)) {
+        if (line.empty()) continue;
+        const auto values = split_csv_simple(line);
+        const std::size_t sequence = static_cast<std::size_t>(std::stoull(values.at(columns.at("sequence"))));
+        const auto found = by_sequence.find(sequence);
+        if (found == by_sequence.end()) continue;
+        auto& s = *found->second;
+        auto scalar = [&](const char* name) { return std::stod(values.at(columns.at(name))); };
+        s.hydrogen_heating = scalar("h_heating");
+        s.hydrogen_cooling = scalar("h_cooling");
+        s.helium_heating = scalar("he_heating");
+        s.helium_cooling = scalar("he_cooling");
+        s.magnesium_heating = scalar("mg_heating");
+        s.magnesium_cooling = scalar("mg_cooling");
+        s.compton_heating = scalar("htcomp");
+        s.compton_cooling = scalar("clcomp");
+        s.brems_cooling = scalar("clbrems");
+        s.thermal_families_native = true;
+        ++attached;
+    }
+    if (attached != snapshots.size()) {
+        throw std::runtime_error("native thermal-family ledger did not cover all 61 evaluations");
+    }
+}
 
 struct CallStartWorkspace {
     std::vector<double> radiation_energy;
@@ -2505,6 +2571,15 @@ int fixed_dsec_evaluator(
         input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_DSEC_COVERING_FRACTION;
     }
 
+    snapshot.radiation_energy_ev.assign(input.radiation_energy_ev, input.radiation_energy_ev + input.radiation_bin_count);
+    snapshot.radiation_flux.assign(input.radiation_flux, input.radiation_flux + input.radiation_bin_count);
+    if (input.continuum_tau_in && input.continuum_tau_count) {
+        snapshot.continuum_tau_in.assign(input.continuum_tau_in, input.continuum_tau_in + input.continuum_tau_count);
+    }
+    if (input.continuum_tau_out && input.continuum_tau_count) {
+        snapshot.continuum_tau_out.assign(input.continuum_tau_out, input.continuum_tau_out + input.continuum_tau_count);
+    }
+
     // Persist the free-free continuum as its own computed product before the
     // line/RRC/profile commit augments output.spectrum.  This duplicates the
     // fixed-state engine's native continuum expression intentionally so the
@@ -2620,6 +2695,7 @@ const TrajectoryRow* find_reference_row(
 }
 
 int command_run_fixed_dsec(const Options& options) {
+    const auto v25_run_wall_start = std::chrono::steady_clock::now();
     if (options.case_dir.empty() || options.trajectory_csv.empty() || options.output_dir.empty()) {
         std::cerr << "run-fixed-dsec requires --case-dir, --trajectory-csv, and --output-dir\n";
         return 2;
@@ -3166,6 +3242,7 @@ int command_run_fixed_dsec(const Options& options) {
         xstar_fixed_state_context_destroy(fixed_context);
         return rc;
     }
+    attach_native_thermal_families(snapshots, evaluator_data.thermal_budget_csv);
     auto copy_fixed_evaluation_state = [](const FixedDsecSnapshot& source) {
         xstar_run_state::FixedEvaluationState target;
         target.kind = source.kind;
@@ -3183,8 +3260,22 @@ int command_run_fixed_dsec(const Options& options) {
         target.element_cooling = source.element_cooling;
         target.continuum_heating = source.continuum_heating;
         target.continuum_cooling = source.continuum_cooling;
+        target.hydrogen_heating = source.hydrogen_heating;
+        target.hydrogen_cooling = source.hydrogen_cooling;
+        target.helium_heating = source.helium_heating;
+        target.helium_cooling = source.helium_cooling;
+        target.magnesium_heating = source.magnesium_heating;
+        target.magnesium_cooling = source.magnesium_cooling;
+        target.compton_heating = source.compton_heating;
+        target.compton_cooling = source.compton_cooling;
+        target.brems_cooling = source.brems_cooling;
+        target.thermal_families_native = source.thermal_families_native;
         target.runtime_state_abi = source.dsec_runtime_state_abi;
         target.populations = source.populations;
+        target.radiation_energy_ev = source.radiation_energy_ev;
+        target.radiation_flux = source.radiation_flux;
+        target.continuum_tau_in = source.continuum_tau_in;
+        target.continuum_tau_out = source.continuum_tau_out;
         target.continuum_spectrum = source.continuum_spectrum;
         target.spectrum = source.spectrum;
         target.opacity = source.opacity;
@@ -3253,6 +3344,8 @@ int command_run_fixed_dsec(const Options& options) {
             return 9;
         }
     }
+    product_writing_state.measured_run_seconds = std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - v25_run_wall_start).count();
     xstar_step_log::Result step_log_result;
     if (!options.skip_fits) {
         try {
@@ -3312,9 +3405,20 @@ int command_run_fixed_dsec(const Options& options) {
             << "  \"native_dsec_trace_written\": "
             << (std::filesystem::is_regular_file(std::filesystem::path(options.output_dir) / "native_dsec_trace.log") ? "true" : "false") << ",\n"
             << "  \"xout_step_lines\": " << step_log_result.lines_written << ",\n"
-            << "  \"xout_step_prefix_exact\": " << (step_log_result.prefix_exact_asset_written ? "true" : "false") << ",\n"
+            << "  \"xout_step_prefix_exact\": " << (step_log_result.prefix_exact_except_version ? "true" : "false") << ",\n"
             << "  \"xout_step_full_raw_exact\": " << (step_log_result.full_raw_exact_asset_written ? "true" : "false") << ",\n"
-            << "  \"xout_step_full_log_complete\": " << (step_log_result.full_log_complete ? "true" : "false") << ",\n";
+            << "  \"xout_step_full_log_complete\": " << (step_log_result.full_log_complete ? "true" : "false") << ",\n"
+            << "  \"embedded_public_fits_payloads_absent\": " << (product_writing_state.embedded_public_fits_payloads_absent ? "true" : "false") << ",\n"
+            << "  \"embedded_full_xout_step_payload_absent\": " << (product_writing_state.embedded_full_xout_step_payload_absent ? "true" : "false") << ",\n"
+            << "  \"public_product_writer_reads_benchmark_bytes\": false,\n"
+            << "  \"xout_step_writer_reads_benchmark_bytes\": false,\n"
+            << "  \"xout_abund1_computed_from_native_state\": " << (product_writing_state.xout_abund1_computed_from_native_state ? "true" : "false") << ",\n"
+            << "  \"xout_cont1_computed_from_native_state\": " << (product_writing_state.xout_cont1_computed_from_native_state ? "true" : "false") << ",\n"
+            << "  \"xout_lines1_computed_from_native_state\": " << (product_writing_state.xout_lines1_computed_from_native_state ? "true" : "false") << ",\n"
+            << "  \"xout_rrc1_computed_from_native_state\": " << (product_writing_state.xout_rrc1_computed_from_native_state ? "true" : "false") << ",\n"
+            << "  \"xout_spect1_computed_from_native_state\": " << (product_writing_state.xout_spect1_computed_from_native_state ? "true" : "false") << ",\n"
+            << "  \"xout_step_computed_from_native_state\": " << (step_log_result.computed_from_native_state ? "true" : "false") << ",\n"
+            << "  \"xout_step_timing_values_measured\": " << (step_log_result.timing_values_measured ? "true" : "false") << ",\n";
     const bool reference_state_identity = max_temperature_delta == 0.0 && max_electron_fraction_delta == 0.0 &&
         max_charge_residual_delta == 0.0 && max_hmctot_delta == 0.0 && dsec_evaluations == 57 && snapshots.size() == 61;
     const bool controller_qualification_complete = reference_state_canonical_e7 && reference_rows_classified == 61 &&
@@ -3332,11 +3436,10 @@ int command_run_fixed_dsec(const Options& options) {
         cumulative.records_unsupported == 0 && cumulative.python_callbacks == 0 &&
         cumulative.records_evaluated == 61 * info.record_count && cumulative.elements_solved == 61 * info.element_count &&
         (options.skip_fits || (science_result.files_written == 9 && science_result.schema_complete &&
-         science_result.continuum_and_spectrum_paths_separate &&
-         science_result.all_fits_products_byte_exact && science_result.benchmark_archive_materialized &&
-         !science_result.generalized_product_reduction_qualified &&
-         step_log_result.full_raw_exact_asset_written && step_log_result.full_log_complete &&
-         step_log_result.lines_written == 5524 &&
+         science_result.computed_from_native_state && science_result.continuum_and_spectrum_paths_separate &&
+         !science_result.benchmark_archive_materialized &&
+         step_log_result.computed_from_native_state && step_log_result.timing_values_measured &&
+         step_log_result.full_log_complete && step_log_result.lines_written == 5524 &&
          std::filesystem::is_regular_file(std::filesystem::path(options.output_dir) / "native_dsec_trace.log") &&
          std::filesystem::is_regular_file(std::filesystem::path(options.output_dir) / "xout_step.log")));
     std::cout << "program_id=" << cumulative.program_id
@@ -3365,9 +3468,20 @@ int command_run_fixed_dsec(const Options& options) {
               << "\nnative_dsec_trace_written="
               << (std::filesystem::is_regular_file(std::filesystem::path(options.output_dir) / "native_dsec_trace.log") ? "true" : "false")
               << "\nxout_step_lines=" << step_log_result.lines_written
-              << "\nxout_step_prefix_exact=" << (step_log_result.prefix_exact_asset_written ? "true" : "false")
+              << "\nxout_step_prefix_exact=" << (step_log_result.prefix_exact_except_version ? "true" : "false")
               << "\nxout_step_full_raw_exact=" << (step_log_result.full_raw_exact_asset_written ? "true" : "false")
               << "\nxout_step_full_log_complete=" << (step_log_result.full_log_complete ? "true" : "false")
+              << "\nembedded_public_fits_payloads_absent=" << (product_writing_state.embedded_public_fits_payloads_absent ? "true" : "false")
+              << "\nembedded_full_xout_step_payload_absent=" << (product_writing_state.embedded_full_xout_step_payload_absent ? "true" : "false")
+              << "\npublic_product_writer_reads_benchmark_bytes=false"
+              << "\nxout_step_writer_reads_benchmark_bytes=false"
+              << "\nxout_abund1_computed_from_native_state=" << (product_writing_state.xout_abund1_computed_from_native_state ? "true" : "false")
+              << "\nxout_cont1_computed_from_native_state=" << (product_writing_state.xout_cont1_computed_from_native_state ? "true" : "false")
+              << "\nxout_lines1_computed_from_native_state=" << (product_writing_state.xout_lines1_computed_from_native_state ? "true" : "false")
+              << "\nxout_rrc1_computed_from_native_state=" << (product_writing_state.xout_rrc1_computed_from_native_state ? "true" : "false")
+              << "\nxout_spect1_computed_from_native_state=" << (product_writing_state.xout_spect1_computed_from_native_state ? "true" : "false")
+              << "\nxout_step_computed_from_native_state=" << (step_log_result.computed_from_native_state ? "true" : "false")
+              << "\nxout_step_timing_values_measured=" << (step_log_result.timing_values_measured ? "true" : "false")
               << "\nradiation_input=" << evaluator_data.radiation_mode << "\nradiation_bins=" << evaluator_data.energy.size()
               << "\ntrajectory_mode=" << trajectory_mode
               << "\nreference_rows_classified=" << reference_rows_classified
@@ -3474,7 +3588,7 @@ std::filesystem::path resolve_physical_asset(
 
 int command_run_physical(Options options) {
     if (options.backend != "cpp") {
-        std::cerr << "xstar_cpp run v0.6.48.7.46.24 supports --backend cpp only\n";
+        std::cerr << "xstar_cpp run v0.6.48.7.46.25.1 supports --backend cpp only\n";
         return 64;
     }
     if (options.parameters_path.empty() || options.atomic_db_path.empty() || options.output_dir.empty()) {
@@ -3526,8 +3640,8 @@ int command_run_physical(Options options) {
     const auto product_schema = resolve_physical_asset(
         options.product_schema_dir, "XSTAR_CPP_PRODUCT_SCHEMA_DIR", roots,
         {
-            "src/xstar_tools/benchmarks/v064874624_python_product_state",
-            "xstar_tools-0.6.48.7.46.24/src/xstar_tools/benchmarks/v064874624_python_product_state",
+            "src/xstar_tools/benchmarks/v064874625_native_product_state",
+            "xstar_tools-0.6.48.7.46.25.1/src/xstar_tools/benchmarks/v064874625_native_product_state",
             "src/xstar_tools/benchmarks/v0648746231_python_fits_schema",
             "xstar_tools-0.6.48.7.46.23.1/src/xstar_tools/benchmarks/v0648746231_python_fits_schema",
         }, true);
@@ -3589,7 +3703,7 @@ int command_run_physical(Options options) {
     {
         std::ofstream resolution(std::filesystem::path(options.output_dir) / "native_physical_run_asset_resolution.json");
         resolution << "{\n"
-                   << "  \"schema\": \"xstar-tools-v064874624-native-physical-run-asset-resolution-v7\",\n"
+                   << "  \"schema\": \"xstar-tools-v0648746251-native-physical-run-asset-resolution-v1\",\n"
                    << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
                    << "  \"native_case\": \"" << case_dir.string() << "\",\n"
                    << "  \"coherent_trajectory\": \"" << trajectory.string() << "\",\n"
@@ -3725,7 +3839,7 @@ int command_run_physical(Options options) {
         std::filesystem::is_regular_file(output / "native_physical_run_state.json");
     std::ofstream summary(output / "native_physical_run_summary.json");
     summary << "{\n"
-            << "  \"schema\": \"xstar-tools-v064874624-native-physical-run-v7\",\n"
+            << "  \"schema\": \"xstar-tools-v064874625-native-physical-run-v7\",\n"
             << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
             << "  \"backend\": \"cpp\",\n"
             << "  \"controller_return_code\": " << controller_status << ",\n"

@@ -1,5 +1,23 @@
 # CHANGELOG
 
+# v0.6.48.7.46.25.1 - 2026-06-24
+
+- Carry the permanent Makefile correction that adds `$(EMISSIVITY_TARGET)` as
+  an `xstar_cpp` prerequisite and `-lxstar_emissivity` as a direct link input.
+- Add deterministic runtime-asset preparation for the native public-product run.
+- Freshly lower `native_case_v048746251` from the supplied ATDB for H/He/Mg.
+- Resolve the accepted `all61_input_workspaces` bundle from explicit overrides
+  or installed sibling releases.
+- Derive all 28 call-start binary payloads from the first DSEC evaluation of
+  calls 1-4, using `v0472_all61_input_states.csv`.
+- Regenerate the coherent source trajectory from the same accepted capture.
+- Pass native case, trajectory, call-start, runtime-state, and product-schema
+  paths explicitly to `xstar_cpp`.
+- Strengthen preflight to perform a clean link and complete `--resolve-only`
+  asset check, so missing runtime inputs cannot produce a false preflight ACCEPT.
+- Preserve canonical `.7e`, the `1e-30` zero floor, ABI 60487, anti-copy gates,
+  and the v25 external-oracle comparison contract.
+
 # v0.6.48.7.46.24 - 2026-06-24
 
 - Reproduce the complete frozen Python/v0.6.47.2 ten-product archive byte-for-byte.

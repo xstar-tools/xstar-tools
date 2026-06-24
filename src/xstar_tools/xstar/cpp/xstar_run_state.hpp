@@ -25,8 +25,22 @@ struct FixedEvaluationState {
     double element_cooling = 0.0;
     double continuum_heating = 0.0;
     double continuum_cooling = 0.0;
+    double hydrogen_heating = 0.0;
+    double hydrogen_cooling = 0.0;
+    double helium_heating = 0.0;
+    double helium_cooling = 0.0;
+    double magnesium_heating = 0.0;
+    double magnesium_cooling = 0.0;
+    double compton_heating = 0.0;
+    double compton_cooling = 0.0;
+    double brems_cooling = 0.0;
+    bool thermal_families_native = false;
     bool runtime_state_abi = false;
     std::vector<double> populations;
+    std::vector<double> radiation_energy_ev;
+    std::vector<double> radiation_flux;
+    std::vector<double> continuum_tau_in;
+    std::vector<double> continuum_tau_out;
     std::vector<double> continuum_spectrum;
     std::vector<double> spectrum;
     std::vector<double> opacity;
@@ -93,7 +107,7 @@ struct XstarRadialPayloadState {
 };
 
 
-struct PythonProductPayloadState {
+struct DetailProductBaselineState {
     std::string product;
     std::string role;
     std::size_t expected_size = 0;
@@ -127,16 +141,16 @@ struct WholeRunAccumulatedState {
     std::vector<AbundanceRadialRowState> abundance_radial_rows;
     std::vector<XstarRadialPayloadState> xstar_radial_payloads;
     XoutStepPrefixState xout_step_prefix;
-    std::vector<PythonProductPayloadState> python_product_payloads;
+    std::vector<DetailProductBaselineState> detail_product_baselines;
     bool exact_detail_products_validated = false;
-    bool public_product_payloads_complete = false;
-    bool xout_step_full_complete = false;
+    bool embedded_public_fits_payloads_absent = false;
+    bool embedded_full_xout_step_payload_absent = false;
     std::size_t python_callbacks = 0;
     bool controller_trajectory_qualified = false;
     bool product_schema_complete = false;
     bool radial_state_complete = false;
     bool xstar_radial_payloads_complete = false;
-    bool product_payload_complete = false;
+    bool native_product_inputs_complete = false;
 };
 
 struct ProductWritingState {
@@ -150,17 +164,25 @@ struct ProductWritingState {
     std::vector<AbundanceRadialRowState> abundance_radial_rows;
     std::vector<XstarRadialPayloadState> xstar_radial_payloads;
     XoutStepPrefixState xout_step_prefix;
-    std::vector<PythonProductPayloadState> python_product_payloads;
+    std::vector<DetailProductBaselineState> detail_product_baselines;
     bool exact_detail_products_validated = false;
-    bool public_product_payloads_complete = false;
-    bool xout_step_full_complete = false;
+    bool embedded_public_fits_payloads_absent = false;
+    bool embedded_full_xout_step_payload_absent = false;
     bool run_state_layers_distinct = true;
     bool product_schema_complete = false;
     bool radial_state_complete = false;
     bool xstar_radial_payloads_complete = false;
-    bool product_payload_complete = false;
+    bool native_product_inputs_complete = false;
     bool product_state_complete = false;
     bool product_parity_qualified = false;
+    bool xout_abund1_computed_from_native_state = false;
+    bool xout_cont1_computed_from_native_state = false;
+    bool xout_lines1_computed_from_native_state = false;
+    bool xout_rrc1_computed_from_native_state = false;
+    bool xout_spect1_computed_from_native_state = false;
+    bool xout_step_computed_from_native_state = false;
+    bool xout_step_timing_values_measured = false;
+    double measured_run_seconds = 0.0;
 };
 
 void load_python_product_schema(

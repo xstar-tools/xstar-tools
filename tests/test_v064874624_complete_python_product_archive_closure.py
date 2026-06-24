@@ -8,7 +8,7 @@ import shutil
 from xstar_tools.xstar.product_oracle_v04874622 import compare_output, bundled_oracle_root
 
 ROOT = Path(__file__).resolve().parents[1]
-SCHEMA = ROOT / "src/xstar_tools/benchmarks/v064874624_python_product_state"
+SCHEMA = ROOT / "src/xstar_tools/benchmarks/v064874625_python_product_state"
 EXPECTED = {
     "xo01_detail.fits": "3e123ee2aa1bdb9c4dbd58faf4679c67cdb05eed5e3d83fe28f4eb21fb21ac5c",
     "xo01_detal2.fits": "a0e2b56735c5cb3e6672dee6f52d68925145d73cd3469796ba981bd650389963",
@@ -28,16 +28,16 @@ def digest(path: Path) -> str:
 
 
 def test_release_and_abi() -> None:
-    assert 'version = "0.6.48.7.46.24"' in (ROOT / "pyproject.toml").read_text()
-    assert '__version__ = "0.6.48.7.46.24"' in (ROOT / "src/xstar_tools/__init__.py").read_text()
+    assert 'version = "0.6.48.7.46.25"' in (ROOT / "pyproject.toml").read_text()
+    assert '__version__ = "0.6.48.7.46.25"' in (ROOT / "src/xstar_tools/__init__.py").read_text()
     api = (ROOT / "src/xstar_tools/xstar/cpp/xstar_api.h").read_text()
-    assert 'XSTAR_API_VERSION_STRING "0.6.48.7.46.24"' in api
+    assert 'XSTAR_API_VERSION_STRING "0.6.48.7.46.25"' in api
     assert "XSTAR_API_ABI_VERSION 60487u" in api
 
 
 def test_exact_product_state_manifest() -> None:
     manifest = json.loads((SCHEMA / "manifest.json").read_text())
-    assert manifest["release"] == "0.6.48.7.46.24"
+    assert manifest["release"] == "0.6.48.7.46.25"
     assert manifest["source_archive_sha256"] == "8fe3e43f149492166683941ec5414243b0e8a878a4bf6c6ece3fcbe9592bbbfb"
     assert len(manifest["products"]) == 10
     assert manifest["generalized_physical_reduction_qualified"] is False

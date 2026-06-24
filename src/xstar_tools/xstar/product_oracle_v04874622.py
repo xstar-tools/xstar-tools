@@ -1,4 +1,4 @@
-"""Immutable product-oracle manifests and strict product comparison for v0.6.48.7.46.24.
+"""Immutable product-oracle manifests and strict product comparison for v0.6.48.7.46.25.1.
 
 The module intentionally has no Astropy dependency.  It parses FITS block
 boundaries directly so qualification hosts can freeze and compare products
@@ -19,8 +19,8 @@ import struct
 import tarfile
 from typing import Any, Iterable
 
-RELEASE = "0.6.48.7.46.24"
-SCHEMA = "xstar-tools-v064874624-product-oracle-v6"
+RELEASE = "0.6.48.7.46.25.1"
+SCHEMA = "xstar-tools-v064874625-product-oracle-v6"
 EXPECTED_PRODUCTS = (
     "xo01_detail.fits",
     "xo01_detal2.fits",
@@ -708,7 +708,7 @@ def compare_output(output_dir: Path, oracle: Path, output_json: Path | None = No
 
     all_byte_exact = not missing and all(files_report[name].get("byte_exact", False) for name in EXPECTED_PRODUCTS)
     report = {
-        "schema": "xstar-tools-v064874624-strict-product-comparison-v4",
+        "schema": "xstar-tools-v064874625-strict-product-comparison-v4",
         "release": RELEASE,
         "oracle_name": manifest["oracle_name"],
         "oracle_source_kind": manifest["source_kind"],
