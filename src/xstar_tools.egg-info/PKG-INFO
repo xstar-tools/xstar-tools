@@ -1,3 +1,31 @@
+Metadata-Version: 2.4
+Name: xstar-tools
+Version: 0.6.48.7.46.24
+Summary: Source-faithful Python/C++ XSTAR tools, atomic-data utilities, benchmarks, and runtime
+Author: Ashkbiz Danehkar
+License-Expression: MIT
+Keywords: astronomy,atomic-data,xstar,fits,emissivity,x-ray
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Science/Research
+Classifier: Programming Language :: Python :: 3
+Classifier: Topic :: Scientific/Engineering :: Astronomy
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: numpy<2.4,>=1.23; python_version < "3.11"
+Requires-Dist: astropy>=5.0; python_version < "3.11"
+Requires-Dist: numpy>=1.24; python_version >= "3.11"
+Requires-Dist: astropy>=7.2; python_version >= "3.11"
+Provides-Extra: dev
+Requires-Dist: pytest>=7; extra == "dev"
+Requires-Dist: build>=1.0; extra == "dev"
+Provides-Extra: docs
+Requires-Dist: sphinx>=7; extra == "docs"
+Requires-Dist: sphinx-rtd-theme>=2; extra == "docs"
+Provides-Extra: hdf5
+Requires-Dist: h5py>=3; extra == "hdf5"
+Provides-Extra: sparse
+Requires-Dist: scipy>=1.8; extra == "sparse"
+
 ## v0.6.48.7.46.24 complete benchmark archive reproduction
 
 The standalone qualification path now reproduces all nine FITS products and the complete 5,524-line Python `xout_step.log` byte-for-byte for the frozen `mg11_ne1e8` benchmark. The four `xo01_*` products are generated and validated first. Public products and the full log are then materialized from frozen benchmark payload state; generalized reduction remains unqualified and production promotion is false. Run `run_v04874624_complete_python_product_archive_closure.sh`.

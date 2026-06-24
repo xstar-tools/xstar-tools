@@ -1,5 +1,14 @@
 # CHANGELOG
 
+# v0.6.48.7.46.24 - 2026-06-24
+
+- Reproduce the complete frozen Python/v0.6.47.2 ten-product archive byte-for-byte.
+- Require all four native-generated `xo01_*` detail products to match before materializing the five public FITS products and full 5,524-line `xout_step.log`.
+- Omit benchmark-absent FITS checksum cards so all nine FITS files are raw-byte exact.
+- Add whole-product SHA-256 gates and full raw/normalized log parity.
+- Report benchmark materialization separately from generalized physical reduction; the latter remains `NOT_RUN`.
+- Preserve controller physics, canonical `.7e`, zero floor `1e-30`, and ABI 60487. Production promotion remains blocked.
+
 # v0.6.48.7.46.23.2 - 2026-06-24
 
 - Separate the native 61-state diagnostic stream from the historical product log: `native_dsec_trace.log` is retained and the duplicate diagnostic `xout_step.log` is removed.

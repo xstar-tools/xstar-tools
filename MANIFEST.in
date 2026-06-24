@@ -945,3 +945,12 @@ include compare_v04874623_product_oracle.py
 include tests/test_v064874623_python_fits_schema_header_radial_state_closure.py
 
 recursive-include src/xstar_tools/benchmarks/v0648746231_python_fits_schema *
+
+# v0.6.48.7.46.24 complete Python benchmark product archive reproduction
+recursive-include src/xstar_tools/benchmarks/v064874624_python_product_state *
+include V064874624_COMPLETE_PYTHON_BENCHMARK_PRODUCT_ARCHIVE_REPRODUCTION.md
+include V04874624_PRODUCTION_HOST_COMMANDS.md
+include V04874624_QUALIFICATION_ASSESSMENT.md
+include run_v04874624_complete_python_product_archive_closure.sh
+include check_v04874624_complete_python_product_archive_readiness.py
+include tests/test_v064874624_complete_python_product_archive_closure.py

@@ -19,6 +19,11 @@ struct Result {
     bool computed_from_native_state = false;
     bool continuum_and_spectrum_paths_separate = false;
     bool physical_equivalence_qualified = false;
+    bool detail_products_byte_exact = false;
+    bool public_products_byte_exact = false;
+    bool all_fits_products_byte_exact = false;
+    bool benchmark_archive_materialized = false;
+    bool generalized_product_reduction_qualified = false;
     std::vector<std::string> filenames;
 };
 
@@ -31,7 +36,7 @@ Result write_historical_science_products(
 Result write_historical_science_products(
     const std::filesystem::path& program_dir,
     const std::filesystem::path& output_dir,
-    const xstar_run_state::ProductWritingState& product_state,
+    xstar_run_state::ProductWritingState& product_state,
     const std::vector<double>& native_energy_ev);
 
 } // namespace xstar_science_fits

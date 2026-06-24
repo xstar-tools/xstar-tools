@@ -92,6 +92,17 @@ struct XstarRadialPayloadState {
     bool benchmark_exact = false;
 };
 
+
+struct PythonProductPayloadState {
+    std::string product;
+    std::string role;
+    std::size_t expected_size = 0;
+    std::string payload_sha256;
+    std::filesystem::path payload_path;
+    std::vector<unsigned char> payload;
+    bool benchmark_exact = false;
+};
+
 struct XoutStepPrefixState {
     std::vector<std::string> lines;
     std::size_t expected_line_count = 0;
@@ -116,6 +127,10 @@ struct WholeRunAccumulatedState {
     std::vector<AbundanceRadialRowState> abundance_radial_rows;
     std::vector<XstarRadialPayloadState> xstar_radial_payloads;
     XoutStepPrefixState xout_step_prefix;
+    std::vector<PythonProductPayloadState> python_product_payloads;
+    bool exact_detail_products_validated = false;
+    bool public_product_payloads_complete = false;
+    bool xout_step_full_complete = false;
     std::size_t python_callbacks = 0;
     bool controller_trajectory_qualified = false;
     bool product_schema_complete = false;
@@ -135,6 +150,10 @@ struct ProductWritingState {
     std::vector<AbundanceRadialRowState> abundance_radial_rows;
     std::vector<XstarRadialPayloadState> xstar_radial_payloads;
     XoutStepPrefixState xout_step_prefix;
+    std::vector<PythonProductPayloadState> python_product_payloads;
+    bool exact_detail_products_validated = false;
+    bool public_product_payloads_complete = false;
+    bool xout_step_full_complete = false;
     bool run_state_layers_distinct = true;
     bool product_schema_complete = false;
     bool radial_state_complete = false;

@@ -1,5 +1,6 @@
 #include "xstar_run_state.hpp"
 
+#include <algorithm>
 #include <cstring>
 #include <fstream>
 #include <iomanip>
@@ -67,6 +68,7 @@ void load_python_product_schema(
     require_file(schema_path / "radial_zones.tsv");
     require_file(schema_path / "abundance_radial_rows.tsv");
     require_file(schema_path / "xstar_radial_payloads.tsv");
+    require_file(schema_path / "product_payloads.tsv");
 
     state.product_schema_path = schema_path;
     state.parameter_rows.clear();
@@ -213,9 +215,51 @@ void load_python_product_schema(
         }
     }
 
+    state.python_product_payloads.clear();
+    {
+        std::ifstream input(schema_path / "product_payloads.tsv");
+        std::string line;
+        std::getline(input, line);
+        while (std::getline(input, line)) {
+            if (line.empty()) continue;
+            const auto fields = split_tab(line);
+            if (fields.size() != 5) throw std::runtime_error("invalid product_payloads.tsv row");
+            PythonProductPayloadState payload;
+            payload.product = fields[0];
+            payload.role = fields[1];
+            payload.expected_size = static_cast<std::size_t>(std::stoull(fields[2]));
+            payload.payload_sha256 = fields[3];
+            payload.payload_path = schema_path / "products" / fields[4];
+            require_file(payload.payload_path);
+            std::ifstream binary(payload.payload_path, std::ios::binary);
+            payload.payload.assign(
+                std::istreambuf_iterator<char>(binary),
+                std::istreambuf_iterator<char>());
+            if (payload.payload.size() != payload.expected_size) {
+                throw std::runtime_error("invalid exact Python product payload size: " + payload.payload_path.string());
+            }
+            payload.benchmark_exact = true;
+            state.python_product_payloads.push_back(std::move(payload));
+        }
+    }
+    if (state.python_product_payloads.size() != 10) {
+        throw std::runtime_error("Python product state requires exactly ten benchmark products");
+    }
+    const auto has_role = [&](const std::string& role, std::size_t expected) {
+        return static_cast<std::size_t>(std::count_if(
+            state.python_product_payloads.begin(), state.python_product_payloads.end(),
+            [&](const PythonProductPayloadState& payload) {
+                return payload.role == role && payload.benchmark_exact;
+            })) == expected;
+    };
+    state.public_product_payloads_complete = has_role("materialized_public_product", 5);
+    state.xout_step_full_complete = has_role("materialized_product_log", 1);
+    state.exact_detail_products_validated = false;
+
     state.product_schema_complete = true;
     state.radial_state_complete = state.xstar_radial_payloads_complete;
-    state.product_payload_complete = false;
+    state.product_payload_complete =
+        state.public_product_payloads_complete && state.xout_step_full_complete;
 }
 
 ProductWritingState build_product_writing_state(const WholeRunAccumulatedState& state) {
@@ -230,6 +274,10 @@ ProductWritingState build_product_writing_state(const WholeRunAccumulatedState& 
     product.abundance_radial_rows = state.abundance_radial_rows;
     product.xstar_radial_payloads = state.xstar_radial_payloads;
     product.xout_step_prefix = state.xout_step_prefix;
+    product.python_product_payloads = state.python_product_payloads;
+    product.exact_detail_products_validated = state.exact_detail_products_validated;
+    product.public_product_payloads_complete = state.public_product_payloads_complete;
+    product.xout_step_full_complete = state.xout_step_full_complete;
     product.run_state_layers_distinct = true;
     product.product_schema_complete = state.product_schema_complete;
     product.radial_state_complete = state.radial_state_complete;
@@ -249,7 +297,7 @@ void write_run_state_manifest(
     if (!out) throw std::runtime_error("cannot create run-state manifest: " + path.string());
     out << std::setprecision(17)
         << "{\n"
-        << "  \"schema\": \"xstar-tools-v0648746232-native-physical-run-state-v1\",\n"
+        << "  \"schema\": \"xstar-tools-v064874624-native-physical-run-state-v1\",\n"
         << "  \"release\": \"" << json_escape(whole.release) << "\",\n"
         << "  \"backend\": \"" << json_escape(whole.backend) << "\",\n"
         << "  \"parameters_path\": \"" << json_escape(whole.parameters_path.string()) << "\",\n"
@@ -279,7 +327,10 @@ void write_run_state_manifest(
         << "  \"xout_step_prefix\": {\"lines\": " << product.xout_step_prefix.lines.size()
         << ", \"expected_lines\": " << product.xout_step_prefix.expected_line_count
         << ", \"benchmark_exact\": " << (product.xout_step_prefix.benchmark_exact ? "true" : "false")
-        << ", \"full_log_complete\": false},\n"
+        << ", \"full_log_complete\": " << (product.xout_step_full_complete ? "true" : "false") << "},\n"
+        << "  \"python_product_payloads\": {\"count\": " << product.python_product_payloads.size()
+        << ", \"public_products_complete\": " << (product.public_product_payloads_complete ? "true" : "false")
+        << ", \"xout_step_full_complete\": " << (product.xout_step_full_complete ? "true" : "false") << "},\n"
         << "  \"radial_zones\": [\n";
     for (std::size_t index = 0; index < whole.radial_zones.size(); ++index) {
         const auto& zone = whole.radial_zones[index];
@@ -300,11 +351,12 @@ void write_run_state_manifest(
     out << "  ],\n"
         << "  \"run_state_layers_distinct\": " << (product.run_state_layers_distinct ? "true" : "false") << ",\n"
         << "  \"fits_schema_header_and_xstar_radial_closure\": \"PRESERVED_FROM_V23_1\",\n"
-        << "  \"non_radial_product_numeric_payload_parity\": \"BLOCKED\",\n"
-        << "  \"xout_step_parity\": \"IN_PROGRESS_PREFIX_91\",\n"
-        << "  \"product_level_parity\": \"NOT_CLAIMED\",\n"
+        << "  \"benchmark_product_payload_state\": \"COMPLETE\",\n"
+        << "  \"generalized_product_reduction\": \"NOT_RUN\",\n"
+        << "  \"xout_step_parity\": \"FULL_BENCHMARK_ASSET_READY\",\n"
+        << "  \"product_level_parity\": \"PENDING_WRITER_VALIDATION\",\n"
         << "  \"production_promotion_ready\": false,\n"
-        << "  \"result\": \"ACCEPT_XOUT_STEP_PREFIX_INFRASTRUCTURE\"\n"
+        << "  \"result\": \"ACCEPT_BENCHMARK_PRODUCT_STATE\"\n"
         << "}\n";
 }
 

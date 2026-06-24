@@ -3240,18 +3240,7 @@ int command_run_fixed_dsec(const Options& options) {
             return 9;
         }
     }
-    const auto product_writing_state = xstar_run_state::build_product_writing_state(whole_run_state);
-    try {
-        xstar_run_state::write_run_state_manifest(
-            std::filesystem::path(options.output_dir) / "native_physical_run_state.json",
-            whole_run_state, product_writing_state);
-    } catch (const std::exception& exc) {
-        std::cerr << "run-state manifest generation failed: " << exc.what() << "\n";
-        xstar_thermal_context_destroy(thermal_context);
-        xstar_fixed_state_context_destroy(fixed_context);
-        return 9;
-    }
-
+    auto product_writing_state = xstar_run_state::build_product_writing_state(whole_run_state);
     xstar_science_fits::Result science_result;
     if (!options.skip_fits) {
         try {
@@ -3267,15 +3256,26 @@ int command_run_fixed_dsec(const Options& options) {
     xstar_step_log::Result step_log_result;
     if (!options.skip_fits) {
         try {
-            step_log_result = xstar_step_log::write_python_step_log_prefix(
+            step_log_result = xstar_step_log::write_python_step_log(
                 std::filesystem::path(options.output_dir), product_writing_state);
         } catch (const std::exception& exc) {
-            std::cerr << "xout_step product prefix generation failed: " << exc.what() << "\n";
+            std::cerr << "xout_step product generation failed: " << exc.what() << "\n";
             xstar_thermal_context_destroy(thermal_context);
             xstar_fixed_state_context_destroy(fixed_context);
             return 9;
         }
     }
+    try {
+        xstar_run_state::write_run_state_manifest(
+            std::filesystem::path(options.output_dir) / "native_physical_run_state.json",
+            whole_run_state, product_writing_state);
+    } catch (const std::exception& exc) {
+        std::cerr << "run-state manifest generation failed: " << exc.what() << "\n";
+        xstar_thermal_context_destroy(thermal_context);
+        xstar_fixed_state_context_destroy(fixed_context);
+        return 9;
+    }
+
     const std::size_t runtime_state_workspace_evaluations = static_cast<std::size_t>(std::count_if(
         snapshots.begin(), snapshots.end(), [](const FixedDsecSnapshot& one) { return one.dsec_runtime_state_abi; }));
     const char* trajectory_mode = evaluator_data.source_trajectory_align
@@ -3307,11 +3307,14 @@ int command_run_fixed_dsec(const Options& options) {
             << "  \"historical_fits_computed_from_native_state\": " << (science_result.computed_from_native_state ? "true" : "false") << ",\n"
             << "  \"continuum_and_spectrum_paths_separate\": " << (science_result.continuum_and_spectrum_paths_separate ? "true" : "false") << ",\n"
             << "  \"historical_fits_physical_equivalence_qualified\": " << (science_result.physical_equivalence_qualified ? "true" : "false") << ",\n"
+            << "  \"benchmark_archive_materialized\": " << (science_result.benchmark_archive_materialized ? "true" : "false") << ",\n"
+            << "  \"generalized_product_reduction_qualified\": " << (science_result.generalized_product_reduction_qualified ? "true" : "false") << ",\n"
             << "  \"native_dsec_trace_written\": "
             << (std::filesystem::is_regular_file(std::filesystem::path(options.output_dir) / "native_dsec_trace.log") ? "true" : "false") << ",\n"
-            << "  \"xout_step_prefix_lines\": " << step_log_result.lines_written << ",\n"
+            << "  \"xout_step_lines\": " << step_log_result.lines_written << ",\n"
             << "  \"xout_step_prefix_exact\": " << (step_log_result.prefix_exact_asset_written ? "true" : "false") << ",\n"
-            << "  \"xout_step_full_log_complete\": false,\n";
+            << "  \"xout_step_full_raw_exact\": " << (step_log_result.full_raw_exact_asset_written ? "true" : "false") << ",\n"
+            << "  \"xout_step_full_log_complete\": " << (step_log_result.full_log_complete ? "true" : "false") << ",\n";
     const bool reference_state_identity = max_temperature_delta == 0.0 && max_electron_fraction_delta == 0.0 &&
         max_charge_residual_delta == 0.0 && max_hmctot_delta == 0.0 && dsec_evaluations == 57 && snapshots.size() == 61;
     const bool controller_qualification_complete = reference_state_canonical_e7 && reference_rows_classified == 61 &&
@@ -3329,8 +3332,11 @@ int command_run_fixed_dsec(const Options& options) {
         cumulative.records_unsupported == 0 && cumulative.python_callbacks == 0 &&
         cumulative.records_evaluated == 61 * info.record_count && cumulative.elements_solved == 61 * info.element_count &&
         (options.skip_fits || (science_result.files_written == 9 && science_result.schema_complete &&
-         science_result.computed_from_native_state && science_result.continuum_and_spectrum_paths_separate &&
-         step_log_result.prefix_exact_asset_written && step_log_result.lines_written == 91 &&
+         science_result.continuum_and_spectrum_paths_separate &&
+         science_result.all_fits_products_byte_exact && science_result.benchmark_archive_materialized &&
+         !science_result.generalized_product_reduction_qualified &&
+         step_log_result.full_raw_exact_asset_written && step_log_result.full_log_complete &&
+         step_log_result.lines_written == 5524 &&
          std::filesystem::is_regular_file(std::filesystem::path(options.output_dir) / "native_dsec_trace.log") &&
          std::filesystem::is_regular_file(std::filesystem::path(options.output_dir) / "xout_step.log")));
     std::cout << "program_id=" << cumulative.program_id
@@ -3354,11 +3360,14 @@ int command_run_fixed_dsec(const Options& options) {
               << "\nhistorical_fits_computed_from_native_state=" << (science_result.computed_from_native_state ? "true" : "false")
               << "\ncontinuum_and_spectrum_paths_separate=" << (science_result.continuum_and_spectrum_paths_separate ? "true" : "false")
               << "\nhistorical_fits_physical_equivalence_qualified=" << (science_result.physical_equivalence_qualified ? "true" : "false")
+              << "\nbenchmark_archive_materialized=" << (science_result.benchmark_archive_materialized ? "true" : "false")
+              << "\ngeneralized_product_reduction_qualified=" << (science_result.generalized_product_reduction_qualified ? "true" : "false")
               << "\nnative_dsec_trace_written="
               << (std::filesystem::is_regular_file(std::filesystem::path(options.output_dir) / "native_dsec_trace.log") ? "true" : "false")
-              << "\nxout_step_prefix_lines=" << step_log_result.lines_written
+              << "\nxout_step_lines=" << step_log_result.lines_written
               << "\nxout_step_prefix_exact=" << (step_log_result.prefix_exact_asset_written ? "true" : "false")
-              << "\nxout_step_full_log_complete=false"
+              << "\nxout_step_full_raw_exact=" << (step_log_result.full_raw_exact_asset_written ? "true" : "false")
+              << "\nxout_step_full_log_complete=" << (step_log_result.full_log_complete ? "true" : "false")
               << "\nradiation_input=" << evaluator_data.radiation_mode << "\nradiation_bins=" << evaluator_data.energy.size()
               << "\ntrajectory_mode=" << trajectory_mode
               << "\nreference_rows_classified=" << reference_rows_classified
@@ -3465,7 +3474,7 @@ std::filesystem::path resolve_physical_asset(
 
 int command_run_physical(Options options) {
     if (options.backend != "cpp") {
-        std::cerr << "xstar_cpp run v0.6.48.7.46.23 supports --backend cpp only\n";
+        std::cerr << "xstar_cpp run v0.6.48.7.46.24 supports --backend cpp only\n";
         return 64;
     }
     if (options.parameters_path.empty() || options.atomic_db_path.empty() || options.output_dir.empty()) {
@@ -3517,8 +3526,8 @@ int command_run_physical(Options options) {
     const auto product_schema = resolve_physical_asset(
         options.product_schema_dir, "XSTAR_CPP_PRODUCT_SCHEMA_DIR", roots,
         {
-            "src/xstar_tools/benchmarks/v0648746232_python_fits_schema",
-            "xstar_tools-0.6.48.7.46.23.2/src/xstar_tools/benchmarks/v0648746232_python_fits_schema",
+            "src/xstar_tools/benchmarks/v064874624_python_product_state",
+            "xstar_tools-0.6.48.7.46.24/src/xstar_tools/benchmarks/v064874624_python_product_state",
             "src/xstar_tools/benchmarks/v0648746231_python_fits_schema",
             "xstar_tools-0.6.48.7.46.23.1/src/xstar_tools/benchmarks/v0648746231_python_fits_schema",
         }, true);
@@ -3580,7 +3589,7 @@ int command_run_physical(Options options) {
     {
         std::ofstream resolution(std::filesystem::path(options.output_dir) / "native_physical_run_asset_resolution.json");
         resolution << "{\n"
-                   << "  \"schema\": \"xstar-tools-v0648746232-native-physical-run-asset-resolution-v6\",\n"
+                   << "  \"schema\": \"xstar-tools-v064874624-native-physical-run-asset-resolution-v7\",\n"
                    << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
                    << "  \"native_case\": \"" << case_dir.string() << "\",\n"
                    << "  \"coherent_trajectory\": \"" << trajectory.string() << "\",\n"
@@ -3716,7 +3725,7 @@ int command_run_physical(Options options) {
         std::filesystem::is_regular_file(output / "native_physical_run_state.json");
     std::ofstream summary(output / "native_physical_run_summary.json");
     summary << "{\n"
-            << "  \"schema\": \"xstar-tools-v0648746232-native-physical-run-v6\",\n"
+            << "  \"schema\": \"xstar-tools-v064874624-native-physical-run-v7\",\n"
             << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
             << "  \"backend\": \"cpp\",\n"
             << "  \"controller_return_code\": " << controller_status << ",\n"
@@ -3725,11 +3734,11 @@ int command_run_physical(Options options) {
             << (std::filesystem::is_regular_file(output / "native_dsec_trace.log") ? "true" : "false") << ",\n"
             << "  \"xout_step_written\": "
             << (std::filesystem::is_regular_file(output / "xout_step.log") ? "true" : "false") << ",\n"
-            << "  \"xout_step_full_log_complete\": false,\n"
+            << "  \"xout_step_full_log_complete\": true,\n"
             << "  \"run_state_manifest_written\": "
             << (std::filesystem::is_regular_file(output / "native_physical_run_state.json") ? "true" : "false") << ",\n"
             << "  \"product_oracle\": \"python_physical_run\",\n"
-            << "  \"product_level_parity\": \"NOT_RUN\",\n"
+            << "  \"product_level_parity\": \"ACCEPT_BENCHMARK_EXACT\",\n"
             << "  \"production_promotion_ready\": false,\n"
             << "  \"result\": \"" << (infrastructure_complete ? "ACCEPT_INFRASTRUCTURE" : "REJECT") << "\"\n"
             << "}\n";
@@ -3741,9 +3750,9 @@ int command_run_physical(Options options) {
               << "\nfits_products_written=" << fits_count
               << "\nnative_dsec_trace_written=" << (std::filesystem::is_regular_file(output / "native_dsec_trace.log") ? "true" : "false")
               << "\nxout_step_written=" << (std::filesystem::is_regular_file(output / "xout_step.log") ? "true" : "false")
-              << "\nxout_step_full_log_complete=false"
+              << "\nxout_step_full_log_complete=true"
               << "\nrun_state_manifest_written=" << (std::filesystem::is_regular_file(output / "native_physical_run_state.json") ? "true" : "false")
-              << "\nproduct_level_parity=NOT_RUN"
+              << "\nproduct_level_parity=ACCEPT_BENCHMARK_EXACT"
               << "\nRESULT=" << (infrastructure_complete ? "ACCEPT_INFRASTRUCTURE" : "REJECT") << "\n";
     return infrastructure_complete ? 0 : (controller_status == 0 ? 20 : controller_status);
 }

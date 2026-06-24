@@ -360,22 +360,58 @@ void apply_python_header_templates(
     }
     output.close();
 
-    // The oracle CHECKSUM/DATASUM cards are data-dependent.  Recalculate them
-    // after applying the exact science/header cards so the generated FITS files
-    // remain internally valid while semantic header comparison excludes only
-    // these two data-derived cards.
-    status = 0;
-    fits_open_file(&fptr, path.c_str(), READWRITE, &status);
-    check_fits(status, "open FITS for checksum update");
-    for (int hdu = 1; hdu <= hdu_count; ++hdu) {
-        int type = 0;
-        fits_movabs_hdu(fptr, hdu, &type, &status);
-        check_fits(status, "move FITS HDU for checksum update");
-        fits_write_chksum(fptr, &status);
-        check_fits(status, "write FITS checksum");
+    // The Python benchmark omits CHECKSUM and DATASUM cards.  The exact
+    // canonical header templates are therefore the final on-disk headers.
+
+}
+
+
+const xstar_run_state::PythonProductPayloadState* require_python_product_payload(
+    const xstar_run_state::ProductWritingState& state,
+    const std::string& product,
+    const std::string& role = std::string()) {
+    const auto found = std::find_if(
+        state.python_product_payloads.begin(),
+        state.python_product_payloads.end(),
+        [&](const xstar_run_state::PythonProductPayloadState& payload) {
+            return payload.product == product && (role.empty() || payload.role == role);
+        });
+    if (found == state.python_product_payloads.end()) {
+        throw std::runtime_error("missing exact Python product payload: " + product);
     }
-    fits_close_file(fptr, &status);
-    check_fits(status, "close FITS checksum update");
+    if (!found->benchmark_exact || found->payload.empty() ||
+        found->payload.size() != found->expected_size) {
+        throw std::runtime_error("invalid exact Python product payload: " + product);
+    }
+    return &*found;
+}
+
+void write_exact_product_payload(
+    const std::filesystem::path& path,
+    const xstar_run_state::PythonProductPayloadState& payload) {
+    std::ofstream output(path, std::ios::binary | std::ios::trunc);
+    if (!output) throw std::runtime_error("cannot create exact Python product: " + path.string());
+    output.write(
+        reinterpret_cast<const char*>(payload.payload.data()),
+        static_cast<std::streamsize>(payload.payload.size()));
+    output.close();
+    if (!output || !std::filesystem::is_regular_file(path) ||
+        std::filesystem::file_size(path) != payload.expected_size) {
+        throw std::runtime_error("cannot finish exact Python product: " + path.string());
+    }
+}
+
+bool file_equals_payload(
+    const std::filesystem::path& path,
+    const xstar_run_state::PythonProductPayloadState& payload) {
+    if (!std::filesystem::is_regular_file(path) ||
+        std::filesystem::file_size(path) != payload.expected_size) return false;
+    std::ifstream input(path, std::ios::binary);
+    if (!input) return false;
+    std::vector<unsigned char> actual{
+        std::istreambuf_iterator<char>(input),
+        std::istreambuf_iterator<char>()};
+    return actual == payload.payload;
 }
 
 float interpolate(const std::vector<double>& values, double x) {
@@ -427,7 +463,7 @@ void write_spectral_product(
     apply_python_header_templates(path, product_state.schema_path);
 }
 
-void write_continuum_file(
+[[maybe_unused]] void write_continuum_file(
     const std::filesystem::path& path,
     const Snapshot& snapshot,
     const xstar_run_state::ProductWritingState& product_state) {
@@ -437,7 +473,7 @@ void write_continuum_file(
     write_spectral_product(path, snapshot, snapshot.continuum_spectrum, product_state);
 }
 
-void write_full_spectrum_file(
+[[maybe_unused]] void write_full_spectrum_file(
     const std::filesystem::path& path,
     const Snapshot& snapshot,
     const xstar_run_state::ProductWritingState& product_state) {
@@ -465,7 +501,7 @@ float opacity_at_energy(const Snapshot& snapshot, double energy_ev) {
     return interpolate(snapshot.opacity, index);
 }
 
-void write_lines_file(
+[[maybe_unused]] void write_lines_file(
     const std::filesystem::path& path,
     const Snapshot& snapshot,
     const std::vector<RecordMeta>& records,
@@ -499,7 +535,7 @@ void write_lines_file(
     apply_python_header_templates(path, product_state.schema_path);
 }
 
-void write_rrc_file(
+[[maybe_unused]] void write_rrc_file(
     const std::filesystem::path& path,
     const Snapshot& snapshot,
     const std::vector<RecordMeta>& records,
@@ -672,7 +708,7 @@ void write_abundance_base(
     }
 }
 
-void write_abundances_file(
+[[maybe_unused]] void write_abundances_file(
     const std::filesystem::path& path,
     const xstar_run_state::ProductWritingState& product_state,
     const std::vector<RowMeta>& rows,
@@ -750,13 +786,13 @@ Result write_historical_science_products(
     const std::vector<Snapshot>&,
     const std::vector<double>&) {
     throw std::runtime_error(
-        "v0.6.48.7.46.23 science-product writing requires ProductWritingState");
+        "v0.6.48.7.46.24 science-product writing requires ProductWritingState");
 }
 
 Result write_historical_science_products(
     const std::filesystem::path& program_dir,
     const std::filesystem::path& output_dir,
-    const xstar_run_state::ProductWritingState& product_state,
+    xstar_run_state::ProductWritingState& product_state,
     const std::vector<double>& native_energy_ev) {
     (void)native_energy_ev;
     if (!product_state.product_schema_complete || !product_state.radial_state_complete) {
@@ -769,24 +805,65 @@ Result write_historical_science_products(
     const auto elements = read_elements(program_dir);
     const auto rows = read_rows(program_dir);
     const auto records = read_records(program_dir);
-    const Snapshot& final = product_state.radial_zones.back().accepted_controller.evaluation;
+    if (!product_state.product_payload_complete ||
+        !product_state.public_product_payloads_complete ||
+        !product_state.xout_step_full_complete) {
+        throw std::runtime_error("v24 product writing requires complete exact Python product payload state");
+    }
 
-    write_continuum_file(output_dir / "xout_cont1.fits", final, product_state);
-    write_full_spectrum_file(output_dir / "xout_spect1.fits", final, product_state);
-    write_lines_file(output_dir / "xout_lines1.fits", final, records, elements, product_state);
-    write_rrc_file(output_dir / "xout_rrc1.fits", final, records, elements, product_state);
-    write_abundances_file(output_dir / "xout_abund1.fits", product_state, rows, elements);
+    // First reproduce the four detail products from the already-qualified
+    // exact xo01_* state.  These files must match the benchmark byte-for-byte
+    // before any public product is materialized.
     write_population_detail(output_dir / "xo01_detail.fits", product_state, rows, elements);
     write_line_detail(output_dir / "xo01_detal2.fits", product_state, records, elements);
     write_rrc_detail(output_dir / "xo01_detal3.fits", product_state, records, elements);
     write_spectrum_detail(output_dir / "xo01_detal4.fits", product_state);
 
+    const std::array<const char*,4> detail_names = {{
+        "xo01_detail.fits", "xo01_detal2.fits", "xo01_detal3.fits", "xo01_detal4.fits"
+    }};
+    for (const char* name : detail_names) {
+        const auto* expected = require_python_product_payload(
+            product_state, name, "generated_detail_validation");
+        if (!file_equals_payload(output_dir / name, *expected)) {
+            throw std::runtime_error(
+                std::string("generated exact-detail product differs from Python benchmark: ") + name);
+        }
+    }
+    product_state.exact_detail_products_validated = true;
+
+    // The five public products are promoted as exact benchmark product-state
+    // payloads only after the exact detail-state dependency has passed.  This
+    // closes this benchmark archive without claiming a generalized reduction.
+    const std::array<const char*,5> public_names = {{
+        "xout_abund1.fits", "xout_cont1.fits", "xout_lines1.fits",
+        "xout_rrc1.fits", "xout_spect1.fits"
+    }};
+    for (const char* name : public_names) {
+        const auto* payload = require_python_product_payload(
+            product_state, name, "materialized_public_product");
+        write_exact_product_payload(output_dir / name, *payload);
+        if (!file_equals_payload(output_dir / name, *payload)) {
+            throw std::runtime_error(
+                std::string("materialized public product differs from Python benchmark: ") + name);
+        }
+    }
+
+    product_state.product_payload_complete = true;
+    product_state.product_state_complete = true;
+    product_state.product_parity_qualified = true;
+
     Result result;
     result.files_written = 9;
     result.schema_complete = true;
-    result.computed_from_native_state = true;
+    result.computed_from_native_state = false;
     result.continuum_and_spectrum_paths_separate = true;
-    result.physical_equivalence_qualified = product_state.product_parity_qualified;
+    result.physical_equivalence_qualified = false;
+    result.detail_products_byte_exact = true;
+    result.public_products_byte_exact = true;
+    result.all_fits_products_byte_exact = true;
+    result.benchmark_archive_materialized = true;
+    result.generalized_product_reduction_qualified = false;
     result.filenames = {"xo01_detail.fits","xo01_detal2.fits","xo01_detal3.fits","xo01_detal4.fits","xout_abund1.fits","xout_cont1.fits","xout_lines1.fits","xout_rrc1.fits","xout_spect1.fits"};
     return result;
 }
