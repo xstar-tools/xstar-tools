@@ -865,7 +865,7 @@ extern "C" int xstar_engine_eval_mg_rate_payload_native_scalars_v1(
         const double* c=context_f64+static_cast<std::int64_t>(k)*context_stride;
         double* out=out_ans_f64+static_cast<std::int64_t>(k)*out_stride;
         for (int q=0;q<out_stride;++q) out[q]=0.0;
-        const long long record=m[0],rt=m[1],dt=m[2];
+        const long long rt=m[1],dt=m[2];
         const int ni=static_cast<int>(m[7]),li=static_cast<int>(m[8]),nf=static_cast<int>(m[9]),lf=static_cast<int>(m[10]),iq=static_cast<int>(m[11]);
         const int off=static_cast<int>(m[12]),count=static_cast<int>(m[13]);
         stats[0]+=1;

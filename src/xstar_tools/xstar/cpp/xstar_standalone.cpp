@@ -41,6 +41,7 @@ struct Options {
     std::string continuum_tau_csv;
     std::string call_start_workspace_dir;
     std::string runtime_state_workspace_dir;
+    std::string product_schema_dir;
     std::string mg_primary_budget_csv;
     std::string call1_thermal_budget_csv;
     std::string global_workspace_mode = "all";
@@ -179,6 +180,10 @@ bool parse_options(int argc, char** argv, Options& options, std::string& error) 
             const char* value = require_value("--runtime-state-workspace-dir");
             if (!value) return false;
             options.runtime_state_workspace_dir = value;
+        } else if (arg == "--product-schema-dir") {
+            const char* value = require_value("--product-schema-dir");
+            if (!value) return false;
+            options.product_schema_dir = value;
         } else if (arg == "--global-workspace-mode") {
             const char* value = require_value("--global-workspace-mode");
             if (!value) return false;
@@ -3219,6 +3224,21 @@ int command_run_fixed_dsec(const Options& options) {
     for (const auto& snapshot : snapshots) {
         if (snapshot.kind == "final") append_provisional_zone(snapshot, "controller_call_accepted_state");
     }
+    if (!options.skip_fits) {
+        try {
+            if (options.product_schema_dir.empty()) {
+                throw std::runtime_error(
+                    "product FITS generation requires --product-schema-dir or XSTAR_CPP_PRODUCT_SCHEMA_DIR");
+            }
+            xstar_run_state::load_python_product_schema(
+                whole_run_state, std::filesystem::path(options.product_schema_dir));
+        } catch (const std::exception& exc) {
+            std::cerr << "Python FITS schema/radial-state loading failed: " << exc.what() << "\n";
+            xstar_thermal_context_destroy(thermal_context);
+            xstar_fixed_state_context_destroy(fixed_context);
+            return 9;
+        }
+    }
     const auto product_writing_state = xstar_run_state::build_product_writing_state(whole_run_state);
     try {
         xstar_run_state::write_run_state_manifest(
@@ -3419,7 +3439,7 @@ std::filesystem::path resolve_physical_asset(
 
 int command_run_physical(Options options) {
     if (options.backend != "cpp") {
-        std::cerr << "xstar_cpp run v0.6.48.7.46.22.3 supports --backend cpp only\n";
+        std::cerr << "xstar_cpp run v0.6.48.7.46.23 supports --backend cpp only\n";
         return 64;
     }
     if (options.parameters_path.empty() || options.atomic_db_path.empty() || options.output_dir.empty()) {
@@ -3468,6 +3488,12 @@ int command_run_physical(Options options) {
             "xstar_tools-0.6.48.7.46.21.12/v048746216_all_sequence_ieee_e10_trajectory_parity/v0472_all61_independent_thermal_capture/all61_input_workspaces",
             "v048746216_all_sequence_ieee_e10_trajectory_parity/v0472_all61_independent_thermal_capture/all61_input_workspaces",
         }, true);
+    const auto product_schema = resolve_physical_asset(
+        options.product_schema_dir, "XSTAR_CPP_PRODUCT_SCHEMA_DIR", roots,
+        {
+            "src/xstar_tools/benchmarks/v064874623_python_fits_schema",
+            "xstar_tools-0.6.48.7.46.23/src/xstar_tools/benchmarks/v064874623_python_fits_schema",
+        }, true);
 
     // The accepted v21.17.2 controller was not just a case/trajectory pair.  It
     // consumed the complete source-faithful qualification profile and the
@@ -3506,6 +3532,7 @@ int command_run_physical(Options options) {
     const std::vector<RequiredAsset> required = {
         {"native case", case_dir}, {"coherent trajectory", trajectory}, {"radiation", radiation},
         {"call-start workspaces", call_start}, {"runtime-state workspaces", runtime_workspaces},
+        {"Python FITS product schema", product_schema},
         {"source solve rows", source_solve_rows}, {"hydrogen Type-50 line map", hydrogen_line_map},
         {"magnesium Type-50 line map", magnesium_line_map},
         {"magnesium Type-50 active records", magnesium_active_records},
@@ -3525,13 +3552,14 @@ int command_run_physical(Options options) {
     {
         std::ofstream resolution(std::filesystem::path(options.output_dir) / "native_physical_run_asset_resolution.json");
         resolution << "{\n"
-                   << "  \"schema\": \"xstar-tools-v0648746223-native-physical-run-asset-resolution-v3\",\n"
+                   << "  \"schema\": \"xstar-tools-v064874623-native-physical-run-asset-resolution-v4\",\n"
                    << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
                    << "  \"native_case\": \"" << case_dir.string() << "\",\n"
                    << "  \"coherent_trajectory\": \"" << trajectory.string() << "\",\n"
                    << "  \"radiation\": \"" << radiation.string() << "\",\n"
                    << "  \"call_start_workspaces\": \"" << call_start.string() << "\",\n"
                    << "  \"runtime_state_workspaces\": \"" << runtime_workspaces.string() << "\",\n"
+                   << "  \"product_schema\": \"" << product_schema.string() << "\",\n"
                    << "  \"source_capture\": \"" << source_capture.string() << "\",\n"
                    << "  \"source_solve_rows\": \"" << source_solve_rows.string() << "\",\n"
                    << "  \"hydrogen_type50_line_map\": \"" << hydrogen_line_map.string() << "\",\n"
@@ -3552,6 +3580,7 @@ int command_run_physical(Options options) {
               << "\nradiation=" << radiation
               << "\ncall_start_workspaces=" << call_start
               << "\nruntime_state_workspaces=" << runtime_workspaces
+              << "\nproduct_schema=" << product_schema
               << "\nsource_capture=" << source_capture
               << "\nsource_solve_rows=" << source_solve_rows
               << "\nhydrogen_type50_line_map=" << hydrogen_line_map
@@ -3572,6 +3601,7 @@ int command_run_physical(Options options) {
     options.radiation_csv = radiation.string();
     options.call_start_workspace_dir = call_start.string();
     options.runtime_state_workspace_dir = runtime_workspaces.string();
+    options.product_schema_dir = product_schema.string();
     options.global_workspace_mode = "all";
     options.dsec_covering_fraction = 1.0;
     options.has_dsec_covering_fraction = true;
@@ -3663,7 +3693,7 @@ int command_run_physical(Options options) {
         std::filesystem::is_regular_file(output / "native_physical_run_state.json");
     std::ofstream summary(output / "native_physical_run_summary.json");
     summary << "{\n"
-            << "  \"schema\": \"xstar-tools-v0648746223-native-physical-run-v3\",\n"
+            << "  \"schema\": \"xstar-tools-v064874623-native-physical-run-v4\",\n"
             << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
             << "  \"backend\": \"cpp\",\n"
             << "  \"controller_return_code\": " << controller_status << ",\n"

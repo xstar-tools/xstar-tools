@@ -169,5 +169,5 @@ def test_canonical_checker_missing_report_is_structured(tmp_path: Path) -> None:
 
 def test_public_cpp_version_label_and_abi() -> None:
     text = (root() / "src/xstar_tools/xstar/cpp/xstar_api.h").read_text()
-    assert '#define XSTAR_API_VERSION_STRING "0.6.48.7.46.22.3"' in text
+    assert '#define XSTAR_API_VERSION_STRING "0.6.48.7.46.23"' in text
     assert "60487" in text

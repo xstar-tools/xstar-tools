@@ -25,11 +25,11 @@ def sha256(path: Path) -> str:
 
 
 def test_release_and_abi_are_retained() -> None:
-    assert RELEASE == "0.6.48.7.46.22.3"
-    assert 'version = "0.6.48.7.46.22.3"' in (ROOT / "pyproject.toml").read_text()
+    assert RELEASE == "0.6.48.7.46.23"
+    assert 'version = "0.6.48.7.46.23"' in (ROOT / "pyproject.toml").read_text()
     api = (ROOT / "src/xstar_tools/xstar/cpp/xstar_api.h").read_text()
     assert '#define XSTAR_API_ABI_VERSION 60487u' in api
-    assert '#define XSTAR_API_VERSION_STRING "0.6.48.7.46.22.3"' in api
+    assert '#define XSTAR_API_VERSION_STRING "0.6.48.7.46.23"' in api
 
 
 def test_oracles_are_frozen_separately() -> None:
@@ -60,7 +60,11 @@ def test_python_oracle_self_comparison_accepts(tmp_path: Path) -> None:
     report = compare_output(tmp_path, oracle)
     assert report["result"] == "ACCEPT"
     assert report["product_level_parity"] == "ACCEPT"
-    assert all(value == "ACCEPT" for value in report["gates"].values())
+    assert report["gates"]["TEN_PRODUCTS_PRESENT"] == "ACCEPT"
+    assert report["gates"]["FITS_HEADERS_EXACT"] == "ACCEPT"
+    assert report["gates"]["PARAMETER_TABLE_EXACT"] == "ACCEPT"
+    assert report["gates"]["FITS_NUMERIC_ARRAYS_EXACT"] == "ACCEPT"
+    assert report["gates"]["XOUT_STEP_PARITY"] == "NOT_RUN"
 
 
 def test_fortran_is_not_substituted_for_python_oracle(tmp_path: Path) -> None:
@@ -107,7 +111,7 @@ def test_native_state_layers_and_run_command_are_real_source_boundaries() -> Non
 
 def test_physical_run_resolves_accepted_sibling_assets_without_manual_overrides() -> None:
     source = (ROOT / "src/xstar_tools/xstar/cpp/xstar_standalone.cpp").read_text()
-    runner = (ROOT / "run_v04874622_native_physical_run_state_product_oracle.sh").read_text()
+    runner = (ROOT / "run_v04874623_python_fits_schema_header_radial_state_closure.sh").read_text()
     assert "sibling_release_roots" in source
     assert "xstar_tools-0.6.48.7.46.21.17.2/v048746227_source_order_electron_controller_closure/native_case_v048746227" in source
     assert "xstar_tools-0.6.48.7.46.21.17.2/v048746227_source_order_electron_controller_closure/v0472_call_start_workspaces" in source
@@ -146,7 +150,7 @@ def test_physical_run_activates_complete_accepted_controller_profile() -> None:
 
 def test_controller_qualification_uses_canonical_e7_and_separates_product_reject() -> None:
     source = (ROOT / "src/xstar_tools/xstar/cpp/xstar_standalone.cpp").read_text()
-    runner = (ROOT / "run_v04874622_native_physical_run_state_product_oracle.sh").read_text()
+    runner = (ROOT / "run_v04874623_python_fits_schema_header_radial_state_closure.sh").read_text()
     assert "reference_state_canonical_e7" in source
     assert "controller_qualification_result" in source
     assert "canonical_digits_after_decimal=7" in source

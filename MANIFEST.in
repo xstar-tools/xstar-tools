@@ -933,3 +933,13 @@ include V048746222_QUALIFICATION_ASSESSMENT.md
 include V0648746223_CANONICAL_CONTROLLER_AND_INFRASTRUCTURE_GATE_SEPARATION.md
 include V048746223_PRODUCTION_HOST_COMMANDS.md
 include V048746223_QUALIFICATION_ASSESSMENT.md
+
+# v0.6.48.7.46.23 Python FITS schema, header, and radial-state closure
+recursive-include src/xstar_tools/benchmarks/v064874623_python_fits_schema *
+include V064874623_PYTHON_FITS_SCHEMA_HEADER_RADIAL_STATE_CLOSURE.md
+include V04874623_PRODUCTION_HOST_COMMANDS.md
+include V04874623_QUALIFICATION_ASSESSMENT.md
+include run_v04874623_python_fits_schema_header_radial_state_closure.sh
+include check_v04874623_python_fits_schema_header_radial_state_closure_readiness.py
+include compare_v04874623_product_oracle.py
+include tests/test_v064874623_python_fits_schema_header_radial_state_closure.py

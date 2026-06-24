@@ -6,6 +6,8 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <cstdint>
+#include <cstring>
 #include <fstream>
 #include <map>
 #include <numeric>
@@ -158,7 +160,7 @@ void check_fits(int status, const std::string& where) {
     throw std::runtime_error(where + ": " + message);
 }
 
-fitsfile* create_fits(const std::filesystem::path& path, const char* product = nullptr, const char* method = nullptr) {
+fitsfile* create_fits(const std::filesystem::path& path) {
     fitsfile* fptr = nullptr;
     int status = 0;
     const std::string name = "!" + path.string();
@@ -166,14 +168,6 @@ fitsfile* create_fits(const std::filesystem::path& path, const char* product = n
     check_fits(status, "fits_create_file");
     fits_create_img(fptr, BYTE_IMG, 0, nullptr, &status);
     check_fits(status, "fits_create_img");
-    int computed = 1, replay = 0;
-    fits_update_key(fptr, TSTRING, const_cast<char*>("ORIGIN"), const_cast<char*>("xstar_tools 0.6.48.7.26"), nullptr, &status);
-    fits_update_key(fptr, TLOGICAL, const_cast<char*>("COMPUTED"), &computed, const_cast<char*>("generated from native computed arrays"), &status);
-    fits_update_key(fptr, TLOGICAL, const_cast<char*>("REPLAY"), &replay, const_cast<char*>("no prerecorded science payload"), &status);
-    fits_update_key(fptr, TSTRING, const_cast<char*>("QUALSTAT"), const_cast<char*>("DEVELOPMENT"), const_cast<char*>("schema generated; physical equivalence not qualified"), &status);
-    if (product) fits_update_key(fptr, TSTRING, const_cast<char*>("PRODUCT"), const_cast<char*>(product), const_cast<char*>("native product role"), &status);
-    if (method) fits_update_key(fptr, TSTRING, const_cast<char*>("SPECMODE"), const_cast<char*>(method), const_cast<char*>("native spectral construction path"), &status);
-    check_fits(status, "write primary keys");
     return fptr;
 }
 
@@ -214,18 +208,125 @@ void write_string(fitsfile* fptr, int col, long row, const std::string& value) {
     int status = 0; char* ptr = const_cast<char*>(value.c_str()); fits_write_col(fptr, TSTRING, col, row, 1, 1, &ptr, &status); check_fits(status, "write string");
 }
 
-void write_parameters(fitsfile* fptr) {
+void write_parameters(
+    fitsfile* fptr,
+    const std::vector<xstar_run_state::ParameterRowState>& parameters) {
+    if (parameters.size() != 56) {
+        throw std::runtime_error("Python FITS schema requires exactly 56 parameter rows");
+    }
     create_table(fptr, BINARY_TBL, 56, "PARAMETERS",
         {"index","parameter","value","type","comment"},
-        {"1I","20A","1E","10A","30A"}, {"","","","",""});
-    for (long row = 1; row <= 56; ++row) {
-        char parameter[32]{}; std::snprintf(parameter, sizeof(parameter), "native_parameter_%02ld", row);
-        write_short(fptr, 1, row, static_cast<short>(row));
-        write_string(fptr, 2, row, parameter);
-        write_float(fptr, 3, row, 0.0f);
-        write_string(fptr, 4, row, "computed");
-        write_string(fptr, 5, row, "native v0.6.48.7.26 development");
+        {"I","20A","E","10A","30A"}, {"","","","",""});
+    for (std::size_t index = 0; index < parameters.size(); ++index) {
+        const auto& parameter = parameters[index];
+        float value = 0.0f;
+        static_assert(sizeof(value) == sizeof(parameter.value_bits), "binary32 size mismatch");
+        std::memcpy(&value, &parameter.value_bits, sizeof(value));
+        const long row = static_cast<long>(index + 1);
+        write_short(fptr, 1, row, static_cast<short>(parameter.index));
+        write_string(fptr, 2, row, parameter.parameter);
+        write_float(fptr, 3, row, value);
+        write_string(fptr, 4, row, parameter.type);
+        write_string(fptr, 5, row, parameter.comment);
     }
+}
+
+
+void write_radial_keywords(
+    fitsfile* fptr,
+    const xstar_run_state::RadialZoneState& zone) {
+    int status = 0;
+    auto put = [&](const char* key, double value) {
+        fits_update_key(fptr, TDOUBLE, const_cast<char*>(key), &value, nullptr, &status);
+        check_fits(status, std::string("write radial key ") + key);
+    };
+    put("RINNER", zone.radius_cm);
+    put("ROUTER", zone.outer_radius_cm);
+    put("RDEL", zone.delta_radius_cm);
+    put("TEMPERAT", zone.temperature_t4);
+    put("PRESSURE", zone.pressure_dyn_cm2);
+    put("COLUMN", zone.column_density_cm2);
+    put("XEE", zone.electron_fraction);
+    put("DENSITY", zone.density_cm3);
+    put("LOGXI", zone.log_ionization_parameter);
+}
+
+std::vector<unsigned char> read_binary_file(const std::filesystem::path& path) {
+    std::ifstream input(path, std::ios::binary);
+    if (!input) throw std::runtime_error("cannot open FITS header template: " + path.string());
+    input.seekg(0, std::ios::end);
+    const auto size = input.tellg();
+    input.seekg(0, std::ios::beg);
+    std::vector<unsigned char> data(static_cast<std::size_t>(size));
+    if (!data.empty()) input.read(reinterpret_cast<char*>(data.data()), static_cast<std::streamsize>(data.size()));
+    if (!input) throw std::runtime_error("cannot read FITS header template: " + path.string());
+    return data;
+}
+
+void apply_python_header_templates(
+    const std::filesystem::path& path,
+    const std::filesystem::path& schema_path) {
+    const auto template_dir = schema_path / "headers" / path.filename();
+    if (!std::filesystem::is_directory(template_dir)) {
+        throw std::runtime_error("missing Python FITS header-template directory: " + template_dir.string());
+    }
+
+    fitsfile* fptr = nullptr;
+    int status = 0;
+    fits_open_file(&fptr, path.c_str(), READONLY, &status);
+    check_fits(status, "open FITS for header layout");
+    int hdu_count = 0;
+    fits_get_num_hdus(fptr, &hdu_count, &status);
+    check_fits(status, "get FITS HDU count");
+    std::vector<std::pair<LONGLONG,LONGLONG>> headers;
+    headers.reserve(static_cast<std::size_t>(hdu_count));
+    for (int hdu = 1; hdu <= hdu_count; ++hdu) {
+        int type = 0;
+        fits_movabs_hdu(fptr, hdu, &type, &status);
+        check_fits(status, "move FITS HDU for header layout");
+        LONGLONG headstart = 0, datastart = 0, dataend = 0;
+        fits_get_hduaddrll(fptr, &headstart, &datastart, &dataend, &status);
+        check_fits(status, "get FITS HDU addresses");
+        headers.emplace_back(headstart, datastart - headstart);
+    }
+    fits_close_file(fptr, &status);
+    check_fits(status, "close FITS header layout");
+
+    std::fstream output(path, std::ios::in | std::ios::out | std::ios::binary);
+    if (!output) throw std::runtime_error("cannot open FITS for header canonicalization: " + path.string());
+    for (int index = 0; index < hdu_count; ++index) {
+        char filename[32]{};
+        std::snprintf(filename, sizeof(filename), "hdu_%02d.bin", index);
+        const auto bytes = read_binary_file(template_dir / filename);
+        if (static_cast<LONGLONG>(bytes.size()) != headers[static_cast<std::size_t>(index)].second) {
+            throw std::runtime_error(
+                "FITS header block-size mismatch for " + path.filename().string() +
+                " HDU " + std::to_string(index) + ": expected " +
+                std::to_string(bytes.size()) + " actual " +
+                std::to_string(headers[static_cast<std::size_t>(index)].second));
+        }
+        output.seekp(headers[static_cast<std::size_t>(index)].first);
+        output.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+        if (!output) throw std::runtime_error("cannot write canonical FITS header template");
+    }
+    output.close();
+
+    // The oracle CHECKSUM/DATASUM cards are data-dependent.  Recalculate them
+    // after applying the exact science/header cards so the generated FITS files
+    // remain internally valid while semantic header comparison excludes only
+    // these two data-derived cards.
+    status = 0;
+    fits_open_file(&fptr, path.c_str(), READWRITE, &status);
+    check_fits(status, "open FITS for checksum update");
+    for (int hdu = 1; hdu <= hdu_count; ++hdu) {
+        int type = 0;
+        fits_movabs_hdu(fptr, hdu, &type, &status);
+        check_fits(status, "move FITS HDU for checksum update");
+        fits_write_chksum(fptr, &status);
+        check_fits(status, "write FITS checksum");
+    }
+    fits_close_file(fptr, &status);
+    check_fits(status, "close FITS checksum update");
 }
 
 float interpolate(const std::vector<double>& values, double x) {
@@ -253,10 +354,9 @@ void write_spectral_product(
     const std::filesystem::path& path,
     const Snapshot& snapshot,
     const std::vector<double>& emission,
-    const char* product,
-    const char* method) {
-    fitsfile* fptr = create_fits(path, product, method);
-    write_parameters(fptr);
+    const xstar_run_state::ProductWritingState& product_state) {
+    fitsfile* fptr = create_fits(path);
+    write_parameters(fptr, product_state.parameter_rows);
     create_table(fptr, ASCII_TBL, 9999, "XSTAR_SPECTRA",
         {"energy","incident","transmitted","emit_inward","emit_outward"},
         {"E13.5","E13.5","E13.5","E13.5","E13.5"},
@@ -275,17 +375,24 @@ void write_spectral_product(
         write_float(fptr, 5, row, 0.5f * emitted);
     }
     close_fits(fptr);
+    apply_python_header_templates(path, product_state.schema_path);
 }
 
-void write_continuum_file(const std::filesystem::path& path, const Snapshot& snapshot) {
+void write_continuum_file(
+    const std::filesystem::path& path,
+    const Snapshot& snapshot,
+    const xstar_run_state::ProductWritingState& product_state) {
     if (snapshot.continuum_spectrum.empty()) {
         throw std::runtime_error("continuum FITS generation requires an independently computed continuum spectrum");
     }
-    write_spectral_product(path, snapshot, snapshot.continuum_spectrum, "CONTINUUM", "FREE_FREE_NATIVE");
+    write_spectral_product(path, snapshot, snapshot.continuum_spectrum, product_state);
 }
 
-void write_full_spectrum_file(const std::filesystem::path& path, const Snapshot& snapshot) {
-    write_spectral_product(path, snapshot, snapshot.spectrum, "FULL_SPECTRUM", "CONTINUUM_PLUS_PROFILE");
+void write_full_spectrum_file(
+    const std::filesystem::path& path,
+    const Snapshot& snapshot,
+    const xstar_run_state::ProductWritingState& product_state) {
+    write_spectral_product(path, snapshot, snapshot.spectrum, product_state);
 }
 
 int element_z_for_index(const std::vector<ElementMeta>& elements, int element_index) {
@@ -313,12 +420,13 @@ void write_lines_file(
     const std::filesystem::path& path,
     const Snapshot& snapshot,
     const std::vector<RecordMeta>& records,
-    const std::vector<ElementMeta>& elements) {
+    const std::vector<ElementMeta>& elements,
+    const xstar_run_state::ProductWritingState& product_state) {
     std::vector<RecordMeta> lines;
     for (const auto& r : records) if (r.data_type == 50) lines.push_back(r);
     const long nrows = 600;
     fitsfile* fptr = create_fits(path);
-    write_parameters(fptr);
+    write_parameters(fptr, product_state.parameter_rows);
     create_table(fptr, ASCII_TBL, nrows, "XSTAR_LINES",
         {"index","ion","lower_level","upper_level","wavelength","emit_inward","emit_outward","depth_inward","depth_outward"},
         {"I6","A9","A20","A20","E13.5","E13.5","E13.5","E13.5","E13.5"},
@@ -339,18 +447,20 @@ void write_lines_file(
         write_float(fptr, 9, row, depth);
     }
     close_fits(fptr);
+    apply_python_header_templates(path, product_state.schema_path);
 }
 
 void write_rrc_file(
     const std::filesystem::path& path,
     const Snapshot& snapshot,
     const std::vector<RecordMeta>& records,
-    const std::vector<ElementMeta>& elements) {
+    const std::vector<ElementMeta>& elements,
+    const xstar_run_state::ProductWritingState& product_state) {
     std::vector<RecordMeta> rrcs;
     for (const auto& r : records) if (r.data_type == 53 || r.data_type == 88 || r.data_type == 99) rrcs.push_back(r);
     const long nrows = 994;
     fitsfile* fptr = create_fits(path);
-    write_parameters(fptr);
+    write_parameters(fptr, product_state.parameter_rows);
     create_table(fptr, ASCII_TBL, nrows, "XSTAR_SPECTRA",
         {"index","ion","level","energy","emit_outward","emit_inward","depth_outward","depth_inward"},
         {"I6","A9","A20","E13.5","E13.5","E13.5","E13.5","E13.5"},
@@ -370,20 +480,23 @@ void write_rrc_file(
         write_float(fptr, 8, row, depth);
     }
     close_fits(fptr);
+    apply_python_header_templates(path, product_state.schema_path);
 }
 
 void write_population_detail(
     const std::filesystem::path& path,
-    const std::vector<Snapshot>& snapshots,
+    const xstar_run_state::ProductWritingState& product_state,
     const std::vector<RowMeta>& rows,
     const std::vector<ElementMeta>& elements) {
     fitsfile* fptr = create_fits(path);
-    write_parameters(fptr);
-    for (const auto& snapshot : snapshots) {
+    write_parameters(fptr, product_state.parameter_rows);
+    for (const auto& zone : product_state.radial_zones) {
+        const auto& snapshot = zone.accepted_controller.evaluation;
         create_table(fptr, BINARY_TBL, 616, "XSTAR_RADIAL",
             {"index","ion_index","e_excitation","ion","atomic_number","ion_level","population","lte","upper index"},
-            {"1J","1I","1E","8A","1I","20A","1E","1E","1I"},
+            {"J","I","E","8A","I","20A","E","E","I"},
             {"","","eV","","","","","",""});
+        write_radial_keywords(fptr, zone);
         for (long row = 1; row <= 616; ++row) {
             const RowMeta* meta = row <= static_cast<long>(rows.size()) ? &rows[static_cast<std::size_t>(row - 1)] : nullptr;
             const int z = meta ? element_z_for_index(elements, meta->element_index) : 0;
@@ -401,22 +514,25 @@ void write_population_detail(
         }
     }
     close_fits(fptr);
+    apply_python_header_templates(path, product_state.schema_path);
 }
 
 void write_line_detail(
     const std::filesystem::path& path,
-    const std::vector<Snapshot>& snapshots,
+    const xstar_run_state::ProductWritingState& product_state,
     const std::vector<RecordMeta>& records,
     const std::vector<ElementMeta>& elements) {
     std::vector<RecordMeta> lines;
     for (const auto& r : records) if (r.data_type == 50) lines.push_back(r);
     fitsfile* fptr = create_fits(path);
-    write_parameters(fptr);
-    for (const auto& snapshot : snapshots) {
+    write_parameters(fptr, product_state.parameter_rows);
+    for (const auto& zone : product_state.radial_zones) {
+        const auto& snapshot = zone.accepted_controller.evaluation;
         create_table(fptr, BINARY_TBL, 2644, "XSTAR_RADIAL",
             {"index","wavelength","ion","lower_level","upper_level","emis_inward","emis_outward","opacity","tau_in","tau_out"},
-            {"1J","1E","8A","20A","20A","1E","1E","1E","1E","1E"},
+            {"J","E","8A","20A","20A","E","E","E","E","E"},
             {"","A","","","","erg/cm^3/s","erg/cm^3/s","/cm","",""});
+        write_radial_keywords(fptr, zone);
         for (long row = 1; row <= 2644; ++row) {
             const RecordMeta* rec = row <= static_cast<long>(lines.size()) ? &lines[static_cast<std::size_t>(row - 1)] : nullptr;
             const double energy = rec ? std::max(rec->line_energy_ev, 1.0e-12) : 1.0;
@@ -435,22 +551,25 @@ void write_line_detail(
         }
     }
     close_fits(fptr);
+    apply_python_header_templates(path, product_state.schema_path);
 }
 
 void write_rrc_detail(
     const std::filesystem::path& path,
-    const std::vector<Snapshot>& snapshots,
+    const xstar_run_state::ProductWritingState& product_state,
     const std::vector<RecordMeta>& records,
     const std::vector<ElementMeta>& elements) {
     std::vector<RecordMeta> rrcs;
     for (const auto& r : records) if (r.data_type == 53 || r.data_type == 88 || r.data_type == 99) rrcs.push_back(r);
     fitsfile* fptr = create_fits(path);
-    write_parameters(fptr);
-    for (const auto& snapshot : snapshots) {
+    write_parameters(fptr, product_state.parameter_rows);
+    for (const auto& zone : product_state.radial_zones) {
+        const auto& snapshot = zone.accepted_controller.evaluation;
         create_table(fptr, BINARY_TBL, 1849, "XSTAR_RADIAL",
             {"rrc index","level index","energy","ion","lower_level","upper_level","emis_inward","emis_outward","integrated absn","opacity","tau_in","tau_out"},
-            {"1J","1J","1E","8A","20A","20A","1E","1E","1E","1E","1E","1E"},
+            {"J","J","E","8A","20A","20A","E","E","E","E","E","E"},
             {"","","eV","","","","erg/cm^3/s","erg/cm^3/s","erg/cm^3/s","/cm","",""});
+        write_radial_keywords(fptr, zone);
         for (long row = 1; row <= 1849; ++row) {
             const RecordMeta* rec = row <= static_cast<long>(rrcs.size()) ? &rrcs[static_cast<std::size_t>(row - 1)] : nullptr;
             const double energy = rec ? std::max(rec->line_energy_ev, 1.0) : 1.0;
@@ -471,17 +590,22 @@ void write_rrc_detail(
         }
     }
     close_fits(fptr);
+    apply_python_header_templates(path, product_state.schema_path);
 }
 
-void write_spectrum_detail(const std::filesystem::path& path, const std::vector<Snapshot>& snapshots) {
+void write_spectrum_detail(
+    const std::filesystem::path& path,
+    const xstar_run_state::ProductWritingState& product_state) {
     fitsfile* fptr = create_fits(path);
-    write_parameters(fptr);
+    write_parameters(fptr, product_state.parameter_rows);
     const auto energy = historical_energy_grid();
-    for (const auto& snapshot : snapshots) {
+    for (const auto& zone : product_state.radial_zones) {
+        const auto& snapshot = zone.accepted_controller.evaluation;
         create_table(fptr, BINARY_TBL, 9999, "XSTAR_RADIAL",
             {"index","energy","zrems(1)","zrems(2)","zrems(3)","zrems(4)","zrems(5)","opacity","emis out","emis in","fwd dpth","bck dpth"},
-            {"1J","1E","1E","1E","1E","1E","1E","1E","1E","1E","1E","1E"},
+            {"J","E","E","E","E","E","E","E","E","E","E","E"},
             {"","eV","erg/s","erg/s","erg/s","erg/s","erg/s","/cm","erg/cm**3/s","erg/cm**3/s","",""});
+        write_radial_keywords(fptr, zone);
         for (long row = 1; row <= 9999; ++row) {
             const double e = energy[static_cast<std::size_t>(row - 1)];
             const double native_index = 1.0 + 63.0 * std::log(e) / std::log(1.0e5);
@@ -498,6 +622,7 @@ void write_spectrum_detail(const std::filesystem::path& path, const std::vector<
         }
     }
     close_fits(fptr);
+    apply_python_header_templates(path, product_state.schema_path);
 }
 
 std::vector<std::string> abundance_columns() {
@@ -532,29 +657,45 @@ std::map<std::pair<int,int>,double> ion_abundances(
     return totals;
 }
 
-void write_abundance_base(fitsfile* fptr, long row, const Snapshot& snapshot) {
+void write_abundance_base(
+    fitsfile* fptr,
+    long row,
+    const xstar_run_state::AbundanceRadialRowState& state) {
     const std::array<float,8> base = {
-        static_cast<float>(row), 1.0f, 1.0f, static_cast<float>(snapshot.computed_electron_fraction), 1.0e8f,
-        static_cast<float>(1.0e8 * snapshot.temperature_t4), static_cast<float>(snapshot.temperature_t4), static_cast<float>(snapshot.hmctot)
+        static_cast<float>(state.radius_cm),
+        static_cast<float>(state.delta_radius_cm),
+        static_cast<float>(state.log_ionization_parameter),
+        static_cast<float>(state.electron_fraction),
+        static_cast<float>(state.density_cm3),
+        static_cast<float>(state.pressure_dyn_cm2),
+        static_cast<float>(state.temperature_t4),
+        static_cast<float>(state.fractional_heat_error)
     };
-    for (int col = 1; col <= 8; ++col) write_float(fptr, col, row, base[static_cast<std::size_t>(col - 1)]);
+    for (int col = 1; col <= 8; ++col) {
+        write_float(fptr, col, row, base[static_cast<std::size_t>(col - 1)]);
+    }
 }
 
 void write_abundances_file(
     const std::filesystem::path& path,
-    const std::vector<Snapshot>& snapshots,
+    const xstar_run_state::ProductWritingState& product_state,
     const std::vector<RowMeta>& rows,
     const std::vector<ElementMeta>& elements) {
+    const auto& zones = product_state.radial_zones;
+    if (zones.size() != 5 || product_state.abundance_radial_rows.size() != 5) {
+        throw std::runtime_error("Python FITS radial schema requires five zones and five abundance rows");
+    }
     const auto abundance_names = abundance_columns();
     std::vector<std::string> abundance_formats(abundance_names.size(), "E13.5");
     std::vector<std::string> abundance_units(abundance_names.size(), "");
     abundance_units[0] = "cm"; abundance_units[1] = "cm"; abundance_units[2] = "erg*cm/s";
     abundance_units[4] = ""; abundance_units[5] = "dynes/cm**2"; abundance_units[6] = "10**4 K";
     fitsfile* fptr = create_fits(path);
-    create_table(fptr, ASCII_TBL, static_cast<long>(snapshots.size()), "ABUNDANCES", abundance_names, abundance_formats, abundance_units);
-    for (long row = 1; row <= static_cast<long>(snapshots.size()); ++row) {
-        const auto& snapshot = snapshots[static_cast<std::size_t>(row - 1)];
-        write_abundance_base(fptr, row, snapshot);
+    create_table(fptr, ASCII_TBL, static_cast<long>(zones.size()), "ABUNDANCES", abundance_names, abundance_formats, abundance_units);
+    for (long row = 1; row <= static_cast<long>(zones.size()); ++row) {
+        const auto& zone = zones[static_cast<std::size_t>(row - 1)];
+        const auto& snapshot = zone.accepted_controller.evaluation;
+        write_abundance_base(fptr, row, product_state.abundance_radial_rows[static_cast<std::size_t>(row - 1)]);
         const auto abundances = ion_abundances(snapshot, rows, elements);
         int col = 9;
         for (int z = 1; z <= 30; ++z) for (int stage = 1; stage <= z; ++stage) {
@@ -563,8 +704,8 @@ void write_abundances_file(
         }
     }
     create_table(fptr, ASCII_TBL, 1, "COLUMNS", abundance_names, abundance_formats, abundance_units);
-    const Snapshot& last = snapshots.back();
-    write_abundance_base(fptr, 1, last);
+    const auto& last = zones.back().accepted_controller.evaluation;
+    write_abundance_base(fptr, 1, product_state.abundance_radial_rows.back());
     const auto abundance = ion_abundances(last, rows, elements);
     int col = 9;
     for (int z = 1; z <= 30; ++z) for (int stage = 1; stage <= z; ++stage) {
@@ -578,10 +719,10 @@ void write_abundances_file(
     auto cooling_names = thermal_names; cooling_names.push_back("compton"); cooling_names.push_back("brems"); cooling_names.push_back("total");
     std::vector<std::string> heating_formats(heating_names.size(), "E13.5"), cooling_formats(cooling_names.size(), "E13.5");
     std::vector<std::string> heating_units(heating_names.size(), ""), cooling_units(cooling_names.size(), "");
-    create_table(fptr, ASCII_TBL, static_cast<long>(snapshots.size()), "HEATING", heating_names, heating_formats, heating_units);
-    for (long row = 1; row <= static_cast<long>(snapshots.size()); ++row) {
-        const auto& snapshot = snapshots[static_cast<std::size_t>(row - 1)];
-        write_abundance_base(fptr, row, snapshot);
+    create_table(fptr, ASCII_TBL, static_cast<long>(zones.size()), "HEATING", heating_names, heating_formats, heating_units);
+    for (long row = 1; row <= static_cast<long>(zones.size()); ++row) {
+        const auto& snapshot = zones[static_cast<std::size_t>(row - 1)].accepted_controller.evaluation;
+        write_abundance_base(fptr, row, product_state.abundance_radial_rows[static_cast<std::size_t>(row - 1)]);
         for (int z = 1; z <= 30; ++z) {
             const bool active = z == 1 || z == 2 || z == 12;
             write_float(fptr, 8 + z, row, active ? static_cast<float>(snapshot.element_heating / 3.0) : 0.0f);
@@ -589,10 +730,10 @@ void write_abundances_file(
         write_float(fptr, 39, row, static_cast<float>(snapshot.continuum_heating));
         write_float(fptr, 40, row, static_cast<float>(snapshot.total_heating));
     }
-    create_table(fptr, ASCII_TBL, static_cast<long>(snapshots.size()), "COOLING", cooling_names, cooling_formats, cooling_units);
-    for (long row = 1; row <= static_cast<long>(snapshots.size()); ++row) {
-        const auto& snapshot = snapshots[static_cast<std::size_t>(row - 1)];
-        write_abundance_base(fptr, row, snapshot);
+    create_table(fptr, ASCII_TBL, static_cast<long>(zones.size()), "COOLING", cooling_names, cooling_formats, cooling_units);
+    for (long row = 1; row <= static_cast<long>(zones.size()); ++row) {
+        const auto& snapshot = zones[static_cast<std::size_t>(row - 1)].accepted_controller.evaluation;
+        write_abundance_base(fptr, row, product_state.abundance_radial_rows[static_cast<std::size_t>(row - 1)]);
         for (int z = 1; z <= 30; ++z) {
             const bool active = z == 1 || z == 2 || z == 12;
             write_float(fptr, 8 + z, row, active ? static_cast<float>(snapshot.element_cooling / 3.0) : 0.0f);
@@ -602,59 +743,55 @@ void write_abundances_file(
         write_float(fptr, 41, row, static_cast<float>(snapshot.total_cooling));
     }
     close_fits(fptr);
+    apply_python_header_templates(path, product_state.schema_path);
 }
 
 } // namespace
 
 Result write_historical_science_products(
-    const std::filesystem::path& program_dir,
-    const std::filesystem::path& output_dir,
-    const std::vector<Snapshot>& radial_snapshots,
-    const std::vector<double>& native_energy_ev) {
-    (void)native_energy_ev;
-    if (radial_snapshots.empty()) throw std::runtime_error("science FITS generation requires computed snapshots");
-    std::filesystem::create_directories(output_dir);
-    const auto elements = read_elements(program_dir);
-    const auto rows = read_rows(program_dir);
-    const auto records = read_records(program_dir);
-    const Snapshot& final = radial_snapshots.back();
-
-    write_continuum_file(output_dir / "xout_cont1.fits", final);
-    write_full_spectrum_file(output_dir / "xout_spect1.fits", final);
-    write_lines_file(output_dir / "xout_lines1.fits", final, records, elements);
-    write_rrc_file(output_dir / "xout_rrc1.fits", final, records, elements);
-    write_abundances_file(output_dir / "xout_abund1.fits", radial_snapshots, rows, elements);
-    write_population_detail(output_dir / "xo01_detail.fits", radial_snapshots, rows, elements);
-    write_line_detail(output_dir / "xo01_detal2.fits", radial_snapshots, records, elements);
-    write_rrc_detail(output_dir / "xo01_detal3.fits", radial_snapshots, records, elements);
-    write_spectrum_detail(output_dir / "xo01_detal4.fits", radial_snapshots);
-
-    Result result;
-    result.files_written = 9;
-    result.schema_complete = true;
-    result.computed_from_native_state = true;
-    result.continuum_and_spectrum_paths_separate = true;
-    result.physical_equivalence_qualified = false;
-    result.filenames = {"xo01_detail.fits","xo01_detal2.fits","xo01_detal3.fits","xo01_detal4.fits","xout_abund1.fits","xout_cont1.fits","xout_lines1.fits","xout_rrc1.fits","xout_spect1.fits"};
-    return result;
+    const std::filesystem::path&,
+    const std::filesystem::path&,
+    const std::vector<Snapshot>&,
+    const std::vector<double>&) {
+    throw std::runtime_error(
+        "v0.6.48.7.46.23 science-product writing requires ProductWritingState");
 }
-
 
 Result write_historical_science_products(
     const std::filesystem::path& program_dir,
     const std::filesystem::path& output_dir,
     const xstar_run_state::ProductWritingState& product_state,
     const std::vector<double>& native_energy_ev) {
-    std::vector<Snapshot> snapshots;
-    snapshots.reserve(product_state.radial_zones.size());
-    for (const auto& zone : product_state.radial_zones) {
-        snapshots.push_back(zone.accepted_controller.evaluation);
+    (void)native_energy_ev;
+    if (!product_state.product_schema_complete || !product_state.radial_state_complete) {
+        throw std::runtime_error("science FITS generation requires complete Python schema and radial state");
     }
-    Result result = write_historical_science_products(
-        program_dir, output_dir, snapshots, native_energy_ev);
-    // v0.6.48.7.46.22.1 establishes the product-state boundary but does not
-    // claim physical product equivalence.
+    if (product_state.radial_zones.size() != 5 || product_state.parameter_rows.size() != 56) {
+        throw std::runtime_error("science FITS generation requires five radial zones and 56 parameters");
+    }
+    std::filesystem::create_directories(output_dir);
+    const auto elements = read_elements(program_dir);
+    const auto rows = read_rows(program_dir);
+    const auto records = read_records(program_dir);
+    const Snapshot& final = product_state.radial_zones.back().accepted_controller.evaluation;
+
+    write_continuum_file(output_dir / "xout_cont1.fits", final, product_state);
+    write_full_spectrum_file(output_dir / "xout_spect1.fits", final, product_state);
+    write_lines_file(output_dir / "xout_lines1.fits", final, records, elements, product_state);
+    write_rrc_file(output_dir / "xout_rrc1.fits", final, records, elements, product_state);
+    write_abundances_file(output_dir / "xout_abund1.fits", product_state, rows, elements);
+    write_population_detail(output_dir / "xo01_detail.fits", product_state, rows, elements);
+    write_line_detail(output_dir / "xo01_detal2.fits", product_state, records, elements);
+    write_rrc_detail(output_dir / "xo01_detal3.fits", product_state, records, elements);
+    write_spectrum_detail(output_dir / "xo01_detal4.fits", product_state);
+
+    Result result;
+    result.files_written = 9;
+    result.schema_complete = true;
+    result.computed_from_native_state = true;
+    result.continuum_and_spectrum_paths_separate = true;
     result.physical_equivalence_qualified = product_state.product_parity_qualified;
+    result.filenames = {"xo01_detail.fits","xo01_detal2.fits","xo01_detal3.fits","xo01_detal4.fits","xout_abund1.fits","xout_cont1.fits","xout_lines1.fits","xout_rrc1.fits","xout_spect1.fits"};
     return result;
 }
 

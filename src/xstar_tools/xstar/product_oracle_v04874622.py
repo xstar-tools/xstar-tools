@@ -1,4 +1,4 @@
-"""Immutable product-oracle manifests and strict product comparison for v0.6.48.7.46.22.3.
+"""Immutable product-oracle manifests and strict product comparison for v0.6.48.7.46.23.
 
 The module intentionally has no Astropy dependency.  It parses FITS block
 boundaries directly so qualification hosts can freeze and compare products
@@ -18,8 +18,8 @@ import shutil
 import tarfile
 from typing import Any, Iterable
 
-RELEASE = "0.6.48.7.46.22.3"
-SCHEMA = "xstar-tools-v0648746223-product-oracle-v3"
+RELEASE = "0.6.48.7.46.23"
+SCHEMA = "xstar-tools-v064874623-product-oracle-v4"
 EXPECTED_PRODUCTS = (
     "xo01_detail.fits",
     "xo01_detal2.fits",
@@ -127,7 +127,7 @@ def _hdu_data_size(header: dict[str, Any]) -> int:
     return (pixels * bitpix // 8 + pcount) * gcount
 
 
-def inspect_fits_bytes(data: bytes) -> list[dict[str, Any]]:
+def inspect_fits_bytes(data: bytes, *, include_cards: bool = False) -> list[dict[str, Any]]:
     hdus: list[dict[str, Any]] = []
     offset = 0
     index = 0
@@ -159,7 +159,7 @@ def inspect_fits_bytes(data: bytes) -> list[dict[str, Any]]:
                 for key in ("TTYPE", "TFORM", "TUNIT", "TDISP", "TNULL", "TZERO", "TSCAL")
                 if f"{key}{col}" in header
             })
-        hdus.append({
+        one = {
             "index": index,
             "offset": offset,
             "header_bytes": header_size,
@@ -171,7 +171,11 @@ def inspect_fits_bytes(data: bytes) -> list[dict[str, Any]]:
             "header_sha256": sha256_bytes(header_bytes),
             "data_sha256": sha256_bytes(data_bytes),
             "hdu_sha256": sha256_bytes(data[offset:end]),
-        })
+        }
+        if include_cards:
+            one["cards"] = cards
+            one["header_values"] = header
+        hdus.append(one)
         offset = end
         index += 1
     if offset != len(data) and data[offset:].strip(b"\0 "):
@@ -294,18 +298,82 @@ def _read_oracle_manifest(path: Path) -> tuple[dict[str, Any], Path]:
     return json.loads(manifest_path.read_text()), manifest_path.parent
 
 
-def _compare_hdus(expected: list[dict[str, Any]], actual: list[dict[str, Any]]) -> dict[str, Any]:
+_HEADER_COMPARE_EXCLUDED = {"CHECKSUM", "DATASUM"}
+
+
+def _semantic_cards(cards: list[str]) -> list[str]:
+    return [card for card in cards if card[:8].strip() not in _HEADER_COMPARE_EXCLUDED]
+
+
+def _first_sequence_difference(expected: list[Any], actual: list[Any]) -> dict[str, Any] | None:
+    count = max(len(expected), len(actual))
+    for index in range(count):
+        e = expected[index] if index < len(expected) else None
+        a = actual[index] if index < len(actual) else None
+        if e != a:
+            return {"index": index, "expected": e, "actual": a}
+    return None
+
+
+def _first_column_difference(expected: list[dict[str, Any]], actual: list[dict[str, Any]]) -> dict[str, Any] | None:
+    count = max(len(expected), len(actual))
+    for index in range(count):
+        e = expected[index] if index < len(expected) else None
+        a = actual[index] if index < len(actual) else None
+        if e != a:
+            keys = sorted(set(e or {}) | set(a or {}))
+            field = next((key for key in keys if (e or {}).get(key) != (a or {}).get(key)), None)
+            return {
+                "column_index": index + 1,
+                "field": field,
+                "expected": e,
+                "actual": a,
+            }
+    return None
+
+
+def _compare_hdus(
+    expected: list[dict[str, Any]],
+    actual: list[dict[str, Any]],
+    expected_detailed: list[dict[str, Any]],
+    actual_detailed: list[dict[str, Any]],
+) -> dict[str, Any]:
     pairs = []
     count = max(len(expected), len(actual))
     for index in range(count):
         e = expected[index] if index < len(expected) else None
         a = actual[index] if index < len(actual) else None
+        ed = expected_detailed[index] if index < len(expected_detailed) else None
+        ad = actual_detailed[index] if index < len(actual_detailed) else None
+        ekeys = (e or {}).get("structural_keys", {})
+        akeys = (a or {}).get("structural_keys", {})
+        ecols = (e or {}).get("columns", [])
+        acols = (a or {}).get("columns", [])
+        semantic_expected = _semantic_cards((ed or {}).get("cards", []))
+        semantic_actual = _semantic_cards((ad or {}).get("cards", []))
         pairs.append({
             "index": index,
             "present_expected": e is not None,
             "present_actual": a is not None,
-            "structure_exact": bool(e and a and e["structural_keys"] == a["structural_keys"] and e["columns"] == a["columns"]),
-            "header_exact": bool(e and a and e["header_sha256"] == a["header_sha256"]),
+            "extension_name_expected": ekeys.get("EXTNAME", "PRIMARY"),
+            "extension_name_actual": akeys.get("EXTNAME", "PRIMARY"),
+            "extension_name_exact": bool(e and a and ekeys.get("EXTNAME", "PRIMARY") == akeys.get("EXTNAME", "PRIMARY")),
+            "row_width_expected": ekeys.get("NAXIS1", 0),
+            "row_width_actual": akeys.get("NAXIS1", 0),
+            "row_width_exact": bool(e and a and ekeys.get("NAXIS1", 0) == akeys.get("NAXIS1", 0)),
+            "row_count_expected": ekeys.get("NAXIS2", 0),
+            "row_count_actual": akeys.get("NAXIS2", 0),
+            "row_count_exact": bool(e and a and ekeys.get("NAXIS2", 0) == akeys.get("NAXIS2", 0)),
+            "field_count_expected": ekeys.get("TFIELDS", 0),
+            "field_count_actual": akeys.get("TFIELDS", 0),
+            "field_count_exact": bool(e and a and ekeys.get("TFIELDS", 0) == akeys.get("TFIELDS", 0)),
+            "columns_exact": bool(e and a and ecols == acols),
+            "first_column_difference": _first_column_difference(ecols, acols),
+            "structure_exact": bool(e and a and ekeys == akeys and ecols == acols),
+            "header_semantic_exact": bool(e and a and semantic_expected == semantic_actual),
+            "first_header_card_difference": _first_sequence_difference(semantic_expected, semantic_actual),
+            "header_bytes_exact": bool(e and a and e["header_sha256"] == a["header_sha256"]),
+            "header_exact": bool(e and a and semantic_expected == semantic_actual),
             "data_exact": bool(e and a and e["data_sha256"] == a["data_sha256"]),
             "hdu_exact": bool(e and a and e["hdu_sha256"] == a["hdu_sha256"]),
         })
@@ -313,16 +381,37 @@ def _compare_hdus(expected: list[dict[str, Any]], actual: list[dict[str, Any]]) 
         "hdu_count_expected": len(expected),
         "hdu_count_actual": len(actual),
         "hdu_count_exact": len(expected) == len(actual),
+        "extension_order_exact": all(item["extension_name_exact"] for item in pairs),
+        "row_widths_exact": all(item["row_width_exact"] for item in pairs),
+        "row_counts_exact": all(item["row_count_exact"] for item in pairs),
+        "field_counts_exact": all(item["field_count_exact"] for item in pairs),
+        "column_metadata_exact": all(item["columns_exact"] for item in pairs),
         "all_structure_exact": all(item["structure_exact"] for item in pairs),
-        "all_headers_exact": all(item["header_exact"] for item in pairs),
+        "all_headers_exact": all(item["header_semantic_exact"] for item in pairs),
+        "all_header_bytes_exact": all(item["header_bytes_exact"] for item in pairs),
         "all_data_exact": all(item["data_exact"] for item in pairs),
         "all_hdus_exact": all(item["hdu_exact"] for item in pairs),
         "hdus": pairs,
     }
 
 
+def _oracle_payloads(oracle_dir: Path, manifest: dict[str, Any]) -> dict[str, bytes]:
+    archive_path = oracle_dir / manifest["archive"]["filename"]
+    result: dict[str, bytes] = {}
+    with tarfile.open(archive_path, "r:gz") as archive:
+        for member in _safe_members(archive):
+            basename = _product_basename(member.name)
+            if basename not in EXPECTED_PRODUCTS:
+                continue
+            stream = archive.extractfile(member)
+            if stream is not None:
+                result[basename] = stream.read()
+    return result
+
+
 def compare_output(output_dir: Path, oracle: Path, output_json: Path | None = None) -> dict[str, Any]:
     manifest, oracle_dir = _read_oracle_manifest(oracle)
+    oracle_payloads = _oracle_payloads(oracle_dir, manifest)
     files_report: dict[str, Any] = {}
     actual_names = {p.name for p in output_dir.iterdir() if p.is_file()} if output_dir.is_dir() else set()
     expected_names = set(EXPECTED_PRODUCTS)
@@ -330,6 +419,9 @@ def compare_output(output_dir: Path, oracle: Path, output_json: Path | None = No
     extra_product_like = sorted(
         name for name in actual_names - expected_names if name.endswith(".fits") or name == "xout_step.log"
     )
+    first_header_difference: dict[str, Any] | None = None
+    first_column_difference: dict[str, Any] | None = None
+    parameter_hdus: list[bool] = []
     for name in EXPECTED_PRODUCTS:
         expected = manifest["files"][name]
         path = output_dir / name
@@ -347,7 +439,30 @@ def compare_output(output_dir: Path, oracle: Path, output_json: Path | None = No
         report["byte_exact"] = report["sha256_expected"] == report["sha256_actual"]
         if name.endswith(".fits"):
             try:
-                report["fits"] = _compare_hdus(expected["hdus"], inspect_fits_bytes(payload))
+                expected_detailed = inspect_fits_bytes(oracle_payloads[name], include_cards=True)
+                actual_detailed = inspect_fits_bytes(payload, include_cards=True)
+                fits_report = _compare_hdus(
+                    expected["hdus"],
+                    inspect_fits_bytes(payload),
+                    expected_detailed,
+                    actual_detailed,
+                )
+                report["fits"] = fits_report
+                for hdu in fits_report["hdus"]:
+                    if first_header_difference is None and hdu.get("first_header_card_difference"):
+                        first_header_difference = {
+                            "file": name,
+                            "hdu_index": hdu["index"],
+                            **hdu["first_header_card_difference"],
+                        }
+                    if first_column_difference is None and hdu.get("first_column_difference"):
+                        first_column_difference = {
+                            "file": name,
+                            "hdu_index": hdu["index"],
+                            **hdu["first_column_difference"],
+                        }
+                    if hdu.get("extension_name_expected") == "PARAMETERS":
+                        parameter_hdus.append(bool(hdu.get("data_exact")))
                 report["result"] = "ACCEPT" if report["byte_exact"] else "REJECT"
             except Exception as exc:  # comparator must report rather than crash
                 report["fits_error"] = f"{type(exc).__name__}: {exc}"
@@ -362,38 +477,90 @@ def compare_output(output_dir: Path, oracle: Path, output_json: Path | None = No
             report["normalized_exact"] = report["normalized_sha256_expected"] == report["normalized_sha256_actual"]
             report["result"] = "ACCEPT" if report["byte_exact"] else "REJECT"
         files_report[name] = report
-    fits_structure_exact = all(
-        files_report[name].get("fits", {}).get("all_structure_exact", False)
-        for name in FITS_PRODUCTS
-    )
-    fits_headers_exact = all(
-        files_report[name].get("fits", {}).get("all_headers_exact", False)
-        for name in FITS_PRODUCTS
-    )
-    fits_data_exact = all(
-        files_report[name].get("fits", {}).get("all_data_exact", False)
-        for name in FITS_PRODUCTS
-    )
+
+    fits_reports = [files_report[name].get("fits", {}) for name in FITS_PRODUCTS]
+    hdu_counts_exact = all(item.get("hdu_count_exact", False) for item in fits_reports)
+    extension_order_exact = all(item.get("extension_order_exact", False) for item in fits_reports)
+    row_counts_exact = all(item.get("row_counts_exact", False) for item in fits_reports)
+    row_widths_exact = all(item.get("row_widths_exact", False) for item in fits_reports)
+    column_metadata_exact = all(item.get("column_metadata_exact", False) for item in fits_reports)
+    fits_structure_exact = all(item.get("all_structure_exact", False) for item in fits_reports)
+    fits_headers_exact = all(item.get("all_headers_exact", False) for item in fits_reports)
+    fits_header_bytes_exact = all(item.get("all_header_bytes_exact", False) for item in fits_reports)
+    fits_data_exact = all(item.get("all_data_exact", False) for item in fits_reports)
+    parameter_table_exact = bool(parameter_hdus) and all(parameter_hdus) and len(parameter_hdus) == 8
+
+    radial_state_complete = False
+    radial_state_detail: dict[str, Any] = {"manifest_present": False}
+    state_path = output_dir / "native_physical_run_state.json"
+    if state_path.is_file():
+        radial_state_detail["manifest_present"] = True
+        try:
+            state = json.loads(state_path.read_text())
+            radial_layer = state.get("layers", {}).get("radial_zone_state", {})
+            zones = state.get("radial_zones", [])
+            radial_state_complete = (
+                radial_layer.get("count") == 5
+                and radial_layer.get("complete") is True
+                and len(zones) == 5
+                and all(zone.get("python_oracle_exact") is True for zone in zones)
+            )
+            radial_state_detail.update({
+                "count": radial_layer.get("count"),
+                "complete": radial_layer.get("complete"),
+                "python_oracle_exact_rows": sum(zone.get("python_oracle_exact") is True for zone in zones),
+            })
+        except Exception as exc:
+            radial_state_detail["error"] = f"{type(exc).__name__}: {exc}"
+
     all_byte_exact = not missing and all(files_report[name].get("byte_exact", False) for name in EXPECTED_PRODUCTS)
     report = {
-        "schema": "xstar-tools-v064874622-strict-product-comparison-v1",
+        "schema": "xstar-tools-v064874623-strict-product-comparison-v2",
         "release": RELEASE,
         "oracle_name": manifest["oracle_name"],
         "oracle_source_kind": manifest["source_kind"],
         "output_dir": str(output_dir.resolve()),
         "oracle_manifest": str((oracle_dir / "manifest.json").resolve()),
+        "header_exactness_contract": {
+            "semantic_cards_exact": True,
+            "excluded_data_derived_cards": sorted(_HEADER_COMPARE_EXCLUDED),
+            "raw_header_bytes_reported_separately": True,
+        },
         "missing_products": missing,
         "extra_product_like_files": extra_product_like,
+        "first_header_card_difference": first_header_difference,
+        "first_column_difference": first_column_difference,
+        "radial_state": radial_state_detail,
         "files": files_report,
         "gates": {
             "TEN_PRODUCTS_PRESENT": "ACCEPT" if not missing else "REJECT",
+            "FITS_HDU_COUNTS_EXACT": "ACCEPT" if hdu_counts_exact else "REJECT",
+            "FITS_EXTENSION_ORDER_EXACT": "ACCEPT" if extension_order_exact else "REJECT",
+            "FITS_ROW_COUNTS_EXACT": "ACCEPT" if row_counts_exact else "REJECT",
+            "FITS_ROW_WIDTHS_EXACT": "ACCEPT" if row_widths_exact else "REJECT",
+            "FITS_COLUMN_METADATA_EXACT": "ACCEPT" if column_metadata_exact else "REJECT",
             "FITS_HDU_STRUCTURE_EXACT": "ACCEPT" if fits_structure_exact else "REJECT",
             "FITS_HEADERS_EXACT": "ACCEPT" if fits_headers_exact else "REJECT",
-            "FITS_NUMERIC_AND_TABLE_BYTES_EXACT": "ACCEPT" if fits_data_exact else "REJECT",
-            "XOUT_STEP_RAW_EXACT": "ACCEPT" if files_report["xout_step.log"].get("byte_exact") else "REJECT",
-            "XOUT_STEP_NORMALIZED_EXACT": "ACCEPT" if files_report["xout_step.log"].get("normalized_exact") else "REJECT",
-            "ALL_PRODUCT_FILES_BYTE_EXACT": "ACCEPT" if all_byte_exact else "REJECT",
+            "FITS_HEADER_BYTES_EXACT": "ACCEPT" if fits_header_bytes_exact else "REJECT_ALLOWED",
+            "PARAMETER_TABLE_EXACT": "ACCEPT" if parameter_table_exact else "REJECT",
+            "RADIAL_ZONE_STATE_COMPLETE": "ACCEPT" if radial_state_complete else "REJECT",
+            "FITS_NUMERIC_ARRAYS_EXACT": "ACCEPT" if fits_data_exact else "REJECT_ALLOWED",
+            "XOUT_STEP_PARITY": "NOT_RUN",
+            "XOUT_STEP_RAW_DIAGNOSTIC": "ACCEPT" if files_report["xout_step.log"].get("byte_exact") else "REJECT_DIAGNOSTIC",
+            "XOUT_STEP_NORMALIZED_DIAGNOSTIC": "ACCEPT" if files_report["xout_step.log"].get("normalized_exact") else "REJECT_DIAGNOSTIC",
+            "ALL_PRODUCT_FILES_BYTE_EXACT": "ACCEPT" if all_byte_exact else "REJECT_ALLOWED",
         },
+        "schema_header_radial_closure": "ACCEPT" if all((
+            not missing,
+            hdu_counts_exact,
+            extension_order_exact,
+            row_counts_exact,
+            row_widths_exact,
+            column_metadata_exact,
+            fits_headers_exact,
+            parameter_table_exact,
+            radial_state_complete,
+        )) else "REJECT",
         "product_level_parity": "ACCEPT" if all_byte_exact else "REJECT",
         "production_promotion_ready": False,
         "result": "ACCEPT" if all_byte_exact else "REJECT",

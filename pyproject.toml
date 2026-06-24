@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xstar-tools"
-version = "0.6.48.7.46.22.3"
+version = "0.6.48.7.46.23"
 description = "Source-faithful Python/C++ XSTAR tools, atomic-data utilities, benchmarks, and runtime"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -120,5 +120,5 @@ where = ["src"]
 
 
 [tool.setuptools.package-data]
-"xstar_tools.benchmarks" = ["oxygen_milestone3_v0422/*", "oxygen_v0434_correction_targets/*", "oxygen_call73_v0434_acceptance/*", "hydrogen_v0436_targets/*", "all_element_call73_v0438_acceptance/*", "comp2_call73_v0439_acceptance/*", "freef_call73_v0440_acceptance/*", "bremem_call73_v0441_acceptance/*", "heatf_call73_v0442_acceptance/*", "complete_fixed_state_v0443_state_ownership/*", "complete_fixed_state_v0444_acceptance/*", "v0648_compiled_case_helike_type69_mg11_ne1e8/*", "v0648_compiled_case_helike_type69_mg11_ne1e8/science/*", "v06482_native_fixed_state_synthetic/*", "v06483_active_atdb_lowerer_fixture/*", "v06484_active_family_phase1_fixture/*", "v06485_active_family_phase2_fixture/*", "v06486_qualification_reference_v0472/*", "v06487_fixed_state_reference_v0472/*", "v064873_type53_runtime_oracle_v0472/*", "v064876_type99_record1695_runtime_oracle_v0472/*", "v064877_type71_row77_runtime_oracle_v0472/*", "v064879_type50_heii_rows46_54_runtime_oracle_v0472/*", "v0648712_type50_dsec_runtime_oracle_v0472/*", "v0648715_type53_row46_dsec_runtime_oracle_v0472/*", "v0648719_type53_two_state_promotion/evaluation60/*", "v0648722_call1_thermal_refresh_reference/*", "v0648724_call1_thermal_leaf_reference/*", "v064874622_product_oracles/*/*", "specs/*"]
+"xstar_tools.benchmarks" = ["oxygen_milestone3_v0422/*", "oxygen_v0434_correction_targets/*", "oxygen_call73_v0434_acceptance/*", "hydrogen_v0436_targets/*", "all_element_call73_v0438_acceptance/*", "comp2_call73_v0439_acceptance/*", "freef_call73_v0440_acceptance/*", "bremem_call73_v0441_acceptance/*", "heatf_call73_v0442_acceptance/*", "complete_fixed_state_v0443_state_ownership/*", "complete_fixed_state_v0444_acceptance/*", "v0648_compiled_case_helike_type69_mg11_ne1e8/*", "v0648_compiled_case_helike_type69_mg11_ne1e8/science/*", "v06482_native_fixed_state_synthetic/*", "v06483_active_atdb_lowerer_fixture/*", "v06484_active_family_phase1_fixture/*", "v06485_active_family_phase2_fixture/*", "v06486_qualification_reference_v0472/*", "v06487_fixed_state_reference_v0472/*", "v064873_type53_runtime_oracle_v0472/*", "v064876_type99_record1695_runtime_oracle_v0472/*", "v064877_type71_row77_runtime_oracle_v0472/*", "v064879_type50_heii_rows46_54_runtime_oracle_v0472/*", "v0648712_type50_dsec_runtime_oracle_v0472/*", "v0648715_type53_row46_dsec_runtime_oracle_v0472/*", "v0648719_type53_two_state_promotion/evaluation60/*", "v0648722_call1_thermal_refresh_reference/*", "v0648724_call1_thermal_leaf_reference/*", "v064874622_product_oracles/*/*", "v064874623_python_fits_schema/*", "v064874623_python_fits_schema/headers/*/*", "specs/*"]
 "xstar_tools.xstar" = ["data/coheat.dat", "constants.def", "cpp/*"]

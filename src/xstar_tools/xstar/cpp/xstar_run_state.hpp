@@ -2,6 +2,7 @@
 #define XSTAR_RUN_STATE_HPP
 
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -38,16 +39,42 @@ struct AcceptedControllerState {
     FixedEvaluationState evaluation;
 };
 
+struct ParameterRowState {
+    std::uint16_t index = 0;
+    std::string parameter;
+    std::uint32_t value_bits = 0;
+    std::string type;
+    std::string comment;
+};
+
+struct AbundanceRadialRowState {
+    std::size_t row_index = 0;
+    double radius_cm = 0.0;
+    double delta_radius_cm = 0.0;
+    double log_ionization_parameter = 0.0;
+    double electron_fraction = 0.0;
+    double density_cm3 = 0.0;
+    double pressure_dyn_cm2 = 0.0;
+    double temperature_t4 = 0.0;
+    double fractional_heat_error = 0.0;
+    bool terminal_row = false;
+};
+
 struct RadialZoneState {
     std::size_t zone_index = 0;
     std::size_t pass_index = 0;
-    double radius_cm = 0.0;
-    double delta_radius_cm = 0.0;
+    double radius_cm = 0.0;             // Python-oracle RINNER
+    double outer_radius_cm = 0.0;       // Python-oracle ROUTER
+    double delta_radius_cm = 0.0;       // Python-oracle RDEL
     double density_cm3 = 0.0;
     double pressure_dyn_cm2 = 0.0;
-    double ionization_parameter = 0.0;
+    double ionization_parameter = 0.0;  // retained compatibility alias for LOGXI
+    double log_ionization_parameter = 0.0;
     double column_density_cm2 = 0.0;
+    double temperature_t4 = 0.0;
+    double electron_fraction = 0.0;
     bool provisional_from_controller = false;
+    bool python_oracle_radial_exact = false;
     AcceptedControllerState accepted_controller;
 };
 
@@ -58,12 +85,17 @@ struct WholeRunAccumulatedState {
     std::filesystem::path atomic_database_path;
     std::filesystem::path native_case_path;
     std::filesystem::path source_trajectory_path;
+    std::filesystem::path product_schema_path;
     std::vector<FixedEvaluationState> fixed_evaluations;
     std::vector<AcceptedControllerState> accepted_controller_states;
     std::vector<RadialZoneState> radial_zones;
+    std::vector<ParameterRowState> parameter_rows;
+    std::vector<AbundanceRadialRowState> abundance_radial_rows;
     std::size_t python_callbacks = 0;
     bool controller_trajectory_qualified = false;
+    bool product_schema_complete = false;
     bool radial_state_complete = false;
+    bool product_payload_complete = false;
 };
 
 struct ProductWritingState {
@@ -71,12 +103,21 @@ struct ProductWritingState {
     std::string backend;
     std::filesystem::path parameters_path;
     std::filesystem::path atomic_database_path;
+    std::filesystem::path schema_path;
     std::vector<RadialZoneState> radial_zones;
+    std::vector<ParameterRowState> parameter_rows;
+    std::vector<AbundanceRadialRowState> abundance_radial_rows;
     bool run_state_layers_distinct = true;
+    bool product_schema_complete = false;
+    bool radial_state_complete = false;
+    bool product_payload_complete = false;
     bool product_state_complete = false;
     bool product_parity_qualified = false;
 };
 
+void load_python_product_schema(
+    WholeRunAccumulatedState& state,
+    const std::filesystem::path& schema_path);
 ProductWritingState build_product_writing_state(const WholeRunAccumulatedState& state);
 void write_run_state_manifest(
     const std::filesystem::path& path,

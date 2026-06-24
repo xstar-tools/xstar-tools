@@ -1,5 +1,15 @@
 # CHANGELOG
 
+# 0.6.48.7.46.23 - 2026-06-24
+
+- Freeze 45 Python-oracle FITS header templates, 56 exact parameter rows, five exact radial-zone states, and five abundance radial base rows.
+- Populate distinct native radial and product-writing state layers without claiming payload completeness.
+- Write canonical source `TFORM`/`TUNIT` metadata and exact semantic Python-oracle headers.
+- Remove development-only science FITS keywords and retain native provenance in the run-state manifest.
+- Extend the product comparator with card-level and column-level first differences and separate semantic headers from data-derived checksum bytes.
+- Require schema/header/radial closure while leaving numerical FITS arrays `REJECT_ALLOWED`, `xout_step.log` `NOT_RUN`, and product promotion blocked.
+- Remove the unused `record` compiler warning. ABI remains 60487.
+
 # 0.6.48.7.46.22.3 - 2026-06-23
 
 - Classify the completed 61-state controller with canonical `.7e` equality and the `1e-30` zero floor instead of obsolete bit identity for `hmctot`.
