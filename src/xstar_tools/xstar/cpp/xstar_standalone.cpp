@@ -3440,7 +3440,7 @@ int command_run_fixed_dsec(const Options& options) {
         target.source_workspace.line_tau_workspace_exact = !source.tau0.empty();
         target.source_workspace.rrc_workspace_exact =
             (source.exact_source_workspace_flags & XSTAR_FIXED_EXACT_WORKSPACE_RRC) != 0u;
-        target.source_workspace.rrc_tau_workspace_exact = false;
+        target.source_workspace.rrc_tau_workspace_exact = !source.tauc.empty();
         target.source_workspace.continuum_workspace_exact =
             (source.exact_source_workspace_flags & XSTAR_FIXED_EXACT_WORKSPACE_CONTINUUM) != 0u;
         target.source_workspace.line_profile_workspace_exact =
@@ -3755,7 +3755,7 @@ std::filesystem::path resolve_physical_asset(
 
 int command_run_physical(Options options) {
     if (options.backend != "cpp") {
-        std::cerr << "xstar_cpp run v0.6.48.7.46.25.5.2 supports --backend cpp only\n";
+        std::cerr << "xstar_cpp run v0.6.48.7.46.25.5.3 supports --backend cpp only\n";
         return 64;
     }
     if (options.parameters_path.empty() || options.atomic_db_path.empty() || options.output_dir.empty()) {

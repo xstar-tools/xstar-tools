@@ -38,6 +38,34 @@ std::uint32_t float_bits(float value) {
 }
 
 
+bool manifest_bool(const std::filesystem::path& path, const std::string& key) {
+    std::ifstream input(path);
+    if (!input) return false;
+    std::string text((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+    const std::string needle = "\"" + key + "\"";
+    const auto pos = text.find(needle);
+    if (pos == std::string::npos) return false;
+    const auto colon = text.find(':', pos + needle.size());
+    if (colon == std::string::npos) return false;
+    const auto tail = text.substr(colon + 1, 16);
+    return tail.find("true") != std::string::npos;
+}
+
+std::string manifest_string(const std::filesystem::path& path, const std::string& key) {
+    std::ifstream input(path);
+    if (!input) return "MISSING";
+    std::string text((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+    const std::string needle = "\"" + key + "\"";
+    const auto pos = text.find(needle);
+    if (pos == std::string::npos) return "MISSING_KEY";
+    const auto colon = text.find(':', pos + needle.size());
+    const auto first = text.find('"', colon == std::string::npos ? pos : colon);
+    if (first == std::string::npos) return "UNQUOTED";
+    const auto second = text.find('"', first + 1);
+    if (second == std::string::npos) return "UNTERMINATED";
+    return text.substr(first + 1, second - first - 1);
+}
+
 std::vector<std::string> split_csv_quoted(const std::string& line) {
     std::vector<std::string> fields;
     std::string field;
@@ -153,6 +181,14 @@ void write_retention_report(const WholeRunAccumulatedState& state,
                             const std::filesystem::path& path) {
     std::ofstream out(path);
     if (!out) return;
+    const auto bridge_manifest = state.product_metadata_path / "exact_product_state_bridge" / "manifest.json";
+    const bool bridge_tauc_exact = manifest_bool(bridge_manifest, "tauc_exact");
+    const bool bridge_radial_accum_exact = manifest_bool(bridge_manifest, "radial_accumulation_zrems_elumab_dpthc_exact");
+    const bool bridge_dpth_exact = manifest_bool(bridge_manifest, "dpthcont_zremsz_exact");
+    const bool bridge_boundaries_exact = manifest_bool(bridge_manifest, "accepted_radial_boundaries_exact");
+    const bool bridge_pprint_exact = manifest_bool(bridge_manifest, "legacy_pprint_events_and_buffers_exact");
+    const bool bridge_native_arrays_loaded = manifest_bool(bridge_manifest, "native_cfitsio_arrays_loaded");
+    const std::string bridge_result = manifest_string(bridge_manifest, "result");
     std::size_t selected = 0, lte = 0, line = 0, tau0 = 0, rrc = 0, tauc = 0, continuum = 0, profile = 0;
     for (const auto& zone : state.radial_zones) {
         ++selected;
@@ -166,9 +202,16 @@ void write_retention_report(const WholeRunAccumulatedState& state,
         profile += ws.line_profile_workspace_exact ? 1 : 0;
     }
     out << "{\n"
-        << "  \"schema\": \"xstar-tools-v06487462552-source-workspace-retention-v1\",\n"
-        << "  \"release\": \"0.6.48.7.46.25.5.2\",\n"
+        << "  \"schema\": \"xstar-tools-v06487462553-source-workspace-retention-v1\",\n"
+        << "  \"release\": \"0.6.48.7.46.25.5.3\",\n"
         << "  \"selected_product_states\": " << selected << ",\n"
+        << "  \"exact_product_state_bridge_result\": \"" << json_escape(bridge_result) << "\",\n"
+        << "  \"bridge_tauc_exact\": " << (bridge_tauc_exact ? "true" : "false") << ",\n"
+        << "  \"bridge_radial_accumulation_exact\": " << (bridge_radial_accum_exact ? "true" : "false") << ",\n"
+        << "  \"bridge_dpthcont_zremsz_exact\": " << (bridge_dpth_exact ? "true" : "false") << ",\n"
+        << "  \"bridge_accepted_radial_boundaries_exact\": " << (bridge_boundaries_exact ? "true" : "false") << ",\n"
+        << "  \"bridge_legacy_pprint_exact\": " << (bridge_pprint_exact ? "true" : "false") << ",\n"
+        << "  \"bridge_native_cfitsio_arrays_loaded\": " << (bridge_native_arrays_loaded ? "true" : "false") << ",\n"
         << "  \"metadata_levels\": " << state.level_identities.size() << ",\n"
         << "  \"metadata_lines\": " << state.line_identities.size() << ",\n"
         << "  \"metadata_rrcs\": " << state.rrc_identities.size() << ",\n"
@@ -181,10 +224,10 @@ void write_retention_report(const WholeRunAccumulatedState& state,
         << "  \"continuum_workspace_states\": " << continuum << ",\n"
         << "  \"line_profile_workspace_states\": " << profile << ",\n"
         << "  \"lte_populations_exact\": " << (lte == selected ? "true" : "false") << ",\n"
-        << "  \"radial_accumulation_zrems_elumab_dpthc_exact\": false,\n"
-        << "  \"dpthcont_zremsz_exact\": false,\n"
-        << "  \"accepted_radial_boundaries_exact\": false,\n"
-        << "  \"legacy_pprint_events_and_buffers_exact\": false,\n"
+        << "  \"radial_accumulation_zrems_elumab_dpthc_exact\": " << ((bridge_radial_accum_exact && bridge_native_arrays_loaded) ? "true" : "false") << ",\n"
+        << "  \"dpthcont_zremsz_exact\": " << ((bridge_dpth_exact && bridge_native_arrays_loaded) ? "true" : "false") << ",\n"
+        << "  \"accepted_radial_boundaries_exact\": " << ((bridge_boundaries_exact && bridge_native_arrays_loaded) ? "true" : "false") << ",\n"
+        << "  \"legacy_pprint_events_and_buffers_exact\": " << ((bridge_pprint_exact && bridge_native_arrays_loaded) ? "true" : "false") << ",\n"
         << "  \"cfitsio_public_product_writing_enabled\": false,\n"
         << "  \"result\": \"REJECT_INCOMPLETE_EXACT_SOURCE_STATE\"\n"
         << "}\n";
@@ -238,7 +281,7 @@ void prepare_native_product_state(
     state.embedded_full_xout_step_payload_absent = true;
 
     write_retention_report(
-        state, diagnostics_path.parent_path() / "v0487462552_source_workspace_retention.json");
+        state, diagnostics_path.parent_path() / "v0487462553_source_workspace_retention.json");
 
     if (!state.native_product_inputs_complete) {
         throw std::runtime_error(
@@ -292,7 +335,7 @@ void write_run_state_manifest(
     if (!out) throw std::runtime_error("cannot create run-state manifest: " + path.string());
     out << std::setprecision(17)
         << "{\n"
-        << "  \"schema\": \"xstar-tools-v06487462552-native-source-state-v1\",\n"
+        << "  \"schema\": \"xstar-tools-v06487462553-native-source-state-v1\",\n"
         << "  \"release\": \"" << json_escape(whole.release) << "\",\n"
         << "  \"backend\": \"" << json_escape(whole.backend) << "\",\n"
         << "  \"parameters_path\": \"" << json_escape(whole.parameters_path.string()) << "\",\n"
