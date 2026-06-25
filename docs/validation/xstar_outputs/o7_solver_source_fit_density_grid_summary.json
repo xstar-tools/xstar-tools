@@ -1699,7 +1699,7 @@
         "summary_json": "o7_solver_source_fit_density_grid/fixed_ne1_validation_ne_1e12/o7_fixed_ne1_solver_summary.json",
         "triplet_components": {
           "forbidden": 9.632277429095157e-11,
-          "intercombination": 9.525331732558362e-10,
+          "intercombination": 9.525331732559362e-10,
           "resonance": 4.670830757973607e-10
         },
         "R_f_over_i": 0.10112275036230242,

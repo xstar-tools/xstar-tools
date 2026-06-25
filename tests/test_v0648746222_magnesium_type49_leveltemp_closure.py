@@ -11,14 +11,14 @@ def _candidates(*pairs):
     return mask,tuple(values)
 
 def test_type49_active_second_pass_owner():
-    mask,values=_candidates((5,500.0),(11,1695.53125),(12,1884.255859375))
+    mask,values=_candidates((5,500.0),(11,1695.53125),(12,1884.255959375))
     value,owner,column=source_leveltemp_destination_energy(ion_stage=11,active_min_stage=5,active_max_stage=12,destination_column=35,candidate_mask=mask,candidate_energy_ev=values,incoming_energy_ev=104.0)
     assert (value,owner,column)==(1695.53125,11,35)
 
 def test_type49_first_pass_last_active_owner_before_writer():
-    mask,values=_candidates((11,1695.53125),(12,1884.255859375))
+    mask,values=_candidates((11,1695.53125),(12,1884.255959375))
     value,owner,_=source_leveltemp_destination_energy(ion_stage=6,active_min_stage=5,active_max_stage=12,destination_column=35,candidate_mask=mask,candidate_energy_ev=values,incoming_energy_ev=104.0)
-    assert value==1884.255859375 and owner==12
+    assert value==1884.255959375 and owner==12
 
 def test_type49_unowned_preserves_incoming():
     value,owner,column=source_leveltemp_destination_energy(ion_stage=6,active_min_stage=5,active_max_stage=12,destination_column=50,candidate_mask=0,candidate_energy_ev=(0.0,)*12,incoming_energy_ev=77.25)

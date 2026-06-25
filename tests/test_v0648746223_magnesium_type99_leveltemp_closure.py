@@ -28,7 +28,7 @@ def _candidates(*pairs: tuple[int, float, float]):
 
 def test_type99_active_second_pass_context():
     mask, energies, weights = _candidates(
-        (5, 100.0, 2.0), (11, 1695.53125, 4.0), (12, 1884.255859375, 6.0)
+        (5, 100.0, 2.0), (11, 1695.53125, 4.0), (12, 1884.255959375, 6.0)
     )
     energy, weight, owner = source_leveltemp_value(
         ion_stage=11,
