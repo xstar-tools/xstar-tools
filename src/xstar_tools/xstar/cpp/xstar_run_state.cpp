@@ -203,7 +203,7 @@ void write_retention_report(const WholeRunAccumulatedState& state,
     }
     out << "{\n"
         << "  \"schema\": \"xstar-tools-v064874625591-source-workspace-retention-v1\",\n"
-        << "  \"release\": \"0.6.48.7.46.25.5.9.1\",\n"
+        << "  \"release\": \"0.6.48.7.46.25.5.10\",\n"
         << "  \"selected_product_states\": " << selected << ",\n"
         << "  \"exact_product_state_bridge_result\": \"" << json_escape(bridge_result) << "\",\n"
         << "  \"bridge_tauc_exact\": " << (bridge_tauc_exact ? "true" : "false") << ",\n"
