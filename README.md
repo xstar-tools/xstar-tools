@@ -39,3 +39,7 @@ v25.2 therefore:
 
 This is a provenance and false-positive-gate correction, not production
 promotion and not completion of the v25 scientific milestone.
+
+### v0.6.48.7.46.25.5.7 developer preview mode
+
+Set `XSTAR_V0487462557_WRITE_SCHEMA_PREVIEW=1` with `run_v0487462557_native_product_state_completion.sh` to write schema-only preview products (`xo01_*.fits`, `xout_*.fits`, and `xout_step.log`).  These files are marked as previews and `PARITY=NOT_CLAIMED`; they are not production products and are not compared to the v0.6.47.2 oracle.
