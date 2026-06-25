@@ -36,6 +36,16 @@ const std::array<const char*,31> kElementNames = {
     "calcium", "scandium", "titanium", "vanadium", "chromium", "manganese", "iron", "cobalt", "nickel", "copper", "zinc"
 };
 
+const std::array<const char*,31> kElementSymbolsLower = {
+    "", "h", "he", "li", "be", "b", "c", "n", "o", "f", "ne", "na", "mg", "al", "si", "p",
+    "s", "cl", "ar", "k", "ca", "sc", "ti", "v", "cr", "mn", "fe", "co", "ni", "cu", "zn"
+};
+const std::array<const char*,31> kRomanLower = {
+    "", "i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x", "xi", "xii", "xiii", "xiv", "xv",
+    "xvi", "xvii", "xviii", "xix", "xx", "xxi", "xxii", "xxiii", "xxiv", "xxv", "xxvi", "xxvii", "xxviii", "xxix", "xxx"
+};
+
+
 struct ElementMeta {
     int element_index = 0;
     int element_z = 0;
@@ -338,6 +348,32 @@ std::string read_atdata(const std::filesystem::path& atdb) {
     return read_status == 0 ? std::string(value) : "unknown";
 }
 
+
+std::string extract_json_string(const std::string& text, const std::string& key) {
+    const std::string needle = "\"" + key + "\"";
+    const auto p = text.find(needle);
+    if (p == std::string::npos) return "";
+    const auto colon = text.find(':', p + needle.size());
+    if (colon == std::string::npos) return "";
+    const auto q1 = text.find('"', colon + 1);
+    if (q1 == std::string::npos) return "";
+    const auto q2 = text.find('"', q1 + 1);
+    if (q2 == std::string::npos) return "";
+    return text.substr(q1 + 1, q2 - q1 - 1);
+}
+
+std::string product_model_name(const xstar_run_state::ProductWritingState& state) {
+    const auto manifest = state.product_metadata_path / "manifest.json";
+    std::ifstream input(manifest);
+    if (input) {
+        std::ostringstream buffer;
+        buffer << input.rdbuf();
+        const auto model = extract_json_string(buffer.str(), "model_name");
+        if (!model.empty()) return model;
+    }
+    return "xstar_atomic_mg11_xi1p5_ne1e8";
+}
+
 fitsfile* create_fits(const std::filesystem::path& path, const xstar_run_state::ProductWritingState& state) {
     fitsfile* fptr = nullptr;
     int status = 0;
@@ -352,7 +388,9 @@ fitsfile* create_fits(const std::filesystem::path& path, const xstar_run_state::
     std::string mode = "NATIVE_CPP_LIVE_STATE";
     std::string tau_mode = "NATIVE_OPACITY_TRAPEZOID";
     std::string run_id = state.native_run_id;
+    std::string model = product_model_name(state);
     fits_update_key(fptr, TSTRING, const_cast<char*>("CREATOR"), creator.data(), const_cast<char*>("native executable"), &status);
+    fits_update_key(fptr, TSTRING, const_cast<char*>("MODEL"), model.data(), const_cast<char*>("source model name"), &status);
     fits_update_key(fptr, TSTRING, const_cast<char*>("ORIGIN"), origin.data(), nullptr, &status);
     fits_update_key(fptr, TSTRING, const_cast<char*>("ATDATA"), atdata.data(), const_cast<char*>("supplied atomic database metadata"), &status);
     fits_update_key(fptr, TSTRING, const_cast<char*>("DATAMODE"), mode.data(), const_cast<char*>("no benchmark payloads"), &status);
@@ -391,15 +429,14 @@ void create_table(fitsfile* fptr, int table_type, long rows, const std::string& 
     check_fits(status, "fits_create_tbl " + extname);
 }
 
-void write_double(fitsfile* fptr, int col, long row, double value) {
-    int status = 0;
-    fits_write_col(fptr, TDOUBLE, col, row, 1, 1, &value, &status);
-    check_fits(status, "write double");
-}
 void write_float(fitsfile* fptr, int col, long row, float value) {
     int status = 0;
     fits_write_col(fptr, TFLOAT, col, row, 1, 1, &value, &status);
     check_fits(status, "write float");
+}
+void write_real4(fitsfile* fptr, int col, long row, double value) {
+    const float out = static_cast<float>(value);
+    write_float(fptr, col, row, out);
 }
 void write_int(fitsfile* fptr, int col, long row, int value) {
     int status = 0;
@@ -425,7 +462,7 @@ void write_string(fitsfile* fptr, int col, long row, const std::string& value) {
 
 void write_parameters(fitsfile* fptr, const std::vector<xstar_run_state::ParameterRowState>& parameters) {
     create_table(fptr, BINARY_TBL, static_cast<long>(parameters.size()), "PARAMETERS",
-        {"index","parameter","value","type","comment"}, {"I","20A","E","10A","30A"}, {"","","","",""});
+        {"index","parameter","value","type","comment"}, {"1I","20A","1E","10A","30A"}, {"","","","",""});
     for (std::size_t i = 0; i < parameters.size(); ++i) {
         float value = 0.0f;
         std::memcpy(&value, &parameters[i].value_bits, sizeof(value));
@@ -441,7 +478,8 @@ void write_parameters(fitsfile* fptr, const std::vector<xstar_run_state::Paramet
 void write_radial_keywords(fitsfile* fptr, const xstar_run_state::RadialZoneState& zone) {
     int status = 0;
     auto put = [&](const char* key, double value) {
-        fits_update_key(fptr, TDOUBLE, const_cast<char*>(key), &value, nullptr, &status);
+        float v = static_cast<float>(value);
+        fits_update_key(fptr, TFLOAT, const_cast<char*>(key), &v, nullptr, &status);
         check_fits(status, std::string("write radial keyword ") + key);
     };
     put("RINNER", zone.radius_cm); put("ROUTER", zone.outer_radius_cm); put("RDEL", zone.delta_radius_cm);
@@ -549,7 +587,7 @@ void write_population_detail(const std::filesystem::path& path,
     for (const auto& zone : state.radial_zones) {
         create_table(fptr, BINARY_TBL, static_cast<long>(rows.size()), "XSTAR_RADIAL",
             {"index","ion_index","e_excitation","ion","atomic_number","ion_level","population","lte","upper index"},
-            {"J","I","D","8A","I","20A","D","D","I"}, {"","","eV","","","","","",""});
+            {"1J","1I","1E","8A","1I","20A","1E","1E","1I"}, {"","","eV","","","","","",""});
         write_radial_keywords(fptr, zone);
         const auto& evaluation = zone.accepted_controller.evaluation;
         for (std::size_t i = 0; i < rows.size(); ++i) {
@@ -560,12 +598,12 @@ void write_population_detail(const std::filesystem::path& path,
             const long fits_row = static_cast<long>(i + 1);
             write_int(fptr, 1, fits_row, static_cast<int>(i + 1));
             write_short(fptr, 2, fits_row, static_cast<short>(std::max(row.ion, 1)));
-            write_double(fptr, 3, fits_row, row.energy_ev);
+            write_real4(fptr, 3, fits_row, row.energy_ev);
             write_string(fptr, 4, fits_row, ion_label(e.element_z, std::max(row.ion, 1), true));
             write_short(fptr, 5, fits_row, static_cast<short>(e.element_z));
             write_string(fptr, 6, fits_row, level_label(&row, row.row));
-            write_double(fptr, 7, fits_row, pop);
-            write_double(fptr, 8, fits_row, 0.0);
+            write_real4(fptr, 7, fits_row, pop);
+            write_real4(fptr, 8, fits_row, 0.0);
             write_short(fptr, 9, fits_row, static_cast<short>(row.row));
         }
     }
@@ -584,7 +622,7 @@ void write_line_detail(const std::filesystem::path& path,
         const auto lines = build_line_rows(state, elements, rows, z);
         create_table(fptr, BINARY_TBL, static_cast<long>(lines.size()), "XSTAR_RADIAL",
             {"index","wavelength","ion","lower_level","upper_level","emis_inward","emis_outward","opacity","tau_in","tau_out"},
-            {"K","D","8A","20A","20A","D","D","D","D","D"},
+            {"1J","1E","8A","20A","20A","1E","1E","1E","1E","1E"},
             {"","A","","","","erg/cm^3/s","erg/cm^3/s","/cm","",""});
         write_radial_keywords(fptr, state.radial_zones[z]);
         for (std::size_t i = 0; i < lines.size(); ++i) {
@@ -593,11 +631,11 @@ void write_line_detail(const std::filesystem::path& path,
             const auto* lower = row_for(rows, element_index, r.lower_row);
             const auto* upper = row_for(rows, element_index, r.upper_row);
             const long row = static_cast<long>(i + 1);
-            write_longlong(fptr, 1, row, r.record); write_double(fptr, 2, row, r.wavelength_a);
+            write_longlong(fptr, 1, row, r.record); write_real4(fptr, 2, row, r.wavelength_a);
             write_string(fptr, 3, row, ion_label(r.z, r.stage, true));
             write_string(fptr, 4, row, level_label(lower, r.lower_row)); write_string(fptr, 5, row, level_label(upper, r.upper_row));
-            write_double(fptr, 6, row, r.emis_in); write_double(fptr, 7, row, r.emis_out); write_double(fptr, 8, row, r.opacity);
-            write_double(fptr, 9, row, r.tau_in); write_double(fptr, 10, row, r.tau_out);
+            write_real4(fptr, 6, row, r.emis_in); write_real4(fptr, 7, row, r.emis_out); write_real4(fptr, 8, row, r.opacity);
+            write_real4(fptr, 9, row, r.tau_in); write_real4(fptr, 10, row, r.tau_out);
         }
     }
     close_fits(fptr);
@@ -618,7 +656,7 @@ void write_rrc_detail(const std::filesystem::path& path,
         const auto rrc = build_rrc_rows(state, elements, z);
         create_table(fptr, BINARY_TBL, static_cast<long>(rrc.size()), "XSTAR_RADIAL",
             {"rrc index","level index","energy","ion","lower_level","upper_level","emis_inward","emis_outward","integrated absn","opacity","tau_in","tau_out"},
-            {"K","J","D","8A","20A","20A","D","D","D","D","D","D"},
+            {"1J","1J","1E","8A","20A","20A","1E","1E","1E","1E","1E","1E"},
             {"","","eV","","","","erg/cm^3/s","erg/cm^3/s","erg/cm^3/s","/cm","",""});
         write_radial_keywords(fptr, state.radial_zones[z]);
         for (std::size_t i = 0; i < rrc.size(); ++i) {
@@ -627,10 +665,10 @@ void write_rrc_detail(const std::filesystem::path& path,
             const auto* lower = row_for(rows, element_index, r.lower_row);
             const auto* upper = row_for(rows, element_index, r.upper_row);
             const long row = static_cast<long>(i + 1);
-            write_longlong(fptr, 1, row, r.record); write_int(fptr, 2, row, r.upper_row); write_double(fptr, 3, row, r.energy_ev);
+            write_longlong(fptr, 1, row, r.record); write_int(fptr, 2, row, r.upper_row); write_real4(fptr, 3, row, r.energy_ev);
             write_string(fptr, 4, row, ion_label(r.z, r.stage, true)); write_string(fptr, 5, row, level_label(lower, r.lower_row));
-            write_string(fptr, 6, row, level_label(upper, r.upper_row)); write_double(fptr, 7, row, r.emis_in); write_double(fptr, 8, row, r.emis_out);
-            write_double(fptr, 9, row, r.absorption); write_double(fptr, 10, row, r.opacity); write_double(fptr, 11, row, r.tau_in); write_double(fptr, 12, row, r.tau_out);
+            write_string(fptr, 6, row, level_label(upper, r.upper_row)); write_real4(fptr, 7, row, r.emis_in); write_real4(fptr, 8, row, r.emis_out);
+            write_real4(fptr, 9, row, r.absorption); write_real4(fptr, 10, row, r.opacity); write_real4(fptr, 11, row, r.tau_in); write_real4(fptr, 12, row, r.tau_out);
         }
     }
     close_fits(fptr);
@@ -645,7 +683,7 @@ void write_spectrum_detail(const std::filesystem::path& path,
         const std::size_t n = e.radiation_energy_ev.size();
         create_table(fptr, BINARY_TBL, static_cast<long>(n), "XSTAR_RADIAL",
             {"index","energy","zrems(1)","zrems(2)","zrems(3)","zrems(4)","zrems(5)","opacity","emis out","emis in","fwd dpth","bck dpth"},
-            {"J","D","D","D","D","D","D","D","D","D","D","D"},
+            {"1J","1E","1E","1E","1E","1E","1E","1E","1E","1E","1E","1E"},
             {"","eV","erg/s","erg/s","erg/s","erg/s","erg/s","/cm","erg/cm**3/s","erg/cm**3/s","",""});
         write_radial_keywords(fptr, zone);
         for (std::size_t i = 0; i < n; ++i) {
@@ -656,26 +694,61 @@ void write_spectrum_detail(const std::filesystem::path& path,
             const double spectrum = i < e.spectrum.size() ? e.spectrum[i] : 0.0;
             const double opacity = i < e.opacity.size() ? e.opacity[i] : 0.0;
             const long row = static_cast<long>(i + 1);
-            write_int(fptr, 1, row, static_cast<int>(i + 1)); write_double(fptr, 2, row, e.radiation_energy_ev[i]);
-            write_double(fptr, 3, row, incident); write_double(fptr, 4, row, incident * std::exp(-tau_out));
-            write_double(fptr, 5, row, continuum); write_double(fptr, 6, row, spectrum * 0.5); write_double(fptr, 7, row, spectrum * 0.5);
-            write_double(fptr, 8, row, opacity); write_double(fptr, 9, row, spectrum * 0.5); write_double(fptr, 10, row, spectrum * 0.5);
-            write_double(fptr, 11, row, tau_in); write_double(fptr, 12, row, tau_out);
+            write_int(fptr, 1, row, static_cast<int>(i + 1)); write_real4(fptr, 2, row, e.radiation_energy_ev[i]);
+            write_real4(fptr, 3, row, incident); write_real4(fptr, 4, row, incident * std::exp(-tau_out));
+            write_real4(fptr, 5, row, continuum); write_real4(fptr, 6, row, spectrum * 0.5); write_real4(fptr, 7, row, spectrum * 0.5);
+            write_real4(fptr, 8, row, opacity); write_real4(fptr, 9, row, spectrum * 0.5); write_real4(fptr, 10, row, spectrum * 0.5);
+            write_real4(fptr, 11, row, tau_in); write_real4(fptr, 12, row, tau_out);
         }
     }
     close_fits(fptr);
 }
 
-std::vector<std::string> abundance_columns(const std::vector<ElementMeta>& elements) {
-    std::vector<std::string> names = {"radius","delta_r","ion_parameter","x_e","n_p","pressure","temperature","frac_heat_error"};
-    for (const auto& e : elements) for (int stage = 1; stage <= e.element_z; ++stage) names.push_back(ion_label(e.element_z, stage, true));
+
+std::string ion_column_name(int element_z, int stage) {
+    const std::size_t z = static_cast<std::size_t>(std::max(0, std::min(30, element_z)));
+    const std::size_t s = static_cast<std::size_t>(std::max(0, std::min(30, stage)));
+    std::string out = kElementSymbolsLower[z];
+    out += "_";
+    out += kRomanLower[s];
+    return out;
+}
+
+std::vector<std::string> all_ion_columns() {
+    std::vector<std::string> names;
+    for (int z = 1; z <= 30; ++z) {
+        for (int stage = 1; stage <= z; ++stage) names.push_back(ion_column_name(z, stage));
+    }
     return names;
+}
+
+std::vector<std::string> abundance_columns(const std::vector<ElementMeta>&) {
+    std::vector<std::string> names = {"radius","delta_r","ion_parameter","x_e","n_p","pressure","temperature","frac_heat_error"};
+    const auto ions = all_ion_columns();
+    names.insert(names.end(), ions.begin(), ions.end());
+    return names;
+}
+
+std::vector<std::string> abundance_units(const std::vector<std::string>& names) {
+    std::vector<std::string> units(names.size(), "");
+    if (units.size() >= 8) {
+        units[0] = "cm";
+        units[1] = "cm";
+        units[2] = "erg*cm";
+        units[5] = "dynes/cm**2";
+        units[6] = "10**4 K";
+    }
+    return units;
+}
+
+std::vector<std::string> ascii_e_formats(std::size_t n) {
+    return std::vector<std::string>(n, "E13.5");
 }
 
 void write_abundance_base(fitsfile* fptr, long row, const xstar_run_state::AbundanceRadialRowState& r) {
     const std::array<double,8> values = {r.radius_cm,r.delta_radius_cm,r.log_ionization_parameter,r.electron_fraction,
         r.density_cm3,r.pressure_dyn_cm2,r.temperature_t4,r.fractional_heat_error};
-    for (int col = 1; col <= 8; ++col) write_double(fptr, col, row, values[static_cast<std::size_t>(col - 1)]);
+    for (int col = 1; col <= 8; ++col) write_real4(fptr, col, row, values[static_cast<std::size_t>(col - 1)]);
 }
 
 void write_abundances(const std::filesystem::path& path,
@@ -683,60 +756,68 @@ void write_abundances(const std::filesystem::path& path,
                       const std::vector<ElementMeta>& elements,
                       const std::vector<RowMeta>& rows) {
     const auto names = abundance_columns(elements);
-    std::vector<std::string> formats(names.size(), "D"), units(names.size(), "");
+    const auto formats = ascii_e_formats(names.size());
+    const auto units = abundance_units(names);
     fitsfile* fptr = create_fits(path, state);
-    create_table(fptr, BINARY_TBL, static_cast<long>(state.radial_zones.size()), "ABUNDANCES", names, formats, units);
+    create_table(fptr, ASCII_TBL, static_cast<long>(state.radial_zones.size()), "ABUNDANCES", names, formats, units);
     std::vector<std::map<std::pair<int,int>,double>> fractions;
     for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
         fractions.push_back(ion_fractions(state.radial_zones[z].accepted_controller.evaluation, elements, rows));
         const long row = static_cast<long>(z + 1);
         write_abundance_base(fptr, row, state.abundance_radial_rows[z]);
         int col = 9;
-        for (const auto& e : elements) for (int stage = 1; stage <= e.element_z; ++stage) {
-            write_double(fptr, col++, row, fractions.back()[{e.element_z,stage}]);
+        for (int element_z = 1; element_z <= 30; ++element_z) {
+            for (int stage = 1; stage <= element_z; ++stage) {
+                write_real4(fptr, col++, row, fractions.back()[{element_z,stage}]);
+            }
         }
     }
-    create_table(fptr, BINARY_TBL, 1, "COLUMNS", names, formats, units);
+    create_table(fptr, ASCII_TBL, 1, "COLUMNS", names, formats, units);
     write_abundance_base(fptr, 1, xstar_run_state::AbundanceRadialRowState{});
     int col = 9;
-    for (const auto& e : elements) for (int stage = 1; stage <= e.element_z; ++stage) {
-        double column = 0.0;
-        for (std::size_t z = 0; z + 1 < state.radial_zones.size(); ++z) {
-            const double f0 = fractions[z][{e.element_z,stage}];
-            const double f1 = fractions[z+1][{e.element_z,stage}];
-            const double n0 = state.radial_zones[z].density_cm3;
-            const double n1 = state.radial_zones[z+1].density_cm3;
-            const double dr = state.radial_zones[z].delta_radius_cm;
-            column += 0.5 * (f0*n0 + f1*n1) * dr * e.abundance;
+    for (int element_z = 1; element_z <= 30; ++element_z) {
+        const auto eit = std::find_if(elements.begin(), elements.end(), [element_z](const ElementMeta& e){ return e.element_z == element_z; });
+        const double abundance = eit == elements.end() ? 0.0 : eit->abundance;
+        for (int stage = 1; stage <= element_z; ++stage) {
+            double column = 0.0;
+            for (std::size_t z = 0; z + 1 < state.radial_zones.size(); ++z) {
+                const double f0 = fractions[z][{element_z,stage}];
+                const double f1 = fractions[z+1][{element_z,stage}];
+                const double n0 = state.radial_zones[z].density_cm3;
+                const double n1 = state.radial_zones[z+1].density_cm3;
+                const double dr = state.radial_zones[z].delta_radius_cm;
+                column += 0.5 * (f0*n0 + f1*n1) * dr * abundance;
+            }
+            write_real4(fptr, col++, 1, column);
         }
-        write_double(fptr, col++, 1, column);
     }
 
     std::vector<std::string> thermal = {"radius","delta_r","ion_parameter","x_e","n_p","pressure","temperature","frac_heat_error"};
     for (int z = 1; z <= 30; ++z) thermal.push_back(kElementNames[static_cast<std::size_t>(z)]);
     auto heating = thermal; heating.push_back("compton"); heating.push_back("total");
     auto cooling = thermal; cooling.push_back("compton"); cooling.push_back("brems"); cooling.push_back("total");
-    create_table(fptr, BINARY_TBL, static_cast<long>(state.radial_zones.size()), "HEATING", heating, std::vector<std::string>(heating.size(), "D"), std::vector<std::string>(heating.size(), ""));
+    auto thermal_units = abundance_units(thermal);
+    create_table(fptr, ASCII_TBL, static_cast<long>(state.radial_zones.size()), "HEATING", heating, ascii_e_formats(heating.size()), abundance_units(heating));
     for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
         const long row = static_cast<long>(z + 1);
         write_abundance_base(fptr, row, state.abundance_radial_rows[z]);
-        const auto& s = state.radial_zones[z].accepted_controller.evaluation;
+        const auto& st = state.radial_zones[z].accepted_controller.evaluation;
         for (int element = 1; element <= 30; ++element) {
-            const double value = element == 1 ? s.hydrogen_heating : element == 2 ? s.helium_heating : element == 12 ? s.magnesium_heating : 0.0;
-            write_double(fptr, 8 + element, row, value);
+            const double value = element == 1 ? st.hydrogen_heating : element == 2 ? st.helium_heating : element == 12 ? st.magnesium_heating : 0.0;
+            write_real4(fptr, 8 + element, row, value);
         }
-        write_double(fptr, 39, row, s.compton_heating); write_double(fptr, 40, row, s.total_heating);
+        write_real4(fptr, 39, row, st.compton_heating); write_real4(fptr, 40, row, st.total_heating);
     }
-    create_table(fptr, BINARY_TBL, static_cast<long>(state.radial_zones.size()), "COOLING", cooling, std::vector<std::string>(cooling.size(), "D"), std::vector<std::string>(cooling.size(), ""));
+    create_table(fptr, ASCII_TBL, static_cast<long>(state.radial_zones.size()), "COOLING", cooling, ascii_e_formats(cooling.size()), abundance_units(cooling));
     for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
         const long row = static_cast<long>(z + 1);
         write_abundance_base(fptr, row, state.abundance_radial_rows[z]);
-        const auto& s = state.radial_zones[z].accepted_controller.evaluation;
+        const auto& st = state.radial_zones[z].accepted_controller.evaluation;
         for (int element = 1; element <= 30; ++element) {
-            const double value = element == 1 ? s.hydrogen_cooling : element == 2 ? s.helium_cooling : element == 12 ? s.magnesium_cooling : 0.0;
-            write_double(fptr, 8 + element, row, value);
+            const double value = element == 1 ? st.hydrogen_cooling : element == 2 ? st.helium_cooling : element == 12 ? st.magnesium_cooling : 0.0;
+            write_real4(fptr, 8 + element, row, value);
         }
-        write_double(fptr, 39, row, s.compton_cooling); write_double(fptr, 40, row, s.brems_cooling); write_double(fptr, 41, row, s.total_cooling);
+        write_real4(fptr, 39, row, st.compton_cooling); write_real4(fptr, 40, row, st.brems_cooling); write_real4(fptr, 41, row, st.total_cooling);
     }
     close_fits(fptr);
 }
@@ -764,19 +845,19 @@ void write_public_lines(const std::filesystem::path& path,
     std::stable_sort(list.begin(), list.end(), [](const LineRow& a, const LineRow& b){ return a.emis_in + a.emis_out > b.emis_in + b.emis_out; });
     if (list.size() > 600) list.resize(600);
     fitsfile* fptr = create_fits(path, state); write_parameters(fptr, state.parameter_rows);
-    create_table(fptr, BINARY_TBL, static_cast<long>(list.size()), "XSTAR_LINES",
+    create_table(fptr, ASCII_TBL, static_cast<long>(list.size()), "XSTAR_LINES",
         {"index","ion","lower_level","upper_level","wavelength","emit_inward","emit_outward","depth_inward","depth_outward"},
-        {"K","9A","20A","20A","D","D","D","D","D"}, {"","","","","A","erg/s","erg/s","",""});
+        {"I6","A9","A20","A20","E13.5","E13.5","E13.5","E13.5","E13.5"}, {"","","","","A","erg/s/10**38","erg/s/10**38","",""});
     for (std::size_t i = 0; i < list.size(); ++i) {
         const auto& r = list[i];
         const int element_index = element_index_for_z(elements, r.z);
         const auto* lower = row_for(rows, element_index, r.lower_row);
         const auto* upper = row_for(rows, element_index, r.upper_row);
         const long row = static_cast<long>(i + 1);
-        write_longlong(fptr, 1, row, r.record); write_string(fptr, 2, row, ion_label(r.z, r.stage));
+        write_int(fptr, 1, row, static_cast<int>(r.record)); write_string(fptr, 2, row, ion_label(r.z, r.stage));
         write_string(fptr, 3, row, level_label(lower, r.lower_row)); write_string(fptr, 4, row, level_label(upper, r.upper_row));
-        write_double(fptr, 5, row, r.wavelength_a); write_double(fptr, 6, row, r.emis_in); write_double(fptr, 7, row, r.emis_out);
-        write_double(fptr, 8, row, r.tau_in); write_double(fptr, 9, row, r.tau_out);
+        write_real4(fptr, 5, row, r.wavelength_a); write_real4(fptr, 6, row, r.emis_in); write_real4(fptr, 7, row, r.emis_out);
+        write_real4(fptr, 8, row, r.tau_in); write_real4(fptr, 9, row, r.tau_out);
     }
     close_fits(fptr);
 }
@@ -802,17 +883,17 @@ void write_public_rrc(const std::filesystem::path& path,
     for (const auto& [_, value] : combined) if (value.emis_in + value.emis_out > 0.0) list.push_back(value);
     std::stable_sort(list.begin(), list.end(), [](const RrcRow& a, const RrcRow& b){ return a.record < b.record; });
     fitsfile* fptr = create_fits(path, state); write_parameters(fptr, state.parameter_rows);
-    create_table(fptr, BINARY_TBL, static_cast<long>(list.size()), "XSTAR_SPECTRA",
+    create_table(fptr, ASCII_TBL, static_cast<long>(list.size()), "XSTAR_SPECTRA",
         {"index","ion","level","energy","emit_outward","emit_inward","depth_outward","depth_inward"},
-        {"K","9A","20A","D","D","D","D","D"}, {"","","","eV","erg/s","erg/s","",""});
+        {"I6","A9","A20","E13.5","E13.5","E13.5","E13.5","E13.5"}, {"","","","eV","erg/s","erg/s","",""});
     for (std::size_t i = 0; i < list.size(); ++i) {
         const auto& r = list[i];
         const int element_index = element_index_for_z(elements, r.z);
         const auto* level = row_for(rows, element_index, r.upper_row);
         const long row = static_cast<long>(i + 1);
-        write_longlong(fptr, 1, row, r.record); write_string(fptr, 2, row, ion_label(r.z, r.stage)); write_string(fptr, 3, row, level_label(level, r.upper_row));
-        write_double(fptr, 4, row, r.energy_ev); write_double(fptr, 5, row, r.emis_out); write_double(fptr, 6, row, r.emis_in);
-        write_double(fptr, 7, row, r.tau_out); write_double(fptr, 8, row, r.tau_in);
+        write_int(fptr, 1, row, static_cast<int>(r.record)); write_string(fptr, 2, row, ion_label(r.z, r.stage)); write_string(fptr, 3, row, level_label(level, r.upper_row));
+        write_real4(fptr, 4, row, r.energy_ev); write_real4(fptr, 5, row, r.emis_out); write_real4(fptr, 6, row, r.emis_in);
+        write_real4(fptr, 7, row, r.tau_out); write_real4(fptr, 8, row, r.tau_in);
     }
     close_fits(fptr);
 }
@@ -823,8 +904,8 @@ void write_public_spectrum(const std::filesystem::path& path,
     const auto& e = state.radial_zones.back().accepted_controller.evaluation;
     const std::size_t n = e.radiation_energy_ev.size();
     fitsfile* fptr = create_fits(path, state); write_parameters(fptr, state.parameter_rows);
-    create_table(fptr, BINARY_TBL, static_cast<long>(n), "XSTAR_SPECTRA",
-        {"energy","incident","transmitted","emit_inward","emit_outward"}, {"D","D","D","D","D"},
+    create_table(fptr, ASCII_TBL, static_cast<long>(n), "XSTAR_SPECTRA",
+        {"energy","incident","transmitted","emit_inward","emit_outward"}, {"E13.5","E13.5","E13.5","E13.5","E13.5"},
         {"eV","erg/s/erg","erg/s/erg","erg/s/erg","erg/s/erg"});
     for (std::size_t i = 0; i < n; ++i) {
         const double incident = i < e.radiation_flux.size() ? e.radiation_flux[i] : 0.0;
@@ -833,8 +914,8 @@ void write_public_spectrum(const std::filesystem::path& path,
             ? (i < e.spectrum.size() ? e.spectrum[i] : 0.0)
             : (i < e.continuum_spectrum.size() ? e.continuum_spectrum[i] : 0.0);
         const long row = static_cast<long>(i + 1);
-        write_double(fptr, 1, row, e.radiation_energy_ev[i]); write_double(fptr, 2, row, incident);
-        write_double(fptr, 3, row, incident * std::exp(-tau)); write_double(fptr, 4, row, emitted * 0.5); write_double(fptr, 5, row, emitted * 0.5);
+        write_real4(fptr, 1, row, e.radiation_energy_ev[i]); write_real4(fptr, 2, row, incident);
+        write_real4(fptr, 3, row, incident * std::exp(-tau)); write_real4(fptr, 4, row, emitted * 0.5); write_real4(fptr, 5, row, emitted * 0.5);
     }
     close_fits(fptr);
 }

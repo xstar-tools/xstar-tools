@@ -3755,7 +3755,7 @@ std::filesystem::path resolve_physical_asset(
 
 int command_run_physical(Options options) {
     if (options.backend != "cpp") {
-        std::cerr << "xstar_cpp run v0.6.48.7.46.25.5.5 supports --backend cpp only\n";
+        std::cerr << "xstar_cpp run v0.6.48.7.46.25.5.6 supports --backend cpp only\n";
         return 64;
     }
     if (options.parameters_path.empty() || options.atomic_db_path.empty() || options.output_dir.empty()) {
@@ -4011,7 +4011,7 @@ int command_run_physical(Options options) {
             << (std::filesystem::is_regular_file(output / "native_dsec_trace.log") ? "true" : "false") << ",\n"
             << "  \"xout_step_written\": "
             << (std::filesystem::is_regular_file(output / "xout_step.log") ? "true" : "false") << ",\n"
-            << "  \"xout_step_full_log_complete\": true,\n"
+            << "  \"xout_step_full_log_complete\": false,\n"
             << "  \"run_state_manifest_written\": "
             << (std::filesystem::is_regular_file(output / "native_physical_run_state.json") ? "true" : "false") << ",\n"
             << "  \"product_oracle\": \"external_comparison_only\",\n"
@@ -4027,7 +4027,7 @@ int command_run_physical(Options options) {
               << "\nfits_products_written=" << fits_count
               << "\nnative_dsec_trace_written=" << (std::filesystem::is_regular_file(output / "native_dsec_trace.log") ? "true" : "false")
               << "\nxout_step_written=" << (std::filesystem::is_regular_file(output / "xout_step.log") ? "true" : "false")
-              << "\nxout_step_full_log_complete=true"
+              << "\nxout_step_full_log_complete=false"
               << "\nrun_state_manifest_written=" << (std::filesystem::is_regular_file(output / "native_physical_run_state.json") ? "true" : "false")
               << "\nproduct_level_parity=NOT_YET_EXACT"
               << "\nRESULT=" << (infrastructure_complete ? "ACCEPT_INFRASTRUCTURE" : "REJECT") << "\n";
