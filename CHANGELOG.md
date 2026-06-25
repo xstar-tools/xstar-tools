@@ -1,5 +1,28 @@
 # CHANGELOG
 
+## v0.6.48.7.46.25.5.8 - 2026-06-25
+
+- Fixed bridge manifest semantics: existing manifest with missing payload is `REJECT_BRIDGE_PAYLOAD_NOT_CAPTURED`.
+- Added explicit bridge payload counts for tauc, zrems, elumab, dpthc, dpthcont, zremsz, accepted radial boundaries, and pprint events/buffers.
+- Added first-family bridge extraction for accepted radial boundary rows and shell lifecycle from saved radial state.
+- Kept CFITSIO and xout_step writing fail-closed until native ProductWritingState loads every required exact family.
+
+- Encoded oracle-compatible CFITSIO schema surfaces for detail products and final public products: BINTABLE `1E` detail science fields, ASCII `TABLE` final products, full H-Zn abundance/column tables, and `MODEL` from metadata.
+- Replaced the compact native debug `xout_step.log` surface with a fail-closed legacy `pprint` buffer writer and corrected `xout_step_full_log_complete=false` when no log is written.
+- Kept public product generation blocked until exact ProductWritingState arrays/events are retained and loaded; no value/byte parity is claimed.
+
+
+- Correct metadata export to read `PprintElementMetadata.element_label` while preserving the `symbol` CSV column.
+- Correct turbulent-velocity metadata to use normalized `vturbi`, not nonexistent `rlv`.
+- Validate metadata numeric parameters as present and finite before serialization.
+- Add focused host-path regressions and static readiness gates for both metadata field corrections.
+
+- Retain committed native line, RRC, continuum, and profile workspaces through the fixed-state ABI.
+- Retain transported `tau0` line-depth workspaces while keeping the 301301-value DSEC continuum transport workspace distinct from public RRC `tauc` and output-grid `dpthc`.
+- Export and load source identities plus the literal 56-row parameter table from the supplied ATDB and parameters.
+- Remove equal-shell radial and opacity-trapezoid product-state fabrication from the public writer path.
+- Retain the source-faithful LTE population vector in the exact-workspace sidecar and block CFITSIO and legacy log writing until radial accumulation, accepted boundaries, and legacy `pprint` state are exact.
+
 ## v0.6.48.7.46.25.5.7 - 2026-06-25
 
 - Fixed bridge manifest semantics: existing manifest with missing payload is `REJECT_BRIDGE_PAYLOAD_NOT_CAPTURED`.
