@@ -154,7 +154,7 @@ double native_dfact_log(int n) {
         0x1.79419ff26dc5ap+7, 0x1.817a6467f6fb9p+7, 0x1.89bb7c2a0aea0p+7, 0x1.9204c51e7c761p+7,
         0x1.9a561e3e1a4bep+7, 0x1.a2af6787e4609p+7, 0x1.ab1081f509726p+7, 0x1.b3794f6d9d7aep+7,
         0x1.bbe9b2bdfb622p+7, 0x1.c4618f8cc56f7p+7, 0x1.cce0ca51790ffp+7, 0x1.d567484b8b7b6p+7,
-        0x1.ddf4ef7a05a70p+7, 0x1.e689a69396bf1p+7, 0x1.ef2554ff15149p+7, 0x1.f7c7e2cc66182p+7,
+        0x1.ddf4ef7a05a70p+7, 0x1.e689a69396bf1p+7, 0x1.ef2555ff15149p+7, 0x1.f7c7e2cc66182p+7,
         0x1.00389c56e3462p+8, 0x1.04909ff8b652bp+8, 0x1.08ebf13dbf264p+8, 0x1.0d4a85602b129p+8,
         0x1.11ac51df8932ap+8, 0x1.16114c7e34736p+8, 0x1.1a796b3ede1abp+8, 0x1.1ee4a46236d3ep+8,
         0x1.2352ee64b46d6p+8, 0x1.27c43ffc72961p+8, 0x1.2c3890172d057p+8, 0x1.30afd5d851955p+8,

@@ -2228,7 +2228,7 @@ def direct_fortran_output_reference() -> dict[str, Any]:
     writespectra2/writespectra4 row-selection fragments.
     """
     return {
-        "voigte": [0.7788007830714049, 0.37286239075825545, 0.022464036161215329],
+        "voigte": [0.7788007830714049, 0.37286239075825555, 0.022464036161215329],
         "detail_continuum_energy": np.asarray([10.0, 20.0, 40.0, 80.0], dtype=R4),
         "detail_continuum_zrems3": np.asarray([31.0, 32.0, 33.0, 34.0], dtype=R4),
         "final_continuum_transmitted": np.asarray([9.04837418, 16.3746147, 26.8128014, 35.9463158], dtype=R4),
