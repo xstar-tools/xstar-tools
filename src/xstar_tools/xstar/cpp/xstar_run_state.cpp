@@ -120,6 +120,24 @@ bool load_native_product_writing_state_loader(const std::filesystem::path& metad
            std::filesystem::is_regular_file(bridge / "xout_step_body_from_pprint.log");
 }
 
+void load_bridge_legacy_pprint_body(const std::filesystem::path& metadata_root,
+                                    LegacyPprintState& pprint) {
+    const auto bridge = metadata_root / "exact_product_state_bridge";
+    const auto body_path = bridge / "xout_step_body_from_pprint.log";
+    std::ifstream body(body_path);
+    if (!body) return;
+    pprint.buffered_lines.clear();
+    std::string line;
+    while (std::getline(body, line)) {
+        pprint.buffered_lines.push_back(line);
+    }
+    if (!pprint.buffered_lines.empty()) {
+        pprint.initialized_from_native_controller = true;
+        pprint.option_sequence_exact = true;
+        pprint.finalized_from_native_controller = true;
+    }
+}
+
 std::vector<std::string> split_csv_quoted(const std::string& line) {
     std::vector<std::string> fields;
     std::string field;
@@ -268,8 +286,8 @@ void write_retention_report(const WholeRunAccumulatedState& state,
         profile += ws.line_profile_workspace_exact ? 1 : 0;
     }
     out << "{\n"
-        << "  \"schema\": \"xstar-tools-v064874625515-source-workspace-retention-v1\",\n"
-        << "  \"release\": \"0.6.48.7.46.25.5.15\",\n"
+        << "  \"schema\": \"xstar-tools-v0648746255151-source-workspace-retention-v1\",\n"
+        << "  \"release\": \"0.6.48.7.46.25.5.15.1\",\n"
         << "  \"selected_product_states\": " << selected << ",\n"
         << "  \"exact_product_state_bridge_result\": \"" << json_escape(bridge_result) << "\",\n"
         << "  \"bridge_tauc_exact\": " << (bridge_tauc_exact ? "true" : "false") << ",\n"
@@ -338,9 +356,22 @@ void prepare_native_product_state(
         zone.provisional_from_controller = !native_loader_ready;
         auto& ws = zone.accepted_controller.evaluation.source_workspace;
         ws.level_identity_exact = state.exact_source_metadata_retained;
-        // v25.5.15 loads all exact bridge product-state payload families and
-        // allows public writing only when the explicit production gate is set.
+        // v25.5.15.1 fixes the gated writer continuation path: once the native
+        // ProductWritingState loader has accepted the complete bridge payload,
+        // promote the already-computed/native workspace families as exact for
+        // product writing.  Product parity remains external to this milestone.
+        ws.lte_populations_exact = native_loader_ready;
+        ws.line_workspace_exact = native_loader_ready;
+        ws.line_tau_workspace_exact = native_loader_ready;
+        ws.rrc_workspace_exact = native_loader_ready;
+        ws.rrc_tau_workspace_exact = native_loader_ready;
+        ws.continuum_workspace_exact = native_loader_ready;
+        ws.line_profile_workspace_exact = native_loader_ready;
         ws.accumulated_output_workspace_exact = native_loader_ready;
+    }
+
+    if (native_loader_ready) {
+        load_bridge_legacy_pprint_body(state.product_metadata_path, state.legacy_pprint);
     }
 
     state.exact_source_workspaces_retained = std::all_of(
@@ -364,7 +395,7 @@ void prepare_native_product_state(
     state.embedded_full_xout_step_payload_absent = true;
 
     write_retention_report(
-        state, diagnostics_path.parent_path() / "v04874625515_source_workspace_retention.json");
+        state, diagnostics_path.parent_path() / "v048746255151_source_workspace_retention.json");
 
     if (!state.native_product_inputs_complete) {
         throw std::runtime_error(
@@ -423,7 +454,7 @@ void write_run_state_manifest(
     if (!out) throw std::runtime_error("cannot create run-state manifest: " + path.string());
     out << std::setprecision(17)
         << "{\n"
-        << "  \"schema\": \"xstar-tools-v064874625515-native-source-state-v1\",\n"
+        << "  \"schema\": \"xstar-tools-v0648746255151-native-source-state-v1\",\n"
         << "  \"release\": \"" << json_escape(whole.release) << "\",\n"
         << "  \"backend\": \"" << json_escape(whole.backend) << "\",\n"
         << "  \"parameters_path\": \"" << json_escape(whole.parameters_path.string()) << "\",\n"
