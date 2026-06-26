@@ -613,34 +613,119 @@ void truncate_to_oracle_count(std::vector<T>& values, std::size_t count) {
     if (values.size() > count) values.resize(count);
 }
 
+
+std::vector<xstar_run_state::LevelIdentityState> oracle_detail_levels(
+    const xstar_run_state::ProductWritingState& state) {
+    std::vector<xstar_run_state::LevelIdentityState> out;
+    out.reserve(616);
+    for (const auto& level : state.level_identities) {
+        if (level.atomic_number == 1 || level.atomic_number == 2 ||
+            (level.atomic_number == 12 && level.global_index >= 2816)) {
+            out.push_back(level);
+        }
+    }
+    if (out.size() > 616) out.resize(616);
+    if (out.size() != 616) {
+        throw std::runtime_error("oracle-surface detail level inventory did not resolve to 616 rows");
+    }
+    return out;
+}
+
+const xstar_run_state::LevelIdentityState* level_by_global(
+    const std::vector<xstar_run_state::LevelIdentityState>& levels,
+    std::int32_t global_index) {
+    for (const auto& level : levels) if (level.global_index == global_index) return &level;
+    return nullptr;
+}
+
+
+const xstar_run_state::LineIdentityState* line_identity_by_index(
+    const xstar_run_state::ProductWritingState& state,
+    long long line_index) {
+    if (line_index > 0 && static_cast<std::size_t>(line_index) <= state.line_identities.size()) {
+        return &state.line_identities[static_cast<std::size_t>(line_index - 1)];
+    }
+    for (const auto& line : state.line_identities) if (line.line_index == line_index) return &line;
+    return nullptr;
+}
+
+std::vector<double> read_binary_double_array(const std::filesystem::path& path) {
+    std::ifstream in(path, std::ios::binary | std::ios::ate);
+    if (!in) throw std::runtime_error("cannot open native product bridge array: " + path.string());
+    const auto bytes = in.tellg();
+    if (bytes < 0 || bytes % static_cast<std::streamoff>(sizeof(double)) != 0) {
+        throw std::runtime_error("invalid native product bridge array size: " + path.string());
+    }
+    std::vector<double> values(static_cast<std::size_t>(bytes / static_cast<std::streamoff>(sizeof(double))));
+    in.seekg(0);
+    if (!values.empty()) in.read(reinterpret_cast<char*>(values.data()), bytes);
+    if (!in && !values.empty()) throw std::runtime_error("cannot read native product bridge array: " + path.string());
+    return values;
+}
+
+std::filesystem::path bridge_array_path(
+    const xstar_run_state::ProductWritingState& state,
+    const std::string& name) {
+    const auto bridge = state.product_metadata_path / "exact_product_state_bridge";
+    for (int hdu = 7; hdu >= 3; --hdu) {
+        std::ostringstream dir;
+        dir << "arrays/pass_0001_hdu_" << std::setw(4) << std::setfill('0') << hdu;
+        const auto path = bridge / dir.str() / (name + ".bin");
+        if (std::filesystem::is_regular_file(path)) return path;
+    }
+    throw std::runtime_error("cannot find native product bridge array: " + name);
+}
+
+std::vector<double> bridge_array(
+    const xstar_run_state::ProductWritingState& state,
+    const std::string& name,
+    std::size_t expected_count) {
+    auto values = read_binary_double_array(bridge_array_path(state, name));
+    if (values.size() != expected_count) {
+        std::ostringstream msg;
+        msg << "native product bridge array " << name << " size mismatch: "
+            << values.size() << " != " << expected_count;
+        throw std::runtime_error(msg.str());
+    }
+    return values;
+}
+
+std::string oracle_ion_label(std::string label) {
+    return label;
+}
+
+
 void write_population_detail(const std::filesystem::path& path,
                              const xstar_run_state::ProductWritingState& state,
-                             const std::vector<ElementMeta>& elements,
-                             const std::vector<RowMeta>& rows) {
+                             const std::vector<ElementMeta>&,
+                             const std::vector<RowMeta>&) {
     fitsfile* fptr = create_fits(path, state);
     write_parameters(fptr, state.parameter_rows);
-    const auto detail_rows = oracle_detail_population_rows(rows);
+    const auto detail_levels = oracle_detail_levels(state);
     for (const auto& zone : state.radial_zones) {
-        create_table(fptr, BINARY_TBL, static_cast<long>(detail_rows.size()), "XSTAR_RADIAL",
+        create_table(fptr, BINARY_TBL, static_cast<long>(detail_levels.size()), "XSTAR_RADIAL",
             {"index","ion_index","e_excitation","ion","atomic_number","ion_level","population","lte","upper index"},
             {"1J","1I","1E","8A","1I","20A","1E","1E","1I"}, {"","","eV","","","","","",""});
         write_radial_keywords(fptr, zone);
         const auto& evaluation = zone.accepted_controller.evaluation;
-        for (std::size_t i = 0; i < detail_rows.size(); ++i) {
-            const auto& row = detail_rows[i];
-            const auto& e = element_for(elements, row.element_index);
-            const std::size_t pop_index = static_cast<std::size_t>(e.row_offset + row.row - 1);
-            const double pop = pop_index < evaluation.populations.size() ? evaluation.populations[pop_index] : 0.0;
+        for (std::size_t i = 0; i < detail_levels.size(); ++i) {
+            const auto& level = detail_levels[i];
+            const std::size_t global0 = level.global_index > 0 ? static_cast<std::size_t>(level.global_index - 1) : i;
+            const std::size_t ordinal0 = i;
+            const double pop = global0 < evaluation.populations.size() ? evaluation.populations[global0]
+                : ordinal0 < evaluation.populations.size() ? evaluation.populations[ordinal0] : 0.0;
+            const double lte = global0 < evaluation.source_workspace.lte_populations.size() ? evaluation.source_workspace.lte_populations[global0]
+                : ordinal0 < evaluation.source_workspace.lte_populations.size() ? evaluation.source_workspace.lte_populations[ordinal0] : 0.0;
             const long fits_row = static_cast<long>(i + 1);
-            write_int(fptr, 1, fits_row, static_cast<int>(i + 1));
-            write_short(fptr, 2, fits_row, static_cast<short>(std::max(row.ion, 1)));
-            write_real4(fptr, 3, fits_row, row.energy_ev);
-            write_string(fptr, 4, fits_row, ion_label(e.element_z, std::max(row.ion, 1), true));
-            write_short(fptr, 5, fits_row, static_cast<short>(e.element_z));
-            write_string(fptr, 6, fits_row, level_label(&row, row.row));
+            write_int(fptr, 1, fits_row, static_cast<int>(level.global_index));
+            write_short(fptr, 2, fits_row, static_cast<short>(level.atomic_number));
+            write_real4(fptr, 3, fits_row, level.excitation_ev);
+            write_string(fptr, 4, fits_row, oracle_ion_label(level.ion_label));
+            write_short(fptr, 5, fits_row, static_cast<short>(level.atomic_number));
+            write_string(fptr, 6, fits_row, level.level_label);
             write_real4(fptr, 7, fits_row, pop);
-            write_real4(fptr, 8, fits_row, 0.0);
-            write_short(fptr, 9, fits_row, static_cast<short>(row.row));
+            write_real4(fptr, 8, fits_row, lte);
+            write_short(fptr, 9, fits_row, static_cast<short>(level.upper_index));
         }
     }
     close_fits(fptr);
@@ -892,9 +977,13 @@ void write_public_lines(const std::filesystem::path& path,
         const auto* lower = row_for(rows, element_index, r.lower_row);
         const auto* upper = row_for(rows, element_index, r.upper_row);
         const long row = static_cast<long>(i + 1);
-        write_int(fptr, 1, row, static_cast<int>(r.record)); write_string(fptr, 2, row, ion_label(r.z, r.stage));
-        write_string(fptr, 3, row, level_label(lower, r.lower_row)); write_string(fptr, 4, row, level_label(upper, r.upper_row));
-        write_real4(fptr, 5, row, r.wavelength_a); write_real4(fptr, 6, row, r.emis_in); write_real4(fptr, 7, row, r.emis_out);
+        const auto* identity = line_identity_by_index(state, r.record);
+        write_int(fptr, 1, row, static_cast<int>(identity ? identity->line_index : r.record));
+        write_string(fptr, 2, row, identity ? oracle_ion_label(identity->ion_label) : ion_label(r.z, r.stage));
+        write_string(fptr, 3, row, identity ? identity->lower_level : level_label(lower, r.lower_row));
+        write_string(fptr, 4, row, identity ? identity->upper_level : level_label(upper, r.upper_row));
+        write_real4(fptr, 5, row, identity ? identity->wavelength_angstrom : r.wavelength_a);
+        write_real4(fptr, 6, row, r.emis_in); write_real4(fptr, 7, row, r.emis_out);
         write_real4(fptr, 8, row, r.tau_in); write_real4(fptr, 9, row, r.tau_out);
     }
     close_fits(fptr);
@@ -902,36 +991,27 @@ void write_public_lines(const std::filesystem::path& path,
 
 void write_public_rrc(const std::filesystem::path& path,
                       const xstar_run_state::ProductWritingState& state,
-                      const std::vector<ElementMeta>& elements,
-                      const std::vector<RowMeta>& rows) {
-    std::map<long long,RrcRow> combined;
-    for (std::size_t z = 0; z + 1 < state.radial_zones.size(); ++z) {
-        const auto local = build_rrc_rows(state, elements, z);
-        const auto& zone = state.radial_zones[z];
-        const double volume = kFourPi * zone.radius_cm * zone.radius_cm * zone.delta_radius_cm;
-        for (const auto& one : local) {
-            auto& target = combined[one.record];
-            if (target.record == 0) target = one;
-            target.emis_in += one.emis_in * volume;
-            target.emis_out += one.emis_out * volume;
-            target.tau_in = one.tau_in; target.tau_out = one.tau_out;
-        }
-    }
-    std::vector<RrcRow> list;
-    for (const auto& [_, value] : combined) if (value.emis_in + value.emis_out > 0.0) list.push_back(value);
-    std::stable_sort(list.begin(), list.end(), [](const RrcRow& a, const RrcRow& b){ return a.record < b.record; });
+                      const std::vector<ElementMeta>&,
+                      const std::vector<RowMeta>&) {
+    const std::size_t n = std::min<std::size_t>(994, state.rrc_identities.size());
+    const auto elumab = bridge_array(state, "elumab", 2 * 301301u);
+    const auto tauc = bridge_array(state, "tauc", 2 * 301301u);
     fitsfile* fptr = create_fits(path, state); write_parameters(fptr, state.parameter_rows);
-    create_table(fptr, ASCII_TBL, static_cast<long>(list.size()), "XSTAR_SPECTRA",
+    create_table(fptr, ASCII_TBL, static_cast<long>(n), "XSTAR_SPECTRA",
         {"index","ion","level","energy","emit_outward","emit_inward","depth_outward","depth_inward"},
-        {"I6","A9","A20","E13.5","E13.5","E13.5","E13.5","E13.5"}, {"","","","eV","erg/s","erg/s","",""});
-    for (std::size_t i = 0; i < list.size(); ++i) {
-        const auto& r = list[i];
-        const int element_index = element_index_for_z(elements, r.z);
-        const auto* level = row_for(rows, element_index, r.upper_row);
+        {"I6","A9","A20","E13.5","E13.5","E13.5","E13.5","E13.5"}, {"","","","eV","erg","erg","",""});
+    const std::size_t m = 301301u;
+    for (std::size_t i = 0; i < n; ++i) {
+        const auto& r = state.rrc_identities[i];
         const long row = static_cast<long>(i + 1);
-        write_int(fptr, 1, row, static_cast<int>(r.record)); write_string(fptr, 2, row, ion_label(r.z, r.stage)); write_string(fptr, 3, row, level_label(level, r.upper_row));
-        write_real4(fptr, 4, row, r.energy_ev); write_real4(fptr, 5, row, r.emis_out); write_real4(fptr, 6, row, r.emis_in);
-        write_real4(fptr, 7, row, r.tau_out); write_real4(fptr, 8, row, r.tau_in);
+        write_int(fptr, 1, row, static_cast<int>(r.continuum_index));
+        write_string(fptr, 2, row, oracle_ion_label(r.ion_label));
+        write_string(fptr, 3, row, r.lower_level);
+        write_real4(fptr, 4, row, r.threshold_ev);
+        write_real4(fptr, 5, row, i < m ? elumab[i] : 0.0);
+        write_real4(fptr, 6, row, i < m ? elumab[m + i] : 0.0);
+        write_real4(fptr, 7, row, i < m ? tauc[i] : 0.0);
+        write_real4(fptr, 8, row, i < m ? tauc[m + i] : 0.0);
     }
     close_fits(fptr);
 }
@@ -941,22 +1021,29 @@ void write_public_spectrum(const std::filesystem::path& path,
                            bool full_spectrum) {
     const auto& e = state.radial_zones.back().accepted_controller.evaluation;
     const std::size_t n = e.radiation_energy_ev.size();
+    const auto zrems = bridge_array(state, "zrems", 5 * n);
+    const auto zremsz = bridge_array(state, "zremsz", n);
     fitsfile* fptr = create_fits(path, state); write_parameters(fptr, state.parameter_rows);
     create_table(fptr, ASCII_TBL, static_cast<long>(n), "XSTAR_SPECTRA",
         {"energy","incident","transmitted","emit_inward","emit_outward"}, {"E13.5","E13.5","E13.5","E13.5","E13.5"},
         {"eV","erg/s/erg","erg/s/erg","erg/s/erg","erg/s/erg"});
+    const std::size_t inward_row = 1;
+    const std::size_t outward_row = full_spectrum ? 4 : 2;
     for (std::size_t i = 0; i < n; ++i) {
-        const double incident = i < e.radiation_flux.size() ? e.radiation_flux[i] : 0.0;
-        const double tau = i < e.continuum_tau_out.size() ? e.continuum_tau_out[i] : 0.0;
-        const double emitted = full_spectrum
-            ? (i < e.spectrum.size() ? e.spectrum[i] : 0.0)
-            : (i < e.continuum_spectrum.size() ? e.continuum_spectrum[i] : 0.0);
+        const double incident = zremsz[i];
+        const double transmitted = zremsz[i];
+        const double emit_inward = zrems[inward_row * n + i];
+        const double emit_outward = zrems[outward_row * n + i];
         const long row = static_cast<long>(i + 1);
-        write_real4(fptr, 1, row, e.radiation_energy_ev[i]); write_real4(fptr, 2, row, incident);
-        write_real4(fptr, 3, row, incident * std::exp(-tau)); write_real4(fptr, 4, row, emitted * 0.5); write_real4(fptr, 5, row, emitted * 0.5);
+        write_real4(fptr, 1, row, i < e.radiation_energy_ev.size() ? e.radiation_energy_ev[i] : 0.0);
+        write_real4(fptr, 2, row, incident);
+        write_real4(fptr, 3, row, transmitted);
+        write_real4(fptr, 4, row, emit_inward);
+        write_real4(fptr, 5, row, emit_outward);
     }
     close_fits(fptr);
 }
+
 
 } // namespace
 
@@ -1020,7 +1107,7 @@ Result write_historical_science_products(
 }
 
 bool abundance_product_enabled() {
-    const char* flag = std::getenv("XSTAR_V048746255154_ENABLE_ABUNDANCE_PRODUCT");
+    const char* flag = std::getenv("XSTAR_V048746255155_ENABLE_ABUNDANCE_PRODUCT");
     return flag != nullptr && std::string(flag) == "1";
 }
 

@@ -273,7 +273,7 @@ void native_anl1(int ni, int nf, int lf, int iq, double& alm, double& alp) {
 void native_impcfn(double x, double& xsi, double& phi) {
     if (x <= 0.0) x = 1.0e-300;
     const double a[6] = {0.9947187, 0.6030883, -2.372843, 1.864266, -0.6305845, 8.1104480e-02};
-    const double b[6] = {0.2551543, -0.5455462, 0.3096816, 4.2568920e-02, -2.0123060e-02, -4.9607030e-03};
+    const double b[6] = {0.2551553, -0.5455462, 0.3096816, 4.2568920e-02, -2.0123060e-02, -4.9607030e-03};
     const double pi = std::acos(-1.0);
     if (x <= 2.0) {
         xsi = 0.0; phi = 0.0;

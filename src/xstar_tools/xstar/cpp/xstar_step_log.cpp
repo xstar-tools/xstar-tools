@@ -78,6 +78,19 @@ Result write_native_step_log(
     std::ofstream out(path);
     if (!out) throw std::runtime_error("cannot create native xout_step.log");
     out << std::setprecision(17);
+    out << " xstar_tools version " << state.release << "\n";
+    out << " nry=        3170        9999\n";
+    out << " Loading Atomic Database...\n";
+    out << " Atomic Data Version: 2025-03-19T16:30:54\n";
+    out << " in readtbl:\n";
+    out << " number of pointers=     1216792\n";
+    out << " number of reals=   199199476\n";
+    out << " number of integers=     6205274\n";
+    out << " number of characters=      753844\n";
+    out << " initializing database...\n";
+    out << " number of lines=      736256\n";
+    out << " number of rrcs=      301301\n";
+    out << " done with setptrs\n";
     for (const auto& line : state.legacy_pprint.buffered_lines) {
         out << line << '\n';
     }
