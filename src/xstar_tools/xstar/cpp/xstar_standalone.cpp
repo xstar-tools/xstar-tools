@@ -3526,6 +3526,19 @@ int command_run_fixed_dsec(const Options& options) {
             return 9;
         }
     }
+    if (!options.skip_fits && xstar_science_fits::abundance_product_enabled()) {
+        try {
+            xstar_science_fits::write_native_abundance_product(
+                options.case_dir, options.output_dir, product_writing_state);
+            ++science_result.files_written;
+            science_result.filenames.push_back("xout_abund1.fits");
+        } catch (const std::exception& exc) {
+            std::cerr << "xout_abund1 product generation failed after xout_step.log: " << exc.what() << "\n";
+            xstar_thermal_context_destroy(thermal_context);
+            xstar_fixed_state_context_destroy(fixed_context);
+            return 9;
+        }
+    }
     try {
         xstar_run_state::write_run_state_manifest(
             std::filesystem::path(options.output_dir) / "native_physical_run_state.json",
@@ -3581,6 +3594,7 @@ int command_run_fixed_dsec(const Options& options) {
             << "  \"public_product_writer_reads_benchmark_bytes\": false,\n"
             << "  \"xout_step_writer_reads_benchmark_bytes\": false,\n"
             << "  \"xout_abund1_computed_from_native_state\": " << (product_writing_state.xout_abund1_computed_from_native_state ? "true" : "false") << ",\n"
+            << "  \"xout_abund1_gate_enabled\": " << (xstar_science_fits::abundance_product_enabled() ? "true" : "false") << ",\n"
             << "  \"xout_cont1_computed_from_native_state\": " << (product_writing_state.xout_cont1_computed_from_native_state ? "true" : "false") << ",\n"
             << "  \"xout_lines1_computed_from_native_state\": " << (product_writing_state.xout_lines1_computed_from_native_state ? "true" : "false") << ",\n"
             << "  \"xout_rrc1_computed_from_native_state\": " << (product_writing_state.xout_rrc1_computed_from_native_state ? "true" : "false") << ",\n"
@@ -3600,10 +3614,12 @@ int command_run_fixed_dsec(const Options& options) {
             << (controller_qualification_complete ? "ACCEPT" : "REJECT") << "\",\n"
             << "  \"production_promotion_ready\": false\n}\n";
 
+    const bool abundance_enabled = xstar_science_fits::abundance_product_enabled();
+    const std::size_t required_science_files = abundance_enabled ? 9u : 8u;
     const bool accepted = controller_qualification_complete && cumulative.calls == 61 &&
         cumulative.records_unsupported == 0 && cumulative.python_callbacks == 0 &&
         cumulative.records_evaluated == 61 * info.record_count && cumulative.elements_solved == 61 * info.element_count &&
-        (options.skip_fits || (science_result.files_written == 9 && science_result.schema_complete &&
+        (options.skip_fits || (science_result.files_written == required_science_files && science_result.schema_complete &&
          science_result.computed_from_native_state && science_result.continuum_and_spectrum_paths_separate &&
          !science_result.benchmark_archive_materialized &&
          step_log_result.computed_from_native_state && step_log_result.timing_values_measured &&
@@ -3644,6 +3660,7 @@ int command_run_fixed_dsec(const Options& options) {
               << "\npublic_product_writer_reads_benchmark_bytes=false"
               << "\nxout_step_writer_reads_benchmark_bytes=false"
               << "\nxout_abund1_computed_from_native_state=" << (product_writing_state.xout_abund1_computed_from_native_state ? "true" : "false")
+              << "\nxout_abund1_gate_enabled=" << (xstar_science_fits::abundance_product_enabled() ? "true" : "false")
               << "\nxout_cont1_computed_from_native_state=" << (product_writing_state.xout_cont1_computed_from_native_state ? "true" : "false")
               << "\nxout_lines1_computed_from_native_state=" << (product_writing_state.xout_lines1_computed_from_native_state ? "true" : "false")
               << "\nxout_rrc1_computed_from_native_state=" << (product_writing_state.xout_rrc1_computed_from_native_state ? "true" : "false")
@@ -3756,7 +3773,7 @@ std::filesystem::path resolve_physical_asset(
 
 int command_run_physical(Options options) {
     if (options.backend != "cpp") {
-        std::cerr << "xstar_cpp run v0.6.48.7.46.25.5.15.2 supports --backend cpp only\n";
+        std::cerr << "xstar_cpp run v0.6.48.7.46.25.5.15.3 supports --backend cpp only\n";
         return 64;
     }
     if (options.parameters_path.empty() || options.atomic_db_path.empty() || options.output_dir.empty()) {

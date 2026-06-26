@@ -39,6 +39,13 @@ Result write_historical_science_products(
     xstar_run_state::ProductWritingState& product_state,
     const std::vector<double>& native_energy_ev);
 
+bool abundance_product_enabled();
+
+void write_native_abundance_product(
+    const std::filesystem::path& program_dir,
+    const std::filesystem::path& output_dir,
+    xstar_run_state::ProductWritingState& product_state);
+
 } // namespace xstar_science_fits
 
 #endif

@@ -8,6 +8,7 @@
 #include <cctype>
 #include <cstdint>
 #include <cstring>
+#include <cstdlib>
 #include <fstream>
 #include <iomanip>
 #include <limits>
@@ -997,14 +998,13 @@ Result write_historical_science_products(
     state.xout_cont1_computed_from_native_state = true;
     write_public_spectrum(output_dir / "xout_spect1.fits", state, true);
     state.xout_spect1_computed_from_native_state = true;
-    // xout_abund1 is intentionally last while its 473-column ASCII writer is
-    // isolated.  The v25.5.15.2 runner stages outputs atomically, so a crash
-    // here cannot publish partial products.
-    write_abundances(output_dir / "xout_abund1.fits", state, elements, rows);
-    state.xout_abund1_computed_from_native_state = true;
+    // xout_abund1 remains isolated because its 473-column ASCII writer is the
+    // current crash suspect. v25.5.15.3 writes xout_step.log before invoking
+    // the abundance writer and keeps abundance behind an explicit env gate.
+    state.xout_abund1_computed_from_native_state = false;
 
     Result result;
-    result.files_written = 9;
+    result.files_written = 8;
     result.schema_complete = true;
     result.computed_from_native_state = true;
     result.continuum_and_spectrum_paths_separate = true;
@@ -1015,8 +1015,23 @@ Result write_historical_science_products(
     result.benchmark_archive_materialized = false;
     result.generalized_product_reduction_qualified = false;
     result.filenames = {"xo01_detail.fits","xo01_detal2.fits","xo01_detal3.fits","xo01_detal4.fits",
-        "xout_abund1.fits","xout_cont1.fits","xout_lines1.fits","xout_rrc1.fits","xout_spect1.fits"};
+        "xout_cont1.fits","xout_lines1.fits","xout_rrc1.fits","xout_spect1.fits"};
     return result;
+}
+
+bool abundance_product_enabled() {
+    const char* flag = std::getenv("XSTAR_V048746255153_ENABLE_ABUNDANCE_PRODUCT");
+    return flag != nullptr && std::string(flag) == "1";
+}
+
+void write_native_abundance_product(
+    const std::filesystem::path& program_dir,
+    const std::filesystem::path& output_dir,
+    xstar_run_state::ProductWritingState& state) {
+    const auto elements = read_elements(program_dir);
+    const auto rows = read_rows(program_dir);
+    write_abundances(output_dir / "xout_abund1.fits", state, elements, rows);
+    state.xout_abund1_computed_from_native_state = true;
 }
 
 } // namespace xstar_science_fits
