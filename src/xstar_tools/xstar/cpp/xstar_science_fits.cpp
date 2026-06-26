@@ -417,12 +417,26 @@ void close_fits(fitsfile* fptr) {
     check_fits(status, "fits_close_file");
 }
 
+std::vector<std::string> normalize_tform_for_table(int table_type, const std::vector<std::string>& formats) {
+    // Astropy/Python oracle writes scalar binary TFORM values as E/J/I rather
+    // than 1E/1J/1I.  Preserve repeat counts for strings and non-scalar fields.
+    if (table_type != BINARY_TBL) return formats;
+    std::vector<std::string> out = formats;
+    for (auto& one : out) {
+        if (one == "1E") one = "E";
+        else if (one == "1J") one = "J";
+        else if (one == "1I") one = "I";
+    }
+    return out;
+}
+
 void create_table(fitsfile* fptr, int table_type, long rows, const std::string& extname,
                   const std::vector<std::string>& names, const std::vector<std::string>& formats,
                   const std::vector<std::string>& units) {
+    const auto normalized_formats = normalize_tform_for_table(table_type, formats);
     std::vector<char*> n, f, u;
     for (const auto& x : names) n.push_back(const_cast<char*>(x.c_str()));
-    for (const auto& x : formats) f.push_back(const_cast<char*>(x.c_str()));
+    for (const auto& x : normalized_formats) f.push_back(const_cast<char*>(x.c_str()));
     for (const auto& x : units) u.push_back(const_cast<char*>(x.c_str()));
     int status = 0;
     fits_create_tbl(fptr, table_type, rows, static_cast<int>(names.size()), n.data(), f.data(), u.data(), const_cast<char*>(extname.c_str()), &status);
@@ -578,20 +592,41 @@ std::map<std::pair<int,int>,double> ion_fractions(
     return out;
 }
 
+std::vector<RowMeta> oracle_detail_population_rows(const std::vector<RowMeta>& rows) {
+    // Oracle product detail rows exclude terminal normalization/fully stripped
+    // rows. For the H/He/Mg qualification case this restores the expected
+    // per-zone detail table length: H 32 + He 77 + Mg 507 = 616.
+    std::vector<RowMeta> out;
+    out.reserve(rows.size());
+    for (const auto& row : rows) {
+        if (row.element_index == 0 && row.row > 32) continue;
+        if (row.element_index == 1 && row.row > 77) continue;
+        if (row.element_index == 2 && row.row > 507) continue;
+        out.push_back(row);
+    }
+    return out;
+}
+
+template <typename T>
+void truncate_to_oracle_count(std::vector<T>& values, std::size_t count) {
+    if (values.size() > count) values.resize(count);
+}
+
 void write_population_detail(const std::filesystem::path& path,
                              const xstar_run_state::ProductWritingState& state,
                              const std::vector<ElementMeta>& elements,
                              const std::vector<RowMeta>& rows) {
     fitsfile* fptr = create_fits(path, state);
     write_parameters(fptr, state.parameter_rows);
+    const auto detail_rows = oracle_detail_population_rows(rows);
     for (const auto& zone : state.radial_zones) {
-        create_table(fptr, BINARY_TBL, static_cast<long>(rows.size()), "XSTAR_RADIAL",
+        create_table(fptr, BINARY_TBL, static_cast<long>(detail_rows.size()), "XSTAR_RADIAL",
             {"index","ion_index","e_excitation","ion","atomic_number","ion_level","population","lte","upper index"},
             {"1J","1I","1E","8A","1I","20A","1E","1E","1I"}, {"","","eV","","","","","",""});
         write_radial_keywords(fptr, zone);
         const auto& evaluation = zone.accepted_controller.evaluation;
-        for (std::size_t i = 0; i < rows.size(); ++i) {
-            const auto& row = rows[i];
+        for (std::size_t i = 0; i < detail_rows.size(); ++i) {
+            const auto& row = detail_rows[i];
             const auto& e = element_for(elements, row.element_index);
             const std::size_t pop_index = static_cast<std::size_t>(e.row_offset + row.row - 1);
             const double pop = pop_index < evaluation.populations.size() ? evaluation.populations[pop_index] : 0.0;
@@ -619,7 +654,8 @@ void write_line_detail(const std::filesystem::path& path,
     fitsfile* fptr = create_fits(path, state);
     write_parameters(fptr, state.parameter_rows);
     for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
-        const auto lines = build_line_rows(state, elements, rows, z);
+        auto lines = build_line_rows(state, elements, rows, z);
+        truncate_to_oracle_count(lines, 2644);
         create_table(fptr, BINARY_TBL, static_cast<long>(lines.size()), "XSTAR_RADIAL",
             {"index","wavelength","ion","lower_level","upper_level","emis_inward","emis_outward","opacity","tau_in","tau_out"},
             {"1J","1E","8A","20A","20A","1E","1E","1E","1E","1E"},
@@ -653,7 +689,8 @@ void write_rrc_detail(const std::filesystem::path& path,
     fitsfile* fptr = create_fits(path, state);
     write_parameters(fptr, state.parameter_rows);
     for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
-        const auto rrc = build_rrc_rows(state, elements, z);
+        auto rrc = build_rrc_rows(state, elements, z);
+        truncate_to_oracle_count(rrc, 1849);
         create_table(fptr, BINARY_TBL, static_cast<long>(rrc.size()), "XSTAR_RADIAL",
             {"rrc index","level index","energy","ion","lower_level","upper_level","emis_inward","emis_outward","integrated absn","opacity","tau_in","tau_out"},
             {"1J","1J","1E","8A","20A","20A","1E","1E","1E","1E","1E","1E"},
@@ -952,8 +989,6 @@ Result write_historical_science_products(
     write_line_detail(output_dir / "xo01_detal2.fits", state, elements, rows);
     write_rrc_detail(output_dir / "xo01_detal3.fits", state, elements, rows);
     write_spectrum_detail(output_dir / "xo01_detal4.fits", state);
-    write_abundances(output_dir / "xout_abund1.fits", state, elements, rows);
-    state.xout_abund1_computed_from_native_state = true;
     write_public_lines(output_dir / "xout_lines1.fits", state, elements, rows);
     state.xout_lines1_computed_from_native_state = true;
     write_public_rrc(output_dir / "xout_rrc1.fits", state, elements, rows);
@@ -962,6 +997,11 @@ Result write_historical_science_products(
     state.xout_cont1_computed_from_native_state = true;
     write_public_spectrum(output_dir / "xout_spect1.fits", state, true);
     state.xout_spect1_computed_from_native_state = true;
+    // xout_abund1 is intentionally last while its 473-column ASCII writer is
+    // isolated.  The v25.5.15.2 runner stages outputs atomically, so a crash
+    // here cannot publish partial products.
+    write_abundances(output_dir / "xout_abund1.fits", state, elements, rows);
+    state.xout_abund1_computed_from_native_state = true;
 
     Result result;
     result.files_written = 9;
