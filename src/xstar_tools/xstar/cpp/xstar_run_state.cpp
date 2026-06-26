@@ -66,9 +66,9 @@ std::string manifest_string(const std::filesystem::path& path, const std::string
     return text.substr(first + 1, second - first - 1);
 }
 
-// v25.5.14 scaffolds all bridge-loader contracts without marking the full
-// CFITSIO ProductWritingState arrays loaded.  These helpers are used only
-// for diagnostics/gating until the native ProductWritingState loader is promoted.
+// v25.5.15 keeps the bridge loader validation explicit and enables public
+// product writing only through an opt-in manifest gate.  Product parity remains
+// outside this milestone.
 bool load_tauc_bridge_payload_scaffold(const std::filesystem::path& metadata_root) {
     const auto bridge = metadata_root / "exact_product_state_bridge";
     const auto manifest = bridge / "manifest.json";
@@ -112,7 +112,6 @@ bool load_native_product_writing_state_loader(const std::filesystem::path& metad
            manifest_bool(manifest, "native_product_writing_state_loader_promoted") &&
            manifest_bool(manifest, "native_product_writing_state_loaded") &&
            manifest_bool(manifest, "native_cfitsio_arrays_loaded") &&
-           !manifest_bool(manifest, "cfitsio_public_product_writing_enabled") &&
            std::filesystem::is_regular_file(bridge / "native_product_writing_state_loader_manifest.csv") &&
            std::filesystem::is_regular_file(bridge / "native_product_writing_state_loader.json") &&
            std::filesystem::is_regular_file(bridge / "array_inventory.csv") &&
@@ -252,7 +251,9 @@ void write_retention_report(const WholeRunAccumulatedState& state,
     const bool bridge_product_loader_payload_complete = manifest_bool(bridge_manifest, "native_product_writing_state_payload_complete");
     const bool bridge_product_loader_promoted = manifest_bool(bridge_manifest, "native_product_writing_state_loader_promoted");
     const bool bridge_product_loader_loaded = load_native_product_writing_state_loader(state.product_metadata_path);
-    const bool bridge_product_write_gate_enabled = manifest_bool(bridge_manifest, "cfitsio_public_product_writing_enabled");
+    const bool bridge_product_write_gate_enabled = manifest_bool(bridge_manifest, "cfitsio_public_product_writing_enabled") &&
+        manifest_bool(bridge_manifest, "native_product_write_gate_enabled") &&
+        manifest_bool(bridge_manifest, "production_cfitsio_xout_step_gate_enabled");
     const std::string bridge_result = manifest_string(bridge_manifest, "result");
     std::size_t selected = 0, lte = 0, line = 0, tau0 = 0, rrc = 0, tauc = 0, continuum = 0, profile = 0;
     for (const auto& zone : state.radial_zones) {
@@ -267,8 +268,8 @@ void write_retention_report(const WholeRunAccumulatedState& state,
         profile += ws.line_profile_workspace_exact ? 1 : 0;
     }
     out << "{\n"
-        << "  \"schema\": \"xstar-tools-v064874625514-source-workspace-retention-v1\",\n"
-        << "  \"release\": \"0.6.48.7.46.25.5.14\",\n"
+        << "  \"schema\": \"xstar-tools-v064874625515-source-workspace-retention-v1\",\n"
+        << "  \"release\": \"0.6.48.7.46.25.5.15\",\n"
         << "  \"selected_product_states\": " << selected << ",\n"
         << "  \"exact_product_state_bridge_result\": \"" << json_escape(bridge_result) << "\",\n"
         << "  \"bridge_tauc_exact\": " << (bridge_tauc_exact ? "true" : "false") << ",\n"
@@ -303,8 +304,8 @@ void write_retention_report(const WholeRunAccumulatedState& state,
         << "  \"dpthcont_zremsz_exact\": " << ((bridge_dpth_exact && bridge_native_arrays_loaded) ? "true" : "false") << ",\n"
         << "  \"accepted_radial_boundaries_exact\": " << ((bridge_boundaries_exact && bridge_native_arrays_loaded) ? "true" : "false") << ",\n"
         << "  \"legacy_pprint_events_and_buffers_exact\": " << ((bridge_pprint_exact && bridge_native_arrays_loaded) ? "true" : "false") << ",\n"
-        << "  \"cfitsio_public_product_writing_enabled\": false,\n"
-        << "  \"result\": " << (bridge_product_loader_loaded ? "\"ACCEPT_NATIVE_PRODUCT_WRITING_STATE_LOADED_PRODUCTION_DISABLED\"" : "\"REJECT_INCOMPLETE_EXACT_SOURCE_STATE\"") << "\n"
+        << "  \"cfitsio_public_product_writing_enabled\": " << (bridge_product_write_gate_enabled ? "true" : "false") << ",\n"
+        << "  \"result\": " << (bridge_product_loader_loaded ? (bridge_product_write_gate_enabled ? "\"ACCEPT_NATIVE_PRODUCT_WRITING_STATE_LOADED_GATED_PRODUCTION_ENABLED\"" : "\"ACCEPT_NATIVE_PRODUCT_WRITING_STATE_LOADED_PRODUCTION_DISABLED\"") : "\"REJECT_INCOMPLETE_EXACT_SOURCE_STATE\"") << "\n"
         << "}\n";
 }
 
@@ -323,7 +324,11 @@ void prepare_native_product_state(
     state.native_run_id = state.release + "-" + std::to_string(run_ticks);
     load_exact_source_metadata(state);
 
+    const auto bridge_manifest = state.product_metadata_path / "exact_product_state_bridge" / "manifest.json";
     const bool native_loader_ready = load_native_product_writing_state_loader(state.product_metadata_path);
+    const bool native_product_write_gate_enabled = manifest_bool(bridge_manifest, "cfitsio_public_product_writing_enabled") &&
+        manifest_bool(bridge_manifest, "native_product_write_gate_enabled") &&
+        manifest_bool(bridge_manifest, "production_cfitsio_xout_step_gate_enabled");
 
     for (auto& zone : state.radial_zones) {
         zone.accepted_boundary_exact = native_loader_ready;
@@ -333,8 +338,8 @@ void prepare_native_product_state(
         zone.provisional_from_controller = !native_loader_ready;
         auto& ws = zone.accepted_controller.evaluation.source_workspace;
         ws.level_identity_exact = state.exact_source_metadata_retained;
-        // v25.5.14 loads all exact bridge product-state payload families into the
-        // native ProductWritingState input contract. Public writing remains gated.
+        // v25.5.15 loads all exact bridge product-state payload families and
+        // allows public writing only when the explicit production gate is set.
         ws.accumulated_output_workspace_exact = native_loader_ready;
     }
 
@@ -359,17 +364,20 @@ void prepare_native_product_state(
     state.embedded_full_xout_step_payload_absent = true;
 
     write_retention_report(
-        state, diagnostics_path.parent_path() / "v04874625514_source_workspace_retention.json");
+        state, diagnostics_path.parent_path() / "v04874625515_source_workspace_retention.json");
 
     if (!state.native_product_inputs_complete) {
         throw std::runtime_error(
             "exact source state is incomplete; CFITSIO and xout_step writers are disabled "
             "until all bridge payload families are loaded into native ProductWritingState");
     }
-    throw std::runtime_error(
-        "native ProductWritingState loader accepted all bridge payload families; "
-        "CFITSIO and xout_step writers remain disabled until gated production enablement");
+    if (!native_product_write_gate_enabled) {
+        throw std::runtime_error(
+            "native ProductWritingState loader accepted all bridge payload families; "
+            "CFITSIO and xout_step writers remain disabled until gated production enablement");
+    }
 }
+
 
 ProductWritingState build_product_writing_state(const WholeRunAccumulatedState& state) {
     ProductWritingState product;
@@ -415,7 +423,7 @@ void write_run_state_manifest(
     if (!out) throw std::runtime_error("cannot create run-state manifest: " + path.string());
     out << std::setprecision(17)
         << "{\n"
-        << "  \"schema\": \"xstar-tools-v064874625514-native-source-state-v1\",\n"
+        << "  \"schema\": \"xstar-tools-v064874625515-native-source-state-v1\",\n"
         << "  \"release\": \"" << json_escape(whole.release) << "\",\n"
         << "  \"backend\": \"" << json_escape(whole.backend) << "\",\n"
         << "  \"parameters_path\": \"" << json_escape(whole.parameters_path.string()) << "\",\n"
