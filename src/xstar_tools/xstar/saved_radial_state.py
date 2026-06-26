@@ -84,6 +84,7 @@ class SavedShellSnapshot:
     cabab: np.ndarray
     opakab: np.ndarray
     tauc: np.ndarray
+    elumab: np.ndarray
     ncn2: int
     zrems_saved: np.ndarray
     dpthc: np.ndarray
@@ -108,6 +109,7 @@ class SavedShellSnapshot:
             "cabab": self.cabab.shape == (self.rrc_indices_one_based.size,),
             "opakab": self.opakab.shape == (self.rrc_indices_one_based.size,),
             "tauc": self.tauc.shape == (2, self.rrc_indices_one_based.size),
+            "elumab": self.elumab.shape == (2, self.rrc_indices_one_based.size),
             "zrems_saved": self.zrems_saved.shape == (5, n),
             "dpthc": self.dpthc.shape == (2, n),
             "opakc": self.opakc.shape == (n,),
@@ -142,6 +144,7 @@ class SavedShellSnapshot:
             self.cabab,
             self.opakab,
             self.tauc,
+            self.elumab,
             self.zrems_saved,
             self.dpthc,
             self.opakc,
@@ -302,6 +305,7 @@ def make_saved_shell_snapshot(
     cabab: Sequence[float],
     opakab: Sequence[float],
     tauc: Sequence[Sequence[float]],
+    elumab: Sequence[Sequence[float]],
     zrems: Sequence[Sequence[float]],
     dpthc: Sequence[Sequence[float]],
     opakc: Sequence[float],
@@ -327,6 +331,7 @@ def make_saved_shell_snapshot(
     tau = np.asarray(tau0, dtype=float)
     ce = np.asarray(cemab, dtype=float)
     tc = np.asarray(tauc, dtype=float)
+    elb = np.asarray(elumab, dtype=float)
     zr = np.asarray(zrems, dtype=float)
     dc = np.asarray(dpthc, dtype=float)
     opc = np.asarray(opakc, dtype=float).reshape(-1)
@@ -342,6 +347,8 @@ def make_saved_shell_snapshot(
         raise SavedRadialStatePortError("tauc shape is inconsistent with opakab")
     if ca.size < rrc.size:
         raise SavedRadialStatePortError("cabab is shorter than opakab")
+    if elb.ndim != 2 or elb.shape[0] < 2 or elb.shape[1] < rrc.size:
+        raise SavedRadialStatePortError("elumab shape is inconsistent with opakab")
     if zr.ndim != 2 or zr.shape[0] < 5 or zr.shape[1] < n:
         raise SavedRadialStatePortError("zrems is shorter than the active continuum")
     if dc.ndim != 2 or dc.shape[0] < 2 or dc.shape[1] < n:
@@ -374,6 +381,7 @@ def make_saved_shell_snapshot(
         cabab=_real4_array(ca[ri - 1]),
         opakab=_real4_array(rrc[ri - 1]),
         tauc=_real4_array(tc[:2, ri - 1]),
+        elumab=_real4_array(elb[:2, ri - 1]),
         ncn2=n,
         zrems_saved=_real4_array(zr[:5, :n]),
         dpthc=_real4_array(dc[:2, :n]),

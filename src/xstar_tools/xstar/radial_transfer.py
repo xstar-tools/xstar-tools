@@ -1030,6 +1030,7 @@ def capture_saved_shell_snapshot_from_state(
         cabab=workspace.emissivity.base.cabab[1 : n_continua + 1],
         opakab=workspace.opakab_physical[:n_continua],
         tauc=workspace.tauc[:, :n_continua],
+        elumab=workspace.elumab[:, :n_continua],
         zrems=workspace.zrems,
         dpthc=workspace.dpthc,
         opakc=workspace.opakc,
