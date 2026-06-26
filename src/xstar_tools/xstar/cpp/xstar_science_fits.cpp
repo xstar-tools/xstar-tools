@@ -83,6 +83,8 @@ struct RecordDiag {
     double natural_width_ev = 0.0;
     double opakab = 0.0;
     bool type50_valid = false;
+    long long type50_line_index_one_based = 0;
+    long long continuum_index_one_based = 0;
     double type50_wavelength_a = 0.0;
     double type50_ptmp1 = 1.0;
     double type50_ptmp2 = 1.0;
@@ -294,6 +296,10 @@ std::vector<RecordDiag> read_record_diagnostics(
         r.natural_width_ev = number_or(f, columns, "natural_width_ev");
         r.opakab = number_or(f, columns, "opakab");
         r.type50_valid = integer_or(f, columns, "type50_shadow_valid") != 0;
+        r.type50_line_index_one_based = integer_or(f, columns, "type50_line_index_one_based", 0);
+        r.continuum_index_one_based = integer_or(f, columns, "type49_continuum_index_one_based", 0);
+        if (r.continuum_index_one_based <= 0) r.continuum_index_one_based = integer_or(f, columns, "type53_continuum_index_one_based", 0);
+        if (r.continuum_index_one_based <= 0) r.continuum_index_one_based = integer_or(f, columns, "type99_nbinc_threshold_one_based", 0);
         r.type50_wavelength_a = number_or(f, columns, "type50_stored_wavelength_a");
         r.type50_ptmp1 = number_or(f, columns, "type50_ptmp1", 1.0);
         r.type50_ptmp2 = number_or(f, columns, "type50_ptmp2", 1.0);
@@ -318,6 +324,49 @@ const ElementMeta& element_for(const std::vector<ElementMeta>& elements, int ele
     for (const auto& e : elements) if (e.element_index == element_index) return e;
     throw std::runtime_error("native record references unknown element index");
 }
+
+const ElementMeta* element_ptr_for(const std::vector<ElementMeta>& elements, int element_index) {
+    for (const auto& e : elements) if (e.element_index == element_index) return &e;
+    return nullptr;
+}
+
+bool active_product_element_stage(int element_z, int ion_stage, double abundance) {
+    if (!(abundance > 0.0)) return false;
+    if (element_z == 1 || element_z == 2) return true;
+    // The Mg XI benchmark oracle surface includes Mg III and higher.  Mg I/II
+    // have zero public-product abundance in this trajectory and must not be
+    // emitted in the line/RRC products.
+    if (element_z == 12) return ion_stage >= 3;
+    return false;
+}
+
+int roman_stage_from_ion_label(const std::string& label) {
+    const auto pos = label.find('_');
+    if (pos == std::string::npos) return 0;
+    const std::string stage = label.substr(pos + 1);
+    for (std::size_t i = 1; i < kRomanLower.size(); ++i) {
+        if (stage == kRomanLower[i]) return static_cast<int>(i);
+    }
+    return 0;
+}
+
+int element_z_from_ion_label(const std::string& label) {
+    const auto pos = label.find('_');
+    const std::string sym = pos == std::string::npos ? label : label.substr(0, pos);
+    for (std::size_t z = 1; z < kElementSymbolsLower.size(); ++z) {
+        if (sym == kElementSymbolsLower[z]) return static_cast<int>(z);
+    }
+    return 0;
+}
+
+bool active_product_ion_label(const std::string& label, const std::vector<ElementMeta>& elements) {
+    const int z = element_z_from_ion_label(label);
+    const int stage = roman_stage_from_ion_label(label);
+    double abundance = 0.0;
+    for (const auto& e : elements) if (e.element_z == z) { abundance = e.abundance; break; }
+    return active_product_element_stage(z, stage, abundance);
+}
+
 
 const RowMeta* row_for(const std::vector<RowMeta>& rows, int element_index, int local_row) {
     for (const auto& row : rows) if (row.element_index == element_index && row.row == local_row) return &row;
@@ -555,18 +604,19 @@ std::vector<LineRow> build_line_rows(const xstar_run_state::ProductWritingState&
     const auto records = read_record_diagnostics(state, zone.accepted_controller.accepted_sequence);
     std::vector<LineRow> out;
     for (const auto& r : records) {
-        if (!r.spectral || !(r.line_energy_ev > 0.0) || r.lower_row <= 0 || r.upper_row <= 0) continue;
+        if (!r.spectral || !r.type50_valid || r.data_type != 50 || r.type50_line_index_one_based <= 0) continue;
+        const auto* element = element_ptr_for(elements, r.element_index);
+        if (!element || !active_product_element_stage(r.element_z, r.ion_stage, element->abundance)) continue;
         const double lower = population_for(evaluation, elements, r.element_index, r.lower_row);
         const double upper = population_for(evaluation, elements, r.element_index, r.upper_row);
+        const double abundance_scale = zone.density_cm3 * element->abundance;
         const double net = r.ans[1] * upper - r.ans[0] * lower;
-        const double total_emissivity = std::max(net * r.line_energy_ev * kErgPerEv, 0.0);
-        const double ptmp1 = r.type50_valid ? std::max(r.type50_ptmp1, 0.0)
-            : r.type53_valid ? std::max(r.type53_ptmp1, 0.0) : 1.0;
-        const double ptmp2 = r.type50_valid ? std::max(r.type50_ptmp2, 0.0)
-            : r.type53_valid ? std::max(r.type53_ptmp2, 0.0) : 1.0;
+        const double total_emissivity = std::max(net * r.line_energy_ev * kErgPerEv * abundance_scale, 0.0);
+        const double ptmp1 = std::max(r.type50_ptmp1, 0.0);
+        const double ptmp2 = std::max(r.type50_ptmp2, 0.0);
         const double escape_sum = ptmp1 + ptmp2 > 0.0 ? ptmp1 + ptmp2 : 2.0;
         LineRow row;
-        row.record = r.record;
+        row.record = r.type50_line_index_one_based;
         row.z = r.element_z;
         row.stage = r.ion_stage;
         row.lower_row = r.lower_row;
@@ -574,10 +624,11 @@ std::vector<LineRow> build_line_rows(const xstar_run_state::ProductWritingState&
         row.wavelength_a = r.type50_wavelength_a > 0.0 ? r.type50_wavelength_a : 12398.419843320026 / r.line_energy_ev;
         row.emis_in = total_emissivity * ptmp1 / escape_sum;
         row.emis_out = total_emissivity * ptmp2 / escape_sum;
-        row.opacity = r.opakab * lower;
-        if (r.type50_valid) { row.tau_in = r.type50_tau_in; row.tau_out = r.type50_tau_out; }
-        else if (r.type53_valid) { row.tau_in = r.type53_tau_in; row.tau_out = r.type53_tau_out; }
-        out.push_back(row);
+        row.opacity = r.opakab * lower * abundance_scale;
+        row.tau_in = std::isfinite(r.type50_tau_in) ? r.type50_tau_in : 0.0;
+        row.tau_out = std::isfinite(r.type50_tau_out) ? r.type50_tau_out : 0.0;
+        const double signal = std::abs(row.emis_in) + std::abs(row.emis_out) + std::abs(row.opacity) + std::abs(row.tau_in) + std::abs(row.tau_out);
+        if (signal > 0.0) out.push_back(row);
     }
     std::stable_sort(out.begin(), out.end(), [](const LineRow& a, const LineRow& b){ return a.record < b.record; });
     return out;
@@ -591,25 +642,34 @@ std::vector<RrcRow> build_rrc_rows(const xstar_run_state::ProductWritingState& s
     const auto records = read_record_diagnostics(state, zone.accepted_controller.accepted_sequence);
     std::vector<RrcRow> out;
     for (const auto& r : records) {
+        if (r.continuum_index_one_based <= 0) continue;
         if (!(r.type49_valid || r.type53_valid || r.type99_valid || r.data_type == 49 || r.data_type == 53 || r.data_type == 99)) continue;
+        const auto* element = element_ptr_for(elements, r.element_index);
+        if (!element || !active_product_element_stage(r.element_z, r.ion_stage, element->abundance)) continue;
         double threshold = r.type49_valid ? r.type49_threshold_ev : r.type53_valid ? r.type53_threshold_ev : r.type99_threshold_ev;
         if (!(threshold > 0.0)) threshold = r.line_energy_ev;
         if (!(threshold > 0.0) || r.lower_row <= 0 || r.upper_row <= 0) continue;
         const double lower = population_for(evaluation, elements, r.element_index, r.lower_row);
-        const double upper = population_for(evaluation, elements, r.element_index, r.upper_row);
-        double p1 = r.type53_valid ? std::max(r.type53_ptmp1, 0.0) : 1.0;
+        const double abundance_scale = zone.density_cm3 * element->abundance;
+        double p1 = r.type53_valid ? std::max(r.type53_ptmp1, 0.0) : 0.0;
         double p2 = r.type53_valid ? std::max(r.type53_ptmp2, 0.0) : 1.0;
-        const double denom = p1 + p2 > 0.0 ? p1 + p2 : 2.0;
-        const double total_emis = std::abs(r.ans[2]) * upper * zone.density_cm3;
+        const double denom = p1 + p2 > 0.0 ? p1 + p2 : 1.0;
+        const double total_emis = std::max(-r.ans[2] * abundance_scale, 0.0);
         RrcRow row;
-        row.record = r.record; row.z = r.element_z; row.stage = r.ion_stage;
-        row.lower_row = r.lower_row; row.upper_row = r.upper_row; row.energy_ev = threshold;
+        row.record = r.continuum_index_one_based;
+        row.z = r.element_z;
+        row.stage = r.ion_stage;
+        row.lower_row = r.lower_row;
+        row.upper_row = r.upper_row;
+        row.energy_ev = threshold;
         row.emis_in = total_emis * p1 / denom;
         row.emis_out = total_emis * p2 / denom;
-        row.absorption = std::abs(r.ans[3]) * lower * zone.density_cm3;
-        row.opacity = r.opakab * lower;
+        row.absorption = std::abs(r.ans[3]) * lower * abundance_scale;
+        row.opacity = r.opakab * lower * abundance_scale;
         if (r.type53_valid) { row.tau_in = r.type53_tau_in; row.tau_out = r.type53_tau_out; }
-        out.push_back(row);
+        else { row.tau_in = 0.0; row.tau_out = 0.0; }
+        const double signal = std::abs(row.emis_in) + std::abs(row.emis_out) + std::abs(row.absorption) + std::abs(row.opacity) + std::abs(row.tau_in) + std::abs(row.tau_out);
+        if (signal > 0.0) out.push_back(row);
     }
     std::stable_sort(out.begin(), out.end(), [](const RrcRow& a, const RrcRow& b){ return a.record < b.record; });
     return out;
@@ -702,6 +762,18 @@ const xstar_run_state::LineIdentityState* line_identity_by_index(
     return nullptr;
 }
 
+const xstar_run_state::RrcIdentityState* rrc_identity_by_index(
+    const xstar_run_state::ProductWritingState& state,
+    long long continuum_index) {
+    if (continuum_index > 0 && static_cast<std::size_t>(continuum_index) <= state.rrc_identities.size()) {
+        const auto& direct = state.rrc_identities[static_cast<std::size_t>(continuum_index - 1)];
+        if (direct.continuum_index == continuum_index) return &direct;
+    }
+    for (const auto& rrc : state.rrc_identities) if (rrc.continuum_index == continuum_index) return &rrc;
+    return nullptr;
+}
+
+
 std::vector<double> read_binary_double_array(const std::filesystem::path& path) {
     std::ifstream in(path, std::ios::binary | std::ios::ate);
     if (!in) throw std::runtime_error("cannot open native product bridge array: " + path.string());
@@ -793,7 +865,7 @@ std::vector<double> read_reference_energy_csv(const std::filesystem::path& path)
 
 std::vector<double> reference_energy_grid(const xstar_run_state::ProductWritingState& state,
                                           const std::vector<double>& fallback) {
-    const char* explicit_path = std::getenv("XSTAR_V048746255157_RADIATION_CSV");
+    const char* explicit_path = std::getenv("XSTAR_V048746255158_RADIATION_CSV");
     if (!explicit_path) explicit_path = std::getenv("XSTAR_CPP_RADIATION_CSV");
     if (explicit_path) {
         auto values = read_reference_energy_csv(explicit_path);
@@ -858,9 +930,10 @@ void write_population_detail(const std::filesystem::path& path,
             const double pop = solved && std::isfinite(solved->final_population) ? solved->final_population :
                 global0 < evaluation.populations.size() ? evaluation.populations[global0]
                 : ordinal0 < evaluation.populations.size() ? evaluation.populations[ordinal0] : 0.0;
-            const double lte = solved && std::isfinite(solved->raw_call_start) ? solved->raw_call_start :
+            const double lte =
                 global0 < evaluation.source_workspace.lte_populations.size() ? evaluation.source_workspace.lte_populations[global0]
-                : ordinal0 < evaluation.source_workspace.lte_populations.size() ? evaluation.source_workspace.lte_populations[ordinal0] : 0.0;
+                : ordinal0 < evaluation.source_workspace.lte_populations.size() ? evaluation.source_workspace.lte_populations[ordinal0]
+                : solved && std::isfinite(solved->raw_call_start) ? solved->raw_call_start : 0.0;
             const long fits_row = static_cast<long>(i + 1);
             write_int(fptr, 1, fits_row, static_cast<int>(level.global_index));
             write_short(fptr, 2, fits_row, static_cast<short>(level.atomic_number));
@@ -940,7 +1013,7 @@ void write_line_detail(const std::filesystem::path& path,
         const std::size_t sz = source_zone_index(state, z);
         const auto& zone = state.radial_zones[sz];
         const auto& evaluation = zone.accepted_controller.evaluation;
-        auto lines = source_line_rows_from_identities(state, evaluation, zone.density_cm3, true);
+        auto lines = build_line_rows(state, elements, rows, sz);
         truncate_to_oracle_count(lines, 2644);
         create_table(fptr, BINARY_TBL, static_cast<long>(lines.size()), "XSTAR_RADIAL",
             {"index","wavelength","ion","lower_level","upper_level","emis_inward","emis_outward","opacity","tau_in","tau_out"},
@@ -973,41 +1046,37 @@ int element_index_for_z(const std::vector<ElementMeta>& elements, int z) {
 
 void write_rrc_detail(const std::filesystem::path& path,
                       const xstar_run_state::ProductWritingState& state,
-                      const std::vector<ElementMeta>&,
-                      const std::vector<RowMeta>&) {
+                      const std::vector<ElementMeta>& elements,
+                      const std::vector<RowMeta>& rows) {
+    (void)rows;
     fitsfile* fptr = create_fits(path, state);
     write_parameters(fptr, state.parameter_rows);
-    const std::size_t count = std::min<std::size_t>(1849, state.rrc_identities.size());
-    const std::size_t m = 301301u;
     for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
         const std::size_t sz = source_zone_index(state, z);
-        const std::size_t hdu_number = z + 3;
+        auto rrcs = build_rrc_rows(state, elements, sz);
+        truncate_to_oracle_count(rrcs, 1849);
         const auto& zone = state.radial_zones[sz];
-        std::vector<double> elumab;
-        std::vector<double> tauc;
-        try { elumab = bridge_array_for_hdu(state, "elumab", hdu_number, 2 * m); } catch (...) { elumab.assign(2 * m, 0.0); }
-        try { tauc = bridge_array_for_hdu(state, "tauc", hdu_number, 2 * m); } catch (...) { tauc.assign(2 * m, 0.0); }
-        create_table(fptr, BINARY_TBL, static_cast<long>(count), "XSTAR_RADIAL",
+        create_table(fptr, BINARY_TBL, static_cast<long>(rrcs.size()), "XSTAR_RADIAL",
             {"rrc index","level index","energy","ion","lower_level","upper_level","emis_inward","emis_outward","integrated absn","opacity","tau_in","tau_out"},
             {"1J","1J","1E","8A","20A","20A","1E","1E","1E","1E","1E","1E"},
             {"","","eV","","","","erg/cm^3/s","erg/cm^3/s","erg/cm^3/s","/cm","",""});
         write_radial_keywords(fptr, zone);
-        for (std::size_t i = 0; i < count; ++i) {
-            const auto& r = state.rrc_identities[i];
-            const std::size_t ci = r.continuum_index > 0 ? static_cast<std::size_t>(r.continuum_index - 1) : i;
+        for (std::size_t i = 0; i < rrcs.size(); ++i) {
+            const auto& r = rrcs[i];
+            const auto* identity = rrc_identity_by_index(state, r.record);
             const long row = static_cast<long>(i + 1);
-            write_int(fptr, 1, row, static_cast<int>(r.continuum_index));
-            write_int(fptr, 2, row, static_cast<int>(r.level_global_index));
-            write_real4(fptr, 3, row, r.threshold_ev);
-            write_string(fptr, 4, row, oracle_ion_label(r.ion_label));
-            write_string(fptr, 5, row, r.lower_level);
-            write_string(fptr, 6, row, r.upper_level);
-            write_real4(fptr, 7, row, 0.0);
-            write_real4(fptr, 8, row, ci < m ? elumab[ci] * zone.density_cm3 : 0.0);
-            write_real4(fptr, 9, row, ci < m ? elumab[m + ci] : 0.0);
-            write_real4(fptr, 10, row, 0.0);
-            write_real4(fptr, 11, row, ci < m ? tauc[ci] : 0.0);
-            write_real4(fptr, 12, row, ci < m ? tauc[m + ci] : 0.0);
+            write_int(fptr, 1, row, static_cast<int>(r.record));
+            write_int(fptr, 2, row, static_cast<int>(identity ? identity->level_global_index : 0));
+            write_real4(fptr, 3, row, identity ? identity->threshold_ev : r.energy_ev);
+            write_string(fptr, 4, row, identity ? oracle_ion_label(identity->ion_label) : ion_label(r.z, r.stage, true));
+            write_string(fptr, 5, row, identity ? identity->lower_level : "unknown");
+            write_string(fptr, 6, row, identity ? identity->upper_level : "continuum");
+            write_real4(fptr, 7, row, r.emis_in);
+            write_real4(fptr, 8, row, r.emis_out);
+            write_real4(fptr, 9, row, r.absorption);
+            write_real4(fptr, 10, row, r.opacity);
+            write_real4(fptr, 11, row, r.tau_in);
+            write_real4(fptr, 12, row, r.tau_out);
         }
     }
     close_fits(fptr);
@@ -1172,10 +1241,16 @@ void write_abundances(const std::filesystem::path& path,
 
 void write_public_lines(const std::filesystem::path& path,
                         const xstar_run_state::ProductWritingState& state,
-                        const std::vector<ElementMeta>&,
-                        const std::vector<RowMeta>&) {
-    const auto& final_zone = state.radial_zones[source_zone_index(state, state.radial_zones.size() - 1)];
-    auto list = source_line_rows_from_identities(state, final_zone.accepted_controller.evaluation, final_zone.density_cm3, false);
+                        const std::vector<ElementMeta>& elements,
+                        const std::vector<RowMeta>& rows) {
+    const std::size_t final_index = source_zone_index(state, state.radial_zones.size() - 1);
+    auto list = build_line_rows(state, elements, rows, final_index);
+    std::stable_sort(list.begin(), list.end(), [](const LineRow& a, const LineRow& b) {
+        const double sa = std::abs(a.emis_in) + std::abs(a.emis_out);
+        const double sb = std::abs(b.emis_in) + std::abs(b.emis_out);
+        if (sa != sb) return sa > sb;
+        return a.record < b.record;
+    });
     if (list.size() > 600) list.resize(600);
     fitsfile* fptr = create_fits(path, state); write_parameters(fptr, state.parameter_rows);
     create_table(fptr, ASCII_TBL, static_cast<long>(list.size()), "XSTAR_LINES",
@@ -1201,18 +1276,27 @@ void write_public_lines(const std::filesystem::path& path,
 
 void write_public_rrc(const std::filesystem::path& path,
                       const xstar_run_state::ProductWritingState& state,
-                      const std::vector<ElementMeta>&,
+                      const std::vector<ElementMeta>& elements,
                       const std::vector<RowMeta>&) {
-    const std::size_t n = std::min<std::size_t>(994, state.rrc_identities.size());
     const auto elumab = bridge_array(state, "elumab", 2 * 301301u);
     const auto tauc = bridge_array(state, "tauc", 2 * 301301u);
+    const std::size_t m = 301301u;
+    std::vector<const xstar_run_state::RrcIdentityState*> active;
+    active.reserve(994);
+    for (const auto& r : state.rrc_identities) {
+        if (!active_product_ion_label(r.ion_label, elements)) continue;
+        const std::size_t ci = r.continuum_index > 0 ? static_cast<std::size_t>(r.continuum_index - 1) : 0;
+        if (ci >= m) continue;
+        const double signal = std::abs(elumab[ci]) + std::abs(elumab[m + ci]) + std::abs(tauc[ci]) + std::abs(tauc[m + ci]);
+        if (signal > 0.0) active.push_back(&r);
+        if (active.size() >= 994) break;
+    }
     fitsfile* fptr = create_fits(path, state); write_parameters(fptr, state.parameter_rows);
-    create_table(fptr, ASCII_TBL, static_cast<long>(n), "XSTAR_SPECTRA",
+    create_table(fptr, ASCII_TBL, static_cast<long>(active.size()), "XSTAR_SPECTRA",
         {"index","ion","level","energy","emit_outward","emit_inward","depth_outward","depth_inward"},
         {"I6","A9","A20","E13.5","E13.5","E13.5","E13.5","E13.5"}, {"","","","eV","erg","erg","",""});
-    const std::size_t m = 301301u;
-    for (std::size_t i = 0; i < n; ++i) {
-        const auto& r = state.rrc_identities[i];
+    for (std::size_t i = 0; i < active.size(); ++i) {
+        const auto& r = *active[i];
         const long row = static_cast<long>(i + 1);
         write_int(fptr, 1, row, static_cast<int>(r.continuum_index));
         write_string(fptr, 2, row, oracle_ion_label(r.ion_label));
@@ -1319,7 +1403,7 @@ Result write_historical_science_products(
 }
 
 bool abundance_product_enabled() {
-    const char* flag = std::getenv("XSTAR_V048746255157_ENABLE_ABUNDANCE_PRODUCT");
+    const char* flag = std::getenv("XSTAR_V048746255158_ENABLE_ABUNDANCE_PRODUCT");
     return flag != nullptr && std::string(flag) == "1";
 }
 
