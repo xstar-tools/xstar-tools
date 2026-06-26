@@ -1862,7 +1862,7 @@
           "components": {
             "forbidden": 0.06273357931665692,
             "intercombination": 0.5786140951700159,
-            "resonance": 0.35865232551332726
+            "resonance": 0.35865232551432726
           },
           "raw_components": {
             "forbidden": 9.558484261856274e-11,
@@ -1871,7 +1871,7 @@
           },
           "forbidden": 0.06273357931665692,
           "intercombination": 0.5786140951700159,
-          "resonance": 0.35865232551332726,
+          "resonance": 0.35865232551432726,
           "R_f_over_i": 0.10842041326045422,
           "G_f_plus_i_over_r": 1.7882155749826327,
           "R_over_xstar": 0.03379297338861323,

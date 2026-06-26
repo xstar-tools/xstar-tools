@@ -3495,7 +3495,8 @@ int command_run_fixed_dsec(const Options& options) {
             std::cerr << "native ProductWritingState preparation failed: " << exc.what() << "\n";
             xstar_thermal_context_destroy(thermal_context);
             xstar_fixed_state_context_destroy(fixed_context);
-            return std::string(exc.what()).find("exact source state is incomplete") != std::string::npos ? 20 : 9;
+            return (std::string(exc.what()).find("exact source state is incomplete") != std::string::npos ||
+                    std::string(exc.what()).find("ProductWritingState loader accepted") != std::string::npos) ? 20 : 9;
         }
     }
     auto product_writing_state = xstar_run_state::build_product_writing_state(whole_run_state);
@@ -3755,7 +3756,7 @@ std::filesystem::path resolve_physical_asset(
 
 int command_run_physical(Options options) {
     if (options.backend != "cpp") {
-        std::cerr << "xstar_cpp run v0.6.48.7.46.25.5.13 supports --backend cpp only\n";
+        std::cerr << "xstar_cpp run v0.6.48.7.46.25.5.14 supports --backend cpp only\n";
         return 64;
     }
     if (options.parameters_path.empty() || options.atomic_db_path.empty() || options.output_dir.empty()) {

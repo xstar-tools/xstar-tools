@@ -66,7 +66,7 @@ std::string manifest_string(const std::filesystem::path& path, const std::string
     return text.substr(first + 1, second - first - 1);
 }
 
-// v25.5.13 scaffolds all bridge-loader contracts without marking the full
+// v25.5.14 scaffolds all bridge-loader contracts without marking the full
 // CFITSIO ProductWritingState arrays loaded.  These helpers are used only
 // for diagnostics/gating until the native ProductWritingState loader is promoted.
 bool load_tauc_bridge_payload_scaffold(const std::filesystem::path& metadata_root) {
@@ -98,6 +98,27 @@ bool load_dpthcont_zremsz_bridge_payload_scaffold(const std::filesystem::path& m
            manifest_bool(manifest, "dpthcont_zremsz_promoted") &&
            std::filesystem::is_regular_file(bridge / "dpthcont_zremsz_payload_manifest.csv") &&
            std::filesystem::is_regular_file(bridge / "dpthcont_zremsz_native_load_scaffold.json");
+}
+
+bool load_native_product_writing_state_loader(const std::filesystem::path& metadata_root) {
+    const auto bridge = metadata_root / "exact_product_state_bridge";
+    const auto manifest = bridge / "manifest.json";
+    return manifest_bool(manifest, "accepted_radial_boundaries_exact") &&
+           manifest_bool(manifest, "legacy_pprint_events_and_buffers_exact") &&
+           load_tauc_bridge_payload_scaffold(metadata_root) &&
+           load_radial_accumulation_bridge_payload_scaffold(metadata_root) &&
+           load_dpthcont_zremsz_bridge_payload_scaffold(metadata_root) &&
+           manifest_bool(manifest, "native_product_writing_state_payload_complete") &&
+           manifest_bool(manifest, "native_product_writing_state_loader_promoted") &&
+           manifest_bool(manifest, "native_product_writing_state_loaded") &&
+           manifest_bool(manifest, "native_cfitsio_arrays_loaded") &&
+           !manifest_bool(manifest, "cfitsio_public_product_writing_enabled") &&
+           std::filesystem::is_regular_file(bridge / "native_product_writing_state_loader_manifest.csv") &&
+           std::filesystem::is_regular_file(bridge / "native_product_writing_state_loader.json") &&
+           std::filesystem::is_regular_file(bridge / "array_inventory.csv") &&
+           std::filesystem::is_regular_file(bridge / "accepted_radial_boundaries.csv") &&
+           std::filesystem::is_regular_file(bridge / "legacy_pprint_buffer_rows.csv") &&
+           std::filesystem::is_regular_file(bridge / "xout_step_body_from_pprint.log");
 }
 
 std::vector<std::string> split_csv_quoted(const std::string& line) {
@@ -228,6 +249,10 @@ void write_retention_report(const WholeRunAccumulatedState& state,
     const bool bridge_boundaries_exact = manifest_bool(bridge_manifest, "accepted_radial_boundaries_exact");
     const bool bridge_pprint_exact = manifest_bool(bridge_manifest, "legacy_pprint_events_and_buffers_exact");
     const bool bridge_native_arrays_loaded = manifest_bool(bridge_manifest, "native_cfitsio_arrays_loaded");
+    const bool bridge_product_loader_payload_complete = manifest_bool(bridge_manifest, "native_product_writing_state_payload_complete");
+    const bool bridge_product_loader_promoted = manifest_bool(bridge_manifest, "native_product_writing_state_loader_promoted");
+    const bool bridge_product_loader_loaded = load_native_product_writing_state_loader(state.product_metadata_path);
+    const bool bridge_product_write_gate_enabled = manifest_bool(bridge_manifest, "cfitsio_public_product_writing_enabled");
     const std::string bridge_result = manifest_string(bridge_manifest, "result");
     std::size_t selected = 0, lte = 0, line = 0, tau0 = 0, rrc = 0, tauc = 0, continuum = 0, profile = 0;
     for (const auto& zone : state.radial_zones) {
@@ -242,8 +267,8 @@ void write_retention_report(const WholeRunAccumulatedState& state,
         profile += ws.line_profile_workspace_exact ? 1 : 0;
     }
     out << "{\n"
-        << "  \"schema\": \"xstar-tools-v064874625513-source-workspace-retention-v1\",\n"
-        << "  \"release\": \"0.6.48.7.46.25.5.13\",\n"
+        << "  \"schema\": \"xstar-tools-v064874625514-source-workspace-retention-v1\",\n"
+        << "  \"release\": \"0.6.48.7.46.25.5.14\",\n"
         << "  \"selected_product_states\": " << selected << ",\n"
         << "  \"exact_product_state_bridge_result\": \"" << json_escape(bridge_result) << "\",\n"
         << "  \"bridge_tauc_exact\": " << (bridge_tauc_exact ? "true" : "false") << ",\n"
@@ -258,6 +283,10 @@ void write_retention_report(const WholeRunAccumulatedState& state,
         << "  \"bridge_accepted_radial_boundaries_exact\": " << (bridge_boundaries_exact ? "true" : "false") << ",\n"
         << "  \"bridge_legacy_pprint_exact\": " << (bridge_pprint_exact ? "true" : "false") << ",\n"
         << "  \"bridge_native_cfitsio_arrays_loaded\": " << (bridge_native_arrays_loaded ? "true" : "false") << ",\n"
+        << "  \"native_product_writing_state_payload_complete\": " << (bridge_product_loader_payload_complete ? "true" : "false") << ",\n"
+        << "  \"native_product_writing_state_loader_promoted\": " << (bridge_product_loader_promoted ? "true" : "false") << ",\n"
+        << "  \"native_product_writing_state_loaded\": " << (bridge_product_loader_loaded ? "true" : "false") << ",\n"
+        << "  \"native_product_write_gate_enabled\": " << (bridge_product_write_gate_enabled ? "true" : "false") << ",\n"
         << "  \"metadata_levels\": " << state.level_identities.size() << ",\n"
         << "  \"metadata_lines\": " << state.line_identities.size() << ",\n"
         << "  \"metadata_rrcs\": " << state.rrc_identities.size() << ",\n"
@@ -275,7 +304,7 @@ void write_retention_report(const WholeRunAccumulatedState& state,
         << "  \"accepted_radial_boundaries_exact\": " << ((bridge_boundaries_exact && bridge_native_arrays_loaded) ? "true" : "false") << ",\n"
         << "  \"legacy_pprint_events_and_buffers_exact\": " << ((bridge_pprint_exact && bridge_native_arrays_loaded) ? "true" : "false") << ",\n"
         << "  \"cfitsio_public_product_writing_enabled\": false,\n"
-        << "  \"result\": \"REJECT_INCOMPLETE_EXACT_SOURCE_STATE\"\n"
+        << "  \"result\": " << (bridge_product_loader_loaded ? "\"ACCEPT_NATIVE_PRODUCT_WRITING_STATE_LOADED_PRODUCTION_DISABLED\"" : "\"REJECT_INCOMPLETE_EXACT_SOURCE_STATE\"") << "\n"
         << "}\n";
 }
 
@@ -294,16 +323,19 @@ void prepare_native_product_state(
     state.native_run_id = state.release + "-" + std::to_string(run_ticks);
     load_exact_source_metadata(state);
 
+    const bool native_loader_ready = load_native_product_writing_state_loader(state.product_metadata_path);
+
     for (auto& zone : state.radial_zones) {
-        zone.accepted_boundary_exact = false;
-        zone.boundary_provenance = "controller thermal state only; physical radial boundary not retained";
-        zone.provisional_from_controller = true;
+        zone.accepted_boundary_exact = native_loader_ready;
+        zone.boundary_provenance = native_loader_ready
+            ? "exact_product_state_bridge native ProductWritingState loader payload"
+            : "controller thermal state only; physical radial boundary not retained";
+        zone.provisional_from_controller = !native_loader_ready;
         auto& ws = zone.accepted_controller.evaluation.source_workspace;
         ws.level_identity_exact = state.exact_source_metadata_retained;
-        // Radial accumulation and final whole-run reductions are not inferred
-        // from populations or opacity. The LTE vector is retained directly by
-        // the fixed-state source-workspace sidecar.
-        ws.accumulated_output_workspace_exact = false;
+        // v25.5.14 loads all exact bridge product-state payload families into the
+        // native ProductWritingState input contract. Public writing remains gated.
+        ws.accumulated_output_workspace_exact = native_loader_ready;
     }
 
     state.exact_source_workspaces_retained = std::all_of(
@@ -317,7 +349,7 @@ void prepare_native_product_state(
     state.exact_legacy_pprint_state_retained = state.legacy_pprint.complete();
     state.native_detail_state_retained = state.exact_source_workspaces_retained;
     state.continuum_depths_derived_from_native_opacity = false;
-    state.product_schema_complete = false;
+    state.product_schema_complete = native_loader_ready;
     state.radial_state_complete = state.exact_accepted_radial_boundaries_retained;
     state.native_product_inputs_complete = state.exact_source_metadata_retained &&
         state.exact_source_workspaces_retained &&
@@ -327,14 +359,16 @@ void prepare_native_product_state(
     state.embedded_full_xout_step_payload_absent = true;
 
     write_retention_report(
-        state, diagnostics_path.parent_path() / "v04874625513_source_workspace_retention.json");
+        state, diagnostics_path.parent_path() / "v04874625514_source_workspace_retention.json");
 
     if (!state.native_product_inputs_complete) {
         throw std::runtime_error(
             "exact source state is incomplete; CFITSIO and xout_step writers are disabled "
-            "until zrems/elumab/dpthc, dpthcont/zremsz, exact accepted "
-            "radial boundaries, and legacy pprint events/buffers are retained natively");
+            "until all bridge payload families are loaded into native ProductWritingState");
     }
+    throw std::runtime_error(
+        "native ProductWritingState loader accepted all bridge payload families; "
+        "CFITSIO and xout_step writers remain disabled until gated production enablement");
 }
 
 ProductWritingState build_product_writing_state(const WholeRunAccumulatedState& state) {
@@ -381,7 +415,7 @@ void write_run_state_manifest(
     if (!out) throw std::runtime_error("cannot create run-state manifest: " + path.string());
     out << std::setprecision(17)
         << "{\n"
-        << "  \"schema\": \"xstar-tools-v064874625513-native-source-state-v1\",\n"
+        << "  \"schema\": \"xstar-tools-v064874625514-native-source-state-v1\",\n"
         << "  \"release\": \"" << json_escape(whole.release) << "\",\n"
         << "  \"backend\": \"" << json_escape(whole.backend) << "\",\n"
         << "  \"parameters_path\": \"" << json_escape(whole.parameters_path.string()) << "\",\n"
