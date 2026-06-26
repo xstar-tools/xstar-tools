@@ -66,9 +66,9 @@ std::string manifest_string(const std::filesystem::path& path, const std::string
     return text.substr(first + 1, second - first - 1);
 }
 
-// v25.5.12 scaffolds native bridge-loader contracts without marking the full
-// CFITSIO ProductWritingState arrays loaded.  dpthcont/zremsz remain incomplete,
-// so these helpers are used only for diagnostics/gating.
+// v25.5.13 scaffolds all bridge-loader contracts without marking the full
+// CFITSIO ProductWritingState arrays loaded.  These helpers are used only
+// for diagnostics/gating until the native ProductWritingState loader is promoted.
 bool load_tauc_bridge_payload_scaffold(const std::filesystem::path& metadata_root) {
     const auto bridge = metadata_root / "exact_product_state_bridge";
     const auto manifest = bridge / "manifest.json";
@@ -85,9 +85,19 @@ bool load_radial_accumulation_bridge_payload_scaffold(const std::filesystem::pat
     return manifest_bool(manifest, "radial_accumulation_zrems_elumab_dpthc_exact") &&
            manifest_bool(manifest, "radial_accumulation_payload_exported") &&
            manifest_bool(manifest, "radial_accumulation_native_load_scaffold") &&
-           !manifest_bool(manifest, "dpthcont_zremsz_promoted") &&
            std::filesystem::is_regular_file(bridge / "radial_accumulation_payload_manifest.csv") &&
            std::filesystem::is_regular_file(bridge / "radial_accumulation_native_load_scaffold.json");
+}
+
+bool load_dpthcont_zremsz_bridge_payload_scaffold(const std::filesystem::path& metadata_root) {
+    const auto bridge = metadata_root / "exact_product_state_bridge";
+    const auto manifest = bridge / "manifest.json";
+    return manifest_bool(manifest, "dpthcont_zremsz_exact") &&
+           manifest_bool(manifest, "dpthcont_zremsz_payload_exported") &&
+           manifest_bool(manifest, "dpthcont_zremsz_native_load_scaffold") &&
+           manifest_bool(manifest, "dpthcont_zremsz_promoted") &&
+           std::filesystem::is_regular_file(bridge / "dpthcont_zremsz_payload_manifest.csv") &&
+           std::filesystem::is_regular_file(bridge / "dpthcont_zremsz_native_load_scaffold.json");
 }
 
 std::vector<std::string> split_csv_quoted(const std::string& line) {
@@ -213,6 +223,8 @@ void write_retention_report(const WholeRunAccumulatedState& state,
     const bool bridge_radial_accum_payload_exported = manifest_bool(bridge_manifest, "radial_accumulation_payload_exported");
     const bool bridge_radial_accum_native_load_scaffold = load_radial_accumulation_bridge_payload_scaffold(state.product_metadata_path);
     const bool bridge_dpth_exact = manifest_bool(bridge_manifest, "dpthcont_zremsz_exact");
+    const bool bridge_dpth_payload_exported = manifest_bool(bridge_manifest, "dpthcont_zremsz_payload_exported");
+    const bool bridge_dpth_native_load_scaffold = load_dpthcont_zremsz_bridge_payload_scaffold(state.product_metadata_path);
     const bool bridge_boundaries_exact = manifest_bool(bridge_manifest, "accepted_radial_boundaries_exact");
     const bool bridge_pprint_exact = manifest_bool(bridge_manifest, "legacy_pprint_events_and_buffers_exact");
     const bool bridge_native_arrays_loaded = manifest_bool(bridge_manifest, "native_cfitsio_arrays_loaded");
@@ -230,8 +242,8 @@ void write_retention_report(const WholeRunAccumulatedState& state,
         profile += ws.line_profile_workspace_exact ? 1 : 0;
     }
     out << "{\n"
-        << "  \"schema\": \"xstar-tools-v064874625512-source-workspace-retention-v1\",\n"
-        << "  \"release\": \"0.6.48.7.46.25.5.12\",\n"
+        << "  \"schema\": \"xstar-tools-v064874625513-source-workspace-retention-v1\",\n"
+        << "  \"release\": \"0.6.48.7.46.25.5.13\",\n"
         << "  \"selected_product_states\": " << selected << ",\n"
         << "  \"exact_product_state_bridge_result\": \"" << json_escape(bridge_result) << "\",\n"
         << "  \"bridge_tauc_exact\": " << (bridge_tauc_exact ? "true" : "false") << ",\n"
@@ -241,6 +253,8 @@ void write_retention_report(const WholeRunAccumulatedState& state,
         << "  \"bridge_radial_accumulation_payload_exported\": " << (bridge_radial_accum_payload_exported ? "true" : "false") << ",\n"
         << "  \"bridge_radial_accumulation_native_load_scaffold\": " << (bridge_radial_accum_native_load_scaffold ? "true" : "false") << ",\n"
         << "  \"bridge_dpthcont_zremsz_exact\": " << (bridge_dpth_exact ? "true" : "false") << ",\n"
+        << "  \"bridge_dpthcont_zremsz_payload_exported\": " << (bridge_dpth_payload_exported ? "true" : "false") << ",\n"
+        << "  \"bridge_dpthcont_zremsz_native_load_scaffold\": " << (bridge_dpth_native_load_scaffold ? "true" : "false") << ",\n"
         << "  \"bridge_accepted_radial_boundaries_exact\": " << (bridge_boundaries_exact ? "true" : "false") << ",\n"
         << "  \"bridge_legacy_pprint_exact\": " << (bridge_pprint_exact ? "true" : "false") << ",\n"
         << "  \"bridge_native_cfitsio_arrays_loaded\": " << (bridge_native_arrays_loaded ? "true" : "false") << ",\n"
@@ -313,7 +327,7 @@ void prepare_native_product_state(
     state.embedded_full_xout_step_payload_absent = true;
 
     write_retention_report(
-        state, diagnostics_path.parent_path() / "v04874625512_source_workspace_retention.json");
+        state, diagnostics_path.parent_path() / "v04874625513_source_workspace_retention.json");
 
     if (!state.native_product_inputs_complete) {
         throw std::runtime_error(
@@ -367,7 +381,7 @@ void write_run_state_manifest(
     if (!out) throw std::runtime_error("cannot create run-state manifest: " + path.string());
     out << std::setprecision(17)
         << "{\n"
-        << "  \"schema\": \"xstar-tools-v064874625512-native-source-state-v1\",\n"
+        << "  \"schema\": \"xstar-tools-v064874625513-native-source-state-v1\",\n"
         << "  \"release\": \"" << json_escape(whole.release) << "\",\n"
         << "  \"backend\": \"" << json_escape(whole.backend) << "\",\n"
         << "  \"parameters_path\": \"" << json_escape(whole.parameters_path.string()) << "\",\n"

@@ -1033,6 +1033,8 @@ def capture_saved_shell_snapshot_from_state(
         elumab=workspace.elumab[:, :n_continua],
         zrems=workspace.zrems,
         dpthc=workspace.dpthc,
+        dpthcont=workspace.dpthcont,
+        zremsz=workspace.zremsz,
         opakc=workspace.opakc,
         rccemis=workspace.rccemis,
         ncn2=ncn2,

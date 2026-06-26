@@ -88,6 +88,8 @@ class SavedShellSnapshot:
     ncn2: int
     zrems_saved: np.ndarray
     dpthc: np.ndarray
+    dpthcont: np.ndarray
+    zremsz: np.ndarray
     opakc: np.ndarray
     rccemis: np.ndarray
     source_file: str = "xstar/xstarlib/src/savd.f90"
@@ -112,6 +114,8 @@ class SavedShellSnapshot:
             "elumab": self.elumab.shape == (2, self.rrc_indices_one_based.size),
             "zrems_saved": self.zrems_saved.shape == (5, n),
             "dpthc": self.dpthc.shape == (2, n),
+            "dpthcont": self.dpthcont.shape == (2, n),
+            "zremsz": self.zremsz.shape == (n,),
             "opakc": self.opakc.shape == (n,),
             "rccemis": self.rccemis.shape == (2, n),
         }
@@ -308,6 +312,8 @@ def make_saved_shell_snapshot(
     elumab: Sequence[Sequence[float]],
     zrems: Sequence[Sequence[float]],
     dpthc: Sequence[Sequence[float]],
+    dpthcont: Sequence[Sequence[float]],
+    zremsz: Sequence[float],
     opakc: Sequence[float],
     rccemis: Sequence[Sequence[float]],
     ncn2: int,
@@ -334,6 +340,8 @@ def make_saved_shell_snapshot(
     elb = np.asarray(elumab, dtype=float)
     zr = np.asarray(zrems, dtype=float)
     dc = np.asarray(dpthc, dtype=float)
+    dpc = np.asarray(dpthcont, dtype=float)
+    zz = np.asarray(zremsz, dtype=float).reshape(-1)
     opc = np.asarray(opakc, dtype=float).reshape(-1)
     rce = np.asarray(rccemis, dtype=float)
     ca = np.asarray(cabab, dtype=float).reshape(-1)
@@ -353,6 +361,10 @@ def make_saved_shell_snapshot(
         raise SavedRadialStatePortError("zrems is shorter than the active continuum")
     if dc.ndim != 2 or dc.shape[0] < 2 or dc.shape[1] < n:
         raise SavedRadialStatePortError("dpthc is shorter than the active continuum")
+    if dpc.ndim != 2 or dpc.shape[0] < 2 or dpc.shape[1] < n:
+        raise SavedRadialStatePortError("dpthcont is shorter than the active continuum")
+    if zz.size < n:
+        raise SavedRadialStatePortError("zremsz is shorter than the active continuum")
     if opc.size < n or rce.ndim != 2 or rce.shape[0] < 2 or rce.shape[1] < n:
         raise SavedRadialStatePortError("continuum opacity/emissivity range is incomplete")
 
@@ -385,6 +397,8 @@ def make_saved_shell_snapshot(
         ncn2=n,
         zrems_saved=_real4_array(zr[:5, :n]),
         dpthc=_real4_array(dc[:2, :n]),
+        dpthcont=_real4_array(dpc[:2, :n]),
+        zremsz=_real4_array(zz[:n]),
         opakc=_real4_array(opc[:n]),
         rccemis=_real4_array(rce[:2, :n]),
     )
@@ -634,6 +648,8 @@ def _direct_unsavd_python_result(direction: int) -> UnsavdResult:
         ncn2=ncn2,
         zrems_saved=np.arange(5 * ncn2, dtype=float).reshape(5, ncn2),
         dpthc=np.asarray([[200.1, 200.2, 200.3, 200.4], [210.1, 210.2, 210.3, 210.4]]),
+        dpthcont=np.asarray([[211.1, 211.2, 211.3, 211.4], [212.1, 212.2, 212.3, 212.4]]),
+        zremsz=np.asarray([213.1, 213.2, 213.3, 213.4]),
         opakc=np.asarray([220.1, 220.2, 220.3, 220.4]),
         rccemis=np.asarray([[230.1, 230.2, 230.3, 230.4], [240.1, 240.2, 240.3, 240.4]]),
     )
