@@ -1020,7 +1020,7 @@ Result write_historical_science_products(
 }
 
 bool abundance_product_enabled() {
-    const char* flag = std::getenv("XSTAR_V048746255153_ENABLE_ABUNDANCE_PRODUCT");
+    const char* flag = std::getenv("XSTAR_V048746255154_ENABLE_ABUNDANCE_PRODUCT");
     return flag != nullptr && std::string(flag) == "1";
 }
 
