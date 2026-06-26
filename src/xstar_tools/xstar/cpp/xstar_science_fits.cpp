@@ -14,6 +14,7 @@
 #include <limits>
 #include <map>
 #include <numeric>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -380,6 +381,45 @@ double population_for(const xstar_run_state::FixedEvaluationState& state,
     const auto& element = element_for(elements, element_index);
     const std::size_t index = static_cast<std::size_t>(element.row_offset + local_row - 1);
     return index < state.populations.size() ? state.populations[index] : 0.0;
+}
+
+const RowMeta* row_meta_by_global(const std::vector<RowMeta>& rows, std::int32_t global_index) {
+    for (const auto& row : rows) if (row.global_level_index == global_index) return &row;
+    return nullptr;
+}
+
+double source_lte_for_level(const xstar_run_state::FixedEvaluationState& evaluation,
+                            const std::vector<ElementMeta>& elements,
+                            const std::vector<RowMeta>& rows,
+                            const xstar_run_state::LevelIdentityState& level) {
+    // v25.5.15.9: LTE must come from the retained/source LTE workspace, not
+    // from accepted populations or solve-row fallbacks.  The source workspace
+    // is element-local/packed in the native program order; public product
+    // global level indices are ATDB-level identities and are not valid direct
+    // offsets for He/Mg.
+    const auto* row = row_meta_by_global(rows, level.global_index);
+    if (row) {
+        const auto& element = element_for(elements, row->element_index);
+        const std::size_t packed = static_cast<std::size_t>(element.row_offset + row->row - 1);
+        if (packed < evaluation.source_workspace.lte_populations.size()) {
+            return evaluation.source_workspace.lte_populations[packed];
+        }
+        // Continuum public rows sometimes point at the next ion ground row in
+        // the population surface.  Use the same source-LTE packed family only
+        // when the adjacent native row exists; never fall back to population.
+        if ((level.level_label.find("continu") != std::string::npos ||
+             level.level_label.find("continuum") != std::string::npos) && row->row + 1 <= element.n_rows) {
+            const std::size_t adjacent = static_cast<std::size_t>(element.row_offset + row->row);
+            if (adjacent < evaluation.source_workspace.lte_populations.size()) {
+                return evaluation.source_workspace.lte_populations[adjacent];
+            }
+        }
+    }
+    const std::size_t ordinal0 = level.global_index > 0 ? static_cast<std::size_t>(level.global_index - 1) : 0u;
+    if (ordinal0 < evaluation.source_workspace.lte_populations.size()) {
+        return evaluation.source_workspace.lte_populations[ordinal0];
+    }
+    return 0.0;
 }
 
 std::string roman(int value) {
@@ -865,7 +905,7 @@ std::vector<double> read_reference_energy_csv(const std::filesystem::path& path)
 
 std::vector<double> reference_energy_grid(const xstar_run_state::ProductWritingState& state,
                                           const std::vector<double>& fallback) {
-    const char* explicit_path = std::getenv("XSTAR_V048746255158_RADIATION_CSV");
+    const char* explicit_path = std::getenv("XSTAR_V048746255159_RADIATION_CSV");
     if (!explicit_path) explicit_path = std::getenv("XSTAR_CPP_RADIATION_CSV");
     if (explicit_path) {
         auto values = read_reference_energy_csv(explicit_path);
@@ -896,8 +936,8 @@ std::string oracle_ion_label(std::string label) {
 
 void write_population_detail(const std::filesystem::path& path,
                              const xstar_run_state::ProductWritingState& state,
-                             const std::vector<ElementMeta>&,
-                             const std::vector<RowMeta>&) {
+                             const std::vector<ElementMeta>& elements,
+                             const std::vector<RowMeta>& rows) {
     fitsfile* fptr = create_fits(path, state);
     write_parameters(fptr, state.parameter_rows);
     const auto detail_levels = oracle_detail_levels(state);
@@ -930,10 +970,7 @@ void write_population_detail(const std::filesystem::path& path,
             const double pop = solved && std::isfinite(solved->final_population) ? solved->final_population :
                 global0 < evaluation.populations.size() ? evaluation.populations[global0]
                 : ordinal0 < evaluation.populations.size() ? evaluation.populations[ordinal0] : 0.0;
-            const double lte =
-                global0 < evaluation.source_workspace.lte_populations.size() ? evaluation.source_workspace.lte_populations[global0]
-                : ordinal0 < evaluation.source_workspace.lte_populations.size() ? evaluation.source_workspace.lte_populations[ordinal0]
-                : solved && std::isfinite(solved->raw_call_start) ? solved->raw_call_start : 0.0;
+            const double lte = source_lte_for_level(evaluation, elements, rows, level);
             const long fits_row = static_cast<long>(i + 1);
             write_int(fptr, 1, fits_row, static_cast<int>(level.global_index));
             write_short(fptr, 2, fits_row, static_cast<short>(level.atomic_number));
@@ -1013,8 +1050,13 @@ void write_line_detail(const std::filesystem::path& path,
         const std::size_t sz = source_zone_index(state, z);
         const auto& zone = state.radial_zones[sz];
         const auto& evaluation = zone.accepted_controller.evaluation;
-        auto lines = build_line_rows(state, elements, rows, sz);
+        auto lines = source_line_rows_from_identities(state, evaluation, zone.density_cm3, true);
         truncate_to_oracle_count(lines, 2644);
+        if (lines.size() != 2644) {
+            std::ostringstream msg;
+            msg << "oracle/public line-detail inventory did not resolve to 2644 rows: " << lines.size();
+            throw std::runtime_error(msg.str());
+        }
         create_table(fptr, BINARY_TBL, static_cast<long>(lines.size()), "XSTAR_RADIAL",
             {"index","wavelength","ion","lower_level","upper_level","emis_inward","emis_outward","opacity","tau_in","tau_out"},
             {"1J","1E","8A","20A","20A","1E","1E","1E","1E","1E"},
@@ -1044,6 +1086,53 @@ int element_index_for_z(const std::vector<ElementMeta>& elements, int z) {
     return 0;
 }
 
+std::size_t continuum_plane_count(const xstar_run_state::ExactSourceWorkspaceState& ws) {
+    if (ws.native_continuum_count > 0) return ws.native_continuum_count;
+    if (!ws.elumab.empty() && ws.elumab.size() % 2 == 0) return ws.elumab.size() / 2;
+    if (!ws.tauc.empty() && ws.tauc.size() % 2 == 0) return ws.tauc.size() / 2;
+    return 0;
+}
+
+double two_plane_value(const std::vector<double>& values, std::size_t plane_count, std::size_t plane, std::size_t index, const char* name) {
+    if (plane_count == 0 || index >= plane_count || plane * plane_count + index >= values.size()) {
+        std::ostringstream msg;
+        msg << "retained two-plane workspace " << name << " is missing index " << (index + 1);
+        throw std::runtime_error(msg.str());
+    }
+    return values[plane * plane_count + index];
+}
+
+std::vector<RrcRow> source_rrc_rows_from_identities(
+    const xstar_run_state::ProductWritingState& state,
+    const xstar_run_state::FixedEvaluationState& evaluation,
+    bool detail_inventory) {
+    std::vector<RrcRow> out;
+    const auto& ws = evaluation.source_workspace;
+    const std::size_t n = continuum_plane_count(ws);
+    out.reserve(state.rrc_identities.size());
+    for (const auto& id : state.rrc_identities) {
+        if (id.continuum_index <= 0) continue;
+        const std::size_t ci = static_cast<std::size_t>(id.continuum_index - 1);
+        if (ci >= n) continue;
+        RrcRow row;
+        row.record = id.continuum_index;
+        row.energy_ev = id.threshold_ev;
+        // Source tauc/elumab convention follows the line tau workspace: plane 0
+        // is inward and plane 1 is outward.  Keep this orientation explicit so
+        // xout_rrc1 depth_outward/depth_inward are not swapped.
+        row.emis_in = two_plane_value(ws.elumab, n, 0, ci, "elumab");
+        row.emis_out = two_plane_value(ws.elumab, n, 1, ci, "elumab");
+        row.tau_in = two_plane_value(ws.tauc, n, 0, ci, "tauc");
+        row.tau_out = two_plane_value(ws.tauc, n, 1, ci, "tauc");
+        row.absorption = ci < ws.cabab.size() ? ws.cabab[ci] : 0.0;
+        row.opacity = ci < ws.opakab.size() ? ws.opakab[ci] : 0.0;
+        if (detail_inventory || row.emis_in != 0.0 || row.emis_out != 0.0 || row.tau_in != 0.0 || row.tau_out != 0.0) {
+            out.push_back(row);
+        }
+    }
+    return out;
+}
+
 void write_rrc_detail(const std::filesystem::path& path,
                       const xstar_run_state::ProductWritingState& state,
                       const std::vector<ElementMeta>& elements,
@@ -1053,9 +1142,14 @@ void write_rrc_detail(const std::filesystem::path& path,
     write_parameters(fptr, state.parameter_rows);
     for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
         const std::size_t sz = source_zone_index(state, z);
-        auto rrcs = build_rrc_rows(state, elements, sz);
-        truncate_to_oracle_count(rrcs, 1849);
         const auto& zone = state.radial_zones[sz];
+        auto rrcs = source_rrc_rows_from_identities(state, zone.accepted_controller.evaluation, true);
+        truncate_to_oracle_count(rrcs, 1849);
+        if (rrcs.size() != 1849) {
+            std::ostringstream msg;
+            msg << "oracle/public RRC-detail inventory did not resolve to 1849 rows: " << rrcs.size();
+            throw std::runtime_error(msg.str());
+        }
         create_table(fptr, BINARY_TBL, static_cast<long>(rrcs.size()), "XSTAR_RADIAL",
             {"rrc index","level index","energy","ion","lower_level","upper_level","emis_inward","emis_outward","integrated absn","opacity","tau_in","tau_out"},
             {"1J","1J","1E","8A","20A","20A","1E","1E","1E","1E","1E","1E"},
@@ -1093,15 +1187,20 @@ void write_spectrum_detail(const std::filesystem::path& path,
         const std::size_t hdu_number = oz + 3;
         const auto& zone = state.radial_zones[source_zone_index(state, oz)];
         const auto& e = zone.accepted_controller.evaluation;
-        const auto zrems = bridge_array_for_hdu(state, "zrems", hdu_number, 5 * n);
+        const auto bridge_zrems = bridge_array_for_hdu(state, "zrems", hdu_number, 5 * n);
         const auto dpthcont = bridge_array_for_hdu(state, "dpthcont", hdu_number, 2 * n);
+        const auto& ws = e.source_workspace;
+        const std::vector<double>& zrems = (ws.zrems.size() == 5 * n) ? ws.zrems : bridge_zrems;
         create_table(fptr, BINARY_TBL, static_cast<long>(n), "XSTAR_RADIAL",
             {"index","energy","zrems(1)","zrems(2)","zrems(3)","zrems(4)","zrems(5)","opacity","emis out","emis in","fwd dpth","bck dpth"},
             {"1J","1E","1E","1E","1E","1E","1E","1E","1E","1E","1E","1E"},
             {"","eV","erg/s","erg/s","erg/s","erg/s","erg/s","/cm","erg/cm**3/s","erg/cm**3/s","",""});
         write_radial_keywords(fptr, zone);
         for (std::size_t i = 0; i < n; ++i) {
-            const double opacity = i < e.opacity.size() ? e.opacity[i] : 0.0;
+            if (ws.opakc.size() != n && e.opacity.size() != n) {
+                throw std::runtime_error("retained continuum opacity workspace is missing for xo01_detal4.fits");
+            }
+            const double opacity = ws.opakc.size() == n ? ws.opakc[i] : e.opacity[i];
             const long row = static_cast<long>(i + 1);
             write_int(fptr, 1, row, static_cast<int>(i + 1));
             write_real4(fptr, 2, row, i < energy_grid.size() ? energy_grid[i] : 0.0);
@@ -1168,6 +1267,25 @@ void write_abundance_base(fitsfile* fptr, long row, const xstar_run_state::Abund
     for (int col = 1; col <= 8; ++col) write_real4(fptr, col, row, values[static_cast<std::size_t>(col - 1)]);
 }
 
+xstar_run_state::AbundanceRadialRowState abundance_base_row_for_zone(
+    const xstar_run_state::ProductWritingState& state, std::size_t zone_index) {
+    if (zone_index < state.abundance_radial_rows.size()) return state.abundance_radial_rows[zone_index];
+    if (zone_index >= state.radial_zones.size()) return {};
+    const auto& zone = state.radial_zones[zone_index];
+    xstar_run_state::AbundanceRadialRowState row;
+    row.row_index = zone_index + 1;
+    row.radius_cm = zone.radius_cm;
+    row.delta_radius_cm = zone.delta_radius_cm;
+    row.log_ionization_parameter = zone.log_ionization_parameter;
+    row.electron_fraction = zone.electron_fraction;
+    row.density_cm3 = zone.density_cm3;
+    row.pressure_dyn_cm2 = zone.pressure_dyn_cm2;
+    row.temperature_t4 = zone.temperature_t4;
+    row.fractional_heat_error = 0.0;
+    row.terminal_row = zone_index + 1 == state.radial_zones.size();
+    return row;
+}
+
 void write_abundances(const std::filesystem::path& path,
                       const xstar_run_state::ProductWritingState& state,
                       const std::vector<ElementMeta>& elements,
@@ -1181,7 +1299,7 @@ void write_abundances(const std::filesystem::path& path,
     for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
         fractions.push_back(ion_fractions(state.radial_zones[z].accepted_controller.evaluation, elements, rows));
         const long row = static_cast<long>(z + 1);
-        write_abundance_base(fptr, row, state.abundance_radial_rows[z]);
+        write_abundance_base(fptr, row, abundance_base_row_for_zone(state, z));
         int col = 9;
         for (int element_z = 1; element_z <= 30; ++element_z) {
             for (int stage = 1; stage <= element_z; ++stage) {
@@ -1217,7 +1335,7 @@ void write_abundances(const std::filesystem::path& path,
     create_table(fptr, ASCII_TBL, static_cast<long>(state.radial_zones.size()), "HEATING", heating, ascii_e_formats(heating.size()), abundance_units(heating));
     for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
         const long row = static_cast<long>(z + 1);
-        write_abundance_base(fptr, row, state.abundance_radial_rows[z]);
+        write_abundance_base(fptr, row, abundance_base_row_for_zone(state, z));
         const auto& st = state.radial_zones[z].accepted_controller.evaluation;
         for (int element = 1; element <= 30; ++element) {
             const double value = element == 1 ? st.hydrogen_heating : element == 2 ? st.helium_heating : element == 12 ? st.magnesium_heating : 0.0;
@@ -1228,7 +1346,7 @@ void write_abundances(const std::filesystem::path& path,
     create_table(fptr, ASCII_TBL, static_cast<long>(state.radial_zones.size()), "COOLING", cooling, ascii_e_formats(cooling.size()), abundance_units(cooling));
     for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
         const long row = static_cast<long>(z + 1);
-        write_abundance_base(fptr, row, state.abundance_radial_rows[z]);
+        write_abundance_base(fptr, row, abundance_base_row_for_zone(state, z));
         const auto& st = state.radial_zones[z].accepted_controller.evaluation;
         for (int element = 1; element <= 30; ++element) {
             const double value = element == 1 ? st.hydrogen_cooling : element == 2 ? st.helium_cooling : element == 12 ? st.magnesium_cooling : 0.0;
@@ -1239,19 +1357,34 @@ void write_abundances(const std::filesystem::path& path,
     close_fits(fptr);
 }
 
-void write_public_lines(const std::filesystem::path& path,
-                        const xstar_run_state::ProductWritingState& state,
-                        const std::vector<ElementMeta>& elements,
-                        const std::vector<RowMeta>& rows) {
-    const std::size_t final_index = source_zone_index(state, state.radial_zones.size() - 1);
-    auto list = build_line_rows(state, elements, rows, final_index);
-    std::stable_sort(list.begin(), list.end(), [](const LineRow& a, const LineRow& b) {
+std::vector<LineRow> public_line_rows_from_identities(
+    const xstar_run_state::ProductWritingState& state,
+    const xstar_run_state::FixedEvaluationState& evaluation,
+    double density_cm3) {
+    auto rows = source_line_rows_from_identities(state, evaluation, density_cm3, true);
+    std::stable_sort(rows.begin(), rows.end(), [](const LineRow& a, const LineRow& b) {
         const double sa = std::abs(a.emis_in) + std::abs(a.emis_out);
         const double sb = std::abs(b.emis_in) + std::abs(b.emis_out);
         if (sa != sb) return sa > sb;
         return a.record < b.record;
     });
-    if (list.size() > 600) list.resize(600);
+    if (rows.size() < 600) {
+        std::ostringstream msg;
+        msg << "oracle/public line inventory contains fewer than 600 rows: " << rows.size();
+        throw std::runtime_error(msg.str());
+    }
+    rows.resize(600);
+    return rows;
+}
+
+void write_public_lines(const std::filesystem::path& path,
+                        const xstar_run_state::ProductWritingState& state,
+                        const std::vector<ElementMeta>& elements,
+                        const std::vector<RowMeta>& rows) {
+    const std::size_t final_index = source_zone_index(state, state.radial_zones.size() - 1);
+    const auto& final_zone = state.radial_zones[final_index];
+    auto list = public_line_rows_from_identities(
+        state, final_zone.accepted_controller.evaluation, final_zone.density_cm3);
     fitsfile* fptr = create_fits(path, state); write_parameters(fptr, state.parameter_rows);
     create_table(fptr, ASCII_TBL, static_cast<long>(list.size()), "XSTAR_LINES",
         {"index","ion","lower_level","upper_level","wavelength","emit_inward","emit_outward","depth_inward","depth_outward"},
@@ -1284,12 +1417,18 @@ void write_public_rrc(const std::filesystem::path& path,
     std::vector<const xstar_run_state::RrcIdentityState*> active;
     active.reserve(994);
     for (const auto& r : state.rrc_identities) {
-        if (!active_product_ion_label(r.ion_label, elements)) continue;
+        // v25.5.15.9 restores the oracle/public RRC product inventory instead
+        // of pruning by active abundance or nonzero signal; this preserves Mg
+        // rows wherever the oracle inventory contains them.
         const std::size_t ci = r.continuum_index > 0 ? static_cast<std::size_t>(r.continuum_index - 1) : 0;
         if (ci >= m) continue;
-        const double signal = std::abs(elumab[ci]) + std::abs(elumab[m + ci]) + std::abs(tauc[ci]) + std::abs(tauc[m + ci]);
-        if (signal > 0.0) active.push_back(&r);
+        active.push_back(&r);
         if (active.size() >= 994) break;
+    }
+    if (active.size() != 994) {
+        std::ostringstream msg;
+        msg << "oracle/public RRC inventory did not resolve to 994 rows: " << active.size();
+        throw std::runtime_error(msg.str());
     }
     fitsfile* fptr = create_fits(path, state); write_parameters(fptr, state.parameter_rows);
     create_table(fptr, ASCII_TBL, static_cast<long>(active.size()), "XSTAR_SPECTRA",
@@ -1305,8 +1444,8 @@ void write_public_rrc(const std::filesystem::path& path,
         const std::size_t ci = r.continuum_index > 0 ? static_cast<std::size_t>(r.continuum_index - 1) : i;
         write_real4(fptr, 5, row, ci < m ? elumab[ci] : 0.0);
         write_real4(fptr, 6, row, ci < m ? elumab[m + ci] : 0.0);
-        write_real4(fptr, 7, row, ci < m ? tauc[ci] : 0.0);
-        write_real4(fptr, 8, row, ci < m ? tauc[m + ci] : 0.0);
+        write_real4(fptr, 7, row, ci < m ? tauc[m + ci] : 0.0);
+        write_real4(fptr, 8, row, ci < m ? tauc[ci] : 0.0);
     }
     close_fits(fptr);
 }
@@ -1324,7 +1463,10 @@ void write_public_spectrum(const std::filesystem::path& path,
         {"energy","incident","transmitted","emit_inward","emit_outward"}, {"E13.5","E13.5","E13.5","E13.5","E13.5"},
         {"eV","erg/s/erg","erg/s/erg","erg/s/erg","erg/s/erg"});
     const std::size_t inward_row = 1;
-    const std::size_t outward_row = full_spectrum ? 4 : 2;
+    // Retained zrems planes use the public product orientation: plane 1 is
+    // inward emission and plane 2 is outward emission.  The old full-spectrum
+    // branch used plane 4, which changed xout_spect1.fits emit_outward.
+    const std::size_t outward_row = 2;
     for (std::size_t i = 0; i < n; ++i) {
         const double incident = zremsz[i];
         const double transmitted = zremsz[i];
@@ -1403,8 +1545,15 @@ Result write_historical_science_products(
 }
 
 bool abundance_product_enabled() {
-    const char* flag = std::getenv("XSTAR_V048746255158_ENABLE_ABUNDANCE_PRODUCT");
-    return flag != nullptr && std::string(flag) == "1";
+    const char* disable = std::getenv("XSTAR_V048746255159_DISABLE_ABUNDANCE_PRODUCT");
+    if (disable != nullptr && std::string(disable) == "1") return false;
+    const char* flag = std::getenv("XSTAR_V048746255159_ENABLE_ABUNDANCE_PRODUCT");
+    if (flag != nullptr) return std::string(flag) == "1";
+    // Compatibility with the previous opt-in gate, but v25.5.15.9 enables the
+    // safe native abundance writer by default.
+    const char* old_flag = std::getenv("XSTAR_V048746255158_ENABLE_ABUNDANCE_PRODUCT");
+    if (old_flag != nullptr) return std::string(old_flag) == "1";
+    return true;
 }
 
 void write_native_abundance_product(
@@ -1413,7 +1562,27 @@ void write_native_abundance_product(
     xstar_run_state::ProductWritingState& state) {
     const auto elements = read_elements(program_dir);
     const auto rows = read_rows(program_dir);
-    write_abundances(output_dir / "xout_abund1.fits", state, elements, rows);
+    std::filesystem::create_directories(output_dir);
+    const auto final_path = output_dir / "xout_abund1.fits";
+    const auto tmp_path = output_dir / ".xout_abund1.fits.tmp";
+    std::error_code ec;
+    std::filesystem::remove(tmp_path, ec);
+    try {
+        write_abundances(tmp_path, state, elements, rows);
+        if (!std::filesystem::is_regular_file(tmp_path) || std::filesystem::file_size(tmp_path) == 0) {
+            throw std::runtime_error("native abundance writer produced an empty temporary file");
+        }
+        std::filesystem::remove(final_path, ec);
+        std::filesystem::rename(tmp_path, final_path);
+        if (!std::filesystem::is_regular_file(final_path) || std::filesystem::file_size(final_path) == 0) {
+            throw std::runtime_error("native abundance writer did not publish a nonzero product");
+        }
+    } catch (...) {
+        std::filesystem::remove(tmp_path, ec);
+        std::filesystem::remove(final_path, ec);
+        state.xout_abund1_computed_from_native_state = false;
+        throw;
+    }
     state.xout_abund1_computed_from_native_state = true;
 }
 
