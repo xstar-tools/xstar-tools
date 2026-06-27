@@ -287,7 +287,7 @@ void write_retention_report(const WholeRunAccumulatedState& state,
     }
     out << "{\n"
         << "  \"schema\": \"xstar-tools-v06487462551593-source-workspace-retention-v1\",\n"
-        << "  \"release\": \"0.6.48.7.46.25.5.15.9.6\",\n"
+        << "  \"release\": \"0.6.48.7.46.25.5.15.9.7\",\n"
         << "  \"selected_product_states\": " << selected << ",\n"
         << "  \"exact_product_state_bridge_result\": \"" << json_escape(bridge_result) << "\",\n"
         << "  \"bridge_tauc_exact\": " << (bridge_tauc_exact ? "true" : "false") << ",\n"
@@ -387,15 +387,17 @@ void prepare_native_product_state(
     state.continuum_depths_derived_from_native_opacity = false;
     state.product_schema_complete = native_loader_ready;
     state.radial_state_complete = state.exact_accepted_radial_boundaries_retained;
+    // v25.5.15.9.7: native FITS products must be hydro-safe and must not
+    // depend on retained legacy pprint/xout_step buffers.  xout_step.log still
+    // has its own legacy-pprint requirement inside xstar_step_log.cpp.
     state.native_product_inputs_complete = state.exact_source_metadata_retained &&
         state.exact_source_workspaces_retained &&
-        state.exact_accepted_radial_boundaries_retained &&
-        state.exact_legacy_pprint_state_retained;
+        state.exact_accepted_radial_boundaries_retained;
     state.embedded_public_fits_payloads_absent = true;
     state.embedded_full_xout_step_payload_absent = true;
 
     write_retention_report(
-        state, diagnostics_path.parent_path() / "v0487462551596_source_workspace_retention.json");
+        state, diagnostics_path.parent_path() / "v0487462551597_source_workspace_retention.json");
 
     if (!state.native_product_inputs_complete) {
         throw std::runtime_error(
