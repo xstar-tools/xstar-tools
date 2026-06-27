@@ -1134,7 +1134,7 @@ std::vector<double> read_reference_energy_csv(const std::filesystem::path& path)
 
 std::vector<double> reference_energy_grid(const xstar_run_state::ProductWritingState& state,
                                           const std::vector<double>& fallback) {
-    const char* explicit_path = std::getenv("XSTAR_V04874625515913_RADIATION_CSV");
+    const char* explicit_path = std::getenv("XSTAR_V04874625515914_RADIATION_CSV");
     if (!explicit_path) explicit_path = std::getenv("XSTAR_CPP_RADIATION_CSV");
     if (explicit_path) {
         auto values = read_reference_energy_csv(explicit_path);
@@ -1426,12 +1426,23 @@ struct LineBridgeArrays {
     std::vector<double> rcem;
     std::vector<double> oplin;
     std::vector<double> tau0;
+    std::vector<double> line_volume_emis_in;
+    std::vector<double> line_volume_emis_out;
+    std::vector<double> line_opacity_final;
+    std::vector<double> line_tau_in_final;
+    std::vector<double> line_tau_out_final;
+    std::vector<double> line_public_emit_in;
+    std::vector<double> line_public_emit_out;
+    std::vector<double> line_public_depth_in;
+    std::vector<double> line_public_depth_out;
     std::map<long long,std::size_t> index_map;
     std::size_t count = 0;
     std::size_t nonzero_rcem = 0;
     std::size_t nonzero_oplin = 0;
     std::size_t nonzero_tau0 = 0;
     bool complete = false;
+    bool final_detail_complete = false;
+    bool final_public_complete = false;
 };
 
 std::size_t nonzero_count(const std::vector<double>& values) {
@@ -1453,7 +1464,20 @@ LineBridgeArrays load_line_bridge_arrays(
     out.rcem = optional_bridge_array_for_hdu(state, "rcem", hdu_number, 2 * out.count);
     out.oplin = optional_bridge_array_for_hdu(state, "oplin", hdu_number, out.count);
     out.tau0 = optional_bridge_array_for_hdu(state, "tau0", hdu_number, 2 * out.count);
+    out.line_volume_emis_in = optional_bridge_array_for_hdu(state, "line_volume_emis_in", hdu_number, out.count);
+    out.line_volume_emis_out = optional_bridge_array_for_hdu(state, "line_volume_emis_out", hdu_number, out.count);
+    out.line_opacity_final = optional_bridge_array_for_hdu(state, "line_opacity_final", hdu_number, out.count);
+    out.line_tau_in_final = optional_bridge_array_for_hdu(state, "line_tau_in_final", hdu_number, out.count);
+    out.line_tau_out_final = optional_bridge_array_for_hdu(state, "line_tau_out_final", hdu_number, out.count);
+    out.line_public_emit_in = optional_bridge_array_for_hdu(state, "line_public_emit_in", hdu_number, out.count);
+    out.line_public_emit_out = optional_bridge_array_for_hdu(state, "line_public_emit_out", hdu_number, out.count);
+    out.line_public_depth_in = optional_bridge_array_for_hdu(state, "line_public_depth_in", hdu_number, out.count);
+    out.line_public_depth_out = optional_bridge_array_for_hdu(state, "line_public_depth_out", hdu_number, out.count);
     out.complete = (out.rcem.size() == 2 * out.count && out.oplin.size() == out.count && out.tau0.size() == 2 * out.count);
+    out.final_detail_complete = (out.line_volume_emis_in.size() == out.count && out.line_volume_emis_out.size() == out.count &&
+        out.line_opacity_final.size() == out.count && out.line_tau_in_final.size() == out.count && out.line_tau_out_final.size() == out.count);
+    out.final_public_complete = (out.line_public_emit_in.size() == out.count && out.line_public_emit_out.size() == out.count &&
+        out.line_public_depth_in.size() == out.count && out.line_public_depth_out.size() == out.count);
     out.nonzero_rcem = nonzero_count(out.rcem);
     out.nonzero_oplin = nonzero_count(out.oplin);
     out.nonzero_tau0 = nonzero_count(out.tau0);
@@ -1466,7 +1490,8 @@ LineRow line_row_from_identity(const xstar_run_state::LineIdentityState& id,
                                const xstar_run_state::FixedEvaluationState& evaluation,
                                double density_cm3,
                                std::size_t workspace_index,
-                               const LineBridgeArrays* bridge = nullptr) {
+                               const LineBridgeArrays* bridge = nullptr,
+                               bool public_units = false) {
     const auto& ws = evaluation.source_workspace;
     const std::size_t compact = workspace_index;
     const std::size_t direct = safe_workspace_index(id.line_index, compact);
@@ -1488,15 +1513,28 @@ LineRow line_row_from_identity(const xstar_run_state::LineIdentityState& id,
         const auto found = bridge->index_map.find(id.line_index);
         if (found != bridge->index_map.end() && found->second < bridge->count) {
             const std::size_t bi = found->second;
-            // SavedShellSnapshot already stores the source/output line arrays
-            // in their product units.  Do not multiply by density again here;
-            // density scaling belongs at the physics kernel that populated rcem,
-            // oplin and tau0, not at the FITS projection layer.
-            row.emis_in = bridge->rcem[bi];
-            row.emis_out = bridge->rcem[bridge->count + bi];
-            row.opacity = bridge->oplin[bi];
-            row.tau_in = bridge->tau0[bi];
-            row.tau_out = bridge->tau0[bridge->count + bi];
+            // Prefer the post-scaled product arrays promoted into the typed
+            // bridge.  Raw rcem/oplin/tau0 are retained for diagnostics, but FITS
+            // projection must consume final product semantics when available.
+            if (public_units && bridge->final_public_complete) {
+                row.emis_in = bridge->line_public_emit_in[bi];
+                row.emis_out = bridge->line_public_emit_out[bi];
+                row.opacity = bridge->line_opacity_final.size() == bridge->count ? bridge->line_opacity_final[bi] : bridge->oplin[bi];
+                row.tau_in = bridge->line_public_depth_in[bi];
+                row.tau_out = bridge->line_public_depth_out[bi];
+            } else if (!public_units && bridge->final_detail_complete) {
+                row.emis_in = bridge->line_volume_emis_in[bi];
+                row.emis_out = bridge->line_volume_emis_out[bi];
+                row.opacity = bridge->line_opacity_final[bi];
+                row.tau_in = bridge->line_tau_in_final[bi];
+                row.tau_out = bridge->line_tau_out_final[bi];
+            } else {
+                row.emis_in = bridge->rcem[bi];
+                row.emis_out = bridge->rcem[bridge->count + bi];
+                row.opacity = bridge->oplin[bi];
+                row.tau_in = bridge->tau0[bi];
+                row.tau_out = bridge->tau0[bridge->count + bi];
+            }
             bridge_hit = true;
         }
     }
@@ -1557,7 +1595,7 @@ std::vector<LineRow> source_line_rows_from_identities(
         const auto ordered = oracle_detail_line_identity_order(state);
         for (std::size_t i = 0; i < ordered.size(); ++i) {
             if (!ordered[i]) continue;
-            out.push_back(line_row_from_identity(*ordered[i], evaluation, density_cm3, i, &line_bridge));
+            out.push_back(line_row_from_identity(*ordered[i], evaluation, density_cm3, i, &line_bridge, false));
         }
     } else {
         for (const auto line_index : kOraclePublicLineInventory) {
@@ -1565,7 +1603,7 @@ std::vector<LineRow> source_line_rows_from_identities(
             if (!id) continue;
             const auto found = workspace_index.find(line_index);
             const std::size_t compact = found == workspace_index.end() ? 0u : found->second;
-            out.push_back(line_row_from_identity(*id, evaluation, density_cm3, compact, &line_bridge));
+            out.push_back(line_row_from_identity(*id, evaluation, density_cm3, compact, &line_bridge, true));
         }
     }
     return out;
@@ -1989,9 +2027,13 @@ void write_spectrum_detail(const std::filesystem::path& path,
         const auto dpthcont = bridge_array_for_hdu(state, "dpthcont", hdu_number, 2 * n);
         const auto retained_opakc = optional_bridge_array_for_hdu(state, "opakc", hdu_number, n);
         const auto retained_rccemis = optional_bridge_array_for_hdu(state, "rccemis", hdu_number, 2 * n);
+        const auto final_energy_grid = optional_bridge_array_for_hdu(state, "detail_energy_ev", hdu_number, n);
+        const auto final_continuum_opacity = optional_bridge_array_for_hdu(state, "continuum_opacity_final", hdu_number, n);
+        const auto final_continuum_emis_in = optional_bridge_array_for_hdu(state, "continuum_emis_in_final", hdu_number, n);
+        const auto final_continuum_emit_out = optional_bridge_array_for_hdu(state, "continuum_emit_out_final", hdu_number, n);
         const auto& ws = e.source_workspace;
         const auto continuum_diag = read_continuum_diagnostics_by_full_bin(state, zone.accepted_controller.accepted_sequence, n);
-        const auto detail_energy_grid = e.radiation_energy_ev;
+        const auto detail_energy_grid = final_energy_grid.size() == n ? final_energy_grid : e.radiation_energy_ev;
         const std::vector<double>& zrems = (ws.zrems.size() == 5 * n) ? ws.zrems : bridge_zrems;
         create_table(fptr, BINARY_TBL, static_cast<long>(n), "XSTAR_RADIAL",
             {"index","energy","zrems(1)","zrems(2)","zrems(3)","zrems(4)","zrems(5)","opacity","emis out","emis in","fwd dpth","bck dpth"},
@@ -2002,8 +2044,9 @@ void write_spectrum_detail(const std::filesystem::path& path,
             if (retained_opakc.size() != n && ws.opakc.size() != n && e.opacity.size() != n) {
                 throw std::runtime_error("retained continuum opacity workspace is missing for xo01_detal4.fits");
             }
-            double opacity = source_continuum_opacity_for_bin(e, continuum_diag, retained_opakc, i);
-            const double emis_in = source_continuum_emis_in_for_bin(e, continuum_diag, retained_rccemis, n, i);
+            double opacity = final_continuum_opacity.size() == n ? final_continuum_opacity[i] : source_continuum_opacity_for_bin(e, continuum_diag, retained_opakc, i);
+            const double emis_in = final_continuum_emis_in.size() == n ? final_continuum_emis_in[i] : source_continuum_emis_in_for_bin(e, continuum_diag, retained_rccemis, n, i);
+            const double emis_out = final_continuum_emit_out.size() == n ? final_continuum_emit_out[i] : zrems[3 * n + i];
             const long row = static_cast<long>(i + 1);
             write_int(fptr, 1, row, static_cast<int>(i + 1));
             write_real4(fptr, 2, row, i < detail_energy_grid.size() ? detail_energy_grid[i] : (i < e.radiation_energy_ev.size() ? e.radiation_energy_ev[i] : 0.0));
@@ -2013,7 +2056,7 @@ void write_spectrum_detail(const std::filesystem::path& path,
             write_real4(fptr, 6, row, zrems[3 * n + i]);
             write_real4(fptr, 7, row, zrems[4 * n + i]);
             write_real4(fptr, 8, row, opacity);
-            write_real4(fptr, 9, row, zrems[3 * n + i]);
+            write_real4(fptr, 9, row, emis_out);
             write_real4(fptr, 10, row, emis_in);
             const auto bridge_rows = radial_keyword_boundaries(state);
             const double radial_depth = oz < bridge_rows.size() ? bridge_rows[oz].radial_depth_cm : zone.delta_radius_cm;
@@ -2325,6 +2368,9 @@ void write_public_spectrum(const std::filesystem::path& path,
     const auto zrems = bridge_array_for_hdu(state, "zrems", 6, 5 * n);
     const auto zremsz = bridge_array_for_hdu(state, "zremsz", 6, n);
     const auto dpthcont = bridge_array_for_hdu(state, "dpthcont", 6, 2 * n);
+    const auto final_transmitted = optional_bridge_array_for_hdu(state, "continuum_transmitted_final", 6, n);
+    const auto final_continuum_emit_out = optional_bridge_array_for_hdu(state, "continuum_emit_out_final", 6, n);
+    const auto final_spectrum_emit_out = optional_bridge_array_for_hdu(state, "spectrum_emit_out_final", 6, n);
     const auto energy_grid = reference_energy_grid(state, e.radiation_energy_ev);
     fitsfile* fptr = create_fits(path, state); write_parameters(fptr, state.parameter_rows);
     create_table(fptr, ASCII_TBL, static_cast<long>(n), "XSTAR_SPECTRA",
@@ -2339,9 +2385,10 @@ void write_public_spectrum(const std::filesystem::path& path,
     for (std::size_t i = 0; i < n; ++i) {
         const double incident = zremsz[i];
         const double tau_forward = i < n ? std::max(0.0, dpthcont[i]) : 0.0;
-        const double transmitted = incident * std::exp(-tau_forward);
+        const double transmitted = final_transmitted.size() == n ? final_transmitted[i] : incident * std::exp(-tau_forward);
         const double emit_inward = zrems[inward_row * n + i];
-        const double emit_outward = zrems[outward_row * n + i];
+        const double emit_outward = full_spectrum && final_spectrum_emit_out.size() == n ? final_spectrum_emit_out[i] :
+            (!full_spectrum && final_continuum_emit_out.size() == n ? final_continuum_emit_out[i] : zrems[outward_row * n + i]);
         const long row = static_cast<long>(i + 1);
         write_real4(fptr, 1, row, i < energy_grid.size() ? energy_grid[i] : (i < e.radiation_energy_ev.size() ? e.radiation_energy_ev[i] : 0.0));
         write_real4(fptr, 2, row, incident);
@@ -2412,9 +2459,9 @@ Result write_historical_science_products(
 }
 
 bool abundance_product_enabled() {
-    const char* disable = std::getenv("XSTAR_V04874625515913_DISABLE_ABUNDANCE_PRODUCT");
+    const char* disable = std::getenv("XSTAR_V04874625515914_DISABLE_ABUNDANCE_PRODUCT");
     if (disable != nullptr && std::string(disable) == "1") return false;
-    const char* flag = std::getenv("XSTAR_V04874625515913_ENABLE_ABUNDANCE_PRODUCT");
+    const char* flag = std::getenv("XSTAR_V04874625515914_ENABLE_ABUNDANCE_PRODUCT");
     if (flag != nullptr) return std::string(flag) == "1";
     // Compatibility with the previous opt-in gate, but v25.5.15.9.1 enables the
     // safe native abundance writer by default.
