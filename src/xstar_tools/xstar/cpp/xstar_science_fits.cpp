@@ -1110,7 +1110,7 @@ std::vector<double> read_reference_energy_csv(const std::filesystem::path& path)
 
 std::vector<double> reference_energy_grid(const xstar_run_state::ProductWritingState& state,
                                           const std::vector<double>& fallback) {
-    const char* explicit_path = std::getenv("XSTAR_V0487462551597_RADIATION_CSV");
+    const char* explicit_path = std::getenv("XSTAR_V0487462551598_RADIATION_CSV");
     if (!explicit_path) explicit_path = std::getenv("XSTAR_CPP_RADIATION_CSV");
     if (explicit_path) {
         auto values = read_reference_energy_csv(explicit_path);
@@ -1132,6 +1132,43 @@ std::size_t source_zone_index(const xstar_run_state::ProductWritingState& state,
                               std::size_t output_zone_index) {
     if (state.radial_zones.empty()) return 0;
     return std::min(output_zone_index + 1, state.radial_zones.size() - 1);
+}
+
+// Native product writers must use typed physical zone values.  In the retained
+// v0472 bridge path, some radial_zones entries carry accepted evaluations but
+// zero scalar density/shell-width because the public radial boundary ledger is
+// stored separately.  Hydro/post-processing states should carry density directly;
+// this helper uses that direct value first and only falls back to the retained
+// radial boundary/parameter rows when the scalar is absent.
+double physical_density_cm3_for_output_zone(const xstar_run_state::ProductWritingState& state,
+                                            std::size_t output_zone_index) {
+    if (!state.radial_zones.empty()) {
+        const std::size_t src = source_zone_index(state, output_zone_index);
+        if (src < state.radial_zones.size() && state.radial_zones[src].density_cm3 > 0.0) {
+            return state.radial_zones[src].density_cm3;
+        }
+    }
+    const auto boundaries = abundance_boundary_rows(state);
+    if (output_zone_index < boundaries.size() && boundaries[output_zone_index].density_cm3 > 0.0) {
+        return boundaries[output_zone_index].density_cm3;
+    }
+    const double parameter_density = parameter_value(state, "density", 0.0);
+    return parameter_density > 0.0 ? parameter_density : 0.0;
+}
+
+double physical_shell_depth_cm_for_output_zone(const xstar_run_state::ProductWritingState& state,
+                                               std::size_t output_zone_index) {
+    const auto boundaries = abundance_boundary_rows(state);
+    if (output_zone_index < boundaries.size() && boundaries[output_zone_index].radial_depth_cm > 0.0) {
+        return boundaries[output_zone_index].radial_depth_cm;
+    }
+    if (!state.radial_zones.empty()) {
+        const std::size_t src = source_zone_index(state, output_zone_index);
+        if (src < state.radial_zones.size() && state.radial_zones[src].delta_radius_cm > 0.0) {
+            return state.radial_zones[src].delta_radius_cm;
+        }
+    }
+    return 0.0;
 }
 
 std::string oracle_ion_label(std::string label) {
@@ -1226,7 +1263,7 @@ int parse_print_option_number(const std::string& line) {
 }
 
 bool pprint_value_patch_enabled() {
-    // v25.5.15.9.7: public FITS products must not borrow values from the
+    // v25.5.15.9.8: public FITS products must not borrow values from the
     // retained legacy pprint/xout_step surface.  Keep the parser available only
     // for standalone forensic experiments, but production and hydro-safe FITS
     // writing always consume typed ProductWritingState arrays.
@@ -1554,7 +1591,7 @@ void write_line_detail(const std::filesystem::path& path,
         const auto& zone = state.radial_zones[sz];
         const auto& evaluation = zone.accepted_controller.evaluation;
         const auto diagnostic_lines = diagnostic_line_rows_by_index(state, evaluation, elements, zone.accepted_controller.accepted_sequence);
-        auto lines = source_line_rows_from_identities(state, evaluation, zone.density_cm3, true);
+        auto lines = source_line_rows_from_identities(state, evaluation, physical_density_cm3_for_output_zone(state, z), true);
         truncate_to_oracle_count(lines, 2644);
         if (lines.size() != 2644) {
             std::ostringstream msg;
@@ -1996,14 +2033,12 @@ void write_abundances(const std::filesystem::path& path,
                 if (!z0) continue;
                 const double f0 = fractions[z][{element_z,stage}];
                 const double f1 = z1 ? fractions[z+1][{element_z,stage}] : f0;
-                const double n0 = z0->density_cm3;
-                const double n1 = z1 ? z1->density_cm3 : n0;
-                const auto base0 = abundance_output_base_row_for_zone(state, z);
-                double dr = base0.delta_radius_cm > 0.0 ? base0.delta_radius_cm : z0->delta_radius_cm;
-                if (!(dr > 0.0)) {
-                    const auto bridge_rows = abundance_boundary_rows(state);
-                    if (z < bridge_rows.size()) dr = bridge_rows[z].radial_depth_cm;
-                }
+                double n0 = physical_density_cm3_for_output_zone(state, z);
+                double n1 = z1 ? physical_density_cm3_for_output_zone(state, z + 1) : n0;
+                if (!(n0 > 0.0)) n0 = z0->density_cm3;
+                if (!(n1 > 0.0)) n1 = z1 ? z1->density_cm3 : n0;
+                double dr = physical_shell_depth_cm_for_output_zone(state, z);
+                if (!(dr > 0.0)) dr = z0->delta_radius_cm;
                 column += 0.5 * (f0*n0 + f1*n1) * dr * abundance;
             }
             write_real4(fptr, col++, 1, column);
@@ -2064,7 +2099,8 @@ void write_public_lines(const std::filesystem::path& path,
     const std::size_t final_index = source_zone_index(state, state.radial_zones.size() - 1);
     const auto& final_zone = state.radial_zones[final_index];
     auto list = public_line_rows_from_identities(
-        state, final_zone.accepted_controller.evaluation, final_zone.density_cm3);
+        state, final_zone.accepted_controller.evaluation,
+        physical_density_cm3_for_output_zone(state, state.radial_zones.size() - 1));
     const auto legacy_values = pprint_value_patch_enabled() ? parse_legacy_pprint_product_values(state) : LegacyPprintProductValues{};
     fitsfile* fptr = create_fits(path, state); write_parameters(fptr, state.parameter_rows);
     create_table(fptr, ASCII_TBL, static_cast<long>(list.size()), "XSTAR_LINES",
@@ -2131,9 +2167,9 @@ void write_public_rrc(const std::filesystem::path& path,
         // Public RRC depth columns follow the public/oracle orientation: the
         // first retained tauc plane is depth_outward and the second plane is
         // depth_inward.  Detail products retain tau_in/tau_out semantics, so
-        // this swap is intentionally local to xout_rrc1.fits.
-        write_real4(fptr, 7, row, ci < m ? tauc[m + ci] : 0.0);
-        write_real4(fptr, 8, row, ci < m ? tauc[ci] : 0.0);
+        // this mapping is intentionally local to xout_rrc1.fits.
+        write_real4(fptr, 7, row, ci < m ? tauc[ci] : 0.0);
+        write_real4(fptr, 8, row, ci < m ? tauc[m + ci] : 0.0);
     }
     close_fits(fptr);
 }
