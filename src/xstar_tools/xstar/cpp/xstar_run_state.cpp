@@ -100,6 +100,16 @@ bool load_dpthcont_zremsz_bridge_payload_scaffold(const std::filesystem::path& m
            std::filesystem::is_regular_file(bridge / "dpthcont_zremsz_native_load_scaffold.json");
 }
 
+
+bool load_line_rrc_continuum_bridge_payload_scaffold(const std::filesystem::path& metadata_root) {
+    const auto bridge = metadata_root / "exact_product_state_bridge";
+    const auto manifest = bridge / "manifest.json";
+    return manifest_bool(manifest, "line_rrc_continuum_payload_exported") &&
+           manifest_bool(manifest, "line_rrc_continuum_native_load_scaffold") &&
+           std::filesystem::is_regular_file(bridge / "line_rrc_continuum_payload_manifest.csv") &&
+           std::filesystem::is_regular_file(bridge / "line_rrc_continuum_native_load_scaffold.json");
+}
+
 bool load_native_product_writing_state_loader(const std::filesystem::path& metadata_root) {
     const auto bridge = metadata_root / "exact_product_state_bridge";
     const auto manifest = bridge / "manifest.json";
@@ -108,6 +118,7 @@ bool load_native_product_writing_state_loader(const std::filesystem::path& metad
            load_tauc_bridge_payload_scaffold(metadata_root) &&
            load_radial_accumulation_bridge_payload_scaffold(metadata_root) &&
            load_dpthcont_zremsz_bridge_payload_scaffold(metadata_root) &&
+           load_line_rrc_continuum_bridge_payload_scaffold(metadata_root) &&
            manifest_bool(manifest, "native_product_writing_state_payload_complete") &&
            manifest_bool(manifest, "native_product_writing_state_loader_promoted") &&
            manifest_bool(manifest, "native_product_writing_state_loaded") &&
@@ -263,6 +274,8 @@ void write_retention_report(const WholeRunAccumulatedState& state,
     const bool bridge_dpth_exact = manifest_bool(bridge_manifest, "dpthcont_zremsz_exact");
     const bool bridge_dpth_payload_exported = manifest_bool(bridge_manifest, "dpthcont_zremsz_payload_exported");
     const bool bridge_dpth_native_load_scaffold = load_dpthcont_zremsz_bridge_payload_scaffold(state.product_metadata_path);
+    const bool bridge_line_rrc_continuum_exported = manifest_bool(bridge_manifest, "line_rrc_continuum_payload_exported");
+    const bool bridge_line_rrc_continuum_native_load_scaffold = load_line_rrc_continuum_bridge_payload_scaffold(state.product_metadata_path);
     const bool bridge_boundaries_exact = manifest_bool(bridge_manifest, "accepted_radial_boundaries_exact");
     const bool bridge_pprint_exact = manifest_bool(bridge_manifest, "legacy_pprint_events_and_buffers_exact");
     const bool bridge_native_arrays_loaded = manifest_bool(bridge_manifest, "native_cfitsio_arrays_loaded");
@@ -287,7 +300,7 @@ void write_retention_report(const WholeRunAccumulatedState& state,
     }
     out << "{\n"
         << "  \"schema\": \"xstar-tools-v06487462551593-source-workspace-retention-v1\",\n"
-        << "  \"release\": \"0.6.48.7.46.25.5.15.9.10\",\n"
+        << "  \"release\": \"0.6.48.7.46.25.5.15.9.11\",\n"
         << "  \"selected_product_states\": " << selected << ",\n"
         << "  \"exact_product_state_bridge_result\": \"" << json_escape(bridge_result) << "\",\n"
         << "  \"bridge_tauc_exact\": " << (bridge_tauc_exact ? "true" : "false") << ",\n"
@@ -299,6 +312,8 @@ void write_retention_report(const WholeRunAccumulatedState& state,
         << "  \"bridge_dpthcont_zremsz_exact\": " << (bridge_dpth_exact ? "true" : "false") << ",\n"
         << "  \"bridge_dpthcont_zremsz_payload_exported\": " << (bridge_dpth_payload_exported ? "true" : "false") << ",\n"
         << "  \"bridge_dpthcont_zremsz_native_load_scaffold\": " << (bridge_dpth_native_load_scaffold ? "true" : "false") << ",\n"
+        << "  \"bridge_line_rrc_continuum_payload_exported\": " << (bridge_line_rrc_continuum_exported ? "true" : "false") << ",\n"
+        << "  \"bridge_line_rrc_continuum_native_load_scaffold\": " << (bridge_line_rrc_continuum_native_load_scaffold ? "true" : "false") << ",\n"
         << "  \"bridge_accepted_radial_boundaries_exact\": " << (bridge_boundaries_exact ? "true" : "false") << ",\n"
         << "  \"bridge_legacy_pprint_exact\": " << (bridge_pprint_exact ? "true" : "false") << ",\n"
         << "  \"bridge_native_cfitsio_arrays_loaded\": " << (bridge_native_arrays_loaded ? "true" : "false") << ",\n"
@@ -320,6 +335,7 @@ void write_retention_report(const WholeRunAccumulatedState& state,
         << "  \"lte_populations_exact\": " << (lte == selected ? "true" : "false") << ",\n"
         << "  \"radial_accumulation_zrems_elumab_dpthc_exact\": " << ((bridge_radial_accum_exact && bridge_native_arrays_loaded) ? "true" : "false") << ",\n"
         << "  \"dpthcont_zremsz_exact\": " << ((bridge_dpth_exact && bridge_native_arrays_loaded) ? "true" : "false") << ",\n"
+        << "  \"line_rrc_continuum_arrays_exact\": " << ((bridge_line_rrc_continuum_exported && bridge_line_rrc_continuum_native_load_scaffold && bridge_native_arrays_loaded) ? "true" : "false") << ",\n"
         << "  \"accepted_radial_boundaries_exact\": " << ((bridge_boundaries_exact && bridge_native_arrays_loaded) ? "true" : "false") << ",\n"
         << "  \"legacy_pprint_events_and_buffers_exact\": " << ((bridge_pprint_exact && bridge_native_arrays_loaded) ? "true" : "false") << ",\n"
         << "  \"cfitsio_public_product_writing_enabled\": " << (bridge_product_write_gate_enabled ? "true" : "false") << ",\n"
@@ -397,7 +413,7 @@ void prepare_native_product_state(
     state.embedded_full_xout_step_payload_absent = true;
 
     write_retention_report(
-        state, diagnostics_path.parent_path() / "v04874625515910_source_workspace_retention.json");
+        state, diagnostics_path.parent_path() / "v04874625515911_source_workspace_retention.json");
 
     if (!state.native_product_inputs_complete) {
         throw std::runtime_error(
