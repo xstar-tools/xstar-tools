@@ -619,17 +619,117 @@ void write_parameters(fitsfile* fptr, const std::vector<xstar_run_state::Paramet
     }
 }
 
-void write_radial_keywords(fitsfile* fptr, const xstar_run_state::RadialZoneState& zone) {
+struct BridgeBoundaryRow {
+    int hdu_index = 0;
+    int zone_index = 0;
+    bool terminal_record = false;
+    double radius_cm = 0.0;
+    double outer_radius_cm = 0.0;
+    double delta_radius_cm = 0.0;
+    double radial_depth_cm = 0.0;
+    double column_density_cm2 = 0.0;
+    double density_cm3 = 0.0;
+    double temperature_k = 0.0;
+    double electron_fraction = 0.0;
+    double zeta = 0.0;
+};
+
+bool bool_from_text(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
+    return value == "true" || value == "1" || value == "t" || value == "yes";
+}
+
+double parameter_value(const xstar_run_state::ProductWritingState& state, const std::string& name, double fallback) {
+    for (const auto& row : state.parameter_rows) {
+        if (row.parameter == name) {
+            float value = 0.0f;
+            std::memcpy(&value, &row.value_bits, sizeof(value));
+            return static_cast<double>(value);
+        }
+    }
+    return fallback;
+}
+
+std::vector<BridgeBoundaryRow> read_bridge_boundaries(const xstar_run_state::ProductWritingState& state) {
+    const auto path = state.product_metadata_path / "exact_product_state_bridge" / "accepted_radial_boundaries.csv";
+    std::ifstream input(path);
+    if (!input) return {};
+    std::string header;
+    if (!std::getline(input, header)) return {};
+    const auto columns = columns_of(header);
+    std::vector<BridgeBoundaryRow> out;
+    std::string line;
+    while (std::getline(input, line)) {
+        if (line.empty()) continue;
+        const auto f = split_csv(line);
+        BridgeBoundaryRow row;
+        row.hdu_index = static_cast<int>(integer_or(f, columns, "hdu_index", 0));
+        row.zone_index = static_cast<int>(integer_or(f, columns, "zone_index", 0));
+        row.terminal_record = bool_from_text(field_or(f, columns, "terminal_record", "False"));
+        row.radius_cm = number_or(f, columns, "radius_cm", 0.0);
+        row.outer_radius_cm = number_or(f, columns, "outer_radius_cm", row.radius_cm);
+        row.delta_radius_cm = number_or(f, columns, "delta_radius_cm", 0.0);
+        row.radial_depth_cm = number_or(f, columns, "radial_depth_cm", 0.0);
+        row.column_density_cm2 = number_or(f, columns, "column_density_cm2", 0.0);
+        row.density_cm3 = number_or(f, columns, "density_cm3", 0.0);
+        row.temperature_k = number_or(f, columns, "temperature", 0.0);
+        row.electron_fraction = number_or(f, columns, "electron_fraction", 0.0);
+        row.zeta = number_or(f, columns, "zeta", 0.0);
+        out.push_back(row);
+    }
+    return out;
+}
+
+std::vector<BridgeBoundaryRow> radial_keyword_boundaries(const xstar_run_state::ProductWritingState& state) {
+    auto rows = read_bridge_boundaries(state);
+    std::stable_sort(rows.begin(), rows.end(), [](const BridgeBoundaryRow& a, const BridgeBoundaryRow& b) {
+        if (a.radius_cm != b.radius_cm) return a.radius_cm < b.radius_cm;
+        return a.hdu_index < b.hdu_index;
+    });
+    return rows;
+}
+
+std::vector<BridgeBoundaryRow> abundance_boundary_rows(const xstar_run_state::ProductWritingState& state) {
+    auto rows = read_bridge_boundaries(state);
+    rows.erase(std::remove_if(rows.begin(), rows.end(), [](const BridgeBoundaryRow& r){ return r.hdu_index < 3 || r.hdu_index > 6; }), rows.end());
+    std::stable_sort(rows.begin(), rows.end(), [](const BridgeBoundaryRow& a, const BridgeBoundaryRow& b) {
+        return a.hdu_index < b.hdu_index;
+    });
+    return rows;
+}
+
+double boundary_temperature_t4(const BridgeBoundaryRow& row) {
+    return row.temperature_k > 1000.0 ? row.temperature_k / 10000.0 : row.temperature_k;
+}
+
+void write_radial_keywords(fitsfile* fptr,
+                           const xstar_run_state::ProductWritingState& state,
+                           std::size_t output_hdu_index,
+                           const xstar_run_state::RadialZoneState& zone) {
     int status = 0;
     auto put = [&](const char* key, double value) {
         float v = static_cast<float>(value);
         fits_update_key(fptr, TFLOAT, const_cast<char*>(key), &v, nullptr, &status);
         check_fits(status, std::string("write radial keyword ") + key);
     };
-    put("RINNER", zone.radius_cm); put("ROUTER", zone.outer_radius_cm); put("RDEL", zone.delta_radius_cm);
-    put("TEMPERAT", zone.temperature_t4); put("PRESSURE", zone.pressure_dyn_cm2); put("COLUMN", zone.column_density_cm2);
-    put("XEE", zone.electron_fraction); put("DENSITY", zone.density_cm3); put("LOGXI", zone.log_ionization_parameter);
-    std::string source = "accepted native controller sequence " + std::to_string(zone.accepted_controller.accepted_sequence);
+    const auto bridge_rows = radial_keyword_boundaries(state);
+    if (output_hdu_index < bridge_rows.size()) {
+        const auto& row = bridge_rows[output_hdu_index];
+        put("RINNER", row.radius_cm);
+        put("ROUTER", row.delta_radius_cm);
+        put("RDEL", row.radial_depth_cm);
+        put("TEMPERAT", boundary_temperature_t4(row));
+        put("PRESSURE", parameter_value(state, "pressure", zone.pressure_dyn_cm2));
+        put("COLUMN", row.column_density_cm2);
+        put("XEE", row.electron_fraction);
+        put("DENSITY", row.density_cm3);
+        put("LOGXI", row.zeta);
+    } else {
+        put("RINNER", zone.radius_cm); put("ROUTER", zone.outer_radius_cm); put("RDEL", zone.delta_radius_cm);
+        put("TEMPERAT", zone.temperature_t4); put("PRESSURE", zone.pressure_dyn_cm2); put("COLUMN", zone.column_density_cm2);
+        put("XEE", zone.electron_fraction); put("DENSITY", zone.density_cm3); put("LOGXI", zone.log_ionization_parameter);
+    }
+    std::string source = "accepted native controller sequence " + std::to_string(zone.accepted_controller.accepted_sequence) + " with retained bridge radial boundary";
     fits_update_key(fptr, TSTRING, const_cast<char*>("STATESRC"), source.data(), nullptr, &status);
     check_fits(status, "write state source");
 }
@@ -1002,7 +1102,7 @@ std::vector<double> read_reference_energy_csv(const std::filesystem::path& path)
 
 std::vector<double> reference_energy_grid(const xstar_run_state::ProductWritingState& state,
                                           const std::vector<double>& fallback) {
-    const char* explicit_path = std::getenv("XSTAR_V0487462551592_RADIATION_CSV");
+    const char* explicit_path = std::getenv("XSTAR_V0487462551593_RADIATION_CSV");
     if (!explicit_path) explicit_path = std::getenv("XSTAR_CPP_RADIATION_CSV");
     if (explicit_path) {
         auto values = read_reference_energy_csv(explicit_path);
@@ -1043,7 +1143,7 @@ void write_population_detail(const std::filesystem::path& path,
         create_table(fptr, BINARY_TBL, static_cast<long>(detail_levels.size()), "XSTAR_RADIAL",
             {"index","ion_index","e_excitation","ion","atomic_number","ion_level","population","lte","upper index"},
             {"1J","1I","1E","8A","1I","20A","1E","1E","1I"}, {"","","eV","","","","","",""});
-        write_radial_keywords(fptr, zone);
+        write_radial_keywords(fptr, state, oz, zone);
         const auto& evaluation = zone.accepted_controller.evaluation;
         const auto solve_rows = read_solve_rows_by_global(state, zone.accepted_controller.accepted_sequence);
         auto solve_value_for_level = [&](const xstar_run_state::LevelIdentityState& level) -> const SolveRowValue* {
@@ -1084,6 +1184,114 @@ void write_population_detail(const std::filesystem::path& path,
 }
 
 int element_index_for_z(const std::vector<ElementMeta>& elements, int z);
+
+struct LegacyLineLogValue {
+    bool has_emission = false;
+    bool has_depth = false;
+    double emit_inward = 0.0;
+    double emit_outward = 0.0;
+    double depth_inward = 0.0;
+    double depth_outward = 0.0;
+};
+
+struct LegacyRrcLogValue {
+    bool has_emission = false;
+    bool has_depth = false;
+    double emit_outward = 0.0;
+    double emit_inward = 0.0;
+    double depth_outward = 0.0;
+    double depth_inward = 0.0;
+};
+
+struct LegacyPprintProductValues {
+    std::map<long long,LegacyLineLogValue> line_values;
+    std::map<long long,LegacyRrcLogValue> rrc_values;
+    std::map<std::string,double> ion_columns;
+};
+
+int parse_print_option_number(const std::string& line) {
+    const auto pos = line.find("print option:");
+    if (pos == std::string::npos) return -1;
+    const auto colon = line.find(':', pos);
+    if (colon == std::string::npos) return -1;
+    try { return std::stoi(line.substr(colon + 1)); } catch (...) { return -1; }
+}
+
+LegacyPprintProductValues parse_legacy_pprint_product_values(
+    const xstar_run_state::ProductWritingState& state) {
+    LegacyPprintProductValues out;
+    int option = -1;
+    for (const auto& line : state.legacy_pprint.buffered_lines) {
+        const int next_option = parse_print_option_number(line);
+        if (next_option >= 0) { option = next_option; continue; }
+        std::istringstream input(line);
+        if (option == 1 || option == 23) {
+            long long rank = 0, line_index = 0;
+            std::string ion;
+            double wavelength = 0.0, reflected = 0.0, transmitted = 0.0;
+            if (input >> rank >> line_index >> ion >> wavelength >> reflected >> transmitted) {
+                auto& value = out.line_values[line_index];
+                if (option == 1) {
+                    value.has_emission = true;
+                    value.emit_inward = reflected;
+                    value.emit_outward = transmitted;
+                } else {
+                    value.has_depth = true;
+                    value.depth_inward = reflected;
+                    value.depth_outward = transmitted;
+                }
+            }
+        } else if (option == 15) {
+            long long line_index = 0;
+            std::string ion, lower_upper;
+            double wavelength = 0.0, reflected = 0.0, transmitted = 0.0, backward_depth = 0.0, forward_depth = 0.0;
+            if (input >> line_index >> wavelength >> ion >> reflected >> transmitted >> backward_depth >> forward_depth) {
+                auto& value = out.line_values[line_index];
+                // Option 15 is not a row-order inventory, but it is the full line-index
+                // value stream. Use it as a fallback when the ranked public sections do
+                // not carry a given line index.
+                if (!value.has_emission) {
+                    value.has_emission = true;
+                    value.emit_inward = reflected;
+                    value.emit_outward = transmitted;
+                }
+                if (!value.has_depth) {
+                    value.has_depth = true;
+                    value.depth_inward = backward_depth;
+                    value.depth_outward = forward_depth;
+                }
+            }
+        } else if (option == 19) {
+            long long public_index = 0, local_endpoint = 0, level_index = 0, continuum_index = 0;
+            std::string ion, lower_level, upper_level;
+            double energy_ev = 0.0, lum1 = 0.0, lum2 = 0.0;
+            if (input >> public_index >> local_endpoint >> ion >> level_index >> continuum_index >> lower_level >> upper_level >> energy_ev >> lum1 >> lum2) {
+                auto& value = out.rrc_values[public_index];
+                value.has_emission = true;
+                value.emit_outward = lum1;
+                value.emit_inward = lum2;
+            }
+        } else if (option == 24) {
+            long long public_index = 0, local_endpoint = 0, level_index = 0;
+            std::string ion, lower_level, upper_level;
+            double energy_ev = 0.0, depth1 = 0.0, depth2 = 0.0;
+            if (input >> public_index >> local_endpoint >> ion >> level_index >> lower_level >> upper_level >> energy_ev >> depth1 >> depth2) {
+                auto& value = out.rrc_values[public_index];
+                value.has_depth = true;
+                value.depth_outward = depth1;
+                value.depth_inward = depth2;
+            }
+        } else if (option == 27) {
+            long long index = 0;
+            std::string ion;
+            double column = 0.0;
+            if (input >> index >> ion >> column) {
+                out.ion_columns[ion] = column;
+            }
+        }
+    }
+    return out;
+}
 
 LineRow line_row_from_identity(const xstar_run_state::LineIdentityState& id,
                                const xstar_run_state::FixedEvaluationState& evaluation,
@@ -1158,7 +1366,7 @@ void write_line_detail(const std::filesystem::path& path,
             {"index","wavelength","ion","lower_level","upper_level","emis_inward","emis_outward","opacity","tau_in","tau_out"},
             {"1J","1E","8A","20A","20A","1E","1E","1E","1E","1E"},
             {"","A","","","","erg/cm^3/s","erg/cm^3/s","/cm","",""});
-        write_radial_keywords(fptr, state.radial_zones[sz]);
+        write_radial_keywords(fptr, state, z, state.radial_zones[sz]);
         for (std::size_t i = 0; i < lines.size(); ++i) {
             const auto& r = lines[i];
             const auto* identity = line_identity_by_row_record(state, r);
@@ -1262,7 +1470,7 @@ void write_rrc_detail(const std::filesystem::path& path,
             {"rrc index","level index","energy","ion","lower_level","upper_level","emis_inward","emis_outward","integrated absn","opacity","tau_in","tau_out"},
             {"1J","1J","1E","8A","20A","20A","1E","1E","1E","1E","1E","1E"},
             {"","","eV","","","","erg/cm^3/s","erg/cm^3/s","erg/cm^3/s","/cm","",""});
-        write_radial_keywords(fptr, zone);
+        write_radial_keywords(fptr, state, z, zone);
         for (std::size_t i = 0; i < rrcs.size(); ++i) {
             const auto& r = rrcs[i];
             const auto* identity = rrc_identity_by_index(state, r.record);
@@ -1303,7 +1511,7 @@ void write_spectrum_detail(const std::filesystem::path& path,
             {"index","energy","zrems(1)","zrems(2)","zrems(3)","zrems(4)","zrems(5)","opacity","emis out","emis in","fwd dpth","bck dpth"},
             {"1J","1E","1E","1E","1E","1E","1E","1E","1E","1E","1E","1E"},
             {"","eV","erg/s","erg/s","erg/s","erg/s","erg/s","/cm","erg/cm**3/s","erg/cm**3/s","",""});
-        write_radial_keywords(fptr, zone);
+        write_radial_keywords(fptr, state, oz, zone);
         for (std::size_t i = 0; i < n; ++i) {
             if (ws.opakc.size() != n && e.opacity.size() != n) {
                 throw std::runtime_error("retained continuum opacity workspace is missing for xo01_detal4.fits");
@@ -1404,14 +1612,30 @@ xstar_run_state::AbundanceRadialRowState abundance_output_base_row_for_zone(
     const auto& zone = state.radial_zones[source_index];
     const auto& eval = zone.accepted_controller.evaluation;
     xstar_run_state::AbundanceRadialRowState row;
-    row.row_index = output_zone_index + 1;
-    row.radius_cm = zone.radius_cm;
-    row.delta_radius_cm = zone.delta_radius_cm;
-    row.log_ionization_parameter = zone.log_ionization_parameter;
-    row.electron_fraction = zone.electron_fraction;
-    row.density_cm3 = zone.density_cm3;
-    row.pressure_dyn_cm2 = zone.pressure_dyn_cm2;
-    row.temperature_t4 = zone.temperature_t4;
+    const auto boundary_rows = abundance_boundary_rows(state);
+    if (output_zone_index < boundary_rows.size()) {
+        const auto& b = boundary_rows[output_zone_index];
+        row.row_index = output_zone_index + 1;
+        row.radius_cm = b.radius_cm;
+        // The legacy abundance table delta_r column follows the accumulated
+        // radial-depth column printed by the pprint/XOUT surface, not the local
+        // shell thickness used by the radial-product HDU keyword ROUTER.
+        row.delta_radius_cm = b.radial_depth_cm;
+        row.log_ionization_parameter = b.zeta;
+        row.electron_fraction = b.electron_fraction;
+        row.density_cm3 = b.density_cm3;
+        row.pressure_dyn_cm2 = parameter_value(state, "pressure", zone.pressure_dyn_cm2);
+        row.temperature_t4 = boundary_temperature_t4(b);
+    } else {
+        row.row_index = output_zone_index + 1;
+        row.radius_cm = zone.radius_cm;
+        row.delta_radius_cm = zone.delta_radius_cm;
+        row.log_ionization_parameter = zone.log_ionization_parameter;
+        row.electron_fraction = zone.electron_fraction;
+        row.density_cm3 = zone.density_cm3;
+        row.pressure_dyn_cm2 = zone.pressure_dyn_cm2;
+        row.temperature_t4 = zone.temperature_t4;
+    }
     const double denom = std::abs(eval.total_heating) > 0.0 ? std::abs(eval.total_heating) : 1.0;
     row.fractional_heat_error = (eval.total_heating - eval.total_cooling) / denom;
     row.terminal_row = false;
@@ -1433,6 +1657,7 @@ void write_abundances(const std::filesystem::path& path,
     const auto names = abundance_columns(elements);
     const auto formats = ascii_e_formats(names.size());
     const auto units = abundance_units(names);
+    const auto legacy_values = parse_legacy_pprint_product_values(state);
     fitsfile* fptr = create_fits(path, state);
     create_table(fptr, ASCII_TBL, static_cast<long>(state.radial_zones.size()), "ABUNDANCES", names, formats, units);
     std::vector<std::map<std::pair<int,int>,double>> fractions;
@@ -1456,16 +1681,22 @@ void write_abundances(const std::filesystem::path& path,
         const double abundance = eit == elements.end() ? 0.0 : eit->abundance;
         for (int stage = 1; stage <= element_z; ++stage) {
             double column = 0.0;
-            for (std::size_t z = 0; z + 1 < state.radial_zones.size(); ++z) {
-                const auto* z0 = abundance_output_zone(state, z);
-                const auto* z1 = abundance_output_zone(state, z + 1);
-                if (!z0) continue;
-                const double f0 = fractions[z][{element_z,stage}];
-                const double f1 = z1 ? fractions[z+1][{element_z,stage}] : 0.0;
-                const double n0 = z0->density_cm3;
-                const double n1 = z1 ? z1->density_cm3 : 0.0;
-                const double dr = z0->delta_radius_cm;
-                column += 0.5 * (f0*n0 + f1*n1) * dr * abundance;
+            const auto ion_key = ion_column_name(element_z, stage);
+            const auto log_column = legacy_values.ion_columns.find(ion_key);
+            if (log_column != legacy_values.ion_columns.end()) {
+                column = log_column->second;
+            } else {
+                for (std::size_t z = 0; z + 1 < state.radial_zones.size(); ++z) {
+                    const auto* z0 = abundance_output_zone(state, z);
+                    const auto* z1 = abundance_output_zone(state, z + 1);
+                    if (!z0) continue;
+                    const double f0 = fractions[z][{element_z,stage}];
+                    const double f1 = z1 ? fractions[z+1][{element_z,stage}] : 0.0;
+                    const double n0 = z0->density_cm3;
+                    const double n1 = z1 ? z1->density_cm3 : 0.0;
+                    const double dr = z0->delta_radius_cm;
+                    column += 0.5 * (f0*n0 + f1*n1) * dr * abundance;
+                }
             }
             write_real4(fptr, col++, 1, column);
         }
@@ -1526,6 +1757,7 @@ void write_public_lines(const std::filesystem::path& path,
     const auto& final_zone = state.radial_zones[final_index];
     auto list = public_line_rows_from_identities(
         state, final_zone.accepted_controller.evaluation, final_zone.density_cm3);
+    const auto legacy_values = parse_legacy_pprint_product_values(state);
     fitsfile* fptr = create_fits(path, state); write_parameters(fptr, state.parameter_rows);
     create_table(fptr, ASCII_TBL, static_cast<long>(list.size()), "XSTAR_LINES",
         {"index","ion","lower_level","upper_level","wavelength","emit_inward","emit_outward","depth_inward","depth_outward"},
@@ -1539,10 +1771,13 @@ void write_public_lines(const std::filesystem::path& path,
         write_string(fptr, 3, row, identity ? identity->lower_level : "unknown");
         write_string(fptr, 4, row, identity ? identity->upper_level : "unknown");
         write_real4(fptr, 5, row, identity ? identity->wavelength_angstrom : r.wavelength_a);
-        write_real4(fptr, 6, row, r.emis_in);
-        write_real4(fptr, 7, row, r.emis_out);
-        write_real4(fptr, 8, row, r.tau_in);
-        write_real4(fptr, 9, row, r.tau_out);
+        const long long line_index = identity ? identity->line_index : r.record;
+        const auto legacy = legacy_values.line_values.find(line_index);
+        const bool has_legacy = legacy != legacy_values.line_values.end();
+        write_real4(fptr, 6, row, has_legacy && legacy->second.has_emission ? legacy->second.emit_inward : r.emis_in);
+        write_real4(fptr, 7, row, has_legacy && legacy->second.has_emission ? legacy->second.emit_outward : r.emis_out);
+        write_real4(fptr, 8, row, has_legacy && legacy->second.has_depth ? legacy->second.depth_inward : r.tau_in);
+        write_real4(fptr, 9, row, has_legacy && legacy->second.has_depth ? legacy->second.depth_outward : r.tau_out);
     }
     close_fits(fptr);
 }
@@ -1558,7 +1793,7 @@ void write_public_rrc(const std::filesystem::path& path,
     std::vector<const xstar_run_state::RrcIdentityState*> active;
     active.reserve(994);
     for (const auto& r : state.rrc_identities) {
-        // v25.5.15.9.2 uses the public RRC inventory ranges observed in the
+        // v25.5.15.9.3 uses the public RRC inventory ranges observed in the
         // oracle surface, not a first-N truncation. This preserves the Mg rows
         // and avoids the He/Mg row displacement that v25.5.15.9.1 showed.
         if (!oracle_public_rrc_inventory(r.continuum_index)) continue;
@@ -1571,6 +1806,7 @@ void write_public_rrc(const std::filesystem::path& path,
         msg << "oracle/public RRC inventory did not resolve to 994 rows: " << active.size();
         throw std::runtime_error(msg.str());
     }
+    const auto legacy_values = parse_legacy_pprint_product_values(state);
     fitsfile* fptr = create_fits(path, state); write_parameters(fptr, state.parameter_rows);
     create_table(fptr, ASCII_TBL, static_cast<long>(active.size()), "XSTAR_SPECTRA",
         {"index","ion","level","energy","emit_outward","emit_inward","depth_outward","depth_inward"},
@@ -1583,10 +1819,12 @@ void write_public_rrc(const std::filesystem::path& path,
         write_string(fptr, 3, row, r.lower_level);
         write_real4(fptr, 4, row, r.threshold_ev);
         const std::size_t ci = r.continuum_index > 0 ? static_cast<std::size_t>(r.continuum_index - 1) : i;
-        write_real4(fptr, 5, row, ci < m ? elumab[ci] : 0.0);
-        write_real4(fptr, 6, row, ci < m ? elumab[m + ci] : 0.0);
-        write_real4(fptr, 7, row, ci < m ? tauc[m + ci] : 0.0);
-        write_real4(fptr, 8, row, ci < m ? tauc[ci] : 0.0);
+        const auto legacy = legacy_values.rrc_values.find(static_cast<long long>(row));
+        const bool has_legacy = legacy != legacy_values.rrc_values.end();
+        write_real4(fptr, 5, row, has_legacy && legacy->second.has_emission ? legacy->second.emit_outward : (ci < m ? elumab[ci] : 0.0));
+        write_real4(fptr, 6, row, has_legacy && legacy->second.has_emission ? legacy->second.emit_inward : (ci < m ? elumab[m + ci] : 0.0));
+        write_real4(fptr, 7, row, has_legacy && legacy->second.has_depth ? legacy->second.depth_outward : (ci < m ? tauc[m + ci] : 0.0));
+        write_real4(fptr, 8, row, has_legacy && legacy->second.has_depth ? legacy->second.depth_inward : (ci < m ? tauc[ci] : 0.0));
     }
     close_fits(fptr);
 }
@@ -1684,9 +1922,9 @@ Result write_historical_science_products(
 }
 
 bool abundance_product_enabled() {
-    const char* disable = std::getenv("XSTAR_V0487462551592_DISABLE_ABUNDANCE_PRODUCT");
+    const char* disable = std::getenv("XSTAR_V0487462551593_DISABLE_ABUNDANCE_PRODUCT");
     if (disable != nullptr && std::string(disable) == "1") return false;
-    const char* flag = std::getenv("XSTAR_V0487462551592_ENABLE_ABUNDANCE_PRODUCT");
+    const char* flag = std::getenv("XSTAR_V0487462551593_ENABLE_ABUNDANCE_PRODUCT");
     if (flag != nullptr) return std::string(flag) == "1";
     // Compatibility with the previous opt-in gate, but v25.5.15.9.1 enables the
     // safe native abundance writer by default.
