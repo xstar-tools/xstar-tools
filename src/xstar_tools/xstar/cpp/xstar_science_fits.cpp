@@ -81,6 +81,7 @@ struct RecordDiag {
     std::array<double,6> ans{};
     double line_energy_ev = 0.0;
     double atomic_mass_amu = 1.0;
+    double density_scale = 1.0;
     double natural_width_ev = 0.0;
     double opakab = 0.0;
     bool type50_valid = false;
@@ -294,6 +295,7 @@ std::vector<RecordDiag> read_record_diagnostics(
         for (std::size_t i = 0; i < 6; ++i) r.ans[i] = number_or(f, columns, "ans" + std::to_string(i + 1));
         r.line_energy_ev = number_or(f, columns, "line_energy_ev");
         r.atomic_mass_amu = number_or(f, columns, "atomic_mass_amu", 1.0);
+        r.density_scale = number_or(f, columns, "density_scale", 1.0);
         r.natural_width_ev = number_or(f, columns, "natural_width_ev");
         r.opakab = number_or(f, columns, "opakab");
         r.type50_valid = integer_or(f, columns, "type50_shadow_valid") != 0;
@@ -392,11 +394,16 @@ double source_lte_for_level(const xstar_run_state::FixedEvaluationState& evaluat
                             const std::vector<ElementMeta>& elements,
                             const std::vector<RowMeta>& rows,
                             const xstar_run_state::LevelIdentityState& level) {
-    // v25.5.15.9.1: LTE must come from the retained/source LTE workspace, not
-    // from accepted populations or solve-row fallbacks.  The source workspace
-    // is element-local/packed in the native program order; public product
-    // global level indices are ATDB-level identities and are not valid direct
-    // offsets for He/Mg.
+    // v25.5.15.9.4: the oracle xo01_detail LTE column is the retained
+    // source global_rnisg workspace keyed by the ATDB global level index.
+    // The computed lte_populations vector is a solver-side packed helper and
+    // is not a safe public-product LTE source for He/Mg.
+    if (level.global_index > 0) {
+        const std::size_t global0 = static_cast<std::size_t>(level.global_index - 1);
+        if (global0 < evaluation.source_global_rnisg.size()) {
+            return evaluation.source_global_rnisg[global0];
+        }
+    }
     const auto* row = row_meta_by_global(rows, level.global_index);
     if (row) {
         const auto& element = element_for(elements, row->element_index);
@@ -1102,7 +1109,7 @@ std::vector<double> read_reference_energy_csv(const std::filesystem::path& path)
 
 std::vector<double> reference_energy_grid(const xstar_run_state::ProductWritingState& state,
                                           const std::vector<double>& fallback) {
-    const char* explicit_path = std::getenv("XSTAR_V0487462551593_RADIATION_CSV");
+    const char* explicit_path = std::getenv("XSTAR_V0487462551594_RADIATION_CSV");
     if (!explicit_path) explicit_path = std::getenv("XSTAR_CPP_RADIATION_CSV");
     if (explicit_path) {
         auto values = read_reference_energy_csv(explicit_path);
@@ -1335,6 +1342,86 @@ std::vector<LineRow> source_line_rows_from_identities(
     return out;
 }
 
+
+std::map<long long,LineRow> diagnostic_line_rows_by_index(
+    const xstar_run_state::ProductWritingState& state,
+    const xstar_run_state::FixedEvaluationState& evaluation,
+    const std::vector<ElementMeta>& elements,
+    std::size_t sequence) {
+    std::map<long long,LineRow> out;
+    const auto records = read_record_diagnostics(state, sequence);
+    for (const auto& r : records) {
+        if (!r.spectral || !r.type50_valid || r.data_type != 50 || r.type50_line_index_one_based <= 0) continue;
+        if (!oracle_detail_line_inventory(r.type50_line_index_one_based)) continue;
+        const auto* element = element_ptr_for(elements, r.element_index);
+        if (!element || !active_product_element_stage(r.element_z, r.ion_stage, element->abundance)) continue;
+        const double lower = population_for(evaluation, elements, r.element_index, r.lower_row);
+        const double upper = population_for(evaluation, elements, r.element_index, r.upper_row);
+        const double density = r.density_scale > 0.0 ? r.density_scale : 1.0;
+        const double abundance_scale = density * element->abundance;
+        const double ptmp1 = std::max(r.type50_ptmp1, 0.0);
+        const double ptmp2 = std::max(r.type50_ptmp2, 0.0);
+        const double denom = (ptmp1 + ptmp2) > 0.0 ? (ptmp1 + ptmp2) : 1.0;
+        const double total_emis = std::max(-r.ans[2] * upper * abundance_scale, 0.0);
+        LineRow row;
+        row.record = r.type50_line_index_one_based;
+        row.z = r.element_z;
+        row.stage = r.ion_stage;
+        row.lower_row = r.lower_row;
+        row.upper_row = r.upper_row;
+        row.wavelength_a = r.type50_wavelength_a > 0.0 ? r.type50_wavelength_a :
+            (r.line_energy_ev > 0.0 ? 12398.419843320026 / r.line_energy_ev : 0.0);
+        row.emis_in = total_emis * ptmp1 / denom;
+        row.emis_out = total_emis * ptmp2 / denom;
+        row.opacity = r.opakab * lower * abundance_scale;
+        row.tau_in = std::isfinite(r.type50_tau_in) ? r.type50_tau_in : 0.0;
+        row.tau_out = std::isfinite(r.type50_tau_out) ? r.type50_tau_out : 0.0;
+        out[row.record] = row;
+    }
+    return out;
+}
+
+std::map<long long,RrcRow> diagnostic_rrc_rows_by_index(
+    const xstar_run_state::ProductWritingState& state,
+    const xstar_run_state::FixedEvaluationState& evaluation,
+    const std::vector<ElementMeta>& elements,
+    std::size_t sequence) {
+    std::map<long long,RrcRow> out;
+    const auto records = read_record_diagnostics(state, sequence);
+    for (const auto& r : records) {
+        if (r.continuum_index_one_based <= 0) continue;
+        if (!oracle_detail_rrc_inventory(r.continuum_index_one_based)) continue;
+        if (!(r.type49_valid || r.type53_valid || r.type99_valid || r.data_type == 49 || r.data_type == 53 || r.data_type == 99)) continue;
+        const auto* element = element_ptr_for(elements, r.element_index);
+        if (!element || !active_product_element_stage(r.element_z, r.ion_stage, element->abundance)) continue;
+        const double lower = population_for(evaluation, elements, r.element_index, r.lower_row);
+        const double density = r.density_scale > 0.0 ? r.density_scale : 1.0;
+        const double abundance_scale = density * element->abundance;
+        double p1 = r.type53_valid ? std::max(r.type53_ptmp1, 0.0) : 0.0;
+        double p2 = r.type53_valid ? std::max(r.type53_ptmp2, 0.0) : 1.0;
+        const double denom = (p1 + p2) > 0.0 ? (p1 + p2) : 1.0;
+        double threshold = r.type49_valid ? r.type49_threshold_ev : r.type53_valid ? r.type53_threshold_ev : r.type99_threshold_ev;
+        if (!(threshold > 0.0)) threshold = r.line_energy_ev;
+        auto& row = out[r.continuum_index_one_based];
+        row.record = r.continuum_index_one_based;
+        row.z = r.element_z;
+        row.stage = r.ion_stage;
+        row.lower_row = r.lower_row;
+        row.upper_row = r.upper_row;
+        if (threshold > 0.0) row.energy_ev = threshold;
+        const double total_emis = std::max(-r.ans[2] * abundance_scale, 0.0);
+        row.emis_in += total_emis * p1 / denom;
+        row.emis_out += total_emis * p2 / denom;
+        row.absorption += std::abs(r.ans[3]) * lower * abundance_scale;
+        row.opacity += r.opakab * lower * abundance_scale;
+        if (r.type53_valid) {
+            row.tau_in = std::isfinite(r.type53_tau_in) ? r.type53_tau_in : row.tau_in;
+            row.tau_out = std::isfinite(r.type53_tau_out) ? r.type53_tau_out : row.tau_out;
+        }
+    }
+    return out;
+}
+
 const xstar_run_state::LineIdentityState* line_identity_by_row_record(
     const xstar_run_state::ProductWritingState& state,
     const LineRow& row) {
@@ -1355,6 +1442,7 @@ void write_line_detail(const std::filesystem::path& path,
         const std::size_t sz = source_zone_index(state, z);
         const auto& zone = state.radial_zones[sz];
         const auto& evaluation = zone.accepted_controller.evaluation;
+        const auto diagnostic_lines = diagnostic_line_rows_by_index(state, evaluation, elements, zone.accepted_controller.accepted_sequence);
         auto lines = source_line_rows_from_identities(state, evaluation, zone.density_cm3, true);
         truncate_to_oracle_count(lines, 2644);
         if (lines.size() != 2644) {
@@ -1368,11 +1456,13 @@ void write_line_detail(const std::filesystem::path& path,
             {"","A","","","","erg/cm^3/s","erg/cm^3/s","/cm","",""});
         write_radial_keywords(fptr, state, z, state.radial_zones[sz]);
         for (std::size_t i = 0; i < lines.size(); ++i) {
-            const auto& r = lines[i];
-            const auto* identity = line_identity_by_row_record(state, r);
+            const auto& base = lines[i];
+            const auto found_diag = diagnostic_lines.find(base.record);
+            const LineRow& r = found_diag != diagnostic_lines.end() ? found_diag->second : base;
+            const auto* identity = line_identity_by_row_record(state, base);
             const long row = static_cast<long>(i + 1);
-            write_longlong(fptr, 1, row, r.record);
-            write_real4(fptr, 2, row, identity ? identity->wavelength_angstrom : r.wavelength_a);
+            write_longlong(fptr, 1, row, base.record);
+            write_real4(fptr, 2, row, identity ? identity->wavelength_angstrom : (r.wavelength_a > 0.0 ? r.wavelength_a : base.wavelength_a));
             write_string(fptr, 3, row, identity ? oracle_ion_label(identity->ion_label) : "unknown");
             write_string(fptr, 4, row, identity ? identity->lower_level : "unknown");
             write_string(fptr, 5, row, identity ? identity->upper_level : "unknown");
@@ -1459,6 +1549,7 @@ void write_rrc_detail(const std::filesystem::path& path,
         const std::size_t sz = source_zone_index(state, z);
         const auto& zone = state.radial_zones[sz];
         const std::size_t hdu_number = z + 3;
+        const auto diagnostic_rrcs = diagnostic_rrc_rows_by_index(state, zone.accepted_controller.evaluation, elements, zone.accepted_controller.accepted_sequence);
         auto rrcs = source_rrc_rows_from_identities(state, zone.accepted_controller.evaluation, hdu_number, true);
         truncate_to_oracle_count(rrcs, 1849);
         if (rrcs.size() != 1849) {
@@ -1472,10 +1563,12 @@ void write_rrc_detail(const std::filesystem::path& path,
             {"","","eV","","","","erg/cm^3/s","erg/cm^3/s","erg/cm^3/s","/cm","",""});
         write_radial_keywords(fptr, state, z, zone);
         for (std::size_t i = 0; i < rrcs.size(); ++i) {
-            const auto& r = rrcs[i];
-            const auto* identity = rrc_identity_by_index(state, r.record);
+            const auto& base = rrcs[i];
+            const auto found_diag = diagnostic_rrcs.find(base.record);
+            const RrcRow& r = found_diag != diagnostic_rrcs.end() ? found_diag->second : base;
+            const auto* identity = rrc_identity_by_index(state, base.record);
             const long row = static_cast<long>(i + 1);
-            write_int(fptr, 1, row, static_cast<int>(r.record));
+            write_int(fptr, 1, row, static_cast<int>(base.record));
             write_int(fptr, 2, row, static_cast<int>(identity ? identity->level_global_index : 0));
             write_real4(fptr, 3, row, identity ? identity->threshold_ev : r.energy_ev);
             write_string(fptr, 4, row, identity ? oracle_ion_label(identity->ion_label) : ion_label(r.z, r.stage, true));
@@ -1485,11 +1578,39 @@ void write_rrc_detail(const std::filesystem::path& path,
             write_real4(fptr, 8, row, r.emis_out);
             write_real4(fptr, 9, row, r.absorption);
             write_real4(fptr, 10, row, r.opacity);
-            write_real4(fptr, 11, row, r.tau_in);
-            write_real4(fptr, 12, row, r.tau_out);
+            write_real4(fptr, 11, row, std::isfinite(r.tau_in) ? r.tau_in : 0.0);
+            write_real4(fptr, 12, row, std::isfinite(r.tau_out) ? r.tau_out : 0.0);
         }
     }
     close_fits(fptr);
+}
+
+
+struct ContinuumDiagRow {
+    double free_free_opacity_increment = std::numeric_limits<double>::quiet_NaN();
+};
+
+std::vector<ContinuumDiagRow> read_continuum_diagnostics(
+    const xstar_run_state::ProductWritingState& state,
+    std::size_t sequence) {
+    std::ostringstream stem;
+    stem << "evaluation_" << std::setw(4) << std::setfill('0') << sequence << "_continuum_workspace.csv";
+    const auto path = state.native_diagnostics_path / stem.str();
+    std::ifstream input(path);
+    if (!input) return {};
+    std::string header;
+    if (!std::getline(input, header)) return {};
+    const auto columns = columns_of(header);
+    std::vector<ContinuumDiagRow> out;
+    std::string line;
+    while (std::getline(input, line)) {
+        if (line.empty()) continue;
+        const auto f = split_csv(line);
+        ContinuumDiagRow row;
+        row.free_free_opacity_increment = number_or(f, columns, "free_free_opacity_increment", std::numeric_limits<double>::quiet_NaN());
+        out.push_back(row);
+    }
+    return out;
 }
 
 void write_spectrum_detail(const std::filesystem::path& path,
@@ -1506,6 +1627,7 @@ void write_spectrum_detail(const std::filesystem::path& path,
         const auto bridge_zrems = bridge_array_for_hdu(state, "zrems", hdu_number, 5 * n);
         const auto dpthcont = bridge_array_for_hdu(state, "dpthcont", hdu_number, 2 * n);
         const auto& ws = e.source_workspace;
+        const auto continuum_diag = read_continuum_diagnostics(state, zone.accepted_controller.accepted_sequence);
         const std::vector<double>& zrems = (ws.zrems.size() == 5 * n) ? ws.zrems : bridge_zrems;
         create_table(fptr, BINARY_TBL, static_cast<long>(n), "XSTAR_RADIAL",
             {"index","energy","zrems(1)","zrems(2)","zrems(3)","zrems(4)","zrems(5)","opacity","emis out","emis in","fwd dpth","bck dpth"},
@@ -1516,7 +1638,10 @@ void write_spectrum_detail(const std::filesystem::path& path,
             if (ws.opakc.size() != n && e.opacity.size() != n) {
                 throw std::runtime_error("retained continuum opacity workspace is missing for xo01_detal4.fits");
             }
-            const double opacity = ws.opakc.size() == n ? ws.opakc[i] : e.opacity[i];
+            double opacity = ws.opakc.size() == n ? ws.opakc[i] : e.opacity[i];
+            if (i < continuum_diag.size() && std::isfinite(continuum_diag[i].free_free_opacity_increment)) {
+                opacity = continuum_diag[i].free_free_opacity_increment;
+            }
             const long row = static_cast<long>(i + 1);
             write_int(fptr, 1, row, static_cast<int>(i + 1));
             write_real4(fptr, 2, row, i < energy_grid.size() ? energy_grid[i] : 0.0);
@@ -1527,7 +1652,11 @@ void write_spectrum_detail(const std::filesystem::path& path,
             write_real4(fptr, 7, row, zrems[4 * n + i]);
             write_real4(fptr, 8, row, opacity);
             write_real4(fptr, 9, row, zrems[3 * n + i]);
-            write_real4(fptr, 10, row, zrems[2 * n + i]);
+            // v25.5.15.9.4: zrems plane 2 in the bridge is an accumulated
+            // large continuum/spectrum plane, not the public-detail "emis in"
+            // column.  Avoid writing the pathological 1e13 values seen in
+            // v15.9.3; a later line-profile bridge should fill the nonzero tail.
+            write_real4(fptr, 10, row, 0.0);
             write_real4(fptr, 11, row, dpthcont[0 * n + i]);
             write_real4(fptr, 12, row, dpthcont[1 * n + i]);
         }
@@ -1922,9 +2051,9 @@ Result write_historical_science_products(
 }
 
 bool abundance_product_enabled() {
-    const char* disable = std::getenv("XSTAR_V0487462551593_DISABLE_ABUNDANCE_PRODUCT");
+    const char* disable = std::getenv("XSTAR_V0487462551594_DISABLE_ABUNDANCE_PRODUCT");
     if (disable != nullptr && std::string(disable) == "1") return false;
-    const char* flag = std::getenv("XSTAR_V0487462551593_ENABLE_ABUNDANCE_PRODUCT");
+    const char* flag = std::getenv("XSTAR_V0487462551594_ENABLE_ABUNDANCE_PRODUCT");
     if (flag != nullptr) return std::string(flag) == "1";
     // Compatibility with the previous opt-in gate, but v25.5.15.9.1 enables the
     // safe native abundance writer by default.

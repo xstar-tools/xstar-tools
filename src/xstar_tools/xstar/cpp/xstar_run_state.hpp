@@ -132,6 +132,7 @@ struct FixedEvaluationState {
     double brems_cooling = 0.0;
     bool thermal_families_native = false;
     bool runtime_state_abi = false;
+    std::vector<double> source_global_rnisg;
     std::vector<double> populations;
     std::vector<double> radiation_energy_ev;
     std::vector<double> radiation_flux;

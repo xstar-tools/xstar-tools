@@ -2053,6 +2053,7 @@ struct FixedDsecSnapshot {
     double brems_cooling = 0.0;
     bool thermal_families_native = false;
     bool dsec_runtime_state_abi = false;
+    std::vector<double> source_global_rnisg;
     std::vector<double> populations;
     std::vector<double> lte_populations;
     std::vector<double> radiation_energy_ev;
@@ -2606,9 +2607,11 @@ int fixed_dsec_evaluator(
             return 1;
         }
         call_workspace = &data->current_runtime_state_workspace;
+        snapshot.source_global_rnisg = call_workspace->global_rnisg;
         ++data->sequence_workspace_evaluations;
     } else if (data->call_index >= 1 && data->call_index <= data->call_start_workspaces.size()) {
         call_workspace = &data->call_start_workspaces[data->call_index - 1];
+        snapshot.source_global_rnisg = call_workspace->global_rnisg;
     }
     if (call_workspace) {
         input.dsec_radiation_energy_ev = call_workspace->radiation_energy.data();
@@ -3409,6 +3412,7 @@ int command_run_fixed_dsec(const Options& options) {
         target.brems_cooling = source.brems_cooling;
         target.thermal_families_native = source.thermal_families_native;
         target.runtime_state_abi = source.dsec_runtime_state_abi;
+        target.source_global_rnisg = source.source_global_rnisg;
         target.populations = source.populations;
         target.radiation_energy_ev = source.radiation_energy_ev;
         target.radiation_flux = source.radiation_flux;
@@ -3773,7 +3777,7 @@ std::filesystem::path resolve_physical_asset(
 
 int command_run_physical(Options options) {
     if (options.backend != "cpp") {
-        std::cerr << "xstar_cpp run v0.6.48.7.46.25.5.15.9.3 supports --backend cpp only\n";
+        std::cerr << "xstar_cpp run v0.6.48.7.46.25.5.15.9.4 supports --backend cpp only\n";
         return 64;
     }
     if (options.parameters_path.empty() || options.atomic_db_path.empty() || options.output_dir.empty()) {
