@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## v0.6.48.7.46.25.5.15.9.1 - 2026-06-26
+
+- Fixes v25.5.9.1 preview flag routing regression: use `XSTAR_V0487462551591_WRITE_SCHEMA_PREVIEW=1`.
+- Moves schema preview into a fast path after metadata preparation and before C++ clean/build/self-test, so preview mode writes FITS/log previews without running the normal product-state path.
+- Production product writing remains fail-closed.
+
 ## v0.6.48.7.46.25.5.15.9 - 2026-06-26
 
 - Fixes v25.5.9.1 preview flag routing regression: use `XSTAR_V048746255159_WRITE_SCHEMA_PREVIEW=1`.

@@ -392,7 +392,7 @@ double source_lte_for_level(const xstar_run_state::FixedEvaluationState& evaluat
                             const std::vector<ElementMeta>& elements,
                             const std::vector<RowMeta>& rows,
                             const xstar_run_state::LevelIdentityState& level) {
-    // v25.5.15.9: LTE must come from the retained/source LTE workspace, not
+    // v25.5.15.9.1: LTE must come from the retained/source LTE workspace, not
     // from accepted populations or solve-row fallbacks.  The source workspace
     // is element-local/packed in the native program order; public product
     // global level indices are ATDB-level identities and are not valid direct
@@ -905,7 +905,7 @@ std::vector<double> read_reference_energy_csv(const std::filesystem::path& path)
 
 std::vector<double> reference_energy_grid(const xstar_run_state::ProductWritingState& state,
                                           const std::vector<double>& fallback) {
-    const char* explicit_path = std::getenv("XSTAR_V048746255159_RADIATION_CSV");
+    const char* explicit_path = std::getenv("XSTAR_V0487462551591_RADIATION_CSV");
     if (!explicit_path) explicit_path = std::getenv("XSTAR_CPP_RADIATION_CSV");
     if (explicit_path) {
         auto values = read_reference_energy_csv(explicit_path);
@@ -1105,10 +1105,19 @@ double two_plane_value(const std::vector<double>& values, std::size_t plane_coun
 std::vector<RrcRow> source_rrc_rows_from_identities(
     const xstar_run_state::ProductWritingState& state,
     const xstar_run_state::FixedEvaluationState& evaluation,
+    std::size_t hdu_number,
     bool detail_inventory) {
     std::vector<RrcRow> out;
     const auto& ws = evaluation.source_workspace;
-    const std::size_t n = continuum_plane_count(ws);
+    // v25.5.15.9.1: the accepted evaluation source workspace can carry only
+    // scalar RRC diagnostics while the product bridge carries the retained
+    // two-plane public continuum arrays.  Do not abort the atomic writer just
+    // because evaluation.source_workspace.elumab is empty; use the retained
+    // per-HDU bridge inventory that v25.5.13/15 promoted.
+    constexpr std::size_t kOracleContinuumCount = 301301u;
+    const auto elumab = bridge_array_for_hdu(state, "elumab", hdu_number, 2 * kOracleContinuumCount);
+    const auto tauc = bridge_array_for_hdu(state, "tauc", hdu_number, 2 * kOracleContinuumCount);
+    const std::size_t n = kOracleContinuumCount;
     out.reserve(state.rrc_identities.size());
     for (const auto& id : state.rrc_identities) {
         if (id.continuum_index <= 0) continue;
@@ -1117,13 +1126,13 @@ std::vector<RrcRow> source_rrc_rows_from_identities(
         RrcRow row;
         row.record = id.continuum_index;
         row.energy_ev = id.threshold_ev;
-        // Source tauc/elumab convention follows the line tau workspace: plane 0
-        // is inward and plane 1 is outward.  Keep this orientation explicit so
-        // xout_rrc1 depth_outward/depth_inward are not swapped.
-        row.emis_in = two_plane_value(ws.elumab, n, 0, ci, "elumab");
-        row.emis_out = two_plane_value(ws.elumab, n, 1, ci, "elumab");
-        row.tau_in = two_plane_value(ws.tauc, n, 0, ci, "tauc");
-        row.tau_out = two_plane_value(ws.tauc, n, 1, ci, "tauc");
+        // Source tauc/elumab convention follows the retained bridge arrays:
+        // plane 0 is inward and plane 1 is outward.  Keep this orientation
+        // explicit so public RRC depth/emission columns are not swapped.
+        row.emis_in = two_plane_value(elumab, n, 0, ci, "elumab");
+        row.emis_out = two_plane_value(elumab, n, 1, ci, "elumab");
+        row.tau_in = two_plane_value(tauc, n, 0, ci, "tauc");
+        row.tau_out = two_plane_value(tauc, n, 1, ci, "tauc");
         row.absorption = ci < ws.cabab.size() ? ws.cabab[ci] : 0.0;
         row.opacity = ci < ws.opakab.size() ? ws.opakab[ci] : 0.0;
         if (detail_inventory || row.emis_in != 0.0 || row.emis_out != 0.0 || row.tau_in != 0.0 || row.tau_out != 0.0) {
@@ -1143,7 +1152,8 @@ void write_rrc_detail(const std::filesystem::path& path,
     for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
         const std::size_t sz = source_zone_index(state, z);
         const auto& zone = state.radial_zones[sz];
-        auto rrcs = source_rrc_rows_from_identities(state, zone.accepted_controller.evaluation, true);
+        const std::size_t hdu_number = z + 3;
+        auto rrcs = source_rrc_rows_from_identities(state, zone.accepted_controller.evaluation, hdu_number, true);
         truncate_to_oracle_count(rrcs, 1849);
         if (rrcs.size() != 1849) {
             std::ostringstream msg;
@@ -1417,9 +1427,10 @@ void write_public_rrc(const std::filesystem::path& path,
     std::vector<const xstar_run_state::RrcIdentityState*> active;
     active.reserve(994);
     for (const auto& r : state.rrc_identities) {
-        // v25.5.15.9 restores the oracle/public RRC product inventory instead
+        // v25.5.15.9.1 restores the oracle/public RRC product inventory instead
         // of pruning by active abundance or nonzero signal; this preserves Mg
-        // rows wherever the oracle inventory contains them.
+        // rows wherever the oracle inventory contains them.  The explicit
+        // retained tauc mapping keeps depth_outward/depth_inward are not swapped.
         const std::size_t ci = r.continuum_index > 0 ? static_cast<std::size_t>(r.continuum_index - 1) : 0;
         if (ci >= m) continue;
         active.push_back(&r);
@@ -1523,9 +1534,7 @@ Result write_historical_science_products(
     state.xout_cont1_computed_from_native_state = true;
     write_public_spectrum(output_dir / "xout_spect1.fits", state, true);
     state.xout_spect1_computed_from_native_state = true;
-    // xout_abund1 remains isolated because its 473-column ASCII writer is the
-    // current crash suspect. v25.5.15.3 writes xout_step.log before invoking
-    // the abundance writer and keeps abundance behind an explicit env gate.
+    // xout_abund1 is written after xout_step.log by write_native_abundance_product().
     state.xout_abund1_computed_from_native_state = false;
 
     Result result;
@@ -1545,11 +1554,11 @@ Result write_historical_science_products(
 }
 
 bool abundance_product_enabled() {
-    const char* disable = std::getenv("XSTAR_V048746255159_DISABLE_ABUNDANCE_PRODUCT");
+    const char* disable = std::getenv("XSTAR_V0487462551591_DISABLE_ABUNDANCE_PRODUCT");
     if (disable != nullptr && std::string(disable) == "1") return false;
-    const char* flag = std::getenv("XSTAR_V048746255159_ENABLE_ABUNDANCE_PRODUCT");
+    const char* flag = std::getenv("XSTAR_V0487462551591_ENABLE_ABUNDANCE_PRODUCT");
     if (flag != nullptr) return std::string(flag) == "1";
-    // Compatibility with the previous opt-in gate, but v25.5.15.9 enables the
+    // Compatibility with the previous opt-in gate, but v25.5.15.9.1 enables the
     // safe native abundance writer by default.
     const char* old_flag = std::getenv("XSTAR_V048746255158_ENABLE_ABUNDANCE_PRODUCT");
     if (old_flag != nullptr) return std::string(old_flag) == "1";
