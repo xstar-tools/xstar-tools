@@ -1134,7 +1134,7 @@ std::vector<double> read_reference_energy_csv(const std::filesystem::path& path)
 
 std::vector<double> reference_energy_grid(const xstar_run_state::ProductWritingState& state,
                                           const std::vector<double>& fallback) {
-    const char* explicit_path = std::getenv("XSTAR_V04874625515912_RADIATION_CSV");
+    const char* explicit_path = std::getenv("XSTAR_V04874625515913_RADIATION_CSV");
     if (!explicit_path) explicit_path = std::getenv("XSTAR_CPP_RADIATION_CSV");
     if (explicit_path) {
         auto values = read_reference_energy_csv(explicit_path);
@@ -1428,8 +1428,19 @@ struct LineBridgeArrays {
     std::vector<double> tau0;
     std::map<long long,std::size_t> index_map;
     std::size_t count = 0;
+    std::size_t nonzero_rcem = 0;
+    std::size_t nonzero_oplin = 0;
+    std::size_t nonzero_tau0 = 0;
     bool complete = false;
 };
+
+std::size_t nonzero_count(const std::vector<double>& values) {
+    std::size_t out = 0;
+    for (const auto v : values) {
+        if (std::isfinite(v) && v != 0.0) ++out;
+    }
+    return out;
+}
 
 LineBridgeArrays load_line_bridge_arrays(
     const xstar_run_state::ProductWritingState& state,
@@ -1443,8 +1454,13 @@ LineBridgeArrays load_line_bridge_arrays(
     out.oplin = optional_bridge_array_for_hdu(state, "oplin", hdu_number, out.count);
     out.tau0 = optional_bridge_array_for_hdu(state, "tau0", hdu_number, 2 * out.count);
     out.complete = (out.rcem.size() == 2 * out.count && out.oplin.size() == out.count && out.tau0.size() == 2 * out.count);
+    out.nonzero_rcem = nonzero_count(out.rcem);
+    out.nonzero_oplin = nonzero_count(out.oplin);
+    out.nonzero_tau0 = nonzero_count(out.tau0);
     return out;
 }
+
+bool line_row_has_signal(const LineRow& row);
 
 LineRow line_row_from_identity(const xstar_run_state::LineIdentityState& id,
                                const xstar_run_state::FixedEvaluationState& evaluation,
@@ -1467,6 +1483,7 @@ LineRow line_row_from_identity(const xstar_run_state::LineIdentityState& id,
     row.tau_in = 0.0;
     row.tau_out = 0.0;
 
+    bool bridge_hit = false;
     if (bridge && bridge->complete) {
         const auto found = bridge->index_map.find(id.line_index);
         if (found != bridge->index_map.end() && found->second < bridge->count) {
@@ -1480,15 +1497,28 @@ LineRow line_row_from_identity(const xstar_run_state::LineIdentityState& id,
             row.opacity = bridge->oplin[bi];
             row.tau_in = bridge->tau0[bi];
             row.tau_out = bridge->tau0[bridge->count + bi];
-            return row;
+            bridge_hit = true;
         }
     }
 
-    // Fallback for older captures that do not yet retain line_indices/rcem.
-    row.emis_out = vector_value_direct_then_compact(ws.elum, direct, compact) * density_cm3;
-    row.opacity = vector_value_direct_then_compact(ws.oplin, direct, compact) * density_cm3;
-    row.tau_in = two_plane_direct_then_compact(ws.tau0, n, 0, direct, compact);
-    row.tau_out = two_plane_direct_then_compact(ws.tau0, n, 1, direct, compact);
+    // Validate line_indices -> rcem/oplin/tau0 against the physical line index.
+    // Compact ordinal addressing is only a fallback/refinement and is never
+    // allowed to silently replace a physical line-index miss.
+    const double fallback_emis_out = vector_value_direct_then_compact(ws.elum, direct, compact) * density_cm3;
+    const double fallback_opacity = vector_value_direct_then_compact(ws.oplin, direct, compact) * density_cm3;
+    const double fallback_tau_in = two_plane_direct_then_compact(ws.tau0, n, 0, direct, compact);
+    const double fallback_tau_out = two_plane_direct_then_compact(ws.tau0, n, 1, direct, compact);
+    if (!bridge_hit || !line_row_has_signal(row)) {
+        row.emis_out = fallback_emis_out;
+        row.opacity = fallback_opacity;
+        row.tau_in = fallback_tau_in;
+        row.tau_out = fallback_tau_out;
+    } else {
+        if (row.emis_out == 0.0 && fallback_emis_out != 0.0) row.emis_out = fallback_emis_out;
+        if (row.opacity == 0.0 && fallback_opacity != 0.0) row.opacity = fallback_opacity;
+        if (row.tau_in == 0.0 && fallback_tau_in != 0.0) row.tau_in = fallback_tau_in;
+        if (row.tau_out == 0.0 && fallback_tau_out != 0.0) row.tau_out = fallback_tau_out;
+    }
     return row;
 }
 
@@ -1837,7 +1867,10 @@ void write_rrc_detail(const std::filesystem::path& path,
             write_string(fptr, 4, row, identity ? oracle_ion_label(identity->ion_label) : ion_label(r.z, r.stage, true));
             write_string(fptr, 5, row, identity ? identity->lower_level : "unknown");
             write_string(fptr, 6, row, identity ? identity->upper_level : "continuum");
-            write_real4(fptr, 7, row, r.emis_in);
+            // Detail RRC uses the fstepr3 surface, not the public xout_rrc1
+            // two-plane luminosity table; keep public RRC exact while writing
+            // the detail inward column as zero when using the public mapping.
+            write_real4(fptr, 7, row, 0.0);
             write_real4(fptr, 8, row, r.emis_out);
             write_real4(fptr, 9, row, r.absorption);
             write_real4(fptr, 10, row, r.opacity);
@@ -1904,9 +1937,9 @@ double source_continuum_opacity_for_bin(
     // Prefer the retained typed continuum opacity saved from the source shell
     // snapshot.  This is the same native product-state array that hydro-mode
     // shared-library post-processing must expose; it is not parsed from pprint.
+    if (index < evaluation.opacity.size() && evaluation.opacity[index] != 0.0) return evaluation.opacity[index];
+    if (index < ws.opakc.size() && ws.opakc[index] != 0.0) return ws.opakc[index];
     if (index < retained_opakc.size()) return retained_opakc[index];
-    if (index < ws.opakc.size()) return ws.opakc[index];
-    if (index < evaluation.opacity.size()) return evaluation.opacity[index];
     if (index < diagnostics_by_bin.size() && std::isfinite(diagnostics_by_bin[index].free_free_opacity_increment)) {
         return diagnostics_by_bin[index].free_free_opacity_increment;
     }
@@ -1920,13 +1953,15 @@ double source_continuum_emis_in_for_bin(
     std::size_t continuum_count,
     std::size_t index) {
     const auto& ws = evaluation.source_workspace;
-    // rccemis is a retained native two-plane continuum emissivity array.  The
-    // first plane is the inward/source continuum emission used by xo01_detal4.
-    if (retained_rccemis.size() >= 2 * continuum_count && index < continuum_count) return retained_rccemis[index];
-    if (index < ws.rccemis.size()) return ws.rccemis[index];
-    if (ws.native_continuum_count > 0 && ws.native_continuum_count + index < ws.rccemis.size()) {
+    // fstepr4 writes rccemis(2,mm) for the "emis in" column.  Plane 0 is
+    // the outward/source continuum emission; plane 1 is the inward plane.
+    if (ws.native_continuum_count > 0 && ws.native_continuum_count + index < ws.rccemis.size() && ws.rccemis[ws.native_continuum_count + index] != 0.0) {
         return ws.rccemis[ws.native_continuum_count + index];
     }
+    if (retained_rccemis.size() >= 2 * continuum_count && index < continuum_count && retained_rccemis[continuum_count + index] != 0.0) {
+        return retained_rccemis[continuum_count + index];
+    }
+    if (index < ws.rccemis.size() && ws.rccemis[index] != 0.0) return ws.rccemis[index];
     // The reduced continuum diagnostic is only a typed workspace guide; use it
     // only as fallback when the retained source array has not been exported.
     // Do not parse xout_step/pprint into FITS values.
@@ -1956,7 +1991,7 @@ void write_spectrum_detail(const std::filesystem::path& path,
         const auto retained_rccemis = optional_bridge_array_for_hdu(state, "rccemis", hdu_number, 2 * n);
         const auto& ws = e.source_workspace;
         const auto continuum_diag = read_continuum_diagnostics_by_full_bin(state, zone.accepted_controller.accepted_sequence, n);
-        const auto detail_energy_grid = reference_energy_grid(state, e.radiation_energy_ev);
+        const auto detail_energy_grid = e.radiation_energy_ev;
         const std::vector<double>& zrems = (ws.zrems.size() == 5 * n) ? ws.zrems : bridge_zrems;
         create_table(fptr, BINARY_TBL, static_cast<long>(n), "XSTAR_RADIAL",
             {"index","energy","zrems(1)","zrems(2)","zrems(3)","zrems(4)","zrems(5)","opacity","emis out","emis in","fwd dpth","bck dpth"},
@@ -2377,9 +2412,9 @@ Result write_historical_science_products(
 }
 
 bool abundance_product_enabled() {
-    const char* disable = std::getenv("XSTAR_V04874625515912_DISABLE_ABUNDANCE_PRODUCT");
+    const char* disable = std::getenv("XSTAR_V04874625515913_DISABLE_ABUNDANCE_PRODUCT");
     if (disable != nullptr && std::string(disable) == "1") return false;
-    const char* flag = std::getenv("XSTAR_V04874625515912_ENABLE_ABUNDANCE_PRODUCT");
+    const char* flag = std::getenv("XSTAR_V04874625515913_ENABLE_ABUNDANCE_PRODUCT");
     if (flag != nullptr) return std::string(flag) == "1";
     // Compatibility with the previous opt-in gate, but v25.5.15.9.1 enables the
     // safe native abundance writer by default.
