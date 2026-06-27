@@ -1000,7 +1000,8 @@ const xstar_run_state::LineIdentityState* line_identity_by_index(
     const xstar_run_state::ProductWritingState& state,
     long long line_index) {
     if (line_index > 0 && static_cast<std::size_t>(line_index) <= state.line_identities.size()) {
-        return &state.line_identities[static_cast<std::size_t>(line_index - 1)];
+        const auto& direct = state.line_identities[static_cast<std::size_t>(line_index - 1)];
+        if (direct.line_index == line_index) return &direct;
     }
     for (const auto& line : state.line_identities) if (line.line_index == line_index) return &line;
     return nullptr;
@@ -1109,7 +1110,7 @@ std::vector<double> read_reference_energy_csv(const std::filesystem::path& path)
 
 std::vector<double> reference_energy_grid(const xstar_run_state::ProductWritingState& state,
                                           const std::vector<double>& fallback) {
-    const char* explicit_path = std::getenv("XSTAR_V0487462551595_RADIATION_CSV");
+    const char* explicit_path = std::getenv("XSTAR_V0487462551596_RADIATION_CSV");
     if (!explicit_path) explicit_path = std::getenv("XSTAR_CPP_RADIATION_CSV");
     if (explicit_path) {
         auto values = read_reference_energy_csv(explicit_path);
@@ -1225,7 +1226,7 @@ int parse_print_option_number(const std::string& line) {
 }
 
 bool pprint_value_patch_enabled() {
-    const char* enabled = std::getenv("XSTAR_V0487462551595_ENABLE_PPRINT_VALUE_PATCH");
+    const char* enabled = std::getenv("XSTAR_V0487462551596_ENABLE_PPRINT_VALUE_PATCH");
     return enabled != nullptr && std::string(enabled) == "1";
 }
 
@@ -1506,11 +1507,7 @@ RrcRow merged_rrc_row(const RrcRow& base, const RrcRow* diagnostic) {
 const xstar_run_state::LineIdentityState* line_identity_by_row_record(
     const xstar_run_state::ProductWritingState& state,
     const LineRow& row) {
-    const auto index = row.record;
-    if (index > 0 && static_cast<std::size_t>(index) <= state.line_identities.size()) {
-        return &state.line_identities[static_cast<std::size_t>(index - 1)];
-    }
-    return line_identity_by_index(state, index);
+    return line_identity_by_index(state, row.record);
 }
 
 void write_line_detail(const std::filesystem::path& path,
@@ -1768,6 +1765,7 @@ void write_spectrum_detail(const std::filesystem::path& path,
         const auto dpthcont = bridge_array_for_hdu(state, "dpthcont", hdu_number, 2 * n);
         const auto& ws = e.source_workspace;
         const auto continuum_diag = read_continuum_diagnostics_by_full_bin(state, zone.accepted_controller.accepted_sequence, n);
+        const auto detail_energy_grid = reference_energy_grid(state, e.radiation_energy_ev);
         const std::vector<double>& zrems = (ws.zrems.size() == 5 * n) ? ws.zrems : bridge_zrems;
         create_table(fptr, BINARY_TBL, static_cast<long>(n), "XSTAR_RADIAL",
             {"index","energy","zrems(1)","zrems(2)","zrems(3)","zrems(4)","zrems(5)","opacity","emis out","emis in","fwd dpth","bck dpth"},
@@ -1782,7 +1780,7 @@ void write_spectrum_detail(const std::filesystem::path& path,
             const double emis_in = source_continuum_emis_in_for_bin(e, continuum_diag, i);
             const long row = static_cast<long>(i + 1);
             write_int(fptr, 1, row, static_cast<int>(i + 1));
-            write_real4(fptr, 2, row, i < e.radiation_energy_ev.size() ? e.radiation_energy_ev[i] : 0.0);
+            write_real4(fptr, 2, row, i < detail_energy_grid.size() ? detail_energy_grid[i] : (i < e.radiation_energy_ev.size() ? e.radiation_energy_ev[i] : 0.0));
             write_real4(fptr, 3, row, zrems[0 * n + i]);
             write_real4(fptr, 4, row, zrems[1 * n + i]);
             write_real4(fptr, 5, row, zrems[2 * n + i]);
@@ -1793,7 +1791,8 @@ void write_spectrum_detail(const std::filesystem::path& path,
             write_real4(fptr, 10, row, emis_in);
             const auto bridge_rows = radial_keyword_boundaries(state);
             const double radial_depth = oz < bridge_rows.size() ? bridge_rows[oz].radial_depth_cm : zone.delta_radius_cm;
-            const double fwd_depth = radial_depth > 0.0 ? opacity * radial_depth : dpthcont[0 * n + i];
+            (void)radial_depth;
+            const double fwd_depth = dpthcont[0 * n + i];
             write_real4(fptr, 11, row, fwd_depth);
             write_real4(fptr, 12, row, dpthcont[1 * n + i]);
         }
@@ -1960,7 +1959,8 @@ void write_abundances(const std::filesystem::path& path,
                     const double f1 = z1 ? fractions[z+1][{element_z,stage}] : 0.0;
                     const double n0 = z0->density_cm3;
                     const double n1 = z1 ? z1->density_cm3 : 0.0;
-                    const double dr = z0->delta_radius_cm;
+                    const auto base0 = abundance_output_base_row_for_zone(state, z);
+                    const double dr = base0.delta_radius_cm > 0.0 ? base0.delta_radius_cm : z0->delta_radius_cm;
                     column += 0.5 * (f0*n0 + f1*n1) * dr * abundance;
                 }
             }
@@ -2089,8 +2089,12 @@ void write_public_rrc(const std::filesystem::path& path,
         const bool has_legacy = legacy != legacy_values.rrc_values.end();
         write_real4(fptr, 5, row, has_legacy && legacy->second.has_emission ? legacy->second.emit_outward : (ci < m ? elumab[ci] : 0.0));
         write_real4(fptr, 6, row, has_legacy && legacy->second.has_emission ? legacy->second.emit_inward : (ci < m ? elumab[m + ci] : 0.0));
-        write_real4(fptr, 7, row, has_legacy && legacy->second.has_depth ? legacy->second.depth_outward : (ci < m ? tauc[m + ci] : 0.0));
-        write_real4(fptr, 8, row, has_legacy && legacy->second.has_depth ? legacy->second.depth_inward : (ci < m ? tauc[ci] : 0.0));
+        // Public RRC depth columns follow the public/oracle orientation: the
+        // first retained tauc plane is depth_outward and the second plane is
+        // depth_inward.  Detail products retain tau_in/tau_out semantics, so
+        // this swap is intentionally local to xout_rrc1.fits.
+        write_real4(fptr, 7, row, has_legacy && legacy->second.has_depth ? legacy->second.depth_outward : (ci < m ? tauc[ci] : 0.0));
+        write_real4(fptr, 8, row, has_legacy && legacy->second.has_depth ? legacy->second.depth_inward : (ci < m ? tauc[m + ci] : 0.0));
     }
     close_fits(fptr);
 }
@@ -2188,9 +2192,9 @@ Result write_historical_science_products(
 }
 
 bool abundance_product_enabled() {
-    const char* disable = std::getenv("XSTAR_V0487462551595_DISABLE_ABUNDANCE_PRODUCT");
+    const char* disable = std::getenv("XSTAR_V0487462551596_DISABLE_ABUNDANCE_PRODUCT");
     if (disable != nullptr && std::string(disable) == "1") return false;
-    const char* flag = std::getenv("XSTAR_V0487462551595_ENABLE_ABUNDANCE_PRODUCT");
+    const char* flag = std::getenv("XSTAR_V0487462551596_ENABLE_ABUNDANCE_PRODUCT");
     if (flag != nullptr) return std::string(flag) == "1";
     // Compatibility with the previous opt-in gate, but v25.5.15.9.1 enables the
     // safe native abundance writer by default.
