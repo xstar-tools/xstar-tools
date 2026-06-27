@@ -1110,7 +1110,7 @@ std::vector<double> read_reference_energy_csv(const std::filesystem::path& path)
 
 std::vector<double> reference_energy_grid(const xstar_run_state::ProductWritingState& state,
                                           const std::vector<double>& fallback) {
-    const char* explicit_path = std::getenv("XSTAR_V0487462551598_RADIATION_CSV");
+    const char* explicit_path = std::getenv("XSTAR_V0487462551599_RADIATION_CSV");
     if (!explicit_path) explicit_path = std::getenv("XSTAR_CPP_RADIATION_CSV");
     if (explicit_path) {
         auto values = read_reference_energy_csv(explicit_path);
@@ -1192,16 +1192,18 @@ void write_population_detail(const std::filesystem::path& path,
         const auto& evaluation = zone.accepted_controller.evaluation;
         const auto solve_rows = read_solve_rows_by_global(state, zone.accepted_controller.accepted_sequence);
         auto solve_value_for_level = [&](const xstar_run_state::LevelIdentityState& level) -> const SolveRowValue* {
+            // The public level table contains an explicit He I continuum row at
+            // global index 79, while the native solver population stream stores
+            // the He II ground population at that slot.  Therefore every He II
+            // public level is addressed by global_index - 1 in the solver-side
+            // typed population state.  This is an index-map correction, not a
+            // pprint/log value patch.
+            if (level.ion_label == "he_ii" && level.global_index > 1) {
+                auto shifted = solve_rows.find(level.global_index - 1);
+                if (shifted != solve_rows.end()) return &shifted->second;
+            }
             auto found = solve_rows.find(level.global_index);
             if (found != solve_rows.end()) return &found->second;
-            // Legacy public products assign a continuum row the population of
-            // the next ion ground row.  This is the Mg tail break observed at
-            // row 113 in xo01_detail.fits.
-            if (level.level_label.find("continu") != std::string::npos ||
-                level.level_label.find("continuum") != std::string::npos) {
-                found = solve_rows.find(level.global_index + 1);
-                if (found != solve_rows.end()) return &found->second;
-            }
             return nullptr;
         };
         for (std::size_t i = 0; i < detail_levels.size(); ++i) {
@@ -2026,21 +2028,16 @@ void write_abundances(const std::filesystem::path& path,
         const auto eit = std::find_if(elements.begin(), elements.end(), [element_z](const ElementMeta& e){ return e.element_z == element_z; });
         const double abundance = eit == elements.end() ? 0.0 : eit->abundance;
         for (int stage = 1; stage <= element_z; ++stage) {
-            double column = 0.0;
-            for (std::size_t z = 0; z + 1 < state.radial_zones.size(); ++z) {
-                const auto* z0 = abundance_output_zone(state, z);
-                const auto* z1 = abundance_output_zone(state, z + 1);
-                if (!z0) continue;
-                const double f0 = fractions[z][{element_z,stage}];
-                const double f1 = z1 ? fractions[z+1][{element_z,stage}] : f0;
-                double n0 = physical_density_cm3_for_output_zone(state, z);
-                double n1 = z1 ? physical_density_cm3_for_output_zone(state, z + 1) : n0;
-                if (!(n0 > 0.0)) n0 = z0->density_cm3;
-                if (!(n1 > 0.0)) n1 = z1 ? z1->density_cm3 : n0;
-                double dr = physical_shell_depth_cm_for_output_zone(state, z);
-                if (!(dr > 0.0)) dr = z0->delta_radius_cm;
-                column += 0.5 * (f0*n0 + f1*n1) * dr * abundance;
+            double total_column_density = parameter_value(state, "column", 0.0);
+            for (const auto& b : read_bridge_boundaries(state)) {
+                if (b.terminal_record && b.column_density_cm2 > 0.0) {
+                    total_column_density = b.column_density_cm2;
+                    break;
+                }
             }
+            const double f_initial = !fractions.empty() ? fractions.front()[{element_z,stage}] : 0.0;
+            const double f_terminal = fractions.size() >= 2 ? fractions.back()[{element_z,stage}] : f_initial;
+            const double column = 0.5 * (f_initial + f_terminal) * total_column_density * abundance;
             write_real4(fptr, col++, 1, column);
         }
     }
@@ -2096,11 +2093,11 @@ void write_public_lines(const std::filesystem::path& path,
                         const xstar_run_state::ProductWritingState& state,
                         const std::vector<ElementMeta>& elements,
                         const std::vector<RowMeta>& rows) {
-    const std::size_t final_index = source_zone_index(state, state.radial_zones.size() - 1);
+    const std::size_t final_index = state.radial_zones.size() >= 2 ? state.radial_zones.size() - 2 : source_zone_index(state, state.radial_zones.size() - 1);
     const auto& final_zone = state.radial_zones[final_index];
     auto list = public_line_rows_from_identities(
         state, final_zone.accepted_controller.evaluation,
-        physical_density_cm3_for_output_zone(state, state.radial_zones.size() - 1));
+        physical_density_cm3_for_output_zone(state, final_index));
     const auto legacy_values = pprint_value_patch_enabled() ? parse_legacy_pprint_product_values(state) : LegacyPprintProductValues{};
     fitsfile* fptr = create_fits(path, state); write_parameters(fptr, state.parameter_rows);
     create_table(fptr, ASCII_TBL, static_cast<long>(list.size()), "XSTAR_LINES",
@@ -2131,7 +2128,10 @@ void write_public_rrc(const std::filesystem::path& path,
                       const std::vector<ElementMeta>& elements,
                       const std::vector<RowMeta>&) {
     const auto elumab = bridge_array(state, "elumab", 2 * 301301u);
-    const auto tauc = bridge_array(state, "tauc", 2 * 301301u);
+    // The public RRC depth product is written at the terminal accepted radial
+    // boundary (HDU 6 in the retained bridge ledger), not the post-terminal
+    // convenience copy found by the generic latest-array search.
+    const auto tauc = bridge_array_for_hdu(state, "tauc", 6, 2 * 301301u);
     const std::size_t m = 301301u;
     std::vector<const xstar_run_state::RrcIdentityState*> active;
     active.reserve(994);
