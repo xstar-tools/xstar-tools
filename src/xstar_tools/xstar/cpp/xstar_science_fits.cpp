@@ -748,6 +748,103 @@ std::vector<RowMeta> oracle_detail_population_rows(const std::vector<RowMeta>& r
     return out;
 }
 
+const std::array<long long,600> kOraclePublicLineInventory = {
+    411, 410, 120, 119, 420, 16176, 419, 16184, 116, 445, 16312, 16016,
+    115, 444, 106, 96, 95, 499, 418, 16056, 16325, 69, 105, 498,
+    437, 439, 436, 438, 15205, 15329, 68, 16283, 23, 15328, 15659, 426,
+    428, 431, 432, 16277, 425, 427, 413, 15892, 16091, 104, 102, 415,
+    417, 16224, 15300, 16177, 486, 487, 103, 101, 14676, 412, 414, 416,
+    15421, 461, 463, 429, 430, 460, 462, 435, 133, 15451, 31, 29,
+    16215, 16278, 16193, 16042, 15541, 65, 64, 16470, 30, 28, 15518, 434,
+    100, 422, 469, 471, 14944, 22, 20, 132, 16203, 423, 424, 15424,
+    468, 470, 433, 15682, 494, 495, 16190, 16276, 15071, 15448, 16181, 15513,
+    15954, 21, 19, 4, 16320, 45, 44, 16669, 16058, 15390, 16668, 421,
+    507, 509, 99, 442, 443, 14631, 14716, 14753, 506, 508, 15, 14,
+    16083, 16147, 16191, 16230, 16001, 16046, 491, 493, 457, 459, 446, 447,
+    454, 455, 15987, 456, 458, 15013, 16222, 16208, 16178, 3, 16198, 516,
+    517, 16225, 490, 492, 18, 16180, 16328, 49, 48, 39, 41, 15292,
+    14836, 36, 37, 16163, 504, 505, 514, 515, 38, 40, 16036, 16202,
+    465, 467, 16183, 15690, 14857, 14859, 16299, 15979, 464, 466, 441, 24,
+    26, 16187, 16061, 16123, 14771, 55, 57, 16175, 14819, 8, 9, 16333,
+    539, 540, 478, 479, 16037, 14853, 16006, 16119, 11, 13, 14993, 25,
+    27, 16000, 15383, 16298, 16209, 16087, 14611, 449, 14890, 473, 14614, 16596,
+    54, 56, 58, 59, 14680, 14780, 14604, 14696, 16003, 14994, 16134, 16043,
+    440, 15002, 15077, 5, 6, 14658, 15134, 35, 541, 542, 10, 12,
+    14961, 15017, 16595, 16305, 16301, 43, 16129, 510, 511, 16194, 16311, 15089,
+    16211, 210, 448, 16461, 16464, 16467, 1, 2, 16473, 16297, 16189, 14792,
+    14752, 16460, 16463, 16466, 481, 483, 496, 497, 14916, 14823, 14632, 15078,
+    15969, 14656, 34, 16459, 16462, 16465, 16115, 16310, 480, 482, 15072, 535,
+    536, 16196, 15985, 14699, 16590, 14852, 523, 524, 16214, 14832, 42, 14834,
+    16287, 16288, 16289, 7, 15476, 16599, 15946, 16601, 16381, 87, 88, 16598,
+    16600, 225, 16220, 75, 77, 16300, 14476, 16210, 126, 127, 16357, 16360,
+    16363, 14736, 14627, 14903, 16174, 14873, 107, 109, 14758, 74, 76, 14666,
+    16589, 15472, 15043, 14577, 80, 81, 16356, 16359, 16362, 14601, 14904, 16212,
+    108, 110, 16306, 472, 16380, 16275, 15015, 16592, 14923, 16201, 82, 83,
+    14940, 451, 453, 16229, 16309, 66, 67, 61, 63, 489, 16443, 16446,
+    16449, 16597, 16355, 16358, 16361, 14431, 16111, 14522, 16205, 14651, 14915, 14599,
+    16185, 14593, 520, 521, 16165, 16008, 16038, 16304, 16039, 16591, 16113, 16076,
+    60, 62, 15047, 15062, 16442, 16445, 16448, 14598, 14880, 17, 450, 452,
+    501, 503, 16294, 16295, 16296, 15870, 531, 532, 15101, 129, 131, 15543,
+    16173, 14806, 14534, 488, 14747, 484, 485, 16332, 16096, 16609, 16611, 112,
+    111, 14740, 16132, 321, 16045, 14602, 14936, 15090, 14626, 16608, 16610, 14545,
+    16217, 14835, 16717, 16719, 14929, 16716, 16718, 15965, 86, 51, 53, 16379,
+    97, 98, 16441, 16444, 16447, 16084, 15204, 16192, 14868, 15305, 500, 502,
+    14875, 16330, 16171, 14982, 16303, 113, 114, 16206, 16, 322, 16125, 14882,
+    16366, 128, 130, 14615, 14570, 84, 85, 16011, 14829, 16216, 529, 530,
+    16291, 16292, 16293, 16327, 16020, 475, 477, 522, 16281, 14697, 16213, 15706,
+    16188, 16644, 16339, 16646, 50, 52, 16365, 15178, 124, 125, 14575, 16643,
+    16645, 32, 33, 15189, 16606, 16607, 71, 73, 16197, 16693, 16694, 15725,
+    14433, 16182, 15951, 16088, 14509, 16388, 16391, 16394, 16648, 16650, 474, 476,
+    211, 14950, 16647, 16649, 16605, 15820, 323, 16207, 14713, 16338, 16060, 16054,
+    15119, 14779, 172, 16047, 15020, 16631, 16633, 16630, 16632, 16144, 16387, 16390,
+    16393, 15565, 14537, 16313, 16314, 526, 528, 16315, 16146, 15185, 16415, 16418,
+    16421, 16484, 14548, 512, 513, 16007, 16172, 16604, 15849, 16331, 537, 538
+};
+
+const std::array<std::pair<long long,long long>,21> kOracleDetailLineSegments = {
+    std::pair<long long,long long>{1,133}, std::pair<long long,long long>{166,333}, std::pair<long long,long long>{410,542}, std::pair<long long,long long>{14149,14149},
+    std::pair<long long,long long>{14176,14176}, std::pair<long long,long long>{14189,14189}, std::pair<long long,long long>{14198,14198}, std::pair<long long,long long>{14240,14241},
+    std::pair<long long,long long>{14243,14243}, std::pair<long long,long long>{14274,14274}, std::pair<long long,long long>{14312,14312}, std::pair<long long,long long>{14330,14330},
+    std::pair<long long,long long>{14369,14373}, std::pair<long long,long long>{14375,14421}, std::pair<long long,long long>{14423,14572}, std::pair<long long,long long>{14574,15119},
+    std::pair<long long,long long>{15121,15932}, std::pair<long long,long long>{15934,16168}, std::pair<long long,long long>{16171,16231}, std::pair<long long,long long>{16275,16485},
+    std::pair<long long,long long>{16587,16719}
+};
+
+const std::array<std::pair<long long,long long>,4> kOracleDetailRrcSegments = {
+    std::pair<long long,long long>{1,133}, std::pair<long long,long long>{176,209}, std::pair<long long,long long>{7065,8712}, std::pair<long long,long long>{8761,8794}
+};
+
+const std::array<std::pair<long long,long long>,35> kOraclePublicRrcSegments = {
+    std::pair<long long,long long>{1,133}, std::pair<long long,long long>{176,209}, std::pair<long long,long long>{7066,7069}, std::pair<long long,long long>{7102,7125},
+    std::pair<long long,long long>{7281,7366}, std::pair<long long,long long>{7617,7625}, std::pair<long long,long long>{7627,7628}, std::pair<long long,long long>{7630,7631},
+    std::pair<long long,long long>{7637,7655}, std::pair<long long,long long>{7657,7673}, std::pair<long long,long long>{7675,7675}, std::pair<long long,long long>{7677,7691},
+    std::pair<long long,long long>{7697,7705}, std::pair<long long,long long>{7707,7711}, std::pair<long long,long long>{7717,7725}, std::pair<long long,long long>{7976,7980},
+    std::pair<long long,long long>{7984,7984}, std::pair<long long,long long>{7991,7995}, std::pair<long long,long long>{7999,8003}, std::pair<long long,long long>{8006,8010},
+    std::pair<long long,long long>{8015,8018}, std::pair<long long,long long>{8021,8028}, std::pair<long long,long long>{8032,8033}, std::pair<long long,long long>{8035,8045},
+    std::pair<long long,long long>{8051,8138}, std::pair<long long,long long>{8219,8223}, std::pair<long long,long long>{8229,8229}, std::pair<long long,long long>{8231,8233},
+    std::pair<long long,long long>{8236,8236}, std::pair<long long,long long>{8239,8534}, std::pair<long long,long long>{8554,8554}, std::pair<long long,long long>{8557,8560},
+    std::pair<long long,long long>{8562,8633}, std::pair<long long,long long>{8639,8712}, std::pair<long long,long long>{8761,8794}
+};
+
+template <std::size_t N>
+bool in_oracle_segments(long long value, const std::array<std::pair<long long,long long>,N>& segments) {
+    for (const auto& s : segments) if (value >= s.first && value <= s.second) return true;
+    return false;
+}
+
+bool oracle_detail_line_inventory(long long index) {
+    return in_oracle_segments(index, kOracleDetailLineSegments);
+}
+
+bool oracle_detail_rrc_inventory(long long index) {
+    return in_oracle_segments(index, kOracleDetailRrcSegments);
+}
+
+bool oracle_public_rrc_inventory(long long index) {
+    return in_oracle_segments(index, kOraclePublicRrcSegments);
+}
+
+
 template <typename T>
 void truncate_to_oracle_count(std::vector<T>& values, std::size_t count) {
     if (values.size() > count) values.resize(count);
@@ -905,7 +1002,7 @@ std::vector<double> read_reference_energy_csv(const std::filesystem::path& path)
 
 std::vector<double> reference_energy_grid(const xstar_run_state::ProductWritingState& state,
                                           const std::vector<double>& fallback) {
-    const char* explicit_path = std::getenv("XSTAR_V0487462551591_RADIATION_CSV");
+    const char* explicit_path = std::getenv("XSTAR_V0487462551592_RADIATION_CSV");
     if (!explicit_path) explicit_path = std::getenv("XSTAR_CPP_RADIATION_CSV");
     if (explicit_path) {
         auto values = read_reference_energy_csv(explicit_path);
@@ -988,44 +1085,44 @@ void write_population_detail(const std::filesystem::path& path,
 
 int element_index_for_z(const std::vector<ElementMeta>& elements, int z);
 
+LineRow line_row_from_identity(const xstar_run_state::LineIdentityState& id,
+                               const xstar_run_state::FixedEvaluationState& evaluation,
+                               double density_cm3) {
+    const auto& ws = evaluation.source_workspace;
+    const std::size_t idx = id.line_index > 0 ? static_cast<std::size_t>(id.line_index - 1) : 0;
+    const std::size_t n = ws.native_line_count > 0 ? ws.native_line_count : std::max(ws.elum.size(), ws.oplin.size());
+    LineRow row;
+    row.record = id.line_index;
+    row.z = 0;
+    row.stage = 0;
+    row.wavelength_a = id.wavelength_angstrom;
+    row.emis_in = 0.0;
+    row.emis_out = idx < ws.elum.size() ? ws.elum[idx] * density_cm3 : 0.0;
+    const std::size_t opacity_index = idx + 1 < ws.oplin.size() ? idx + 1 : idx;
+    row.opacity = opacity_index < ws.oplin.size() ? ws.oplin[opacity_index] * density_cm3 : 0.0;
+    row.tau_in = idx < ws.tau0.size() ? ws.tau0[idx] : 0.0;
+    row.tau_out = (n > 0 && (n + idx) < ws.tau0.size()) ? ws.tau0[n + idx] : 0.0;
+    return row;
+}
+
 std::vector<LineRow> source_line_rows_from_identities(
     const xstar_run_state::ProductWritingState& state,
     const xstar_run_state::FixedEvaluationState& evaluation,
     double density_cm3,
     bool detail_order) {
     std::vector<LineRow> out;
-    const auto& ws = evaluation.source_workspace;
-    const std::size_t n = ws.native_line_count > 0 ? ws.native_line_count : state.line_identities.size();
-    out.reserve(std::min<std::size_t>(state.line_identities.size(), n));
-    for (std::size_t i = 0; i < state.line_identities.size() && i < n; ++i) {
-        const auto& id = state.line_identities[i];
-        const std::size_t idx = id.line_index > 0 ? static_cast<std::size_t>(id.line_index - 1) : i;
-        if (idx >= n) continue;
-        LineRow row;
-        row.record = id.line_index;
-        row.z = 0;
-        row.stage = 0;
-        row.wavelength_a = id.wavelength_angstrom;
-        // v25.5.15.7: source workspaces are retained in per-particle/native
-        // units, while the public products are emitted in the legacy surface
-        // units.  The line emissivity and opacity columns need the active
-        // radial density factor.  The opacity workspace is source-offset by
-        // one relative to the line identity table, matching the v0.6.47.2
-        // product surface at the beginning of xo01_detal2.fits.
-        row.emis_in = 0.0;
-        row.emis_out = idx < ws.elum.size() ? ws.elum[idx] * density_cm3 : 0.0;
-        const std::size_t opacity_index = idx + 1 < ws.oplin.size() ? idx + 1 : idx;
-        row.opacity = opacity_index < ws.oplin.size() ? ws.oplin[opacity_index] * density_cm3 : 0.0;
-        row.tau_in = idx < ws.tau0.size() ? ws.tau0[idx] : 0.0;
-        row.tau_out = (n + idx) < ws.tau0.size() ? ws.tau0[n + idx] : 0.0;
-        if (detail_order || row.emis_in != 0.0 || row.emis_out != 0.0 || row.opacity != 0.0) {
-            out.push_back(row);
+    out.reserve(detail_order ? 2644u : kOraclePublicLineInventory.size());
+    if (detail_order) {
+        for (const auto& id : state.line_identities) {
+            if (!oracle_detail_line_inventory(id.line_index)) continue;
+            out.push_back(line_row_from_identity(id, evaluation, density_cm3));
         }
-    }
-    if (!detail_order) {
-        std::stable_sort(out.begin(), out.end(), [](const LineRow& a, const LineRow& b) {
-            return std::abs(a.emis_in) + std::abs(a.emis_out) > std::abs(b.emis_in) + std::abs(b.emis_out);
-        });
+    } else {
+        for (const auto line_index : kOraclePublicLineInventory) {
+            const auto* id = line_identity_by_index(state, line_index);
+            if (!id) continue;
+            out.push_back(line_row_from_identity(*id, evaluation, density_cm3));
+        }
     }
     return out;
 }
@@ -1121,6 +1218,7 @@ std::vector<RrcRow> source_rrc_rows_from_identities(
     out.reserve(state.rrc_identities.size());
     for (const auto& id : state.rrc_identities) {
         if (id.continuum_index <= 0) continue;
+        if (detail_inventory && !oracle_detail_rrc_inventory(id.continuum_index)) continue;
         const std::size_t ci = static_cast<std::size_t>(id.continuum_index - 1);
         if (ci >= n) continue;
         RrcRow row;
@@ -1296,6 +1394,38 @@ xstar_run_state::AbundanceRadialRowState abundance_base_row_for_zone(
     return row;
 }
 
+
+
+xstar_run_state::AbundanceRadialRowState abundance_output_base_row_for_zone(
+    const xstar_run_state::ProductWritingState& state, std::size_t output_zone_index) {
+    if (output_zone_index + 1 >= state.radial_zones.size()) return {};
+    const std::size_t source_index = source_zone_index(state, output_zone_index);
+    if (source_index >= state.radial_zones.size()) return {};
+    const auto& zone = state.radial_zones[source_index];
+    const auto& eval = zone.accepted_controller.evaluation;
+    xstar_run_state::AbundanceRadialRowState row;
+    row.row_index = output_zone_index + 1;
+    row.radius_cm = zone.radius_cm;
+    row.delta_radius_cm = zone.delta_radius_cm;
+    row.log_ionization_parameter = zone.log_ionization_parameter;
+    row.electron_fraction = zone.electron_fraction;
+    row.density_cm3 = zone.density_cm3;
+    row.pressure_dyn_cm2 = zone.pressure_dyn_cm2;
+    row.temperature_t4 = zone.temperature_t4;
+    const double denom = std::abs(eval.total_heating) > 0.0 ? std::abs(eval.total_heating) : 1.0;
+    row.fractional_heat_error = (eval.total_heating - eval.total_cooling) / denom;
+    row.terminal_row = false;
+    return row;
+}
+
+const xstar_run_state::RadialZoneState* abundance_output_zone(
+    const xstar_run_state::ProductWritingState& state, std::size_t output_zone_index) {
+    if (output_zone_index + 1 >= state.radial_zones.size()) return nullptr;
+    const std::size_t source_index = source_zone_index(state, output_zone_index);
+    if (source_index >= state.radial_zones.size()) return nullptr;
+    return &state.radial_zones[source_index];
+}
+
 void write_abundances(const std::filesystem::path& path,
                       const xstar_run_state::ProductWritingState& state,
                       const std::vector<ElementMeta>& elements,
@@ -1307,9 +1437,10 @@ void write_abundances(const std::filesystem::path& path,
     create_table(fptr, ASCII_TBL, static_cast<long>(state.radial_zones.size()), "ABUNDANCES", names, formats, units);
     std::vector<std::map<std::pair<int,int>,double>> fractions;
     for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
-        fractions.push_back(ion_fractions(state.radial_zones[z].accepted_controller.evaluation, elements, rows));
+        const auto* zone = abundance_output_zone(state, z);
+        fractions.push_back(zone ? ion_fractions(zone->accepted_controller.evaluation, elements, rows) : std::map<std::pair<int,int>,double>{});
         const long row = static_cast<long>(z + 1);
-        write_abundance_base(fptr, row, abundance_base_row_for_zone(state, z));
+        write_abundance_base(fptr, row, abundance_output_base_row_for_zone(state, z));
         int col = 9;
         for (int element_z = 1; element_z <= 30; ++element_z) {
             for (int stage = 1; stage <= element_z; ++stage) {
@@ -1326,11 +1457,14 @@ void write_abundances(const std::filesystem::path& path,
         for (int stage = 1; stage <= element_z; ++stage) {
             double column = 0.0;
             for (std::size_t z = 0; z + 1 < state.radial_zones.size(); ++z) {
+                const auto* z0 = abundance_output_zone(state, z);
+                const auto* z1 = abundance_output_zone(state, z + 1);
+                if (!z0) continue;
                 const double f0 = fractions[z][{element_z,stage}];
-                const double f1 = fractions[z+1][{element_z,stage}];
-                const double n0 = state.radial_zones[z].density_cm3;
-                const double n1 = state.radial_zones[z+1].density_cm3;
-                const double dr = state.radial_zones[z].delta_radius_cm;
+                const double f1 = z1 ? fractions[z+1][{element_z,stage}] : 0.0;
+                const double n0 = z0->density_cm3;
+                const double n1 = z1 ? z1->density_cm3 : 0.0;
+                const double dr = z0->delta_radius_cm;
                 column += 0.5 * (f0*n0 + f1*n1) * dr * abundance;
             }
             write_real4(fptr, col++, 1, column);
@@ -1345,8 +1479,10 @@ void write_abundances(const std::filesystem::path& path,
     create_table(fptr, ASCII_TBL, static_cast<long>(state.radial_zones.size()), "HEATING", heating, ascii_e_formats(heating.size()), abundance_units(heating));
     for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
         const long row = static_cast<long>(z + 1);
-        write_abundance_base(fptr, row, abundance_base_row_for_zone(state, z));
-        const auto& st = state.radial_zones[z].accepted_controller.evaluation;
+        write_abundance_base(fptr, row, abundance_output_base_row_for_zone(state, z));
+        const auto* zone = abundance_output_zone(state, z);
+        const xstar_run_state::FixedEvaluationState st_zero{};
+        const auto& st = zone ? zone->accepted_controller.evaluation : st_zero;
         for (int element = 1; element <= 30; ++element) {
             const double value = element == 1 ? st.hydrogen_heating : element == 2 ? st.helium_heating : element == 12 ? st.magnesium_heating : 0.0;
             write_real4(fptr, 8 + element, row, value);
@@ -1356,8 +1492,10 @@ void write_abundances(const std::filesystem::path& path,
     create_table(fptr, ASCII_TBL, static_cast<long>(state.radial_zones.size()), "COOLING", cooling, ascii_e_formats(cooling.size()), abundance_units(cooling));
     for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
         const long row = static_cast<long>(z + 1);
-        write_abundance_base(fptr, row, abundance_base_row_for_zone(state, z));
-        const auto& st = state.radial_zones[z].accepted_controller.evaluation;
+        write_abundance_base(fptr, row, abundance_output_base_row_for_zone(state, z));
+        const auto* zone = abundance_output_zone(state, z);
+        const xstar_run_state::FixedEvaluationState st_zero{};
+        const auto& st = zone ? zone->accepted_controller.evaluation : st_zero;
         for (int element = 1; element <= 30; ++element) {
             const double value = element == 1 ? st.hydrogen_cooling : element == 2 ? st.helium_cooling : element == 12 ? st.magnesium_cooling : 0.0;
             write_real4(fptr, 8 + element, row, value);
@@ -1371,19 +1509,12 @@ std::vector<LineRow> public_line_rows_from_identities(
     const xstar_run_state::ProductWritingState& state,
     const xstar_run_state::FixedEvaluationState& evaluation,
     double density_cm3) {
-    auto rows = source_line_rows_from_identities(state, evaluation, density_cm3, true);
-    std::stable_sort(rows.begin(), rows.end(), [](const LineRow& a, const LineRow& b) {
-        const double sa = std::abs(a.emis_in) + std::abs(a.emis_out);
-        const double sb = std::abs(b.emis_in) + std::abs(b.emis_out);
-        if (sa != sb) return sa > sb;
-        return a.record < b.record;
-    });
-    if (rows.size() < 600) {
+    auto rows = source_line_rows_from_identities(state, evaluation, density_cm3, false);
+    if (rows.size() != kOraclePublicLineInventory.size()) {
         std::ostringstream msg;
-        msg << "oracle/public line inventory contains fewer than 600 rows: " << rows.size();
+        msg << "oracle/public line inventory did not resolve to 600 rows: " << rows.size();
         throw std::runtime_error(msg.str());
     }
-    rows.resize(600);
     return rows;
 }
 
@@ -1427,14 +1558,13 @@ void write_public_rrc(const std::filesystem::path& path,
     std::vector<const xstar_run_state::RrcIdentityState*> active;
     active.reserve(994);
     for (const auto& r : state.rrc_identities) {
-        // v25.5.15.9.1 restores the oracle/public RRC product inventory instead
-        // of pruning by active abundance or nonzero signal; this preserves Mg
-        // rows wherever the oracle inventory contains them.  The explicit
-        // retained tauc mapping keeps depth_outward/depth_inward are not swapped.
+        // v25.5.15.9.2 uses the public RRC inventory ranges observed in the
+        // oracle surface, not a first-N truncation. This preserves the Mg rows
+        // and avoids the He/Mg row displacement that v25.5.15.9.1 showed.
+        if (!oracle_public_rrc_inventory(r.continuum_index)) continue;
         const std::size_t ci = r.continuum_index > 0 ? static_cast<std::size_t>(r.continuum_index - 1) : 0;
         if (ci >= m) continue;
         active.push_back(&r);
-        if (active.size() >= 994) break;
     }
     if (active.size() != 994) {
         std::ostringstream msg;
@@ -1554,9 +1684,9 @@ Result write_historical_science_products(
 }
 
 bool abundance_product_enabled() {
-    const char* disable = std::getenv("XSTAR_V0487462551591_DISABLE_ABUNDANCE_PRODUCT");
+    const char* disable = std::getenv("XSTAR_V0487462551592_DISABLE_ABUNDANCE_PRODUCT");
     if (disable != nullptr && std::string(disable) == "1") return false;
-    const char* flag = std::getenv("XSTAR_V0487462551591_ENABLE_ABUNDANCE_PRODUCT");
+    const char* flag = std::getenv("XSTAR_V0487462551592_ENABLE_ABUNDANCE_PRODUCT");
     if (flag != nullptr) return std::string(flag) == "1";
     // Compatibility with the previous opt-in gate, but v25.5.15.9.1 enables the
     // safe native abundance writer by default.
