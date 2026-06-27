@@ -1134,7 +1134,7 @@ std::vector<double> read_reference_energy_csv(const std::filesystem::path& path)
 
 std::vector<double> reference_energy_grid(const xstar_run_state::ProductWritingState& state,
                                           const std::vector<double>& fallback) {
-    const char* explicit_path = std::getenv("XSTAR_V04874625515911_RADIATION_CSV");
+    const char* explicit_path = std::getenv("XSTAR_V04874625515912_RADIATION_CSV");
     if (!explicit_path) explicit_path = std::getenv("XSTAR_CPP_RADIATION_CSV");
     if (explicit_path) {
         auto values = read_reference_energy_csv(explicit_path);
@@ -2289,6 +2289,7 @@ void write_public_spectrum(const std::filesystem::path& path,
     const std::size_t n = e.radiation_energy_ev.size();
     const auto zrems = bridge_array_for_hdu(state, "zrems", 6, 5 * n);
     const auto zremsz = bridge_array_for_hdu(state, "zremsz", 6, n);
+    const auto dpthcont = bridge_array_for_hdu(state, "dpthcont", 6, 2 * n);
     const auto energy_grid = reference_energy_grid(state, e.radiation_energy_ev);
     fitsfile* fptr = create_fits(path, state); write_parameters(fptr, state.parameter_rows);
     create_table(fptr, ASCII_TBL, static_cast<long>(n), "XSTAR_SPECTRA",
@@ -2302,7 +2303,8 @@ void write_public_spectrum(const std::filesystem::path& path,
     const std::size_t outward_row = full_spectrum ? 4 : 2;
     for (std::size_t i = 0; i < n; ++i) {
         const double incident = zremsz[i];
-        const double transmitted = zremsz[i];
+        const double tau_forward = i < n ? std::max(0.0, dpthcont[i]) : 0.0;
+        const double transmitted = incident * std::exp(-tau_forward);
         const double emit_inward = zrems[inward_row * n + i];
         const double emit_outward = zrems[outward_row * n + i];
         const long row = static_cast<long>(i + 1);
@@ -2375,9 +2377,9 @@ Result write_historical_science_products(
 }
 
 bool abundance_product_enabled() {
-    const char* disable = std::getenv("XSTAR_V04874625515911_DISABLE_ABUNDANCE_PRODUCT");
+    const char* disable = std::getenv("XSTAR_V04874625515912_DISABLE_ABUNDANCE_PRODUCT");
     if (disable != nullptr && std::string(disable) == "1") return false;
-    const char* flag = std::getenv("XSTAR_V04874625515911_ENABLE_ABUNDANCE_PRODUCT");
+    const char* flag = std::getenv("XSTAR_V04874625515912_ENABLE_ABUNDANCE_PRODUCT");
     if (flag != nullptr) return std::string(flag) == "1";
     // Compatibility with the previous opt-in gate, but v25.5.15.9.1 enables the
     // safe native abundance writer by default.
