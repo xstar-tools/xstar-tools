@@ -2577,6 +2577,22 @@ bool source_trajectory_electron_fraction_ok_v172517(double proposed, double expe
         source_trajectory_roundoff_close_v172517(proposed, expected, 1.0e-12, 1.0e-12);
 }
 
+// v0.6.48.7.46.25.5.17.25.18: keep the post-evaluation
+// controller-state oracle semantically aligned with the source-trajectory
+// guard.  The guard can accept tiny temperature roundoff and align the
+// effective evaluator state to the source contract before the fixed-state
+// calculation.  The later gate must not re-reject the same accepted roundoff
+// merely because canonical .7e formatting straddles a decimal boundary.
+bool controller_state_ok_v172518(
+    const FixedDsecSnapshot& snapshot,
+    const SequenceContractV1724& contract) {
+    const bool temperature_ok = canonical_e7_equal(snapshot.temperature_t4, contract.temperature_t4) ||
+        source_trajectory_temperature_ok_v172517(snapshot.temperature_t4, contract.temperature_t4);
+    const bool electron_fraction_ok = canonical_e7_equal(snapshot.electron_fraction_input, contract.electron_fraction) ||
+        source_trajectory_electron_fraction_ok_v172517(snapshot.electron_fraction_input, contract.electron_fraction);
+    return temperature_ok && electron_fraction_ok;
+}
+
 int command_trajectory_alignment_self_test(const Options&) {
     const double proposed_t4 = 6.5615298855644753;
     const double expected_t4 = 6.561529885564275;
@@ -7349,8 +7365,7 @@ PerEvaluationGateResultV1724 evaluate_per_sequence_gate_v1724(
     gate.topology_classified = contract.topology_classified;
     gate.identity_ok = snapshot.kind == contract.kind && snapshot.call_index == contract.call_index &&
         snapshot.evaluation_index == contract.evaluation_index;
-    gate.controller_state_ok = canonical_e7_equal(snapshot.temperature_t4, contract.temperature_t4) &&
-        canonical_e7_equal(snapshot.electron_fraction_input, contract.electron_fraction);
+    gate.controller_state_ok = controller_state_ok_v172518(snapshot, contract);
 
     const auto diagnostics = std::filesystem::path(data.diagnostics_dir);
     std::ostringstream prefix_stream; prefix_stream << "evaluation_" << std::setw(4) << std::setfill('0') << snapshot.sequence;
@@ -7922,21 +7937,21 @@ int command_run_native_resumable_trajectory_v1724(Options options) {
         << "  \"xout_step_written\": false,\n"
         << "  \"result\": \"" << (full_accept ? "ACCEPT_FULL_61" : prefix_accept ? "ACCEPT_PREFIX_STOP" :
             data.gate_failed_v1724 ? "REJECT_FIRST_EVALUATION_GATE" : "REJECT_RUNTIME") << "\"\n}\n";
-    std::cout << "V048746255172516_TRUE_NATIVE_CONTROLLER=YES\n"
-              << "V048746255172516_GENERIC_TRAJECTORY_LOOP=ENABLED\n"
-              << "V048746255172516_QUALIFICATION_CONTRACTS_CONTROLLER_INPUT=NO\n"
-              << "V048746255172516_DETERMINISTIC_REPLAY_RESUME=ENABLED\n"
-              << "V048746255172516_ACCEPTED_RUNTIME_EVALUATIONS=" << data.accepted_runtime_ordinal_v1724 << "\n"
-              << "V048746255172516_LAST_ACCEPTED_SOURCE_SEQUENCE=" << data.last_accepted_sequence_v1724 << "\n"
-              << "V048746255172516_FIRST_FAILED_SOURCE_SEQUENCE=" << data.first_failed_sequence_v1724 << "\n"
-              << "V048746255172516_FIRST_FAILURE_REASON=" << data.first_failure_reason_v1724 << "\n"
-              << "V048746255172516_FULL_ACCEPTED_TRAJECTORY_COUNT=" << (full_accept ? 61 : data.accepted_runtime_ordinal_v1724) << "\n"
-              << "V048746255172516_FULL_61_TRAJECTORY_GATE=" << (full_accept ? "ACCEPT" : "NOT_REACHED") << "\n"
-              << "V048746255172516_PRODUCT_STATE_RETENTION_ENABLED=NO\n"
-              << "V048746255172516_PRODUCT_PUBLICATION_ENABLED=NO\n"
-              << "V048746255172516_FITS_PRODUCTS_WRITTEN=0\n"
-              << "V048746255172516_XOUT_STEP_LOG_WRITTEN=0\n"
-              << "V048746255172516_RESULT=" << (full_accept ? "ACCEPT_FULL_61_NO_PRODUCT_PUBLICATION" :
+    std::cout << "V048746255172518_TRUE_NATIVE_CONTROLLER=YES\n"
+              << "V048746255172518_GENERIC_TRAJECTORY_LOOP=ENABLED\n"
+              << "V048746255172518_QUALIFICATION_CONTRACTS_CONTROLLER_INPUT=NO\n"
+              << "V048746255172518_DETERMINISTIC_REPLAY_RESUME=ENABLED\n"
+              << "V048746255172518_ACCEPTED_RUNTIME_EVALUATIONS=" << data.accepted_runtime_ordinal_v1724 << "\n"
+              << "V048746255172518_LAST_ACCEPTED_SOURCE_SEQUENCE=" << data.last_accepted_sequence_v1724 << "\n"
+              << "V048746255172518_FIRST_FAILED_SOURCE_SEQUENCE=" << data.first_failed_sequence_v1724 << "\n"
+              << "V048746255172518_FIRST_FAILURE_REASON=" << data.first_failure_reason_v1724 << "\n"
+              << "V048746255172518_FULL_ACCEPTED_TRAJECTORY_COUNT=" << (full_accept ? 61 : data.accepted_runtime_ordinal_v1724) << "\n"
+              << "V048746255172518_FULL_61_TRAJECTORY_GATE=" << (full_accept ? "ACCEPT" : "NOT_REACHED") << "\n"
+              << "V048746255172518_PRODUCT_STATE_RETENTION_ENABLED=NO\n"
+              << "V048746255172518_PRODUCT_PUBLICATION_ENABLED=NO\n"
+              << "V048746255172518_FITS_PRODUCTS_WRITTEN=0\n"
+              << "V048746255172518_XOUT_STEP_LOG_WRITTEN=0\n"
+              << "V048746255172518_RESULT=" << (full_accept ? "ACCEPT_FULL_61_NO_PRODUCT_PUBLICATION" :
                   prefix_accept ? "ACCEPT_RESUMABLE_PREFIX_NO_PRODUCT_PUBLICATION" :
                   data.gate_failed_v1724 ? "REJECT_FIRST_EVALUATION_GATE_FAIL_CLOSED" : "REJECT_RUNTIME") << "\n";
     if (full_accept || prefix_accept) return 0;
