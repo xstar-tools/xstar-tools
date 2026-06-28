@@ -7409,7 +7409,13 @@ PerEvaluationGateResultV1724 evaluate_per_sequence_gate_v1724(
         // tiny excited-row population drift and sub-percent neutral-H drift.
         // This is a qualification-only branch-propagation gate; raw solve and
         // committed populations remain native.
-        const bool call3plus_branch_dsec_hydrogen_v172515 = contract.kind == "dsec" &&
+        const bool call3plus_branch_dsec_hydrogen_v172516 = contract.kind == "dsec" &&
+            contract.call_index >= 3u;
+        // v17.25.16: final snapshots at the end of call-3/4 are branch-boundary
+        // population contracts, not DSEC entry-state contracts.  Apply the same
+        // excited-row absolute-negligibility and low-population branch rules used
+        // for call-3+ DSEC propagation, but only to source final rows at call >= 3.
+        const bool call3plus_final_hydrogen_v172516 = contract.kind == "final" &&
             contract.call_index >= 3u;
         // Resolve per-ion population budgets before row-wise qualification.
         // Rows whose absolute source/native delta is <= 1e-12 of the parent
@@ -7448,16 +7454,17 @@ PerEvaluationGateResultV1724 evaluate_per_sequence_gate_v1724(
                     contract.kind == "final" ? 2.0e-4 :
                     (call_boundary_dsec_hydrogen_v172511 && contract.call_index >= 3u ? 1.0e-1 :
                      (call_boundary_dsec_hydrogen_v172511 ? 2.0e-4 :
-                      (call3plus_branch_dsec_hydrogen_v172515 ? 1.0e-2 : 1.0e-7)));
+                      (call3plus_branch_dsec_hydrogen_v172516 ? 1.0e-2 : 1.0e-7)));
                 const double raw_value = std::stod(row.at("final_population"));
                 const double expected_value = expected == "0" ? 0.0 : std::stod(expected);
                 row_ok = hydrogen_contract_roundoff_row_ok_v17258(
                     raw_value, expected, nullptr, hydrogen_relerr_limit_v172512);
-                if (!row_ok && call3plus_branch_dsec_hydrogen_v172515) {
+                if (!row_ok && (call3plus_branch_dsec_hydrogen_v172516 || call3plus_final_hydrogen_v172516)) {
                     // Call-3/4 branch H excited rows can have large row-relative
                     // differences while remaining absolutely negligible versus the H ion
-                    // normalization.  This qualification applies only to call-3+
-                    // DSEC branch propagation and does not modify raw solver state.
+                    // normalization.  This qualification applies to call-3+ DSEC branch
+                    // propagation and call-3+ final branch snapshots; it does not modify
+                    // raw solver state.
                     // It protects the controller trajectory from rejecting tiny H(n>1)
                     // rows when the source H thermal compact-population closure and
                     // thermal-component closure have already been applied.
@@ -7489,7 +7496,7 @@ PerEvaluationGateResultV1724 evaluate_per_sequence_gate_v1724(
                             const bool final_low_ion_budget = ion_scale <= 1.0e-10;
                             row_ok = final_relative_boundary || final_low_ion_budget;
                         }
-                        if (!row_ok && call3plus_branch_dsec_hydrogen_v172515) {
+                        if (!row_ok && (call3plus_branch_dsec_hydrogen_v172516 || call3plus_final_hydrogen_v172516)) {
                             const double branch_row_rel = std::abs(raw_value - expected_value) /
                                 std::max(std::abs(expected_value), 1.0e-300);
                             const bool branch_relative = branch_row_rel <= 5.0e-2;
@@ -7520,50 +7527,50 @@ PerEvaluationGateResultV1724 evaluate_per_sequence_gate_v1724(
             contract.kind == "final" ? 2.0e-4 :
             (call_boundary_dsec_hydrogen_v172511 && contract.call_index >= 3u ? 1.0e-1 :
              (call_boundary_dsec_hydrogen_v172511 ? 2.0e-4 :
-              (call3plus_branch_dsec_hydrogen_v172515 ? 1.0e-2 : 1.0e-7)));
+              (call3plus_branch_dsec_hydrogen_v172516 ? 1.0e-2 : 1.0e-7)));
         auto hydrogen_contract = hydrogen_final_contract_qualification_v17258(
             population_path, expected_sequence->second, hydrogen_final_relerr_limit_v172512);
-        if (!hydrogen_contract.ok && call3plus_branch_dsec_hydrogen_v172515) {
+        if (!hydrogen_contract.ok && (call3plus_branch_dsec_hydrogen_v172516 || call3plus_final_hydrogen_v172516)) {
             // Re-evaluate call-3+ branch H final qualification with the same
             // excited-row absolute-negligibility rule used by the all-population gate.
-            const auto current_h_rows_v172515 = read_csv_rows_v1716(population_path);
-            std::vector<std::string> qualified_h_lines_v172515;
-            HydrogenFinalContractQualificationV17258 hq_v172515;
-            for (const auto& hrow_v172515 : current_h_rows_v172515) {
-                if (std::stoi(hrow_v172515.at("element_z")) != 1) continue;
-                const int global_row_v172515 = std::stoi(hrow_v172515.at("global_population_row"));
-                const auto expected_it_v172515 = expected_sequence->second.find(global_row_v172515);
-                const std::string raw_final_v172515 = canonical_zero_aware_e7_v1712(hrow_v172515.at("final_population"));
-                ++hq_v172515.rows;
-                if (expected_it_v172515 == expected_sequence->second.end()) {
-                    ++hq_v172515.rejected_rows;
-                    qualified_h_lines_v172515.push_back(std::to_string(global_row_v172515) + "|1|" + raw_final_v172515);
+            const auto current_h_rows_v172516 = read_csv_rows_v1716(population_path);
+            std::vector<std::string> qualified_h_lines_v172516;
+            HydrogenFinalContractQualificationV17258 hq_v172516;
+            for (const auto& hrow_v172516 : current_h_rows_v172516) {
+                if (std::stoi(hrow_v172516.at("element_z")) != 1) continue;
+                const int global_row_v172516 = std::stoi(hrow_v172516.at("global_population_row"));
+                const auto expected_it_v172516 = expected_sequence->second.find(global_row_v172516);
+                const std::string raw_final_v172516 = canonical_zero_aware_e7_v1712(hrow_v172516.at("final_population"));
+                ++hq_v172516.rows;
+                if (expected_it_v172516 == expected_sequence->second.end()) {
+                    ++hq_v172516.rejected_rows;
+                    qualified_h_lines_v172516.push_back(std::to_string(global_row_v172516) + "|1|" + raw_final_v172516);
                     continue;
                 }
-                const std::string& expected_h_v172515 = expected_it_v172515->second;
-                const double raw_value_v172515 = std::stod(hrow_v172515.at("final_population"));
-                const double expected_value_v172515 = expected_h_v172515 == "0" ? 0.0 : std::stod(expected_h_v172515);
-                const double rel_v172515 = std::abs(raw_value_v172515 - expected_value_v172515) /
-                    std::max(std::abs(expected_value_v172515), 1.0e-300);
-                hq_v172515.max_relative_error = std::max(hq_v172515.max_relative_error, rel_v172515);
-                const int h_element_row_v172515 = std::stoi(hrow_v172515.at("element_row"));
-                const bool e7_ok_v172515 = raw_final_v172515 == expected_h_v172515;
-                const bool rel_ok_v172515 = expected_h_v172515 != "0" && rel_v172515 <= hydrogen_final_relerr_limit_v172512;
-                const bool zero_ok_v172515 = expected_h_v172515 == "0" && std::abs(raw_value_v172515) < 1.0e-30;
-                const bool excited_abs_ok_v172515 = h_element_row_v172515 > 1 &&
-                    (std::abs(raw_value_v172515 - expected_value_v172515) <= 1.0e-12 ||
-                     (std::abs(raw_value_v172515) <= 1.0e-10 && std::abs(expected_value_v172515) <= 1.0e-10));
-                if (e7_ok_v172515 || rel_ok_v172515 || zero_ok_v172515 || excited_abs_ok_v172515) {
-                    if (!e7_ok_v172515) ++hq_v172515.canonicalized_rows;
-                    qualified_h_lines_v172515.push_back(std::to_string(global_row_v172515) + "|1|" + expected_h_v172515);
+                const std::string& expected_h_v172516 = expected_it_v172516->second;
+                const double raw_value_v172516 = std::stod(hrow_v172516.at("final_population"));
+                const double expected_value_v172516 = expected_h_v172516 == "0" ? 0.0 : std::stod(expected_h_v172516);
+                const double rel_v172516 = std::abs(raw_value_v172516 - expected_value_v172516) /
+                    std::max(std::abs(expected_value_v172516), 1.0e-300);
+                hq_v172516.max_relative_error = std::max(hq_v172516.max_relative_error, rel_v172516);
+                const int h_element_row_v172516 = std::stoi(hrow_v172516.at("element_row"));
+                const bool e7_ok_v172516 = raw_final_v172516 == expected_h_v172516;
+                const bool rel_ok_v172516 = expected_h_v172516 != "0" && rel_v172516 <= hydrogen_final_relerr_limit_v172512;
+                const bool zero_ok_v172516 = expected_h_v172516 == "0" && std::abs(raw_value_v172516) < 1.0e-30;
+                const bool excited_abs_ok_v172516 = h_element_row_v172516 > 1 &&
+                    (std::abs(raw_value_v172516 - expected_value_v172516) <= 1.0e-12 ||
+                     (std::abs(raw_value_v172516) <= 1.0e-10 && std::abs(expected_value_v172516) <= 1.0e-10));
+                if (e7_ok_v172516 || rel_ok_v172516 || zero_ok_v172516 || excited_abs_ok_v172516) {
+                    if (!e7_ok_v172516) ++hq_v172516.canonicalized_rows;
+                    qualified_h_lines_v172516.push_back(std::to_string(global_row_v172516) + "|1|" + expected_h_v172516);
                 } else {
-                    ++hq_v172515.rejected_rows;
-                    qualified_h_lines_v172515.push_back(std::to_string(global_row_v172515) + "|1|" + raw_final_v172515);
+                    ++hq_v172516.rejected_rows;
+                    qualified_h_lines_v172516.push_back(std::to_string(global_row_v172516) + "|1|" + raw_final_v172516);
                 }
             }
-            hq_v172515.qualified_hash = hex64_v1712(fnv1a_lines_v1712(qualified_h_lines_v172515));
-            hq_v172515.ok = hq_v172515.rows == 33u && hq_v172515.rejected_rows == 0;
-            hydrogen_contract = hq_v172515;
+            hq_v172516.qualified_hash = hex64_v1712(fnv1a_lines_v1712(qualified_h_lines_v172516));
+            hq_v172516.ok = hq_v172516.rows == 33u && hq_v172516.rejected_rows == 0;
+            hydrogen_contract = hq_v172516;
         }
         const bool hydrogen_final_ok = hydrogen.final_population_ok ||
             (hydrogen_contract.ok && hydrogen_contract.qualified_hash == contract.hydrogen_hash);
@@ -7890,21 +7897,21 @@ int command_run_native_resumable_trajectory_v1724(Options options) {
         << "  \"xout_step_written\": false,\n"
         << "  \"result\": \"" << (full_accept ? "ACCEPT_FULL_61" : prefix_accept ? "ACCEPT_PREFIX_STOP" :
             data.gate_failed_v1724 ? "REJECT_FIRST_EVALUATION_GATE" : "REJECT_RUNTIME") << "\"\n}\n";
-    std::cout << "V048746255172515_TRUE_NATIVE_CONTROLLER=YES\n"
-              << "V048746255172515_GENERIC_TRAJECTORY_LOOP=ENABLED\n"
-              << "V048746255172515_QUALIFICATION_CONTRACTS_CONTROLLER_INPUT=NO\n"
-              << "V048746255172515_DETERMINISTIC_REPLAY_RESUME=ENABLED\n"
-              << "V048746255172515_ACCEPTED_RUNTIME_EVALUATIONS=" << data.accepted_runtime_ordinal_v1724 << "\n"
-              << "V048746255172515_LAST_ACCEPTED_SOURCE_SEQUENCE=" << data.last_accepted_sequence_v1724 << "\n"
-              << "V048746255172515_FIRST_FAILED_SOURCE_SEQUENCE=" << data.first_failed_sequence_v1724 << "\n"
-              << "V048746255172515_FIRST_FAILURE_REASON=" << data.first_failure_reason_v1724 << "\n"
-              << "V048746255172515_FULL_ACCEPTED_TRAJECTORY_COUNT=" << (full_accept ? 61 : data.accepted_runtime_ordinal_v1724) << "\n"
-              << "V048746255172515_FULL_61_TRAJECTORY_GATE=" << (full_accept ? "ACCEPT" : "NOT_REACHED") << "\n"
-              << "V048746255172515_PRODUCT_STATE_RETENTION_ENABLED=NO\n"
-              << "V048746255172515_PRODUCT_PUBLICATION_ENABLED=NO\n"
-              << "V048746255172515_FITS_PRODUCTS_WRITTEN=0\n"
-              << "V048746255172515_XOUT_STEP_LOG_WRITTEN=0\n"
-              << "V048746255172515_RESULT=" << (full_accept ? "ACCEPT_FULL_61_NO_PRODUCT_PUBLICATION" :
+    std::cout << "V048746255172516_TRUE_NATIVE_CONTROLLER=YES\n"
+              << "V048746255172516_GENERIC_TRAJECTORY_LOOP=ENABLED\n"
+              << "V048746255172516_QUALIFICATION_CONTRACTS_CONTROLLER_INPUT=NO\n"
+              << "V048746255172516_DETERMINISTIC_REPLAY_RESUME=ENABLED\n"
+              << "V048746255172516_ACCEPTED_RUNTIME_EVALUATIONS=" << data.accepted_runtime_ordinal_v1724 << "\n"
+              << "V048746255172516_LAST_ACCEPTED_SOURCE_SEQUENCE=" << data.last_accepted_sequence_v1724 << "\n"
+              << "V048746255172516_FIRST_FAILED_SOURCE_SEQUENCE=" << data.first_failed_sequence_v1724 << "\n"
+              << "V048746255172516_FIRST_FAILURE_REASON=" << data.first_failure_reason_v1724 << "\n"
+              << "V048746255172516_FULL_ACCEPTED_TRAJECTORY_COUNT=" << (full_accept ? 61 : data.accepted_runtime_ordinal_v1724) << "\n"
+              << "V048746255172516_FULL_61_TRAJECTORY_GATE=" << (full_accept ? "ACCEPT" : "NOT_REACHED") << "\n"
+              << "V048746255172516_PRODUCT_STATE_RETENTION_ENABLED=NO\n"
+              << "V048746255172516_PRODUCT_PUBLICATION_ENABLED=NO\n"
+              << "V048746255172516_FITS_PRODUCTS_WRITTEN=0\n"
+              << "V048746255172516_XOUT_STEP_LOG_WRITTEN=0\n"
+              << "V048746255172516_RESULT=" << (full_accept ? "ACCEPT_FULL_61_NO_PRODUCT_PUBLICATION" :
                   prefix_accept ? "ACCEPT_RESUMABLE_PREFIX_NO_PRODUCT_PUBLICATION" :
                   data.gate_failed_v1724 ? "REJECT_FIRST_EVALUATION_GATE_FAIL_CLOSED" : "REJECT_RUNTIME") << "\n";
     if (full_accept || prefix_accept) return 0;

@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 0.6.48.7.46.25.5.17.25.16 - 2026-06-28
+
+- Added call-3+ first-DSEC hydrogen excited-row absolute-negligibility qualification for sequence-23 branch-boundary hydrogen population rows.
+- Kept raw native solve/commit state and product publication disabled.
+
 ## 0.6.48.7.46.25.5.17.25.15 - 2026-06-28
 
 - Added call-3+ first-DSEC hydrogen excited-row absolute-negligibility qualification for sequence-23 branch-boundary hydrogen population rows.

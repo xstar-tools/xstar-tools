@@ -1,4 +1,4 @@
-# xstar_tools 0.6.48.7.46.25.5.17.25.15
+# xstar_tools 0.6.48.7.46.25.5.17.25.16
 
 This release is a runtime hotfix for the v17.25.12 sequence-23 call-3 branch thermal boundary closure.  It removes the obsolete dependency that required fixed-state parity closure whenever thermal-component parity closure was enabled.  The component closure is now explicitly a thermal residual-consumption boundary closure and does not replace raw native solve populations or committed population state.
 
