@@ -7729,7 +7729,7 @@ inline constexpr std::array<double,ncomp*ncomp> decomp = {
     0x1.16e978d4fdf3bp+2,
     0x1.16872b020c49cp+2,
     0x1.16147ae147ae1p+2,
-    0x1.15916872b020cp+2,
+    0x1.15918872b020cp+2,
     0x1.14ed916872b02p+2,
     0x1.1428f5c28f5c3p+2,
     0x1.1322d0e560419p+2,

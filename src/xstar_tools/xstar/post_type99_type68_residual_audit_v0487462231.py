@@ -11,7 +11,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, Iterable
 
-from . import magnesium_type99_leveltemp_closure_v048746223 as v223
+from . import magnesium_type99_leveltemp_closure_v048746223 as v233
 
 RELEASE = "0.6.48.7.46.21.13.1"
 SCHEMA = "xstar-tools-v06487462231-type68-source-constants-and-residual-attribution-v1"
@@ -162,9 +162,9 @@ def audit(
     selected_set = set(selected)
     differences: list[dict[str, Any]] = []
 
-    with tempfile.TemporaryDirectory(prefix="v0487462231_v223_") as tmp:
-        baseline_csv = Path(tmp) / "v223_differences.csv"
-        baseline = v223.audit(
+    with tempfile.TemporaryDirectory(prefix="v0487462231_v233_") as tmp:
+        baseline_csv = Path(tmp) / "v233_differences.csv"
+        baseline = v233.audit(
             source_capture, native_evaluations, native_case, controller,
             canonical_report, baseline_csv, selected,
         )
@@ -231,8 +231,8 @@ def audit(
         ):
             cooling_rejections += 1
 
-    v223_gates = baseline.get("required_gates", {})
-    v223_required = (
+    v233_gates = baseline.get("required_gates", {})
+    v233_required = (
         "V21_12_TYPE49_REGRESSION",
         "FOCUSED_ANALYZER_COMPLETES_WITHOUT_RECURSION",
         "MAGNESIUM_TYPE99_CONTEXT_LAYOUT_EXACT",
@@ -242,15 +242,15 @@ def audit(
         "MAGNESIUM_TYPE99_ANS3_ANS4_IEEE_E10",
         "MAGNESIUM_TYPE99_ANS5_ANS6_IEEE_E10",
     )
-    v223_ok = all(v223_gates.get(name) == "ACCEPT" for name in v223_required)
-    v21_12_ok = v223_gates.get("V21_12_TYPE49_REGRESSION") == "ACCEPT"
+    v233_ok = all(v233_gates.get(name) == "ACCEPT" for name in v233_required)
+    v21_12_ok = v233_gates.get("V21_12_TYPE49_REGRESSION") == "ACCEPT"
     v21_11_ok = (
         baseline.get("v21_12_regression", {}).get("required_gates", {})
         .get("V21_11_TYPE53_TYPE57_AND_V21_9_REGRESSION") == "ACCEPT"
     )
 
     required_gates = {
-        "V21_13_TYPE99_AND_PRIOR_REGRESSION": "ACCEPT" if v223_ok else "REJECT",
+        "V21_13_TYPE99_AND_PRIOR_REGRESSION": "ACCEPT" if v233_ok else "REJECT",
         "V21_11_TYPE53_TYPE57_AND_V21_9_REGRESSION": "ACCEPT" if v21_11_ok else "REJECT",
         "V21_12_TYPE49_REGRESSION": "ACCEPT" if v21_12_ok else "REJECT",
         "MAGNESIUM_TYPE68_SOURCE_DOMAIN_EXACT": "ACCEPT" if source_domain_exact else "REJECT",
@@ -299,7 +299,7 @@ def audit(
         "residual_family_attribution": residuals,
         "v21_13_regression": {
             "result": baseline.get("result", "REJECT"),
-            "required_gates": v223_gates,
+            "required_gates": v233_gates,
         },
         "focused_rejections": len(differences),
         "first_focused_rejection": differences[0] if differences else None,

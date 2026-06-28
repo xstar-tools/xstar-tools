@@ -29,7 +29,7 @@ def test_type57_threshold_gate_uses_e10_and_distinct_valid_domains(tmp_path, mon
         "MAGNESIUM_COOLING2_ALL_SELECTED_IEEE_E10": "ACCEPT",
     }
     monkeypatch.setattr(
-        focused.v2231,
+        focused.v2331,
         "audit",
         lambda *args, **kwargs: {
             "result": "ACCEPT",
@@ -129,7 +129,7 @@ def test_type57_threshold_e10_gate_rejects_visible_e10_difference(tmp_path, monk
         "MAGNESIUM_COOLING2_ALL_SELECTED_IEEE_E10": "ACCEPT",
     }
     monkeypatch.setattr(
-        focused.v2231,
+        focused.v2331,
         "audit",
         lambda *args, **kwargs: {"result": "ACCEPT", "required_gates": prior},
     )

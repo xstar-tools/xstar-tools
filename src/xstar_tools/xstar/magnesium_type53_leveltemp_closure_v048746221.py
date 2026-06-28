@@ -10,7 +10,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Iterable
 
-from . import magnesium_type57_thermal_closure_v048746220 as v220
+from . import magnesium_type57_thermal_closure_v048746220 as v230
 
 RELEASE = "0.6.48.7.46.21.11"
 SCHEMA = "xstar-tools-v0648746221-magnesium-type53-persistent-leveltemp-closure-v1"
@@ -151,9 +151,9 @@ def audit(
     selected_set = set(selected)
     differences: list[dict[str, Any]] = []
 
-    with tempfile.TemporaryDirectory(prefix="v048746221_v220_") as tmp:
-        baseline_csv = Path(tmp) / "v220_differences.csv"
-        baseline = v220.audit(
+    with tempfile.TemporaryDirectory(prefix="v048746221_v230_") as tmp:
+        baseline_csv = Path(tmp) / "v230_differences.csv"
+        baseline = v230.audit(
             source_capture, native_evaluations, controller, canonical_report,
             baseline_csv, selected,
         )

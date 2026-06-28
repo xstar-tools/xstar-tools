@@ -116,7 +116,7 @@ def test_type57_analyzer_does_not_read_missing_source_ans1_ans2() -> None:
     assert "MAGNESIUM_TYPE57_ANS1_ANS2_NATIVE_FINITE" in text
 
 
-def test_v221_readiness_accepts(tmp_path: Path) -> None:
+def test_v231_readiness_accepts(tmp_path: Path) -> None:
     output = tmp_path / "readiness.json"
     completed = subprocess.run(
         [

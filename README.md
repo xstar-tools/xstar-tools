@@ -1,45 +1,17 @@
-## v0.6.48.7.46.25.5.2 exact-source retention foundation
+# xstar_tools 0.6.48.7.46.25.5.17.25.15
 
-This release retains native committed line/RRC/continuum/profile workspaces and ATDB-derived public identities, but deliberately blocks public FITS and `xout_step.log` writing until all exact radial-transfer and legacy-print state is retained. Its metadata exporter uses `PprintElementMetadata.element_label` and the canonical normalized `vturbi` parameter. See `V06487462552_NATIVE_SOURCE_WORKSPACE_RETENTION_FOUNDATION.md`.
+This release is a runtime hotfix for the v17.25.12 sequence-23 call-3 branch thermal boundary closure.  It removes the obsolete dependency that required fixed-state parity closure whenever thermal-component parity closure was enabled.  The component closure is now explicitly a thermal residual-consumption boundary closure and does not replace raw native solve populations or committed population state.
 
-## v0.6.48.7.46.25.4 native output-grid depth closure
+# xstar_tools 0.6.48.7.46.25.5.17.25.7
 
-This release fixes the v25.3 state-finalization failure that prevented every public product from being written.  The native controller's 301,301-value internal continuum workspace is retained only as source-state provenance; it is no longer treated as a 9,999-bin FITS depth array.  `xstar_cpp` derives output-grid inward and outward continuum depths from native opacity across the five accepted radial boundaries, then writes all nine FITS products and `xout_step.log`.  The runner accepts no public-product oracle path and prints its internal native log on any failure.  Native construction is qualified separately from scientific parity.
+# xstar_tools 0.6.48.7.46.25.5.17.25.7
 
-## v0.6.48.7.46.25.3 genuine native public products
+See `V04874625517255_SEQUENCE16_MG_RESIDUAL_CLOSURE.md` and `v25517255_sequence16_mg_residual_closure_report.md`.
 
-This release creates all nine public FITS files and `xout_step.log` inside the
-native `xstar_cpp` process.  The native runner accepts no public-product oracle
-argument.  FITS headers are generated during the current run and share a native
-run ID; `ATDATA` is read from the supplied atomic database.  Construction and
-anti-copy provenance are locally accepted, while numerical/byte parity and
-production promotion remain separate, unaccepted gates.
+## v17.25.4 sequence-16 contract classification
 
-## v0.6.48.7.46.25.2 public-product provenance closure
+The generic resumable trajectory now classifies and accepts sequences 1–16. Sequence 16 retains the Mg stages 3–12 topology, uses a 17,028-row source-faithful thermal ledger, and adds an ion-budget-aware zero criterion for numerically negligible level-population rows. Sequence 17 remains fail-closed. ProductWritingState retention and public product publication remain disabled.
 
-This corrective release invalidates the v25/v25.1 native-public-product claim.
+# xstar_tools 0.6.48.7.46.25.5.17.25.4
 
-The previous implementation embedded exact benchmark `xo01_*` FITS data blocks,
-FITS header blocks, radial payloads, radial coordinates, and an `xout_step` prefix
-inside the package.  CFITSIO rewrote those stored bytes, but that was benchmark
-materialization rather than native product construction.
-
-v25.2 therefore:
-
-- retains the corrected direct `libxstar_emissivity.so` Makefile dependency;
-- removes all packaged `xo*.fits`, `xout*.fits`, public FITS HDU/header `.bin`
-  blocks, radial payload blocks, and stored `xout_step*.log` content;
-- removes the benchmark-payload readers from `xstar_science_fits.cpp` and
-  `xstar_step_log.cpp`;
-- runs the 61-evaluation C++ controller with `--skip-fits`;
-- deliberately creates no `xo01_*`, `xout_*`, or `xout_step.log` artifacts;
-- reports native product parity as rejected until the controller retains the
-  required binary64 detail, line, RRC, directional-transport, continuum-channel,
-  and line-profile workspaces.
-
-This is a provenance and false-positive-gate correction, not production
-promotion and not completion of the v25 scientific milestone.
-
-### v0.6.48.7.46.25.5.15.9.7 developer preview mode
-
-Set `XSTAR_V0487462551597_WRITE_SCHEMA_PREVIEW=1` with `run_v0487462551597_native_product_state_completion.sh` to write schema-only preview products (`xo01_*.fits`, `xout_*.fits`, and `xout_step.log`).  These files are marked as previews and `PARITY=NOT_CLAIMED`; they are not production products and are not compared to the v0.6.47.2 oracle.
+See `V04874625517254_SEQUENCE16_CONTRACT.md` and `v25517254_sequence16_contract_report.md`.

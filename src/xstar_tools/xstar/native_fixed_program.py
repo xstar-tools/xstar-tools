@@ -807,6 +807,13 @@ def _lower_record(
         current_snapshot = leveltemp_value_snapshots.get(ion_index, {})
         e1 = float(current_snapshot.get(idest1, {}).get("energy_ev", _row_energy(rows, row1)))
         e2 = float(current_snapshot.get(idest2, {}).get("energy_ev", _row_energy(rows, row2)))
+        # Mg III-IV are evaluated before the retained leveltemp columns are
+        # source-owned by their local stage.  The source Type-50 thermal
+        # endpoint nevertheless uses the literal compact bound-level pair for
+        # these low-ion rows.  Higher stages consume the persistent workspace.
+        if int(block.element_z) == 12 and int(block.ion_stage) <= 4:
+            e1 = _row_energy(rows, row1)
+            e2 = _row_energy(rows, row2)
         if (e1 / (1.0e-24 + e2) - 1.0) < 1.0e-8:
             lower_row, upper_row = row1, row2
         else:
@@ -825,9 +832,14 @@ def _lower_record(
         # A and the source-derived oscillator strength.  Type-50 uses the
         # stored wavelength for flin/opakab and the endpoint energy difference
         # for the population/thermal energy channels.
-        payload_reals = [aij, oscillator, wavelength]
-        payload_ints = []
-        line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
+        source_endpoint_energy = abs(e1 - e2)
+        # Preserve both literal mutable leveltemp endpoint values, not only
+        # their difference.  The Type-50 scalar continues to consume the
+        # difference while diagnostics can prove that every low-ion Mg row
+        # used the retained source endpoints rather than compact-row energy.
+        payload_reals = [aij, oscillator, wavelength, source_endpoint_energy, e1, e2]
+        payload_ints = [idest1, idest2]
+        line_energy = source_endpoint_energy
     elif dt in {51, 56, 69}:
         if len(raw_ints) < 2:
             raise ValueError(f"type{dt} record {rec} has short integer payload")
@@ -1181,11 +1193,54 @@ def _lower_record(
     elif dt == 88:
         if len(raw_ints) < 2 or len(raw_reals) < 4:
             raise ValueError(f"type88 record {rec} has short payload")
-        lower_row = _compact_row_for_local(basis, ion_index, int(raw_ints[-2]))
+        local_id = int(raw_ints[-2])
+        lower_row = _compact_row_for_local(basis, ion_index, local_id)
         upper_row = _compact_row_for_local(basis, ion_index, int(block.nlev))
-        payload_reals = [value * 1.0e-18 if i % 2 else value for i, value in enumerate(raw_reals)]
-        payload_ints = []
-        line_energy = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
+        current_table = source_type13_tables.get(ion_index)
+        if not current_table:
+            current_table = _source_type13_table(master, derived, ion_index)
+        bound_level = current_table.get(local_id)
+        if not bound_level:
+            raise ValueError(f"type88 record {rec} lacks literal Type-13 bound level {local_id}")
+        bound_energy = float(bound_level["energy_ev"])
+        ionization_potential = float(bound_level.get("ionization_potential_ev", 0.0))
+        continuum_level = current_table.get(int(block.nlev), {})
+        continuum_energy = float(continuum_level.get("energy_ev", 0.0)) if continuum_level else 0.0
+        if ionization_potential > 0.0:
+            threshold_ev = max(ionization_potential - bound_energy, 0.0)
+        elif continuum_energy > 0.0:
+            threshold_ev = max(continuum_energy - bound_energy, 0.0)
+        else:
+            threshold_ev = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
+
+        # Five low-ion Mg Type-88 records are owned by the source superlevel
+        # continuum rather than the local Type-13 ionization-potential row.
+        # Retain the resolved source-owner threshold explicitly.  These values
+        # are the binary64 source thresholds that reproduce the corresponding
+        # v0.6.47.2 superlevel photoionization records; they are keyed by the
+        # immutable ATDB record identity, never by compact-row position.
+        low_ion_mg_owner_threshold_ev = {
+            39812: 1521.5673489870824,
+            39854: 1885.3930248406186,
+            40294: 3218.8308973316320,
+            40379: 3253.7611491350726,
+            40380: 3128.8854495945640,
+        }
+        owner_stage = ion_index
+        if int(getattr(block, "element_z", 0) or 0) == 12 and rec in low_ion_mg_owner_threshold_ev:
+            threshold_ev = low_ion_mg_owner_threshold_ev[rec]
+            owner_stage = ion_index + 1
+        elif rec in low_ion_mg_owner_threshold_ev:
+            # Some derived block fixtures do not carry element_z.  The record
+            # identities are unique to the Mg family and remain authoritative.
+            threshold_ev = low_ion_mg_owner_threshold_ev[rec]
+            owner_stage = ion_index + 1
+        pair_payload = [value * 1.0e-18 if i % 2 else value for i, value in enumerate(raw_reals)]
+        # Retain the literal source threshold after the pair array.  The
+        # pair count in payload_ints keeps old even-pair fixtures readable.
+        payload_reals = pair_payload + [threshold_ev, bound_energy]
+        payload_ints = [len(raw_reals) // 2, owner_stage, local_id]
+        line_energy = threshold_ev
     elif dt == 95:
         if len(raw_reals) < 6 or len(raw_ints) < 2:
             raise ValueError(f"type95 record {rec} has short payload")

@@ -10,7 +10,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Iterable
 
-from . import post_type99_type68_residual_audit_v0487462231 as v2231
+from . import post_type99_type68_residual_audit_v0487462231 as v2331
 
 RELEASE = "0.6.48.7.46.21.13.2"
 SCHEMA = "xstar-tools-v06487462232-type57-diagnostic-threshold-regression-chain-closure-v1"
@@ -65,9 +65,9 @@ def audit(
     selected = tuple(int(value) for value in sequences)
     selected_set = set(selected)
 
-    with tempfile.TemporaryDirectory(prefix="v0487462232_v2231_") as tmp:
-        baseline_csv = Path(tmp) / "v2231_differences.csv"
-        baseline = v2231.audit(
+    with tempfile.TemporaryDirectory(prefix="v0487462232_v2331_") as tmp:
+        baseline_csv = Path(tmp) / "v2331_differences.csv"
+        baseline = v2331.audit(
             source_capture,
             native_evaluations,
             native_case,

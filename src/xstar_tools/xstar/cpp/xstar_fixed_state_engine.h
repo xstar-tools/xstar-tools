@@ -79,7 +79,16 @@ typedef enum xstar_fixed_runtime_state_flags_v1 {
     XSTAR_FIXED_RUNTIME_STATE_DSEC_COVERING_FRACTION = 1u << 0,
     XSTAR_FIXED_RUNTIME_STATE_GLOBAL_LEVEL_WORKSPACES = 1u << 1,
     XSTAR_FIXED_RUNTIME_STATE_MG_PRIMARY_OVERRIDE = 1u << 2,
-    XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE = 1u << 3
+    XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE = 1u << 3,
+    /* v0.6.48.7.46.25.5.17.17: repeated-evaluation hydrogen uses the
+     * committed global population workspace for xh0/xh1, but clears the
+     * compact terminal normalization row before msolvelucy. */
+    XSTAR_FIXED_RUNTIME_STATE_REPEATED_HYDROGEN_SOURCE_STATE = 1u << 4,
+    /* v0.6.48.7.46.25.5.17.18: retain the accepted active ion-stage window
+     * across autonomous repeated evaluations.  The source controller carries
+     * the compact stage window as run state rather than recomputing a wider
+     * preliminary window from every trial electron fraction. */
+    XSTAR_FIXED_RUNTIME_STATE_RETAIN_ACTIVE_STAGE_WINDOW = 1u << 5
 } xstar_fixed_runtime_state_flags_v1;
 
 typedef struct xstar_fixed_state_input_v1 {

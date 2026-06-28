@@ -50,7 +50,7 @@ def test_threshold_audit_closes_named_regression_chain(tmp_path, monkeypatch):
         "MAGNESIUM_COOLING2_ALL_SELECTED_IEEE_E10": "ACCEPT",
     }
     monkeypatch.setattr(
-        focused.v2231,
+        focused.v2331,
         "audit",
         lambda *args, **kwargs: {
             "result": "ACCEPT",

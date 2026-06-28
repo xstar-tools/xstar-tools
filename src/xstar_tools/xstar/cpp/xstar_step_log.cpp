@@ -1,5 +1,6 @@
 #include "xstar_step_log.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <fstream>
@@ -7,7 +8,10 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
+
+#include <fitsio.h>
 
 namespace xstar_step_log {
 namespace {
@@ -34,11 +38,37 @@ void require_legacy_pprint_payload(const xstar_run_state::ProductWritingState& s
     if (!state.product_state_complete || !state.native_detail_state_retained ||
         !state.exact_source_metadata_retained || !state.exact_source_workspaces_retained ||
         !state.exact_accepted_radial_boundaries_retained ||
-        !state.exact_legacy_pprint_state_retained ||
-        !state.embedded_public_fits_payloads_absent || !state.embedded_full_xout_step_payload_absent ||
-        !state.legacy_pprint.complete() || state.legacy_pprint.buffered_lines.empty()) {
+        !state.embedded_public_fits_payloads_absent || !state.embedded_full_xout_step_payload_absent) {
         throw std::runtime_error("native xout_step.log state or provenance is incomplete");
     }
+    if (!(state.legacy_pprint.complete() && !state.legacy_pprint.buffered_lines.empty())) {
+        throw std::runtime_error(
+            "xout_step.log requires retained legacy/full xout_step body or a validated true native equivalent; "
+            "scratch ProductWritingState log body is disabled");
+    }
+}
+
+std::string read_atomic_data_version(const std::filesystem::path& atdb) {
+    fitsfile* fptr = nullptr;
+    int status = 0;
+    fits_open_file(&fptr, atdb.c_str(), READONLY, &status);
+    if (status != 0) return "unknown";
+    char value[FLEN_VALUE]{};
+    int read_status = 0;
+    fits_read_key(fptr, TSTRING, const_cast<char*>("ATDATA"), value, nullptr, &read_status);
+    if (read_status != 0) {
+        read_status = 0;
+        fits_read_key(fptr, TSTRING, const_cast<char*>("DATE"), value, nullptr, &read_status);
+    }
+    int close_status = 0;
+    fits_close_file(fptr, &close_status);
+    if (read_status != 0) return "unknown";
+    return std::string(value);
+}
+
+std::string path_string_or_unknown(const std::filesystem::path& path) {
+    const auto s = path.string();
+    return s.empty() ? std::string("unknown") : s;
 }
 
 void append_source_like_timing_footer(std::ofstream& out,
@@ -63,11 +93,6 @@ void append_source_like_timing_footer(std::ofstream& out,
 
 } // namespace
 
-// Source-faithful C++ analogue of physical_runner.py::run_xstar_from_parameters
-// for the xout_step.log surface: do not synthesize a compact debug report and
-// do not read any oracle log.  The writer consumes the already-retained legacy
-// pprint event/buffer stream, then appends measured timing lines in the same
-// phase used by physical_runner.py::_append_xout_step_timing_footer.
 Result write_native_step_log(
     const std::filesystem::path& output_dir,
     xstar_run_state::ProductWritingState& state) {
@@ -79,18 +104,10 @@ Result write_native_step_log(
     if (!out) throw std::runtime_error("cannot create native xout_step.log");
     out << std::setprecision(17);
     out << " xstar_tools version " << state.release << "\n";
-    out << " nry=        3170        9999\n";
-    out << " Loading Atomic Database...\n";
-    out << " Atomic Data Version: 2025-03-19T16:30:54\n";
-    out << " in readtbl:\n";
-    out << " number of pointers=     1216792\n";
-    out << " number of reals=   199199476\n";
-    out << " number of integers=     6205274\n";
-    out << " number of characters=      753844\n";
-    out << " initializing database...\n";
-    out << " number of lines=      736256\n";
-    out << " number of rrcs=      301301\n";
-    out << " done with setptrs\n";
+    out << " Atomic Database Path: " << path_string_or_unknown(state.atomic_database_path) << "\n";
+    out << " Atomic Data Version: " << read_atomic_data_version(state.atomic_database_path) << "\n";
+    out << " Native xout_step.log does not emit XSTAR readtbl pointer/reals/integers/characters/line/rrc counts unless they are retained from the live reader.\n";
+    out << " Synthetic atomic database count prologue: disabled\n";
     for (const auto& line : state.legacy_pprint.buffered_lines) {
         out << line << '\n';
     }
@@ -103,9 +120,9 @@ Result write_native_step_log(
     state.xout_step_timing_values_measured = true;
     Result result;
     result.lines_written = count_lines(path);
-    result.prefix_exact_except_version = true;
+    result.prefix_exact_except_version = false;
     result.full_raw_exact_asset_written = false;
-    result.full_log_complete = state.legacy_pprint.complete() && !state.legacy_pprint.buffered_lines.empty();
+    result.full_log_complete = true;
     result.computed_from_native_state = true;
     result.timing_values_measured = true;
     result.product_parity_qualified = false;

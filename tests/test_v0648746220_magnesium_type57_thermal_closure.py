@@ -155,7 +155,7 @@ def test_focused_analyzer_accepts_type57_and_prior_domains(tmp_path: Path) -> No
     assert report["v21_9_regression"]["result"] == "ACCEPT"
 
 
-def test_v2201_runner_builds_and_binds_verified_fresh_case() -> None:
+def test_v2301_runner_builds_and_binds_verified_fresh_case() -> None:
     milestone = MILESTONE.read_text()
     controller = CONTROLLER.read_text()
     assert "20260727-type57-fresh-lowered-case-hotfix-v2" in milestone

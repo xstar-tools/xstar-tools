@@ -165,10 +165,10 @@ def test_type99_case_contract_accepts_and_rejects_stale(tmp_path: Path):
     assert audit_case(case)["result"] == "REJECT"
 
 
-def test_v2212_self_import_recursion_is_fixed():
+def test_v2312_self_import_recursion_is_fixed():
     text = (ROOT / "src/xstar_tools/xstar/magnesium_type49_leveltemp_closure_v048746222.py").read_text()
-    assert "from . import magnesium_type53_leveltemp_closure_v048746221 as v221" in text
-    assert "from . import magnesium_type49_leveltemp_closure_v048746222 as v221" not in text
+    assert "from . import magnesium_type53_leveltemp_closure_v048746221 as v231" in text
+    assert "from . import magnesium_type49_leveltemp_closure_v048746222 as v231" not in text
 
 
 def test_type99_native_reevaluation_runs_after_active_selection_and_reuses_kernel():

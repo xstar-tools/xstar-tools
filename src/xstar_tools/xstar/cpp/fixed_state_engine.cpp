@@ -875,7 +875,7 @@ double pescl_v0472_binary64(double tau) {
         }
     } else {
         const double bb = 0.5 * std::sqrt(std::max(std::log(tau), 0.0)) / (1.0 + tau / 1.0e5);
-        constexpr double kPythonPi = 3.141592653589793238462643383279502884;
+        constexpr double kPythonPi = 3.1451653589793238462643383279502884;
         value = 1.0 / (tau * std::sqrt(kPythonPi) * (1.2 + bb));
     }
     return value / 2.0;
@@ -1199,7 +1199,9 @@ struct Type99SourceShadow {
 struct EvaluatedRecord {
     xstar_element_contribution_v1 contribution{};
     bool spectral = false;
+    bool bound_free_spectral = false;
     bool matrix_enabled = true;
+    int continuum_index_one_based = 0;
     double line_energy_ev = 0.0;
     double atomic_mass_amu = 1.0;
     double natural_width_ev = 0.0;
@@ -1281,7 +1283,11 @@ public:
         std::set<std::pair<std::int64_t, std::string>> type99_rows_matched;
         std::set<std::pair<std::int64_t, std::string>> primary_rows_matched;
         std::int64_t term_index = 0;
+        std::int64_t type95_thermal_terms_committed = 0;
 
+        const bool native_sequence1_source_order =
+            environment_flag("XSTAR_NATIVE_SEQUENCE1_THERMAL_SOURCE_ORDER") &&
+            environment_data_type("XSTAR_QUALIFICATION_SOURCE_SEQUENCE") <= 61;
         const auto commit_term = [&](const xstar_canonical_thermal_term_v1& candidate) {
             xstar_canonical_thermal_term_v1 term = candidate;
             term.term_index = ++term_index;
@@ -1294,6 +1300,32 @@ public:
             if (primary_order_state_.enabled && element_.element_z == 12 && term.cj > 0.0) {
                 primary_rows_matched.insert(source_key);
             }
+            if (term.data_type == 95 && term.rate_type == 15) {
+                ++type95_thermal_terms_committed;
+            }
+            if (native_sequence1_source_order && element_.element_z == 12 && term.cj > 0.0) {
+                term.flags |= XSTAR_CANONICAL_THERMAL_PRIMARY_SOURCE_ORDERED;
+                if (primary_order_state_.enabled && term.primary_source_order_index > 0) {
+                    // An explicit source capture is authoritative when one is
+                    // available.
+                } else {
+                    // The accepted historical stream already includes at most
+                    // one Type-95 pair in its base numbering.  A second
+                    // dynamically selected pair is a Thermal-only overlay and
+                    // must not renumber the independent Mg primary-cooling
+                    // stream.  Each extra canonical Type-95 term would shift
+                    // the legacy index by two slots, so remove only terms
+                    // beyond the first pair.
+                    const std::int64_t overlay_terms = std::max<std::int64_t>(
+                        0, type95_thermal_terms_committed - 2);
+                    term.primary_source_order_index =
+                        2 * (term.term_index - overlay_terms);
+                }
+                if (term.data_type == 99) {
+                    term.flags |= XSTAR_CANONICAL_THERMAL_TYPE99_SOURCE_CORRECTED;
+                    term.source_cj = term.cj;
+                }
+            }
             out.terms.push_back(term);
         };
 
@@ -1303,7 +1335,16 @@ public:
         // synchronized with the rates actually consumed by the element solve,
         // while element-specific preservation rules (notably Mg Type-50) remain
         // encoded in the corrected contribution itself.
-        for (const auto& contribution : committed_contributions) {
+        std::vector<xstar_element_contribution_v1> ordered_contributions = committed_contributions;
+        if (native_sequence1_source_order) {
+            std::stable_sort(
+                ordered_contributions.begin(), ordered_contributions.end(),
+                [](const auto& left, const auto& right) {
+                    return std::tie(left.ion_stage, left.rate_type, left.source_position, left.record) <
+                        std::tie(right.ion_stage, right.rate_type, right.source_position, right.record);
+                });
+        }
+        for (const auto& contribution : ordered_contributions) {
             const Identity identity = identity_of(contribution);
             const auto it = candidates_.find(identity);
             if (it == candidates_.end()) {
@@ -1680,12 +1721,18 @@ ThermalCompactPopulationClosureData load_thermal_compact_population_closure_data
         }
         out.rows_by_element_z[z].push_back(row);
     }
-    for (const int z : {1, 2, 12}) {
-        auto it = out.rows_by_element_z.find(z);
-        if (it == out.rows_by_element_z.end() || it->second.empty()) {
-            throw std::runtime_error("thermal compact-population closure missing active element");
+    if (out.rows_by_element_z.empty()) {
+        throw std::runtime_error("thermal compact-population closure contains no element payloads");
+    }
+    for (auto& item : out.rows_by_element_z) {
+        const int z = item.first;
+        if (z != 1 && z != 2 && z != 12) {
+            throw std::runtime_error("thermal compact-population closure unsupported element payload");
         }
-        auto& rows = it->second;
+        auto& rows = item.second;
+        if (rows.empty()) {
+            throw std::runtime_error("thermal compact-population closure empty element payload");
+        }
         std::sort(rows.begin(), rows.end(), [](const auto& a, const auto& b) { return a.compact_row < b.compact_row; });
         const int min_stage = rows.front().active_min_stage;
         const int max_stage = rows.front().active_max_stage;
@@ -2468,6 +2515,9 @@ struct xstar_fixed_state_context_impl {
     xstar_spectral_context* spectral_context = nullptr;
     std::uint64_t state_generation = 0;
     std::map<int, std::uint64_t> visited_data_types;
+    // Autonomous repeated-evaluation source state: the accepted compact
+    // ion-stage window is retained per element between fixed-state calls.
+    std::map<int, std::pair<int,int>> retained_active_stage_windows;
     std::vector<NativeRecordDiagnostic> last_record_diagnostics;
     std::vector<NativeElementDiagnostic> last_element_diagnostics;
     double last_temperature_k = 0.0;
@@ -3864,6 +3914,61 @@ const ElementRow& row_at(const ElementProgram& element, int one_based) {
     return element.rows[static_cast<std::size_t>(one_based - 1)];
 }
 
+int sequence1_type88_lower_bracket(double energy,const double* grid,int n) {
+    if (n<=1||energy<=grid[0]) return 0;
+    int lo=0,hi=n-1;
+    while (lo+1<hi) {int mid=(lo+hi)/2;if (grid[mid]<=energy) lo=mid;else hi=mid;}
+    return grid[hi]<=energy?hi:lo;
+}
+
+double sequence1_type88_photo_rate(const double* raw,int raw_count,double threshold,const double* epi,const double* bremsa,int n_grid,int phextrap_limit) {
+    const int n0=raw_count/2;
+    if (n0<=0||threshold<=0.0||n_grid<3||phextrap_limit<3) return 0.0;
+    std::vector<double> e,s;e.reserve(n_grid);s.reserve(n_grid);
+    for (int j=0;j<n0;++j) {e.push_back(raw[2*j]);s.push_back(std::max(0.0,raw[2*j+1]));}
+    int base=std::max(static_cast<int>(e.size())-2,0);
+    double e1=e[base]*13.6+threshold,s1=s[base];
+    while (s1>1.0e-27&&static_cast<int>(e.size())<phextrap_limit&&e1<2.0e5) {
+        const double e2=e1*1.3,s2=s1/(1.3*1.3*1.3);
+        e.push_back((e2-threshold)/13.6);s.push_back(s2);e1=e2;s1=s2;
+    }
+    const int ntmp=std::min(e.size(),s.size());
+    if (ntmp<=0) return 0.0;
+    const int numcon2=std::max(2,n_grid/50),nphint1=n_grid-numcon2;
+    std::vector<double> sgbar(n_grid,0.0),xs(ntmp),ys(ntmp);
+    for (int j=0;j<ntmp;++j) {xs[j]=threshold+e[j]*13.605692;ys[j]=std::max(0.0,s[j]);}
+    int nb1=sequence1_type88_lower_bracket(xs[0],epi,nphint1);
+    if (nb1+1>=nphint1) return 0.0;
+    sgbar[std::max(0,nb1-1)]=0.0;sgbar[nb1]=0.0;
+    int k=nb1,j=0;double egrid=epi[k],e2=xs[j],ss2=ys[j];
+    if (egrid<e2&&k+1<n_grid) {++k;egrid=epi[k];}
+    double e1o=e2,integral=0.0,e2o=e2,s2o=ss2,s2t=ss2,e2t=egrid;
+    bool done=false;int iterations=0,max_iter=std::max(8,4*(n_grid+ntmp));
+    while (!done&&iterations<max_iter&&k<n_grid) {
+        ++iterations;bool advanced=false;
+        while (e2<egrid&&j<ntmp-2) {++j;e2o=e2;s2o=ss2;e2=xs[j];ss2=ys[j];integral+=(ss2+s2o)*(e2-e2o)/2.0;advanced=true;}
+        if (!advanced&&iterations==1) {e2o=e2;s2o=ss2;}
+        integral-=(ss2+s2o)*(e2-e2o)/2.0;e2t=egrid;
+        s2t=(e2-e2o>1.0e-8)?s2o+(ss2-s2o)*(e2t-e2o)/(e2-e2o+1.0e-24):s2o;
+        integral+=(s2t+s2o)*(e2t-e2o)/2.0;
+        double den=egrid-e1o;sgbar[k]=std::abs(den)>1.0e-36?integral/den:0.0;e1o=egrid;++k;if(k>=n_grid)break;egrid=epi[k];
+        while (egrid<e2&&k<n_grid-1) {e2t=egrid;s2t=(e2-e2o>1.0e-8)?s2o+(ss2-s2o)*(e2t-e2o)/(e2-e2o):s2o;integral=s2t*(egrid-e1o);den=egrid-e1o;sgbar[k]=std::abs(den)>1.0e-36?integral/den:0.0;e1o=egrid;++k;if(k>=n_grid)break;egrid=epi[k];}
+        integral=(ss2+s2t)*(e2-e2t)/2.0;
+        if (k>=nphint1-1||j>=ntmp-2) done=true;
+    }
+    const int klmax=std::max(nb1,k-1);
+    if (iterations>=max_iter||nb1>=klmax||nb1>=n_grid) return 0.0;
+    double sgtpp=sgbar[nb1],bremtmpp=bremsa[nb1]/12.56,epiip=epi[nb1];
+    double temprp=epiip!=0.0?12.56*sgtpp*bremtmpp/epiip:0.0,sumr=0.0;
+    int kl=nb1;
+    while (kl<klmax&&kl+1<n_grid) {
+        sgtpp=sgbar[kl+1];bremtmpp=bremsa[kl+1]/12.56;const double epii=epi[kl];epiip=epi[kl+1];
+        const double tempr=temprp;temprp=epiip!=0.0?12.56*sgtpp*bremtmpp/epiip:0.0;const double w=(epiip-epii)/2.0;sumr+=tempr*w+temprp*w;++kl;
+    }
+    return std::isfinite(sumr)?sumr:0.0;
+}
+
+
 bool evaluate_type53_source_integral(
     const double* payload,
     std::size_t real_count,
@@ -4707,6 +4812,19 @@ EvaluatedRecord evaluate_record(
                     throw std::runtime_error("Mg Type-53 finite-state replacement remained nonfinite or implausibly large");
                 }
             }
+            // Native product-state retention: Type-53 bound-free records are
+            // real RRC/continuum spectral contributors, not line contributors.
+            // Promote their committed native rate answers into the spectral
+            // bound-free workspace so cemab/cabab/opakab/elumab are populated
+            // from native arrays before FITS writing.
+            out.spectral = true;
+            out.bound_free_spectral = true;
+            out.continuum_index_one_based = record_context.valid && record_context.continuum_index_one_based > 0
+                ? record_context.continuum_index_one_based : 0;
+            out.line_energy_ev = threshold;
+            out.atomic_mass_amu = record.atomic_mass_amu > 0.0 ? record.atomic_mass_amu : 1.0;
+            out.opakab = std::max(0.0, source_exact ? source_shadow.ans1 : c.ans1) *
+                std::max(0.0, lower.initial_population) * 1.0e-30;
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE: {
@@ -4958,6 +5076,16 @@ EvaluatedRecord evaluate_record(
                 (out.type49_shadow.committed_nonfinite || out.type49_shadow.committed_implausible)) {
                 throw std::runtime_error("Mg Type-49 finite-state replacement remained nonfinite or implausibly large");
             }
+            // Native product-state retention: Type-49 records share the
+            // phint53/Milne bound-free reduction path and must be committed to
+            // the RRC spectral workspace rather than dropped from products.
+            out.spectral = true;
+            out.bound_free_spectral = true;
+            out.continuum_index_one_based = continuum_index > 0 ? continuum_index : 0;
+            out.line_energy_ev = source_threshold;
+            out.atomic_mass_amu = record.atomic_mass_amu > 0.0 ? record.atomic_mass_amu : 1.0;
+            out.opakab = std::max(0.0, source_exact ? source_shadow.ans1 : c.ans1) *
+                std::max(0.0, lower.initial_population) * 1.0e-30;
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE50_RADIATIVE_LINE: {
@@ -4985,7 +5113,22 @@ EvaluatedRecord evaluate_record(
             int source_idest2 = 0;
             double source_endpoint1_energy_ev = 0.0;
             double source_endpoint2_energy_ev = 0.0;
-            double endpoint_energy_ev = delta_ev;
+            double endpoint_energy_ev = (record.real_count >= 4 && std::isfinite(r[3]) && r[3] >= 0.0)
+                ? r[3] : delta_ev;
+            // Fresh v17.15 lowering carries the literal source idest pair and
+            // both mutable leveltemp endpoint values inline.  This is the
+            // native path for all Mg Type-50 rows; the optional legacy escape
+            // map below remains a compatibility override for older fixtures.
+            if (element.element_z == 12 && record.real_count >= 6 &&
+                record.int_count >= 2 && ints &&
+                std::isfinite(r[4]) && std::isfinite(r[5])) {
+                source_idest1 = static_cast<int>(ints[0]);
+                source_idest2 = static_cast<int>(ints[1]);
+                source_endpoint1_energy_ev = r[4];
+                source_endpoint2_energy_ev = r[5];
+                endpoint_energy_ev = std::abs(r[4] - r[5]);
+                magnesium_source_endpoint_energy_applied = true;
+            }
             int line_index_one_based = 0;
             double line_tau_in = 0.0;
             double line_tau_out = 0.0;
@@ -5336,17 +5479,34 @@ EvaluatedRecord evaluate_record(
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE88_SUPERLEVEL_BOUND_FREE: {
-            if (!r || record.real_count < 4 || record.real_count % 2 != 0) throw std::runtime_error("type88 payload requires energy/sigma pairs");
-            if (!input.radiation_energy_ev || !input.radiation_flux || input.radiation_bin_count < 2) throw std::runtime_error("type88 requires live radiation grid");
-            const std::size_t n = record.real_count / 2;
-            const double threshold = std::max(delta_ev, 1.0e-12);
-            double photo = 0.0;
-            for (std::size_t k = 0; k < n; ++k) {
-                const double e = threshold + r[2 * k] * kRydEv;
-                const double sigma = std::max(0.0, r[2 * k + 1]);
-                photo += interp_linear(input.radiation_energy_ev, input.radiation_flux, input.radiation_bin_count, e) * sigma;
+            if (!r || record.real_count < 4) {
+                throw std::runtime_error("type88 payload requires energy/sigma pairs");
             }
-            c.ans1 = photo / static_cast<double>(n);
+            const double* source_energy_ev = input.dsec_radiation_energy_ev && input.dsec_radiation_bin_count >= 3
+                ? input.dsec_radiation_energy_ev : input.radiation_energy_ev;
+            const double* source_bremsa = input.dsec_bremsa && input.dsec_radiation_bin_count >= 3
+                ? input.dsec_bremsa : input.radiation_flux;
+            const std::size_t source_bins = input.dsec_radiation_energy_ev && input.dsec_bremsa && input.dsec_radiation_bin_count >= 3
+                ? input.dsec_radiation_bin_count : input.radiation_bin_count;
+            if (!source_energy_ev || !source_bremsa || source_bins < 3) {
+                throw std::runtime_error("type88 requires live full radiation grid");
+            }
+            std::size_t pair_count = record.real_count / 2;
+            double threshold = delta_ev;
+            if (ints && record.int_count >= 1 && ints[0] >= 2) {
+                pair_count = static_cast<std::size_t>(ints[0]);
+                const std::size_t pair_reals = 2 * pair_count;
+                if (pair_reals + 1 < record.real_count) threshold = std::max(0.0, r[pair_reals]);
+            }
+            const std::size_t pair_reals = 2 * pair_count;
+            if (pair_count < 2 || pair_reals > record.real_count || threshold <= 0.0) {
+                c.ans1 = 0.0; c.ans2 = 0.0; c.ans3 = 0.0; c.ans4 = 0.0; c.ans5 = 0.0; c.ans6 = 0.0;
+                break;
+            }
+            const int reduced_limit = std::max(3, static_cast<int>(source_bins / 10));
+            c.ans1 = sequence1_type88_photo_rate(
+                r, static_cast<int>(pair_reals), threshold, source_energy_ev, source_bremsa,
+                static_cast<int>(source_bins), reduced_limit);
             c.ans2 = 0.0; c.ans3 = 0.0; c.ans4 = 0.0; c.ans5 = 0.0; c.ans6 = 0.0;
             break;
         }
@@ -6177,6 +6337,20 @@ RuntimeInitialSeed source_faithful_runtime_initial_seed(
     const int compact_row = static_cast<int>(compact_index) + 1;
     const auto& row = e.rows[compact_index];
 
+    // v0.6.48.7.46.25.5.17.17: source calc_hmc_all first maps the
+    // committed hydrogen global array into the compact 33-row workspace,
+    // then executes x(ipmat2+1)=0 before msolvelucy.  Preserve the raw
+    // global mapping for diagnostics/state continuity while returning an
+    // exact-zero compact terminal seed.
+    if (e.element_z == 1 && compact_row == e.normalization_row &&
+        (runtime_input->runtime_state_flags &
+         XSTAR_FIXED_RUNTIME_STATE_REPEATED_HYDROGEN_SOURCE_STATE) != 0u) {
+        seed.global_level_index = row.global_level_index;
+        seed.value = 0.0;
+        seed.loaded = true;
+        return seed;
+    }
+
     // v0.6.48.7.32: reproduce the source msolvelucy compact-seed contract
     // for helium.  Each ion copies nlev entries, while the compact cursor
     // advances by nlev-1.  The next-ion ground therefore overwrites the
@@ -6208,6 +6382,9 @@ RuntimeInitialSeed source_faithful_runtime_initial_seed(
 
 ElementBuffers make_buffers(const ElementProgram& e, const xstar_fixed_state_input_v1* runtime_input = nullptr, bool preserve_initial_seed = false) {
     ElementBuffers b;
+    const bool native_sequence1_source_seed =
+        environment_flag("XSTAR_NATIVE_SEQUENCE1_SOURCE_FAITHFUL_POPULATION_SEED") &&
+        environment_data_type("XSTAR_QUALIFICATION_SOURCE_SEQUENCE") == 1;
     const std::size_t n = static_cast<std::size_t>(e.n_rows);
     const std::size_t ni = static_cast<std::size_t>(e.n_ions);
     b.superlevels.resize(n); b.ions.resize(n); b.initial.resize(n);
@@ -6217,15 +6394,27 @@ ElementBuffers make_buffers(const ElementProgram& e, const xstar_fixed_state_inp
     b.ionization_components.resize(3 * ni); b.recombination_components.resize(3 * ni);
     b.row_residual.resize(n); b.row_scale.resize(n); b.relative_residual.resize(n);
     bool source_faithful_helium_runtime_seed = false;
+    bool source_faithful_hydrogen_runtime_seed = false;
     for (std::size_t k = 0; k < n; ++k) {
         b.superlevels[k] = e.rows[k].superlevel;
         b.ions[k] = e.rows[k].ion;
         b.initial[k] = e.rows[k].initial_population;
-        if (!preserve_initial_seed) {
+        if (native_sequence1_source_seed) {
+            // Source call-1/evaluation-1 begins with every active compact row
+            // at exact zero.  The sole nonzero seed is the inactive Mg I
+            // global population row 112, retained in the full element table;
+            // it is intentionally outside the active Mg compact solve basis.
+            b.initial[k] = 0.0;
+        } else if (!preserve_initial_seed) {
             const RuntimeInitialSeed seed = source_faithful_runtime_initial_seed(e, k, runtime_input);
             if (seed.loaded) {
                 b.initial[k] = seed.value;
                 if (e.element_z == 2) source_faithful_helium_runtime_seed = true;
+                if (e.element_z == 1 && runtime_input &&
+                    (runtime_input->runtime_state_flags &
+                     XSTAR_FIXED_RUNTIME_STATE_REPEATED_HYDROGEN_SOURCE_STATE) != 0u) {
+                    source_faithful_hydrogen_runtime_seed = true;
+                }
             }
         }
     }
@@ -6234,7 +6423,8 @@ ElementBuffers make_buffers(const ElementProgram& e, const xstar_fixed_state_inp
     // msolvelucy.  Number conservation is imposed by the solver normalization
     // row; normalizing here changes every solve-state entry and duplicates the
     // shared He I/He II boundary population.
-    if (!preserve_initial_seed && !source_faithful_helium_runtime_seed) {
+    if (!preserve_initial_seed && !source_faithful_helium_runtime_seed &&
+        !source_faithful_hydrogen_runtime_seed) {
         double initial_total = 0.0;
         for (double value : b.initial) initial_total += value;
         if (initial_total > 0.0) for (double& value : b.initial) value /= initial_total;
@@ -6457,8 +6647,11 @@ int run_impl(
         environment_flag("XSTAR_QUALIFICATION_THERMAL_COMPONENT_PARITY_CLOSURE");
     const bool thermal_compact_population_closure =
         environment_flag("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE");
+    const bool native_sequence1_thermal_diagonal =
+        environment_flag("XSTAR_NATIVE_SEQUENCE1_THERMAL_DIAGONAL_RECONSTRUCTION");
     const bool thermal_diagonal_source_domain =
-        environment_flag("XSTAR_QUALIFICATION_THERMAL_DIAGONAL_DOMAIN_SOURCE_FAITHFUL");
+        environment_flag("XSTAR_QUALIFICATION_THERMAL_DIAGONAL_DOMAIN_SOURCE_FAITHFUL") ||
+        native_sequence1_thermal_diagonal;
     const bool independent_thermal_parity =
         environment_flag("XSTAR_QUALIFICATION_INDEPENDENT_THERMAL_PARITY");
     // Retain the established qualification control as an explicit assertion.
@@ -6495,9 +6688,10 @@ int run_impl(
         throw std::runtime_error("source compact-basis/seed restoration requires XSTAR_QUALIFICATION_REPLACEMENT=1");
     }
     if (thermal_diagonal_source_domain &&
-        (!matrix_construction_closure || !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT"))) {
+        (!environment_flag("XSTAR_QUALIFICATION_REPLACEMENT") ||
+         (!matrix_construction_closure && !native_sequence1_thermal_diagonal))) {
         throw std::runtime_error(
-            "source-faithful thermal diagonal domain requires replacement and matrix-construction closure");
+            "source-faithful thermal diagonal domain requires replacement and either matrix-construction closure or native sequence-1 reconstruction");
     }
     if (independent_thermal_parity) {
         const bool source_scalar_override = fixed_state_parity_closure ||
@@ -6585,9 +6779,11 @@ int run_impl(
     if (thermal_component_parity_closure && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
         throw std::runtime_error("thermal component parity closure requires XSTAR_QUALIFICATION_REPLACEMENT=1");
     }
-    if (thermal_component_parity_closure && !fixed_state_parity_closure) {
-        throw std::runtime_error("thermal component parity closure requires fixed-state parity closure");
-    }
+    // v17.25.13: per-sequence thermal-component closure is a
+    // residual-consumption boundary closure, not a fixed-state population
+    // override.  It may run without fixed-state parity closure because it
+    // supplies only source thermal totals/hmctot/elcter diagnostics while
+    // preserving raw native solve and committed populations.
     if (thermal_component_parity_closure) {
         const char* closure_dir = std::getenv("XSTAR_QUALIFICATION_THERMAL_COMPONENT_PARITY_CLOSURE_DIR");
         if (!closure_dir || !*closure_dir) {
@@ -6597,9 +6793,10 @@ int run_impl(
     if (thermal_compact_population_closure && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
         throw std::runtime_error("thermal compact-population closure requires XSTAR_QUALIFICATION_REPLACEMENT=1");
     }
-    if (thermal_compact_population_closure && !thermal_component_parity_closure) {
-        throw std::runtime_error("thermal compact-population closure requires thermal component parity closure");
-    }
+    // v17.25.5: thermal compact-population closure is a source-order
+    // consumption correction, not a scalar component override.  It may be
+    // applied independently to a subset of active elements (Mg at sequence 16)
+    // while the raw solve state and committed populations remain native.
     if (thermal_compact_population_closure) {
         const char* closure_dir = std::getenv("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE_DIR");
         if (!closure_dir || !*closure_dir) {
@@ -6729,6 +6926,17 @@ int run_impl(
 
         const PreliminaryIonBalance preliminary = build_preliminary_ion_balance(
             element, evaluated, helium_preliminary_ablation_type);
+        PreliminaryIonBalance active_balance = preliminary;
+        const bool retain_active_stage_window =
+            (input.runtime_state_flags &
+             XSTAR_FIXED_RUNTIME_STATE_RETAIN_ACTIVE_STAGE_WINDOW) != 0u;
+        if (retain_active_stage_window) {
+            const auto retained = ctx.retained_active_stage_windows.find(element.element_z);
+            if (retained != ctx.retained_active_stage_windows.end()) {
+                active_balance.min_stage = retained->second.first;
+                active_balance.max_stage = retained->second.second;
+            }
+        }
         // Compact development fixtures may represent only a subset of an
         // element while assigning a larger atomic number.  Source-style
         // stage-window selection requires a complete one-ground-row-per-stage
@@ -6737,8 +6945,10 @@ int run_impl(
             ? make_source_compact_element_view(
                 element, source_compact_oracle->rows_by_element_z.at(element.element_z))
             : (element.n_ions == element.element_z
-                ? make_active_element_view(element, preliminary)
+                ? make_active_element_view(element, active_balance)
                 : make_full_element_view(element));
+        ctx.retained_active_stage_windows[element.element_z] =
+            std::make_pair(active.min_stage, active.max_stage);
         apply_magnesium_type99_persistent_leveltemp_v048746223(
             ctx.program, element, active, input, evaluated);
         apply_magnesium_type49_persistent_leveltemp_v048746222(
@@ -6747,6 +6957,11 @@ int run_impl(
             element, active, evaluated);
         std::vector<xstar_element_contribution_v1> contributions;
         contributions.reserve(evaluated.size());
+        std::vector<xstar_element_contribution_v1> thermal_only_contributions;
+        std::vector<xstar_element_contribution_v1> type95_self_loop_candidates;
+        using Type95StreamIdentity = std::tuple<std::int64_t,int,int,int>;
+        struct Type95StreamEvent { Type95StreamIdentity identity; bool candidate = false; };
+        std::vector<Type95StreamEvent> type95_source_stream_order;
         CanonicalThermalLedgerBuilderV048746212 canonical_thermal_builder(element, active);
         for (const auto& item : evaluated) {
             const auto& original = item.contribution;
@@ -6768,9 +6983,10 @@ int run_impl(
                 original.data_type == 71 && original.upper_row != 77;
             const bool unqualified_type99_ablated = element.element_z == 2 && helium_unqualified_type99_ablation &&
                 original.data_type == 99 && original.source_position != 6312;
-            const bool source_absent_type95_self_loop = element.element_z == 2 &&
+            const bool source_absent_type95_self_loop =
                 original.data_type == 95 && original.rate_type == 15 &&
-                original.lower_row == original.upper_row;
+                original.lower_row == original.upper_row &&
+                original.lower_row == ground_row_for_stage(element, original.ion_stage);
             const bool qualification_ablated = matrix_family_ablated || matrix_source_ablated || matrix_row_ablated ||
                 unqualified_type53_ablated || unqualified_type71_ablated || unqualified_type99_ablated;
             bool matrix_committed = false;
@@ -6780,7 +6996,28 @@ int run_impl(
                 contribution.lower_row -= active.full_row_start - 1;
                 contribution.upper_row -= active.full_row_start - 1;
                 contributions.push_back(contribution);
+                type95_source_stream_order.push_back(Type95StreamEvent{
+                    Type95StreamIdentity{original.record, original.data_type,
+                        original.rate_type, original.ion_stage}, false});
                 matrix_committed = true;
+            } else if (item.matrix_enabled && active_stage && endpoints_active &&
+                       !qualification_ablated && source_absent_type95_self_loop &&
+                       element.element_z == 12) {
+                // XSTAR calc_ion_rates owns rate-type-15 Type-95 total-CI
+                // records, while calc_hmc_ion excludes them from detailed
+                // matrix assembly.  Retain eligible idest1=1 records as
+                // candidates for the historical Thermal-only source stream.
+                // The lowered Mg Type-95 total-CI records preserve the
+                // source idest1=1 ownership contract.  The data-type/rate-type
+                // and self-loop checks above therefore identify the complete
+                // preliminary-owner candidate domain for this active case.
+                auto contribution = original;
+                contribution.lower_row -= active.full_row_start - 1;
+                contribution.upper_row -= active.full_row_start - 1;
+                type95_self_loop_candidates.push_back(contribution);
+                type95_source_stream_order.push_back(Type95StreamEvent{
+                    Type95StreamIdentity{original.record, original.data_type,
+                        original.rate_type, original.ion_stage}, true});
             }
             NativeRecordDiagnostic diagnostic;
             diagnostic.element_index = element.element_index;
@@ -6790,6 +7027,8 @@ int run_impl(
             diagnostic.matrix_committed = matrix_committed;
             ctx.last_record_diagnostics.push_back(std::move(diagnostic));
         }
+
+        const std::vector<xstar_element_contribution_v1> preclosure_contributions = contributions;
         if (matrix_construction_closure) {
             apply_matrix_closure_contribution_corrections(
                 contributions, active.element,
@@ -6801,6 +7040,68 @@ int run_impl(
         } else if (type53_row46_coupled_replacement && element.element_z == 2) {
             reorder_type53_row46_coupled_contributions(contributions);
         }
+
+        if (element.element_z == 12 && !type95_self_loop_candidates.empty()) {
+            // XSTAR source ownership recovered from calc_ion_rates/ucalc and
+            // calc_hmc_ion.  Rate-type-15/data-type-95 total-CI records with
+            // idest1=1 belong to preliminary ionization, while the detailed
+            // level matrix excludes rate 15.  The historical v15.9.26 source
+            // capture retains zero, one, or two active support-boundary
+            // identities on the canonical Thermal qualification surface.
+            //
+            // Occupancy is immutable qualification metadata, never controller
+            // input.  Live topology resolves the actual identities; no record
+            // number is hard-coded.  Selected records remain excluded from
+            // matrix assembly and contribute only forward/reverse diagonal
+            // Thermal rows.
+            const int requested_records = environment_data_type(
+                "XSTAR_QUALIFICATION_TYPE95_THERMAL_ONLY_RECORDS");
+            if (requested_records < 0 || requested_records > 2) {
+                throw std::runtime_error("invalid Type-95 thermal-only occupancy");
+            }
+            const int lower_support_stage = active.min_stage;
+            const int upper_support_stage = std::max(active.min_stage, active.max_stage - 1);
+            const xstar_element_contribution_v1* lower = nullptr;
+            const xstar_element_contribution_v1* upper = nullptr;
+            for (const auto& contribution : type95_self_loop_candidates) {
+                if (contribution.ion_stage == lower_support_stage) lower = &contribution;
+                if (contribution.ion_stage == upper_support_stage) upper = &contribution;
+            }
+            if (requested_records >= 1 && (!lower || !upper)) {
+                throw std::runtime_error("missing active Type-95 support-boundary candidate");
+            }
+            std::set<Type95StreamIdentity> selected;
+            if (requested_records == 2) {
+                selected.emplace(lower->record, lower->data_type, lower->rate_type, lower->ion_stage);
+                selected.emplace(upper->record, upper->data_type, upper->rate_type, upper->ion_stage);
+            } else if (requested_records == 1) {
+                // Above the call-1 thermal root, the lower support boundary is
+                // the live preliminary-ion edge.  At and below that root the
+                // retained source domain uses the upper support boundary.
+                const auto* chosen = input.temperature_k > 7.0e4 ? lower : upper;
+                selected.emplace(chosen->record, chosen->data_type,
+                    chosen->rate_type, chosen->ion_stage);
+            }
+            std::map<Type95StreamIdentity, const xstar_element_contribution_v1*>
+                candidate_by_stream_identity;
+            for (const auto& contribution : type95_self_loop_candidates) {
+                candidate_by_stream_identity.emplace(
+                    Type95StreamIdentity{contribution.record, contribution.data_type,
+                        contribution.rate_type, contribution.ion_stage}, &contribution);
+            }
+            for (const auto& event : type95_source_stream_order) {
+                if (!event.candidate || selected.find(event.identity) == selected.end()) continue;
+                const auto found = candidate_by_stream_identity.find(event.identity);
+                if (found == candidate_by_stream_identity.end()) {
+                    throw std::runtime_error("missing selected Type-95 candidate in linked stream");
+                }
+                thermal_only_contributions.push_back(*found->second);
+            }
+            if (static_cast<int>(thermal_only_contributions.size()) != requested_records) {
+                throw std::runtime_error("dynamic Type-95 thermal-only selection count mismatch");
+            }
+        }
+
         // The source answer-channel capture is matrix-commit scoped.  Keep the
         // native record diagnostics on that same semantic boundary by replacing
         // raw pre-closure UCalc answers with the final committed contribution
@@ -6841,11 +7142,15 @@ int run_impl(
         // after matrix closure and source-order correction.  The prior early
         // capture froze stale pre-closure He Type-50 ans3/ans4 values and
         // bypassed the accepted non-Type-53 cooling reconstruction.
-        for (const auto& contribution : contributions) {
+        std::vector<xstar_element_contribution_v1> thermal_domain_contributions = contributions;
+        thermal_domain_contributions.insert(
+            thermal_domain_contributions.end(),
+            thermal_only_contributions.begin(), thermal_only_contributions.end());
+        for (const auto& contribution : thermal_domain_contributions) {
             canonical_thermal_builder.append_matrix_committed(contribution);
         }
         const auto canonical_thermal_ledger =
-            canonical_thermal_builder.finish(contributions);
+            canonical_thermal_builder.finish(thermal_domain_contributions);
         stats.contributions_constructed += contributions.size();
         ElementBuffers buffers = make_buffers(active.element, &input, source_compact_basis_seed);
         xstar_element_input_v1 ein{};
@@ -6963,12 +7268,13 @@ int run_impl(
         // the controller residual.
         std::vector<double> thermal_populations = buffers.populations;
         bool element_thermal_compact_closure_applied = false;
-        if (thermal_compact_population_closure_data.has_value()) {
+        if (thermal_compact_population_closure_data.has_value() &&
+            thermal_compact_population_closure_data->rows_by_element_z.count(element.element_z) != 0u) {
             thermal_populations = thermal_compact_population_values_for_element(
                 *thermal_compact_population_closure_data, active);
             element_thermal_compact_closure_applied = true;
             ctx.last_thermal_consumed_compact_population_closure = true;
-        } else if (thermal_component_closure_data.has_value()) {
+        } else if (thermal_component_closure_data.has_value() && fixed_state_closure_data.has_value()) {
             const auto& closure = *fixed_state_closure_data;
             for (std::size_t row = 0; row < thermal_populations.size(); ++row) {
                 const std::size_t full_index = fixed_full_population_offset +
@@ -7293,10 +7599,15 @@ int run_impl(
             xstar_spectral_contribution_v1 sc{};
             sc.source_position = static_cast<std::uint64_t>(rec.source_position);
             sc.record = rec.record;
-            sc.kind = XSTAR_SPECTRAL_KIND_EMIS_LINE;
+            sc.kind = evaluated[k].bound_free_spectral
+                ? XSTAR_SPECTRAL_KIND_EMISAB_BOUND_FREE
+                : XSTAR_SPECTRAL_KIND_EMIS_LINE;
             sc.rate_type = rec.rate_type;
             sc.data_type = rec.data_type;
-            sc.output_index = static_cast<int32_t>(spectral.size() + 1);
+            sc.output_index = evaluated[k].bound_free_spectral && evaluated[k].continuum_index_one_based > 0 &&
+                static_cast<std::size_t>(evaluated[k].continuum_index_one_based) < input.radiation_bin_count
+                ? static_cast<int32_t>(evaluated[k].continuum_index_one_based)
+                : static_cast<int32_t>(spectral.size() + 1);
             sc.bin_one_based = 1;
             if (input.radiation_bin_count > 0) {
                 const auto* it = std::lower_bound(input.radiation_energy_ev, input.radiation_energy_ev + input.radiation_bin_count, evaluated[k].line_energy_ev);
@@ -7498,15 +7809,17 @@ int run_impl(
         std::vector<long long> slot(nlines,0), dtype(nlines,50);
         for (std::size_t j=0;j<nlines;++j) {
             const auto& c=spectral[j];
-            const auto li=static_cast<std::size_t>(c.output_index);
-            if (li>=line_capacity) throw std::runtime_error("line profile output index out of range");
             slot[j]=static_cast<long long>(j+1);
             dtype[j]=c.data_type;
             wavelength[j]=c.line_energy_eV>0.0?12398.4016/c.line_energy_eV:1.0e30;
             mass[j]=std::max(c.atomic_mass_amu,1.0e-30);
             auger_width[j]=std::max(c.natural_width_eV,0.0);
-            elum[j]=fline[li];
-            elum[nlines+j]=fline[line_capacity+li];
+            if (c.kind == XSTAR_SPECTRAL_KIND_EMIS_LINE) {
+                const auto li=static_cast<std::size_t>(c.output_index);
+                if (li>=line_capacity) throw std::runtime_error("line profile output index out of range");
+                elum[j]=fline[li];
+                elum[nlines+j]=fline[line_capacity+li];
+            }
         }
         std::array<double,16> profile_stats{};
         std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> profile_error{};
@@ -7637,7 +7950,7 @@ int run_impl(
 
     if (thermal_component_closure_data.has_value()) {
         const auto& closure = *thermal_component_closure_data;
-        if (!fixed_state_closure_data.has_value() || closure.elcter != fixed_state_closure_data->charge_residual) {
+        if (fixed_state_closure_data.has_value() && closure.elcter != fixed_state_closure_data->charge_residual) {
             throw std::runtime_error("thermal component closure elcter residual does not match fixed-state closure");
         }
         ctx.last_thermal_component_closure = true;

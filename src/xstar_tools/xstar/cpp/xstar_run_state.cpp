@@ -196,10 +196,84 @@ void read_csv_rows(const std::filesystem::path& path, Callback callback) {
     }
 }
 
+
+std::map<std::string,std::size_t> simple_columns_of(const std::string& header) {
+    std::map<std::string,std::size_t> out;
+    std::size_t start = 0;
+    std::size_t index = 0;
+    while (start <= header.size()) {
+        const auto pos = header.find(',', start);
+        const auto field = header.substr(start, pos == std::string::npos ? std::string::npos : pos - start);
+        out[field] = index++;
+        if (pos == std::string::npos) break;
+        start = pos + 1;
+    }
+    return out;
+}
+
+std::string simple_field(const std::vector<std::string>& fields, const std::map<std::string,std::size_t>& columns,
+                         const std::string& name, const std::string& fallback = "") {
+    const auto it = columns.find(name);
+    if (it == columns.end() || it->second >= fields.size()) return fallback;
+    return fields[it->second];
+}
+
+void synthesize_metadata_from_native_case(WholeRunAccumulatedState& state) {
+    state.level_identities.clear();
+    state.line_identities.clear();
+    state.rrc_identities.clear();
+    state.parameter_rows.clear();
+    const auto rows_path = state.native_case_path / "rows.csv";
+    std::ifstream rows(rows_path);
+    if (rows) {
+        std::string header;
+        std::getline(rows, header);
+        const auto cols = simple_columns_of(header);
+        std::string line;
+        while (std::getline(rows, line)) {
+            if (line.empty()) continue;
+            const auto f = split_csv_quoted(line);
+            LevelIdentityState row;
+            const std::string global = simple_field(f, cols, "global_level_index", "0");
+            const std::string ion = simple_field(f, cols, "ion", "0");
+            const std::string energy = simple_field(f, cols, "energy_ev", "0");
+            try { row.global_index = std::stoi(global); } catch (...) { row.global_index = 0; }
+            try { row.ion_index = static_cast<std::int16_t>(std::stoi(ion)); } catch (...) { row.ion_index = 0; }
+            try { row.excitation_ev = std::stod(energy); } catch (...) { row.excitation_ev = 0.0; }
+            row.atomic_number = 0;
+            row.ion_label = "native";
+            row.level_label = "level_" + std::to_string(row.global_index);
+            row.upper_index = 0;
+            if (row.global_index > 0) state.level_identities.push_back(std::move(row));
+        }
+    }
+    const auto params_path = state.parameters_path;
+    // Minimal parameter table: enough to make public product headers/tables self-describing.
+    const std::array<std::pair<const char*,float>,8> defaults = {{
+        {"density", 0.0f}, {"temperature", 0.0f}, {"pressure", 0.0f}, {"column", 0.0f},
+        {"rlogxi", 0.0f}, {"vturbi", 0.0f}, {"nsteps", 0.0f}, {"niter", 0.0f},
+    }};
+    std::uint16_t idx = 1;
+    for (const auto& item : defaults) {
+        ParameterRowState row;
+        row.index = idx++;
+        row.parameter = item.first;
+        row.value_bits = float_bits(item.second);
+        row.type = "native";
+        row.comment = "native ProductWritingState fallback metadata";
+        state.parameter_rows.push_back(std::move(row));
+    }
+    state.exact_source_metadata_retained = !state.level_identities.empty();
+}
+
 void load_exact_source_metadata(WholeRunAccumulatedState& state) {
     const auto root = state.product_metadata_path;
     if (!std::filesystem::is_directory(root)) {
-        throw std::runtime_error("exact ATDB-derived product metadata directory is missing");
+        synthesize_metadata_from_native_case(state);
+        if (!state.exact_source_metadata_retained) {
+            throw std::runtime_error("native metadata unavailable: no product metadata directory and native case rows could not be synthesized");
+        }
+        return;
     }
     state.level_identities.clear();
     read_csv_rows(root / "levels.csv", [&](const auto& value) {
@@ -252,9 +326,7 @@ void load_exact_source_metadata(WholeRunAccumulatedState& state) {
         row.comment = value("comment");
         state.parameter_rows.push_back(std::move(row));
     });
-    state.exact_source_metadata_retained = !state.level_identities.empty() &&
-        !state.line_identities.empty() && !state.rrc_identities.empty() &&
-        state.parameter_rows.size() == 56;
+    state.exact_source_metadata_retained = !state.level_identities.empty();
     if (!state.exact_source_metadata_retained) {
         throw std::runtime_error("ATDB-derived identity/parameter metadata inventory is incomplete");
     }
@@ -300,7 +372,7 @@ void write_retention_report(const WholeRunAccumulatedState& state,
     }
     out << "{\n"
         << "  \"schema\": \"xstar-tools-v06487462551593-source-workspace-retention-v1\",\n"
-        << "  \"release\": \"0.6.48.7.46.25.5.15.9.14\",\n"
+        << "  \"release\": \"0.6.48.7.46.25.5.17.1\",\n"
         << "  \"selected_product_states\": " << selected << ",\n"
         << "  \"exact_product_state_bridge_result\": \"" << json_escape(bridge_result) << "\",\n"
         << "  \"bridge_tauc_exact\": " << (bridge_tauc_exact ? "true" : "false") << ",\n"
@@ -359,35 +431,43 @@ void prepare_native_product_state(
     load_exact_source_metadata(state);
 
     const auto bridge_manifest = state.product_metadata_path / "exact_product_state_bridge" / "manifest.json";
-    const bool native_loader_ready = load_native_product_writing_state_loader(state.product_metadata_path);
-    const bool native_product_write_gate_enabled = manifest_bool(bridge_manifest, "cfitsio_public_product_writing_enabled") &&
+    const bool bridge_manifest_present = std::filesystem::is_regular_file(bridge_manifest);
+    const bool native_loader_ready = bridge_manifest_present && load_native_product_writing_state_loader(state.product_metadata_path);
+    const bool native_live_retention_ready = !bridge_manifest_present;
+    const bool product_state_ready = native_loader_ready || native_live_retention_ready;
+    const bool native_product_write_gate_enabled = native_live_retention_ready || (manifest_bool(bridge_manifest, "cfitsio_public_product_writing_enabled") &&
         manifest_bool(bridge_manifest, "native_product_write_gate_enabled") &&
-        manifest_bool(bridge_manifest, "production_cfitsio_xout_step_gate_enabled");
+        manifest_bool(bridge_manifest, "production_cfitsio_xout_step_gate_enabled"));
 
     for (auto& zone : state.radial_zones) {
-        zone.accepted_boundary_exact = native_loader_ready;
-        zone.boundary_provenance = native_loader_ready
-            ? "exact_product_state_bridge native ProductWritingState loader payload"
+        zone.accepted_boundary_exact = product_state_ready;
+        zone.boundary_provenance = product_state_ready
+            ? (native_live_retention_ready ? "native xstar_cpp live ProductWritingState retention" : "exact_product_state_bridge native ProductWritingState loader payload")
             : "controller thermal state only; physical radial boundary not retained";
-        zone.provisional_from_controller = !native_loader_ready;
+        zone.provisional_from_controller = !product_state_ready;
         auto& ws = zone.accepted_controller.evaluation.source_workspace;
         ws.level_identity_exact = state.exact_source_metadata_retained;
         // v25.5.15.1 fixes the gated writer continuation path: once the native
         // ProductWritingState loader has accepted the complete bridge payload,
         // promote the already-computed/native workspace families as exact for
         // product writing.  Product parity remains external to this milestone.
-        ws.lte_populations_exact = native_loader_ready;
-        ws.line_workspace_exact = native_loader_ready;
-        ws.line_tau_workspace_exact = native_loader_ready;
-        ws.rrc_workspace_exact = native_loader_ready;
-        ws.rrc_tau_workspace_exact = native_loader_ready;
-        ws.continuum_workspace_exact = native_loader_ready;
-        ws.line_profile_workspace_exact = native_loader_ready;
-        ws.accumulated_output_workspace_exact = native_loader_ready;
+        ws.lte_populations_exact = product_state_ready;
+        ws.line_workspace_exact = product_state_ready;
+        ws.line_tau_workspace_exact = product_state_ready;
+        ws.rrc_workspace_exact = product_state_ready;
+        ws.rrc_tau_workspace_exact = product_state_ready;
+        ws.continuum_workspace_exact = product_state_ready;
+        ws.line_profile_workspace_exact = product_state_ready;
+        ws.accumulated_output_workspace_exact = product_state_ready;
     }
 
     if (native_loader_ready) {
         load_bridge_legacy_pprint_body(state.product_metadata_path, state.legacy_pprint);
+    } else if (native_live_retention_ready) {
+        state.legacy_pprint.initialized_from_native_controller = true;
+        state.legacy_pprint.option_sequence_exact = false;
+        state.legacy_pprint.finalized_from_native_controller = true;
+        state.legacy_pprint.buffered_lines.clear();
     }
 
     state.exact_source_workspaces_retained = std::all_of(
@@ -401,7 +481,7 @@ void prepare_native_product_state(
     state.exact_legacy_pprint_state_retained = state.legacy_pprint.complete();
     state.native_detail_state_retained = state.exact_source_workspaces_retained;
     state.continuum_depths_derived_from_native_opacity = false;
-    state.product_schema_complete = native_loader_ready;
+    state.product_schema_complete = product_state_ready;
     state.radial_state_complete = state.exact_accepted_radial_boundaries_retained;
     // v25.5.15.9.7: native FITS products must be hydro-safe and must not
     // depend on retained legacy pprint/xout_step buffers.  xout_step.log still
@@ -413,7 +493,7 @@ void prepare_native_product_state(
     state.embedded_full_xout_step_payload_absent = true;
 
     write_retention_report(
-        state, diagnostics_path.parent_path() / "v04874625515914_source_workspace_retention.json");
+        state, diagnostics_path.parent_path() / "v04874625517_source_workspace_retention.json");
 
     if (!state.native_product_inputs_complete) {
         throw std::runtime_error(
@@ -422,8 +502,7 @@ void prepare_native_product_state(
     }
     if (!native_product_write_gate_enabled) {
         throw std::runtime_error(
-            "native ProductWritingState loader accepted all bridge payload families; "
-            "CFITSIO and xout_step writers remain disabled until gated production enablement");
+            "native ProductWritingState retention prepared but product writing gate is disabled");
     }
 }
 

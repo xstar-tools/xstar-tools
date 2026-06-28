@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 0.6.48.7.46.25.5.17.25.15 - 2026-06-28
+
+- Added call-3+ first-DSEC hydrogen excited-row absolute-negligibility qualification for sequence-23 branch-boundary hydrogen population rows.
+- Kept raw native solve/commit state and product publication disabled.
+
 ## v0.6.48.7.46.25.5.15.9.7 - 2026-06-27
 
 - Fixes v25.5.9.1 preview flag routing regression: use `XSTAR_V0487462551597_WRITE_SCHEMA_PREVIEW=1`.

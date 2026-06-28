@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+import csv
+import hashlib
 import json
 import os
 from typing import Any, Iterable, Mapping, Sequence
@@ -1950,6 +1952,144 @@ def _zero_detail_shell_output(record: DetailShellOutput) -> DetailShellOutput:
         source_file=record.source_file,
     )
 
+
+def _array_sha256(array: np.ndarray) -> str:
+    arr = np.ascontiguousarray(array)
+    return hashlib.sha256(arr.tobytes()).hexdigest()
+
+
+def _write_f8(path: Path, values: np.ndarray) -> dict[str, Any]:
+    arr = np.ascontiguousarray(np.asarray(values, dtype='<f8'))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(arr.tobytes())
+    finite = np.isfinite(arr)
+    return {
+        "path": path.name,
+        "dtype": "float64-le",
+        "shape": list(arr.shape),
+        "count": int(arr.size),
+        "finite_count": int(finite.sum()),
+        "nonzero_count": int(np.count_nonzero(arr)),
+        "min": float(np.nanmin(arr)) if arr.size else 0.0,
+        "max": float(np.nanmax(arr)) if arr.size else 0.0,
+        "abs_max": float(np.nanmax(np.abs(arr))) if arr.size else 0.0,
+        "sha256": _array_sha256(arr),
+    }
+
+
+def _maybe_export_detail_continuum_product_write_state(
+    state: XSTARPythonState,
+    *,
+    hdunum: int,
+    terminal_record: bool,
+    workspace: Any,
+    record: DetailShellOutput,
+) -> None:
+    """Optionally dump the exact source state passed to build_detail_continuum_table.
+
+    This is a diagnostic bridge hook only.  It writes the caller-owned fstepr4
+    product-write arrays at the same boundary where Python constructs
+    xo01_detal4.fits.  It does not read public products, pprint, xout_step.log,
+    or oracle FITS values.
+    """
+    root_text = (
+        os.environ.get("XSTAR_V04874625517_DETAIL_CONTINUUM_CAPTURE_DIR")
+        or os.environ.get("XSTAR_DETAIL_CONTINUUM_CAPTURE_DIR")
+        or str(state.control.get("detail_continuum_capture_dir", "") or "")
+    )
+    if not root_text:
+        return
+    try:
+        root = Path(root_text)
+        pass_index = int(state.transfer.pass_index)
+        # write_detail_output_files() materializes detail HDUs by store.records
+        # order, not by the source after-HDU ledger.  The terminal record may
+        # have the same source hdunum as the preceding record, so using
+        # hdunum+1 overwrote the fourth/fifth continuum captures into HDU 6
+        # and left no product-write arrays for HDU 7.  Keep source_hdunum in
+        # metadata, but name capture directories by their final output HDU.
+        capture_counts = state.outputs.setdefault("detail_continuum_capture_record_counts", {})
+        key = int(pass_index)
+        record_ordinal = int(capture_counts.get(key, 0)) + 1
+        capture_counts[key] = record_ordinal
+        output_hdu = record_ordinal + 2
+        source_inserted_hdu = int(hdunum) + 1
+        zone_index = int(getattr(state.transfer, "zone_index", 0))
+        out_dir = root / f"pass_{pass_index:04d}_hdu_{output_hdu:04d}"
+        continuum = record.continuum
+        n = int(continuum.nrows)
+        opakc = np.asarray(getattr(workspace, "opakc"), dtype='<f8').reshape(-1)[:n]
+        rccemis = np.asarray(getattr(workspace, "rccemis"), dtype='<f8')[:, :n]
+        if rccemis.shape != (2, n) or opakc.shape != (n,):
+            raise OutputWriterPortError("detail continuum product-write capture shape mismatch")
+        energy = np.asarray(continuum.values["energy"], dtype='<f8').reshape(-1)[:n]
+        emis_out = np.asarray(continuum.values["emis out"], dtype='<f8').reshape(-1)[:n]
+        emis_in = np.asarray(continuum.values["emis in"], dtype='<f8').reshape(-1)[:n]
+        fwd = np.asarray(continuum.values["fwd dpth"], dtype='<f8').reshape(-1)[:n]
+        bck = np.asarray(continuum.values["bck dpth"], dtype='<f8').reshape(-1)[:n]
+        dpthc = np.vstack([fwd, bck])
+        stats = {
+            "opakc": _write_f8(out_dir / "product_write_opakc.bin", opakc),
+            "rccemis": _write_f8(out_dir / "product_write_rccemis.bin", rccemis),
+            "detail_energy_ev": _write_f8(out_dir / "product_write_detail_energy_ev.bin", energy),
+            "dpthc": _write_f8(out_dir / "product_write_dpthc.bin", dpthc),
+            "energy": _write_f8(out_dir / "product_write_energy_ev.bin", energy),
+            "emis_out_column": _write_f8(out_dir / "product_write_emis_out_column.bin", emis_out),
+            "emis_in_column": _write_f8(out_dir / "product_write_emis_in_column.bin", emis_in),
+            "fwd_dpth_column": _write_f8(out_dir / "product_write_fwd_dpth_column.bin", fwd),
+            "bck_dpth_column": _write_f8(out_dir / "product_write_bck_dpth_column.bin", bck),
+        }
+        rows_path = out_dir / "product_write_detail_continuum_rows.csv"
+        with rows_path.open("w", newline="") as fp:
+            writer = csv.writer(fp)
+            writer.writerow([
+                "pass_index", "hdu_index", "zone_index", "terminal_record",
+                "row_index_one_based", "full_bin_one_based", "energy_eV",
+                "opakc", "rccemis_plane0_emis_out", "rccemis_plane1_emis_in",
+                "fwd_dpth", "bck_dpth", "source_function",
+            ])
+            for i in range(n):
+                writer.writerow([
+                    pass_index, output_hdu, zone_index, bool(terminal_record),
+                    i + 1, i + 1, float(energy[i]), float(opakc[i]),
+                    float(rccemis[0, i]), float(rccemis[1, i]),
+                    float(fwd[i]), float(bck[i]),
+                    "xstar_tools.xstar.output_writers.build_detail_continuum_table",
+                ])
+        manifest = {
+            "schema": "xstar-tools-v064874625517-product-write-detail-continuum-state-v1",
+            "release": "0.6.48.7.46.25.5.17",
+            "pass_index": pass_index,
+            "hdu_index": output_hdu,
+            "record_ordinal": record_ordinal,
+            "source_hdunum": int(hdunum),
+            "source_inserted_hdu": source_inserted_hdu,
+            "zone_index": zone_index,
+            "terminal_record": bool(terminal_record),
+            "ncn2": n,
+            "source_state": "exact Python product-write-time fstepr4 workspace",
+            "source_function": "xstar_tools.xstar.output_writers.build_detail_continuum_table",
+            "plane_semantics": {
+                "rccemis[0,:]": "emis out column",
+                "rccemis[1,:]": "emis in column",
+                "opakc[:]": "opacity column",
+            },
+            "rows_csv": rows_path.name,
+            "arrays": stats,
+            "result": "ACCEPT_EXACT_PRODUCT_WRITE_DETAIL_CONTINUUM_STATE_CAPTURED",
+        }
+        (out_dir / "product_write_detail_continuum_manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+    except Exception as exc:
+        # Diagnostics must not perturb the scientific run; record failures if possible.
+        try:
+            fail_root = Path(root_text)
+            fail_root.mkdir(parents=True, exist_ok=True)
+            (fail_root / "product_write_detail_continuum_capture_error.json").write_text(
+                json.dumps({"result": "REJECT_CAPTURE_FAILED", "error": str(exc)}, indent=2, sort_keys=True) + "\n"
+            )
+        except Exception:
+            pass
+
 def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int, terminal_record: bool = False) -> DetailShellOutput:
     from .radial_transfer import _workspace_from_state, _level_arrays_from_state
 
@@ -1978,6 +2118,11 @@ def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int, ter
         dpthc=workspace.dpthc,
         ncn2=ncn2,
     )
+    _maybe_export_detail_continuum_product_write_state(
+        state, hdunum=int(hdunum), terminal_record=bool(terminal_record),
+        workspace=workspace, record=record,
+    )
+
     if bool(terminal_record):
         # v0.5.10: source detail output does not zero the terminal shell.
         # The terminal detail record reuses the caller-owned final radial
