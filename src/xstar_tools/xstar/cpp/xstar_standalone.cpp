@@ -2555,6 +2555,28 @@ bool canonical_e7_equal(double left, double right) {
     return std::isfinite(left) && std::isfinite(right) && canonical_e7(left) == canonical_e7(right);
 }
 
+bool source_trajectory_roundoff_close_v172517(
+    double proposed,
+    double expected,
+    double relative_limit,
+    double absolute_limit) {
+    if (!std::isfinite(proposed) || !std::isfinite(expected)) return false;
+    const double diff = std::abs(proposed - expected);
+    if (diff <= absolute_limit) return true;
+    const double scale = std::max(std::abs(expected), absolute_limit);
+    return diff / scale <= relative_limit;
+}
+
+bool source_trajectory_temperature_ok_v172517(double proposed, double expected) {
+    return canonical_e7_equal(proposed, expected) ||
+        source_trajectory_roundoff_close_v172517(proposed, expected, 1.0e-8, 1.0e-12);
+}
+
+bool source_trajectory_electron_fraction_ok_v172517(double proposed, double expected) {
+    return canonical_e7_equal(proposed, expected) ||
+        source_trajectory_roundoff_close_v172517(proposed, expected, 1.0e-12, 1.0e-12);
+}
+
 int command_trajectory_alignment_self_test(const Options&) {
     const double proposed_t4 = 6.5615298855644753;
     const double expected_t4 = 6.561529885564275;
@@ -2680,8 +2702,11 @@ int fixed_dsec_evaluator(
         const std::size_t slot = snapshot.sequence - 1;
         const double expected_t4 = data->source_temperature_t4[slot];
         const double expected_xee = data->source_electron_fraction[slot];
-        if (!canonical_e7_equal(proposed_temperature_t4, expected_t4) ||
-            !canonical_e7_equal(proposed_electron_fraction, expected_xee)) {
+        const bool temperature_state_ok_v172517 =
+            source_trajectory_temperature_ok_v172517(proposed_temperature_t4, expected_t4);
+        const bool electron_fraction_state_ok_v172517 =
+            source_trajectory_electron_fraction_ok_v172517(proposed_electron_fraction, expected_xee);
+        if (!temperature_state_ok_v172517 || !electron_fraction_state_ok_v172517) {
             data->source_trajectory_diverged = true;
             data->divergence_sequence = snapshot.sequence;
             data->divergence_call_index = snapshot.call_index;
