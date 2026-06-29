@@ -7771,6 +7771,97 @@ void write_accepted_checkpoint_v1724(
     write_binary(data.checkpoint_dir_v1724 / (stem.str() + "_lte.bin"), snapshot.lte_populations);
 }
 
+
+std::uintmax_t regular_file_size_or_zero_v172520(const std::filesystem::path& path) {
+    std::error_code ec;
+    if (!std::filesystem::is_regular_file(path, ec)) return 0;
+    const auto size = std::filesystem::file_size(path, ec);
+    return ec ? 0 : size;
+}
+
+bool write_full61_retention_staging_v172520(
+    const std::filesystem::path& output,
+    const FixedDsecEvaluatorData& data,
+    const std::vector<FixedDsecSnapshot>& snapshots,
+    std::string& error) {
+    try {
+        const auto root = output / "_native_product_state_retention";
+        const auto checkpoints = output / "accepted_checkpoints";
+        std::filesystem::create_directories(root);
+        std::size_t json_count = 0, population_count = 0, lte_count = 0;
+        std::uintmax_t json_bytes = 0, population_bytes = 0, lte_bytes = 0;
+        std::ofstream inventory(root / "retained_checkpoint_inventory.csv");
+        inventory << "filename,kind,bytes\n";
+        if (std::filesystem::is_directory(checkpoints)) {
+            std::vector<std::filesystem::path> files;
+            for (const auto& entry : std::filesystem::directory_iterator(checkpoints)) {
+                if (entry.is_regular_file()) files.push_back(entry.path());
+            }
+            std::sort(files.begin(), files.end());
+            for (const auto& file : files) {
+                const std::string name = file.filename().string();
+                const auto bytes = regular_file_size_or_zero_v172520(file);
+                std::string kind = "other";
+                if (name.size() >= 5 && name.substr(name.size() - 5) == ".json") {
+                    kind = "controller_state_json"; ++json_count; json_bytes += bytes;
+                } else if (name.find("_populations.bin") != std::string::npos) {
+                    kind = "population_binary"; ++population_count; population_bytes += bytes;
+                } else if (name.find("_lte.bin") != std::string::npos) {
+                    kind = "lte_binary"; ++lte_count; lte_bytes += bytes;
+                }
+                inventory << name << ',' << kind << ',' << bytes << '\n';
+            }
+        }
+        const bool checkpoint_complete = json_count == 61 && population_count == 61 && lte_count == 61;
+        const bool trajectory_complete = data.accepted_runtime_ordinal_v1724 == 61 && !data.gate_failed_v1724 && snapshots.size() == 61;
+        const std::uintmax_t trajectory_bytes = regular_file_size_or_zero_v172520(output / "native_controller_trajectory.csv");
+        const std::uintmax_t acceptance_bytes = regular_file_size_or_zero_v172520(output / "per_evaluation_acceptance.csv");
+        std::ofstream manifest(root / "product_state_retention_manifest.json");
+        manifest << std::boolalpha << std::setprecision(17)
+                 << "{\n"
+                 << "  \"schema\": \"xstar-tools-v048746255172520-full61-product-state-retention-staging-v1\",\n"
+                 << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
+                 << "  \"retention_source\": \"accepted_true_native_controller_checkpoints\",\n"
+                 << "  \"full_accepted_trajectory_required\": 61,\n"
+                 << "  \"accepted_runtime_evaluations\": " << data.accepted_runtime_ordinal_v1724 << ",\n"
+                 << "  \"last_accepted_source_sequence\": " << data.last_accepted_sequence_v1724 << ",\n"
+                 << "  \"first_failed_source_sequence\": " << data.first_failed_sequence_v1724 << ",\n"
+                 << "  \"trajectory_snapshot_count\": " << snapshots.size() << ",\n"
+                 << "  \"checkpoint_json_count\": " << json_count << ",\n"
+                 << "  \"checkpoint_population_binary_count\": " << population_count << ",\n"
+                 << "  \"checkpoint_lte_binary_count\": " << lte_count << ",\n"
+                 << "  \"checkpoint_json_bytes\": " << json_bytes << ",\n"
+                 << "  \"checkpoint_population_binary_bytes\": " << population_bytes << ",\n"
+                 << "  \"checkpoint_lte_binary_bytes\": " << lte_bytes << ",\n"
+                 << "  \"native_controller_trajectory_bytes\": " << trajectory_bytes << ",\n"
+                 << "  \"per_evaluation_acceptance_bytes\": " << acceptance_bytes << ",\n"
+                 << "  \"full_61_trajectory_gate\": " << trajectory_complete << ",\n"
+                 << "  \"checkpoint_retention_complete\": " << checkpoint_complete << ",\n"
+                 << "  \"product_state_retention_enabled\": " << (trajectory_complete && checkpoint_complete) << ",\n"
+                 << "  \"productwritingstate_comparison_gate\": \"NOT_RUN\",\n"
+                 << "  \"oracle_compatible_row_selection_gate\": \"NOT_RUN\",\n"
+                 << "  \"product_publication_enabled\": false,\n"
+                 << "  \"fits_products_written\": 0,\n"
+                 << "  \"xout_step_written\": false,\n"
+                 << "  \"result\": \"" << ((trajectory_complete && checkpoint_complete) ?
+                        "ACCEPT_FULL61_RETENTION_STAGING_NO_PRODUCT_PUBLICATION" :
+                        "REJECT_FULL61_RETENTION_STAGING_INCOMPLETE") << "\"\n"
+                 << "}\n";
+        std::ofstream gate(root / "retention_gate.txt");
+        gate << "V048746255172520_PRODUCT_STATE_RETENTION_ENABLED=" << ((trajectory_complete && checkpoint_complete) ? "YES" : "NO") << '\n'
+             << "V048746255172520_PRODUCTWRITINGSTATE_RETENTION_GATE=" << ((trajectory_complete && checkpoint_complete) ? "ACCEPT" : "REJECT") << '\n'
+             << "V048746255172520_PRODUCTWRITINGSTATE_COMPARISON_GATE=NOT_RUN\n"
+             << "V048746255172520_ORACLE_COMPATIBLE_ROW_SELECTION_GATE=NOT_RUN\n"
+             << "V048746255172520_PRODUCT_PUBLICATION_ENABLED=NO\n"
+             << "V048746255172520_FITS_PRODUCTS_WRITTEN=0\n"
+             << "V048746255172520_XOUT_STEP_LOG_WRITTEN=0\n";
+        return trajectory_complete && checkpoint_complete;
+    } catch (const std::exception& exc) {
+        error = exc.what();
+        return false;
+    }
+}
+
 int command_run_native_resumable_trajectory_v1724(Options options) {
     const auto output = std::filesystem::path(options.output_dir);
     std::filesystem::create_directories(output);
@@ -7920,9 +8011,12 @@ int command_run_native_resumable_trajectory_v1724(Options options) {
     }
     const bool full_accept = data.accepted_runtime_ordinal_v1724 == 61 && !data.gate_failed_v1724;
     const bool prefix_accept = data.stop_requested_v1724 && !data.gate_failed_v1724;
+    std::string retention_error_v172520;
+    const bool retention_staged_v172520 = full_accept &&
+        write_full61_retention_staging_v172520(output, data, snapshots, retention_error_v172520);
     std::ofstream summary(output / "native_resumable_trajectory_summary.json");
     summary << std::boolalpha << std::setprecision(17)
-        << "{\n  \"schema\": \"xstar-tools-v04874625517256-resumable-trajectory-v1\",\n"
+        << "{\n  \"schema\": \"xstar-tools-v048746255172520-resumable-trajectory-with-retention-staging-v1\",\n"
         << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
         << "  \"controller_mode\": \"true_native_autonomous_generic_loop\",\n"
         << "  \"qualification_contracts_are_controller_input\": false,\n"
@@ -7936,30 +8030,44 @@ int command_run_native_resumable_trajectory_v1724(Options options) {
         << "  \"full_61_trajectory_accept\": " << full_accept << ",\n"
         << "  \"prefix_stop_accept\": " << prefix_accept << ",\n"
         << "  \"bridge_runtime_input_used\": false,\n"
-        << "  \"product_state_retention_enabled\": false,\n"
+        << "  \"product_state_retention_enabled\": " << retention_staged_v172520 << ",\n"
+        << "  \"product_state_retention_gate\": \"" << (full_accept ? (retention_staged_v172520 ? "ACCEPT" : "REJECT") : "NOT_RUN") << "\",\n"
+        << "  \"productwritingstate_comparison_gate\": \"NOT_RUN\",\n"
+        << "  \"oracle_compatible_row_selection_gate\": \"NOT_RUN\",\n"
         << "  \"product_publication_enabled\": false,\n"
         << "  \"fits_products_written\": 0,\n"
         << "  \"xout_step_written\": false,\n"
-        << "  \"result\": \"" << (full_accept ? "ACCEPT_FULL_61" : prefix_accept ? "ACCEPT_PREFIX_STOP" :
+        << "  \"result\": \"" << (full_accept ? (retention_staged_v172520 ?
+            "ACCEPT_FULL_61_PRODUCT_STATE_RETENTION_STAGED" : "REJECT_FULL_61_PRODUCT_STATE_RETENTION") :
+            prefix_accept ? "ACCEPT_PREFIX_STOP" :
             data.gate_failed_v1724 ? "REJECT_FIRST_EVALUATION_GATE" : "REJECT_RUNTIME") << "\"\n}\n";
-    std::cout << "V048746255172519_TRUE_NATIVE_CONTROLLER=YES\n"
-              << "V048746255172519_GENERIC_TRAJECTORY_LOOP=ENABLED\n"
-              << "V048746255172519_QUALIFICATION_CONTRACTS_CONTROLLER_INPUT=NO\n"
-              << "V048746255172519_DETERMINISTIC_REPLAY_RESUME=ENABLED\n"
-              << "V048746255172519_ACCEPTED_RUNTIME_EVALUATIONS=" << data.accepted_runtime_ordinal_v1724 << "\n"
-              << "V048746255172519_LAST_ACCEPTED_SOURCE_SEQUENCE=" << data.last_accepted_sequence_v1724 << "\n"
-              << "V048746255172519_FIRST_FAILED_SOURCE_SEQUENCE=" << data.first_failed_sequence_v1724 << "\n"
-              << "V048746255172519_FIRST_FAILURE_REASON=" << data.first_failure_reason_v1724 << "\n"
-              << "V048746255172519_FULL_ACCEPTED_TRAJECTORY_COUNT=" << (full_accept ? 61 : data.accepted_runtime_ordinal_v1724) << "\n"
-              << "V048746255172519_FULL_61_TRAJECTORY_GATE=" << (full_accept ? "ACCEPT" : "NOT_REACHED") << "\n"
-              << "V048746255172519_PRODUCT_STATE_RETENTION_ENABLED=NO\n"
-              << "V048746255172519_PRODUCT_PUBLICATION_ENABLED=NO\n"
-              << "V048746255172519_FITS_PRODUCTS_WRITTEN=0\n"
-              << "V048746255172519_XOUT_STEP_LOG_WRITTEN=0\n"
-              << "V048746255172519_RESULT=" << (full_accept ? "ACCEPT_FULL_61_NO_PRODUCT_PUBLICATION" :
+    std::cout << "V048746255172520_TRUE_NATIVE_CONTROLLER=YES\n"
+              << "V048746255172520_GENERIC_TRAJECTORY_LOOP=ENABLED\n"
+              << "V048746255172520_QUALIFICATION_CONTRACTS_CONTROLLER_INPUT=NO\n"
+              << "V048746255172520_DETERMINISTIC_REPLAY_RESUME=ENABLED\n"
+              << "V048746255172520_ACCEPTED_RUNTIME_EVALUATIONS=" << data.accepted_runtime_ordinal_v1724 << "\n"
+              << "V048746255172520_LAST_ACCEPTED_SOURCE_SEQUENCE=" << data.last_accepted_sequence_v1724 << "\n"
+              << "V048746255172520_FIRST_FAILED_SOURCE_SEQUENCE=" << data.first_failed_sequence_v1724 << "\n"
+              << "V048746255172520_FIRST_FAILURE_REASON=" << data.first_failure_reason_v1724 << "\n"
+              << "V048746255172520_FULL_ACCEPTED_TRAJECTORY_COUNT=" << (full_accept ? 61 : data.accepted_runtime_ordinal_v1724) << "\n"
+              << "V048746255172520_FULL_61_TRAJECTORY_GATE=" << (full_accept ? "ACCEPT" : "NOT_REACHED") << "\n"
+              << "V048746255172520_PRODUCT_STATE_RETENTION_ENABLED=" << (retention_staged_v172520 ? "YES" : "NO") << "\n"
+              << "V048746255172520_PRODUCTWRITINGSTATE_RETENTION_GATE=" << (full_accept ? (retention_staged_v172520 ? "ACCEPT" : "REJECT") : "NOT_RUN") << "\n"
+              << "V048746255172520_PRODUCTWRITINGSTATE_COMPARISON_GATE=NOT_RUN\n"
+              << "V048746255172520_ORACLE_COMPATIBLE_ROW_SELECTION_GATE=NOT_RUN\n"
+              << "V048746255172520_PRODUCT_PUBLICATION_ENABLED=NO\n"
+              << "V048746255172520_FITS_PRODUCTS_WRITTEN=0\n"
+              << "V048746255172520_XOUT_STEP_LOG_WRITTEN=0\n"
+              << "V048746255172520_RESULT=" << (full_accept ? (retention_staged_v172520 ?
+                  "ACCEPT_FULL_61_PRODUCT_STATE_RETENTION_STAGED_NO_PRODUCT_PUBLICATION" :
+                  "REJECT_FULL_61_PRODUCT_STATE_RETENTION") :
                   prefix_accept ? "ACCEPT_RESUMABLE_PREFIX_NO_PRODUCT_PUBLICATION" :
                   data.gate_failed_v1724 ? "REJECT_FIRST_EVALUATION_GATE_FAIL_CLOSED" : "REJECT_RUNTIME") << "\n";
-    if (full_accept || prefix_accept) return 0;
+    if (!retention_error_v172520.empty()) {
+        std::cerr << "full-61 product-state retention staging failed: " << retention_error_v172520 << "\n";
+    }
+    if (full_accept) return retention_staged_v172520 ? 0 : 20;
+    if (prefix_accept) return 0;
     return data.gate_failed_v1724 ? 20 : (rc == 0 ? 1 : rc);
 }
 
