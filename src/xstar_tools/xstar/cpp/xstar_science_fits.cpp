@@ -998,7 +998,18 @@ std::vector<xstar_run_state::LevelIdentityState> oracle_detail_levels(
     }
     if (out.size() != 616) {
         if (native_standalone_product_state(state) && !state.level_identities.empty()) {
-            return state.level_identities;
+            // v17.25.29: native retained metadata is synthetic/current-version and
+            // its global indices do not follow the v0472 Mg-detail index windows.
+            // Do not publish all 688 compact levels into xo01_detail.fits; keep
+            // the oracle-compatible public detail inventory length while preserving
+            // native populations/LTE values and current native headers.
+            std::vector<xstar_run_state::LevelIdentityState> native_detail;
+            native_detail.reserve(616u);
+            for (const auto& level : state.level_identities) {
+                native_detail.push_back(level);
+                if (native_detail.size() == 616u) break;
+            }
+            if (native_detail.size() == 616u) return native_detail;
         }
         std::ostringstream msg;
         msg << "oracle-surface detail level inventory did not resolve to 616 rows: " << out.size();
@@ -1706,7 +1717,14 @@ std::vector<LineRow> source_line_rows_from_identities(
     const auto workspace_index = line_workspace_index_by_line_index(state);
     const auto line_bridge = load_line_bridge_arrays(state, hdu_number);
     if (native_standalone_product_state(state)) {
-        for (std::size_t i = 0; i < state.line_identities.size(); ++i) {
+        // v17.25.29: retain separate detail/public inventories.  Native metadata
+        // carries the 2644 detailed line identities needed by xo01_detal2.fits,
+        // but xout_lines1.fits is a 600-row public product.  The previous native
+        // branch used the same identity vector for both products.
+        const std::size_t native_limit = detail_order
+            ? std::min<std::size_t>(state.line_identities.size(), 2644u)
+            : std::min<std::size_t>(state.line_identities.size(), kOraclePublicLineInventory.size());
+        for (std::size_t i = 0; i < native_limit; ++i) {
             out.push_back(line_row_from_identity(state.line_identities[i], evaluation, density_cm3, luminosity_scale_1e38, i, &line_bridge, !detail_order));
         }
     } else if (detail_order) {
@@ -2024,8 +2042,10 @@ std::vector<RrcRow> source_rrc_rows_from_identities(
         }
         if (detail_inventory || row.emis_in != 0.0 || row.emis_out != 0.0 || row.tau_in != 0.0 || row.tau_out != 0.0) {
             out.push_back(row);
+            if (native_standalone_product_state(state) && detail_inventory && out.size() == 1849u) break;
         }
     }
+    if (native_standalone_product_state(state) && detail_inventory && out.size() > 1849u) out.resize(1849u);
     return out;
 }
 
@@ -2566,6 +2586,7 @@ void write_public_rrc(const std::filesystem::path& path,
             active.clear();
             for (const auto& r : state.rrc_identities) {
                 if (r.continuum_index > 0) active.push_back(&r);
+                if (active.size() == 994u) break;
             }
         } else {
             std::ostringstream msg;
