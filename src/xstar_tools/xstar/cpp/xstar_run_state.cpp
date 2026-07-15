@@ -433,7 +433,18 @@ void prepare_native_product_state(
     const auto bridge_manifest = state.product_metadata_path / "exact_product_state_bridge" / "manifest.json";
     const bool bridge_manifest_present = std::filesystem::is_regular_file(bridge_manifest);
     const bool native_loader_ready = bridge_manifest_present && load_native_product_writing_state_loader(state.product_metadata_path);
-    const bool native_live_retention_ready = !bridge_manifest_present;
+    // v25.5.17.25.24: a complete controller trajectory is not, by itself, a
+    // complete public ProductWritingState.  The v25.5.17.25.23 writer treated
+    // absence of an exact bridge payload as "live retention ready" and therefore
+    // published structurally present but content-poor products: empty line/RRC
+    // tables, zero detail metadata, zero LTE, and compact xout_step.log.
+    // Require the oracle-surface public inventory to be retained before enabling
+    // publication from native live state.
+    const bool native_live_product_surface_ready =
+        state.parameter_rows.size() >= 56u &&
+        state.line_identities.size() >= 600u &&
+        state.rrc_identities.size() >= 994u;
+    const bool native_live_retention_ready = !bridge_manifest_present && native_live_product_surface_ready;
     const bool product_state_ready = native_loader_ready || native_live_retention_ready;
     const bool native_product_write_gate_enabled = native_live_retention_ready || (manifest_bool(bridge_manifest, "cfitsio_public_product_writing_enabled") &&
         manifest_bool(bridge_manifest, "native_product_write_gate_enabled") &&
