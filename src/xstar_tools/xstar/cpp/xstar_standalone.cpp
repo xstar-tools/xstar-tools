@@ -7779,6 +7779,212 @@ std::uintmax_t regular_file_size_or_zero_v172521(const std::filesystem::path& pa
     return ec ? 0 : size;
 }
 
+xstar_run_state::FixedEvaluationState copy_fixed_evaluation_state_v172523(const FixedDsecSnapshot& source) {
+    xstar_run_state::FixedEvaluationState target;
+    target.kind = source.kind;
+    target.sequence = source.sequence;
+    target.call_index = source.call_index;
+    target.evaluation_index = source.evaluation_index;
+    target.temperature_t4 = source.temperature_t4;
+    target.electron_fraction_input = source.electron_fraction_input;
+    target.computed_electron_fraction = source.computed_electron_fraction;
+    target.charge_residual = source.charge_residual;
+    target.hmctot = source.hmctot;
+    target.total_heating = source.total_heating;
+    target.total_cooling = source.total_cooling;
+    target.element_heating = source.element_heating;
+    target.element_cooling = source.element_cooling;
+    target.continuum_heating = source.continuum_heating;
+    target.continuum_cooling = source.continuum_cooling;
+    target.hydrogen_heating = source.hydrogen_heating;
+    target.hydrogen_cooling = source.hydrogen_cooling;
+    target.helium_heating = source.helium_heating;
+    target.helium_cooling = source.helium_cooling;
+    target.magnesium_heating = source.magnesium_heating;
+    target.magnesium_cooling = source.magnesium_cooling;
+    target.compton_heating = source.compton_heating;
+    target.compton_cooling = source.compton_cooling;
+    target.brems_cooling = source.brems_cooling;
+    target.thermal_families_native = source.thermal_families_native;
+    target.runtime_state_abi = source.dsec_runtime_state_abi;
+    target.source_global_rnisg = source.source_global_rnisg;
+    target.populations = source.populations;
+    target.radiation_energy_ev = source.radiation_energy_ev;
+    target.radiation_flux = source.radiation_flux;
+    target.source_continuum_tau_workspace_count = source.source_continuum_tau_workspace_count;
+    target.continuum_tau_in = source.continuum_tau_in;
+    target.continuum_tau_out = source.continuum_tau_out;
+    target.continuum_spectrum = source.continuum_spectrum;
+    target.spectrum = source.spectrum;
+    target.opacity = source.opacity;
+    target.source_workspace.lte_populations = source.lte_populations;
+    target.source_workspace.rcem = source.rcem;
+    target.source_workspace.oplin = source.oplin;
+    target.source_workspace.tau0 = source.tau0;
+    target.source_workspace.elum = source.elum;
+    target.source_workspace.cemab = source.cemab;
+    target.source_workspace.cabab = source.cabab;
+    target.source_workspace.opakab = source.opakab;
+    target.source_workspace.tauc = source.tauc;
+    target.source_workspace.rccemis = source.rccemis;
+    target.source_workspace.opakc = source.opakc;
+    target.source_workspace.line_profile_workspace = source.line_profile_workspace;
+    target.source_workspace.native_line_count = source.native_line_count;
+    target.source_workspace.native_continuum_count = source.native_continuum_count;
+    target.source_workspace.lte_populations_exact =
+        (source.exact_source_workspace_flags & XSTAR_FIXED_EXACT_WORKSPACE_LTE_POPULATIONS) != 0u &&
+        source.lte_populations.size() == source.populations.size();
+    target.source_workspace.line_workspace_exact =
+        (source.exact_source_workspace_flags & XSTAR_FIXED_EXACT_WORKSPACE_LINE) != 0u;
+    target.source_workspace.line_tau_workspace_exact = !source.tau0.empty();
+    target.source_workspace.rrc_workspace_exact =
+        (source.exact_source_workspace_flags & XSTAR_FIXED_EXACT_WORKSPACE_RRC) != 0u;
+    target.source_workspace.rrc_tau_workspace_exact = !source.tauc.empty();
+    target.source_workspace.continuum_workspace_exact =
+        (source.exact_source_workspace_flags & XSTAR_FIXED_EXACT_WORKSPACE_CONTINUUM) != 0u;
+    target.source_workspace.line_profile_workspace_exact =
+        (source.exact_source_workspace_flags & XSTAR_FIXED_EXACT_WORKSPACE_LINE_PROFILE) != 0u;
+    return target;
+}
+
+struct ProductPublicationResultV172523 {
+    bool attempted = false;
+    bool ok = false;
+    std::size_t fits_count = 0;
+    bool step_log_written = false;
+    std::size_t step_log_lines = 0;
+    std::string error;
+};
+
+void remove_native_products_v172523(const std::filesystem::path& output) {
+    for (const char* name : {"xo01_detail.fits", "xo01_detal2.fits", "xo01_detal3.fits", "xo01_detal4.fits",
+             "xout_abund1.fits", "xout_cont1.fits", "xout_lines1.fits", "xout_rrc1.fits", "xout_spect1.fits", "xout_step.log"}) {
+        std::error_code ec;
+        std::filesystem::remove(output / name, ec);
+    }
+}
+
+std::size_t count_native_fits_products_v172523(const std::filesystem::path& output) {
+    std::size_t count = 0;
+    for (const char* name : {"xo01_detail.fits", "xo01_detal2.fits", "xo01_detal3.fits", "xo01_detal4.fits",
+             "xout_abund1.fits", "xout_cont1.fits", "xout_lines1.fits", "xout_rrc1.fits", "xout_spect1.fits"}) {
+        std::error_code ec;
+        if (std::filesystem::is_regular_file(output / name, ec) &&
+            std::filesystem::file_size(output / name, ec) > 0) ++count;
+    }
+    return count;
+}
+
+ProductPublicationResultV172523 publish_full61_products_v172523(
+    const Options& options,
+    const std::filesystem::path& output,
+    const FixedDsecEvaluatorData& data,
+    const std::vector<FixedDsecSnapshot>& snapshots,
+    bool retention_gate,
+    bool comparison_gate,
+    bool row_selection_gate) {
+    ProductPublicationResultV172523 result;
+    const bool upstream_ok = data.accepted_runtime_ordinal_v1724 == 61 && !data.gate_failed_v1724 &&
+        retention_gate && comparison_gate && row_selection_gate && snapshots.size() == 61;
+    if (!upstream_ok) return result;
+    result.attempted = true;
+    const auto root = output / "_native_product_state_retention";
+    const auto publication_manifest = root / "product_publication_manifest.json";
+    try {
+        remove_native_products_v172523(output);
+        xstar_run_state::WholeRunAccumulatedState whole;
+        whole.release = XSTAR_API_VERSION_STRING;
+        whole.backend = "cpp";
+        whole.parameters_path = options.parameters_path;
+        whole.atomic_database_path = options.atomic_db_path;
+        whole.native_case_path = options.case_dir;
+        whole.source_trajectory_path = output / "native_controller_trajectory.csv";
+        whole.product_metadata_path = options.product_metadata_dir;
+        whole.python_callbacks = 0;
+        whole.controller_trajectory_qualified = true;
+        whole.fixed_evaluations.reserve(snapshots.size());
+        for (const auto& snapshot : snapshots) {
+            whole.fixed_evaluations.push_back(copy_fixed_evaluation_state_v172523(snapshot));
+        }
+        auto append_zone = [&](const FixedDsecSnapshot& snapshot, const std::string& reason) {
+            xstar_run_state::AcceptedControllerState accepted;
+            accepted.call_index = snapshot.call_index;
+            accepted.accepted_sequence = snapshot.sequence;
+            accepted.acceptance_reason = reason;
+            accepted.evaluation = copy_fixed_evaluation_state_v172523(snapshot);
+            whole.accepted_controller_states.push_back(accepted);
+            xstar_run_state::RadialZoneState zone;
+            zone.zone_index = whole.radial_zones.size() + 1;
+            zone.pass_index = 1;
+            zone.provisional_from_controller = true;
+            zone.accepted_controller = accepted;
+            whole.radial_zones.push_back(zone);
+        };
+        if (!snapshots.empty()) append_zone(snapshots.front(), "initial_controller_seed");
+        for (const auto& snapshot : snapshots) {
+            if (snapshot.kind == "final") append_zone(snapshot, "controller_call_accepted_state");
+        }
+        const auto diagnostics = root / "publication_diagnostics";
+        std::filesystem::create_directories(diagnostics);
+        xstar_run_state::prepare_native_product_state(whole, diagnostics / "v048746255172523_source_workspace_retention.json");
+        auto product = xstar_run_state::build_product_writing_state(whole);
+        product.measured_run_seconds = 0.0;
+        const std::vector<double> energy = product.fixed_evaluations.empty()
+            ? std::vector<double>{} : product.fixed_evaluations.front().radiation_energy_ev;
+        auto science = xstar_science_fits::write_historical_science_products(
+            options.case_dir, output, product, energy);
+        auto step = xstar_step_log::write_native_step_log(output, product);
+        if (xstar_science_fits::abundance_product_enabled()) {
+            xstar_science_fits::write_native_abundance_product(options.case_dir, output, product);
+            ++science.files_written;
+            science.filenames.push_back("xout_abund1.fits");
+        }
+        xstar_run_state::write_run_state_manifest(output / "native_physical_run_state.json", whole, product);
+        result.fits_count = count_native_fits_products_v172523(output);
+        result.step_log_written = std::filesystem::is_regular_file(output / "xout_step.log") &&
+            regular_file_size_or_zero_v172521(output / "xout_step.log") > 0;
+        result.step_log_lines = step.lines_written;
+        result.ok = result.fits_count == 9 && result.step_log_written;
+        std::ofstream manifest(publication_manifest);
+        manifest << std::boolalpha
+                 << "{\n"
+                 << "  \"schema\": \"xstar-tools-v048746255172523-gated-product-publication-v1\",\n"
+                 << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
+                 << "  \"full_61_trajectory_gate\": true,\n"
+                 << "  \"productwritingstate_retention_gate\": " << retention_gate << ",\n"
+                 << "  \"productwritingstate_comparison_gate\": " << comparison_gate << ",\n"
+                 << "  \"oracle_compatible_row_selection_gate\": " << row_selection_gate << ",\n"
+                 << "  \"product_publication_enabled\": " << result.ok << ",\n"
+                 << "  \"fits_products_written\": " << result.fits_count << ",\n"
+                 << "  \"xout_step_written\": " << result.step_log_written << ",\n"
+                 << "  \"xout_step_lines\": " << result.step_log_lines << ",\n"
+                 << "  \"publication_parity\": \"NOT_CLAIMED\",\n"
+                 << "  \"result\": \"" << (result.ok ? "ACCEPT_GATED_PRODUCT_PUBLICATION" : "REJECT_GATED_PRODUCT_PUBLICATION_INCOMPLETE") << "\"\n"
+                 << "}\n";
+        if (!result.ok) {
+            remove_native_products_v172523(output);
+            result.fits_count = 0;
+            result.step_log_written = false;
+        }
+    } catch (const std::exception& exc) {
+        result.error = exc.what();
+        remove_native_products_v172523(output);
+        result.fits_count = 0;
+        result.step_log_written = false;
+        std::ofstream manifest(publication_manifest);
+        manifest << "{\n"
+                 << "  \"schema\": \"xstar-tools-v048746255172523-gated-product-publication-v1\",\n"
+                 << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
+                 << "  \"product_publication_enabled\": false,\n"
+                 << "  \"fits_products_written\": 0,\n"
+                 << "  \"xout_step_written\": false,\n"
+                 << "  \"error\": \"" << exc.what() << "\",\n"
+                 << "  \"result\": \"REJECT_GATED_PRODUCT_PUBLICATION_EXCEPTION\"\n"
+                 << "}\n";
+    }
+    return result;
+}
+
 bool write_full61_retention_staging_v172521(
     const std::filesystem::path& output,
     const FixedDsecEvaluatorData& data,
@@ -7854,7 +8060,7 @@ bool write_full61_retention_staging_v172521(
         std::ofstream comparison(root / "productwritingstate_comparison_manifest.json");
         comparison << std::boolalpha << std::setprecision(17)
                    << "{\n"
-                   << "  \"schema\": \"xstar-tools-v048746255172522-productwritingstate-comparison-v1\",\n"
+                   << "  \"schema\": \"xstar-tools-v048746255172523-productwritingstate-comparison-v1\",\n"
                    << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
                    << "  \"comparison_source\": \"retained_true_native_controller_checkpoints_vs_runtime_snapshots\",\n"
                    << "  \"trajectory_snapshot_count\": " << snapshots.size() << ",\n"
@@ -7880,7 +8086,7 @@ bool write_full61_retention_staging_v172521(
         std::ofstream rowmanifest(root / "oracle_row_selection_manifest.json");
         rowmanifest << std::boolalpha
                     << "{\n"
-                    << "  \"schema\": \"xstar-tools-v048746255172522-oracle-row-selection-v1\",\n"
+                    << "  \"schema\": \"xstar-tools-v048746255172523-oracle-row-selection-v1\",\n"
                     << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
                     << "  \"source\": \"v0472_python_product_oracle_inventory\",\n"
                     << "  \"row_selection_is_publication\": false,\n"
@@ -7895,7 +8101,7 @@ bool write_full61_retention_staging_v172521(
         std::ofstream manifest(root / "product_state_retention_manifest.json");
         manifest << std::boolalpha << std::setprecision(17)
                  << "{\n"
-                 << "  \"schema\": \"xstar-tools-v048746255172522-full61-product-state-comparison-row-selection-v1\",\n"
+                 << "  \"schema\": \"xstar-tools-v048746255172523-full61-product-state-comparison-row-selection-v1\",\n"
                  << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
                  << "  \"retention_source\": \"accepted_true_native_controller_checkpoints\",\n"
                  << "  \"full_accepted_trajectory_required\": 61,\n"
@@ -7927,13 +8133,13 @@ bool write_full61_retention_staging_v172521(
                  << "}\n";
         std::ofstream gate(root / "retention_gate.txt");
         const bool retention_gate_ok = trajectory_complete && checkpoint_complete;
-        gate << "V048746255172522_PRODUCT_STATE_RETENTION_ENABLED=" << (retention_gate_ok ? "YES" : "NO") << '\n'
-             << "V048746255172522_PRODUCTWRITINGSTATE_RETENTION_GATE=" << (retention_gate_ok ? "ACCEPT" : "REJECT") << '\n'
-             << "V048746255172522_PRODUCTWRITINGSTATE_COMPARISON_GATE=" << (productwritingstate_comparison_ok ? "ACCEPT" : "REJECT") << '\n'
-             << "V048746255172522_ORACLE_COMPATIBLE_ROW_SELECTION_GATE=" << (oracle_compatible_row_selection_ok ? "ACCEPT" : "REJECT") << '\n'
-             << "V048746255172522_PRODUCT_PUBLICATION_ENABLED=NO\n"
-             << "V048746255172522_FITS_PRODUCTS_WRITTEN=0\n"
-             << "V048746255172522_XOUT_STEP_LOG_WRITTEN=0\n";
+        gate << "V048746255172523_PRODUCT_STATE_RETENTION_ENABLED=" << (retention_gate_ok ? "YES" : "NO") << '\n'
+             << "V048746255172523_PRODUCTWRITINGSTATE_RETENTION_GATE=" << (retention_gate_ok ? "ACCEPT" : "REJECT") << '\n'
+             << "V048746255172523_PRODUCTWRITINGSTATE_COMPARISON_GATE=" << (productwritingstate_comparison_ok ? "ACCEPT" : "REJECT") << '\n'
+             << "V048746255172523_ORACLE_COMPATIBLE_ROW_SELECTION_GATE=" << (oracle_compatible_row_selection_ok ? "ACCEPT" : "REJECT") << '\n'
+             << "V048746255172523_PRODUCT_PUBLICATION_ENABLED=NO\n"
+             << "V048746255172523_FITS_PRODUCTS_WRITTEN=0\n"
+             << "V048746255172523_XOUT_STEP_LOG_WRITTEN=0\n";
         if (retention_gate_out) *retention_gate_out = retention_gate_ok;
         if (comparison_gate_out) *comparison_gate_out = productwritingstate_comparison_ok;
         if (row_selection_gate_out) *row_selection_gate_out = oracle_compatible_row_selection_ok;
@@ -8102,9 +8308,12 @@ int command_run_native_resumable_trajectory_v1724(Options options) {
     const bool retention_staged_v172521 = full_accept &&
         write_full61_retention_staging_v172521(output, data, snapshots, retention_error_v172521,
             &retention_gate_v172521, &comparison_gate_v172521, &row_selection_gate_v172521);
+    const auto publication_v172523 = publish_full61_products_v172523(
+        options, output, data, snapshots, retention_gate_v172521, comparison_gate_v172521, row_selection_gate_v172521);
+    const bool product_publication_enabled_v172523 = publication_v172523.ok;
     std::ofstream summary(output / "native_resumable_trajectory_summary.json");
     summary << std::boolalpha << std::setprecision(17)
-        << "{\n  \"schema\": \"xstar-tools-v048746255172522-resumable-trajectory-with-product-state-comparison-row-selection-v1\",\n"
+        << "{\n  \"schema\": \"xstar-tools-v048746255172523-resumable-trajectory-with-product-state-comparison-row-selection-v1\",\n"
         << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
         << "  \"controller_mode\": \"true_native_autonomous_generic_loop\",\n"
         << "  \"qualification_contracts_are_controller_input\": false,\n"
@@ -8122,39 +8331,44 @@ int command_run_native_resumable_trajectory_v1724(Options options) {
         << "  \"product_state_retention_gate\": \"" << (full_accept ? (retention_gate_v172521 ? "ACCEPT" : "REJECT") : "NOT_RUN") << "\",\n"
         << "  \"productwritingstate_comparison_gate\": \"" << (full_accept ? (comparison_gate_v172521 ? "ACCEPT" : "REJECT") : "NOT_RUN") << "\",\n"
         << "  \"oracle_compatible_row_selection_gate\": \"" << (full_accept ? (row_selection_gate_v172521 ? "ACCEPT" : "REJECT") : "NOT_RUN") << "\",\n"
-        << "  \"product_publication_enabled\": false,\n"
-        << "  \"fits_products_written\": 0,\n"
-        << "  \"xout_step_written\": false,\n"
+        << "  \"product_publication_enabled\": " << product_publication_enabled_v172523 << ",\n"
+        << "  \"fits_products_written\": " << publication_v172523.fits_count << ",\n"
+        << "  \"xout_step_written\": " << publication_v172523.step_log_written << ",\n"
+        << "  \"xout_step_lines\": " << publication_v172523.step_log_lines << ",\n"
         << "  \"result\": \"" << (full_accept ? (retention_staged_v172521 ?
-            "ACCEPT_FULL_61_PRODUCT_STATE_COMPARED_ROW_SELECTION_STAGED" : "REJECT_FULL_61_PRODUCT_STATE_RETENTION") :
+            (product_publication_enabled_v172523 ? "ACCEPT_FULL_61_GATED_PRODUCT_PUBLICATION" : "REJECT_FULL_61_PRODUCT_PUBLICATION") :
+            "REJECT_FULL_61_PRODUCT_STATE_RETENTION") :
             prefix_accept ? "ACCEPT_PREFIX_STOP" :
             data.gate_failed_v1724 ? "REJECT_FIRST_EVALUATION_GATE" : "REJECT_RUNTIME") << "\"\n}\n";
-    std::cout << "V048746255172522_TRUE_NATIVE_CONTROLLER=YES\n"
-              << "V048746255172522_GENERIC_TRAJECTORY_LOOP=ENABLED\n"
-              << "V048746255172522_QUALIFICATION_CONTRACTS_CONTROLLER_INPUT=NO\n"
-              << "V048746255172522_DETERMINISTIC_REPLAY_RESUME=ENABLED\n"
-              << "V048746255172522_ACCEPTED_RUNTIME_EVALUATIONS=" << data.accepted_runtime_ordinal_v1724 << "\n"
-              << "V048746255172522_LAST_ACCEPTED_SOURCE_SEQUENCE=" << data.last_accepted_sequence_v1724 << "\n"
-              << "V048746255172522_FIRST_FAILED_SOURCE_SEQUENCE=" << data.first_failed_sequence_v1724 << "\n"
-              << "V048746255172522_FIRST_FAILURE_REASON=" << data.first_failure_reason_v1724 << "\n"
-              << "V048746255172522_FULL_ACCEPTED_TRAJECTORY_COUNT=" << (full_accept ? 61 : data.accepted_runtime_ordinal_v1724) << "\n"
-              << "V048746255172522_FULL_61_TRAJECTORY_GATE=" << (full_accept ? "ACCEPT" : "NOT_REACHED") << "\n"
-              << "V048746255172522_PRODUCT_STATE_RETENTION_ENABLED=" << (retention_gate_v172521 ? "YES" : "NO") << "\n"
-              << "V048746255172522_PRODUCTWRITINGSTATE_RETENTION_GATE=" << (full_accept ? (retention_gate_v172521 ? "ACCEPT" : "REJECT") : "NOT_RUN") << "\n"
-              << "V048746255172522_PRODUCTWRITINGSTATE_COMPARISON_GATE=" << (full_accept ? (comparison_gate_v172521 ? "ACCEPT" : "REJECT") : "NOT_RUN") << "\n"
-              << "V048746255172522_ORACLE_COMPATIBLE_ROW_SELECTION_GATE=" << (full_accept ? (row_selection_gate_v172521 ? "ACCEPT" : "REJECT") : "NOT_RUN") << "\n"
-              << "V048746255172522_PRODUCT_PUBLICATION_ENABLED=NO\n"
-              << "V048746255172522_FITS_PRODUCTS_WRITTEN=0\n"
-              << "V048746255172522_XOUT_STEP_LOG_WRITTEN=0\n"
-              << "V048746255172522_RESULT=" << (full_accept ? (retention_staged_v172521 ?
-                  "ACCEPT_FULL_61_PRODUCT_STATE_COMPARED_ROW_SELECTION_STAGED_NO_PRODUCT_PUBLICATION" :
+    std::cout << "V048746255172523_TRUE_NATIVE_CONTROLLER=YES\n"
+              << "V048746255172523_GENERIC_TRAJECTORY_LOOP=ENABLED\n"
+              << "V048746255172523_QUALIFICATION_CONTRACTS_CONTROLLER_INPUT=NO\n"
+              << "V048746255172523_DETERMINISTIC_REPLAY_RESUME=ENABLED\n"
+              << "V048746255172523_ACCEPTED_RUNTIME_EVALUATIONS=" << data.accepted_runtime_ordinal_v1724 << "\n"
+              << "V048746255172523_LAST_ACCEPTED_SOURCE_SEQUENCE=" << data.last_accepted_sequence_v1724 << "\n"
+              << "V048746255172523_FIRST_FAILED_SOURCE_SEQUENCE=" << data.first_failed_sequence_v1724 << "\n"
+              << "V048746255172523_FIRST_FAILURE_REASON=" << data.first_failure_reason_v1724 << "\n"
+              << "V048746255172523_FULL_ACCEPTED_TRAJECTORY_COUNT=" << (full_accept ? 61 : data.accepted_runtime_ordinal_v1724) << "\n"
+              << "V048746255172523_FULL_61_TRAJECTORY_GATE=" << (full_accept ? "ACCEPT" : "NOT_REACHED") << "\n"
+              << "V048746255172523_PRODUCT_STATE_RETENTION_ENABLED=" << (retention_gate_v172521 ? "YES" : "NO") << "\n"
+              << "V048746255172523_PRODUCTWRITINGSTATE_RETENTION_GATE=" << (full_accept ? (retention_gate_v172521 ? "ACCEPT" : "REJECT") : "NOT_RUN") << "\n"
+              << "V048746255172523_PRODUCTWRITINGSTATE_COMPARISON_GATE=" << (full_accept ? (comparison_gate_v172521 ? "ACCEPT" : "REJECT") : "NOT_RUN") << "\n"
+              << "V048746255172523_ORACLE_COMPATIBLE_ROW_SELECTION_GATE=" << (full_accept ? (row_selection_gate_v172521 ? "ACCEPT" : "REJECT") : "NOT_RUN") << "\n"
+              << "V048746255172523_PRODUCT_PUBLICATION_ENABLED=" << (product_publication_enabled_v172523 ? "YES" : "NO") << "\n"
+              << "V048746255172523_FITS_PRODUCTS_WRITTEN=" << publication_v172523.fits_count << "\n"
+              << "V048746255172523_XOUT_STEP_LOG_WRITTEN=" << (publication_v172523.step_log_written ? 1 : 0) << "\n"
+              << "V048746255172523_RESULT=" << (full_accept ? (retention_staged_v172521 ?
+                  (product_publication_enabled_v172523 ? "ACCEPT_FULL_61_GATED_PRODUCT_PUBLICATION" : "REJECT_FULL_61_PRODUCT_PUBLICATION") :
                   "REJECT_FULL_61_PRODUCT_STATE_RETENTION") :
                   prefix_accept ? "ACCEPT_RESUMABLE_PREFIX_NO_PRODUCT_PUBLICATION" :
                   data.gate_failed_v1724 ? "REJECT_FIRST_EVALUATION_GATE_FAIL_CLOSED" : "REJECT_RUNTIME") << "\n";
     if (!retention_error_v172521.empty()) {
         std::cerr << "full-61 product-state comparison/row-selection staging failed: " << retention_error_v172521 << "\n";
     }
-    if (full_accept) return retention_staged_v172521 ? 0 : 20;
+    if (!publication_v172523.error.empty()) {
+        std::cerr << "gated product publication failed: " << publication_v172523.error << "\n";
+    }
+    if (full_accept) return (retention_staged_v172521 && product_publication_enabled_v172523) ? 0 : 20;
     if (prefix_accept) return 0;
     return data.gate_failed_v1724 ? 20 : (rc == 0 ? 1 : rc);
 }

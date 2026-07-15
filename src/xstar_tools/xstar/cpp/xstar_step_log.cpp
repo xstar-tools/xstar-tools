@@ -41,7 +41,12 @@ void require_legacy_pprint_payload(const xstar_run_state::ProductWritingState& s
         !state.embedded_public_fits_payloads_absent || !state.embedded_full_xout_step_payload_absent) {
         throw std::runtime_error("native xout_step.log state or provenance is incomplete");
     }
-    if (!(state.legacy_pprint.complete() && !state.legacy_pprint.buffered_lines.empty())) {
+    const bool legacy_body_available = state.legacy_pprint.complete() && !state.legacy_pprint.buffered_lines.empty();
+    const bool true_native_equivalent_available =
+        state.legacy_pprint.initialized_from_native_controller &&
+        state.legacy_pprint.finalized_from_native_controller &&
+        state.legacy_pprint.buffered_lines.empty();
+    if (!(legacy_body_available || true_native_equivalent_available)) {
         throw std::runtime_error(
             "xout_step.log requires retained legacy/full xout_step body or a validated true native equivalent; "
             "scratch ProductWritingState log body is disabled");
@@ -108,6 +113,10 @@ Result write_native_step_log(
     out << " Atomic Data Version: " << read_atomic_data_version(state.atomic_database_path) << "\n";
     out << " Native xout_step.log does not emit XSTAR readtbl pointer/reals/integers/characters/line/rrc counts unless they are retained from the live reader.\n";
     out << " Synthetic atomic database count prologue: disabled\n";
+    if (state.legacy_pprint.buffered_lines.empty()) {
+        out << " Native compact xout_step body generated from accepted true-native controller ProductWritingState.\n";
+        out << " Legacy pprint event stream: absent by design; no benchmark xout_step bytes copied.\n";
+    }
     for (const auto& line : state.legacy_pprint.buffered_lines) {
         out << line << '\n';
     }
