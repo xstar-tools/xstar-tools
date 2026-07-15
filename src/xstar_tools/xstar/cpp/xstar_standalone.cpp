@@ -7824,17 +7824,18 @@ bool write_full61_retention_staging_v172521(
         std::size_t lte_width_ok_count = 0;
         std::size_t unique_sequence_count = 0;
         std::set<std::size_t> retained_sequences;
+        const std::size_t compact_population_width = data.population_global_level_index.size();
         for (const auto& snapshot : snapshots) {
             retained_sequences.insert(snapshot.sequence);
             if (snapshot.kind == "final") ++final_snapshot_count;
-            if (snapshot.populations.size() == data.global_level_count) ++population_width_ok_count;
-            if (snapshot.lte_populations.size() == data.global_level_count) ++lte_width_ok_count;
+            if (snapshot.populations.size() == compact_population_width) ++population_width_ok_count;
+            if (snapshot.lte_populations.size() == compact_population_width) ++lte_width_ok_count;
         }
         unique_sequence_count = retained_sequences.size();
         const bool terminal_snapshot_ok = !snapshots.empty() &&
             snapshots.back().sequence == 61 && snapshots.back().kind == "final";
         const bool radial_boundary_count_ok = (1 + final_snapshot_count) == 5;
-        const bool retained_population_widths_ok = data.global_level_count == 688 &&
+        const bool retained_population_widths_ok = compact_population_width == 688 &&
             population_width_ok_count == snapshots.size() && lte_width_ok_count == snapshots.size();
         const bool retained_identity_ok = unique_sequence_count == 61 &&
             retained_sequences.count(1) == 1 && retained_sequences.count(61) == 1;
@@ -7853,7 +7854,7 @@ bool write_full61_retention_staging_v172521(
         std::ofstream comparison(root / "productwritingstate_comparison_manifest.json");
         comparison << std::boolalpha << std::setprecision(17)
                    << "{\n"
-                   << "  \"schema\": \"xstar-tools-v048746255172521-productwritingstate-comparison-v1\",\n"
+                   << "  \"schema\": \"xstar-tools-v048746255172522-productwritingstate-comparison-v1\",\n"
                    << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
                    << "  \"comparison_source\": \"retained_true_native_controller_checkpoints_vs_runtime_snapshots\",\n"
                    << "  \"trajectory_snapshot_count\": " << snapshots.size() << ",\n"
@@ -7861,6 +7862,7 @@ bool write_full61_retention_staging_v172521(
                    << "  \"final_snapshot_count\": " << final_snapshot_count << ",\n"
                    << "  \"radial_boundary_count\": " << (1 + final_snapshot_count) << ",\n"
                    << "  \"global_population_width\": " << data.global_level_count << ",\n"
+                   << "  \"compact_population_width\": " << compact_population_width << ",\n"
                    << "  \"population_width_ok_count\": " << population_width_ok_count << ",\n"
                    << "  \"lte_width_ok_count\": " << lte_width_ok_count << ",\n"
                    << "  \"terminal_snapshot_ok\": " << terminal_snapshot_ok << ",\n"
@@ -7878,7 +7880,7 @@ bool write_full61_retention_staging_v172521(
         std::ofstream rowmanifest(root / "oracle_row_selection_manifest.json");
         rowmanifest << std::boolalpha
                     << "{\n"
-                    << "  \"schema\": \"xstar-tools-v048746255172521-oracle-row-selection-v1\",\n"
+                    << "  \"schema\": \"xstar-tools-v048746255172522-oracle-row-selection-v1\",\n"
                     << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
                     << "  \"source\": \"v0472_python_product_oracle_inventory\",\n"
                     << "  \"row_selection_is_publication\": false,\n"
@@ -7893,7 +7895,7 @@ bool write_full61_retention_staging_v172521(
         std::ofstream manifest(root / "product_state_retention_manifest.json");
         manifest << std::boolalpha << std::setprecision(17)
                  << "{\n"
-                 << "  \"schema\": \"xstar-tools-v048746255172521-full61-product-state-comparison-row-selection-v1\",\n"
+                 << "  \"schema\": \"xstar-tools-v048746255172522-full61-product-state-comparison-row-selection-v1\",\n"
                  << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
                  << "  \"retention_source\": \"accepted_true_native_controller_checkpoints\",\n"
                  << "  \"full_accepted_trajectory_required\": 61,\n"
@@ -7925,13 +7927,13 @@ bool write_full61_retention_staging_v172521(
                  << "}\n";
         std::ofstream gate(root / "retention_gate.txt");
         const bool retention_gate_ok = trajectory_complete && checkpoint_complete;
-        gate << "V048746255172521_PRODUCT_STATE_RETENTION_ENABLED=" << (retention_gate_ok ? "YES" : "NO") << '\n'
-             << "V048746255172521_PRODUCTWRITINGSTATE_RETENTION_GATE=" << (retention_gate_ok ? "ACCEPT" : "REJECT") << '\n'
-             << "V048746255172521_PRODUCTWRITINGSTATE_COMPARISON_GATE=" << (productwritingstate_comparison_ok ? "ACCEPT" : "REJECT") << '\n'
-             << "V048746255172521_ORACLE_COMPATIBLE_ROW_SELECTION_GATE=" << (oracle_compatible_row_selection_ok ? "ACCEPT" : "REJECT") << '\n'
-             << "V048746255172521_PRODUCT_PUBLICATION_ENABLED=NO\n"
-             << "V048746255172521_FITS_PRODUCTS_WRITTEN=0\n"
-             << "V048746255172521_XOUT_STEP_LOG_WRITTEN=0\n";
+        gate << "V048746255172522_PRODUCT_STATE_RETENTION_ENABLED=" << (retention_gate_ok ? "YES" : "NO") << '\n'
+             << "V048746255172522_PRODUCTWRITINGSTATE_RETENTION_GATE=" << (retention_gate_ok ? "ACCEPT" : "REJECT") << '\n'
+             << "V048746255172522_PRODUCTWRITINGSTATE_COMPARISON_GATE=" << (productwritingstate_comparison_ok ? "ACCEPT" : "REJECT") << '\n'
+             << "V048746255172522_ORACLE_COMPATIBLE_ROW_SELECTION_GATE=" << (oracle_compatible_row_selection_ok ? "ACCEPT" : "REJECT") << '\n'
+             << "V048746255172522_PRODUCT_PUBLICATION_ENABLED=NO\n"
+             << "V048746255172522_FITS_PRODUCTS_WRITTEN=0\n"
+             << "V048746255172522_XOUT_STEP_LOG_WRITTEN=0\n";
         if (retention_gate_out) *retention_gate_out = retention_gate_ok;
         if (comparison_gate_out) *comparison_gate_out = productwritingstate_comparison_ok;
         if (row_selection_gate_out) *row_selection_gate_out = oracle_compatible_row_selection_ok;
@@ -8089,6 +8091,8 @@ int command_run_native_resumable_trajectory_v1724(Options options) {
             << s.call_index << ',' << s.evaluation_index << ',' << s.temperature_t4 << ',' << s.electron_fraction_input << ','
             << s.hmctot << ',' << s.charge_residual << '\n';
     }
+    trajectory.flush();
+    trajectory.close();
     const bool full_accept = data.accepted_runtime_ordinal_v1724 == 61 && !data.gate_failed_v1724;
     const bool prefix_accept = data.stop_requested_v1724 && !data.gate_failed_v1724;
     std::string retention_error_v172521;
@@ -8100,7 +8104,7 @@ int command_run_native_resumable_trajectory_v1724(Options options) {
             &retention_gate_v172521, &comparison_gate_v172521, &row_selection_gate_v172521);
     std::ofstream summary(output / "native_resumable_trajectory_summary.json");
     summary << std::boolalpha << std::setprecision(17)
-        << "{\n  \"schema\": \"xstar-tools-v048746255172521-resumable-trajectory-with-product-state-comparison-row-selection-v1\",\n"
+        << "{\n  \"schema\": \"xstar-tools-v048746255172522-resumable-trajectory-with-product-state-comparison-row-selection-v1\",\n"
         << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
         << "  \"controller_mode\": \"true_native_autonomous_generic_loop\",\n"
         << "  \"qualification_contracts_are_controller_input\": false,\n"
@@ -8125,24 +8129,24 @@ int command_run_native_resumable_trajectory_v1724(Options options) {
             "ACCEPT_FULL_61_PRODUCT_STATE_COMPARED_ROW_SELECTION_STAGED" : "REJECT_FULL_61_PRODUCT_STATE_RETENTION") :
             prefix_accept ? "ACCEPT_PREFIX_STOP" :
             data.gate_failed_v1724 ? "REJECT_FIRST_EVALUATION_GATE" : "REJECT_RUNTIME") << "\"\n}\n";
-    std::cout << "V048746255172521_TRUE_NATIVE_CONTROLLER=YES\n"
-              << "V048746255172521_GENERIC_TRAJECTORY_LOOP=ENABLED\n"
-              << "V048746255172521_QUALIFICATION_CONTRACTS_CONTROLLER_INPUT=NO\n"
-              << "V048746255172521_DETERMINISTIC_REPLAY_RESUME=ENABLED\n"
-              << "V048746255172521_ACCEPTED_RUNTIME_EVALUATIONS=" << data.accepted_runtime_ordinal_v1724 << "\n"
-              << "V048746255172521_LAST_ACCEPTED_SOURCE_SEQUENCE=" << data.last_accepted_sequence_v1724 << "\n"
-              << "V048746255172521_FIRST_FAILED_SOURCE_SEQUENCE=" << data.first_failed_sequence_v1724 << "\n"
-              << "V048746255172521_FIRST_FAILURE_REASON=" << data.first_failure_reason_v1724 << "\n"
-              << "V048746255172521_FULL_ACCEPTED_TRAJECTORY_COUNT=" << (full_accept ? 61 : data.accepted_runtime_ordinal_v1724) << "\n"
-              << "V048746255172521_FULL_61_TRAJECTORY_GATE=" << (full_accept ? "ACCEPT" : "NOT_REACHED") << "\n"
-              << "V048746255172521_PRODUCT_STATE_RETENTION_ENABLED=" << (retention_gate_v172521 ? "YES" : "NO") << "\n"
-              << "V048746255172521_PRODUCTWRITINGSTATE_RETENTION_GATE=" << (full_accept ? (retention_gate_v172521 ? "ACCEPT" : "REJECT") : "NOT_RUN") << "\n"
-              << "V048746255172521_PRODUCTWRITINGSTATE_COMPARISON_GATE=" << (full_accept ? (comparison_gate_v172521 ? "ACCEPT" : "REJECT") : "NOT_RUN") << "\n"
-              << "V048746255172521_ORACLE_COMPATIBLE_ROW_SELECTION_GATE=" << (full_accept ? (row_selection_gate_v172521 ? "ACCEPT" : "REJECT") : "NOT_RUN") << "\n"
-              << "V048746255172521_PRODUCT_PUBLICATION_ENABLED=NO\n"
-              << "V048746255172521_FITS_PRODUCTS_WRITTEN=0\n"
-              << "V048746255172521_XOUT_STEP_LOG_WRITTEN=0\n"
-              << "V048746255172521_RESULT=" << (full_accept ? (retention_staged_v172521 ?
+    std::cout << "V048746255172522_TRUE_NATIVE_CONTROLLER=YES\n"
+              << "V048746255172522_GENERIC_TRAJECTORY_LOOP=ENABLED\n"
+              << "V048746255172522_QUALIFICATION_CONTRACTS_CONTROLLER_INPUT=NO\n"
+              << "V048746255172522_DETERMINISTIC_REPLAY_RESUME=ENABLED\n"
+              << "V048746255172522_ACCEPTED_RUNTIME_EVALUATIONS=" << data.accepted_runtime_ordinal_v1724 << "\n"
+              << "V048746255172522_LAST_ACCEPTED_SOURCE_SEQUENCE=" << data.last_accepted_sequence_v1724 << "\n"
+              << "V048746255172522_FIRST_FAILED_SOURCE_SEQUENCE=" << data.first_failed_sequence_v1724 << "\n"
+              << "V048746255172522_FIRST_FAILURE_REASON=" << data.first_failure_reason_v1724 << "\n"
+              << "V048746255172522_FULL_ACCEPTED_TRAJECTORY_COUNT=" << (full_accept ? 61 : data.accepted_runtime_ordinal_v1724) << "\n"
+              << "V048746255172522_FULL_61_TRAJECTORY_GATE=" << (full_accept ? "ACCEPT" : "NOT_REACHED") << "\n"
+              << "V048746255172522_PRODUCT_STATE_RETENTION_ENABLED=" << (retention_gate_v172521 ? "YES" : "NO") << "\n"
+              << "V048746255172522_PRODUCTWRITINGSTATE_RETENTION_GATE=" << (full_accept ? (retention_gate_v172521 ? "ACCEPT" : "REJECT") : "NOT_RUN") << "\n"
+              << "V048746255172522_PRODUCTWRITINGSTATE_COMPARISON_GATE=" << (full_accept ? (comparison_gate_v172521 ? "ACCEPT" : "REJECT") : "NOT_RUN") << "\n"
+              << "V048746255172522_ORACLE_COMPATIBLE_ROW_SELECTION_GATE=" << (full_accept ? (row_selection_gate_v172521 ? "ACCEPT" : "REJECT") : "NOT_RUN") << "\n"
+              << "V048746255172522_PRODUCT_PUBLICATION_ENABLED=NO\n"
+              << "V048746255172522_FITS_PRODUCTS_WRITTEN=0\n"
+              << "V048746255172522_XOUT_STEP_LOG_WRITTEN=0\n"
+              << "V048746255172522_RESULT=" << (full_accept ? (retention_staged_v172521 ?
                   "ACCEPT_FULL_61_PRODUCT_STATE_COMPARED_ROW_SELECTION_STAGED_NO_PRODUCT_PUBLICATION" :
                   "REJECT_FULL_61_PRODUCT_STATE_RETENTION") :
                   prefix_accept ? "ACCEPT_RESUMABLE_PREFIX_NO_PRODUCT_PUBLICATION" :
