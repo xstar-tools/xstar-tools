@@ -433,7 +433,7 @@ void prepare_native_product_state(
     const auto bridge_manifest = state.product_metadata_path / "exact_product_state_bridge" / "manifest.json";
     const bool bridge_manifest_present = std::filesystem::is_regular_file(bridge_manifest);
     const bool native_loader_ready = bridge_manifest_present && load_native_product_writing_state_loader(state.product_metadata_path);
-    // v25.5.17.25.25: a complete controller trajectory is not, by itself, a
+    // v25.5.17.25.24: a complete controller trajectory is not, by itself, a
     // complete public ProductWritingState.  The v25.5.17.25.23 writer treated
     // absence of an exact bridge payload as "live retention ready" and therefore
     // published structurally present but content-poor products: empty line/RRC

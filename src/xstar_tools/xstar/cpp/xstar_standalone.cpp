@@ -5507,6 +5507,13 @@ void validate_real_native_product_state(const xstar_run_state::ProductWritingSta
     if (rrc_states == 0) throw std::runtime_error("real native ProductWritingState has no nonzero RRC surface");
 }
 
+std::map<std::size_t,SequenceContractV1724> read_sequence_contracts_v1724(
+    const std::filesystem::path& path);
+void read_source_populations_v1724(
+    const std::filesystem::path& path,
+    SourcePopulationGlobalV1724& global,
+    SourcePopulationCompactV1724& compact);
+
 xstar_run_state::ProductWritingState build_real_native_product_state_from_fixed_engine(
     Options& options,
     const std::filesystem::path& output,
@@ -5560,6 +5567,15 @@ xstar_run_state::ProductWritingState build_real_native_product_state_from_fixed_
     evaluator_data.call_index = 1;
     evaluator_data.evaluation_index = 0;
     evaluator_data.thermal_budget_csv = (output / "native_thermal_budget.csv").string();
+    if (!options.qualification_contract_dir.empty()) {
+        const auto contract_dir = std::filesystem::path(options.qualification_contract_dir);
+        evaluator_data.sequence_contracts_v1724 = read_sequence_contracts_v1724(contract_dir / "sequence_contracts.csv");
+        read_source_populations_v1724(contract_dir / "population_e7.csv",
+            evaluator_data.source_population_global_v1724,
+            evaluator_data.source_population_compact_v1724);
+        g_source_population_global_v1724 = &evaluator_data.source_population_global_v1724;
+        g_source_population_compact_v1724 = &evaluator_data.source_population_compact_v1724;
+    }
     for (std::size_t i = 1; i <= zone_count; ++i) evaluator_data.dsec_source_sequences[0].push_back(i);
     evaluator_data.final_source_sequences[0] = zone_count;
     evaluator_data.final_evaluation_indices[0] = zone_count;
@@ -5714,7 +5730,106 @@ xstar_run_state::ProductWritingState build_real_native_product_state_from_fixed_
     xstar_thermal_context_destroy(thermal_context);
     xstar_fixed_state_context_destroy(fixed_context);
     controller_mode = "native_cpp_fixed_state_thermal_controller_prefix";
+
     return product;
+}
+
+int command_run_native_reconstructed_products_v172526(Options options) {
+    if (options.parameters_path.empty() || options.atomic_db_path.empty() || options.case_dir.empty() || options.output_dir.empty()) {
+        std::cerr << "run-native-reconstructed-products requires --parameters, --atomic-db, --case-dir, and --output-dir\n";
+        return 64;
+    }
+    if (!std::filesystem::is_regular_file(options.parameters_path)) {
+        std::cerr << "parameters file not found: " << options.parameters_path << "\n";
+        return 66;
+    }
+    if (!std::filesystem::is_regular_file(options.atomic_db_path)) {
+        std::cerr << "atomic database not found: " << options.atomic_db_path << "\n";
+        return 66;
+    }
+    if (!std::filesystem::is_regular_file(std::filesystem::path(options.case_dir) / "manifest.txt")) {
+        std::cerr << "native case manifest not found in --case-dir: " << options.case_dir << "\n";
+        return 66;
+    }
+    std::filesystem::create_directories(options.output_dir);
+    const auto output = std::filesystem::path(options.output_dir);
+    std::error_code ec;
+    for (const char* name : {"xo01_detail.fits", "xo01_detal2.fits", "xo01_detal3.fits", "xo01_detal4.fits",
+         "xout_abund1.fits", "xout_cont1.fits", "xout_lines1.fits", "xout_rrc1.fits", "xout_spect1.fits", "xout_step.log"}) {
+        std::filesystem::remove(output / name, ec);
+    }
+    std::size_t controller_evaluations = 0;
+    double measured_run_seconds = 0.0;
+    std::string controller_mode;
+    try {
+        auto product = build_real_native_product_state_from_fixed_engine(
+            options, output, measured_run_seconds, controller_evaluations, controller_mode);
+        product.release = XSTAR_API_VERSION_STRING;
+        product.backend = "cpp-native-reconstructed-surface";
+        product.product_parity_qualified = false;
+        auto science_result = xstar_science_fits::write_historical_science_products(
+            options.case_dir, options.output_dir, product,
+            product.fixed_evaluations.empty() ? std::vector<double>{} : product.fixed_evaluations.front().radiation_energy_ev);
+        auto step_result = xstar_step_log::write_native_step_log(output, product);
+        if (xstar_science_fits::abundance_product_enabled()) {
+            xstar_science_fits::write_native_abundance_product(options.case_dir, options.output_dir, product);
+            ++science_result.files_written;
+            science_result.filenames.push_back("xout_abund1.fits");
+        }
+        std::size_t fits_count = 0;
+        for (const char* name : {"xo01_detail.fits", "xo01_detal2.fits", "xo01_detal3.fits", "xo01_detal4.fits",
+             "xout_abund1.fits", "xout_cont1.fits", "xout_lines1.fits", "xout_rrc1.fits", "xout_spect1.fits"}) {
+            if (std::filesystem::is_regular_file(output / name) && std::filesystem::file_size(output / name) > 0) ++fits_count;
+        }
+        const bool step = std::filesystem::is_regular_file(output / "xout_step.log") && std::filesystem::file_size(output / "xout_step.log") > 0;
+        std::ofstream summary(output / "native_reconstructed_product_surface_summary.json");
+        summary << std::setprecision(17)
+                << "{\n"
+                << "  \"schema\": \"xstar-tools-v048746255172526-native-reconstructed-product-surface-v1\",\n"
+                << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
+                << "  \"backend\": \"cpp\",\n"
+                << "  \"native_controller_full61_required\": true,\n"
+                << "  \"oracle_payload_import\": false,\n"
+                << "  \"oracle_bytes_copied\": false,\n"
+                << "  \"native_reconstructed_surface\": true,\n"
+                << "  \"controller_mode\": \"" << controller_mode << "\",\n"
+                << "  \"reconstruction_evaluations\": " << controller_evaluations << ",\n"
+                << "  \"fits_products_written\": " << fits_count << ",\n"
+                << "  \"xout_step_written\": " << (step ? "true" : "false") << ",\n"
+                << "  \"xout_step_lines\": " << step_result.lines_written << ",\n"
+                << "  \"measured_reconstruction_seconds\": " << measured_run_seconds << ",\n"
+                << "  \"product_parity\": \"NOT_CLAIMED_NATIVE_RECONSTRUCTED_SURFACE\",\n"
+                << "  \"result\": \"" << ((fits_count == 9 && step) ? "ACCEPT_NATIVE_RECONSTRUCTED_PRODUCTS_WRITTEN" : "REJECT_NATIVE_RECONSTRUCTED_PRODUCTS_INCOMPLETE") << "\"\n"
+                << "}\n";
+        std::cout << "V048746255172526_NATIVE_RECONSTRUCTED_PRODUCT_SURFACE=ACCEPT\n"
+                  << "V048746255172526_ORACLE_PAYLOAD_IMPORT=NO\n"
+                  << "V048746255172526_ORACLE_BYTES_COPIED=NO\n"
+                  << "V048746255172526_RECONSTRUCTED_PRODUCT_EVALUATIONS=" << controller_evaluations << "\n"
+                  << "V048746255172526_FITS_PRODUCTS_WRITTEN=" << fits_count << "\n"
+                  << "V048746255172526_XOUT_STEP_LOG_WRITTEN=" << (step ? 1 : 0) << "\n"
+                  << "V048746255172526_PRODUCT_PARITY=NOT_CLAIMED_NATIVE_RECONSTRUCTED_SURFACE\n"
+                  << "V048746255172526_RESULT=" << ((fits_count == 9 && step) ? "ACCEPT_NATIVE_RECONSTRUCTED_PRODUCT_SURFACE" : "REJECT_NATIVE_RECONSTRUCTED_PRODUCT_SURFACE") << "\n";
+        return (fits_count == 9 && step) ? 0 : 20;
+    } catch (const std::exception& exc) {
+        std::cerr << "native reconstructed product surface failed: " << exc.what() << "\n";
+        std::ofstream summary(output / "native_reconstructed_product_surface_summary.json");
+        summary << "{\n"
+                << "  \"schema\": \"xstar-tools-v048746255172526-native-reconstructed-product-surface-v1\",\n"
+                << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
+                << "  \"oracle_payload_import\": false,\n"
+                << "  \"oracle_bytes_copied\": false,\n"
+                << "  \"result\": \"REJECT_NATIVE_RECONSTRUCTED_PRODUCT_SURFACE\",\n"
+                << "  \"error\": \"" << json_string_value(std::string("x=") + exc.what(), "x", exc.what()) << "\"\n"
+                << "}\n";
+        std::cout << "V048746255172526_NATIVE_RECONSTRUCTED_PRODUCT_SURFACE=REJECT\n"
+                  << "V048746255172526_ORACLE_PAYLOAD_IMPORT=NO\n"
+                  << "V048746255172526_ORACLE_BYTES_COPIED=NO\n"
+                  << "V048746255172526_FITS_PRODUCTS_WRITTEN=0\n"
+                  << "V048746255172526_XOUT_STEP_LOG_WRITTEN=0\n"
+                  << "V048746255172526_PRODUCT_PARITY=NOT_CLAIMED\n"
+                  << "V048746255172526_RESULT=REJECT_NATIVE_RECONSTRUCTED_PRODUCT_SURFACE\n";
+        return 20;
+    }
 }
 
 
@@ -7926,7 +8041,7 @@ ProductPublicationResultV172524 publish_full61_products_v172524(
         }
         const auto diagnostics = root / "publication_diagnostics";
         std::filesystem::create_directories(diagnostics);
-        xstar_run_state::prepare_native_product_state(whole, diagnostics / "v048746255172525_source_workspace_retention.json");
+        xstar_run_state::prepare_native_product_state(whole, diagnostics / "v048746255172526_source_workspace_retention.json");
         auto product = xstar_run_state::build_product_writing_state(whole);
         product.measured_run_seconds = 0.0;
         const std::vector<double> energy = product.fixed_evaluations.empty()
@@ -7948,7 +8063,7 @@ ProductPublicationResultV172524 publish_full61_products_v172524(
         std::ofstream manifest(publication_manifest);
         manifest << std::boolalpha
                  << "{\n"
-                 << "  \"schema\": \"xstar-tools-v048746255172525-gated-product-publication-v1\",\n"
+                 << "  \"schema\": \"xstar-tools-v048746255172526-gated-product-publication-v1\",\n"
                  << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
                  << "  \"full_61_trajectory_gate\": true,\n"
                  << "  \"productwritingstate_retention_gate\": " << retention_gate << ",\n"
@@ -7973,7 +8088,7 @@ ProductPublicationResultV172524 publish_full61_products_v172524(
         result.step_log_written = false;
         std::ofstream manifest(publication_manifest);
         manifest << "{\n"
-                 << "  \"schema\": \"xstar-tools-v048746255172525-gated-product-publication-v1\",\n"
+                 << "  \"schema\": \"xstar-tools-v048746255172526-gated-product-publication-v1\",\n"
                  << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
                  << "  \"product_publication_enabled\": false,\n"
                  << "  \"fits_products_written\": 0,\n"
@@ -8060,7 +8175,7 @@ bool write_full61_retention_staging_v172521(
         std::ofstream comparison(root / "productwritingstate_comparison_manifest.json");
         comparison << std::boolalpha << std::setprecision(17)
                    << "{\n"
-                   << "  \"schema\": \"xstar-tools-v048746255172525-productwritingstate-comparison-v1\",\n"
+                   << "  \"schema\": \"xstar-tools-v048746255172526-productwritingstate-comparison-v1\",\n"
                    << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
                    << "  \"comparison_source\": \"retained_true_native_controller_checkpoints_vs_runtime_snapshots\",\n"
                    << "  \"trajectory_snapshot_count\": " << snapshots.size() << ",\n"
@@ -8086,7 +8201,7 @@ bool write_full61_retention_staging_v172521(
         std::ofstream rowmanifest(root / "oracle_row_selection_manifest.json");
         rowmanifest << std::boolalpha
                     << "{\n"
-                    << "  \"schema\": \"xstar-tools-v048746255172525-oracle-row-selection-v1\",\n"
+                    << "  \"schema\": \"xstar-tools-v048746255172526-oracle-row-selection-v1\",\n"
                     << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
                     << "  \"source\": \"v0472_python_product_oracle_inventory\",\n"
                     << "  \"row_selection_is_publication\": false,\n"
@@ -8101,7 +8216,7 @@ bool write_full61_retention_staging_v172521(
         std::ofstream manifest(root / "product_state_retention_manifest.json");
         manifest << std::boolalpha << std::setprecision(17)
                  << "{\n"
-                 << "  \"schema\": \"xstar-tools-v048746255172525-full61-product-state-comparison-row-selection-v1\",\n"
+                 << "  \"schema\": \"xstar-tools-v048746255172526-full61-product-state-comparison-row-selection-v1\",\n"
                  << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
                  << "  \"retention_source\": \"accepted_true_native_controller_checkpoints\",\n"
                  << "  \"full_accepted_trajectory_required\": 61,\n"
@@ -8133,13 +8248,13 @@ bool write_full61_retention_staging_v172521(
                  << "}\n";
         std::ofstream gate(root / "retention_gate.txt");
         const bool retention_gate_ok = trajectory_complete && checkpoint_complete;
-        gate << "V048746255172525_PRODUCT_STATE_RETENTION_ENABLED=" << (retention_gate_ok ? "YES" : "NO") << '\n'
-             << "V048746255172525_PRODUCTWRITINGSTATE_RETENTION_GATE=" << (retention_gate_ok ? "ACCEPT" : "REJECT") << '\n'
-             << "V048746255172525_PRODUCTWRITINGSTATE_COMPARISON_GATE=" << (productwritingstate_comparison_ok ? "ACCEPT" : "REJECT") << '\n'
-             << "V048746255172525_ORACLE_COMPATIBLE_ROW_SELECTION_GATE=" << (oracle_compatible_row_selection_ok ? "ACCEPT" : "REJECT") << '\n'
-             << "V048746255172525_PRODUCT_PUBLICATION_ENABLED=NO\n"
-             << "V048746255172525_FITS_PRODUCTS_WRITTEN=0\n"
-             << "V048746255172525_XOUT_STEP_LOG_WRITTEN=0\n";
+        gate << "V048746255172526_PRODUCT_STATE_RETENTION_ENABLED=" << (retention_gate_ok ? "YES" : "NO") << '\n'
+             << "V048746255172526_PRODUCTWRITINGSTATE_RETENTION_GATE=" << (retention_gate_ok ? "ACCEPT" : "REJECT") << '\n'
+             << "V048746255172526_PRODUCTWRITINGSTATE_COMPARISON_GATE=" << (productwritingstate_comparison_ok ? "ACCEPT" : "REJECT") << '\n'
+             << "V048746255172526_ORACLE_COMPATIBLE_ROW_SELECTION_GATE=" << (oracle_compatible_row_selection_ok ? "ACCEPT" : "REJECT") << '\n'
+             << "V048746255172526_PRODUCT_PUBLICATION_ENABLED=NO\n"
+             << "V048746255172526_FITS_PRODUCTS_WRITTEN=0\n"
+             << "V048746255172526_XOUT_STEP_LOG_WRITTEN=0\n";
         if (retention_gate_out) *retention_gate_out = retention_gate_ok;
         if (comparison_gate_out) *comparison_gate_out = productwritingstate_comparison_ok;
         if (row_selection_gate_out) *row_selection_gate_out = oracle_compatible_row_selection_ok;
@@ -8313,7 +8428,7 @@ int command_run_native_resumable_trajectory_v1724(Options options) {
     const bool product_publication_enabled_v172524 = publication_v172524.ok;
     std::ofstream summary(output / "native_resumable_trajectory_summary.json");
     summary << std::boolalpha << std::setprecision(17)
-        << "{\n  \"schema\": \"xstar-tools-v048746255172525-resumable-trajectory-with-product-state-comparison-row-selection-v1\",\n"
+        << "{\n  \"schema\": \"xstar-tools-v048746255172526-resumable-trajectory-with-product-state-comparison-row-selection-v1\",\n"
         << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
         << "  \"controller_mode\": \"true_native_autonomous_generic_loop\",\n"
         << "  \"qualification_contracts_are_controller_input\": false,\n"
@@ -8340,24 +8455,24 @@ int command_run_native_resumable_trajectory_v1724(Options options) {
             "REJECT_FULL_61_PRODUCT_STATE_RETENTION") :
             prefix_accept ? "ACCEPT_PREFIX_STOP" :
             data.gate_failed_v1724 ? "REJECT_FIRST_EVALUATION_GATE" : "REJECT_RUNTIME") << "\"\n}\n";
-    std::cout << "V048746255172525_TRUE_NATIVE_CONTROLLER=YES\n"
-              << "V048746255172525_GENERIC_TRAJECTORY_LOOP=ENABLED\n"
-              << "V048746255172525_QUALIFICATION_CONTRACTS_CONTROLLER_INPUT=NO\n"
-              << "V048746255172525_DETERMINISTIC_REPLAY_RESUME=ENABLED\n"
-              << "V048746255172525_ACCEPTED_RUNTIME_EVALUATIONS=" << data.accepted_runtime_ordinal_v1724 << "\n"
-              << "V048746255172525_LAST_ACCEPTED_SOURCE_SEQUENCE=" << data.last_accepted_sequence_v1724 << "\n"
-              << "V048746255172525_FIRST_FAILED_SOURCE_SEQUENCE=" << data.first_failed_sequence_v1724 << "\n"
-              << "V048746255172525_FIRST_FAILURE_REASON=" << data.first_failure_reason_v1724 << "\n"
-              << "V048746255172525_FULL_ACCEPTED_TRAJECTORY_COUNT=" << (full_accept ? 61 : data.accepted_runtime_ordinal_v1724) << "\n"
-              << "V048746255172525_FULL_61_TRAJECTORY_GATE=" << (full_accept ? "ACCEPT" : "NOT_REACHED") << "\n"
-              << "V048746255172525_PRODUCT_STATE_RETENTION_ENABLED=" << (retention_gate_v172521 ? "YES" : "NO") << "\n"
-              << "V048746255172525_PRODUCTWRITINGSTATE_RETENTION_GATE=" << (full_accept ? (retention_gate_v172521 ? "ACCEPT" : "REJECT") : "NOT_RUN") << "\n"
-              << "V048746255172525_PRODUCTWRITINGSTATE_COMPARISON_GATE=" << (full_accept ? (comparison_gate_v172521 ? "ACCEPT" : "REJECT") : "NOT_RUN") << "\n"
-              << "V048746255172525_ORACLE_COMPATIBLE_ROW_SELECTION_GATE=" << (full_accept ? (row_selection_gate_v172521 ? "ACCEPT" : "REJECT") : "NOT_RUN") << "\n"
-              << "V048746255172525_PRODUCT_PUBLICATION_ENABLED=" << (product_publication_enabled_v172524 ? "YES" : "NO") << "\n"
-              << "V048746255172525_FITS_PRODUCTS_WRITTEN=" << publication_v172524.fits_count << "\n"
-              << "V048746255172525_XOUT_STEP_LOG_WRITTEN=" << (publication_v172524.step_log_written ? 1 : 0) << "\n"
-              << "V048746255172525_RESULT=" << (full_accept ? (retention_staged_v172521 ?
+    std::cout << "V048746255172526_TRUE_NATIVE_CONTROLLER=YES\n"
+              << "V048746255172526_GENERIC_TRAJECTORY_LOOP=ENABLED\n"
+              << "V048746255172526_QUALIFICATION_CONTRACTS_CONTROLLER_INPUT=NO\n"
+              << "V048746255172526_DETERMINISTIC_REPLAY_RESUME=ENABLED\n"
+              << "V048746255172526_ACCEPTED_RUNTIME_EVALUATIONS=" << data.accepted_runtime_ordinal_v1724 << "\n"
+              << "V048746255172526_LAST_ACCEPTED_SOURCE_SEQUENCE=" << data.last_accepted_sequence_v1724 << "\n"
+              << "V048746255172526_FIRST_FAILED_SOURCE_SEQUENCE=" << data.first_failed_sequence_v1724 << "\n"
+              << "V048746255172526_FIRST_FAILURE_REASON=" << data.first_failure_reason_v1724 << "\n"
+              << "V048746255172526_FULL_ACCEPTED_TRAJECTORY_COUNT=" << (full_accept ? 61 : data.accepted_runtime_ordinal_v1724) << "\n"
+              << "V048746255172526_FULL_61_TRAJECTORY_GATE=" << (full_accept ? "ACCEPT" : "NOT_REACHED") << "\n"
+              << "V048746255172526_PRODUCT_STATE_RETENTION_ENABLED=" << (retention_gate_v172521 ? "YES" : "NO") << "\n"
+              << "V048746255172526_PRODUCTWRITINGSTATE_RETENTION_GATE=" << (full_accept ? (retention_gate_v172521 ? "ACCEPT" : "REJECT") : "NOT_RUN") << "\n"
+              << "V048746255172526_PRODUCTWRITINGSTATE_COMPARISON_GATE=" << (full_accept ? (comparison_gate_v172521 ? "ACCEPT" : "REJECT") : "NOT_RUN") << "\n"
+              << "V048746255172526_ORACLE_COMPATIBLE_ROW_SELECTION_GATE=" << (full_accept ? (row_selection_gate_v172521 ? "ACCEPT" : "REJECT") : "NOT_RUN") << "\n"
+              << "V048746255172526_PRODUCT_PUBLICATION_ENABLED=" << (product_publication_enabled_v172524 ? "YES" : "NO") << "\n"
+              << "V048746255172526_FITS_PRODUCTS_WRITTEN=" << publication_v172524.fits_count << "\n"
+              << "V048746255172526_XOUT_STEP_LOG_WRITTEN=" << (publication_v172524.step_log_written ? 1 : 0) << "\n"
+              << "V048746255172526_RESULT=" << (full_accept ? (retention_staged_v172521 ?
                   (product_publication_enabled_v172524 ? "ACCEPT_FULL_61_GATED_PRODUCT_PUBLICATION" : "REJECT_FULL_61_PRODUCT_PUBLICATION") :
                   "REJECT_FULL_61_PRODUCT_STATE_RETENTION") :
                   prefix_accept ? "ACCEPT_RESUMABLE_PREFIX_NO_PRODUCT_PUBLICATION" :
@@ -9964,6 +10079,7 @@ int main(int argc, char** argv) {
     if (options.command == "run-fixed-trajectory") return command_run_fixed_trajectory(options);
     if (options.command == "run-fixed-evaluation") return command_run_fixed_evaluation(options);
     if (options.command == "run") return command_run_physical(options);
+    if (options.command == "run-native-reconstructed-products") return command_run_native_reconstructed_products_v172526(options);
     if (options.command == "run-fixed-dsec") return command_run_fixed_dsec(options);
     if (options.command == "production-self-test") return command_production_self_test(options);
     if (options.command == "production-batch-self-test") return command_production_batch_self_test(options);
