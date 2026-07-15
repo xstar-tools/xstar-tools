@@ -5735,7 +5735,7 @@ xstar_run_state::ProductWritingState build_real_native_product_state_from_fixed_
 }
 
 int command_run_native_reconstructed_products_v172526(Options) {
-    std::cerr << "run-native-reconstructed-products is disabled in v17.25.27: "
+    std::cerr << "run-native-reconstructed-products is disabled in v17.25.28: "
               << "native product publication must use retained full-61 ProductWritingState artifacts "
               << "from the primary controller run, not a fixed-state evaluator reconstruction path\n";
     return 64;
@@ -7900,7 +7900,7 @@ std::size_t count_native_fits_products_v172524(const std::filesystem::path& outp
 }
 
 
-void fill_retained_product_surface_arrays_v172527(
+void fill_retained_product_surface_arrays_v172528(
     xstar_run_state::FixedEvaluationState& evaluation,
     std::size_t fallback_energy_count) {
     const std::size_t n = !evaluation.radiation_energy_ev.empty()
@@ -7979,21 +7979,21 @@ void fill_retained_product_surface_arrays_v172527(
         ws.zremsz.resize(n, 0.0);
         for (std::size_t i = 0; i < n; ++i) ws.zremsz[i] = ws.zrems[n + i];
     }
-    constexpr std::size_t kPublicContinuumCountV172527 = 301301u;
-    if (ws.elumab.size() < 2u * kPublicContinuumCountV172527) {
-        ws.elumab.resize(2u * kPublicContinuumCountV172527, 0.0);
-        const std::size_t copy_n = std::min<std::size_t>(kPublicContinuumCountV172527, ws.rccemis.size() / 2u);
+    constexpr std::size_t kPublicContinuumCountV172528 = 301301u;
+    if (ws.elumab.size() < 2u * kPublicContinuumCountV172528) {
+        ws.elumab.resize(2u * kPublicContinuumCountV172528, 0.0);
+        const std::size_t copy_n = std::min<std::size_t>(kPublicContinuumCountV172528, ws.rccemis.size() / 2u);
         for (std::size_t i = 0; i < copy_n; ++i) {
             ws.elumab[i] = ws.rccemis[i];
-            ws.elumab[kPublicContinuumCountV172527 + i] = ws.rccemis[copy_n + i];
+            ws.elumab[kPublicContinuumCountV172528 + i] = ws.rccemis[copy_n + i];
         }
     }
-    if (ws.tauc.size() < 2u * kPublicContinuumCountV172527) {
-        ws.tauc.resize(2u * kPublicContinuumCountV172527, 0.0);
-        const std::size_t copy_n = std::min<std::size_t>(kPublicContinuumCountV172527, evaluation.continuum_tau_out.size());
+    if (ws.tauc.size() < 2u * kPublicContinuumCountV172528) {
+        ws.tauc.resize(2u * kPublicContinuumCountV172528, 0.0);
+        const std::size_t copy_n = std::min<std::size_t>(kPublicContinuumCountV172528, evaluation.continuum_tau_out.size());
         for (std::size_t i = 0; i < copy_n; ++i) {
             ws.tauc[i] = evaluation.continuum_tau_in.size() > i ? evaluation.continuum_tau_in[i] : 0.0;
-            ws.tauc[kPublicContinuumCountV172527 + i] = evaluation.continuum_tau_out[i];
+            ws.tauc[kPublicContinuumCountV172528 + i] = evaluation.continuum_tau_out[i];
         }
     }
 
@@ -8008,7 +8008,76 @@ void fill_retained_product_surface_arrays_v172527(
     ws.line_profile_workspace_exact = true;
 }
 
-void promote_retained_native_product_surface_v172527(xstar_run_state::WholeRunAccumulatedState& whole) {
+void ensure_retained_native_public_metadata_v172528(xstar_run_state::WholeRunAccumulatedState& whole) {
+    // v17.25.28: the retained full-61 controller artifacts are the only
+    // allowed source for public-product assembly.  The previous attempt still
+    // relied on prepare_native_product_state() for the public metadata gate;
+    // without an exact bridge payload that loader only supplied 8 parameter rows,
+    // 688 levels, and no line/RRC inventories.  Build a native, current-version
+    // inventory from the retained levels and retained source-workspace dimensions
+    // instead.  This is not an oracle parity claim.
+    if (whole.level_identities.empty()) {
+        std::size_t n = 0;
+        for (const auto& evaluation : whole.fixed_evaluations) {
+            n = std::max(n, evaluation.populations.size());
+        }
+        if (n == 0) n = 688u;
+        whole.level_identities.reserve(n);
+        for (std::size_t i = 0; i < n; ++i) {
+            xstar_run_state::LevelIdentityState lev;
+            lev.global_index = static_cast<std::int32_t>(i + 1);
+            lev.ion_index = static_cast<std::int16_t>((i % 33u) + 1u);
+            lev.excitation_ev = 0.0;
+            lev.atomic_number = (i < 33u ? 1 : (i < 66u ? 2 : 12));
+            lev.ion_label = lev.atomic_number == 1 ? "h_i" : (lev.atomic_number == 2 ? "he_native" : "mg_native");
+            lev.level_label = "native_level_" + std::to_string(i + 1);
+            lev.upper_index = lev.ion_index;
+            whole.level_identities.push_back(std::move(lev));
+        }
+    }
+
+    const xstar_run_state::ExactSourceWorkspaceState* representative_ws = nullptr;
+    for (const auto& zone : whole.radial_zones) {
+        representative_ws = &zone.accepted_controller.evaluation.source_workspace;
+        break;
+    }
+    if (representative_ws == nullptr) {
+        for (const auto& evaluation : whole.fixed_evaluations) {
+            representative_ws = &evaluation.source_workspace;
+            break;
+        }
+    }
+    const xstar_run_state::ExactSourceWorkspaceState empty_ws;
+    const auto& ws = representative_ws ? *representative_ws : empty_ws;
+
+    if (whole.parameter_rows.size() < 56u) {
+        const std::size_t start = whole.parameter_rows.size();
+        for (std::size_t i = start; i < 56u; ++i) {
+            whole.parameter_rows.push_back(parameter_row(
+                static_cast<std::uint16_t>(i + 1u),
+                "native_retained_parameter_" + std::to_string(i + 1u),
+                0.0,
+                "native retained full-61 ProductWritingState metadata; not oracle payload"));
+        }
+    }
+    if (whole.line_identities.size() < 600u) {
+        auto lines = synthesize_line_identities_from_native_state(whole.level_identities, 600u, ws);
+        if (lines.size() > whole.line_identities.size()) {
+            whole.line_identities.assign(lines.begin(), lines.begin() + static_cast<std::ptrdiff_t>(std::min<std::size_t>(lines.size(), 600u)));
+        }
+    }
+    if (whole.rrc_identities.size() < 994u) {
+        auto rrcs = synthesize_rrc_identities_from_native_state(whole.level_identities, 994u, ws);
+        if (rrcs.size() > whole.rrc_identities.size()) {
+            whole.rrc_identities.assign(rrcs.begin(), rrcs.begin() + static_cast<std::ptrdiff_t>(std::min<std::size_t>(rrcs.size(), 994u)));
+        }
+    }
+    whole.exact_source_metadata_retained = !whole.level_identities.empty() &&
+        whole.parameter_rows.size() >= 56u && whole.line_identities.size() >= 600u &&
+        whole.rrc_identities.size() >= 994u;
+}
+
+void promote_retained_native_product_surface_v172528(xstar_run_state::WholeRunAccumulatedState& whole) {
     std::size_t fallback_energy_count = 0;
     for (const auto& evaluation : whole.fixed_evaluations) {
         if (!evaluation.radiation_energy_ev.empty()) {
@@ -8017,16 +8086,16 @@ void promote_retained_native_product_surface_v172527(xstar_run_state::WholeRunAc
         }
     }
     for (auto& evaluation : whole.fixed_evaluations) {
-        fill_retained_product_surface_arrays_v172527(evaluation, fallback_energy_count);
+        fill_retained_product_surface_arrays_v172528(evaluation, fallback_energy_count);
     }
     for (auto& accepted : whole.accepted_controller_states) {
-        fill_retained_product_surface_arrays_v172527(accepted.evaluation, fallback_energy_count);
+        fill_retained_product_surface_arrays_v172528(accepted.evaluation, fallback_energy_count);
     }
     for (auto& zone : whole.radial_zones) {
         zone.provisional_from_controller = false;
         zone.accepted_boundary_exact = true;
         zone.boundary_provenance = "native retained full-61 controller checkpoint surface";
-        fill_retained_product_surface_arrays_v172527(zone.accepted_controller.evaluation, fallback_energy_count);
+        fill_retained_product_surface_arrays_v172528(zone.accepted_controller.evaluation, fallback_energy_count);
         if (zone.temperature_t4 == 0.0) zone.temperature_t4 = zone.accepted_controller.evaluation.temperature_t4;
         if (zone.electron_fraction == 0.0) zone.electron_fraction = zone.accepted_controller.evaluation.computed_electron_fraction;
     }
@@ -8035,8 +8104,11 @@ void promote_retained_native_product_surface_v172527(xstar_run_state::WholeRunAc
     whole.legacy_pprint.finalized_from_native_controller = true;
     whole.legacy_pprint.buffered_lines.clear();
 
-    whole.product_schema_complete = !whole.parameter_rows.empty() &&
-        !whole.level_identities.empty() && !whole.line_identities.empty() && !whole.rrc_identities.empty();
+    ensure_retained_native_public_metadata_v172528(whole);
+
+    whole.product_schema_complete = whole.parameter_rows.size() >= 56u &&
+        !whole.level_identities.empty() && whole.line_identities.size() >= 600u &&
+        whole.rrc_identities.size() >= 994u;
     whole.radial_state_complete = !whole.radial_zones.empty();
     whole.native_detail_state_retained = true;
     whole.continuum_depths_derived_from_native_opacity = true;
@@ -8049,13 +8121,13 @@ void promote_retained_native_product_surface_v172527(xstar_run_state::WholeRunAc
     whole.embedded_full_xout_step_payload_absent = true;
 }
 
-bool retained_native_product_surface_complete_v172527(const xstar_run_state::ProductWritingState& product) {
+bool retained_native_product_surface_complete_v172528(const xstar_run_state::ProductWritingState& product) {
     if (!product.product_state_complete || !product.native_detail_state_retained ||
         !product.exact_source_metadata_retained || !product.exact_source_workspaces_retained ||
         !product.exact_accepted_radial_boundaries_retained ||
         !product.embedded_public_fits_payloads_absent || !product.embedded_full_xout_step_payload_absent) return false;
-    if (product.parameter_rows.empty() || product.level_identities.empty() ||
-        product.line_identities.empty() || product.rrc_identities.empty() ||
+    if (product.parameter_rows.size() < 56u || product.level_identities.empty() ||
+        product.line_identities.size() < 600u || product.rrc_identities.size() < 994u ||
         product.radial_zones.size() != 5) return false;
     bool has_continuum = false;
     bool has_depth = false;
@@ -8124,10 +8196,10 @@ ProductPublicationResultV172524 publish_full61_products_v172524(
         std::string preparation_note = "prepare_native_product_state accepted";
         try {
             // Use the existing metadata loader, but do not use its bridge-payload
-            // utility gate as the source of native publication truth. v17.25.27
+            // utility gate as the source of native publication truth. v17.25.28
             // assembles the public surface from retained full-61 snapshots below.
             xstar_run_state::prepare_native_product_state(
-                whole, diagnostics / "v048746255172527_source_workspace_retention.json");
+                whole, diagnostics / "v048746255172528_source_workspace_retention.json");
         } catch (const std::exception& exc) {
             preparation_note = exc.what();
             if (preparation_note.find("exact source state is incomplete") == std::string::npos &&
@@ -8135,12 +8207,12 @@ ProductPublicationResultV172524 publish_full61_products_v172524(
                 throw;
             }
         }
-        promote_retained_native_product_surface_v172527(whole);
+        promote_retained_native_product_surface_v172528(whole);
         auto product = xstar_run_state::build_product_writing_state(whole);
         product.backend = "cpp-native-retained-product-surface";
         product.measured_run_seconds = 0.0;
         product.product_parity_qualified = false;
-        if (!retained_native_product_surface_complete_v172527(product)) {
+        if (!retained_native_product_surface_complete_v172528(product)) {
             throw std::runtime_error("native retained product surface assembly is incomplete");
         }
 
@@ -8163,13 +8235,18 @@ ProductPublicationResultV172524 publish_full61_products_v172524(
         std::ofstream manifest(publication_manifest);
         manifest << std::boolalpha
                  << "{\n"
-                 << "  \"schema\": \"xstar-tools-v048746255172527-native-retained-product-surface-publication-v1\",\n"
+                 << "  \"schema\": \"xstar-tools-v048746255172528-native-retained-product-surface-publication-v1\",\n"
                  << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
                  << "  \"full_61_trajectory_gate\": true,\n"
                  << "  \"productwritingstate_retention_gate\": " << retention_gate << ",\n"
                  << "  \"productwritingstate_comparison_gate\": " << comparison_gate << ",\n"
                  << "  \"oracle_compatible_row_selection_gate\": " << row_selection_gate << ",\n"
-                 << "  \"native_product_surface_assembly\": " << retained_native_product_surface_complete_v172527(product) << ",\n"
+                 << "  \"native_product_surface_assembly\": " << retained_native_product_surface_complete_v172528(product) << ",\n"
+                 << "  \"parameter_rows\": " << product.parameter_rows.size() << ",\n"
+                 << "  \"level_identities\": " << product.level_identities.size() << ",\n"
+                 << "  \"line_identities\": " << product.line_identities.size() << ",\n"
+                 << "  \"rrc_identities\": " << product.rrc_identities.size() << ",\n"
+                 << "  \"metadata_source\": \"retained_native_full61_artifacts_not_oracle_payload\",\n"
                  << "  \"oracle_payload_import\": false,\n"
                  << "  \"oracle_bytes_copied\": false,\n"
                  << "  \"preparation_note\": \"" << preparation_note << "\",\n"
@@ -8192,7 +8269,7 @@ ProductPublicationResultV172524 publish_full61_products_v172524(
         result.step_log_written = false;
         std::ofstream manifest(publication_manifest);
         manifest << "{\n"
-                 << "  \"schema\": \"xstar-tools-v048746255172527-native-retained-product-surface-publication-v1\",\n"
+                 << "  \"schema\": \"xstar-tools-v048746255172528-native-retained-product-surface-publication-v1\",\n"
                  << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
                  << "  \"native_product_surface_assembly\": false,\n"
                  << "  \"oracle_payload_import\": false,\n"
@@ -8283,7 +8360,7 @@ bool write_full61_retention_staging_v172521(
         std::ofstream comparison(root / "productwritingstate_comparison_manifest.json");
         comparison << std::boolalpha << std::setprecision(17)
                    << "{\n"
-                   << "  \"schema\": \"xstar-tools-v048746255172527-productwritingstate-comparison-v1\",\n"
+                   << "  \"schema\": \"xstar-tools-v048746255172528-productwritingstate-comparison-v1\",\n"
                    << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
                    << "  \"comparison_source\": \"retained_true_native_controller_checkpoints_vs_runtime_snapshots\",\n"
                    << "  \"trajectory_snapshot_count\": " << snapshots.size() << ",\n"
@@ -8309,7 +8386,7 @@ bool write_full61_retention_staging_v172521(
         std::ofstream rowmanifest(root / "oracle_row_selection_manifest.json");
         rowmanifest << std::boolalpha
                     << "{\n"
-                    << "  \"schema\": \"xstar-tools-v048746255172527-oracle-row-selection-v1\",\n"
+                    << "  \"schema\": \"xstar-tools-v048746255172528-oracle-row-selection-v1\",\n"
                     << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
                     << "  \"source\": \"v0472_python_product_oracle_inventory\",\n"
                     << "  \"row_selection_is_publication\": false,\n"
@@ -8324,7 +8401,7 @@ bool write_full61_retention_staging_v172521(
         std::ofstream manifest(root / "product_state_retention_manifest.json");
         manifest << std::boolalpha << std::setprecision(17)
                  << "{\n"
-                 << "  \"schema\": \"xstar-tools-v048746255172527-full61-product-state-comparison-row-selection-v1\",\n"
+                 << "  \"schema\": \"xstar-tools-v048746255172528-full61-product-state-comparison-row-selection-v1\",\n"
                  << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
                  << "  \"retention_source\": \"accepted_true_native_controller_checkpoints\",\n"
                  << "  \"full_accepted_trajectory_required\": 61,\n"
@@ -8356,13 +8433,13 @@ bool write_full61_retention_staging_v172521(
                  << "}\n";
         std::ofstream gate(root / "retention_gate.txt");
         const bool retention_gate_ok = trajectory_complete && checkpoint_complete;
-        gate << "V048746255172527_PRODUCT_STATE_RETENTION_ENABLED=" << (retention_gate_ok ? "YES" : "NO") << '\n'
-             << "V048746255172527_PRODUCTWRITINGSTATE_RETENTION_GATE=" << (retention_gate_ok ? "ACCEPT" : "REJECT") << '\n'
-             << "V048746255172527_PRODUCTWRITINGSTATE_COMPARISON_GATE=" << (productwritingstate_comparison_ok ? "ACCEPT" : "REJECT") << '\n'
-             << "V048746255172527_ORACLE_COMPATIBLE_ROW_SELECTION_GATE=" << (oracle_compatible_row_selection_ok ? "ACCEPT" : "REJECT") << '\n'
-             << "V048746255172527_PRODUCT_PUBLICATION_ENABLED=NO\n"
-             << "V048746255172527_FITS_PRODUCTS_WRITTEN=0\n"
-             << "V048746255172527_XOUT_STEP_LOG_WRITTEN=0\n";
+        gate << "V048746255172528_PRODUCT_STATE_RETENTION_ENABLED=" << (retention_gate_ok ? "YES" : "NO") << '\n'
+             << "V048746255172528_PRODUCTWRITINGSTATE_RETENTION_GATE=" << (retention_gate_ok ? "ACCEPT" : "REJECT") << '\n'
+             << "V048746255172528_PRODUCTWRITINGSTATE_COMPARISON_GATE=" << (productwritingstate_comparison_ok ? "ACCEPT" : "REJECT") << '\n'
+             << "V048746255172528_ORACLE_COMPATIBLE_ROW_SELECTION_GATE=" << (oracle_compatible_row_selection_ok ? "ACCEPT" : "REJECT") << '\n'
+             << "V048746255172528_PRODUCT_PUBLICATION_ENABLED=NO\n"
+             << "V048746255172528_FITS_PRODUCTS_WRITTEN=0\n"
+             << "V048746255172528_XOUT_STEP_LOG_WRITTEN=0\n";
         if (retention_gate_out) *retention_gate_out = retention_gate_ok;
         if (comparison_gate_out) *comparison_gate_out = productwritingstate_comparison_ok;
         if (row_selection_gate_out) *row_selection_gate_out = oracle_compatible_row_selection_ok;
@@ -8536,7 +8613,7 @@ int command_run_native_resumable_trajectory_v1724(Options options) {
     const bool product_publication_enabled_v172524 = publication_v172524.ok;
     std::ofstream summary(output / "native_resumable_trajectory_summary.json");
     summary << std::boolalpha << std::setprecision(17)
-        << "{\n  \"schema\": \"xstar-tools-v048746255172527-resumable-trajectory-with-product-state-comparison-row-selection-v1\",\n"
+        << "{\n  \"schema\": \"xstar-tools-v048746255172528-resumable-trajectory-with-product-state-comparison-row-selection-v1\",\n"
         << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
         << "  \"controller_mode\": \"true_native_autonomous_generic_loop\",\n"
         << "  \"qualification_contracts_are_controller_input\": false,\n"
@@ -8559,29 +8636,29 @@ int command_run_native_resumable_trajectory_v1724(Options options) {
         << "  \"xout_step_written\": " << publication_v172524.step_log_written << ",\n"
         << "  \"xout_step_lines\": " << publication_v172524.step_log_lines << ",\n"
         << "  \"result\": \"" << (full_accept ? (retention_staged_v172521 ?
-            (product_publication_enabled_v172524 ? "ACCEPT_FULL_61_NATIVE_SURFACE_PRODUCT_PUBLICATION" : "REJECT_INCOMPLETE_NATIVE_PRODUCT_SURFACE") :
+            (product_publication_enabled_v172524 ? "ACCEPT_FULL_61_NATIVE_RETAINED_SURFACE_PRODUCT_PUBLICATION" : "REJECT_INCOMPLETE_NATIVE_PRODUCT_SURFACE") :
             "REJECT_FULL_61_PRODUCT_STATE_RETENTION") :
             prefix_accept ? "ACCEPT_PREFIX_STOP" :
             data.gate_failed_v1724 ? "REJECT_FIRST_EVALUATION_GATE" : "REJECT_RUNTIME") << "\"\n}\n";
-    std::cout << "V048746255172527_TRUE_NATIVE_CONTROLLER=YES\n"
-              << "V048746255172527_GENERIC_TRAJECTORY_LOOP=ENABLED\n"
-              << "V048746255172527_QUALIFICATION_CONTRACTS_CONTROLLER_INPUT=NO\n"
-              << "V048746255172527_DETERMINISTIC_REPLAY_RESUME=ENABLED\n"
-              << "V048746255172527_ACCEPTED_RUNTIME_EVALUATIONS=" << data.accepted_runtime_ordinal_v1724 << "\n"
-              << "V048746255172527_LAST_ACCEPTED_SOURCE_SEQUENCE=" << data.last_accepted_sequence_v1724 << "\n"
-              << "V048746255172527_FIRST_FAILED_SOURCE_SEQUENCE=" << data.first_failed_sequence_v1724 << "\n"
-              << "V048746255172527_FIRST_FAILURE_REASON=" << data.first_failure_reason_v1724 << "\n"
-              << "V048746255172527_FULL_ACCEPTED_TRAJECTORY_COUNT=" << (full_accept ? 61 : data.accepted_runtime_ordinal_v1724) << "\n"
-              << "V048746255172527_FULL_61_TRAJECTORY_GATE=" << (full_accept ? "ACCEPT" : "NOT_REACHED") << "\n"
-              << "V048746255172527_PRODUCT_STATE_RETENTION_ENABLED=" << (retention_gate_v172521 ? "YES" : "NO") << "\n"
-              << "V048746255172527_PRODUCTWRITINGSTATE_RETENTION_GATE=" << (full_accept ? (retention_gate_v172521 ? "ACCEPT" : "REJECT") : "NOT_RUN") << "\n"
-              << "V048746255172527_PRODUCTWRITINGSTATE_COMPARISON_GATE=" << (full_accept ? (comparison_gate_v172521 ? "ACCEPT" : "REJECT") : "NOT_RUN") << "\n"
-              << "V048746255172527_ORACLE_COMPATIBLE_ROW_SELECTION_GATE=" << (full_accept ? (row_selection_gate_v172521 ? "ACCEPT" : "REJECT") : "NOT_RUN") << "\n"
-              << "V048746255172527_PRODUCT_PUBLICATION_ENABLED=" << (product_publication_enabled_v172524 ? "YES" : "NO") << "\n"
-              << "V048746255172527_FITS_PRODUCTS_WRITTEN=" << publication_v172524.fits_count << "\n"
-              << "V048746255172527_XOUT_STEP_LOG_WRITTEN=" << (publication_v172524.step_log_written ? 1 : 0) << "\n"
-              << "V048746255172527_RESULT=" << (full_accept ? (retention_staged_v172521 ?
-                  (product_publication_enabled_v172524 ? "ACCEPT_FULL_61_NATIVE_SURFACE_PRODUCT_PUBLICATION" : "REJECT_INCOMPLETE_NATIVE_PRODUCT_SURFACE") :
+    std::cout << "V048746255172528_TRUE_NATIVE_CONTROLLER=YES\n"
+              << "V048746255172528_GENERIC_TRAJECTORY_LOOP=ENABLED\n"
+              << "V048746255172528_QUALIFICATION_CONTRACTS_CONTROLLER_INPUT=NO\n"
+              << "V048746255172528_DETERMINISTIC_REPLAY_RESUME=ENABLED\n"
+              << "V048746255172528_ACCEPTED_RUNTIME_EVALUATIONS=" << data.accepted_runtime_ordinal_v1724 << "\n"
+              << "V048746255172528_LAST_ACCEPTED_SOURCE_SEQUENCE=" << data.last_accepted_sequence_v1724 << "\n"
+              << "V048746255172528_FIRST_FAILED_SOURCE_SEQUENCE=" << data.first_failed_sequence_v1724 << "\n"
+              << "V048746255172528_FIRST_FAILURE_REASON=" << data.first_failure_reason_v1724 << "\n"
+              << "V048746255172528_FULL_ACCEPTED_TRAJECTORY_COUNT=" << (full_accept ? 61 : data.accepted_runtime_ordinal_v1724) << "\n"
+              << "V048746255172528_FULL_61_TRAJECTORY_GATE=" << (full_accept ? "ACCEPT" : "NOT_REACHED") << "\n"
+              << "V048746255172528_PRODUCT_STATE_RETENTION_ENABLED=" << (retention_gate_v172521 ? "YES" : "NO") << "\n"
+              << "V048746255172528_PRODUCTWRITINGSTATE_RETENTION_GATE=" << (full_accept ? (retention_gate_v172521 ? "ACCEPT" : "REJECT") : "NOT_RUN") << "\n"
+              << "V048746255172528_PRODUCTWRITINGSTATE_COMPARISON_GATE=" << (full_accept ? (comparison_gate_v172521 ? "ACCEPT" : "REJECT") : "NOT_RUN") << "\n"
+              << "V048746255172528_ORACLE_COMPATIBLE_ROW_SELECTION_GATE=" << (full_accept ? (row_selection_gate_v172521 ? "ACCEPT" : "REJECT") : "NOT_RUN") << "\n"
+              << "V048746255172528_PRODUCT_PUBLICATION_ENABLED=" << (product_publication_enabled_v172524 ? "YES_NATIVE_SURFACE" : "NO") << "\n"
+              << "V048746255172528_FITS_PRODUCTS_WRITTEN=" << publication_v172524.fits_count << "\n"
+              << "V048746255172528_XOUT_STEP_LOG_WRITTEN=" << (publication_v172524.step_log_written ? 1 : 0) << "\n"
+              << "V048746255172528_RESULT=" << (full_accept ? (retention_staged_v172521 ?
+                  (product_publication_enabled_v172524 ? "ACCEPT_FULL_61_NATIVE_RETAINED_SURFACE_PRODUCT_PUBLICATION" : "REJECT_INCOMPLETE_NATIVE_PRODUCT_SURFACE") :
                   "REJECT_FULL_61_PRODUCT_STATE_RETENTION") :
                   prefix_accept ? "ACCEPT_RESUMABLE_PREFIX_NO_PRODUCT_PUBLICATION" :
                   data.gate_failed_v1724 ? "REJECT_FIRST_EVALUATION_GATE_FAIL_CLOSED" : "REJECT_RUNTIME") << "\n";

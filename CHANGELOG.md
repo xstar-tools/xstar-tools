@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 0.6.48.7.46.25.5.17.25.28 - 2026-07-15
+
+- Enabled gated product publication after full-61 trajectory, ProductWritingState retention, ProductWritingState comparison, and oracle-compatible row-selection gates accept.
+- Added compact native xout_step.log publication from accepted true-native ProductWritingState without copying benchmark xout_step bytes or faking atomic database statistics.
+- Kept publication fail-closed for any upstream gate rejection and made product parity explicitly not claimed.
+
 ## 0.6.48.7.46.25.5.17.25.27 - 2026-07-15
 
 - Enabled gated product publication after full-61 trajectory, ProductWritingState retention, ProductWritingState comparison, and oracle-compatible row-selection gates accept.
