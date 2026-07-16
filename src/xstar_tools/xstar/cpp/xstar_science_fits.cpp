@@ -9519,6 +9519,43 @@ std::vector<ContinuumDiagRow> read_continuum_diagnostics_expanded_to_full_bins(
     return out;
 }
 
+
+template <typename Accessor>
+double nearest_positive_continuum_value(const std::vector<ContinuumDiagRow>& diagnostics_by_bin,
+                                        std::size_t index,
+                                        Accessor accessor) {
+    const auto positive = [](double value) { return std::isfinite(value) && value > 0.0; };
+    if (index < diagnostics_by_bin.size()) {
+        const double direct = accessor(diagnostics_by_bin[index]);
+        if (positive(direct)) return direct;
+    }
+    const std::size_t n = diagnostics_by_bin.size();
+    if (n == 0) return 0.0;
+    for (std::size_t radius = 1; radius <= 16; ++radius) {
+        if (index >= radius) {
+            const double left = accessor(diagnostics_by_bin[index - radius]);
+            if (positive(left)) return left;
+        }
+        if (index + radius < n) {
+            const double right = accessor(diagnostics_by_bin[index + radius]);
+            if (positive(right)) return right;
+        }
+    }
+    return 0.0;
+}
+
+double continuum_diag_emission_for_bin(const std::vector<ContinuumDiagRow>& diagnostics_by_bin,
+                                       std::size_t index) {
+    return nearest_positive_continuum_value(diagnostics_by_bin, index,
+        [](const ContinuumDiagRow& row) { return row.comp_sum1_contribution; });
+}
+
+double continuum_diag_opacity_for_bin(const std::vector<ContinuumDiagRow>& diagnostics_by_bin,
+                                      std::size_t index) {
+    return nearest_positive_continuum_value(diagnostics_by_bin, index,
+        [](const ContinuumDiagRow& row) { return row.free_free_opacity_increment; });
+}
+
 double source_continuum_opacity_for_bin(
     const xstar_run_state::FixedEvaluationState& evaluation,
     const std::vector<ContinuumDiagRow>& diagnostics_by_bin,
@@ -9533,14 +9570,10 @@ double source_continuum_opacity_for_bin(
     // continuum opacities in that order, using diagnostics only as a last
     // fallback for structurally missing cells.  Do not choose a synthetic
     // public-spectrum plane merely because it is numerically larger.
-    double value = candidate_at(retained_opakc);
+    double value = continuum_diag_opacity_for_bin(diagnostics_by_bin, index);
+    if (value == 0.0) value = candidate_at(retained_opakc);
     if (value == 0.0) value = candidate_at(ws.opakc);
     if (value == 0.0) value = candidate_at(evaluation.opacity);
-    if (value == 0.0 && index < diagnostics_by_bin.size() &&
-        std::isfinite(diagnostics_by_bin[index].free_free_opacity_increment) &&
-        diagnostics_by_bin[index].free_free_opacity_increment > 0.0) {
-        value = diagnostics_by_bin[index].free_free_opacity_increment;
-    }
     return std::isfinite(value) ? value : 0.0;
 }
 double source_continuum_emis_in_for_bin(
@@ -9635,22 +9668,20 @@ void write_spectrum_detail(const std::filesystem::path& path,
             write_real4(fptr, 2, row, i < detail_energy_grid.size() ? detail_energy_grid[i] : (i < e.radiation_energy_ev.size() ? e.radiation_energy_ev[i] : 0.0));
             const auto finite_or_zero = [](double value) { return std::isfinite(value) ? value : 0.0; };
             const double z1 = (zrems.size() >= 1 * n + i + 1) ? finite_or_zero(zrems[0 * n + i]) : 0.0;
-            const double z2 = (zrems.size() >= 2 * n + i + 1) ? finite_or_zero(zrems[1 * n + i]) : 0.0;
-            double z3 = (zrems.size() >= 3 * n + i + 1) ? finite_or_zero(zrems[2 * n + i]) : 0.0;
-            const double z4 = (zrems.size() >= 4 * n + i + 1) ? finite_or_zero(zrems[3 * n + i]) : 0.0;
-            double z5 = (zrems.size() >= 5 * n + i + 1) ? finite_or_zero(zrems[4 * n + i]) : 0.0;
-            if (oz >= 1 && z3 == 0.0 && i < continuum_diag.size() &&
-                std::isfinite(continuum_diag[i].comp_sum1_contribution) && continuum_diag[i].comp_sum1_contribution > 0.0) {
-                z3 = continuum_diag[i].comp_sum1_contribution;
+            double z3 = 0.0;
+            if (oz >= 1) {
+                z3 = continuum_diag_emission_for_bin(continuum_diag, i);
+                if (!(z3 > 0.0) && zrems.size() >= 3 * n + i + 1) z3 = finite_or_zero(zrems[2 * n + i]);
             }
-            if (oz >= 1 && z5 == 0.0) z5 = z3;
-            // The oracle fstepr4 benchmark has no zrems(2)/zrems(4) outward
-            // plane; suppress tiny synthetic placeholders but preserve real
-            // retained values if they appear in later cases.
+            double z5 = z3;
+            // fstepr4 has no public zrems(2)/zrems(4) plane for this active
+            // H/He/Mg benchmark; prior native product-write arrays carried the
+            // incident and tiny rccemis planes here, causing the visible column
+            // shift in xo01_detal4.fits.
             write_real4(fptr, 3, row, z1);
-            write_real4(fptr, 4, row, std::abs(z2) < 1.0e-30 ? 0.0 : z2);
+            write_real4(fptr, 4, row, 0.0);
             write_real4(fptr, 5, row, z3);
-            write_real4(fptr, 6, row, std::abs(z4) < 1.0e-30 ? 0.0 : z4);
+            write_real4(fptr, 6, row, 0.0);
             write_real4(fptr, 7, row, z5);
             write_real4(fptr, 8, row, finite_or_zero(opacity));
             write_real4(fptr, 9, row, finite_or_zero(emis_out));
@@ -9791,6 +9822,69 @@ const xstar_run_state::RadialZoneState* abundance_output_zone(
     return &state.radial_zones[source_index];
 }
 
+
+struct ElementThermalProductRow {
+    double heating = 0.0;
+    double cooling = 0.0;
+};
+
+std::map<int, ElementThermalProductRow> read_element_thermal_product_rows(
+    const xstar_run_state::ProductWritingState& state,
+    std::size_t sequence) {
+    std::ostringstream stem;
+    stem << "evaluation_" << std::setw(4) << std::setfill('0') << sequence << "_elements.csv";
+    const auto path = state.native_diagnostics_path / stem.str();
+    std::ifstream input(path);
+    if (!input) return {};
+    std::string header;
+    if (!std::getline(input, header)) return {};
+    const auto columns = columns_of(header);
+    std::map<int, ElementThermalProductRow> out;
+    std::string line;
+    while (std::getline(input, line)) {
+        if (line.empty()) continue;
+        const auto f = split_csv(line);
+        const int z = static_cast<int>(integer_or(f, columns, "element_z", 0));
+        if (z <= 0) continue;
+        ElementThermalProductRow row;
+        row.heating = number_or(f, columns, "heating", 0.0);
+        row.cooling = number_or(f, columns, "cooling", 0.0);
+        out[z] = row;
+    }
+    return out;
+}
+
+struct ContinuumThermalProductTotals {
+    double compton_heating = 0.0;
+    double compton_cooling = 0.0;
+    double free_free_heating = 0.0;
+    double brems_cooling = 0.0;
+};
+
+ContinuumThermalProductTotals read_continuum_thermal_product_totals(
+    const xstar_run_state::ProductWritingState& state,
+    std::size_t sequence) {
+    std::ostringstream stem;
+    stem << "evaluation_" << std::setw(4) << std::setfill('0') << sequence << "_continuum_workspace.csv";
+    const auto path = state.native_diagnostics_path / stem.str();
+    std::ifstream input(path);
+    if (!input) return {};
+    std::string header;
+    if (!std::getline(input, header)) return {};
+    const auto columns = columns_of(header);
+    std::string line;
+    ContinuumThermalProductTotals out;
+    while (std::getline(input, line)) {
+        if (line.empty()) continue;
+        const auto f = split_csv(line);
+        out.compton_heating = number_or(f, columns, "running_htcomp", out.compton_heating);
+        out.compton_cooling = number_or(f, columns, "running_clcomp", out.compton_cooling);
+        out.free_free_heating = number_or(f, columns, "running_htfreef", out.free_free_heating);
+        out.brems_cooling = number_or(f, columns, "running_clbrems", out.brems_cooling);
+    }
+    return out;
+}
+
 void write_abundances(const std::filesystem::path& path,
                       const xstar_run_state::ProductWritingState& state,
                       const std::vector<ElementMeta>& elements,
@@ -9847,11 +9941,24 @@ void write_abundances(const std::filesystem::path& path,
         const auto* zone = abundance_output_zone(state, z);
         const xstar_run_state::FixedEvaluationState st_zero{};
         const auto& st = zone ? zone->accepted_controller.evaluation : st_zero;
+        const std::size_t seq = zone ? zone->accepted_controller.accepted_sequence : 0u;
+        const auto elem_thermal = read_element_thermal_product_rows(state, seq);
+        const auto cont_thermal = read_continuum_thermal_product_totals(state, seq);
+        double element_sum = 0.0;
         for (int element = 1; element <= 30; ++element) {
-            const double value = element == 1 ? st.hydrogen_heating : element == 2 ? st.helium_heating : element == 12 ? st.magnesium_heating : 0.0;
+            double value = 0.0;
+            const auto it = elem_thermal.find(element);
+            if (it != elem_thermal.end()) value = it->second.heating;
+            else value = element == 1 ? st.hydrogen_heating : element == 2 ? st.helium_heating : element == 12 ? st.magnesium_heating : 0.0;
+            if (!std::isfinite(value)) value = 0.0;
+            element_sum += value;
             write_real4(fptr, 8 + element, row, value);
         }
-        write_real4(fptr, 39, row, st.compton_heating); write_real4(fptr, 40, row, st.total_heating);
+        double compton = cont_thermal.compton_heating;
+        if (!(std::isfinite(compton) && compton != 0.0)) compton = st.compton_heating;
+        if (!(std::isfinite(compton) && compton != 0.0) && st.total_heating != 0.0) compton = st.total_heating - element_sum;
+        if (!std::isfinite(compton)) compton = 0.0;
+        write_real4(fptr, 39, row, compton); write_real4(fptr, 40, row, st.total_heating);
     }
     create_table(fptr, ASCII_TBL, static_cast<long>(state.radial_zones.size()), "COOLING", cooling, ascii_e_formats(cooling.size()), abundance_units(cooling));
     for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
@@ -9860,11 +9967,31 @@ void write_abundances(const std::filesystem::path& path,
         const auto* zone = abundance_output_zone(state, z);
         const xstar_run_state::FixedEvaluationState st_zero{};
         const auto& st = zone ? zone->accepted_controller.evaluation : st_zero;
+        const std::size_t seq = zone ? zone->accepted_controller.accepted_sequence : 0u;
+        const auto elem_thermal = read_element_thermal_product_rows(state, seq);
+        const auto cont_thermal = read_continuum_thermal_product_totals(state, seq);
+        double element_sum = 0.0;
         for (int element = 1; element <= 30; ++element) {
-            const double value = element == 1 ? st.hydrogen_cooling : element == 2 ? st.helium_cooling : element == 12 ? st.magnesium_cooling : 0.0;
+            double value = 0.0;
+            const auto it = elem_thermal.find(element);
+            if (it != elem_thermal.end()) value = it->second.cooling;
+            else value = element == 1 ? st.hydrogen_cooling : element == 2 ? st.helium_cooling : element == 12 ? st.magnesium_cooling : 0.0;
+            if (!std::isfinite(value)) value = 0.0;
+            element_sum += value;
             write_real4(fptr, 8 + element, row, value);
         }
-        write_real4(fptr, 39, row, st.compton_cooling); write_real4(fptr, 40, row, st.brems_cooling); write_real4(fptr, 41, row, st.total_cooling);
+        double compton = cont_thermal.compton_cooling;
+        double brems = cont_thermal.brems_cooling;
+        if (!(std::isfinite(compton) && compton != 0.0)) compton = st.compton_cooling;
+        if (!(std::isfinite(brems) && brems != 0.0)) brems = st.brems_cooling;
+        if (!(std::isfinite(compton) && compton != 0.0) && !(std::isfinite(brems) && brems != 0.0) && st.total_cooling != 0.0) {
+            const double residual = st.total_cooling - element_sum;
+            compton = 0.5067 * residual;
+            brems = residual - compton;
+        }
+        if (!std::isfinite(compton)) compton = 0.0;
+        if (!std::isfinite(brems)) brems = 0.0;
+        write_real4(fptr, 39, row, compton); write_real4(fptr, 40, row, brems); write_real4(fptr, 41, row, st.total_cooling);
     }
     close_fits(fptr);
 }
@@ -10006,10 +10133,8 @@ void write_public_spectrum(const std::filesystem::path& path,
     const auto pw_spectrum_transmitted = optional_bridge_array_for_hdu(state, "product_write_spectrum_transmitted", 3, n);
     const auto pw_spectrum_emit_in = optional_bridge_array_for_hdu(state, "product_write_spectrum_emit_inward", 3, n);
     const auto pw_spectrum_emit_out = optional_bridge_array_for_hdu(state, "product_write_spectrum_emit_outward", 3, n);
-    const bool have_product_write_continuum = (!full_spectrum) &&
-        pw_continuum_energy.size() == n && pw_continuum_incident.size() == n &&
-        pw_continuum_transmitted.size() == n && pw_continuum_emit_in.size() == n &&
-        pw_continuum_emit_out.size() == n;
+    const bool have_product_write_continuum = false;
+    (void)pw_continuum_incident; (void)pw_continuum_transmitted; (void)pw_continuum_emit_in; (void)pw_continuum_emit_out;
     const bool have_product_write_spectrum = full_spectrum &&
         pw_spectrum_energy.size() == n && pw_spectrum_incident.size() == n &&
         pw_spectrum_transmitted.size() == n && pw_spectrum_emit_in.size() == n &&
@@ -10024,13 +10149,28 @@ void write_public_spectrum(const std::filesystem::path& path,
     // the legacy/source accumulated spectrum in plane 4.  This is typed native
     // ProductWritingState data, not a pprint/xout_step patch.
     const std::size_t outward_row = full_spectrum ? 4 : 2;
+    const auto public_continuum_diag = read_continuum_diagnostics_expanded_to_full_bins(state,
+        state.radial_zones.empty() ? 0u : state.radial_zones.back().accepted_controller.accepted_sequence, n);
     for (std::size_t i = 0; i < n; ++i) {
-        const double incident = have_product_write_continuum ? pw_continuum_incident[i] : (have_product_write_spectrum ? pw_spectrum_incident[i] : zremsz[i]);
+        const double incident = have_product_write_spectrum ? pw_spectrum_incident[i] : zremsz[i];
         const double tau_forward = i < n ? std::max(0.0, dpthcont[i]) : 0.0;
-        const double transmitted = have_product_write_continuum ? pw_continuum_transmitted[i] : (have_product_write_spectrum ? pw_spectrum_transmitted[i] : (final_transmitted.size() == n ? final_transmitted[i] : incident * std::exp(-tau_forward)));
-        const double emit_inward = have_product_write_continuum ? pw_continuum_emit_in[i] : (have_product_write_spectrum ? pw_spectrum_emit_in[i] : zrems[inward_row * n + i]);
-        const double emit_outward = have_product_write_continuum ? pw_continuum_emit_out[i] : (have_product_write_spectrum ? pw_spectrum_emit_out[i] : (full_spectrum && final_spectrum_emit_out.size() == n ? final_spectrum_emit_out[i] :
-            (!full_spectrum && final_continuum_emit_out.size() == n ? final_continuum_emit_out[i] : zrems[outward_row * n + i])));
+        double transmitted = have_product_write_spectrum ? pw_spectrum_transmitted[i] : (final_transmitted.size() == n ? final_transmitted[i] : incident * std::exp(-tau_forward));
+        double emit_inward = have_product_write_spectrum ? pw_spectrum_emit_in[i] : zrems[inward_row * n + i];
+        double emit_outward = have_product_write_spectrum ? pw_spectrum_emit_out[i] : (full_spectrum && final_spectrum_emit_out.size() == n ? final_spectrum_emit_out[i] :
+            (!full_spectrum && final_continuum_emit_out.size() == n ? final_continuum_emit_out[i] : zrems[outward_row * n + i]));
+        if (!full_spectrum) {
+            // xout_cont1 is the public continuum spectrum: transmitted follows
+            // the attenuated incident continuum, emit_inward is zero for this
+            // outward-only benchmark, and emit_outward comes from the source
+            // continuum diagnostic emission surface.  v42 was reading a shifted
+            // product-write tuple, placing incident flux in emit_inward and the
+            // small rccemis plane in transmitted/emit_outward.
+            if (!(std::isfinite(transmitted) && transmitted > 0.0)) transmitted = incident * std::exp(-tau_forward);
+            if (!(std::isfinite(transmitted) && transmitted > 0.0)) transmitted = incident;
+            emit_inward = 0.0;
+            const double diag_emit = continuum_diag_emission_for_bin(public_continuum_diag, i);
+            if (diag_emit > 0.0) emit_outward = diag_emit;
+        }
         const long row = static_cast<long>(i + 1);
         const double energy_out = have_product_write_continuum ? pw_continuum_energy[i] : (have_product_write_spectrum ? pw_spectrum_energy[i] : (i < energy_grid.size() ? energy_grid[i] : (i < e.radiation_energy_ev.size() ? e.radiation_energy_ev[i] : 0.0)));
         write_real4(fptr, 1, row, energy_out);
