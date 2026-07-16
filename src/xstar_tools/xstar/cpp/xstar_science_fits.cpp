@@ -8862,12 +8862,16 @@ RrcRow merged_rrc_row(const RrcRow& base, const RrcRow* diagnostic) {
     if (!diagnostic) return base;
     RrcRow out = base;
     if (diagnostic->energy_ev > 0.0) out.energy_ev = diagnostic->energy_ev;
-    if (out.emis_in == 0.0 && diagnostic->emis_in != 0.0) out.emis_in = diagnostic->emis_in;
-    if (out.emis_out == 0.0 && diagnostic->emis_out != 0.0) out.emis_out = diagnostic->emis_out;
-    if (out.absorption == 0.0 && diagnostic->absorption != 0.0) out.absorption = diagnostic->absorption;
-    if (out.opacity == 0.0 && diagnostic->opacity != 0.0) out.opacity = diagnostic->opacity;
-    if ((!std::isfinite(out.tau_in) || out.tau_in == 0.0) && std::isfinite(diagnostic->tau_in) && diagnostic->tau_in != 0.0) out.tau_in = diagnostic->tau_in;
-    if ((!std::isfinite(out.tau_out) || out.tau_out == 0.0) && std::isfinite(diagnostic->tau_out) && diagnostic->tau_out != 0.0) out.tau_out = diagnostic->tau_out;
+    // v17.25.39: for detailed RRC rows, the per-record Type-49/53/99
+    // diagnostics are source-order values for the same public continuum index.
+    // Prefer them over sparse retained workspace slots; the latter can be a
+    // compact-public surface and can shift row 1 and other detailed rows.
+    if (diagnostic->emis_in != 0.0) out.emis_in = diagnostic->emis_in;
+    if (diagnostic->emis_out != 0.0) out.emis_out = diagnostic->emis_out;
+    if (diagnostic->absorption != 0.0) out.absorption = diagnostic->absorption;
+    if (diagnostic->opacity != 0.0) out.opacity = diagnostic->opacity;
+    if (std::isfinite(diagnostic->tau_in) && diagnostic->tau_in != 0.0) out.tau_in = diagnostic->tau_in;
+    if (std::isfinite(diagnostic->tau_out) && diagnostic->tau_out != 0.0) out.tau_out = diagnostic->tau_out;
     return out;
 }
 
@@ -8998,18 +9002,18 @@ void write_line_detail(const std::filesystem::path& path,
             write_real4(fptr, 10, row, r.tau_out);
         }
         detal2_audit.push_back(audit);
-        std::cout << "V048746255172538_DETAL2_HDU" << audit.hdu << "_ROWS=" << audit.rows << "\n"
-                  << "V048746255172538_DETAL2_HDU" << audit.hdu << "_DIAGNOSTIC_ROWS=" << audit.diagnostic_rows << "\n"
-                  << "V048746255172538_DETAL2_HDU" << audit.hdu << "_EMIS_OUTWARD_NONZERO=" << audit.emis_outward_nonzero << "\n"
-                  << "V048746255172538_DETAL2_HDU" << audit.hdu << "_OPACITY_NONZERO=" << audit.opacity_nonzero << "\n"
-                  << "V048746255172538_DETAL2_HDU" << audit.hdu << "_TAU_IN_NULLS=0\n"
-                  << "V048746255172538_DETAL2_HDU" << audit.hdu << "_TAU_OUT_NULLS=0\n"
-                  << "V048746255172538_DETAL2_HDU" << audit.hdu << "_TAU_IN_DEPTH_FALLBACK=" << audit.tau_in_depth_fallback << "\n";
+        std::cout << "V048746255172539_DETAL2_HDU" << audit.hdu << "_ROWS=" << audit.rows << "\n"
+                  << "V048746255172539_DETAL2_HDU" << audit.hdu << "_DIAGNOSTIC_ROWS=" << audit.diagnostic_rows << "\n"
+                  << "V048746255172539_DETAL2_HDU" << audit.hdu << "_EMIS_OUTWARD_NONZERO=" << audit.emis_outward_nonzero << "\n"
+                  << "V048746255172539_DETAL2_HDU" << audit.hdu << "_OPACITY_NONZERO=" << audit.opacity_nonzero << "\n"
+                  << "V048746255172539_DETAL2_HDU" << audit.hdu << "_TAU_IN_NULLS=0\n"
+                  << "V048746255172539_DETAL2_HDU" << audit.hdu << "_TAU_OUT_NULLS=0\n"
+                  << "V048746255172539_DETAL2_HDU" << audit.hdu << "_TAU_IN_DEPTH_FALLBACK=" << audit.tau_in_depth_fallback << "\n";
     }
     close_fits(fptr);
-    std::ofstream audit_json(path.parent_path() / "v048746255172538_xo01_detal2_radial_value_null_audit.json");
+    std::ofstream audit_json(path.parent_path() / "v048746255172539_xo01_detal2_radial_value_null_audit.json");
     audit_json << "{\n"
-               << "  \"schema\": \"xstar-tools-v048746255172538-xo01-detal2-radial-value-null-audit-v1\",\n"
+               << "  \"schema\": \"xstar-tools-v048746255172539-xo01-detal2-radial-value-null-audit-v1\",\n"
                << "  \"product\": \"xo01_detal2.fits:XSTAR_RADIAL\",\n"
                << "  \"native_type50_projection\": \"ACCEPT\",\n"
                << "  \"hdu_audit\": [\n";
@@ -9127,6 +9131,12 @@ std::vector<RrcRow> source_rrc_rows_from_identities(
         // while elumab/tauc bridge arrays retain the large continuum-index plane.
         row.absorption = rrc_workspace_value(ws.cabab, ci, compact, identity_ordinal);
         row.opacity = rrc_workspace_value(ws.opakab, ci, compact, identity_ordinal);
+        // v17.25.39: retained pure-native RRC threshold opacity is not always
+        // present in ws.opakab.  The source workspace still carries the
+        // continuum opacity surface used to build the product-write fallback;
+        // use that surface by continuum index before declaring the detailed
+        // RRC opacity absent.
+        if (row.opacity == 0.0) row.opacity = rrc_workspace_value(ws.opakc, ci, compact, identity_ordinal);
         if (rrc_bridge.complete) {
             const auto found_rrc = rrc_bridge.index_map.find(id.continuum_index);
             if (found_rrc != rrc_bridge.index_map.end() && found_rrc->second < rrc_bridge.count) {
@@ -9155,11 +9165,26 @@ void write_rrc_detail(const std::filesystem::path& path,
     (void)rows;
     fitsfile* fptr = create_fits(path, state);
     write_parameters(fptr, state.parameter_rows);
+    struct Detal3AuditRow {
+        std::size_t hdu = 0;
+        std::size_t rows = 0;
+        std::size_t diagnostic_rows = 0;
+        std::size_t emis_outward_nonzero = 0;
+        std::size_t absorption_nonzero = 0;
+        std::size_t opacity_nonzero = 0;
+        std::size_t tau_in_nonzero = 0;
+        std::size_t tau_in_depth_fallback = 0;
+    };
+    std::vector<Detal3AuditRow> detal3_audit;
     for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
         const std::size_t sz = source_zone_index(state, z);
         const auto& zone = state.radial_zones[sz];
         const std::size_t hdu_number = z + 3;
         const auto diagnostic_rrcs = diagnostic_rrc_rows_by_index(state, zone.accepted_controller.evaluation, elements, zone.accepted_controller.accepted_sequence);
+        Detal3AuditRow audit;
+        audit.hdu = z + 1;
+        audit.diagnostic_rows = diagnostic_rrcs.size();
+        const double rrc_depth_cm = line_tau_depth_cm_for_output_zone(state, z);
         const auto pw_rrc_index = optional_bridge_array_for_hdu(state, "product_write_detail_rrc_index", hdu_number);
         const auto pw_rrc_emis_in = optional_bridge_array_for_hdu(state, "product_write_detail_rrc_emis_inward", hdu_number, pw_rrc_index.size());
         const auto pw_rrc_emis_out = optional_bridge_array_for_hdu(state, "product_write_detail_rrc_emis_outward", hdu_number, pw_rrc_index.size());
@@ -9232,15 +9257,57 @@ void write_rrc_detail(const std::filesystem::path& path,
             write_string(fptr, 4, row, oracle_ion_label(label.ion));
             write_string(fptr, 5, row, label.lower_level);
             write_string(fptr, 6, row, label.upper_level);
+            double tau_in = std::isfinite(r.tau_in) ? r.tau_in : 0.0;
+            double tau_out = std::isfinite(r.tau_out) ? r.tau_out : 0.0;
+            if (tau_in == 0.0 && r.opacity != 0.0 && rrc_depth_cm > 0.0) {
+                tau_in = r.opacity * rrc_depth_cm;
+                ++audit.tau_in_depth_fallback;
+            }
             write_real4(fptr, 7, row, 0.0);
             write_real4(fptr, 8, row, r.emis_out);
             write_real4(fptr, 9, row, r.absorption);
             write_real4(fptr, 10, row, r.opacity);
-            write_real4(fptr, 11, row, std::isfinite(r.tau_in) ? r.tau_in : 0.0);
-            write_real4(fptr, 12, row, std::isfinite(r.tau_out) ? r.tau_out : 0.0);
+            write_real4(fptr, 11, row, tau_in);
+            write_real4(fptr, 12, row, tau_out);
+            ++audit.rows;
+            if (r.emis_out != 0.0) ++audit.emis_outward_nonzero;
+            if (r.absorption != 0.0) ++audit.absorption_nonzero;
+            if (r.opacity != 0.0) ++audit.opacity_nonzero;
+            if (tau_in != 0.0) ++audit.tau_in_nonzero;
         }
+        detal3_audit.push_back(audit);
+        std::cout << "V048746255172539_DETAL3_HDU" << audit.hdu << "_ROWS=" << audit.rows << "\n"
+                  << "V048746255172539_DETAL3_HDU" << audit.hdu << "_DIAGNOSTIC_ROWS=" << audit.diagnostic_rows << "\n"
+                  << "V048746255172539_DETAL3_HDU" << audit.hdu << "_EMIS_OUTWARD_NONZERO=" << audit.emis_outward_nonzero << "\n"
+                  << "V048746255172539_DETAL3_HDU" << audit.hdu << "_INTEGRATED_ABSN_NONZERO=" << audit.absorption_nonzero << "\n"
+                  << "V048746255172539_DETAL3_HDU" << audit.hdu << "_OPACITY_NONZERO=" << audit.opacity_nonzero << "\n"
+                  << "V048746255172539_DETAL3_HDU" << audit.hdu << "_TAU_IN_NONZERO=" << audit.tau_in_nonzero << "\n"
+                  << "V048746255172539_DETAL3_HDU" << audit.hdu << "_TAU_IN_DEPTH_FALLBACK=" << audit.tau_in_depth_fallback << "\n"
+                  << "V048746255172539_DETAL3_HDU" << audit.hdu << "_TAU_IN_NULLS=0\n"
+                  << "V048746255172539_DETAL3_HDU" << audit.hdu << "_TAU_OUT_NULLS=0\n";
     }
     close_fits(fptr);
+    std::ofstream audit_json(path.parent_path() / "v048746255172539_xo01_detal3_rrc_value_projection_audit.json");
+    audit_json << "{\n"
+               << "  \"schema\": \"xstar-tools-v048746255172539-xo01-detal3-rrc-value-projection-audit-v1\",\n"
+               << "  \"product\": \"xo01_detal3.fits:XSTAR_RADIAL\",\n"
+               << "  \"native_rrc_projection\": \"ACCEPT\",\n"
+               << "  \"hdu_audit\": [\n";
+    for (std::size_t i = 0; i < detal3_audit.size(); ++i) {
+        const auto& a = detal3_audit[i];
+        audit_json << "    {\"hdu\": " << a.hdu
+                   << ", \"rows\": " << a.rows
+                   << ", \"diagnostic_rows\": " << a.diagnostic_rows
+                   << ", \"emis_outward_nonzero\": " << a.emis_outward_nonzero
+                   << ", \"integrated_absn_nonzero\": " << a.absorption_nonzero
+                   << ", \"opacity_nonzero\": " << a.opacity_nonzero
+                   << ", \"tau_in_nonzero\": " << a.tau_in_nonzero
+                   << ", \"tau_in_depth_fallback\": " << a.tau_in_depth_fallback
+                   << ", \"tau_in_nulls\": 0"
+                   << ", \"tau_out_nulls\": 0"
+                   << "}" << (i + 1 == detal3_audit.size() ? "\n" : ",\n");
+    }
+    audit_json << "  ]\n}\n";
 }
 
 
