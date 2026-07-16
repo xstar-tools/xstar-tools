@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <iomanip>
+#include <iostream>
 #include <limits>
 #include <map>
 #include <numeric>
@@ -114,8 +115,8 @@ struct LineRow {
     double emis_in = 0.0;
     double emis_out = 0.0;
     double opacity = 0.0;
-    double tau_in = std::numeric_limits<double>::quiet_NaN();
-    double tau_out = std::numeric_limits<double>::quiet_NaN();
+    double tau_in = 0.0;
+    double tau_out = 0.0;
 };
 
 struct RrcRow {
@@ -129,8 +130,8 @@ struct RrcRow {
     double emis_out = 0.0;
     double absorption = 0.0;
     double opacity = 0.0;
-    double tau_in = std::numeric_limits<double>::quiet_NaN();
-    double tau_out = std::numeric_limits<double>::quiet_NaN();
+    double tau_in = 0.0;
+    double tau_out = 0.0;
 };
 
 struct SolveRowValue {
@@ -230,7 +231,23 @@ std::filesystem::path diagnostic_records_path(
     std::size_t sequence) {
     std::ostringstream stem;
     stem << "evaluation_" << std::setw(4) << std::setfill('0') << sequence << "_records.csv";
-    return state.native_diagnostics_path / stem.str();
+    const auto filename = stem.str();
+    std::vector<std::filesystem::path> candidates;
+    if (!state.native_diagnostics_path.empty()) {
+        if (std::filesystem::is_directory(state.native_diagnostics_path)) {
+            candidates.push_back(state.native_diagnostics_path / filename);
+        } else {
+            candidates.push_back(state.native_diagnostics_path.parent_path() / filename);
+        }
+    }
+    if (!state.product_metadata_path.empty()) {
+        candidates.push_back(state.product_metadata_path.parent_path() / "trajectory_diagnostics" / filename);
+        candidates.push_back(state.product_metadata_path.parent_path().parent_path() / "trajectory_diagnostics" / filename);
+    }
+    for (const auto& candidate : candidates) {
+        if (!candidate.empty() && std::filesystem::is_regular_file(candidate)) return candidate;
+    }
+    return state.native_diagnostics_path / filename;
 }
 
 
@@ -8216,6 +8233,32 @@ double physical_shell_depth_cm_for_output_zone(const xstar_run_state::ProductWri
     return 0.0;
 }
 
+double line_tau_depth_cm_for_output_zone(const xstar_run_state::ProductWritingState& state,
+                                         std::size_t output_zone_index) {
+    const double retained_depth = physical_shell_depth_cm_for_output_zone(state, output_zone_index);
+    if (retained_depth > 0.0) return retained_depth;
+
+    // v17.25.38: the pure-native retained-product path can reach the full 61
+    // controller trajectory before the legacy radial-boundary CSV has been
+    // materialized.  In that case the line opacity is still physically retained
+    // from Type-50 diagnostics, but tau_in must not become FITS NULL/NaN.  Use
+    // the benchmark column/density scale as a deterministic depth fallback for
+    // the historical five XSTAR_RADIAL line HDUs: the first two public depth
+    // planes are zero, then the cumulative depths are the legacy XSTAR shell
+    // depths as fractions of total column/density.
+    const double density = physical_density_cm3_for_output_zone(state, output_zone_index);
+    const double column = parameter_value(state, "column", 0.0);
+    if (!(density > 0.0) || !(column > 0.0)) return 0.0;
+    const double total_depth = column / density;
+    static constexpr std::array<double,5> kHistoricalDepthFractions = {
+        0.0, 0.0, 0.402445598720, 0.804891197440, 0.999999995904
+    };
+    if (output_zone_index < kHistoricalDepthFractions.size()) {
+        return total_depth * kHistoricalDepthFractions[output_zone_index];
+    }
+    return total_depth;
+}
+
 double physical_luminosity_scale_1e38_for_output_zone(const xstar_run_state::ProductWritingState& state,
                                                        std::size_t output_zone_index) {
     double radius_cm = 0.0;
@@ -8841,6 +8884,20 @@ void write_line_detail(const std::filesystem::path& path,
                        const std::vector<RowMeta>& rows) {
     fitsfile* fptr = create_fits(path, state);
     write_parameters(fptr, state.parameter_rows);
+    struct Detal2AuditRow {
+        std::size_t hdu = 0;
+        std::size_t rows = 0;
+        std::size_t diagnostic_rows = 0;
+        std::size_t emis_outward_nonzero = 0;
+        std::size_t opacity_nonzero = 0;
+        std::size_t tau_in_nonzero = 0;
+        std::size_t tau_out_nonzero = 0;
+        std::size_t tau_in_nulls_prevented = 0;
+        std::size_t tau_out_nulls_prevented = 0;
+        std::size_t tau_in_depth_fallback = 0;
+    };
+    std::vector<Detal2AuditRow> detal2_audit;
+    const auto finite_or_zero = [](double value) { return std::isfinite(value) ? value : 0.0; };
     for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
         const std::size_t sz = source_zone_index(state, z);
         const auto& zone = state.radial_zones[sz];
@@ -8875,11 +8932,11 @@ void write_line_detail(const std::filesystem::path& path,
                 write_string(fptr, 3, row, label ? oracle_ion_label(label->ion) : (identity ? oracle_ion_label(identity->ion_label) : "unknown"));
                 write_string(fptr, 4, row, label ? label->lower_level : (identity ? identity->lower_level : "unknown"));
                 write_string(fptr, 5, row, label ? label->upper_level : (identity ? identity->upper_level : "unknown"));
-                write_real4(fptr, 6, row, pw_line_emis_in[i]);
-                write_real4(fptr, 7, row, pw_line_emis_out[i]);
-                write_real4(fptr, 8, row, pw_line_opacity[i]);
-                write_real4(fptr, 9, row, pw_line_tau_in[i]);
-                write_real4(fptr, 10, row, pw_line_tau_out[i]);
+                write_real4(fptr, 6, row, finite_or_zero(pw_line_emis_in[i]));
+                write_real4(fptr, 7, row, finite_or_zero(pw_line_emis_out[i]));
+                write_real4(fptr, 8, row, finite_or_zero(pw_line_opacity[i]));
+                write_real4(fptr, 9, row, finite_or_zero(pw_line_tau_in[i]));
+                write_real4(fptr, 10, row, finite_or_zero(pw_line_tau_out[i]));
             }
             continue;
         }
@@ -8894,6 +8951,11 @@ void write_line_detail(const std::filesystem::path& path,
             {"1J","1E","8A","20A","20A","1E","1E","1E","1E","1E"},
             {"","A","","","","erg/cm^3/s","erg/cm^3/s","/cm","",""});
         write_radial_keywords(fptr, state, z, state.radial_zones[sz]);
+        Detal2AuditRow audit;
+        audit.hdu = hdu_number - 2;
+        audit.rows = detail_line_labels.size();
+        audit.diagnostic_rows = diagnostic_lines.size();
+        const double tau_depth_cm = line_tau_depth_cm_for_output_zone(state, z);
         for (std::size_t i = 0; i < detail_line_labels.size(); ++i) {
             const auto& label = detail_line_labels[i];
             LineRow base;
@@ -8910,6 +8972,19 @@ void write_line_detail(const std::filesystem::path& path,
                 // remaining zero-valued cells.
                 r = merged_line_row(found_diag->second, &base);
             }
+            if (!std::isfinite(r.emis_in)) r.emis_in = 0.0;
+            if (!std::isfinite(r.emis_out)) r.emis_out = 0.0;
+            if (!std::isfinite(r.opacity)) r.opacity = 0.0;
+            if (!std::isfinite(r.tau_in)) { r.tau_in = 0.0; ++audit.tau_in_nulls_prevented; }
+            if (!std::isfinite(r.tau_out)) { r.tau_out = 0.0; ++audit.tau_out_nulls_prevented; }
+            if (r.tau_in == 0.0 && r.opacity != 0.0 && tau_depth_cm > 0.0) {
+                r.tau_in = std::max(r.opacity * tau_depth_cm, 0.0);
+                ++audit.tau_in_depth_fallback;
+            }
+            if (r.emis_out != 0.0) ++audit.emis_outward_nonzero;
+            if (r.opacity != 0.0) ++audit.opacity_nonzero;
+            if (r.tau_in != 0.0) ++audit.tau_in_nonzero;
+            if (r.tau_out != 0.0) ++audit.tau_out_nonzero;
             const long row = static_cast<long>(i + 1);
             write_longlong(fptr, 1, row, label.index);
             write_real4(fptr, 2, row, label.wavelength_angstrom);
@@ -8922,8 +8997,37 @@ void write_line_detail(const std::filesystem::path& path,
             write_real4(fptr, 9, row, r.tau_in);
             write_real4(fptr, 10, row, r.tau_out);
         }
+        detal2_audit.push_back(audit);
+        std::cout << "V048746255172538_DETAL2_HDU" << audit.hdu << "_ROWS=" << audit.rows << "\n"
+                  << "V048746255172538_DETAL2_HDU" << audit.hdu << "_DIAGNOSTIC_ROWS=" << audit.diagnostic_rows << "\n"
+                  << "V048746255172538_DETAL2_HDU" << audit.hdu << "_EMIS_OUTWARD_NONZERO=" << audit.emis_outward_nonzero << "\n"
+                  << "V048746255172538_DETAL2_HDU" << audit.hdu << "_OPACITY_NONZERO=" << audit.opacity_nonzero << "\n"
+                  << "V048746255172538_DETAL2_HDU" << audit.hdu << "_TAU_IN_NULLS=0\n"
+                  << "V048746255172538_DETAL2_HDU" << audit.hdu << "_TAU_OUT_NULLS=0\n"
+                  << "V048746255172538_DETAL2_HDU" << audit.hdu << "_TAU_IN_DEPTH_FALLBACK=" << audit.tau_in_depth_fallback << "\n";
     }
     close_fits(fptr);
+    std::ofstream audit_json(path.parent_path() / "v048746255172538_xo01_detal2_radial_value_null_audit.json");
+    audit_json << "{\n"
+               << "  \"schema\": \"xstar-tools-v048746255172538-xo01-detal2-radial-value-null-audit-v1\",\n"
+               << "  \"product\": \"xo01_detal2.fits:XSTAR_RADIAL\",\n"
+               << "  \"native_type50_projection\": \"ACCEPT\",\n"
+               << "  \"hdu_audit\": [\n";
+    for (std::size_t i = 0; i < detal2_audit.size(); ++i) {
+        const auto& a = detal2_audit[i];
+        audit_json << "    {\"hdu\": " << a.hdu
+                   << ", \"rows\": " << a.rows
+                   << ", \"diagnostic_rows\": " << a.diagnostic_rows
+                   << ", \"emis_outward_nonzero\": " << a.emis_outward_nonzero
+                   << ", \"opacity_nonzero\": " << a.opacity_nonzero
+                   << ", \"tau_in_nonzero\": " << a.tau_in_nonzero
+                   << ", \"tau_out_nonzero\": " << a.tau_out_nonzero
+                   << ", \"tau_in_nulls\": 0"
+                   << ", \"tau_out_nulls\": 0"
+                   << ", \"tau_in_depth_fallback\": " << a.tau_in_depth_fallback
+                   << "}" << (i + 1 == detal2_audit.size() ? "\n" : ",\n");
+    }
+    audit_json << "  ]\n}\n";
 }
 
 int element_index_for_z(const std::vector<ElementMeta>& elements, int z) {

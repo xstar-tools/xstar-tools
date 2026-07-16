@@ -8322,6 +8322,14 @@ ProductPublicationResultV172524 publish_full61_products_v172524(
             }
         }
         promote_retained_native_product_surface_v172530(whole);
+        // v17.25.38: prepare_native_product_state writes its retention report
+        // under _native_product_state_retention/publication_diagnostics, but
+        // the Type-50/line product records used by xo01_detal2 are retained in
+        // output/trajectory_diagnostics.  Keep product_metadata_path on the
+        // public metadata directory, but point native_diagnostics_path at the
+        // actual per-evaluation record CSV directory before building the writer
+        // state.
+        whole.native_diagnostics_path = output / "trajectory_diagnostics";
         auto product = xstar_run_state::build_product_writing_state(whole);
         product.backend = "cpp-native-retained-product-surface";
         product.measured_run_seconds = 0.0;
