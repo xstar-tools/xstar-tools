@@ -402,7 +402,10 @@ double source_lte_for_level(const xstar_run_state::FixedEvaluationState& evaluat
     if (level.global_index > 0) {
         const std::size_t global0 = static_cast<std::size_t>(level.global_index - 1);
         if (global0 < evaluation.source_global_rnisg.size()) {
-            return evaluation.source_global_rnisg[global0];
+            const double retained_global_lte = evaluation.source_global_rnisg[global0];
+            if (std::isfinite(retained_global_lte) && retained_global_lte != 0.0) {
+                return retained_global_lte;
+            }
         }
     }
     const auto* row = row_meta_by_global(rows, level.global_index);
@@ -1357,7 +1360,7 @@ void write_population_detail(const std::filesystem::path& path,
             const double lte = have_product_write_detail_lte ? pw_level_lte[i] : source_lte_for_level(evaluation, elements, rows, level);
             const long fits_row = static_cast<long>(i + 1);
             write_int(fptr, 1, fits_row, static_cast<int>(level.global_index));
-            write_short(fptr, 2, fits_row, static_cast<short>(level.atomic_number));
+            write_short(fptr, 2, fits_row, static_cast<short>(level.ion_index));
             write_real4(fptr, 3, fits_row, level.excitation_ev);
             write_string(fptr, 4, fits_row, oracle_ion_label(level.ion_label));
             write_short(fptr, 5, fits_row, static_cast<short>(level.atomic_number));
