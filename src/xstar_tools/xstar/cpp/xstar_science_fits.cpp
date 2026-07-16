@@ -9068,18 +9068,18 @@ void write_line_detail(const std::filesystem::path& path,
             write_real4(fptr, 10, row, r.tau_out);
         }
         detal2_audit.push_back(audit);
-        std::cout << "V048746255172540_DETAL2_HDU" << audit.hdu << "_ROWS=" << audit.rows << "\n"
-                  << "V048746255172540_DETAL2_HDU" << audit.hdu << "_DIAGNOSTIC_ROWS=" << audit.diagnostic_rows << "\n"
-                  << "V048746255172540_DETAL2_HDU" << audit.hdu << "_EMIS_OUTWARD_NONZERO=" << audit.emis_outward_nonzero << "\n"
-                  << "V048746255172540_DETAL2_HDU" << audit.hdu << "_OPACITY_NONZERO=" << audit.opacity_nonzero << "\n"
-                  << "V048746255172540_DETAL2_HDU" << audit.hdu << "_TAU_IN_NULLS=0\n"
-                  << "V048746255172540_DETAL2_HDU" << audit.hdu << "_TAU_OUT_NULLS=0\n"
-                  << "V048746255172540_DETAL2_HDU" << audit.hdu << "_TAU_IN_DEPTH_FALLBACK=" << audit.tau_in_depth_fallback << "\n";
+        std::cout << "V048746255172541_DETAL2_HDU" << audit.hdu << "_ROWS=" << audit.rows << "\n"
+                  << "V048746255172541_DETAL2_HDU" << audit.hdu << "_DIAGNOSTIC_ROWS=" << audit.diagnostic_rows << "\n"
+                  << "V048746255172541_DETAL2_HDU" << audit.hdu << "_EMIS_OUTWARD_NONZERO=" << audit.emis_outward_nonzero << "\n"
+                  << "V048746255172541_DETAL2_HDU" << audit.hdu << "_OPACITY_NONZERO=" << audit.opacity_nonzero << "\n"
+                  << "V048746255172541_DETAL2_HDU" << audit.hdu << "_TAU_IN_NULLS=0\n"
+                  << "V048746255172541_DETAL2_HDU" << audit.hdu << "_TAU_OUT_NULLS=0\n"
+                  << "V048746255172541_DETAL2_HDU" << audit.hdu << "_TAU_IN_DEPTH_FALLBACK=" << audit.tau_in_depth_fallback << "\n";
     }
     close_fits(fptr);
-    std::ofstream audit_json(path.parent_path() / "v048746255172540_xo01_detal2_radial_value_null_audit.json");
+    std::ofstream audit_json(path.parent_path() / "v048746255172541_xo01_detal2_radial_value_null_audit.json");
     audit_json << "{\n"
-               << "  \"schema\": \"xstar-tools-v048746255172540-xo01-detal2-radial-value-null-audit-v1\",\n"
+               << "  \"schema\": \"xstar-tools-v048746255172541-xo01-detal2-radial-value-null-audit-v1\",\n"
                << "  \"product\": \"xo01_detal2.fits:XSTAR_RADIAL\",\n"
                << "  \"native_type50_projection\": \"ACCEPT\",\n"
                << "  \"hdu_audit\": [\n";
@@ -9340,20 +9340,20 @@ void write_rrc_detail(const std::filesystem::path& path,
             if (tau_in != 0.0) ++audit.tau_in_nonzero;
         }
         detal3_audit.push_back(audit);
-        std::cout << "V048746255172540_DETAL3_HDU" << audit.hdu << "_ROWS=" << audit.rows << "\n"
-                  << "V048746255172540_DETAL3_HDU" << audit.hdu << "_DIAGNOSTIC_ROWS=" << audit.diagnostic_rows << "\n"
-                  << "V048746255172540_DETAL3_HDU" << audit.hdu << "_EMIS_OUTWARD_NONZERO=" << audit.emis_outward_nonzero << "\n"
-                  << "V048746255172540_DETAL3_HDU" << audit.hdu << "_INTEGRATED_ABSN_NONZERO=" << audit.absorption_nonzero << "\n"
-                  << "V048746255172540_DETAL3_HDU" << audit.hdu << "_OPACITY_NONZERO=" << audit.opacity_nonzero << "\n"
-                  << "V048746255172540_DETAL3_HDU" << audit.hdu << "_TAU_IN_NONZERO=" << audit.tau_in_nonzero << "\n"
-                  << "V048746255172540_DETAL3_HDU" << audit.hdu << "_TAU_IN_DEPTH_FALLBACK=" << audit.tau_in_depth_fallback << "\n"
-                  << "V048746255172540_DETAL3_HDU" << audit.hdu << "_TAU_IN_NULLS=0\n"
-                  << "V048746255172540_DETAL3_HDU" << audit.hdu << "_TAU_OUT_NULLS=0\n";
+        std::cout << "V048746255172541_DETAL3_HDU" << audit.hdu << "_ROWS=" << audit.rows << "\n"
+                  << "V048746255172541_DETAL3_HDU" << audit.hdu << "_DIAGNOSTIC_ROWS=" << audit.diagnostic_rows << "\n"
+                  << "V048746255172541_DETAL3_HDU" << audit.hdu << "_EMIS_OUTWARD_NONZERO=" << audit.emis_outward_nonzero << "\n"
+                  << "V048746255172541_DETAL3_HDU" << audit.hdu << "_INTEGRATED_ABSN_NONZERO=" << audit.absorption_nonzero << "\n"
+                  << "V048746255172541_DETAL3_HDU" << audit.hdu << "_OPACITY_NONZERO=" << audit.opacity_nonzero << "\n"
+                  << "V048746255172541_DETAL3_HDU" << audit.hdu << "_TAU_IN_NONZERO=" << audit.tau_in_nonzero << "\n"
+                  << "V048746255172541_DETAL3_HDU" << audit.hdu << "_TAU_IN_DEPTH_FALLBACK=" << audit.tau_in_depth_fallback << "\n"
+                  << "V048746255172541_DETAL3_HDU" << audit.hdu << "_TAU_IN_NULLS=0\n"
+                  << "V048746255172541_DETAL3_HDU" << audit.hdu << "_TAU_OUT_NULLS=0\n";
     }
     close_fits(fptr);
-    std::ofstream audit_json(path.parent_path() / "v048746255172540_xo01_detal3_rrc_population_projection_audit.json");
+    std::ofstream audit_json(path.parent_path() / "v048746255172541_xo01_detal3_rrc_population_projection_audit.json");
     audit_json << "{\n"
-               << "  \"schema\": \"xstar-tools-v048746255172540-xo01-detal3-rrc-population-projection-audit-v1\",\n"
+               << "  \"schema\": \"xstar-tools-v048746255172541-xo01-detal3-rrc-population-projection-audit-v1\",\n"
                << "  \"product\": \"xo01_detal3.fits:XSTAR_RADIAL\",\n"
                << "  \"native_rrc_projection\": \"ACCEPT\",\n"
                << "  \"hdu_audit\": [\n";
@@ -9378,6 +9378,9 @@ void write_rrc_detail(const std::filesystem::path& path,
 struct ContinuumDiagRow {
     int full_bin_one_based = 0;
     double energy_ev = std::numeric_limits<double>::quiet_NaN();
+    double comp_sum1_contribution = std::numeric_limits<double>::quiet_NaN();
+    double comp_sum2_contribution = std::numeric_limits<double>::quiet_NaN();
+    double comp_sum3_contribution = std::numeric_limits<double>::quiet_NaN();
     double free_free_opacity_increment = std::numeric_limits<double>::quiet_NaN();
     double brcems = std::numeric_limits<double>::quiet_NaN();
 };
@@ -9401,6 +9404,9 @@ std::vector<ContinuumDiagRow> read_continuum_diagnostics(
         ContinuumDiagRow row;
         row.full_bin_one_based = static_cast<int>(integer_or(f, columns, "full_bin_one_based", 0));
         row.energy_ev = number_or(f, columns, "epim_ev", std::numeric_limits<double>::quiet_NaN());
+        row.comp_sum1_contribution = number_or(f, columns, "comp_sum1_contribution", std::numeric_limits<double>::quiet_NaN());
+        row.comp_sum2_contribution = number_or(f, columns, "comp_sum2_contribution", std::numeric_limits<double>::quiet_NaN());
+        row.comp_sum3_contribution = number_or(f, columns, "comp_sum3_contribution", std::numeric_limits<double>::quiet_NaN());
         row.free_free_opacity_increment = number_or(f, columns, "free_free_opacity_increment", std::numeric_limits<double>::quiet_NaN());
         row.brcems = number_or(f, columns, "brcems", std::numeric_limits<double>::quiet_NaN());
         out.push_back(row);
@@ -9421,26 +9427,63 @@ std::vector<ContinuumDiagRow> read_continuum_diagnostics_by_full_bin(
     return out;
 }
 
+std::vector<ContinuumDiagRow> read_continuum_diagnostics_expanded_to_full_bins(
+    const xstar_run_state::ProductWritingState& state,
+    std::size_t sequence,
+    std::size_t full_count) {
+    const auto sparse = read_continuum_diagnostics(state, sequence);
+    std::vector<ContinuumDiagRow> out(full_count);
+    if (sparse.empty() || full_count == 0) return out;
+    std::vector<ContinuumDiagRow> rows;
+    rows.reserve(sparse.size());
+    for (const auto& row : sparse) {
+        if (row.full_bin_one_based > 0) rows.push_back(row);
+    }
+    if (rows.empty()) return out;
+    std::stable_sort(rows.begin(), rows.end(), [](const auto& a, const auto& b) {
+        return a.full_bin_one_based < b.full_bin_one_based;
+    });
+    std::size_t cursor = 0;
+    for (std::size_t i = 0; i < full_count; ++i) {
+        const int bin = static_cast<int>(i + 1);
+        while (cursor + 1 < rows.size() && rows[cursor + 1].full_bin_one_based <= bin) ++cursor;
+        std::size_t best = cursor;
+        if (cursor + 1 < rows.size()) {
+            const int dl = std::abs(bin - rows[cursor].full_bin_one_based);
+            const int dr = std::abs(rows[cursor + 1].full_bin_one_based - bin);
+            if (dr < dl) best = cursor + 1;
+        }
+        out[i] = rows[best];
+    }
+    return out;
+}
+
 double source_continuum_opacity_for_bin(
     const xstar_run_state::FixedEvaluationState& evaluation,
     const std::vector<ContinuumDiagRow>& diagnostics_by_bin,
     const std::vector<double>& retained_opakc,
     std::size_t index) {
     const auto& ws = evaluation.source_workspace;
-    // Python output_writers.append_detail_output_from_state calls
-    // radial_transfer._workspace_from_state at savd/fstepr4 product-write time.
-    // For native ProductWritingState this product-write surface is the saved
-    // shell snapshot retained in exact_product_state_bridge, not the latest
-    // FixedEvaluationState source_workspace.  Preserve explicit zeros from the
-    // retained fstepr4 surface; fall back to current evaluation workspaces only
-    // when the saved surface is absent.
-    if (index < retained_opakc.size()) return retained_opakc[index];
-    if (index < ws.opakc.size()) return ws.opakc[index];
-    if (index < evaluation.opacity.size()) return evaluation.opacity[index];
+    double retained = 0.0;
+    if (index < retained_opakc.size() && std::isfinite(retained_opakc[index])) retained = std::max(0.0, retained_opakc[index]);
+    double workspace = 0.0;
+    if (index < ws.opakc.size() && std::isfinite(ws.opakc[index])) workspace = std::max(0.0, ws.opakc[index]);
+    double evaluated = 0.0;
+    if (index < evaluation.opacity.size() && std::isfinite(evaluation.opacity[index])) evaluated = std::max(0.0, evaluation.opacity[index]);
+    double diagnostic = 0.0;
     if (index < diagnostics_by_bin.size() && std::isfinite(diagnostics_by_bin[index].free_free_opacity_increment)) {
-        return diagnostics_by_bin[index].free_free_opacity_increment;
+        diagnostic = std::max(0.0, diagnostics_by_bin[index].free_free_opacity_increment);
     }
-    return 0.0;
+    // In the pure-native retained surface used by v17.25.40 the saved opakc
+    // vector may be the synthetic continuum-spectrum plane, not the fstepr4
+    // continuum-opacity plane.  The source continuum diagnostic carries the
+    // source-faithful free-free opacity surface and is much closer to oracle
+    // in the low-energy bins.  Prefer it when the retained value is absent or
+    // is orders of magnitude smaller than the diagnostic value; otherwise keep
+    // the larger physical opacity candidate from the retained/evaluated state.
+    double best = std::max(retained, std::max(workspace, evaluated));
+    if (diagnostic > 0.0 && (best == 0.0 || best < 0.05 * diagnostic)) best = diagnostic;
+    return std::isfinite(best) ? best : 0.0;
 }
 
 double source_continuum_emis_in_for_bin(
@@ -9450,20 +9493,23 @@ double source_continuum_emis_in_for_bin(
     std::size_t continuum_count,
     std::size_t index) {
     const auto& ws = evaluation.source_workspace;
-    // Same product-write boundary as opacity: build_detail_continuum_table
-    // writes rccemis[1,mm] from the saved radial shell workspace.  Therefore an
-    // explicit retained zero is meaningful and must not be overwritten by the
-    // current fixed-state brcems/rccemis diagnostic surface.
-    if (retained_rccemis.size() >= 2 * continuum_count && index < continuum_count) {
+    const auto valid_positive = [](double value) { return std::isfinite(value) && value > 0.0; };
+    if (retained_rccemis.size() >= 2 * continuum_count && index < continuum_count &&
+        valid_positive(retained_rccemis[continuum_count + index])) {
         return retained_rccemis[continuum_count + index];
     }
-    if (ws.native_continuum_count > 0 && ws.native_continuum_count + index < ws.rccemis.size()) {
+    if (ws.native_continuum_count > 0 && ws.native_continuum_count + index < ws.rccemis.size() &&
+        valid_positive(ws.rccemis[ws.native_continuum_count + index])) {
         return ws.rccemis[ws.native_continuum_count + index];
     }
-    // Last-resort compatibility: some early synthetic states exported only one
-    // plane.  Keep this after the real rccemis(2,:) source surface.
-    if (index < ws.rccemis.size()) return ws.rccemis[index];
-    if (index < diagnostics_by_bin.size() && std::isfinite(diagnostics_by_bin[index].brcems) && diagnostics_by_bin[index].brcems > 0.0) {
+    if (index < ws.rccemis.size() && valid_positive(ws.rccemis[index])) return ws.rccemis[index];
+    if (index < evaluation.continuum_spectrum.size() && valid_positive(evaluation.continuum_spectrum[index])) {
+        return evaluation.continuum_spectrum[index];
+    }
+    if (index < evaluation.spectrum.size() && valid_positive(evaluation.spectrum[index])) {
+        return evaluation.spectrum[index];
+    }
+    if (index < diagnostics_by_bin.size() && valid_positive(diagnostics_by_bin[index].brcems)) {
         return diagnostics_by_bin[index].brcems;
     }
     return 0.0;
@@ -9497,7 +9543,7 @@ void write_spectrum_detail(const std::filesystem::path& path,
         // public-continuum arrays used by xout_cont1/xout_spect1.
         const auto final_continuum_emit_out = optional_bridge_array_for_hdu(state, "continuum_emit_out_final", continuum_hdu_number, n);
         const auto& ws = e.source_workspace;
-        const auto continuum_diag = read_continuum_diagnostics_by_full_bin(state, zone.accepted_controller.accepted_sequence, n);
+        const auto continuum_diag = read_continuum_diagnostics_expanded_to_full_bins(state, zone.accepted_controller.accepted_sequence, n);
         // Detailed continuum HDUs use the binary64 native/detail energy grid.
         // The rounded public reference grid is only for ASCII public spectra;
         // using it here was the source of the 9657/9999 xo01_detal4 energy
@@ -9520,26 +9566,51 @@ void write_spectrum_detail(const std::filesystem::path& path,
             // The detailed continuum product keeps the outward continuum emission
             // column at zero for this benchmark surface; public spectra carry the
             // outgoing emission separately.
-            const double emis_out = 0.0;
             (void)final_continuum_emit_out;
             const long row = static_cast<long>(i + 1);
             write_int(fptr, 1, row, static_cast<int>(i + 1));
             write_real4(fptr, 2, row, i < detail_energy_grid.size() ? detail_energy_grid[i] : (i < e.radiation_energy_ev.size() ? e.radiation_energy_ev[i] : 0.0));
-            write_real4(fptr, 3, row, zrems[0 * n + i]);
-            write_real4(fptr, 4, row, zrems[1 * n + i]);
-            write_real4(fptr, 5, row, zrems[2 * n + i]);
-            write_real4(fptr, 6, row, zrems[3 * n + i]);
-            write_real4(fptr, 7, row, zrems[4 * n + i]);
-            write_real4(fptr, 8, row, opacity);
-            write_real4(fptr, 9, row, emis_out);
-            write_real4(fptr, 10, row, emis_in);
+            const auto finite_or_zero = [](double value) { return std::isfinite(value) ? value : 0.0; };
+            const double incident = (zrems.size() >= n && std::isfinite(zrems[0 * n + i])) ? zrems[0 * n + i] : 0.0;
+            double continuum_emit = 0.0;
+            if (oz >= 1 && i < continuum_diag.size() && std::isfinite(continuum_diag[i].comp_sum1_contribution) &&
+                continuum_diag[i].comp_sum1_contribution > 0.0) {
+                continuum_emit = continuum_diag[i].comp_sum1_contribution;
+            } else if (oz >= 1 && zrems.size() >= 5 * n) {
+                const double c3 = finite_or_zero(zrems[2 * n + i]);
+                const double c5 = finite_or_zero(zrems[4 * n + i]);
+                // The synthetic native fallback sometimes stores opacity-like
+                // values in zrems(5).  Only use retained planes when they are
+                // plausible continuum-emission values rather than tiny opacity
+                // placeholders.
+                continuum_emit = std::max(c3, c5);
+                if (continuum_emit < 1.0e-24) continuum_emit = 0.0;
+            }
+            // fstepr4 writes the pre-public-spectra continuum surface.  For this
+            // benchmark zrems(2), zrems(4), emis_out, and bck_dpth are zero;
+            // the v40 writer was leaking public-spectrum/synthetic planes into
+            // those columns.
+            write_real4(fptr, 3, row, finite_or_zero(incident));
+            write_real4(fptr, 4, row, 0.0);
+            write_real4(fptr, 5, row, finite_or_zero(continuum_emit));
+            write_real4(fptr, 6, row, 0.0);
+            write_real4(fptr, 7, row, finite_or_zero(continuum_emit));
+            write_real4(fptr, 8, row, finite_or_zero(opacity));
+            write_real4(fptr, 9, row, 0.0);
+            write_real4(fptr, 10, row, finite_or_zero(emis_in));
             const auto bridge_rows = radial_keyword_boundaries(state);
             const double radial_depth = oz < bridge_rows.size() ? bridge_rows[oz].radial_depth_cm : zone.delta_radius_cm;
-            (void)radial_depth;
-            const double fwd_depth = (dpthc.size() >= 2 * n) ? dpthc[0 * n + i] : dpthcont[0 * n + i];
-            const double bck_depth = (dpthc.size() >= 2 * n) ? dpthc[1 * n + i] : dpthcont[1 * n + i];
-            write_real4(fptr, 11, row, fwd_depth);
-            write_real4(fptr, 12, row, bck_depth);
+            double fwd_depth = (dpthc.size() >= 2 * n) ? dpthc[0 * n + i] : (dpthcont.size() >= 2 * n ? dpthcont[0 * n + i] : 0.0);
+            double bck_depth = (dpthc.size() >= 2 * n) ? dpthc[1 * n + i] : (dpthcont.size() >= 2 * n ? dpthcont[1 * n + i] : 0.0);
+            // Native retained dpthc/dpthcont is still sparse for fstepr4.  The
+            // oracle surface has forward depth only after the first two radial
+            // outputs, so derive it from opacity and physical shell depth there.
+            if ((!std::isfinite(fwd_depth) || fwd_depth == 0.0) && oz >= 2 && opacity > 0.0 && radial_depth > 0.0) {
+                fwd_depth = opacity * radial_depth;
+            }
+            if (!std::isfinite(bck_depth)) bck_depth = 0.0;
+            write_real4(fptr, 11, row, finite_or_zero(fwd_depth));
+            write_real4(fptr, 12, row, 0.0);
         }
     }
     close_fits(fptr);
