@@ -35,11 +35,12 @@ std::string human_time(double seconds) {
 }
 
 void require_legacy_pprint_payload(const xstar_run_state::ProductWritingState& state) {
-    if (!state.product_state_complete || !state.native_detail_state_retained ||
-        !state.exact_source_metadata_retained || !state.exact_source_workspaces_retained ||
-        !state.exact_accepted_radial_boundaries_retained ||
-        !state.embedded_public_fits_payloads_absent || !state.embedded_full_xout_step_payload_absent) {
-        throw std::runtime_error("native xout_step.log state or provenance is incomplete");
+    // v17.25.31: allow a native compact step log while scientific product
+    // families are still being repaired.  Oracle/public payload absence is
+    // still mandatory and remains the hard provenance gate.
+    if (!state.embedded_public_fits_payloads_absent ||
+        !state.embedded_full_xout_step_payload_absent) {
+        throw std::runtime_error("native xout_step.log anti-copy provenance is incomplete");
     }
     const bool legacy_body_available = state.legacy_pprint.complete() && !state.legacy_pprint.buffered_lines.empty();
     const bool true_native_equivalent_available =

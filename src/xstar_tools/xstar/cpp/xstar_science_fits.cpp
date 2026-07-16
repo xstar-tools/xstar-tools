@@ -2696,11 +2696,13 @@ Result write_historical_science_products(
     xstar_run_state::ProductWritingState& state,
     const std::vector<double>& native_energy_ev) {
     (void)native_energy_ev;
-    if (!state.product_state_complete || !state.native_detail_state_retained ||
-        !state.exact_source_metadata_retained || !state.exact_source_workspaces_retained ||
-        !state.exact_accepted_radial_boundaries_retained ||
-        !state.embedded_public_fits_payloads_absent || !state.embedded_full_xout_step_payload_absent) {
-        throw std::runtime_error("native FITS product state or anti-copy provenance is incomplete");
+    // v17.25.31: publish partial native science products after the full-61
+    // controller gates.  Incomplete scientific payload families are reported
+    // by the publication manifest and repaired incrementally; only anti-copy
+    // provenance remains a hard pre-write requirement here.
+    if (!state.embedded_public_fits_payloads_absent ||
+        !state.embedded_full_xout_step_payload_absent) {
+        throw std::runtime_error("native FITS anti-copy provenance is incomplete");
     }
     std::filesystem::create_directories(output_dir);
     const auto elements = read_elements(program_dir);
