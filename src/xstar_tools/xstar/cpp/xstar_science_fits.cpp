@@ -2696,7 +2696,7 @@ Result write_historical_science_products(
     xstar_run_state::ProductWritingState& state,
     const std::vector<double>& native_energy_ev) {
     (void)native_energy_ev;
-    // v17.25.31: publish partial native science products after the full-61
+    // v17.25.32: publish partial native science products after the full-61
     // controller gates.  Incomplete scientific payload families are reported
     // by the publication manifest and repaired incrementally; only anti-copy
     // provenance remains a hard pre-write requirement here.

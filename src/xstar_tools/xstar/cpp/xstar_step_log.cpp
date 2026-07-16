@@ -35,7 +35,7 @@ std::string human_time(double seconds) {
 }
 
 void require_legacy_pprint_payload(const xstar_run_state::ProductWritingState& state) {
-    // v17.25.31: allow a native compact step log while scientific product
+    // v17.25.32: allow a native compact step log while scientific product
     // families are still being repaired.  Oracle/public payload absence is
     // still mandatory and remains the hard provenance gate.
     if (!state.embedded_public_fits_payloads_absent ||
