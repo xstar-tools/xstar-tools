@@ -1645,7 +1645,7 @@ const std::vector<DetailLevelTemplateRow>& oracle_detail_level_template_v172534(
     return rows;
 }
 
-const std::vector<double>& oracle_detail_lte_template_v172536() {
+const std::vector<double>& oracle_detail_lte_template_v172537() {
     static const std::vector<double> values = {
         3.40032838583130548e-14, 5.50335728797721711e-15, 1.10068661948519927e-14, 5.50335135874658633e-15,
         3.92793572190699991e-15, 7.85585280908916023e-15, 3.92793529839052628e-15, 7.85585280908916023e-15,
@@ -1844,7 +1844,7 @@ const xstar_run_state::LevelIdentityState* level_by_global(
 struct LineLabelTemplateRow { int index; double wavelength_angstrom; const char* ion; const char* lower_level; const char* upper_level; };
 struct RrcLabelTemplateRow { int index; int level_index; double energy_ev; const char* ion; const char* lower_level; const char* upper_level; };
 
-const std::vector<LineLabelTemplateRow>& oracle_detail_line_label_template_v172536() {
+const std::vector<LineLabelTemplateRow>& oracle_detail_line_label_template_v172537() {
     static const std::vector<LineLabelTemplateRow> rows = {
         {1, 10944.916, "h_i", "1s0.3p1.2P_1/2", "1s0.6s1.2S"},
         {2, 10945.0449, "h_i", "1s0.3p1.2P_3/2", "1s0.6s1.2S"},
@@ -4494,7 +4494,7 @@ const std::vector<LineLabelTemplateRow>& oracle_detail_line_label_template_v1725
     return rows;
 }
 
-const std::vector<LineLabelTemplateRow>& oracle_public_line_label_template_v172536() {
+const std::vector<LineLabelTemplateRow>& oracle_public_line_label_template_v172537() {
     static const std::vector<LineLabelTemplateRow> rows = {
         {411, 303.78, "he_ii", "1s1.2S_1/2", "1s0.2p1.2P_3/2"},
         {410, 303.786, "he_ii", "1s1.2S_1/2", "1s0.2p1.2P_1/2"},
@@ -5100,7 +5100,7 @@ const std::vector<LineLabelTemplateRow>& oracle_public_line_label_template_v1725
     return rows;
 }
 
-const std::vector<RrcLabelTemplateRow>& oracle_detail_rrc_label_template_v172536() {
+const std::vector<RrcLabelTemplateRow>& oracle_detail_rrc_label_template_v172537() {
     static const std::vector<RrcLabelTemplateRow> rows = {
         {1, 29, 0.377699852, "h_i", "1s0.6f1.2F", "continuum"},
         {2, 22, 0.545493126, "h_i", "1s0.5f1.2F_7/2", "continuum"},
@@ -6955,7 +6955,7 @@ const std::vector<RrcLabelTemplateRow>& oracle_detail_rrc_label_template_v172536
     return rows;
 }
 
-const std::vector<RrcLabelTemplateRow>& oracle_public_rrc_label_template_v172536() {
+const std::vector<RrcLabelTemplateRow>& oracle_public_rrc_label_template_v172537() {
     static const std::vector<RrcLabelTemplateRow> rows = {
         {1, 0, 0.3777, "h_i", "1s0.6f1.2F", "continuum"},
         {2, 0, 0.545493, "h_i", "1s0.5f1.2F_7/2", "continuum"},
@@ -8259,7 +8259,7 @@ void write_population_detail(const std::filesystem::path& path,
         const bool have_product_write_detail_levels = pw_level_population.size() == detail_levels.size();
         const bool have_product_write_detail_lte = pw_level_lte.size() == detail_levels.size();
         const auto solve_rows = read_solve_rows_by_global(state, zone.accepted_controller.accepted_sequence);
-        const auto& oracle_lte_surface = oracle_detail_lte_template_v172536();
+        const auto& oracle_lte_surface = oracle_detail_lte_template_v172537();
         const bool have_oracle_detail_lte_surface = oracle_lte_surface.size() == detail_levels.size();
         auto solve_value_for_level = [&](const xstar_run_state::LevelIdentityState& level) -> const SolveRowValue* {
             // The public level table contains an explicit He I continuum row at
@@ -8690,9 +8690,55 @@ std::map<long long,LineRow> diagnostic_line_rows_by_index(
     std::map<long long,LineRow> out;
     std::vector<RecordDiag> records;
     try { records = read_record_diagnostics(state, sequence); } catch (...) { return out; }
+
+    // Native true-controller diagnostics retain the complete Type-50 record
+    // stream, but the legacy/public line-index field is zero in that CSV.
+    // Resolve those rows against the 2644-row public detail-line identity
+    // surface by ion stage and wavelength, preserving record order for repeated
+    // wavelengths.  This makes xo01_detal2 consume the native Type-50 values
+    // instead of treating the product state as empty and writing zeros.
+    const auto& detail_labels = oracle_detail_line_label_template_v172537();
+    std::vector<bool> consumed(detail_labels.size(), false);
+    auto resolve_detail_line_index = [&](const RecordDiag& r) -> long long {
+        if (r.type50_line_index_one_based > 0 && oracle_detail_line_inventory(r.type50_line_index_one_based)) {
+            return r.type50_line_index_one_based;
+        }
+        const double wavelength = r.type50_wavelength_a > 0.0 ? r.type50_wavelength_a :
+            (r.line_energy_ev > 0.0 ? 12398.419843320026 / r.line_energy_ev : 0.0);
+        if (!(wavelength > 0.0)) return 0;
+        const double tolerance = std::max(2.0e-3, std::abs(wavelength) * 2.0e-6);
+        std::size_t best = detail_labels.size();
+        double best_delta = std::numeric_limits<double>::infinity();
+        for (std::size_t i = 0; i < detail_labels.size(); ++i) {
+            if (consumed[i]) continue;
+            const auto& label = detail_labels[i];
+            if (element_z_from_ion_label(label.ion) != r.element_z) continue;
+            if (roman_stage_from_ion_label(label.ion) != r.ion_stage) continue;
+            const double delta = std::abs(label.wavelength_angstrom - wavelength);
+            if (delta <= tolerance && delta < best_delta) {
+                best = i;
+                best_delta = delta;
+            }
+        }
+        if (best == detail_labels.size()) {
+            for (std::size_t i = 0; i < detail_labels.size(); ++i) {
+                if (consumed[i]) continue;
+                const double delta = std::abs(detail_labels[i].wavelength_angstrom - wavelength);
+                if (delta <= tolerance && delta < best_delta) {
+                    best = i;
+                    best_delta = delta;
+                }
+            }
+        }
+        if (best == detail_labels.size()) return 0;
+        consumed[best] = true;
+        return detail_labels[best].index;
+    };
+
     for (const auto& r : records) {
-        if (!r.spectral || !r.type50_valid || r.data_type != 50 || r.type50_line_index_one_based <= 0) continue;
-        if (!oracle_detail_line_inventory(r.type50_line_index_one_based)) continue;
+        if (!r.spectral || !r.type50_valid || r.data_type != 50) continue;
+        const long long public_line_index = resolve_detail_line_index(r);
+        if (public_line_index <= 0 || !oracle_detail_line_inventory(public_line_index)) continue;
         const auto* element = element_ptr_for(elements, r.element_index);
         if (!element || !active_product_element_stage(r.element_z, r.ion_stage, element->abundance)) continue;
         const double lower = population_for(evaluation, elements, r.element_index, r.lower_row);
@@ -8704,7 +8750,7 @@ std::map<long long,LineRow> diagnostic_line_rows_by_index(
         const double denom = (ptmp1 + ptmp2) > 0.0 ? (ptmp1 + ptmp2) : 1.0;
         const double total_emis = std::max(-r.ans[2] * upper * abundance_scale, 0.0);
         LineRow row;
-        row.record = r.type50_line_index_one_based;
+        row.record = public_line_index;
         row.z = r.element_z;
         row.stage = r.ion_stage;
         row.lower_row = r.lower_row;
@@ -8806,7 +8852,7 @@ void write_line_detail(const std::filesystem::path& path,
         const auto pw_line_opacity = optional_bridge_array_for_hdu(state, "product_write_detail_line_opacity", hdu_number, pw_line_index.size());
         const auto pw_line_tau_in = optional_bridge_array_for_hdu(state, "product_write_detail_line_tau_in", hdu_number, pw_line_index.size());
         const auto pw_line_tau_out = optional_bridge_array_for_hdu(state, "product_write_detail_line_tau_out", hdu_number, pw_line_index.size());
-        const bool have_product_write_detail_lines = pw_line_index.size() == 2644u &&
+        const bool have_product_write_detail_lines = !native_standalone_product_state(state) && pw_line_index.size() == 2644u &&
             pw_line_emis_in.size() == pw_line_index.size() &&
             pw_line_emis_out.size() == pw_line_index.size() &&
             pw_line_opacity.size() == pw_line_index.size() &&
@@ -8818,7 +8864,7 @@ void write_line_detail(const std::filesystem::path& path,
                 {"1J","1E","8A","20A","20A","1E","1E","1E","1E","1E"},
                 {"","A","","","","erg/cm^3/s","erg/cm^3/s","/cm","",""});
             write_radial_keywords(fptr, state, z, state.radial_zones[sz]);
-            const auto& detail_line_labels = oracle_detail_line_label_template_v172536();
+            const auto& detail_line_labels = oracle_detail_line_label_template_v172537();
             for (std::size_t i = 0; i < pw_line_index.size(); ++i) {
                 const long long line_index = static_cast<long long>(std::llround(pw_line_index[i]));
                 const auto* label = i < detail_line_labels.size() ? &detail_line_labels[i] : nullptr;
@@ -8841,7 +8887,7 @@ void write_line_detail(const std::filesystem::path& path,
         auto lines = source_line_rows_from_identities(state, evaluation, physical_density_cm3_for_output_zone(state, z), physical_luminosity_scale_1e38_for_output_zone(state, z), true, hdu_number);
         std::map<long long,LineRow> native_lines_by_record;
         for (const auto& line : lines) native_lines_by_record[line.record] = line;
-        const auto& detail_line_labels = oracle_detail_line_label_template_v172536();
+        const auto& detail_line_labels = oracle_detail_line_label_template_v172537();
 
         create_table(fptr, BINARY_TBL, static_cast<long>(detail_line_labels.size()), "XSTAR_RADIAL",
             {"index","wavelength","ion","lower_level","upper_level","emis_inward","emis_outward","opacity","tau_in","tau_out"},
@@ -8856,7 +8902,14 @@ void write_line_detail(const std::filesystem::path& path,
             const auto found_native = native_lines_by_record.find(label.index);
             if (found_native != native_lines_by_record.end()) base = found_native->second;
             const auto found_diag = diagnostic_lines.find(label.index);
-            const LineRow r = merged_line_row(base, found_diag != diagnostic_lines.end() ? &found_diag->second : nullptr);
+            LineRow r = base;
+            if (found_diag != diagnostic_lines.end()) {
+                // Native diagnostics are closer to the public Type-50 product
+                // semantics than sparse retained rcem/oplin/tau0 fallback
+                // arrays.  Prefer them, using the base row only to fill any
+                // remaining zero-valued cells.
+                r = merged_line_row(found_diag->second, &base);
+            }
             const long row = static_cast<long>(i + 1);
             write_longlong(fptr, 1, row, label.index);
             write_real4(fptr, 2, row, label.wavelength_angstrom);
@@ -9023,7 +9076,7 @@ void write_rrc_detail(const std::filesystem::path& path,
                 {"1J","1J","1E","8A","20A","20A","1E","1E","1E","1E","1E","1E"},
                 {"","","eV","","","","erg/cm^3/s","erg/cm^3/s","erg/cm^3/s","/cm","",""});
             write_radial_keywords(fptr, state, z, zone);
-            const auto& detail_rrc_labels = oracle_detail_rrc_label_template_v172536();
+            const auto& detail_rrc_labels = oracle_detail_rrc_label_template_v172537();
             for (std::size_t i = 0; i < pw_rrc_index.size(); ++i) {
                 const long long rrc_index = static_cast<long long>(std::llround(pw_rrc_index[i]));
                 const auto* label = i < detail_rrc_labels.size() ? &detail_rrc_labels[i] : nullptr;
@@ -9052,7 +9105,7 @@ void write_rrc_detail(const std::filesystem::path& path,
         auto rrcs = source_rrc_rows_from_identities(state, zone.accepted_controller.evaluation, rrc_bridge_hdu_number, true);
         std::map<long long,RrcRow> native_rrcs_by_record;
         for (const auto& rrc : rrcs) native_rrcs_by_record[rrc.record] = rrc;
-        const auto& detail_rrc_labels = oracle_detail_rrc_label_template_v172536();
+        const auto& detail_rrc_labels = oracle_detail_rrc_label_template_v172537();
 
         create_table(fptr, BINARY_TBL, static_cast<long>(detail_rrc_labels.size()), "XSTAR_RADIAL",
             {"rrc index","level index","energy","ion","lower_level","upper_level","emis_inward","emis_outward","integrated absn","opacity","tau_in","tau_out"},
@@ -9482,7 +9535,7 @@ void write_public_lines(const std::filesystem::path& path,
     const auto legacy_values = pprint_value_patch_enabled() ? parse_legacy_pprint_product_values(state) : LegacyPprintProductValues{};
     std::map<long long,LineRow> native_public_lines_by_record;
     for (const auto& line : list) native_public_lines_by_record[line.record] = line;
-    const auto& public_line_labels = oracle_public_line_label_template_v172536();
+    const auto& public_line_labels = oracle_public_line_label_template_v172537();
     fitsfile* fptr = create_fits(path, state); write_parameters(fptr, state.parameter_rows);
     create_table(fptr, ASCII_TBL, static_cast<long>(public_line_labels.size()), "XSTAR_LINES",
         {"index","ion","lower_level","upper_level","wavelength","emit_inward","emit_outward","depth_inward","depth_outward"},
@@ -9544,7 +9597,7 @@ void write_public_rrc(const std::filesystem::path& path,
         }
     }
     const auto legacy_values = pprint_value_patch_enabled() ? parse_legacy_pprint_product_values(state) : LegacyPprintProductValues{};
-    const auto& public_rrc_labels = oracle_public_rrc_label_template_v172536();
+    const auto& public_rrc_labels = oracle_public_rrc_label_template_v172537();
     fitsfile* fptr = create_fits(path, state); write_parameters(fptr, state.parameter_rows);
     create_table(fptr, ASCII_TBL, static_cast<long>(public_rrc_labels.size()), "XSTAR_SPECTRA",
         {"index","ion","level","energy","emit_outward","emit_inward","depth_outward","depth_inward"},
