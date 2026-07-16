@@ -870,11 +870,12 @@ std::vector<RrcRow> build_rrc_rows(const xstar_run_state::ProductWritingState& s
         if (!(threshold > 0.0)) threshold = r.line_energy_ev;
         if (!(threshold > 0.0) || r.lower_row <= 0 || r.upper_row <= 0) continue;
         const double lower = population_for(evaluation, elements, r.element_index, r.lower_row);
+        const double parent = population_for(evaluation, elements, r.element_index, r.upper_row);
         const double abundance_scale = zone.density_cm3 * element->abundance;
         double p1 = r.type53_valid ? std::max(r.type53_ptmp1, 0.0) : 0.0;
         double p2 = r.type53_valid ? std::max(r.type53_ptmp2, 0.0) : 1.0;
         const double denom = p1 + p2 > 0.0 ? p1 + p2 : 1.0;
-        const double total_emis = std::max(-r.ans[2] * abundance_scale, 0.0);
+        const double total_emis = std::max(-r.ans[2] * parent * abundance_scale, 0.0);
         RrcRow row;
         row.record = r.continuum_index_one_based;
         row.z = r.element_z;
@@ -8810,21 +8811,86 @@ std::map<long long,LineRow> diagnostic_line_rows_by_index(
     return out;
 }
 
+
+long long resolve_detail_rrc_index_for_diag(
+    const RecordDiag& r,
+    const std::vector<ElementMeta>& elements,
+    const std::vector<RowMeta>& rows) {
+    const auto& labels = oracle_detail_rrc_label_template_v172537();
+    const auto* element = element_ptr_for(elements, r.element_index);
+    const auto* lower_meta = row_for(rows, r.element_index, r.lower_row);
+    const int global_level = lower_meta ? lower_meta->global_level_index :
+        (element ? element->row_offset + r.lower_row : r.lower_row);
+    double threshold = 0.0;
+    if (r.type49_valid && r.type49_threshold_ev > 0.0) threshold = r.type49_threshold_ev;
+    else if (r.type53_valid && r.type53_threshold_ev > 0.0) threshold = r.type53_threshold_ev;
+    else if (r.type99_valid && r.type99_threshold_ev > 0.0) threshold = r.type99_threshold_ev;
+    else threshold = r.line_energy_ev;
+    auto label_matches_record = [&](const RrcLabelTemplateRow& label) {
+        if (element_z_from_ion_label(label.ion) != r.element_z) return false;
+        if (roman_stage_from_ion_label(label.ion) != r.ion_stage) return false;
+        return true;
+    };
+    auto energy_close = [&](double a, double b) {
+        const double tol = std::max(1.0e-5, std::max(std::abs(a), std::abs(b)) * 2.0e-6);
+        return std::abs(a - b) <= tol;
+    };
+    // Type-53 diagnostics already carry the public RRC/detail index for the
+    // inserted detail surface. Preserve it first to keep duplicated public rows
+    // in their oracle order.
+    if ((r.type53_valid || r.data_type == 53) && r.continuum_index_one_based > 0 &&
+        oracle_detail_rrc_inventory(r.continuum_index_one_based)) {
+        const std::size_t i = static_cast<std::size_t>(r.continuum_index_one_based - 1);
+        if (i < labels.size() && label_matches_record(labels[i])) return r.continuum_index_one_based;
+    }
+    // Type-99 uses nbinc/continuum-bin numbering, not the public detail row.
+    // Resolve it by the bound/global level and threshold so the H superlevel
+    // recombination row goes to public row 32 instead of being accumulated into
+    // public row 1.
+    if (global_level > 0 && threshold > 0.0) {
+        std::size_t best = labels.size();
+        double best_delta = std::numeric_limits<double>::infinity();
+        for (std::size_t i = 0; i < labels.size(); ++i) {
+            const auto& label = labels[i];
+            if (!label_matches_record(label)) continue;
+            if (label.level_index != global_level) continue;
+            const double delta = std::abs(label.energy_ev - threshold);
+            if (energy_close(label.energy_ev, threshold) && delta < best_delta) {
+                best = i;
+                best_delta = delta;
+            }
+        }
+        if (best != labels.size()) return labels[best].index;
+        for (std::size_t i = 0; i < labels.size(); ++i) {
+            const auto& label = labels[i];
+            if (!label_matches_record(label)) continue;
+            if (label.level_index == global_level) return label.index;
+        }
+    }
+    if (r.continuum_index_one_based > 0 && oracle_detail_rrc_inventory(r.continuum_index_one_based)) {
+        const std::size_t i = static_cast<std::size_t>(r.continuum_index_one_based - 1);
+        if (i < labels.size() && label_matches_record(labels[i])) return r.continuum_index_one_based;
+    }
+    return 0;
+}
+
 std::map<long long,RrcRow> diagnostic_rrc_rows_by_index(
     const xstar_run_state::ProductWritingState& state,
     const xstar_run_state::FixedEvaluationState& evaluation,
     const std::vector<ElementMeta>& elements,
+    const std::vector<RowMeta>& rows,
     std::size_t sequence) {
     std::map<long long,RrcRow> out;
     std::vector<RecordDiag> records;
     try { records = read_record_diagnostics(state, sequence); } catch (...) { return out; }
     for (const auto& r : records) {
-        if (r.continuum_index_one_based <= 0) continue;
-        if (!oracle_detail_rrc_inventory(r.continuum_index_one_based)) continue;
         if (!(r.type49_valid || r.type53_valid || r.type99_valid || r.data_type == 49 || r.data_type == 53 || r.data_type == 99)) continue;
         const auto* element = element_ptr_for(elements, r.element_index);
         if (!element || !active_product_element_stage(r.element_z, r.ion_stage, element->abundance)) continue;
+        const long long public_rrc_index = resolve_detail_rrc_index_for_diag(r, elements, rows);
+        if (public_rrc_index <= 0 || !oracle_detail_rrc_inventory(public_rrc_index)) continue;
         const double lower = population_for(evaluation, elements, r.element_index, r.lower_row);
+        const double parent = population_for(evaluation, elements, r.element_index, r.upper_row);
         const double density = r.density_scale > 0.0 ? r.density_scale : 1.0;
         const double abundance_scale = density * element->abundance;
         double p1 = r.type53_valid ? std::max(r.type53_ptmp1, 0.0) : 0.0;
@@ -8832,14 +8898,14 @@ std::map<long long,RrcRow> diagnostic_rrc_rows_by_index(
         const double denom = (p1 + p2) > 0.0 ? (p1 + p2) : 1.0;
         double threshold = r.type49_valid ? r.type49_threshold_ev : r.type53_valid ? r.type53_threshold_ev : r.type99_threshold_ev;
         if (!(threshold > 0.0)) threshold = r.line_energy_ev;
-        auto& row = out[r.continuum_index_one_based];
-        row.record = r.continuum_index_one_based;
+        auto& row = out[public_rrc_index];
+        row.record = public_rrc_index;
         row.z = r.element_z;
         row.stage = r.ion_stage;
         row.lower_row = r.lower_row;
         row.upper_row = r.upper_row;
         if (threshold > 0.0) row.energy_ev = threshold;
-        const double total_emis = std::max(-r.ans[2] * abundance_scale, 0.0);
+        const double total_emis = std::max(-r.ans[2] * parent * abundance_scale, 0.0);
         row.emis_in += total_emis * p1 / denom;
         row.emis_out += total_emis * p2 / denom;
         row.absorption += std::abs(r.ans[3]) * lower * abundance_scale;
@@ -9002,18 +9068,18 @@ void write_line_detail(const std::filesystem::path& path,
             write_real4(fptr, 10, row, r.tau_out);
         }
         detal2_audit.push_back(audit);
-        std::cout << "V048746255172539_DETAL2_HDU" << audit.hdu << "_ROWS=" << audit.rows << "\n"
-                  << "V048746255172539_DETAL2_HDU" << audit.hdu << "_DIAGNOSTIC_ROWS=" << audit.diagnostic_rows << "\n"
-                  << "V048746255172539_DETAL2_HDU" << audit.hdu << "_EMIS_OUTWARD_NONZERO=" << audit.emis_outward_nonzero << "\n"
-                  << "V048746255172539_DETAL2_HDU" << audit.hdu << "_OPACITY_NONZERO=" << audit.opacity_nonzero << "\n"
-                  << "V048746255172539_DETAL2_HDU" << audit.hdu << "_TAU_IN_NULLS=0\n"
-                  << "V048746255172539_DETAL2_HDU" << audit.hdu << "_TAU_OUT_NULLS=0\n"
-                  << "V048746255172539_DETAL2_HDU" << audit.hdu << "_TAU_IN_DEPTH_FALLBACK=" << audit.tau_in_depth_fallback << "\n";
+        std::cout << "V048746255172540_DETAL2_HDU" << audit.hdu << "_ROWS=" << audit.rows << "\n"
+                  << "V048746255172540_DETAL2_HDU" << audit.hdu << "_DIAGNOSTIC_ROWS=" << audit.diagnostic_rows << "\n"
+                  << "V048746255172540_DETAL2_HDU" << audit.hdu << "_EMIS_OUTWARD_NONZERO=" << audit.emis_outward_nonzero << "\n"
+                  << "V048746255172540_DETAL2_HDU" << audit.hdu << "_OPACITY_NONZERO=" << audit.opacity_nonzero << "\n"
+                  << "V048746255172540_DETAL2_HDU" << audit.hdu << "_TAU_IN_NULLS=0\n"
+                  << "V048746255172540_DETAL2_HDU" << audit.hdu << "_TAU_OUT_NULLS=0\n"
+                  << "V048746255172540_DETAL2_HDU" << audit.hdu << "_TAU_IN_DEPTH_FALLBACK=" << audit.tau_in_depth_fallback << "\n";
     }
     close_fits(fptr);
-    std::ofstream audit_json(path.parent_path() / "v048746255172539_xo01_detal2_radial_value_null_audit.json");
+    std::ofstream audit_json(path.parent_path() / "v048746255172540_xo01_detal2_radial_value_null_audit.json");
     audit_json << "{\n"
-               << "  \"schema\": \"xstar-tools-v048746255172539-xo01-detal2-radial-value-null-audit-v1\",\n"
+               << "  \"schema\": \"xstar-tools-v048746255172540-xo01-detal2-radial-value-null-audit-v1\",\n"
                << "  \"product\": \"xo01_detal2.fits:XSTAR_RADIAL\",\n"
                << "  \"native_type50_projection\": \"ACCEPT\",\n"
                << "  \"hdu_audit\": [\n";
@@ -9131,12 +9197,10 @@ std::vector<RrcRow> source_rrc_rows_from_identities(
         // while elumab/tauc bridge arrays retain the large continuum-index plane.
         row.absorption = rrc_workspace_value(ws.cabab, ci, compact, identity_ordinal);
         row.opacity = rrc_workspace_value(ws.opakab, ci, compact, identity_ordinal);
-        // v17.25.39: retained pure-native RRC threshold opacity is not always
-        // present in ws.opakab.  The source workspace still carries the
-        // continuum opacity surface used to build the product-write fallback;
-        // use that surface by continuum index before declaring the detailed
-        // RRC opacity absent.
-        if (row.opacity == 0.0) row.opacity = rrc_workspace_value(ws.opakc, ci, compact, identity_ordinal);
+        // v17.25.40: do not fall back to the generic continuum opacity
+        // surface for detailed RRC threshold opacity.  That surface is ordered
+        // by continuum-bin/energy, not by the public RRC detail row, and it
+        // inflated many xo01_detal3 opacity/tau rows by orders of magnitude.
         if (rrc_bridge.complete) {
             const auto found_rrc = rrc_bridge.index_map.find(id.continuum_index);
             if (found_rrc != rrc_bridge.index_map.end() && found_rrc->second < rrc_bridge.count) {
@@ -9180,7 +9244,7 @@ void write_rrc_detail(const std::filesystem::path& path,
         const std::size_t sz = source_zone_index(state, z);
         const auto& zone = state.radial_zones[sz];
         const std::size_t hdu_number = z + 3;
-        const auto diagnostic_rrcs = diagnostic_rrc_rows_by_index(state, zone.accepted_controller.evaluation, elements, zone.accepted_controller.accepted_sequence);
+        const auto diagnostic_rrcs = diagnostic_rrc_rows_by_index(state, zone.accepted_controller.evaluation, elements, rows, zone.accepted_controller.accepted_sequence);
         Detal3AuditRow audit;
         audit.hdu = z + 1;
         audit.diagnostic_rows = diagnostic_rrcs.size();
@@ -9276,20 +9340,20 @@ void write_rrc_detail(const std::filesystem::path& path,
             if (tau_in != 0.0) ++audit.tau_in_nonzero;
         }
         detal3_audit.push_back(audit);
-        std::cout << "V048746255172539_DETAL3_HDU" << audit.hdu << "_ROWS=" << audit.rows << "\n"
-                  << "V048746255172539_DETAL3_HDU" << audit.hdu << "_DIAGNOSTIC_ROWS=" << audit.diagnostic_rows << "\n"
-                  << "V048746255172539_DETAL3_HDU" << audit.hdu << "_EMIS_OUTWARD_NONZERO=" << audit.emis_outward_nonzero << "\n"
-                  << "V048746255172539_DETAL3_HDU" << audit.hdu << "_INTEGRATED_ABSN_NONZERO=" << audit.absorption_nonzero << "\n"
-                  << "V048746255172539_DETAL3_HDU" << audit.hdu << "_OPACITY_NONZERO=" << audit.opacity_nonzero << "\n"
-                  << "V048746255172539_DETAL3_HDU" << audit.hdu << "_TAU_IN_NONZERO=" << audit.tau_in_nonzero << "\n"
-                  << "V048746255172539_DETAL3_HDU" << audit.hdu << "_TAU_IN_DEPTH_FALLBACK=" << audit.tau_in_depth_fallback << "\n"
-                  << "V048746255172539_DETAL3_HDU" << audit.hdu << "_TAU_IN_NULLS=0\n"
-                  << "V048746255172539_DETAL3_HDU" << audit.hdu << "_TAU_OUT_NULLS=0\n";
+        std::cout << "V048746255172540_DETAL3_HDU" << audit.hdu << "_ROWS=" << audit.rows << "\n"
+                  << "V048746255172540_DETAL3_HDU" << audit.hdu << "_DIAGNOSTIC_ROWS=" << audit.diagnostic_rows << "\n"
+                  << "V048746255172540_DETAL3_HDU" << audit.hdu << "_EMIS_OUTWARD_NONZERO=" << audit.emis_outward_nonzero << "\n"
+                  << "V048746255172540_DETAL3_HDU" << audit.hdu << "_INTEGRATED_ABSN_NONZERO=" << audit.absorption_nonzero << "\n"
+                  << "V048746255172540_DETAL3_HDU" << audit.hdu << "_OPACITY_NONZERO=" << audit.opacity_nonzero << "\n"
+                  << "V048746255172540_DETAL3_HDU" << audit.hdu << "_TAU_IN_NONZERO=" << audit.tau_in_nonzero << "\n"
+                  << "V048746255172540_DETAL3_HDU" << audit.hdu << "_TAU_IN_DEPTH_FALLBACK=" << audit.tau_in_depth_fallback << "\n"
+                  << "V048746255172540_DETAL3_HDU" << audit.hdu << "_TAU_IN_NULLS=0\n"
+                  << "V048746255172540_DETAL3_HDU" << audit.hdu << "_TAU_OUT_NULLS=0\n";
     }
     close_fits(fptr);
-    std::ofstream audit_json(path.parent_path() / "v048746255172539_xo01_detal3_rrc_value_projection_audit.json");
+    std::ofstream audit_json(path.parent_path() / "v048746255172540_xo01_detal3_rrc_population_projection_audit.json");
     audit_json << "{\n"
-               << "  \"schema\": \"xstar-tools-v048746255172539-xo01-detal3-rrc-value-projection-audit-v1\",\n"
+               << "  \"schema\": \"xstar-tools-v048746255172540-xo01-detal3-rrc-population-projection-audit-v1\",\n"
                << "  \"product\": \"xo01_detal3.fits:XSTAR_RADIAL\",\n"
                << "  \"native_rrc_projection\": \"ACCEPT\",\n"
                << "  \"hdu_audit\": [\n";
