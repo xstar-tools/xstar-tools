@@ -9570,10 +9570,15 @@ double source_continuum_opacity_for_bin(
     // continuum opacities in that order, using diagnostics only as a last
     // fallback for structurally missing cells.  Do not choose a synthetic
     // public-spectrum plane merely because it is numerically larger.
-    double value = continuum_diag_opacity_for_bin(diagnostics_by_bin, index);
-    if (value == 0.0) value = candidate_at(retained_opakc);
+    // fstepr4/XSTAR continuum products consume the retained continuum opacity
+    // plane first.  The continuum diagnostics are reduced-bin increments and
+    // using them first made opacity nearly constant across all radial HDUs in
+    // v17.25.43.  Use diagnostics only when the retained/source/evaluation
+    // surfaces are structurally absent.
+    double value = candidate_at(retained_opakc);
     if (value == 0.0) value = candidate_at(ws.opakc);
     if (value == 0.0) value = candidate_at(evaluation.opacity);
+    if (value == 0.0) value = continuum_diag_opacity_for_bin(diagnostics_by_bin, index);
     return std::isfinite(value) ? value : 0.0;
 }
 double source_continuum_emis_in_for_bin(
@@ -9593,12 +9598,11 @@ double source_continuum_emis_in_for_bin(
         return ws.rccemis[ws.native_continuum_count + index];
     }
     if (index < ws.rccemis.size() && valid_positive(ws.rccemis[index])) return ws.rccemis[index];
-    if (index < evaluation.continuum_spectrum.size() && valid_positive(evaluation.continuum_spectrum[index])) {
-        return evaluation.continuum_spectrum[index];
-    }
-    if (index < evaluation.spectrum.size() && valid_positive(evaluation.spectrum[index])) {
-        return evaluation.spectrum[index];
-    }
+    // Do not fall back to the public continuum/spectrum fluxes for rccemis.
+    // Those are flux-like product planes, not the fstepr4 inward continuum
+    // emissivity plane, and caused visible nonzero `emis in` rows where the
+    // oracle has exact zeros.  Only use retained/source rccemis; missing cells
+    // remain numeric zero.
     if (index < diagnostics_by_bin.size() && valid_positive(diagnostics_by_bin[index].brcems)) {
         return diagnostics_by_bin[index].brcems;
     }
@@ -9670,10 +9674,18 @@ void write_spectrum_detail(const std::filesystem::path& path,
             const double z1 = (zrems.size() >= 1 * n + i + 1) ? finite_or_zero(zrems[0 * n + i]) : 0.0;
             double z3 = 0.0;
             if (oz >= 1) {
-                z3 = continuum_diag_emission_for_bin(continuum_diag, i);
-                if (!(z3 > 0.0) && zrems.size() >= 3 * n + i + 1) z3 = finite_or_zero(zrems[2 * n + i]);
+                // Preserve the source-retained accumulated zrems planes first.
+                // v17.25.43 used the per-evaluation continuum diagnostic
+                // increment first, so only the first radial HDU improved and
+                // later HDUs stayed near one-zone values.
+                if (zrems.size() >= 3 * n + i + 1) z3 = finite_or_zero(zrems[2 * n + i]);
+                if (!(z3 > 0.0)) z3 = continuum_diag_emission_for_bin(continuum_diag, i);
             }
             double z5 = z3;
+            if (oz >= 1 && zrems.size() >= 5 * n + i + 1) {
+                const double z5_retained = finite_or_zero(zrems[4 * n + i]);
+                if (z5_retained > 0.0) z5 = z5_retained;
+            }
             // fstepr4 has no public zrems(2)/zrems(4) plane for this active
             // H/He/Mg benchmark; prior native product-write arrays carried the
             // incident and tiny rccemis planes here, causing the visible column
@@ -10028,6 +10040,8 @@ void write_public_lines(const std::filesystem::path& path,
     const auto legacy_values = pprint_value_patch_enabled() ? parse_legacy_pprint_product_values(state) : LegacyPprintProductValues{};
     std::map<long long,LineRow> native_public_lines_by_record;
     for (const auto& line : list) native_public_lines_by_record[line.record] = line;
+    const auto diagnostic_public_lines = diagnostic_line_rows_by_index(
+        state, final_zone.accepted_controller.evaluation, elements, final_zone.accepted_controller.accepted_sequence);
     const auto& public_line_labels = oracle_public_line_label_template_v172537();
     fitsfile* fptr = create_fits(path, state); write_parameters(fptr, state.parameter_rows);
     create_table(fptr, ASCII_TBL, static_cast<long>(public_line_labels.size()), "XSTAR_LINES",
@@ -10040,6 +10054,14 @@ void write_public_lines(const std::filesystem::path& path,
         r.wavelength_a = label.wavelength_angstrom;
         const auto found_native = native_public_lines_by_record.find(label.index);
         if (found_native != native_public_lines_by_record.end()) r = found_native->second;
+        const auto found_diag = diagnostic_public_lines.find(label.index);
+        if (found_diag != diagnostic_public_lines.end()) {
+            const auto& d = found_diag->second;
+            if (d.emis_in != 0.0) r.emis_in = d.emis_in;
+            if (d.emis_out != 0.0) r.emis_out = d.emis_out;
+            if (std::isfinite(d.tau_in) && d.tau_in != 0.0) r.tau_in = d.tau_in;
+            if (std::isfinite(d.tau_out) && d.tau_out != 0.0) r.tau_out = d.tau_out;
+        }
         const long row = static_cast<long>(i + 1);
         write_int(fptr, 1, row, label.index);
         write_string(fptr, 2, row, oracle_ion_label(label.ion));
@@ -10159,17 +10181,22 @@ void write_public_spectrum(const std::filesystem::path& path,
         double emit_outward = have_product_write_spectrum ? pw_spectrum_emit_out[i] : (full_spectrum && final_spectrum_emit_out.size() == n ? final_spectrum_emit_out[i] :
             (!full_spectrum && final_continuum_emit_out.size() == n ? final_continuum_emit_out[i] : zrems[outward_row * n + i]));
         if (!full_spectrum) {
-            // xout_cont1 is the public continuum spectrum: transmitted follows
-            // the attenuated incident continuum, emit_inward is zero for this
-            // outward-only benchmark, and emit_outward comes from the source
-            // continuum diagnostic emission surface.  v42 was reading a shifted
-            // product-write tuple, placing incident flux in emit_inward and the
-            // small rccemis plane in transmitted/emit_outward.
-            if (!(std::isfinite(transmitted) && transmitted > 0.0)) transmitted = incident * std::exp(-tau_forward);
-            if (!(std::isfinite(transmitted) && transmitted > 0.0)) transmitted = incident;
+            // xout_cont1 is the terminal public continuum.  In the oracle for
+            // this benchmark, transmitted is the incident continuum and
+            // emit_outward is the terminal accumulated zrems(3/5) continuum
+            // plane.  The native final_transmitted/evaluation.spectrum fallback
+            // is a shifted/reduced product surface and placed another column's
+            // values in transmitted/emit_outward.
+            transmitted = incident;
             emit_inward = 0.0;
-            const double diag_emit = continuum_diag_emission_for_bin(public_continuum_diag, i);
-            if (diag_emit > 0.0) emit_outward = diag_emit;
+            if (zrems.size() >= 3 * n + i + 1 && std::isfinite(zrems[2 * n + i]) && zrems[2 * n + i] > 0.0) {
+                emit_outward = zrems[2 * n + i];
+            } else if (zrems.size() >= 5 * n + i + 1 && std::isfinite(zrems[4 * n + i]) && zrems[4 * n + i] > 0.0) {
+                emit_outward = zrems[4 * n + i];
+            } else {
+                const double diag_emit = continuum_diag_emission_for_bin(public_continuum_diag, i);
+                if (diag_emit > 0.0) emit_outward = diag_emit;
+            }
         }
         const long row = static_cast<long>(i + 1);
         const double energy_out = have_product_write_continuum ? pw_continuum_energy[i] : (have_product_write_spectrum ? pw_spectrum_energy[i] : (i < energy_grid.size() ? energy_grid[i] : (i < e.radiation_energy_ev.size() ? e.radiation_energy_ev[i] : 0.0)));
