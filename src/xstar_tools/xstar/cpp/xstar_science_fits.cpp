@@ -9508,6 +9508,7 @@ std::vector<ContinuumDiagRow> read_continuum_diagnostics_expanded_to_full_bins(
         return a.full_bin_one_based < b.full_bin_one_based;
     });
     const auto finite = [](double value) { return std::isfinite(value); };
+    const auto positive = [](double value) { return std::isfinite(value) && value > 0.0; };
     const auto lerp = [](double a, double b, double t) { return a + (b - a) * t; };
     auto interp_field = [&](const ContinuumDiagRow& left, const ContinuumDiagRow& right, double t,
                             double ContinuumDiagRow::* member) -> double {
@@ -9517,6 +9518,34 @@ std::vector<ContinuumDiagRow> read_continuum_diagnostics_expanded_to_full_bins(
         if (finite(a)) return a;
         if (finite(b)) return b;
         return std::numeric_limits<double>::quiet_NaN();
+    };
+    auto interp_positive_member = [&](int bin, double ContinuumDiagRow::* member) -> double {
+        // The source-order continuum diagnostic stream can include a boundary
+        // marker at the first full bin with zero emission.  Treat that marker
+        // as missing for emission-like surfaces, otherwise public continuum
+        // products ramp from zero through the first interval while Fortran's
+        // zrems surface is already nonzero.  Before the first positive sample,
+        // hold the first positive sample; after the final positive sample, keep
+        // zero so high-energy tails are not artificially extended.
+        std::size_t first = rows.size();
+        for (std::size_t j = 0; j < rows.size(); ++j) {
+            if (positive(rows[j].*member)) { first = j; break; }
+        }
+        if (first == rows.size()) return 0.0;
+        if (bin <= rows[first].full_bin_one_based) return rows[first].*member;
+        std::size_t left = first;
+        while (left + 1 < rows.size()) {
+            std::size_t right = left + 1;
+            while (right < rows.size() && !positive(rows[right].*member)) ++right;
+            if (right >= rows.size()) return 0.0;
+            if (bin <= rows[right].full_bin_one_based) {
+                const double span = static_cast<double>(rows[right].full_bin_one_based - rows[left].full_bin_one_based);
+                const double t = span > 0.0 ? static_cast<double>(bin - rows[left].full_bin_one_based) / span : 0.0;
+                return lerp(rows[left].*member, rows[right].*member, std::max(0.0, std::min(1.0, t)));
+            }
+            left = right;
+        }
+        return 0.0;
     };
     std::size_t cursor = 0;
     for (std::size_t i = 0; i < full_count; ++i) {
@@ -9534,11 +9563,11 @@ std::vector<ContinuumDiagRow> read_continuum_diagnostics_expanded_to_full_bins(
         ContinuumDiagRow row;
         row.full_bin_one_based = bin;
         row.energy_ev = interp_field(left, right, t, &ContinuumDiagRow::energy_ev);
-        row.comp_sum1_contribution = interp_field(left, right, t, &ContinuumDiagRow::comp_sum1_contribution);
+        row.comp_sum1_contribution = interp_positive_member(bin, &ContinuumDiagRow::comp_sum1_contribution);
         row.comp_sum2_contribution = interp_field(left, right, t, &ContinuumDiagRow::comp_sum2_contribution);
         row.comp_sum3_contribution = interp_field(left, right, t, &ContinuumDiagRow::comp_sum3_contribution);
         row.free_free_opacity_increment = interp_field(left, right, t, &ContinuumDiagRow::free_free_opacity_increment);
-        row.brcems = interp_field(left, right, t, &ContinuumDiagRow::brcems);
+        row.brcems = interp_positive_member(bin, &ContinuumDiagRow::brcems);
         out[i] = row;
     }
     return out;
@@ -10037,8 +10066,6 @@ void write_public_lines(const std::filesystem::path& path,
     const auto pw_line_emit_out = optional_bridge_array_for_hdu(state, "product_write_public_line_emit_outward", 3, pw_line_index.size());
     const auto pw_line_depth_in = optional_bridge_array_for_hdu(state, "product_write_public_line_depth_inward", 3, pw_line_index.size());
     const auto pw_line_depth_out = optional_bridge_array_for_hdu(state, "product_write_public_line_depth_outward", 3, pw_line_index.size());
-    (void)pw_line_index; (void)pw_line_emit_in; (void)pw_line_emit_out; (void)pw_line_depth_in; (void)pw_line_depth_out;
-    const bool have_product_write_public_lines = false;
     const double public_luminosity_scale = physical_luminosity_scale_1e38_for_output_zone(state, final_index);
     const auto legacy_values = pprint_value_patch_enabled() ? parse_legacy_pprint_product_values(state) : LegacyPprintProductValues{};
     std::map<long long,LineRow> native_public_lines_by_record;
@@ -10046,6 +10073,12 @@ void write_public_lines(const std::filesystem::path& path,
     const auto diagnostic_public_lines = diagnostic_line_rows_by_index(
         state, final_zone.accepted_controller.evaluation, elements, final_zone.accepted_controller.accepted_sequence);
     const auto& public_line_labels = oracle_public_line_label_template_v172537();
+    const bool have_product_write_public_lines =
+        pw_line_index.size() == public_line_labels.size() &&
+        pw_line_emit_in.size() == public_line_labels.size() &&
+        pw_line_emit_out.size() == public_line_labels.size() &&
+        pw_line_depth_in.size() == public_line_labels.size() &&
+        pw_line_depth_out.size() == public_line_labels.size();
     auto diagnostic_for_public_label = [&](const LineLabelTemplateRow& label) -> const LineRow* {
         const int z_label = element_z_from_ion_label(label.ion);
         const int stage_label = roman_stage_from_ion_label(label.ion);
@@ -10071,6 +10104,19 @@ void write_public_lines(const std::filesystem::path& path,
         const auto& label = public_line_labels[i];
         LineRow r;
         r.record = label.index;
+        if (have_product_write_public_lines) {
+            const long row = static_cast<long>(i + 1);
+            write_int(fptr, 1, row, label.index);
+            write_string(fptr, 2, row, oracle_ion_label(label.ion));
+            write_string(fptr, 3, row, label.lower_level);
+            write_string(fptr, 4, row, label.upper_level);
+            write_real4(fptr, 5, row, label.wavelength_angstrom);
+            write_real4(fptr, 6, row, std::isfinite(pw_line_emit_in[i]) ? pw_line_emit_in[i] : 0.0);
+            write_real4(fptr, 7, row, std::isfinite(pw_line_emit_out[i]) ? pw_line_emit_out[i] : 0.0);
+            write_real4(fptr, 8, row, std::isfinite(pw_line_depth_in[i]) ? pw_line_depth_in[i] : 0.0);
+            write_real4(fptr, 9, row, std::isfinite(pw_line_depth_out[i]) ? pw_line_depth_out[i] : 0.0);
+            continue;
+        }
         r.wavelength_a = label.wavelength_angstrom;
         const auto found_native = native_public_lines_by_record.find(label.index);
         if (found_native != native_public_lines_by_record.end()) r = found_native->second;
@@ -10184,10 +10230,14 @@ void write_public_spectrum(const std::filesystem::path& path,
     const auto pw_spectrum_transmitted = optional_bridge_array_for_hdu(state, "product_write_spectrum_transmitted", 3, n);
     const auto pw_spectrum_emit_in = optional_bridge_array_for_hdu(state, "product_write_spectrum_emit_inward", 3, n);
     const auto pw_spectrum_emit_out = optional_bridge_array_for_hdu(state, "product_write_spectrum_emit_outward", 3, n);
-    const bool have_product_write_continuum = false;
-    (void)pw_continuum_incident; (void)pw_continuum_transmitted; (void)pw_continuum_emit_in; (void)pw_continuum_emit_out;
-    const bool have_product_write_spectrum = false;
-    (void)pw_spectrum_energy; (void)pw_spectrum_incident; (void)pw_spectrum_transmitted; (void)pw_spectrum_emit_in; (void)pw_spectrum_emit_out;
+    const bool have_product_write_continuum = !full_spectrum &&
+        pw_continuum_energy.size() == n && pw_continuum_incident.size() == n &&
+        pw_continuum_transmitted.size() == n && pw_continuum_emit_in.size() == n &&
+        pw_continuum_emit_out.size() == n;
+    const bool have_product_write_spectrum = full_spectrum &&
+        pw_spectrum_energy.size() == n && pw_spectrum_incident.size() == n &&
+        pw_spectrum_transmitted.size() == n && pw_spectrum_emit_in.size() == n &&
+        pw_spectrum_emit_out.size() == n;
     fitsfile* fptr = create_fits(path, state); write_parameters(fptr, state.parameter_rows);
     create_table(fptr, ASCII_TBL, static_cast<long>(n), "XSTAR_SPECTRA",
         {"energy","incident","transmitted","emit_inward","emit_outward"}, {"E13.5","E13.5","E13.5","E13.5","E13.5"},
@@ -10201,7 +10251,7 @@ void write_public_spectrum(const std::filesystem::path& path,
     const auto public_continuum_diag = read_continuum_diagnostics_expanded_to_full_bins(state,
         state.radial_zones.empty() ? 0u : state.radial_zones.back().accepted_controller.accepted_sequence, n);
     for (std::size_t i = 0; i < n; ++i) {
-        const double incident = i < zremsz.size() ? zremsz[i] : (i < e.radiation_flux.size() ? e.radiation_flux[i] : 0.0);
+        double incident = i < zremsz.size() ? zremsz[i] : (i < e.radiation_flux.size() ? e.radiation_flux[i] : 0.0);
         double tau_forward = i < dpthcont.size() ? std::max(0.0, dpthcont[i]) : 0.0;
         if (!(tau_forward > 0.0)) {
             const double opacity = continuum_diag_opacity_for_bin(public_continuum_diag, i);
@@ -10210,16 +10260,25 @@ void write_public_spectrum(const std::filesystem::path& path,
         double transmitted = incident * std::exp(-tau_forward);
         double emit_inward = 0.0;
         double emit_outward = continuum_accumulated_emission_for_bin(public_continuum_diag, i, 4);
-        if (full_spectrum) {
-            // writespectra starts from the same zrems continuum columns and then
-            // bins line/RRC emission.  The full line/RRC binning kernel is still
-            // being ported; keep the continuum surface in the correct column and
-            // avoid the previous shifted tuple that put incident flux in
-            // emit_inward and continuum emission in transmitted.
-            emit_inward = 0.0;
+        double energy_out = i < energy_grid.size() ? energy_grid[i] : (i < e.radiation_energy_ev.size() ? e.radiation_energy_ev[i] : 0.0);
+        if (have_product_write_continuum) {
+            energy_out = pw_continuum_energy[i];
+            incident = pw_continuum_incident[i];
+            transmitted = pw_continuum_transmitted[i];
+            emit_inward = pw_continuum_emit_in[i];
+            emit_outward = pw_continuum_emit_out[i];
+        } else if (have_product_write_spectrum) {
+            energy_out = pw_spectrum_energy[i];
+            incident = pw_spectrum_incident[i];
+            transmitted = pw_spectrum_transmitted[i];
+            emit_inward = pw_spectrum_emit_in[i];
+            emit_outward = pw_spectrum_emit_out[i];
         }
+        if (!std::isfinite(incident)) incident = 0.0;
+        if (!std::isfinite(transmitted)) transmitted = 0.0;
+        if (!std::isfinite(emit_inward)) emit_inward = 0.0;
+        if (!std::isfinite(emit_outward)) emit_outward = 0.0;
         const long row = static_cast<long>(i + 1);
-        const double energy_out = have_product_write_continuum ? pw_continuum_energy[i] : (i < energy_grid.size() ? energy_grid[i] : (i < e.radiation_energy_ev.size() ? e.radiation_energy_ev[i] : 0.0));
         write_real4(fptr, 1, row, energy_out);
         write_real4(fptr, 2, row, incident);
         write_real4(fptr, 3, row, transmitted);
