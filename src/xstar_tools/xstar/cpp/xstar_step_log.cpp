@@ -115,8 +115,99 @@ Result write_native_step_log(
     out << " Native xout_step.log does not emit XSTAR readtbl pointer/reals/integers/characters/line/rrc counts unless they are retained from the live reader.\n";
     out << " Synthetic atomic database count prologue: disabled\n";
     if (state.legacy_pprint.buffered_lines.empty()) {
-        out << " Native compact xout_step body generated from accepted true-native controller ProductWritingState.\n";
+        out << " Native xout_step body generated from accepted true-native controller ProductWritingState.\n";
         out << " Legacy pprint event stream: absent by design; no benchmark xout_step bytes copied.\n";
+        out << " Native product/state summary follows so this log is not an empty placeholder.\n";
+        out << "\n";
+        out << "run_summary:\n";
+        out << "  release " << state.release << "\n";
+        out << "  backend " << state.backend << "\n";
+        out << "  native_run_id " << state.native_run_id << "\n";
+        out << "  parameters " << path_string_or_unknown(state.parameters_path) << "\n";
+        out << "  schema " << path_string_or_unknown(state.schema_path) << "\n";
+        out << "  metadata " << path_string_or_unknown(state.product_metadata_path) << "\n";
+        out << "  diagnostics " << path_string_or_unknown(state.native_diagnostics_path) << "\n";
+        out << "  fixed_evaluations " << state.fixed_evaluations.size() << "\n";
+        out << "  radial_zones " << state.radial_zones.size() << "\n";
+        out << "  parameters_rows " << state.parameter_rows.size() << "\n";
+        out << "  abundance_rows " << state.abundance_radial_rows.size() << "\n";
+        out << "  level_identities " << state.level_identities.size() << "\n";
+        out << "  line_identities " << state.line_identities.size() << "\n";
+        out << "  rrc_identities " << state.rrc_identities.size() << "\n";
+        out << "  embedded_public_fits_payloads_absent " << (state.embedded_public_fits_payloads_absent ? "true" : "false") << "\n";
+        out << "  embedded_full_xout_step_payload_absent " << (state.embedded_full_xout_step_payload_absent ? "true" : "false") << "\n";
+        out << "  product_schema_complete " << (state.product_schema_complete ? "true" : "false") << "\n";
+        out << "  radial_state_complete " << (state.radial_state_complete ? "true" : "false") << "\n";
+        out << "  native_product_inputs_complete " << (state.native_product_inputs_complete ? "true" : "false") << "\n";
+        out << "  native_detail_state_retained " << (state.native_detail_state_retained ? "true" : "false") << "\n";
+        out << "  exact_source_metadata_retained " << (state.exact_source_metadata_retained ? "true" : "false") << "\n";
+        out << "  exact_source_workspaces_retained " << (state.exact_source_workspaces_retained ? "true" : "false") << "\n";
+        out << "  exact_accepted_radial_boundaries_retained " << (state.exact_accepted_radial_boundaries_retained ? "true" : "false") << "\n";
+        out << "\n";
+        out << "parameter_rows:\n";
+        for (const auto& row : state.parameter_rows) {
+            out << "  " << row.index << " " << row.parameter << " bits=" << row.value_bits
+                << " type=" << row.type << " comment=" << row.comment << "\n";
+        }
+        out << "\n";
+        out << "accepted_radial_zones:\n";
+        for (const auto& zone : state.radial_zones) {
+            out << "  zone " << zone.zone_index
+                << " pass " << zone.pass_index
+                << " seq " << zone.accepted_controller.accepted_sequence
+                << " call " << zone.accepted_controller.call_index
+                << " radius_cm " << zone.radius_cm
+                << " outer_radius_cm " << zone.outer_radius_cm
+                << " delta_radius_cm " << zone.delta_radius_cm
+                << " density_cm3 " << zone.density_cm3
+                << " pressure_dyn_cm2 " << zone.pressure_dyn_cm2
+                << " logxi " << zone.log_ionization_parameter
+                << " temperature_t4 " << zone.temperature_t4
+                << " electron_fraction " << zone.electron_fraction
+                << " populations " << zone.accepted_controller.evaluation.populations.size()
+                << " continuum_bins " << zone.accepted_controller.evaluation.radiation_energy_ev.size()
+                << " line_workspace " << zone.accepted_controller.evaluation.source_workspace.native_line_count
+                << " continuum_workspace " << zone.accepted_controller.evaluation.source_workspace.native_continuum_count
+                << " reason " << zone.accepted_controller.acceptance_reason << "\n";
+        }
+        out << "\n";
+        out << "accepted_controller_evaluations:\n";
+        for (const auto& fixed : state.fixed_evaluations) {
+            out << "  seq " << fixed.sequence
+                << " call " << fixed.call_index
+                << " eval " << fixed.evaluation_index
+                << " kind " << fixed.kind
+                << " t4 " << fixed.temperature_t4
+                << " xee_in " << fixed.electron_fraction_input
+                << " xee_calc " << fixed.computed_electron_fraction
+                << " residual " << fixed.charge_residual
+                << " hmctot " << fixed.hmctot
+                << " heating " << fixed.total_heating
+                << " cooling " << fixed.total_cooling
+                << " h_heat " << fixed.hydrogen_heating
+                << " h_cool " << fixed.hydrogen_cooling
+                << " he_heat " << fixed.helium_heating
+                << " he_cool " << fixed.helium_cooling
+                << " mg_heat " << fixed.magnesium_heating
+                << " mg_cool " << fixed.magnesium_cooling
+                << " compton_heat " << fixed.compton_heating
+                << " compton_cool " << fixed.compton_cooling
+                << " brems_cool " << fixed.brems_cooling
+                << " populations " << fixed.populations.size()
+                << " continuum_bins " << fixed.radiation_energy_ev.size()
+                << "\n";
+        }
+        out << "\n";
+        out << "product_inventory_expected:\n";
+        out << "  xo01_detail.fits XSTAR_RADIAL 616 rows per radial HDU\n";
+        out << "  xo01_detal2.fits XSTAR_RADIAL 2644 rows per radial HDU\n";
+        out << "  xo01_detal3.fits XSTAR_RADIAL 1849 rows per radial HDU\n";
+        out << "  xo01_detal4.fits XSTAR_RADIAL 9999 rows per radial HDU\n";
+        out << "  xout_lines1.fits XSTAR_LINES 600 rows\n";
+        out << "  xout_rrc1.fits XSTAR_SPECTRA 994 rows\n";
+        out << "  xout_abund1.fits ABUNDANCES/HEATING/COOLING native product rows\n";
+        out << "  xout_cont1.fits and xout_spect1.fits XSTAR_SPECTRA native product rows\n";
+        out << "\n";
     }
     for (const auto& line : state.legacy_pprint.buffered_lines) {
         out << line << '\n';
