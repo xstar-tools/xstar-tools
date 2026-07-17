@@ -8096,6 +8096,7 @@ std::vector<double> native_workspace_array_for_hdu(
     if (name == "dpthcont") return resize_native_array(ws.dpthcont, expected_count);
     if (name == "dpthc") return resize_native_array(ws.dpthc, expected_count);
     if (name == "opakc") return resize_native_array(ws.opakc, expected_count);
+    if (name == "opakcont") return resize_native_array(ws.opakcont, expected_count);
     if (name == "rccemis") return resize_native_array(ws.rccemis, expected_count);
     if (name == "rcem") return resize_native_array(ws.rcem, expected_count);
     if (name == "oplin") return resize_native_array(ws.oplin, expected_count);
@@ -8341,6 +8342,31 @@ double physical_luminosity_scale_1e38_for_output_zone(const xstar_run_state::Pro
     if (!(radius_cm > 0.0)) radius_cm = benchmark_radius_cm_from_parameters(state);
     if (!(radius_cm > 0.0) || !(depth_cm > 0.0)) return 0.0;
     return 4.0 * std::acos(-1.0) * radius_cm * radius_cm * depth_cm / 1.0e38;
+}
+
+
+double physical_incremental_shell_depth_cm_for_output_zone(const xstar_run_state::ProductWritingState& state,
+                                                            std::size_t output_zone_index) {
+    const double cumulative = line_tau_depth_cm_for_output_zone(state, output_zone_index);
+    const double previous = output_zone_index == 0 ? 0.0 :
+        line_tau_depth_cm_for_output_zone(state, output_zone_index - 1);
+    return std::max(0.0, cumulative - previous);
+}
+
+double physical_shell_luminosity_scale_1e38_for_output_zone(
+    const xstar_run_state::ProductWritingState& state,
+    std::size_t output_zone_index) {
+    double radius_cm = 0.0;
+    const auto boundaries = abundance_boundary_rows(state);
+    if (output_zone_index < boundaries.size()) radius_cm = boundaries[output_zone_index].radius_cm;
+    if (!(radius_cm > 0.0) && !state.radial_zones.empty()) {
+        const std::size_t src = source_zone_index(state, output_zone_index);
+        if (src < state.radial_zones.size()) radius_cm = state.radial_zones[src].radius_cm;
+    }
+    if (!(radius_cm > 0.0)) radius_cm = benchmark_radius_cm_from_parameters(state);
+    const double shell_depth = physical_incremental_shell_depth_cm_for_output_zone(state, output_zone_index);
+    if (!(radius_cm > 0.0) || !(shell_depth > 0.0)) return 0.0;
+    return 4.0 * std::acos(-1.0) * radius_cm * radius_cm * shell_depth / 1.0e38;
 }
 
 std::string oracle_ion_label(std::string label) {
@@ -9459,20 +9485,20 @@ void write_rrc_detail(const std::filesystem::path& path,
             if (tau_in != 0.0) ++audit.tau_in_nonzero;
         }
         detal3_audit.push_back(audit);
-        std::cout << "V048746255172542_DETAL3_HDU" << audit.hdu << "_ROWS=" << audit.rows << "\n"
-                  << "V048746255172542_DETAL3_HDU" << audit.hdu << "_DIAGNOSTIC_ROWS=" << audit.diagnostic_rows << "\n"
-                  << "V048746255172542_DETAL3_HDU" << audit.hdu << "_EMIS_OUTWARD_NONZERO=" << audit.emis_outward_nonzero << "\n"
-                  << "V048746255172542_DETAL3_HDU" << audit.hdu << "_INTEGRATED_ABSN_NONZERO=" << audit.absorption_nonzero << "\n"
-                  << "V048746255172542_DETAL3_HDU" << audit.hdu << "_OPACITY_NONZERO=" << audit.opacity_nonzero << "\n"
-                  << "V048746255172542_DETAL3_HDU" << audit.hdu << "_TAU_IN_NONZERO=" << audit.tau_in_nonzero << "\n"
-                  << "V048746255172542_DETAL3_HDU" << audit.hdu << "_TAU_IN_DEPTH_FALLBACK=" << audit.tau_in_depth_fallback << "\n"
-                  << "V048746255172542_DETAL3_HDU" << audit.hdu << "_TAU_IN_NULLS=0\n"
-                  << "V048746255172542_DETAL3_HDU" << audit.hdu << "_TAU_OUT_NULLS=0\n";
+        std::cout << "V048746255172551_DETAL3_HDU" << audit.hdu << "_ROWS=" << audit.rows << "\n"
+                  << "V048746255172551_DETAL3_HDU" << audit.hdu << "_DIAGNOSTIC_ROWS=" << audit.diagnostic_rows << "\n"
+                  << "V048746255172551_DETAL3_HDU" << audit.hdu << "_EMIS_OUTWARD_NONZERO=" << audit.emis_outward_nonzero << "\n"
+                  << "V048746255172551_DETAL3_HDU" << audit.hdu << "_INTEGRATED_ABSN_NONZERO=" << audit.absorption_nonzero << "\n"
+                  << "V048746255172551_DETAL3_HDU" << audit.hdu << "_OPACITY_NONZERO=" << audit.opacity_nonzero << "\n"
+                  << "V048746255172551_DETAL3_HDU" << audit.hdu << "_TAU_IN_NONZERO=" << audit.tau_in_nonzero << "\n"
+                  << "V048746255172551_DETAL3_HDU" << audit.hdu << "_TAU_IN_DEPTH_FALLBACK=" << audit.tau_in_depth_fallback << "\n"
+                  << "V048746255172551_DETAL3_HDU" << audit.hdu << "_TAU_IN_NULLS=0\n"
+                  << "V048746255172551_DETAL3_HDU" << audit.hdu << "_TAU_OUT_NULLS=0\n";
     }
     close_fits(fptr);
-    std::ofstream audit_json(path.parent_path() / "v048746255172542_xo01_detal3_rrc_population_projection_audit.json");
+    std::ofstream audit_json(path.parent_path() / "v048746255172551_xo01_detal3_rrc_native_surface_audit.json");
     audit_json << "{\n"
-               << "  \"schema\": \"xstar-tools-v048746255172542-xo01-detal3-rrc-population-projection-audit-v1\",\n"
+               << "  \"schema\": \"xstar-tools-v048746255172551-xo01-detal3-rrc-native-surface-audit-v1\",\n"
                << "  \"product\": \"xo01_detal3.fits:XSTAR_RADIAL\",\n"
                << "  \"native_rrc_projection\": \"ACCEPT\",\n"
                << "  \"hdu_audit\": [\n";
@@ -9736,6 +9762,91 @@ void write_spectrum_detail(const std::filesystem::path& path,
                            const xstar_run_state::ProductWritingState& state) {
     fitsfile* fptr = create_fits(path, state);
     write_parameters(fptr, state.parameter_rows);
+    if (native_standalone_product_state(state)) {
+        if (state.radial_zones.empty()) throw std::runtime_error("native xo01_detal4 requires radial zones");
+        const auto& terminal = state.radial_zones.back().accepted_controller.evaluation;
+        const std::size_t n = terminal.radiation_energy_ev.size();
+        if (n == 0) throw std::runtime_error("native xo01_detal4 requires continuum bins");
+        std::vector<double> z1(n, 0.0), z3(n, 0.0), z5(n, 0.0), forward_depth(n, 0.0);
+        double previous_emission_depth = 0.0;
+        double previous_tau_depth = 0.0;
+        const double cfrac = std::clamp(parameter_value(state, "cfrac", 1.0), 0.0, 1.0);
+        for (std::size_t oz = 0; oz < state.radial_zones.size(); ++oz) {
+            const std::size_t src = source_zone_index(state, oz);
+            const auto& zone = state.radial_zones[src];
+            const auto& e = zone.accepted_controller.evaluation;
+            const auto& ws = e.source_workspace;
+            if (e.radiation_energy_ev.size() != n || e.radiation_flux.size() != n || e.opacity.size() != n) {
+                throw std::runtime_error("native xo01_detal4 radial continuum shape mismatch");
+            }
+            if (oz == 0) z1 = e.radiation_flux;
+            const auto continuum_diag = read_continuum_diagnostics_expanded_to_full_bins(
+                state, zone.accepted_controller.accepted_sequence, n);
+            const double radius = [&]() {
+                const auto boundaries = abundance_boundary_rows(state);
+                if (oz < boundaries.size() && boundaries[oz].radius_cm > 0.0) return boundaries[oz].radius_cm;
+                if (zone.radius_cm > 0.0) return zone.radius_cm;
+                return benchmark_radius_cm_from_parameters(state);
+            }();
+            const double fpr2 = radius > 0.0 ? 12.56 * std::pow(radius / 1.0e19, 2) : 0.0;
+            const std::size_t emission_depth_index = std::min(oz + 1, state.radial_zones.size() - 1);
+            const double emission_depth = line_tau_depth_cm_for_output_zone(state, emission_depth_index);
+            const double emission_shell = std::max(0.0, emission_depth - previous_emission_depth);
+            previous_emission_depth = std::max(previous_emission_depth, emission_depth);
+            if (emission_shell > 0.0 && fpr2 > 0.0) {
+                for (std::size_t i = 0; i < n; ++i) {
+                    const double opacity = std::max(0.0, e.opacity[i]);
+                    const double tau = opacity * emission_shell;
+                    const double fac = tau > 0.01 ? (1.0 - std::exp(-tau)) / tau : 1.0;
+                    const double opakcont = i < ws.opakcont.size() ? std::max(0.0, ws.opakcont[i]) : 0.0;
+                    const double tau_cont = opakcont * emission_shell;
+                    const double fac_cont = tau_cont > 0.01 ? (1.0 - std::exp(-tau_cont)) / tau_cont : 1.0;
+                    const double brcems = i < continuum_diag.size() && std::isfinite(continuum_diag[i].brcems)
+                        ? std::max(0.0, continuum_diag[i].brcems) : 0.0;
+                    const double rcc_out = i < ws.rccemis.size() ? std::max(0.0, ws.rccemis[i]) : 0.0;
+                    const double rcc_in = n + i < ws.rccemis.size() ? std::max(0.0, ws.rccemis[n + i]) : 0.0;
+                    const double tmpc1 = rcc_out + brcems * (1.0 - cfrac) / 2.0;
+                    const double tmpc2 = rcc_in + brcems * (1.0 + cfrac) / 2.0;
+                    const double bremsa = z1[i] / fpr2;
+                    const double tmph = bremsa * opacity;
+                    z1[i] = std::max(0.0, z1[i] -
+                        (tmph - 12.56 * (tmpc1 + tmpc2)) * fac * emission_shell * fpr2);
+                    z3[i] += 12.56 * tmpc2 * fac * emission_shell * fpr2;
+                    z5[i] += 12.56 * tmpc2 * fac_cont * emission_shell * fpr2;
+                }
+            }
+            const double tau_depth = line_tau_depth_cm_for_output_zone(state, oz);
+            const double tau_shell = std::max(0.0, tau_depth - previous_tau_depth);
+            previous_tau_depth = std::max(previous_tau_depth, tau_depth);
+            if (tau_shell > 0.0) {
+                for (std::size_t i = 0; i < n; ++i) forward_depth[i] += std::max(0.0, e.opacity[i]) * tau_shell;
+            }
+            create_table(fptr, BINARY_TBL, static_cast<long>(n), "XSTAR_RADIAL",
+                {"index","energy","zrems(1)","zrems(2)","zrems(3)","zrems(4)","zrems(5)","opacity","emis out","emis in","fwd dpth","bck dpth"},
+                {"1J","1E","1E","1E","1E","1E","1E","1E","1E","1E","1E","1E"},
+                {"","eV","erg/s","erg/s","erg/s","erg/s","erg/s","/cm","erg/cm**3/s","erg/cm**3/s","",""});
+            write_radial_keywords(fptr, state, oz, zone);
+            for (std::size_t i = 0; i < n; ++i) {
+                const long row = static_cast<long>(i + 1);
+                const double rcc_out = i < ws.rccemis.size() ? ws.rccemis[i] : 0.0;
+                const double rcc_in = n + i < ws.rccemis.size() ? ws.rccemis[n + i] : 0.0;
+                write_int(fptr, 1, row, static_cast<int>(i + 1));
+                write_real4(fptr, 2, row, e.radiation_energy_ev[i]);
+                write_real4(fptr, 3, row, z1[i]);
+                write_real4(fptr, 4, row, 0.0);
+                write_real4(fptr, 5, row, z3[i]);
+                write_real4(fptr, 6, row, 0.0);
+                write_real4(fptr, 7, row, z5[i]);
+                write_real4(fptr, 8, row, e.opacity[i]);
+                write_real4(fptr, 9, row, rcc_out);
+                write_real4(fptr, 10, row, rcc_in);
+                write_real4(fptr, 11, row, forward_depth[i]);
+                write_real4(fptr, 12, row, 0.0);
+            }
+        }
+        close_fits(fptr);
+        return;
+    }
     const auto& final_eval = state.radial_zones.back().accepted_controller.evaluation;
     const std::size_t n = final_eval.radiation_energy_ev.size();
     // Binary detail products preserve the native binary64 radiation grid before
@@ -10129,23 +10240,21 @@ void write_public_lines(const std::filesystem::path& path,
                         const xstar_run_state::ProductWritingState& state,
                         const std::vector<ElementMeta>& elements,
                         const std::vector<RowMeta>& rows) {
-    const std::size_t final_index = state.radial_zones.size() >= 2 ? state.radial_zones.size() - 2 : source_zone_index(state, state.radial_zones.size() - 1);
+    (void)rows;
+    const std::size_t final_index = state.radial_zones.empty() ? 0 : state.radial_zones.size() - 1;
     const auto& final_zone = state.radial_zones[final_index];
-    auto list = public_line_rows_from_identities(
+    auto terminal_list = public_line_rows_from_identities(
         state, final_zone.accepted_controller.evaluation,
         physical_density_cm3_for_output_zone(state, final_index),
         physical_luminosity_scale_1e38_for_output_zone(state, final_index));
+    std::map<long long,LineRow> terminal_by_record;
+    for (const auto& line : terminal_list) terminal_by_record[line.record] = line;
+
     const auto pw_line_index = optional_bridge_array_for_hdu(state, "product_write_public_line_index", 3);
     const auto pw_line_emit_in = optional_bridge_array_for_hdu(state, "product_write_public_line_emit_inward", 3, pw_line_index.size());
     const auto pw_line_emit_out = optional_bridge_array_for_hdu(state, "product_write_public_line_emit_outward", 3, pw_line_index.size());
     const auto pw_line_depth_in = optional_bridge_array_for_hdu(state, "product_write_public_line_depth_inward", 3, pw_line_index.size());
     const auto pw_line_depth_out = optional_bridge_array_for_hdu(state, "product_write_public_line_depth_outward", 3, pw_line_index.size());
-    const double public_luminosity_scale = physical_luminosity_scale_1e38_for_output_zone(state, final_index);
-    const auto legacy_values = pprint_value_patch_enabled() ? parse_legacy_pprint_product_values(state) : LegacyPprintProductValues{};
-    std::map<long long,LineRow> native_public_lines_by_record;
-    for (const auto& line : list) native_public_lines_by_record[line.record] = line;
-    const auto diagnostic_public_lines = diagnostic_line_rows_by_index(
-        state, final_zone.accepted_controller.evaluation, elements, final_zone.accepted_controller.accepted_sequence);
     const auto& public_line_labels = oracle_public_line_label_template_v172537();
     const bool have_product_write_public_lines =
         pw_line_index.size() == public_line_labels.size() &&
@@ -10153,23 +10262,32 @@ void write_public_lines(const std::filesystem::path& path,
         pw_line_emit_out.size() == public_line_labels.size() &&
         pw_line_depth_in.size() == public_line_labels.size() &&
         pw_line_depth_out.size() == public_line_labels.size();
-    auto diagnostic_for_public_label = [&](const LineLabelTemplateRow& label) -> const LineRow* {
+
+    std::vector<std::map<long long,LineRow>> diagnostics_by_zone;
+    diagnostics_by_zone.reserve(state.radial_zones.size());
+    for (const auto& zone : state.radial_zones) {
+        diagnostics_by_zone.push_back(diagnostic_line_rows_by_index(
+            state, zone.accepted_controller.evaluation, elements,
+            zone.accepted_controller.accepted_sequence));
+    }
+    auto diagnostic_for_label = [&](const std::map<long long,LineRow>& diagnostics,
+                                    const LineLabelTemplateRow& label) -> const LineRow* {
+        const auto direct = diagnostics.find(label.index);
+        if (direct != diagnostics.end()) return &direct->second;
         const int z_label = element_z_from_ion_label(label.ion);
         const int stage_label = roman_stage_from_ion_label(label.ion);
         const LineRow* best = nullptr;
         double best_delta = std::numeric_limits<double>::infinity();
         const double tolerance = std::max(2.0e-3, std::abs(label.wavelength_angstrom) * 2.0e-6);
-        for (const auto& kv : diagnostic_public_lines) {
+        for (const auto& kv : diagnostics) {
             const auto& d = kv.second;
             if (d.z != z_label || d.stage != stage_label) continue;
             const double delta = std::abs(d.wavelength_a - label.wavelength_angstrom);
-            if (delta <= tolerance && delta < best_delta) {
-                best = &d;
-                best_delta = delta;
-            }
+            if (delta <= tolerance && delta < best_delta) { best = &d; best_delta = delta; }
         }
         return best;
     };
+
     fitsfile* fptr = create_fits(path, state); write_parameters(fptr, state.parameter_rows);
     create_table(fptr, ASCII_TBL, static_cast<long>(public_line_labels.size()), "XSTAR_LINES",
         {"index","ion","lower_level","upper_level","wavelength","emit_inward","emit_outward","depth_inward","depth_outward"},
@@ -10178,30 +10296,34 @@ void write_public_lines(const std::filesystem::path& path,
         const auto& label = public_line_labels[i];
         LineRow r;
         r.record = label.index;
-        if (have_product_write_public_lines) {
-            const long row = static_cast<long>(i + 1);
-            write_int(fptr, 1, row, label.index);
-            write_string(fptr, 2, row, oracle_ion_label(label.ion));
-            write_string(fptr, 3, row, label.lower_level);
-            write_string(fptr, 4, row, label.upper_level);
-            write_real4(fptr, 5, row, label.wavelength_angstrom);
-            write_real4(fptr, 6, row, std::isfinite(pw_line_emit_in[i]) ? pw_line_emit_in[i] : 0.0);
-            write_real4(fptr, 7, row, std::isfinite(pw_line_emit_out[i]) ? pw_line_emit_out[i] : 0.0);
-            write_real4(fptr, 8, row, std::isfinite(pw_line_depth_in[i]) ? pw_line_depth_in[i] : 0.0);
-            write_real4(fptr, 9, row, std::isfinite(pw_line_depth_out[i]) ? pw_line_depth_out[i] : 0.0);
-            continue;
-        }
         r.wavelength_a = label.wavelength_angstrom;
-        const auto found_native = native_public_lines_by_record.find(label.index);
-        if (found_native != native_public_lines_by_record.end()) r = found_native->second;
-        const auto found_diag = diagnostic_public_lines.find(label.index);
-        const LineRow* diag = found_diag != diagnostic_public_lines.end() ? &found_diag->second : diagnostic_for_public_label(label);
-        if (diag) {
-            const auto& d = *diag;
-            if (d.emis_in != 0.0 && public_luminosity_scale > 0.0) r.emis_in = d.emis_in * public_luminosity_scale;
-            if (d.emis_out != 0.0 && public_luminosity_scale > 0.0) r.emis_out = d.emis_out * public_luminosity_scale;
-            if (std::isfinite(d.tau_in) && d.tau_in != 0.0) r.tau_in = d.tau_in;
-            if (std::isfinite(d.tau_out) && d.tau_out != 0.0) r.tau_out = d.tau_out;
+        if (have_product_write_public_lines) {
+            r.emis_in = std::isfinite(pw_line_emit_in[i]) ? pw_line_emit_in[i] : 0.0;
+            r.emis_out = std::isfinite(pw_line_emit_out[i]) ? pw_line_emit_out[i] : 0.0;
+            r.tau_in = std::isfinite(pw_line_depth_in[i]) ? pw_line_depth_in[i] : 0.0;
+            r.tau_out = std::isfinite(pw_line_depth_out[i]) ? pw_line_depth_out[i] : 0.0;
+        } else {
+            bool accumulated = false;
+            for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
+                const LineRow* d = diagnostic_for_label(diagnostics_by_zone[z], label);
+                if (!d) continue;
+                const double shell_scale = physical_shell_luminosity_scale_1e38_for_output_zone(state, z);
+                const double shell_depth = physical_incremental_shell_depth_cm_for_output_zone(state, z);
+                if (shell_scale > 0.0) {
+                    r.emis_in += d->emis_in * shell_scale;
+                    r.emis_out += d->emis_out * shell_scale;
+                    accumulated = true;
+                }
+                if (shell_depth > 0.0 && d->opacity > 0.0) {
+                    r.tau_in += d->opacity * shell_depth;
+                    accumulated = true;
+                }
+            }
+            if (!accumulated) {
+                const auto found = terminal_by_record.find(label.index);
+                if (found != terminal_by_record.end()) r = found->second;
+            }
+            r.tau_out = 0.0;
         }
         const long row = static_cast<long>(i + 1);
         write_int(fptr, 1, row, label.index);
@@ -10222,65 +10344,86 @@ void write_public_rrc(const std::filesystem::path& path,
                       const xstar_run_state::ProductWritingState& state,
                       const std::vector<ElementMeta>& elements,
                       const std::vector<RowMeta>& rows) {
-    const std::size_t final_index = state.radial_zones.size() >= 2 ? state.radial_zones.size() - 2 : source_zone_index(state, state.radial_zones.size() - 1);
+    const std::size_t final_index = state.radial_zones.empty() ? 0 : state.radial_zones.size() - 1;
     const auto& final_zone = state.radial_zones[final_index];
     const auto& evaluation = final_zone.accepted_controller.evaluation;
-    const double public_luminosity_scale = physical_luminosity_scale_1e38_for_output_zone(state, final_index);
-    const auto diagnostic_rrcs = diagnostic_rrc_rows_by_index(state, evaluation, elements, rows, final_zone.accepted_controller.accepted_sequence);
     const auto terminal_detail_rrcs = source_rrc_rows_from_identities(state, evaluation, 6, true);
     std::map<long long,RrcRow> terminal_by_index;
     for (const auto& r : terminal_detail_rrcs) terminal_by_index[r.record] = r;
     const auto& public_rrc_labels = oracle_public_rrc_label_template_v172537();
-    auto diagnostic_for_public_rrc_label = [&](const RrcLabelTemplateRow& label) -> const RrcRow* {
+
+    std::vector<std::map<long long,RrcRow>> diagnostics_by_zone;
+    diagnostics_by_zone.reserve(state.radial_zones.size());
+    for (const auto& zone : state.radial_zones) {
+        diagnostics_by_zone.push_back(diagnostic_rrc_rows_by_index(
+            state, zone.accepted_controller.evaluation, elements, rows,
+            zone.accepted_controller.accepted_sequence));
+    }
+    auto diagnostic_for_label = [&](const std::map<long long,RrcRow>& diagnostics,
+                                    const RrcLabelTemplateRow& label) -> const RrcRow* {
+        const auto direct = diagnostics.find(label.index);
+        if (direct != diagnostics.end()) return &direct->second;
         const int z_label = element_z_from_ion_label(label.ion);
         const int stage_label = roman_stage_from_ion_label(label.ion);
         const RrcRow* best = nullptr;
         double best_score = std::numeric_limits<double>::infinity();
         const double energy_tol = std::max(1.0e-5, std::abs(label.energy_ev) * 2.0e-6);
-        for (const auto& kv : diagnostic_rrcs) {
+        for (const auto& kv : diagnostics) {
             const auto& d = kv.second;
             if (d.z != z_label || d.stage != stage_label) continue;
             const double de = std::abs(d.energy_ev - label.energy_ev);
-            if (de > energy_tol) continue;
-            const double level_penalty = (label.level_index > 0 && d.lower_row != 0) ? 0.0 : 1.0e-3;
-            const double score = de + level_penalty;
-            if (score < best_score) {
-                best = &d;
-                best_score = score;
-            }
+            if (de <= energy_tol && de < best_score) { best = &d; best_score = de; }
         }
         return best;
     };
+
     fitsfile* fptr = create_fits(path, state); write_parameters(fptr, state.parameter_rows);
     create_table(fptr, ASCII_TBL, static_cast<long>(public_rrc_labels.size()), "XSTAR_SPECTRA",
         {"index","ion","level","energy","emit_outward","emit_inward","depth_outward","depth_inward"},
         {native_standalone_product_state(state) ? "I12" : "I6","A9","A20","E13.5","E13.5","E13.5","E13.5","E13.5"}, {"","","","eV","erg","erg","",""});
     for (std::size_t i = 0; i < public_rrc_labels.size(); ++i) {
         const auto& label = public_rrc_labels[i];
-        RrcRow r;
-        r.record = label.index;
-        const auto found_terminal = terminal_by_index.find(label.index);
-        if (found_terminal != terminal_by_index.end()) r = found_terminal->second;
-        const auto found_diag = diagnostic_rrcs.find(label.index);
-        const RrcRow* diag = found_diag != diagnostic_rrcs.end() ? &found_diag->second : diagnostic_for_public_rrc_label(label);
-        if (diag) {
-            r = merged_rrc_row(r, diag);
+        double emit_out = 0.0;
+        double emit_in = 0.0;
+        double depth_out = 0.0;
+        bool accumulated = false;
+        for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
+            const RrcRow* d = diagnostic_for_label(diagnostics_by_zone[z], label);
+            if (!d) continue;
+            const double shell_scale = physical_shell_luminosity_scale_1e38_for_output_zone(state, z);
+            const double shell_depth = physical_incremental_shell_depth_cm_for_output_zone(state, z);
+            if (shell_scale > 0.0) {
+                emit_out += d->emis_out * shell_scale;
+                emit_in += d->emis_in * shell_scale;
+                accumulated = true;
+            }
+            if (shell_depth > 0.0 && d->opacity > 0.0) {
+                depth_out += d->opacity * shell_depth;
+                accumulated = true;
+            }
         }
-        double public_emit = std::max(r.emis_out, r.emis_in);
-        if (public_emit != 0.0 && public_luminosity_scale > 0.0) public_emit *= public_luminosity_scale;
-        const double public_depth_out = std::isfinite(r.tau_in) ? r.tau_in : 0.0;
+        if (!accumulated) {
+            const auto found = terminal_by_index.find(label.index);
+            if (found != terminal_by_index.end()) {
+                const double total_scale = physical_luminosity_scale_1e38_for_output_zone(state, final_index);
+                emit_out = found->second.emis_out * total_scale;
+                emit_in = found->second.emis_in * total_scale;
+                depth_out = std::isfinite(found->second.tau_in) ? found->second.tau_in : 0.0;
+            }
+        }
         const long row = static_cast<long>(i + 1);
         write_int(fptr, 1, row, label.index);
         write_string(fptr, 2, row, oracle_ion_label(label.ion));
         write_string(fptr, 3, row, label.lower_level);
         write_real4(fptr, 4, row, label.energy_ev);
-        write_real4(fptr, 5, row, public_emit);
-        write_real4(fptr, 6, row, public_emit);
-        write_real4(fptr, 7, row, public_depth_out);
+        write_real4(fptr, 5, row, emit_out);
+        write_real4(fptr, 6, row, emit_in);
+        write_real4(fptr, 7, row, depth_out);
         write_real4(fptr, 8, row, 0.0);
     }
     close_fits(fptr);
 }
+
 
 void write_public_spectrum(const std::filesystem::path& path,
                            const xstar_run_state::ProductWritingState& state,

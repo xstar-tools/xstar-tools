@@ -492,7 +492,10 @@ int xstar_spectral_apply_contributions_v1(
                 write_message(error, error_size, "zero continuum escape denominator");
                 return 8;
             }
-            workspace->opakab[index] = c.opakab;
+            // Bound-free opakab is carried as a cross section.  Convert it
+            // to the source cm^-1 threshold opacity once, matching ucalc's
+            // abund1*ansar1*xpx convention.
+            workspace->opakab[index] = c.opakab * c.abundance_lower * c.hydrogen_density;
             workspace->cabab[index] = std::abs(c.ans4) * c.abundance_lower * c.hydrogen_density;
             workspace->cemab[index] = c.ptmp1 * std::abs(c.ans3) / denom * c.abundance_upper * c.hydrogen_density;
             workspace->cemab[cemab_stride + index] = c.ptmp2 * std::abs(c.ans3) / denom * c.abundance_upper * c.hydrogen_density;

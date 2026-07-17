@@ -58,6 +58,7 @@ struct ExactSourceWorkspaceState {
     std::vector<double> elumab;
     std::vector<double> zrems;
     std::vector<double> opakc;
+    std::vector<double> opakcont;
     std::vector<double> rccemis;
     std::vector<double> dpthc;
     std::vector<double> dpthcont;

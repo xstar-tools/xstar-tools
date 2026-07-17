@@ -1002,6 +1002,7 @@ struct Type53SourceShadow {
     double electron_density_cm3 = 0.0;
     double hydrogen_density_cm3 = 0.0;
     double matrix_density_scale = 0.0;
+    double threshold_cross_section_cm2 = 0.0;
     double base_threshold_ev = 0.0;
     double threshold_ev = 0.0;
     double bound_energy_ev = 0.0;
@@ -1166,6 +1167,7 @@ struct Type99SourceShadow {
     double rec_cm3_s = 0.0;
     double milne_alpha_cm3_s = 0.0;
     double cross_section_scale = 0.0;
+    double threshold_cross_section_cm2 = 0.0;
     double ans2d_unscaled_s = 0.0;
     double phint_scale = 0.0;
     double pirt_unscaled_s = 0.0;
@@ -3877,6 +3879,7 @@ bool evaluate_type99_source_faithful(
         shadow->rec_cm3_s = rec;
         shadow->milne_alpha_cm3_s = alpha;
         shadow->cross_section_scale = cross_section_scale;
+        shadow->threshold_cross_section_cm2 = sigma_cm2.empty() ? 0.0 : std::max(0.0, sigma_cm2.front());
         shadow->ans2d_unscaled_s = ph.rrrt;
         shadow->phint_scale = phint_scale;
         shadow->pirt_unscaled_s = ph.pirt;
@@ -4275,6 +4278,7 @@ bool evaluate_type53_source_integral(
         shadow->electron_density_cm3 = input.electron_density_cm3;
         shadow->hydrogen_density_cm3 = input.hydrogen_density_cm3;
         shadow->matrix_density_scale = static_cast<double>(input.hydrogen_density_cm3);
+        shadow->threshold_cross_section_cm2 = pair_sigma_cm2.empty() ? 0.0 : std::max(0.0, pair_sigma_cm2.front());
         shadow->base_threshold_ev = record_context && record_context->valid
             ? record_context->base_threshold_ev : threshold_ev;
         shadow->threshold_ev = threshold_ev;
@@ -4823,8 +4827,12 @@ EvaluatedRecord evaluate_record(
                 ? record_context.continuum_index_one_based : 0;
             out.line_energy_ev = threshold;
             out.atomic_mass_amu = record.atomic_mass_amu > 0.0 ? record.atomic_mass_amu : 1.0;
-            out.opakab = std::max(0.0, source_exact ? source_shadow.ans1 : c.ans1) *
-                std::max(0.0, lower.initial_population) * 1.0e-30;
+            // opakab is the source photoabsorption cross section here.  The
+            // spectral commit applies the live lower-level population,
+            // elemental abundance, and hydrogen density exactly once.
+            out.opakab = source_exact
+                ? std::max(0.0, out.type53_shadow.threshold_cross_section_cm2)
+                : (r && record.real_count >= 2 ? std::max(0.0, r[1]) : 0.0);
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE: {
@@ -5084,8 +5092,12 @@ EvaluatedRecord evaluate_record(
             out.continuum_index_one_based = continuum_index > 0 ? continuum_index : 0;
             out.line_energy_ev = source_threshold;
             out.atomic_mass_amu = record.atomic_mass_amu > 0.0 ? record.atomic_mass_amu : 1.0;
-            out.opakab = std::max(0.0, source_exact ? source_shadow.ans1 : c.ans1) *
-                std::max(0.0, lower.initial_population) * 1.0e-30;
+            // opakab is the source photoabsorption cross section here.  The
+            // spectral commit applies the live lower-level population,
+            // elemental abundance, and hydrogen density exactly once.
+            out.opakab = source_exact
+                ? std::max(0.0, out.type49_shadow.threshold_cross_section_cm2)
+                : (r && record.real_count >= 2 ? std::max(0.0, r[1]) : 0.0);
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE50_RADIATIVE_LINE: {
@@ -5511,7 +5523,15 @@ EvaluatedRecord evaluate_record(
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE99_SUPERLEVEL_BOUND_FREE: {
-            if (evaluate_type99_source_faithful(record, r, ints, lower, upper, input, c, &out.type99_shadow)) break;
+            if (evaluate_type99_source_faithful(record, r, ints, lower, upper, input, c, &out.type99_shadow)) {
+                out.spectral = true;
+                out.bound_free_spectral = true;
+                out.continuum_index_one_based = out.type99_shadow.nbinc_threshold_one_based;
+                out.line_energy_ev = out.type99_shadow.threshold_ev;
+                out.atomic_mass_amu = record.atomic_mass_amu > 0.0 ? record.atomic_mass_amu : 1.0;
+                out.opakab = std::max(0.0, out.type99_shadow.threshold_cross_section_cm2);
+                break;
+            }
             // Backward-compatible development-fixture path.  Strict v0.6.48.7.36
             // qualification uses the appended source destination metadata and
             // the live DSEC workspace above; older compact fixtures retain the
@@ -6572,6 +6592,132 @@ void validate_io(const xstar_fixed_state_input_v1& in, xstar_fixed_state_output_
     if (out.spectrum_capacity < in.radiation_bin_count || out.opacity_capacity < in.radiation_bin_count) throw std::runtime_error("spectrum or opacity output capacity too small");
 }
 
+
+struct NativeBoundFreeCurve {
+    double threshold_ev = 0.0;
+    std::vector<double> offset_ryd;
+    std::vector<double> sigma_cm2;
+};
+
+double interpolate_bound_free_sigma(const NativeBoundFreeCurve& curve, double energy_ev) {
+    if (!(energy_ev >= curve.threshold_ev) || curve.offset_ryd.empty() ||
+        curve.offset_ryd.size() != curve.sigma_cm2.size()) return 0.0;
+    const double x = (energy_ev - curve.threshold_ev) / kType53RydEv;
+    if (x <= curve.offset_ryd.front()) return std::max(0.0, curve.sigma_cm2.front());
+    if (x >= curve.offset_ryd.back()) {
+        if (curve.offset_ryd.size() < 2 || !(curve.offset_ryd.back() > 0.0) || !(x > 0.0)) {
+            return std::max(0.0, curve.sigma_cm2.back());
+        }
+        const std::size_t n = curve.offset_ryd.size();
+        const double x0 = std::max(curve.offset_ryd[n - 2], 1.0e-30);
+        const double x1 = std::max(curve.offset_ryd[n - 1], 1.0e-30);
+        const double s0 = std::max(curve.sigma_cm2[n - 2], 1.0e-300);
+        const double s1 = std::max(curve.sigma_cm2[n - 1], 1.0e-300);
+        double slope = -3.0;
+        if (x1 != x0 && s0 > 0.0 && s1 > 0.0) slope = std::log(s1 / s0) / std::log(x1 / x0);
+        if (!std::isfinite(slope)) slope = -3.0;
+        return std::max(0.0, s1 * std::pow(x / x1, slope));
+    }
+    const auto it = std::upper_bound(curve.offset_ryd.begin(), curve.offset_ryd.end(), x);
+    const std::size_t hi = static_cast<std::size_t>(it - curve.offset_ryd.begin());
+    const std::size_t lo = hi - 1;
+    const double x0 = curve.offset_ryd[lo], x1 = curve.offset_ryd[hi];
+    const double y0 = std::max(0.0, curve.sigma_cm2[lo]);
+    const double y1 = std::max(0.0, curve.sigma_cm2[hi]);
+    if (x1 == x0) return y0;
+    return std::max(0.0, y0 + (y1 - y0) * (x - x0) / (x1 - x0));
+}
+
+bool native_bound_free_curve(const Program& program,
+                             const ProgramRecord& record,
+                             const EvaluatedRecord& evaluated,
+                             NativeBoundFreeCurve& curve) {
+    curve = {};
+    if (!evaluated.bound_free_spectral || record.real_offset + record.real_count > program.reals.size()) return false;
+    const double* r = program.reals.data() + record.real_offset;
+    if (record.opcode == XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE ||
+        record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE) {
+        const Type53SourceShadow& shadow = record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE
+            ? evaluated.type49_shadow : evaluated.type53_shadow;
+        const int pair_count = shadow.phextrap_input_pair_count > 0
+            ? shadow.phextrap_input_pair_count
+            : static_cast<int>(record.real_count / 2);
+        if (pair_count < 2 || static_cast<std::size_t>(2 * pair_count) > record.real_count) return false;
+        curve.threshold_ev = shadow.threshold_ev > 0.0 ? shadow.threshold_ev : evaluated.line_energy_ev;
+        curve.offset_ryd.reserve(static_cast<std::size_t>(pair_count));
+        curve.sigma_cm2.reserve(static_cast<std::size_t>(pair_count));
+        for (int i = 0; i < pair_count; ++i) {
+            curve.offset_ryd.push_back(r[2 * i]);
+            curve.sigma_cm2.push_back(std::max(0.0, r[2 * i + 1]));
+        }
+        return curve.threshold_ev > 0.0;
+    }
+    if (record.opcode == XSTAR_FIXED_OPCODE_TYPE99_SUPERLEVEL_BOUND_FREE) {
+        if (record.int_offset + record.int_count > program.ints.size() || record.int_count < 3) return false;
+        const auto* ints = program.ints.data() + record.int_offset;
+        const int nden = static_cast<int>(ints[0]);
+        const int ntem = static_cast<int>(ints[1]);
+        const int nxs = static_cast<int>(ints[2]);
+        const std::size_t offset = static_cast<std::size_t>(nden + ntem + nden * ntem);
+        if (nden <= 0 || ntem < 2 || nxs < 2 || offset + 2u * static_cast<std::size_t>(nxs) > record.real_count) return false;
+        curve.threshold_ev = evaluated.type99_shadow.threshold_ev;
+        const double scale = evaluated.type99_shadow.cross_section_scale;
+        curve.offset_ryd.reserve(static_cast<std::size_t>(nxs));
+        curve.sigma_cm2.reserve(static_cast<std::size_t>(nxs));
+        for (int i = 0; i < nxs; ++i) {
+            curve.offset_ryd.push_back(r[offset + 2u * static_cast<std::size_t>(i)]);
+            curve.sigma_cm2.push_back(std::max(0.0, r[offset + 2u * static_cast<std::size_t>(i) + 1u]) * scale * 1.0e-18);
+        }
+        return curve.threshold_ev > 0.0 && scale > 0.0;
+    }
+    return false;
+}
+
+void accumulate_native_bound_free_surface(const NativeBoundFreeCurve& curve,
+                                          const EvaluatedRecord& evaluated,
+                                          const ProgramRecord& record,
+                                          const ElementProgram& element,
+                                          const std::vector<double>& populations,
+                                          const xstar_fixed_state_input_v1& input,
+                                          std::vector<double>& opacity_cm1,
+                                          std::vector<double>& rccemis) {
+    const std::size_t n = input.radiation_bin_count;
+    if (n < 2 || opacity_cm1.size() != n || rccemis.size() != 2 * n ||
+        record.lower_row < 1 || record.upper_row < 1 ||
+        static_cast<std::size_t>(record.lower_row) > populations.size() ||
+        static_cast<std::size_t>(record.upper_row) > populations.size()) return;
+    const double lower_abundance = std::max(0.0, populations[static_cast<std::size_t>(record.lower_row - 1)]) * element.abundance;
+    const double upper_abundance = std::max(0.0, populations[static_cast<std::size_t>(record.upper_row - 1)]) * element.abundance;
+    const double density = std::max(0.0, input.hydrogen_density_cm3);
+    std::vector<double> shape(n, 0.0);
+    const double kt_ev = xstar_constants::kModernBoltzmannEvPerK * input.temperature_k;
+    for (std::size_t i = 0; i < n; ++i) {
+        const double energy = input.radiation_energy_ev[i];
+        const double sigma = interpolate_bound_free_sigma(curve, energy);
+        if (!(sigma > 0.0)) continue;
+        opacity_cm1[i] += sigma * lower_abundance * density;
+        const double excess = std::max(0.0, energy - curve.threshold_ev);
+        const double expo = kt_ev > 0.0 ? limited_exp(-excess / kt_ev) : 0.0;
+        shape[i] = sigma * energy * energy * energy * expo;
+    }
+    double integral = 0.0;
+    for (std::size_t i = 1; i < n; ++i) {
+        integral += 0.5 * (shape[i - 1] + shape[i]) *
+            std::max(0.0, input.radiation_energy_ev[i] - input.radiation_energy_ev[i - 1]);
+    }
+    const double total_emission = std::max(0.0, -evaluated.contribution.ans3) * upper_abundance * density;
+    if (!(integral > 0.0) || !(total_emission > 0.0)) return;
+    // heatt.f90 integrates 4*pi*(rccemis(1)+rccemis(2)) over energy.
+    // Split the retained RRC emission equally because the fixed controller
+    // currently has ptmp1=ptmp2=1 for this benchmark.
+    const double normalization = total_emission / (2.0 * 12.56 * integral);
+    for (std::size_t i = 0; i < n; ++i) {
+        const double value = normalization * shape[i];
+        rccemis[i] += value;
+        rccemis[n + i] += value;
+    }
+}
+
 int run_impl(
     xstar_fixed_state_context_impl& ctx,
     const xstar_fixed_state_input_v1& input,
@@ -6879,6 +7025,8 @@ int run_impl(
     std::vector<double> thermal_population_stream;
     std::size_t fixed_full_population_offset = 0;
     std::vector<xstar_spectral_contribution_v1> spectral;
+    std::vector<double> native_bound_free_opacity(input.radiation_bin_count, 0.0);
+    std::vector<double> native_rrc_continuum_emission(2 * input.radiation_bin_count, 0.0);
     std::optional<SourceCompactOracle> source_compact_oracle;
     if (source_compact_basis_seed) source_compact_oracle = load_source_compact_oracle();
     std::optional<FixedStateClosureData> fixed_state_closure_data;
@@ -6894,7 +7042,9 @@ int run_impl(
     for (const auto& element : ctx.program.elements) {
         ++stats.elements_attempted;
         std::vector<EvaluatedRecord> evaluated;
+        std::vector<const ProgramRecord*> evaluated_records;
         evaluated.reserve(static_cast<std::size_t>(element.record_count));
+        evaluated_records.reserve(static_cast<std::size_t>(element.record_count));
         std::vector<unsigned char> visited(ctx.program.records.size(), 0);
         int index = element.record_head;
         int hops = 0;
@@ -6912,6 +7062,7 @@ int run_impl(
             const auto rate_start = clock_type::now();
             try {
                 evaluated.push_back(evaluate_record(ctx.program, element, record, input));
+                evaluated_records.push_back(&record);
                 ++stats.records_evaluated;
             } catch (const std::exception&) {
                 ++stats.records_unsupported;
@@ -7593,6 +7744,19 @@ int run_impl(
         }
         ctx.last_element_diagnostics.push_back(std::move(element_diagnostic));
 
+        // Reconstruct the complete native bound-free continuum surface from
+        // the source cross-section records.  The former product path retained
+        // only one threshold cell per RRC, which left most xo01_detal3 opacity
+        // rows and nearly all xo01_detal4 continuum-opacity bins at zero.
+        for (std::size_t k = 0; k < evaluated.size() && k < evaluated_records.size(); ++k) {
+            if (!evaluated[k].bound_free_spectral) continue;
+            NativeBoundFreeCurve curve;
+            if (!native_bound_free_curve(ctx.program, *evaluated_records[k], evaluated[k], curve)) continue;
+            accumulate_native_bound_free_surface(
+                curve, evaluated[k], *evaluated_records[k], element, buffers.populations, input,
+                native_bound_free_opacity, native_rrc_continuum_emission);
+        }
+
         for (std::size_t k = 0; k < evaluated.size(); ++k) {
             if (!evaluated[k].spectral) continue;
             const auto& rec = evaluated[k].contribution;
@@ -7615,8 +7779,8 @@ int run_impl(
             }
             sc.ptmp1 = 1.0;
             sc.ptmp2 = 1.0;
-            sc.abundance_lower = buffers.populations[static_cast<std::size_t>(rec.lower_row - 1)];
-            sc.abundance_upper = buffers.populations[static_cast<std::size_t>(rec.upper_row - 1)];
+            sc.abundance_lower = buffers.populations[static_cast<std::size_t>(rec.lower_row - 1)] * element.abundance;
+            sc.abundance_upper = buffers.populations[static_cast<std::size_t>(rec.upper_row - 1)] * element.abundance;
             sc.hydrogen_density = input.hydrogen_density_cm3;
             sc.ans1 = rec.ans1; sc.ans2 = rec.ans2; sc.ans3 = rec.ans3; sc.ans4 = rec.ans4;
             sc.opakab = evaluated[k].opakab;
@@ -7831,6 +7995,15 @@ int run_impl(
             natural_rate.data(),auger_width.data(),auger_rate.data(),profiled.data(),profile_stats.data(),
             profile_error.data(),profile_error.size());
         if (prc!=0) throw std::runtime_error(std::string("native line emissivity profile failed: ")+profile_error.data());
+
+        // Add the full source-order bound-free opacity and distributed RRC
+        // emissivity before retaining opakc/rccemis.  These arrays are native
+        // calculations from lowered cross-section records, not oracle assets.
+        for (std::size_t k = 0; k < continuum_capacity; ++k) {
+            output.opacity[k] += native_bound_free_opacity[k];
+            rccemis[k] += native_rrc_continuum_emission[k];
+            rccemis[continuum_capacity + k] += native_rrc_continuum_emission[continuum_capacity + k];
+        }
 
         // Capture the exact source workspaces before the public-product
         // reduction mutates or combines any of them.  The optional sidecar

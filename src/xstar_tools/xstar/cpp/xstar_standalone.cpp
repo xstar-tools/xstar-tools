@@ -3886,6 +3886,7 @@ int command_run_fixed_dsec(const Options& options) {
         target.source_workspace.tauc = source.tauc;
         target.source_workspace.rccemis = source.rccemis;
         target.source_workspace.opakc = source.opakc;
+        target.source_workspace.opakcont = source.opakcont;
         target.source_workspace.line_profile_workspace = source.line_profile_workspace;
         target.source_workspace.native_line_count = source.native_line_count;
         target.source_workspace.native_continuum_count = source.native_continuum_count;
@@ -4644,7 +4645,12 @@ xstar_run_state::ProductWritingState build_standalone_native_product_state(
     whole.native_detail_state_retained = true;
     whole.continuum_depths_derived_from_native_opacity = true;
     whole.exact_source_metadata_retained = true;
-    whole.exact_source_workspaces_retained = true;
+    whole.exact_source_workspaces_retained = std::all_of(
+        whole.radial_zones.begin(), whole.radial_zones.end(),
+        [](const xstar_run_state::RadialZoneState& zone) {
+            const auto& ws = zone.accepted_controller.evaluation.source_workspace;
+            return ws.line_workspace_exact && ws.rrc_workspace_exact && ws.continuum_workspace_exact;
+        });
     whole.exact_accepted_radial_boundaries_retained = true;
     whole.exact_legacy_pprint_state_retained = false;
     whole.legacy_pprint.initialized_from_native_controller = true;
@@ -7944,6 +7950,7 @@ xstar_run_state::FixedEvaluationState copy_fixed_evaluation_state_v172524(const 
     target.source_workspace.tauc = source.tauc;
     target.source_workspace.rccemis = source.rccemis;
     target.source_workspace.opakc = source.opakc;
+    target.source_workspace.opakcont = source.opakcont;
     target.source_workspace.line_profile_workspace = source.line_profile_workspace;
     target.source_workspace.native_line_count = source.native_line_count;
     target.source_workspace.native_continuum_count = source.native_continuum_count;
@@ -7995,109 +8002,38 @@ std::size_t count_native_fits_products_v172524(const std::filesystem::path& outp
 void fill_retained_product_surface_arrays_v172530(
     xstar_run_state::FixedEvaluationState& evaluation,
     std::size_t fallback_energy_count) {
-    const std::size_t n = !evaluation.radiation_energy_ev.empty()
-        ? evaluation.radiation_energy_ev.size()
-        : (fallback_energy_count != 0 ? fallback_energy_count : 9999u);
-    if (evaluation.radiation_energy_ev.empty()) {
-        evaluation.radiation_energy_ev.resize(n);
-        for (std::size_t i = 0; i < n; ++i) evaluation.radiation_energy_ev[i] = static_cast<double>(i + 1);
-    }
-    if (evaluation.radiation_flux.size() < n) {
-        evaluation.radiation_flux.resize(n, 0.0);
-        for (std::size_t i = 0; i < n; ++i) {
-            if (evaluation.radiation_flux[i] == 0.0) evaluation.radiation_flux[i] = 1.0 / static_cast<double>(i + 1);
-        }
-    }
-    if (evaluation.continuum_spectrum.size() < n) {
-        evaluation.continuum_spectrum.resize(n, 0.0);
-        for (std::size_t i = 0; i < n; ++i) {
-            evaluation.continuum_spectrum[i] = 0.05 * evaluation.radiation_flux[i];
-        }
-    }
-    if (evaluation.spectrum.size() < n) {
-        evaluation.spectrum.resize(n, 0.0);
-        for (std::size_t i = 0; i < n; ++i) {
-            evaluation.spectrum[i] = evaluation.continuum_spectrum[i];
-        }
-    }
-    if (evaluation.opacity.size() < n) {
-        evaluation.opacity.resize(n, 0.0);
-        for (std::size_t i = 0; i < n; ++i) {
-            evaluation.opacity[i] = (evaluation.continuum_tau_out.size() > i)
-                ? evaluation.continuum_tau_out[i]
-                : 0.0;
-        }
-    }
-    if (evaluation.continuum_tau_in.size() < n) evaluation.continuum_tau_in.resize(n, 0.0);
-    if (evaluation.continuum_tau_out.size() < n) evaluation.continuum_tau_out.resize(n, 0.0);
-
+    (void)fallback_energy_count;
+    // v17.25.51: this function is a provenance/shape validator only.  Earlier
+    // releases fabricated missing radiation, spectrum, opacity, RRC-emission,
+    // and depth arrays from unrelated fields.  That made incomplete one-zone
+    // diagnostics look like exact accumulated product workspaces and caused the
+    // large xo01_detal3/xo01_detal4/public line/RRC discrepancies.  Missing
+    // arrays now remain missing; the writers may reconstruct only quantities
+    // for which a source-faithful native formula and live inputs exist.
     auto& ws = evaluation.source_workspace;
-    if (ws.lte_populations.empty() && !evaluation.populations.empty()) ws.lte_populations = evaluation.populations;
-    if (ws.native_continuum_count == 0) ws.native_continuum_count = n;
-    if (ws.native_line_count == 0) ws.native_line_count = ws.rcem.size() / 2u;
-
-    if (ws.opakc.size() < n) {
-        ws.opakc.resize(n, 0.0);
-        for (std::size_t i = 0; i < n; ++i) ws.opakc[i] = evaluation.opacity[i];
+    if (ws.native_continuum_count == 0 && !evaluation.radiation_energy_ev.empty()) {
+        ws.native_continuum_count = evaluation.radiation_energy_ev.size();
     }
-    if (ws.rccemis.size() < 2u * n) {
-        ws.rccemis.resize(2u * n, 0.0);
-        for (std::size_t i = 0; i < n; ++i) {
-            ws.rccemis[i] = 0.0;
-            ws.rccemis[n + i] = evaluation.spectrum[i];
-        }
-    }
-    if (ws.dpthcont.size() < 2u * n) {
-        ws.dpthcont.resize(2u * n, 0.0);
-        for (std::size_t i = 0; i < n; ++i) {
-            ws.dpthcont[i] = evaluation.continuum_tau_in[i];
-            ws.dpthcont[n + i] = evaluation.continuum_tau_out[i];
-        }
-    }
-    if (ws.dpthc.size() < 2u * n) ws.dpthc = ws.dpthcont;
-    if (ws.zrems.size() < 5u * n) {
-        ws.zrems.resize(5u * n, 0.0);
-        for (std::size_t i = 0; i < n; ++i) {
-            const double incident = evaluation.radiation_flux[i];
-            const double transmitted = incident * std::exp(-std::max(0.0, evaluation.continuum_tau_out[i]));
-            ws.zrems[i] = incident;
-            ws.zrems[n + i] = transmitted;
-            ws.zrems[2u * n + i] = evaluation.continuum_spectrum[i];
-            ws.zrems[3u * n + i] = evaluation.spectrum[i];
-            ws.zrems[4u * n + i] = evaluation.opacity[i];
-        }
-    }
-    if (ws.zremsz.size() < n) {
-        ws.zremsz.resize(n, 0.0);
-        for (std::size_t i = 0; i < n; ++i) ws.zremsz[i] = ws.zrems[n + i];
-    }
-    constexpr std::size_t kPublicContinuumCountV172530 = 301301u;
-    if (ws.elumab.size() < 2u * kPublicContinuumCountV172530) {
-        ws.elumab.resize(2u * kPublicContinuumCountV172530, 0.0);
-        const std::size_t copy_n = std::min<std::size_t>(kPublicContinuumCountV172530, ws.rccemis.size() / 2u);
-        for (std::size_t i = 0; i < copy_n; ++i) {
-            ws.elumab[i] = ws.rccemis[i];
-            ws.elumab[kPublicContinuumCountV172530 + i] = ws.rccemis[copy_n + i];
-        }
-    }
-    if (ws.tauc.size() < 2u * kPublicContinuumCountV172530) {
-        ws.tauc.resize(2u * kPublicContinuumCountV172530, 0.0);
-        const std::size_t copy_n = std::min<std::size_t>(kPublicContinuumCountV172530, evaluation.continuum_tau_out.size());
-        for (std::size_t i = 0; i < copy_n; ++i) {
-            ws.tauc[i] = evaluation.continuum_tau_in.size() > i ? evaluation.continuum_tau_in[i] : 0.0;
-            ws.tauc[kPublicContinuumCountV172530 + i] = evaluation.continuum_tau_out[i];
-        }
+    if (ws.native_line_count == 0) {
+        if (!ws.rcem.empty()) ws.native_line_count = ws.rcem.size() / 2u;
+        else if (!ws.oplin.empty()) ws.native_line_count = ws.oplin.size();
     }
 
-    ws.level_identity_exact = true;
-    ws.lte_populations_exact = !ws.lte_populations.empty();
-    ws.line_workspace_exact = true;
-    ws.line_tau_workspace_exact = true;
-    ws.rrc_workspace_exact = true;
-    ws.rrc_tau_workspace_exact = true;
-    ws.continuum_workspace_exact = true;
-    ws.accumulated_output_workspace_exact = true;
-    ws.line_profile_workspace_exact = true;
+    ws.level_identity_exact = ws.level_identity_exact;
+    ws.lte_populations_exact = ws.lte_populations_exact &&
+        !ws.lte_populations.empty() && ws.lte_populations.size() == evaluation.populations.size();
+    ws.line_workspace_exact = ws.line_workspace_exact &&
+        !ws.rcem.empty() && !ws.oplin.empty();
+    ws.line_tau_workspace_exact = ws.line_tau_workspace_exact && !ws.tau0.empty();
+    ws.rrc_workspace_exact = ws.rrc_workspace_exact &&
+        !ws.cemab.empty() && !ws.cabab.empty() && !ws.opakab.empty();
+    ws.rrc_tau_workspace_exact = ws.rrc_tau_workspace_exact && !ws.tauc.empty();
+    ws.continuum_workspace_exact = ws.continuum_workspace_exact &&
+        !ws.opakc.empty() && !ws.rccemis.empty();
+    ws.accumulated_output_workspace_exact = ws.accumulated_output_workspace_exact &&
+        !ws.zrems.empty() && !ws.dpthc.empty() && !ws.zremsz.empty();
+    ws.line_profile_workspace_exact = ws.line_profile_workspace_exact &&
+        !ws.line_profile_workspace.empty();
 }
 
 void ensure_retained_native_public_metadata_v172530(xstar_run_state::WholeRunAccumulatedState& whole) {
@@ -8226,10 +8162,25 @@ void promote_retained_native_product_surface_v172530(xstar_run_state::WholeRunAc
     whole.radial_state_complete = !whole.radial_zones.empty();
     whole.native_detail_state_retained = true;
     whole.continuum_depths_derived_from_native_opacity = true;
-    whole.exact_source_metadata_retained = true;
-    whole.exact_source_workspaces_retained = true;
-    whole.exact_accepted_radial_boundaries_retained = true;
-    whole.exact_legacy_pprint_state_retained = true;
+    // Exactness flags describe retained source state only; they are not product
+    // publication switches.  Native products may still be emitted as partial
+    // diagnostic products, but missing accumulated workspaces are never labeled
+    // exact and parity is not claimed.
+    whole.exact_source_metadata_retained = whole.exact_source_metadata_retained &&
+        whole.parameter_rows.size() >= 56u && !whole.level_identities.empty() &&
+        whole.line_identities.size() >= 2644u && whole.rrc_identities.size() >= 1849u;
+    whole.exact_source_workspaces_retained = !whole.radial_zones.empty() && std::all_of(
+        whole.radial_zones.begin(), whole.radial_zones.end(),
+        [](const xstar_run_state::RadialZoneState& zone) {
+            const auto& ws = zone.accepted_controller.evaluation.source_workspace;
+            return ws.line_workspace_exact && ws.rrc_workspace_exact &&
+                   ws.continuum_workspace_exact;
+        });
+    whole.exact_accepted_radial_boundaries_retained = !whole.radial_zones.empty() && std::all_of(
+        whole.radial_zones.begin(), whole.radial_zones.end(),
+        [](const xstar_run_state::RadialZoneState& zone) { return zone.accepted_boundary_exact; });
+    whole.exact_legacy_pprint_state_retained = whole.legacy_pprint.complete() &&
+        !whole.legacy_pprint.buffered_lines.empty();
     whole.native_product_inputs_complete = whole.product_schema_complete && whole.radial_state_complete;
     whole.embedded_public_fits_payloads_absent = true;
     whole.embedded_full_xout_step_payload_absent = true;
