@@ -9507,21 +9507,42 @@ std::vector<ContinuumDiagRow> read_continuum_diagnostics_expanded_to_full_bins(
     std::stable_sort(rows.begin(), rows.end(), [](const auto& a, const auto& b) {
         return a.full_bin_one_based < b.full_bin_one_based;
     });
+    const auto finite = [](double value) { return std::isfinite(value); };
+    const auto lerp = [](double a, double b, double t) { return a + (b - a) * t; };
+    auto interp_field = [&](const ContinuumDiagRow& left, const ContinuumDiagRow& right, double t,
+                            double ContinuumDiagRow::* member) -> double {
+        const double a = left.*member;
+        const double b = right.*member;
+        if (finite(a) && finite(b)) return lerp(a, b, t);
+        if (finite(a)) return a;
+        if (finite(b)) return b;
+        return std::numeric_limits<double>::quiet_NaN();
+    };
     std::size_t cursor = 0;
     for (std::size_t i = 0; i < full_count; ++i) {
         const int bin = static_cast<int>(i + 1);
         while (cursor + 1 < rows.size() && rows[cursor + 1].full_bin_one_based <= bin) ++cursor;
-        std::size_t best = cursor;
-        if (cursor + 1 < rows.size()) {
-            const int dl = std::abs(bin - rows[cursor].full_bin_one_based);
-            const int dr = std::abs(rows[cursor + 1].full_bin_one_based - bin);
-            if (dr < dl) best = cursor + 1;
+        const ContinuumDiagRow& left = rows[cursor];
+        const ContinuumDiagRow& right = (cursor + 1 < rows.size()) ? rows[cursor + 1] : rows[cursor];
+        double t = 0.0;
+        if (right.full_bin_one_based != left.full_bin_one_based) {
+            t = static_cast<double>(bin - left.full_bin_one_based) /
+                static_cast<double>(right.full_bin_one_based - left.full_bin_one_based);
+            if (t < 0.0) t = 0.0;
+            if (t > 1.0) t = 1.0;
         }
-        out[i] = rows[best];
+        ContinuumDiagRow row;
+        row.full_bin_one_based = bin;
+        row.energy_ev = interp_field(left, right, t, &ContinuumDiagRow::energy_ev);
+        row.comp_sum1_contribution = interp_field(left, right, t, &ContinuumDiagRow::comp_sum1_contribution);
+        row.comp_sum2_contribution = interp_field(left, right, t, &ContinuumDiagRow::comp_sum2_contribution);
+        row.comp_sum3_contribution = interp_field(left, right, t, &ContinuumDiagRow::comp_sum3_contribution);
+        row.free_free_opacity_increment = interp_field(left, right, t, &ContinuumDiagRow::free_free_opacity_increment);
+        row.brcems = interp_field(left, right, t, &ContinuumDiagRow::brcems);
+        out[i] = row;
     }
     return out;
 }
-
 
 template <typename Accessor>
 double nearest_positive_continuum_value(const std::vector<ContinuumDiagRow>& diagnostics_by_bin,
@@ -9531,18 +9552,6 @@ double nearest_positive_continuum_value(const std::vector<ContinuumDiagRow>& dia
     if (index < diagnostics_by_bin.size()) {
         const double direct = accessor(diagnostics_by_bin[index]);
         if (positive(direct)) return direct;
-    }
-    const std::size_t n = diagnostics_by_bin.size();
-    if (n == 0) return 0.0;
-    for (std::size_t radius = 1; radius <= 16; ++radius) {
-        if (index >= radius) {
-            const double left = accessor(diagnostics_by_bin[index - radius]);
-            if (positive(left)) return left;
-        }
-        if (index + radius < n) {
-            const double right = accessor(diagnostics_by_bin[index + radius]);
-            if (positive(right)) return right;
-        }
     }
     return 0.0;
 }
@@ -10037,6 +10046,23 @@ void write_public_lines(const std::filesystem::path& path,
     const auto diagnostic_public_lines = diagnostic_line_rows_by_index(
         state, final_zone.accepted_controller.evaluation, elements, final_zone.accepted_controller.accepted_sequence);
     const auto& public_line_labels = oracle_public_line_label_template_v172537();
+    auto diagnostic_for_public_label = [&](const LineLabelTemplateRow& label) -> const LineRow* {
+        const int z_label = element_z_from_ion_label(label.ion);
+        const int stage_label = roman_stage_from_ion_label(label.ion);
+        const LineRow* best = nullptr;
+        double best_delta = std::numeric_limits<double>::infinity();
+        const double tolerance = std::max(2.0e-3, std::abs(label.wavelength_angstrom) * 2.0e-6);
+        for (const auto& kv : diagnostic_public_lines) {
+            const auto& d = kv.second;
+            if (d.z != z_label || d.stage != stage_label) continue;
+            const double delta = std::abs(d.wavelength_a - label.wavelength_angstrom);
+            if (delta <= tolerance && delta < best_delta) {
+                best = &d;
+                best_delta = delta;
+            }
+        }
+        return best;
+    };
     fitsfile* fptr = create_fits(path, state); write_parameters(fptr, state.parameter_rows);
     create_table(fptr, ASCII_TBL, static_cast<long>(public_line_labels.size()), "XSTAR_LINES",
         {"index","ion","lower_level","upper_level","wavelength","emit_inward","emit_outward","depth_inward","depth_outward"},
@@ -10049,12 +10075,13 @@ void write_public_lines(const std::filesystem::path& path,
         const auto found_native = native_public_lines_by_record.find(label.index);
         if (found_native != native_public_lines_by_record.end()) r = found_native->second;
         const auto found_diag = diagnostic_public_lines.find(label.index);
-        if (found_diag != diagnostic_public_lines.end()) {
-            const auto& d = found_diag->second;
+        const LineRow* diag = found_diag != diagnostic_public_lines.end() ? &found_diag->second : diagnostic_for_public_label(label);
+        if (diag) {
+            const auto& d = *diag;
             if (d.emis_in != 0.0 && public_luminosity_scale > 0.0) r.emis_in = d.emis_in * public_luminosity_scale;
             if (d.emis_out != 0.0 && public_luminosity_scale > 0.0) r.emis_out = d.emis_out * public_luminosity_scale;
-            if (std::isfinite(d.tau_in) && d.tau_in != 0.0 && r.tau_in == 0.0) r.tau_in = d.tau_in;
-            if (std::isfinite(d.tau_out) && d.tau_out != 0.0 && r.tau_out == 0.0) r.tau_out = d.tau_out;
+            if (std::isfinite(d.tau_in) && d.tau_in != 0.0) r.tau_in = d.tau_in;
+            if (std::isfinite(d.tau_out) && d.tau_out != 0.0) r.tau_out = d.tau_out;
         }
         const long row = static_cast<long>(i + 1);
         write_int(fptr, 1, row, label.index);
@@ -10084,6 +10111,26 @@ void write_public_rrc(const std::filesystem::path& path,
     std::map<long long,RrcRow> terminal_by_index;
     for (const auto& r : terminal_detail_rrcs) terminal_by_index[r.record] = r;
     const auto& public_rrc_labels = oracle_public_rrc_label_template_v172537();
+    auto diagnostic_for_public_rrc_label = [&](const RrcLabelTemplateRow& label) -> const RrcRow* {
+        const int z_label = element_z_from_ion_label(label.ion);
+        const int stage_label = roman_stage_from_ion_label(label.ion);
+        const RrcRow* best = nullptr;
+        double best_score = std::numeric_limits<double>::infinity();
+        const double energy_tol = std::max(1.0e-5, std::abs(label.energy_ev) * 2.0e-6);
+        for (const auto& kv : diagnostic_rrcs) {
+            const auto& d = kv.second;
+            if (d.z != z_label || d.stage != stage_label) continue;
+            const double de = std::abs(d.energy_ev - label.energy_ev);
+            if (de > energy_tol) continue;
+            const double level_penalty = (label.level_index > 0 && d.lower_row != 0) ? 0.0 : 1.0e-3;
+            const double score = de + level_penalty;
+            if (score < best_score) {
+                best = &d;
+                best_score = score;
+            }
+        }
+        return best;
+    };
     fitsfile* fptr = create_fits(path, state); write_parameters(fptr, state.parameter_rows);
     create_table(fptr, ASCII_TBL, static_cast<long>(public_rrc_labels.size()), "XSTAR_SPECTRA",
         {"index","ion","level","energy","emit_outward","emit_inward","depth_outward","depth_inward"},
@@ -10095,8 +10142,9 @@ void write_public_rrc(const std::filesystem::path& path,
         const auto found_terminal = terminal_by_index.find(label.index);
         if (found_terminal != terminal_by_index.end()) r = found_terminal->second;
         const auto found_diag = diagnostic_rrcs.find(label.index);
-        if (found_diag != diagnostic_rrcs.end()) {
-            r = merged_rrc_row(r, &found_diag->second);
+        const RrcRow* diag = found_diag != diagnostic_rrcs.end() ? &found_diag->second : diagnostic_for_public_rrc_label(label);
+        if (diag) {
+            r = merged_rrc_row(r, diag);
         }
         double public_emit = std::max(r.emis_out, r.emis_in);
         if (public_emit != 0.0 && public_luminosity_scale > 0.0) public_emit *= public_luminosity_scale;
