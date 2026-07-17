@@ -185,21 +185,38 @@ void append_native_radial_summary(std::ofstream& out,
     }
     out.unsetf(std::ios::floatfield);
     out << std::setprecision(17);
-    if (!state.abundance_radial_rows.empty()) {
-        const auto& row = state.abundance_radial_rows.back();
+    if (!state.abundance_radial_rows.empty() || !state.radial_zones.empty() || !state.fixed_evaluations.empty()) {
         const auto& eval = state.radial_zones.empty()
             ? state.fixed_evaluations.back()
             : state.radial_zones.back().accepted_controller.evaluation;
+        double radius_cm = 0.0;
+        double density_cm3 = parameter_number(state, "density", 0.0);
+        double logxi = parameter_number(state, "rlogxi", 0.0);
+        double temperature_t4 = eval.temperature_t4;
+        double electron_fraction = eval.computed_electron_fraction;
+        if (!state.abundance_radial_rows.empty()) {
+            const auto& row = state.abundance_radial_rows.back();
+            radius_cm = row.radius_cm;
+            density_cm3 = row.density_cm3;
+            logxi = row.log_ionization_parameter;
+            temperature_t4 = row.temperature_t4;
+            electron_fraction = row.electron_fraction;
+        } else {
+            const double rlrad38 = parameter_number(state, "rlrad38", 0.0);
+            if (rlrad38 > 0.0 && density_cm3 > 0.0) {
+                radius_cm = std::sqrt(rlrad38 * 1.0e38 / (density_cm3 * std::pow(10.0, logxi)));
+            }
+        }
         double tau_forward = 0.0;
         for (double value : eval.continuum_tau_out) tau_forward = std::max(tau_forward, value);
         double tau_reverse = 0.0;
         for (double value : eval.continuum_tau_in) tau_reverse = std::max(tau_reverse, value);
         out << " print option:22\n";
-        out << " r=  " << e3(row.radius_cm)
-            << " t=  " << e3(row.temperature_t4)
-            << " log(xi)=  " << e3(row.log_ionization_parameter)
-            << " n_e=  " << e3(row.electron_fraction * row.density_cm3)
-            << " n_p=  " << e3(row.density_cm3) << "\n";
+        out << " r=  " << e3(radius_cm)
+            << " t=  " << e3(temperature_t4)
+            << " log(xi)=  " << e3(logxi)
+            << " n_e=  " << e3(electron_fraction * density_cm3)
+            << " n_p=  " << e3(density_cm3) << "\n";
         out << "httot=  " << e3(eval.total_heating)
             << " cltot=  " << e3(eval.total_cooling)
             << " taulc=  " << e3(tau_forward)
@@ -320,7 +337,9 @@ void append_native_public_line_sections(std::ofstream& out,
 }
 
 void append_native_public_rrc_sections(std::ofstream& out,
-                                       const std::filesystem::path& output_dir) {
+                                       const std::filesystem::path& output_dir,
+                                       bool write_depth,
+                                       bool write_luminosity) {
     fitsfile* fptr = nullptr;
     int status = 0;
     const auto path = output_dir / "xout_rrc1.fits";
@@ -339,27 +358,31 @@ void append_native_public_rrc_sections(std::ofstream& out,
     const int c_dout = column_number(fptr, "depth_outward");
     const int c_din = column_number(fptr, "depth_inward");
     const long long rows = table_rows(fptr);
-    out << " print option:24\n absorption edge depths\n";
-    out << " index, ion, level, energy (eV), outward depth, inward depth\n";
-    for (long long row = 1; row <= rows; ++row) {
-        out << std::setw(8) << read_integer_cell(fptr, c_index, row) << " "
-            << std::left << std::setw(10) << read_string_cell(fptr, c_ion, row)
-            << std::setw(24) << read_string_cell(fptr, c_level, row) << std::right
-            << std::setw(14) << std::uppercase << std::scientific << std::setprecision(5)
-            << read_double_cell(fptr, c_energy, row)
-            << std::setw(14) << read_double_cell(fptr, c_dout, row)
-            << std::setw(14) << read_double_cell(fptr, c_din, row) << "\n";
+    if (write_depth) {
+        out << " print option:24\n absorption edge depths\n";
+        out << " index, ion, level, energy (eV), outward depth, inward depth\n";
+        for (long long row = 1; row <= rows; ++row) {
+            out << std::setw(8) << read_integer_cell(fptr, c_index, row) << " "
+                << std::left << std::setw(10) << read_string_cell(fptr, c_ion, row)
+                << std::setw(24) << read_string_cell(fptr, c_level, row) << std::right
+                << std::setw(14) << std::uppercase << std::scientific << std::setprecision(5)
+                << read_double_cell(fptr, c_energy, row)
+                << std::setw(14) << read_double_cell(fptr, c_dout, row)
+                << std::setw(14) << read_double_cell(fptr, c_din, row) << "\n";
+        }
     }
-    out << " print option:19\n recombination continuum luminosities(erg/sec/10**38))\n";
-    out << " index, ion, level, energy (eV), outward RRC luminosity, inward RRC luminosity\n";
-    for (long long row = 1; row <= rows; ++row) {
-        out << std::setw(8) << read_integer_cell(fptr, c_index, row) << " "
-            << std::left << std::setw(10) << read_string_cell(fptr, c_ion, row)
-            << std::setw(24) << read_string_cell(fptr, c_level, row) << std::right
-            << std::setw(14) << std::uppercase << std::scientific << std::setprecision(5)
-            << read_double_cell(fptr, c_energy, row)
-            << std::setw(14) << read_double_cell(fptr, c_eout, row)
-            << std::setw(14) << read_double_cell(fptr, c_ein, row) << "\n";
+    if (write_luminosity) {
+        out << " print option:19\n recombination continuum luminosities(erg/sec/10**38))\n";
+        out << " index, ion, level, energy (eV), outward RRC luminosity, inward RRC luminosity\n";
+        for (long long row = 1; row <= rows; ++row) {
+            out << std::setw(8) << read_integer_cell(fptr, c_index, row) << " "
+                << std::left << std::setw(10) << read_string_cell(fptr, c_ion, row)
+                << std::setw(24) << read_string_cell(fptr, c_level, row) << std::right
+                << std::setw(14) << std::uppercase << std::scientific << std::setprecision(5)
+                << read_double_cell(fptr, c_energy, row)
+                << std::setw(14) << read_double_cell(fptr, c_eout, row)
+                << std::setw(14) << read_double_cell(fptr, c_ein, row) << "\n";
+        }
     }
     int close_status = 0;
     fits_close_file(fptr, &close_status);
@@ -410,12 +433,13 @@ void append_native_detail_line_section(std::ofstream& out,
 void append_native_product_sections(std::ofstream& out,
                                     const std::filesystem::path& output_dir) {
     append_native_public_line_sections(out, output_dir);
-    append_native_public_rrc_sections(out, output_dir);
-    append_native_detail_line_section(out, output_dir);
+    append_native_public_rrc_sections(out, output_dir, true, false);
     out << " print option:16\n";
     out << " source CPU accumulators and per-rate call counts: unavailable (not retained by the native controller).\n";
     out << " print option:27\n";
     out << " ion column density integral: unavailable (per-zone source ion-column accumulator is not retained).\n";
+    append_native_detail_line_section(out, output_dir);
+    append_native_public_rrc_sections(out, output_dir, false, true);
     out << " print option: 5\n";
     out << " source energy-sum accounting tuple: unavailable (not retained by the native controller).\n";
 }

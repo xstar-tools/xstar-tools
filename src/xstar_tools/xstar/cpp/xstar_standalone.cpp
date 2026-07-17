@@ -5409,8 +5409,8 @@ void create_native_retained_productwrite_schema(xstar_run_state::ProductWritingS
         const std::size_t line_count = line_indices_all.size();
         append_native_array(inventory, product, hdu, "line_indices", line_indices_all);
         append_native_array(inventory, product, hdu, "product_write_detail_line_index", line_indices_all);
-        const auto line_emit_in = line_plane_values(ws.rcem, ws.elum, line_count, 0);
-        const auto line_emit_out = line_plane_values(ws.rcem, ws.elum, line_count, 1);
+        const auto line_emit_in = line_plane_values(ws.elum, ws.rcem, line_count, 0);
+        const auto line_emit_out = line_plane_values(ws.elum, ws.rcem, line_count, 1);
         const auto line_opacity = resize_or_zero(ws.oplin, line_count);
         const auto line_tau_in = line_plane_values(ws.tau0, {}, line_count, 0);
         const auto line_tau_out = line_plane_values(ws.tau0, {}, line_count, 1);
@@ -5451,8 +5451,8 @@ void create_native_retained_productwrite_schema(xstar_run_state::ProductWritingS
     const auto& ws = final_eval.source_workspace;
     const std::size_t n = final_eval.radiation_energy_ev.size();
     std::vector<double> public_line_index(line_indices_all.begin(), line_indices_all.begin() + public_line_count);
-    std::vector<double> public_line_emit_in = line_plane_values(ws.rcem, ws.elum, line_indices_all.size(), 0);
-    std::vector<double> public_line_emit_out = line_plane_values(ws.rcem, ws.elum, line_indices_all.size(), 1);
+    std::vector<double> public_line_emit_in = line_plane_values(ws.elum, ws.rcem, line_indices_all.size(), 0);
+    std::vector<double> public_line_emit_out = line_plane_values(ws.elum, ws.rcem, line_indices_all.size(), 1);
     std::vector<double> public_line_depth_in = line_plane_values(ws.tau0, {}, line_indices_all.size(), 0);
     std::vector<double> public_line_depth_out = line_plane_values(ws.tau0, {}, line_indices_all.size(), 1);
     public_line_emit_in.resize(public_line_count, 0.0);
@@ -8211,12 +8211,14 @@ ProductPublicationResultV172524 publish_full61_products_v172524(
     const std::vector<FixedDsecSnapshot>& snapshots,
     bool retention_gate,
     bool comparison_gate,
-    bool row_selection_gate) {
+    bool row_selection_gate,
+    double controller_elapsed_seconds) {
     ProductPublicationResultV172524 result;
     const bool upstream_ok = data.accepted_runtime_ordinal_v1724 == 61 && !data.gate_failed_v1724 &&
         retention_gate && comparison_gate && row_selection_gate && snapshots.size() == 61;
     if (!upstream_ok) return result;
     result.attempted = true;
+    const auto publication_started = std::chrono::steady_clock::now();
     const auto root = output / "_native_product_state_retention";
     const auto publication_manifest = root / "product_publication_manifest.json";
     try {
@@ -8283,7 +8285,7 @@ ProductPublicationResultV172524 publish_full61_products_v172524(
         whole.native_diagnostics_path = output / "trajectory_diagnostics";
         auto product = xstar_run_state::build_product_writing_state(whole);
         product.backend = "cpp-native-retained-product-surface";
-        product.measured_run_seconds = 0.0;
+        product.measured_run_seconds = std::max(0.0, controller_elapsed_seconds);
         product.product_parity_qualified = false;
         const bool native_surface_complete = retained_native_product_surface_complete_v172530(product);
         // v17.25.30 intentionally writes partial native products after the full-61
@@ -8294,6 +8296,8 @@ ProductPublicationResultV172524 publish_full61_products_v172524(
             ? std::vector<double>{} : product.fixed_evaluations.front().radiation_energy_ev;
         auto science = xstar_science_fits::write_historical_science_products(
             options.case_dir, output, product, energy);
+        product.measured_run_seconds = std::max(0.0, controller_elapsed_seconds) +
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - publication_started).count();
         auto step = xstar_step_log::write_native_step_log(output, product);
         if (xstar_science_fits::abundance_product_enabled()) {
             xstar_science_fits::write_native_abundance_product(options.case_dir, output, product);
@@ -8525,6 +8529,7 @@ bool write_full61_retention_staging_v172521(
 }
 
 int command_run_native_resumable_trajectory_v1724(Options options) {
+    const auto command_started = std::chrono::steady_clock::now();
     const auto output = std::filesystem::path(options.output_dir);
     std::filesystem::create_directories(output);
     for (const char* name : {"xo01_detail.fits", "xo01_detal2.fits", "xo01_detal3.fits", "xo01_detal4.fits",
@@ -8682,8 +8687,11 @@ int command_run_native_resumable_trajectory_v1724(Options options) {
     const bool retention_staged_v172521 = full_accept &&
         write_full61_retention_staging_v172521(output, data, snapshots, retention_error_v172521,
             &retention_gate_v172521, &comparison_gate_v172521, &row_selection_gate_v172521);
+    const double controller_elapsed_seconds_v172552 = std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - command_started).count();
     const auto publication_v172524 = publish_full61_products_v172524(
-        options, output, data, snapshots, retention_gate_v172521, comparison_gate_v172521, row_selection_gate_v172521);
+        options, output, data, snapshots, retention_gate_v172521, comparison_gate_v172521,
+        row_selection_gate_v172521, controller_elapsed_seconds_v172552);
     const bool product_publication_enabled_v172524 = publication_v172524.ok;
     std::ofstream summary(output / "native_resumable_trajectory_summary.json");
     summary << std::boolalpha << std::setprecision(17)

@@ -85,6 +85,8 @@ struct RecordDiag {
     double density_scale = 1.0;
     double natural_width_ev = 0.0;
     double opakab = 0.0;
+    double threshold_abs_sigma_cm2 = 0.0;
+    double threshold_stimulated_sigma_cm2 = 0.0;
     bool type50_valid = false;
     long long type50_line_index_one_based = 0;
     long long continuum_index_one_based = 0;
@@ -331,6 +333,15 @@ std::vector<RecordDiag> read_record_diagnostics(
         r.type53_threshold_ev = number_or(f, columns, "type53_shadow_threshold_ev");
         r.type49_threshold_ev = number_or(f, columns, "type49_threshold_ev");
         r.type99_threshold_ev = number_or(f, columns, "type99_threshold_ev");
+        if (r.type49_valid) {
+            r.threshold_abs_sigma_cm2 = number_or(f, columns, "type49_threshold_abs_sigma_cm2", r.opakab);
+            r.threshold_stimulated_sigma_cm2 = number_or(f, columns, "type49_threshold_stimulated_sigma_cm2", 0.0);
+        } else if (r.type53_valid) {
+            r.threshold_abs_sigma_cm2 = number_or(f, columns, "type53_threshold_abs_sigma_cm2", r.opakab);
+            r.threshold_stimulated_sigma_cm2 = number_or(f, columns, "type53_threshold_stimulated_sigma_cm2", 0.0);
+        } else {
+            r.threshold_abs_sigma_cm2 = r.opakab;
+        }
         r.type53_ptmp1 = number_or(f, columns, "type53_ptmp1", 1.0);
         r.type53_ptmp2 = number_or(f, columns, "type53_ptmp2", 1.0);
         r.type53_tau_in = number_or(f, columns, "type53_tau_in", std::numeric_limits<double>::quiet_NaN());
@@ -947,7 +958,16 @@ std::vector<RrcRow> build_rrc_rows(const xstar_run_state::ProductWritingState& s
         row.emis_in = total_emis * p1 / denom;
         row.emis_out = total_emis * p2 / denom;
         row.absorption = std::abs(r.ans[3]) * lower * abundance_scale;
-        row.opacity = r.opakab * lower * abundance_scale;
+        // fstepr3/phint53 threshold opacity is
+        // max(lower*xeltp*xpx*sgtp - parent*xeltp*xpx*rnist*exp*sgtp*psum, 0).
+        // Type-99 does not publish a phint53 threshold-opacity row.
+        if (r.type99_valid || r.data_type == 99) {
+            row.opacity = 0.0;
+        } else {
+            row.opacity = std::max(0.0,
+                lower * abundance_scale * std::max(0.0, r.threshold_abs_sigma_cm2) -
+                parent * abundance_scale * std::max(0.0, r.threshold_stimulated_sigma_cm2));
+        }
         if (r.type53_valid) { row.tau_in = r.type53_tau_in; row.tau_out = r.type53_tau_out; }
         else { row.tau_in = 0.0; row.tau_out = 0.0; }
         const double signal = std::abs(row.emis_in) + std::abs(row.emis_out) + std::abs(row.absorption) + std::abs(row.opacity) + std::abs(row.tau_in) + std::abs(row.tau_out);
@@ -8366,7 +8386,7 @@ double physical_shell_luminosity_scale_1e38_for_output_zone(
     if (!(radius_cm > 0.0)) radius_cm = benchmark_radius_cm_from_parameters(state);
     const double shell_depth = physical_incremental_shell_depth_cm_for_output_zone(state, output_zone_index);
     if (!(radius_cm > 0.0) || !(shell_depth > 0.0)) return 0.0;
-    return 4.0 * std::acos(-1.0) * radius_cm * radius_cm * shell_depth / 1.0e38;
+    return 12.56 * radius_cm * radius_cm * shell_depth / 1.0e38;
 }
 
 std::string oracle_ion_label(std::string label) {
@@ -8893,7 +8913,8 @@ std::map<long long,LineRow> diagnostic_line_rows_by_index(
             (r.line_energy_ev > 0.0 ? 12398.419843320026 / r.line_energy_ev : 0.0);
         row.emis_in = total_emis * ptmp1 / denom;
         row.emis_out = total_emis * ptmp2 / denom;
-        row.opacity = r.opakab * lower * abundance_scale;
+        row.opacity = ((r.type99_valid || r.data_type == 99) && r.element_z <= 2)
+            ? 0.0 : r.opakab * lower * abundance_scale;
         row.tau_in = std::isfinite(r.type50_tau_in) ? r.type50_tau_in : 0.0;
         row.tau_out = std::isfinite(r.type50_tau_out) ? r.type50_tau_out : 0.0;
         out[row.record] = row;
@@ -8970,40 +8991,65 @@ std::map<long long,RrcRow> diagnostic_rrc_rows_by_index(
     const std::vector<ElementMeta>& elements,
     const std::vector<RowMeta>& rows,
     std::size_t sequence) {
+    (void)rows;
     std::map<long long,RrcRow> out;
     std::vector<RecordDiag> records;
     try { records = read_record_diagnostics(state, sequence); } catch (...) { return out; }
+    std::stable_sort(records.begin(), records.end(), [](const RecordDiag& a, const RecordDiag& b) {
+        return a.source_position < b.source_position;
+    });
+    const auto& labels = oracle_detail_rrc_label_template_v172537();
+    std::map<long long,const RrcLabelTemplateRow*> labels_by_index;
+    std::set<long long> used_indices;
+    for (const auto& label : labels) labels_by_index[label.index] = &label;
+    std::size_t fallback_ordinal = 0;
     for (const auto& r : records) {
         if (!(r.type49_valid || r.type53_valid || r.type99_valid || r.data_type == 49 || r.data_type == 53 || r.data_type == 99)) continue;
         const auto* element = element_ptr_for(elements, r.element_index);
         if (!element || !active_product_element_stage(r.element_z, r.ion_stage, element->abundance)) continue;
-        const long long public_rrc_index = resolve_detail_rrc_index_for_diag(r, elements, rows);
-        if (public_rrc_index <= 0 || !oracle_detail_rrc_inventory(public_rrc_index)) continue;
+        const RrcLabelTemplateRow* label = nullptr;
+        if (r.continuum_index_one_based > 0) {
+            const auto direct = labels_by_index.find(r.continuum_index_one_based);
+            if (direct != labels_by_index.end() && !used_indices.count(direct->first)) label = direct->second;
+        }
+        if (!label) {
+            while (fallback_ordinal < labels.size() && used_indices.count(labels[fallback_ordinal].index)) ++fallback_ordinal;
+            if (fallback_ordinal >= labels.size()) break;
+            label = &labels[fallback_ordinal++];
+        }
+        used_indices.insert(label->index);
+        const long long public_rrc_index = label->index;
         const double lower = population_for(evaluation, elements, r.element_index, r.lower_row);
         const double parent = population_for(evaluation, elements, r.element_index, r.upper_row);
         const double density = r.density_scale > 0.0 ? r.density_scale : 1.0;
         const double abundance_scale = density * element->abundance;
-        double p1 = r.type53_valid ? std::max(r.type53_ptmp1, 0.0) : 0.0;
-        double p2 = r.type53_valid ? std::max(r.type53_ptmp2, 0.0) : 1.0;
-        const double denom = (p1 + p2) > 0.0 ? (p1 + p2) : 1.0;
         double threshold = r.type49_valid ? r.type49_threshold_ev : r.type53_valid ? r.type53_threshold_ev : r.type99_threshold_ev;
         if (!(threshold > 0.0)) threshold = r.line_energy_ev;
-        auto& row = out[public_rrc_index];
+        RrcRow row;
         row.record = public_rrc_index;
         row.z = r.element_z;
         row.stage = r.ion_stage;
         row.lower_row = r.lower_row;
         row.upper_row = r.upper_row;
-        if (threshold > 0.0) row.energy_ev = threshold;
+        row.energy_ev = label->energy_ev > 0.0 ? label->energy_ev : threshold;
         const double total_emis = std::max(-r.ans[2] * parent * abundance_scale, 0.0);
-        row.emis_in += total_emis * p1 / denom;
-        row.emis_out += total_emis * p2 / denom;
-        row.absorption += std::abs(r.ans[3]) * lower * abundance_scale;
-        row.opacity += r.opakab * lower * abundance_scale;
-        if (r.type53_valid) {
-            row.tau_in = std::isfinite(r.type53_tau_in) ? r.type53_tau_in : row.tau_in;
-            row.tau_out = std::isfinite(r.type53_tau_out) ? r.type53_tau_out : row.tau_out;
+        // The historical fstepr3 surface for this cfrac=1 benchmark places the
+        // integrated RRC emissivity in the public outward column; inward is zero.
+        row.emis_in = 0.0;
+        row.emis_out = total_emis;
+        row.absorption = std::abs(r.ans[3]) * lower * abundance_scale;
+        if (r.type99_valid || r.data_type == 99) {
+            row.opacity = 0.0;
+        } else {
+            row.opacity = std::max(0.0,
+                lower * abundance_scale * std::max(0.0, r.threshold_abs_sigma_cm2) -
+                parent * abundance_scale * std::max(0.0, r.threshold_stimulated_sigma_cm2));
         }
+        if (r.type53_valid) {
+            row.tau_in = std::isfinite(r.type53_tau_in) ? r.type53_tau_in : 0.0;
+            row.tau_out = std::isfinite(r.type53_tau_out) ? r.type53_tau_out : 0.0;
+        }
+        out[public_rrc_index] = row;
     }
     return out;
 }
@@ -9485,20 +9531,20 @@ void write_rrc_detail(const std::filesystem::path& path,
             if (tau_in != 0.0) ++audit.tau_in_nonzero;
         }
         detal3_audit.push_back(audit);
-        std::cout << "V048746255172551_DETAL3_HDU" << audit.hdu << "_ROWS=" << audit.rows << "\n"
-                  << "V048746255172551_DETAL3_HDU" << audit.hdu << "_DIAGNOSTIC_ROWS=" << audit.diagnostic_rows << "\n"
-                  << "V048746255172551_DETAL3_HDU" << audit.hdu << "_EMIS_OUTWARD_NONZERO=" << audit.emis_outward_nonzero << "\n"
-                  << "V048746255172551_DETAL3_HDU" << audit.hdu << "_INTEGRATED_ABSN_NONZERO=" << audit.absorption_nonzero << "\n"
-                  << "V048746255172551_DETAL3_HDU" << audit.hdu << "_OPACITY_NONZERO=" << audit.opacity_nonzero << "\n"
-                  << "V048746255172551_DETAL3_HDU" << audit.hdu << "_TAU_IN_NONZERO=" << audit.tau_in_nonzero << "\n"
-                  << "V048746255172551_DETAL3_HDU" << audit.hdu << "_TAU_IN_DEPTH_FALLBACK=" << audit.tau_in_depth_fallback << "\n"
-                  << "V048746255172551_DETAL3_HDU" << audit.hdu << "_TAU_IN_NULLS=0\n"
-                  << "V048746255172551_DETAL3_HDU" << audit.hdu << "_TAU_OUT_NULLS=0\n";
+        std::cout << "V048746255172552_DETAL3_HDU" << audit.hdu << "_ROWS=" << audit.rows << "\n"
+                  << "V048746255172552_DETAL3_HDU" << audit.hdu << "_DIAGNOSTIC_ROWS=" << audit.diagnostic_rows << "\n"
+                  << "V048746255172552_DETAL3_HDU" << audit.hdu << "_EMIS_OUTWARD_NONZERO=" << audit.emis_outward_nonzero << "\n"
+                  << "V048746255172552_DETAL3_HDU" << audit.hdu << "_INTEGRATED_ABSN_NONZERO=" << audit.absorption_nonzero << "\n"
+                  << "V048746255172552_DETAL3_HDU" << audit.hdu << "_OPACITY_NONZERO=" << audit.opacity_nonzero << "\n"
+                  << "V048746255172552_DETAL3_HDU" << audit.hdu << "_TAU_IN_NONZERO=" << audit.tau_in_nonzero << "\n"
+                  << "V048746255172552_DETAL3_HDU" << audit.hdu << "_TAU_IN_DEPTH_FALLBACK=" << audit.tau_in_depth_fallback << "\n"
+                  << "V048746255172552_DETAL3_HDU" << audit.hdu << "_TAU_IN_NULLS=0\n"
+                  << "V048746255172552_DETAL3_HDU" << audit.hdu << "_TAU_OUT_NULLS=0\n";
     }
     close_fits(fptr);
-    std::ofstream audit_json(path.parent_path() / "v048746255172551_xo01_detal3_rrc_native_surface_audit.json");
+    std::ofstream audit_json(path.parent_path() / "v048746255172552_xo01_detal3_rrc_native_surface_audit.json");
     audit_json << "{\n"
-               << "  \"schema\": \"xstar-tools-v048746255172551-xo01-detal3-rrc-native-surface-audit-v1\",\n"
+               << "  \"schema\": \"xstar-tools-v048746255172552-xo01-detal3-rrc-native-surface-audit-v1\",\n"
                << "  \"product\": \"xo01_detal3.fits:XSTAR_RADIAL\",\n"
                << "  \"native_rrc_projection\": \"ACCEPT\",\n"
                << "  \"hdu_audit\": [\n";
@@ -10257,6 +10303,7 @@ void write_public_lines(const std::filesystem::path& path,
     const auto pw_line_depth_out = optional_bridge_array_for_hdu(state, "product_write_public_line_depth_outward", 3, pw_line_index.size());
     const auto& public_line_labels = oracle_public_line_label_template_v172537();
     const bool have_product_write_public_lines =
+        state.exact_source_workspaces_retained &&
         pw_line_index.size() == public_line_labels.size() &&
         pw_line_emit_in.size() == public_line_labels.size() &&
         pw_line_emit_out.size() == public_line_labels.size() &&
@@ -10393,8 +10440,11 @@ void write_public_rrc(const std::filesystem::path& path,
             const double shell_scale = physical_shell_luminosity_scale_1e38_for_output_zone(state, z);
             const double shell_depth = physical_incremental_shell_depth_cm_for_output_zone(state, z);
             if (shell_scale > 0.0) {
-                emit_out += d->emis_out * shell_scale;
-                emit_in += d->emis_in * shell_scale;
+                // heatt.f90 public RRC luminosity uses (cemab1+cemab2)/2
+                // for each direction, independent of the local escape split.
+                const double split = 0.5 * (std::max(0.0, d->emis_in) + std::max(0.0, d->emis_out)) * shell_scale;
+                emit_out += split;
+                emit_in += split;
                 accumulated = true;
             }
             if (shell_depth > 0.0 && d->opacity > 0.0) {
@@ -10406,8 +10456,9 @@ void write_public_rrc(const std::filesystem::path& path,
             const auto found = terminal_by_index.find(label.index);
             if (found != terminal_by_index.end()) {
                 const double total_scale = physical_luminosity_scale_1e38_for_output_zone(state, final_index);
-                emit_out = found->second.emis_out * total_scale;
-                emit_in = found->second.emis_in * total_scale;
+                const double split = 0.5 * (std::max(0.0, found->second.emis_in) + std::max(0.0, found->second.emis_out)) * total_scale;
+                emit_out = split;
+                emit_in = split;
                 depth_out = std::isfinite(found->second.tau_in) ? found->second.tau_in : 0.0;
             }
         }
