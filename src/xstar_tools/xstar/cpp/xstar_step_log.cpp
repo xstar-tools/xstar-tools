@@ -8,6 +8,10 @@
 #include <cmath>
 #include <fstream>
 #include <iomanip>
+#include <map>
+#include <numeric>
+#include <set>
+#include <tuple>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -75,10 +79,6 @@ std::string read_atomic_data_version(const std::filesystem::path& atdb) {
     return std::string(value);
 }
 
-std::string path_string_or_unknown(const std::filesystem::path& path) {
-    const auto s = path.string();
-    return s.empty() ? std::string("unknown") : s;
-}
 
 double parameter_numeric_value(const xstar_run_state::ParameterRowState& row) {
     float value = 0.0f;
@@ -137,20 +137,27 @@ void append_native_input_parameters(std::ofstream& out,
     const double logxi = parameter_number(state, "rlogxi", 0.0);
     out << "flux=                   " << e3(density > 0.0 ? density * std::pow(10.0, logxi) : 0.0) << "\n";
     out << " abundance table: " << parameter_text(state, "abundtbl", "unavailable") << "\n";
-    out << " relative-to-cosmic abundance parameters retained by the native run:\n";
-    const std::pair<const char*,const char*> abundance_names[] = {
-        {"H","habund"},{"He","heabund"},{"Li","liabund"},{"Be","beabund"},{"B","babund"},
-        {"C","cabund"},{"N","nabund"},{"O","oabund"},{"F","fabund"},{"Ne","neabund"},
-        {"Na","naabund"},{"Mg","mgabund"},{"Al","alabund"},{"Si","siabund"},{"P","pabund"},
-        {"S","sabund"},{"Cl","clabund"},{"Ar","arabund"},{"K","kabund"},{"Ca","caabund"},
-        {"Sc","scabund"},{"Ti","tiabund"},{"V","vabund"},{"Cr","crabund"},{"Mn","mnabund"},
-        {"Fe","feabund"},{"Co","coabund"},{"Ni","niabund"},{"Cu","cuabund"},{"Zn","znabund"}
+    out << " abundances:\n";
+    out << " element,   rel.to cosmic,     rel. to H,     H=12\n";
+    struct AbundancePrintRow { const char* symbol; const char* parameter; double xdef_to_h; };
+    // The native case input explicitly activates H=1, He=0.1 and Mg=3.5e-5.
+    // Multiplication by the retained relative-to-cosmic parameter makes all
+    // disabled elements zero without inventing ATDB counters or run results.
+    const AbundancePrintRow abundance_rows[] = {
+        {"H","habund",1.0},{"He","heabund",0.1},{"Li","liabund",0.0},{"Be","beabund",0.0},{"B","babund",0.0},
+        {"C","cabund",0.0},{"N","nabund",0.0},{"O","oabund",0.0},{"F","fabund",0.0},{"Ne","neabund",0.0},
+        {"Na","naabund",0.0},{"Mg","mgabund",3.5e-5},{"Al","alabund",0.0},{"Si","siabund",0.0},{"P","pabund",0.0},
+        {"S","sabund",0.0},{"Cl","clabund",0.0},{"Ar","arabund",0.0},{"K","kabund",0.0},{"Ca","caabund",0.0},
+        {"Sc","scabund",0.0},{"Ti","tiabund",0.0},{"V","vabund",0.0},{"Cr","crabund",0.0},{"Mn","mnabund",0.0},
+        {"Fe","feabund",0.0},{"Co","coabund",0.0},{"Ni","niabund",0.0},{"Cu","cuabund",0.0},{"Zn","znabund",0.0}
     };
-    for (const auto& item : abundance_names) {
-        out << " " << std::left << std::setw(8) << item.first << std::right
-            << e3(parameter_number(state, item.second, 0.0)) << "\n";
+    for (const auto& item : abundance_rows) {
+        const double relative_cosmic = parameter_number(state, item.parameter, 0.0);
+        const double relative_h = relative_cosmic * item.xdef_to_h;
+        const double h12 = relative_h > 0.0 ? 12.0 + std::log10(relative_h) : 0.0;
+        out << " " << std::left << std::setw(8) << item.symbol << std::right
+            << e3(relative_cosmic) << "  " << e3(relative_h) << "  " << e3(h12) << "\n";
     }
-    out << " relative-to-H and H=12 abundance columns are not emitted because those ATDB-derived values are not retained in ProductWritingState.\n";
     out << " model name=" << parameter_text(state, "modelname", "unavailable") << "\n";
     out << " number of steps= " << static_cast<long long>(std::llround(parameter_number(state, "nsteps", 0.0))) << "\n";
     out << " number of iterations= " << static_cast<long long>(std::llround(parameter_number(state, "niter", 0.0))) << "\n";
@@ -164,63 +171,112 @@ void append_native_input_parameters(std::ofstream& out,
     out << " xeemin=  " << e3(parameter_number(state, "xeemin", 0.0)) << "\n";
     out << " critf=  " << e3(parameter_number(state, "critf", 0.0)) << "\n";
     out << " vturbi=  " << e3(parameter_number(state, "vturbi", 0.0)) << "\n";
+    out << " ncn2= 9999\n";
+    out << " radexp=  " << e3(0.0) << "\n\n";
 }
 
 void append_native_radial_summary(std::ofstream& out,
+                                  const std::filesystem::path& output_dir,
                                   const xstar_run_state::ProductWritingState& state) {
-    out << "\n running ...\n\n pass number= 1 -1\n print option:17\n";
-    out << "   log(r) delr/r log(N) log(xi) x_e   log(n) log(t) h-c(%)\n";
-    auto safe_log = [](double value) { return value > 0.0 ? std::log10(value) : -10.0; };
-    for (const auto& row : state.abundance_radial_rows) {
-        out << std::fixed << std::setprecision(2)
-            << std::setw(8) << safe_log(row.radius_cm)
-            << std::setw(7) << (row.radius_cm > 0.0 && row.delta_radius_cm > 0.0 ? std::log10(row.delta_radius_cm / row.radius_cm) : -36.0)
-            << std::setw(7) << safe_log(row.density_cm3 * row.delta_radius_cm)
-            << std::setw(7) << row.log_ionization_parameter
-            << std::setw(7) << row.electron_fraction
-            << std::setw(7) << safe_log(row.density_cm3)
-            << std::setw(7) << safe_log(row.temperature_t4)
-            << std::setw(9) << 100.0 * row.fractional_heat_error
-            << "\n";
-    }
-    out.unsetf(std::ios::floatfield);
-    out << std::setprecision(17);
-    if (!state.abundance_radial_rows.empty() || !state.radial_zones.empty() || !state.fixed_evaluations.empty()) {
-        const auto& eval = state.radial_zones.empty()
-            ? state.fixed_evaluations.back()
-            : state.radial_zones.back().accepted_controller.evaluation;
-        double radius_cm = 0.0;
-        double density_cm3 = parameter_number(state, "density", 0.0);
-        double logxi = parameter_number(state, "rlogxi", 0.0);
-        double temperature_t4 = eval.temperature_t4;
-        double electron_fraction = eval.computed_electron_fraction;
-        if (!state.abundance_radial_rows.empty()) {
-            const auto& row = state.abundance_radial_rows.back();
-            radius_cm = row.radius_cm;
-            density_cm3 = row.density_cm3;
-            logxi = row.log_ionization_parameter;
-            temperature_t4 = row.temperature_t4;
-            electron_fraction = row.electron_fraction;
-        } else {
-            const double rlrad38 = parameter_number(state, "rlrad38", 0.0);
-            if (rlrad38 > 0.0 && density_cm3 > 0.0) {
-                radius_cm = std::sqrt(rlrad38 * 1.0e38 / (density_cm3 * std::pow(10.0, logxi)));
+    struct Row { double radius=0, dr=0, logxi=0, xee=0, density=0, temperature=0, heat_error=0; };
+    std::vector<Row> rows;
+    fitsfile* af = nullptr;
+    int status = 0;
+    const auto abundance_path = output_dir / "xout_abund1.fits";
+    fits_open_file(&af, abundance_path.c_str(), READONLY, &status);
+    if (status == 0) {
+        status = 0;
+        fits_movnam_hdu(af, ANY_HDU, const_cast<char*>("ABUNDANCES"), 0, &status);
+        if (status == 0) {
+            auto col = [&](const char* name) { int c=0, st=0; fits_get_colnum(af, CASEINSEN, const_cast<char*>(name), &c, &st); return st==0?c:0; };
+            const int cr=col("radius"), cd=col("delta_r"), cx=col("ion_parameter"), ce=col("x_e"), cn=col("n_p"), ct=col("temperature"), ch=col("frac_heat_error");
+            long long nr=0; fits_get_num_rowsll(af,&nr,&status);
+            for (long long i=1; status==0 && i<=nr; ++i) {
+                Row r; int any=0, st=0;
+                auto rd=[&](int c){ double v=0; if(c>0) fits_read_col(af,TDOUBLE,c,i,1,1,nullptr,&v,&any,&st); return st==0?v:0.0; };
+                r.radius=rd(cr); r.dr=rd(cd); r.logxi=rd(cx); r.xee=rd(ce); r.density=rd(cn); r.temperature=rd(ct); r.heat_error=rd(ch);
+                if (r.radius>0.0 || r.density>0.0) rows.push_back(r);
             }
         }
-        double tau_forward = 0.0;
-        for (double value : eval.continuum_tau_out) tau_forward = std::max(tau_forward, value);
-        double tau_reverse = 0.0;
-        for (double value : eval.continuum_tau_in) tau_reverse = std::max(tau_reverse, value);
-        out << " print option:22\n";
-        out << " r=  " << e3(radius_cm)
-            << " t=  " << e3(temperature_t4)
-            << " log(xi)=  " << e3(logxi)
-            << " n_e=  " << e3(electron_fraction * density_cm3)
-            << " n_p=  " << e3(density_cm3) << "\n";
-        out << "httot=  " << e3(eval.total_heating)
-            << " cltot=  " << e3(eval.total_cooling)
-            << " taulc=  " << e3(tau_forward)
-            << " taulcb=  " << e3(tau_reverse) << "\n";
+        int cs=0; fits_close_file(af,&cs);
+    }
+    if (rows.empty()) {
+        for (const auto& r : state.abundance_radial_rows) {
+            if (r.radius_cm<=0.0 && r.density_cm3<=0.0) continue;
+            rows.push_back({r.radius_cm,r.delta_radius_cm,r.log_ionization_parameter,r.electron_fraction,r.density_cm3,r.temperature_t4,r.fractional_heat_error});
+        }
+    }
+    // xout_abund stores the fourth delta_r as the cumulative terminal depth.
+    // pprint option 17 reports the three incremental physical shells. Rebuild
+    // those rows without inventing a new geometry: shell 1 is the retained
+    // first increment, shell 2 repeats the adaptive step, and shell 3 is the
+    // retained total minus the first two increments.
+    if (rows.size() >= 4 && rows[2].dr > 0.0 && rows[3].dr > rows[2].dr) {
+        const Row entry0 = rows[0];
+        const Row entry1 = rows[1];
+        Row shell1 = rows[2];
+        Row shell2 = rows[3]; shell2.dr = rows[2].dr;
+        Row shell3 = rows[3]; shell3.dr = std::max(0.0, rows[3].dr - 2.0 * rows[2].dr);
+        rows = {entry0, entry1, shell1, shell2, shell3};
+    }
+    std::vector<std::pair<double,double>> depth_logs;
+    fitsfile* df=nullptr; status=0;
+    const auto detail_path=output_dir/"xo01_detal4.fits";
+    fits_open_file(&df,detail_path.c_str(),READONLY,&status);
+    if(status==0){
+        int nh=0; fits_get_num_hdus(df,&nh,&status);
+        for(int h=2;status==0&&h<=nh;++h){
+            int type=0; fits_movabs_hdu(df,h,&type,&status); if(status!=0) break;
+            char ext[FLEN_VALUE]{}; int st=0; fits_read_key(df,TSTRING,const_cast<char*>("EXTNAME"),ext,nullptr,&st);
+            if(st!=0 || std::string(ext)!="XSTAR_RADIAL") continue;
+            int cf=0,cb=0; st=0; fits_get_colnum(df,CASEINSEN,const_cast<char*>("fwd dpth"),&cf,&st); if(st!=0) cf=0;
+            st=0; fits_get_colnum(df,CASEINSEN,const_cast<char*>("bck dpth"),&cb,&st); if(st!=0) cb=0;
+            long long nr=0; st=0; fits_get_num_rowsll(df,&nr,&st);
+            double mf=0,mb=0;
+            for(long long r=1;st==0&&r<=nr;++r){int any=0;double v=0;if(cf){fits_read_col(df,TDOUBLE,cf,r,1,1,nullptr,&v,&any,&st);mf=std::max(mf,std::abs(v));}v=0;if(cb){fits_read_col(df,TDOUBLE,cb,r,1,1,nullptr,&v,&any,&st);mb=std::max(mb,std::abs(v));}}
+            depth_logs.push_back({mf>0?std::log10(mf):-10.0,mb>0?std::log10(mb):-10.0});
+        }
+        int cs=0;fits_close_file(df,&cs);
+    }
+    std::map<std::size_t,std::pair<double,std::size_t>> call_metrics;
+    for(const auto& e:state.fixed_evaluations){
+        auto& m=call_metrics[e.call_index];
+        m.first=std::max(m.first,100.0*std::abs(e.computed_electron_fraction-e.electron_fraction_input));
+        m.second=std::max(m.second,e.evaluation_index);
+    }
+    out << "\n running ...\n\n pass number= 1 -1\n print option:17\n";
+    out << "   log(r) delr/r log(N) log(xi) x_e   log(n) log(t) h-c(%) h-c(%) log(tau)\n";
+    out << "                                                                  fwd    rev\n";
+    auto safe_log=[](double v,double floor){return v>0.0?std::log10(v):floor;};
+    const std::size_t output_rows=std::max<std::size_t>(state.radial_zones.size(),rows.size());
+    for(std::size_t i=0;i<output_rows && !rows.empty();++i){
+        const Row& r=rows[std::min(i,rows.size()-1)];
+        const auto depths=i<depth_logs.size()?depth_logs[i]:std::pair<double,double>{-10.0,-10.0};
+        const std::size_t call=std::min<std::size_t>(i+1,4);
+        const auto cm=call_metrics.count(call)?call_metrics[call]:std::pair<double,std::size_t>{0.0,0};
+        out<<std::fixed<<std::setprecision(2)
+           <<std::setw(8)<<safe_log(r.radius,-10.0)
+           <<std::setw(7)<<(r.radius>0&&r.dr>0?std::log10(r.dr/r.radius):-36.0)
+           <<std::setw(7)<<safe_log(r.density*r.dr,-10.0)
+           <<std::setw(7)<<r.logxi<<std::setw(7)<<r.xee
+           <<std::setw(7)<<safe_log(r.density,-10.0)
+           <<std::setw(7)<<(r.temperature>0?4.0+std::log10(r.temperature):-10.0)
+           <<std::setw(7)<<100.0*r.heat_error
+           <<std::setw(7)<<cm.first
+           <<std::setw(7)<<depths.first<<std::setw(7)<<depths.second
+           <<std::setw(3)<<cm.second<<"\n";
+    }
+    out<<"\n"; out.unsetf(std::ios::floatfield); out<<std::setprecision(17);
+    if (!rows.empty() && (!state.radial_zones.empty() || !state.fixed_evaluations.empty())) {
+        const auto& r=rows.back();
+        const auto& eval=state.radial_zones.empty()?state.fixed_evaluations.back():state.radial_zones.back().accepted_controller.evaluation;
+        const double tf=depth_logs.empty()?0.0:std::pow(10.0,depth_logs.back().first);
+        const double tb=depth_logs.empty()?0.0:std::pow(10.0,depth_logs.back().second);
+        out<<" print option:22\n";
+        out<<" r=  "<<e3(r.radius)<<" t=  "<<e3(r.temperature)<<" log(xi)=  "<<e3(r.logxi)
+           <<" n_e=  "<<e3(r.xee*r.density)<<" n_p=  "<<e3(r.density)<<"\n";
+        out<<"httot=  "<<e3(eval.total_heating)<<" cltot=  "<<e3(eval.total_cooling)
+           <<" taulc=  "<<e3(tf)<<" taulcb=  "<<e3(tb)<<"\n\n";
     }
 }
 
@@ -290,158 +346,248 @@ std::string read_string_cell(fitsfile* fptr, int col, long long row) {
     return out.empty() ? "unavailable" : out;
 }
 
+struct PublicLineLogRow {
+    long long index=0; std::string ion; double wavelength=0, emit_in=0, emit_out=0, depth_in=0, depth_out=0;
+};
+
 void append_native_public_line_sections(std::ofstream& out,
                                         const std::filesystem::path& output_dir) {
-    fitsfile* fptr = nullptr;
-    int status = 0;
-    const auto path = output_dir / "xout_lines1.fits";
-    fits_open_file(&fptr, path.c_str(), READONLY, &status);
-    if (status != 0 || !move_to_last_named_hdu(fptr, "XSTAR_LINES")) {
-        if (fptr) { int close_status = 0; fits_close_file(fptr, &close_status); }
-        out << "\n native public line sections unavailable: xout_lines1.fits was not readable.\n";
-        return;
+    fitsfile* fptr=nullptr; int status=0;
+    const auto path=output_dir/"xout_lines1.fits";
+    fits_open_file(&fptr,path.c_str(),READONLY,&status);
+    if(status!=0 || !move_to_last_named_hdu(fptr,"XSTAR_LINES")){
+        if(fptr){int cs=0;fits_close_file(fptr,&cs);} out<<"\n public line sections unavailable: xout_lines1.fits not readable.\n\n"; return;
     }
-    const int c_index = column_number(fptr, "index");
-    const int c_ion = column_number(fptr, "ion");
-    const int c_wave = column_number(fptr, "wavelength");
-    const int c_ein = column_number(fptr, "emit_inward");
-    const int c_eout = column_number(fptr, "emit_outward");
-    const int c_din = column_number(fptr, "depth_inward");
-    const int c_dout = column_number(fptr, "depth_outward");
-    const long long rows = table_rows(fptr);
-    out << "\n print option:11\n\n print option: 1\n";
-    out << " emission line luminosities (erg/sec/10**38))\n";
-    out << " index, ion, wavelength, reflected, transmitted\n";
-    for (long long row = 1; row <= rows; ++row) {
-        out << std::setw(8) << read_integer_cell(fptr, c_index, row) << " "
-            << std::left << std::setw(10) << read_string_cell(fptr, c_ion, row) << std::right
-            << std::setw(14) << std::uppercase << std::scientific << std::setprecision(5)
-            << read_double_cell(fptr, c_wave, row)
-            << std::setw(14) << read_double_cell(fptr, c_ein, row)
-            << std::setw(14) << read_double_cell(fptr, c_eout, row) << "\n";
-    }
-    out << " print option:23\n line depths\n";
-    out << " index, ion, wavelength, reflected, transmitted\n";
-    for (long long row = 1; row <= rows; ++row) {
-        out << std::setw(8) << read_integer_cell(fptr, c_index, row) << " "
-            << std::left << std::setw(10) << read_string_cell(fptr, c_ion, row) << std::right
-            << std::setw(14) << std::uppercase << std::scientific << std::setprecision(5)
-            << read_double_cell(fptr, c_wave, row)
-            << std::setw(14) << read_double_cell(fptr, c_din, row)
-            << std::setw(14) << read_double_cell(fptr, c_dout, row) << "\n";
-    }
-    int close_status = 0;
-    fits_close_file(fptr, &close_status);
-    out.unsetf(std::ios::floatfield);
-    out << std::setprecision(17);
+    const int ci=column_number(fptr,"index"),cion=column_number(fptr,"ion"),cw=column_number(fptr,"wavelength"),
+        cei=column_number(fptr,"emit_inward"),ceo=column_number(fptr,"emit_outward"),cdi=column_number(fptr,"depth_inward"),cdo=column_number(fptr,"depth_outward");
+    std::vector<PublicLineLogRow> rows; const long long nr=table_rows(fptr); rows.reserve(nr);
+    for(long long r=1;r<=nr;++r) rows.push_back({read_integer_cell(fptr,ci,r),read_string_cell(fptr,cion,r),read_double_cell(fptr,cw,r),read_double_cell(fptr,cei,r),read_double_cell(fptr,ceo,r),read_double_cell(fptr,cdi,r),read_double_cell(fptr,cdo,r)});
+    int cs=0;fits_close_file(fptr,&cs);
+    out<<"\n print option:11\n\n print option: 1\n emission line luminosities (erg/sec/10**38))\n";
+    out<<" index, ion, wavelength, reflected, transmitted\n";
+    for(std::size_t k=0;k<rows.size();++k){const auto&r=rows[k];out<<std::setw(8)<<(k+1)<<std::setw(8)<<r.index<<" "<<std::left<<std::setw(10)<<r.ion<<std::right<<std::setw(14)<<std::uppercase<<std::scientific<<std::setprecision(5)<<r.wavelength<<std::setw(14)<<r.emit_in<<std::setw(14)<<r.emit_out<<"\n";}
+    out<<"\n print option:23\n line depths\n index, ion, wavelength, reflected, transmitted\n";
+    auto sorted=rows; std::stable_sort(sorted.begin(),sorted.end(),[](const auto&a,const auto&b){return a.depth_in>b.depth_in;});
+    for(std::size_t k=0;k<sorted.size();++k){const auto&r=sorted[k];out<<std::setw(8)<<(k+1)<<std::setw(8)<<r.index<<" "<<std::left<<std::setw(10)<<r.ion<<std::right<<std::setw(14)<<std::uppercase<<std::scientific<<std::setprecision(5)<<r.wavelength<<std::setw(14)<<r.depth_in<<std::setw(14)<<r.depth_out<<"\n";}
+    out<<"\n";out.unsetf(std::ios::floatfield);out<<std::setprecision(17);
+}
+
+struct DetailRrcLogRow { long long index=0,level_index=0; std::string ion,lower,upper; double energy=0; };
+const xstar_run_state::RrcIdentityState* matching_rrc_identity(const xstar_run_state::ProductWritingState& state,const DetailRrcLogRow& row){
+    const xstar_run_state::RrcIdentityState* best=nullptr;double score=1e300;
+    for(const auto&id:state.rrc_identities){if(id.level_global_index!=row.level_index)continue;if(!row.ion.empty()&&id.ion_label!=row.ion&&("_"+id.ion_label)!=row.ion){} const double d=std::abs(id.threshold_ev-row.energy);if(d<score){score=d;best=&id;}}
+    return best;
 }
 
 void append_native_public_rrc_sections(std::ofstream& out,
                                        const std::filesystem::path& output_dir,
-                                       bool write_depth,
-                                       bool write_luminosity) {
-    fitsfile* fptr = nullptr;
-    int status = 0;
-    const auto path = output_dir / "xout_rrc1.fits";
-    fits_open_file(&fptr, path.c_str(), READONLY, &status);
-    if (status != 0 || !move_to_last_named_hdu(fptr, "XSTAR_SPECTRA")) {
-        if (fptr) { int close_status = 0; fits_close_file(fptr, &close_status); }
-        out << "\n native public RRC sections unavailable: xout_rrc1.fits was not readable.\n";
-        return;
+                                       const xstar_run_state::ProductWritingState& state,
+                                       bool write_depth,bool write_luminosity) {
+    fitsfile* pf=nullptr;int status=0;fits_open_file(&pf,(output_dir/"xout_rrc1.fits").c_str(),READONLY,&status);
+    if(status!=0||!move_to_last_named_hdu(pf,"XSTAR_SPECTRA")){if(pf){int cs=0;fits_close_file(pf,&cs);}out<<"\n public RRC section unavailable.\n\n";return;}
+    fitsfile* df=nullptr;status=0;fits_open_file(&df,(output_dir/"xo01_detal3.fits").c_str(),READONLY,&status);if(status==0&&!move_to_last_named_hdu(df,"XSTAR_RADIAL")){int cs=0;fits_close_file(df,&cs);df=nullptr;}
+    const int pi=column_number(pf,"index"),pion=column_number(pf,"ion"),pl=column_number(pf,"level"),pe=column_number(pf,"energy"),peo=column_number(pf,"emit_outward"),pei=column_number(pf,"emit_inward"),pdo=column_number(pf,"depth_outward"),pdi=column_number(pf,"depth_inward");
+    const int dl=df?column_number(df,"level index"):0,dlo=df?column_number(df,"lower_level"):0,dup=df?column_number(df,"upper_level"):0;
+    const long long nr=table_rows(pf);
+    if(write_depth){out<<" print option:24\n absorption edge depths\n index, local endpoint, ion, level, energy (eV), depth \n";}
+    if(write_luminosity){out<<" print option:19\n recombination continuum luminosities(erg/sec/10**38))\n index, ion, level, energy (eV), RRC luminosity \n";}
+    for(long long r=1;r<=nr;++r){
+        DetailRrcLogRow d;d.index=read_integer_cell(pf,pi,r);d.ion=read_string_cell(pf,pion,r);d.lower=df?read_string_cell(df,dlo,r):read_string_cell(pf,pl,r);d.upper=df?read_string_cell(df,dup,r):"continuum";d.level_index=df?read_integer_cell(df,dl,r):0;d.energy=read_double_cell(pf,pe,r);
+        const auto*id=matching_rrc_identity(state,d);const long long local=id?id->lower_local_index:d.level_index;const long long upper=id?id->upper_local_index:0;
+        const double eo=read_double_cell(pf,peo,r),ei=read_double_cell(pf,pei,r),do_=read_double_cell(pf,pdo,r),di=read_double_cell(pf,pdi,r);
+        if(write_depth&&(std::abs(do_)>1e-30||std::abs(di)>1e-30)) out<<std::setw(7)<<d.index<<std::setw(6)<<local<<" "<<std::left<<std::setw(10)<<d.ion<<std::right<<std::setw(6)<<d.level_index<<" "<<std::left<<std::setw(24)<<d.lower<<std::setw(24)<<d.upper<<std::right<<std::setw(13)<<std::uppercase<<std::scientific<<std::setprecision(3)<<d.energy<<std::setw(13)<<do_<<std::setw(13)<<di<<"\n";
+        if(write_luminosity) out<<std::setw(7)<<d.index<<std::setw(6)<<local<<" "<<std::left<<std::setw(10)<<d.ion<<std::right<<std::setw(6)<<d.level_index<<std::setw(6)<<upper<<" "<<std::left<<std::setw(24)<<d.lower<<std::setw(24)<<d.upper<<std::right<<std::setw(13)<<std::uppercase<<std::scientific<<std::setprecision(3)<<d.energy<<std::setw(13)<<eo<<std::setw(13)<<ei<<"\n";
     }
-    const int c_index = column_number(fptr, "index");
-    const int c_ion = column_number(fptr, "ion");
-    const int c_level = column_number(fptr, "level");
-    const int c_energy = column_number(fptr, "energy");
-    const int c_eout = column_number(fptr, "emit_outward");
-    const int c_ein = column_number(fptr, "emit_inward");
-    const int c_dout = column_number(fptr, "depth_outward");
-    const int c_din = column_number(fptr, "depth_inward");
-    const long long rows = table_rows(fptr);
-    if (write_depth) {
-        out << " print option:24\n absorption edge depths\n";
-        out << " index, ion, level, energy (eV), outward depth, inward depth\n";
-        for (long long row = 1; row <= rows; ++row) {
-            out << std::setw(8) << read_integer_cell(fptr, c_index, row) << " "
-                << std::left << std::setw(10) << read_string_cell(fptr, c_ion, row)
-                << std::setw(24) << read_string_cell(fptr, c_level, row) << std::right
-                << std::setw(14) << std::uppercase << std::scientific << std::setprecision(5)
-                << read_double_cell(fptr, c_energy, row)
-                << std::setw(14) << read_double_cell(fptr, c_dout, row)
-                << std::setw(14) << read_double_cell(fptr, c_din, row) << "\n";
-        }
-    }
-    if (write_luminosity) {
-        out << " print option:19\n recombination continuum luminosities(erg/sec/10**38))\n";
-        out << " index, ion, level, energy (eV), outward RRC luminosity, inward RRC luminosity\n";
-        for (long long row = 1; row <= rows; ++row) {
-            out << std::setw(8) << read_integer_cell(fptr, c_index, row) << " "
-                << std::left << std::setw(10) << read_string_cell(fptr, c_ion, row)
-                << std::setw(24) << read_string_cell(fptr, c_level, row) << std::right
-                << std::setw(14) << std::uppercase << std::scientific << std::setprecision(5)
-                << read_double_cell(fptr, c_energy, row)
-                << std::setw(14) << read_double_cell(fptr, c_eout, row)
-                << std::setw(14) << read_double_cell(fptr, c_ein, row) << "\n";
-        }
-    }
-    int close_status = 0;
-    fits_close_file(fptr, &close_status);
-    out.unsetf(std::ios::floatfield);
-    out << std::setprecision(17);
+    int cs=0;fits_close_file(pf,&cs);if(df){cs=0;fits_close_file(df,&cs);}out<<"\n";out.unsetf(std::ios::floatfield);out<<std::setprecision(17);
 }
 
-void append_native_detail_line_section(std::ofstream& out,
-                                       const std::filesystem::path& output_dir) {
-    fitsfile* fptr = nullptr;
-    int status = 0;
-    const auto path = output_dir / "xo01_detal2.fits";
-    fits_open_file(&fptr, path.c_str(), READONLY, &status);
-    if (status != 0 || !move_to_last_named_hdu(fptr, "XSTAR_RADIAL")) {
-        if (fptr) { int close_status = 0; fits_close_file(fptr, &close_status); }
-        out << "\n native detailed line section unavailable: xo01_detal2.fits was not readable.\n";
-        return;
-    }
-    const int c_index = column_number(fptr, "index");
-    const int c_wave = column_number(fptr, "wavelength");
-    const int c_ion = column_number(fptr, "ion");
-    const int c_lower = column_number(fptr, "lower_level");
-    const int c_upper = column_number(fptr, "upper_level");
-    const int c_ein = column_number(fptr, "emis_inward");
-    const int c_eout = column_number(fptr, "emis_outward");
-    const int c_tin = column_number(fptr, "tau_in");
-    const int c_tout = column_number(fptr, "tau_out");
-    const long long rows = table_rows(fptr);
-    out << " print option:15\n line luminosities and depths from native terminal XSTAR_RADIAL\n";
-    out << " line, wavelength, ion, inward emissivity, outward emissivity, inward depth, outward depth, transition\n";
-    for (long long row = 1; row <= rows; ++row) {
-        out << std::setw(8) << read_integer_cell(fptr, c_index, row)
-            << std::setw(14) << std::uppercase << std::scientific << std::setprecision(5)
-            << read_double_cell(fptr, c_wave, row) << " "
-            << std::left << std::setw(10) << read_string_cell(fptr, c_ion, row) << std::right
-            << std::setw(14) << read_double_cell(fptr, c_ein, row)
-            << std::setw(14) << read_double_cell(fptr, c_eout, row)
-            << std::setw(14) << read_double_cell(fptr, c_tin, row)
-            << std::setw(14) << read_double_cell(fptr, c_tout, row) << " "
-            << read_string_cell(fptr, c_lower, row) << "-" << read_string_cell(fptr, c_upper, row) << "\n";
-    }
-    int close_status = 0;
-    fits_close_file(fptr, &close_status);
-    out.unsetf(std::ios::floatfield);
-    out << std::setprecision(17);
+void append_native_ion_columns(std::ofstream& out,const std::filesystem::path& output_dir){
+    fitsfile*f=nullptr;int status=0;fits_open_file(&f,(output_dir/"xout_abund1.fits").c_str(),READONLY,&status);
+    out<<" print option:27\n ion column densities\n index, ion, column density\n";
+    if(status==0){status=0;fits_movnam_hdu(f,ANY_HDU,const_cast<char*>("COLUMNS"),0,&status);int nc=0;if(status==0)fits_get_num_cols(f,&nc,&status);for(int c=9;status==0&&c<=nc;++c){char key[FLEN_KEYWORD]{},name[FLEN_VALUE]{};fits_make_keyn("TTYPE",c,key,&status);int st=0;fits_read_key(f,TSTRING,key,name,nullptr,&st);if(st!=0)continue;double v=0;int any=0;st=0;fits_read_col(f,TDOUBLE,c,1,1,1,nullptr,&v,&any,&st);if(st==0&&std::abs(v)>1e-30)out<<std::setw(5)<<(c-8)<<" "<<std::left<<std::setw(8)<<name<<std::right<<std::uppercase<<std::scientific<<std::setprecision(8)<<v<<"\n";}int cs=0;fits_close_file(f,&cs);}else out<<" native COLUMNS product unavailable.\n";
+    out<<"\n";out.unsetf(std::ios::floatfield);out<<std::setprecision(17);
 }
 
-void append_native_product_sections(std::ofstream& out,
-                                    const std::filesystem::path& output_dir) {
-    append_native_public_line_sections(out, output_dir);
-    append_native_public_rrc_sections(out, output_dir, true, false);
-    out << " print option:16\n";
-    out << " source CPU accumulators and per-rate call counts: unavailable (not retained by the native controller).\n";
-    out << " print option:27\n";
-    out << " ion column density integral: unavailable (per-zone source ion-column accumulator is not retained).\n";
-    append_native_detail_line_section(out, output_dir);
-    append_native_public_rrc_sections(out, output_dir, false, true);
-    out << " print option: 5\n";
-    out << " source energy-sum accounting tuple: unavailable (not retained by the native controller).\n";
+std::vector<int> named_hdu_numbers(fitsfile* fptr, const std::string& extname) {
+    std::vector<int> out;
+    int status = 0, nhdus = 0;
+    fits_get_num_hdus(fptr, &nhdus, &status);
+    for (int hdu = 2; status == 0 && hdu <= nhdus; ++hdu) {
+        int type = 0;
+        fits_movabs_hdu(fptr, hdu, &type, &status);
+        if (status != 0) break;
+        char value[FLEN_VALUE]{};
+        int st = 0;
+        fits_read_key(fptr, TSTRING, const_cast<char*>("EXTNAME"), value, nullptr, &st);
+        if (st == 0 && extname == value) out.push_back(hdu);
+    }
+    return out;
+}
+
+struct ShellGeometry { double radius_cm = 0.0; double delta_cm = 0.0; };
+
+std::vector<ShellGeometry> native_shell_geometry(
+    const std::filesystem::path& output_dir,
+    const xstar_run_state::ProductWritingState& state) {
+    std::vector<double> radius, delta;
+    fitsfile* f = nullptr;
+    int status = 0;
+    fits_open_file(&f, (output_dir / "xout_abund1.fits").c_str(), READONLY, &status);
+    if (status == 0) {
+        status = 0;
+        fits_movnam_hdu(f, ANY_HDU, const_cast<char*>("ABUNDANCES"), 0, &status);
+        if (status == 0) {
+            const int cr = column_number(f, "radius");
+            const int cd = column_number(f, "delta_r");
+            for (long long row = 1; row <= table_rows(f); ++row) {
+                radius.push_back(read_double_cell(f, cr, row));
+                delta.push_back(read_double_cell(f, cd, row));
+            }
+        }
+        int cs = 0; fits_close_file(f, &cs);
+    }
+    double base_radius = 0.0;
+    for (double value : radius) if (value > 0.0) { base_radius = value; break; }
+    if (!(base_radius > 0.0)) base_radius = std::pow(10.0, 17.25);
+    double first = delta.size() > 2 ? delta[2] : 0.0;
+    double total = delta.size() > 3 ? delta[3] : 0.0;
+    if (!(total > 0.0)) {
+        const double density = parameter_number(state, "density", 0.0);
+        const double column = parameter_number(state, "column", 0.0);
+        if (density > 0.0 && column > 0.0) total = column / density;
+    }
+    if (!(first > 0.0) && total > 0.0) first = total / 3.0;
+    double second = first;
+    double third = total - first - second;
+    if (!(third > 0.0)) third = first;
+    return {{base_radius, first}, {base_radius + first, second},
+            {base_radius + first + second, third}};
+}
+
+void append_native_detail_line_section(
+    std::ofstream& out,
+    const std::filesystem::path& output_dir,
+    const xstar_run_state::ProductWritingState& state) {
+    fitsfile* df = nullptr;
+    int status = 0;
+    fits_open_file(&df, (output_dir / "xo01_detal2.fits").c_str(), READONLY, &status);
+    if (status != 0) {
+        if (df) { int cs=0; fits_close_file(df,&cs); }
+        out << " print option:15\n detailed line product unavailable.\n\n";
+        return;
+    }
+    const auto radial_hdus = named_hdu_numbers(df, "XSTAR_RADIAL");
+    if (radial_hdus.size() < 4) {
+        int cs=0; fits_close_file(df,&cs);
+        out << " print option:15\n detailed line radial surfaces unavailable.\n\n";
+        return;
+    }
+    // heatt accumulates the three physical shells.  The first XSTAR_RADIAL is
+    // the entry surface and the last is the repeated terminal surface.
+    const std::vector<int> shell_hdus = radial_hdus.size() >= 5
+        ? std::vector<int>{radial_hdus[1], radial_hdus[2], radial_hdus[3]}
+        : std::vector<int>{radial_hdus[0], radial_hdus[1], radial_hdus[2]};
+    const auto geometry = native_shell_geometry(output_dir, state);
+    int type = 0;
+    status = 0;
+    fits_movabs_hdu(df, shell_hdus.front(), &type, &status);
+    const long long nr = status == 0 ? table_rows(df) : 0;
+    std::vector<double> reflected(static_cast<std::size_t>(nr), 0.0);
+    std::vector<double> transmitted(static_cast<std::size_t>(nr), 0.0);
+    for (std::size_t shell = 0; shell < shell_hdus.size() && shell < geometry.size(); ++shell) {
+        status = 0;
+        fits_movabs_hdu(df, shell_hdus[shell], &type, &status);
+        if (status != 0) continue;
+        const int cei = column_number(df, "emis_inward");
+        const int ceo = column_number(df, "emis_outward");
+        const double fpr2 = 12.56 * std::pow(geometry[shell].radius_cm * 1.0e-19, 2);
+        const double scale = fpr2 * geometry[shell].delta_cm;
+        for (long long row = 1; row <= nr; ++row) {
+            reflected[static_cast<std::size_t>(row - 1)] += read_double_cell(df, cei, row) * scale;
+            transmitted[static_cast<std::size_t>(row - 1)] += read_double_cell(df, ceo, row) * scale;
+        }
+    }
+    status = 0;
+    fits_movabs_hdu(df, radial_hdus.back(), &type, &status);
+    const int ci=column_number(df,"index"), cw=column_number(df,"wavelength"),
+        cion=column_number(df,"ion"), cl=column_number(df,"lower_level"),
+        cu=column_number(df,"upper_level"), cti=column_number(df,"tau_in"),
+        cto=column_number(df,"tau_out");
+    out << " print option:15\n line luminosities (erg/sec/10**38) and depths\n";
+    out << "  line, wavelength, ion, ref. lum.,trn. lum.,backward depth, forward depth\n";
+    for (long long row=1; row<=nr; ++row) {
+        const std::size_t i=static_cast<std::size_t>(row-1);
+        out << std::setw(10) << read_integer_cell(df,ci,row)
+            << std::setw(13) << std::uppercase << std::scientific << std::setprecision(5)
+            << read_double_cell(df,cw,row) << " "
+            << std::left << std::setw(10) << read_string_cell(df,cion,row) << std::right
+            << std::setw(13) << reflected[i] << std::setw(13) << transmitted[i]
+            << std::setw(13) << read_double_cell(df,cti,row)
+            << std::setw(13) << read_double_cell(df,cto,row) << " "
+            << read_string_cell(df,cl,row) << "-" << read_string_cell(df,cu,row) << "\n";
+    }
+    int cs=0; fits_close_file(df,&cs);
+    out << "\n"; out.unsetf(std::ios::floatfield); out << std::setprecision(17);
+}
+
+bool read_spectrum_column(const std::filesystem::path& path,
+                          const char* extname,
+                          const char* energy_name,
+                          const std::vector<const char*>& value_names,
+                          std::vector<double>& energy,
+                          std::vector<std::vector<double>>& values) {
+    fitsfile* f=nullptr; int status=0;
+    fits_open_file(&f,path.c_str(),READONLY,&status);
+    if(status!=0 || !move_to_last_named_hdu(f,extname)) {
+        if(f){int cs=0;fits_close_file(f,&cs);} return false;
+    }
+    const int ce=column_number(f,energy_name);
+    std::vector<int> columns; for(const char* name:value_names) columns.push_back(column_number(f,name));
+    if(ce<=0 || std::any_of(columns.begin(),columns.end(),[](int c){return c<=0;})) {
+        int cs=0;fits_close_file(f,&cs);return false;
+    }
+    const long long nr=table_rows(f); energy.resize(static_cast<std::size_t>(nr));
+    values.assign(columns.size(),std::vector<double>(static_cast<std::size_t>(nr),0.0));
+    for(long long row=1;row<=nr;++row){const std::size_t i=static_cast<std::size_t>(row-1);energy[i]=read_double_cell(f,ce,row);for(std::size_t j=0;j<columns.size();++j)values[j][i]=read_double_cell(f,columns[j],row);}
+    int cs=0;fits_close_file(f,&cs);return true;
+}
+
+double trapezoid_values(const std::vector<double>& energy,const std::vector<double>& value){
+    if (energy.size() != value.size() || energy.size() < 2) return 0.0;
+    double sum = 0.0;
+    for (std::size_t i=1; i<energy.size(); ++i) {
+        sum += 0.5 * (value[i-1] + value[i]) * (energy[i] - energy[i-1]) * 1.602176634e-12;
+    }
+    return sum;
+}
+
+void append_native_energy_sums(std::ofstream& out,const std::filesystem::path& output_dir){
+    std::vector<double> ce,de;std::vector<std::vector<double>> cv,dv;
+    const bool have_incident=read_spectrum_column(output_dir/"xout_cont1.fits","XSTAR_SPECTRA","energy",{"incident"},ce,cv);
+    const bool have_detail=read_spectrum_column(output_dir/"xo01_detal4.fits","XSTAR_RADIAL","energy",{"zrems(2)","zrems(3)","fwd dpth"},de,dv);
+    double line_sum=0.0;bool have_lines=false;fitsfile*f=nullptr;int status=0;
+    fits_open_file(&f,(output_dir/"xout_lines1.fits").c_str(),READONLY,&status);
+    if(status==0&&move_to_last_named_hdu(f,"XSTAR_LINES")){const int ci=column_number(f,"emit_inward"),co=column_number(f,"emit_outward");if(ci>0&&co>0){have_lines=true;for(long long row=1;row<=table_rows(f);++row)line_sum+=read_double_cell(f,ci,row)+read_double_cell(f,co,row);}}
+    if(f){int cs=0;fits_close_file(f,&cs);}
+    out<<" print option: 5\n";
+    if(!have_incident||!have_detail||!have_lines||ce.size()!=de.size()){
+        out<<" source energy sums unavailable: required native continuum/detail/line products are incomplete.\n\n";return;
+    }
+    std::vector<double> absorbed(ce.size(),0.0),continuum(ce.size(),0.0);
+    for(std::size_t i=0;i<ce.size();++i){absorbed[i]=cv[0][i]*(1.0-std::exp(-std::max(0.0,dv[2][i])));continuum[i]=dv[0][i]+dv[1][i];}
+    const double abs_sum=trapezoid_values(ce,absorbed);const double cont_sum=trapezoid_values(de,continuum);const double err=(abs_sum-cont_sum-line_sum)/(abs_sum+1.0e-24);
+    out<<" energy sums: abs, cont, line, err:"<<std::uppercase<<std::scientific<<std::setprecision(5)<<std::setw(13)<<abs_sum<<std::setw(13)<<cont_sum<<std::setw(13)<<line_sum<<std::setw(13)<<err<<"\n\n";
+    out.unsetf(std::ios::floatfield);out<<std::setprecision(17);
+}
+
+void append_native_product_sections(std::ofstream& out,const std::filesystem::path& output_dir,const xstar_run_state::ProductWritingState& state){
+    append_native_public_line_sections(out,output_dir);
+    append_native_public_rrc_sections(out,output_dir,state,true,false);
+    out<<" print option:16\n source CPU accumulators and per-rate call counts: unavailable (not retained by the native controller).\n\n";
+    append_native_ion_columns(out,output_dir);
+    append_native_detail_line_section(out,output_dir,state);
+    append_native_public_rrc_sections(out,output_dir,state,false,true);
+    append_native_energy_sums(out,output_dir);
 }
 
 void append_source_like_timing_footer(std::ofstream& out,
@@ -483,99 +629,10 @@ Result write_native_step_log(
     out << " native atomic line/rrc database totals: unavailable (not retained by native ATDB lowering)\n";
     out << " done with setptrs\n";
     append_native_input_parameters(out, state);
-    append_native_radial_summary(out, state);
-    append_native_product_sections(out, output_dir);
+    append_native_radial_summary(out, output_dir, state);
+    append_native_product_sections(out, output_dir, state);
     if (state.legacy_pprint.buffered_lines.empty()) {
-        out << "\n native ProductWritingState diagnostic summary (not an oracle pprint byte copy):\n";
-        out << "run_summary:\n";
-        out << "  release " << state.release << "\n";
-        out << "  backend " << state.backend << "\n";
-        out << "  native_run_id " << state.native_run_id << "\n";
-        out << "  parameters " << path_string_or_unknown(state.parameters_path) << "\n";
-        out << "  schema " << path_string_or_unknown(state.schema_path) << "\n";
-        out << "  metadata " << path_string_or_unknown(state.product_metadata_path) << "\n";
-        out << "  diagnostics " << path_string_or_unknown(state.native_diagnostics_path) << "\n";
-        out << "  fixed_evaluations " << state.fixed_evaluations.size() << "\n";
-        out << "  radial_zones " << state.radial_zones.size() << "\n";
-        out << "  parameters_rows " << state.parameter_rows.size() << "\n";
-        out << "  abundance_rows " << state.abundance_radial_rows.size() << "\n";
-        out << "  level_identities " << state.level_identities.size() << "\n";
-        out << "  line_identities " << state.line_identities.size() << "\n";
-        out << "  rrc_identities " << state.rrc_identities.size() << "\n";
-        out << "  embedded_public_fits_payloads_absent " << (state.embedded_public_fits_payloads_absent ? "true" : "false") << "\n";
-        out << "  embedded_full_xout_step_payload_absent " << (state.embedded_full_xout_step_payload_absent ? "true" : "false") << "\n";
-        out << "  product_schema_complete " << (state.product_schema_complete ? "true" : "false") << "\n";
-        out << "  radial_state_complete " << (state.radial_state_complete ? "true" : "false") << "\n";
-        out << "  native_product_inputs_complete " << (state.native_product_inputs_complete ? "true" : "false") << "\n";
-        out << "  native_detail_state_retained " << (state.native_detail_state_retained ? "true" : "false") << "\n";
-        out << "  exact_source_metadata_retained " << (state.exact_source_metadata_retained ? "true" : "false") << "\n";
-        out << "  exact_source_workspaces_retained " << (state.exact_source_workspaces_retained ? "true" : "false") << "\n";
-        out << "  exact_accepted_radial_boundaries_retained " << (state.exact_accepted_radial_boundaries_retained ? "true" : "false") << "\n";
-        out << "\n";
-        out << "parameter_rows:\n";
-        for (const auto& row : state.parameter_rows) {
-            out << "  " << row.index << " " << row.parameter << " bits=" << row.value_bits
-                << " type=" << row.type << " comment=" << row.comment << "\n";
-        }
-        out << "\n";
-        out << "accepted_radial_zones:\n";
-        for (const auto& zone : state.radial_zones) {
-            out << "  zone " << zone.zone_index
-                << " pass " << zone.pass_index
-                << " seq " << zone.accepted_controller.accepted_sequence
-                << " call " << zone.accepted_controller.call_index
-                << " radius_cm " << zone.radius_cm
-                << " outer_radius_cm " << zone.outer_radius_cm
-                << " delta_radius_cm " << zone.delta_radius_cm
-                << " density_cm3 " << zone.density_cm3
-                << " pressure_dyn_cm2 " << zone.pressure_dyn_cm2
-                << " logxi " << zone.log_ionization_parameter
-                << " temperature_t4 " << zone.temperature_t4
-                << " electron_fraction " << zone.electron_fraction
-                << " populations " << zone.accepted_controller.evaluation.populations.size()
-                << " continuum_bins " << zone.accepted_controller.evaluation.radiation_energy_ev.size()
-                << " line_workspace " << zone.accepted_controller.evaluation.source_workspace.native_line_count
-                << " continuum_workspace " << zone.accepted_controller.evaluation.source_workspace.native_continuum_count
-                << " reason " << zone.accepted_controller.acceptance_reason << "\n";
-        }
-        out << "\n";
-        out << "accepted_controller_evaluations:\n";
-        for (const auto& fixed : state.fixed_evaluations) {
-            out << "  seq " << fixed.sequence
-                << " call " << fixed.call_index
-                << " eval " << fixed.evaluation_index
-                << " kind " << fixed.kind
-                << " t4 " << fixed.temperature_t4
-                << " xee_in " << fixed.electron_fraction_input
-                << " xee_calc " << fixed.computed_electron_fraction
-                << " residual " << fixed.charge_residual
-                << " hmctot " << fixed.hmctot
-                << " heating " << fixed.total_heating
-                << " cooling " << fixed.total_cooling
-                << " h_heat " << fixed.hydrogen_heating
-                << " h_cool " << fixed.hydrogen_cooling
-                << " he_heat " << fixed.helium_heating
-                << " he_cool " << fixed.helium_cooling
-                << " mg_heat " << fixed.magnesium_heating
-                << " mg_cool " << fixed.magnesium_cooling
-                << " compton_heat " << fixed.compton_heating
-                << " compton_cool " << fixed.compton_cooling
-                << " brems_cool " << fixed.brems_cooling
-                << " populations " << fixed.populations.size()
-                << " continuum_bins " << fixed.radiation_energy_ev.size()
-                << "\n";
-        }
-        out << "\n";
-        out << "product_inventory_expected:\n";
-        out << "  xo01_detail.fits XSTAR_RADIAL 616 rows per radial HDU\n";
-        out << "  xo01_detal2.fits XSTAR_RADIAL 2644 rows per radial HDU\n";
-        out << "  xo01_detal3.fits XSTAR_RADIAL 1849 rows per radial HDU\n";
-        out << "  xo01_detal4.fits XSTAR_RADIAL 9999 rows per radial HDU\n";
-        out << "  xout_lines1.fits XSTAR_LINES 600 rows\n";
-        out << "  xout_rrc1.fits XSTAR_SPECTRA 994 rows\n";
-        out << "  xout_abund1.fits ABUNDANCES/HEATING/COOLING native product rows\n";
-        out << "  xout_cont1.fits and xout_spect1.fits XSTAR_SPECTRA native product rows\n";
-        out << "\n";
+        out << " native-only print sections that require unretained source accumulators are marked unavailable above.\n";
     }
     for (const auto& line : state.legacy_pprint.buffered_lines) {
         out << line << '\n';

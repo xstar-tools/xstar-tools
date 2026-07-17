@@ -3970,6 +3970,23 @@ int command_run_fixed_dsec(const Options& options) {
             return 9;
         }
     }
+    // Write xout_abund1 before xout_step.log so print options 17 and 27 are
+    // generated from the actual native abundance/column product rather than a
+    // placeholder ProductWritingState summary.  Include abundance publication
+    // in the measured controller-and-FITS time.
+    if (!options.skip_fits && xstar_science_fits::abundance_product_enabled()) {
+        try {
+            xstar_science_fits::write_native_abundance_product(
+                options.case_dir, options.output_dir, product_writing_state);
+            ++science_result.files_written;
+            science_result.filenames.push_back("xout_abund1.fits");
+        } catch (const std::exception& exc) {
+            std::cerr << "xout_abund1 product generation failed before xout_step.log: " << exc.what() << "\n";
+            xstar_thermal_context_destroy(thermal_context);
+            xstar_fixed_state_context_destroy(fixed_context);
+            return 9;
+        }
+    }
     product_writing_state.measured_run_seconds = std::chrono::duration<double>(
         std::chrono::steady_clock::now() - v25_run_wall_start).count();
     xstar_step_log::Result step_log_result;
@@ -3979,19 +3996,6 @@ int command_run_fixed_dsec(const Options& options) {
                 std::filesystem::path(options.output_dir), product_writing_state);
         } catch (const std::exception& exc) {
             std::cerr << "xout_step product generation failed: " << exc.what() << "\n";
-            xstar_thermal_context_destroy(thermal_context);
-            xstar_fixed_state_context_destroy(fixed_context);
-            return 9;
-        }
-    }
-    if (!options.skip_fits && xstar_science_fits::abundance_product_enabled()) {
-        try {
-            xstar_science_fits::write_native_abundance_product(
-                options.case_dir, options.output_dir, product_writing_state);
-            ++science_result.files_written;
-            science_result.filenames.push_back("xout_abund1.fits");
-        } catch (const std::exception& exc) {
-            std::cerr << "xout_abund1 product generation failed after xout_step.log: " << exc.what() << "\n";
             xstar_thermal_context_destroy(thermal_context);
             xstar_fixed_state_context_destroy(fixed_context);
             return 9;
@@ -8296,14 +8300,14 @@ ProductPublicationResultV172524 publish_full61_products_v172524(
             ? std::vector<double>{} : product.fixed_evaluations.front().radiation_energy_ev;
         auto science = xstar_science_fits::write_historical_science_products(
             options.case_dir, output, product, energy);
-        product.measured_run_seconds = std::max(0.0, controller_elapsed_seconds) +
-            std::chrono::duration<double>(std::chrono::steady_clock::now() - publication_started).count();
-        auto step = xstar_step_log::write_native_step_log(output, product);
         if (xstar_science_fits::abundance_product_enabled()) {
             xstar_science_fits::write_native_abundance_product(options.case_dir, output, product);
             ++science.files_written;
             science.filenames.push_back("xout_abund1.fits");
         }
+        product.measured_run_seconds = std::max(0.0, controller_elapsed_seconds) +
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - publication_started).count();
+        auto step = xstar_step_log::write_native_step_log(output, product);
         xstar_run_state::write_run_state_manifest(output / "native_physical_run_state.json", whole, product);
         result.fits_count = count_native_fits_products_v172524(output);
         result.step_log_written = std::filesystem::is_regular_file(output / "xout_step.log") &&

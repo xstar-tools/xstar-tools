@@ -961,13 +961,12 @@ std::vector<RrcRow> build_rrc_rows(const xstar_run_state::ProductWritingState& s
         // fstepr3/phint53 threshold opacity is
         // max(lower*xeltp*xpx*sgtp - parent*xeltp*xpx*rnist*exp*sgtp*psum, 0).
         // Type-99 does not publish a phint53 threshold-opacity row.
-        if (r.type99_valid || r.data_type == 99) {
-            row.opacity = 0.0;
-        } else {
-            row.opacity = std::max(0.0,
-                lower * abundance_scale * std::max(0.0, r.threshold_abs_sigma_cm2) -
-                parent * abundance_scale * std::max(0.0, r.threshold_stimulated_sigma_cm2));
-        }
+        // Type 99 contributes the same threshold absorption/stimulated
+        // difference to opakab as Types 49/53.  v52 forced these rows to zero,
+        // leaving the Mg Type-99 support missing.
+        row.opacity = std::max(0.0,
+            lower * abundance_scale * std::max(0.0, r.threshold_abs_sigma_cm2) -
+            parent * abundance_scale * std::max(0.0, r.threshold_stimulated_sigma_cm2));
         if (r.type53_valid) { row.tau_in = r.type53_tau_in; row.tau_out = r.type53_tau_out; }
         else { row.tau_in = 0.0; row.tau_out = 0.0; }
         const double signal = std::abs(row.emis_in) + std::abs(row.emis_out) + std::abs(row.absorption) + std::abs(row.opacity) + std::abs(row.tau_in) + std::abs(row.tau_out);
@@ -9007,16 +9006,14 @@ std::map<long long,RrcRow> diagnostic_rrc_rows_by_index(
         if (!(r.type49_valid || r.type53_valid || r.type99_valid || r.data_type == 49 || r.data_type == 53 || r.data_type == 99)) continue;
         const auto* element = element_ptr_for(elements, r.element_index);
         if (!element || !active_product_element_stage(r.element_z, r.ion_stage, element->abundance)) continue;
-        const RrcLabelTemplateRow* label = nullptr;
-        if (r.continuum_index_one_based > 0) {
-            const auto direct = labels_by_index.find(r.continuum_index_one_based);
-            if (direct != labels_by_index.end() && !used_indices.count(direct->first)) label = direct->second;
-        }
-        if (!label) {
-            while (fallback_ordinal < labels.size() && used_indices.count(labels[fallback_ordinal].index)) ++fallback_ordinal;
-            if (fallback_ordinal >= labels.size()) break;
-            label = &labels[fallback_ordinal++];
-        }
+        // The filtered active Type-49/53/99 source stream contains exactly
+        // the 1849 fstepr3 rows in oracle order.  continuum_index_one_based is
+        // an atomic continuum pointer/bin identifier, not the fstepr3 row, and
+        // using it first shifted repeated thresholds and created the residual
+        // zero/nonzero support errors in v52.
+        while (fallback_ordinal < labels.size() && used_indices.count(labels[fallback_ordinal].index)) ++fallback_ordinal;
+        if (fallback_ordinal >= labels.size()) break;
+        const RrcLabelTemplateRow* label = &labels[fallback_ordinal++];
         used_indices.insert(label->index);
         const long long public_rrc_index = label->index;
         const double lower = population_for(evaluation, elements, r.element_index, r.lower_row);
@@ -9038,9 +9035,13 @@ std::map<long long,RrcRow> diagnostic_rrc_rows_by_index(
         row.emis_in = 0.0;
         row.emis_out = total_emis;
         row.absorption = std::abs(r.ans[3]) * lower * abundance_scale;
-        if (r.type99_valid || r.data_type == 99) {
+        if ((r.type99_valid || r.data_type == 99) && r.element_z <= 2) {
+            // The H/He superlevel Type-99 rows are not published as threshold
+            // opacity by the source fstepr3 path.
             row.opacity = 0.0;
         } else {
+            // Mg Type-99 and ordinary Type-49/53 rows do contribute to the
+            // published threshold opacity.
             row.opacity = std::max(0.0,
                 lower * abundance_scale * std::max(0.0, r.threshold_abs_sigma_cm2) -
                 parent * abundance_scale * std::max(0.0, r.threshold_stimulated_sigma_cm2));
@@ -9822,9 +9823,28 @@ void write_spectrum_detail(const std::filesystem::path& path,
             const auto& zone = state.radial_zones[src];
             const auto& e = zone.accepted_controller.evaluation;
             const auto& ws = e.source_workspace;
-            if (e.radiation_energy_ev.size() != n || e.radiation_flux.size() != n || e.opacity.size() != n) {
+            if (e.radiation_energy_ev.size() != n || e.radiation_flux.size() != n ||
+                (ws.opakc.size() != n && e.opacity.size() != n)) {
                 throw std::runtime_error("native xo01_detal4 radial continuum shape mismatch");
             }
+            // fstepr4/heatt consume the complete opakc workspace.  The reduced
+            // FixedEvaluationState::opacity surface can omit bound-free terms
+            // and was about two orders of magnitude low in parts of v52.
+            const auto continuum_opacity = [&](std::size_t i) -> double {
+                if (i < ws.opakc.size() && std::isfinite(ws.opakc[i])) return std::max(0.0, ws.opakc[i]);
+                return i < e.opacity.size() && std::isfinite(e.opacity[i]) ? std::max(0.0, e.opacity[i]) : 0.0;
+            };
+            // fixed_state_engine reconstructs the two phint53 rccemis planes
+            // with the source ptmp1/ptmp2 directional weights already applied.
+            // Splitting their sum a second time (v52) erased source asymmetry
+            // and corrupted `emis in`, zrems(2/3), and zrems(4/5).
+            const auto directional_rcc = [&](std::size_t i) -> std::pair<double,double> {
+                const double outward = i < ws.rccemis.size() && std::isfinite(ws.rccemis[i])
+                    ? std::max(0.0, ws.rccemis[i]) : 0.0;
+                const double inward = n + i < ws.rccemis.size() && std::isfinite(ws.rccemis[n + i])
+                    ? std::max(0.0, ws.rccemis[n + i]) : 0.0;
+                return {outward, inward};
+            };
             if (oz == 0) z1 = e.radiation_flux;
             const auto continuum_diag = read_continuum_diagnostics_expanded_to_full_bins(
                 state, zone.accepted_controller.accepted_sequence, n);
@@ -9841,7 +9861,7 @@ void write_spectrum_detail(const std::filesystem::path& path,
             previous_emission_depth = std::max(previous_emission_depth, emission_depth);
             if (emission_shell > 0.0 && fpr2 > 0.0) {
                 for (std::size_t i = 0; i < n; ++i) {
-                    const double opacity = std::max(0.0, e.opacity[i]);
+                    const double opacity = continuum_opacity(i);
                     const double tau = opacity * emission_shell;
                     const double fac = tau > 0.01 ? (1.0 - std::exp(-tau)) / tau : 1.0;
                     const double opakcont = i < ws.opakcont.size() ? std::max(0.0, ws.opakcont[i]) : 0.0;
@@ -9849,8 +9869,9 @@ void write_spectrum_detail(const std::filesystem::path& path,
                     const double fac_cont = tau_cont > 0.01 ? (1.0 - std::exp(-tau_cont)) / tau_cont : 1.0;
                     const double brcems = i < continuum_diag.size() && std::isfinite(continuum_diag[i].brcems)
                         ? std::max(0.0, continuum_diag[i].brcems) : 0.0;
-                    const double rcc_out = i < ws.rccemis.size() ? std::max(0.0, ws.rccemis[i]) : 0.0;
-                    const double rcc_in = n + i < ws.rccemis.size() ? std::max(0.0, ws.rccemis[n + i]) : 0.0;
+                    const auto rcc = directional_rcc(i);
+                    const double rcc_out = rcc.first;
+                    const double rcc_in = rcc.second;
                     const double tmpc1 = rcc_out + brcems * (1.0 - cfrac) / 2.0;
                     const double tmpc2 = rcc_in + brcems * (1.0 + cfrac) / 2.0;
                     const double bremsa = z1[i] / fpr2;
@@ -9865,7 +9886,7 @@ void write_spectrum_detail(const std::filesystem::path& path,
             const double tau_shell = std::max(0.0, tau_depth - previous_tau_depth);
             previous_tau_depth = std::max(previous_tau_depth, tau_depth);
             if (tau_shell > 0.0) {
-                for (std::size_t i = 0; i < n; ++i) forward_depth[i] += std::max(0.0, e.opacity[i]) * tau_shell;
+                for (std::size_t i = 0; i < n; ++i) forward_depth[i] += continuum_opacity(i) * tau_shell;
             }
             create_table(fptr, BINARY_TBL, static_cast<long>(n), "XSTAR_RADIAL",
                 {"index","energy","zrems(1)","zrems(2)","zrems(3)","zrems(4)","zrems(5)","opacity","emis out","emis in","fwd dpth","bck dpth"},
@@ -9874,8 +9895,9 @@ void write_spectrum_detail(const std::filesystem::path& path,
             write_radial_keywords(fptr, state, oz, zone);
             for (std::size_t i = 0; i < n; ++i) {
                 const long row = static_cast<long>(i + 1);
-                const double rcc_out = i < ws.rccemis.size() ? ws.rccemis[i] : 0.0;
-                const double rcc_in = n + i < ws.rccemis.size() ? ws.rccemis[n + i] : 0.0;
+                const auto rcc = directional_rcc(i);
+                const double rcc_out = rcc.first;
+                const double rcc_in = rcc.second;
                 write_int(fptr, 1, row, static_cast<int>(i + 1));
                 write_real4(fptr, 2, row, e.radiation_energy_ev[i]);
                 write_real4(fptr, 3, row, z1[i]);
@@ -9883,7 +9905,7 @@ void write_spectrum_detail(const std::filesystem::path& path,
                 write_real4(fptr, 5, row, z3[i]);
                 write_real4(fptr, 6, row, 0.0);
                 write_real4(fptr, 7, row, z5[i]);
-                write_real4(fptr, 8, row, e.opacity[i]);
+                write_real4(fptr, 8, row, continuum_opacity(i));
                 write_real4(fptr, 9, row, rcc_out);
                 write_real4(fptr, 10, row, rcc_in);
                 write_real4(fptr, 11, row, forward_depth[i]);
