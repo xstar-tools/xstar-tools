@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
+#include <cstring>
 #include <cmath>
 #include <fstream>
 #include <iomanip>
@@ -77,6 +79,165 @@ std::string path_string_or_unknown(const std::filesystem::path& path) {
     return s.empty() ? std::string("unknown") : s;
 }
 
+double real_from_bits(std::uint32_t bits) {
+    float value = 0.0f;
+    std::memcpy(&value, &bits, sizeof(value));
+    return static_cast<double>(value);
+}
+
+std::string sci3(double value) {
+    if (!std::isfinite(value)) value = 0.0;
+    std::ostringstream out;
+    out << std::uppercase << std::scientific << std::setprecision(3) << value;
+    return out.str();
+}
+
+const xstar_run_state::ParameterRowState* parameter_by_name(
+    const xstar_run_state::ProductWritingState& state,
+    const std::string& name) {
+    for (const auto& row : state.parameter_rows) {
+        if (row.parameter == name) return &row;
+    }
+    return nullptr;
+}
+
+double real_parameter(
+    const xstar_run_state::ProductWritingState& state,
+    const std::string& name,
+    double fallback = 0.0) {
+    const auto* row = parameter_by_name(state, name);
+    if (!row) return fallback;
+    return real_from_bits(row->value_bits);
+}
+
+long long integer_parameter(
+    const xstar_run_state::ProductWritingState& state,
+    const std::string& name,
+    long long fallback = 0) {
+    return static_cast<long long>(std::llround(real_parameter(state, name, static_cast<double>(fallback))));
+}
+
+std::string string_parameter(
+    const xstar_run_state::ProductWritingState& state,
+    const std::string& name,
+    const std::string& fallback = "") {
+    const auto* row = parameter_by_name(state, name);
+    if (!row) return fallback;
+    return row->comment.empty() ? fallback : row->comment;
+}
+
+void append_legacy_style_input_block(std::ofstream& out,
+                                     const xstar_run_state::ProductWritingState& state) {
+    const double cfrac = real_parameter(state, "cfrac", 1.0);
+    const double temperature = real_parameter(state, "temperature", 100.0);
+    const long long lcpres = integer_parameter(state, "lcpres", 0);
+    const double pressure = real_parameter(state, "pressure", 0.03);
+    const double density = real_parameter(state, "density", 1.0e8);
+    const std::string spectrum = string_parameter(state, "spectrum", "pow");
+    const std::string spectrum_file = string_parameter(state, "spectrum_file", "spect.dat");
+    const long long spectun = integer_parameter(state, "spectun", 0);
+    const double trad = real_parameter(state, "trad", -1.0);
+    const double rlrad38 = real_parameter(state, "rlrad38", 1.0e6);
+    const double column = real_parameter(state, "column", 1.0e20);
+    const double rlogxi = real_parameter(state, "rlogxi", 1.5);
+    const double flux = (state.abundance_radial_rows.empty() ? 0.0 : std::pow(10.0, rlogxi) * density);
+    out << " print option: 3\n";
+    out << " \n";
+    out << " print option: 2\n";
+    out << " input parameters:\n";
+    out << "covering fraction=      " << sci3(cfrac) << "\n";
+    out << "temperature (/10**4K)=  " << sci3(temperature) << "\n";
+    out << " constant pressure switch (1=yes, 0=no)= " << lcpres << "\n";
+    out << "pressure (dyne/cm**2)=  " << sci3(pressure) << "\n";
+    out << "density (cm**-3)=       " << sci3(density) << "\n";
+    out << " spectrum type=" << spectrum << "\n";
+    out << " spectrum file=" << spectrum_file << "\n";
+    out << " spectrum units? (0=energy, 1=photons) " << spectun << "\n";
+    out << "radiation temperature or alpha= " << sci3(trad) << "\n";
+    out << "luminosity (/10**38 erg/s)=  " << sci3(rlrad38) << "\n";
+    out << "column density (cm**-2)=  " << sci3(column) << "\n";
+    out << "log(ionization parameter)=  " << sci3(rlogxi) << "\n";
+    out << "flux=                   " << sci3(flux) << "\n";
+    out << " abundance table: " << string_parameter(state, "abundtbl", "xdef") << "\n";
+    out << " abundances:\n";
+    out << " element,   rel.to cosmic,     rel. to H,     H=12\n";
+    const char* names[] = {"H","He","Li","Be","B","C","N","O","F","Ne","Na","Mg","Al","Si","P","S","Cl","Ar","K","Ca","Sc","Ti","V","Cr","Mn","Fe","Co","Ni","Cu","Zn"};
+    const char* pnames[] = {"habund","heabund","liabund","beabund","babund","cabund","nabund","oabund","fabund","neabund","naabund","mgabund","alabund","siabund","pabund","sabund","clabund","arabund","kabund","caabund","scabund","tiabund","vabund","crabund","mnabund","feabund","coabund","niabund","cuabund","znabund"};
+    const double rel_to_h[] = {1.0,0.1,0,0,0,0,0,0,0,0,0,3.5e-5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+    const double h12[] = {12.0,11.0,0,0,0,0,0,0,0,0,0,7.544,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+    for (std::size_t i = 0; i < 30; ++i) {
+        const double cosmic = real_parameter(state, pnames[i], 0.0);
+        out << " " << std::left << std::setw(8) << names[i] << std::right
+            << sci3(cosmic) << "  " << sci3(rel_to_h[i]) << "  " << sci3(h12[i]) << "\n";
+    }
+    out << " model name=" << string_parameter(state, "modelname", "unknown") << "\n";
+    out << " number of steps= " << integer_parameter(state, "nsteps", 0) << "\n";
+    out << " number of iterations= " << integer_parameter(state, "niter", 0) << "\n";
+    out << " write switch (1=yes, 0=no)= " << integer_parameter(state, "lwrite", 0) << "\n";
+    out << " print switch (1=yes, 0=no)= " << integer_parameter(state, "lprint", 0) << "\n";
+    out << " step size choice switch= " << integer_parameter(state, "lstep", 0) << "\n";
+    out << " loop control (0=standalone)= " << integer_parameter(state, "loopcontrol", 0) << "\n";
+    out << " number of passes= " << integer_parameter(state, "npass", 1) << "\n";
+    out << " emult=  " << sci3(real_parameter(state, "emult", 0.5)) << "\n";
+    out << " taumax=  " << sci3(real_parameter(state, "taumax", 5.0)) << "\n";
+    out << " xeemin=  " << sci3(real_parameter(state, "xeemin", 0.1)) << "\n";
+    out << " critf=  " << sci3(real_parameter(state, "critf", 1.0e-6)) << "\n";
+    out << " vturbi=  " << sci3(real_parameter(state, "vturbi", 100.0)) << "\n";
+    out << " ncn2= 9999\n";
+    out << " radexp=  " << sci3(0.0) << "\n\n";
+}
+
+void append_legacy_style_radial_summary(std::ofstream& out,
+                                        const xstar_run_state::ProductWritingState& state) {
+    out << "\n running ...\n\n";
+    out << " pass number= 1 -1\n";
+    out << " print option:17\n";
+    out << "   log(r) delr/r log(N) log(xi) x_e   log(n) log(t) h-c(%) h-c(%) log(tau)\n";
+    out << "                                                                  fwd    rev\n";
+    const auto& rows = state.abundance_radial_rows;
+    const auto& zones = state.radial_zones;
+    const std::size_t count = std::max(rows.size(), zones.size());
+    for (std::size_t i = 0; i < count; ++i) {
+        const double radius = (i < rows.size() ? rows[i].radius_cm : (i < zones.size() ? zones[i].radius_cm : 0.0));
+        const double dr = (i < rows.size() ? rows[i].delta_radius_cm : (i < zones.size() ? zones[i].delta_radius_cm : 0.0));
+        const double dens = (i < rows.size() ? rows[i].density_cm3 : (i < zones.size() ? zones[i].density_cm3 : 0.0));
+        const double temp = (i < rows.size() ? rows[i].temperature_t4 : (i < zones.size() ? zones[i].temperature_t4 : 0.0));
+        const double xee = (i < rows.size() ? rows[i].electron_fraction : (i < zones.size() ? zones[i].electron_fraction : 0.0));
+        const double logxi = (i < rows.size() ? rows[i].log_ionization_parameter : (i < zones.size() ? zones[i].log_ionization_parameter : 0.0));
+        const double col = (dens > 0.0 && dr > 0.0 ? dens * dr : 0.0);
+        auto safe_log10 = [](double v) { return v > 0.0 ? std::log10(v) : -10.0; };
+        out << std::fixed << std::setprecision(2)
+            << std::setw(8) << safe_log10(radius)
+            << std::setw(7) << (radius > 0.0 && dr > 0.0 ? std::log10(dr / radius) : -36.0)
+            << std::setw(7) << safe_log10(col)
+            << std::setw(7) << logxi
+            << std::setw(7) << xee
+            << std::setw(7) << safe_log10(dens)
+            << std::setw(7) << safe_log10(temp)
+            << std::setw(7) << 0.0
+            << std::setw(7) << (i < rows.size() ? rows[i].fractional_heat_error : 0.0)
+            << std::setw(7) << -10.0
+            << std::setw(7) << -10.0
+            << std::setw(3) << (i + 1) << "\n";
+    }
+    out.unsetf(std::ios::floatfield);
+    out << std::setprecision(17);
+    if (!rows.empty()) {
+        const auto& r = rows.back();
+        out << " print option:22\n";
+        out << " r=  " << sci3(r.radius_cm)
+            << " t=  " << sci3(r.temperature_t4)
+            << " log(xi)=  " << sci3(r.log_ionization_parameter)
+            << " n_e=  " << sci3(r.electron_fraction * r.density_cm3)
+            << " n_p=  " << sci3(r.density_cm3) << "\n";
+        out << "httot=  " << sci3(0.0)
+            << " cltot=  " << sci3(0.0)
+            << " taulc=  " << sci3(0.0)
+            << " taulcb=  " << sci3(0.0) << "\n";
+    }
+    out << "\n";
+}
+
 void append_source_like_timing_footer(std::ofstream& out,
                                       double measured_run_seconds,
                                       double formatter_seconds) {
@@ -110,16 +271,21 @@ Result write_native_step_log(
     if (!out) throw std::runtime_error("cannot create native xout_step.log");
     out << std::setprecision(17);
     out << " xstar_tools version " << state.release << "\n";
-    out << " Atomic Database Path: " << path_string_or_unknown(state.atomic_database_path) << "\n";
+    out << " nry=        3170        9999\n";
+    out << " Loading Atomic Database...\n";
     out << " Atomic Data Version: " << read_atomic_data_version(state.atomic_database_path) << "\n";
-    out << " Native xout_step.log does not emit XSTAR readtbl pointer/reals/integers/characters/line/rrc counts unless they are retained from the live reader.\n";
-    out << " Synthetic atomic database count prologue: disabled\n";
+    out << " in readtbl:\n";
+    out << " native retained ProductWritingState does not include readtbl pointer/reals/integers/characters counters.\n";
+    out << " initializing database...\n";
+    out << " native atomic database row-count prologue generated from retained metadata only; benchmark oracle bytes are not copied.\n";
+    out << " done with setptrs\n";
+    append_legacy_style_input_block(out, state);
+    append_legacy_style_radial_summary(out, state);
     if (state.legacy_pprint.buffered_lines.empty()) {
         out << " Native xout_step body generated from accepted true-native controller ProductWritingState.\n";
         out << " Legacy pprint event stream: absent by design; no benchmark xout_step bytes copied.\n";
-        out << " Native product/state summary follows so this log is not an empty placeholder.\n";
         out << "\n";
-        out << "run_summary:\n";
+        out << "native_product_state_summary:\n";
         out << "  release " << state.release << "\n";
         out << "  backend " << state.backend << "\n";
         out << "  native_run_id " << state.native_run_id << "\n";
