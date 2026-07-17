@@ -8364,7 +8364,7 @@ void write_population_detail(const std::filesystem::path& path,
         const auto& evaluation = zone.accepted_controller.evaluation;
         const auto pw_level_population = optional_bridge_array_for_hdu(state, "product_write_detail_level_population", static_cast<int>(oz + 3), detail_levels.size());
         const auto pw_level_lte = optional_bridge_array_for_hdu(state, "product_write_detail_level_lte", static_cast<int>(oz + 3), detail_levels.size());
-        const bool have_product_write_detail_levels = pw_level_population.size() == detail_levels.size();
+        const bool have_product_write_detail_levels = !native_standalone_product_state(state) && pw_level_population.size() == detail_levels.size();
         const bool have_product_write_detail_lte = pw_level_lte.size() == detail_levels.size();
         const auto solve_rows = read_solve_rows_by_global(state, zone.accepted_controller.accepted_sequence);
         const auto& oracle_lte_surface = oracle_detail_lte_template_v172537();
@@ -9043,7 +9043,7 @@ void write_line_detail(const std::filesystem::path& path,
         const auto pw_line_opacity = optional_bridge_array_for_hdu(state, "product_write_detail_line_opacity", hdu_number, pw_line_index.size());
         const auto pw_line_tau_in = optional_bridge_array_for_hdu(state, "product_write_detail_line_tau_in", hdu_number, pw_line_index.size());
         const auto pw_line_tau_out = optional_bridge_array_for_hdu(state, "product_write_detail_line_tau_out", hdu_number, pw_line_index.size());
-        const bool have_product_write_detail_lines = !native_standalone_product_state(state) && pw_line_index.size() == 2644u &&
+        const bool have_product_write_detail_lines = pw_line_index.size() == 2644u &&
             pw_line_emis_in.size() == pw_line_index.size() &&
             pw_line_emis_out.size() == pw_line_index.size() &&
             pw_line_opacity.size() == pw_line_index.size() &&
@@ -9073,6 +9073,19 @@ void write_line_detail(const std::filesystem::path& path,
                 write_real4(fptr, 10, row, finite_or_zero(pw_line_tau_out[i]));
             }
             continue;
+        }
+        std::map<long long,std::size_t> pw_line_by_index;
+        const bool have_mappable_product_write_detail_lines = pw_line_index.size() > 0 &&
+            pw_line_emis_in.size() == pw_line_index.size() &&
+            pw_line_emis_out.size() == pw_line_index.size() &&
+            pw_line_opacity.size() == pw_line_index.size() &&
+            pw_line_tau_in.size() == pw_line_index.size() &&
+            pw_line_tau_out.size() == pw_line_index.size();
+        if (have_mappable_product_write_detail_lines) {
+            for (std::size_t pi = 0; pi < pw_line_index.size(); ++pi) {
+                const long long key = static_cast<long long>(std::llround(pw_line_index[pi]));
+                if (key > 0 && !pw_line_by_index.count(key)) pw_line_by_index[key] = pi;
+            }
         }
         const auto diagnostic_lines = diagnostic_line_rows_by_index(state, evaluation, elements, zone.accepted_controller.accepted_sequence);
         auto lines = source_line_rows_from_identities(state, evaluation, physical_density_cm3_for_output_zone(state, z), physical_luminosity_scale_1e38_for_output_zone(state, z), true, hdu_number);
@@ -9105,6 +9118,20 @@ void write_line_detail(const std::filesystem::path& path,
                 // arrays.  Prefer them, using the base row only to fill any
                 // remaining zero-valued cells.
                 r = merged_line_row(found_diag->second, &base);
+            }
+            const auto found_pw = pw_line_by_index.find(label.index);
+            if (found_pw != pw_line_by_index.end()) {
+                const std::size_t pi = found_pw->second;
+                // v25.5.17.25.48: when the retained native product-write detail
+                // surface exists but has a non-oracle row count, map it by the
+                // public detail line index instead of ignoring it.  This avoids
+                // using one-zone diagnostic fallbacks for rows whose product
+                // writer state already retained the terminal line value.
+                r.emis_in = finite_or_zero(pw_line_emis_in[pi]);
+                r.emis_out = finite_or_zero(pw_line_emis_out[pi]);
+                r.opacity = finite_or_zero(pw_line_opacity[pi]);
+                r.tau_in = finite_or_zero(pw_line_tau_in[pi]);
+                r.tau_out = finite_or_zero(pw_line_tau_out[pi]);
             }
             if (!std::isfinite(r.emis_in)) r.emis_in = 0.0;
             if (!std::isfinite(r.emis_out)) r.emis_out = 0.0;
@@ -9327,6 +9354,20 @@ void write_rrc_detail(const std::filesystem::path& path,
             pw_rrc_opacity.size() == pw_rrc_index.size() &&
             pw_rrc_tau_in.size() == pw_rrc_index.size() &&
             pw_rrc_tau_out.size() == pw_rrc_index.size();
+        std::map<long long,std::size_t> pw_rrc_by_index;
+        const bool have_mappable_product_write_detail_rrcs = pw_rrc_index.size() > 0 &&
+            pw_rrc_emis_in.size() == pw_rrc_index.size() &&
+            pw_rrc_emis_out.size() == pw_rrc_index.size() &&
+            pw_rrc_absn.size() == pw_rrc_index.size() &&
+            pw_rrc_opacity.size() == pw_rrc_index.size() &&
+            pw_rrc_tau_in.size() == pw_rrc_index.size() &&
+            pw_rrc_tau_out.size() == pw_rrc_index.size();
+        if (have_mappable_product_write_detail_rrcs) {
+            for (std::size_t pi = 0; pi < pw_rrc_index.size(); ++pi) {
+                const long long key = static_cast<long long>(std::llround(pw_rrc_index[pi]));
+                if (key > 0 && !pw_rrc_by_index.count(key)) pw_rrc_by_index[key] = pi;
+            }
+        }
         if (have_product_write_detail_rrcs) {
             create_table(fptr, BINARY_TBL, static_cast<long>(pw_rrc_index.size()), "XSTAR_RADIAL",
                 {"rrc index","level index","energy","ion","lower_level","upper_level","emis_inward","emis_outward","integrated absn","opacity","tau_in","tau_out"},
@@ -9377,7 +9418,7 @@ void write_rrc_detail(const std::filesystem::path& path,
             const auto found_native = native_rrcs_by_record.find(label.index);
             if (found_native != native_rrcs_by_record.end()) base = found_native->second;
             const auto found_diag = diagnostic_rrcs.find(label.index);
-            const RrcRow r = merged_rrc_row(base, found_diag != diagnostic_rrcs.end() ? &found_diag->second : nullptr);
+            RrcRow r = merged_rrc_row(base, found_diag != diagnostic_rrcs.end() ? &found_diag->second : nullptr);
             const long row = static_cast<long>(i + 1);
             write_int(fptr, 1, row, label.index);
             write_int(fptr, 2, row, label.level_index);
@@ -9385,6 +9426,20 @@ void write_rrc_detail(const std::filesystem::path& path,
             write_string(fptr, 4, row, oracle_ion_label(label.ion));
             write_string(fptr, 5, row, label.lower_level);
             write_string(fptr, 6, row, label.upper_level);
+            const auto found_pw_rrc = pw_rrc_by_index.find(label.index);
+            if (found_pw_rrc != pw_rrc_by_index.end()) {
+                const std::size_t pi = found_pw_rrc->second;
+                // v25.5.17.25.48: retained product-write RRC arrays may have
+                // more/fewer rows than the public 1849-row surface.  Use the
+                // public detail RRC index to select the native terminal value
+                // before falling back to diagnostic/continuum approximations.
+                r.emis_in = std::isfinite(pw_rrc_emis_in[pi]) ? pw_rrc_emis_in[pi] : 0.0;
+                r.emis_out = std::isfinite(pw_rrc_emis_out[pi]) ? pw_rrc_emis_out[pi] : 0.0;
+                r.absorption = std::isfinite(pw_rrc_absn[pi]) ? pw_rrc_absn[pi] : 0.0;
+                r.opacity = std::isfinite(pw_rrc_opacity[pi]) ? pw_rrc_opacity[pi] : 0.0;
+                r.tau_in = std::isfinite(pw_rrc_tau_in[pi]) ? pw_rrc_tau_in[pi] : 0.0;
+                r.tau_out = std::isfinite(pw_rrc_tau_out[pi]) ? pw_rrc_tau_out[pi] : 0.0;
+            }
             double tau_in = std::isfinite(r.tau_in) ? r.tau_in : 0.0;
             double tau_out = std::isfinite(r.tau_out) ? r.tau_out : 0.0;
             if (tau_in == 0.0 && r.opacity != 0.0 && rrc_depth_cm > 0.0) {
@@ -9727,27 +9782,46 @@ void write_spectrum_detail(const std::filesystem::path& path,
             (void)detail_rccemis;
             (void)final_continuum_emit_out;
             const auto finite_or_zero = [](double value) { return std::isfinite(value) ? value : 0.0; };
-            const double opacity_diag = continuum_diag_opacity_for_bin(continuum_diag, i);
-            const double opacity = opacity_diag > 0.0 ? opacity_diag : source_continuum_opacity_for_bin(e, continuum_diag, retained_opakc, i);
-            const double z_emit = continuum_accumulated_emission_for_bin(continuum_diag, i, oz);
-            const double incident = (zrems.size() >= 1 * n + i + 1 && zrems[0 * n + i] > 0.0)
-                ? finite_or_zero(zrems[0 * n + i])
-                : (i < e.radiation_flux.size() ? e.radiation_flux[i] : 0.0);
-            const double z1 = incident + z_emit;
-            const double fwd_depth = (opacity > 0.0) ? opacity * line_tau_depth_cm_for_output_zone(state, oz) : 0.0;
+            const auto value_from_plane = [&](const std::vector<double>& values, std::size_t plane, double fallback = 0.0) -> double {
+                const std::size_t idx = plane * n + i;
+                return idx < values.size() && std::isfinite(values[idx]) ? values[idx] : fallback;
+            };
+            // v25.5.17.25.48: xo01_detal4.fits is the legacy fstepr4 detail
+            // continuum product.  Use retained full-grid zrems/opakc/rccemis/dpthc
+            // planes directly; diagnostic increments are only a fallback and caused
+            // radius-growing large errors in v47.
+            const double z1 = value_from_plane(bridge_zrems, 0, value_from_plane(zrems, 0, i < e.radiation_flux.size() ? e.radiation_flux[i] : 0.0));
+            const double z2 = 0.0;
+            const double z3 = value_from_plane(bridge_zrems, 2, value_from_plane(zrems, 2, continuum_accumulated_emission_for_bin(continuum_diag, i, oz)));
+            const double z4 = 0.0;
+            const double z5 = value_from_plane(bridge_zrems, 4, value_from_plane(zrems, 4, z3));
+            double opacity = 0.0;
+            if (product_write_opakc.size() == n) opacity = finite_or_zero(product_write_opakc[i]);
+            else if (retained_opakc.size() == n) opacity = finite_or_zero(retained_opakc[i]);
+            else opacity = source_continuum_opacity_for_bin(e, continuum_diag, retained_opakc, i);
+            double emis_in = 0.0;
+            if (product_write_rccemis.size() == 2 * n) emis_in = finite_or_zero(product_write_rccemis[n + i]);
+            else if (retained_rccemis.size() == 2 * n) emis_in = finite_or_zero(retained_rccemis[n + i]);
+            double fwd_depth = 0.0;
+            if (dpthc.size() == 2 * n) fwd_depth = finite_or_zero(dpthc[i]);
+            else if (dpthcont.size() == 2 * n) fwd_depth = finite_or_zero(dpthcont[i]);
+            if (fwd_depth == 0.0 && opacity > 0.0) fwd_depth = opacity * line_tau_depth_cm_for_output_zone(state, oz);
+            double back_depth = 0.0;
+            if (dpthc.size() == 2 * n) back_depth = finite_or_zero(dpthc[n + i]);
+            else if (dpthcont.size() == 2 * n) back_depth = finite_or_zero(dpthcont[n + i]);
             const long row = static_cast<long>(i + 1);
             write_int(fptr, 1, row, static_cast<int>(i + 1));
             write_real4(fptr, 2, row, i < detail_energy_grid.size() ? detail_energy_grid[i] : (i < e.radiation_energy_ev.size() ? e.radiation_energy_ev[i] : 0.0));
             write_real4(fptr, 3, row, finite_or_zero(z1));
-            write_real4(fptr, 4, row, 0.0);
-            write_real4(fptr, 5, row, finite_or_zero(z_emit));
-            write_real4(fptr, 6, row, 0.0);
-            write_real4(fptr, 7, row, finite_or_zero(z_emit));
+            write_real4(fptr, 4, row, finite_or_zero(z2));
+            write_real4(fptr, 5, row, finite_or_zero(z3));
+            write_real4(fptr, 6, row, finite_or_zero(z4));
+            write_real4(fptr, 7, row, finite_or_zero(z5));
             write_real4(fptr, 8, row, finite_or_zero(opacity));
             write_real4(fptr, 9, row, 0.0);
-            write_real4(fptr, 10, row, 0.0);
+            write_real4(fptr, 10, row, finite_or_zero(emis_in));
             write_real4(fptr, 11, row, finite_or_zero(fwd_depth));
-            write_real4(fptr, 12, row, 0.0);
+            write_real4(fptr, 12, row, finite_or_zero(back_depth));
         }
     }
     close_fits(fptr);
