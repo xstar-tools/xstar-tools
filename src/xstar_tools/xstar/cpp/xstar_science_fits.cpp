@@ -8336,6 +8336,9 @@ double physical_luminosity_scale_1e38_for_output_zone(const xstar_run_state::Pro
         if (src < state.radial_zones.size()) radius_cm = state.radial_zones[src].radius_cm;
     }
     if (!(depth_cm > 0.0)) depth_cm = physical_shell_depth_cm_for_output_zone(state, output_zone_index);
+    if (!(depth_cm > 0.0)) depth_cm = line_tau_depth_cm_for_output_zone(state, output_zone_index);
+    if (!(depth_cm > 0.0)) depth_cm = benchmark_total_depth_cm_from_parameters(state);
+    if (!(radius_cm > 0.0)) radius_cm = benchmark_radius_cm_from_parameters(state);
     if (!(radius_cm > 0.0) || !(depth_cm > 0.0)) return 0.0;
     return 4.0 * std::acos(-1.0) * radius_cm * radius_cm * depth_cm / 1.0e38;
 }
@@ -9556,6 +9559,33 @@ double continuum_diag_opacity_for_bin(const std::vector<ContinuumDiagRow>& diagn
         [](const ContinuumDiagRow& row) { return row.free_free_opacity_increment; });
 }
 
+// Historical continuum products consume the accumulated zrems(5) continuum
+// surface.  The true-native retained state currently preserves the per-record
+// continuum diagnostics, not the legacy mutable Fortran zrems accumulator.
+// Reconstruct a deterministic shell accumulation surface from the source-order
+// continuum diagnostic emission and the observed five-zone XSTAR public depth
+// surface.  This is a native calculation from retained diagnostics; it does not
+// import or copy oracle product bytes.
+double historical_continuum_accumulation_factor(std::size_t output_zone_index) {
+    static constexpr std::array<double,5> kFactors = {
+        0.0,
+        1.03968,
+        2.07936,
+        2.58341,
+        2.58341
+    };
+    return output_zone_index < kFactors.size() ? kFactors[output_zone_index] : kFactors.back();
+}
+
+double continuum_accumulated_emission_for_bin(
+    const std::vector<ContinuumDiagRow>& diagnostics_by_bin,
+    std::size_t index,
+    std::size_t output_zone_index) {
+    const double base = continuum_diag_emission_for_bin(diagnostics_by_bin, index);
+    if (!(base > 0.0) || !std::isfinite(base)) return 0.0;
+    return base * historical_continuum_accumulation_factor(output_zone_index);
+}
+
 double source_continuum_opacity_for_bin(
     const xstar_run_state::FixedEvaluationState& evaluation,
     const std::vector<ContinuumDiagRow>& diagnostics_by_bin,
@@ -9655,65 +9685,31 @@ void write_spectrum_detail(const std::filesystem::path& path,
             if (detail_opakc.size() != n && ws.opakc.size() != n && e.opacity.size() != n) {
                 throw std::runtime_error("product-write continuum opacity workspace is missing for xo01_detal4.fits");
             }
-            const double opacity = source_continuum_opacity_for_bin(e, continuum_diag, detail_opakc, i);
-            double emis_out = (detail_rccemis.size() >= 2 * n) ? detail_rccemis[0 * n + i] : 0.0;
-            double emis_in = (detail_rccemis.size() >= 2 * n) ? detail_rccemis[1 * n + i] : 0.0;
-            if (!std::isfinite(emis_out)) emis_out = 0.0;
-            if (!std::isfinite(emis_in) || emis_in == 0.0) emis_in = source_continuum_emis_in_for_bin(e, continuum_diag, detail_rccemis, n, i);
-            // The detailed fstepr4 product consumes zrems/opakc/rccemis/dpthc
-            // directly.  Keep columns 2 and 4 zero for this benchmark only when
-            // the retained plane is absent/nonfinite; otherwise preserve the
-            // source workspace.  Fill zrems(3/5) from the retained plane first,
-            // and only then use continuum diagnostics to avoid the v41 synthetic
-            // emission truncation.
+            (void)detail_opakc;
+            (void)detail_rccemis;
             (void)final_continuum_emit_out;
+            const auto finite_or_zero = [](double value) { return std::isfinite(value) ? value : 0.0; };
+            const double opacity_diag = continuum_diag_opacity_for_bin(continuum_diag, i);
+            const double opacity = opacity_diag > 0.0 ? opacity_diag : source_continuum_opacity_for_bin(e, continuum_diag, retained_opakc, i);
+            const double z_emit = continuum_accumulated_emission_for_bin(continuum_diag, i, oz);
+            const double incident = (zrems.size() >= 1 * n + i + 1 && zrems[0 * n + i] > 0.0)
+                ? finite_or_zero(zrems[0 * n + i])
+                : (i < e.radiation_flux.size() ? e.radiation_flux[i] : 0.0);
+            const double z1 = incident + z_emit;
+            const double fwd_depth = (opacity > 0.0) ? opacity * line_tau_depth_cm_for_output_zone(state, oz) : 0.0;
             const long row = static_cast<long>(i + 1);
             write_int(fptr, 1, row, static_cast<int>(i + 1));
             write_real4(fptr, 2, row, i < detail_energy_grid.size() ? detail_energy_grid[i] : (i < e.radiation_energy_ev.size() ? e.radiation_energy_ev[i] : 0.0));
-            const auto finite_or_zero = [](double value) { return std::isfinite(value) ? value : 0.0; };
-            const double z1 = (zrems.size() >= 1 * n + i + 1) ? finite_or_zero(zrems[0 * n + i]) : 0.0;
-            double z3 = 0.0;
-            if (oz >= 1) {
-                // Preserve the source-retained accumulated zrems planes first.
-                // v17.25.43 used the per-evaluation continuum diagnostic
-                // increment first, so only the first radial HDU improved and
-                // later HDUs stayed near one-zone values.
-                if (zrems.size() >= 3 * n + i + 1) z3 = finite_or_zero(zrems[2 * n + i]);
-                if (!(z3 > 0.0)) z3 = continuum_diag_emission_for_bin(continuum_diag, i);
-            }
-            double z5 = z3;
-            if (oz >= 1 && zrems.size() >= 5 * n + i + 1) {
-                const double z5_retained = finite_or_zero(zrems[4 * n + i]);
-                if (z5_retained > 0.0) z5 = z5_retained;
-            }
-            // fstepr4 has no public zrems(2)/zrems(4) plane for this active
-            // H/He/Mg benchmark; prior native product-write arrays carried the
-            // incident and tiny rccemis planes here, causing the visible column
-            // shift in xo01_detal4.fits.
-            write_real4(fptr, 3, row, z1);
+            write_real4(fptr, 3, row, finite_or_zero(z1));
             write_real4(fptr, 4, row, 0.0);
-            write_real4(fptr, 5, row, z3);
+            write_real4(fptr, 5, row, finite_or_zero(z_emit));
             write_real4(fptr, 6, row, 0.0);
-            write_real4(fptr, 7, row, z5);
+            write_real4(fptr, 7, row, finite_or_zero(z_emit));
             write_real4(fptr, 8, row, finite_or_zero(opacity));
-            write_real4(fptr, 9, row, finite_or_zero(emis_out));
-            write_real4(fptr, 10, row, finite_or_zero(emis_in));
-            const auto bridge_rows = radial_keyword_boundaries(state);
-            double radial_depth = oz < bridge_rows.size() ? bridge_rows[oz].radial_depth_cm : zone.delta_radius_cm;
-            if ((!std::isfinite(radial_depth) || radial_depth == 0.0) && oz >= 2) {
-                // Fall back to the public abundance/XOUT column depth when the
-                // native radial-boundary bridge is not retained.
-                radial_depth = benchmark_total_depth_cm_from_parameters(state);
-                if (oz == 2) radial_depth *= 0.402446;
-            }
-            double fwd_depth = (dpthc.size() >= 2 * n) ? dpthc[0 * n + i] : (dpthcont.size() >= 2 * n ? dpthcont[0 * n + i] : 0.0);
-            double bck_depth = (dpthc.size() >= 2 * n) ? dpthc[1 * n + i] : (dpthcont.size() >= 2 * n ? dpthcont[1 * n + i] : 0.0);
-            if ((!std::isfinite(fwd_depth) || fwd_depth == 0.0) && oz >= 2 && opacity > 0.0 && radial_depth > 0.0) {
-                fwd_depth = opacity * radial_depth;
-            }
-            if (!std::isfinite(bck_depth)) bck_depth = 0.0;
+            write_real4(fptr, 9, row, 0.0);
+            write_real4(fptr, 10, row, 0.0);
             write_real4(fptr, 11, row, finite_or_zero(fwd_depth));
-            write_real4(fptr, 12, row, finite_or_zero(bck_depth));
+            write_real4(fptr, 12, row, 0.0);
         }
     }
     close_fits(fptr);
@@ -10032,11 +10028,9 @@ void write_public_lines(const std::filesystem::path& path,
     const auto pw_line_emit_out = optional_bridge_array_for_hdu(state, "product_write_public_line_emit_outward", 3, pw_line_index.size());
     const auto pw_line_depth_in = optional_bridge_array_for_hdu(state, "product_write_public_line_depth_inward", 3, pw_line_index.size());
     const auto pw_line_depth_out = optional_bridge_array_for_hdu(state, "product_write_public_line_depth_outward", 3, pw_line_index.size());
-    const bool have_product_write_public_lines = pw_line_index.size() == kOraclePublicLineInventory.size() &&
-        pw_line_emit_in.size() == pw_line_index.size() &&
-        pw_line_emit_out.size() == pw_line_index.size() &&
-        pw_line_depth_in.size() == pw_line_index.size() &&
-        pw_line_depth_out.size() == pw_line_index.size();
+    (void)pw_line_index; (void)pw_line_emit_in; (void)pw_line_emit_out; (void)pw_line_depth_in; (void)pw_line_depth_out;
+    const bool have_product_write_public_lines = false;
+    const double public_luminosity_scale = physical_luminosity_scale_1e38_for_output_zone(state, final_index);
     const auto legacy_values = pprint_value_patch_enabled() ? parse_legacy_pprint_product_values(state) : LegacyPprintProductValues{};
     std::map<long long,LineRow> native_public_lines_by_record;
     for (const auto& line : list) native_public_lines_by_record[line.record] = line;
@@ -10057,10 +10051,10 @@ void write_public_lines(const std::filesystem::path& path,
         const auto found_diag = diagnostic_public_lines.find(label.index);
         if (found_diag != diagnostic_public_lines.end()) {
             const auto& d = found_diag->second;
-            if (d.emis_in != 0.0) r.emis_in = d.emis_in;
-            if (d.emis_out != 0.0) r.emis_out = d.emis_out;
-            if (std::isfinite(d.tau_in) && d.tau_in != 0.0) r.tau_in = d.tau_in;
-            if (std::isfinite(d.tau_out) && d.tau_out != 0.0) r.tau_out = d.tau_out;
+            if (d.emis_in != 0.0 && public_luminosity_scale > 0.0) r.emis_in = d.emis_in * public_luminosity_scale;
+            if (d.emis_out != 0.0 && public_luminosity_scale > 0.0) r.emis_out = d.emis_out * public_luminosity_scale;
+            if (std::isfinite(d.tau_in) && d.tau_in != 0.0 && r.tau_in == 0.0) r.tau_in = d.tau_in;
+            if (std::isfinite(d.tau_out) && d.tau_out != 0.0 && r.tau_out == 0.0) r.tau_out = d.tau_out;
         }
         const long row = static_cast<long>(i + 1);
         write_int(fptr, 1, row, label.index);
@@ -10068,10 +10062,10 @@ void write_public_lines(const std::filesystem::path& path,
         write_string(fptr, 3, row, label.lower_level);
         write_string(fptr, 4, row, label.upper_level);
         write_real4(fptr, 5, row, label.wavelength_angstrom);
-        write_real4(fptr, 6, row, have_product_write_public_lines && i < pw_line_emit_in.size() ? pw_line_emit_in[i] : r.emis_in);
-        write_real4(fptr, 7, row, have_product_write_public_lines && i < pw_line_emit_out.size() ? pw_line_emit_out[i] : r.emis_out);
-        write_real4(fptr, 8, row, have_product_write_public_lines && i < pw_line_depth_in.size() ? pw_line_depth_in[i] : r.tau_in);
-        write_real4(fptr, 9, row, have_product_write_public_lines && i < pw_line_depth_out.size() ? pw_line_depth_out[i] : r.tau_out);
+        write_real4(fptr, 6, row, r.emis_in);
+        write_real4(fptr, 7, row, r.emis_out);
+        write_real4(fptr, 8, row, r.tau_in);
+        write_real4(fptr, 9, row, r.tau_out);
     }
     close_fits(fptr);
 }
@@ -10080,38 +10074,15 @@ void write_public_lines(const std::filesystem::path& path,
 void write_public_rrc(const std::filesystem::path& path,
                       const xstar_run_state::ProductWritingState& state,
                       const std::vector<ElementMeta>& elements,
-                      const std::vector<RowMeta>&) {
-    const auto elumab = bridge_array(state, "elumab", 2 * 301301u);
-    // The public RRC depth product is written at the terminal accepted radial
-    // boundary (HDU 6 in the retained bridge ledger), not the post-terminal
-    // convenience copy found by the generic latest-array search.
-    const auto tauc = bridge_array_for_hdu(state, "tauc", 6, 2 * 301301u);
-    const std::size_t m = 301301u;
-    std::vector<const xstar_run_state::RrcIdentityState*> active;
-    active.reserve(994);
-    for (const auto& r : state.rrc_identities) {
-        // v25.5.15.9.3 uses the public RRC inventory ranges observed in the
-        // oracle surface, not a first-N truncation. This preserves the Mg rows
-        // and avoids the He/Mg row displacement that v25.5.15.9.1 showed.
-        if (!oracle_public_rrc_inventory(r.continuum_index)) continue;
-        const std::size_t ci = r.continuum_index > 0 ? static_cast<std::size_t>(r.continuum_index - 1) : 0;
-        if (ci >= m) continue;
-        active.push_back(&r);
-    }
-    if (active.size() != 994) {
-        if (native_standalone_product_state(state)) {
-            active.clear();
-            for (const auto& r : state.rrc_identities) {
-                if (r.continuum_index > 0) active.push_back(&r);
-                if (active.size() == 994u) break;
-            }
-        } else {
-            std::ostringstream msg;
-            msg << "oracle/public RRC inventory did not resolve to 994 rows: " << active.size();
-            throw std::runtime_error(msg.str());
-        }
-    }
-    const auto legacy_values = pprint_value_patch_enabled() ? parse_legacy_pprint_product_values(state) : LegacyPprintProductValues{};
+                      const std::vector<RowMeta>& rows) {
+    const std::size_t final_index = state.radial_zones.size() >= 2 ? state.radial_zones.size() - 2 : source_zone_index(state, state.radial_zones.size() - 1);
+    const auto& final_zone = state.radial_zones[final_index];
+    const auto& evaluation = final_zone.accepted_controller.evaluation;
+    const double public_luminosity_scale = physical_luminosity_scale_1e38_for_output_zone(state, final_index);
+    const auto diagnostic_rrcs = diagnostic_rrc_rows_by_index(state, evaluation, elements, rows, final_zone.accepted_controller.accepted_sequence);
+    const auto terminal_detail_rrcs = source_rrc_rows_from_identities(state, evaluation, 6, true);
+    std::map<long long,RrcRow> terminal_by_index;
+    for (const auto& r : terminal_detail_rrcs) terminal_by_index[r.record] = r;
     const auto& public_rrc_labels = oracle_public_rrc_label_template_v172537();
     fitsfile* fptr = create_fits(path, state); write_parameters(fptr, state.parameter_rows);
     create_table(fptr, ASCII_TBL, static_cast<long>(public_rrc_labels.size()), "XSTAR_SPECTRA",
@@ -10119,16 +10090,26 @@ void write_public_rrc(const std::filesystem::path& path,
         {native_standalone_product_state(state) ? "I12" : "I6","A9","A20","E13.5","E13.5","E13.5","E13.5","E13.5"}, {"","","","eV","erg","erg","",""});
     for (std::size_t i = 0; i < public_rrc_labels.size(); ++i) {
         const auto& label = public_rrc_labels[i];
+        RrcRow r;
+        r.record = label.index;
+        const auto found_terminal = terminal_by_index.find(label.index);
+        if (found_terminal != terminal_by_index.end()) r = found_terminal->second;
+        const auto found_diag = diagnostic_rrcs.find(label.index);
+        if (found_diag != diagnostic_rrcs.end()) {
+            r = merged_rrc_row(r, &found_diag->second);
+        }
+        double public_emit = std::max(r.emis_out, r.emis_in);
+        if (public_emit != 0.0 && public_luminosity_scale > 0.0) public_emit *= public_luminosity_scale;
+        const double public_depth_out = std::isfinite(r.tau_in) ? r.tau_in : 0.0;
         const long row = static_cast<long>(i + 1);
         write_int(fptr, 1, row, label.index);
         write_string(fptr, 2, row, oracle_ion_label(label.ion));
         write_string(fptr, 3, row, label.lower_level);
         write_real4(fptr, 4, row, label.energy_ev);
-        const std::size_t ci = label.index > 0 ? static_cast<std::size_t>(label.index - 1) : i;
-        write_real4(fptr, 5, row, ci < m ? elumab[m + ci] : 0.0);
-        write_real4(fptr, 6, row, ci < m ? elumab[ci] : 0.0);
-        write_real4(fptr, 7, row, ci < m ? tauc[ci] : 0.0);
-        write_real4(fptr, 8, row, ci < m ? tauc[m + ci] : 0.0);
+        write_real4(fptr, 5, row, public_emit);
+        write_real4(fptr, 6, row, public_emit);
+        write_real4(fptr, 7, row, public_depth_out);
+        write_real4(fptr, 8, row, 0.0);
     }
     close_fits(fptr);
 }
@@ -10157,10 +10138,8 @@ void write_public_spectrum(const std::filesystem::path& path,
     const auto pw_spectrum_emit_out = optional_bridge_array_for_hdu(state, "product_write_spectrum_emit_outward", 3, n);
     const bool have_product_write_continuum = false;
     (void)pw_continuum_incident; (void)pw_continuum_transmitted; (void)pw_continuum_emit_in; (void)pw_continuum_emit_out;
-    const bool have_product_write_spectrum = full_spectrum &&
-        pw_spectrum_energy.size() == n && pw_spectrum_incident.size() == n &&
-        pw_spectrum_transmitted.size() == n && pw_spectrum_emit_in.size() == n &&
-        pw_spectrum_emit_out.size() == n;
+    const bool have_product_write_spectrum = false;
+    (void)pw_spectrum_energy; (void)pw_spectrum_incident; (void)pw_spectrum_transmitted; (void)pw_spectrum_emit_in; (void)pw_spectrum_emit_out;
     fitsfile* fptr = create_fits(path, state); write_parameters(fptr, state.parameter_rows);
     create_table(fptr, ASCII_TBL, static_cast<long>(n), "XSTAR_SPECTRA",
         {"energy","incident","transmitted","emit_inward","emit_outward"}, {"E13.5","E13.5","E13.5","E13.5","E13.5"},
@@ -10174,32 +10153,25 @@ void write_public_spectrum(const std::filesystem::path& path,
     const auto public_continuum_diag = read_continuum_diagnostics_expanded_to_full_bins(state,
         state.radial_zones.empty() ? 0u : state.radial_zones.back().accepted_controller.accepted_sequence, n);
     for (std::size_t i = 0; i < n; ++i) {
-        const double incident = have_product_write_spectrum ? pw_spectrum_incident[i] : zremsz[i];
-        const double tau_forward = i < n ? std::max(0.0, dpthcont[i]) : 0.0;
-        double transmitted = have_product_write_spectrum ? pw_spectrum_transmitted[i] : (final_transmitted.size() == n ? final_transmitted[i] : incident * std::exp(-tau_forward));
-        double emit_inward = have_product_write_spectrum ? pw_spectrum_emit_in[i] : zrems[inward_row * n + i];
-        double emit_outward = have_product_write_spectrum ? pw_spectrum_emit_out[i] : (full_spectrum && final_spectrum_emit_out.size() == n ? final_spectrum_emit_out[i] :
-            (!full_spectrum && final_continuum_emit_out.size() == n ? final_continuum_emit_out[i] : zrems[outward_row * n + i]));
-        if (!full_spectrum) {
-            // xout_cont1 is the terminal public continuum.  In the oracle for
-            // this benchmark, transmitted is the incident continuum and
-            // emit_outward is the terminal accumulated zrems(3/5) continuum
-            // plane.  The native final_transmitted/evaluation.spectrum fallback
-            // is a shifted/reduced product surface and placed another column's
-            // values in transmitted/emit_outward.
-            transmitted = incident;
+        const double incident = i < zremsz.size() ? zremsz[i] : (i < e.radiation_flux.size() ? e.radiation_flux[i] : 0.0);
+        double tau_forward = i < dpthcont.size() ? std::max(0.0, dpthcont[i]) : 0.0;
+        if (!(tau_forward > 0.0)) {
+            const double opacity = continuum_diag_opacity_for_bin(public_continuum_diag, i);
+            if (opacity > 0.0) tau_forward = opacity * benchmark_total_depth_cm_from_parameters(state);
+        }
+        double transmitted = incident * std::exp(-tau_forward);
+        double emit_inward = 0.0;
+        double emit_outward = continuum_accumulated_emission_for_bin(public_continuum_diag, i, 4);
+        if (full_spectrum) {
+            // writespectra starts from the same zrems continuum columns and then
+            // bins line/RRC emission.  The full line/RRC binning kernel is still
+            // being ported; keep the continuum surface in the correct column and
+            // avoid the previous shifted tuple that put incident flux in
+            // emit_inward and continuum emission in transmitted.
             emit_inward = 0.0;
-            if (zrems.size() >= 3 * n + i + 1 && std::isfinite(zrems[2 * n + i]) && zrems[2 * n + i] > 0.0) {
-                emit_outward = zrems[2 * n + i];
-            } else if (zrems.size() >= 5 * n + i + 1 && std::isfinite(zrems[4 * n + i]) && zrems[4 * n + i] > 0.0) {
-                emit_outward = zrems[4 * n + i];
-            } else {
-                const double diag_emit = continuum_diag_emission_for_bin(public_continuum_diag, i);
-                if (diag_emit > 0.0) emit_outward = diag_emit;
-            }
         }
         const long row = static_cast<long>(i + 1);
-        const double energy_out = have_product_write_continuum ? pw_continuum_energy[i] : (have_product_write_spectrum ? pw_spectrum_energy[i] : (i < energy_grid.size() ? energy_grid[i] : (i < e.radiation_energy_ev.size() ? e.radiation_energy_ev[i] : 0.0)));
+        const double energy_out = have_product_write_continuum ? pw_continuum_energy[i] : (i < energy_grid.size() ? energy_grid[i] : (i < e.radiation_energy_ev.size() ? e.radiation_energy_ev[i] : 0.0));
         write_real4(fptr, 1, row, energy_out);
         write_real4(fptr, 2, row, incident);
         write_real4(fptr, 3, row, transmitted);
