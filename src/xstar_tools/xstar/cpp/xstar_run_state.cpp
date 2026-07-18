@@ -301,6 +301,7 @@ void load_exact_source_metadata(WholeRunAccumulatedState& state) {
         row.natural_rate_s = std::stod(value("natural_rate_s"));
         row.auger_width_ev = std::stod(value("auger_width_eV"));
         row.auger_rate_s = std::stod(value("auger_rate_s"));
+        row.source_transition = value("source_transition");
         state.line_identities.push_back(std::move(row));
     });
     state.rrc_identities.clear();

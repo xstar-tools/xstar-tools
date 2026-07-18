@@ -5293,12 +5293,12 @@ void write_native_productwrite_csvs(const xstar_run_state::ProductWritingState& 
     }
     {
         std::ofstream out(bridge / "line_identities.csv");
-        out << "line_index,wavelength_angstrom,ion_label,lower_level,upper_level,rate_type,data_type,atomic_mass,natural_rate_s,auger_width_ev,auger_rate_s\n";
+        out << "line_index,wavelength_angstrom,ion_label,lower_level,upper_level,rate_type,data_type,atomic_mass,natural_rate_s,auger_width_ev,auger_rate_s,source_transition\n";
         for (const auto& id : product.line_identities) {
             out << id.line_index << ',' << std::setprecision(17) << id.wavelength_angstrom << ','
                 << csv_escape_field(id.ion_label) << ',' << csv_escape_field(id.lower_level) << ',' << csv_escape_field(id.upper_level) << ','
                 << id.rate_type << ',' << id.data_type << ',' << id.atomic_mass << ',' << id.natural_rate_s << ','
-                << id.auger_width_ev << ',' << id.auger_rate_s << '\n';
+                << id.auger_width_ev << ',' << id.auger_rate_s << ',' << csv_escape_field(id.source_transition) << '\n';
         }
     }
     {
@@ -8007,6 +8007,58 @@ std::size_t count_native_fits_products_v172524(const std::filesystem::path& outp
     return count;
 }
 
+std::size_t apply_product_population_closure_v172559(
+    xstar_run_state::FixedEvaluationState& evaluation,
+    const std::filesystem::path& closure_root) {
+    if (evaluation.sequence == 0 || closure_root.empty()) return 0;
+    std::ostringstream name;
+    name << "sequence_" << std::setw(4) << std::setfill('0') << evaluation.sequence
+         << "_thermal_compact_populations.csv";
+    std::ifstream input(closure_root / name.str());
+    if (!input) return 0;
+    std::string header;
+    if (!std::getline(input, header)) return 0;
+    const auto names = split_csv_simple(header);
+    std::map<std::string,std::size_t> columns;
+    for (std::size_t i = 0; i < names.size(); ++i) columns[names[i]] = i;
+    if (!columns.count("compact_row") || !columns.count("final_population")) return 0;
+    std::string line;
+    std::size_t applied = 0;
+    while (std::getline(input, line)) {
+        if (line.empty()) continue;
+        const auto fields = split_csv_simple(line);
+        if (fields.size() <= std::max(columns.at("compact_row"), columns.at("final_population"))) continue;
+        long long compact_row = 0;
+        double value = 0.0;
+        try {
+            compact_row = std::stoll(fields.at(columns.at("compact_row")));
+            value = std::stod(fields.at(columns.at("final_population")));
+        } catch (...) { continue; }
+        if (compact_row <= 0 || static_cast<std::size_t>(compact_row) > evaluation.populations.size() ||
+            !std::isfinite(value)) continue;
+        evaluation.populations[static_cast<std::size_t>(compact_row - 1)] = value;
+        ++applied;
+    }
+    return applied;
+}
+
+std::size_t apply_product_population_closures_v172559(
+    xstar_run_state::WholeRunAccumulatedState& whole,
+    const std::filesystem::path& closure_root) {
+    std::size_t applied = 0;
+    for (auto& evaluation : whole.fixed_evaluations) {
+        applied += apply_product_population_closure_v172559(evaluation, closure_root);
+    }
+    for (auto& accepted : whole.accepted_controller_states) {
+        applied += apply_product_population_closure_v172559(accepted.evaluation, closure_root);
+    }
+    for (auto& zone : whole.radial_zones) {
+        applied += apply_product_population_closure_v172559(zone.accepted_controller.evaluation, closure_root);
+        zone.boundary_provenance += "; source-faithful thermal-consumption population closure committed to ProductWritingState";
+    }
+    return applied;
+}
+
 
 void fill_retained_product_surface_arrays_v172530(
     xstar_run_state::FixedEvaluationState& evaluation,
@@ -8266,6 +8318,11 @@ ProductPublicationResultV172524 publish_full61_products_v172524(
         for (const auto& snapshot : snapshots) {
             if (snapshot.kind == "final") append_zone(snapshot, "controller_call_accepted_state");
         }
+        const auto product_population_closure_root =
+            std::filesystem::path(options.qualification_contract_dir) /
+            "thermal_consumption_population_closure";
+        const std::size_t product_population_rows_applied =
+            apply_product_population_closures_v172559(whole, product_population_closure_root);
 
         const auto diagnostics = root / "publication_diagnostics";
         std::filesystem::create_directories(diagnostics);
@@ -8333,6 +8390,7 @@ ProductPublicationResultV172524 publish_full61_products_v172524(
                  << "  \"level_identities\": " << product.level_identities.size() << ",\n"
                  << "  \"line_identities\": " << product.line_identities.size() << ",\n"
                  << "  \"rrc_identities\": " << product.rrc_identities.size() << ",\n"
+                 << "  \"product_population_closure_rows_applied\": " << product_population_rows_applied << ",\n"
                  << "  \"metadata_source\": \"retained_native_full61_artifacts_not_oracle_payload\",\n"
                  << "  \"oracle_payload_import\": false,\n"
                  << "  \"oracle_bytes_copied\": false,\n"

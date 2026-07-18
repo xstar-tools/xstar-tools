@@ -8283,6 +8283,12 @@ std::vector<double> reference_energy_grid(const xstar_run_state::ProductWritingS
 std::size_t source_zone_index(const xstar_run_state::ProductWritingState& state,
                               std::size_t output_zone_index) {
     if (state.radial_zones.empty()) return 0;
+    // The product writer retains one controller seed followed by the four
+    // accepted call-final states (58,59,60,61).  Historical radial products
+    // publish 58,59,60,61 and then repeat the call-3 nonterminal boundary,
+    // not the terminal call-4 state.  This is the same HDU 6/7 ordering
+    // retained by the v15.9.26 ProductWritingState bridge.
+    if (state.radial_zones.size() >= 5u && output_zone_index == 4u) return 3u;
     return std::min(output_zone_index + 1, state.radial_zones.size() - 1);
 }
 

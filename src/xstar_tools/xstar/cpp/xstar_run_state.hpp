@@ -32,6 +32,7 @@ struct LineIdentityState {
     double natural_rate_s = 0.0;
     double auger_width_ev = 0.0;
     double auger_rate_s = 0.0;
+    std::string source_transition;
 };
 
 struct RrcIdentityState {

@@ -866,8 +866,6 @@ void append_native_detail_line_section(
         out << " print option:15\n detailed line radial surfaces unavailable.\n\n";
         return;
     }
-    // heatt accumulates the three physical shells.  The first XSTAR_RADIAL is
-    // the entry surface and the last is the repeated terminal surface.
     const std::vector<int> shell_hdus = radial_hdus.size() >= 5
         ? std::vector<int>{radial_hdus[1], radial_hdus[2], radial_hdus[3]}
         : std::vector<int>{radial_hdus[0], radial_hdus[1], radial_hdus[2]};
@@ -897,24 +895,76 @@ void append_native_detail_line_section(
         cion=column_number(df,"ion"), cl=column_number(df,"lower_level"),
         cu=column_number(df,"upper_level"), cti=column_number(df,"tau_in"),
         cto=column_number(df,"tau_out");
-    out << " print option:15\n line luminosities (erg/sec/10**38) and depths\n";
-    out << "  line, wavelength, ion, ref. lum.,trn. lum.,backward depth, forward depth\n";
+
+    struct NativeDetailLineLogRow {
+        double wavelength = 0.0;
+        std::string ion;
+        std::string lower;
+        std::string upper;
+        double reflected = 0.0;
+        double transmitted = 0.0;
+        double tau_in = 0.0;
+        double tau_out = 0.0;
+    };
+    std::map<long long, NativeDetailLineLogRow> by_index;
     for (long long row=1; row<=nr; ++row) {
         const std::size_t i=static_cast<std::size_t>(row-1);
+        NativeDetailLineLogRow item;
         const long long line_index = read_integer_cell(df,ci,row);
-        const auto* source_id = step_log_line_identity(state, line_index);
-        const std::string lower_label = source_id && !source_id->lower_level.empty()
-            ? source_id->lower_level : read_string_cell(df,cl,row);
-        const std::string upper_label = source_id && !source_id->upper_level.empty()
-            ? source_id->upper_level : read_string_cell(df,cu,row);
+        item.wavelength = read_double_cell(df,cw,row);
+        item.ion = read_string_cell(df,cion,row);
+        item.lower = read_string_cell(df,cl,row);
+        item.upper = read_string_cell(df,cu,row);
+        item.reflected = reflected[i];
+        item.transmitted = transmitted[i];
+        item.tau_in = read_double_cell(df,cti,row);
+        item.tau_out = read_double_cell(df,cto,row);
+        by_index.emplace(line_index, std::move(item));
+    }
+
+    std::vector<const xstar_run_state::LineIdentityState*> source_series;
+    source_series.reserve(state.line_identities.size());
+    for (const auto& id : state.line_identities) {
+        const bool active = id.ion_label.rfind("h_",0)==0 || id.ion_label.rfind("he_",0)==0 ||
+            id.ion_label.rfind("mg_",0)==0;
+        if (active) source_series.push_back(&id);
+    }
+    std::sort(source_series.begin(), source_series.end(), [](const auto* a, const auto* b) {
+        return a->line_index < b->line_index;
+    });
+    const bool have_full_source_series = source_series.size() > static_cast<std::size_t>(nr);
+
+    out << " print option:15\n line luminosities (erg/sec/10**38) and depths\n";
+    out << "  line, wavelength, ion, ref. lum.,trn. lum.,backward depth, forward depth\n";
+    auto emit = [&](long long line_index, const xstar_run_state::LineIdentityState* source_id,
+                    const NativeDetailLineLogRow* detail) {
+        const double wavelength = source_id ? source_id->wavelength_angstrom : (detail ? detail->wavelength : 0.0);
+        const std::string ion = source_id && !source_id->ion_label.empty() ? source_id->ion_label : (detail ? detail->ion : "unknown");
+        const std::string lower = source_id && !source_id->lower_level.empty() ? source_id->lower_level : (detail ? detail->lower : "unknown");
+        const std::string upper = source_id && !source_id->upper_level.empty() ? source_id->upper_level : (detail ? detail->upper : "unknown");
+        const std::string transition = source_id && !source_id->source_transition.empty()
+            ? source_id->source_transition : (lower + "-" + upper);
+        const double ref = detail ? detail->reflected : 0.0;
+        const double trn = detail ? detail->transmitted : 0.0;
+        const double backward = detail ? detail->tau_in : 0.0;
+        const double forward = detail ? detail->tau_out : 0.0;
         out << std::setw(10) << line_index
             << std::setw(13) << std::uppercase << std::scientific << std::setprecision(5)
-            << read_double_cell(df,cw,row) << " "
-            << std::left << std::setw(10) << read_string_cell(df,cion,row) << std::right
-            << std::setw(13) << reflected[i] << std::setw(13) << transmitted[i]
-            << std::setw(13) << read_double_cell(df,cti,row)
-            << std::setw(13) << read_double_cell(df,cto,row) << " "
-            << lower_label << "-" << upper_label << "\n";
+            << wavelength << " "
+            << std::left << std::setw(10) << ion << std::right
+            << std::setw(13) << ref << std::setw(13) << trn
+            << std::setw(13) << backward << std::setw(13) << forward << " "
+            << transition << "\n";
+    };
+    if (have_full_source_series) {
+        for (const auto* source_id : source_series) {
+            const auto found = by_index.find(source_id->line_index);
+            emit(source_id->line_index, source_id, found == by_index.end() ? nullptr : &found->second);
+        }
+    } else {
+        for (const auto& [line_index, detail] : by_index) {
+            emit(line_index, step_log_line_identity(state, line_index), &detail);
+        }
     }
     int cs=0; fits_close_file(df,&cs);
     out << "\n"; out.unsetf(std::ios::floatfield); out << std::setprecision(17);
