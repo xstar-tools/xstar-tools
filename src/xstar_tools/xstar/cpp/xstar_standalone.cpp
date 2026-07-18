@@ -4873,6 +4873,7 @@ xstar_run_state::FixedEvaluationState copy_real_native_snapshot(
     ws.tauc = source.tauc;
     ws.rccemis = source.rccemis;
     ws.opakc = source.opakc;
+    ws.opakcont = source.opakcont;
     ws.line_profile_workspace = source.line_profile_workspace;
     ws.native_line_count = source.native_line_count;
     ws.native_continuum_count = source.native_continuum_count;

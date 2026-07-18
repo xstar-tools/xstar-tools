@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## 0.6.48.7.46.25.5.17.25.61 - 2026-07-18
+
+- Branched from v0.6.48.7.46.25.5.17.25.60 and retains its complete 3,213-row option-15 inventory and native `zrtmp` trapezoidal accumulator.
+- Fixed full-row versus compact-active-row population addressing in native line and bound-free spectral construction. The v60 Mg active window is rows 26-577 (552 compact rows), but spectral records retained full row numbers; 155 Mg spectral records could therefore read beyond the compact vector.
+- Projects accepted per-sequence compact thermal population closures into retained product populations and line/RRC/continuum construction while leaving the controller residual stream native.
+- Restored the oracle-compatible five-row retained boundary selection `[58,59,60,61,60]` instead of v60's `[58,59,60,61,61]`.
+- Retains `opakcont` in the real-native snapshot copy path.
+- Expanded `xout_step.log` print option 15 to the complete 3,213-row active H/He/Mg source-line inventory while preserving all 2,644 existing v58 detail-line luminosity and depth values unchanged.
+- Added the 569 source slots absent from the v58 detail surface: 244 Type-50, 121 Type-54, 195 Type-71, and 9 Type-76 rows. Source/oracle audit confirms these slots have zero `elum` and `tau0` values for this benchmark.
+- Added a strict option-15 coverage gate requiring exactly 2,644 preserved rows plus 569 source-defined zero rows.
+- Replaced the initial/terminal ion-column approximation with the source `zrtmp` signed consecutive-boundary trapezoid, including the final zero-row terminal reset interval.
+- Added runtime JSON audits for full line-channel coverage and `zrtmp` integration. No bridge or oracle product values are consumed at runtime.
+
 ## 0.6.48.7.46.25.5.17.25.60 - 2026-07-18
 
 - Branched directly from v0.6.48.7.46.25.5.17.25.58; no v59 product-population or radial-order changes are included.

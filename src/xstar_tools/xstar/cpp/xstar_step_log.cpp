@@ -982,10 +982,10 @@ void append_native_detail_line_section(
          zero_by_type[50]==244 && zero_by_type[54]==121 &&
          zero_by_type[71]==195 && zero_by_type[76]==9);
 
-    std::ofstream audit(output_dir / "v048746255172560_full_line_channels_audit.json");
+    std::ofstream audit(output_dir / "v048746255172561_full_line_channels_audit.json");
     if (audit) {
         audit << "{\n"
-              << "  \"schema\": \"xstar-tools-v048746255172560-full-line-channels-v2\",\n"
+              << "  \"schema\": \"xstar-tools-v048746255172561-full-line-channels-v2\",\n"
               << "  \"source_line_rows\": " << ordered.size() << ",\n"
               << "  \"existing_v58_detail_rows_preserved\": " << preserved << ",\n"
               << "  \"source_defined_zero_rows_added\": " << source_defined_zero << ",\n"

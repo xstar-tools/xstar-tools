@@ -8283,6 +8283,13 @@ std::vector<double> reference_energy_grid(const xstar_run_state::ProductWritingS
 std::size_t source_zone_index(const xstar_run_state::ProductWritingState& state,
                               std::size_t output_zone_index) {
     if (state.radial_zones.empty()) return 0;
+    // The final public radial row is the post-terminal copy of the preceding
+    // accepted boundary. The v58/v60 min() fallback duplicated the last call,
+    // yielding [58,59,60,61,61] instead of [58,59,60,61,60].
+    if (output_zone_index + 1 >= state.radial_zones.size() &&
+        state.radial_zones.size() >= 2) {
+        return state.radial_zones.size() - 2;
+    }
     return std::min(output_zone_index + 1, state.radial_zones.size() - 1);
 }
 
@@ -10379,7 +10386,7 @@ void write_abundances(const std::filesystem::path& path,
     }
 
     {
-        std::ofstream audit(path.parent_path() / "v048746255172560_zrtmp_trapezoidal_audit.json");
+        std::ofstream audit(path.parent_path() / "v048746255172561_zrtmp_trapezoidal_audit.json");
         if (audit) {
             std::size_t positive_intervals = 0;
             std::size_t negative_intervals = 0;
@@ -10389,7 +10396,7 @@ void write_abundances(const std::filesystem::path& path,
                 if (std::isfinite(dr) && dr<0.0) ++negative_intervals;
             }
             audit << "{\n"
-                  << "  \"schema\": \"xstar-tools-v048746255172560-zrtmp-trapezoidal-v2\",\n"
+                  << "  \"schema\": \"xstar-tools-v048746255172561-zrtmp-trapezoidal-v2\",\n"
                   << "  \"radial_rows\": " << abundance_rows.size() << ",\n"
                   << "  \"positive_cumulative_depth_intervals\": " << positive_intervals << ",\n"
                   << "  \"negative_terminal_reset_intervals\": " << negative_intervals << ",\n"

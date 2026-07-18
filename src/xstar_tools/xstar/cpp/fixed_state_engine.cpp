@@ -1241,6 +1241,25 @@ struct ActiveElementView {
     int max_stage = 1;
 };
 
+// Spectral records retain source/full-element row numbers while the live
+// element solver works on a compact active-stage population vector. Translate
+// explicitly at every product/spectral consumer. Rows outside the active
+// window have source population zero; they must never index the compact vector.
+double active_population_for_full_row(
+    const ActiveElementView& active,
+    const std::vector<double>& populations,
+    int full_row
+) {
+    if (full_row < active.full_row_start || full_row > active.full_row_end) return 0.0;
+    const std::size_t compact_index =
+        static_cast<std::size_t>(full_row - active.full_row_start);
+    if (compact_index >= populations.size()) {
+        throw std::runtime_error("active spectral population row translation overflow");
+    }
+    const double value = populations[compact_index];
+    return std::isfinite(value) && value > 0.0 ? value : 0.0;
+}
+
 
 
 struct CanonicalThermalLedgerBuild {
@@ -6697,25 +6716,27 @@ bool native_bound_free_curve(const Program& program,
 void accumulate_native_bound_free_surface(const NativeBoundFreeCurve& curve,
                                           const EvaluatedRecord& evaluated,
                                           const ProgramRecord& record,
-                                          const ElementProgram& element,
+                                          const ActiveElementView& active,
                                           const std::vector<double>& populations,
                                           const xstar_fixed_state_input_v1& input,
                                           std::vector<double>& opacity_cm1,
                                           std::vector<double>& rccemis) {
     const std::size_t n = input.radiation_bin_count;
     if (n < 2 || opacity_cm1.size() != n || rccemis.size() != 2 * n ||
-        record.lower_row < 1 || record.upper_row < 1 ||
-        static_cast<std::size_t>(record.lower_row) > populations.size() ||
-        static_cast<std::size_t>(record.upper_row) > populations.size()) return;
-    const double lower_abundance = std::max(0.0, populations[static_cast<std::size_t>(record.lower_row - 1)]) * element.abundance;
-    const double upper_abundance = std::max(0.0, populations[static_cast<std::size_t>(record.upper_row - 1)]) * element.abundance;
+        record.lower_row < 1 || record.upper_row < 1) return;
+    const double lower_abundance =
+        active_population_for_full_row(active, populations, record.lower_row) *
+        active.element.abundance;
+    const double upper_abundance =
+        active_population_for_full_row(active, populations, record.upper_row) *
+        active.element.abundance;
     const double density = std::max(0.0, input.hydrogen_density_cm3);
     const double kt_ev = xstar_constants::kModernBoltzmannEvPerK * input.temperature_k;
     const bool type99 = record.opcode == XSTAR_FIXED_OPCODE_TYPE99_SUPERLEVEL_BOUND_FREE;
     // The H/He Type-99 superlevel records contribute rate/cooling terms but the
     // legacy phint53/fstepr3 surfaces do not publish their threshold opacity.
     // Including them was the source of the ~15x low-energy opakc excess in v51.
-    const bool publish_type99_opacity = !(type99 && element.element_z <= 2);
+    const bool publish_type99_opacity = !(type99 && active.element.element_z <= 2);
     const Type53SourceShadow* shadow = nullptr;
     if (record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE) shadow = &evaluated.type49_shadow;
     else if (record.opcode == XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE) shadow = &evaluated.type53_shadow;
@@ -7485,6 +7506,20 @@ int run_impl(
         thermal_population_stream.insert(
             thermal_population_stream.end(), thermal_populations.begin(), thermal_populations.end());
 
+        // Product-state closure: the per-sequence compact population contract
+        // was previously consumed only by the thermal residual. Use that same
+        // accepted compact state for retained populations and all
+        // spectral/opacity construction, without changing the controller's
+        // native ion-balance residual stream.
+        std::vector<double> product_populations = buffers.populations;
+        if (element_thermal_compact_closure_applied) {
+            if (thermal_populations.size() != product_populations.size()) {
+                throw std::runtime_error(
+                    "thermal compact population closure/product population width mismatch");
+            }
+            product_populations = thermal_populations;
+        }
+
         double computed_element_heating = 0.0;
         double computed_element_cooling = 0.0;
         double computed_element_heating2 = 0.0;
@@ -7645,8 +7680,8 @@ int run_impl(
         }
 
         std::vector<double> full_populations(static_cast<std::size_t>(element.n_rows), 0.0);
-        for (std::size_t row = 0; row < buffers.populations.size(); ++row) {
-            full_populations[static_cast<std::size_t>(active.full_row_start - 1) + row] = buffers.populations[row];
+        for (std::size_t row = 0; row < product_populations.size(); ++row) {
+            full_populations[static_cast<std::size_t>(active.full_row_start - 1) + row] = product_populations[row];
         }
         all_populations.insert(all_populations.end(), full_populations.begin(), full_populations.end());
         fixed_full_population_offset += full_populations.size();
@@ -7798,7 +7833,7 @@ int run_impl(
             NativeBoundFreeCurve curve;
             if (!native_bound_free_curve(ctx.program, *evaluated_records[k], evaluated[k], curve)) continue;
             accumulate_native_bound_free_surface(
-                curve, evaluated[k], *evaluated_records[k], element, buffers.populations, input,
+                curve, evaluated[k], *evaluated_records[k], active, product_populations, input,
                 native_bound_free_opacity, native_rrc_continuum_emission);
         }
 
@@ -7824,8 +7859,12 @@ int run_impl(
             }
             sc.ptmp1 = 1.0;
             sc.ptmp2 = 1.0;
-            sc.abundance_lower = buffers.populations[static_cast<std::size_t>(rec.lower_row - 1)] * element.abundance;
-            sc.abundance_upper = buffers.populations[static_cast<std::size_t>(rec.upper_row - 1)] * element.abundance;
+            sc.abundance_lower =
+                active_population_for_full_row(active, product_populations, rec.lower_row) *
+                element.abundance;
+            sc.abundance_upper =
+                active_population_for_full_row(active, product_populations, rec.upper_row) *
+                element.abundance;
             sc.hydrogen_density = input.hydrogen_density_cm3;
             sc.ans1 = rec.ans1; sc.ans2 = rec.ans2; sc.ans3 = rec.ans3; sc.ans4 = rec.ans4;
             sc.opakab = evaluated[k].opakab;

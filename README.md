@@ -1,10 +1,8 @@
-# xstar_tools 0.6.48.7.46.25.5.17.25.16
+# xstar_tools 0.6.48.7.46.25.5.17.25.61
 
-This release is a runtime hotfix for the v17.25.12 sequence-23 call-3 branch thermal boundary closure.  It removes the obsolete dependency that required fixed-state parity closure whenever thermal-component parity closure was enabled.  The component closure is now explicitly a thermal residual-consumption boundary closure and does not replace raw native solve populations or committed population state.
+This candidate fixes full-element-row versus compact-active-row population projection in line and bound-free spectral construction, restores the retained radial sequence `[58,59,60,61,60]`, and preserves v60's complete option-15 inventory and native `zrtmp` accumulator.
 
-# xstar_tools 0.6.48.7.46.25.5.17.25.7
-
-# xstar_tools 0.6.48.7.46.25.5.17.25.7
+See `V048746255172561_ACTIVE_POPULATION_SPECTRAL_PROJECTION.md` and `V60_ORACLE_FITS_XOUT_STEP_COMPARISON_AND_V61_FIX.md`.
 
 See `V04874625517255_SEQUENCE16_MG_RESIDUAL_CLOSURE.md` and `v25517255_sequence16_mg_residual_closure_report.md`.
 
