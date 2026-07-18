@@ -1,5 +1,25 @@
 # CHANGELOG
 
+# v0.6.48.7.46.25.5.17.25.68 - 2026-07-18
+
+- Correct production `atdb.fits` packed-column handling for FITS variable-length arrays.
+- Use CFITSIO descriptors to obtain the real heap payload length.
+- Read POINTERS, REALS, INTEGERS, and CHARS through a row-aware global packed-vector abstraction.
+- Retain fixed-width synthetic ATDB compatibility and fail-closed span validation.
+- Add fixed-versus-variable ATDB layout equivalence regression coverage.
+
+## Previous v67 changes
+- Implemented a CFITSIO-backed in-memory packed-ATDB reader and source-order pointer reconstruction for arbitrary active elements selected from `physical_abundances` or the standard abundance keys.
+- Added the documented `atdb.fits` and `coheat.dat` search orders. Public production rejects `--atomic-db`; atomic-data selection comes from `parameters.json` or the search order.
+- Added the fixed-state in-memory program-bundle ABI so no lowered-case directory is required.
+- Derived element, compact-row, level, line, RRC, and complete historical parameter metadata directly in memory.
+- Added a qualification-contract-free radial controller and accepted-boundary product-state retention.
+- Added source `ener` plus built-in power-law (`ispec4`/`ispecgg`) radiation construction; benchmark reference-radiation files are not auto-consumed by the v67 production path.
+- Default `run-production` writes exactly nine FITS files and `xout_step.log`, creating no diagnostic or benchmark artifacts.
+- Added `none`, `summary`, `failure`, and `full` profiles plus independent enable/disable switches for lowered-case exports, runtime metadata, checkpoints, audits, qualification summaries, trajectory diagnostics, benchmark diagnostics, and timing summaries.
+- Added synthetic packed-ATDB regression coverage for H, He, H+He, Mg, Type-50 lines, and Type-53 RRCs.
+- Kept publication fail-closed when atomic data are missing, an active data type is unsupported, controller convergence fails, or any required product workspace is incomplete.
+
 # v0.6.48.7.46.25.5.17.25.67 - 2026-07-18
 
 - Implemented a CFITSIO-backed in-memory packed-ATDB reader and source-order pointer reconstruction for arbitrary active elements selected from `physical_abundances` or the standard abundance keys.

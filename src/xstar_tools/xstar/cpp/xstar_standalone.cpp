@@ -9567,7 +9567,7 @@ void write_standalone_diagnostics_v67(
     if (selection.runtime_metadata) {
         std::ofstream f(root / "runtime_metadata.json");
         f << "{\n"
-          << "  \"schema\": \"xstar-tools-v67-standalone-runtime-metadata-v1\",\n"
+          << "  \"schema\": \"xstar-tools-v68-standalone-runtime-metadata-v1\",\n"
           << "  \"release\": \"" << json_escape_v67(product.release) << "\",\n"
           << "  \"profile\": \"" << json_escape_v67(profile) << "\",\n"
           << "  \"parameters\": \"" << json_escape_v67(params.source_path.string()) << "\",\n"
@@ -9613,7 +9613,7 @@ void write_standalone_diagnostics_v67(
         {
             std::ofstream f(dir / "atdb_lowering_audit.json");
             f << "{\n"
-              << "  \"schema\": \"xstar-tools-v67-atdb-lowering-audit-v1\",\n"
+              << "  \"schema\": \"xstar-tools-v68-atdb-lowering-audit-v1\",\n"
               << "  \"active_atdb_lowered\": true,\n"
               << "  \"topology_record_count\": " << program.topology_record_count << ",\n"
               << "  \"unsupported_record_count\": " << program.unsupported_record_count << ",\n"
@@ -9628,7 +9628,7 @@ void write_standalone_diagnostics_v67(
         {
             std::ofstream f(dir / "product_state_audit.json");
             f << "{\n"
-              << "  \"schema\": \"xstar-tools-v67-product-state-audit-v1\",\n"
+              << "  \"schema\": \"xstar-tools-v68-product-state-audit-v1\",\n"
               << "  \"product_state_complete\": " << (product.product_state_complete ? "true" : "false") << ",\n"
               << "  \"product_schema_complete\": " << (product.product_schema_complete ? "true" : "false") << ",\n"
               << "  \"radial_state_complete\": " << (product.radial_state_complete ? "true" : "false") << ",\n"
@@ -9647,7 +9647,7 @@ void write_standalone_diagnostics_v67(
         {
             std::ofstream f(dir / "controller_summary.json");
             f << "{\n"
-              << "  \"schema\": \"xstar-tools-v67-qualification-free-controller-summary-v1\",\n"
+              << "  \"schema\": \"xstar-tools-v68-qualification-free-controller-summary-v1\",\n"
               << "  \"qualification_contracts_used\": false,\n"
               << "  \"controller_evaluations\": " << evaluations << ",\n"
               << "  \"accepted_radial_boundaries\": " << product.radial_zones.size() << ",\n"
@@ -9937,24 +9937,25 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
 }
 
 int command_standalone_capabilities_v67() {
-    std::cout << "V048746255172567_STANDALONE_EXECUTABLE=YES\n"
-              << "V048746255172567_TWO_ARGUMENT_INTERFACE=YES\n"
-              << "V048746255172567_FILE_SILENT_POLICY=IMPLEMENTED\n"
-              << "V048746255172567_ATDB_SEARCH_ORDER=IMPLEMENTED\n"
-              << "V048746255172567_CXX_IN_MEMORY_ATDB_LOWERER=IMPLEMENTED\n"
-              << "V048746255172567_CXX_PRODUCT_METADATA_DERIVATION=IMPLEMENTED\n"
-              << "V048746255172567_QUALIFICATION_FREE_CONTROLLER_TRAJECTORY=IMPLEMENTED\n"
-              << "V048746255172567_ATDB_SEARCH_ORDER=parameters_atomic_database,parameters_atomic_db,parameters_atdb,parameters_sibling,XSTAR_ATOMIC_DB,XSTAR_ATDB_FITS,XSTAR_DATA,XSTAR_HOME,executable_relative,package_relative,current_directory\n"
-              << "V048746255172567_COHEAT_SEARCH_ORDER=parameters_coheat_file,parameters_coheat,parameters_sibling,XSTAR_COHEAT,XSTAR_DATA,XSTAR_HOME,executable_relative,package_relative,current_directory\n"
-              << "V048746255172567_SOURCE_POWERLAW_GRID=ENER_ISPEC4_ISPECGG_EQUIVALENT\n"
-              << "V048746255172567_ARTIFACT_PROFILES=none,summary,failure,full\n"
-              << "V048746255172567_ARTIFACT_CLASS_OVERRIDES=lowered_case,runtime_metadata,checkpoints,audits,qualification_summaries,trajectory_diagnostics,benchmark_diagnostics,timing_summary\n"
-              << "V048746255172567_RESULT=ACCEPT_CAPABILITY_IMPLEMENTATION\n";
+    std::cout << "V048746255172568_STANDALONE_EXECUTABLE=YES\n"
+              << "V048746255172568_TWO_ARGUMENT_INTERFACE=YES\n"
+              << "V048746255172568_FILE_SILENT_POLICY=IMPLEMENTED\n"
+              << "V048746255172568_ATDB_SEARCH_ORDER=IMPLEMENTED\n"
+              << "V048746255172568_CXX_IN_MEMORY_ATDB_LOWERER=IMPLEMENTED\n"
+              << "V048746255172568_ATDB_PACKED_COLUMN_LAYOUTS=FIXED_AND_VARIABLE_LENGTH\n"
+              << "V048746255172568_CXX_PRODUCT_METADATA_DERIVATION=IMPLEMENTED\n"
+              << "V048746255172568_QUALIFICATION_FREE_CONTROLLER_TRAJECTORY=IMPLEMENTED\n"
+              << "V048746255172568_ATDB_SEARCH_ORDER=parameters_atomic_database,parameters_atomic_db,parameters_atdb,parameters_sibling,XSTAR_ATOMIC_DB,XSTAR_ATDB_FITS,XSTAR_DATA,XSTAR_HOME,executable_relative,package_relative,current_directory\n"
+              << "V048746255172568_COHEAT_SEARCH_ORDER=parameters_coheat_file,parameters_coheat,parameters_sibling,XSTAR_COHEAT,XSTAR_DATA,XSTAR_HOME,executable_relative,package_relative,current_directory\n"
+              << "V048746255172568_SOURCE_POWERLAW_GRID=ENER_ISPEC4_ISPECGG_EQUIVALENT\n"
+              << "V048746255172568_ARTIFACT_PROFILES=none,summary,failure,full\n"
+              << "V048746255172568_ARTIFACT_CLASS_OVERRIDES=lowered_case,runtime_metadata,checkpoints,audits,qualification_summaries,trajectory_diagnostics,benchmark_diagnostics,timing_summary\n"
+              << "V048746255172568_RESULT=ACCEPT_CAPABILITY_IMPLEMENTATION\n";
     return 0;
 }
 
 int command_run_standalone_production_v67(const Options& options, const std::filesystem::path& executable_path) {
-    const std::string prefix = "V048746255172567_";
+    const std::string prefix = "V048746255172568_";
     const std::string artifact_profile = options.artifact_profile_explicit ? options.artifact_profile : "none";
     const auto artifacts = artifact_selection_v67(options, artifact_profile);
     if (options.parameters_path.empty() || options.output_dir.empty()) {

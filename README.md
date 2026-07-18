@@ -1,4 +1,4 @@
-## v67 general standalone C++ production
+## v68 general standalone C++ production
 
 Build and run:
 
@@ -16,6 +16,8 @@ The default artifact profile is `none`: the output directory contains only nine 
 Use `--artifact-profile summary|failure|full` for diagnostics. Each artifact class can also be independently controlled with `--emit-*` or `--no-emit-*` switches for `lowered-case`, `runtime-metadata`, `checkpoints`, `audits`, `qualification-summaries`, `trajectory-diagnostics`, `benchmark-diagnostics`, and `timing-summary`.
 
 The public path fails before publication if ATDB lowering, metadata derivation, controller convergence, accepted radial boundaries, or source workspaces are incomplete.
+
+v68 reads both fixed-width packed FITS columns and production-style `P`/`Q` variable-length packed columns. POINTERS, REALS, INTEGERS, and CHARS are addressed as global logical vectors even when their payload is stored in the FITS heap or split across rows.
 
 ## v66 standalone production status
 

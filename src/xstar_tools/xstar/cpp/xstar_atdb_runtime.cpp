@@ -148,37 +148,31 @@ public:
     std::vector<double> reals(int rec) {
         const auto& h = header(rec);
         if (h.nreal <= 0) return {};
-        move(reals_hdu_);
         std::vector<double> out(static_cast<std::size_t>(h.nreal));
-        int status = 0, anynul = 0;
-        fits_read_col(file_, TDOUBLE, 1, 1, h.real_ptr, h.nreal, nullptr, out.data(), &anynul, &status);
-        fits_check(status, "read ATDB REALS record " + std::to_string(rec));
+        read_column_slice(
+            reals_hdu_, TDOUBLE, h.real_ptr, h.nreal, out.data(),
+            "read ATDB REALS record " + std::to_string(rec)
+        );
         return out;
     }
     std::vector<std::int64_t> ints(int rec) {
         const auto& h = header(rec);
         if (h.nint <= 0) return {};
-        move(integers_hdu_);
         std::vector<long long> temp(static_cast<std::size_t>(h.nint));
-        int status = 0, anynul = 0;
-        fits_read_col(file_, TLONGLONG, 1, 1, h.int_ptr, h.nint, nullptr, temp.data(), &anynul, &status);
-        fits_check(status, "read ATDB INTEGERS record " + std::to_string(rec));
+        read_column_slice(
+            integers_hdu_, TLONGLONG, h.int_ptr, h.nint, temp.data(),
+            "read ATDB INTEGERS record " + std::to_string(rec)
+        );
         return std::vector<std::int64_t>(temp.begin(), temp.end());
     }
     std::string chars(int rec) {
         const auto& h = header(rec);
         if (h.nchar <= 0) return {};
-        move(chars_hdu_);
         std::vector<unsigned char> bytes(static_cast<std::size_t>(h.nchar));
-        int status = 0, anynul = 0;
-        fits_read_col(file_, TBYTE, 1, 1, h.char_ptr, h.nchar, nullptr, bytes.data(), &anynul, &status);
-        if (status) {
-            status = 0;
-            std::vector<char> signed_bytes(static_cast<std::size_t>(h.nchar));
-            fits_read_col(file_, TSBYTE, 1, 1, h.char_ptr, h.nchar, nullptr, signed_bytes.data(), &anynul, &status);
-            fits_check(status, "read ATDB CHARS record " + std::to_string(rec));
-            return trim(std::string(signed_bytes.begin(), signed_bytes.end()));
-        }
+        read_column_slice(
+            chars_hdu_, TBYTE, h.char_ptr, h.nchar, bytes.data(),
+            "read ATDB CHARS record " + std::to_string(rec)
+        );
         return trim(std::string(bytes.begin(), bytes.end()));
     }
     int first_int(int rec, int fallback = 0) {
@@ -217,27 +211,111 @@ private:
         fits_check(status, "read ATDB LENGTH");
         return value;
     }
-    long long column_repeat(int hdu) {
+    struct ColumnLayout {
+        int typecode = 0;
+        long long repeat = 0;
+        long long width = 0;
+        long long rows = 0;
+        bool variable = false;
+    };
+    ColumnLayout column_layout(int hdu) {
         move(hdu);
-        int status = 0, typecode = 0;
-        long repeat = 0, width = 0;
-        fits_get_coltype(file_, 1, &typecode, &repeat, &width, &status);
+        ColumnLayout out;
+        int status = 0;
+        fits_get_coltypell(file_, 1, &out.typecode, &out.repeat, &out.width, &status);
         fits_check(status, "read ATDB column type");
-        return repeat;
+        fits_get_num_rowsll(file_, &out.rows, &status);
+        fits_check(status, "read ATDB row count");
+        out.variable = out.typecode < 0;
+        if (out.rows <= 0) throw std::runtime_error("ATDB packed column has no rows");
+        if (!out.variable && out.repeat <= 0) throw std::runtime_error("ATDB packed column repeat is not positive");
+        return out;
+    }
+    long long row_element_count(int hdu, const ColumnLayout& layout, long long row) {
+        if (!layout.variable) return layout.repeat;
+        move(hdu);
+        int status = 0;
+        long long length = 0, heapaddr = 0;
+        fits_read_descriptll(file_, 1, row, &length, &heapaddr, &status);
+        fits_check(status, "read ATDB variable-length descriptor");
+        if (length < 0) throw std::runtime_error("ATDB variable-length descriptor is negative");
+        return length;
+    }
+    long long column_element_count(int hdu, const ColumnLayout& layout) {
+        long long total = 0;
+        for (long long row = 1; row <= layout.rows; ++row) {
+            const long long count = row_element_count(hdu, layout, row);
+            if (count > std::numeric_limits<long long>::max() - total)
+                throw std::runtime_error("ATDB packed column length overflow");
+            total += count;
+        }
+        return total;
+    }
+    template <typename T>
+    void read_column_slice(
+        int hdu,
+        int datatype,
+        long long first_element,
+        long long count,
+        T* destination,
+        const std::string& context
+    ) {
+        if (count < 0 || first_element <= 0) throw std::runtime_error(context + ": invalid packed-vector span");
+        if (count == 0) return;
+        const ColumnLayout layout = column_layout(hdu);
+        const long long available = column_element_count(hdu, layout);
+        if (first_element - 1 > available || count > available - (first_element - 1)) {
+            throw std::runtime_error(
+                context + ": packed-vector span " + std::to_string(first_element) + "+" +
+                std::to_string(count) + " exceeds available length " + std::to_string(available)
+            );
+        }
+        long long logical_start = 1;
+        long long remaining = count;
+        long long written = 0;
+        for (long long row = 1; row <= layout.rows && remaining > 0; ++row) {
+            const long long row_count = row_element_count(hdu, layout, row);
+            const long long logical_stop = logical_start + row_count;
+            if (first_element >= logical_stop) {
+                logical_start = logical_stop;
+                continue;
+            }
+            const long long offset = std::max<long long>(0, first_element - logical_start);
+            const long long take = std::min(remaining, row_count - offset);
+            move(hdu);
+            int status = 0, anynul = 0;
+            fits_read_col(
+                file_, datatype, 1, row, offset + 1, take, nullptr,
+                destination + written, &anynul, &status
+            );
+            fits_check(status, context);
+            written += take;
+            remaining -= take;
+            first_element += take;
+            logical_start = logical_stop;
+        }
+        if (remaining != 0) throw std::runtime_error(context + ": short packed-vector read");
     }
     void read_headers() {
         long long nrecords = length_keyword(pointers_hdu_);
-        const long long repeat = column_repeat(pointers_hdu_);
+        const ColumnLayout layout = column_layout(pointers_hdu_);
+        const long long available = column_element_count(pointers_hdu_, layout);
         if (nrecords <= 0) {
-            if (repeat <= 0 || repeat % 10 != 0) throw std::runtime_error("ATDB POINTERS repeat is not divisible by 10");
-            nrecords = repeat / 10;
+            if (available <= 0 || available % 10 != 0)
+                throw std::runtime_error("ATDB POINTERS length is not divisible by 10");
+            nrecords = available / 10;
         }
-        if (repeat < 10*nrecords) throw std::runtime_error("ATDB POINTERS column shorter than LENGTH");
-        move(pointers_hdu_);
-        std::vector<long long> packed(static_cast<std::size_t>(10*nrecords));
-        int status = 0, anynul = 0;
-        fits_read_col(file_, TLONGLONG, 1, 1, 1, 10*nrecords, nullptr, packed.data(), &anynul, &status);
-        fits_check(status, "read ATDB POINTERS");
+        const long long required = 10 * nrecords;
+        if (required <= 0 || available < required) {
+            throw std::runtime_error(
+                "ATDB POINTERS payload shorter than 10*LENGTH: available=" +
+                std::to_string(available) + " required=" + std::to_string(required)
+            );
+        }
+        std::vector<long long> packed(static_cast<std::size_t>(required));
+        read_column_slice(
+            pointers_hdu_, TLONGLONG, 1, required, packed.data(), "read ATDB POINTERS"
+        );
         headers_.resize(static_cast<std::size_t>(nrecords)+1);
         for (long long r=1; r<=nrecords; ++r) {
             const auto i = static_cast<std::size_t>(10*(r-1));
@@ -248,6 +326,9 @@ private:
             h.nchar=static_cast<int>(packed[i+6]); h.real_ptr=packed[i+7];
             h.int_ptr=packed[i+8]; h.char_ptr=packed[i+9];
             if (h.nreal < 0 || h.nint < 0 || h.nchar < 0) throw std::runtime_error("ATDB negative record span");
+            if ((h.nreal > 0 && h.real_ptr <= 0) || (h.nint > 0 && h.int_ptr <= 0) ||
+                (h.nchar > 0 && h.char_ptr <= 0))
+                throw std::runtime_error("ATDB positive record span has non-positive packed pointer");
             headers_[static_cast<std::size_t>(r)] = h;
         }
     }
