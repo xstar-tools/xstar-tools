@@ -8283,14 +8283,10 @@ std::vector<double> reference_energy_grid(const xstar_run_state::ProductWritingS
 std::size_t source_zone_index(const xstar_run_state::ProductWritingState& state,
                               std::size_t output_zone_index) {
     if (state.radial_zones.empty()) return 0;
-    // The final public radial row is the post-terminal copy of the preceding
-    // accepted boundary. The v58/v60 min() fallback duplicated the last call,
-    // yielding [58,59,60,61,61] instead of [58,59,60,61,60].
-    if (output_zone_index + 1 >= state.radial_zones.size() &&
-        state.radial_zones.size() >= 2) {
-        return state.radial_zones.size() - 2;
-    }
-    return std::min(output_zone_index + 1, state.radial_zones.size() - 1);
+    // v63 retains the real pprint(12) boundary events in publication order,
+    // including the terminal reset event. Writers therefore consume the event
+    // directly and never select source checkpoints by a hard-coded sequence.
+    return std::min(output_zone_index, state.radial_zones.size() - 1u);
 }
 
 std::size_t detail_terminal_bridge_hdu_number(std::size_t hdu_number) {
@@ -9187,6 +9183,7 @@ void write_line_detail(const std::filesystem::path& path,
         const std::size_t sz = source_zone_index(state, z);
         const auto& zone = state.radial_zones[sz];
         const auto& evaluation = zone.accepted_controller.evaluation;
+        const auto& retained_line_ws = evaluation.source_workspace;
         const std::size_t hdu_number = z + 3;
         const auto pw_line_index = optional_bridge_array_for_hdu(state, "product_write_detail_line_index", hdu_number);
         const auto pw_line_emis_in = optional_bridge_array_for_hdu(state, "product_write_detail_line_emis_inward", hdu_number, pw_line_index.size());
@@ -9273,6 +9270,25 @@ void write_line_detail(const std::filesystem::path& path,
                 // remaining zero-valued cells.
                 r = merged_line_row(found_diag->second, &base);
             }
+            bool retained_line_tau = false;
+            const std::size_t retained_line_slot = label.index > 0 ? static_cast<std::size_t>(label.index) : 0u;
+            const std::size_t retained_rcem_stride = retained_line_ws.rcem.size() / 2u;
+            const std::size_t retained_tau_stride = retained_line_ws.tau0.size() / 2u;
+            if (retained_line_slot > 0u && retained_line_slot < retained_line_ws.oplin.size()) {
+                r.opacity = finite_or_zero(retained_line_ws.oplin[retained_line_slot]);
+            }
+            if (retained_line_slot > 0u && retained_rcem_stride > retained_line_slot &&
+                retained_line_ws.rcem.size() >= 2u * retained_rcem_stride) {
+                r.emis_in = finite_or_zero(retained_line_ws.rcem[retained_line_slot]);
+                r.emis_out = finite_or_zero(retained_line_ws.rcem[retained_rcem_stride + retained_line_slot]);
+            }
+            if (retained_line_slot > 0u && retained_tau_stride > retained_line_slot &&
+                retained_line_ws.tau0.size() >= 2u * retained_tau_stride &&
+                retained_line_ws.line_tau_workspace_exact) {
+                r.tau_in = finite_or_zero(retained_line_ws.tau0[retained_line_slot]);
+                r.tau_out = finite_or_zero(retained_line_ws.tau0[retained_tau_stride + retained_line_slot]);
+                retained_line_tau = true;
+            }
             const auto found_pw = pw_line_by_index.find(label.index);
             if (state.backend.find("native") == std::string::npos && found_pw != pw_line_by_index.end()) {
                 const std::size_t pi = found_pw->second;
@@ -9292,15 +9308,13 @@ void write_line_detail(const std::filesystem::path& path,
             if (!std::isfinite(r.opacity)) r.opacity = 0.0;
             if (!std::isfinite(r.tau_in)) { r.tau_in = 0.0; ++audit.tau_in_nulls_prevented; }
             if (!std::isfinite(r.tau_out)) { r.tau_out = 0.0; ++audit.tau_out_nulls_prevented; }
-            if (line_shell_depth_cm > 0.0 && r.opacity != 0.0) {
-                cumulative_line_tau_in[label.index] += std::max(r.opacity, 0.0) * line_shell_depth_cm;
+            if (!retained_line_tau) {
+                if (line_shell_depth_cm > 0.0 && r.opacity != 0.0) {
+                    cumulative_line_tau_in[label.index] += std::max(r.opacity, 0.0) * line_shell_depth_cm;
+                }
+                r.tau_in = cumulative_line_tau_in[label.index];
+                if (r.tau_in != 0.0) ++audit.tau_in_depth_fallback;
             }
-            // The exact 2644-row product-write branch returned above.  This
-            // fallback branch therefore follows heatt shell accumulation even
-            // when compact product-write arrays are present but contain zero
-            // tau values.
-            r.tau_in = cumulative_line_tau_in[label.index];
-            if (r.tau_in != 0.0) ++audit.tau_in_depth_fallback;
             if (r.emis_out != 0.0) ++audit.emis_outward_nonzero;
             if (r.opacity != 0.0) ++audit.opacity_nonzero;
             if (r.tau_in != 0.0) ++audit.tau_in_nonzero;
@@ -9593,6 +9607,34 @@ void write_rrc_detail(const std::filesystem::path& path,
             write_string(fptr, 4, row, oracle_ion_label(label.ion));
             write_string(fptr, 5, row, label.lower_level);
             write_string(fptr, 6, row, label.upper_level);
+            bool retained_rrc_tau = false;
+            const std::size_t source_continuum_slot = label.index > 0
+                ? static_cast<std::size_t>(label.index) : 0u;
+            const std::size_t retained_cemab_stride = ws.cemab.size() / 2u;
+            const std::size_t retained_tauc_stride = ws.tauc.size() / 2u;
+            if (source_continuum_slot > 0u && retained_cemab_stride > source_continuum_slot &&
+                ws.cemab.size() >= 2u * retained_cemab_stride) {
+                r.emis_in = std::isfinite(ws.cemab[source_continuum_slot])
+                    ? ws.cemab[source_continuum_slot] : 0.0;
+                r.emis_out = std::isfinite(ws.cemab[retained_cemab_stride + source_continuum_slot])
+                    ? ws.cemab[retained_cemab_stride + source_continuum_slot] : 0.0;
+            }
+            if (source_continuum_slot > 0u && source_continuum_slot < ws.cabab.size() &&
+                std::isfinite(ws.cabab[source_continuum_slot])) {
+                r.absorption = std::max(0.0, ws.cabab[source_continuum_slot]);
+            }
+            if (source_continuum_slot > 0u && source_continuum_slot < ws.opakab.size() &&
+                std::isfinite(ws.opakab[source_continuum_slot])) {
+                r.opacity = std::max(0.0, ws.opakab[source_continuum_slot]);
+            }
+            if (source_continuum_slot > 0u && retained_tauc_stride > source_continuum_slot &&
+                ws.tauc.size() >= 2u * retained_tauc_stride && ws.rrc_tau_workspace_exact) {
+                r.tau_in = std::isfinite(ws.tauc[source_continuum_slot])
+                    ? ws.tauc[source_continuum_slot] : 0.0;
+                r.tau_out = std::isfinite(ws.tauc[retained_tauc_stride + source_continuum_slot])
+                    ? ws.tauc[retained_tauc_stride + source_continuum_slot] : 0.0;
+                retained_rrc_tau = true;
+            }
             const auto found_pw_rrc = pw_rrc_by_index.find(label.index);
             if (state.backend.find("native") == std::string::npos && found_pw_rrc != pw_rrc_by_index.end()) {
                 const std::size_t pi = found_pw_rrc->second;
@@ -9613,26 +9655,25 @@ void write_rrc_detail(const std::filesystem::path& path,
             // separately matched ordinal and left false opacity support in H
             // rows 2--4.  For fstepr3 columns 9/10, prefer the retained cabab
             // and opakab slots addressed by the published RRC index.
-            const std::size_t source_continuum_slot = label.index > 0
-                ? static_cast<std::size_t>(label.index) : 0u;
-            if (state.backend.find("native") == std::string::npos &&
-                source_continuum_slot < ws.cabab.size() &&
+            if (source_continuum_slot < ws.cabab.size() &&
                 std::isfinite(ws.cabab[source_continuum_slot])) {
                 r.absorption = std::max(0.0, ws.cabab[source_continuum_slot]);
             }
-            if (state.backend.find("native") == std::string::npos &&
-                source_continuum_slot < ws.opakab.size() &&
+            if (source_continuum_slot < ws.opakab.size() &&
                 std::isfinite(ws.opakab[source_continuum_slot])) {
                 r.opacity = std::max(0.0, ws.opakab[source_continuum_slot]);
             }
             r.opacity = std::max(0.0, r.opacity);
             r.absorption = std::max(0.0, r.absorption);
             double tau_out = std::isfinite(r.tau_out) ? r.tau_out : 0.0;
-            if (rrc_shell_depth_cm > 0.0 && r.opacity != 0.0) {
-                cumulative_rrc_tau_in[label.index] += std::max(r.opacity, 0.0) * rrc_shell_depth_cm;
+            double tau_in = r.tau_in;
+            if (!retained_rrc_tau) {
+                if (rrc_shell_depth_cm > 0.0 && r.opacity != 0.0) {
+                    cumulative_rrc_tau_in[label.index] += std::max(r.opacity, 0.0) * rrc_shell_depth_cm;
+                }
+                tau_in = cumulative_rrc_tau_in[label.index];
+                if (tau_in != 0.0) ++audit.tau_in_depth_fallback;
             }
-            double tau_in = cumulative_rrc_tau_in[label.index];
-            if (tau_in != 0.0) ++audit.tau_in_depth_fallback;
             write_real4(fptr, 7, row, 0.0);
             write_real4(fptr, 8, row, r.emis_out);
             write_real4(fptr, 9, row, r.absorption);
@@ -10197,7 +10238,7 @@ xstar_run_state::AbundanceRadialRowState abundance_base_row_for_zone(
 
 xstar_run_state::AbundanceRadialRowState abundance_output_base_row_for_zone(
     const xstar_run_state::ProductWritingState& state, std::size_t output_zone_index) {
-    if (output_zone_index + 1 >= state.radial_zones.size()) return {};
+    if (output_zone_index >= state.radial_zones.size()) return {};
     const std::size_t source_index = source_zone_index(state, output_zone_index);
     if (source_index >= state.radial_zones.size()) return {};
     const auto& zone = state.radial_zones[source_index];
@@ -10235,7 +10276,7 @@ xstar_run_state::AbundanceRadialRowState abundance_output_base_row_for_zone(
 
 const xstar_run_state::RadialZoneState* abundance_output_zone(
     const xstar_run_state::ProductWritingState& state, std::size_t output_zone_index) {
-    if (output_zone_index + 1 >= state.radial_zones.size()) return nullptr;
+    if (output_zone_index >= state.radial_zones.size()) return nullptr;
     const std::size_t source_index = source_zone_index(state, output_zone_index);
     if (source_index >= state.radial_zones.size()) return nullptr;
     return &state.radial_zones[source_index];
@@ -10318,8 +10359,18 @@ void write_abundances(const std::filesystem::path& path,
     std::vector<xstar_run_state::AbundanceRadialRowState> abundance_rows;
     for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
         const auto* zone = abundance_output_zone(state, z);
-        fractions.push_back(zone ? ion_fractions(zone->accepted_controller.evaluation, elements, rows) : std::map<std::pair<int,int>,double>{});
-        abundance_rows.push_back(abundance_output_base_row_for_zone(state, z));
+        const bool terminal_reset = z + 1u == state.radial_zones.size();
+        // pprint(12) appends a distinct terminal reset row to the abundance
+        // ledger.  Its ion fractions and geometry are zero even though the
+        // detailed level-population product may retain the preceding accepted
+        // population state in its final HDU.
+        fractions.push_back(!terminal_reset && zone
+            ? ion_fractions(zone->accepted_controller.evaluation, elements, rows)
+            : std::map<std::pair<int,int>,double>{});
+        abundance_rows.push_back(terminal_reset
+            ? xstar_run_state::AbundanceRadialRowState{}
+            : abundance_output_base_row_for_zone(state, z));
+        abundance_rows.back().terminal_row = terminal_reset;
         const long row = static_cast<long>(z + 1);
         write_abundance_base(fptr, row, abundance_rows.back());
         int col = 9;
@@ -10386,7 +10437,7 @@ void write_abundances(const std::filesystem::path& path,
     }
 
     {
-        std::ofstream audit(path.parent_path() / "v048746255172561_zrtmp_trapezoidal_audit.json");
+        std::ofstream audit(path.parent_path() / "v048746255172563_zrtmp_trapezoidal_audit.json");
         if (audit) {
             std::size_t positive_intervals = 0;
             std::size_t negative_intervals = 0;
@@ -10396,13 +10447,15 @@ void write_abundances(const std::filesystem::path& path,
                 if (std::isfinite(dr) && dr<0.0) ++negative_intervals;
             }
             audit << "{\n"
-                  << "  \"schema\": \"xstar-tools-v048746255172561-zrtmp-trapezoidal-v2\",\n"
+                  << "  \"schema\": \"xstar-tools-v048746255172563-zrtmp-trapezoidal-v3\",\n"
                   << "  \"radial_rows\": " << abundance_rows.size() << ",\n"
                   << "  \"positive_cumulative_depth_intervals\": " << positive_intervals << ",\n"
                   << "  \"negative_terminal_reset_intervals\": " << negative_intervals << ",\n"
                   << "  \"density_weighted_trapezoid\": true,\n"
                   << "  \"signed_consecutive_boundary_deltas\": true,\n"
                   << "  \"terminal_zero_row_included\": true,\n"
+                  << "  \"exact_accepted_radial_boundaries_retained\": "
+                  << (state.exact_accepted_radial_boundaries_retained ? "true" : "false") << ",\n"
                   << "  \"initial_terminal_average_removed\": true,\n"
                   << "  \"oracle_or_bridge_columns_read\": false\n"
                   << "}\n";

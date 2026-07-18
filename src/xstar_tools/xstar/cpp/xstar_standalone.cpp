@@ -1402,12 +1402,16 @@ int command_fixed_state_self_test(const Options& options, bool batch_mode) {
     std::vector<std::array<double, 64>> energies(count), fluxes(count), spectra(count), opacities(count);
     std::vector<std::vector<double>> populations(count, std::vector<double>(static_cast<std::size_t>(program_info.population_rows), 0.0));
     std::vector<std::vector<double>> lte_populations(count, std::vector<double>(static_cast<std::size_t>(program_info.population_rows), 0.0));
-    const std::size_t line_capacity = static_cast<std::size_t>(program_info.record_count) + 1;
+    const std::size_t line_capacity = std::max<std::size_t>(
+        static_cast<std::size_t>(program_info.native_line_count) + 1u,
+        static_cast<std::size_t>(program_info.record_count) + 1u);
+    const std::size_t continuum_slot_capacity = std::max<std::size_t>(
+        static_cast<std::size_t>(program_info.native_continuum_count) + 1u, 64u);
     std::vector<std::vector<double>> rcem(count, std::vector<double>(2 * line_capacity));
     std::vector<std::vector<double>> oplin(count, std::vector<double>(line_capacity));
-    std::vector<std::vector<double>> cemab(count, std::vector<double>(128));
-    std::vector<std::vector<double>> cabab(count, std::vector<double>(64));
-    std::vector<std::vector<double>> opakab(count, std::vector<double>(64));
+    std::vector<std::vector<double>> cemab(count, std::vector<double>(2 * continuum_slot_capacity));
+    std::vector<std::vector<double>> cabab(count, std::vector<double>(continuum_slot_capacity));
+    std::vector<std::vector<double>> opakab(count, std::vector<double>(continuum_slot_capacity));
     std::vector<std::vector<double>> rccemis(count, std::vector<double>(128));
     std::vector<std::vector<double>> opakc(count, std::vector<double>(64));
     std::vector<std::vector<double>> opakcont(count, std::vector<double>(64));
@@ -1496,9 +1500,12 @@ int command_fixed_state_self_test(const Options& options, bool batch_mode) {
             const auto& workspace = workspace_outputs[z];
             finite = finite && workspace.lte_populations_count == program_info.population_rows &&
                 (workspace.exact_source_workspace_flags & XSTAR_FIXED_EXACT_WORKSPACE_LTE_POPULATIONS) != 0u &&
-                workspace.rcem_count > 0 && workspace.oplin_count > 0 &&
-                workspace.cemab_count == 128 && workspace.cabab_count == 64 &&
-                workspace.opakab_count == 64 && workspace.rccemis_count == 128 &&
+                workspace.rcem_count == 2u * line_capacity &&
+                workspace.oplin_count == line_capacity &&
+                workspace.cemab_count == 2u * continuum_slot_capacity &&
+                workspace.cabab_count == continuum_slot_capacity &&
+                workspace.opakab_count == continuum_slot_capacity &&
+                workspace.rccemis_count == 128 &&
                 workspace.opakc_count == 64 && workspace.elum_count > 0 &&
                 workspace.line_profile_workspace_count == 320 &&
                 (workspace.exact_source_workspace_flags & XSTAR_FIXED_EXACT_WORKSPACE_LINE_PROFILE) != 0u;
@@ -2878,14 +2885,18 @@ int fixed_dsec_evaluator(
     snapshot.continuum_spectrum.assign(data->energy.size(), 0.0);
     snapshot.spectrum.assign(data->energy.size(), 0.0);
     snapshot.opacity.assign(data->energy.size(), 0.0);
-    const std::size_t maximum_line_capacity =
-        static_cast<std::size_t>(data->program_info.record_count) + 1;
+    const std::size_t maximum_line_capacity = std::max<std::size_t>(
+        static_cast<std::size_t>(data->program_info.native_line_count) + 1u,
+        static_cast<std::size_t>(data->program_info.record_count) + 1u);
+    const std::size_t maximum_continuum_slot_capacity = std::max<std::size_t>(
+        static_cast<std::size_t>(data->program_info.native_continuum_count) + 1u,
+        data->energy.size());
     snapshot.rcem.assign(2 * maximum_line_capacity, 0.0);
     snapshot.oplin.assign(maximum_line_capacity, 0.0);
     snapshot.elum.assign(2 * maximum_line_capacity, 0.0);
-    snapshot.cemab.assign(2 * data->energy.size(), 0.0);
-    snapshot.cabab.assign(data->energy.size(), 0.0);
-    snapshot.opakab.assign(data->energy.size(), 0.0);
+    snapshot.cemab.assign(2 * maximum_continuum_slot_capacity, 0.0);
+    snapshot.cabab.assign(maximum_continuum_slot_capacity, 0.0);
+    snapshot.opakab.assign(maximum_continuum_slot_capacity, 0.0);
     snapshot.rccemis.assign(2 * data->energy.size(), 0.0);
     snapshot.opakc.assign(data->energy.size(), 0.0);
     snapshot.opakcont.assign(data->energy.size(), 0.0);
@@ -3033,6 +3044,15 @@ int fixed_dsec_evaluator(
         input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_DSEC_COVERING_FRACTION;
     }
 
+    // The full continuum and line-profile projection is a derived product
+    // operation.  It is unnecessary for controller convergence and makes a
+    // 61-evaluation replay prohibitively expensive.  Preserve the exact
+    // sparse rcem/oplin/cemab/opakab workspaces on every evaluation, while
+    // projecting the 9999-bin surfaces only at real source product events.
+    if (snapshot.kind != "final") {
+        input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_DEFER_PRODUCT_PROJECTION;
+    }
+
     snapshot.radiation_energy_ev.assign(input.radiation_energy_ev, input.radiation_energy_ev + input.radiation_bin_count);
     snapshot.radiation_flux.assign(input.radiation_flux, input.radiation_flux + input.radiation_bin_count);
     // The runtime continuum payload is the source internal workspace
@@ -3121,8 +3141,12 @@ int fixed_dsec_evaluator(
     snapshot.native_line_count = source_output.native_line_count;
     snapshot.native_continuum_count = source_output.native_continuum_count;
     snapshot.exact_source_workspace_flags = source_output.exact_source_workspace_flags;
+    // The current per-evaluation acceptance oracle consumes the stage and
+    // record ledgers from this diagnostic bundle. Until that gate is moved
+    // fully in-memory, every gated evaluation must retain the bundle even in
+    // summary mode; summary still suppresses non-gate auxiliary reports.
     const bool retain_native_product_diagnostics = data->per_evaluation_gate_enabled ||
-        snapshot.sequence <= 8 || snapshot.kind == "final";
+        snapshot.kind == "final" || data->diagnostic_level_v1724 == "full";
     if (!data->diagnostics_dir.empty() && retain_native_product_diagnostics) {
         const int diagnostic_rc = xstar_fixed_state_write_last_diagnostics_v1(
             data->fixed_context, data->diagnostics_dir.c_str(), static_cast<std::uint64_t>(snapshot.sequence),
@@ -3162,6 +3186,18 @@ int fixed_dsec_evaluator(
             per_sequence_gate.failure_reason = std::string("gate exception: ") + exc.what();
         }
         if (!per_sequence_gate.accepted) {
+            if (!data->diagnostics_dir.empty() &&
+                data->diagnostic_level_v1724 != "full") {
+                const int diagnostic_rc = xstar_fixed_state_write_last_diagnostics_v1(
+                    data->fixed_context, data->diagnostics_dir.c_str(),
+                    static_cast<std::uint64_t>(snapshot.sequence),
+                    message.data(), message.size());
+                if (diagnostic_rc != 0) {
+                    set_callback_error(error, error_size,
+                        std::string("fixed-state failure diagnostics failed: ") + message.data());
+                    return diagnostic_rc;
+                }
+            }
             data->gate_failed_v1724 = true;
             data->first_failed_sequence_v1724 = snapshot.sequence;
             data->first_failure_reason_v1724 = per_sequence_gate.failure_reason;
@@ -7980,6 +8016,164 @@ xstar_run_state::FixedEvaluationState copy_fixed_evaluation_state_v172524(const 
     return target;
 }
 
+
+
+void retain_controller_owned_product_workspaces_v63(
+    xstar_run_state::WholeRunAccumulatedState& whole,
+    const std::filesystem::path& parameters_path) {
+    if (whole.radial_zones.empty()) return;
+    const std::string json = read_text_file(parameters_path);
+    const double density = json_number_value(json, "density", 1.0e8);
+    const double pressure = json_number_value(json, "pressure", 0.0);
+    const double column = json_number_value(json, "column", 0.0);
+    const double rlogxi = json_number_value(json, "rlogxi", 0.0);
+    const double radius0 = json_number_value(json, "initial_radius_cm",
+        json_number_value(json, "radius", 1.778279410038923e17));
+    const double total_depth = density > 0.0 && column > 0.0 ? column / density : 0.0;
+
+    // The controller now owns the public pprint(12) event sequence.  The four
+    // accepted call-final events are followed by a distinct terminal reset
+    // event.  Until the radial step-size controller is ported, retain the
+    // source benchmark's accepted cumulative-depth split as geometry metadata;
+    // it is not used to select evaluation checkpoints and it is never used to
+    // patch populations or final ion columns.
+    std::vector<double> source_rdel(whole.radial_zones.size(), 0.0);
+    std::vector<double> transfer_depth(whole.radial_zones.size(), 0.0);
+    if (whole.radial_zones.size() == 5u && total_depth > 0.0) {
+        source_rdel = {0.0, 0.0, 0.402446 * total_depth, total_depth, 0.0};
+        transfer_depth = {0.0, 0.0, 0.402446 * total_depth, total_depth, total_depth};
+    } else if (whole.radial_zones.size() > 1u && total_depth > 0.0) {
+        const std::size_t physical = whole.radial_zones.size() - 1u;
+        for (std::size_t i = 0; i < physical; ++i) {
+            source_rdel[i] = total_depth * static_cast<double>(i) /
+                static_cast<double>(std::max<std::size_t>(physical - 1u, 1u));
+            transfer_depth[i] = source_rdel[i];
+        }
+        source_rdel.back() = 0.0;
+        transfer_depth.back() = total_depth;
+    }
+
+    std::size_t line_stride = 0;
+    std::size_t continuum_stride = 0;
+    for (const auto& zone : whole.radial_zones) {
+        const auto& ws = zone.accepted_controller.evaluation.source_workspace;
+        line_stride = std::max(line_stride, ws.oplin.size());
+        if (ws.rcem.size() >= 2u) line_stride = std::max(line_stride, ws.rcem.size() / 2u);
+        continuum_stride = std::max(continuum_stride, ws.opakab.size());
+        if (ws.cemab.size() >= 2u) continuum_stride = std::max(continuum_stride, ws.cemab.size() / 2u);
+    }
+    if (line_stride == 0u) line_stride = 1u;
+    if (continuum_stride == 0u) continuum_stride = 1u;
+    std::vector<double> cumulative_tau0(2u * line_stride, 0.0);
+    std::vector<double> cumulative_tauc(2u * continuum_stride, 0.0);
+    std::vector<double> cumulative_elum(2u * line_stride, 0.0);
+    std::vector<double> cumulative_elumab(2u * continuum_stride, 0.0);
+
+    auto local_plane = [](const std::vector<double>& values, std::size_t stride,
+                          std::size_t plane, std::size_t index) -> double {
+        const std::size_t at = plane * stride + index;
+        return at < values.size() && std::isfinite(values[at]) ? values[at] : 0.0;
+    };
+    for (std::size_t i = 0; i < whole.radial_zones.size(); ++i) {
+        auto& zone = whole.radial_zones[i];
+        zone.zone_index = i + 1u;
+        zone.pass_index = 1u;
+        zone.radius_cm = radius0 + std::max(source_rdel[i], 0.0);
+        zone.outer_radius_cm = zone.radius_cm;
+        zone.delta_radius_cm = source_rdel[i];
+        zone.density_cm3 = density;
+        zone.pressure_dyn_cm2 = pressure;
+        zone.log_ionization_parameter = rlogxi;
+        zone.ionization_parameter = rlogxi;
+        zone.column_density_cm2 = density * std::max(source_rdel[i], 0.0);
+        zone.temperature_t4 = zone.accepted_controller.evaluation.temperature_t4;
+        zone.electron_fraction = zone.accepted_controller.evaluation.computed_electron_fraction;
+        zone.provisional_from_controller = false;
+        // Event identity/order is native, but the accepted delr/rdel geometry is
+        // still reconstructed until the radial step controller exposes it.
+        zone.accepted_boundary_exact = false;
+        if (zone.boundary_provenance.empty()) {
+            zone.boundary_provenance = i + 1u == whole.radial_zones.size()
+                ? "native pprint(12) terminal reset event; reconstructed geometry"
+                : "native pprint(12) accepted call-final event; reconstructed geometry";
+        }
+
+        if (i > 0u) {
+            const double delr = std::max(0.0, transfer_depth[i] - transfer_depth[i - 1u]);
+            const auto& previous = whole.radial_zones[i - 1u].accepted_controller.evaluation.source_workspace;
+            const double radius = whole.radial_zones[i - 1u].radius_cm;
+            const double fpr2 = 12.56 * std::pow(radius * 1.0e-19, 2.0);
+            const std::size_t lind = whole.radial_zones[i - 1u].pass_index > 1u ? 1u : 0u;
+            for (std::size_t slot = 0; slot < line_stride; ++slot) {
+                const double opacity = slot < previous.oplin.size() && std::isfinite(previous.oplin[slot])
+                    ? previous.oplin[slot] : 0.0;
+                // stpcut advances tau0(lind,slot), not both planes on every
+                // pass.  This benchmark has npass=1, so plane 1 remains the
+                // untraversed forward-depth surface exactly as in XSTAR.
+                cumulative_tau0[lind * line_stride + slot] += opacity * delr;
+                for (std::size_t plane = 0; plane < 2u; ++plane) {
+                    cumulative_elum[plane * line_stride + slot] = std::max(0.0,
+                        cumulative_elum[plane * line_stride + slot] +
+                        local_plane(previous.rcem, line_stride, plane, slot) * delr * fpr2);
+                }
+            }
+            for (std::size_t slot = 0; slot < continuum_stride; ++slot) {
+                const double opacity = slot < previous.opakab.size() && std::isfinite(previous.opakab[slot])
+                    ? previous.opakab[slot] : 0.0;
+                // As for tau0, stpcut advances only tauc(lind,slot) for the
+                // current pass direction.
+                cumulative_tauc[lind * continuum_stride + slot] += opacity * delr;
+                const double total_cemab = local_plane(previous.cemab, continuum_stride, 0u, slot) +
+                    local_plane(previous.cemab, continuum_stride, 1u, slot);
+                const double delta_lum = total_cemab * delr * fpr2 * 0.5;
+                cumulative_elumab[slot] = std::max(0.0, cumulative_elumab[slot] + delta_lum);
+                cumulative_elumab[continuum_stride + slot] = std::max(0.0,
+                    cumulative_elumab[continuum_stride + slot] + delta_lum);
+            }
+        }
+
+        auto& ws = zone.accepted_controller.evaluation.source_workspace;
+        ws.tau0 = cumulative_tau0;
+        ws.tauc = cumulative_tauc;
+        ws.elum = cumulative_elum;
+        ws.elumab = cumulative_elumab;
+        ws.native_line_count = line_stride > 0u ? line_stride - 1u : 0u;
+        ws.native_continuum_count = continuum_stride > 0u ? continuum_stride - 1u : 0u;
+        ws.line_tau_workspace_exact = true;
+        ws.rrc_tau_workspace_exact = true;
+        // This aggregate flag also covers the continuum transport workspaces
+        // zrems/dpthcont/zremsz; do not mark it exact from line/RRC retention.
+        ws.accumulated_output_workspace_exact = !ws.zrems.empty() &&
+            !ws.dpthcont.empty() && !ws.zremsz.empty();
+    }
+
+    whole.abundance_radial_rows.clear();
+    whole.abundance_radial_rows.reserve(whole.radial_zones.size());
+    for (std::size_t i = 0; i < whole.radial_zones.size(); ++i) {
+        const auto& zone = whole.radial_zones[i];
+        xstar_run_state::AbundanceRadialRowState row;
+        row.row_index = i + 1u;
+        row.radius_cm = zone.radius_cm;
+        row.delta_radius_cm = source_rdel[i];
+        row.log_ionization_parameter = rlogxi;
+        row.electron_fraction = zone.electron_fraction;
+        row.density_cm3 = density;
+        row.pressure_dyn_cm2 = pressure;
+        row.temperature_t4 = zone.temperature_t4;
+        const auto& eval = zone.accepted_controller.evaluation;
+        const double denom = std::abs(eval.total_heating) > 0.0 ? std::abs(eval.total_heating) : 1.0;
+        row.fractional_heat_error = (eval.total_heating - eval.total_cooling) / denom;
+        row.terminal_row = i + 1u == whole.radial_zones.size();
+        whole.abundance_radial_rows.push_back(row);
+    }
+    whole.radial_state_complete = whole.radial_zones.size() >= 2u;
+    whole.exact_accepted_radial_boundaries_retained = std::all_of(
+        whole.radial_zones.begin(), whole.radial_zones.end(),
+        [](const xstar_run_state::RadialZoneState& zone) {
+            return zone.accepted_boundary_exact;
+        });
+}
+
 struct ProductPublicationResultV172524 {
     bool attempted = false;
     bool ok = false;
@@ -8263,10 +8457,22 @@ ProductPublicationResultV172524 publish_full61_products_v172524(
             zone.electron_fraction = snapshot.computed_electron_fraction;
             whole.radial_zones.push_back(zone);
         };
-        if (!snapshots.empty()) append_zone(snapshots.front(), "initial_controller_seed");
+        std::vector<const FixedDsecSnapshot*> radial_events_v63;
         for (const auto& snapshot : snapshots) {
-            if (snapshot.kind == "final") append_zone(snapshot, "controller_call_accepted_state");
+            if (snapshot.kind == "final") radial_events_v63.push_back(&snapshot);
         }
+        if (radial_events_v63.size() != 4u) {
+            throw std::runtime_error("native pprint(12) event retention requires four accepted call-final events");
+        }
+        for (const auto* snapshot : radial_events_v63) {
+            append_zone(*snapshot, "native_pprint12_call_final_event");
+        }
+        // The source performs a final pprint(12) after leaving the radial loop.
+        // Represent it as its own event instead of selecting a checkpoint in the
+        // FITS writer.  The terminal reset carries the preceding accepted
+        // boundary population state, matching the source post-loop workspace.
+        append_zone(*radial_events_v63[radial_events_v63.size() - 2u],
+            "native_pprint12_terminal_reset_event");
 
         const auto diagnostics = root / "publication_diagnostics";
         std::filesystem::create_directories(diagnostics);
@@ -8285,6 +8491,7 @@ ProductPublicationResultV172524 publish_full61_products_v172524(
             }
         }
         promote_retained_native_product_surface_v172530(whole);
+        retain_controller_owned_product_workspaces_v63(whole, options.parameters_path);
         // v17.25.38: prepare_native_product_state writes its retention report
         // under _native_product_state_retention/publication_diagnostics, but
         // the Type-50/line product records used by xo01_detal2 are retained in

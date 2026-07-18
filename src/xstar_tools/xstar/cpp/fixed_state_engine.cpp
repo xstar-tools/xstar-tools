@@ -943,6 +943,8 @@ struct ProgramRecord {
     double line_energy_ev = 0.0;
     double atomic_mass_amu = 1.0;
     double natural_width_ev = 0.0;
+    int line_index_one_based = 0;
+    int continuum_index_one_based = 0;
     bool matrix_enabled = true;
 };
 
@@ -951,6 +953,8 @@ struct Program {
     bool active_atdb_lowered = false;
     std::uint64_t topology_record_count = 0;
     std::uint64_t unsupported_record_count = 0;
+    std::size_t native_line_count = 0;
+    std::size_t native_continuum_count = 0;
     std::vector<ElementProgram> elements;
     std::vector<ProgramRecord> records;
     std::vector<double> reals;
@@ -2745,7 +2749,8 @@ void load_records(const std::string& path, Program& program) {
     while (std::getline(input, line)) {
         if (trim(line).empty()) continue;
         const auto c = split_csv(line);
-        if (c.size() != 18 && c.size() != 19) throw std::runtime_error("records.csv requires 18 or 19 columns");
+        if (c.size() != 18 && c.size() != 19 && c.size() != 21)
+            throw std::runtime_error("records.csv requires 18, 19, or 21 columns");
         ProgramRecord r;
         r.source_position = parse_number<std::int64_t>(c[0], "source_position");
         r.record = parse_number<std::int64_t>(c[1], "record");
@@ -2765,7 +2770,13 @@ void load_records(const std::string& path, Program& program) {
         r.density_scale = parse_number<double>(c[15], "density_scale");
         r.line_energy_ev = parse_number<double>(c[16], "line_energy_ev");
         r.atomic_mass_amu = parse_number<double>(c[17], "atomic_mass_amu");
-        if (c.size() == 19) r.matrix_enabled = parse_number<int>(c[18], "matrix_enabled") != 0;
+        if (c.size() == 21) {
+            r.line_index_one_based = parse_number<int>(c[18], "line_index");
+            r.continuum_index_one_based = parse_number<int>(c[19], "continuum_index");
+            r.matrix_enabled = parse_number<int>(c[20], "matrix_enabled") != 0;
+        } else if (c.size() == 19) {
+            r.matrix_enabled = parse_number<int>(c[18], "matrix_enabled") != 0;
+        }
         if (r.element_index < 0 || r.element_index >= static_cast<int>(program.elements.size())) throw std::runtime_error("record element_index out of range");
         program.records.push_back(r);
     }
@@ -2801,6 +2812,10 @@ Program load_program(const std::string& directory) {
     if (topology_it != manifest.end()) p.topology_record_count = parse_number<std::uint64_t>(topology_it->second, "topology_record_count");
     const auto unsupported_it = manifest.find("unsupported_record_count");
     if (unsupported_it != manifest.end()) p.unsupported_record_count = parse_number<std::uint64_t>(unsupported_it->second, "unsupported_record_count");
+    const auto line_count_it = manifest.find("native_line_count");
+    if (line_count_it != manifest.end()) p.native_line_count = parse_number<std::size_t>(line_count_it->second, "native_line_count");
+    const auto continuum_count_it = manifest.find("native_continuum_count");
+    if (continuum_count_it != manifest.end()) p.native_continuum_count = parse_number<std::size_t>(continuum_count_it->second, "native_continuum_count");
     load_elements(join_path(directory, "elements.csv"), p);
     load_rows(join_path(directory, "rows.csv"), p);
     p.reals = load_scalar_file<double>(join_path(directory, "reals.txt"), "reals.txt");
@@ -2822,6 +2837,8 @@ Program load_program(const std::string& directory) {
         } else if (r.lower_row != 0 || r.upper_row != 0) {
             throw std::runtime_error("scalar-only record endpoints must be zero");
         }
+        if (r.line_index_one_based > 0) p.native_line_count = std::max(p.native_line_count, static_cast<std::size_t>(r.line_index_one_based));
+        if (r.continuum_index_one_based > 0) p.native_continuum_count = std::max(p.native_continuum_count, static_cast<std::size_t>(r.continuum_index_one_based));
     }
     return p;
 }
@@ -4309,9 +4326,11 @@ bool evaluate_type53_source_integral(
         shadow->electron_density_cm3 = input.electron_density_cm3;
         shadow->hydrogen_density_cm3 = input.hydrogen_density_cm3;
         shadow->matrix_density_scale = static_cast<double>(input.hydrogen_density_cm3);
-        shadow->threshold_cross_section_cm2 = threshold_abs_sigma_cm2 > 0.0
-            ? threshold_abs_sigma_cm2
-            : (pair_sigma_cm2.empty() ? 0.0 : std::max(0.0, pair_sigma_cm2.front()));
+        // phint53 publishes opakab only when the integration loop reaches
+        // kl == nb1 + 2.  A positive first tabulated cross section is not a
+        // substitute for that source slot: if the loop never reaches the
+        // publishing bin, opakab remains exactly zero.
+        shadow->threshold_cross_section_cm2 = std::max(0.0, threshold_abs_sigma_cm2);
         shadow->threshold_stimulated_cross_section_cm2 =
             std::max(0.0, threshold_stimulated_sigma_cm2);
         shadow->base_threshold_ev = record_context && record_context->valid
@@ -4867,7 +4886,7 @@ EvaluatedRecord evaluate_record(
             // elemental abundance, and hydrogen density exactly once.
             out.opakab = source_exact
                 ? std::max(0.0, out.type53_shadow.threshold_cross_section_cm2)
-                : (r && record.real_count >= 2 ? std::max(0.0, r[1]) : 0.0);
+                : 0.0;
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE: {
@@ -5132,7 +5151,7 @@ EvaluatedRecord evaluate_record(
             // elemental abundance, and hydrogen density exactly once.
             out.opakab = source_exact
                 ? std::max(0.0, out.type49_shadow.threshold_cross_section_cm2)
-                : (r && record.real_count >= 2 ? std::max(0.0, r[1]) : 0.0);
+                : 0.0;
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE50_RADIATIVE_LINE: {
@@ -5456,6 +5475,13 @@ EvaluatedRecord evaluate_record(
                 xstar_constants::kModernErgPerEv;
             const double delt = delta_ev / std::max(source_kt_ev,1.0e-300);
             c.ans3 = -rate*delt*xstar_constants::kModernErgPerEv;
+            // Type 54 is rate-family 4 and owns an exact nplini slot. It can
+            // emit even though its oscillator-strength opacity is zero.
+            out.spectral = record.rate_type == 4 && record.line_index_one_based > 0;
+            out.bound_free_spectral = false;
+            out.line_energy_ev = delta_ev;
+            out.atomic_mass_amu = record.atomic_mass_amu;
+            out.opakab = 0.0;
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE57_COLLISIONAL_IONIZATION: {
@@ -5741,6 +5767,16 @@ EvaluatedRecord evaluate_record(
             const double photon=(wavelength>0.1)?12398.4016/wavelength:delta_ev;
             const double erg=(wavelength>0.1)?1.602197e-12:kErgPerEv;
             c.ans3=-aij*photon*erg;
+            // Source ucalc evaluates Type 71 as a superlevel transition rate,
+            // but it does not call linopac and heatt does not accumulate it
+            // because its rate family is 14 rather than 4. Keep its nplini
+            // identity for option-15 ordering while leaving rcem/oplin/tau0/
+            // elum zero, exactly as the source product workspaces do.
+            out.spectral = false;
+            out.bound_free_spectral = false;
+            out.line_energy_ev = photon;
+            out.atomic_mass_amu = record.atomic_mass_amu;
+            out.opakab = 0.0;
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE77_SUPERLEVEL_COLLISION: {
@@ -5798,6 +5834,12 @@ EvaluatedRecord evaluate_record(
             const double aij=std::max(0.0,r[0]);
             c.ans2=aij;
             c.ans3=-aij*delta_ev*xstar_constants::kLegacyCollisionErgPerEv;
+            // Two-photon decay is distributed over the energy continuum and
+            // intentionally owns no option-15 line slot. The continuum is
+            // accumulated below from this evaluated record.
+            out.spectral = false;
+            out.bound_free_spectral = false;
+            out.line_energy_ev = delta_ev;
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE95_SPLINE_IONIZATION: {
@@ -7080,6 +7122,8 @@ int run_impl(
     ctx.last_continuum_epim_fingerprint = ctx.last_continuum_bremsam_fingerprint = ctx.last_continuum_bremsmap_fingerprint = 0;
     ctx.last_continuum_workspace_diagnostics.clear();
     ctx.last_call1_thermal_oracle = (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE) != 0u;
+    const bool defer_product_projection =
+        (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_DEFER_PRODUCT_PROJECTION) != 0u;
     output.electron_fraction_xee = 0.0;
     output.elcter = 0.0;
     ctx.last_preclosure_electron_fraction = 0.0;
@@ -7820,12 +7864,46 @@ int run_impl(
         // the source cross-section records.  The former product path retained
         // only one threshold cell per RRC, which left most xo01_detal3 opacity
         // rows and nearly all xo01_detal4 continuum-opacity bins at zero.
-        for (std::size_t k = 0; k < evaluated.size() && k < evaluated_records.size(); ++k) {
+        if (!defer_product_projection) for (std::size_t k = 0; k < evaluated.size() && k < evaluated_records.size(); ++k) {
+            const auto& source_record = *evaluated_records[k];
+            if (source_record.data_type == 76 && input.radiation_bin_count > 1 &&
+                evaluated[k].line_energy_ev > 0.0) {
+                // ucalc Type 76: distribute the two-photon decay over the
+                // continuum as E^2(Emax-E), normalized to the total A value.
+                const double emax = evaluated[k].line_energy_ev;
+                std::vector<double> shape(input.radiation_bin_count, 0.0);
+                double integral = 0.0;
+                for (std::size_t j = 0; j < input.radiation_bin_count; ++j) {
+                    const double e = input.radiation_energy_ev[j];
+                    if (e > 0.0 && e < emax) shape[j] = e * e * (emax - e);
+                    if (j > 0) {
+                        integral += 0.5 * (shape[j - 1] + shape[j]) *
+                            (input.radiation_energy_ev[j] - input.radiation_energy_ev[j - 1]);
+                    }
+                }
+                const double upper_population = active_population_for_full_row(
+                    active, buffers.populations, source_record.upper_row);
+                const double source_density = upper_population * element.abundance *
+                    input.hydrogen_density_cm3;
+                const double aij = std::max(0.0, evaluated[k].contribution.ans2);
+                const double cfrac = std::clamp(input.covering_fraction, 0.0, 1.0);
+                const double ptmp1 = 0.5 * (1.0 - cfrac);
+                const double ptmp2 = 0.5 * (1.0 - cfrac) + cfrac;
+                if (integral > 0.0 && source_density > 0.0 && aij > 0.0) {
+                    for (std::size_t j = 0; j < input.radiation_bin_count; ++j) {
+                        const double ansar2 = shape[j] * aij * emax / integral;
+                        native_rrc_continuum_emission[j] +=
+                            source_density * ansar2 * ptmp1 / 12.56;
+                        native_rrc_continuum_emission[input.radiation_bin_count + j] +=
+                            source_density * ansar2 * ptmp2 / 12.56;
+                    }
+                }
+            }
             if (!evaluated[k].bound_free_spectral) continue;
             NativeBoundFreeCurve curve;
-            if (!native_bound_free_curve(ctx.program, *evaluated_records[k], evaluated[k], curve)) continue;
+            if (!native_bound_free_curve(ctx.program, source_record, evaluated[k], curve)) continue;
             accumulate_native_bound_free_surface(
-                curve, evaluated[k], *evaluated_records[k], active, buffers.populations, input,
+                curve, evaluated[k], source_record, active, buffers.populations, input,
                 native_bound_free_opacity, native_rrc_continuum_emission);
         }
 
@@ -7835,31 +7913,76 @@ int run_impl(
             xstar_spectral_contribution_v1 sc{};
             sc.source_position = static_cast<std::uint64_t>(rec.source_position);
             sc.record = rec.record;
+            const auto* source_record = k < evaluated_records.size() ? evaluated_records[k] : nullptr;
+            const int exact_line_index = source_record ? source_record->line_index_one_based : 0;
+            const int exact_continuum_index = source_record ? source_record->continuum_index_one_based :
+                evaluated[k].continuum_index_one_based;
             sc.kind = evaluated[k].bound_free_spectral
                 ? XSTAR_SPECTRAL_KIND_EMISAB_BOUND_FREE
-                : XSTAR_SPECTRAL_KIND_EMIS_LINE;
+                : XSTAR_SPECTRAL_KIND_FULL_LINE;
             sc.rate_type = rec.rate_type;
             sc.data_type = rec.data_type;
-            sc.output_index = evaluated[k].bound_free_spectral && evaluated[k].continuum_index_one_based > 0 &&
-                static_cast<std::size_t>(evaluated[k].continuum_index_one_based) < input.radiation_bin_count
-                ? static_cast<int32_t>(evaluated[k].continuum_index_one_based)
-                : static_cast<int32_t>(spectral.size() + 1);
+            sc.output_index = evaluated[k].bound_free_spectral
+                ? static_cast<int32_t>(exact_continuum_index)
+                : static_cast<int32_t>(exact_line_index);
+            // A zero source pointer means this record has no slot in this
+            // workspace. Its distributed continuum contribution, if any, was
+            // already accumulated by the native continuum reconstruction.
+            if (sc.output_index <= 0) continue;
             sc.bin_one_based = 1;
             if (input.radiation_bin_count > 0) {
                 const auto* it = std::lower_bound(input.radiation_energy_ev, input.radiation_energy_ev + input.radiation_bin_count, evaluated[k].line_energy_ev);
                 sc.bin_one_based = static_cast<int32_t>(std::min<std::size_t>(input.radiation_bin_count, static_cast<std::size_t>(it - input.radiation_energy_ev) + 1));
             }
-            sc.ptmp1 = 1.0;
-            sc.ptmp2 = 1.0;
             sc.abundance_lower =
                 active_population_for_full_row(active, buffers.populations, rec.lower_row) *
                 element.abundance;
             sc.abundance_upper =
                 active_population_for_full_row(active, buffers.populations, rec.upper_row) *
                 element.abundance;
+            // calc_emisab_ion calls ucalc only when either endpoint abundance
+            // exceeds 1e-34.  Leaving opakab populated below that gate caused
+            // every retained npconi2 slot to appear in option 24 instead of
+            // the 99 genuinely accumulated Type-53 thresholds in this case.
+            if (evaluated[k].bound_free_spectral &&
+                !(sc.abundance_lower > 1.0e-34 || sc.abundance_upper > 1.0e-34)) {
+                continue;
+            }
+            if (evaluated[k].bound_free_spectral) {
+                // phint53 publishes the net threshold opacity
+                //   max(0, abund1*sigma_abs - abund2*sigma_stim) * xpx.
+                // The spectral engine multiplies sc.opakab by abund1*xpx,
+                // so retain the equivalent per-lower-population coefficient.
+                const Type53SourceShadow* opacity_shadow = nullptr;
+                if (evaluated[k].type53_shadow.valid) opacity_shadow = &evaluated[k].type53_shadow;
+                else if (evaluated[k].type49_shadow.valid) opacity_shadow = &evaluated[k].type49_shadow;
+                if (opacity_shadow && sc.abundance_lower > 0.0) {
+                    const double population_ratio = sc.abundance_upper / sc.abundance_lower;
+                    sc.opakab = std::max(0.0,
+                        opacity_shadow->threshold_cross_section_cm2 -
+                        population_ratio * opacity_shadow->threshold_stimulated_cross_section_cm2);
+                } else {
+                    sc.opakab = 0.0;
+                }
+            }
+            const double cfrac = std::clamp(input.covering_fraction, 0.0, 1.0);
+            sc.ptmp1 = 1.0 - cfrac;
+            sc.ptmp2 = 1.0 + cfrac;
+            if (!evaluated[k].bound_free_spectral && evaluated[k].type50_shadow.valid) {
+                sc.ptmp1 = evaluated[k].type50_shadow.ptmp1;
+                sc.ptmp2 = evaluated[k].type50_shadow.ptmp2;
+            } else if (evaluated[k].bound_free_spectral &&
+                       evaluated[k].type53_shadow.valid) {
+                sc.ptmp1 = evaluated[k].type53_shadow.ptmp1;
+                sc.ptmp2 = evaluated[k].type53_shadow.ptmp2;
+            } else if (evaluated[k].bound_free_spectral &&
+                       evaluated[k].type49_shadow.valid) {
+                sc.ptmp1 = evaluated[k].type49_shadow.ptmp1;
+                sc.ptmp2 = evaluated[k].type49_shadow.ptmp2;
+            }
             sc.hydrogen_density = input.hydrogen_density_cm3;
             sc.ans1 = rec.ans1; sc.ans2 = rec.ans2; sc.ans3 = rec.ans3; sc.ans4 = rec.ans4;
-            sc.opakab = evaluated[k].opakab;
+            if (!evaluated[k].bound_free_spectral) sc.opakab = evaluated[k].opakab;
             sc.line_energy_eV = evaluated[k].line_energy_ev;
             sc.bin_width_eV = input.radiation_bin_count > 1 ? std::abs(input.radiation_energy_ev[1] - input.radiation_energy_ev[0]) : 1.0;
             sc.atomic_mass_amu = evaluated[k].atomic_mass_amu;
@@ -8020,13 +8143,14 @@ int run_impl(
         // contribution engine owns per-line luminosity/opacity records; the
         // exact native Gaussian/Voigt path then projects those luminosities to
         // the radiation grid instead of using the former single-bin delta.
-        const std::size_t line_capacity = spectral.size() + 1;
+        const std::size_t line_capacity = std::max<std::size_t>(ctx.program.native_line_count, 1u) + 1u;
+        const std::size_t continuum_slot_capacity = std::max<std::size_t>(ctx.program.native_continuum_count, 1u) + 1u;
         const std::size_t continuum_capacity = input.radiation_bin_count;
         std::vector<double> rcem(2 * line_capacity, 0.0);
         std::vector<double> oplin(line_capacity, 0.0);
-        std::vector<double> cemab(2 * continuum_capacity, 0.0);
-        std::vector<double> cabab(continuum_capacity, 0.0);
-        std::vector<double> opakab(continuum_capacity, 0.0);
+        std::vector<double> cemab(2 * continuum_slot_capacity, 0.0);
+        std::vector<double> cabab(continuum_slot_capacity, 0.0);
+        std::vector<double> opakab(continuum_slot_capacity, 0.0);
         std::vector<double> rccemis(2 * continuum_capacity, 0.0);
         // XSTAR heatt defines opakc as continuum opacity with line profiles
         // binned in, while opakcont is the lines-excluded continuum surface.
@@ -8076,31 +8200,35 @@ int run_impl(
             wavelength[j]=c.line_energy_eV>0.0?12398.4016/c.line_energy_eV:1.0e30;
             mass[j]=std::max(c.atomic_mass_amu,1.0e-30);
             auger_width[j]=std::max(c.natural_width_eV,0.0);
-            if (c.kind == XSTAR_SPECTRAL_KIND_EMIS_LINE) {
+            if (c.kind == XSTAR_SPECTRAL_KIND_EMIS_LINE || c.kind == XSTAR_SPECTRAL_KIND_FULL_LINE) {
                 const auto li=static_cast<std::size_t>(c.output_index);
                 if (li>=line_capacity) throw std::runtime_error("line profile output index out of range");
                 elum[j]=fline[li];
                 elum[nlines+j]=fline[line_capacity+li];
             }
         }
-        std::array<double,16> profile_stats{};
-        std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> profile_error{};
-        const int prc=xstar_emissivity_build_binemis_profile(
-            static_cast<int>(continuum_capacity),20000,static_cast<int>(continuum_capacity),
-            static_cast<int>(nlines),static_cast<int>(nlines),1.0,input.temperature_k/1.0e4,
-            input.turbulent_velocity_km_s,input.radiation_energy_ev,dpthc.data(),elum.data(),
-            original.data(),input.radiation_flux,slot.data(),wavelength.data(),dtype.data(),mass.data(),
-            natural_rate.data(),auger_width.data(),auger_rate.data(),profiled.data(),profile_stats.data(),
-            profile_error.data(),profile_error.size());
-        if (prc!=0) throw std::runtime_error(std::string("native line emissivity profile failed: ")+profile_error.data());
+        if (!defer_product_projection) {
+            std::array<double,16> profile_stats{};
+            std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> profile_error{};
+            const int prc=xstar_emissivity_build_binemis_profile(
+                static_cast<int>(continuum_capacity),20000,static_cast<int>(continuum_capacity),
+                static_cast<int>(nlines),static_cast<int>(nlines),1.0,input.temperature_k/1.0e4,
+                input.turbulent_velocity_km_s,input.radiation_energy_ev,dpthc.data(),elum.data(),
+                original.data(),input.radiation_flux,slot.data(),wavelength.data(),dtype.data(),mass.data(),
+                natural_rate.data(),auger_width.data(),auger_rate.data(),profiled.data(),profile_stats.data(),
+                profile_error.data(),profile_error.size());
+            if (prc!=0) throw std::runtime_error(std::string("native line emissivity profile failed: ")+profile_error.data());
+        }
 
         // Add the full source-order bound-free opacity and distributed RRC
         // emissivity before retaining opakc/rccemis.  These arrays are native
         // calculations from lowered cross-section records, not oracle assets.
-        for (std::size_t k = 0; k < continuum_capacity; ++k) {
-            output.opacity[k] += native_bound_free_opacity[k];
-            rccemis[k] += native_rrc_continuum_emission[k];
-            rccemis[continuum_capacity + k] += native_rrc_continuum_emission[continuum_capacity + k];
+        if (!defer_product_projection) {
+            for (std::size_t k = 0; k < continuum_capacity; ++k) {
+                output.opacity[k] += native_bound_free_opacity[k];
+                rccemis[k] += native_rrc_continuum_emission[k];
+                rccemis[continuum_capacity + k] += native_rrc_continuum_emission[continuum_capacity + k];
+            }
         }
 
         // Capture the exact source workspaces before the public-product
@@ -8158,29 +8286,36 @@ int run_impl(
                            source_workspaces->line_profile_workspace_capacity,
                            source_workspaces->line_profile_workspace_count,
                            "line profile workspace");
-            source_workspaces->native_line_count = nlines;
-            source_workspaces->native_continuum_count = continuum_capacity;
+            source_workspaces->native_line_count = ctx.program.native_line_count;
+            source_workspaces->native_continuum_count = ctx.program.native_continuum_count;
             source_workspaces->exact_source_workspace_flags |=
                 XSTAR_FIXED_EXACT_WORKSPACE_LINE |
-                XSTAR_FIXED_EXACT_WORKSPACE_RRC |
-                XSTAR_FIXED_EXACT_WORKSPACE_CONTINUUM |
-                XSTAR_FIXED_EXACT_WORKSPACE_LINE_PROFILE;
+                XSTAR_FIXED_EXACT_WORKSPACE_RRC;
+            if (!defer_product_projection) {
+                source_workspaces->exact_source_workspace_flags |=
+                    XSTAR_FIXED_EXACT_WORKSPACE_CONTINUUM |
+                    XSTAR_FIXED_EXACT_WORKSPACE_LINE_PROFILE;
+            }
             copy_text(source_workspaces->message, sizeof(source_workspaces->message),
-                      "exact committed source workspaces retained");
+                      defer_product_projection
+                          ? "exact sparse source workspaces retained; derived product projection deferred"
+                          : "exact committed source workspaces retained");
         }
 
-        for (std::size_t k = 0; k < continuum_capacity; ++k) {
-            const double spectrum_add = cemab[k] + cemab[continuum_capacity + k]
-                + rccemis[k] + rccemis[continuum_capacity + k]
-                + profiled[2*continuum_capacity+k] + profiled[3*continuum_capacity+k];
-            if (std::isfinite(spectrum_add)) output.spectrum[k] += spectrum_add;
-            if (!std::isfinite(output.spectrum[k])) output.spectrum[k] = 0.0;
-            const double continuum_only = std::isfinite(opakcont[k]) && opakcont[k] > 0.0
-                ? opakcont[k] : 0.0;
-            const double line_value = std::isfinite(line_profile_opacity[k]) && line_profile_opacity[k] > 0.0
-                ? line_profile_opacity[k] : 0.0;
-            const double combined = output.opacity[k] + continuum_only + line_value;
-            output.opacity[k] = std::isfinite(combined) && combined > 0.0 ? combined : 0.0;
+        if (!defer_product_projection) {
+            for (std::size_t k = 0; k < continuum_capacity; ++k) {
+                const double spectrum_add = cemab[k] + cemab[continuum_capacity + k]
+                    + rccemis[k] + rccemis[continuum_capacity + k]
+                    + profiled[2*continuum_capacity+k] + profiled[3*continuum_capacity+k];
+                if (std::isfinite(spectrum_add)) output.spectrum[k] += spectrum_add;
+                if (!std::isfinite(output.spectrum[k])) output.spectrum[k] = 0.0;
+                const double continuum_only = std::isfinite(opakcont[k]) && opakcont[k] > 0.0
+                    ? opakcont[k] : 0.0;
+                const double line_value = std::isfinite(line_profile_opacity[k]) && line_profile_opacity[k] > 0.0
+                    ? line_profile_opacity[k] : 0.0;
+                const double combined = output.opacity[k] + continuum_only + line_value;
+                output.opacity[k] = std::isfinite(combined) && combined > 0.0 ? combined : 0.0;
+            }
         }
         stats.spectral_contributions += ss.contributions_committed;
     }
@@ -8419,6 +8554,8 @@ int xstar_fixed_state_context_get_program_info_v1(
     info->record_count = context->program.records.size();
     info->topology_record_count = context->program.topology_record_count;
     info->unsupported_record_count = context->program.unsupported_record_count;
+    info->native_line_count = context->program.native_line_count;
+    info->native_continuum_count = context->program.native_continuum_count;
     copy_text(info->program_id, sizeof(info->program_id), context->program.id);
     copy_text(info->message, sizeof(info->message), "native fixed-state program info available");
     copy_text(message, message_size, info->message);

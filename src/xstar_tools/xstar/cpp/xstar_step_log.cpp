@@ -664,120 +664,60 @@ std::vector<ShellGeometry> native_shell_geometry(
     const xstar_run_state::ProductWritingState& state);
 
 void append_native_public_rrc_sections(std::ofstream& out,
-                                       const std::filesystem::path& output_dir,
+                                       const std::filesystem::path&,
                                        const xstar_run_state::ProductWritingState& state,
                                        bool write_depth,bool write_luminosity) {
-    fitsfile* df=nullptr; int status=0;
-    fits_open_file(&df,(output_dir/"xo01_detal3.fits").c_str(),READONLY,&status);
-    if(status!=0){if(df){int cs=0;fits_close_file(df,&cs);}out<<"\n detailed RRC section unavailable.\n\n";return;}
-    const auto radial_hdus=named_hdu_numbers(df,"XSTAR_RADIAL");
-    if(radial_hdus.empty()){int cs=0;fits_close_file(df,&cs);out<<"\n detailed RRC section unavailable.\n\n";return;}
-    const auto geometry=native_shell_geometry(output_dir,state);
-    const std::vector<int> shell_hdus=radial_hdus.size()>=5
-        ?std::vector<int>{radial_hdus[1],radial_hdus[2],radial_hdus[3]}
-        :std::vector<int>(radial_hdus.begin(),radial_hdus.begin()+std::min<std::size_t>(3,radial_hdus.size()));
-    int type=0; status=0; fits_movabs_hdu(df,radial_hdus.back(),&type,&status);
-    const long long nr=status==0?table_rows(df):0;
-    std::vector<double> luminosity(static_cast<std::size_t>(nr),0.0);
-    for(std::size_t shell=0;shell<shell_hdus.size()&&shell<geometry.size();++shell){
-        status=0;fits_movabs_hdu(df,shell_hdus[shell],&type,&status);if(status!=0)continue;
-        const int cei=column_number(df,"emis_inward"),ceo=column_number(df,"emis_outward");
-        const double fpr2=12.56*std::pow(geometry[shell].radius_cm*1.0e-19,2);
-        const double scale=0.5*fpr2*geometry[shell].delta_cm;
-        for(long long row=1;row<=nr;++row){
-            luminosity[static_cast<std::size_t>(row-1)]+=
-                (read_double_cell(df,cei,row)+read_double_cell(df,ceo,row))*scale;
+    if (state.radial_zones.empty()) {
+        out << "\n retained native RRC workspace unavailable.\n\n";
+        return;
+    }
+    const auto& ws = state.radial_zones.back().accepted_controller.evaluation.source_workspace;
+    const std::size_t tauc_stride = ws.tauc.size() >= 2u ? ws.tauc.size() / 2u : 0u;
+    const std::size_t elum_stride = ws.elumab.size() >= 2u ? ws.elumab.size() / 2u : 0u;
+    if (write_depth) {
+        out << " print option:24\n absorption edge depths\n"
+               " index, local endpoint, ion, level, energy (eV), depth \n";
+    }
+    if (write_luminosity) {
+        out << " print option:19\n recombination continuum luminosities(erg/sec/10**38))\n"
+               " index, ion, level, energy (eV), RRC luminosity \n";
+    }
+    // Source pprint traverses rate-family-7 records and addresses the retained
+    // arrays only through exact npconi2. A zero pointer has no public slot.
+    for (const auto& id : state.rrc_identities) {
+        if (id.continuum_index <= 0) continue;
+        const std::size_t slot = static_cast<std::size_t>(id.continuum_index);
+        const double tau_in = slot < tauc_stride ? ws.tauc[slot] : 0.0;
+        const double tau_out = slot < tauc_stride ? ws.tauc[tauc_stride + slot] : 0.0;
+        const double lum_in = slot < elum_stride ? ws.elumab[slot] : 0.0;
+        const double lum_out = slot < elum_stride ? ws.elumab[elum_stride + slot] : 0.0;
+        if (write_depth && (std::abs(tau_in) > 1.0e-49 || std::abs(tau_out) > 1.0e-49)) {
+            out << std::setw(7) << id.continuum_index
+                << std::setw(6) << id.lower_local_index << " "
+                << std::left << std::setw(8) << id.ion_label << std::right
+                << std::setw(8) << id.level_global_index << " "
+                << std::left << std::setw(20) << id.lower_level << " "
+                << std::setw(20) << id.upper_level << std::right
+                << std::setw(13) << std::uppercase << std::scientific
+                << std::setprecision(3) << id.threshold_ev
+                << std::setw(13) << tau_in << std::setw(13) << tau_out << "\n";
+        }
+        if (write_luminosity && (std::abs(lum_in) > 1.0e-49 || std::abs(lum_out) > 1.0e-49)) {
+            out << std::setw(7) << id.continuum_index
+                << std::setw(6) << id.level_global_index << " "
+                << std::left << std::setw(10) << id.ion_label << std::right
+                << std::setw(6) << id.lower_local_index
+                << std::setw(6) << id.upper_local_index << " "
+                << std::left << std::setw(24) << id.lower_level
+                << std::setw(24) << id.upper_level << std::right
+                << std::setw(13) << std::uppercase << std::scientific
+                << std::setprecision(3) << id.threshold_ev
+                << std::setw(13) << lum_in << std::setw(13) << lum_out << "\n";
         }
     }
-    status=0;fits_movabs_hdu(df,radial_hdus.back(),&type,&status);
-    const int ci=column_number(df,"rrc index"),clv=column_number(df,"level index"),
-        ce=column_number(df,"energy"),cion=column_number(df,"ion"),
-        clo=column_number(df,"lower_level"),cup=column_number(df,"upper_level"),
-        cti=column_number(df,"tau_in"),cto=column_number(df,"tau_out");
-    struct PublishedRrcRow {
-        DetailRrcLogRow detail;
-        double tau_in=0.0,tau_out=0.0,luminosity=0.0;
-    };
-    std::vector<PublishedRrcRow> rows(static_cast<std::size_t>(nr));
-    std::map<long long,std::size_t> by_continuum;
-    for(long long row=1;row<=nr;++row){
-        auto& item=rows[static_cast<std::size_t>(row-1)];
-        item.detail.index=read_integer_cell(df,ci,row);
-        item.detail.level_index=read_integer_cell(df,clv,row);
-        item.detail.energy=read_double_cell(df,ce,row);
-        item.detail.ion=read_string_cell(df,cion,row);
-        item.detail.lower=read_string_cell(df,clo,row);
-        item.detail.upper=read_string_cell(df,cup,row);
-        item.tau_in=read_double_cell(df,cti,row);
-        item.tau_out=read_double_cell(df,cto,row);
-        item.luminosity=luminosity[static_cast<std::size_t>(row-1)];
-        by_continuum[item.detail.index]=static_cast<std::size_t>(row-1);
-    }
-    const auto source_records=load_rrc_source_records(output_dir,state);
-    // Reserve every deterministic Type-49/53 row before matching Type-99
-    // superlevels.  Without this pre-pass, an early Type-99 threshold can
-    // steal a later direct row with a similar energy and leave the true
-    // source record unmapped.
-    std::set<std::size_t> reserved_direct;
-    for (const auto& source : source_records) {
-        if (source.data_type != 49 && source.data_type != 53) continue;
-        auto found = by_continuum.find(source.continuum_index);
-        if (source.continuum_index > 0 && found != by_continuum.end()) {
-            reserved_direct.insert(found->second);
-            continue;
-        }
-        found = by_continuum.find(source.source_index);
-        if (found != by_continuum.end()) reserved_direct.insert(found->second);
-    }
-    std::set<std::size_t> used_rows;
-    if(write_depth) out<<" print option:24\n absorption edge depths\n index, local endpoint, ion, level, energy (eV), depth \n";
-    if(write_luminosity) out<<" print option:19\n recombination continuum luminosities(erg/sec/10**38))\n index, ion, level, energy (eV), RRC luminosity \n";
-    for(const auto& source:source_records){
-        std::size_t position=rows.size();
-        auto direct=by_continuum.find(source.continuum_index);
-        if(source.continuum_index>0&&direct!=by_continuum.end()) position=direct->second;
-        if(position==rows.size()&&(source.data_type==49||source.data_type==53)){
-            // Some compact He-I records do not retain npconi2 in the native
-            // diagnostic, but their source type-7 ordinal is the published
-            // pointer used by pprint.
-            direct=by_continuum.find(source.source_index);
-            if(direct!=by_continuum.end()) position=direct->second;
-        }
-        if(position==rows.size()&&source.data_type==99){
-            // Type-99 superlevels have no Type-49/53 continuum pointer.
-            // Match the still-unclaimed published row by ion and threshold,
-            // preserving source traversal order.  Mg I/II Type-99 records
-            // have no public row and therefore remain unmatched.
-            double best=1.0e300;
-            for(std::size_t i=0;i<rows.size();++i){
-                if(used_rows.count(i)||reserved_direct.count(i)||rows[i].detail.ion!=source.ion_label)continue;
-                const double delta=std::abs(rows[i].detail.energy-source.threshold_ev);
-                if(delta<best){best=delta;position=i;}
-            }
-            const double tolerance=std::max(1.0e-4,1.0e-5*std::max(1.0,std::abs(source.threshold_ev)));
-            if(position<rows.size()&&best>tolerance)position=rows.size();
-        }
-        if(position>=rows.size()||used_rows.count(position))continue;
-        used_rows.insert(position);
-        const auto& item=rows[position];
-        const auto& d=item.detail;
-        const bool hhe=d.ion.rfind("h_",0)==0||d.ion.rfind("he_",0)==0;
-        if(write_depth&&hhe&&(std::abs(item.tau_in)>1e-49||std::abs(item.tau_out)>1e-49)){
-            out<<std::setw(7)<<source.source_index<<std::setw(6)<<d.level_index<<" "
-               <<std::left<<std::setw(10)<<d.ion<<std::right<<std::setw(6)<<source.lower_local<<" "
-               <<std::left<<std::setw(24)<<d.lower<<std::setw(24)<<d.upper<<std::right
-               <<std::setw(13)<<std::uppercase<<std::scientific<<std::setprecision(3)<<d.energy
-               <<std::setw(13)<<item.tau_in<<std::setw(13)<<item.tau_out<<"\n";
-        }
-        if(write_luminosity&&std::abs(item.luminosity)>1e-49){
-            out<<std::setw(7)<<source.source_index<<std::setw(6)<<d.level_index<<" "
-               <<std::left<<std::setw(10)<<d.ion<<std::right<<std::setw(6)<<source.lower_local<<std::setw(6)<<source.upper_local<<" "
-               <<std::left<<std::setw(24)<<d.lower<<std::setw(24)<<d.upper<<std::right
-               <<std::setw(13)<<std::uppercase<<std::scientific<<std::setprecision(3)<<d.energy
-               <<std::setw(13)<<item.luminosity<<std::setw(13)<<item.luminosity<<"\n";
-        }
-    }
-    int cs=0;fits_close_file(df,&cs);out<<"\n";out.unsetf(std::ios::floatfield);out<<std::setprecision(17);
+    out << "\n";
+    out.unsetf(std::ios::floatfield);
+    out << std::setprecision(17);
 }
 
 void append_native_ion_columns(std::ofstream& out,const std::filesystem::path& output_dir){
@@ -846,80 +786,21 @@ void append_native_detail_line_section(
     std::ofstream& out,
     const std::filesystem::path& output_dir,
     const xstar_run_state::ProductWritingState& state) {
-    fitsfile* df = nullptr;
-    int status = 0;
-    fits_open_file(&df, (output_dir / "xo01_detal2.fits").c_str(), READONLY, &status);
-    if (status != 0) {
-        if (df) { int cs=0; fits_close_file(df,&cs); }
-        out << " print option:15\n detailed line product unavailable.\n\n";
+    if (state.radial_zones.empty()) {
+        out << " print option:15\n retained native line workspace unavailable.\n\n";
         return;
     }
-    const auto radial_hdus = named_hdu_numbers(df, "XSTAR_RADIAL");
-    if (radial_hdus.size() < 4) {
-        int cs=0; fits_close_file(df,&cs);
-        out << " print option:15\n detailed line radial surfaces unavailable.\n\n";
-        return;
-    }
-
-    // Preserve the v58 heatt-compatible accumulation for every detailed line
-    // already retained by the native 2644-row surface.  The first radial HDU is
-    // the entry surface and the last is the repeated terminal surface.
-    const std::vector<int> shell_hdus = radial_hdus.size() >= 5
-        ? std::vector<int>{radial_hdus[1], radial_hdus[2], radial_hdus[3]}
-        : std::vector<int>{radial_hdus[0], radial_hdus[1], radial_hdus[2]};
-    const auto geometry = native_shell_geometry(output_dir, state);
-    int type = 0;
-    status = 0;
-    fits_movabs_hdu(df, shell_hdus.front(), &type, &status);
-    const long long nr = status == 0 ? table_rows(df) : 0;
-    std::vector<double> reflected(static_cast<std::size_t>(nr), 0.0);
-    std::vector<double> transmitted(static_cast<std::size_t>(nr), 0.0);
-    for (std::size_t shell = 0; shell < shell_hdus.size() && shell < geometry.size(); ++shell) {
-        status = 0;
-        fits_movabs_hdu(df, shell_hdus[shell], &type, &status);
-        if (status != 0) continue;
-        const int cei = column_number(df, "emis_inward");
-        const int ceo = column_number(df, "emis_outward");
-        const double fpr2 = 12.56 * std::pow(geometry[shell].radius_cm * 1.0e-19, 2);
-        const double scale = fpr2 * geometry[shell].delta_cm;
-        for (long long row = 1; row <= nr; ++row) {
-            reflected[static_cast<std::size_t>(row - 1)] += read_double_cell(df, cei, row) * scale;
-            transmitted[static_cast<std::size_t>(row - 1)] += read_double_cell(df, ceo, row) * scale;
-        }
-    }
-
-    status = 0;
-    fits_movabs_hdu(df, radial_hdus.back(), &type, &status);
-    const int ci=column_number(df,"index"), cw=column_number(df,"wavelength"),
-        cion=column_number(df,"ion"), cl=column_number(df,"lower_level"),
-        cu=column_number(df,"upper_level"), cti=column_number(df,"tau_in"),
-        cto=column_number(df,"tau_out");
-
-    struct ExistingDetailValue {
-        double wavelength=0.0, reflected=0.0, transmitted=0.0, tau_in=0.0, tau_out=0.0;
-        std::string ion, lower, upper;
-    };
-    std::map<long long,ExistingDetailValue> existing;
-    for (long long row=1; row<=nr; ++row) {
-        const std::size_t i=static_cast<std::size_t>(row-1);
-        ExistingDetailValue value;
-        value.wavelength=read_double_cell(df,cw,row);
-        value.ion=read_string_cell(df,cion,row);
-        value.lower=read_string_cell(df,cl,row);
-        value.upper=read_string_cell(df,cu,row);
-        value.reflected=reflected[i];
-        value.transmitted=transmitted[i];
-        value.tau_in=read_double_cell(df,cti,row);
-        value.tau_out=read_double_cell(df,cto,row);
-        existing[read_integer_cell(df,ci,row)]=std::move(value);
-    }
-    int cs=0; fits_close_file(df,&cs);
+    const auto& ws = state.radial_zones.back().accepted_controller.evaluation.source_workspace;
+    const std::size_t rcem_stride = ws.rcem.size() / 2u;
+    const std::size_t tau_stride = ws.tau0.size() / 2u;
+    const std::size_t elum_stride = ws.elum.size() / 2u;
 
     std::vector<const xstar_run_state::LineIdentityState*> ordered;
     ordered.reserve(state.line_identities.size());
     for (const auto& id : state.line_identities) {
         if (id.line_index > 0 &&
-            (id.data_type==50 || id.data_type==54 || id.data_type==71 || id.data_type==76)) {
+            (id.data_type == 50 || id.data_type == 54 ||
+             id.data_type == 71 || id.data_type == 76)) {
             ordered.push_back(&id);
         }
     }
@@ -927,81 +808,76 @@ void append_native_detail_line_section(
         return a->line_index < b->line_index;
     });
 
-    std::map<int,std::size_t> preserved_by_type;
-    std::map<int,std::size_t> zero_by_type;
-    std::size_t preserved=0;
-    std::size_t source_defined_zero=0;
+    auto plane_value = [](const std::vector<double>& values, std::size_t stride,
+                          std::size_t plane, std::size_t slot) {
+        const std::size_t at = plane * stride + slot;
+        return at < values.size() && std::isfinite(values[at]) ? values[at] : 0.0;
+    };
+    std::map<int,std::size_t> rows_by_type;
+    std::map<int,std::size_t> nonzero_by_type;
+    std::size_t mapped_rows = 0;
+    std::size_t max_slot = 0;
 
     out << " print option:15\n line luminosities (erg/sec/10**38) and depths\n";
     out << "  line, wavelength, ion, ref. lum.,trn. lum.,backward depth, forward depth\n";
     for (const auto* id : ordered) {
-        double wavelength=id->wavelength_angstrom;
-        std::string ion=id->ion_label;
-        std::string lower=id->lower_level;
-        std::string upper=id->upper_level;
-        double ref=0.0, trn=0.0, backward=0.0, forward=0.0;
-        const auto found=existing.find(id->line_index);
-        if (found != existing.end()) {
-            // Preserve all v58 values and labels exactly.  Product metadata is
-            // used only to supply the 569 source inventory rows absent from
-            // xo01_detal2; it must not remap or zero the existing 2644 rows.
-            wavelength=found->second.wavelength;
-            ion=found->second.ion;
-            lower=found->second.lower;
-            upper=found->second.upper;
-            ref=found->second.reflected;
-            trn=found->second.transmitted;
-            backward=found->second.tau_in;
-            forward=found->second.tau_out;
-            ++preserved;
-            ++preserved_by_type[id->data_type];
-        } else {
-            // Source pprint/option-15 has real slots for these records, but
-            // elum and tau0 are zero: no nplini-backed line-product channel is
-            // committed for the omitted Type-50 rows or Types 54/71/76.  These
-            // are defined zero values, not unavailable or imported values.
-            ++source_defined_zero;
-            ++zero_by_type[id->data_type];
+        const std::size_t slot = static_cast<std::size_t>(id->line_index);
+        max_slot = std::max(max_slot, slot);
+        ++rows_by_type[id->data_type];
+        const bool mapped = slot < ws.oplin.size() && slot < rcem_stride &&
+            slot < tau_stride && slot < elum_stride;
+        if (mapped) ++mapped_rows;
+        const double ref = mapped ? plane_value(ws.elum, elum_stride, 0u, slot) : 0.0;
+        const double trn = mapped ? plane_value(ws.elum, elum_stride, 1u, slot) : 0.0;
+        const double backward = mapped ? plane_value(ws.tau0, tau_stride, 0u, slot) : 0.0;
+        const double forward = mapped ? plane_value(ws.tau0, tau_stride, 1u, slot) : 0.0;
+        if (ref != 0.0 || trn != 0.0 || backward != 0.0 || forward != 0.0) {
+            ++nonzero_by_type[id->data_type];
         }
+        std::string ion = id->ion_label;
+        if (ion.size() > 8u) ion.resize(8u);
+        std::string description = id->lower_level + "-" + id->upper_level;
+        description.erase(std::remove(description.begin(), description.end(), ' '), description.end());
+        if (description.size() > 18u) description.resize(18u);
         out << std::setw(10) << id->line_index
             << std::setw(13) << std::uppercase << std::scientific << std::setprecision(5)
-            << wavelength << " "
-            << std::left << std::setw(10) << ion << std::right
+            << id->wavelength_angstrom << " "
+            << std::left << std::setw(8) << ion << std::right
             << std::setw(13) << ref << std::setw(13) << trn
-            << std::setw(13) << backward << std::setw(13) << forward << " "
-            << lower << "-" << upper << "\n";
+            << std::setw(13) << backward << std::setw(13) << forward
+            << " " << description << "\n";
     }
     out << "\n";
     out.unsetf(std::ios::floatfield);
     out << std::setprecision(17);
 
-    const bool benchmark_inventory = ordered.size()==3213;
-    const bool coverage_ok = !benchmark_inventory ||
-        (preserved==2644 && source_defined_zero==569 &&
-         preserved_by_type[50]==2644 &&
-         zero_by_type[50]==244 && zero_by_type[54]==121 &&
-         zero_by_type[71]==195 && zero_by_type[76]==9);
-
-    std::ofstream audit(output_dir / "v048746255172561_full_line_channels_audit.json");
+    const bool coverage_ok = !ordered.empty() && mapped_rows == ordered.size() &&
+        ws.line_workspace_exact && ws.line_tau_workspace_exact &&
+        elum_stride > max_slot;
+    std::ofstream audit(output_dir / "v048746255172563_full_line_channels_audit.json");
     if (audit) {
         audit << "{\n"
-              << "  \"schema\": \"xstar-tools-v048746255172561-full-line-channels-v2\",\n"
+              << "  \"schema\": \"xstar-tools-v048746255172563-full-line-channels-v3\",\n"
               << "  \"source_line_rows\": " << ordered.size() << ",\n"
-              << "  \"existing_v58_detail_rows_preserved\": " << preserved << ",\n"
-              << "  \"source_defined_zero_rows_added\": " << source_defined_zero << ",\n"
-              << "  \"preserved_type50\": " << preserved_by_type[50] << ",\n"
-              << "  \"zero_type50\": " << zero_by_type[50] << ",\n"
-              << "  \"zero_type54\": " << zero_by_type[54] << ",\n"
-              << "  \"zero_type71\": " << zero_by_type[71] << ",\n"
-              << "  \"zero_type76\": " << zero_by_type[76] << ",\n"
-              << "  \"coverage_gate\": \"" << (coverage_ok?"ACCEPT":"REJECT") << "\",\n"
-              << "  \"existing_detail_values_modified\": false,\n"
+              << "  \"mapped_exact_nplini_rows\": " << mapped_rows << ",\n"
+              << "  \"maximum_nplini_slot\": " << max_slot << ",\n"
+              << "  \"native_line_workspace_slots\": " << (ws.oplin.empty() ? 0u : ws.oplin.size() - 1u) << ",\n"
+              << "  \"type50_rows\": " << rows_by_type[50] << ",\n"
+              << "  \"type54_rows\": " << rows_by_type[54] << ",\n"
+              << "  \"type71_rows\": " << rows_by_type[71] << ",\n"
+              << "  \"type76_rows\": " << rows_by_type[76] << ",\n"
+              << "  \"nonzero_type50\": " << nonzero_by_type[50] << ",\n"
+              << "  \"nonzero_type54\": " << nonzero_by_type[54] << ",\n"
+              << "  \"nonzero_type71\": " << nonzero_by_type[71] << ",\n"
+              << "  \"nonzero_type76\": " << nonzero_by_type[76] << ",\n"
+              << "  \"controller_owned_rcem_oplin_tau0_elum\": true,\n"
+              << "  \"zero_placeholder_merge_removed\": true,\n"
+              << "  \"coverage_gate\": \"" << (coverage_ok ? "ACCEPT" : "REJECT") << "\",\n"
               << "  \"oracle_or_bridge_values_read\": false\n"
               << "}\n";
     }
     if (!coverage_ok) {
-        throw std::runtime_error(
-            "full option-15 source inventory gate failed: expected 2644 preserved plus 569 source-defined zero rows");
+        throw std::runtime_error("full option-15 nplini workspace coverage gate failed");
     }
 }
 

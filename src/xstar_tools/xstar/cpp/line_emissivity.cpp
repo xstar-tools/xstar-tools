@@ -501,7 +501,8 @@ int xstar_spectral_apply_contributions_v1(
             workspace->cemab[cemab_stride + index] = c.ptmp2 * std::abs(c.ans3) / denom * c.abundance_upper * c.hydrogen_density;
             ++stats->emissivity_contributions;
             ++stats->opacity_contributions;
-        } else if (c.kind == XSTAR_SPECTRAL_KIND_EMISAB_LINE) {
+        } else if (c.kind == XSTAR_SPECTRAL_KIND_EMISAB_LINE ||
+                   c.kind == XSTAR_SPECTRAL_KIND_FULL_LINE) {
             if (c.rate_type == 4 && index > 0) {
                 if (static_cast<size_t>(index) >= line_capacity || static_cast<size_t>(index) >= rcem_stride) {
                     write_message(error, error_size, "line contribution output index out of range");
@@ -512,8 +513,14 @@ int xstar_spectral_apply_contributions_v1(
                     write_message(error, error_size, "zero line escape denominator");
                     return 8;
                 }
-                workspace->rcem[index] = -c.abundance_upper * c.ans3 * c.ptmp1 / denom;
-                workspace->rcem[rcem_stride + index] = -c.abundance_upper * c.ans3 * c.ptmp2 / denom;
+                // calc_emisab_ion defines abund2 as level population times
+                // elemental abundance times xpx.  Keep rcem in the same
+                // volumetric units; omitting xpx suppressed every line
+                // luminosity by the hydrogen density (1e8 in this case).
+                workspace->rcem[index] = -c.abundance_upper * c.hydrogen_density *
+                    c.ans3 * c.ptmp1 / denom;
+                workspace->rcem[rcem_stride + index] = -c.abundance_upper * c.hydrogen_density *
+                    c.ans3 * c.ptmp2 / denom;
                 // Source linopac consumes cm^-1 line opacity.  Type-50 opakab is a
                 // cross section, while abundance_lower is the dimensionless
                 // level population times elemental abundance.  The previous
@@ -524,6 +531,57 @@ int xstar_spectral_apply_contributions_v1(
                 workspace->oplin[index] = c.opakab * c.abundance_lower * c.hydrogen_density;
                 ++stats->emissivity_contributions;
                 ++stats->opacity_contributions;
+                if (c.kind == XSTAR_SPECTRAL_KIND_FULL_LINE) {
+                    if (static_cast<size_t>(index) >= fline_stride ||
+                        c.bin_one_based <= 0 || static_cast<size_t>(c.bin_one_based) > workspace->flinel_count ||
+                        !(c.bin_width_eV > 0.0)) {
+                        write_message(error, error_size, "full line profile index or width invalid");
+                        return 7;
+                    }
+                    const double net = (c.ans2 * c.abundance_upper -
+                        c.ans1 * c.abundance_lower) * c.hydrogen_density;
+                    const double erg_per_ev = 1.602176634e-12;
+                    const double line1 = std::max(net * c.line_energy_eV * erg_per_ev * c.ptmp1, 0.0);
+                    const double line2 = std::max(net * c.line_energy_eV * erg_per_ev * c.ptmp2, 0.0);
+                    workspace->fline[index] = line1;
+                    workspace->fline[fline_stride + index] = line2;
+                    workspace->flinel[c.bin_one_based - 1] +=
+                        (line1 + line2) * 2.0 / c.bin_width_eV / erg_per_ev;
+                    const double* seed = nullptr;
+                    int seed_radius = 0;
+                    const bool exact_grid_oracle =
+                        seed_profiles && seed_profile_stride == XSTAR_SPECTRAL_EXACT_GRID_STRIDE;
+                    if (seed_profiles && (exact_grid_oracle ||
+                        (seed_profile_stride >= 21 && (seed_profile_stride % 2) == 1))) {
+                        seed = seed_profiles + i * seed_profile_stride;
+                        if (!exact_grid_oracle) seed_radius = static_cast<int>((seed_profile_stride - 1) / 2);
+                    }
+                    if (!seed || (!exact_grid_oracle && seed_radius < 10)) {
+                        write_message(error, error_size, "full line contribution lacks valid seed or exact-grid oracle");
+                        return 9;
+                    }
+                    long long updated = 0;
+                    double opacity_elapsed = 0.0;
+                    char opacity_error[512] = {0};
+                    const int profile_rc = exact_grid_oracle
+                        ? xstar_opacity_apply_exact_grid_v1(
+                            seed, workspace->epi_eV, static_cast<int>(workspace->energy_count),
+                            workspace->opakc, workspace->rccemis, &updated, &opacity_elapsed,
+                            opacity_error, sizeof(opacity_error))
+                        : xstar_opacity_apply_line_profile_v1(
+                            c.opakab * c.abundance_lower * c.hydrogen_density,
+                            c.line_energy_eV, c.turbulent_velocity_km_s,
+                            c.temperature_1e4K, c.atomic_mass_amu, c.natural_width_eV,
+                            seed, seed_radius, workspace->epi_eV,
+                            static_cast<int>(workspace->energy_count), workspace->opakc,
+                            workspace->rccemis, &updated, &opacity_elapsed,
+                            opacity_error, sizeof(opacity_error));
+                    if (profile_rc != 0) {
+                        write_message(error, error_size, opacity_error);
+                        return 10;
+                    }
+                    ++stats->line_profiles;
+                }
             }
         } else if (c.kind == XSTAR_SPECTRAL_KIND_EMIS_OPACITY_ONLY) {
             if (index <= 0 || static_cast<size_t>(index) >= continuum_capacity) {

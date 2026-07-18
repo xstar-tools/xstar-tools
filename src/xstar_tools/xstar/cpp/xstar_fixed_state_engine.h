@@ -88,7 +88,13 @@ typedef enum xstar_fixed_runtime_state_flags_v1 {
      * across autonomous repeated evaluations.  The source controller carries
      * the compact stage window as run state rather than recomputing a wider
      * preliminary window from every trial electron fraction. */
-    XSTAR_FIXED_RUNTIME_STATE_RETAIN_ACTIVE_STAGE_WINDOW = 1u << 5
+    XSTAR_FIXED_RUNTIME_STATE_RETAIN_ACTIVE_STAGE_WINDOW = 1u << 5,
+    /* v0.6.48.7.46.25.5.17.25.63: retain the exact sparse line/RRC source
+     * workspaces on every controller evaluation, but defer the expensive
+     * 9999-bin continuum and line-profile projection until a real product
+     * boundary is being retained.  The controller gates depend on the
+     * populations and thermal state, not on these derived public surfaces. */
+    XSTAR_FIXED_RUNTIME_STATE_DEFER_PRODUCT_PROJECTION = 1u << 6
 } xstar_fixed_runtime_state_flags_v1;
 
 typedef struct xstar_fixed_state_input_v1 {
@@ -272,6 +278,8 @@ typedef struct xstar_fixed_state_program_info_v1 {
     uint64_t record_count;
     uint64_t topology_record_count;
     uint64_t unsupported_record_count;
+    uint64_t native_line_count;
+    uint64_t native_continuum_count;
     char program_id[XSTAR_FIXED_STATE_ID_SIZE];
     char message[XSTAR_FIXED_STATE_MESSAGE_SIZE];
 } xstar_fixed_state_program_info_v1;

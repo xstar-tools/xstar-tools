@@ -1403,6 +1403,11 @@ def _lower_record(
         "density_scale": 1.0,
         "line_energy_ev": float(line_energy),
         "atomic_mass_amu": float(mass),
+        # Exact source pointer spaces. nplini indexes the complete line
+        # workspace and npconi2 indexes the complete RRC threshold workspace.
+        # Preserve zero exactly; zero means the record owns no public slot.
+        "line_index": int(derived.nplini[rec]) if rec < len(derived.nplini) else 0,
+        "continuum_index": int(derived.npconi2[rec]) if rec < len(derived.npconi2) else 0,
         "matrix_enabled": 1 if matrix_enabled else 0,
         "reals": payload_reals,
         "ints": payload_ints,
@@ -1509,7 +1514,8 @@ def lower_active_atdb(
         record_fields = [
             "source_position", "record", "next_index", "element_index", "opcode", "data_type", "rate_type",
             "ion_index", "ion_stage", "lower_row", "upper_row", "real_offset", "real_count", "int_offset",
-            "int_count", "density_scale", "line_energy_ev", "atomic_mass_amu", "matrix_enabled",
+            "int_count", "density_scale", "line_energy_ev", "atomic_mass_amu",
+            "line_index", "continuum_index", "matrix_enabled",
         ]
         real_offset = int_offset = global_index = 0
         native_types: set[int] = set()
@@ -1562,6 +1568,8 @@ def lower_active_atdb(
             f"atdb_fingerprint_sha256={fingerprint}", f"element_count={len(element_table)}",
             f"topology_record_count={coverage['category_counts'].get('topology_metadata', 0)}",
             f"compact_row_count={len(row_table)}", f"record_count={global_index}",
+            f"native_line_count={int(getattr(built.derived, 'nlsvn', 0) or max((int(v) for v in built.derived.nplini), default=0))}",
+            f"native_continuum_count={int(getattr(built.derived, 'ncsvn', 0) or max((int(v) for v in built.derived.npconi2), default=0))}",
             f"unsupported_record_count={len(unsupported_rows)}",
             f"partial_lowering={'true' if unsupported_rows else 'false'}",
             f"active_record_completion_ready={'true' if active_record_completion_ready else 'false'}",
