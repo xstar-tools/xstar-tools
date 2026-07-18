@@ -503,12 +503,15 @@ std::map<long long,RrcRatePointerMeta> load_rrc_rate_pointer_metadata(
         const auto found = column.find(key);
         return found == column.end() ? header.size() : found->second;
     };
-    const std::size_t ctype=required("data_type"), clower=required("lower_row"),
-        cupper=required("upper_row"), c53=required("type53_continuum_index_one_based"),
+    const std::size_t ctype=required("data_type"), crate=required("rate_type"),
+        clower=required("lower_row"), cupper=required("upper_row"),
+        c53=required("type53_continuum_index_one_based"),
         c49=required("type49_continuum_index_one_based");
     while (std::getline(input, line)) {
         const auto fields = split_simple_csv(line);
         const long long type = csv_integer(fields, ctype);
+        const long long rate_type = csv_integer(fields, crate);
+        if (rate_type != 7) continue;
         long long continuum = 0;
         if (type == 53) continuum = csv_integer(fields, c53);
         else if (type == 49) continuum = csv_integer(fields, c49);
@@ -518,9 +521,18 @@ std::map<long long,RrcRatePointerMeta> load_rrc_rate_pointer_metadata(
     }
     return out;
 }
-const xstar_run_state::RrcIdentityState* matching_rrc_identity(const xstar_run_state::ProductWritingState& state,const DetailRrcLogRow& row){
+const xstar_run_state::RrcIdentityState* matching_rrc_identity(
+    const xstar_run_state::ProductWritingState& state,const DetailRrcLogRow& row){
+    // npconi2 is the primary source identity used by pprint options 19/24.
+    for (const auto& id : state.rrc_identities) {
+        if (id.continuum_index == row.index) return &id;
+    }
     const xstar_run_state::RrcIdentityState* best=nullptr;double score=1e300;
-    for(const auto&id:state.rrc_identities){if(id.level_global_index!=row.level_index)continue;if(!row.ion.empty()&&id.ion_label!=row.ion&&("_"+id.ion_label)!=row.ion){} const double d=std::abs(id.threshold_ev-row.energy);if(d<score){score=d;best=&id;}}
+    for(const auto&id:state.rrc_identities){
+        if(!row.ion.empty()&&id.ion_label!=row.ion&&("_"+id.ion_label)!=row.ion) continue;
+        const double d=std::abs(id.threshold_ev-row.energy);
+        if(d<score){score=d;best=&id;}
+    }
     return best;
 }
 
@@ -571,24 +583,27 @@ void append_native_public_rrc_sections(std::ofstream& out,
         d.lower=read_string_cell(df,clo,row);d.upper=read_string_cell(df,cup,row);
         const auto* id=matching_rrc_identity(state,d);
         const auto found_rate=rate_pointer_meta.find(d.index);
-        const long long local=found_rate!=rate_pointer_meta.end() && found_rate->second.lower_local>0
-            ? found_rate->second.lower_local
-            : (id&&id->lower_local_index>0?id->lower_local_index:d.level_index);
-        const long long upper=found_rate!=rate_pointer_meta.end() && found_rate->second.upper_local>0
-            ? found_rate->second.upper_local
-            : (id&&id->upper_local_index>0?id->upper_local_index:0);
+        const bool source_type7 = found_rate != rate_pointer_meta.end();
+        const long long global_level = id && id->level_global_index > 0
+            ? id->level_global_index : d.level_index;
+        const long long local = id && id->lower_local_index > 0
+            ? id->lower_local_index
+            : (source_type7 && found_rate->second.lower_local > 0 ? found_rate->second.lower_local : d.level_index);
+        const long long upper = id && id->upper_local_index > 0
+            ? id->upper_local_index
+            : (source_type7 ? found_rate->second.upper_local : 0);
         const double ti=read_double_cell(df,cti,row),to=read_double_cell(df,cto,row);
         const double lum=luminosity[static_cast<std::size_t>(row-1)];
         const bool hhe=d.ion.rfind("h_",0)==0||d.ion.rfind("he_",0)==0;
-        if(write_depth&&hhe&&(std::abs(ti)>1e-30||std::abs(to)>1e-30)){
-            out<<std::setw(7)<<d.index<<std::setw(6)<<d.level_index<<" "
+        if(write_depth&&source_type7&&hhe&&(std::abs(ti)>1e-49||std::abs(to)>1e-49)){
+            out<<std::setw(7)<<d.index<<std::setw(6)<<global_level<<" "
                <<std::left<<std::setw(10)<<d.ion<<std::right<<std::setw(6)<<local<<" "
                <<std::left<<std::setw(24)<<d.lower<<std::setw(24)<<d.upper<<std::right
                <<std::setw(13)<<std::uppercase<<std::scientific<<std::setprecision(3)<<d.energy
                <<std::setw(13)<<ti<<std::setw(13)<<to<<"\n";
         }
-        if(write_luminosity&&std::abs(lum)>1e-49){
-            out<<std::setw(7)<<d.index<<std::setw(6)<<d.level_index<<" "
+        if(write_luminosity&&source_type7&&std::abs(lum)>1e-49){
+            out<<std::setw(7)<<d.index<<std::setw(6)<<global_level<<" "
                <<std::left<<std::setw(10)<<d.ion<<std::right<<std::setw(6)<<local<<std::setw(6)<<upper<<" "
                <<std::left<<std::setw(24)<<d.lower<<std::setw(24)<<d.upper<<std::right
                <<std::setw(13)<<std::uppercase<<std::scientific<<std::setprecision(3)<<d.energy
@@ -659,6 +674,13 @@ std::vector<ShellGeometry> native_shell_geometry(
             {base_radius + first + second, third}};
 }
 
+
+const xstar_run_state::LineIdentityState* step_log_line_identity(
+    const xstar_run_state::ProductWritingState& state, long long index) {
+    for (const auto& id : state.line_identities) if (id.line_index == index) return &id;
+    return nullptr;
+}
+
 void append_native_detail_line_section(
     std::ofstream& out,
     const std::filesystem::path& output_dir,
@@ -712,14 +734,20 @@ void append_native_detail_line_section(
     out << "  line, wavelength, ion, ref. lum.,trn. lum.,backward depth, forward depth\n";
     for (long long row=1; row<=nr; ++row) {
         const std::size_t i=static_cast<std::size_t>(row-1);
-        out << std::setw(10) << read_integer_cell(df,ci,row)
+        const long long line_index = read_integer_cell(df,ci,row);
+        const auto* source_id = step_log_line_identity(state, line_index);
+        const std::string lower_label = source_id && !source_id->lower_level.empty()
+            ? source_id->lower_level : read_string_cell(df,cl,row);
+        const std::string upper_label = source_id && !source_id->upper_level.empty()
+            ? source_id->upper_level : read_string_cell(df,cu,row);
+        out << std::setw(10) << line_index
             << std::setw(13) << std::uppercase << std::scientific << std::setprecision(5)
             << read_double_cell(df,cw,row) << " "
             << std::left << std::setw(10) << read_string_cell(df,cion,row) << std::right
             << std::setw(13) << reflected[i] << std::setw(13) << transmitted[i]
             << std::setw(13) << read_double_cell(df,cti,row)
             << std::setw(13) << read_double_cell(df,cto,row) << " "
-            << read_string_cell(df,cl,row) << "-" << read_string_cell(df,cu,row) << "\n";
+            << lower_label << "-" << upper_label << "\n";
     }
     int cs=0; fits_close_file(df,&cs);
     out << "\n"; out.unsetf(std::ios::floatfield); out << std::setprecision(17);

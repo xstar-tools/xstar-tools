@@ -9171,7 +9171,8 @@ void write_line_detail(const std::filesystem::path& path,
         const auto pw_line_opacity = optional_bridge_array_for_hdu(state, "product_write_detail_line_opacity", hdu_number, pw_line_index.size());
         const auto pw_line_tau_in = optional_bridge_array_for_hdu(state, "product_write_detail_line_tau_in", hdu_number, pw_line_index.size());
         const auto pw_line_tau_out = optional_bridge_array_for_hdu(state, "product_write_detail_line_tau_out", hdu_number, pw_line_index.size());
-        const bool have_product_write_detail_lines = pw_line_index.size() == 2644u &&
+        const bool have_product_write_detail_lines = state.backend.find("native") == std::string::npos &&
+            pw_line_index.size() == 2644u &&
             pw_line_emis_in.size() == pw_line_index.size() &&
             pw_line_emis_out.size() == pw_line_index.size() &&
             pw_line_opacity.size() == pw_line_index.size() &&
@@ -9250,7 +9251,7 @@ void write_line_detail(const std::filesystem::path& path,
                 r = merged_line_row(found_diag->second, &base);
             }
             const auto found_pw = pw_line_by_index.find(label.index);
-            if (found_pw != pw_line_by_index.end()) {
+            if (state.backend.find("native") == std::string::npos && found_pw != pw_line_by_index.end()) {
                 const std::size_t pi = found_pw->second;
                 // v25.5.17.25.48: when the retained native product-write detail
                 // surface exists but has a non-oracle row count, map it by the
@@ -9489,7 +9490,8 @@ void write_rrc_detail(const std::filesystem::path& path,
         const auto pw_rrc_opacity = optional_bridge_array_for_hdu(state, "product_write_detail_rrc_opacity", hdu_number, pw_rrc_index.size());
         const auto pw_rrc_tau_in = optional_bridge_array_for_hdu(state, "product_write_detail_rrc_tau_in", hdu_number, pw_rrc_index.size());
         const auto pw_rrc_tau_out = optional_bridge_array_for_hdu(state, "product_write_detail_rrc_tau_out", hdu_number, pw_rrc_index.size());
-        const bool have_product_write_detail_rrcs = pw_rrc_index.size() == 1849u &&
+        const bool have_product_write_detail_rrcs = state.backend.find("native") == std::string::npos &&
+            pw_rrc_index.size() == 1849u &&
             pw_rrc_emis_in.size() == pw_rrc_index.size() &&
             pw_rrc_emis_out.size() == pw_rrc_index.size() &&
             pw_rrc_absn.size() == pw_rrc_index.size() &&
@@ -9569,7 +9571,7 @@ void write_rrc_detail(const std::filesystem::path& path,
             write_string(fptr, 5, row, label.lower_level);
             write_string(fptr, 6, row, label.upper_level);
             const auto found_pw_rrc = pw_rrc_by_index.find(label.index);
-            if (found_pw_rrc != pw_rrc_by_index.end()) {
+            if (state.backend.find("native") == std::string::npos && found_pw_rrc != pw_rrc_by_index.end()) {
                 const std::size_t pi = found_pw_rrc->second;
                 // v25.5.17.25.48: retained product-write RRC arrays may have
                 // more/fewer rows than the public 1849-row surface.  Use the
@@ -9590,14 +9592,18 @@ void write_rrc_detail(const std::filesystem::path& path,
             // and opakab slots addressed by the published RRC index.
             const std::size_t source_continuum_slot = label.index > 0
                 ? static_cast<std::size_t>(label.index) : 0u;
-            if (source_continuum_slot < ws.cabab.size() &&
+            if (state.backend.find("native") == std::string::npos &&
+                source_continuum_slot < ws.cabab.size() &&
                 std::isfinite(ws.cabab[source_continuum_slot])) {
                 r.absorption = std::max(0.0, ws.cabab[source_continuum_slot]);
             }
-            if (source_continuum_slot < ws.opakab.size() &&
+            if (state.backend.find("native") == std::string::npos &&
+                source_continuum_slot < ws.opakab.size() &&
                 std::isfinite(ws.opakab[source_continuum_slot])) {
                 r.opacity = std::max(0.0, ws.opakab[source_continuum_slot]);
             }
+            r.opacity = std::max(0.0, r.opacity);
+            r.absorption = std::max(0.0, r.absorption);
             double tau_out = std::isfinite(r.tau_out) ? r.tau_out : 0.0;
             if (rrc_shell_depth_cm > 0.0 && r.opacity != 0.0) {
                 cumulative_rrc_tau_in[label.index] += std::max(r.opacity, 0.0) * rrc_shell_depth_cm;
@@ -9617,20 +9623,20 @@ void write_rrc_detail(const std::filesystem::path& path,
             if (tau_in != 0.0) ++audit.tau_in_nonzero;
         }
         detal3_audit.push_back(audit);
-        std::cout << "V048746255172552_DETAL3_HDU" << audit.hdu << "_ROWS=" << audit.rows << "\n"
-                  << "V048746255172552_DETAL3_HDU" << audit.hdu << "_DIAGNOSTIC_ROWS=" << audit.diagnostic_rows << "\n"
-                  << "V048746255172552_DETAL3_HDU" << audit.hdu << "_EMIS_OUTWARD_NONZERO=" << audit.emis_outward_nonzero << "\n"
-                  << "V048746255172552_DETAL3_HDU" << audit.hdu << "_INTEGRATED_ABSN_NONZERO=" << audit.absorption_nonzero << "\n"
-                  << "V048746255172552_DETAL3_HDU" << audit.hdu << "_OPACITY_NONZERO=" << audit.opacity_nonzero << "\n"
-                  << "V048746255172552_DETAL3_HDU" << audit.hdu << "_TAU_IN_NONZERO=" << audit.tau_in_nonzero << "\n"
-                  << "V048746255172552_DETAL3_HDU" << audit.hdu << "_TAU_IN_DEPTH_FALLBACK=" << audit.tau_in_depth_fallback << "\n"
-                  << "V048746255172552_DETAL3_HDU" << audit.hdu << "_TAU_IN_NULLS=0\n"
-                  << "V048746255172552_DETAL3_HDU" << audit.hdu << "_TAU_OUT_NULLS=0\n";
+        std::cout << "V048746255172556_DETAL3_HDU" << audit.hdu << "_ROWS=" << audit.rows << "\n"
+                  << "V048746255172556_DETAL3_HDU" << audit.hdu << "_DIAGNOSTIC_ROWS=" << audit.diagnostic_rows << "\n"
+                  << "V048746255172556_DETAL3_HDU" << audit.hdu << "_EMIS_OUTWARD_NONZERO=" << audit.emis_outward_nonzero << "\n"
+                  << "V048746255172556_DETAL3_HDU" << audit.hdu << "_INTEGRATED_ABSN_NONZERO=" << audit.absorption_nonzero << "\n"
+                  << "V048746255172556_DETAL3_HDU" << audit.hdu << "_OPACITY_NONZERO=" << audit.opacity_nonzero << "\n"
+                  << "V048746255172556_DETAL3_HDU" << audit.hdu << "_TAU_IN_NONZERO=" << audit.tau_in_nonzero << "\n"
+                  << "V048746255172556_DETAL3_HDU" << audit.hdu << "_TAU_IN_DEPTH_FALLBACK=" << audit.tau_in_depth_fallback << "\n"
+                  << "V048746255172556_DETAL3_HDU" << audit.hdu << "_TAU_IN_NULLS=0\n"
+                  << "V048746255172556_DETAL3_HDU" << audit.hdu << "_TAU_OUT_NULLS=0\n";
     }
     close_fits(fptr);
-    std::ofstream audit_json(path.parent_path() / "v048746255172552_xo01_detal3_rrc_native_surface_audit.json");
+    std::ofstream audit_json(path.parent_path() / "v048746255172556_xo01_detal3_rrc_native_surface_audit.json");
     audit_json << "{\n"
-               << "  \"schema\": \"xstar-tools-v048746255172552-xo01-detal3-rrc-native-surface-audit-v1\",\n"
+               << "  \"schema\": \"xstar-tools-v048746255172556-xo01-detal3-rrc-native-surface-audit-v1\",\n"
                << "  \"product\": \"xo01_detal3.fits:XSTAR_RADIAL\",\n"
                << "  \"native_rrc_projection\": \"ACCEPT\",\n"
                << "  \"hdu_audit\": [\n";

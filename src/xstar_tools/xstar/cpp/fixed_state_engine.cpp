@@ -5542,7 +5542,12 @@ EvaluatedRecord evaluate_record(
             if (evaluate_type99_source_faithful(record, r, ints, lower, upper, input, c, &out.type99_shadow)) {
                 out.spectral = true;
                 out.bound_free_spectral = true;
-                out.continuum_index_one_based = out.type99_shadow.nbinc_threshold_one_based;
+                // type99_nbinc_threshold_one_based is a radiation-grid bin, not
+                // the atomic npconi2 RRC pointer.  Publishing it as opakab/cabab
+                // index collides with Type-49/53 rows and shifts fstepr3 output.
+                // Type-99 remains in the full continuum reconstruction and is
+                // mapped to the detailed RRC surface from its source diagnostic.
+                out.continuum_index_one_based = 0;
                 out.line_energy_ev = out.type99_shadow.threshold_ev;
                 out.atomic_mass_amu = record.atomic_mass_amu > 0.0 ? record.atomic_mass_amu : 1.0;
                 out.opakab = std::max(0.0, out.type99_shadow.threshold_cross_section_cm2);
@@ -7992,10 +7997,10 @@ int run_impl(
         std::vector<double> cabab(continuum_capacity, 0.0);
         std::vector<double> opakab(continuum_capacity, 0.0);
         std::vector<double> rccemis(2 * continuum_capacity, 0.0);
-        // Line-profile opacity is not part of the source continuum opakc
-        // workspace.  Keep it separate so line wings cannot reduce or
-        // otherwise contaminate the free-free + bound-free continuum surface
-        // written by fstepr4 and integrated into dpthc.
+        // XSTAR heatt defines opakc as continuum opacity with line profiles
+        // binned in, while opakcont is the lines-excluded continuum surface.
+        // Keep the profile in a separate construction buffer, then add it only
+        // to opakc after the continuum contributions are complete.
         std::vector<double> line_profile_opacity(continuum_capacity, 0.0);
         std::vector<double> opakcont(continuum_capacity, 0.0);
         std::vector<double> fline(2 * line_capacity, 0.0);
@@ -8075,7 +8080,10 @@ int run_impl(
                 source_workspaces->abi_version != XSTAR_FIXED_STATE_ENGINE_ABI_VERSION) {
                 throw std::runtime_error("fixed-state source-workspace ABI mismatch");
             }
-            const std::vector<double> opakc_exact(output.opacity, output.opacity + continuum_capacity);
+            std::vector<double> opakc_exact(continuum_capacity, 0.0);
+            for (std::size_t k = 0; k < continuum_capacity; ++k) {
+                opakc_exact[k] = output.opacity[k] + opakcont[k] + line_profile_opacity[k];
+            }
             auto copy_workspace = [](const std::vector<double>& source, double* destination,
                                      std::size_t capacity, std::size_t& count,
                                      const char* label) {
@@ -8127,7 +8135,7 @@ int run_impl(
             output.spectrum[k] += cemab[k] + cemab[continuum_capacity + k]
                 + rccemis[k] + rccemis[continuum_capacity + k]
                 + profiled[2*continuum_capacity+k] + profiled[3*continuum_capacity+k];
-            output.opacity[k] += opakcont[k];
+            output.opacity[k] += opakcont[k] + line_profile_opacity[k];
         }
         stats.spectral_contributions += ss.contributions_committed;
     }

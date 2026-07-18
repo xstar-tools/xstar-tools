@@ -5198,14 +5198,17 @@ std::vector<double> rrc_scalar_values(const xstar_run_state::ProductWritingState
     std::vector<double> out(product.rrc_identities.size(), 0.0);
     const std::size_t continuum_count = ws.native_continuum_count;
     for (std::size_t i = 0; i < product.rrc_identities.size(); ++i) {
+        // Native opakab/cabab arrays use the source one-based continuum
+        // pointer as the actual vector slot; slot zero is intentionally unused.
+        // Do not prefer the compact public ordinal and do not subtract one.
         std::size_t direct = 0;
         if (product.rrc_identities[i].continuum_index > 0) {
-            direct = static_cast<std::size_t>(product.rrc_identities[i].continuum_index - 1);
+            direct = static_cast<std::size_t>(product.rrc_identities[i].continuum_index);
         }
-        double value = vector_at_or_zero(primary, i);
-        if (value == 0.0 && continuum_count > 0) value = vector_at_or_zero(primary, direct);
-        if (value == 0.0) value = vector_at_or_zero(fallback, i);
+        double value = continuum_count > 0 ? vector_at_or_zero(primary, direct) : 0.0;
+        if (value == 0.0) value = vector_at_or_zero(primary, i);
         if (value == 0.0 && continuum_count > 0) value = vector_at_or_zero(fallback, direct);
+        if (value == 0.0) value = vector_at_or_zero(fallback, i);
         out[i] = value;
     }
     return out;
