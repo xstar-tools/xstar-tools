@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.7.46.25.5.17.25.62 - 2026-07-18
+
+- Kept checked full-element-row to compact-active-row translation for line and bound-free spectral endpoints.
+- Prevented thermal compact-population closures from replacing committed populations or transported spectral workspaces.
+- Restored native committed populations as the controller state while retaining thermal closure only for thermal residual qualification.
+- Corrected sequence-24 branch diagnostics so a partial H-row qualification cannot be reported as an accepted gate.
+- Requires a fresh replay; v61 sequence-24 failure checkpoints are not compatible.
+
 ## 0.6.48.7.46.25.5.17.25.61 - 2026-07-18
 
 - Branched from v0.6.48.7.46.25.5.17.25.60 and retains its complete 3,213-row option-15 inventory and native `zrtmp` trapezoidal accumulator.

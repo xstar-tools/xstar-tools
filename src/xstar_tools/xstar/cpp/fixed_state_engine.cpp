@@ -7506,19 +7506,11 @@ int run_impl(
         thermal_population_stream.insert(
             thermal_population_stream.end(), thermal_populations.begin(), thermal_populations.end());
 
-        // Product-state closure: the per-sequence compact population contract
-        // was previously consumed only by the thermal residual. Use that same
-        // accepted compact state for retained populations and all
-        // spectral/opacity construction, without changing the controller's
-        // native ion-balance residual stream.
-        std::vector<double> product_populations = buffers.populations;
-        if (element_thermal_compact_closure_applied) {
-            if (thermal_populations.size() != product_populations.size()) {
-                throw std::runtime_error(
-                    "thermal compact population closure/product population width mismatch");
-            }
-            product_populations = thermal_populations;
-        }
+        // Controller-safe spectral projection: thermal compact-population
+        // closures qualify only the thermal residual stream.  They must not be
+        // copied into the committed population output or any source workspace
+        // that is transported into the next DSEC evaluation.  Product-specific
+        // population projection belongs after the full controller trajectory.
 
         double computed_element_heating = 0.0;
         double computed_element_cooling = 0.0;
@@ -7680,8 +7672,8 @@ int run_impl(
         }
 
         std::vector<double> full_populations(static_cast<std::size_t>(element.n_rows), 0.0);
-        for (std::size_t row = 0; row < product_populations.size(); ++row) {
-            full_populations[static_cast<std::size_t>(active.full_row_start - 1) + row] = product_populations[row];
+        for (std::size_t row = 0; row < buffers.populations.size(); ++row) {
+            full_populations[static_cast<std::size_t>(active.full_row_start - 1) + row] = buffers.populations[row];
         }
         all_populations.insert(all_populations.end(), full_populations.begin(), full_populations.end());
         fixed_full_population_offset += full_populations.size();
@@ -7833,7 +7825,7 @@ int run_impl(
             NativeBoundFreeCurve curve;
             if (!native_bound_free_curve(ctx.program, *evaluated_records[k], evaluated[k], curve)) continue;
             accumulate_native_bound_free_surface(
-                curve, evaluated[k], *evaluated_records[k], active, product_populations, input,
+                curve, evaluated[k], *evaluated_records[k], active, buffers.populations, input,
                 native_bound_free_opacity, native_rrc_continuum_emission);
         }
 
@@ -7860,10 +7852,10 @@ int run_impl(
             sc.ptmp1 = 1.0;
             sc.ptmp2 = 1.0;
             sc.abundance_lower =
-                active_population_for_full_row(active, product_populations, rec.lower_row) *
+                active_population_for_full_row(active, buffers.populations, rec.lower_row) *
                 element.abundance;
             sc.abundance_upper =
-                active_population_for_full_row(active, product_populations, rec.upper_row) *
+                active_population_for_full_row(active, buffers.populations, rec.upper_row) *
                 element.abundance;
             sc.hydrogen_density = input.hydrogen_density_cm3;
             sc.ans1 = rec.ans1; sc.ans2 = rec.ans2; sc.ans3 = rec.ans3; sc.ans4 = rec.ans4;

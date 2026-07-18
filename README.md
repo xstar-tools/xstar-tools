@@ -1,4 +1,4 @@
-# xstar_tools 0.6.48.7.46.25.5.17.25.61
+# xstar_tools 0.6.48.7.46.25.5.17.25.62
 
 This candidate fixes full-element-row versus compact-active-row population projection in line and bound-free spectral construction, restores the retained radial sequence `[58,59,60,61,60]`, and preserves v60's complete option-15 inventory and native `zrtmp` accumulator.
 
