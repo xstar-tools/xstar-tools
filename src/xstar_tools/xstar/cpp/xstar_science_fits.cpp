@@ -8283,12 +8283,6 @@ std::vector<double> reference_energy_grid(const xstar_run_state::ProductWritingS
 std::size_t source_zone_index(const xstar_run_state::ProductWritingState& state,
                               std::size_t output_zone_index) {
     if (state.radial_zones.empty()) return 0;
-    // The product writer retains one controller seed followed by the four
-    // accepted call-final states (58,59,60,61).  Historical radial products
-    // publish 58,59,60,61 and then repeat the call-3 nonterminal boundary,
-    // not the terminal call-4 state.  This is the same HDU 6/7 ordering
-    // retained by the v15.9.26 ProductWritingState bridge.
-    if (state.radial_zones.size() >= 5u && output_zone_index == 4u) return 3u;
     return std::min(output_zone_index + 1, state.radial_zones.size() - 1);
 }
 
@@ -10314,11 +10308,13 @@ void write_abundances(const std::filesystem::path& path,
     fitsfile* fptr = create_fits(path, state);
     create_table(fptr, ASCII_TBL, static_cast<long>(state.radial_zones.size()), "ABUNDANCES", names, formats, units);
     std::vector<std::map<std::pair<int,int>,double>> fractions;
+    std::vector<xstar_run_state::AbundanceRadialRowState> abundance_rows;
     for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
         const auto* zone = abundance_output_zone(state, z);
         fractions.push_back(zone ? ion_fractions(zone->accepted_controller.evaluation, elements, rows) : std::map<std::pair<int,int>,double>{});
+        abundance_rows.push_back(abundance_output_base_row_for_zone(state, z));
         const long row = static_cast<long>(z + 1);
-        write_abundance_base(fptr, row, abundance_output_base_row_for_zone(state, z));
+        write_abundance_base(fptr, row, abundance_rows.back());
         int col = 9;
         for (int element_z = 1; element_z <= 30; ++element_z) {
             for (int stage = 1; stage <= element_z; ++stage) {
@@ -10333,17 +10329,76 @@ void write_abundances(const std::filesystem::path& path,
         const auto eit = std::find_if(elements.begin(), elements.end(), [element_z](const ElementMeta& e){ return e.element_z == element_z; });
         const double abundance = eit == elements.end() ? 0.0 : eit->abundance;
         for (int stage = 1; stage <= element_z; ++stage) {
-            double total_column_density = parameter_value(state, "column", 0.0);
-            for (const auto& b : read_bridge_boundaries(state)) {
-                if (b.terminal_record && b.column_density_cm2 > 0.0) {
-                    total_column_density = b.column_density_cm2;
-                    break;
+            // Native pprint option-12/27 zrtmp trapezoidal accumulator.
+            // Preserve the complete signed source boundary sequence, including
+            // the final zeroed row whose rdel resets from the terminal depth to
+            // zero.  Fortran loops jkl=2..numrec without discarding that final
+            // negative interval; it supplies the terminal half-cell subtraction.
+            double column = 0.0;
+            std::size_t intervals = 0;
+            for (std::size_t j = 1; j < fractions.size() && j < abundance_rows.size(); ++j) {
+                const double dr = abundance_rows[j].delta_radius_cm - abundance_rows[j-1].delta_radius_cm;
+                if (!std::isfinite(dr) || dr == 0.0) continue;
+                const auto key = std::make_pair(element_z, stage);
+                const auto p0 = fractions[j-1].find(key);
+                const auto p1 = fractions[j].find(key);
+                const double f0 = p0 == fractions[j-1].end() ? 0.0 : p0->second;
+                const double f1 = p1 == fractions[j].end() ? 0.0 : p1->second;
+                const double n0 = std::max(abundance_rows[j-1].density_cm3, 0.0);
+                const double n1 = std::max(abundance_rows[j].density_cm3, 0.0);
+                column += 0.5 * (f0*n0 + f1*n1) * dr * abundance;
+                ++intervals;
+            }
+            // Fail over to the typed radial-zone shell widths only when the
+            // public cumulative rdel ledger is unavailable.  This remains a
+            // genuine shell-by-shell trapezoid and never reverts to the old
+            // initial/terminal whole-column average.
+            if (intervals == 0 && state.radial_zones.size() >= 2) {
+                std::vector<std::map<std::pair<int,int>,double>> zone_fractions;
+                zone_fractions.reserve(state.radial_zones.size());
+                for (const auto& zone : state.radial_zones) {
+                    zone_fractions.push_back(ion_fractions(zone.accepted_controller.evaluation, elements, rows));
+                }
+                const auto key = std::make_pair(element_z, stage);
+                for (std::size_t j = 1; j < state.radial_zones.size(); ++j) {
+                    double dr = state.radial_zones[j].delta_radius_cm;
+                    if (!(dr > 0.0) && state.radial_zones[j].outer_radius_cm > state.radial_zones[j-1].outer_radius_cm) {
+                        dr = state.radial_zones[j].outer_radius_cm - state.radial_zones[j-1].outer_radius_cm;
+                    }
+                    if (!(std::isfinite(dr) && dr > 0.0)) continue;
+                    const double f0 = zone_fractions[j-1].count(key) ? zone_fractions[j-1].at(key) : 0.0;
+                    const double f1 = zone_fractions[j].count(key) ? zone_fractions[j].at(key) : 0.0;
+                    const double n0 = std::max(state.radial_zones[j-1].density_cm3, 0.0);
+                    const double n1 = std::max(state.radial_zones[j].density_cm3, 0.0);
+                    column += 0.5 * (f0*n0 + f1*n1) * dr * abundance;
+                    ++intervals;
                 }
             }
-            const double f_initial = !fractions.empty() ? fractions.front()[{element_z,stage}] : 0.0;
-            const double f_terminal = fractions.size() >= 2 ? fractions.back()[{element_z,stage}] : f_initial;
-            const double column = 0.5 * (f_initial + f_terminal) * total_column_density * abundance;
             write_real4(fptr, col++, 1, column);
+        }
+    }
+
+    {
+        std::ofstream audit(path.parent_path() / "v048746255172560_zrtmp_trapezoidal_audit.json");
+        if (audit) {
+            std::size_t positive_intervals = 0;
+            std::size_t negative_intervals = 0;
+            for (std::size_t j=1; j<abundance_rows.size(); ++j) {
+                const double dr=abundance_rows[j].delta_radius_cm-abundance_rows[j-1].delta_radius_cm;
+                if (std::isfinite(dr) && dr>0.0) ++positive_intervals;
+                if (std::isfinite(dr) && dr<0.0) ++negative_intervals;
+            }
+            audit << "{\n"
+                  << "  \"schema\": \"xstar-tools-v048746255172560-zrtmp-trapezoidal-v2\",\n"
+                  << "  \"radial_rows\": " << abundance_rows.size() << ",\n"
+                  << "  \"positive_cumulative_depth_intervals\": " << positive_intervals << ",\n"
+                  << "  \"negative_terminal_reset_intervals\": " << negative_intervals << ",\n"
+                  << "  \"density_weighted_trapezoid\": true,\n"
+                  << "  \"signed_consecutive_boundary_deltas\": true,\n"
+                  << "  \"terminal_zero_row_included\": true,\n"
+                  << "  \"initial_terminal_average_removed\": true,\n"
+                  << "  \"oracle_or_bridge_columns_read\": false\n"
+                  << "}\n";
         }
     }
 

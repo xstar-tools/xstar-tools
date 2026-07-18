@@ -301,7 +301,9 @@ void load_exact_source_metadata(WholeRunAccumulatedState& state) {
         row.natural_rate_s = std::stod(value("natural_rate_s"));
         row.auger_width_ev = std::stod(value("auger_width_eV"));
         row.auger_rate_s = std::stod(value("auger_rate_s"));
-        row.source_transition = value("source_transition");
+        try { row.source_record = std::stoll(value("source_record")); } catch (...) { row.source_record = 0; }
+        try { row.lower_local_index = std::stoi(value("lower_local_index")); } catch (...) { row.lower_local_index = 0; }
+        try { row.upper_local_index = std::stoi(value("upper_local_index")); } catch (...) { row.upper_local_index = 0; }
         state.line_identities.push_back(std::move(row));
     });
     state.rrc_identities.clear();

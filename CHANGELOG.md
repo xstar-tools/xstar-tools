@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.7.46.25.5.17.25.60 - 2026-07-18
+
+- Branched directly from v0.6.48.7.46.25.5.17.25.58; no v59 product-population or radial-order changes are included.
+- Expanded `xout_step.log` print option 15 to the complete 3,213-row active H/He/Mg source-line inventory while preserving all 2,644 existing v58 detail-line luminosity and depth values unchanged.
+- Added the 569 source slots absent from the v58 detail surface: 244 Type-50, 121 Type-54, 195 Type-71, and 9 Type-76 rows. Source/oracle audit confirms these slots have zero `elum` and `tau0` values for this benchmark.
+- Added a strict option-15 coverage gate requiring exactly 2,644 preserved rows plus 569 source-defined zero rows.
+- Replaced the initial/terminal ion-column approximation with the source `zrtmp` signed consecutive-boundary trapezoid, including the final zero-row terminal reset interval.
+- Added runtime JSON audits for full line-channel coverage and `zrtmp` integration. No bridge or oracle product values are consumed at runtime.
+
 ## 0.6.48.7.46.25.5.17.25.30 - 2026-07-15
 
 - Enabled gated product publication after full-61 trajectory, ProductWritingState retention, ProductWritingState comparison, and oracle-compatible row-selection gates accept.

@@ -842,12 +842,6 @@ std::vector<ShellGeometry> native_shell_geometry(
 }
 
 
-const xstar_run_state::LineIdentityState* step_log_line_identity(
-    const xstar_run_state::ProductWritingState& state, long long index) {
-    for (const auto& id : state.line_identities) if (id.line_index == index) return &id;
-    return nullptr;
-}
-
 void append_native_detail_line_section(
     std::ofstream& out,
     const std::filesystem::path& output_dir,
@@ -866,6 +860,10 @@ void append_native_detail_line_section(
         out << " print option:15\n detailed line radial surfaces unavailable.\n\n";
         return;
     }
+
+    // Preserve the v58 heatt-compatible accumulation for every detailed line
+    // already retained by the native 2644-row surface.  The first radial HDU is
+    // the entry surface and the last is the repeated terminal surface.
     const std::vector<int> shell_hdus = radial_hdus.size() >= 5
         ? std::vector<int>{radial_hdus[1], radial_hdus[2], radial_hdus[3]}
         : std::vector<int>{radial_hdus[0], radial_hdus[1], radial_hdus[2]};
@@ -889,6 +887,7 @@ void append_native_detail_line_section(
             transmitted[static_cast<std::size_t>(row - 1)] += read_double_cell(df, ceo, row) * scale;
         }
     }
+
     status = 0;
     fits_movabs_hdu(df, radial_hdus.back(), &type, &status);
     const int ci=column_number(df,"index"), cw=column_number(df,"wavelength"),
@@ -896,78 +895,114 @@ void append_native_detail_line_section(
         cu=column_number(df,"upper_level"), cti=column_number(df,"tau_in"),
         cto=column_number(df,"tau_out");
 
-    struct NativeDetailLineLogRow {
-        double wavelength = 0.0;
-        std::string ion;
-        std::string lower;
-        std::string upper;
-        double reflected = 0.0;
-        double transmitted = 0.0;
-        double tau_in = 0.0;
-        double tau_out = 0.0;
+    struct ExistingDetailValue {
+        double wavelength=0.0, reflected=0.0, transmitted=0.0, tau_in=0.0, tau_out=0.0;
+        std::string ion, lower, upper;
     };
-    std::map<long long, NativeDetailLineLogRow> by_index;
+    std::map<long long,ExistingDetailValue> existing;
     for (long long row=1; row<=nr; ++row) {
         const std::size_t i=static_cast<std::size_t>(row-1);
-        NativeDetailLineLogRow item;
-        const long long line_index = read_integer_cell(df,ci,row);
-        item.wavelength = read_double_cell(df,cw,row);
-        item.ion = read_string_cell(df,cion,row);
-        item.lower = read_string_cell(df,cl,row);
-        item.upper = read_string_cell(df,cu,row);
-        item.reflected = reflected[i];
-        item.transmitted = transmitted[i];
-        item.tau_in = read_double_cell(df,cti,row);
-        item.tau_out = read_double_cell(df,cto,row);
-        by_index.emplace(line_index, std::move(item));
+        ExistingDetailValue value;
+        value.wavelength=read_double_cell(df,cw,row);
+        value.ion=read_string_cell(df,cion,row);
+        value.lower=read_string_cell(df,cl,row);
+        value.upper=read_string_cell(df,cu,row);
+        value.reflected=reflected[i];
+        value.transmitted=transmitted[i];
+        value.tau_in=read_double_cell(df,cti,row);
+        value.tau_out=read_double_cell(df,cto,row);
+        existing[read_integer_cell(df,ci,row)]=std::move(value);
     }
+    int cs=0; fits_close_file(df,&cs);
 
-    std::vector<const xstar_run_state::LineIdentityState*> source_series;
-    source_series.reserve(state.line_identities.size());
+    std::vector<const xstar_run_state::LineIdentityState*> ordered;
+    ordered.reserve(state.line_identities.size());
     for (const auto& id : state.line_identities) {
-        const bool active = id.ion_label.rfind("h_",0)==0 || id.ion_label.rfind("he_",0)==0 ||
-            id.ion_label.rfind("mg_",0)==0;
-        if (active) source_series.push_back(&id);
+        if (id.line_index > 0 &&
+            (id.data_type==50 || id.data_type==54 || id.data_type==71 || id.data_type==76)) {
+            ordered.push_back(&id);
+        }
     }
-    std::sort(source_series.begin(), source_series.end(), [](const auto* a, const auto* b) {
+    std::stable_sort(ordered.begin(), ordered.end(), [](const auto* a, const auto* b) {
         return a->line_index < b->line_index;
     });
-    const bool have_full_source_series = source_series.size() > static_cast<std::size_t>(nr);
+
+    std::map<int,std::size_t> preserved_by_type;
+    std::map<int,std::size_t> zero_by_type;
+    std::size_t preserved=0;
+    std::size_t source_defined_zero=0;
 
     out << " print option:15\n line luminosities (erg/sec/10**38) and depths\n";
     out << "  line, wavelength, ion, ref. lum.,trn. lum.,backward depth, forward depth\n";
-    auto emit = [&](long long line_index, const xstar_run_state::LineIdentityState* source_id,
-                    const NativeDetailLineLogRow* detail) {
-        const double wavelength = source_id ? source_id->wavelength_angstrom : (detail ? detail->wavelength : 0.0);
-        const std::string ion = source_id && !source_id->ion_label.empty() ? source_id->ion_label : (detail ? detail->ion : "unknown");
-        const std::string lower = source_id && !source_id->lower_level.empty() ? source_id->lower_level : (detail ? detail->lower : "unknown");
-        const std::string upper = source_id && !source_id->upper_level.empty() ? source_id->upper_level : (detail ? detail->upper : "unknown");
-        const std::string transition = source_id && !source_id->source_transition.empty()
-            ? source_id->source_transition : (lower + "-" + upper);
-        const double ref = detail ? detail->reflected : 0.0;
-        const double trn = detail ? detail->transmitted : 0.0;
-        const double backward = detail ? detail->tau_in : 0.0;
-        const double forward = detail ? detail->tau_out : 0.0;
-        out << std::setw(10) << line_index
+    for (const auto* id : ordered) {
+        double wavelength=id->wavelength_angstrom;
+        std::string ion=id->ion_label;
+        std::string lower=id->lower_level;
+        std::string upper=id->upper_level;
+        double ref=0.0, trn=0.0, backward=0.0, forward=0.0;
+        const auto found=existing.find(id->line_index);
+        if (found != existing.end()) {
+            // Preserve all v58 values and labels exactly.  Product metadata is
+            // used only to supply the 569 source inventory rows absent from
+            // xo01_detal2; it must not remap or zero the existing 2644 rows.
+            wavelength=found->second.wavelength;
+            ion=found->second.ion;
+            lower=found->second.lower;
+            upper=found->second.upper;
+            ref=found->second.reflected;
+            trn=found->second.transmitted;
+            backward=found->second.tau_in;
+            forward=found->second.tau_out;
+            ++preserved;
+            ++preserved_by_type[id->data_type];
+        } else {
+            // Source pprint/option-15 has real slots for these records, but
+            // elum and tau0 are zero: no nplini-backed line-product channel is
+            // committed for the omitted Type-50 rows or Types 54/71/76.  These
+            // are defined zero values, not unavailable or imported values.
+            ++source_defined_zero;
+            ++zero_by_type[id->data_type];
+        }
+        out << std::setw(10) << id->line_index
             << std::setw(13) << std::uppercase << std::scientific << std::setprecision(5)
             << wavelength << " "
             << std::left << std::setw(10) << ion << std::right
             << std::setw(13) << ref << std::setw(13) << trn
             << std::setw(13) << backward << std::setw(13) << forward << " "
-            << transition << "\n";
-    };
-    if (have_full_source_series) {
-        for (const auto* source_id : source_series) {
-            const auto found = by_index.find(source_id->line_index);
-            emit(source_id->line_index, source_id, found == by_index.end() ? nullptr : &found->second);
-        }
-    } else {
-        for (const auto& [line_index, detail] : by_index) {
-            emit(line_index, step_log_line_identity(state, line_index), &detail);
-        }
+            << lower << "-" << upper << "\n";
     }
-    int cs=0; fits_close_file(df,&cs);
-    out << "\n"; out.unsetf(std::ios::floatfield); out << std::setprecision(17);
+    out << "\n";
+    out.unsetf(std::ios::floatfield);
+    out << std::setprecision(17);
+
+    const bool benchmark_inventory = ordered.size()==3213;
+    const bool coverage_ok = !benchmark_inventory ||
+        (preserved==2644 && source_defined_zero==569 &&
+         preserved_by_type[50]==2644 &&
+         zero_by_type[50]==244 && zero_by_type[54]==121 &&
+         zero_by_type[71]==195 && zero_by_type[76]==9);
+
+    std::ofstream audit(output_dir / "v048746255172560_full_line_channels_audit.json");
+    if (audit) {
+        audit << "{\n"
+              << "  \"schema\": \"xstar-tools-v048746255172560-full-line-channels-v2\",\n"
+              << "  \"source_line_rows\": " << ordered.size() << ",\n"
+              << "  \"existing_v58_detail_rows_preserved\": " << preserved << ",\n"
+              << "  \"source_defined_zero_rows_added\": " << source_defined_zero << ",\n"
+              << "  \"preserved_type50\": " << preserved_by_type[50] << ",\n"
+              << "  \"zero_type50\": " << zero_by_type[50] << ",\n"
+              << "  \"zero_type54\": " << zero_by_type[54] << ",\n"
+              << "  \"zero_type71\": " << zero_by_type[71] << ",\n"
+              << "  \"zero_type76\": " << zero_by_type[76] << ",\n"
+              << "  \"coverage_gate\": \"" << (coverage_ok?"ACCEPT":"REJECT") << "\",\n"
+              << "  \"existing_detail_values_modified\": false,\n"
+              << "  \"oracle_or_bridge_values_read\": false\n"
+              << "}\n";
+    }
+    if (!coverage_ok) {
+        throw std::runtime_error(
+            "full option-15 source inventory gate failed: expected 2644 preserved plus 569 source-defined zero rows");
+    }
 }
 
 bool read_spectrum_column(const std::filesystem::path& path,

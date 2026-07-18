@@ -113,7 +113,9 @@ class LineOutputMetadata:
     natural_rate_s: float = 0.0
     auger_width_eV: float = 0.0
     auger_rate_s: float = 0.0
-    source_transition: str = ""
+    source_record: int = 0
+    lower_local_index: int = 0
+    upper_local_index: int = 0
 
 
 @dataclass(frozen=True)

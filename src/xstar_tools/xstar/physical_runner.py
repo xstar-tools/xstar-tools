@@ -742,7 +742,9 @@ def save_source_output_metadata_cache(
                 line_natural_rate_s=np.asarray([row.natural_rate_s for row in metadata.lines], dtype=np.float64),
                 line_auger_width_eV=np.asarray([row.auger_width_eV for row in metadata.lines], dtype=np.float64),
                 line_auger_rate_s=np.asarray([row.auger_rate_s for row in metadata.lines], dtype=np.float64),
-                line_source_transition=_string_array([row.source_transition for row in metadata.lines]),
+                line_source_record=np.asarray([row.source_record for row in metadata.lines], dtype=np.int64),
+                line_lower_local_index=np.asarray([row.lower_local_index for row in metadata.lines], dtype=np.int32),
+                line_upper_local_index=np.asarray([row.upper_local_index for row in metadata.lines], dtype=np.int32),
                 rrc_continuum_index=np.asarray([row.continuum_index for row in metadata.rrcs], dtype=np.int32),
                 rrc_level_global_index=np.asarray([row.level_global_index for row in metadata.rrcs], dtype=np.int32),
                 rrc_threshold_eV=np.asarray([row.threshold_eV for row in metadata.rrcs], dtype=np.float64),
@@ -784,13 +786,14 @@ def load_source_output_metadata_cache(master: Any, path: str | Path) -> SourceOu
                 line_index=int(a), wavelength_angstrom=float(b), ion_label=str(c),
                 lower_level=str(d), upper_level=str(e), rate_type=int(f), data_type=int(g),
                 atomic_mass=float(h), natural_rate_s=float(i), auger_width_eV=float(j), auger_rate_s=float(k),
-                source_transition=str(l),
+                source_record=int(l), lower_local_index=int(m), upper_local_index=int(n),
             )
-            for a, b, c, d, e, f, g, h, i, j, k, l in zip(
+            for a, b, c, d, e, f, g, h, i, j, k, l, m, n in zip(
                 z["line_index"], z["line_wavelength_angstrom"], z["line_ion_label"],
                 z["line_lower_level"], z["line_upper_level"], z["line_rate_type"],
                 z["line_data_type"], z["line_atomic_mass"], z["line_natural_rate_s"],
-                z["line_auger_width_eV"], z["line_auger_rate_s"], z["line_source_transition"],
+                z["line_auger_width_eV"], z["line_auger_rate_s"],
+                z["line_source_record"], z["line_lower_local_index"], z["line_upper_local_index"],
             )
         )
         rrcs = tuple(
@@ -989,7 +992,9 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
                 data_type=int(line_rows[pos, 1]),
                 atomic_mass=float(ATOMIC_MASS[z - 1]),
                 natural_rate_s=float(natural[pos]),
-                source_transition=(master.record_chars(int(line_records[pos])).decode("latin-1", errors="replace").replace("\x00", " ")[:20].rstrip()),
+                source_record=int(line_records[pos]),
+                lower_local_index=low,
+                upper_local_index=up,
             )
         )
 
