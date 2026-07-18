@@ -224,6 +224,7 @@ void append_native_radial_summary(std::ofstream& out,
         rows = {entry0, entry1, shell1, shell2, shell3};
     }
     std::vector<std::pair<double,double>> depth_logs;
+    std::vector<std::pair<double,double>> reference_depths;
     std::vector<double> heat_balance_percent;
     std::vector<double> source_energy;
     std::vector<double> source_flux;
@@ -243,22 +244,39 @@ void append_native_radial_summary(std::ofstream& out,
             st=0; fits_get_colnum(df,CASEINSEN,const_cast<char*>("energy"),&ce,&st); if(st!=0) ce=0;
             st=0; fits_get_colnum(df,CASEINSEN,const_cast<char*>("zrems(1)"),&cz,&st); if(st!=0) cz=0;
             long long nr=0; st=0; fits_get_num_rowsll(df,&nr,&st);
-            double mf=0,mb=0,integral=0.0,prev_e=0.0,prev_z=0.0;
-            std::vector<double> local_e,local_z;
+            double integral=0.0,prev_e=0.0,prev_z=0.0;
+            std::vector<double> local_e,local_z,local_fwd,local_bck;
             local_e.reserve(static_cast<std::size_t>(nr)); local_z.reserve(static_cast<std::size_t>(nr));
+            local_fwd.reserve(static_cast<std::size_t>(nr)); local_bck.reserve(static_cast<std::size_t>(nr));
             for(long long rr=1;st==0&&rr<=nr;++rr){
                 int any=0; double v=0;
-                if(cf){fits_read_col(df,TDOUBLE,cf,rr,1,1,nullptr,&v,&any,&st);if(std::isfinite(v))mf=std::max(mf,std::abs(v));}
-                v=0;if(cb){fits_read_col(df,TDOUBLE,cb,rr,1,1,nullptr,&v,&any,&st);if(std::isfinite(v))mb=std::max(mb,std::abs(v));}
+                double fwd=0.0,bck=0.0;
+                if(cf){fits_read_col(df,TDOUBLE,cf,rr,1,1,nullptr,&fwd,&any,&st);if(!std::isfinite(fwd))fwd=0.0;}
+                if(cb){fits_read_col(df,TDOUBLE,cb,rr,1,1,nullptr,&bck,&any,&st);if(!std::isfinite(bck))bck=0.0;}
                 double ev=0,zv=0;
                 if(ce) fits_read_col(df,TDOUBLE,ce,rr,1,1,nullptr,&ev,&any,&st);
                 if(cz) fits_read_col(df,TDOUBLE,cz,rr,1,1,nullptr,&zv,&any,&st);
                 local_e.push_back(ev); local_z.push_back(zv);
+                local_fwd.push_back(std::max(0.0,fwd)); local_bck.push_back(std::max(0.0,bck));
                 if(rr>1) integral += 0.5*(prev_z+zv)*(ev-prev_e);
                 prev_e=ev; prev_z=zv;
             }
             if(source_energy.empty()) { source_energy=local_e; source_flux=local_z; source_integral=integral; }
-            depth_logs.push_back({mf>0?std::log10(mf):-10.0,mb>0?std::log10(mb):-10.0});
+            // pprint uses nry=nbinc(13.6,epi,ncn2)+1, not the maximum
+            // optical depth over the grid.  For the retained grid this is the
+            // second bin above 13.6 eV (13.628082 eV).
+            std::size_t reference_bin=0;
+            if(!local_e.empty()) {
+                const auto it=std::upper_bound(local_e.begin(),local_e.end(),13.6);
+                reference_bin=static_cast<std::size_t>(it-local_e.begin());
+                if(reference_bin+1<local_e.size()) ++reference_bin;
+                if(reference_bin>=local_e.size()) reference_bin=local_e.size()-1;
+            }
+            const double reference_fwd=reference_bin<local_fwd.size()?local_fwd[reference_bin]:0.0;
+            const double reference_bck=reference_bin<local_bck.size()?local_bck[reference_bin]:0.0;
+            depth_logs.push_back({reference_fwd>0?std::log10(reference_fwd):-10.0,
+                                  reference_bck>0?std::log10(reference_bck):-10.0});
+            reference_depths.push_back({reference_fwd,reference_bck});
             heat_balance_percent.push_back(source_integral!=0.0 ? 100.0*(source_integral-integral)/source_integral : 0.0);
         }
         int cs=0;fits_close_file(df,&cs);
@@ -289,14 +307,14 @@ void append_native_radial_summary(std::ofstream& out,
            <<std::setw(7)<<100.0*r.heat_error
            <<std::setw(7)<<(i<heat_balance_percent.size()?heat_balance_percent[i]:0.0)
            <<std::setw(7)<<depths.first<<std::setw(7)<<depths.second
-           <<std::setw(3)<<cm.second<<"\n";
+           <<std::setw(3)<<(cm.second>0?cm.second-1:0)<<"\n";
     }
-    out<<"\n"; out.unsetf(std::ios::floatfield); out<<std::setprecision(17);
+    out.unsetf(std::ios::floatfield); out<<std::setprecision(17);
     if (!rows.empty() && (!state.radial_zones.empty() || !state.fixed_evaluations.empty())) {
         const auto& r=rows.back();
         const auto& eval=state.radial_zones.empty()?state.fixed_evaluations.back():state.radial_zones.back().accepted_controller.evaluation;
-        const double tf=depth_logs.empty()?0.0:std::pow(10.0,depth_logs.back().first);
-        const double tb=depth_logs.empty()?0.0:std::pow(10.0,depth_logs.back().second);
+        const double tf=reference_depths.empty()?0.0:reference_depths.back().first;
+        const double tb=reference_depths.empty()?0.0:reference_depths.back().second;
         out<<" print option:22\n";
         out<<" r=  "<<e3(r.radius)<<" t=  "<<e3(r.temperature)<<" log(xi)=  "<<e3(r.logxi)
            <<" n_e=  "<<e3(r.xee*r.density)<<" n_p=  "<<e3(r.density)<<"\n";
@@ -445,6 +463,61 @@ void append_native_public_line_sections(std::ofstream& out,
 }
 
 struct DetailRrcLogRow { long long index=0,level_index=0; std::string ion,lower,upper; double energy=0; };
+
+struct RrcRatePointerMeta { long long lower_local=0, upper_local=0; };
+
+std::vector<std::string> split_simple_csv(const std::string& line) {
+    std::vector<std::string> out;
+    std::string current;
+    bool quoted = false;
+    for (char ch : line) {
+        if (ch == '"') { quoted = !quoted; continue; }
+        if (ch == ',' && !quoted) { out.push_back(current); current.clear(); }
+        else current.push_back(ch);
+    }
+    out.push_back(current);
+    return out;
+}
+
+long long csv_integer(const std::vector<std::string>& fields, std::size_t index) {
+    if (index >= fields.size() || fields[index].empty()) return 0;
+    try { return std::stoll(fields[index]); } catch (...) { return 0; }
+}
+
+std::map<long long,RrcRatePointerMeta> load_rrc_rate_pointer_metadata(
+    const xstar_run_state::ProductWritingState& state) {
+    std::map<long long,RrcRatePointerMeta> out;
+    std::size_t sequence = 0;
+    for (const auto& fixed : state.fixed_evaluations) sequence = std::max(sequence, fixed.sequence);
+    if (sequence == 0) return out;
+    std::ostringstream name;
+    name << "evaluation_" << std::setw(4) << std::setfill('0') << sequence << "_records.csv";
+    std::ifstream input(state.native_diagnostics_path / name.str());
+    if (!input) return out;
+    std::string line;
+    if (!std::getline(input, line)) return out;
+    const auto header = split_simple_csv(line);
+    std::map<std::string,std::size_t> column;
+    for (std::size_t i=0; i<header.size(); ++i) column[header[i]] = i;
+    const auto required = [&](const char* key) -> std::size_t {
+        const auto found = column.find(key);
+        return found == column.end() ? header.size() : found->second;
+    };
+    const std::size_t ctype=required("data_type"), clower=required("lower_row"),
+        cupper=required("upper_row"), c53=required("type53_continuum_index_one_based"),
+        c49=required("type49_continuum_index_one_based");
+    while (std::getline(input, line)) {
+        const auto fields = split_simple_csv(line);
+        const long long type = csv_integer(fields, ctype);
+        long long continuum = 0;
+        if (type == 53) continuum = csv_integer(fields, c53);
+        else if (type == 49) continuum = csv_integer(fields, c49);
+        else continue;
+        if (continuum <= 0 || out.count(continuum)) continue;
+        out[continuum] = {csv_integer(fields, clower), csv_integer(fields, cupper)};
+    }
+    return out;
+}
 const xstar_run_state::RrcIdentityState* matching_rrc_identity(const xstar_run_state::ProductWritingState& state,const DetailRrcLogRow& row){
     const xstar_run_state::RrcIdentityState* best=nullptr;double score=1e300;
     for(const auto&id:state.rrc_identities){if(id.level_global_index!=row.level_index)continue;if(!row.ion.empty()&&id.ion_label!=row.ion&&("_"+id.ion_label)!=row.ion){} const double d=std::abs(id.threshold_ev-row.energy);if(d<score){score=d;best=&id;}}
@@ -467,6 +540,7 @@ void append_native_public_rrc_sections(std::ofstream& out,
     const auto radial_hdus=named_hdu_numbers(df,"XSTAR_RADIAL");
     if(radial_hdus.empty()){int cs=0;fits_close_file(df,&cs);out<<"\n detailed RRC section unavailable.\n\n";return;}
     const auto geometry=native_shell_geometry(output_dir,state);
+    const auto rate_pointer_meta=load_rrc_rate_pointer_metadata(state);
     const std::vector<int> shell_hdus=radial_hdus.size()>=5
         ?std::vector<int>{radial_hdus[1],radial_hdus[2],radial_hdus[3]}
         :std::vector<int>(radial_hdus.begin(),radial_hdus.begin()+std::min<std::size_t>(3,radial_hdus.size()));
@@ -496,21 +570,26 @@ void append_native_public_rrc_sections(std::ofstream& out,
         d.energy=read_double_cell(df,ce,row);d.ion=read_string_cell(df,cion,row);
         d.lower=read_string_cell(df,clo,row);d.upper=read_string_cell(df,cup,row);
         const auto* id=matching_rrc_identity(state,d);
-        const long long local=id&&id->lower_local_index>0?id->lower_local_index:d.level_index;
-        const long long upper=id&&id->upper_local_index>0?id->upper_local_index:0;
+        const auto found_rate=rate_pointer_meta.find(d.index);
+        const long long local=found_rate!=rate_pointer_meta.end() && found_rate->second.lower_local>0
+            ? found_rate->second.lower_local
+            : (id&&id->lower_local_index>0?id->lower_local_index:d.level_index);
+        const long long upper=found_rate!=rate_pointer_meta.end() && found_rate->second.upper_local>0
+            ? found_rate->second.upper_local
+            : (id&&id->upper_local_index>0?id->upper_local_index:0);
         const double ti=read_double_cell(df,cti,row),to=read_double_cell(df,cto,row);
         const double lum=luminosity[static_cast<std::size_t>(row-1)];
         const bool hhe=d.ion.rfind("h_",0)==0||d.ion.rfind("he_",0)==0;
         if(write_depth&&hhe&&(std::abs(ti)>1e-30||std::abs(to)>1e-30)){
-            out<<std::setw(7)<<d.index<<std::setw(6)<<local<<" "
-               <<std::left<<std::setw(10)<<d.ion<<std::right<<std::setw(6)<<d.level_index<<" "
+            out<<std::setw(7)<<d.index<<std::setw(6)<<d.level_index<<" "
+               <<std::left<<std::setw(10)<<d.ion<<std::right<<std::setw(6)<<local<<" "
                <<std::left<<std::setw(24)<<d.lower<<std::setw(24)<<d.upper<<std::right
                <<std::setw(13)<<std::uppercase<<std::scientific<<std::setprecision(3)<<d.energy
                <<std::setw(13)<<ti<<std::setw(13)<<to<<"\n";
         }
         if(write_luminosity&&std::abs(lum)>1e-49){
-            out<<std::setw(7)<<d.index<<std::setw(6)<<local<<" "
-               <<std::left<<std::setw(10)<<d.ion<<std::right<<std::setw(6)<<d.level_index<<std::setw(6)<<upper<<" "
+            out<<std::setw(7)<<d.index<<std::setw(6)<<d.level_index<<" "
+               <<std::left<<std::setw(10)<<d.ion<<std::right<<std::setw(6)<<local<<std::setw(6)<<upper<<" "
                <<std::left<<std::setw(24)<<d.lower<<std::setw(24)<<d.upper<<std::right
                <<std::setw(13)<<std::uppercase<<std::scientific<<std::setprecision(3)<<d.energy
                <<std::setw(13)<<lum<<std::setw(13)<<lum<<"\n";

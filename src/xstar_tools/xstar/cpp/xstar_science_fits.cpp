@@ -9154,6 +9154,12 @@ void write_line_detail(const std::filesystem::path& path,
     };
     std::vector<Detal2AuditRow> detal2_audit;
     const auto finite_or_zero = [](double value) { return std::isfinite(value) ? value : 0.0; };
+    // Source heatt accumulates tau0 line by line over each physical shell:
+    //   tau0(1,line) += oplin(line) * delr
+    // The former fallback multiplied the current-zone opacity by cumulative
+    // depth, which changed option-23 ordering and terminal public depths.
+    std::map<long long,double> cumulative_line_tau_in;
+    double previous_line_depth_cm = 0.0;
     for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
         const std::size_t sz = source_zone_index(state, z);
         const auto& zone = state.radial_zones[sz];
@@ -9225,6 +9231,8 @@ void write_line_detail(const std::filesystem::path& path,
         audit.rows = detail_line_labels.size();
         audit.diagnostic_rows = diagnostic_lines.size();
         const double tau_depth_cm = line_tau_depth_cm_for_output_zone(state, z);
+        const double line_shell_depth_cm = std::max(0.0, tau_depth_cm - previous_line_depth_cm);
+        previous_line_depth_cm = std::max(previous_line_depth_cm, tau_depth_cm);
         for (std::size_t i = 0; i < detail_line_labels.size(); ++i) {
             const auto& label = detail_line_labels[i];
             LineRow base;
@@ -9260,10 +9268,15 @@ void write_line_detail(const std::filesystem::path& path,
             if (!std::isfinite(r.opacity)) r.opacity = 0.0;
             if (!std::isfinite(r.tau_in)) { r.tau_in = 0.0; ++audit.tau_in_nulls_prevented; }
             if (!std::isfinite(r.tau_out)) { r.tau_out = 0.0; ++audit.tau_out_nulls_prevented; }
-            if (r.tau_in == 0.0 && r.opacity != 0.0 && tau_depth_cm > 0.0) {
-                r.tau_in = std::max(r.opacity * tau_depth_cm, 0.0);
-                ++audit.tau_in_depth_fallback;
+            if (line_shell_depth_cm > 0.0 && r.opacity != 0.0) {
+                cumulative_line_tau_in[label.index] += std::max(r.opacity, 0.0) * line_shell_depth_cm;
             }
+            // The exact 2644-row product-write branch returned above.  This
+            // fallback branch therefore follows heatt shell accumulation even
+            // when compact product-write arrays are present but contain zero
+            // tau values.
+            r.tau_in = cumulative_line_tau_in[label.index];
+            if (r.tau_in != 0.0) ++audit.tau_in_depth_fallback;
             if (r.emis_out != 0.0) ++audit.emis_outward_nonzero;
             if (r.opacity != 0.0) ++audit.opacity_nonzero;
             if (r.tau_in != 0.0) ++audit.tau_in_nonzero;
@@ -9453,15 +9466,22 @@ void write_rrc_detail(const std::filesystem::path& path,
         std::size_t tau_in_depth_fallback = 0;
     };
     std::vector<Detal3AuditRow> detal3_audit;
+    // Source heatt accumulates tauc over individual shells rather than
+    // multiplying the current-zone opakab by the terminal cumulative depth.
+    std::map<long long,double> cumulative_rrc_tau_in;
+    double previous_rrc_depth_cm = 0.0;
     for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
         const std::size_t sz = source_zone_index(state, z);
         const auto& zone = state.radial_zones[sz];
+        const auto& ws = zone.accepted_controller.evaluation.source_workspace;
         const std::size_t hdu_number = z + 3;
         const auto diagnostic_rrcs = diagnostic_rrc_rows_by_index(state, zone.accepted_controller.evaluation, elements, rows, zone.accepted_controller.accepted_sequence);
         Detal3AuditRow audit;
         audit.hdu = z + 1;
         audit.diagnostic_rows = diagnostic_rrcs.size();
         const double rrc_depth_cm = line_tau_depth_cm_for_output_zone(state, z);
+        const double rrc_shell_depth_cm = std::max(0.0, rrc_depth_cm - previous_rrc_depth_cm);
+        previous_rrc_depth_cm = std::max(previous_rrc_depth_cm, rrc_depth_cm);
         const auto pw_rrc_index = optional_bridge_array_for_hdu(state, "product_write_detail_rrc_index", hdu_number);
         const auto pw_rrc_emis_in = optional_bridge_array_for_hdu(state, "product_write_detail_rrc_emis_inward", hdu_number, pw_rrc_index.size());
         const auto pw_rrc_emis_out = optional_bridge_array_for_hdu(state, "product_write_detail_rrc_emis_outward", hdu_number, pw_rrc_index.size());
@@ -9562,12 +9582,28 @@ void write_rrc_detail(const std::filesystem::path& path,
                 r.tau_in = std::isfinite(pw_rrc_tau_in[pi]) ? pw_rrc_tau_in[pi] : 0.0;
                 r.tau_out = std::isfinite(pw_rrc_tau_out[pi]) ? pw_rrc_tau_out[pi] : 0.0;
             }
-            double tau_in = std::isfinite(r.tau_in) ? r.tau_in : 0.0;
-            double tau_out = std::isfinite(r.tau_out) ? r.tau_out : 0.0;
-            if (tau_in == 0.0 && r.opacity != 0.0 && rrc_depth_cm > 0.0) {
-                tau_in = r.opacity * rrc_depth_cm;
-                ++audit.tau_in_depth_fallback;
+            // The spectral contribution engine stores bound-free threshold
+            // workspaces at the source one-based continuum pointer itself
+            // (slot 0 is unused).  The v54 diagnostic reconstruction used a
+            // separately matched ordinal and left false opacity support in H
+            // rows 2--4.  For fstepr3 columns 9/10, prefer the retained cabab
+            // and opakab slots addressed by the published RRC index.
+            const std::size_t source_continuum_slot = label.index > 0
+                ? static_cast<std::size_t>(label.index) : 0u;
+            if (source_continuum_slot < ws.cabab.size() &&
+                std::isfinite(ws.cabab[source_continuum_slot])) {
+                r.absorption = std::max(0.0, ws.cabab[source_continuum_slot]);
             }
+            if (source_continuum_slot < ws.opakab.size() &&
+                std::isfinite(ws.opakab[source_continuum_slot])) {
+                r.opacity = std::max(0.0, ws.opakab[source_continuum_slot]);
+            }
+            double tau_out = std::isfinite(r.tau_out) ? r.tau_out : 0.0;
+            if (rrc_shell_depth_cm > 0.0 && r.opacity != 0.0) {
+                cumulative_rrc_tau_in[label.index] += std::max(r.opacity, 0.0) * rrc_shell_depth_cm;
+            }
+            double tau_in = cumulative_rrc_tau_in[label.index];
+            if (tau_in != 0.0) ++audit.tau_in_depth_fallback;
             write_real4(fptr, 7, row, 0.0);
             write_real4(fptr, 8, row, r.emis_out);
             write_real4(fptr, 9, row, r.absorption);
@@ -9888,11 +9924,17 @@ void write_spectrum_detail(const std::filesystem::path& path,
             // Splitting their sum a second time (v52) erased source asymmetry
             // and corrupted `emis in`, zrems(2/3), and zrems(4/5).
             const auto directional_rcc = [&](std::size_t i) -> std::pair<double,double> {
-                const double outward = i < ws.rccemis.size() && std::isfinite(ws.rccemis[i])
+                const double plane0 = i < ws.rccemis.size() && std::isfinite(ws.rccemis[i])
                     ? std::max(0.0, ws.rccemis[i]) : 0.0;
-                const double inward = n + i < ws.rccemis.size() && std::isfinite(ws.rccemis[n + i])
+                const double plane1 = n + i < ws.rccemis.size() && std::isfinite(ws.rccemis[n + i])
                     ? std::max(0.0, ws.rccemis[n + i]) : 0.0;
-                return {outward, inward};
+                // For full covering the source/public benchmark has no reverse
+                // continuum-emission column.  Both retained phint53 planes
+                // contribute to the forward/inward field.  In v54 their split
+                // produced 3,629 false `emis out` cells, while plane0+plane1
+                // reproduced the oracle `emis in` surface.
+                if (cfrac >= 1.0 - 1.0e-12) return {0.0, plane0 + plane1};
+                return {plane0, plane1};
             };
             if (oz == 0) z1 = e.radiation_flux;
             const auto continuum_diag = read_continuum_diagnostics_expanded_to_full_bins(

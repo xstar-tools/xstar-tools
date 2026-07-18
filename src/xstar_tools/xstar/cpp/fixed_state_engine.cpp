@@ -7952,9 +7952,26 @@ int run_impl(
             const double e = input.radiation_energy_ev[k];
             shape[k] = limited_exp(-e / std::max(kt_ev, 1.0e-300));
             shape_sum += shape[k];
-            const double nu = e * 2.417989242e14;
-            const double stim = 1.0 - limited_exp(-e / std::max(kt_ev, 1.0e-300));
-            output.opacity[k] += 3.692e8 * input.electron_density_cm3 * input.ionized_h_density_cm3 * std::pow(input.temperature_k, -0.5) * std::pow(std::max(nu, 1.0), -3.0) * stim;
+            // XSTAR freef.f90 continuum opacity.  The source routine works in
+            // T/1e4 K and photon energy in eV:
+            //   opaff = 2.614e-37 * xnx * (1.4*xnx) / sqrt(t4) / E^3
+            //           * (1-exp(-E/(0.861707*t4)))
+            // where xnx=xpx*xee is the electron density.  The former generic
+            // radio free-free coefficient produced the v54 ~0.54 continuum
+            // opacity/depth ratio and the wrong option-5 absorbed energy.
+            const double temperature_t4 = std::max(input.temperature_k * 1.0e-4, 1.0e-30);
+            const double ekt_source_ev = 0.861707 * temperature_t4;
+            const double xnx = std::max(input.electron_density_cm3, 0.0);
+            const double freef_cc = static_cast<double>(static_cast<float>(2.614e-37));
+            const double ion_z2_factor = static_cast<double>(static_cast<float>(1.4));
+            const double enz2 = ion_z2_factor * xnx;
+            const double stim = 1.0 - limited_exp(-e / std::max(ekt_source_ev, 1.0e-300));
+            const double safe_e = std::max(e, 1.0e-30);
+            const double e_cube = environment_flag("XSTAR_QUALIFICATION_FREEF_REAL_EXPONENT_POW")
+                ? std::pow(safe_e, 3.0)
+                : safe_e * safe_e * safe_e;
+            output.opacity[k] += freef_cc * xnx * enz2 /
+                std::sqrt(temperature_t4) / e_cube * stim;
         }
         if (shape_sum > 0.0) for (std::size_t k=0;k<input.radiation_bin_count;++k) output.spectrum[k] += clbrems * shape[k] / shape_sum;
         stats.continuum_bins += input.radiation_bin_count;
