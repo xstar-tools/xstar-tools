@@ -1,3 +1,7 @@
+## v66 standalone production status
+
+The public command is now `xstar_cpp run-production --parameters parameters.json --output-dir output`. It is fail-closed and creates no output directory until the C++ executable can derive the atomic program, product metadata, and controller trajectory internally. Use `xstar_cpp standalone-capabilities` to inspect readiness. The old asset-backed path is validation-only under `run-production-assets`.
+
 # xstar_tools 0.6.48.7.46.25.5.17.25.63
 
 This candidate fixes full-element-row versus compact-active-row population projection in line and bound-free spectral construction, restores the retained radial sequence `[58,59,60,61,60]`, and preserves v60's complete option-15 inventory and native `zrtmp` accumulator.

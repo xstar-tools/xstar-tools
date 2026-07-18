@@ -1,5 +1,14 @@
 # CHANGELOG
 
+# v0.6.48.7.46.25.5.17.25.66 - 2026-07-18
+
+- Replaced the benchmark-bound v65 public production command with a two-argument fail-closed standalone interface.
+- Public production rejects external case, metadata, contract, and checkpoint assets.
+- Added `standalone-capabilities` and `--artifact-profile none|summary|failure|full`.
+- Separated `run-production-assets` as validation-only.
+- Removed v65 non-final snapshot pruning as a product-state authority and switched silent publication to the v63 retained-surface assembly.
+- General production remains blocked until C++ in-memory ATDB lowering, metadata derivation, and qualification-free trajectory construction are complete.
+
 # 0.6.48.7.46.25.5.17.25.65 - 2026-07-18
 
 - Added `run-production`, a true FITS/log-only path using packaged immutable benchmark inputs.

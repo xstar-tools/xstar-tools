@@ -75,6 +75,7 @@ struct Options {
     std::size_t trajectory_resume_after = 0;
     std::size_t trajectory_stop_after = 61;
     std::string trajectory_diagnostic_level = "full";
+    std::string artifact_profile = "full";
 };
 
 void usage(std::ostream& output) {
@@ -96,9 +97,13 @@ void usage(std::ostream& output) {
         "  xstar_cpp trajectory-alignment-self-test --backend cpp [--plugin-dir DIR]\n"
         "  xstar_cpp controller-canonical-e7-self-test --backend cpp [--plugin-dir DIR]\n"
         "  xstar_cpp fixed-state-self-test --case-dir RAW_PROGRAM_DIR [--diagnostics-dir DIR]\n"
-        "  xstar_cpp run --backend cpp --parameters parameters.json --atomic-db atdb.fits --output-dir DIR [--qualification-contract-dir DIR] [--checkpoint-dir DIR] [--resume-after N] [--stop-after N] [--diagnostic-level summary|failure|full] [--resolve-only]\n"
-        "  xstar_cpp run-production --parameters parameters.json --case-dir PREBUILT_CASE --product-metadata-dir PREBUILT_METADATA --qualification-contract-dir CONTRACTS --output-dir DIR\n"
-        "    True production mode creates only nine FITS files and xout_step.log; no lowering, checkpoints, diagnostics, audits, metadata, or summaries.\n"
+        "  xstar_cpp run --backend cpp --parameters parameters.json --atomic-db atdb.fits --output-dir DIR [--qualification-contract-dir DIR] [--checkpoint-dir DIR] [--resume-after N] [--stop-after N] [--diagnostic-level summary|failure|full] [--artifact-profile none|summary|failure|full] [--resolve-only]\n"
+        "  xstar_cpp standalone-capabilities\n"
+        "  xstar_cpp run-production --parameters parameters.json --output-dir DIR\n"
+        "    Standalone public production entrypoint. It creates only nine FITS files and xout_step.log.\n"
+        "    It rejects without writing products until C++ derives atomic program, metadata, and trajectory state internally.\n"
+        "  xstar_cpp run-production-assets --parameters parameters.json --case-dir PREBUILT_CASE --product-metadata-dir PREBUILT_METADATA --qualification-contract-dir CONTRACTS --output-dir DIR\n"
+        "    Asset-backed validation only; not a standalone production interface.\n"
         "    v25.5.17.1 bridge-free path does not require a bridge tar, native_case,\n"
         "    coherent trajectory, call-start/runtime workspaces, product diagnostics,\n"
         "    or qualification ledgers. It retains ProductWritingState directly from parameters.\n"
@@ -332,6 +337,18 @@ bool parse_options(int argc, char** argv, Options& options, std::string& error) 
                 error = "--diagnostic-level must be summary, failure, or full";
                 return false;
             }
+        } else if (arg == "--artifact-profile") {
+            const char* value = require_value("--artifact-profile");
+            if (!value) return false;
+            options.artifact_profile = value;
+            if (options.artifact_profile != "none" &&
+                options.artifact_profile != "summary" &&
+                options.artifact_profile != "failure" &&
+                options.artifact_profile != "full") {
+                error = "--artifact-profile must be none, summary, failure, or full";
+                return false;
+            }
+            if (options.artifact_profile != "none") options.trajectory_diagnostic_level = options.artifact_profile;
         } else {
             error = "unknown option: " + arg;
             return false;
@@ -3275,6 +3292,9 @@ int fixed_dsec_evaluator(
             }
         }
     }
+    // v66 keeps complete source/product workspaces for the four call-final
+    // radial boundaries. Non-boundary evaluations retain scalar controller
+    // state only; public products never consume their large transport arrays.
     if (data->true_production_v65 && snapshot.kind != "final") {
         snapshot = lightweight_snapshot_v65(snapshot);
     }
@@ -8868,6 +8888,7 @@ ProductPublicationResultV172524 publish_true_production_products_v65(
             accepted.accepted_sequence = snapshot.sequence;
             accepted.acceptance_reason = reason;
             accepted.evaluation = copy_fixed_evaluation_state_v172524(snapshot);
+            whole.accepted_controller_states.push_back(accepted);
             xstar_run_state::RadialZoneState zone;
             zone.zone_index = whole.radial_zones.size() + 1;
             zone.pass_index = 1;
@@ -8890,7 +8911,10 @@ ProductPublicationResultV172524 publish_true_production_products_v65(
             if (note.find("exact source state is incomplete") == std::string::npos &&
                 note.find("product writing gate is disabled") == std::string::npos) throw;
         }
-        promote_true_production_surface_v65(whole);
+        // Use the same state-complete retained-surface assembly as the
+        // validated v63 diagnostic path. File silence affects only artifact
+        // emission, never product-state selection or projection.
+        promote_retained_native_product_surface_v172530(whole);
         retain_controller_owned_product_workspaces_v63(whole, options.parameters_path);
         whole.native_diagnostics_path.clear();
         auto product = xstar_run_state::build_product_writing_state(whole);
@@ -8942,6 +8966,91 @@ ProductPublicationResultV172524 publish_true_production_products_v65(
         result.ok = false;
     }
     return result;
+}
+
+
+
+int command_standalone_capabilities_v66() {
+    std::cout << "V048746255172566_STANDALONE_EXECUTABLE=YES\n"
+              << "V048746255172566_TWO_ARGUMENT_INTERFACE=YES\n"
+              << "V048746255172566_FILE_SILENT_POLICY=IMPLEMENTED\n"
+              << "V048746255172566_STATE_COMPLETE_ASSET_VALIDATION_PATH=IMPLEMENTED_UNVERIFIED_FULL_RUN\n"
+              << "V048746255172566_CXX_IN_MEMORY_ATDB_LOWERER=NO\n"
+              << "V048746255172566_CXX_PRODUCT_METADATA_DERIVATION=NO\n"
+              << "V048746255172566_QUALIFICATION_FREE_CONTROLLER_TRAJECTORY=NO\n"
+              << "V048746255172566_GENERAL_STANDALONE_PRODUCTION_READY=NO\n"
+              << "V048746255172566_RESULT=REJECT_NOT_STANDALONE_PRODUCTION_PATH\n";
+    return 20;
+}
+
+std::filesystem::path resolve_standalone_atomic_database_v66(const Options& options) {
+    std::vector<std::filesystem::path> candidates;
+    if (!options.atomic_db_path.empty()) candidates.emplace_back(options.atomic_db_path);
+    if (!options.parameters_path.empty() && std::filesystem::is_regular_file(options.parameters_path)) {
+        const std::string text = read_text_file(options.parameters_path);
+        for (const char* key : {"atomic_database", "atomic_db", "atdb"}) {
+            const std::string value = json_string_value(text, key, "");
+            if (!value.empty()) {
+                std::filesystem::path candidate(value);
+                if (candidate.is_relative()) candidate = std::filesystem::path(options.parameters_path).parent_path() / candidate;
+                candidates.push_back(candidate);
+            }
+        }
+        candidates.push_back(std::filesystem::path(options.parameters_path).parent_path() / "atdb.fits");
+    }
+    if (const char* value = std::getenv("XSTAR_ATOMIC_DB")) candidates.emplace_back(value);
+    if (const char* value = std::getenv("XSTAR_DATA")) candidates.emplace_back(std::filesystem::path(value) / "atdb.fits");
+    if (const char* value = std::getenv("XSTAR_HOME")) candidates.emplace_back(std::filesystem::path(value) / "data" / "atdb.fits");
+    for (const auto& candidate : candidates) {
+        std::error_code ec;
+        const auto normalized = std::filesystem::weakly_canonical(candidate, ec);
+        const auto selected = ec ? candidate : normalized;
+        if (std::filesystem::is_regular_file(selected)) return selected;
+    }
+    return {};
+}
+
+int command_run_standalone_production_v66(const Options& options) {
+    if (options.parameters_path.empty() || options.output_dir.empty()) {
+        std::cerr << "run-production requires --parameters and --output-dir\n";
+        std::cout << "V048746255172566_RESULT=REJECT_NOT_STANDALONE_PRODUCTION_PATH\n";
+        return 64;
+    }
+    if (!std::filesystem::is_regular_file(options.parameters_path)) {
+        std::cerr << "parameters file not found: " << options.parameters_path << "\n";
+        std::cout << "V048746255172566_RESULT=REJECT_NOT_STANDALONE_PRODUCTION_PATH\n";
+        return 66;
+    }
+    if (!options.case_dir.empty() || !options.product_metadata_dir.empty() ||
+        !options.qualification_contract_dir.empty() || !options.checkpoint_dir.empty()) {
+        std::cerr << "run-production rejects external case, metadata, qualification, and checkpoint assets\n";
+        std::cout << "V048746255172566_EXTERNAL_RUNTIME_ASSETS=REJECT\n"
+                  << "V048746255172566_PRODUCTS_WRITTEN=0\n"
+                  << "V048746255172566_RESULT=REJECT_NOT_STANDALONE_PRODUCTION_PATH\n";
+        return 20;
+    }
+    const auto atdb = resolve_standalone_atomic_database_v66(options);
+    std::cout << "V048746255172566_COMMAND=RUN_PRODUCTION_STANDALONE\n"
+              << "V048746255172566_PARAMETERS=" << options.parameters_path << "\n"
+              << "V048746255172566_OUTPUT_DIR=" << options.output_dir << "\n"
+              << "V048746255172566_ARTIFACT_PROFILE=none\n"
+              << "V048746255172566_EXTERNAL_CASE_DIR_USED=NO\n"
+              << "V048746255172566_EXTERNAL_PRODUCT_METADATA_USED=NO\n"
+              << "V048746255172566_EXTERNAL_QUALIFICATION_CONTRACTS_USED=NO\n"
+              << "V048746255172566_OUTPUT_DIRECTORY_CREATED=NO\n"
+              << "V048746255172566_PRODUCTS_WRITTEN=0\n";
+    if (atdb.empty()) {
+        std::cout << "V048746255172566_ATOMIC_DATABASE=NOT_RESOLVED\n"
+                  << "V048746255172566_CXX_IN_MEMORY_ATDB_LOWERER=NOT_RUN\n"
+                  << "V048746255172566_RESULT=REJECT_NOT_STANDALONE_PRODUCTION_PATH\n";
+        return 20;
+    }
+    std::cout << "V048746255172566_ATOMIC_DATABASE=" << atdb.string() << "\n"
+              << "V048746255172566_CXX_IN_MEMORY_ATDB_LOWERER=UNAVAILABLE\n"
+              << "V048746255172566_CXX_PRODUCT_METADATA_DERIVATION=UNAVAILABLE\n"
+              << "V048746255172566_QUALIFICATION_FREE_CONTROLLER_TRAJECTORY=UNAVAILABLE\n"
+              << "V048746255172566_RESULT=REJECT_NOT_STANDALONE_PRODUCTION_PATH\n";
+    return 20;
 }
 
 int command_run_native_resumable_trajectory_v1724(Options options, bool true_production_v65 = false) {
@@ -10373,7 +10482,8 @@ int command_run_native_controller_v1711(Options options) {
 }
 
 int command_run_physical_standalone(Options options) {
-    return command_run_native_resumable_trajectory_v1724(options);
+    const bool file_silent = options.artifact_profile == "none";
+    return command_run_native_resumable_trajectory_v1724(options, file_silent);
 #if 0
 
     std::filesystem::create_directories(options.output_dir);
@@ -10834,7 +10944,9 @@ int main(int argc, char** argv) {
     if (options.command == "run-fixed-trajectory") return command_run_fixed_trajectory(options);
     if (options.command == "run-fixed-evaluation") return command_run_fixed_evaluation(options);
     if (options.command == "run") return command_run_physical(options);
-    if (options.command == "run-production") return command_run_native_resumable_trajectory_v1724(options, true);
+    if (options.command == "standalone-capabilities") return command_standalone_capabilities_v66();
+    if (options.command == "run-production") return command_run_standalone_production_v66(options);
+    if (options.command == "run-production-assets") return command_run_native_resumable_trajectory_v1724(options, true);
     if (options.command == "run-native-reconstructed-products") return command_run_native_reconstructed_products_v172526(options);
     if (options.command == "run-fixed-dsec") return command_run_fixed_dsec(options);
     if (options.command == "production-self-test") return command_production_self_test(options);
