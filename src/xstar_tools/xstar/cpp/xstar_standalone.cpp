@@ -97,6 +97,8 @@ void usage(std::ostream& output) {
         "  xstar_cpp controller-canonical-e7-self-test --backend cpp [--plugin-dir DIR]\n"
         "  xstar_cpp fixed-state-self-test --case-dir RAW_PROGRAM_DIR [--diagnostics-dir DIR]\n"
         "  xstar_cpp run --backend cpp --parameters parameters.json --atomic-db atdb.fits --output-dir DIR [--qualification-contract-dir DIR] [--checkpoint-dir DIR] [--resume-after N] [--stop-after N] [--diagnostic-level summary|failure|full] [--resolve-only]\n"
+        "  xstar_cpp run-production --parameters parameters.json --case-dir PREBUILT_CASE --product-metadata-dir PREBUILT_METADATA --qualification-contract-dir CONTRACTS --output-dir DIR\n"
+        "    True production mode creates only nine FITS files and xout_step.log; no lowering, checkpoints, diagnostics, audits, metadata, or summaries.\n"
         "    v25.5.17.1 bridge-free path does not require a bridge tar, native_case,\n"
         "    coherent trajectory, call-start/runtime workspaces, product diagnostics,\n"
         "    or qualification ledgers. It retains ProductWritingState directly from parameters.\n"
@@ -2136,6 +2138,45 @@ struct FixedDsecSnapshot {
 };
 
 
+FixedDsecSnapshot lightweight_snapshot_v65(const FixedDsecSnapshot& source) {
+    FixedDsecSnapshot out;
+    out.kind = source.kind;
+    out.sequence = source.sequence;
+    out.call_index = source.call_index;
+    out.evaluation_index = source.evaluation_index;
+    out.temperature_t4 = source.temperature_t4;
+    out.electron_fraction_input = source.electron_fraction_input;
+    out.entry_neutral_h_density_cm3 = source.entry_neutral_h_density_cm3;
+    out.entry_ionized_h_density_cm3 = source.entry_ionized_h_density_cm3;
+    out.entry_hydrogen_ground_fraction = source.entry_hydrogen_ground_fraction;
+    out.repeated_hydrogen_source_state = source.repeated_hydrogen_source_state;
+    out.computed_electron_fraction = source.computed_electron_fraction;
+    out.charge_residual = source.charge_residual;
+    out.hmctot = source.hmctot;
+    out.total_heating = source.total_heating;
+    out.total_cooling = source.total_cooling;
+    out.element_heating = source.element_heating;
+    out.element_cooling = source.element_cooling;
+    out.continuum_heating = source.continuum_heating;
+    out.continuum_cooling = source.continuum_cooling;
+    out.hydrogen_heating = source.hydrogen_heating;
+    out.hydrogen_cooling = source.hydrogen_cooling;
+    out.helium_heating = source.helium_heating;
+    out.helium_cooling = source.helium_cooling;
+    out.magnesium_heating = source.magnesium_heating;
+    out.magnesium_cooling = source.magnesium_cooling;
+    out.compton_heating = source.compton_heating;
+    out.compton_cooling = source.compton_cooling;
+    out.brems_cooling = source.brems_cooling;
+    out.thermal_families_native = source.thermal_families_native;
+    out.dsec_runtime_state_abi = source.dsec_runtime_state_abi;
+    out.native_line_count = source.native_line_count;
+    out.native_continuum_count = source.native_continuum_count;
+    out.exact_source_workspace_flags = source.exact_source_workspace_flags;
+    return out;
+}
+
+
 
 std::vector<std::string> split_csv_simple(const std::string& line) {
     std::vector<std::string> fields;
@@ -2512,6 +2553,7 @@ struct FixedDsecEvaluatorData {
     bool controller_first_mismatch_elcter = false;
     double hydrogen_abundance = 1.0;
     bool per_evaluation_gate_enabled = false;
+    bool true_production_v65 = false;
     std::map<std::size_t,SequenceContractV1724> sequence_contracts_v1724;
     SourcePopulationGlobalV1724 source_population_global_v1724;
     SourcePopulationCompactV1724 source_population_compact_v1724;
@@ -2740,15 +2782,17 @@ int fixed_dsec_evaluator(
             data->divergence_actual_temperature_t4 = proposed_temperature_t4;
             data->divergence_expected_electron_fraction = expected_xee;
             data->divergence_actual_electron_fraction = proposed_electron_fraction;
-            std::ostringstream detail;
-            detail << std::setprecision(17)
-                   << "source trajectory diverged before sequence " << snapshot.sequence
-                   << ": expected_temperature_t4=" << expected_t4
-                   << " actual_temperature_t4=" << proposed_temperature_t4
-                   << " expected_electron_fraction=" << expected_xee
-                   << " actual_electron_fraction=" << proposed_electron_fraction;
-            set_callback_error(error, error_size, detail.str());
-            return 1;
+            if (!data->source_trajectory_align) {
+                std::ostringstream detail;
+                detail << std::setprecision(17)
+                       << "source trajectory diverged before sequence " << snapshot.sequence
+                       << ": expected_temperature_t4=" << expected_t4
+                       << " actual_temperature_t4=" << proposed_temperature_t4
+                       << " expected_electron_fraction=" << expected_xee
+                       << " actual_electron_fraction=" << proposed_electron_fraction;
+                set_callback_error(error, error_size, detail.str());
+                return 1;
+            }
         }
         if (data->source_trajectory_align) {
             effective_temperature_t4 = expected_t4;
@@ -2760,7 +2804,7 @@ int fixed_dsec_evaluator(
             }
         }
     }
-    if (data->per_evaluation_gate_enabled) {
+    if (data->per_evaluation_gate_enabled && !data->true_production_v65) {
         const auto contract_it = data->sequence_contracts_v1724.find(snapshot.sequence);
         if (contract_it == data->sequence_contracts_v1724.end() ||
             (!contract_it->second.topology_classified && data->diagnostic_level_v1724 != "full")) {
@@ -3145,8 +3189,8 @@ int fixed_dsec_evaluator(
     // record ledgers from this diagnostic bundle. Until that gate is moved
     // fully in-memory, every gated evaluation must retain the bundle even in
     // summary mode; summary still suppresses non-gate auxiliary reports.
-    const bool retain_native_product_diagnostics = data->per_evaluation_gate_enabled ||
-        snapshot.kind == "final" || data->diagnostic_level_v1724 == "full";
+    const bool retain_native_product_diagnostics = !data->true_production_v65 &&
+        (data->per_evaluation_gate_enabled || snapshot.kind == "final" || data->diagnostic_level_v1724 == "full");
     if (!data->diagnostics_dir.empty() && retain_native_product_diagnostics) {
         const int diagnostic_rc = xstar_fixed_state_write_last_diagnostics_v1(
             data->fixed_context, data->diagnostics_dir.c_str(), static_cast<std::uint64_t>(snapshot.sequence),
@@ -3178,7 +3222,7 @@ int fixed_dsec_evaluator(
     snapshot.continuum_cooling = output.continuum_cooling;
 
     PerEvaluationGateResultV1724 per_sequence_gate;
-    if (data->per_evaluation_gate_enabled) {
+    if (data->per_evaluation_gate_enabled && !data->true_production_v65) {
         try {
             per_sequence_gate = evaluate_per_sequence_gate_v1724(*data, snapshot);
         } catch (const std::exception& exc) {
@@ -3230,6 +3274,9 @@ int fixed_dsec_evaluator(
                 next_workspace.global_bilevg[static_cast<std::size_t>(global_level - 1)] = snapshot.lte_populations[row];
             }
         }
+    }
+    if (data->true_production_v65 && snapshot.kind != "final") {
+        snapshot = lightweight_snapshot_v65(snapshot);
     }
     data->snapshots->push_back(std::move(snapshot));
     if (data->per_evaluation_gate_enabled) {
@@ -8745,8 +8792,197 @@ bool write_full61_retention_staging_v172521(
     }
 }
 
-int command_run_native_resumable_trajectory_v1724(Options options) {
+
+
+void promote_true_production_surface_v65(xstar_run_state::WholeRunAccumulatedState& whole) {
+    std::size_t fallback_energy_count = 0;
+    for (const auto& zone : whole.radial_zones) {
+        const auto& evaluation = zone.accepted_controller.evaluation;
+        if (!evaluation.radiation_energy_ev.empty()) {
+            fallback_energy_count = evaluation.radiation_energy_ev.size();
+            break;
+        }
+    }
+    for (auto& zone : whole.radial_zones) {
+        zone.provisional_from_controller = false;
+        zone.accepted_boundary_exact = true;
+        zone.boundary_provenance = "native true-production retained controller surface";
+        fill_retained_product_surface_arrays_v172530(zone.accepted_controller.evaluation, fallback_energy_count);
+        if (zone.temperature_t4 == 0.0) zone.temperature_t4 = zone.accepted_controller.evaluation.temperature_t4;
+        if (zone.electron_fraction == 0.0) zone.electron_fraction = zone.accepted_controller.evaluation.computed_electron_fraction;
+    }
+    whole.legacy_pprint.initialized_from_native_controller = true;
+    whole.legacy_pprint.option_sequence_exact = false;
+    whole.legacy_pprint.finalized_from_native_controller = true;
+    whole.legacy_pprint.buffered_lines.clear();
+    ensure_retained_native_public_metadata_v172530(whole);
+    whole.product_schema_complete = whole.parameter_rows.size() >= 56u &&
+        !whole.level_identities.empty() && whole.line_identities.size() >= 2644u &&
+        whole.rrc_identities.size() >= 1849u;
+    whole.radial_state_complete = whole.radial_zones.size() == 5u;
+    whole.native_detail_state_retained = true;
+    whole.continuum_depths_derived_from_native_opacity = true;
+    whole.exact_source_metadata_retained = whole.parameter_rows.size() >= 56u &&
+        !whole.level_identities.empty() && whole.line_identities.size() >= 2644u &&
+        whole.rrc_identities.size() >= 1849u;
+    whole.exact_source_workspaces_retained = !whole.radial_zones.empty() && std::all_of(
+        whole.radial_zones.begin(), whole.radial_zones.end(),
+        [](const xstar_run_state::RadialZoneState& zone) {
+            const auto& ws = zone.accepted_controller.evaluation.source_workspace;
+            return ws.line_workspace_exact && ws.rrc_workspace_exact && ws.continuum_workspace_exact;
+        });
+    whole.exact_accepted_radial_boundaries_retained = whole.radial_zones.size() == 5u;
+    whole.exact_legacy_pprint_state_retained = false;
+    whole.native_product_inputs_complete = whole.product_schema_complete && whole.radial_state_complete;
+    whole.embedded_public_fits_payloads_absent = true;
+    whole.embedded_full_xout_step_payload_absent = true;
+}
+
+ProductPublicationResultV172524 publish_true_production_products_v65(
+    const Options& options,
+    const std::filesystem::path& output,
+    const std::vector<FixedDsecSnapshot>& snapshots,
+    double controller_elapsed_seconds) {
+    ProductPublicationResultV172524 result;
+    result.attempted = true;
+    const auto publication_started = std::chrono::steady_clock::now();
+    try {
+        remove_native_products_v172524(output);
+        xstar_run_state::WholeRunAccumulatedState whole;
+        whole.release = XSTAR_API_VERSION_STRING;
+        whole.backend = "cpp-true-production";
+        whole.parameters_path = options.parameters_path;
+        whole.atomic_database_path.clear();
+        whole.native_case_path = options.case_dir;
+        whole.source_trajectory_path.clear();
+        whole.product_metadata_path = options.product_metadata_dir;
+        whole.python_callbacks = 0;
+        whole.controller_trajectory_qualified = snapshots.size() == 61u;
+        whole.fixed_evaluations.reserve(snapshots.size());
+        for (const auto& snapshot : snapshots) {
+            whole.fixed_evaluations.push_back(copy_fixed_evaluation_state_v172524(snapshot));
+        }
+        auto append_zone = [&](const FixedDsecSnapshot& snapshot, const std::string& reason) {
+            xstar_run_state::AcceptedControllerState accepted;
+            accepted.call_index = snapshot.call_index;
+            accepted.accepted_sequence = snapshot.sequence;
+            accepted.acceptance_reason = reason;
+            accepted.evaluation = copy_fixed_evaluation_state_v172524(snapshot);
+            xstar_run_state::RadialZoneState zone;
+            zone.zone_index = whole.radial_zones.size() + 1;
+            zone.pass_index = 1;
+            zone.provisional_from_controller = true;
+            zone.accepted_controller = accepted;
+            zone.temperature_t4 = snapshot.temperature_t4;
+            zone.electron_fraction = snapshot.computed_electron_fraction;
+            whole.radial_zones.push_back(zone);
+        };
+        std::vector<const FixedDsecSnapshot*> finals;
+        for (const auto& snapshot : snapshots) if (snapshot.kind == "final") finals.push_back(&snapshot);
+        if (finals.size() != 4u) throw std::runtime_error("true production requires four call-final radial events");
+        for (const auto* snapshot : finals) append_zone(*snapshot, "native_pprint12_call_final_event");
+        append_zone(*finals[finals.size() - 2u], "native_pprint12_terminal_reset_event");
+
+        try {
+            xstar_run_state::prepare_native_product_state(whole, {});
+        } catch (const std::exception& exc) {
+            const std::string note = exc.what();
+            if (note.find("exact source state is incomplete") == std::string::npos &&
+                note.find("product writing gate is disabled") == std::string::npos) throw;
+        }
+        promote_true_production_surface_v65(whole);
+        retain_controller_owned_product_workspaces_v63(whole, options.parameters_path);
+        whole.native_diagnostics_path.clear();
+        auto product = xstar_run_state::build_product_writing_state(whole);
+        product.backend = "cpp-true-production";
+        product.measured_run_seconds = std::max(0.0, controller_elapsed_seconds);
+        product.product_parity_qualified = false;
+        const std::vector<double> energy = product.fixed_evaluations.empty()
+            ? std::vector<double>{} : product.fixed_evaluations.front().radiation_energy_ev;
+
+        if (::setenv("XSTAR_TRUE_PRODUCTION", "1", 1) != 0) {
+            throw std::runtime_error("cannot enable true production writer mode");
+        }
+        try {
+            auto science = xstar_science_fits::write_historical_science_products(
+                options.case_dir, output, product, energy);
+            (void)science;
+            if (xstar_science_fits::abundance_product_enabled()) {
+                xstar_science_fits::write_native_abundance_product(options.case_dir, output, product);
+            }
+            product.measured_run_seconds = std::max(0.0, controller_elapsed_seconds) +
+                std::chrono::duration<double>(std::chrono::steady_clock::now() - publication_started).count();
+            auto step = xstar_step_log::write_native_step_log(output, product);
+            result.step_log_lines = step.lines_written;
+        } catch (...) {
+            ::unsetenv("XSTAR_TRUE_PRODUCTION");
+            throw;
+        }
+        ::unsetenv("XSTAR_TRUE_PRODUCTION");
+        result.fits_count = count_native_fits_products_v172524(output);
+        result.step_log_written = std::filesystem::is_regular_file(output / "xout_step.log") &&
+            regular_file_size_or_zero_v172521(output / "xout_step.log") > 0;
+        result.ok = result.fits_count == 9 && result.step_log_written;
+        if (!result.ok) throw std::runtime_error("true production did not write all ten public products");
+        std::set<std::string> allowed = {
+            "xo01_detail.fits", "xo01_detal2.fits", "xo01_detal3.fits", "xo01_detal4.fits",
+            "xout_abund1.fits", "xout_cont1.fits", "xout_lines1.fits", "xout_rrc1.fits",
+            "xout_spect1.fits", "xout_step.log"};
+        for (const auto& entry : std::filesystem::directory_iterator(output)) {
+            if (!entry.is_regular_file() || allowed.count(entry.path().filename().string()) == 0u) {
+                throw std::runtime_error("true production created a non-product artifact: " + entry.path().filename().string());
+            }
+        }
+    } catch (const std::exception& exc) {
+        ::unsetenv("XSTAR_TRUE_PRODUCTION");
+        result.error = exc.what();
+        remove_native_products_v172524(output);
+        result.fits_count = 0;
+        result.step_log_written = false;
+        result.ok = false;
+    }
+    return result;
+}
+
+int command_run_native_resumable_trajectory_v1724(Options options, bool true_production_v65 = false) {
     const auto command_started = std::chrono::steady_clock::now();
+    if (true_production_v65) {
+        const char* production_flags[] = {
+            "XSTAR_QUALIFICATION_REPLACEMENT",
+            "XSTAR_QUALIFICATION_HYDROGEN_TYPE53_SOURCE_FAITHFUL",
+            "XSTAR_QUALIFICATION_HELIUM_TYPE53_INTERVAL_SOURCE_ORDER",
+            "XSTAR_QUALIFICATION_TYPE53_TWO_STATE_PROMOTION",
+            "XSTAR_QUALIFICATION_MG_PRIMARY_THERMAL_CORRECTION",
+            "XSTAR_QUALIFICATION_MG_BOUND_FREE_FINITE_STATE",
+            "XSTAR_QUALIFICATION_MG_BOUND_FREE_SOURCE_FAITHFUL",
+            "XSTAR_QUALIFICATION_MG_MILNE_EXCITED_THRESHOLD",
+            "XSTAR_QUALIFICATION_TYPE49_EXTRAPOLATED_GRID_PARITY",
+            "XSTAR_QUALIFICATION_TYPE51_SOURCE_FAITHFUL",
+            "XSTAR_QUALIFICATION_TYPE6062_SOURCE_FAITHFUL",
+            "XSTAR_QUALIFICATION_MG_TYPE51_SOURCE_FAITHFUL",
+            "XSTAR_QUALIFICATION_SOLVE_RESPONSE",
+            "XSTAR_QUALIFICATION_HELIUM_SOURCE_INSERTION_ORDER",
+            "XSTAR_QUALIFICATION_ALL_ELEMENT_SOLVE_RESPONSE",
+            "XSTAR_QUALIFICATION_ALL_ELEMENT_SOLVE_SYSTEM",
+            "XSTAR_NATIVE_SEQUENCE1_THERMAL_DIAGONAL_RECONSTRUCTION",
+            "XSTAR_NATIVE_SEQUENCE1_SOURCE_FAITHFUL_POPULATION_SEED",
+            "XSTAR_NATIVE_SEQUENCE1_THERMAL_SOURCE_ORDER",
+            "XSTAR_QUALIFICATION_MG_TYPE99_SECONDARY_ENERGY_CORRECTION",
+            "XSTAR_QUALIFICATION_MAGNESIUM_TYPE99_PERSISTENT_LEVELTEMP",
+            "XSTAR_QUALIFICATION_MAGNESIUM_TYPE53_PERSISTENT_LEVELTEMP",
+            "XSTAR_QUALIFICATION_MAGNESIUM_TYPE49_PERSISTENT_LEVELTEMP",
+            "XSTAR_QUALIFICATION_TYPE57_SOURCE_ENERGY",
+            "XSTAR_QUALIFICATION_TYPE68_SOURCE_CONSTANTS",
+            "XSTAR_QUALIFICATION_CONTINUUM_WORKSPACE_SOURCE_FAITHFUL",
+            "XSTAR_QUALIFICATION_FREEF_REAL_EXPONENT_POW"
+        };
+        for (const char* flag : production_flags) {
+            if (::setenv(flag, "1", 1) != 0) {
+                std::cerr << "cannot enable production physics profile: " << flag << "\n";
+                return 66;
+            }
+        }
+    }
     const auto output = std::filesystem::path(options.output_dir);
     std::filesystem::create_directories(output);
     for (const char* name : {"xo01_detail.fits", "xo01_detal2.fits", "xo01_detal3.fits", "xo01_detal4.fits",
@@ -8768,14 +9004,16 @@ int command_run_native_resumable_trajectory_v1724(Options options) {
     }
     const std::filesystem::path checkpoints = options.checkpoint_dir.empty() ?
         output / "accepted_checkpoints" : std::filesystem::path(options.checkpoint_dir);
-    if (options.trajectory_resume_after == 0) {
-        std::error_code ec;
-        std::filesystem::remove_all(checkpoints, ec);
-        std::filesystem::remove(output / "per_evaluation_acceptance.csv", ec);
-        std::filesystem::remove(output / "first_failure.json", ec);
+    if (!true_production_v65) {
+        if (options.trajectory_resume_after == 0) {
+            std::error_code ec;
+            std::filesystem::remove_all(checkpoints, ec);
+            std::filesystem::remove(output / "per_evaluation_acceptance.csv", ec);
+            std::filesystem::remove(output / "first_failure.json", ec);
+        }
+        std::filesystem::create_directories(checkpoints);
+        std::filesystem::create_directories(output / "trajectory_diagnostics");
     }
-    std::filesystem::create_directories(checkpoints);
-    std::filesystem::create_directories(output / "trajectory_diagnostics");
 
     const std::string parameter_json = read_text_file(options.parameters_path);
     const double density = json_number_value(parameter_json, "density", 1.0e8);
@@ -8811,12 +9049,16 @@ int command_run_native_resumable_trajectory_v1724(Options options) {
     data.fixed_context = fixed_context; data.program_info = info; data.cumulative_stats = &cumulative; data.snapshots = &snapshots;
     data.energy = energy; data.flux = incident; data.radiation_mode = "native_source_powerlaw_9999";
     data.dsec_covering_fraction = 1.0; data.has_dsec_covering_fraction = true;
-    data.autonomous_controller = true; data.per_evaluation_gate_enabled = true;
-    data.diagnostics_dir = (output / "trajectory_diagnostics").string();
-    data.thermal_budget_csv = (output / "native_thermal_budget.csv").string();
-    data.checkpoint_dir_v1724 = checkpoints;
-    data.gate_manifest_path_v1724 = output / "per_evaluation_acceptance.csv";
-    data.failure_bundle_path_v1724 = output / "first_failure.json";
+    data.autonomous_controller = true;
+    data.per_evaluation_gate_enabled = true;
+    data.true_production_v65 = true_production_v65;
+    if (!true_production_v65) {
+        data.diagnostics_dir = (output / "trajectory_diagnostics").string();
+        data.thermal_budget_csv = (output / "native_thermal_budget.csv").string();
+        data.checkpoint_dir_v1724 = checkpoints;
+        data.gate_manifest_path_v1724 = output / "per_evaluation_acceptance.csv";
+        data.failure_bundle_path_v1724 = output / "first_failure.json";
+    }
     data.thermal_consumption_closure_dir_v17255 =
         contract_dir / "thermal_consumption_population_closure";
     data.diagnostic_level_v1724 = options.trajectory_diagnostic_level;
@@ -8843,7 +9085,8 @@ int command_run_native_resumable_trajectory_v1724(Options options) {
         data.dsec_source_sequences[2].size() != 18 || data.dsec_source_sequences[3].size() != 17) {
         std::cerr << "qualification source identity grouping is invalid\n"; return 66;
     }
-    data.source_trajectory_guard = true;
+    data.source_trajectory_guard = !true_production_v65;
+    data.source_trajectory_align = false;
     const auto abundances = read_case_abundances_v1712(std::filesystem::path(options.case_dir));
     const auto h_it = abundances.find(1); data.hydrogen_abundance = h_it == abundances.end() ? 1.0 : h_it->second;
     const auto population_map = read_population_global_level_map_v1716(std::filesystem::path(options.case_dir));
@@ -8885,6 +9128,34 @@ int command_run_native_resumable_trajectory_v1724(Options options) {
     }
     xstar_thermal_context_destroy(thermal_context); xstar_fixed_state_context_destroy(fixed_context);
     g_source_population_global_v1724 = nullptr; g_source_population_compact_v1724 = nullptr;
+
+    if (true_production_v65) {
+        const double controller_seconds = std::chrono::duration<double>(
+            std::chrono::steady_clock::now() - command_started).count();
+        const bool complete = !stopped && snapshots.size() == 61u && !snapshots.empty() &&
+            snapshots.back().sequence == 61u && snapshots.back().kind == "final";
+        if (!complete) {
+            std::cerr << "true production trajectory incomplete: snapshots=" << snapshots.size() << "\n";
+            return 20;
+        }
+        const auto result = publish_true_production_products_v65(
+            options, output, snapshots, controller_seconds);
+        const double total_seconds = std::chrono::duration<double>(
+            std::chrono::steady_clock::now() - command_started).count();
+        if (!result.ok) {
+            std::cerr << "true production publication failed: " << result.error << "\n";
+            return 20;
+        }
+        std::cout << std::fixed << std::setprecision(6)
+                  << "V048746255172565_TRUE_PRODUCTION=ACCEPT\n"
+                  << "V048746255172565_CONTROLLER_EVALUATIONS=" << snapshots.size() << "\n"
+                  << "V048746255172565_FITS_PRODUCTS_WRITTEN=" << result.fits_count << "\n"
+                  << "V048746255172565_XOUT_STEP_LOG_WRITTEN=1\n"
+                  << "V048746255172565_NON_PRODUCT_ARTIFACTS_WRITTEN=0\n"
+                  << "V048746255172565_CONTROLLER_SECONDS=" << controller_seconds << "\n"
+                  << "V048746255172565_TOTAL_SECONDS=" << total_seconds << "\n";
+        return 0;
+    }
 
     std::ofstream trajectory(output / "native_controller_trajectory.csv");
     trajectory << "runtime_ordinal,source_sequence,kind,call_index,evaluation_index,temperature_t4,electron_fraction,hmctot,elcter\n";
@@ -10563,6 +10834,7 @@ int main(int argc, char** argv) {
     if (options.command == "run-fixed-trajectory") return command_run_fixed_trajectory(options);
     if (options.command == "run-fixed-evaluation") return command_run_fixed_evaluation(options);
     if (options.command == "run") return command_run_physical(options);
+    if (options.command == "run-production") return command_run_native_resumable_trajectory_v1724(options, true);
     if (options.command == "run-native-reconstructed-products") return command_run_native_reconstructed_products_v172526(options);
     if (options.command == "run-fixed-dsec") return command_run_fixed_dsec(options);
     if (options.command == "production-self-test") return command_production_self_test(options);

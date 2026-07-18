@@ -506,8 +506,10 @@ void prepare_native_product_state(
     state.embedded_public_fits_payloads_absent = true;
     state.embedded_full_xout_step_payload_absent = true;
 
-    write_retention_report(
-        state, diagnostics_path.parent_path() / "v04874625517_source_workspace_retention.json");
+    if (!diagnostics_path.empty()) {
+        write_retention_report(
+            state, diagnostics_path.parent_path() / "v04874625517_source_workspace_retention.json");
+    }
 
     if (!state.native_product_inputs_complete) {
         throw std::runtime_error(

@@ -26,6 +26,12 @@
 namespace xstar_science_fits {
 namespace {
 
+bool true_production_mode_v65() {
+    const char* value = std::getenv("XSTAR_TRUE_PRODUCTION");
+    return value && std::string(value) == "1";
+}
+
+
 constexpr double kErgPerEv = 1.602176634e-12;
 constexpr double kFourPi = 12.56637061435917295385;
 
@@ -9332,15 +9338,18 @@ void write_line_detail(const std::filesystem::path& path,
             write_real4(fptr, 10, row, r.tau_out);
         }
         detal2_audit.push_back(audit);
-        std::cout << "V048746255172542_DETAL2_HDU" << audit.hdu << "_ROWS=" << audit.rows << "\n"
-                  << "V048746255172542_DETAL2_HDU" << audit.hdu << "_DIAGNOSTIC_ROWS=" << audit.diagnostic_rows << "\n"
-                  << "V048746255172542_DETAL2_HDU" << audit.hdu << "_EMIS_OUTWARD_NONZERO=" << audit.emis_outward_nonzero << "\n"
-                  << "V048746255172542_DETAL2_HDU" << audit.hdu << "_OPACITY_NONZERO=" << audit.opacity_nonzero << "\n"
-                  << "V048746255172542_DETAL2_HDU" << audit.hdu << "_TAU_IN_NULLS=0\n"
-                  << "V048746255172542_DETAL2_HDU" << audit.hdu << "_TAU_OUT_NULLS=0\n"
-                  << "V048746255172542_DETAL2_HDU" << audit.hdu << "_TAU_IN_DEPTH_FALLBACK=" << audit.tau_in_depth_fallback << "\n";
+        if (!true_production_mode_v65()) {
+            std::cout << "V048746255172542_DETAL2_HDU" << audit.hdu << "_ROWS=" << audit.rows << "\n"
+                      << "V048746255172542_DETAL2_HDU" << audit.hdu << "_DIAGNOSTIC_ROWS=" << audit.diagnostic_rows << "\n"
+                      << "V048746255172542_DETAL2_HDU" << audit.hdu << "_EMIS_OUTWARD_NONZERO=" << audit.emis_outward_nonzero << "\n"
+                      << "V048746255172542_DETAL2_HDU" << audit.hdu << "_OPACITY_NONZERO=" << audit.opacity_nonzero << "\n"
+                      << "V048746255172542_DETAL2_HDU" << audit.hdu << "_TAU_IN_NULLS=0\n"
+                      << "V048746255172542_DETAL2_HDU" << audit.hdu << "_TAU_OUT_NULLS=0\n"
+                      << "V048746255172542_DETAL2_HDU" << audit.hdu << "_TAU_IN_DEPTH_FALLBACK=" << audit.tau_in_depth_fallback << "\n";
+        }
     }
     close_fits(fptr);
+    if (true_production_mode_v65()) return;
     std::ofstream audit_json(path.parent_path() / "v048746255172542_xo01_detal2_radial_value_null_audit.json");
     audit_json << "{\n"
                << "  \"schema\": \"xstar-tools-v048746255172542-xo01-detal2-radial-value-null-audit-v1\",\n"
@@ -9687,7 +9696,7 @@ void write_rrc_detail(const std::filesystem::path& path,
             if (tau_in != 0.0) ++audit.tau_in_nonzero;
         }
         detal3_audit.push_back(audit);
-        std::cout << "V048746255172556_DETAL3_HDU" << audit.hdu << "_ROWS=" << audit.rows << "\n"
+        if (!true_production_mode_v65()) std::cout << "V048746255172556_DETAL3_HDU" << audit.hdu << "_ROWS=" << audit.rows << "\n"
                   << "V048746255172556_DETAL3_HDU" << audit.hdu << "_DIAGNOSTIC_ROWS=" << audit.diagnostic_rows << "\n"
                   << "V048746255172556_DETAL3_HDU" << audit.hdu << "_EMIS_OUTWARD_NONZERO=" << audit.emis_outward_nonzero << "\n"
                   << "V048746255172556_DETAL3_HDU" << audit.hdu << "_INTEGRATED_ABSN_NONZERO=" << audit.absorption_nonzero << "\n"
@@ -9698,6 +9707,7 @@ void write_rrc_detail(const std::filesystem::path& path,
                   << "V048746255172556_DETAL3_HDU" << audit.hdu << "_TAU_OUT_NULLS=0\n";
     }
     close_fits(fptr);
+    if (true_production_mode_v65()) return;
     std::ofstream audit_json(path.parent_path() / "v048746255172556_xo01_detal3_rrc_native_surface_audit.json");
     audit_json << "{\n"
                << "  \"schema\": \"xstar-tools-v048746255172556-xo01-detal3-rrc-native-surface-audit-v1\",\n"
@@ -10436,8 +10446,8 @@ void write_abundances(const std::filesystem::path& path,
         }
     }
 
-    {
-        std::ofstream audit(path.parent_path() / "v048746255172563_zrtmp_trapezoidal_audit.json");
+    if (!true_production_mode_v65()) {
+        std::ofstream audit(path.parent_path() / "v048746255172565_zrtmp_trapezoidal_audit.json");
         if (audit) {
             std::size_t positive_intervals = 0;
             std::size_t negative_intervals = 0;
