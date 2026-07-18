@@ -536,6 +536,8 @@ ProductWritingState build_product_writing_state(const WholeRunAccumulatedState& 
     product.fixed_evaluations = state.fixed_evaluations;
     product.radial_zones = state.radial_zones;
     product.parameter_rows = state.parameter_rows;
+    product.element_metadata = state.element_metadata;
+    product.row_metadata = state.row_metadata;
     product.abundance_radial_rows = state.abundance_radial_rows;
     product.level_identities = state.level_identities;
     product.line_identities = state.line_identities;

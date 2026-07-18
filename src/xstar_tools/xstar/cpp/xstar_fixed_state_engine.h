@@ -268,6 +268,93 @@ typedef struct xstar_fixed_state_stats_v1 {
     char message[XSTAR_FIXED_STATE_MESSAGE_SIZE];
 } xstar_fixed_state_stats_v1;
 
+
+/* In-memory raw-program bundle.  This is the file-silent counterpart of the
+ * historical manifest/elements/rows/records/reals/ints directory format.  All
+ * pointers are borrowed for the duration of context creation and copied into
+ * the native context before this function returns. */
+typedef struct xstar_fixed_program_element_v1 {
+    int32_t element_index;
+    int32_t element_z;
+    double abundance;
+    int32_t n_rows;
+    int32_t n_superlevels;
+    int32_t n_ions;
+    int32_t normalization_row;
+    int32_t record_head;
+    int32_t record_count;
+} xstar_fixed_program_element_v1;
+
+typedef struct xstar_fixed_program_row_v1 {
+    int32_t element_index;
+    int32_t row;
+    int32_t superlevel;
+    int32_t ion;
+    int32_t ion_charge;
+    double initial_population;
+    double energy_ev;
+    double statistical_weight;
+    int32_t principal_n;
+    int32_t orbital_l;
+    int32_t global_level_index;
+} xstar_fixed_program_row_v1;
+
+typedef struct xstar_fixed_program_record_v1 {
+    int64_t source_position;
+    int64_t record;
+    int32_t next_index;
+    int32_t element_index;
+    int32_t opcode;
+    int32_t data_type;
+    int32_t rate_type;
+    int32_t ion_index;
+    int32_t ion_stage;
+    int32_t lower_row;
+    int32_t upper_row;
+    size_t real_offset;
+    size_t real_count;
+    size_t int_offset;
+    size_t int_count;
+    double density_scale;
+    double line_energy_ev;
+    double atomic_mass_amu;
+    double natural_width_ev;
+    int32_t line_index_one_based;
+    int32_t continuum_index_one_based;
+    uint32_t matrix_enabled;
+    uint32_t reserved0;
+} xstar_fixed_program_record_v1;
+
+typedef struct xstar_fixed_program_bundle_v1 {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    const char* program_id;
+    uint32_t active_atdb_lowered;
+    uint32_t reserved0;
+    uint64_t topology_record_count;
+    uint64_t unsupported_record_count;
+    size_t native_line_count;
+    size_t native_continuum_count;
+    const xstar_fixed_program_element_v1* elements;
+    size_t element_count;
+    const xstar_fixed_program_row_v1* rows;
+    size_t row_count;
+    const xstar_fixed_program_record_v1* records;
+    size_t record_count;
+    const double* reals;
+    size_t real_count;
+    const int64_t* ints;
+    size_t int_count;
+} xstar_fixed_program_bundle_v1;
+
+XSTAR_FIXED_STATE_EXPORT int xstar_fixed_program_bundle_init_v1(
+    xstar_fixed_program_bundle_v1* bundle);
+XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_context_create_from_bundle_v1(
+    const xstar_fixed_program_bundle_v1* bundle,
+    struct xstar_fixed_state_context** context,
+    char* message,
+    size_t message_size);
+
 typedef struct xstar_fixed_state_program_info_v1 {
     uint32_t struct_size;
     uint32_t abi_version;

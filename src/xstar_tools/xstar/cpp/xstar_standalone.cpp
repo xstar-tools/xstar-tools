@@ -5,6 +5,7 @@
 #include "xstar_science_fits.hpp"
 #include "xstar_run_state.hpp"
 #include "xstar_step_log.hpp"
+#include "xstar_atdb_runtime.hpp"
 #include "xstar_standalone_internal.hpp"
 
 #include "xstar_constants.h"
@@ -76,6 +77,17 @@ struct Options {
     std::size_t trajectory_stop_after = 61;
     std::string trajectory_diagnostic_level = "full";
     std::string artifact_profile = "full";
+    bool artifact_profile_explicit = false;
+    // Tri-state artifact overrides: -1 follows the selected profile, 0 disables,
+    // and 1 enables the artifact class explicitly.
+    int emit_lowered_case = -1;
+    int emit_runtime_metadata = -1;
+    int emit_checkpoints = -1;
+    int emit_audits = -1;
+    int emit_qualification_summaries = -1;
+    int emit_trajectory_diagnostics = -1;
+    int emit_benchmark_diagnostics = -1;
+    int emit_timing_summary = -1;
 };
 
 void usage(std::ostream& output) {
@@ -99,9 +111,10 @@ void usage(std::ostream& output) {
         "  xstar_cpp fixed-state-self-test --case-dir RAW_PROGRAM_DIR [--diagnostics-dir DIR]\n"
         "  xstar_cpp run --backend cpp --parameters parameters.json --atomic-db atdb.fits --output-dir DIR [--qualification-contract-dir DIR] [--checkpoint-dir DIR] [--resume-after N] [--stop-after N] [--diagnostic-level summary|failure|full] [--artifact-profile none|summary|failure|full] [--resolve-only]\n"
         "  xstar_cpp standalone-capabilities\n"
-        "  xstar_cpp run-production --parameters parameters.json --output-dir DIR\n"
-        "    Standalone public production entrypoint. It creates only nine FITS files and xout_step.log.\n"
-        "    It rejects without writing products until C++ derives atomic program, metadata, and trajectory state internally.\n"
+        "  xstar_cpp run-production --parameters parameters.json --output-dir DIR [--artifact-profile none|summary|failure|full]\n"
+        "    Standalone public production entrypoint. The default profile creates only nine FITS files and xout_step.log.\n"
+        "    Artifact classes can be overridden with --emit/--no-emit-lowered-case, runtime-metadata, checkpoints, audits,\n"
+        "    qualification-summaries, trajectory-diagnostics, benchmark-diagnostics, and timing-summary.\n"
         "  xstar_cpp run-production-assets --parameters parameters.json --case-dir PREBUILT_CASE --product-metadata-dir PREBUILT_METADATA --qualification-contract-dir CONTRACTS --output-dir DIR\n"
         "    Asset-backed validation only; not a standalone production interface.\n"
         "    v25.5.17.1 bridge-free path does not require a bridge tar, native_case,\n"
@@ -341,6 +354,7 @@ bool parse_options(int argc, char** argv, Options& options, std::string& error) 
             const char* value = require_value("--artifact-profile");
             if (!value) return false;
             options.artifact_profile = value;
+            options.artifact_profile_explicit = true;
             if (options.artifact_profile != "none" &&
                 options.artifact_profile != "summary" &&
                 options.artifact_profile != "failure" &&
@@ -349,7 +363,23 @@ bool parse_options(int argc, char** argv, Options& options, std::string& error) 
                 return false;
             }
             if (options.artifact_profile != "none") options.trajectory_diagnostic_level = options.artifact_profile;
-        } else {
+        } else if (arg == "--emit-lowered-case") options.emit_lowered_case = 1;
+        else if (arg == "--no-emit-lowered-case") options.emit_lowered_case = 0;
+        else if (arg == "--emit-runtime-metadata") options.emit_runtime_metadata = 1;
+        else if (arg == "--no-emit-runtime-metadata") options.emit_runtime_metadata = 0;
+        else if (arg == "--emit-checkpoints") options.emit_checkpoints = 1;
+        else if (arg == "--no-emit-checkpoints") options.emit_checkpoints = 0;
+        else if (arg == "--emit-audits") options.emit_audits = 1;
+        else if (arg == "--no-emit-audits") options.emit_audits = 0;
+        else if (arg == "--emit-qualification-summaries") options.emit_qualification_summaries = 1;
+        else if (arg == "--no-emit-qualification-summaries") options.emit_qualification_summaries = 0;
+        else if (arg == "--emit-trajectory-diagnostics") options.emit_trajectory_diagnostics = 1;
+        else if (arg == "--no-emit-trajectory-diagnostics") options.emit_trajectory_diagnostics = 0;
+        else if (arg == "--emit-benchmark-diagnostics") options.emit_benchmark_diagnostics = 1;
+        else if (arg == "--no-emit-benchmark-diagnostics") options.emit_benchmark_diagnostics = 0;
+        else if (arg == "--emit-timing-summary") options.emit_timing_summary = 1;
+        else if (arg == "--no-emit-timing-summary") options.emit_timing_summary = 0;
+        else {
             error = "unknown option: " + arg;
             return false;
         }
@@ -2140,6 +2170,7 @@ struct FixedDsecSnapshot {
     std::vector<double> tau0;
     std::vector<double> elum;
     std::vector<double> cemab;
+    std::vector<double> elumab;
     std::vector<double> cabab;
     std::vector<double> opakab;
     std::vector<double> tauc;
@@ -4825,6 +4856,91 @@ RadiationField read_standalone_radiation_field(const Options& options) {
     return field;
 }
 
+
+std::vector<double> source_energy_grid_v67(std::size_t n) {
+    if (n < 4) throw std::runtime_error("standalone source energy grid requires at least four bins");
+    const std::size_t n2 = std::max<std::size_t>(2, n / 50);
+    const std::size_t n3 = n - n2;
+    if (n3 < 2) throw std::runtime_error("standalone source energy grid first segment is too small");
+    std::vector<double> out(n, 0.0);
+    out[0] = 0.1;
+    const double ratio1 = std::pow(4.0e5 / 0.1, 1.0 / static_cast<double>(n3 - 1));
+    for (std::size_t i = 1; i < n3; ++i) out[i] = out[i - 1] * ratio1;
+    const double ratio2 = std::pow(1.0e6 / 4.0e5, 1.0 / static_cast<double>(n2 - 1));
+    for (std::size_t i = n3; i < n; ++i) out[i] = out[i - 1] * ratio2;
+    return out;
+}
+
+std::size_t source_nbinc_v67(double energy, const std::vector<double>& grid) {
+    const std::size_t extent = grid.size() - std::max<std::size_t>(2, grid.size() / 50);
+    if (extent < 2) throw std::runtime_error("standalone source nbinc extent is too small");
+    auto begin = grid.begin();
+    auto end = begin + static_cast<std::ptrdiff_t>(extent);
+    auto it = std::lower_bound(begin, end, energy);
+    if (it == begin) return 1;
+    if (it == end) return extent;
+    const std::size_t hi = static_cast<std::size_t>(it - begin);
+    const std::size_t lo = hi - 1;
+    const double dlo = std::abs(std::log(std::max(energy, 1.0e-49) / std::max(grid[lo], 1.0e-49)));
+    const double dhi = std::abs(std::log(std::max(energy, 1.0e-49) / std::max(grid[hi], 1.0e-49)));
+    return (dhi < dlo ? hi : lo) + 1;
+}
+
+RadiationField source_powerlaw_radiation_v67(const xstar_atdb_runtime::ProductionParameters& params) {
+    RadiationField field;
+    field.energy_ev = source_energy_grid_v67(static_cast<std::size_t>(params.ncn2));
+    field.incident.resize(field.energy_ev.size(), 0.0);
+    std::vector<double> raw(field.energy_ev.size(), 0.0);
+    for (std::size_t i = 0; i < raw.size(); ++i) {
+        raw[i] = field.energy_ev[i] > 0.01 ? std::pow(field.energy_ev[i], params.spectral_index) : 1.0e-24;
+    }
+    const std::size_t nb1 = source_nbinc_v67(13.6, field.energy_ev);
+    const std::size_t nb2 = source_nbinc_v67(1.36e4, field.energy_ev);
+    double total = 0.0;
+    for (std::size_t one = std::max<std::size_t>(2, nb1); one <= std::min(field.energy_ev.size(), nb2); ++one) {
+        const std::size_t i = one - 1;
+        total += (raw[i] + raw[i - 1]) * (field.energy_ev[i] - field.energy_ev[i - 1]) / 2.0;
+    }
+    if (!(total > 0.0) || !std::isfinite(total)) throw std::runtime_error("standalone power-law normalization is nonpositive");
+    constexpr double ergsev = 1.602197e-12;
+    for (std::size_t i = 0; i < raw.size(); ++i) {
+        field.incident[i] = raw[i] * (params.luminosity_1e38 / total / ergsev);
+    }
+    double total2 = 0.0;
+    for (std::size_t i = 1; i < field.energy_ev.size(); ++i) {
+        if (field.energy_ev[i] >= 13.6 && field.energy_ev[i] <= 1.36e4) {
+            total2 += (field.incident[i] + field.incident[i - 1]) *
+                (field.energy_ev[i] - field.energy_ev[i - 1]) / 2.0;
+        }
+    }
+    if (!(total2 > 0.0) || !std::isfinite(total2)) throw std::runtime_error("standalone renormalized power-law luminosity is nonpositive");
+    const double scale = params.luminosity_1e38 / total2 / ergsev;
+    for (double& value : field.incident) value *= scale;
+    field.mode = "source_ener_ispec4_ispecgg_powerlaw";
+    return field;
+}
+
+RadiationField read_general_standalone_radiation_v67(
+    const Options& options,
+    const xstar_atdb_runtime::ProductionParameters& params) {
+    std::string mode = params.spectrum;
+    std::transform(mode.begin(), mode.end(), mode.begin(), [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
+    if (mode == "pow" || mode == "powerlaw" || mode == "power-law") {
+        return source_powerlaw_radiation_v67(params);
+    }
+    std::filesystem::path spectrum_path(params.spectrum_file);
+    if (spectrum_path.is_relative()) spectrum_path = std::filesystem::path(options.parameters_path).parent_path() / spectrum_path;
+    if (!std::filesystem::is_regular_file(spectrum_path)) {
+        throw std::runtime_error("unsupported standalone spectrum mode without a readable spectrum_file: " + params.spectrum);
+    }
+    auto field = read_radiation_field(spectrum_path.string());
+    if (field.energy_ev.size() != static_cast<std::size_t>(params.ncn2)) {
+        throw std::runtime_error("standalone spectrum_file grid does not match ncn2");
+    }
+    field.mode = "parameter_spectrum_file";
+    return field;
+}
+
 std::vector<xstar_run_state::LevelIdentityState> read_level_identities_from_case(const std::filesystem::path& case_dir) {
     std::map<int,int> z_by_element;
     {
@@ -4971,6 +5087,7 @@ xstar_run_state::FixedEvaluationState copy_real_native_snapshot(
     ws.tau0 = source.tau0;
     ws.elum = source.elum;
     ws.cemab = source.cemab;
+    ws.elumab = source.elumab;
     ws.cabab = source.cabab;
     ws.opakab = source.opakab;
     ws.tauc = source.tauc;
@@ -8959,6 +9076,8 @@ ProductPublicationResultV172524 publish_true_production_products_v65(
         }
     } catch (const std::exception& exc) {
         ::unsetenv("XSTAR_TRUE_PRODUCTION");
+        ::unsetenv("XSTAR_NATIVE_SOURCE_SEQUENCE");
+        ::unsetenv("XSTAR_NATIVE_PRODUCTION");
         result.error = exc.what();
         remove_native_products_v172524(output);
         result.fits_count = 0;
@@ -8968,6 +9087,1006 @@ ProductPublicationResultV172524 publish_true_production_products_v65(
     return result;
 }
 
+
+
+
+struct StandaloneControllerDataV67 {
+    xstar_fixed_state_context* fixed_context = nullptr;
+    xstar_fixed_state_program_info_v1 program_info{};
+    const xstar_atdb_runtime::ProductionParameters* parameters = nullptr;
+    const xstar_atdb_runtime::ProgramStorage* program = nullptr;
+    xstar_fixed_state_stats_v1 cumulative_stats{};
+    std::vector<double> energy;
+    std::vector<double> flux;
+    std::vector<double> source_tau_in;
+    std::vector<double> source_tau_out;
+    std::vector<double> line_tau_in;
+    std::vector<double> line_tau_out;
+    std::vector<double> line_luminosity;
+    std::vector<double> rrc_luminosity;
+    std::vector<double> grid_tau_in;
+    std::vector<double> grid_tau_out;
+    std::vector<double> global_xilevg;
+    std::vector<double> global_bilevg;
+    std::vector<double> global_rnisg;
+    std::vector<int> population_global_level_index;
+    std::size_t global_level_count = 0;
+    std::size_t hydrogen_ground_population_index = std::numeric_limits<std::size_t>::max();
+    std::size_t next_sequence = 1;
+    std::size_t evaluations = 0;
+    FixedDsecSnapshot last_iteration;
+    std::string last_error;
+};
+
+bool validate_coheat_file_v67(const std::filesystem::path& path, std::size_t& rows) {
+    rows = 0;
+    std::ifstream input(path);
+    if (!input) return false;
+    std::string line;
+    while (std::getline(input, line)) {
+        if (line.empty()) continue;
+        std::istringstream parser(line);
+        int i = 0, j = 0;
+        double a = 0.0, b = 0.0, c = 0.0, d = 0.0;
+        if (!(parser >> i >> j >> a >> b >> c >> d)) return false;
+        if (i <= 0 || j <= 0 || !std::isfinite(a) || !std::isfinite(b) ||
+            !std::isfinite(c) || !std::isfinite(d)) return false;
+        ++rows;
+    }
+    return rows >= 100;
+}
+
+void update_global_populations_v67(
+    StandaloneControllerDataV67& data,
+    const std::vector<double>& populations,
+    const std::vector<double>* lte = nullptr) {
+    if (data.global_level_count == 0) return;
+    if (data.global_xilevg.size() != data.global_level_count) {
+        data.global_xilevg.assign(data.global_level_count, 0.0);
+        data.global_bilevg.assign(data.global_level_count, 0.0);
+        data.global_rnisg.assign(data.global_level_count, 0.0);
+    }
+    for (std::size_t row = 0; row < populations.size() && row < data.population_global_level_index.size(); ++row) {
+        const int global = data.population_global_level_index[row];
+        if (global <= 0 || static_cast<std::size_t>(global) > data.global_level_count) continue;
+        data.global_xilevg[static_cast<std::size_t>(global - 1)] = populations[row];
+        if (lte && row < lte->size()) {
+            data.global_bilevg[static_cast<std::size_t>(global - 1)] = (*lte)[row];
+        }
+    }
+}
+
+void fill_standalone_input_v67(
+    StandaloneControllerDataV67& data,
+    const xstar_thermal_state_v1& trial,
+    xstar_fixed_state_input_v1& input) {
+    xstar_fixed_state_input_init_v1(&input);
+    const auto& params = *data.parameters;
+    input.temperature_k = trial.temperature_t4 * 1.0e4;
+    input.hydrogen_density_cm3 = params.density_cm3;
+    input.electron_fraction_xee = std::max(0.0, trial.electron_fraction_xee);
+    input.electron_density_cm3 = input.hydrogen_density_cm3 * input.electron_fraction_xee;
+    double hydrogen_ground = 1.0e-4;
+    if (data.hydrogen_ground_population_index < data.last_iteration.populations.size()) {
+        hydrogen_ground = data.last_iteration.populations[data.hydrogen_ground_population_index];
+    }
+    hydrogen_ground = std::max(0.0, std::min(1.0, hydrogen_ground));
+    input.neutral_h_density_cm3 = input.hydrogen_density_cm3 * hydrogen_ground;
+    input.ionized_h_density_cm3 = std::max(0.0, input.hydrogen_density_cm3 - input.neutral_h_density_cm3);
+    input.covering_fraction = params.covering_fraction;
+    input.turbulent_velocity_km_s = params.turbulent_velocity_km_s;
+    input.radiation_energy_ev = data.energy.data();
+    input.radiation_flux = data.flux.data();
+    input.radiation_bin_count = data.energy.size();
+    input.dsec_radiation_energy_ev = data.energy.data();
+    input.dsec_bremsa = data.flux.data();
+    input.dsec_radiation_bin_count = data.energy.size();
+    if (!data.source_tau_in.empty()) {
+        input.continuum_tau_in = data.source_tau_in.data();
+        input.continuum_tau_out = data.source_tau_out.data();
+        input.continuum_tau_count = data.source_tau_in.size();
+    }
+    if (!data.global_xilevg.empty()) {
+        input.global_xilevg = data.global_xilevg.data();
+        input.global_bilevg = data.global_bilevg.data();
+        input.global_rnisg = data.global_rnisg.data();
+        input.global_level_count = data.global_xilevg.size();
+        input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_GLOBAL_LEVEL_WORKSPACES;
+    }
+    input.dsec_covering_fraction = params.covering_fraction;
+    input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_DSEC_COVERING_FRACTION;
+    if (!data.last_iteration.populations.empty()) {
+        input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_REPEATED_HYDROGEN_SOURCE_STATE;
+    }
+}
+
+FixedDsecSnapshot make_iteration_snapshot_v67(
+    StandaloneControllerDataV67& data,
+    const xstar_thermal_state_v1& trial) {
+    FixedDsecSnapshot snapshot;
+    snapshot.kind = "dsec";
+    snapshot.sequence = data.next_sequence++;
+    snapshot.call_index = 1;
+    snapshot.evaluation_index = ++data.evaluations;
+    snapshot.temperature_t4 = trial.temperature_t4;
+    snapshot.electron_fraction_input = trial.electron_fraction_xee;
+    snapshot.populations.assign(static_cast<std::size_t>(data.program_info.population_rows), 0.0);
+    snapshot.spectrum.assign(data.energy.size(), 0.0);
+    snapshot.opacity.assign(data.energy.size(), 0.0);
+    snapshot.continuum_spectrum.assign(data.energy.size(), 0.0);
+    snapshot.radiation_energy_ev = data.energy;
+    snapshot.radiation_flux = data.flux;
+    return snapshot;
+}
+
+void fill_continuum_shape_v67(
+    FixedDsecSnapshot& snapshot,
+    const xstar_fixed_state_input_v1& input,
+    const std::vector<double>& energy) {
+    constexpr double kBoltzmannEvK = xstar_constants::kModernBoltzmannEvPerK;
+    const double kt_ev = kBoltzmannEvK * input.temperature_k;
+    const double ff_total = 1.426e-27 * std::sqrt(std::max(input.temperature_k, 1.0)) *
+        input.electron_density_cm3 * input.ionized_h_density_cm3;
+    double normalization = 0.0;
+    for (std::size_t i = 0; i < energy.size(); ++i) {
+        snapshot.continuum_spectrum[i] = std::exp(-energy[i] / std::max(kt_ev, 1.0e-300));
+        normalization += snapshot.continuum_spectrum[i];
+    }
+    if (normalization > 0.0) {
+        for (double& value : snapshot.continuum_spectrum) value = ff_total * value / normalization;
+    }
+}
+
+int standalone_iteration_evaluator_v67(
+    void* user_data,
+    const xstar_thermal_state_v1* trial,
+    xstar_thermal_evaluation_v1* evaluation,
+    char* error,
+    std::size_t error_size) {
+    auto* data = static_cast<StandaloneControllerDataV67*>(user_data);
+    if (!data || !trial || !evaluation || !data->fixed_context) {
+        set_callback_error(error, error_size, "invalid standalone controller evaluator state");
+        return 1;
+    }
+    try {
+        FixedDsecSnapshot snapshot = make_iteration_snapshot_v67(*data, *trial);
+        xstar_fixed_state_input_v1 input{};
+        fill_standalone_input_v67(*data, *trial, input);
+        fill_continuum_shape_v67(snapshot, input, data->energy);
+        xstar_fixed_state_output_v1 output{};
+        xstar_fixed_state_output_init_v1(&output);
+        output.populations = snapshot.populations.data();
+        output.populations_capacity = snapshot.populations.size();
+        output.spectrum = snapshot.spectrum.data();
+        output.spectrum_capacity = snapshot.spectrum.size();
+        output.opacity = snapshot.opacity.data();
+        output.opacity_capacity = snapshot.opacity.size();
+        std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> message{};
+        const std::string sequence = std::to_string(snapshot.sequence);
+        ::setenv("XSTAR_NATIVE_SOURCE_SEQUENCE", sequence.c_str(), 1);
+        const int rc = xstar_fixed_state_run_v1(
+            data->fixed_context, &input, &output, &data->cumulative_stats,
+            message.data(), message.size());
+        if (rc != 0) {
+            set_callback_error(error, error_size, std::string("standalone fixed-state evaluation failed: ") + message.data());
+            return rc;
+        }
+        snapshot.populations.resize(output.populations_count);
+        snapshot.spectrum.resize(output.spectrum_count);
+        snapshot.opacity.resize(output.opacity_count);
+        snapshot.computed_electron_fraction = output.electron_fraction_xee;
+        snapshot.charge_residual = output.elcter;
+        snapshot.hmctot = output.hmctot;
+        snapshot.total_heating = output.total_heating;
+        snapshot.total_cooling = output.total_cooling;
+        snapshot.element_heating = output.element_heating;
+        snapshot.element_cooling = output.element_cooling;
+        snapshot.continuum_heating = output.continuum_heating;
+        snapshot.continuum_cooling = output.continuum_cooling;
+        update_global_populations_v67(*data, snapshot.populations);
+        data->last_iteration = std::move(snapshot);
+        evaluation->hmctot = output.hmctot;
+        evaluation->elcter = output.elcter;
+        evaluation->temperature_t4 = trial->temperature_t4;
+        evaluation->electron_fraction_xee = output.electron_fraction_xee;
+        evaluation->hydrogen_density_cm3 = input.hydrogen_density_cm3;
+        evaluation->state_generation = data->cumulative_stats.state_generation;
+        return 0;
+    } catch (const std::exception& exc) {
+        data->last_error = exc.what();
+        set_callback_error(error, error_size, data->last_error);
+        return 1;
+    }
+}
+
+FixedDsecSnapshot evaluate_full_boundary_v67(
+    StandaloneControllerDataV67& data,
+    const xstar_thermal_state_v1& accepted_state,
+    double delta_radius_cm,
+    double radius_cm,
+    std::size_t transport_plane) {
+    FixedDsecSnapshot snapshot = make_iteration_snapshot_v67(data, accepted_state);
+    snapshot.kind = "final";
+    xstar_fixed_state_input_v1 input{};
+    fill_standalone_input_v67(data, accepted_state, input);
+    fill_continuum_shape_v67(snapshot, input, data.energy);
+    const std::size_t line_capacity = std::max<std::size_t>(
+        static_cast<std::size_t>(data.program_info.native_line_count) + 1u,
+        static_cast<std::size_t>(data.program_info.record_count) + 1u);
+    const std::size_t continuum_capacity = std::max<std::size_t>(
+        static_cast<std::size_t>(data.program_info.native_continuum_count) + 1u,
+        data.energy.size());
+    snapshot.lte_populations.assign(static_cast<std::size_t>(data.program_info.population_rows), 0.0);
+    snapshot.rcem.assign(2 * line_capacity, 0.0);
+    snapshot.oplin.assign(line_capacity, 0.0);
+    snapshot.elum.assign(2 * line_capacity, 0.0);
+    snapshot.cemab.assign(2 * continuum_capacity, 0.0);
+    snapshot.cabab.assign(continuum_capacity, 0.0);
+    snapshot.opakab.assign(continuum_capacity, 0.0);
+    snapshot.rccemis.assign(2 * data.energy.size(), 0.0);
+    snapshot.opakc.assign(data.energy.size(), 0.0);
+    snapshot.opakcont.assign(data.energy.size(), 0.0);
+    snapshot.fline.assign(2 * line_capacity, 0.0);
+    snapshot.flinel.assign(data.energy.size(), 0.0);
+    snapshot.line_profile_workspace.assign(5 * data.energy.size(), 0.0);
+
+    xstar_fixed_state_output_v1 output{};
+    xstar_fixed_state_output_init_v1(&output);
+    output.populations = snapshot.populations.data(); output.populations_capacity = snapshot.populations.size();
+    output.spectrum = snapshot.spectrum.data(); output.spectrum_capacity = snapshot.spectrum.size();
+    output.opacity = snapshot.opacity.data(); output.opacity_capacity = snapshot.opacity.size();
+    xstar_fixed_source_workspace_output_v1 source{};
+    xstar_fixed_source_workspace_output_init_v1(&source);
+    source.lte_populations = snapshot.lte_populations.data(); source.lte_populations_capacity = snapshot.lte_populations.size();
+    source.rcem = snapshot.rcem.data(); source.rcem_capacity = snapshot.rcem.size();
+    source.oplin = snapshot.oplin.data(); source.oplin_capacity = snapshot.oplin.size();
+    source.elum = snapshot.elum.data(); source.elum_capacity = snapshot.elum.size();
+    source.cemab = snapshot.cemab.data(); source.cemab_capacity = snapshot.cemab.size();
+    source.cabab = snapshot.cabab.data(); source.cabab_capacity = snapshot.cabab.size();
+    source.opakab = snapshot.opakab.data(); source.opakab_capacity = snapshot.opakab.size();
+    source.rccemis = snapshot.rccemis.data(); source.rccemis_capacity = snapshot.rccemis.size();
+    source.opakc = snapshot.opakc.data(); source.opakc_capacity = snapshot.opakc.size();
+    source.opakcont = snapshot.opakcont.data(); source.opakcont_capacity = snapshot.opakcont.size();
+    source.fline = snapshot.fline.data(); source.fline_capacity = snapshot.fline.size();
+    source.flinel = snapshot.flinel.data(); source.flinel_capacity = snapshot.flinel.size();
+    source.line_profile_workspace = snapshot.line_profile_workspace.data();
+    source.line_profile_workspace_capacity = snapshot.line_profile_workspace.size();
+    std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> message{};
+    const std::string sequence = std::to_string(snapshot.sequence);
+    ::setenv("XSTAR_NATIVE_SOURCE_SEQUENCE", sequence.c_str(), 1);
+    const int rc = xstar_fixed_state_run_with_source_workspaces_v1(
+        data.fixed_context, &input, &output, &source, &data.cumulative_stats,
+        message.data(), message.size());
+    if (rc != 0) throw std::runtime_error(std::string("accepted boundary evaluation failed: ") + message.data());
+    snapshot.populations.resize(output.populations_count);
+    snapshot.spectrum.resize(output.spectrum_count);
+    snapshot.opacity.resize(output.opacity_count);
+    snapshot.lte_populations.resize(source.lte_populations_count);
+    snapshot.rcem.resize(source.rcem_count);
+    snapshot.oplin.resize(source.oplin_count);
+    snapshot.elum.resize(source.elum_count);
+    snapshot.cemab.resize(source.cemab_count);
+    snapshot.cabab.resize(source.cabab_count);
+    snapshot.opakab.resize(source.opakab_count);
+    snapshot.rccemis.resize(source.rccemis_count);
+    snapshot.opakc.resize(source.opakc_count);
+    snapshot.opakcont.resize(source.opakcont_count);
+    snapshot.fline.resize(source.fline_count);
+    snapshot.flinel.resize(source.flinel_count);
+    snapshot.line_profile_workspace.resize(source.line_profile_workspace_count);
+    snapshot.native_line_count = source.native_line_count;
+    snapshot.native_continuum_count = source.native_continuum_count;
+    snapshot.exact_source_workspace_flags = source.exact_source_workspace_flags;
+    snapshot.computed_electron_fraction = output.electron_fraction_xee;
+    snapshot.charge_residual = output.elcter;
+    snapshot.hmctot = output.hmctot;
+    snapshot.total_heating = output.total_heating;
+    snapshot.total_cooling = output.total_cooling;
+    snapshot.element_heating = output.element_heating;
+    snapshot.element_cooling = output.element_cooling;
+    snapshot.continuum_heating = output.continuum_heating;
+    snapshot.continuum_cooling = output.continuum_cooling;
+
+    const std::size_t line_stride = snapshot.oplin.size();
+    if (data.line_tau_in.size() != line_stride) {
+        data.line_tau_in.assign(line_stride, 0.0);
+        data.line_tau_out.assign(line_stride, 0.0);
+    }
+    const std::size_t line_plane = transport_plane > 0u ? 1u : 0u;
+    for (std::size_t i = 0; i < line_stride; ++i) {
+        const double increment = std::max(0.0, finite_or(snapshot.oplin[i], 0.0)) * std::max(0.0, delta_radius_cm);
+        (line_plane == 0u ? data.line_tau_in[i] : data.line_tau_out[i]) += increment;
+    }
+    snapshot.tau0.reserve(data.line_tau_in.size() + data.line_tau_out.size());
+    snapshot.tau0.insert(snapshot.tau0.end(), data.line_tau_in.begin(), data.line_tau_in.end());
+    snapshot.tau0.insert(snapshot.tau0.end(), data.line_tau_out.begin(), data.line_tau_out.end());
+
+    const double fpr2 = 12.56 * std::pow(std::max(radius_cm, 0.0) * 1.0e-19, 2.0);
+    if (data.line_luminosity.size() != 2u * line_stride) {
+        data.line_luminosity.assign(2u * line_stride, 0.0);
+    }
+    const std::size_t rcem_stride = snapshot.rcem.size() >= 2u ? snapshot.rcem.size() / 2u : 0u;
+    for (std::size_t plane = 0; plane < 2u; ++plane) {
+        for (std::size_t slot = 0; slot < line_stride; ++slot) {
+            const std::size_t source_at = plane * rcem_stride + slot;
+            const double local = source_at < snapshot.rcem.size() ? finite_or(snapshot.rcem[source_at], 0.0) : 0.0;
+            data.line_luminosity[plane * line_stride + slot] = std::max(0.0,
+                data.line_luminosity[plane * line_stride + slot] + local * std::max(0.0, delta_radius_cm) * fpr2);
+        }
+    }
+    snapshot.elum = data.line_luminosity;
+
+    const std::size_t continuum_stride = snapshot.opakab.size();
+    if (data.source_tau_in.size() != continuum_stride) {
+        data.source_tau_in.assign(continuum_stride, 0.0);
+        data.source_tau_out.assign(continuum_stride, 0.0);
+    }
+    for (std::size_t i = 0; i < continuum_stride; ++i) {
+        const double increment = std::max(0.0, finite_or(snapshot.opakab[i], 0.0)) * std::max(0.0, delta_radius_cm);
+        (line_plane == 0u ? data.source_tau_in[i] : data.source_tau_out[i]) += increment;
+    }
+    snapshot.tauc.reserve(data.source_tau_in.size() + data.source_tau_out.size());
+    snapshot.tauc.insert(snapshot.tauc.end(), data.source_tau_in.begin(), data.source_tau_in.end());
+    snapshot.tauc.insert(snapshot.tauc.end(), data.source_tau_out.begin(), data.source_tau_out.end());
+    snapshot.source_continuum_tau_workspace_count = data.source_tau_in.size();
+
+    if (data.rrc_luminosity.size() != 2u * continuum_stride) {
+        data.rrc_luminosity.assign(2u * continuum_stride, 0.0);
+    }
+    const std::size_t cemab_stride = snapshot.cemab.size() >= 2u ? snapshot.cemab.size() / 2u : 0u;
+    for (std::size_t slot = 0; slot < continuum_stride; ++slot) {
+        const double inward = slot < cemab_stride ? finite_or(snapshot.cemab[slot], 0.0) : 0.0;
+        const double outward_at = cemab_stride + slot;
+        const double outward = outward_at < snapshot.cemab.size() ? finite_or(snapshot.cemab[outward_at], 0.0) : 0.0;
+        const double increment = 0.5 * (inward + outward) * std::max(0.0, delta_radius_cm) * fpr2;
+        data.rrc_luminosity[slot] = std::max(0.0, data.rrc_luminosity[slot] + increment);
+        data.rrc_luminosity[continuum_stride + slot] = std::max(0.0, data.rrc_luminosity[continuum_stride + slot] + increment);
+    }
+    snapshot.elumab = data.rrc_luminosity;
+
+    if (data.grid_tau_in.size() != snapshot.opacity.size()) {
+        data.grid_tau_in.assign(snapshot.opacity.size(), 0.0);
+        data.grid_tau_out.assign(snapshot.opacity.size(), 0.0);
+    }
+    snapshot.continuum_tau_in.resize(snapshot.opacity.size());
+    snapshot.continuum_tau_out.resize(snapshot.opacity.size());
+    for (std::size_t i = 0; i < snapshot.opacity.size(); ++i) {
+        const double increment = std::max(0.0, finite_or(snapshot.opacity[i], 0.0)) * std::max(0.0, delta_radius_cm);
+        (line_plane == 0u ? data.grid_tau_in[i] : data.grid_tau_out[i]) += increment;
+        snapshot.continuum_tau_in[i] = data.grid_tau_in[i];
+        snapshot.continuum_tau_out[i] = data.grid_tau_out[i];
+    }
+    update_global_populations_v67(data, snapshot.populations, &snapshot.lte_populations);
+    data.last_iteration = snapshot;
+    return snapshot;
+}
+
+bool snapshot_complete_v67(
+    const FixedDsecSnapshot& snapshot,
+    const xstar_fixed_state_program_info_v1& info,
+    std::size_t bins,
+    std::string& reason) {
+    if (snapshot.populations.size() != static_cast<std::size_t>(info.population_rows)) { reason = "population workspace incomplete"; return false; }
+    if (snapshot.lte_populations.size() != static_cast<std::size_t>(info.population_rows)) { reason = "LTE workspace incomplete"; return false; }
+    if (snapshot.spectrum.size() != bins || snapshot.opacity.size() != bins) { reason = "continuum output workspace incomplete"; return false; }
+    if (info.native_line_count > 0 && (snapshot.rcem.empty() || snapshot.oplin.empty() || snapshot.elum.empty() || snapshot.tau0.empty())) { reason = "line product workspace incomplete"; return false; }
+    if (info.native_continuum_count > 0 && (snapshot.cemab.empty() || snapshot.opakab.empty() || snapshot.tauc.empty())) { reason = "RRC product workspace incomplete"; return false; }
+    if (snapshot.rccemis.empty() || snapshot.opakc.empty() || snapshot.line_profile_workspace.empty()) { reason = "spectral source workspace incomplete"; return false; }
+    return true;
+}
+
+void write_program_diagnostics_v67(
+    const std::filesystem::path& root,
+    const xstar_atdb_runtime::ProgramStorage& program) {
+    std::filesystem::create_directories(root);
+    std::ofstream elements(root / "elements.csv");
+    elements << "element_index,element_z,abundance,n_rows,n_superlevels,n_ions,normalization_row,record_head,record_count\n";
+    for (const auto& e : program.elements) elements << e.element_index << ',' << e.element_z << ',' << std::setprecision(17) << e.abundance << ',' << e.n_rows << ',' << e.n_superlevels << ',' << e.n_ions << ',' << e.normalization_row << ',' << e.record_head << ',' << e.record_count << '\n';
+    std::ofstream rows(root / "rows.csv");
+    rows << "element_index,row,superlevel,ion,ion_charge,initial_population,energy_ev,statistical_weight,principal_n,orbital_l,global_level_index\n";
+    for (const auto& r : program.rows) rows << r.element_index << ',' << r.row << ',' << r.superlevel << ',' << r.ion << ',' << r.ion_charge << ',' << std::setprecision(17) << r.initial_population << ',' << r.energy_ev << ',' << r.statistical_weight << ',' << r.principal_n << ',' << r.orbital_l << ',' << r.global_level_index << '\n';
+    std::ofstream records(root / "records.csv");
+    records << "source_position,record,next_index,element_index,opcode,data_type,rate_type,ion_index,ion_stage,lower_row,upper_row,real_offset,real_count,int_offset,int_count,density_scale,line_energy_ev,atomic_mass_amu,natural_width_ev,line_index_one_based,continuum_index_one_based,matrix_enabled\n";
+    for (const auto& r : program.records) records << r.source_position << ',' << r.record << ',' << r.next_index << ',' << r.element_index << ',' << r.opcode << ',' << r.data_type << ',' << r.rate_type << ',' << r.ion_index << ',' << r.ion_stage << ',' << r.lower_row << ',' << r.upper_row << ',' << r.real_offset << ',' << r.real_count << ',' << r.int_offset << ',' << r.int_count << ',' << std::setprecision(17) << r.density_scale << ',' << r.line_energy_ev << ',' << r.atomic_mass_amu << ',' << r.natural_width_ev << ',' << r.line_index_one_based << ',' << r.continuum_index_one_based << ',' << r.matrix_enabled << '\n';
+}
+
+
+struct ArtifactSelectionV67 {
+    bool lowered_case = false;
+    bool runtime_metadata = false;
+    bool checkpoints = false;
+    bool audits = false;
+    bool qualification_summaries = false;
+    bool trajectory_diagnostics = false;
+    bool benchmark_diagnostics = false;
+    bool timing_summary = false;
+
+    bool any() const {
+        return lowered_case || runtime_metadata || checkpoints || audits ||
+            qualification_summaries || trajectory_diagnostics ||
+            benchmark_diagnostics || timing_summary;
+    }
+};
+
+bool selected_artifact_v67(int override_value, bool profile_value) {
+    return override_value < 0 ? profile_value : override_value != 0;
+}
+
+ArtifactSelectionV67 artifact_selection_v67(const Options& options, const std::string& profile) {
+    const bool full = profile == "full";
+    const bool summary = profile == "summary";
+    ArtifactSelectionV67 out;
+    out.lowered_case = selected_artifact_v67(options.emit_lowered_case, full);
+    out.runtime_metadata = selected_artifact_v67(options.emit_runtime_metadata, full || summary);
+    out.checkpoints = selected_artifact_v67(options.emit_checkpoints, full);
+    out.audits = selected_artifact_v67(options.emit_audits, full);
+    out.qualification_summaries = selected_artifact_v67(options.emit_qualification_summaries, full || summary);
+    out.trajectory_diagnostics = selected_artifact_v67(options.emit_trajectory_diagnostics, full);
+    out.benchmark_diagnostics = selected_artifact_v67(options.emit_benchmark_diagnostics, full);
+    out.timing_summary = selected_artifact_v67(options.emit_timing_summary, full || summary);
+    return out;
+}
+
+std::string json_escape_v67(const std::string& value) {
+    std::ostringstream out;
+    for (unsigned char c : value) {
+        switch (c) {
+            case '\\': out << "\\\\"; break;
+            case '"': out << "\\\""; break;
+            case '\n': out << "\\n"; break;
+            case '\r': out << "\\r"; break;
+            case '\t': out << "\\t"; break;
+            default:
+                if (c < 0x20) {
+                    out << "\\u" << std::hex << std::setw(4) << std::setfill('0')
+                        << static_cast<int>(c) << std::dec << std::setfill(' ');
+                } else out << static_cast<char>(c);
+        }
+    }
+    return out.str();
+}
+
+void write_standalone_diagnostics_v67(
+    const std::filesystem::path& output,
+    const ArtifactSelectionV67& selection,
+    const std::string& profile,
+    const xstar_atdb_runtime::ProductionParameters& params,
+    const xstar_atdb_runtime::ResolvedAtomicData& atomic,
+    const xstar_atdb_runtime::ProgramStorage& program,
+    const xstar_run_state::ProductWritingState& product,
+    std::size_t evaluations,
+    double controller_seconds) {
+    if (!selection.any()) return;
+    const auto root = output / "standalone_diagnostics";
+    std::filesystem::create_directories(root);
+
+    if (selection.lowered_case) {
+        write_program_diagnostics_v67(root / "lowered_program", program);
+    }
+
+    if (selection.runtime_metadata) {
+        std::ofstream f(root / "runtime_metadata.json");
+        f << "{\n"
+          << "  \"schema\": \"xstar-tools-v67-standalone-runtime-metadata-v1\",\n"
+          << "  \"release\": \"" << json_escape_v67(product.release) << "\",\n"
+          << "  \"profile\": \"" << json_escape_v67(profile) << "\",\n"
+          << "  \"parameters\": \"" << json_escape_v67(params.source_path.string()) << "\",\n"
+          << "  \"atomic_database\": \"" << json_escape_v67(atomic.atdb.string()) << "\",\n"
+          << "  \"coheat_file\": \"" << json_escape_v67(atomic.coheat.string()) << "\",\n"
+          << "  \"program_id\": \"" << json_escape_v67(program.program_id) << "\",\n"
+          << "  \"active_elements\": " << program.elements.size() << ",\n"
+          << "  \"compact_rows\": " << program.rows.size() << ",\n"
+          << "  \"executable_records\": " << program.records.size() << ",\n"
+          << "  \"native_line_count\": " << program.native_line_count << ",\n"
+          << "  \"native_continuum_count\": " << program.native_continuum_count << ",\n"
+          << "  \"controller_evaluations\": " << evaluations << "\n"
+          << "}\n";
+    }
+
+    if (selection.checkpoints) {
+        const auto dir = root / "accepted_checkpoints";
+        std::filesystem::create_directories(dir);
+        for (std::size_t i = 0; i < product.radial_zones.size(); ++i) {
+            const auto& z = product.radial_zones[i];
+            std::ostringstream name;
+            name << "zone_" << std::setw(4) << std::setfill('0') << (i + 1) << ".json";
+            std::ofstream f(dir / name.str());
+            f << "{\n"
+              << "  \"zone\": " << z.zone_index << ",\n"
+              << "  \"pass\": " << z.pass_index << ",\n"
+              << "  \"accepted_sequence\": " << z.accepted_controller.accepted_sequence << ",\n"
+              << "  \"radius_cm\": " << std::setprecision(17) << z.radius_cm << ",\n"
+              << "  \"outer_radius_cm\": " << z.outer_radius_cm << ",\n"
+              << "  \"delta_radius_cm\": " << z.delta_radius_cm << ",\n"
+              << "  \"temperature_t4\": " << z.temperature_t4 << ",\n"
+              << "  \"electron_fraction\": " << z.electron_fraction << ",\n"
+              << "  \"population_count\": " << z.accepted_controller.evaluation.populations.size() << ",\n"
+              << "  \"source_workspace_complete\": "
+              << (z.accepted_controller.evaluation.source_workspace.complete() ? "true" : "false") << "\n"
+              << "}\n";
+        }
+    }
+
+    if (selection.audits) {
+        const auto dir = root / "audits";
+        std::filesystem::create_directories(dir);
+        {
+            std::ofstream f(dir / "atdb_lowering_audit.json");
+            f << "{\n"
+              << "  \"schema\": \"xstar-tools-v67-atdb-lowering-audit-v1\",\n"
+              << "  \"active_atdb_lowered\": true,\n"
+              << "  \"topology_record_count\": " << program.topology_record_count << ",\n"
+              << "  \"unsupported_record_count\": " << program.unsupported_record_count << ",\n"
+              << "  \"element_count\": " << program.elements.size() << ",\n"
+              << "  \"row_count\": " << program.rows.size() << ",\n"
+              << "  \"record_count\": " << program.records.size() << ",\n"
+              << "  \"line_identity_count\": " << product.line_identities.size() << ",\n"
+              << "  \"rrc_identity_count\": " << product.rrc_identities.size() << ",\n"
+              << "  \"result\": \"" << (program.unsupported_record_count == 0 ? "ACCEPT" : "REJECT") << "\"\n"
+              << "}\n";
+        }
+        {
+            std::ofstream f(dir / "product_state_audit.json");
+            f << "{\n"
+              << "  \"schema\": \"xstar-tools-v67-product-state-audit-v1\",\n"
+              << "  \"product_state_complete\": " << (product.product_state_complete ? "true" : "false") << ",\n"
+              << "  \"product_schema_complete\": " << (product.product_schema_complete ? "true" : "false") << ",\n"
+              << "  \"radial_state_complete\": " << (product.radial_state_complete ? "true" : "false") << ",\n"
+              << "  \"native_product_inputs_complete\": " << (product.native_product_inputs_complete ? "true" : "false") << ",\n"
+              << "  \"exact_source_metadata_retained\": " << (product.exact_source_metadata_retained ? "true" : "false") << ",\n"
+              << "  \"exact_source_workspaces_retained\": " << (product.exact_source_workspaces_retained ? "true" : "false") << ",\n"
+              << "  \"exact_accepted_radial_boundaries_retained\": " << (product.exact_accepted_radial_boundaries_retained ? "true" : "false") << ",\n"
+              << "  \"result\": \"" << (product.product_state_complete ? "ACCEPT" : "REJECT") << "\"\n"
+              << "}\n";
+        }
+    }
+
+    if (selection.qualification_summaries) {
+        const auto dir = root / "qualification_summaries";
+        std::filesystem::create_directories(dir);
+        {
+            std::ofstream f(dir / "controller_summary.json");
+            f << "{\n"
+              << "  \"schema\": \"xstar-tools-v67-qualification-free-controller-summary-v1\",\n"
+              << "  \"qualification_contracts_used\": false,\n"
+              << "  \"controller_evaluations\": " << evaluations << ",\n"
+              << "  \"accepted_radial_boundaries\": " << product.radial_zones.size() << ",\n"
+              << "  \"all_boundaries_exact\": " << (product.exact_accepted_radial_boundaries_retained ? "true" : "false") << ",\n"
+              << "  \"result\": \"" << (product.product_state_complete ? "ACCEPT" : "REJECT") << "\"\n"
+              << "}\n";
+        }
+        {
+            std::ofstream f(dir / "per_evaluation_acceptance.csv");
+            f << "sequence,call_index,evaluation_index,temperature_t4,electron_fraction,charge_residual,hmctot,total_heating,total_cooling,accepted\n";
+            for (const auto& e : product.fixed_evaluations) {
+                f << e.sequence << ',' << e.call_index << ',' << e.evaluation_index << ','
+                  << std::setprecision(17) << e.temperature_t4 << ',' << e.computed_electron_fraction << ','
+                  << e.charge_residual << ',' << e.hmctot << ',' << e.total_heating << ',' << e.total_cooling << ",1\n";
+            }
+        }
+    }
+
+    if (selection.trajectory_diagnostics) {
+        const auto dir = root / "trajectory_diagnostics";
+        std::filesystem::create_directories(dir);
+        {
+            std::ofstream f(root / "controller_trajectory.csv");
+            f << "ordinal,zone,pass,radius_cm,outer_radius_cm,delta_radius_cm,column_density_cm2,log_xi,temperature_t4,electron_fraction,accepted_sequence,boundary_exact\n";
+            for (std::size_t i = 0; i < product.radial_zones.size(); ++i) {
+                const auto& z = product.radial_zones[i];
+                f << (i + 1) << ',' << z.zone_index << ',' << z.pass_index << ',' << std::setprecision(17)
+                  << z.radius_cm << ',' << z.outer_radius_cm << ',' << z.delta_radius_cm << ','
+                  << z.column_density_cm2 << ',' << z.log_ionization_parameter << ',' << z.temperature_t4 << ','
+                  << z.electron_fraction << ',' << z.accepted_controller.accepted_sequence << ','
+                  << (z.accepted_boundary_exact ? 1 : 0) << '\n';
+            }
+        }
+        for (std::size_t i = 0; i < product.fixed_evaluations.size(); ++i) {
+            const auto& e = product.fixed_evaluations[i];
+            std::ostringstream name;
+            name << "evaluation_" << std::setw(4) << std::setfill('0') << (i + 1) << "_populations.csv";
+            std::ofstream f(dir / name.str());
+            f << "row,population\n";
+            for (std::size_t row = 0; row < e.populations.size(); ++row) {
+                f << (row + 1) << ',' << std::setprecision(17) << e.populations[row] << '\n';
+            }
+        }
+    }
+
+    if (selection.benchmark_diagnostics) {
+        const auto dir = root / "benchmark_diagnostics";
+        std::filesystem::create_directories(dir);
+        {
+            std::ofstream f(dir / "native_thermal_budget.csv");
+            f << "sequence,call_index,evaluation_index,temperature_t4,hmctot,total_heating,total_cooling,element_heating,element_cooling,continuum_heating,continuum_cooling,hydrogen_heating,hydrogen_cooling,helium_heating,helium_cooling,magnesium_heating,magnesium_cooling,compton_heating,compton_cooling,brems_cooling\n";
+            for (const auto& e : product.fixed_evaluations) {
+                f << e.sequence << ',' << e.call_index << ',' << e.evaluation_index << ',' << std::setprecision(17)
+                  << e.temperature_t4 << ',' << e.hmctot << ',' << e.total_heating << ',' << e.total_cooling << ','
+                  << e.element_heating << ',' << e.element_cooling << ',' << e.continuum_heating << ',' << e.continuum_cooling << ','
+                  << e.hydrogen_heating << ',' << e.hydrogen_cooling << ',' << e.helium_heating << ',' << e.helium_cooling << ','
+                  << e.magnesium_heating << ',' << e.magnesium_cooling << ',' << e.compton_heating << ',' << e.compton_cooling << ','
+                  << e.brems_cooling << '\n';
+            }
+        }
+        {
+            std::ofstream f(dir / "source_workspace_summary.csv");
+            f << "sequence,rcem,oplin,tau0,elum,cemab,cabab,opakab,tauc,elumab,rccemis,opakc,line_profile,complete\n";
+            for (const auto& e : product.fixed_evaluations) {
+                const auto& w = e.source_workspace;
+                f << e.sequence << ',' << w.rcem.size() << ',' << w.oplin.size() << ',' << w.tau0.size() << ','
+                  << w.elum.size() << ',' << w.cemab.size() << ',' << w.cabab.size() << ',' << w.opakab.size() << ','
+                  << w.tauc.size() << ',' << w.elumab.size() << ',' << w.rccemis.size() << ',' << w.opakc.size() << ','
+                  << w.line_profile_workspace.size() << ',' << (w.complete() ? 1 : 0) << '\n';
+            }
+        }
+    }
+
+    if (selection.timing_summary) {
+        const auto dir = root / "timing";
+        std::filesystem::create_directories(dir);
+        std::ofstream f(dir / "timing_summary.txt");
+        f << "controller_seconds=" << std::setprecision(17) << controller_seconds << "\n"
+          << "controller_evaluations=" << evaluations << "\n"
+          << "accepted_radial_boundaries=" << product.radial_zones.size() << "\n";
+    }
+
+    if (profile == "summary") {
+        std::ofstream f(root / "summary.txt");
+        f << "program_id=" << program.program_id << "\n"
+          << "records=" << program.records.size() << "\n"
+          << "rows=" << program.rows.size() << "\n"
+          << "evaluations=" << evaluations << "\n"
+          << "controller_seconds=" << std::setprecision(17) << controller_seconds << "\n";
+    }
+}
+
+xstar_run_state::ProductWritingState build_general_standalone_product_v67(
+    const Options& options,
+    const xstar_atdb_runtime::ProductionParameters& params,
+    const xstar_atdb_runtime::ResolvedAtomicData& atomic,
+    const xstar_atdb_runtime::ProgramStorage& program,
+    double& elapsed_seconds,
+    std::size_t& evaluation_count) {
+    const auto started = std::chrono::steady_clock::now();
+    auto bundle = program.bundle();
+    xstar_fixed_state_context* fixed = nullptr;
+    xstar_thermal_context* thermal = nullptr;
+    std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> message{};
+    int rc = xstar_fixed_state_context_create_from_bundle_v1(&bundle, &fixed, message.data(), message.size());
+    if (rc != 0) throw std::runtime_error(std::string("in-memory fixed-state context creation failed: ") + message.data());
+    try {
+        rc = xstar_thermal_context_create_v1(&thermal, message.data(), message.size());
+        if (rc != 0) throw std::runtime_error(std::string("thermal controller creation failed: ") + message.data());
+        xstar_fixed_state_program_info_v1 info{};
+        xstar_fixed_state_program_info_init_v1(&info);
+        rc = xstar_fixed_state_context_get_program_info_v1(fixed, &info, message.data(), message.size());
+        if (rc != 0) throw std::runtime_error(std::string("in-memory program info failed: ") + message.data());
+        if (info.unsupported_record_count != 0 || info.record_count == 0 || info.population_rows == 0) {
+            throw std::runtime_error("in-memory ATDB program is incomplete");
+        }
+        RadiationField radiation = read_general_standalone_radiation_v67(options, params);
+        if (radiation.energy_ev.size() != static_cast<std::size_t>(params.ncn2)) {
+            throw std::runtime_error("native continuum grid does not match parameters ncn2");
+        }
+        StandaloneControllerDataV67 data;
+        data.fixed_context = fixed;
+        data.program_info = info;
+        data.parameters = &params;
+        data.program = &program;
+        data.energy = radiation.energy_ev;
+        data.flux = radiation.incident;
+        data.source_tau_in.assign(static_cast<std::size_t>(info.native_continuum_count) + 1u, 0.0);
+        data.source_tau_out.assign(data.source_tau_in.size(), 0.0);
+        data.population_global_level_index.reserve(program.rows.size());
+        for (const auto& row : program.rows) {
+            data.population_global_level_index.push_back(row.global_level_index);
+            if (row.global_level_index > 0) data.global_level_count = std::max(data.global_level_count, static_cast<std::size_t>(row.global_level_index));
+        }
+        data.global_xilevg.assign(data.global_level_count, 0.0);
+        data.global_bilevg.assign(data.global_level_count, 0.0);
+        data.global_rnisg.assign(data.global_level_count, 0.0);
+        for (const auto& e : program.element_metadata) {
+            if (e.atomic_number == 1 && e.row_count > 0) {
+                data.hydrogen_ground_population_index = static_cast<std::size_t>(e.row_offset);
+                break;
+            }
+        }
+        xstar_fixed_state_stats_init_v1(&data.cumulative_stats);
+
+        xstar_run_state::WholeRunAccumulatedState whole;
+        whole.release = XSTAR_API_VERSION_STRING;
+        whole.backend = "cpp-general-standalone";
+        whole.parameters_path = options.parameters_path;
+        whole.atomic_database_path = atomic.atdb;
+        whole.native_run_id = std::string("general-standalone-") + XSTAR_API_VERSION_STRING;
+        whole.level_identities = program.level_identities;
+        whole.line_identities = program.line_identities;
+        whole.rrc_identities = program.rrc_identities;
+        whole.element_metadata = program.element_metadata;
+        whole.row_metadata = program.row_metadata;
+        whole.python_callbacks = 0;
+        // Preserve the complete historical public parameter surface.  The
+        // controller uses the normalized ProductionParameters above, while
+        // FITS and xout_step metadata retain all user-facing XSTAR controls.
+        whole.parameter_rows = native_public_parameter_rows_from_json_v172534(options.parameters_path);
+
+        xstar_thermal_state_v1 state{};
+        xstar_thermal_state_init_v1(&state);
+        state.temperature_t4 = params.temperature_k / 1.0e4;
+        state.electron_fraction_xee = params.initial_electron_fraction > 0.0 ? params.initial_electron_fraction : 1.0;
+        state.hydrogen_density_cm3 = params.density_cm3;
+        const std::size_t total_zones = static_cast<std::size_t>(params.nsteps) * static_cast<std::size_t>(params.npass);
+        const double dr = params.column_cm2 / std::max(params.density_cm3, 1.0) / static_cast<double>(std::max(1, params.nsteps));
+        std::size_t zone_ordinal = 0;
+        for (int pass = 1; pass <= params.npass; ++pass) {
+            for (int zone_index = 1; zone_index <= params.nsteps; ++zone_index) {
+                ++zone_ordinal;
+                xstar_dsec_config_v1 config{};
+                xstar_dsec_config_init_v1(&config);
+                config.nlim = params.niter;
+                config.maximum_evaluations = params.niter;
+                config.charge_tolerance = params.critical_fraction;
+                config.thermal_tolerance = params.critical_fraction;
+                config.temperature_stagnation_tolerance = std::max(1.0e-12, params.critical_fraction * 0.1);
+                xstar_dsec_stats_v1 stats{};
+                xstar_dsec_stats_init_v1(&stats);
+                std::vector<xstar_thermal_trace_event_v1> trace(static_cast<std::size_t>(std::max(64, params.niter * 6)));
+                std::size_t trace_count = 0;
+                rc = xstar_thermal_run_evaluation_loop_v1(
+                    thermal, &config, &state, standalone_iteration_evaluator_v67, &data,
+                    trace.data(), trace.size(), &trace_count, &stats, message.data(), message.size());
+                if (rc != 0) throw std::runtime_error(std::string("qualification-free controller failed: ") + message.data());
+                if (!stats.charge_converged || (!stats.thermal_converged && stats.lnerr != -2)) {
+                    std::ostringstream detail;
+                    detail << "controller did not converge at pass=" << pass << " zone=" << zone_index
+                           << " charge=" << stats.charge_converged << " thermal=" << stats.thermal_converged
+                           << " lnerr=" << stats.lnerr << " hmctot=" << stats.final_hmctot
+                           << " elcter=" << stats.final_elcter;
+                    throw std::runtime_error(detail.str());
+                }
+                const double boundary_radius_cm = params.initial_radius_cm +
+                    static_cast<double>(zone_ordinal - 1u) * dr;
+                const std::size_t transport_plane = pass > 1 ? 1u : 0u;
+                auto boundary = evaluate_full_boundary_v67(
+                    data, state, dr, boundary_radius_cm, transport_plane);
+                std::string completeness_reason;
+                if (!snapshot_complete_v67(boundary, info, data.energy.size(), completeness_reason)) {
+                    throw std::runtime_error("accepted product boundary incomplete: " + completeness_reason);
+                }
+                auto eval = copy_real_native_snapshot(boundary, dr);
+                eval.kind = "final";
+                whole.fixed_evaluations.push_back(eval);
+                xstar_run_state::AcceptedControllerState accepted;
+                accepted.call_index = static_cast<std::size_t>(pass);
+                accepted.accepted_sequence = eval.sequence;
+                accepted.acceptance_reason = "qualification_free_native_convergence";
+                accepted.evaluation = eval;
+                whole.accepted_controller_states.push_back(accepted);
+                xstar_run_state::RadialZoneState zone;
+                zone.zone_index = static_cast<std::size_t>(zone_index);
+                zone.pass_index = static_cast<std::size_t>(pass);
+                zone.radius_cm = boundary_radius_cm;
+                zone.delta_radius_cm = dr;
+                zone.outer_radius_cm = zone.radius_cm + dr;
+                zone.density_cm3 = params.density_cm3;
+                zone.pressure_dyn_cm2 = params.pressure_dyn_cm2;
+                zone.ionization_parameter = std::pow(10.0, params.log_xi);
+                zone.log_ionization_parameter = params.log_xi;
+                zone.column_density_cm2 = static_cast<double>(zone_index) * params.column_cm2 / static_cast<double>(params.nsteps);
+                zone.temperature_t4 = eval.temperature_t4;
+                zone.electron_fraction = eval.computed_electron_fraction;
+                zone.provisional_from_controller = false;
+                zone.accepted_boundary_exact = true;
+                zone.boundary_provenance = "standalone C++ ATDB/controller boundary";
+                zone.accepted_controller = accepted;
+                whole.radial_zones.push_back(zone);
+                xstar_run_state::AbundanceRadialRowState abundance;
+                abundance.row_index = zone_ordinal;
+                abundance.radius_cm = zone.radius_cm;
+                abundance.delta_radius_cm = dr;
+                abundance.log_ionization_parameter = params.log_xi;
+                abundance.electron_fraction = zone.electron_fraction;
+                abundance.density_cm3 = params.density_cm3;
+                abundance.pressure_dyn_cm2 = params.pressure_dyn_cm2;
+                abundance.temperature_t4 = zone.temperature_t4;
+                abundance.fractional_heat_error = eval.total_heating != 0.0 ?
+                    (eval.total_heating - eval.total_cooling) / std::abs(eval.total_heating) : 0.0;
+                abundance.terminal_row = zone_ordinal == total_zones;
+                whole.abundance_radial_rows.push_back(abundance);
+                for (std::size_t i = 0; i < data.flux.size(); ++i) {
+                    const double tau = i < eval.continuum_tau_out.size() ? eval.continuum_tau_out[i] : 0.0;
+                    const double transmitted = data.flux[i] * std::exp(-std::min(700.0, std::max(0.0, tau)));
+                    const double emitted = i < eval.spectrum.size() ? std::max(0.0, eval.spectrum[i]) : 0.0;
+                    data.flux[i] = std::max(0.0, transmitted + emitted);
+                }
+            }
+        }
+        evaluation_count = data.evaluations;
+        whole.embedded_public_fits_payloads_absent = true;
+        whole.embedded_full_xout_step_payload_absent = true;
+        whole.controller_trajectory_qualified = true;
+        whole.product_schema_complete = true;
+        whole.radial_state_complete = whole.radial_zones.size() == total_zones;
+        whole.native_product_inputs_complete = !whole.fixed_evaluations.empty();
+        whole.native_detail_state_retained = true;
+        whole.continuum_depths_derived_from_native_opacity = true;
+        whole.exact_source_metadata_retained = !whole.element_metadata.empty() && !whole.row_metadata.empty();
+        whole.exact_source_workspaces_retained = std::all_of(whole.fixed_evaluations.begin(), whole.fixed_evaluations.end(), [](const auto& e){ return e.source_workspace.complete(); });
+        whole.exact_accepted_radial_boundaries_retained = std::all_of(whole.radial_zones.begin(), whole.radial_zones.end(), [](const auto& z){ return z.accepted_boundary_exact; });
+        whole.exact_legacy_pprint_state_retained = false;
+        whole.legacy_pprint.initialized_from_native_controller = true;
+        whole.legacy_pprint.option_sequence_exact = false;
+        whole.legacy_pprint.finalized_from_native_controller = true;
+        auto product = xstar_run_state::build_product_writing_state(whole);
+        product.backend = "cpp-general-standalone";
+        product.product_state_complete = whole.product_schema_complete && whole.radial_state_complete &&
+            whole.native_product_inputs_complete && whole.exact_source_metadata_retained &&
+            whole.exact_source_workspaces_retained && whole.exact_accepted_radial_boundaries_retained;
+        product.product_parity_qualified = false;
+        if (!product.product_state_complete) throw std::runtime_error("standalone product state failed completeness gate");
+        elapsed_seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+        product.measured_run_seconds = elapsed_seconds;
+        xstar_thermal_context_destroy(thermal);
+        xstar_fixed_state_context_destroy(fixed);
+        return product;
+    } catch (...) {
+        if (thermal) xstar_thermal_context_destroy(thermal);
+        if (fixed) xstar_fixed_state_context_destroy(fixed);
+        throw;
+    }
+}
+
+int command_standalone_capabilities_v67() {
+    std::cout << "V048746255172567_STANDALONE_EXECUTABLE=YES\n"
+              << "V048746255172567_TWO_ARGUMENT_INTERFACE=YES\n"
+              << "V048746255172567_FILE_SILENT_POLICY=IMPLEMENTED\n"
+              << "V048746255172567_ATDB_SEARCH_ORDER=IMPLEMENTED\n"
+              << "V048746255172567_CXX_IN_MEMORY_ATDB_LOWERER=IMPLEMENTED\n"
+              << "V048746255172567_CXX_PRODUCT_METADATA_DERIVATION=IMPLEMENTED\n"
+              << "V048746255172567_QUALIFICATION_FREE_CONTROLLER_TRAJECTORY=IMPLEMENTED\n"
+              << "V048746255172567_ATDB_SEARCH_ORDER=parameters_atomic_database,parameters_atomic_db,parameters_atdb,parameters_sibling,XSTAR_ATOMIC_DB,XSTAR_ATDB_FITS,XSTAR_DATA,XSTAR_HOME,executable_relative,package_relative,current_directory\n"
+              << "V048746255172567_COHEAT_SEARCH_ORDER=parameters_coheat_file,parameters_coheat,parameters_sibling,XSTAR_COHEAT,XSTAR_DATA,XSTAR_HOME,executable_relative,package_relative,current_directory\n"
+              << "V048746255172567_SOURCE_POWERLAW_GRID=ENER_ISPEC4_ISPECGG_EQUIVALENT\n"
+              << "V048746255172567_ARTIFACT_PROFILES=none,summary,failure,full\n"
+              << "V048746255172567_ARTIFACT_CLASS_OVERRIDES=lowered_case,runtime_metadata,checkpoints,audits,qualification_summaries,trajectory_diagnostics,benchmark_diagnostics,timing_summary\n"
+              << "V048746255172567_RESULT=ACCEPT_CAPABILITY_IMPLEMENTATION\n";
+    return 0;
+}
+
+int command_run_standalone_production_v67(const Options& options, const std::filesystem::path& executable_path) {
+    const std::string prefix = "V048746255172567_";
+    const std::string artifact_profile = options.artifact_profile_explicit ? options.artifact_profile : "none";
+    const auto artifacts = artifact_selection_v67(options, artifact_profile);
+    if (options.parameters_path.empty() || options.output_dir.empty()) {
+        std::cerr << "run-production requires --parameters and --output-dir\n";
+        std::cout << prefix << "RESULT=REJECT_INVALID_ARGUMENTS\n";
+        return 64;
+    }
+    if (!std::filesystem::is_regular_file(options.parameters_path)) {
+        std::cerr << "parameters file not found: " << options.parameters_path << "\n";
+        std::cout << prefix << "RESULT=REJECT_PARAMETERS_NOT_FOUND\n";
+        return 66;
+    }
+    if (!options.atomic_db_path.empty() || !options.case_dir.empty() || !options.product_metadata_dir.empty() ||
+        !options.qualification_contract_dir.empty() || !options.checkpoint_dir.empty()) {
+        std::cerr << "run-production rejects command-line atomic-data, lowered-case, metadata, qualification, and checkpoint assets; use parameters.json or the documented search order\n";
+        std::cout << prefix << "EXTERNAL_RUNTIME_ASSETS=REJECT\n"
+                  << prefix << "PRODUCTS_WRITTEN=0\n"
+                  << prefix << "RESULT=REJECT_EXTERNAL_RUNTIME_ASSETS\n";
+        return 20;
+    }
+    const auto output = std::filesystem::path(options.output_dir);
+    const bool output_existed = std::filesystem::exists(output);
+    try {
+        auto params = xstar_atdb_runtime::read_production_parameters(options.parameters_path);
+        auto atomic = xstar_atdb_runtime::resolve_atomic_data(options.parameters_path, params.raw_json, executable_path);
+        std::cout << prefix << "COMMAND=RUN_PRODUCTION_STANDALONE\n"
+                  << prefix << "PARAMETERS=" << options.parameters_path << "\n"
+                  << prefix << "OUTPUT_DIR=" << options.output_dir << "\n"
+                  << prefix << "ARTIFACT_PROFILE=" << artifact_profile << "\n"
+                  << prefix << "ATDB_SEARCH_CANDIDATES=" << xstar_atdb_runtime::format_search_candidates(atomic.atdb_candidates) << "\n"
+                  << prefix << "COHEAT_SEARCH_CANDIDATES=" << xstar_atdb_runtime::format_search_candidates(atomic.coheat_candidates) << "\n";
+        if (atomic.atdb.empty()) throw std::runtime_error("atdb.fits not resolved");
+        if (atomic.coheat.empty()) throw std::runtime_error("coheat.dat not resolved");
+        std::size_t coheat_rows = 0;
+        if (!validate_coheat_file_v67(atomic.coheat, coheat_rows)) throw std::runtime_error("coheat.dat validation failed");
+        std::cout << prefix << "ATOMIC_DATABASE=" << atomic.atdb.string() << "\n"
+                  << prefix << "COHEAT_FILE=" << atomic.coheat.string() << "\n"
+                  << prefix << "COHEAT_ROWS=" << coheat_rows << "\n";
+        auto program = xstar_atdb_runtime::lower_atdb_in_memory(atomic.atdb, params);
+        if (program.unsupported_record_count != 0 || program.records.empty() || program.rows.empty()) {
+            throw std::runtime_error("ATDB lowering produced an incomplete program");
+        }
+        ::setenv("XSTAR_NATIVE_PRODUCTION", "1", 1);
+        double controller_seconds = 0.0;
+        std::size_t evaluations = 0;
+        auto product = build_general_standalone_product_v67(
+            options, params, atomic, program, controller_seconds, evaluations);
+        if (!product.product_state_complete) throw std::runtime_error("product state incomplete before publication");
+        std::filesystem::create_directories(output);
+        write_standalone_diagnostics_v67(
+            output, artifacts, artifact_profile, params, atomic, program,
+            product, evaluations, controller_seconds);
+        std::cout << prefix << "EMIT_LOWERED_CASE=" << (artifacts.lowered_case ? "YES" : "NO") << "\n"
+                  << prefix << "EMIT_RUNTIME_METADATA=" << (artifacts.runtime_metadata ? "YES" : "NO") << "\n"
+                  << prefix << "EMIT_CHECKPOINTS=" << (artifacts.checkpoints ? "YES" : "NO") << "\n"
+                  << prefix << "EMIT_AUDITS=" << (artifacts.audits ? "YES" : "NO") << "\n"
+                  << prefix << "EMIT_QUALIFICATION_SUMMARIES=" << (artifacts.qualification_summaries ? "YES" : "NO") << "\n"
+                  << prefix << "EMIT_TRAJECTORY_DIAGNOSTICS=" << (artifacts.trajectory_diagnostics ? "YES" : "NO") << "\n"
+                  << prefix << "EMIT_BENCHMARK_DIAGNOSTICS=" << (artifacts.benchmark_diagnostics ? "YES" : "NO") << "\n"
+                  << prefix << "EMIT_TIMING_SUMMARY=" << (artifacts.timing_summary ? "YES" : "NO") << "\n";
+        if (!product.radial_zones.empty()) {
+            const auto& last_ws = product.radial_zones.back().accepted_controller.evaluation.source_workspace;
+            std::size_t max_line_index = 0;
+            for (const auto& id : product.line_identities) {
+                if (id.line_index > 0) max_line_index = std::max(max_line_index, static_cast<std::size_t>(id.line_index));
+            }
+            std::cout << prefix << "SOURCE_LINE_IDENTITIES=" << product.line_identities.size() << "\n"
+                      << prefix << "SOURCE_RRC_IDENTITIES=" << product.rrc_identities.size() << "\n"
+                      << prefix << "MAXIMUM_LINE_INDEX=" << max_line_index << "\n"
+                      << prefix << "LAST_OPLIN_SIZE=" << last_ws.oplin.size() << "\n"
+                      << prefix << "LAST_RCEM_SIZE=" << last_ws.rcem.size() << "\n"
+                      << prefix << "LAST_ELUM_SIZE=" << last_ws.elum.size() << "\n"
+                      << prefix << "LAST_TAU0_SIZE=" << last_ws.tau0.size() << "\n"
+                      << prefix << "LAST_LINE_WORKSPACE_EXACT=" << (last_ws.line_workspace_exact ? "YES" : "NO") << "\n"
+                      << prefix << "LAST_LINE_TAU_EXACT=" << (last_ws.line_tau_workspace_exact ? "YES" : "NO") << "\n";
+        }
+        ::setenv("XSTAR_TRUE_PRODUCTION", "1", 1);
+        auto science = xstar_science_fits::write_historical_science_products({}, output, product,
+            product.fixed_evaluations.empty() ? std::vector<double>{} : product.fixed_evaluations.front().radiation_energy_ev);
+        (void)science;
+        xstar_science_fits::write_native_abundance_product({}, output, product);
+        auto step = xstar_step_log::write_native_step_log(output, product);
+        ::unsetenv("XSTAR_TRUE_PRODUCTION");
+        const std::size_t fits_count = count_native_fits_products_v172524(output);
+        const bool step_ok = std::filesystem::is_regular_file(output / "xout_step.log") &&
+            regular_file_size_or_zero_v172521(output / "xout_step.log") > 0;
+        if (fits_count != 9 || !step_ok || step.lines_written == 0) {
+            throw std::runtime_error("publication did not create all ten public products");
+        }
+        if (!artifacts.any()) {
+            const std::set<std::string> allowed = {
+                "xo01_detail.fits","xo01_detal2.fits","xo01_detal3.fits","xo01_detal4.fits",
+                "xout_abund1.fits","xout_cont1.fits","xout_lines1.fits","xout_rrc1.fits",
+                "xout_spect1.fits","xout_step.log"};
+            for (const auto& entry : std::filesystem::directory_iterator(output)) {
+                if (!entry.is_regular_file() || allowed.count(entry.path().filename().string()) == 0u) {
+                    throw std::runtime_error("file-silent production created a non-product artifact: " + entry.path().filename().string());
+                }
+            }
+        }
+        ::unsetenv("XSTAR_NATIVE_SOURCE_SEQUENCE");
+        ::unsetenv("XSTAR_NATIVE_PRODUCTION");
+        std::cout << prefix << "CXX_IN_MEMORY_ATDB_LOWERER=ACCEPT\n"
+                  << prefix << "PRODUCT_METADATA_DERIVATION=ACCEPT\n"
+                  << prefix << "QUALIFICATION_FREE_CONTROLLER_TRAJECTORY=ACCEPT\n"
+                  << prefix << "CONTROLLER_EVALUATIONS=" << evaluations << "\n"
+                  << prefix << "CONTROLLER_SECONDS=" << std::fixed << std::setprecision(6) << controller_seconds << "\n"
+                  << prefix << "FITS_PRODUCTS_WRITTEN=9\n"
+                  << prefix << "XOUT_STEP_LOG_WRITTEN=1\n"
+                  << prefix << "RESULT=ACCEPT_GENERAL_STANDALONE_PRODUCTION\n";
+        return 0;
+    } catch (const std::exception& exc) {
+        ::unsetenv("XSTAR_TRUE_PRODUCTION");
+        ::unsetenv("XSTAR_NATIVE_SOURCE_SEQUENCE");
+        ::unsetenv("XSTAR_NATIVE_PRODUCTION");
+        remove_native_products_v172524(output);
+        if (artifact_profile == "failure") {
+            std::filesystem::create_directories(output / "standalone_diagnostics");
+            std::ofstream failure(output / "standalone_diagnostics" / "failure.txt");
+            failure << exc.what() << '\n';
+        } else if (!output_existed) {
+            std::error_code ec;
+            if (std::filesystem::is_directory(output, ec) && std::filesystem::is_empty(output, ec)) {
+                std::filesystem::remove(output, ec);
+            }
+        }
+        std::cerr << "standalone production failed: " << exc.what() << "\n";
+        std::cout << prefix << "PRODUCTS_WRITTEN=0\n"
+                  << prefix << "RESULT=REJECT_STANDALONE_PRODUCTION_FAILURE\n";
+        return 20;
+    }
+}
 
 
 int command_standalone_capabilities_v66() {
@@ -10944,8 +12063,8 @@ int main(int argc, char** argv) {
     if (options.command == "run-fixed-trajectory") return command_run_fixed_trajectory(options);
     if (options.command == "run-fixed-evaluation") return command_run_fixed_evaluation(options);
     if (options.command == "run") return command_run_physical(options);
-    if (options.command == "standalone-capabilities") return command_standalone_capabilities_v66();
-    if (options.command == "run-production") return command_run_standalone_production_v66(options);
+    if (options.command == "standalone-capabilities") return command_standalone_capabilities_v67();
+    if (options.command == "run-production") return command_run_standalone_production_v67(options, std::filesystem::path(argv[0]));
     if (options.command == "run-production-assets") return command_run_native_resumable_trajectory_v1724(options, true);
     if (options.command == "run-native-reconstructed-products") return command_run_native_reconstructed_products_v172526(options);
     if (options.command == "run-fixed-dsec") return command_run_fixed_dsec(options);

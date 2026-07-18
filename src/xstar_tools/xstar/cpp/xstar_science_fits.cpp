@@ -235,6 +235,45 @@ std::vector<RowMeta> read_rows(const std::filesystem::path& program_dir) {
     return out;
 }
 
+std::vector<ElementMeta> read_elements(
+    const xstar_run_state::ProductWritingState& state,
+    const std::filesystem::path& legacy_program_dir) {
+    if (state.element_metadata.empty()) return read_elements(legacy_program_dir);
+    std::vector<ElementMeta> out;
+    out.reserve(state.element_metadata.size());
+    for (const auto& source : state.element_metadata) {
+        ElementMeta e;
+        e.element_index = source.element_index;
+        e.element_z = source.atomic_number;
+        e.row_offset = source.row_offset;
+        e.n_rows = source.row_count;
+        e.abundance = source.abundance;
+        out.push_back(e);
+    }
+    return out;
+}
+
+std::vector<RowMeta> read_rows(
+    const xstar_run_state::ProductWritingState& state,
+    const std::filesystem::path& legacy_program_dir) {
+    if (state.row_metadata.empty()) return read_rows(legacy_program_dir);
+    std::vector<RowMeta> out;
+    out.reserve(state.row_metadata.size());
+    for (const auto& source : state.row_metadata) {
+        RowMeta r;
+        r.element_index = source.element_index;
+        r.row = source.row;
+        r.ion = source.ion;
+        r.ion_charge = source.ion_charge;
+        r.energy_ev = source.energy_ev;
+        r.principal_n = source.principal_n;
+        r.orbital_l = source.orbital_l;
+        r.global_level_index = source.global_level_index;
+        out.push_back(r);
+    }
+    return out;
+}
+
 std::filesystem::path diagnostic_records_path(
     const xstar_run_state::ProductWritingState& state,
     std::size_t sequence) {
@@ -10889,8 +10928,8 @@ Result write_historical_science_products(
         throw std::runtime_error("native FITS anti-copy provenance is incomplete");
     }
     std::filesystem::create_directories(output_dir);
-    const auto elements = read_elements(program_dir);
-    const auto rows = read_rows(program_dir);
+    const auto elements = read_elements(state, program_dir);
+    const auto rows = read_rows(state, program_dir);
     write_population_detail(output_dir / "xo01_detail.fits", state, elements, rows);
     write_line_detail(output_dir / "xo01_detal2.fits", state, elements, rows);
     write_rrc_detail(output_dir / "xo01_detal3.fits", state, elements, rows);
@@ -10938,8 +10977,8 @@ void write_native_abundance_product(
     const std::filesystem::path& program_dir,
     const std::filesystem::path& output_dir,
     xstar_run_state::ProductWritingState& state) {
-    const auto elements = read_elements(program_dir);
-    const auto rows = read_rows(program_dir);
+    const auto elements = read_elements(state, program_dir);
+    const auto rows = read_rows(state, program_dir);
     std::filesystem::create_directories(output_dir);
     const auto final_path = output_dir / "xout_abund1.fits";
     const auto tmp_path = output_dir / ".xout_abund1.fits.tmp";

@@ -29,6 +29,7 @@
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -102,7 +103,11 @@ std::string hex_u64(std::uint64_t value) {
 }
 
 int environment_data_type(const char* name) {
-    const char* value = std::getenv(name);
+    const char* value = nullptr;
+    if (std::string(name) == "XSTAR_QUALIFICATION_SOURCE_SEQUENCE") {
+        value = std::getenv("XSTAR_NATIVE_SOURCE_SEQUENCE");
+    }
+    if (!value || !*value) value = std::getenv(name);
     if (!value || !*value) return 0;
     char* end = nullptr;
     const long parsed = std::strtol(value, &end, 10);
@@ -112,9 +117,48 @@ int environment_data_type(const char* name) {
     return static_cast<int>(parsed);
 }
 
+bool native_production_mode() {
+    const char* value = std::getenv("XSTAR_NATIVE_PRODUCTION");
+    return value && std::string(value) == "1";
+}
+
+bool native_promoted_flag(const char* name) {
+    if (!native_production_mode()) return false;
+    static const std::unordered_set<std::string> promoted = {
+        "XSTAR_QUALIFICATION_REPLACEMENT",
+        "XSTAR_QUALIFICATION_HYDROGEN_TYPE53_SOURCE_FAITHFUL",
+        "XSTAR_QUALIFICATION_HELIUM_TYPE53_INTERVAL_SOURCE_ORDER",
+        "XSTAR_QUALIFICATION_TYPE53_TWO_STATE_PROMOTION",
+        "XSTAR_QUALIFICATION_MG_PRIMARY_THERMAL_CORRECTION",
+        "XSTAR_QUALIFICATION_MG_BOUND_FREE_FINITE_STATE",
+        "XSTAR_QUALIFICATION_MG_BOUND_FREE_SOURCE_FAITHFUL",
+        "XSTAR_QUALIFICATION_MG_MILNE_EXCITED_THRESHOLD",
+        "XSTAR_QUALIFICATION_TYPE49_EXTRAPOLATED_GRID_PARITY",
+        "XSTAR_QUALIFICATION_TYPE51_SOURCE_FAITHFUL",
+        "XSTAR_QUALIFICATION_TYPE6062_SOURCE_FAITHFUL",
+        "XSTAR_QUALIFICATION_MG_TYPE51_SOURCE_FAITHFUL",
+        "XSTAR_QUALIFICATION_SOLVE_RESPONSE",
+        "XSTAR_QUALIFICATION_HELIUM_SOURCE_INSERTION_ORDER",
+        "XSTAR_QUALIFICATION_ALL_ELEMENT_SOLVE_RESPONSE",
+        "XSTAR_QUALIFICATION_ALL_ELEMENT_SOLVE_SYSTEM",
+        "XSTAR_NATIVE_SEQUENCE1_THERMAL_DIAGONAL_RECONSTRUCTION",
+        "XSTAR_NATIVE_SEQUENCE1_SOURCE_FAITHFUL_POPULATION_SEED",
+        "XSTAR_NATIVE_SEQUENCE1_THERMAL_SOURCE_ORDER",
+        "XSTAR_QUALIFICATION_MG_TYPE99_SECONDARY_ENERGY_CORRECTION",
+        "XSTAR_QUALIFICATION_MAGNESIUM_TYPE99_PERSISTENT_LEVELTEMP",
+        "XSTAR_QUALIFICATION_MAGNESIUM_TYPE53_PERSISTENT_LEVELTEMP",
+        "XSTAR_QUALIFICATION_MAGNESIUM_TYPE49_PERSISTENT_LEVELTEMP",
+        "XSTAR_QUALIFICATION_TYPE57_SOURCE_ENERGY",
+        "XSTAR_QUALIFICATION_TYPE68_SOURCE_CONSTANTS",
+        "XSTAR_QUALIFICATION_CONTINUUM_WORKSPACE_SOURCE_FAITHFUL",
+        "XSTAR_QUALIFICATION_FREEF_REAL_EXPONENT_POW"
+    };
+    return promoted.count(name) != 0u;
+}
+
 bool environment_flag(const char* name) {
     const char* value = std::getenv(name);
-    if (!value || !*value) return false;
+    if (!value || !*value) return native_promoted_flag(name);
     if (std::string(value) == "1") return true;
     if (std::string(value) == "0") return false;
     throw std::runtime_error(std::string("invalid environment flag: ") + name);
@@ -2796,6 +2840,8 @@ std::vector<T> load_scalar_file(const std::string& path, const char* name) {
     return values;
 }
 
+void validate_program(Program& p);
+
 Program load_program(const std::string& directory) {
     Program p;
     const auto manifest = read_manifest(join_path(directory, "manifest.txt"));
@@ -2821,6 +2867,31 @@ Program load_program(const std::string& directory) {
     p.reals = load_scalar_file<double>(join_path(directory, "reals.txt"), "reals.txt");
     p.ints = load_scalar_file<std::int64_t>(join_path(directory, "ints.txt"), "ints.txt");
     load_records(join_path(directory, "records.csv"), p);
+    validate_program(p);
+    return p;
+}
+
+
+void validate_program(Program& p) {
+    if (p.id.empty()) throw std::runtime_error("program_id missing");
+    if (p.elements.empty()) throw std::runtime_error("program contains no elements");
+    if (p.records.empty()) throw std::runtime_error("program contains no records");
+    for (std::size_t i = 0; i < p.elements.size(); ++i) {
+        auto& e = p.elements[i];
+        if (e.element_index != static_cast<int>(i)) throw std::runtime_error("element indices must be contiguous and zero-based");
+        if (e.element_z <= 0 || e.n_rows <= 0 || e.n_ions <= 0) throw std::runtime_error("invalid element program dimensions");
+        if (e.normalization_row < 1 || e.normalization_row > e.n_rows) throw std::runtime_error("element normalization row out of range");
+        if (static_cast<int>(e.rows.size()) != e.n_rows) throw std::runtime_error("element row count mismatch");
+        for (std::size_t j = 0; j < e.rows.size(); ++j) {
+            const auto& row = e.rows[j];
+            if (row.element_index != e.element_index || row.row != static_cast<int>(j + 1)) {
+                throw std::runtime_error("program rows must be grouped by element and contiguous");
+            }
+            if (!(row.statistical_weight > 0.0) || !std::isfinite(row.statistical_weight)) {
+                throw std::runtime_error("row statistical weight must be positive and finite");
+            }
+        }
+    }
     std::int64_t previous_source_position = 0;
     for (std::size_t k = 0; k < p.records.size(); ++k) {
         const auto& r = p.records[k];
@@ -2828,6 +2899,7 @@ Program load_program(const std::string& directory) {
             throw std::runtime_error("record source_position must be positive and strictly increasing");
         }
         previous_source_position = r.source_position;
+        if (r.element_index < 0 || r.element_index >= static_cast<int>(p.elements.size())) throw std::runtime_error("record element_index out of range");
         if (r.next_index < -1 || r.next_index >= static_cast<int>(p.records.size())) throw std::runtime_error("record next_index out of range");
         if (r.real_offset + r.real_count > p.reals.size()) throw std::runtime_error("record real payload out of range");
         if (r.int_offset + r.int_count > p.ints.size()) throw std::runtime_error("record integer payload out of range");
@@ -2840,8 +2912,95 @@ Program load_program(const std::string& directory) {
         if (r.line_index_one_based > 0) p.native_line_count = std::max(p.native_line_count, static_cast<std::size_t>(r.line_index_one_based));
         if (r.continuum_index_one_based > 0) p.native_continuum_count = std::max(p.native_continuum_count, static_cast<std::size_t>(r.continuum_index_one_based));
     }
+}
+
+Program load_program_bundle(const xstar_fixed_program_bundle_v1& bundle) {
+    if (bundle.struct_size < sizeof(bundle) || bundle.abi_version != XSTAR_FIXED_STATE_ENGINE_ABI_VERSION) {
+        throw std::runtime_error("fixed-state in-memory program bundle ABI mismatch");
+    }
+    if (!bundle.program_id || !*bundle.program_id) throw std::runtime_error("in-memory program_id missing");
+    if (!bundle.elements || bundle.element_count == 0) throw std::runtime_error("in-memory program elements missing");
+    if (!bundle.rows || bundle.row_count == 0) throw std::runtime_error("in-memory program rows missing");
+    if (!bundle.records || bundle.record_count == 0) throw std::runtime_error("in-memory program records missing");
+    if (bundle.real_count && !bundle.reals) throw std::runtime_error("in-memory program real payload missing");
+    if (bundle.int_count && !bundle.ints) throw std::runtime_error("in-memory program integer payload missing");
+
+    Program p;
+    p.id = bundle.program_id;
+    p.active_atdb_lowered = bundle.active_atdb_lowered != 0;
+    p.topology_record_count = bundle.topology_record_count;
+    p.unsupported_record_count = bundle.unsupported_record_count;
+    p.native_line_count = bundle.native_line_count;
+    p.native_continuum_count = bundle.native_continuum_count;
+    p.reals.assign(bundle.reals, bundle.reals + bundle.real_count);
+    p.ints.assign(bundle.ints, bundle.ints + bundle.int_count);
+    p.elements.reserve(bundle.element_count);
+    for (std::size_t i = 0; i < bundle.element_count; ++i) {
+        const auto& src = bundle.elements[i];
+        ElementProgram e;
+        e.element_index = src.element_index;
+        e.element_z = src.element_z;
+        e.abundance = src.abundance;
+        e.n_rows = src.n_rows;
+        e.n_superlevels = src.n_superlevels;
+        e.n_ions = src.n_ions;
+        e.normalization_row = src.normalization_row;
+        e.record_head = src.record_head;
+        e.record_count = src.record_count;
+        p.elements.push_back(std::move(e));
+    }
+    for (std::size_t i = 0; i < bundle.row_count; ++i) {
+        const auto& src = bundle.rows[i];
+        if (src.element_index < 0 || src.element_index >= static_cast<int32_t>(p.elements.size())) {
+            throw std::runtime_error("in-memory row element_index out of range");
+        }
+        ElementRow row;
+        row.element_index = src.element_index;
+        row.row = src.row;
+        row.superlevel = src.superlevel;
+        row.ion = src.ion;
+        row.ion_charge = src.ion_charge;
+        row.initial_population = src.initial_population;
+        row.energy_ev = src.energy_ev;
+        row.statistical_weight = src.statistical_weight;
+        row.principal_n = src.principal_n;
+        row.orbital_l = src.orbital_l;
+        row.global_level_index = src.global_level_index;
+        p.elements[static_cast<std::size_t>(src.element_index)].rows.push_back(row);
+    }
+    p.records.reserve(bundle.record_count);
+    for (std::size_t i = 0; i < bundle.record_count; ++i) {
+        const auto& src = bundle.records[i];
+        ProgramRecord r;
+        r.source_position = src.source_position;
+        r.record = src.record;
+        r.next_index = src.next_index;
+        r.element_index = src.element_index;
+        r.opcode = src.opcode;
+        r.data_type = src.data_type;
+        r.rate_type = src.rate_type;
+        r.ion_index = src.ion_index;
+        r.ion_stage = src.ion_stage;
+        r.lower_row = src.lower_row;
+        r.upper_row = src.upper_row;
+        r.real_offset = src.real_offset;
+        r.real_count = src.real_count;
+        r.int_offset = src.int_offset;
+        r.int_count = src.int_count;
+        r.density_scale = src.density_scale;
+        r.line_energy_ev = src.line_energy_ev;
+        r.atomic_mass_amu = src.atomic_mass_amu;
+        r.natural_width_ev = src.natural_width_ev;
+        r.line_index_one_based = src.line_index_one_based;
+        r.continuum_index_one_based = src.continuum_index_one_based;
+        r.matrix_enabled = src.matrix_enabled != 0;
+        p.records.push_back(r);
+    }
+    validate_program(p);
     return p;
 }
+
+
 
 double limited_exp(double x) {
     return std::exp(std::max(-700.0, std::min(700.0, x)));
@@ -8439,6 +8598,17 @@ int run_impl(
 
 struct xstar_fixed_state_context : xstar_fixed_state_context_impl {};
 
+static std::unique_ptr<xstar_fixed_state_context> create_context_from_program(Program program) {
+    auto ptr = std::make_unique<xstar_fixed_state_context>();
+    ptr->program = std::move(program);
+    std::array<char, XSTAR_FIXED_STATE_MESSAGE_SIZE> error{};
+    int rc = xstar_element_engine_context_create_v1(&ptr->element_context, error.data(), error.size());
+    if (rc != 0) throw std::runtime_error(std::string("cannot create element context: ") + error.data());
+    rc = xstar_spectral_context_create_v1(&ptr->spectral_context, error.data(), error.size());
+    if (rc != 0) throw std::runtime_error(std::string("cannot create spectral context: ") + error.data());
+    return ptr;
+}
+
 extern "C" {
 
 uint32_t xstar_fixed_state_engine_abi_version(void) { return XSTAR_FIXED_STATE_ENGINE_ABI_VERSION; }
@@ -8509,15 +8679,38 @@ int xstar_fixed_state_context_create_v1(const char* program_directory, xstar_fix
     }
     *context = nullptr;
     try {
-        auto ptr = std::make_unique<xstar_fixed_state_context>();
-        ptr->program = load_program(program_directory);
-        std::array<char, XSTAR_FIXED_STATE_MESSAGE_SIZE> error{};
-        int rc = xstar_element_engine_context_create_v1(&ptr->element_context, error.data(), error.size());
-        if (rc != 0) throw std::runtime_error(std::string("cannot create element context: ") + error.data());
-        rc = xstar_spectral_context_create_v1(&ptr->spectral_context, error.data(), error.size());
-        if (rc != 0) throw std::runtime_error(std::string("cannot create spectral context: ") + error.data());
+        auto ptr = create_context_from_program(load_program(program_directory));
         *context = ptr.release();
         copy_text(message, message_size, "native fixed-state raw program loaded");
+        return 0;
+    } catch (const std::exception& exc) {
+        copy_text(message, message_size, exc.what());
+        return 4;
+    }
+}
+
+int xstar_fixed_program_bundle_init_v1(xstar_fixed_program_bundle_v1* bundle) {
+    if (!bundle) return 1;
+    std::memset(bundle, 0, sizeof(*bundle));
+    bundle->struct_size = sizeof(*bundle);
+    bundle->abi_version = XSTAR_FIXED_STATE_ENGINE_ABI_VERSION;
+    return 0;
+}
+
+int xstar_fixed_state_context_create_from_bundle_v1(
+    const xstar_fixed_program_bundle_v1* bundle,
+    xstar_fixed_state_context** context,
+    char* message,
+    size_t message_size) {
+    if (!bundle || !context) {
+        copy_text(message, message_size, "program bundle and context are required");
+        return 1;
+    }
+    *context = nullptr;
+    try {
+        auto ptr = create_context_from_program(load_program_bundle(*bundle));
+        *context = ptr.release();
+        copy_text(message, message_size, "native fixed-state in-memory raw program loaded");
         return 0;
     } catch (const std::exception& exc) {
         copy_text(message, message_size, exc.what());

@@ -10,6 +10,30 @@
 namespace xstar_run_state {
 
 
+struct ElementMetadataState {
+    std::int32_t element_index = 0;
+    std::int32_t atomic_number = 0;
+    double abundance = 0.0;
+    std::int32_t row_offset = 0;
+    std::int32_t row_count = 0;
+    std::int32_t ion_count = 0;
+};
+
+struct CompactRowMetadataState {
+    std::int32_t element_index = 0;
+    std::int32_t row = 0;
+    std::int32_t superlevel = 0;
+    std::int32_t ion = 0;
+    std::int32_t ion_charge = 0;
+    double energy_ev = 0.0;
+    double statistical_weight = 1.0;
+    std::int32_t principal_n = 0;
+    std::int32_t orbital_l = 0;
+    std::int32_t global_level_index = 0;
+    std::string ion_label;
+    std::string level_label;
+};
+
 struct LevelIdentityState {
     std::int32_t global_index = 0;
     std::int16_t ion_index = 0;
@@ -217,6 +241,8 @@ struct WholeRunAccumulatedState {
     std::vector<AcceptedControllerState> accepted_controller_states;
     std::vector<RadialZoneState> radial_zones;
     std::vector<ParameterRowState> parameter_rows;
+    std::vector<ElementMetadataState> element_metadata;
+    std::vector<CompactRowMetadataState> row_metadata;
     std::vector<AbundanceRadialRowState> abundance_radial_rows;
     std::vector<LevelIdentityState> level_identities;
     std::vector<LineIdentityState> line_identities;
@@ -249,6 +275,8 @@ struct ProductWritingState {
     std::vector<FixedEvaluationState> fixed_evaluations;
     std::vector<RadialZoneState> radial_zones;
     std::vector<ParameterRowState> parameter_rows;
+    std::vector<ElementMetadataState> element_metadata;
+    std::vector<CompactRowMetadataState> row_metadata;
     std::vector<AbundanceRadialRowState> abundance_radial_rows;
     std::vector<LevelIdentityState> level_identities;
     std::vector<LineIdentityState> line_identities;

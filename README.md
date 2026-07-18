@@ -1,3 +1,22 @@
+## v67 general standalone C++ production
+
+Build and run:
+
+```bash
+make -C src/xstar_tools/xstar/cpp -j1 xstar_cpp
+src/xstar_tools/xstar/cpp/xstar_cpp run-production \
+  --parameters parameters.json \
+  --output-dir output
+```
+
+The default artifact profile is `none`: the output directory contains only nine FITS files and `xout_step.log`. The executable lowers the active ATDB records, derives product metadata, runs the controller, and retains product workspaces in memory. It does not accept external lowered-case, product-metadata, qualification-contract, checkpoint, or command-line ATDB assets.
+
+`atdb.fits` is resolved in this order: `atomic_database`, `atomic_db`, or `atdb` in `parameters.json`; `atdb.fits` beside the parameter file; `XSTAR_ATOMIC_DB`; `XSTAR_ATDB_FITS`; `$XSTAR_DATA/atdb.fits`; `$XSTAR_HOME/data/atdb.fits`; executable-relative data directories; package-relative data; current-directory `atdb.fits`.
+
+Use `--artifact-profile summary|failure|full` for diagnostics. Each artifact class can also be independently controlled with `--emit-*` or `--no-emit-*` switches for `lowered-case`, `runtime-metadata`, `checkpoints`, `audits`, `qualification-summaries`, `trajectory-diagnostics`, `benchmark-diagnostics`, and `timing-summary`.
+
+The public path fails before publication if ATDB lowering, metadata derivation, controller convergence, accepted radial boundaries, or source workspaces are incomplete.
+
 ## v66 standalone production status
 
 The public command is now `xstar_cpp run-production --parameters parameters.json --output-dir output`. It is fail-closed and creates no output directory until the C++ executable can derive the atomic program, product metadata, and controller trajectory internally. Use `xstar_cpp standalone-capabilities` to inspect readiness. The old asset-backed path is validation-only under `run-production-assets`.

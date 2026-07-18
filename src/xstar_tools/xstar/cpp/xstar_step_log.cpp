@@ -580,8 +580,22 @@ std::string source_ion_label(long long element_z, long long ion_index) {
 }
 
 std::map<std::pair<long long,long long>,long long> load_native_ion_row_minima(
-    const std::filesystem::path& output_dir) {
+    const std::filesystem::path& output_dir,
+    const xstar_run_state::ProductWritingState& state) {
     std::map<std::pair<long long,long long>,long long> minima;
+    if (!state.row_metadata.empty()) {
+        for (const auto& source : state.row_metadata) {
+            if (source.row <= 0) continue;
+            const auto key = std::make_pair(
+                static_cast<long long>(source.element_index),
+                static_cast<long long>(source.ion));
+            const auto found = minima.find(key);
+            if (found == minima.end() || source.row < found->second) {
+                minima[key] = source.row;
+            }
+        }
+        return minima;
+    }
     std::ifstream input(output_dir / "_native_atdb_case" / "rows.csv");
     if (!input) return minima;
     std::string line;
@@ -634,7 +648,7 @@ std::vector<RrcSourceRecord> load_rrc_source_records(
         c49=at("type49_continuum_index_one_based"),
         ct53=at("type53_shadow_threshold_ev"),
         ct49=at("type49_threshold_ev"), ct99=at("type99_threshold_ev");
-    const auto minima = load_native_ion_row_minima(output_dir);
+    const auto minima = load_native_ion_row_minima(output_dir, state);
     long long source_index = 0;
     while (std::getline(input, line)) {
         const auto fields = split_simple_csv(line);
