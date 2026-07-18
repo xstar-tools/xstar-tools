@@ -666,6 +666,7 @@ int command_spectral_self_test(const Options& options) {
     rows[1].ptmp2 = 0.4;
     rows[1].abundance_lower = 0.3;
     rows[1].abundance_upper = 0.7;
+    rows[1].hydrogen_density = 2.0;
     rows[1].ans3 = -2.0;
     rows[1].opakab = 11.0;
 
@@ -684,6 +685,7 @@ int command_spectral_self_test(const Options& options) {
     rows[3].ptmp2 = 0.45;
     rows[3].abundance_lower = 0.2;
     rows[3].abundance_upper = 0.8;
+    rows[3].hydrogen_density = 2.0;
     rows[3].ans1 = 1.0;
     rows[3].ans2 = 2.0;
     rows[3].opakab = 0.5;
@@ -735,9 +737,9 @@ int command_spectral_self_test(const Options& options) {
     const bool accepted = stats.calls == 1 && stats.contributions_attempted == 4 &&
         stats.contributions_committed == 4 && stats.emissivity_contributions == 3 &&
         stats.opacity_contributions == 4 && stats.line_profiles == 1 &&
-        stats.source_order_violations == 0 && opakab[1] == 7.0 &&
-        oplin[2] == 3.3 && opakab[3] == 13.0 && oplin[4] == 0.1 &&
-        fline[4] > 0.0 && flinel[30] > 0.0;
+        stats.source_order_violations == 0 && std::abs(opakab[1] - 5.6) < 1.0e-12 &&
+        std::abs(oplin[2] - 6.6) < 1.0e-12 && std::abs(opakab[3] - 13.0) < 1.0e-12 &&
+        std::abs(oplin[4] - 0.2) < 1.0e-12 && fline[4] > 0.0 && flinel[30] > 0.0;
     std::cout << "backend=" << xstar_context_backend_name(context) << "\n"
               << "spectral_contributions=" << stats.contributions_committed << "\n"
               << "emissivity_contributions=" << stats.emissivity_contributions << "\n"

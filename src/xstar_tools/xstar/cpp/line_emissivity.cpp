@@ -514,7 +514,14 @@ int xstar_spectral_apply_contributions_v1(
                 }
                 workspace->rcem[index] = -c.abundance_upper * c.ans3 * c.ptmp1 / denom;
                 workspace->rcem[rcem_stride + index] = -c.abundance_upper * c.ans3 * c.ptmp2 / denom;
-                workspace->oplin[index] = c.opakab * c.abundance_lower;
+                // Source linopac consumes cm^-1 line opacity.  Type-50 opakab is a
+                // cross section, while abundance_lower is the dimensionless
+                // level population times elemental abundance.  The previous
+                // native path omitted xpx (hydrogen density), suppressing
+                // line opacity by approximately 1e8 in this benchmark and
+                // corrupting opakc, dpthc, option-17 h-c, and option-5 energy
+                // absorption.
+                workspace->oplin[index] = c.opakab * c.abundance_lower * c.hydrogen_density;
                 ++stats->emissivity_contributions;
                 ++stats->opacity_contributions;
             }
@@ -533,7 +540,9 @@ int xstar_spectral_apply_contributions_v1(
                 write_message(error, error_size, "native line contribution index or width invalid");
                 return 7;
             }
-            const double opakb1 = c.opakab * c.abundance_lower;
+            // Match ucalc/linopac: convert the Type-50 cross section to cm^-1
+            // exactly once with abundance and hydrogen density.
+            const double opakb1 = c.opakab * c.abundance_lower * c.hydrogen_density;
             const double net = c.ans2 * c.abundance_upper - c.ans1 * c.abundance_lower;
             const double erg_per_ev = 1.602176634e-12;
             const double rcem1 = std::max(net * c.line_energy_eV * erg_per_ev * c.ptmp1, 0.0);

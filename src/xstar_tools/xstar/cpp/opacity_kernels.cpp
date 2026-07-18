@@ -264,7 +264,17 @@ int xstar_opacity_apply_line_profile_v1(
     std::vector<double> etpp(static_cast<std::size_t>(nbtpp), 0.0);
     std::vector<double> optpp2(static_cast<std::size_t>(nbtpp), 0.0);
     double delet = source_div(source_sub(e00, line_energy_ev), dele);
-    double profile = seed_profiles[0];
+    // Source linopac evaluates the center temporary-grid point at its
+    // actual fractional Doppler displacement.  seed_profiles[0] is the
+    // profile at zero displacement and is generally wrong because e00 is
+    // the lower continuum-grid boundary, not the exact line center.
+    // The source uses the stricter 1e-6 Voigt threshold at this center
+    // point (the outward temporary points retain the 1e-9 threshold).
+    const double center_profile = aasmall > 1.0e-6
+        ? voigte(std::abs(delet), aasmall) / 1.772
+        : std::exp(-delet * delet) / 1.772;
+    double profile = std::isfinite(center_profile) && center_profile > 0.0
+        ? center_profile : 0.0;
     etpp[ml2 - 1] = e00;
     optpp2[ml2 - 1] = optpp * profile;
     double tst = 1.0;

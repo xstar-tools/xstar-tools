@@ -505,8 +505,6 @@ void append_native_public_line_sections(std::ofstream& out,
 
 struct DetailRrcLogRow { long long index=0,level_index=0; std::string ion,lower,upper; double energy=0; };
 
-struct RrcRatePointerMeta { long long lower_local=0, upper_local=0; };
-
 std::vector<std::string> split_simple_csv(const std::string& line) {
     std::vector<std::string> out;
     std::string current;
@@ -525,9 +523,81 @@ long long csv_integer(const std::vector<std::string>& fields, std::size_t index)
     try { return std::stoll(fields[index]); } catch (...) { return 0; }
 }
 
-std::map<long long,RrcRatePointerMeta> load_rrc_rate_pointer_metadata(
+struct RrcSourceRecord {
+    long long source_index = 0;
+    long long data_type = 0;
+    long long element_index = 0;
+    long long element_z = 0;
+    long long ion_index = 0;
+    long long lower_row = 0;
+    long long upper_row = 0;
+    long long continuum_index = 0;
+    long long lower_local = 0;
+    long long upper_local = 0;
+    double threshold_ev = 0.0;
+    std::string ion_label;
+};
+
+double csv_double(const std::vector<std::string>& fields, std::size_t index) {
+    if (index >= fields.size() || fields[index].empty()) return 0.0;
+    try { return std::stod(fields[index]); } catch (...) { return 0.0; }
+}
+
+std::string roman_lower(long long value) {
+    struct Roman { int value; const char* text; };
+    static const Roman tokens[] = {
+        {1000,"m"},{900,"cm"},{500,"d"},{400,"cd"},{100,"c"},{90,"xc"},
+        {50,"l"},{40,"xl"},{10,"x"},{9,"ix"},{5,"v"},{4,"iv"},{1,"i"}
+    };
+    if (value <= 0) return "";
+    std::string out;
+    for (const auto& token : tokens) {
+        while (value >= token.value) { out += token.text; value -= token.value; }
+    }
+    return out;
+}
+
+std::string source_ion_label(long long element_z, long long ion_index) {
+    std::string symbol;
+    if (element_z == 1) symbol = "h";
+    else if (element_z == 2) symbol = "he";
+    else if (element_z == 12) symbol = "mg";
+    else symbol = "z" + std::to_string(element_z);
+    return symbol + "_" + roman_lower(ion_index);
+}
+
+std::map<std::pair<long long,long long>,long long> load_native_ion_row_minima(
+    const std::filesystem::path& output_dir) {
+    std::map<std::pair<long long,long long>,long long> minima;
+    std::ifstream input(output_dir / "_native_atdb_case" / "rows.csv");
+    if (!input) return minima;
+    std::string line;
+    if (!std::getline(input, line)) return minima;
+    const auto header = split_simple_csv(line);
+    std::map<std::string,std::size_t> column;
+    for (std::size_t i=0; i<header.size(); ++i) column[header[i]] = i;
+    const auto at = [&](const char* key) -> std::size_t {
+        const auto found = column.find(key);
+        return found == column.end() ? header.size() : found->second;
+    };
+    const std::size_t celement=at("element_index"), cion=at("ion"), crow=at("row");
+    while (std::getline(input, line)) {
+        const auto fields = split_simple_csv(line);
+        const long long element = csv_integer(fields, celement);
+        const long long ion = csv_integer(fields, cion);
+        const long long row = csv_integer(fields, crow);
+        if (row <= 0) continue;
+        const auto key = std::make_pair(element, ion);
+        const auto found = minima.find(key);
+        if (found == minima.end() || row < found->second) minima[key] = row;
+    }
+    return minima;
+}
+
+std::vector<RrcSourceRecord> load_rrc_source_records(
+    const std::filesystem::path& output_dir,
     const xstar_run_state::ProductWritingState& state) {
-    std::map<long long,RrcRatePointerMeta> out;
+    std::vector<RrcSourceRecord> out;
     std::size_t sequence = 0;
     for (const auto& fixed : state.fixed_evaluations) sequence = std::max(sequence, fixed.sequence);
     if (sequence == 0) return out;
@@ -540,41 +610,51 @@ std::map<long long,RrcRatePointerMeta> load_rrc_rate_pointer_metadata(
     const auto header = split_simple_csv(line);
     std::map<std::string,std::size_t> column;
     for (std::size_t i=0; i<header.size(); ++i) column[header[i]] = i;
-    const auto required = [&](const char* key) -> std::size_t {
+    const auto at = [&](const char* key) -> std::size_t {
         const auto found = column.find(key);
         return found == column.end() ? header.size() : found->second;
     };
-    const std::size_t ctype=required("data_type"), crate=required("rate_type"),
-        clower=required("lower_row"), cupper=required("upper_row"),
-        c53=required("type53_continuum_index_one_based"),
-        c49=required("type49_continuum_index_one_based");
+    const std::size_t ctype=at("data_type"), crate=at("rate_type"),
+        celement=at("element_index"), cz=at("element_z"), cion=at("ion_index"),
+        clower=at("lower_row"), cupper=at("upper_row"),
+        c53=at("type53_continuum_index_one_based"),
+        c49=at("type49_continuum_index_one_based"),
+        ct53=at("type53_shadow_threshold_ev"),
+        ct49=at("type49_threshold_ev"), ct99=at("type99_threshold_ev");
+    const auto minima = load_native_ion_row_minima(output_dir);
+    long long source_index = 0;
     while (std::getline(input, line)) {
         const auto fields = split_simple_csv(line);
+        if (csv_integer(fields, crate) != 7) continue;
+        ++source_index; // pprint's kkkl/npconi2 ordering includes every type-7 record.
         const long long type = csv_integer(fields, ctype);
-        const long long rate_type = csv_integer(fields, crate);
-        if (rate_type != 7) continue;
-        long long continuum = 0;
-        if (type == 53) continuum = csv_integer(fields, c53);
-        else if (type == 49) continuum = csv_integer(fields, c49);
-        else continue;
-        if (continuum <= 0 || out.count(continuum)) continue;
-        out[continuum] = {csv_integer(fields, clower), csv_integer(fields, cupper)};
+        if (type != 49 && type != 53 && type != 99) continue;
+        RrcSourceRecord record;
+        record.source_index = source_index;
+        record.data_type = type;
+        record.element_index = csv_integer(fields, celement);
+        record.element_z = csv_integer(fields, cz);
+        record.ion_index = csv_integer(fields, cion);
+        record.lower_row = csv_integer(fields, clower);
+        record.upper_row = csv_integer(fields, cupper);
+        if (type == 53) {
+            record.continuum_index = csv_integer(fields, c53);
+            record.threshold_ev = csv_double(fields, ct53);
+        } else if (type == 49) {
+            record.continuum_index = csv_integer(fields, c49);
+            record.threshold_ev = csv_double(fields, ct49);
+        } else {
+            record.threshold_ev = csv_double(fields, ct99);
+        }
+        const auto key = std::make_pair(record.element_index, record.ion_index);
+        const auto found = minima.find(key);
+        const long long first = found == minima.end() ? 1 : found->second;
+        record.lower_local = record.lower_row > 0 ? record.lower_row - first + 1 : 0;
+        record.upper_local = record.upper_row > 0 ? record.upper_row - first + 1 : 0;
+        record.ion_label = source_ion_label(record.element_z, record.ion_index);
+        out.push_back(std::move(record));
     }
     return out;
-}
-const xstar_run_state::RrcIdentityState* matching_rrc_identity(
-    const xstar_run_state::ProductWritingState& state,const DetailRrcLogRow& row){
-    // npconi2 is the primary source identity used by pprint options 19/24.
-    for (const auto& id : state.rrc_identities) {
-        if (id.continuum_index == row.index) return &id;
-    }
-    const xstar_run_state::RrcIdentityState* best=nullptr;double score=1e300;
-    for(const auto&id:state.rrc_identities){
-        if(!row.ion.empty()&&id.ion_label!=row.ion&&("_"+id.ion_label)!=row.ion) continue;
-        const double d=std::abs(id.threshold_ev-row.energy);
-        if(d<score){score=d;best=&id;}
-    }
-    return best;
 }
 
 struct ShellGeometry { double radius_cm = 0.0; double delta_cm = 0.0; };
@@ -593,7 +673,6 @@ void append_native_public_rrc_sections(std::ofstream& out,
     const auto radial_hdus=named_hdu_numbers(df,"XSTAR_RADIAL");
     if(radial_hdus.empty()){int cs=0;fits_close_file(df,&cs);out<<"\n detailed RRC section unavailable.\n\n";return;}
     const auto geometry=native_shell_geometry(output_dir,state);
-    const auto rate_pointer_meta=load_rrc_rate_pointer_metadata(state);
     const std::vector<int> shell_hdus=radial_hdus.size()>=5
         ?std::vector<int>{radial_hdus[1],radial_hdus[2],radial_hdus[3]}
         :std::vector<int>(radial_hdus.begin(),radial_hdus.begin()+std::min<std::size_t>(3,radial_hdus.size()));
@@ -615,40 +694,87 @@ void append_native_public_rrc_sections(std::ofstream& out,
         ce=column_number(df,"energy"),cion=column_number(df,"ion"),
         clo=column_number(df,"lower_level"),cup=column_number(df,"upper_level"),
         cti=column_number(df,"tau_in"),cto=column_number(df,"tau_out");
+    struct PublishedRrcRow {
+        DetailRrcLogRow detail;
+        double tau_in=0.0,tau_out=0.0,luminosity=0.0;
+    };
+    std::vector<PublishedRrcRow> rows(static_cast<std::size_t>(nr));
+    std::map<long long,std::size_t> by_continuum;
+    for(long long row=1;row<=nr;++row){
+        auto& item=rows[static_cast<std::size_t>(row-1)];
+        item.detail.index=read_integer_cell(df,ci,row);
+        item.detail.level_index=read_integer_cell(df,clv,row);
+        item.detail.energy=read_double_cell(df,ce,row);
+        item.detail.ion=read_string_cell(df,cion,row);
+        item.detail.lower=read_string_cell(df,clo,row);
+        item.detail.upper=read_string_cell(df,cup,row);
+        item.tau_in=read_double_cell(df,cti,row);
+        item.tau_out=read_double_cell(df,cto,row);
+        item.luminosity=luminosity[static_cast<std::size_t>(row-1)];
+        by_continuum[item.detail.index]=static_cast<std::size_t>(row-1);
+    }
+    const auto source_records=load_rrc_source_records(output_dir,state);
+    // Reserve every deterministic Type-49/53 row before matching Type-99
+    // superlevels.  Without this pre-pass, an early Type-99 threshold can
+    // steal a later direct row with a similar energy and leave the true
+    // source record unmapped.
+    std::set<std::size_t> reserved_direct;
+    for (const auto& source : source_records) {
+        if (source.data_type != 49 && source.data_type != 53) continue;
+        auto found = by_continuum.find(source.continuum_index);
+        if (source.continuum_index > 0 && found != by_continuum.end()) {
+            reserved_direct.insert(found->second);
+            continue;
+        }
+        found = by_continuum.find(source.source_index);
+        if (found != by_continuum.end()) reserved_direct.insert(found->second);
+    }
+    std::set<std::size_t> used_rows;
     if(write_depth) out<<" print option:24\n absorption edge depths\n index, local endpoint, ion, level, energy (eV), depth \n";
     if(write_luminosity) out<<" print option:19\n recombination continuum luminosities(erg/sec/10**38))\n index, ion, level, energy (eV), RRC luminosity \n";
-    for(long long row=1;row<=nr;++row){
-        DetailRrcLogRow d;
-        d.index=read_integer_cell(df,ci,row);d.level_index=read_integer_cell(df,clv,row);
-        d.energy=read_double_cell(df,ce,row);d.ion=read_string_cell(df,cion,row);
-        d.lower=read_string_cell(df,clo,row);d.upper=read_string_cell(df,cup,row);
-        const auto* id=matching_rrc_identity(state,d);
-        const auto found_rate=rate_pointer_meta.find(d.index);
-        const bool source_type7 = found_rate != rate_pointer_meta.end();
-        const long long global_level = id && id->level_global_index > 0
-            ? id->level_global_index : d.level_index;
-        const long long local = id && id->lower_local_index > 0
-            ? id->lower_local_index
-            : (source_type7 && found_rate->second.lower_local > 0 ? found_rate->second.lower_local : d.level_index);
-        const long long upper = id && id->upper_local_index > 0
-            ? id->upper_local_index
-            : (source_type7 ? found_rate->second.upper_local : 0);
-        const double ti=read_double_cell(df,cti,row),to=read_double_cell(df,cto,row);
-        const double lum=luminosity[static_cast<std::size_t>(row-1)];
-        const bool hhe=d.ion.rfind("h_",0)==0||d.ion.rfind("he_",0)==0;
-        if(write_depth&&source_type7&&hhe&&(std::abs(ti)>1e-49||std::abs(to)>1e-49)){
-            out<<std::setw(7)<<d.index<<std::setw(6)<<global_level<<" "
-               <<std::left<<std::setw(10)<<d.ion<<std::right<<std::setw(6)<<local<<" "
-               <<std::left<<std::setw(24)<<d.lower<<std::setw(24)<<d.upper<<std::right
-               <<std::setw(13)<<std::uppercase<<std::scientific<<std::setprecision(3)<<d.energy
-               <<std::setw(13)<<ti<<std::setw(13)<<to<<"\n";
+    for(const auto& source:source_records){
+        std::size_t position=rows.size();
+        auto direct=by_continuum.find(source.continuum_index);
+        if(source.continuum_index>0&&direct!=by_continuum.end()) position=direct->second;
+        if(position==rows.size()&&(source.data_type==49||source.data_type==53)){
+            // Some compact He-I records do not retain npconi2 in the native
+            // diagnostic, but their source type-7 ordinal is the published
+            // pointer used by pprint.
+            direct=by_continuum.find(source.source_index);
+            if(direct!=by_continuum.end()) position=direct->second;
         }
-        if(write_luminosity&&source_type7&&std::abs(lum)>1e-49){
-            out<<std::setw(7)<<d.index<<std::setw(6)<<global_level<<" "
-               <<std::left<<std::setw(10)<<d.ion<<std::right<<std::setw(6)<<local<<std::setw(6)<<upper<<" "
+        if(position==rows.size()&&source.data_type==99){
+            // Type-99 superlevels have no Type-49/53 continuum pointer.
+            // Match the still-unclaimed published row by ion and threshold,
+            // preserving source traversal order.  Mg I/II Type-99 records
+            // have no public row and therefore remain unmatched.
+            double best=1.0e300;
+            for(std::size_t i=0;i<rows.size();++i){
+                if(used_rows.count(i)||reserved_direct.count(i)||rows[i].detail.ion!=source.ion_label)continue;
+                const double delta=std::abs(rows[i].detail.energy-source.threshold_ev);
+                if(delta<best){best=delta;position=i;}
+            }
+            const double tolerance=std::max(1.0e-4,1.0e-5*std::max(1.0,std::abs(source.threshold_ev)));
+            if(position<rows.size()&&best>tolerance)position=rows.size();
+        }
+        if(position>=rows.size()||used_rows.count(position))continue;
+        used_rows.insert(position);
+        const auto& item=rows[position];
+        const auto& d=item.detail;
+        const bool hhe=d.ion.rfind("h_",0)==0||d.ion.rfind("he_",0)==0;
+        if(write_depth&&hhe&&(std::abs(item.tau_in)>1e-49||std::abs(item.tau_out)>1e-49)){
+            out<<std::setw(7)<<source.source_index<<std::setw(6)<<d.level_index<<" "
+               <<std::left<<std::setw(10)<<d.ion<<std::right<<std::setw(6)<<source.lower_local<<" "
                <<std::left<<std::setw(24)<<d.lower<<std::setw(24)<<d.upper<<std::right
                <<std::setw(13)<<std::uppercase<<std::scientific<<std::setprecision(3)<<d.energy
-               <<std::setw(13)<<lum<<std::setw(13)<<lum<<"\n";
+               <<std::setw(13)<<item.tau_in<<std::setw(13)<<item.tau_out<<"\n";
+        }
+        if(write_luminosity&&std::abs(item.luminosity)>1e-49){
+            out<<std::setw(7)<<source.source_index<<std::setw(6)<<d.level_index<<" "
+               <<std::left<<std::setw(10)<<d.ion<<std::right<<std::setw(6)<<source.lower_local<<std::setw(6)<<source.upper_local<<" "
+               <<std::left<<std::setw(24)<<d.lower<<std::setw(24)<<d.upper<<std::right
+               <<std::setw(13)<<std::uppercase<<std::scientific<<std::setprecision(3)<<d.energy
+               <<std::setw(13)<<item.luminosity<<std::setw(13)<<item.luminosity<<"\n";
         }
     }
     int cs=0;fits_close_file(df,&cs);out<<"\n";out.unsetf(std::ios::floatfield);out<<std::setprecision(17);
