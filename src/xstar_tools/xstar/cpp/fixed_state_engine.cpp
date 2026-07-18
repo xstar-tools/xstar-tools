@@ -6728,8 +6728,15 @@ void accumulate_native_bound_free_surface(const NativeBoundFreeCurve& curve,
             // rccemis(l,kl) += abund2*xpx*rnist*bbnur*sgtpp*exp(-dE/kT)*ptmp_l
             const double bbnur = std::pow(std::min(2.0e4, energy), 3.0) * 1.571e22 * 2.0;
             const double common = upper_abundance * density * shadow->rnist * bbnur * sigma * expo;
-            rccemis[i] += common * std::max(0.0, shadow->ptmp1);
-            rccemis[n + i] += common * std::max(0.0, shadow->ptmp2);
+            // calc_emisab_ion/calc_emis_ion multiply the reverse escape
+            // probability by (1-cfrac).  For the benchmark cfrac=1 this plane
+            // is identically zero; captured qualification anchors that retain
+            // ptmp1=1 must not leak into the production continuum workspace.
+            const double covering = std::clamp(input.covering_fraction, 0.0, 1.0);
+            const double ptmp1 = covering >= 1.0 - 1.0e-15 ? 0.0 : std::max(0.0, shadow->ptmp1);
+            const double ptmp2 = covering >= 1.0 - 1.0e-15 ? 1.0 : std::max(0.0, shadow->ptmp2);
+            rccemis[i] += common * ptmp1;
+            rccemis[n + i] += common * ptmp2;
         } else {
             fallback_shape[i] = sigma * energy * energy * energy * expo;
         }
@@ -7968,6 +7975,11 @@ int run_impl(
         std::vector<double> cabab(continuum_capacity, 0.0);
         std::vector<double> opakab(continuum_capacity, 0.0);
         std::vector<double> rccemis(2 * continuum_capacity, 0.0);
+        // Line-profile opacity is not part of the source continuum opakc
+        // workspace.  Keep it separate so line wings cannot reduce or
+        // otherwise contaminate the free-free + bound-free continuum surface
+        // written by fstepr4 and integrated into dpthc.
+        std::vector<double> line_profile_opacity(continuum_capacity, 0.0);
         std::vector<double> opakcont(continuum_capacity, 0.0);
         std::vector<double> fline(2 * line_capacity, 0.0);
         std::vector<double> flinel(continuum_capacity, 0.0);
@@ -7979,7 +7991,7 @@ int run_impl(
         sw.cabab = cabab.data(); sw.cabab_count = cabab.size();
         sw.opakab = opakab.data(); sw.opakab_count = opakab.size();
         sw.rccemis = rccemis.data(); sw.rccemis_count = rccemis.size();
-        sw.opakc = output.opacity; sw.opakc_count = continuum_capacity;
+        sw.opakc = line_profile_opacity.data(); sw.opakc_count = continuum_capacity;
         sw.opakcont = opakcont.data(); sw.opakcont_count = opakcont.size();
         sw.fline = fline.data(); sw.fline_count = fline.size();
         sw.flinel = flinel.data(); sw.flinel_count = flinel.size();

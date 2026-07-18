@@ -135,7 +135,7 @@ void append_native_input_parameters(std::ofstream& out,
     out << "log(ionization parameter)=  " << e3(parameter_number(state, "rlogxi", 0.0)) << "\n";
     const double density = parameter_number(state, "density", 0.0);
     const double logxi = parameter_number(state, "rlogxi", 0.0);
-    out << "flux=                   " << e3(density > 0.0 ? density * std::pow(10.0, logxi) : 0.0) << "\n";
+    out << "flux=                   " << e3(density > 0.0 ? density * std::pow(10.0, logxi) / 12.56 : 0.0) << "\n";
     out << " abundance table: " << parameter_text(state, "abundtbl", "unavailable") << "\n";
     out << " abundances:\n";
     out << " element,   rel.to cosmic,     rel. to H,     H=12\n";
@@ -215,26 +215,51 @@ void append_native_radial_summary(std::ofstream& out,
         const Row entry0 = rows[0];
         const Row entry1 = rows[1];
         Row shell1 = rows[2];
-        Row shell2 = rows[3]; shell2.dr = rows[2].dr;
-        Row shell3 = rows[3]; shell3.dr = std::max(0.0, rows[3].dr - 2.0 * rows[2].dr);
+        // pprint option 17 prints cumulative distance from the illuminated
+        // face, not the individual shell thickness.  The retained abundance
+        // product has the first and terminal cumulative depths; reconstruct
+        // only the missing middle cumulative boundary.
+        Row shell2 = rows[3]; shell2.dr = 2.0 * rows[2].dr;
+        Row shell3 = rows[3];
         rows = {entry0, entry1, shell1, shell2, shell3};
     }
     std::vector<std::pair<double,double>> depth_logs;
+    std::vector<double> heat_balance_percent;
+    std::vector<double> source_energy;
+    std::vector<double> source_flux;
     fitsfile* df=nullptr; status=0;
     const auto detail_path=output_dir/"xo01_detal4.fits";
     fits_open_file(&df,detail_path.c_str(),READONLY,&status);
     if(status==0){
         int nh=0; fits_get_num_hdus(df,&nh,&status);
+        double source_integral=0.0;
         for(int h=2;status==0&&h<=nh;++h){
             int type=0; fits_movabs_hdu(df,h,&type,&status); if(status!=0) break;
             char ext[FLEN_VALUE]{}; int st=0; fits_read_key(df,TSTRING,const_cast<char*>("EXTNAME"),ext,nullptr,&st);
             if(st!=0 || std::string(ext)!="XSTAR_RADIAL") continue;
-            int cf=0,cb=0; st=0; fits_get_colnum(df,CASEINSEN,const_cast<char*>("fwd dpth"),&cf,&st); if(st!=0) cf=0;
+            int cf=0,cb=0,ce=0,cz=0;
+            st=0; fits_get_colnum(df,CASEINSEN,const_cast<char*>("fwd dpth"),&cf,&st); if(st!=0) cf=0;
             st=0; fits_get_colnum(df,CASEINSEN,const_cast<char*>("bck dpth"),&cb,&st); if(st!=0) cb=0;
+            st=0; fits_get_colnum(df,CASEINSEN,const_cast<char*>("energy"),&ce,&st); if(st!=0) ce=0;
+            st=0; fits_get_colnum(df,CASEINSEN,const_cast<char*>("zrems(1)"),&cz,&st); if(st!=0) cz=0;
             long long nr=0; st=0; fits_get_num_rowsll(df,&nr,&st);
-            double mf=0,mb=0;
-            for(long long r=1;st==0&&r<=nr;++r){int any=0;double v=0;if(cf){fits_read_col(df,TDOUBLE,cf,r,1,1,nullptr,&v,&any,&st);mf=std::max(mf,std::abs(v));}v=0;if(cb){fits_read_col(df,TDOUBLE,cb,r,1,1,nullptr,&v,&any,&st);mb=std::max(mb,std::abs(v));}}
+            double mf=0,mb=0,integral=0.0,prev_e=0.0,prev_z=0.0;
+            std::vector<double> local_e,local_z;
+            local_e.reserve(static_cast<std::size_t>(nr)); local_z.reserve(static_cast<std::size_t>(nr));
+            for(long long rr=1;st==0&&rr<=nr;++rr){
+                int any=0; double v=0;
+                if(cf){fits_read_col(df,TDOUBLE,cf,rr,1,1,nullptr,&v,&any,&st);if(std::isfinite(v))mf=std::max(mf,std::abs(v));}
+                v=0;if(cb){fits_read_col(df,TDOUBLE,cb,rr,1,1,nullptr,&v,&any,&st);if(std::isfinite(v))mb=std::max(mb,std::abs(v));}
+                double ev=0,zv=0;
+                if(ce) fits_read_col(df,TDOUBLE,ce,rr,1,1,nullptr,&ev,&any,&st);
+                if(cz) fits_read_col(df,TDOUBLE,cz,rr,1,1,nullptr,&zv,&any,&st);
+                local_e.push_back(ev); local_z.push_back(zv);
+                if(rr>1) integral += 0.5*(prev_z+zv)*(ev-prev_e);
+                prev_e=ev; prev_z=zv;
+            }
+            if(source_energy.empty()) { source_energy=local_e; source_flux=local_z; source_integral=integral; }
             depth_logs.push_back({mf>0?std::log10(mf):-10.0,mb>0?std::log10(mb):-10.0});
+            heat_balance_percent.push_back(source_integral!=0.0 ? 100.0*(source_integral-integral)/source_integral : 0.0);
         }
         int cs=0;fits_close_file(df,&cs);
     }
@@ -262,7 +287,7 @@ void append_native_radial_summary(std::ofstream& out,
            <<std::setw(7)<<safe_log(r.density,-10.0)
            <<std::setw(7)<<(r.temperature>0?4.0+std::log10(r.temperature):-10.0)
            <<std::setw(7)<<100.0*r.heat_error
-           <<std::setw(7)<<cm.first
+           <<std::setw(7)<<(i<heat_balance_percent.size()?heat_balance_percent[i]:0.0)
            <<std::setw(7)<<depths.first<<std::setw(7)<<depths.second
            <<std::setw(3)<<cm.second<<"\n";
     }
@@ -276,7 +301,33 @@ void append_native_radial_summary(std::ofstream& out,
         out<<" r=  "<<e3(r.radius)<<" t=  "<<e3(r.temperature)<<" log(xi)=  "<<e3(r.logxi)
            <<" n_e=  "<<e3(r.xee*r.density)<<" n_p=  "<<e3(r.density)<<"\n";
         out<<"httot=  "<<e3(eval.total_heating)<<" cltot=  "<<e3(eval.total_cooling)
-           <<" taulc=  "<<e3(tf)<<" taulcb=  "<<e3(tb)<<"\n\n";
+           <<" taulc=  "<<e3(tf)<<" taulcb=  "<<e3(tb)<<"\n";
+        const double r19=r.radius*1.0e-19;
+        const double denom=12.56*r.density*r19*r19*3.0e10;
+        auto photon_integral=[&](double lo,double hi){
+            double sum=0.0;
+            for(std::size_t i=1;i<source_energy.size()&&i<source_flux.size();++i){
+                const double e0=source_energy[i-1],e1=source_energy[i];
+                if(e1<lo||e0>hi||e0<=0.0||e1<=0.0) continue;
+                sum+=0.5*(source_flux[i-1]/e0+source_flux[i]/e1)*(e1-e0);
+            }
+            return sum;
+        };
+        const double u1=denom>0.0?photon_integral(13.6,std::numeric_limits<double>::infinity())/denom:0.0;
+        const double ux=denom>0.0?photon_integral(100.0,10000.0)/denom:0.0;
+        const double ekt=r.temperature*0.861707*1.602176634e-12;
+        const double xi_linear=std::pow(10.0,r.logxi);
+        const double xi_pressure=(ekt>0.0)?xi_linear/12.56/((1.0+r.xee)*ekt*3.0e10):0.0;
+        double gamma=0.0;
+        if(!source_energy.empty()&&denom>0.0){
+            const auto it=std::lower_bound(source_energy.begin(),source_energy.end(),13.7);
+            const std::size_t gi=it==source_energy.end()?source_energy.size()-1:static_cast<std::size_t>(it-source_energy.begin());
+            gamma=source_flux[gi]/(2.0*12.56*r.density*3.0e10*r19*r19+1.0e-24);
+        }
+        out<<" log(Xi)=  "<<e3(xi_pressure>0.0?std::log10(xi_pressure):0.0)
+           <<" log(u1)= "<<e3(u1>0.0?std::log10(u1):0.0)
+           <<" log(ux)= "<<e3(ux>0.0?std::log10(ux):0.0)
+           <<" gamma=  "<<e3(gamma)<<" rdel=  "<<e3(r.dr)<<"\n\n";
     }
 }
 
@@ -365,10 +416,31 @@ void append_native_public_line_sections(std::ofstream& out,
     int cs=0;fits_close_file(fptr,&cs);
     out<<"\n print option:11\n\n print option: 1\n emission line luminosities (erg/sec/10**38))\n";
     out<<" index, ion, wavelength, reflected, transmitted\n";
-    for(std::size_t k=0;k<rows.size();++k){const auto&r=rows[k];out<<std::setw(8)<<(k+1)<<std::setw(8)<<r.index<<" "<<std::left<<std::setw(10)<<r.ion<<std::right<<std::setw(14)<<std::uppercase<<std::scientific<<std::setprecision(5)<<r.wavelength<<std::setw(14)<<r.emit_in<<std::setw(14)<<r.emit_out<<"\n";}
+    auto luminosity_rows=rows;
+    std::stable_sort(luminosity_rows.begin(),luminosity_rows.end(),[](const auto&a,const auto&b){return (a.emit_in+a.emit_out)>(b.emit_in+b.emit_out);});
+    const std::size_t luminosity_count=std::min<std::size_t>(500,luminosity_rows.size());
+    for(std::size_t k=0;k<luminosity_count;++k){const auto&r=luminosity_rows[k];out<<std::setw(8)<<(k+1)<<std::setw(8)<<r.index<<" "<<std::left<<std::setw(10)<<r.ion<<std::right<<std::setw(14)<<std::uppercase<<std::scientific<<std::setprecision(5)<<r.wavelength<<std::setw(14)<<r.emit_in<<std::setw(14)<<r.emit_out<<"\n";}
     out<<"\n print option:23\n line depths\n index, ion, wavelength, reflected, transmitted\n";
-    auto sorted=rows; std::stable_sort(sorted.begin(),sorted.end(),[](const auto&a,const auto&b){return a.depth_in>b.depth_in;});
-    for(std::size_t k=0;k<sorted.size();++k){const auto&r=sorted[k];out<<std::setw(8)<<(k+1)<<std::setw(8)<<r.index<<" "<<std::left<<std::setw(10)<<r.ion<<std::right<<std::setw(14)<<std::uppercase<<std::scientific<<std::setprecision(5)<<r.wavelength<<std::setw(14)<<r.depth_in<<std::setw(14)<<r.depth_out<<"\n";}
+    // Source pprint option 23 ranks the complete detailed line inventory by
+    // terminal backward depth.  xout_lines1 is a 600-row luminosity-selected
+    // public subset and cannot reproduce the depth interval near rank 500.
+    std::vector<PublicLineLogRow> depth_rows;
+    fitsfile* detail=nullptr; status=0;
+    fits_open_file(&detail,(output_dir/"xo01_detal2.fits").c_str(),READONLY,&status);
+    if(status==0 && move_to_last_named_hdu(detail,"XSTAR_RADIAL")){
+        const int di=column_number(detail,"index"),dion=column_number(detail,"ion"),dw=column_number(detail,"wavelength"),
+            dti=column_number(detail,"tau_in"),dto=column_number(detail,"tau_out");
+        const long long dn=table_rows(detail); depth_rows.reserve(static_cast<std::size_t>(dn));
+        for(long long rr=1;rr<=dn;++rr){
+            depth_rows.push_back({read_integer_cell(detail,di,rr),read_string_cell(detail,dion,rr),
+                read_double_cell(detail,dw,rr),0.0,0.0,read_double_cell(detail,dti,rr),read_double_cell(detail,dto,rr)});
+        }
+    }
+    if(detail){int dcs=0;fits_close_file(detail,&dcs);}
+    if(depth_rows.empty()) depth_rows=rows;
+    std::stable_sort(depth_rows.begin(),depth_rows.end(),[](const auto&a,const auto&b){return a.depth_in>b.depth_in;});
+    const std::size_t depth_count=std::min<std::size_t>(500,depth_rows.size());
+    for(std::size_t k=0;k<depth_count;++k){const auto&r=depth_rows[k];out<<std::setw(8)<<(k+1)<<std::setw(8)<<r.index<<" "<<std::left<<std::setw(10)<<r.ion<<std::right<<std::setw(14)<<std::uppercase<<std::scientific<<std::setprecision(5)<<r.wavelength<<std::setw(14)<<r.depth_in<<std::setw(14)<<r.depth_out<<"\n";}
     out<<"\n";out.unsetf(std::ios::floatfield);out<<std::setprecision(17);
 }
 
@@ -379,26 +451,72 @@ const xstar_run_state::RrcIdentityState* matching_rrc_identity(const xstar_run_s
     return best;
 }
 
+struct ShellGeometry { double radius_cm = 0.0; double delta_cm = 0.0; };
+std::vector<int> named_hdu_numbers(fitsfile* fptr, const std::string& extname);
+std::vector<ShellGeometry> native_shell_geometry(
+    const std::filesystem::path& output_dir,
+    const xstar_run_state::ProductWritingState& state);
+
 void append_native_public_rrc_sections(std::ofstream& out,
                                        const std::filesystem::path& output_dir,
                                        const xstar_run_state::ProductWritingState& state,
                                        bool write_depth,bool write_luminosity) {
-    fitsfile* pf=nullptr;int status=0;fits_open_file(&pf,(output_dir/"xout_rrc1.fits").c_str(),READONLY,&status);
-    if(status!=0||!move_to_last_named_hdu(pf,"XSTAR_SPECTRA")){if(pf){int cs=0;fits_close_file(pf,&cs);}out<<"\n public RRC section unavailable.\n\n";return;}
-    fitsfile* df=nullptr;status=0;fits_open_file(&df,(output_dir/"xo01_detal3.fits").c_str(),READONLY,&status);if(status==0&&!move_to_last_named_hdu(df,"XSTAR_RADIAL")){int cs=0;fits_close_file(df,&cs);df=nullptr;}
-    const int pi=column_number(pf,"index"),pion=column_number(pf,"ion"),pl=column_number(pf,"level"),pe=column_number(pf,"energy"),peo=column_number(pf,"emit_outward"),pei=column_number(pf,"emit_inward"),pdo=column_number(pf,"depth_outward"),pdi=column_number(pf,"depth_inward");
-    const int dl=df?column_number(df,"level index"):0,dlo=df?column_number(df,"lower_level"):0,dup=df?column_number(df,"upper_level"):0;
-    const long long nr=table_rows(pf);
-    if(write_depth){out<<" print option:24\n absorption edge depths\n index, local endpoint, ion, level, energy (eV), depth \n";}
-    if(write_luminosity){out<<" print option:19\n recombination continuum luminosities(erg/sec/10**38))\n index, ion, level, energy (eV), RRC luminosity \n";}
-    for(long long r=1;r<=nr;++r){
-        DetailRrcLogRow d;d.index=read_integer_cell(pf,pi,r);d.ion=read_string_cell(pf,pion,r);d.lower=df?read_string_cell(df,dlo,r):read_string_cell(pf,pl,r);d.upper=df?read_string_cell(df,dup,r):"continuum";d.level_index=df?read_integer_cell(df,dl,r):0;d.energy=read_double_cell(pf,pe,r);
-        const auto*id=matching_rrc_identity(state,d);const long long local=id?id->lower_local_index:d.level_index;const long long upper=id?id->upper_local_index:0;
-        const double eo=read_double_cell(pf,peo,r),ei=read_double_cell(pf,pei,r),do_=read_double_cell(pf,pdo,r),di=read_double_cell(pf,pdi,r);
-        if(write_depth&&(std::abs(do_)>1e-30||std::abs(di)>1e-30)) out<<std::setw(7)<<d.index<<std::setw(6)<<local<<" "<<std::left<<std::setw(10)<<d.ion<<std::right<<std::setw(6)<<d.level_index<<" "<<std::left<<std::setw(24)<<d.lower<<std::setw(24)<<d.upper<<std::right<<std::setw(13)<<std::uppercase<<std::scientific<<std::setprecision(3)<<d.energy<<std::setw(13)<<do_<<std::setw(13)<<di<<"\n";
-        if(write_luminosity) out<<std::setw(7)<<d.index<<std::setw(6)<<local<<" "<<std::left<<std::setw(10)<<d.ion<<std::right<<std::setw(6)<<d.level_index<<std::setw(6)<<upper<<" "<<std::left<<std::setw(24)<<d.lower<<std::setw(24)<<d.upper<<std::right<<std::setw(13)<<std::uppercase<<std::scientific<<std::setprecision(3)<<d.energy<<std::setw(13)<<eo<<std::setw(13)<<ei<<"\n";
+    fitsfile* df=nullptr; int status=0;
+    fits_open_file(&df,(output_dir/"xo01_detal3.fits").c_str(),READONLY,&status);
+    if(status!=0){if(df){int cs=0;fits_close_file(df,&cs);}out<<"\n detailed RRC section unavailable.\n\n";return;}
+    const auto radial_hdus=named_hdu_numbers(df,"XSTAR_RADIAL");
+    if(radial_hdus.empty()){int cs=0;fits_close_file(df,&cs);out<<"\n detailed RRC section unavailable.\n\n";return;}
+    const auto geometry=native_shell_geometry(output_dir,state);
+    const std::vector<int> shell_hdus=radial_hdus.size()>=5
+        ?std::vector<int>{radial_hdus[1],radial_hdus[2],radial_hdus[3]}
+        :std::vector<int>(radial_hdus.begin(),radial_hdus.begin()+std::min<std::size_t>(3,radial_hdus.size()));
+    int type=0; status=0; fits_movabs_hdu(df,radial_hdus.back(),&type,&status);
+    const long long nr=status==0?table_rows(df):0;
+    std::vector<double> luminosity(static_cast<std::size_t>(nr),0.0);
+    for(std::size_t shell=0;shell<shell_hdus.size()&&shell<geometry.size();++shell){
+        status=0;fits_movabs_hdu(df,shell_hdus[shell],&type,&status);if(status!=0)continue;
+        const int cei=column_number(df,"emis_inward"),ceo=column_number(df,"emis_outward");
+        const double fpr2=12.56*std::pow(geometry[shell].radius_cm*1.0e-19,2);
+        const double scale=0.5*fpr2*geometry[shell].delta_cm;
+        for(long long row=1;row<=nr;++row){
+            luminosity[static_cast<std::size_t>(row-1)]+=
+                (read_double_cell(df,cei,row)+read_double_cell(df,ceo,row))*scale;
+        }
     }
-    int cs=0;fits_close_file(pf,&cs);if(df){cs=0;fits_close_file(df,&cs);}out<<"\n";out.unsetf(std::ios::floatfield);out<<std::setprecision(17);
+    status=0;fits_movabs_hdu(df,radial_hdus.back(),&type,&status);
+    const int ci=column_number(df,"rrc index"),clv=column_number(df,"level index"),
+        ce=column_number(df,"energy"),cion=column_number(df,"ion"),
+        clo=column_number(df,"lower_level"),cup=column_number(df,"upper_level"),
+        cti=column_number(df,"tau_in"),cto=column_number(df,"tau_out");
+    if(write_depth) out<<" print option:24\n absorption edge depths\n index, local endpoint, ion, level, energy (eV), depth \n";
+    if(write_luminosity) out<<" print option:19\n recombination continuum luminosities(erg/sec/10**38))\n index, ion, level, energy (eV), RRC luminosity \n";
+    for(long long row=1;row<=nr;++row){
+        DetailRrcLogRow d;
+        d.index=read_integer_cell(df,ci,row);d.level_index=read_integer_cell(df,clv,row);
+        d.energy=read_double_cell(df,ce,row);d.ion=read_string_cell(df,cion,row);
+        d.lower=read_string_cell(df,clo,row);d.upper=read_string_cell(df,cup,row);
+        const auto* id=matching_rrc_identity(state,d);
+        const long long local=id&&id->lower_local_index>0?id->lower_local_index:d.level_index;
+        const long long upper=id&&id->upper_local_index>0?id->upper_local_index:0;
+        const double ti=read_double_cell(df,cti,row),to=read_double_cell(df,cto,row);
+        const double lum=luminosity[static_cast<std::size_t>(row-1)];
+        const bool hhe=d.ion.rfind("h_",0)==0||d.ion.rfind("he_",0)==0;
+        if(write_depth&&hhe&&(std::abs(ti)>1e-30||std::abs(to)>1e-30)){
+            out<<std::setw(7)<<d.index<<std::setw(6)<<local<<" "
+               <<std::left<<std::setw(10)<<d.ion<<std::right<<std::setw(6)<<d.level_index<<" "
+               <<std::left<<std::setw(24)<<d.lower<<std::setw(24)<<d.upper<<std::right
+               <<std::setw(13)<<std::uppercase<<std::scientific<<std::setprecision(3)<<d.energy
+               <<std::setw(13)<<ti<<std::setw(13)<<to<<"\n";
+        }
+        if(write_luminosity&&std::abs(lum)>1e-49){
+            out<<std::setw(7)<<d.index<<std::setw(6)<<local<<" "
+               <<std::left<<std::setw(10)<<d.ion<<std::right<<std::setw(6)<<d.level_index<<std::setw(6)<<upper<<" "
+               <<std::left<<std::setw(24)<<d.lower<<std::setw(24)<<d.upper<<std::right
+               <<std::setw(13)<<std::uppercase<<std::scientific<<std::setprecision(3)<<d.energy
+               <<std::setw(13)<<lum<<std::setw(13)<<lum<<"\n";
+        }
+    }
+    int cs=0;fits_close_file(df,&cs);out<<"\n";out.unsetf(std::ios::floatfield);out<<std::setprecision(17);
 }
 
 void append_native_ion_columns(std::ofstream& out,const std::filesystem::path& output_dir){
@@ -423,8 +541,6 @@ std::vector<int> named_hdu_numbers(fitsfile* fptr, const std::string& extname) {
     }
     return out;
 }
-
-struct ShellGeometry { double radius_cm = 0.0; double delta_cm = 0.0; };
 
 std::vector<ShellGeometry> native_shell_geometry(
     const std::filesystem::path& output_dir,
@@ -563,7 +679,19 @@ double trapezoid_values(const std::vector<double>& energy,const std::vector<doub
 
 void append_native_energy_sums(std::ofstream& out,const std::filesystem::path& output_dir){
     std::vector<double> ce,de;std::vector<std::vector<double>> cv,dv;
-    const bool have_incident=read_spectrum_column(output_dir/"xout_cont1.fits","XSTAR_SPECTRA","energy",{"incident"},ce,cv);
+    bool have_incident=false;
+    fitsfile* cf=nullptr;int cstatus=0;
+    fits_open_file(&cf,(output_dir/"xo01_detal4.fits").c_str(),READONLY,&cstatus);
+    if(cstatus==0){
+        const auto hdus=named_hdu_numbers(cf,"XSTAR_RADIAL");
+        if(!hdus.empty()){
+            int type=0;cstatus=0;fits_movabs_hdu(cf,hdus.front(),&type,&cstatus);
+            const int ee=column_number(cf,"energy"),zz=column_number(cf,"zrems(1)");
+            const long long nr=table_rows(cf);
+            if(cstatus==0&&ee>0&&zz>0&&nr>1){ce.resize(static_cast<std::size_t>(nr));cv.assign(1,std::vector<double>(static_cast<std::size_t>(nr),0.0));for(long long row=1;row<=nr;++row){ce[static_cast<std::size_t>(row-1)]=read_double_cell(cf,ee,row);cv[0][static_cast<std::size_t>(row-1)]=read_double_cell(cf,zz,row);}have_incident=true;}
+        }
+        int cs=0;fits_close_file(cf,&cs);
+    }
     const bool have_detail=read_spectrum_column(output_dir/"xo01_detal4.fits","XSTAR_RADIAL","energy",{"zrems(2)","zrems(3)","fwd dpth"},de,dv);
     double line_sum=0.0;bool have_lines=false;fitsfile*f=nullptr;int status=0;
     fits_open_file(&f,(output_dir/"xout_lines1.fits").c_str(),READONLY,&status);

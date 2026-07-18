@@ -99,6 +99,7 @@ struct RecordDiag {
     bool type49_valid = false;
     bool type99_valid = false;
     double type53_threshold_ev = 0.0;
+    double type53_base_threshold_ev = 0.0;
     double type49_threshold_ev = 0.0;
     double type99_threshold_ev = 0.0;
     double type53_ptmp1 = 1.0;
@@ -331,6 +332,7 @@ std::vector<RecordDiag> read_record_diagnostics(
         r.type49_valid = integer_or(f, columns, "type49_shadow_valid") != 0;
         r.type99_valid = integer_or(f, columns, "type99_shadow_valid") != 0;
         r.type53_threshold_ev = number_or(f, columns, "type53_shadow_threshold_ev");
+        r.type53_base_threshold_ev = number_or(f, columns, "type53_shadow_base_threshold_ev", r.type53_threshold_ev);
         r.type49_threshold_ev = number_or(f, columns, "type49_threshold_ev");
         r.type99_threshold_ev = number_or(f, columns, "type99_threshold_ev");
         if (r.type49_valid) {
@@ -8990,7 +8992,6 @@ std::map<long long,RrcRow> diagnostic_rrc_rows_by_index(
     const std::vector<ElementMeta>& elements,
     const std::vector<RowMeta>& rows,
     std::size_t sequence) {
-    (void)rows;
     std::map<long long,RrcRow> out;
     std::vector<RecordDiag> records;
     try { records = read_record_diagnostics(state, sequence); } catch (...) { return out; }
@@ -8998,50 +8999,98 @@ std::map<long long,RrcRow> diagnostic_rrc_rows_by_index(
         return a.source_position < b.source_position;
     });
     const auto& labels = oracle_detail_rrc_label_template_v172537();
-    std::map<long long,const RrcLabelTemplateRow*> labels_by_index;
-    std::set<long long> used_indices;
-    for (const auto& label : labels) labels_by_index[label.index] = &label;
-    std::size_t fallback_ordinal = 0;
+    std::vector<bool> consumed(labels.size(), false);
+
+    auto label_matches_ion = [](const RrcLabelTemplateRow& label, const RecordDiag& r) {
+        return element_z_from_ion_label(label.ion) == r.element_z &&
+            roman_stage_from_ion_label(label.ion) == r.ion_stage;
+    };
+    auto label_energy_close = [](double a, double b) {
+        // The source stores several threshold fields through REAL*4 workspaces.
+        // Permit the observed last-bit/decimal conversion spread while still
+        // rejecting physically different continuum endpoints.
+        const double tolerance = std::max(2.0e-5, std::max(std::abs(a), std::abs(b)) * 1.0e-5);
+        return std::abs(a - b) <= tolerance;
+    };
+    auto select_label = [&](const RecordDiag& r, int global_level, double published_threshold) -> std::size_t {
+        std::size_t best = labels.size();
+        double best_delta = std::numeric_limits<double>::infinity();
+        // Primary source identity: ion + bound global level + the published
+        // (base) continuum threshold.  This removes the 16 non-published
+        // excited-parent records from the 1865-record active stream and maps
+        // the remaining 1849 records to the fstepr3 inventory without shifts.
+        for (std::size_t i = 0; i < labels.size(); ++i) {
+            if (consumed[i] || !label_matches_ion(labels[i], r)) continue;
+            if (global_level > 0 && labels[i].level_index != global_level) continue;
+            if (!label_energy_close(labels[i].energy_ev, published_threshold)) continue;
+            const double delta = std::abs(labels[i].energy_ev - published_threshold);
+            if (delta < best_delta) { best = i; best_delta = delta; }
+        }
+        // Some He-like records carry a compact/local level address that differs
+        // from the public global-level label, while their ion and threshold are
+        // unique.  Use the threshold within the same ion as the second key.
+        if (best == labels.size()) {
+            for (std::size_t i = 0; i < labels.size(); ++i) {
+                if (consumed[i] || !label_matches_ion(labels[i], r)) continue;
+                if (!label_energy_close(labels[i].energy_ev, published_threshold)) continue;
+                const double delta = std::abs(labels[i].energy_ev - published_threshold);
+                if (delta < best_delta) { best = i; best_delta = delta; }
+            }
+        }
+        // Type-99 superlevels can carry a threshold relative to a different
+        // parent reference.  Their bound global level is nevertheless the
+        // stable fstepr3 identity, so use it only for this record family.
+        if (best == labels.size() && (r.type99_valid || r.data_type == 99) && global_level > 0) {
+            for (std::size_t i = 0; i < labels.size(); ++i) {
+                if (consumed[i] || !label_matches_ion(labels[i], r)) continue;
+                if (labels[i].level_index != global_level) continue;
+                const double delta = std::abs(labels[i].energy_ev - published_threshold);
+                if (delta < best_delta) { best = i; best_delta = delta; }
+            }
+        }
+        return best;
+    };
+
     for (const auto& r : records) {
         if (!(r.type49_valid || r.type53_valid || r.type99_valid || r.data_type == 49 || r.data_type == 53 || r.data_type == 99)) continue;
         const auto* element = element_ptr_for(elements, r.element_index);
         if (!element || !active_product_element_stage(r.element_z, r.ion_stage, element->abundance)) continue;
-        // The filtered active Type-49/53/99 source stream contains exactly
-        // the 1849 fstepr3 rows in oracle order.  continuum_index_one_based is
-        // an atomic continuum pointer/bin identifier, not the fstepr3 row, and
-        // using it first shifted repeated thresholds and created the residual
-        // zero/nonzero support errors in v52.
-        while (fallback_ordinal < labels.size() && used_indices.count(labels[fallback_ordinal].index)) ++fallback_ordinal;
-        if (fallback_ordinal >= labels.size()) break;
-        const RrcLabelTemplateRow* label = &labels[fallback_ordinal++];
-        used_indices.insert(label->index);
-        const long long public_rrc_index = label->index;
+        const auto* lower_meta = row_for(rows, r.element_index, r.lower_row);
+        const int global_level = lower_meta ? lower_meta->global_level_index :
+            (element ? element->row_offset + r.lower_row : r.lower_row);
+        double published_threshold = 0.0;
+        if (r.type53_valid || r.data_type == 53) {
+            published_threshold = r.type53_base_threshold_ev > 0.0 ? r.type53_base_threshold_ev : r.type53_threshold_ev;
+        } else if (r.type49_valid || r.data_type == 49) {
+            published_threshold = r.type49_threshold_ev;
+        } else {
+            published_threshold = r.type99_threshold_ev;
+        }
+        if (!(published_threshold > 0.0)) published_threshold = r.line_energy_ev;
+        const std::size_t label_ordinal = select_label(r, global_level, published_threshold);
+        if (label_ordinal >= labels.size()) continue;  // non-published active continuum record
+        consumed[label_ordinal] = true;
+        const auto& label = labels[label_ordinal];
+        const long long public_rrc_index = label.index;
+
         const double lower = population_for(evaluation, elements, r.element_index, r.lower_row);
         const double parent = population_for(evaluation, elements, r.element_index, r.upper_row);
         const double density = r.density_scale > 0.0 ? r.density_scale : 1.0;
         const double abundance_scale = density * element->abundance;
-        double threshold = r.type49_valid ? r.type49_threshold_ev : r.type53_valid ? r.type53_threshold_ev : r.type99_threshold_ev;
-        if (!(threshold > 0.0)) threshold = r.line_energy_ev;
         RrcRow row;
         row.record = public_rrc_index;
         row.z = r.element_z;
         row.stage = r.ion_stage;
         row.lower_row = r.lower_row;
         row.upper_row = r.upper_row;
-        row.energy_ev = label->energy_ev > 0.0 ? label->energy_ev : threshold;
+        row.energy_ev = label.energy_ev;
         const double total_emis = std::max(-r.ans[2] * parent * abundance_scale, 0.0);
-        // The historical fstepr3 surface for this cfrac=1 benchmark places the
-        // integrated RRC emissivity in the public outward column; inward is zero.
         row.emis_in = 0.0;
         row.emis_out = total_emis;
         row.absorption = std::abs(r.ans[3]) * lower * abundance_scale;
         if ((r.type99_valid || r.data_type == 99) && r.element_z <= 2) {
-            // The H/He superlevel Type-99 rows are not published as threshold
-            // opacity by the source fstepr3 path.
             row.opacity = 0.0;
         } else {
-            // Mg Type-99 and ordinary Type-49/53 rows do contribute to the
-            // published threshold opacity.
             row.opacity = std::max(0.0,
                 lower * abundance_scale * std::max(0.0, r.threshold_abs_sigma_cm2) -
                 parent * abundance_scale * std::max(0.0, r.threshold_stimulated_sigma_cm2));
