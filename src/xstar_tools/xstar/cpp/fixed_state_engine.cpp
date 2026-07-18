@@ -8082,7 +8082,14 @@ int run_impl(
             }
             std::vector<double> opakc_exact(continuum_capacity, 0.0);
             for (std::size_t k = 0; k < continuum_capacity; ++k) {
-                opakc_exact[k] = output.opacity[k] + opakcont[k] + line_profile_opacity[k];
+                const double continuum_value = std::isfinite(output.opacity[k]) && output.opacity[k] > 0.0
+                    ? output.opacity[k] : 0.0;
+                const double continuum_only = std::isfinite(opakcont[k]) && opakcont[k] > 0.0
+                    ? opakcont[k] : 0.0;
+                const double line_value = std::isfinite(line_profile_opacity[k]) && line_profile_opacity[k] > 0.0
+                    ? line_profile_opacity[k] : 0.0;
+                const double combined = continuum_value + continuum_only + line_value;
+                opakc_exact[k] = std::isfinite(combined) && combined > 0.0 ? combined : 0.0;
             }
             auto copy_workspace = [](const std::vector<double>& source, double* destination,
                                      std::size_t capacity, std::size_t& count,
@@ -8132,10 +8139,17 @@ int run_impl(
         }
 
         for (std::size_t k = 0; k < continuum_capacity; ++k) {
-            output.spectrum[k] += cemab[k] + cemab[continuum_capacity + k]
+            const double spectrum_add = cemab[k] + cemab[continuum_capacity + k]
                 + rccemis[k] + rccemis[continuum_capacity + k]
                 + profiled[2*continuum_capacity+k] + profiled[3*continuum_capacity+k];
-            output.opacity[k] += opakcont[k] + line_profile_opacity[k];
+            if (std::isfinite(spectrum_add)) output.spectrum[k] += spectrum_add;
+            if (!std::isfinite(output.spectrum[k])) output.spectrum[k] = 0.0;
+            const double continuum_only = std::isfinite(opakcont[k]) && opakcont[k] > 0.0
+                ? opakcont[k] : 0.0;
+            const double line_value = std::isfinite(line_profile_opacity[k]) && line_profile_opacity[k] > 0.0
+                ? line_profile_opacity[k] : 0.0;
+            const double combined = output.opacity[k] + continuum_only + line_value;
+            output.opacity[k] = std::isfinite(combined) && combined > 0.0 ? combined : 0.0;
         }
         stats.spectral_contributions += ss.contributions_committed;
     }

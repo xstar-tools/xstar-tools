@@ -180,9 +180,12 @@ int xstar_opacity_apply_exact_grid_v1(
         opsum = source_add(opsum, interval);
         if (etpp[mlm - 1] > epi[ml1m - 1]) {
             if (sume > 1.0e-34) {
-                const double optp2 = source_div(opsum, sume);
+                const double raw_optp2 = source_div(opsum, sume);
+                const double optp2 = std::isfinite(raw_optp2) && raw_optp2 > 0.0 ? raw_optp2 : 0.0;
                 while (etpp[mlm - 1] > epi[ml1m - 1] && ml1m < n) {
-                    opakc[ml1m - 1] = source_add(opakc[ml1m - 1], optp2);
+                    const double current = std::isfinite(opakc[ml1m - 1]) && opakc[ml1m - 1] > 0.0
+                        ? opakc[ml1m - 1] : 0.0;
+                    opakc[ml1m - 1] = source_add(current, optp2);
                     rccemis[ml1m - 1] += 0.0;
                     rccemis[n + ml1m - 1] += 0.0;
                     ++(*updated_bins);
@@ -278,13 +281,16 @@ int xstar_opacity_apply_line_profile_v1(
                 mlmax = std::max(mlmax, mlm);
                 etpp[mlm - 1] = etptst;
                 delet = source_div(source_sub(etptst, line_energy_ev), dele);
-                if (mlc <= seed_radius) {
-                    const int seed_index = 2 * mlc - ((ldir < 0) ? 1 : 0);
-                    profile = seed_profiles[seed_index];
-                } else {
-                    profile = use_voigt ? voigte(std::abs(delet), aasmall) / 1.772
-                                         : std::exp(-delet * delet) / 1.772;
-                }
+                // Source linopac evaluates the profile at the actual
+                // temporary-grid displacement for every point.  The former
+                // native path used integer-offset seed samples for the first
+                // ten substeps; when one continuum bin spans many Doppler
+                // widths, those samples describe the wrong displacement and
+                // can overpopulate entire optical/UV bins by many orders of
+                // magnitude.  Retain seeds only as an API/qualification
+                // precondition; compute the live Gaussian/Voigt value here.
+                profile = use_voigt ? voigte(std::abs(delet), aasmall) / 1.772
+                                     : std::exp(-delet * delet) / 1.772;
                 optpp2[mlm - 1] = optpp * profile;
                 tst = profile;
             }
@@ -314,9 +320,12 @@ int xstar_opacity_apply_line_profile_v1(
             opsum = source_add(opsum, interval);
             if (etpp[mlm - 1] > epi[ml1m - 1]) {
                 if (sume > 1.0e-34) {
-                    const double optp2 = source_div(opsum, sume);
+                    const double raw_optp2 = source_div(opsum, sume);
+                    const double optp2 = std::isfinite(raw_optp2) && raw_optp2 > 0.0 ? raw_optp2 : 0.0;
                     while (etpp[mlm - 1] > epi[ml1m - 1] && ml1m < n) {
-                        opakc[ml1m - 1] = source_add(opakc[ml1m - 1], optp2);
+                        const double current = std::isfinite(opakc[ml1m - 1]) && opakc[ml1m - 1] > 0.0
+                            ? opakc[ml1m - 1] : 0.0;
+                        opakc[ml1m - 1] = source_add(current, optp2);
                         rccemis[ml1m - 1] += 0.0;
                         rccemis[n + ml1m - 1] += 0.0;
                         ++(*updated_bins);

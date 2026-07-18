@@ -175,6 +175,19 @@ void append_native_input_parameters(std::ofstream& out,
     out << " radexp=  " << e3(0.0) << "\n\n";
 }
 
+bool read_spectrum_column(const std::filesystem::path& path,
+                          const char* extname,
+                          const char* energy_name,
+                          const std::vector<const char*>& value_names,
+                          std::vector<double>& energy,
+                          std::vector<std::vector<double>>& values);
+
+bool finite_nonzero_vector(const std::vector<double>& values) {
+    return std::any_of(values.begin(), values.end(), [](double value) {
+        return std::isfinite(value) && std::abs(value) > 1.0e-300;
+    });
+}
+
 void append_native_radial_summary(std::ofstream& out,
                                   const std::filesystem::path& output_dir,
                                   const xstar_run_state::ProductWritingState& state) {
@@ -226,14 +239,24 @@ void append_native_radial_summary(std::ofstream& out,
     std::vector<std::pair<double,double>> depth_logs;
     std::vector<std::pair<double,double>> reference_depths;
     std::vector<double> heat_balance_percent;
+    std::vector<double> current_radiation_integrals;
     std::vector<double> source_energy;
     std::vector<double> source_flux;
+    std::vector<std::vector<double>> public_spectrum_values;
+    if (read_spectrum_column(output_dir / "xout_spect1.fits", "XSTAR_SPECTRA", "energy",
+                             {"incident"}, source_energy, public_spectrum_values) &&
+        !public_spectrum_values.empty() && finite_nonzero_vector(public_spectrum_values.front())) {
+        source_flux = public_spectrum_values.front();
+    } else {
+        source_energy.clear();
+        source_flux.clear();
+    }
     fitsfile* df=nullptr; status=0;
     const auto detail_path=output_dir/"xo01_detal4.fits";
     fits_open_file(&df,detail_path.c_str(),READONLY,&status);
     if(status==0){
         int nh=0; fits_get_num_hdus(df,&nh,&status);
-        double source_integral=0.0;
+        double fallback_source_integral=0.0;
         for(int h=2;status==0&&h<=nh;++h){
             int type=0; fits_movabs_hdu(df,h,&type,&status); if(status!=0) break;
             char ext[FLEN_VALUE]{}; int st=0; fits_read_key(df,TSTRING,const_cast<char*>("EXTNAME"),ext,nullptr,&st);
@@ -261,7 +284,12 @@ void append_native_radial_summary(std::ofstream& out,
                 if(rr>1) integral += 0.5*(prev_z+zv)*(ev-prev_e);
                 prev_e=ev; prev_z=zv;
             }
-            if(source_energy.empty()) { source_energy=local_e; source_flux=local_z; source_integral=integral; }
+            if (source_energy.empty()) {
+                source_energy = local_e;
+                source_flux = local_z;
+                fallback_source_integral = integral;
+            }
+            current_radiation_integrals.push_back(integral);
             // pprint uses nry=nbinc(13.6,epi,ncn2)+1, not the maximum
             // optical depth over the grid.  For the retained grid this is the
             // second bin above 13.6 eV (13.628082 eV).
@@ -277,9 +305,22 @@ void append_native_radial_summary(std::ofstream& out,
             depth_logs.push_back({reference_fwd>0?std::log10(reference_fwd):-10.0,
                                   reference_bck>0?std::log10(reference_bck):-10.0});
             reference_depths.push_back({reference_fwd,reference_bck});
-            heat_balance_percent.push_back(source_integral!=0.0 ? 100.0*(source_integral-integral)/source_integral : 0.0);
         }
         int cs=0;fits_close_file(df,&cs);
+        double source_integral = 0.0;
+        if (source_energy.size() == source_flux.size() && source_energy.size() > 1 &&
+            finite_nonzero_vector(source_flux)) {
+            for (std::size_t i = 1; i < source_energy.size(); ++i) {
+                source_integral += 0.5 * (source_flux[i - 1] + source_flux[i]) *
+                    (source_energy[i] - source_energy[i - 1]);
+            }
+        }
+        if (!(source_integral > 0.0)) source_integral = fallback_source_integral;
+        heat_balance_percent.reserve(current_radiation_integrals.size());
+        for (double current_integral : current_radiation_integrals) {
+            heat_balance_percent.push_back(source_integral > 0.0
+                ? 100.0 * (source_integral - current_integral) / source_integral : 0.0);
+        }
     }
     std::map<std::size_t,std::pair<double,std::size_t>> call_metrics;
     for(const auto& e:state.fixed_evaluations){
@@ -786,18 +827,21 @@ double trapezoid_values(const std::vector<double>& energy,const std::vector<doub
 
 void append_native_energy_sums(std::ofstream& out,const std::filesystem::path& output_dir){
     std::vector<double> ce,de;std::vector<std::vector<double>> cv,dv;
-    bool have_incident=false;
-    fitsfile* cf=nullptr;int cstatus=0;
-    fits_open_file(&cf,(output_dir/"xo01_detal4.fits").c_str(),READONLY,&cstatus);
-    if(cstatus==0){
-        const auto hdus=named_hdu_numbers(cf,"XSTAR_RADIAL");
-        if(!hdus.empty()){
-            int type=0;cstatus=0;fits_movabs_hdu(cf,hdus.front(),&type,&cstatus);
-            const int ee=column_number(cf,"energy"),zz=column_number(cf,"zrems(1)");
-            const long long nr=table_rows(cf);
-            if(cstatus==0&&ee>0&&zz>0&&nr>1){ce.resize(static_cast<std::size_t>(nr));cv.assign(1,std::vector<double>(static_cast<std::size_t>(nr),0.0));for(long long row=1;row<=nr;++row){ce[static_cast<std::size_t>(row-1)]=read_double_cell(cf,ee,row);cv[0][static_cast<std::size_t>(row-1)]=read_double_cell(cf,zz,row);}have_incident=true;}
+    bool have_incident=read_spectrum_column(output_dir/"xout_spect1.fits","XSTAR_SPECTRA","energy",{"incident"},ce,cv) &&
+        !cv.empty() && finite_nonzero_vector(cv.front());
+    if(!have_incident){
+        fitsfile* cf=nullptr;int cstatus=0;
+        fits_open_file(&cf,(output_dir/"xo01_detal4.fits").c_str(),READONLY,&cstatus);
+        if(cstatus==0){
+            const auto hdus=named_hdu_numbers(cf,"XSTAR_RADIAL");
+            if(!hdus.empty()){
+                int type=0;cstatus=0;fits_movabs_hdu(cf,hdus.front(),&type,&cstatus);
+                const int ee=column_number(cf,"energy"),zz=column_number(cf,"zrems(1)");
+                const long long nr=table_rows(cf);
+                if(cstatus==0&&ee>0&&zz>0&&nr>1){ce.resize(static_cast<std::size_t>(nr));cv.assign(1,std::vector<double>(static_cast<std::size_t>(nr),0.0));for(long long row=1;row<=nr;++row){ce[static_cast<std::size_t>(row-1)]=read_double_cell(cf,ee,row);cv[0][static_cast<std::size_t>(row-1)]=read_double_cell(cf,zz,row);}have_incident=finite_nonzero_vector(cv.front());}
+            }
+            int cs=0;fits_close_file(cf,&cs);
         }
-        int cs=0;fits_close_file(cf,&cs);
     }
     const bool have_detail=read_spectrum_column(output_dir/"xo01_detal4.fits","XSTAR_RADIAL","energy",{"zrems(2)","zrems(3)","fwd dpth"},de,dv);
     double line_sum=0.0;bool have_lines=false;fitsfile*f=nullptr;int status=0;

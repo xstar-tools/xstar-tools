@@ -8100,6 +8100,22 @@ std::vector<double> resize_native_array(std::vector<double> values, std::size_t 
     return values;
 }
 
+
+bool has_finite_nonzero_signal(const std::vector<double>& values, double floor = 1.0e-300) {
+    return std::any_of(values.begin(), values.end(), [floor](double value) {
+        return std::isfinite(value) && std::abs(value) > floor;
+    });
+}
+
+bool has_finite_monotonic_energy(const std::vector<double>& values) {
+    if (values.size() < 2) return false;
+    for (std::size_t i = 0; i < values.size(); ++i) {
+        if (!std::isfinite(values[i]) || !(values[i] > 0.0)) return false;
+        if (i > 0 && !(values[i] > values[i - 1])) return false;
+    }
+    return true;
+}
+
 std::vector<double> native_workspace_array_for_hdu(
     const xstar_run_state::ProductWritingState& state,
     const std::string& name,
@@ -10617,14 +10633,52 @@ void write_public_spectrum(const std::filesystem::path& path,
     const auto pw_spectrum_transmitted = optional_bridge_array_for_hdu(state, "product_write_spectrum_transmitted", 3, n);
     const auto pw_spectrum_emit_in = optional_bridge_array_for_hdu(state, "product_write_spectrum_emit_inward", 3, n);
     const auto pw_spectrum_emit_out = optional_bridge_array_for_hdu(state, "product_write_spectrum_emit_outward", 3, n);
+    // Exact-size retained arrays are not sufficient evidence of a valid product
+    // surface: the true-native retention path may allocate 9999 zero cells.
+    // Do not let those placeholders override a live incident/transmitted field.
     const bool have_product_write_continuum = !full_spectrum &&
         pw_continuum_energy.size() == n && pw_continuum_incident.size() == n &&
         pw_continuum_transmitted.size() == n && pw_continuum_emit_in.size() == n &&
-        pw_continuum_emit_out.size() == n;
+        pw_continuum_emit_out.size() == n &&
+        has_finite_monotonic_energy(pw_continuum_energy) &&
+        has_finite_nonzero_signal(pw_continuum_incident) &&
+        has_finite_nonzero_signal(pw_continuum_transmitted);
     const bool have_product_write_spectrum = full_spectrum &&
         pw_spectrum_energy.size() == n && pw_spectrum_incident.size() == n &&
         pw_spectrum_transmitted.size() == n && pw_spectrum_emit_in.size() == n &&
-        pw_spectrum_emit_out.size() == n;
+        pw_spectrum_emit_out.size() == n &&
+        has_finite_monotonic_energy(pw_spectrum_energy) &&
+        has_finite_nonzero_signal(pw_spectrum_incident) &&
+        has_finite_nonzero_signal(pw_spectrum_transmitted);
+
+    std::vector<double> incident_surface;
+    if (zremsz.size() == n && has_finite_nonzero_signal(zremsz)) {
+        incident_surface = zremsz;
+    } else if (!state.radial_zones.empty()) {
+        // zrems(1,:) at the first accepted boundary is the live source
+        // radiation surface when the dedicated zremsz sidecar was not retained.
+        const auto& initial_ws = state.radial_zones.front().accepted_controller.evaluation.source_workspace;
+        if (initial_ws.zrems.size() >= n && has_finite_nonzero_signal(initial_ws.zrems)) {
+            incident_surface.assign(initial_ws.zrems.begin(), initial_ws.zrems.begin() + static_cast<std::ptrdiff_t>(n));
+        } else {
+            const auto& initial_flux = state.radial_zones.front().accepted_controller.evaluation.radiation_flux;
+            if (initial_flux.size() == n && has_finite_nonzero_signal(initial_flux)) incident_surface = initial_flux;
+        }
+    }
+    if (incident_surface.empty() && e.radiation_flux.size() == n &&
+        has_finite_nonzero_signal(e.radiation_flux)) {
+        incident_surface = e.radiation_flux;
+    }
+
+    std::vector<double> forward_depth_surface;
+    if (dpthcont.size() >= n && has_finite_nonzero_signal(dpthcont)) {
+        forward_depth_surface.assign(dpthcont.begin(), dpthcont.begin() + static_cast<std::ptrdiff_t>(n));
+    } else {
+        const auto dpthc = optional_bridge_array_for_hdu(state, "dpthc", 6, 2 * n);
+        if (dpthc.size() >= n && has_finite_nonzero_signal(dpthc)) {
+            forward_depth_surface.assign(dpthc.begin(), dpthc.begin() + static_cast<std::ptrdiff_t>(n));
+        }
+    }
     fitsfile* fptr = create_fits(path, state); write_parameters(fptr, state.parameter_rows);
     create_table(fptr, ASCII_TBL, static_cast<long>(n), "XSTAR_SPECTRA",
         {"energy","incident","transmitted","emit_inward","emit_outward"}, {"E13.5","E13.5","E13.5","E13.5","E13.5"},
@@ -10638,8 +10692,9 @@ void write_public_spectrum(const std::filesystem::path& path,
     const auto public_continuum_diag = read_continuum_diagnostics_expanded_to_full_bins(state,
         state.radial_zones.empty() ? 0u : state.radial_zones.back().accepted_controller.accepted_sequence, n);
     for (std::size_t i = 0; i < n; ++i) {
-        double incident = i < zremsz.size() ? zremsz[i] : (i < e.radiation_flux.size() ? e.radiation_flux[i] : 0.0);
-        double tau_forward = i < dpthcont.size() ? std::max(0.0, dpthcont[i]) : 0.0;
+        double incident = i < incident_surface.size() ? incident_surface[i] : 0.0;
+        double tau_forward = i < forward_depth_surface.size() && std::isfinite(forward_depth_surface[i])
+            ? std::max(0.0, forward_depth_surface[i]) : 0.0;
         if (!(tau_forward > 0.0)) {
             const double opacity = continuum_diag_opacity_for_bin(public_continuum_diag, i);
             if (opacity > 0.0) tau_forward = opacity * benchmark_total_depth_cm_from_parameters(state);
