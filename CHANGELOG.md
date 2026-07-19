@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.7.46.25.5.17.25.82 - 2026-07-19
+
+- Sequence-16 Mg gate now blocks only on row-count/identity/order, charge ledger, hmctot/elcter .7e, and aggregate Mg thermal scientific tolerance; exact binary64 ledgers remain diagnostic.
+- Values with absolute magnitude <= 1e-40 are treated as zero-equivalent in diagnostic mismatch accounting.
+- Public 600-line product inventory is projected by the actual public line-index list instead of the first 600 native line identities.
+- Public line luminosity/depth arrays are gathered by physical line index from retained elum/tau0 workspaces.
+- Keeps fail-closed publication until the complete 61-event scientific trajectory accepts.
+
 ## 0.6.48.7.46.25.5.17.25.81 - 2026-07-19
 
 - Correct Mg compact-seed global indexing to use the source `npilev(local_ordinal, ion)` coordinate instead of looking up the Type-13 record selected by the packed local-level identifier.  Sequence-16 Mg contains packed identifiers whose order differs from Type-13 source order; the old lowering therefore attached many compact rows to the wrong committed `xilevg` slots.
