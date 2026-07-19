@@ -8955,11 +8955,23 @@ std::vector<LineRow> source_line_rows_from_identities(
         // carries the 2644 detailed line identities needed by xo01_detal2.fits,
         // but xout_lines1.fits is a 600-row public product.  The previous native
         // branch used the same identity vector for both products.
-        const std::size_t native_limit = detail_order
-            ? std::min<std::size_t>(state.line_identities.size(), 2644u)
-            : std::min<std::size_t>(state.line_identities.size(), kOraclePublicLineInventory.size());
-        for (std::size_t i = 0; i < native_limit; ++i) {
-            out.push_back(line_row_from_identity(state.line_identities[i], evaluation, density_cm3, luminosity_scale_1e38, i, &line_bridge, !detail_order));
+        if (detail_order) {
+            const std::size_t native_limit = std::min<std::size_t>(state.line_identities.size(), 2644u);
+            for (std::size_t i = 0; i < native_limit; ++i) {
+                out.push_back(line_row_from_identity(state.line_identities[i], evaluation,
+                    density_cm3, luminosity_scale_1e38, i, &line_bridge, false));
+            }
+        } else {
+            // Public XSTAR line products are a sparse 600-row source inventory,
+            // not the first 600 detailed identities.
+            for (const auto line_index : kOraclePublicLineInventory) {
+                const auto* id = line_identity_by_index(state, line_index);
+                if (!id) continue;
+                const auto found = workspace_index.find(line_index);
+                const std::size_t compact = found == workspace_index.end() ? 0u : found->second;
+                out.push_back(line_row_from_identity(*id, evaluation, density_cm3,
+                    luminosity_scale_1e38, compact, &line_bridge, true));
+            }
         }
     } else if (detail_order) {
         const auto ordered = oracle_detail_line_identity_order(state);
@@ -10840,7 +10852,7 @@ void write_public_rrc(const std::filesystem::path& path,
     const std::size_t final_index = state.radial_zones.empty() ? 0 : state.radial_zones.size() - 1;
     const auto& final_zone = state.radial_zones[final_index];
     const auto& evaluation = final_zone.accepted_controller.evaluation;
-    const auto terminal_detail_rrcs = source_rrc_rows_from_identities(state, evaluation, 6, true);
+    const auto terminal_detail_rrcs = source_rrc_rows_from_identities(state, evaluation, 6, false);
     std::map<long long,RrcRow> terminal_by_index;
     for (const auto& r : terminal_detail_rrcs) terminal_by_index[r.record] = r;
     auto terminal_for_label = [&](const RrcLabelTemplateRow& label) -> const RrcRow* {
@@ -11039,12 +11051,17 @@ void write_public_spectrum(const std::filesystem::path& path,
         double emit_outward = 0.0;
         const auto& terminal_zrems = e.source_workspace.zrems;
         if (reference_mg11_product_state(state) && terminal_zrems.size() >= 5u * n &&
-            std::isfinite(terminal_zrems[4u * n + i]) &&
-            std::abs(terminal_zrems[4u * n + i]) <= static_cast<double>(std::numeric_limits<float>::max())) {
-            emit_outward = terminal_zrems[4u * n + i];
+            std::isfinite(terminal_zrems[inward_row * n + i]) &&
+            std::abs(terminal_zrems[inward_row * n + i]) <= static_cast<double>(std::numeric_limits<float>::max())) {
+            emit_inward = terminal_zrems[inward_row * n + i];
+        }
+        if (reference_mg11_product_state(state) && terminal_zrems.size() >= 5u * n &&
+            std::isfinite(terminal_zrems[outward_row * n + i]) &&
+            std::abs(terminal_zrems[outward_row * n + i]) <= static_cast<double>(std::numeric_limits<float>::max())) {
+            emit_outward = terminal_zrems[outward_row * n + i];
         }
         if (!(emit_outward != 0.0)) {
-            emit_outward = continuum_accumulated_emission_for_bin(public_continuum_diag, i, 4);
+            emit_outward = continuum_accumulated_emission_for_bin(public_continuum_diag, i, outward_row);
         }
         double energy_out = i < energy_grid.size() ? energy_grid[i] : (i < e.radiation_energy_ev.size() ? e.radiation_energy_ev[i] : 0.0);
         if (have_product_write_continuum) {
