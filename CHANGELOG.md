@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.48.7.46.25.5.17.25.76 - 2026-07-19
+
+- Added a mandatory sequence-2 helium pre-product qualification pass.
+- Captures the full 78x78 helium dense matrix, native/source RHS, all 78 solved populations, source-order matrix terms, and Type-53/non-Type-53 primary-cooling ledgers.
+- Fails before FITS or `xout_step.log` publication unless all six sequence-2 `.7e` gates accept.
+- Adds source-shadow answer columns to the helium source-order diagnostic stream.
+
 ## 0.6.48.7.46.25.5.17.25.74 - 2026-07-19
 
 - Retry the v63 FITS comparator with `-lstdc++fs` for older GCC/libstdc++ hosts.

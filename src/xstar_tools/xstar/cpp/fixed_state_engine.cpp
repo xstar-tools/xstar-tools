@@ -9927,7 +9927,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                 }
             }
 
-            solve_terms << "evaluation_ordinal,source_order_index,contribution_source_position,term_source_position,record,data_type,rate_type,ion_index,ion_stage,role,compact_row,compact_column,full_row,full_column,aj1,aj2,cj,cj2,density_scale\n";
+            solve_terms << "evaluation_ordinal,source_order_index,contribution_source_position,term_source_position,record,data_type,rate_type,ion_index,ion_stage,role,compact_row,compact_column,full_row,full_column,native_aj1,native_aj2,source_aj1,source_aj2,source_answer_basis,native_cj,native_cj2,source_cj,source_cj2,density_scale\n";
             solve_terms << std::setprecision(17);
             std::uint64_t source_order_index = 0;
             std::vector<const NativeRecordDiagnostic*> ordered_helium_records;
@@ -9972,10 +9972,28 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                 const int rows4[4] = {upper, lower, lower, upper};
                 const int cols4[4] = {lower, upper, lower, upper};
                 const char* roles[4] = {"forward_gain", "reverse_gain", "forward_diag_loss", "reverse_diag_loss"};
-                const double aj1[4] = {c.ans1, c.ans2, -c.ans1, -c.ans2};
-                const double aj2[4] = {c.ans2, c.ans1, -c.ans1, -c.ans2};
-                const double cj[4] = {0.0, 0.0, c.ans4 * c.density_scale, -c.ans3 * c.density_scale};
-                const double cj2[4] = {0.0, 0.0, c.ans6 * c.density_scale, -c.ans5 * c.density_scale};
+                std::array<double,6> source_answers{{c.ans1,c.ans2,c.ans3,c.ans4,c.ans5,c.ans6}};
+                const auto& item = diagnostic.evaluated;
+                const char* source_answer_basis = "committed_source_faithful";
+                if (c.data_type == 53 && item.type53_shadow.valid) {
+                    source_answers = item.type53_shadow.ans; source_answer_basis = "type53_source_shadow";
+                } else if (c.data_type == 49 && item.type49_shadow.valid) {
+                    source_answers = item.type49_shadow.ans; source_answer_basis = "type49_source_shadow";
+                } else if (c.data_type == 50 && item.type50_shadow.valid) {
+                    source_answers = item.type50_shadow.ans; source_answer_basis = "type50_source_shadow";
+                } else if (c.data_type == 51 && item.type51_shadow.valid) {
+                    source_answers = item.type51_shadow.ans; source_answer_basis = "type51_source_shadow";
+                } else if (c.data_type == 99 && item.type99_shadow.valid) {
+                    source_answers = item.type99_shadow.ans; source_answer_basis = "type99_source_shadow";
+                }
+                const double native_aj1[4] = {c.ans1, c.ans2, -c.ans1, -c.ans2};
+                const double native_aj2[4] = {c.ans2, c.ans1, -c.ans1, -c.ans2};
+                const double source_aj1[4] = {source_answers[0], source_answers[1], -source_answers[0], -source_answers[1]};
+                const double source_aj2[4] = {source_answers[1], source_answers[0], -source_answers[0], -source_answers[1]};
+                const double native_cj[4] = {0.0, 0.0, c.ans4 * c.density_scale, -c.ans3 * c.density_scale};
+                const double native_cj2[4] = {0.0, 0.0, c.ans6 * c.density_scale, -c.ans5 * c.density_scale};
+                const double source_cj[4] = {0.0, 0.0, source_answers[3] * c.density_scale, -source_answers[2] * c.density_scale};
+                const double source_cj2[4] = {0.0, 0.0, source_answers[5] * c.density_scale, -source_answers[4] * c.density_scale};
                 for (int offset = 0; offset < 4; ++offset) {
                     ++source_order_index;
                     solve_terms << evaluation_ordinal << ',' << source_order_index << ',' << c.source_position << ','
@@ -9984,7 +10002,11 @@ int xstar_fixed_state_write_last_diagnostics_v1(
                                 << rows4[offset] << ',' << cols4[offset] << ','
                                 << helium->active.full_row_start + rows4[offset] - 1 << ','
                                 << helium->active.full_row_start + cols4[offset] - 1 << ','
-                                << aj1[offset] << ',' << aj2[offset] << ',' << cj[offset] << ',' << cj2[offset] << ','
+                                << native_aj1[offset] << ',' << native_aj2[offset] << ','
+                                << source_aj1[offset] << ',' << source_aj2[offset] << ','
+                                << source_answer_basis << ','
+                                << native_cj[offset] << ',' << native_cj2[offset] << ','
+                                << source_cj[offset] << ',' << source_cj2[offset] << ','
                                 << c.density_scale << '\n';
                 }
             }
