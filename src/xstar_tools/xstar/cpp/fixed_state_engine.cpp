@@ -6633,12 +6633,14 @@ RuntimeInitialSeed source_faithful_runtime_initial_seed(
         return seed;
     }
 
-    // v0.6.48.7.32: reproduce the source msolvelucy compact-seed contract
-    // for helium.  Each ion copies nlev entries, while the compact cursor
-    // advances by nlev-1.  The next-ion ground therefore overwrites the
-    // preceding continuum row.  The lowered He II ordinals retain the shared
-    // ground at their first row; subsequent rows consume the following global
-    // level, and the terminal solver-normalization row starts at exact zero.
+    // v0.6.48.7.46.25.5.17.25.77: preserve the source helium compact
+    // seed exactly at the active-row identities already produced by the
+    // lowered basis.  The basis itself contains the shared He I/He II ground
+    // overwrite.  Advancing every later He II row by one duplicated that
+    // overlap, shifted rows 47-77 to the following global population, and
+    // discarded the final carried He II level.  The source still performs
+    // the literal terminal normalization-row zero write after the compact
+    // copy, so only that last row is replaced by zero.
     if (e.element_z == 2 && compact_row == e.normalization_row) {
         seed.global_level_index = 0;
         seed.value = 0.0;
@@ -6646,11 +6648,7 @@ RuntimeInitialSeed source_faithful_runtime_initial_seed(
         return seed;
     }
 
-    int global_level_index = row.global_level_index;
-    if (e.element_z == 2 && compact_index > 0 && row.ion_charge > 0 &&
-        e.rows[compact_index - 1].ion_charge == row.ion_charge) {
-        ++global_level_index;
-    }
+    const int global_level_index = row.global_level_index;
     if (global_level_index <= 0 ||
         static_cast<std::size_t>(global_level_index) > runtime_input->global_level_count) return seed;
 

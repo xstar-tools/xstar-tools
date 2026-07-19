@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.7.46.25.5.17.25.77 - 2026-07-19
+
+- Correct the repeated-evaluation helium compact seed: active He II rows now retain their lowered global-row identities instead of being shifted to the following population.
+- Preserve the literal source terminal normalization-row zero write.
+- Add a fail-closed compact-seed mapping comparison to the sequence-2 pre-product gate.
+- Retain raw LEQT2F population values while applying the established qualification-only source-canonical `.7e` policy to twelve guarded decimal-boundary rows.
+- Continue to the full 61-event trajectory and v63 FITS comparator only after all six sequence-2 gates accept.
+
 ## 0.6.48.7.46.25.5.17.25.76 - 2026-07-19
 
 - Added a mandatory sequence-2 helium pre-product qualification pass.
