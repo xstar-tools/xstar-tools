@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.7.46.25.5.17.25.80 - 2026-07-19
+
+- Remove the native-only pre-`msolvelucy` normalization of live runtime-mapped Mg compact populations; source `calc_hmc_element` passes the committed `xilevg` scale through unchanged and the solver normalization row owns number conservation.
+- Require an exact v0.6.47.2 sequence-16 Mg solve-stage capture as comparison-only binary64 evidence. The source vector is never bound as a native thermal population closure or controller input.
+- Compare all 552 Mg final populations, ten ion totals, the charge ledger, 26,624 source-order population operands/contributions/running sums/weighted contributions, and all four Mg thermal channels before the sequence-16 commit.
+- Report the first exact source/native binary64 solve-phase divergence and keep publication fail-closed on any sequence-16 mismatch.
+- Reopen the complete 61-event canonical `.7e` trajectory gate only after sequence 16 accepts.
+
 ## 0.6.48.7.46.25.5.17.25.79 - 2026-07-19
 
 - Add a sequence-16 Mg source-order ledger captured before the DSEC commit boundary.

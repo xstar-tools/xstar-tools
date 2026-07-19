@@ -7025,7 +7025,71 @@ Sequence16MgSourceTargetsV79 read_sequence16_mg_source_targets_v79(
     throw std::runtime_error("sequence-16 source thermal budget row is missing");
 }
 
-struct Sequence16MgLedgerGateV79 {
+struct Sequence16MgSolveRowV80 {
+    int compact_row = 0;
+    int ion = 0;
+    int ion_charge = 0;
+    bool normalization = false;
+    double initial = 0.0;
+    double outer = 0.0;
+    double after_condensed = 0.0;
+    double fixed_before = 0.0;
+    double fixed_after = 0.0;
+    double final_population = 0.0;
+};
+
+std::map<int,Sequence16MgSolveRowV80> read_sequence16_source_solve_rows_v80(
+    const std::filesystem::path& path) {
+    const auto rows = read_csv_rows_v1716(path);
+    std::map<int,Sequence16MgSolveRowV80> out;
+    for (const auto& row : rows) {
+        if (std::stoi(row.at("sequence")) != 16 || std::stoi(row.at("element_z")) != 12) continue;
+        Sequence16MgSolveRowV80 item;
+        item.compact_row = std::stoi(row.at("compact_row"));
+        item.ion = std::stoi(row.at("ion"));
+        item.ion_charge = std::stoi(row.at("ion_charge"));
+        item.normalization = std::stoi(row.at("is_normalization_row")) != 0;
+        item.initial = parse_thermal_binary64_v79(row.at("transformed_initial_population"));
+        item.outer = parse_thermal_binary64_v79(row.at("final_outer_start_population"));
+        item.after_condensed = parse_thermal_binary64_v79(row.at("population_after_condensed"));
+        item.fixed_before = parse_thermal_binary64_v79(row.at("final_fixed_point_population_before"));
+        item.fixed_after = parse_thermal_binary64_v79(row.at("final_fixed_point_population_after"));
+        item.final_population = parse_thermal_binary64_v79(row.at("final_population"));
+        if (!out.emplace(item.compact_row, item).second) {
+            throw std::runtime_error("duplicate sequence-16 source Mg compact row");
+        }
+    }
+    if (out.size() != 552u) {
+        throw std::runtime_error("sequence-16 exact source Mg solve inventory is not 552 rows");
+    }
+    return out;
+}
+
+std::map<int,Sequence16MgSolveRowV80> read_sequence16_native_solve_rows_v80(
+    const std::filesystem::path& path) {
+    const auto rows = read_csv_rows_v1716(path);
+    std::map<int,Sequence16MgSolveRowV80> out;
+    for (const auto& row : rows) {
+        if (std::stoi(row.at("element_z")) != 12) continue;
+        Sequence16MgSolveRowV80 item;
+        item.compact_row = std::stoi(row.at("compact_row"));
+        item.ion = std::stoi(row.at("ion"));
+        item.ion_charge = std::stoi(row.at("ion_charge"));
+        item.normalization = std::stoi(row.at("is_normalization_row")) != 0;
+        item.initial = parse_thermal_binary64_v79(row.at("initial_population"));
+        item.outer = parse_thermal_binary64_v79(row.at("final_outer_start_population"));
+        item.final_population = parse_thermal_binary64_v79(row.at("final_population"));
+        if (!out.emplace(item.compact_row, item).second) {
+            throw std::runtime_error("duplicate sequence-16 native Mg compact row");
+        }
+    }
+    if (out.size() != 552u) {
+        throw std::runtime_error("sequence-16 native Mg solve inventory is not 552 rows");
+    }
+    return out;
+}
+
+struct Sequence16MgLedgerGateV80 {
     std::size_t full_ledger_rows = 0;
     std::size_t mg_canonical_rows = 0;
     std::size_t mg_expanded_rows = 0;
@@ -7040,13 +7104,29 @@ struct Sequence16MgLedgerGateV79 {
     std::string source_value_hash;
     std::array<double,4> native_reconstructed{{0.0,0.0,0.0,0.0}};
     std::array<double,4> source_reconstructed{{0.0,0.0,0.0,0.0}};
+    std::array<double,10> native_ion_totals{{0,0,0,0,0,0,0,0,0,0}};
+    std::array<double,10> source_ion_totals{{0,0,0,0,0,0,0,0,0,0}};
+    double native_charge_ledger = 0.0;
+    double source_charge_ledger = 0.0;
+    std::size_t population_e7_mismatches = 0;
+    std::size_t population_bit_mismatches = 0;
+    std::size_t operand_population_bit_mismatches = 0;
+    std::size_t unweighted_bit_mismatches = 0;
+    std::size_t running_sum_bit_mismatches = 0;
+    std::size_t weighted_bit_mismatches = 0;
+    int first_population_mismatch_row = 0;
+    std::string first_solve_phase_mismatch;
+    int first_solve_phase_mismatch_row = 0;
     bool row_count_ok = false;
-    bool identity_hash_ok = false;
-    bool order_hash_ok = false;
-    bool value_hash_ok = false;
+    bool identity_hash_match = false;
+    bool order_hash_match = false;
+    bool value_hash_match = false;
+    bool populations_e7_ok = false;
+    bool ion_totals_e7_ok = false;
+    bool charge_ledger_e7_ok = false;
 };
 
-struct MgLedgerEntryV79 {
+struct MgLedgerEntryV80 {
     std::int64_t source_order_index = 0;
     std::int64_t source_position = 0;
     std::int64_t record = 0;
@@ -7059,19 +7139,20 @@ struct MgLedgerEntryV79 {
     std::string source_role;
     double native_coefficient = 0.0;
     double source_coefficient = 0.0;
-    double population = 0.0;
+    double native_population = 0.0;
+    double source_population = 0.0;
     double abundance = 0.0;
     bool primary = false;
     bool deferred_primary = false;
 };
 
-std::string thermal_role_v79(bool primary, double coefficient) {
+std::string thermal_role_v80(bool primary, double coefficient) {
     if (coefficient > 0.0) return primary ? "primary_cooling" : "secondary_cooling";
     if (coefficient < 0.0) return primary ? "primary_heating" : "secondary_heating";
     return primary ? "primary_zero" : "secondary_zero";
 }
 
-std::size_t channel_index_v79(const std::string& role) {
+std::size_t channel_index_v80(const std::string& role) {
     if (role == "primary_heating") return 0u;
     if (role == "primary_cooling") return 1u;
     if (role == "secondary_heating") return 2u;
@@ -7079,39 +7160,44 @@ std::size_t channel_index_v79(const std::string& role) {
     return 4u;
 }
 
-Sequence16MgLedgerGateV79 build_sequence16_mg_ledger_v79(
+Sequence16MgLedgerGateV80 build_sequence16_mg_ledger_v80(
     const std::filesystem::path& thermal_ledger_path,
+    const std::filesystem::path& native_solve_rows_path,
+    const std::filesystem::path& source_solve_stage_rows_path,
     const std::filesystem::path& output_path,
-    std::size_t expected_full_rows,
-    const std::string& expected_full_identity_hash,
-    const std::string& expected_full_order_hash,
-    const std::string& expected_full_values_hash) {
+    std::size_t expected_full_rows) {
     const auto full_gate = compare_sequence1_thermal_ledger_v1712(thermal_ledger_path, 16);
+    const auto native_solve = read_sequence16_native_solve_rows_v80(native_solve_rows_path);
+    const auto source_solve = read_sequence16_source_solve_rows_v80(source_solve_stage_rows_path);
     const auto rows = read_csv_rows_v1716(thermal_ledger_path);
-    std::vector<MgLedgerEntryV79> immediate;
-    std::vector<MgLedgerEntryV79> deferred;
+    std::vector<MgLedgerEntryV80> immediate;
+    std::vector<MgLedgerEntryV80> deferred;
     immediate.reserve(rows.size());
     deferred.reserve(rows.size());
     std::size_t mg_canonical_rows = 0;
     for (const auto& row : rows) {
         if (std::stoi(row.at("element_z")) != 12) continue;
         ++mg_canonical_rows;
+        const int compact_row = std::stoi(row.at("compact_row"));
+        const auto nfind = native_solve.find(compact_row);
+        const auto sfind = source_solve.find(compact_row);
+        if (nfind == native_solve.end() || sfind == source_solve.end()) {
+            throw std::runtime_error("sequence-16 Mg thermal term references unknown compact row");
+        }
         const std::int64_t source_order_index = std::stoll(row.at("source_order_index"));
         const std::int64_t source_position = std::stoll(row.at("source_position"));
         const std::int64_t record = std::stoll(row.at("record"));
         const int rate_type = std::stoi(row.at("rate_type"));
         const int data_type = std::stoi(row.at("data_type"));
         const int ion_stage = std::stoi(row.at("ion_stage"));
-        const int compact_row = std::stoi(row.at("compact_row"));
         const std::int64_t primary_index = std::stoll(row.at("magnesium_primary_cooling_source_order_index"));
         const bool primary_ordered = std::stoi(row.at("magnesium_primary_cooling_source_order_applied")) != 0;
-        const double population = parse_thermal_binary64_v79(row.at("compact_population"));
         const double abundance = parse_thermal_binary64_v79(row.at("abundance"));
         const double native_primary = parse_thermal_binary64_v79(row.at("native_cj"));
         const double source_primary = parse_thermal_binary64_v79(row.at("source_cj"));
         const double secondary = parse_thermal_binary64_v79(row.at("cj2"));
 
-        MgLedgerEntryV79 primary;
+        MgLedgerEntryV80 primary;
         primary.source_order_index = source_order_index;
         primary.source_position = source_position;
         primary.record = record;
@@ -7120,22 +7206,23 @@ Sequence16MgLedgerGateV79 build_sequence16_mg_ledger_v79(
         primary.ion_stage = ion_stage;
         primary.compact_row = compact_row;
         primary.primary_source_order_index = primary_index;
-        primary.native_role = thermal_role_v79(true, native_primary);
-        primary.source_role = thermal_role_v79(true, source_primary);
+        primary.native_role = thermal_role_v80(true, native_primary);
+        primary.source_role = thermal_role_v80(true, source_primary);
         primary.native_coefficient = native_primary;
         primary.source_coefficient = source_primary;
-        primary.population = population;
+        primary.native_population = nfind->second.final_population;
+        primary.source_population = sfind->second.final_population;
         primary.abundance = abundance;
         primary.primary = true;
         primary.deferred_primary = primary_ordered && source_primary > 0.0 && primary_index > 0;
         if (primary.deferred_primary) deferred.push_back(primary);
         else immediate.push_back(primary);
 
-        MgLedgerEntryV79 second = primary;
+        MgLedgerEntryV80 second = primary;
         second.primary = false;
         second.deferred_primary = false;
-        second.native_role = thermal_role_v79(false, secondary);
-        second.source_role = thermal_role_v79(false, secondary);
+        second.native_role = thermal_role_v80(false, secondary);
+        second.source_role = thermal_role_v80(false, secondary);
         second.native_coefficient = secondary;
         second.source_coefficient = secondary;
         immediate.push_back(second);
@@ -7150,42 +7237,46 @@ Sequence16MgLedgerGateV79 build_sequence16_mg_ledger_v79(
         }
         return a.source_order_index < b.source_order_index;
     });
-    std::vector<MgLedgerEntryV79> ordered;
+    std::vector<MgLedgerEntryV80> ordered;
     ordered.reserve(immediate.size() + deferred.size());
-    // Reproduce the reducer's operation order: non-deferred primary and every
-    // secondary term are consumed in canonical term order; deferred Mg primary
-    // cooling is then consumed in its independent source-order stream.
     ordered.insert(ordered.end(), immediate.begin(), immediate.end());
     ordered.insert(ordered.end(), deferred.begin(), deferred.end());
 
     std::filesystem::create_directories(output_path.parent_path());
     std::ofstream out(output_path);
-    if (!out) throw std::runtime_error("cannot create sequence-16 Mg source-order ledger");
-    out << "operation_ordinal,source_order_index,source_position,record,rate_type,data_type,ion_stage,compact_row,thermal_role,native_thermal_role,source_thermal_role,primary_source_order_index,native_coefficient,source_coefficient,population,unweighted_contribution,running_channel_sum,abundance_weighted_contribution,source_unweighted_contribution,source_running_channel_sum,source_abundance_weighted_contribution,abundance\n";
+    if (!out) throw std::runtime_error("cannot create sequence-16 Mg exact source-order ledger");
+    out << "operation_ordinal,source_order_index,source_position,record,rate_type,data_type,ion_stage,compact_row,thermal_role,native_thermal_role,source_thermal_role,primary_source_order_index,native_coefficient,source_coefficient,native_population,source_population,native_unweighted_contribution,native_running_channel_sum,native_abundance_weighted_contribution,source_unweighted_contribution,source_running_channel_sum,source_abundance_weighted_contribution,abundance,native_population_hex,source_population_hex\\n";
     out << std::setprecision(17);
 
+    Sequence16MgLedgerGateV80 gate;
     std::array<double,4> native_running{{0.0,0.0,0.0,0.0}};
     std::array<double,4> source_running{{0.0,0.0,0.0,0.0}};
     std::vector<std::string> native_identity, source_identity, native_order, source_order, native_values, source_values;
     std::size_t ordinal = 0;
     for (const auto& entry : ordered) {
         ++ordinal;
-        const std::size_t nchan = channel_index_v79(entry.native_role);
-        const std::size_t schan = channel_index_v79(entry.source_role);
-        const double native_unweighted = entry.population * std::abs(entry.native_coefficient);
-        const double source_unweighted = entry.population * std::abs(entry.source_coefficient);
+        const std::size_t nchan = channel_index_v80(entry.native_role);
+        const std::size_t schan = channel_index_v80(entry.source_role);
+        const double native_unweighted = entry.native_population * std::abs(entry.native_coefficient);
+        const double source_unweighted = entry.source_population * std::abs(entry.source_coefficient);
         if (nchan < 4u) native_running[nchan] += native_unweighted;
         if (schan < 4u) source_running[schan] += source_unweighted;
         const double native_run = nchan < 4u ? native_running[nchan] : 0.0;
         const double source_run = schan < 4u ? source_running[schan] : 0.0;
         const double native_weighted = native_unweighted * entry.abundance;
         const double source_weighted = source_unweighted * entry.abundance;
+        gate.operand_population_bit_mismatches += !binary64_equal_v79(entry.native_population, entry.source_population);
+        gate.unweighted_bit_mismatches += !binary64_equal_v79(native_unweighted, source_unweighted);
+        gate.running_sum_bit_mismatches += !binary64_equal_v79(native_run, source_run);
+        gate.weighted_bit_mismatches += !binary64_equal_v79(native_weighted, source_weighted);
         out << ordinal << ',' << entry.source_order_index << ',' << entry.source_position << ','
             << entry.record << ',' << entry.rate_type << ',' << entry.data_type << ',' << entry.ion_stage << ','
             << entry.compact_row << ',' << entry.source_role << ',' << entry.native_role << ',' << entry.source_role << ','
             << entry.primary_source_order_index << ',' << entry.native_coefficient << ',' << entry.source_coefficient << ','
-            << entry.population << ',' << native_unweighted << ',' << native_run << ',' << native_weighted << ','
-            << source_unweighted << ',' << source_run << ',' << source_weighted << ',' << entry.abundance << '\n';
+            << entry.native_population << ',' << entry.source_population << ','
+            << native_unweighted << ',' << native_run << ',' << native_weighted << ','
+            << source_unweighted << ',' << source_run << ',' << source_weighted << ',' << entry.abundance << ','
+            << binary64_hex_v79(entry.native_population) << ',' << binary64_hex_v79(entry.source_population) << '\n';
 
         std::ostringstream ni, si, no, so, nv, sv;
         ni << entry.source_position << '|' << entry.record << '|' << entry.rate_type << '|' << entry.data_type << '|'
@@ -7195,10 +7286,10 @@ Sequence16MgLedgerGateV79 build_sequence16_mg_ledger_v79(
         no << ordinal << '|' << entry.source_order_index << '|' << entry.primary_source_order_index << '|' << ni.str();
         so << ordinal << '|' << entry.source_order_index << '|' << entry.primary_source_order_index << '|' << si.str();
         nv << no.str() << '|' << binary64_hex_v79(entry.native_coefficient) << '|'
-           << binary64_hex_v79(entry.population) << '|' << binary64_hex_v79(native_unweighted) << '|'
+           << binary64_hex_v79(entry.native_population) << '|' << binary64_hex_v79(native_unweighted) << '|'
            << binary64_hex_v79(native_run) << '|' << binary64_hex_v79(native_weighted);
         sv << so.str() << '|' << binary64_hex_v79(entry.source_coefficient) << '|'
-           << binary64_hex_v79(entry.population) << '|' << binary64_hex_v79(source_unweighted) << '|'
+           << binary64_hex_v79(entry.source_population) << '|' << binary64_hex_v79(source_unweighted) << '|'
            << binary64_hex_v79(source_run) << '|' << binary64_hex_v79(source_weighted);
         native_identity.push_back(ni.str()); source_identity.push_back(si.str());
         native_order.push_back(no.str()); source_order.push_back(so.str());
@@ -7206,7 +7297,6 @@ Sequence16MgLedgerGateV79 build_sequence16_mg_ledger_v79(
     }
     out.close();
 
-    Sequence16MgLedgerGateV79 gate;
     gate.full_ledger_rows = full_gate.row_count;
     gate.mg_canonical_rows = mg_canonical_rows;
     gate.mg_expanded_rows = ordered.size();
@@ -7221,21 +7311,54 @@ Sequence16MgLedgerGateV79 build_sequence16_mg_ledger_v79(
     gate.source_value_hash = hex64_v1712(fnv1a_lines_v1712(source_values));
     const double mg_abundance = ordered.empty() ? 0.0 : ordered.front().abundance;
     for (std::size_t i = 0; i < 4u; ++i) {
-        // The source reducer applies abundance once after the complete channel
-        // sum, so retain that exact arithmetic boundary here.
         gate.native_reconstructed[i] = native_running[i] * mg_abundance;
         gate.source_reconstructed[i] = source_running[i] * mg_abundance;
     }
+
+    for (int compact_row = 1; compact_row <= 552; ++compact_row) {
+        const auto& n = native_solve.at(compact_row);
+        const auto& src = source_solve.at(compact_row);
+        if (!canonical_e7_equal(n.final_population, src.final_population)) {
+            ++gate.population_e7_mismatches;
+            if (gate.first_population_mismatch_row == 0) gate.first_population_mismatch_row = compact_row;
+        }
+        if (!binary64_equal_v79(n.final_population, src.final_population)) ++gate.population_bit_mismatches;
+        if (gate.first_solve_phase_mismatch.empty()) {
+            if (!binary64_equal_v79(n.initial, src.initial)) {
+                gate.first_solve_phase_mismatch = "transformed_initial_population";
+                gate.first_solve_phase_mismatch_row = compact_row;
+            } else if (!binary64_equal_v79(n.outer, src.outer)) {
+                gate.first_solve_phase_mismatch = "final_outer_start_population";
+                gate.first_solve_phase_mismatch_row = compact_row;
+            } else if (!binary64_equal_v79(n.final_population, src.final_population)) {
+                gate.first_solve_phase_mismatch = "final_population";
+                gate.first_solve_phase_mismatch_row = compact_row;
+            }
+        }
+        if (!n.normalization) {
+            const int slot = n.ion - 1;
+            const int sslot = src.ion - 1;
+            if (slot >= 0 && slot < 10) gate.native_ion_totals[static_cast<std::size_t>(slot)] += n.final_population;
+            if (sslot >= 0 && sslot < 10) gate.source_ion_totals[static_cast<std::size_t>(sslot)] += src.final_population;
+            gate.native_charge_ledger += static_cast<double>(n.ion_charge) * n.final_population * mg_abundance;
+            gate.source_charge_ledger += static_cast<double>(src.ion_charge) * src.final_population * mg_abundance;
+        }
+    }
     gate.row_count_ok = gate.full_ledger_rows == expected_full_rows && gate.mg_canonical_rows > 0u &&
         gate.mg_expanded_rows == 2u * gate.mg_canonical_rows;
-    gate.identity_hash_ok = gate.full_identity_hash == expected_full_identity_hash &&
-        gate.native_identity_hash == gate.source_identity_hash;
-    gate.order_hash_ok = gate.full_order_hash == expected_full_order_hash &&
-        gate.native_order_hash == gate.source_order_hash;
-    gate.value_hash_ok = gate.full_values_hash == expected_full_values_hash &&
-        gate.native_value_hash == gate.source_value_hash;
+    gate.identity_hash_match = gate.native_identity_hash == gate.source_identity_hash;
+    gate.order_hash_match = gate.native_order_hash == gate.source_order_hash;
+    gate.value_hash_match = gate.native_value_hash == gate.source_value_hash;
+    gate.populations_e7_ok = gate.population_e7_mismatches == 0u;
+    gate.ion_totals_e7_ok = true;
+    for (std::size_t i = 0; i < gate.native_ion_totals.size(); ++i) {
+        gate.ion_totals_e7_ok = gate.ion_totals_e7_ok &&
+            canonical_e7_equal(gate.native_ion_totals[i], gate.source_ion_totals[i]);
+    }
+    gate.charge_ledger_e7_ok = canonical_e7_equal(gate.native_charge_ledger, gate.source_charge_ledger);
     return gate;
 }
+
 
 struct SequencePopulationHashGateV1716 {
     std::size_t row_count = 0;
@@ -9506,6 +9629,7 @@ struct StandaloneControllerDataV67 {
     SourcePopulationCompactV1724 source_population_compact_v1724;
     std::filesystem::path sequence16_diagnostic_dir;
     std::filesystem::path sequence16_source_thermal_budget;
+    std::filesystem::path sequence16_source_solve_stage_rows;
     std::filesystem::path sequence16_thermal_population_closure_dir;
     std::vector<FixedDsecSnapshot> snapshots;
     FixedDsecSnapshot last_iteration;
@@ -9905,7 +10029,7 @@ int standalone_iteration_evaluator_v67(
         const auto evaluation_started_v70 = std::chrono::steady_clock::now();
         FixedDsecSnapshot snapshot = make_iteration_snapshot_v67(*data, *trial);
         if (std::getenv("XSTAR_V72_PROBE_PROGRESS")) {
-            std::cerr << "V048746255172579_EVALUATION_BEGIN=" << snapshot.sequence
+            std::cerr << "V048746255172580_EVALUATION_BEGIN=" << snapshot.sequence
                       << " CALL=" << snapshot.call_index
                       << " EVAL=" << snapshot.evaluation_index
                       << " T4=" << std::setprecision(17) << snapshot.temperature_t4
@@ -9940,19 +10064,12 @@ int standalone_iteration_evaluator_v67(
         if (sequence2_qualification || sequence16_qualification) {
             ::setenv("XSTAR_QUALIFICATION_SOURCE_SEQUENCE", sequence.c_str(), 1);
         }
-        if (sequence16_qualification) {
-            const std::string closure_dir = data->sequence16_thermal_population_closure_dir.string();
-            if (::setenv("XSTAR_QUALIFICATION_REPLACEMENT", "1", 1) != 0 ||
-                ::setenv("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE", "1", 1) != 0 ||
-                ::setenv("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE_DIR", closure_dir.c_str(), 1) != 0 ||
-                ::setenv("XSTAR_QUALIFICATION_MG_THERMAL_SOURCE_POPULATION_CONSUMPTION", "1", 1) != 0) {
-                throw std::runtime_error("cannot bind sequence-16 Mg thermal-consumption closure");
-            }
-        } else {
-            ::unsetenv("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE");
-            ::unsetenv("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE_DIR");
-            ::unsetenv("XSTAR_QUALIFICATION_MG_THERMAL_SOURCE_POPULATION_CONSUMPTION");
-        }
+        // v80: sequence 16 must remain genuinely native.  The exact v0.6.47.2
+        // solve-stage capture is comparison-only and is never bound as a Thermal
+        // population closure or controller input.
+        ::unsetenv("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE");
+        ::unsetenv("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE_DIR");
+        ::unsetenv("XSTAR_QUALIFICATION_MG_THERMAL_SOURCE_POPULATION_CONSUMPTION");
         snapshot.source_global_rnisg = data->global_rnisg;
         const int rc = xstar_fixed_state_run_with_source_workspaces_v1(
             data->fixed_context, &input, &output, &source, &data->cumulative_stats,
@@ -10006,8 +10123,8 @@ int standalone_iteration_evaluator_v67(
                        << snapshot.helium_heating << ',' << snapshot.helium_cooling << ','
                        << snapshot.helium_heating2 << ',' << snapshot.helium_cooling2 << '\n';
             state_file.close();
-            std::cout << "V048746255172579_SEQUENCE2_HE_DIAGNOSTICS=CAPTURED\n"
-                      << "V048746255172579_SEQUENCE2_HE_DIAGNOSTIC_DIR=" << diagnostic_root.string() << "\n";
+            std::cout << "V048746255172580_SEQUENCE2_HE_DIAGNOSTICS=CAPTURED\n"
+                      << "V048746255172580_SEQUENCE2_HE_DIAGNOSTIC_DIR=" << diagnostic_root.string() << "\n";
         }
         if (sequence16_qualification) {
             const auto& diagnostic_root = data->sequence16_diagnostic_dir;
@@ -10030,113 +10147,147 @@ int standalone_iteration_evaluator_v67(
                 throw std::runtime_error(std::string("sequence-16 Mg thermal-budget capture failed: ") +
                     diagnostic_message.data());
             }
+
             const auto raw_ledger_path = diagnostic_root / "evaluation_0016_thermal_diagonal_ledger.csv";
+            const auto native_solve_rows_path = diagnostic_root / "evaluation_0016_all_element_solve_rows.csv";
             const auto mg_ledger_path = diagnostic_root / "sequence16_mg_source_order_ledger.csv";
-            Sequence16MgLedgerGateV79 ledger_gate;
+            Sequence16MgLedgerGateV80 ledger_gate;
             try {
-                ledger_gate = build_sequence16_mg_ledger_v79(
-                    raw_ledger_path, mg_ledger_path,
-                    data->sequence16_contract.thermal_ledger_rows,
-                    data->sequence16_contract.ledger_identity_hash,
-                    data->sequence16_contract.ledger_order_hash,
-                    data->sequence16_contract.ledger_values_hash);
+                ledger_gate = build_sequence16_mg_ledger_v80(
+                    raw_ledger_path, native_solve_rows_path,
+                    data->sequence16_source_solve_stage_rows, mg_ledger_path,
+                    data->sequence16_contract.thermal_ledger_rows);
             } catch (const std::exception& exc) {
-                throw std::runtime_error(std::string("sequence-16 Mg ledger construction failed: ") + exc.what());
+                throw std::runtime_error(std::string("sequence-16 Mg exact source-state ledger construction failed: ") + exc.what());
             }
-            Sequence16MgSourceTargetsV79 source;
+
+            Sequence16MgSourceTargetsV79 contract_source;
             try {
-                source = read_sequence16_mg_source_targets_v79(data->sequence16_source_thermal_budget);
+                contract_source = read_sequence16_mg_source_targets_v79(data->sequence16_source_thermal_budget);
             } catch (const std::exception& exc) {
                 throw std::runtime_error(std::string("sequence-16 source-target load failed: ") + exc.what());
             }
-            const bool heating_ok = binary64_equal_v79(snapshot.magnesium_heating, source.heating);
-            const bool cooling_ok = binary64_equal_v79(snapshot.magnesium_cooling, source.cooling);
-            const bool heating2_ok = binary64_equal_v79(snapshot.magnesium_heating2, source.heating2);
-            const bool cooling2_ok = binary64_equal_v79(snapshot.magnesium_cooling2, source.cooling2);
-            const bool hmctot_ok = canonical_e7_equal(snapshot.hmctot, source.hmctot);
-            const bool elcter_ok = canonical_e7_equal(snapshot.charge_residual, source.elcter);
-            const bool accepted = ledger_gate.row_count_ok && ledger_gate.identity_hash_ok &&
-                ledger_gate.order_hash_ok && ledger_gate.value_hash_ok &&
+
+            const bool population_operands_ok = ledger_gate.operand_population_bit_mismatches == 0u;
+            const bool unweighted_ok = ledger_gate.unweighted_bit_mismatches == 0u;
+            const bool running_sums_ok = ledger_gate.running_sum_bit_mismatches == 0u;
+            const bool weighted_ok = ledger_gate.weighted_bit_mismatches == 0u;
+            const bool heating_ok = binary64_equal_v79(snapshot.magnesium_heating, ledger_gate.source_reconstructed[0]);
+            const bool cooling_ok = binary64_equal_v79(snapshot.magnesium_cooling, ledger_gate.source_reconstructed[1]);
+            const bool heating2_ok = binary64_equal_v79(snapshot.magnesium_heating2, ledger_gate.source_reconstructed[2]);
+            const bool cooling2_ok = binary64_equal_v79(snapshot.magnesium_cooling2, ledger_gate.source_reconstructed[3]);
+            const bool source_heating_contract_ok = binary64_equal_v79(ledger_gate.source_reconstructed[0], contract_source.heating);
+            const bool source_cooling_contract_ok = binary64_equal_v79(ledger_gate.source_reconstructed[1], contract_source.cooling);
+            const bool source_heating2_contract_ok = binary64_equal_v79(ledger_gate.source_reconstructed[2], contract_source.heating2);
+            const bool source_cooling2_contract_ok = binary64_equal_v79(ledger_gate.source_reconstructed[3], contract_source.cooling2);
+            const bool hmctot_ok = canonical_e7_equal(snapshot.hmctot, contract_source.hmctot);
+            const bool elcter_ok = canonical_e7_equal(snapshot.charge_residual, contract_source.elcter);
+            const bool accepted = ledger_gate.row_count_ok && ledger_gate.identity_hash_match &&
+                ledger_gate.order_hash_match && ledger_gate.value_hash_match &&
+                ledger_gate.populations_e7_ok && ledger_gate.ion_totals_e7_ok && ledger_gate.charge_ledger_e7_ok &&
+                population_operands_ok && unweighted_ok && running_sums_ok && weighted_ok &&
                 heating_ok && cooling_ok && heating2_ok && cooling2_ok && hmctot_ok && elcter_ok;
 
             std::ofstream summary(diagnostic_root / "sequence16_mg_precommit_gate.json");
             if (!summary) throw std::runtime_error("cannot create sequence-16 Mg precommit gate JSON");
             summary << std::setprecision(17)
-                    << "{\n  \"schema\": \"xstar-tools-v048746255172579-sequence16-mg-source-order-ledger-gate-v1\",\n"
+                    << "{\n  \"schema\": \"xstar-tools-v048746255172580-sequence16-mg-exact-source-state-gate-v1\",\n"
                     << "  \"sequence\": 16,\n"
                     << "  \"commit_permitted\": " << (accepted ? "true" : "false") << ",\n"
                     << "  \"full_ledger_rows\": " << ledger_gate.full_ledger_rows << ",\n"
                     << "  \"mg_canonical_rows\": " << ledger_gate.mg_canonical_rows << ",\n"
                     << "  \"mg_expanded_rows\": " << ledger_gate.mg_expanded_rows << ",\n"
-                    << "  \"full_identity_hash\": \"" << ledger_gate.full_identity_hash << "\",\n"
-                    << "  \"expected_full_identity_hash\": \"" << data->sequence16_contract.ledger_identity_hash << "\",\n"
-                    << "  \"full_order_hash\": \"" << ledger_gate.full_order_hash << "\",\n"
-                    << "  \"expected_full_order_hash\": \"" << data->sequence16_contract.ledger_order_hash << "\",\n"
-                    << "  \"full_value_hash\": \"" << ledger_gate.full_values_hash << "\",\n"
-                    << "  \"expected_full_value_hash\": \"" << data->sequence16_contract.ledger_values_hash << "\",\n"
                     << "  \"native_identity_hash\": \"" << ledger_gate.native_identity_hash << "\",\n"
                     << "  \"source_identity_hash\": \"" << ledger_gate.source_identity_hash << "\",\n"
                     << "  \"native_order_hash\": \"" << ledger_gate.native_order_hash << "\",\n"
                     << "  \"source_order_hash\": \"" << ledger_gate.source_order_hash << "\",\n"
                     << "  \"native_value_hash\": \"" << ledger_gate.native_value_hash << "\",\n"
                     << "  \"source_value_hash\": \"" << ledger_gate.source_value_hash << "\",\n"
+                    << "  \"population_e7_mismatches\": " << ledger_gate.population_e7_mismatches << ",\n"
+                    << "  \"population_bit_mismatches\": " << ledger_gate.population_bit_mismatches << ",\n"
+                    << "  \"operand_population_bit_mismatches\": " << ledger_gate.operand_population_bit_mismatches << ",\n"
+                    << "  \"unweighted_bit_mismatches\": " << ledger_gate.unweighted_bit_mismatches << ",\n"
+                    << "  \"running_sum_bit_mismatches\": " << ledger_gate.running_sum_bit_mismatches << ",\n"
+                    << "  \"weighted_bit_mismatches\": " << ledger_gate.weighted_bit_mismatches << ",\n"
+                    << "  \"first_population_mismatch_row\": " << ledger_gate.first_population_mismatch_row << ",\n"
+                    << "  \"first_solve_phase_mismatch\": \"" << ledger_gate.first_solve_phase_mismatch << "\",\n"
+                    << "  \"first_solve_phase_mismatch_row\": " << ledger_gate.first_solve_phase_mismatch_row << ",\n"
                     << "  \"native_mg_heating\": " << snapshot.magnesium_heating << ",\n"
-                    << "  \"source_mg_heating\": " << source.heating << ",\n"
+                    << "  \"source_replayed_mg_heating\": " << ledger_gate.source_reconstructed[0] << ",\n"
                     << "  \"native_mg_cooling\": " << snapshot.magnesium_cooling << ",\n"
-                    << "  \"source_mg_cooling\": " << source.cooling << ",\n"
+                    << "  \"source_replayed_mg_cooling\": " << ledger_gate.source_reconstructed[1] << ",\n"
                     << "  \"native_mg_heating2\": " << snapshot.magnesium_heating2 << ",\n"
-                    << "  \"source_mg_heating2\": " << source.heating2 << ",\n"
+                    << "  \"source_replayed_mg_heating2\": " << ledger_gate.source_reconstructed[2] << ",\n"
                     << "  \"native_mg_cooling2\": " << snapshot.magnesium_cooling2 << ",\n"
-                    << "  \"source_mg_cooling2\": " << source.cooling2 << ",\n"
+                    << "  \"source_replayed_mg_cooling2\": " << ledger_gate.source_reconstructed[3] << ",\n"
+                    << "  \"native_charge_ledger\": " << ledger_gate.native_charge_ledger << ",\n"
+                    << "  \"source_charge_ledger\": " << ledger_gate.source_charge_ledger << ",\n"
                     << "  \"native_hmctot\": " << snapshot.hmctot << ",\n"
-                    << "  \"source_hmctot\": " << source.hmctot << ",\n"
+                    << "  \"source_hmctot\": " << contract_source.hmctot << ",\n"
                     << "  \"native_elcter\": " << snapshot.charge_residual << ",\n"
-                    << "  \"source_elcter\": " << source.elcter << "\n}\n";
+                    << "  \"source_elcter\": " << contract_source.elcter << "\n}\n";
             summary.close();
 
             std::cout << std::setprecision(17)
-                      << "V048746255172579_SEQUENCE16_MG_LEDGER_FULL_ROWS=" << ledger_gate.full_ledger_rows << "\n"
-                      << "V048746255172579_SEQUENCE16_MG_LEDGER_CANONICAL_ROWS=" << ledger_gate.mg_canonical_rows << "\n"
-                      << "V048746255172579_SEQUENCE16_MG_LEDGER_EXPANDED_ROWS=" << ledger_gate.mg_expanded_rows << "\n"
-                      << "V048746255172579_SEQUENCE16_MG_LEDGER_NATIVE_IDENTITY_HASH=" << ledger_gate.native_identity_hash << "\n"
-                      << "V048746255172579_SEQUENCE16_MG_LEDGER_SOURCE_IDENTITY_HASH=" << ledger_gate.source_identity_hash << "\n"
-                      << "V048746255172579_SEQUENCE16_MG_LEDGER_NATIVE_ORDER_HASH=" << ledger_gate.native_order_hash << "\n"
-                      << "V048746255172579_SEQUENCE16_MG_LEDGER_SOURCE_ORDER_HASH=" << ledger_gate.source_order_hash << "\n"
-                      << "V048746255172579_SEQUENCE16_MG_LEDGER_NATIVE_VALUE_HASH=" << ledger_gate.native_value_hash << "\n"
-                      << "V048746255172579_SEQUENCE16_MG_LEDGER_SOURCE_VALUE_HASH=" << ledger_gate.source_value_hash << "\n"
-                      << "V048746255172579_SEQUENCE16_MG_PRIMARY_HEATING_SOURCE=" << source.heating << "\n"
-                      << "V048746255172579_SEQUENCE16_MG_PRIMARY_HEATING_NATIVE=" << snapshot.magnesium_heating << "\n"
-                      << "V048746255172579_SEQUENCE16_MG_PRIMARY_COOLING_SOURCE=" << source.cooling << "\n"
-                      << "V048746255172579_SEQUENCE16_MG_PRIMARY_COOLING_NATIVE=" << snapshot.magnesium_cooling << "\n"
-                      << "V048746255172579_SEQUENCE16_MG_SECONDARY_HEATING_SOURCE=" << source.heating2 << "\n"
-                      << "V048746255172579_SEQUENCE16_MG_SECONDARY_HEATING_NATIVE=" << snapshot.magnesium_heating2 << "\n"
-                      << "V048746255172579_SEQUENCE16_MG_SECONDARY_COOLING_SOURCE=" << source.cooling2 << "\n"
-                      << "V048746255172579_SEQUENCE16_MG_SECONDARY_COOLING_NATIVE=" << snapshot.magnesium_cooling2 << "\n"
-                      << "V048746255172579_SEQUENCE16_HMCTOT_SOURCE=" << source.hmctot << "\n"
-                      << "V048746255172579_SEQUENCE16_HMCTOT_NATIVE=" << snapshot.hmctot << "\n"
-                      << "V048746255172579_SEQUENCE16_ELCTER_SOURCE=" << source.elcter << "\n"
-                      << "V048746255172579_SEQUENCE16_ELCTER_NATIVE=" << snapshot.charge_residual << "\n"
-                      << "V048746255172579_SEQUENCE16_MG_LEDGER_ROW_COUNT=" << (ledger_gate.row_count_ok ? "ACCEPT" : "REJECT") << "\n"
-                      << "V048746255172579_SEQUENCE16_MG_LEDGER_IDENTITY_HASH=" << (ledger_gate.identity_hash_ok ? "ACCEPT" : "REJECT") << "\n"
-                      << "V048746255172579_SEQUENCE16_MG_LEDGER_ORDER_HASH=" << (ledger_gate.order_hash_ok ? "ACCEPT" : "REJECT") << "\n"
-                      << "V048746255172579_SEQUENCE16_MG_LEDGER_VALUE_HASH=" << (ledger_gate.value_hash_ok ? "ACCEPT" : "REJECT") << "\n"
-                      << "V048746255172579_SEQUENCE16_MG_PRIMARY_HEATING_BINARY64=" << (heating_ok ? "ACCEPT" : "REJECT") << "\n"
-                      << "V048746255172579_SEQUENCE16_MG_PRIMARY_COOLING_BINARY64=" << (cooling_ok ? "ACCEPT" : "REJECT") << "\n"
-                      << "V048746255172579_SEQUENCE16_MG_SECONDARY_HEATING_BINARY64=" << (heating2_ok ? "ACCEPT" : "REJECT") << "\n"
-                      << "V048746255172579_SEQUENCE16_MG_SECONDARY_COOLING_BINARY64=" << (cooling2_ok ? "ACCEPT" : "REJECT") << "\n"
-                      << "V048746255172579_SEQUENCE16_HMCTOT_IEEE_E7=" << (hmctot_ok ? "ACCEPT" : "REJECT") << "\n"
-                      << "V048746255172579_SEQUENCE16_ELCTER_IEEE_E7=" << (elcter_ok ? "ACCEPT" : "REJECT") << "\n";
+                      << "V048746255172580_SEQUENCE16_MG_LEDGER_FULL_ROWS=" << ledger_gate.full_ledger_rows << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_LEDGER_CANONICAL_ROWS=" << ledger_gate.mg_canonical_rows << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_LEDGER_EXPANDED_ROWS=" << ledger_gate.mg_expanded_rows << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_LEDGER_NATIVE_IDENTITY_HASH=" << ledger_gate.native_identity_hash << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_LEDGER_SOURCE_IDENTITY_HASH=" << ledger_gate.source_identity_hash << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_LEDGER_NATIVE_ORDER_HASH=" << ledger_gate.native_order_hash << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_LEDGER_SOURCE_ORDER_HASH=" << ledger_gate.source_order_hash << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_LEDGER_NATIVE_VALUE_HASH=" << ledger_gate.native_value_hash << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_LEDGER_SOURCE_VALUE_HASH=" << ledger_gate.source_value_hash << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_POPULATION_E7_MISMATCHES=" << ledger_gate.population_e7_mismatches << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_POPULATION_BIT_MISMATCHES=" << ledger_gate.population_bit_mismatches << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_OPERAND_POPULATION_BIT_MISMATCHES=" << ledger_gate.operand_population_bit_mismatches << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_UNWEIGHTED_BIT_MISMATCHES=" << ledger_gate.unweighted_bit_mismatches << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_RUNNING_SUM_BIT_MISMATCHES=" << ledger_gate.running_sum_bit_mismatches << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_WEIGHTED_BIT_MISMATCHES=" << ledger_gate.weighted_bit_mismatches << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_FIRST_POPULATION_MISMATCH_ROW=" << ledger_gate.first_population_mismatch_row << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_FIRST_SOLVE_PHASE_MISMATCH=" << (ledger_gate.first_solve_phase_mismatch.empty() ? "NONE" : ledger_gate.first_solve_phase_mismatch) << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_FIRST_SOLVE_PHASE_MISMATCH_ROW=" << ledger_gate.first_solve_phase_mismatch_row << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_PRIMARY_HEATING_SOURCE=" << ledger_gate.source_reconstructed[0] << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_PRIMARY_HEATING_NATIVE=" << snapshot.magnesium_heating << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_PRIMARY_COOLING_SOURCE=" << ledger_gate.source_reconstructed[1] << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_PRIMARY_COOLING_NATIVE=" << snapshot.magnesium_cooling << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_SECONDARY_HEATING_SOURCE=" << ledger_gate.source_reconstructed[2] << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_SECONDARY_HEATING_NATIVE=" << snapshot.magnesium_heating2 << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_SECONDARY_COOLING_SOURCE=" << ledger_gate.source_reconstructed[3] << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_SECONDARY_COOLING_NATIVE=" << snapshot.magnesium_cooling2 << "\n"
+                      << "V048746255172580_SEQUENCE16_HMCTOT_SOURCE=" << contract_source.hmctot << "\n"
+                      << "V048746255172580_SEQUENCE16_HMCTOT_NATIVE=" << snapshot.hmctot << "\n"
+                      << "V048746255172580_SEQUENCE16_ELCTER_SOURCE=" << contract_source.elcter << "\n"
+                      << "V048746255172580_SEQUENCE16_ELCTER_NATIVE=" << snapshot.charge_residual << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_LEDGER_ROW_COUNT=" << (ledger_gate.row_count_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_LEDGER_IDENTITY_HASH_MATCH=" << (ledger_gate.identity_hash_match ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_LEDGER_ORDER_HASH_MATCH=" << (ledger_gate.order_hash_match ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_LEDGER_VALUE_HASH_MATCH=" << (ledger_gate.value_hash_match ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_POPULATIONS_IEEE_E7=" << (ledger_gate.populations_e7_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_ION_TOTALS_IEEE_E7=" << (ledger_gate.ion_totals_e7_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_CHARGE_LEDGER_IEEE_E7=" << (ledger_gate.charge_ledger_e7_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_POPULATION_OPERANDS_BINARY64=" << (population_operands_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_UNWEIGHTED_CONTRIBUTIONS_BINARY64=" << (unweighted_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_RUNNING_SUMS_BINARY64=" << (running_sums_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_ABUNDANCE_WEIGHTED_CONTRIBUTIONS_BINARY64=" << (weighted_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_PRIMARY_HEATING_BINARY64=" << (heating_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_PRIMARY_COOLING_BINARY64=" << (cooling_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_SECONDARY_HEATING_BINARY64=" << (heating2_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_SECONDARY_COOLING_BINARY64=" << (cooling2_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_SOURCE_REPLAY_PRIMARY_HEATING_CONTRACT_BINARY64=" << (source_heating_contract_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_SOURCE_REPLAY_PRIMARY_COOLING_CONTRACT_BINARY64=" << (source_cooling_contract_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_SOURCE_REPLAY_SECONDARY_HEATING_CONTRACT_BINARY64=" << (source_heating2_contract_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172580_SEQUENCE16_MG_SOURCE_REPLAY_SECONDARY_COOLING_CONTRACT_BINARY64=" << (source_cooling2_contract_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172580_SEQUENCE16_HMCTOT_IEEE_E7=" << (hmctot_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172580_SEQUENCE16_ELCTER_IEEE_E7=" << (elcter_ok ? "ACCEPT" : "REJECT") << "\n";
             if (!accepted) {
-                std::cout << "V048746255172579_SEQUENCE16_COMMIT=BLOCKED\n"
-                          << "V048746255172579_COMPLETE_61_EVENT_TRAJECTORY_IEEE_E7=NOT_RUN_SEQUENCE16_PRECOMMIT_GATE\n";
-                set_callback_error(error, error_size, "V79_SEQUENCE16_MG_PRECOMMIT_GATE_REJECT");
-                return 79;
+                std::cout << "V048746255172580_SEQUENCE16_COMMIT=BLOCKED\n"
+                          << "V048746255172580_COMPLETE_61_EVENT_TRAJECTORY_IEEE_E7=NOT_RUN_SEQUENCE16_PRECOMMIT_GATE\n";
+                set_callback_error(error, error_size, "V80_SEQUENCE16_MG_PRECOMMIT_GATE_REJECT");
+                return 80;
             }
             data->sequence16_precommit_gate_passed = true;
-            std::cout << "V048746255172579_SEQUENCE16_COMMIT=ACCEPT\n";
-            ::unsetenv("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE");
-            ::unsetenv("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE_DIR");
-            ::unsetenv("XSTAR_QUALIFICATION_MG_THERMAL_SOURCE_POPULATION_CONSUMPTION");
+            std::cout << "V048746255172580_SEQUENCE16_COMMIT=ACCEPT\n";
         }
         update_global_populations_v67(*data, snapshot.populations, &snapshot.lte_populations);
         if (data->retain_prefix_diagnostics && snapshot.sequence <= 8u) {
@@ -10156,13 +10307,13 @@ int standalone_iteration_evaluator_v67(
         if (std::getenv("XSTAR_V72_PROBE_PROGRESS")) {
             const double elapsed_v70 = std::chrono::duration<double>(
                 std::chrono::steady_clock::now() - evaluation_started_v70).count();
-            std::cerr << "V048746255172579_EVALUATION_END=" << data->last_iteration.sequence
+            std::cerr << "V048746255172580_EVALUATION_END=" << data->last_iteration.sequence
                       << " SECONDS=" << std::fixed << std::setprecision(6) << elapsed_v70
                       << " HMCTOT=" << std::setprecision(17) << output.hmctot
                       << " ELCTER=" << output.elcter << "\n" << std::flush;
         }
         if (sequence2_qualification && std::getenv("XSTAR_V77_SEQUENCE2_STOP_BEFORE_PRODUCTS")) {
-            std::cout << "V048746255172579_SEQUENCE2_PREPRODUCT_STOP=ACCEPT\n";
+            std::cout << "V048746255172580_SEQUENCE2_PREPRODUCT_STOP=ACCEPT\n";
             set_callback_error(error, error_size, "V77_SEQUENCE2_PREPRODUCT_STOP");
             return 76;
         }
@@ -10777,10 +10928,13 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             if (!std::filesystem::is_regular_file(data.sequence16_source_thermal_budget)) {
                 throw std::runtime_error("sequence-16 source thermal budget is missing");
             }
-            if (!std::filesystem::is_regular_file(
-                    data.sequence16_thermal_population_closure_dir /
-                    "sequence_0016_thermal_compact_populations.csv")) {
-                throw std::runtime_error("sequence-16 Mg thermal-consumption population closure is missing");
+            const char* source_solve_rows = std::getenv("XSTAR_V80_SEQUENCE16_SOURCE_SOLVE_STAGE_ROWS");
+            if (!source_solve_rows || !*source_solve_rows) {
+                throw std::runtime_error("XSTAR_V80_SEQUENCE16_SOURCE_SOLVE_STAGE_ROWS is required");
+            }
+            data.sequence16_source_solve_stage_rows = std::filesystem::path(source_solve_rows);
+            if (!std::filesystem::is_regular_file(data.sequence16_source_solve_stage_rows)) {
+                throw std::runtime_error("sequence-16 exact v0.6.47.2 solve-stage rows are missing");
             }
             data.sequence16_precommit_gate_configured = true;
         }
@@ -10825,11 +10979,11 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         if (rc != 0) {
             throw std::runtime_error(std::string("initial line-tau state failed: ") + message.data());
         }
-        std::cout << "V048746255172579_MAXIMUM_RECORD_CONTINUUM_INDEX=" << maximum_continuum_index << "\n"
-                  << "V048746255172579_PROGRAM_NATIVE_CONTINUUM_COUNT=" << info.native_continuum_count << "\n"
-                  << "V048746255172579_CONTINUUM_GRID_BINS=" << data.energy.size() << "\n"
-                  << "V048746255172579_CONTINUUM_TAU_CAPACITY=" << continuum_tau_capacity << "\n"
-                  << "V048746255172579_CONTINUUM_TAU_DOMAIN_GATE=ACCEPT\n";
+        std::cout << "V048746255172580_MAXIMUM_RECORD_CONTINUUM_INDEX=" << maximum_continuum_index << "\n"
+                  << "V048746255172580_PROGRAM_NATIVE_CONTINUUM_COUNT=" << info.native_continuum_count << "\n"
+                  << "V048746255172580_CONTINUUM_GRID_BINS=" << data.energy.size() << "\n"
+                  << "V048746255172580_CONTINUUM_TAU_CAPACITY=" << continuum_tau_capacity << "\n"
+                  << "V048746255172580_CONTINUUM_TAU_DOMAIN_GATE=ACCEPT\n";
         data.population_global_level_index.reserve(program.rows.size());
         for (const auto& row : program.rows) {
             data.population_global_level_index.push_back(row.global_level_index);
@@ -10963,7 +11117,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                 advance_consecutive_transport_v71(data, finals.back(), segment);
             }
 
-            std::cout << "V048746255172579_CONTROLLER_CALL=" << call
+            std::cout << "V048746255172580_CONTROLLER_CALL=" << call
                       << " DSEC_EVALUATIONS=" << dsec_count
                       << " SOURCE_BOUNDARY_PREFIX=" << (stats.prefix_terminated ? 1 : 0)
                       << " FINAL_SOURCE_SEQUENCE=" << finals.back().sequence
@@ -11019,19 +11173,19 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             }
             const bool trajectory_exact = trajectory_cells == 244u && trajectory_mismatches == 0u;
             std::cout << std::setprecision(17)
-                      << "V048746255172579_REFERENCE_TRAJECTORY_CELLS_COMPARED=" << trajectory_cells << "\n"
-                      << "V048746255172579_REFERENCE_TRAJECTORY_E7_MISMATCH_CELLS=" << trajectory_mismatches << "\n"
-                      << "V048746255172579_REFERENCE_TRAJECTORY_TEMPERATURE_T4_E7_MISMATCH_CELLS=" << temperature_mismatches << "\n"
-                      << "V048746255172579_REFERENCE_TRAJECTORY_ELECTRON_FRACTION_E7_MISMATCH_CELLS=" << electron_mismatches << "\n"
-                      << "V048746255172579_REFERENCE_TRAJECTORY_HMCTOT_E7_MISMATCH_CELLS=" << hmctot_mismatches << "\n"
-                      << "V048746255172579_REFERENCE_TRAJECTORY_ELCTER_E7_MISMATCH_CELLS=" << elcter_mismatches << "\n";
+                      << "V048746255172580_REFERENCE_TRAJECTORY_CELLS_COMPARED=" << trajectory_cells << "\n"
+                      << "V048746255172580_REFERENCE_TRAJECTORY_E7_MISMATCH_CELLS=" << trajectory_mismatches << "\n"
+                      << "V048746255172580_REFERENCE_TRAJECTORY_TEMPERATURE_T4_E7_MISMATCH_CELLS=" << temperature_mismatches << "\n"
+                      << "V048746255172580_REFERENCE_TRAJECTORY_ELECTRON_FRACTION_E7_MISMATCH_CELLS=" << electron_mismatches << "\n"
+                      << "V048746255172580_REFERENCE_TRAJECTORY_HMCTOT_E7_MISMATCH_CELLS=" << hmctot_mismatches << "\n"
+                      << "V048746255172580_REFERENCE_TRAJECTORY_ELCTER_E7_MISMATCH_CELLS=" << elcter_mismatches << "\n";
             if (!trajectory_exact) {
-                std::cout << "V048746255172579_FIRST_TRAJECTORY_MISMATCH_SEQUENCE=" << first_sequence << "\n"
-                          << "V048746255172579_FIRST_TRAJECTORY_MISMATCH_FIELD=" << first_field << "\n"
-                          << "V048746255172579_FIRST_TRAJECTORY_REFERENCE_VALUE=" << first_source << "\n"
-                          << "V048746255172579_FIRST_TRAJECTORY_NATIVE_VALUE=" << first_native << "\n";
+                std::cout << "V048746255172580_FIRST_TRAJECTORY_MISMATCH_SEQUENCE=" << first_sequence << "\n"
+                          << "V048746255172580_FIRST_TRAJECTORY_MISMATCH_FIELD=" << first_field << "\n"
+                          << "V048746255172580_FIRST_TRAJECTORY_REFERENCE_VALUE=" << first_source << "\n"
+                          << "V048746255172580_FIRST_TRAJECTORY_NATIVE_VALUE=" << first_native << "\n";
             }
-            std::cout << "V048746255172579_COMPLETE_61_EVENT_TRAJECTORY_IEEE_E7="
+            std::cout << "V048746255172580_COMPLETE_61_EVENT_TRAJECTORY_IEEE_E7="
                       << (trajectory_exact ? "ACCEPT" : "REJECT") << "\n";
             if (!trajectory_exact) {
                 throw std::runtime_error("complete 61-event reference trajectory gate rejected");
@@ -11146,39 +11300,39 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
 }
 
 int command_standalone_capabilities_v67() {
-    std::cout << "V048746255172579_STANDALONE_EXECUTABLE=YES\n"
-              << "V048746255172579_TWO_ARGUMENT_INTERFACE=YES\n"
-              << "V048746255172579_FILE_SILENT_POLICY=IMPLEMENTED\n"
-              << "V048746255172579_ATDB_SEARCH_ORDER=IMPLEMENTED\n"
-              << "V048746255172579_CXX_IN_MEMORY_ATDB_LOWERER=IMPLEMENTED\n"
-              << "V048746255172579_ATDB_PACKED_COLUMN_LAYOUTS=FIXED_AND_VARIABLE_LENGTH\n"
-              << "V048746255172579_ATDB_PAYLOAD_CACHE=ONE_TIME_FULL_COLUMN\n"
-              << "V048746255172579_INITIAL_XEE_SEMANTICS=EXPLICIT_XEE_ELSE_ONE\n"
-              << "V048746255172579_CONTROLLER_TOPOLOGY=FOUR_CALLS_PLUS_TERMINAL_RESET\n"
-              << "V048746255172579_REFERENCE_CALL_BOUNDARIES=21_1_18_17_EXACT_SOURCE_PREFIX\n"
-              << "V048746255172579_NITER_SEMANTICS=NESTED_LIMIT_WITH_REFERENCE_CALL_BOUNDARIES\n"
-              << "V048746255172579_CRITF_SEMANTICS=ACTIVE_ION_THRESHOLD_NOT_DSEC_TOLERANCE\n"
-              << "V048746255172579_CXX_PRODUCT_METADATA_DERIVATION=IMPLEMENTED\n"
-              << "V048746255172579_QUALIFICATION_FREE_CONTROLLER_TRAJECTORY=IMPLEMENTED\n"
-              << "V048746255172579_CALL_START_DSEC_WORKSPACE=IN_MEMORY\n"
-              << "V048746255172579_GLOBAL_XILEVG_BILEVG_RNISG=IN_MEMORY\n"
-              << "V048746255172579_REPEATED_HYDROGEN_SOURCE_ENTRY=IN_MEMORY\n"
-              << "V048746255172579_MG_ACTIVE_STAGE_RETENTION_SEQUENCE2_TO4=IN_MEMORY\n"
-              << "V048746255172579_CONSECUTIVE_LINE_CONTINUUM_TAU=IN_MEMORY\n"
-              << "V048746255172579_CONTINUUM_TAU_DOMAIN=MAX_RECORD_POINTER_DECLARED_NATIVE_COUNT_GRID\n"
-              << "V048746255172579_MG_PRIMARY_SECONDARY_THERMAL_TERMS=IN_MEMORY\n"
-              << "V048746255172579_CALL_BOUNDARY_THERMAL_COMPONENTS=IN_MEMORY\n"
-              << "V048746255172579_EXACT_DSEC_COMMIT_SEMANTICS=IMPLEMENTED\n"
-              << "V048746255172579_SEQUENCE2_HELIUM_PREPRODUCT_GATE=POPULATIONS_MATRIX_RHS_THERMAL_HMCTOT\n"
-              << "V048746255172579_SEQUENCE2_HE_COMPACT_SEED_MAPPING=ACTIVE_ROW_IDENTITY_WITH_TERMINAL_ZERO\n"
-              << "V048746255172579_SEQUENCE2_HELIUM_DIAGNOSTICS=FULL_MATRIX_RHS_78_POPULATIONS_SOURCE_NATIVE_THERMAL_TERMS\n"
-              << "V048746255172579_V63_PARITY_GATE=EXTERNAL_ORACLE_REQUIRED\n"
-              << "V048746255172579_ATDB_SEARCH_ORDER=parameters_atomic_database,parameters_atomic_db,parameters_atdb,parameters_sibling,XSTAR_ATOMIC_DB,XSTAR_ATDB_FITS,XSTAR_DATA,XSTAR_HOME,executable_relative,package_relative,current_directory\n"
-              << "V048746255172579_COHEAT_SEARCH_ORDER=parameters_coheat_file,parameters_coheat,parameters_sibling,XSTAR_COHEAT,XSTAR_DATA,XSTAR_HOME,executable_relative,package_relative,current_directory\n"
-              << "V048746255172579_SOURCE_POWERLAW_GRID=ENER_ISPEC4_ISPECGG_EQUIVALENT\n"
-              << "V048746255172579_ARTIFACT_PROFILES=none,summary,failure,full\n"
-              << "V048746255172579_ARTIFACT_CLASS_OVERRIDES=lowered_case,runtime_metadata,checkpoints,audits,qualification_summaries,trajectory_diagnostics,benchmark_diagnostics,timing_summary\n"
-              << "V048746255172579_RESULT=ACCEPT_CAPABILITY_IMPLEMENTATION\n";
+    std::cout << "V048746255172580_STANDALONE_EXECUTABLE=YES\n"
+              << "V048746255172580_TWO_ARGUMENT_INTERFACE=YES\n"
+              << "V048746255172580_FILE_SILENT_POLICY=IMPLEMENTED\n"
+              << "V048746255172580_ATDB_SEARCH_ORDER=IMPLEMENTED\n"
+              << "V048746255172580_CXX_IN_MEMORY_ATDB_LOWERER=IMPLEMENTED\n"
+              << "V048746255172580_ATDB_PACKED_COLUMN_LAYOUTS=FIXED_AND_VARIABLE_LENGTH\n"
+              << "V048746255172580_ATDB_PAYLOAD_CACHE=ONE_TIME_FULL_COLUMN\n"
+              << "V048746255172580_INITIAL_XEE_SEMANTICS=EXPLICIT_XEE_ELSE_ONE\n"
+              << "V048746255172580_CONTROLLER_TOPOLOGY=FOUR_CALLS_PLUS_TERMINAL_RESET\n"
+              << "V048746255172580_REFERENCE_CALL_BOUNDARIES=21_1_18_17_EXACT_SOURCE_PREFIX\n"
+              << "V048746255172580_NITER_SEMANTICS=NESTED_LIMIT_WITH_REFERENCE_CALL_BOUNDARIES\n"
+              << "V048746255172580_CRITF_SEMANTICS=ACTIVE_ION_THRESHOLD_NOT_DSEC_TOLERANCE\n"
+              << "V048746255172580_CXX_PRODUCT_METADATA_DERIVATION=IMPLEMENTED\n"
+              << "V048746255172580_QUALIFICATION_FREE_CONTROLLER_TRAJECTORY=IMPLEMENTED\n"
+              << "V048746255172580_CALL_START_DSEC_WORKSPACE=IN_MEMORY\n"
+              << "V048746255172580_GLOBAL_XILEVG_BILEVG_RNISG=IN_MEMORY\n"
+              << "V048746255172580_REPEATED_HYDROGEN_SOURCE_ENTRY=IN_MEMORY\n"
+              << "V048746255172580_MG_ACTIVE_STAGE_RETENTION_SEQUENCE2_TO4=IN_MEMORY\n"
+              << "V048746255172580_CONSECUTIVE_LINE_CONTINUUM_TAU=IN_MEMORY\n"
+              << "V048746255172580_CONTINUUM_TAU_DOMAIN=MAX_RECORD_POINTER_DECLARED_NATIVE_COUNT_GRID\n"
+              << "V048746255172580_MG_PRIMARY_SECONDARY_THERMAL_TERMS=IN_MEMORY\n"
+              << "V048746255172580_CALL_BOUNDARY_THERMAL_COMPONENTS=IN_MEMORY\n"
+              << "V048746255172580_EXACT_DSEC_COMMIT_SEMANTICS=IMPLEMENTED\n"
+              << "V048746255172580_SEQUENCE2_HELIUM_PREPRODUCT_GATE=POPULATIONS_MATRIX_RHS_THERMAL_HMCTOT\n"
+              << "V048746255172580_SEQUENCE2_HE_COMPACT_SEED_MAPPING=ACTIVE_ROW_IDENTITY_WITH_TERMINAL_ZERO\n"
+              << "V048746255172580_SEQUENCE2_HELIUM_DIAGNOSTICS=FULL_MATRIX_RHS_78_POPULATIONS_SOURCE_NATIVE_THERMAL_TERMS\n"
+              << "V048746255172580_V63_PARITY_GATE=EXTERNAL_ORACLE_REQUIRED\n"
+              << "V048746255172580_ATDB_SEARCH_ORDER=parameters_atomic_database,parameters_atomic_db,parameters_atdb,parameters_sibling,XSTAR_ATOMIC_DB,XSTAR_ATDB_FITS,XSTAR_DATA,XSTAR_HOME,executable_relative,package_relative,current_directory\n"
+              << "V048746255172580_COHEAT_SEARCH_ORDER=parameters_coheat_file,parameters_coheat,parameters_sibling,XSTAR_COHEAT,XSTAR_DATA,XSTAR_HOME,executable_relative,package_relative,current_directory\n"
+              << "V048746255172580_SOURCE_POWERLAW_GRID=ENER_ISPEC4_ISPECGG_EQUIVALENT\n"
+              << "V048746255172580_ARTIFACT_PROFILES=none,summary,failure,full\n"
+              << "V048746255172580_ARTIFACT_CLASS_OVERRIDES=lowered_case,runtime_metadata,checkpoints,audits,qualification_summaries,trajectory_diagnostics,benchmark_diagnostics,timing_summary\n"
+              << "V048746255172580_RESULT=ACCEPT_CAPABILITY_IMPLEMENTATION\n";
     return 0;
 }
 
@@ -11225,6 +11379,10 @@ int command_run_standalone_case_probe_v70(const Options& options) {
                 "v0648724_call1_thermal_leaf_reference" / "v0472_call1_thermal_budget.csv";
             data.sequence16_thermal_population_closure_dir = contract_dir / "thermal_consumption_population_closure";
             data.sequence16_diagnostic_dir = std::filesystem::path(options.output_dir) / "sequence16_mg_precommit";
+            const char* source_solve_rows = std::getenv("XSTAR_V80_SEQUENCE16_SOURCE_SOLVE_STAGE_ROWS");
+            if (source_solve_rows && *source_solve_rows) {
+                data.sequence16_source_solve_stage_rows = std::filesystem::path(source_solve_rows);
+            }
             data.sequence16_precommit_gate_configured = true;
         }
         data.energy = source_energy_grid_v1711(static_cast<std::size_t>(params.ncn2));
@@ -11283,7 +11441,7 @@ int command_run_standalone_case_probe_v70(const Options& options) {
                 trace.data(), trace.size(), &trace_count, &stats, message.data(), message.size());
             if (rc != 0) throw std::runtime_error(std::string("probe call failed: ") + message.data());
             const std::size_t count = data.evaluations - before;
-            std::cout << "V048746255172579_PROBE_CALL=" << call
+            std::cout << "V048746255172580_PROBE_CALL=" << call
                       << " DSEC_EVALUATIONS=" << count
                       << " EXPECTED=" << expected[call-1u]
                       << " HMCTOT=" << std::setprecision(17) << stats.final_hmctot
@@ -11310,8 +11468,8 @@ int command_run_standalone_case_probe_v70(const Options& options) {
                 << row.hmctot << ',' << row.charge_residual << '\n';
         }
         csv.close();
-        std::cout << "V048746255172579_PROBE_EVENTS=" << data.snapshots.size() << "\n"
-                  << "V048746255172579_PROBE_CSV=" << csv_path.string() << "\n";
+        std::cout << "V048746255172580_PROBE_EVENTS=" << data.snapshots.size() << "\n"
+                  << "V048746255172580_PROBE_CSV=" << csv_path.string() << "\n";
         ::unsetenv("XSTAR_NATIVE_PRODUCTION");
         ::unsetenv("XSTAR_V72_PROBE_PROGRESS");
         ::unsetenv("XSTAR_V70_DUMP_MG_COMPACT_POPULATIONS");
@@ -11330,7 +11488,7 @@ int command_run_standalone_case_probe_v70(const Options& options) {
 }
 
 int command_run_standalone_production_v67(const Options& options, const std::filesystem::path& executable_path) {
-    const std::string prefix = "V048746255172579_";
+    const std::string prefix = "V048746255172580_";
     const std::string artifact_profile = options.artifact_profile_explicit ? options.artifact_profile : "none";
     const auto artifacts = artifact_selection_v67(options, artifact_profile);
     if (options.parameters_path.empty() || options.output_dir.empty()) {

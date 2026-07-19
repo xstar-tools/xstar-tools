@@ -6675,6 +6675,7 @@ ElementBuffers make_buffers(const ElementProgram& e, const xstar_fixed_state_inp
     b.row_residual.resize(n); b.row_scale.resize(n); b.relative_residual.resize(n);
     bool source_faithful_helium_runtime_seed = false;
     bool source_faithful_hydrogen_runtime_seed = false;
+    bool source_faithful_runtime_seed = false;
     for (std::size_t k = 0; k < n; ++k) {
         b.superlevels[k] = e.rows[k].superlevel;
         b.ions[k] = e.rows[k].ion;
@@ -6689,6 +6690,7 @@ ElementBuffers make_buffers(const ElementProgram& e, const xstar_fixed_state_inp
             const RuntimeInitialSeed seed = source_faithful_runtime_initial_seed(e, k, runtime_input);
             if (seed.loaded) {
                 b.initial[k] = seed.value;
+                source_faithful_runtime_seed = true;
                 if (e.element_z == 2) source_faithful_helium_runtime_seed = true;
                 if (e.element_z == 1 && runtime_input &&
                     (runtime_input->runtime_state_flags &
@@ -6703,8 +6705,14 @@ ElementBuffers make_buffers(const ElementProgram& e, const xstar_fixed_state_inp
     // msolvelucy.  Number conservation is imposed by the solver normalization
     // row; normalizing here changes every solve-state entry and duplicates the
     // shared He I/He II boundary population.
-    if (!preserve_initial_seed && !source_faithful_helium_runtime_seed &&
-        !source_faithful_hydrogen_runtime_seed) {
+    // v0.6.48.7.46.25.5.17.25.80: calc_hmc_element maps the live committed
+    // global xilevg state directly into compact x.  It does not renormalize
+    // H, He, Mg, or any other runtime-mapped element before msolvelucy; the
+    // solver normalization row owns number conservation.  Earlier native
+    // code exempted only H/He and silently renormalized Mg at every later
+    // DSEC evaluation, changing the binary64 solve path at sequence 16.
+    if (!preserve_initial_seed && !source_faithful_runtime_seed &&
+        !source_faithful_helium_runtime_seed && !source_faithful_hydrogen_runtime_seed) {
         double initial_total = 0.0;
         for (double value : b.initial) initial_total += value;
         if (initial_total > 0.0) for (double& value : b.initial) value /= initial_total;
