@@ -35,7 +35,9 @@ cat > "$WORK/parameters_${layout}.json" <<JSON
   "ncn2": 64,
   "nsteps": 1,
   "npass": 1,
-  "niter": 4
+  "niter": 4,
+  "standalone_charge_tolerance": 10.0,
+  "standalone_thermal_tolerance": 10.0
 }
 JSON
 "$CPP/xstar_cpp" run-production \
@@ -82,8 +84,8 @@ if normalized_step(left / "xout_step.log") != normalized_step(right / "xout_step
     raise SystemExit("fixed/variable ATDB layout changed xout_step.log science content")
 PYCOMPARE
 printf '%s\n' \
-  'V048746255172568_FIXED_WIDTH_PACKED_COLUMNS=ACCEPT' \
-  'V048746255172568_VARIABLE_LENGTH_PACKED_COLUMNS=ACCEPT' \
-  'V048746255172568_PACKED_LAYOUT_SCIENCE_EQUIVALENCE=ACCEPT' \
-  'V048746255172568_FILE_SILENT_PRODUCTS=ACCEPT' \
-  'V048746255172568_RESULT=ACCEPT'
+  'V048746255172569_FIXED_WIDTH_PACKED_COLUMNS=ACCEPT' \
+  'V048746255172569_VARIABLE_LENGTH_PACKED_COLUMNS=ACCEPT' \
+  'V048746255172569_PACKED_LAYOUT_SCIENCE_EQUIVALENCE=ACCEPT' \
+  'V048746255172569_FILE_SILENT_PRODUCTS=ACCEPT' \
+  'V048746255172569_RESULT=ACCEPT'

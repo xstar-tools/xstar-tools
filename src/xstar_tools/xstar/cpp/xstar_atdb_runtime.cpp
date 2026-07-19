@@ -131,6 +131,7 @@ public:
             integers_hdu_ = find_hdu("INTEGERS", 4);
             chars_hdu_ = find_hdu("CHARS", 5);
             read_headers();
+            load_payload_columns();
         } catch (...) {
             close();
             throw;
@@ -145,40 +146,26 @@ public:
         if (rec <= 0 || static_cast<std::size_t>(rec) >= headers_.size()) throw std::runtime_error("ATDB record outside range");
         return headers_[static_cast<std::size_t>(rec)];
     }
-    std::vector<double> reals(int rec) {
+    std::vector<double> reals(int rec) const {
         const auto& h = header(rec);
-        if (h.nreal <= 0) return {};
-        std::vector<double> out(static_cast<std::size_t>(h.nreal));
-        read_column_slice(
-            reals_hdu_, TDOUBLE, h.real_ptr, h.nreal, out.data(),
-            "read ATDB REALS record " + std::to_string(rec)
-        );
-        return out;
+        return cached_span(reals_cache_, h.real_ptr, h.nreal,
+            "read ATDB REALS record " + std::to_string(rec));
     }
-    std::vector<std::int64_t> ints(int rec) {
+    std::vector<std::int64_t> ints(int rec) const {
         const auto& h = header(rec);
-        if (h.nint <= 0) return {};
-        std::vector<long long> temp(static_cast<std::size_t>(h.nint));
-        read_column_slice(
-            integers_hdu_, TLONGLONG, h.int_ptr, h.nint, temp.data(),
-            "read ATDB INTEGERS record " + std::to_string(rec)
-        );
-        return std::vector<std::int64_t>(temp.begin(), temp.end());
+        return cached_span(ints_cache_, h.int_ptr, h.nint,
+            "read ATDB INTEGERS record " + std::to_string(rec));
     }
-    std::string chars(int rec) {
+    std::string chars(int rec) const {
         const auto& h = header(rec);
-        if (h.nchar <= 0) return {};
-        std::vector<unsigned char> bytes(static_cast<std::size_t>(h.nchar));
-        read_column_slice(
-            chars_hdu_, TBYTE, h.char_ptr, h.nchar, bytes.data(),
-            "read ATDB CHARS record " + std::to_string(rec)
-        );
+        const auto bytes = cached_span(chars_cache_, h.char_ptr, h.nchar,
+            "read ATDB CHARS record " + std::to_string(rec));
         return trim(std::string(bytes.begin(), bytes.end()));
     }
-    int first_int(int rec, int fallback = 0) {
+    int first_int(int rec, int fallback = 0) const {
         auto v = ints(rec); return v.empty() ? fallback : static_cast<int>(v.front());
     }
-    int local_level(int rec) {
+    int local_level(int rec) const {
         auto v = ints(rec);
         if (v.size() < 2) throw std::runtime_error("ATDB level record lacks local level");
         return static_cast<int>(v[v.size()-2]);
@@ -296,6 +283,55 @@ private:
         }
         if (remaining != 0) throw std::runtime_error(context + ": short packed-vector read");
     }
+
+    template <typename T>
+    std::vector<T> cached_span(
+        const std::vector<T>& cache,
+        long long first_element,
+        long long count,
+        const std::string& context) const {
+        if (count <= 0) return {};
+        if (first_element <= 0) throw std::runtime_error(context + ": invalid packed-vector pointer");
+        const auto start = static_cast<unsigned long long>(first_element - 1);
+        const auto width = static_cast<unsigned long long>(count);
+        if (start > cache.size() || width > cache.size() - start) {
+            throw std::runtime_error(context + ": cached packed-vector span exceeds payload");
+        }
+        return std::vector<T>(cache.begin() + static_cast<std::ptrdiff_t>(start),
+                              cache.begin() + static_cast<std::ptrdiff_t>(start + width));
+    }
+
+    template <typename T>
+    std::vector<T> read_full_column(int hdu, int datatype, const std::string& context) {
+        const ColumnLayout layout = column_layout(hdu);
+        const long long total = column_element_count(hdu, layout);
+        if (total < 0 || static_cast<unsigned long long>(total) >
+                static_cast<unsigned long long>(std::numeric_limits<std::size_t>::max())) {
+            throw std::runtime_error(context + ": packed column is too large");
+        }
+        std::vector<T> values(static_cast<std::size_t>(total));
+        long long written = 0;
+        for (long long row = 1; row <= layout.rows; ++row) {
+            const long long count = row_element_count(hdu, layout, row);
+            if (count == 0) continue;
+            move(hdu);
+            int status = 0, anynul = 0;
+            fits_read_col(file_, datatype, 1, row, 1, count, nullptr,
+                          values.data() + written, &anynul, &status);
+            fits_check(status, context);
+            written += count;
+        }
+        if (written != total) throw std::runtime_error(context + ": short full-column read");
+        return values;
+    }
+
+    void load_payload_columns() {
+        reals_cache_ = read_full_column<double>(reals_hdu_, TDOUBLE, "cache ATDB REALS");
+        const auto ints = read_full_column<long long>(integers_hdu_, TLONGLONG, "cache ATDB INTEGERS");
+        ints_cache_.assign(ints.begin(), ints.end());
+        chars_cache_ = read_full_column<unsigned char>(chars_hdu_, TBYTE, "cache ATDB CHARS");
+    }
+
     void read_headers() {
         long long nrecords = length_keyword(pointers_hdu_);
         const ColumnLayout layout = column_layout(pointers_hdu_);
@@ -339,6 +375,9 @@ private:
     fitsfile* file_ = nullptr;
     int pointers_hdu_=0, reals_hdu_=0, integers_hdu_=0, chars_hdu_=0;
     std::vector<Header> headers_;
+    std::vector<double> reals_cache_;
+    std::vector<std::int64_t> ints_cache_;
+    std::vector<unsigned char> chars_cache_;
 };
 
 struct Derived {
@@ -652,11 +691,21 @@ ProductionParameters read_production_parameters(const std::filesystem::path& pat
     p.temperature_k=json_number(p.raw_json,"temperature_k",json_number(p.raw_json,"temperature",100.0)*1.0e4);
     p.column_cm2=json_number(p.raw_json,"column",p.column_cm2); p.log_xi=json_number(p.raw_json,"rlogxi",p.log_xi);
     p.initial_radius_cm=json_number(p.raw_json,"initial_radius_cm",p.initial_radius_cm); p.covering_fraction=json_number(p.raw_json,"cfrac",p.covering_fraction);
-    p.turbulent_velocity_km_s=json_number(p.raw_json,"vturbi",p.turbulent_velocity_km_s); p.initial_electron_fraction=json_number(p.raw_json,"xee",json_number(p.raw_json,"xeemin",p.initial_electron_fraction));
+    p.turbulent_velocity_km_s=json_number(p.raw_json,"vturbi",p.turbulent_velocity_km_s);
+    // xeemin is a lower bound used by the source charge controller, not the
+    // initial charge iterate.  Unless parameters explicitly provide xee or
+    // initial_electron_fraction, native XSTAR starts at xee=1.
+    p.minimum_electron_fraction=json_number(p.raw_json,"xeemin",p.minimum_electron_fraction);
+    p.initial_electron_fraction=json_number(
+        p.raw_json,"initial_electron_fraction",
+        json_number(p.raw_json,"xee",p.initial_electron_fraction));
     p.luminosity_1e38=json_number(p.raw_json,"rlrad38",p.luminosity_1e38); p.spectral_index=json_number(p.raw_json,"trad",p.spectral_index);
     p.radial_density_exponent=json_number(p.raw_json,"radexp",p.radial_density_exponent); p.pressure_mode=static_cast<int>(json_number(p.raw_json,"lcpres",p.pressure_mode));
     p.spectrum_units=static_cast<int>(json_number(p.raw_json,"spectun",p.spectrum_units)); p.spectrum_file=json_string(p.raw_json,"spectrum_file",p.spectrum_file);
-    p.critical_fraction=json_number(p.raw_json,"critf",p.critical_fraction); p.ncn2=std::max(4,static_cast<int>(json_number(p.raw_json,"ncn2",p.ncn2)));
+    p.critical_fraction=json_number(p.raw_json,"critf",p.critical_fraction);
+    p.controller_charge_tolerance=json_number(p.raw_json,"standalone_charge_tolerance",0.0);
+    p.controller_thermal_tolerance=json_number(p.raw_json,"standalone_thermal_tolerance",0.0);
+    p.ncn2=std::max(4,static_cast<int>(json_number(p.raw_json,"ncn2",p.ncn2)));
     p.nsteps=std::max(1,static_cast<int>(json_number(p.raw_json,"nsteps",p.nsteps))); p.npass=std::max(1,static_cast<int>(json_number(p.raw_json,"npass",p.npass))); p.niter=std::max(1,static_cast<int>(json_number(p.raw_json,"niter",p.niter))); p.spectrum=json_string(p.raw_json,"spectrum",p.spectrum);
     auto physical=json_number_array(p.raw_json,"physical_abundances");
     for(std::size_t i=0;i<physical.size()&&i<30;++i) if(physical[i]>0) p.abundances_by_z[static_cast<int>(i)+1]=physical[i];

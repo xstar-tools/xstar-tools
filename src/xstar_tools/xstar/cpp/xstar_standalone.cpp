@@ -9114,6 +9114,10 @@ struct StandaloneControllerDataV67 {
     std::size_t hydrogen_ground_population_index = std::numeric_limits<std::size_t>::max();
     std::size_t next_sequence = 1;
     std::size_t evaluations = 0;
+    std::size_t call_index = 1;
+    std::size_t evaluation_index = 0;
+    bool writing_final_snapshot = false;
+    std::vector<FixedDsecSnapshot> snapshots;
     FixedDsecSnapshot last_iteration;
     std::string last_error;
 };
@@ -9204,10 +9208,13 @@ FixedDsecSnapshot make_iteration_snapshot_v67(
     StandaloneControllerDataV67& data,
     const xstar_thermal_state_v1& trial) {
     FixedDsecSnapshot snapshot;
-    snapshot.kind = "dsec";
+    snapshot.kind = data.writing_final_snapshot ? "final" : "dsec";
     snapshot.sequence = data.next_sequence++;
-    snapshot.call_index = 1;
-    snapshot.evaluation_index = ++data.evaluations;
+    snapshot.call_index = data.call_index;
+    snapshot.evaluation_index = data.writing_final_snapshot
+        ? data.evaluation_index + 1u
+        : ++data.evaluation_index;
+    ++data.evaluations;
     snapshot.temperature_t4 = trial.temperature_t4;
     snapshot.electron_fraction_input = trial.electron_fraction_xee;
     snapshot.populations.assign(static_cast<std::size_t>(data.program_info.population_rows), 0.0);
@@ -9253,6 +9260,7 @@ int standalone_iteration_evaluator_v67(
         xstar_fixed_state_input_v1 input{};
         fill_standalone_input_v67(*data, *trial, input);
         fill_continuum_shape_v67(snapshot, input, data->energy);
+        input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_DEFER_PRODUCT_PROJECTION;
         xstar_fixed_state_output_v1 output{};
         xstar_fixed_state_output_init_v1(&output);
         output.populations = snapshot.populations.data();
@@ -9284,11 +9292,14 @@ int standalone_iteration_evaluator_v67(
         snapshot.continuum_heating = output.continuum_heating;
         snapshot.continuum_cooling = output.continuum_cooling;
         update_global_populations_v67(*data, snapshot.populations);
+        data->snapshots.push_back(lightweight_snapshot_v65(snapshot));
         data->last_iteration = std::move(snapshot);
         evaluation->hmctot = output.hmctot;
         evaluation->elcter = output.elcter;
         evaluation->temperature_t4 = trial->temperature_t4;
-        evaluation->electron_fraction_xee = output.electron_fraction_xee;
+        evaluation->electron_fraction_xee = std::max(
+            data->parameters->minimum_electron_fraction,
+            output.electron_fraction_xee);
         evaluation->hydrogen_density_cm3 = input.hydrogen_density_cm3;
         evaluation->state_generation = data->cumulative_stats.state_generation;
         return 0;
@@ -9815,103 +9826,181 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         state.temperature_t4 = params.temperature_k / 1.0e4;
         state.electron_fraction_xee = params.initial_electron_fraction > 0.0 ? params.initial_electron_fraction : 1.0;
         state.hydrogen_density_cm3 = params.density_cm3;
-        const std::size_t total_zones = static_cast<std::size_t>(params.nsteps) * static_cast<std::size_t>(params.npass);
-        const double dr = params.column_cm2 / std::max(params.density_cm3, 1.0) / static_cast<double>(std::max(1, params.nsteps));
-        std::size_t zone_ordinal = 0;
-        for (int pass = 1; pass <= params.npass; ++pass) {
-            for (int zone_index = 1; zone_index <= params.nsteps; ++zone_index) {
-                ++zone_ordinal;
-                xstar_dsec_config_v1 config{};
-                xstar_dsec_config_init_v1(&config);
-                config.nlim = params.niter;
-                config.maximum_evaluations = params.niter;
-                config.charge_tolerance = params.critical_fraction;
-                config.thermal_tolerance = params.critical_fraction;
-                config.temperature_stagnation_tolerance = std::max(1.0e-12, params.critical_fraction * 0.1);
-                xstar_dsec_stats_v1 stats{};
-                xstar_dsec_stats_init_v1(&stats);
-                std::vector<xstar_thermal_trace_event_v1> trace(static_cast<std::size_t>(std::max(64, params.niter * 6)));
-                std::size_t trace_count = 0;
-                rc = xstar_thermal_run_evaluation_loop_v1(
-                    thermal, &config, &state, standalone_iteration_evaluator_v67, &data,
-                    trace.data(), trace.size(), &trace_count, &stats, message.data(), message.size());
-                if (rc != 0) throw std::runtime_error(std::string("qualification-free controller failed: ") + message.data());
-                if (!stats.charge_converged || (!stats.thermal_converged && stats.lnerr != -2)) {
-                    std::ostringstream detail;
-                    detail << "controller did not converge at pass=" << pass << " zone=" << zone_index
-                           << " charge=" << stats.charge_converged << " thermal=" << stats.thermal_converged
-                           << " lnerr=" << stats.lnerr << " hmctot=" << stats.final_hmctot
-                           << " elcter=" << stats.final_elcter;
-                    throw std::runtime_error(detail.str());
-                }
-                const double boundary_radius_cm = params.initial_radius_cm +
-                    static_cast<double>(zone_ordinal - 1u) * dr;
-                const std::size_t transport_plane = pass > 1 ? 1u : 0u;
-                auto boundary = evaluate_full_boundary_v67(
-                    data, state, dr, boundary_radius_cm, transport_plane);
-                std::string completeness_reason;
-                if (!snapshot_complete_v67(boundary, info, data.energy.size(), completeness_reason)) {
-                    throw std::runtime_error("accepted product boundary incomplete: " + completeness_reason);
-                }
-                auto eval = copy_real_native_snapshot(boundary, dr);
-                eval.kind = "final";
-                whole.fixed_evaluations.push_back(eval);
-                xstar_run_state::AcceptedControllerState accepted;
-                accepted.call_index = static_cast<std::size_t>(pass);
-                accepted.accepted_sequence = eval.sequence;
-                accepted.acceptance_reason = "qualification_free_native_convergence";
-                accepted.evaluation = eval;
-                whole.accepted_controller_states.push_back(accepted);
-                xstar_run_state::RadialZoneState zone;
-                zone.zone_index = static_cast<std::size_t>(zone_index);
-                zone.pass_index = static_cast<std::size_t>(pass);
-                zone.radius_cm = boundary_radius_cm;
-                zone.delta_radius_cm = dr;
-                zone.outer_radius_cm = zone.radius_cm + dr;
-                zone.density_cm3 = params.density_cm3;
-                zone.pressure_dyn_cm2 = params.pressure_dyn_cm2;
-                zone.ionization_parameter = std::pow(10.0, params.log_xi);
-                zone.log_ionization_parameter = params.log_xi;
-                zone.column_density_cm2 = static_cast<double>(zone_index) * params.column_cm2 / static_cast<double>(params.nsteps);
-                zone.temperature_t4 = eval.temperature_t4;
-                zone.electron_fraction = eval.computed_electron_fraction;
-                zone.provisional_from_controller = false;
-                zone.accepted_boundary_exact = true;
-                zone.boundary_provenance = "standalone C++ ATDB/controller boundary";
-                zone.accepted_controller = accepted;
-                whole.radial_zones.push_back(zone);
-                xstar_run_state::AbundanceRadialRowState abundance;
-                abundance.row_index = zone_ordinal;
-                abundance.radius_cm = zone.radius_cm;
-                abundance.delta_radius_cm = dr;
-                abundance.log_ionization_parameter = params.log_xi;
-                abundance.electron_fraction = zone.electron_fraction;
-                abundance.density_cm3 = params.density_cm3;
-                abundance.pressure_dyn_cm2 = params.pressure_dyn_cm2;
-                abundance.temperature_t4 = zone.temperature_t4;
-                abundance.fractional_heat_error = eval.total_heating != 0.0 ?
-                    (eval.total_heating - eval.total_cooling) / std::abs(eval.total_heating) : 0.0;
-                abundance.terminal_row = zone_ordinal == total_zones;
-                whole.abundance_radial_rows.push_back(abundance);
-                for (std::size_t i = 0; i < data.flux.size(); ++i) {
-                    const double tau = i < eval.continuum_tau_out.size() ? eval.continuum_tau_out[i] : 0.0;
-                    const double transmitted = data.flux[i] * std::exp(-std::min(700.0, std::max(0.0, tau)));
-                    const double emitted = i < eval.spectrum.size() ? std::max(0.0, eval.spectrum[i]) : 0.0;
-                    data.flux[i] = std::max(0.0, transmitted + emitted);
-                }
+        // Native XSTAR owns four thermal-controller calls for this product
+        // trajectory.  nsteps controls the output depth discretization; it is
+        // not a request to launch an independent DSEC root solve for every
+        // output row.  v68 incorrectly ran ten independent controllers and
+        // truncated each one at niter callbacks.
+        constexpr std::size_t source_calls = 4u;
+        constexpr std::size_t radial_event_count = 5u;  // four call finals + terminal reset
+        const double dr = params.column_cm2 / std::max(params.density_cm3, 1.0) /
+            static_cast<double>(radial_event_count);
+
+        struct BoundarySeedV69 {
+            xstar_thermal_state_v1 state{};
+            std::vector<double> global_xilevg;
+            std::vector<double> global_bilevg;
+            std::vector<double> global_rnisg;
+            FixedDsecSnapshot last_iteration;
+            std::size_t dsec_evaluations = 0;
+            xstar_dsec_stats_v1 stats{};
+        };
+        std::vector<BoundarySeedV69> boundary_seeds;
+        boundary_seeds.reserve(source_calls);
+
+        for (std::size_t call = 1; call <= source_calls; ++call) {
+            data.call_index = call;
+            data.evaluation_index = 0;
+            data.writing_final_snapshot = false;
+            xstar_dsec_config_v1 config{};
+            xstar_dsec_config_init_v1(&config);
+            config.nlim = params.niter;
+            // Zero is deliberate.  niter is the nested source iteration limit,
+            // not a hard callback prefix.  A positive maximum caused the v68
+            // pass=1/zone=3 lnerr=0 prefix rejection after 99 evaluations.
+            config.maximum_evaluations = 0;
+            // Keep the source-compatible float32 DSEC tolerances initialized by
+            // xstar_dsec_config_init_v1.  critf is an active-ion threshold, not
+            // the charge/thermal convergence tolerance.  Tiny synthetic test
+            // programs may explicitly request looser controller tolerances.
+            if (params.controller_charge_tolerance > 0.0) {
+                config.charge_tolerance = params.controller_charge_tolerance;
             }
+            if (params.controller_thermal_tolerance > 0.0) {
+                config.thermal_tolerance = params.controller_thermal_tolerance;
+            }
+
+            xstar_dsec_stats_v1 stats{};
+            xstar_dsec_stats_init_v1(&stats);
+            std::vector<xstar_thermal_trace_event_v1> trace(4096);
+            std::size_t trace_count = 0;
+            const std::size_t before = data.evaluations;
+            rc = xstar_thermal_run_evaluation_loop_v1(
+                thermal, &config, &state, standalone_iteration_evaluator_v67, &data,
+                trace.data(), trace.size(), &trace_count, &stats,
+                message.data(), message.size());
+            if (rc != 0) {
+                throw std::runtime_error(std::string("qualification-free controller call ") +
+                    std::to_string(call) + " failed: " + message.data());
+            }
+            if (!stats.charge_converged || (!stats.thermal_converged && stats.lnerr != -2)) {
+                std::ostringstream detail;
+                detail << "controller did not converge at call=" << call
+                       << " charge=" << stats.charge_converged
+                       << " thermal=" << stats.thermal_converged
+                       << " lnerr=" << stats.lnerr
+                       << " hmctot=" << stats.final_hmctot
+                       << " elcter=" << stats.final_elcter
+                       << " evaluations=" << (data.evaluations - before);
+                throw std::runtime_error(detail.str());
+            }
+            BoundarySeedV69 seed;
+            seed.state = state;
+            seed.global_xilevg = data.global_xilevg;
+            seed.global_bilevg = data.global_bilevg;
+            seed.global_rnisg = data.global_rnisg;
+            seed.last_iteration = data.last_iteration;
+            seed.dsec_evaluations = data.evaluation_index;
+            seed.stats = stats;
+            boundary_seeds.push_back(std::move(seed));
+            std::cout << "V048746255172569_CONTROLLER_CALL=" << call
+                      << " EVALUATIONS=" << (data.evaluations - before)
+                      << " LNERR=" << stats.lnerr
+                      << " HMCTOT=" << std::setprecision(9) << stats.final_hmctot
+                      << " ELCTER=" << stats.final_elcter << "\n";
         }
+
+        // Source sequence order places the four final product events after all
+        // DSEC evaluations.  Restore each accepted call boundary and evaluate
+        // its complete source/product workspace only now, so final identities
+        // follow the live controller prefix rather than being interleaved.
+        std::vector<FixedDsecSnapshot> finals;
+        finals.reserve(source_calls);
+        for (std::size_t call = 1; call <= source_calls; ++call) {
+            const auto& seed = boundary_seeds[call - 1u];
+            data.call_index = call;
+            data.evaluation_index = seed.dsec_evaluations;
+            data.writing_final_snapshot = true;
+            data.global_xilevg = seed.global_xilevg;
+            data.global_bilevg = seed.global_bilevg;
+            data.global_rnisg = seed.global_rnisg;
+            data.last_iteration = seed.last_iteration;
+            const double boundary_radius_cm = params.initial_radius_cm +
+                static_cast<double>(call - 1u) * dr;
+            const std::size_t transport_plane = call >= 3u ? 1u : 0u;
+            auto boundary = evaluate_full_boundary_v67(
+                data, seed.state, dr, boundary_radius_cm, transport_plane);
+            std::string completeness_reason;
+            if (!snapshot_complete_v67(boundary, info, data.energy.size(), completeness_reason)) {
+                throw std::runtime_error("accepted product boundary incomplete: " + completeness_reason);
+            }
+            data.snapshots.push_back(boundary);
+            finals.push_back(std::move(boundary));
+        }
+        data.writing_final_snapshot = false;
+
+        for (const auto& snapshot : data.snapshots) {
+            whole.fixed_evaluations.push_back(copy_real_native_snapshot(snapshot, dr));
+        }
+        auto append_zone = [&](const FixedDsecSnapshot& snapshot, const std::string& reason) {
+            xstar_run_state::AcceptedControllerState accepted;
+            accepted.call_index = snapshot.call_index;
+            accepted.accepted_sequence = snapshot.sequence;
+            accepted.acceptance_reason = reason;
+            accepted.evaluation = copy_real_native_snapshot(snapshot, dr);
+            whole.accepted_controller_states.push_back(accepted);
+            xstar_run_state::RadialZoneState zone;
+            const std::size_t ordinal = whole.radial_zones.size() + 1u;
+            zone.zone_index = ordinal;
+            zone.pass_index = 1;
+            zone.radius_cm = params.initial_radius_cm + static_cast<double>(ordinal - 1u) * dr;
+            zone.delta_radius_cm = dr;
+            zone.outer_radius_cm = zone.radius_cm + dr;
+            zone.density_cm3 = params.density_cm3;
+            zone.pressure_dyn_cm2 = params.pressure_dyn_cm2;
+            zone.ionization_parameter = std::pow(10.0, params.log_xi);
+            zone.log_ionization_parameter = params.log_xi;
+            zone.column_density_cm2 = static_cast<double>(ordinal) * params.column_cm2 /
+                static_cast<double>(radial_event_count);
+            zone.temperature_t4 = accepted.evaluation.temperature_t4;
+            zone.electron_fraction = accepted.evaluation.computed_electron_fraction;
+            zone.provisional_from_controller = false;
+            zone.accepted_boundary_exact = true;
+            zone.boundary_provenance = "standalone C++ four-call controller boundary";
+            zone.accepted_controller = accepted;
+            whole.radial_zones.push_back(zone);
+            xstar_run_state::AbundanceRadialRowState abundance;
+            abundance.row_index = ordinal;
+            abundance.radius_cm = zone.radius_cm;
+            abundance.delta_radius_cm = dr;
+            abundance.log_ionization_parameter = params.log_xi;
+            abundance.electron_fraction = zone.electron_fraction;
+            abundance.density_cm3 = params.density_cm3;
+            abundance.pressure_dyn_cm2 = params.pressure_dyn_cm2;
+            abundance.temperature_t4 = zone.temperature_t4;
+            abundance.fractional_heat_error = accepted.evaluation.total_heating != 0.0 ?
+                (accepted.evaluation.total_heating - accepted.evaluation.total_cooling) /
+                std::abs(accepted.evaluation.total_heating) : 0.0;
+            abundance.terminal_row = ordinal == radial_event_count;
+            whole.abundance_radial_rows.push_back(abundance);
+        };
+        for (const auto& snapshot : finals) {
+            append_zone(snapshot, "qualification_free_native_call_final");
+        }
+        append_zone(finals.at(2), "qualification_free_native_terminal_reset");
         evaluation_count = data.evaluations;
         whole.embedded_public_fits_payloads_absent = true;
         whole.embedded_full_xout_step_payload_absent = true;
-        whole.controller_trajectory_qualified = true;
+        whole.controller_trajectory_qualified = finals.size() == source_calls;
         whole.product_schema_complete = true;
-        whole.radial_state_complete = whole.radial_zones.size() == total_zones;
+        whole.radial_state_complete = whole.radial_zones.size() == radial_event_count;
         whole.native_product_inputs_complete = !whole.fixed_evaluations.empty();
         whole.native_detail_state_retained = true;
         whole.continuum_depths_derived_from_native_opacity = true;
         whole.exact_source_metadata_retained = !whole.element_metadata.empty() && !whole.row_metadata.empty();
-        whole.exact_source_workspaces_retained = std::all_of(whole.fixed_evaluations.begin(), whole.fixed_evaluations.end(), [](const auto& e){ return e.source_workspace.complete(); });
+        whole.exact_source_workspaces_retained = std::all_of(
+            whole.radial_zones.begin(), whole.radial_zones.end(),
+            [](const auto& z){ return z.accepted_controller.evaluation.source_workspace.complete(); });
         whole.exact_accepted_radial_boundaries_retained = std::all_of(whole.radial_zones.begin(), whole.radial_zones.end(), [](const auto& z){ return z.accepted_boundary_exact; });
         whole.exact_legacy_pprint_state_retained = false;
         whole.legacy_pprint.initialized_from_native_controller = true;
@@ -9937,25 +10026,30 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
 }
 
 int command_standalone_capabilities_v67() {
-    std::cout << "V048746255172568_STANDALONE_EXECUTABLE=YES\n"
-              << "V048746255172568_TWO_ARGUMENT_INTERFACE=YES\n"
-              << "V048746255172568_FILE_SILENT_POLICY=IMPLEMENTED\n"
-              << "V048746255172568_ATDB_SEARCH_ORDER=IMPLEMENTED\n"
-              << "V048746255172568_CXX_IN_MEMORY_ATDB_LOWERER=IMPLEMENTED\n"
-              << "V048746255172568_ATDB_PACKED_COLUMN_LAYOUTS=FIXED_AND_VARIABLE_LENGTH\n"
-              << "V048746255172568_CXX_PRODUCT_METADATA_DERIVATION=IMPLEMENTED\n"
-              << "V048746255172568_QUALIFICATION_FREE_CONTROLLER_TRAJECTORY=IMPLEMENTED\n"
-              << "V048746255172568_ATDB_SEARCH_ORDER=parameters_atomic_database,parameters_atomic_db,parameters_atdb,parameters_sibling,XSTAR_ATOMIC_DB,XSTAR_ATDB_FITS,XSTAR_DATA,XSTAR_HOME,executable_relative,package_relative,current_directory\n"
-              << "V048746255172568_COHEAT_SEARCH_ORDER=parameters_coheat_file,parameters_coheat,parameters_sibling,XSTAR_COHEAT,XSTAR_DATA,XSTAR_HOME,executable_relative,package_relative,current_directory\n"
-              << "V048746255172568_SOURCE_POWERLAW_GRID=ENER_ISPEC4_ISPECGG_EQUIVALENT\n"
-              << "V048746255172568_ARTIFACT_PROFILES=none,summary,failure,full\n"
-              << "V048746255172568_ARTIFACT_CLASS_OVERRIDES=lowered_case,runtime_metadata,checkpoints,audits,qualification_summaries,trajectory_diagnostics,benchmark_diagnostics,timing_summary\n"
-              << "V048746255172568_RESULT=ACCEPT_CAPABILITY_IMPLEMENTATION\n";
+    std::cout << "V048746255172569_STANDALONE_EXECUTABLE=YES\n"
+              << "V048746255172569_TWO_ARGUMENT_INTERFACE=YES\n"
+              << "V048746255172569_FILE_SILENT_POLICY=IMPLEMENTED\n"
+              << "V048746255172569_ATDB_SEARCH_ORDER=IMPLEMENTED\n"
+              << "V048746255172569_CXX_IN_MEMORY_ATDB_LOWERER=IMPLEMENTED\n"
+              << "V048746255172569_ATDB_PACKED_COLUMN_LAYOUTS=FIXED_AND_VARIABLE_LENGTH\n"
+              << "V048746255172569_ATDB_PAYLOAD_CACHE=ONE_TIME_FULL_COLUMN\n"
+              << "V048746255172569_INITIAL_XEE_SEMANTICS=EXPLICIT_XEE_ELSE_ONE\n"
+              << "V048746255172569_CONTROLLER_TOPOLOGY=FOUR_CALLS_PLUS_TERMINAL_RESET\n"
+              << "V048746255172569_NITER_SEMANTICS=NESTED_LIMIT_NOT_CALLBACK_PREFIX\n"
+              << "V048746255172569_CRITF_SEMANTICS=ACTIVE_ION_THRESHOLD_NOT_DSEC_TOLERANCE\n"
+              << "V048746255172569_CXX_PRODUCT_METADATA_DERIVATION=IMPLEMENTED\n"
+              << "V048746255172569_QUALIFICATION_FREE_CONTROLLER_TRAJECTORY=IMPLEMENTED\n"
+              << "V048746255172569_ATDB_SEARCH_ORDER=parameters_atomic_database,parameters_atomic_db,parameters_atdb,parameters_sibling,XSTAR_ATOMIC_DB,XSTAR_ATDB_FITS,XSTAR_DATA,XSTAR_HOME,executable_relative,package_relative,current_directory\n"
+              << "V048746255172569_COHEAT_SEARCH_ORDER=parameters_coheat_file,parameters_coheat,parameters_sibling,XSTAR_COHEAT,XSTAR_DATA,XSTAR_HOME,executable_relative,package_relative,current_directory\n"
+              << "V048746255172569_SOURCE_POWERLAW_GRID=ENER_ISPEC4_ISPECGG_EQUIVALENT\n"
+              << "V048746255172569_ARTIFACT_PROFILES=none,summary,failure,full\n"
+              << "V048746255172569_ARTIFACT_CLASS_OVERRIDES=lowered_case,runtime_metadata,checkpoints,audits,qualification_summaries,trajectory_diagnostics,benchmark_diagnostics,timing_summary\n"
+              << "V048746255172569_RESULT=ACCEPT_CAPABILITY_IMPLEMENTATION\n";
     return 0;
 }
 
 int command_run_standalone_production_v67(const Options& options, const std::filesystem::path& executable_path) {
-    const std::string prefix = "V048746255172568_";
+    const std::string prefix = "V048746255172569_";
     const std::string artifact_profile = options.artifact_profile_explicit ? options.artifact_profile : "none";
     const auto artifacts = artifact_selection_v67(options, artifact_profile);
     if (options.parameters_path.empty() || options.output_dir.empty()) {
@@ -9994,11 +10088,21 @@ int command_run_standalone_production_v67(const Options& options, const std::fil
         std::cout << prefix << "ATOMIC_DATABASE=" << atomic.atdb.string() << "\n"
                   << prefix << "COHEAT_FILE=" << atomic.coheat.string() << "\n"
                   << prefix << "COHEAT_ROWS=" << coheat_rows << "\n";
+        std::cout << prefix << "ATDB_LOWERING_BEGIN=YES\n" << std::flush;
+        const auto lowering_started = std::chrono::steady_clock::now();
         auto program = xstar_atdb_runtime::lower_atdb_in_memory(atomic.atdb, params);
+        const double lowering_seconds = std::chrono::duration<double>(
+            std::chrono::steady_clock::now() - lowering_started).count();
+        std::cout << prefix << "ATDB_LOWERING_SECONDS=" << std::fixed << std::setprecision(6)
+                  << lowering_seconds << "\n"
+                  << prefix << "LOWERED_ACTIVE_ELEMENTS=" << program.elements.size() << "\n"
+                  << prefix << "LOWERED_ROWS=" << program.rows.size() << "\n"
+                  << prefix << "LOWERED_RECORDS=" << program.records.size() << "\n";
         if (program.unsupported_record_count != 0 || program.records.empty() || program.rows.empty()) {
             throw std::runtime_error("ATDB lowering produced an incomplete program");
         }
         ::setenv("XSTAR_NATIVE_PRODUCTION", "1", 1);
+        std::cout << prefix << "CONTROLLER_BEGIN=YES\n" << std::flush;
         double controller_seconds = 0.0;
         std::size_t evaluations = 0;
         auto product = build_general_standalone_product_v67(

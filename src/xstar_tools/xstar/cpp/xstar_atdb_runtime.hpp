@@ -32,6 +32,7 @@ struct ProductionParameters {
     double covering_fraction = 1.0;
     double turbulent_velocity_km_s = 0.0;
     double initial_electron_fraction = 1.0;
+    double minimum_electron_fraction = 0.1;
     double luminosity_1e38 = 1.0e6;
     double spectral_index = -1.0;
     double radial_density_exponent = 0.0;
@@ -39,6 +40,8 @@ struct ProductionParameters {
     int spectrum_units = 0;
     std::string spectrum_file = "spect.dat";
     double critical_fraction = 1.0e-6;
+    double controller_charge_tolerance = 0.0;
+    double controller_thermal_tolerance = 0.0;
     int ncn2 = 9999;
     int nsteps = 10;
     int npass = 1;

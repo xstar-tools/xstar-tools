@@ -7474,11 +7474,6 @@ int run_impl(
             // number is hard-coded.  Selected records remain excluded from
             // matrix assembly and contribute only forward/reverse diagonal
             // Thermal rows.
-            const int requested_records = environment_data_type(
-                "XSTAR_QUALIFICATION_TYPE95_THERMAL_ONLY_RECORDS");
-            if (requested_records < 0 || requested_records > 2) {
-                throw std::runtime_error("invalid Type-95 thermal-only occupancy");
-            }
             const int lower_support_stage = active.min_stage;
             const int upper_support_stage = std::max(active.min_stage, active.max_stage - 1);
             const xstar_element_contribution_v1* lower = nullptr;
@@ -7486,6 +7481,33 @@ int run_impl(
             for (const auto& contribution : type95_self_loop_candidates) {
                 if (contribution.ion_stage == lower_support_stage) lower = &contribution;
                 if (contribution.ion_stage == upper_support_stage) upper = &contribution;
+            }
+            int requested_records = 0;
+            const char* requested_text = std::getenv(
+                "XSTAR_QUALIFICATION_TYPE95_THERMAL_ONLY_RECORDS");
+            if (requested_text && *requested_text) {
+                requested_records = environment_data_type(
+                    "XSTAR_QUALIFICATION_TYPE95_THERMAL_ONLY_RECORDS");
+            } else if (native_production_mode() && lower && upper) {
+                // In general standalone production, derive occupancy from the
+                // live support-boundary contributions instead of importing a
+                // sequence contract.  The qualification environment variable
+                // remains authoritative only when explicitly supplied.
+                const auto has_signal = [](const xstar_element_contribution_v1* c) {
+                    if (!c) return false;
+                    const double scale = std::abs(c->ans1) + std::abs(c->ans2) +
+                        std::abs(c->ans3) + std::abs(c->ans4) +
+                        std::abs(c->ans5) + std::abs(c->ans6);
+                    return std::isfinite(scale) && scale > 0.0;
+                };
+                const bool lower_signal = has_signal(lower);
+                const bool upper_signal = upper != lower && has_signal(upper);
+                requested_records = static_cast<int>(lower_signal) +
+                    static_cast<int>(upper_signal);
+                if (requested_records == 0) requested_records = 1;
+            }
+            if (requested_records < 0 || requested_records > 2) {
+                throw std::runtime_error("invalid Type-95 thermal-only occupancy");
             }
             if (requested_records >= 1 && (!lower || !upper)) {
                 throw std::runtime_error("missing active Type-95 support-boundary candidate");

@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.7.46.25.5.17.25.69 - 2026-07-18
+
+- Cache production ATDB packed columns once in memory instead of rescanning FITS descriptors for every record.
+- Correct `xeemin` versus initial `xee` semantics.
+- Remove the erroneous `niter` callback prefix and `critf` DSEC tolerance override.
+- Replace ten independent zone controllers with the source four-call trajectory and terminal-reset product boundary.
+- Add phase timing/progress output and live Type-95 support-boundary derivation for standalone production.
+
 # v0.6.48.7.46.25.5.17.25.68 - 2026-07-18
 
 - Correct production `atdb.fits` packed-column handling for FITS variable-length arrays.
