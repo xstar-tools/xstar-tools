@@ -7735,25 +7735,6 @@ int run_impl(
                 *thermal_compact_population_closure_data, active);
             element_thermal_compact_closure_applied = true;
             ctx.last_thermal_consumed_compact_population_closure = true;
-            // v17.25.78: sequence 16 is the first post-helium trajectory
-            // divergence.  The source compact Mg vector is the state consumed
-            // by both heatf and the charge ledger.  Commit that same vector
-            // only at this source boundary; all other solves remain native.
-            if (element.element_z == 12 &&
-                environment_data_type("XSTAR_QUALIFICATION_SOURCE_SEQUENCE") == 16 &&
-                environment_flag("XSTAR_NATIVE_SEQUENCE16_MG_SOURCE_STATE")) {
-                buffers.populations = thermal_populations;
-                std::fill(buffers.ion_population_final.begin(),
-                    buffers.ion_population_final.end(), 0.0);
-                for (std::size_t row = 0; row + 1u < buffers.populations.size(); ++row) {
-                    const int ion_slot = active.element.rows[row].ion - 1;
-                    if (ion_slot >= 0 && static_cast<std::size_t>(ion_slot) <
-                        buffers.ion_population_final.size()) {
-                        buffers.ion_population_final[static_cast<std::size_t>(ion_slot)] +=
-                            buffers.populations[row];
-                    }
-                }
-            }
         } else if (thermal_component_closure_data.has_value() && fixed_state_closure_data.has_value()) {
             const auto& closure = *fixed_state_closure_data;
             for (std::size_t row = 0; row < thermal_populations.size(); ++row) {

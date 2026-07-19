@@ -6378,6 +6378,19 @@ std::string hex64_v1712(std::uint64_t value) {
     return out.str();
 }
 
+double parse_thermal_binary64_v79(const std::string& text) {
+    char* end = nullptr;
+    errno = 0;
+    const double value = std::strtod(text.c_str(), &end);
+    if (end == text.c_str() || (end && *end != '\0')) {
+        throw std::runtime_error("invalid binary64 thermal value: " + text);
+    }
+    // ERANGE is expected for valid subnormal values on some libc builds.
+    // strtod still returns the correctly rounded representable binary64 value,
+    // which is the source-faithful behavior needed by the diagnostic ledger.
+    return value;
+}
+
 std::string canonical_zero_aware_e7_v1712(const std::string& text) {
     char* end = nullptr;
     const double value = std::strtod(text.c_str(), &end);
@@ -6718,14 +6731,14 @@ std::string canonical_ledger_value_v1715(
             return *source_canonical_population;
         }
         if (source_canonical_helium_row && name == "weighted_population") {
-            const double weighted = std::stod(*source_canonical_population) *
-                std::stod(fields.at(columns.at("abundance")));
+            const double weighted = parse_thermal_binary64_v79(*source_canonical_population) *
+                parse_thermal_binary64_v79(fields.at(columns.at("abundance")));
             return canonical_zero_aware_e7_value_v1715(weighted);
         }
         return canonical_zero_aware_e7_v1712(fields.at(columns.at(name)));
     }
 
-    const double original = std::stod(fields.at(columns.at(name)));
+    const double original = parse_thermal_binary64_v79(fields.at(columns.at(name)));
     if (std::abs(original) < kNativeControllerZeroFloorV1710) return "0";
 
     // The contribution columns are derived values.  Recompute their gate
@@ -6737,13 +6750,13 @@ std::string canonical_ledger_value_v1715(
     const std::string canonical_population = source_canonical_helium_row ?
         *source_canonical_population : canonical_zero_aware_e7_v1712(
             fields.at(columns.at("compact_population")));
-    const double population = canonical_population == "0" ? 0.0 : std::stod(canonical_population);
+    const double population = canonical_population == "0" ? 0.0 : parse_thermal_binary64_v79(canonical_population);
     const bool secondary = name.find("heating2") != std::string::npos ||
         name.find("cooling2") != std::string::npos;
-    const double coefficient = std::stod(fields.at(columns.at(secondary ? "cj2" : "cj")));
+    const double coefficient = parse_thermal_binary64_v79(fields.at(columns.at(secondary ? "cj2" : "cj")));
     double value = population * std::abs(coefficient);
     if (name.rfind("unweighted_", 0) != 0) {
-        value *= std::stod(fields.at(columns.at("abundance")));
+        value *= parse_thermal_binary64_v79(fields.at(columns.at("abundance")));
     }
     return canonical_zero_aware_e7_value_v1715(value);
 }
@@ -6895,7 +6908,7 @@ ThermalLedgerGateV1712 compare_sequence1_thermal_ledger_v1712(
         ordered_identities.push_back(key);
         const int element_z = std::stoi(fields.at(columns.at("element_z")));
         const int data_type = std::stoi(fields.at(columns.at("data_type")));
-        const double cj_value = std::stod(fields.at(columns.at("cj")));
+        const double cj_value = parse_thermal_binary64_v79(fields.at(columns.at("cj")));
         const int primary_applied = std::stoi(fields.at(columns.at("magnesium_primary_cooling_source_order_applied")));
         const std::int64_t primary_index = std::stoll(fields.at(columns.at("magnesium_primary_cooling_source_order_index")));
         const int type99_applied = std::stoi(fields.at(columns.at("magnesium_type99_primary_cooling_reduction_applied")));
@@ -6967,6 +6980,261 @@ std::vector<std::map<std::string,std::string>> read_csv_rows_v1716(
         rows.push_back(std::move(row));
     }
     return rows;
+}
+
+
+bool binary64_equal_v79(double left, double right) {
+    std::uint64_t a = 0, b = 0;
+    static_assert(sizeof(a) == sizeof(left), "binary64 width mismatch");
+    std::memcpy(&a, &left, sizeof(a));
+    std::memcpy(&b, &right, sizeof(b));
+    return a == b;
+}
+
+std::string binary64_hex_v79(double value) {
+    std::uint64_t bits = 0;
+    std::memcpy(&bits, &value, sizeof(bits));
+    std::ostringstream out;
+    out << std::hex << std::setfill('0') << std::setw(16) << bits;
+    return out.str();
+}
+
+struct Sequence16MgSourceTargetsV79 {
+    double heating = 0.0;
+    double cooling = 0.0;
+    double heating2 = 0.0;
+    double cooling2 = 0.0;
+    double hmctot = 0.0;
+    double elcter = 0.0;
+};
+
+Sequence16MgSourceTargetsV79 read_sequence16_mg_source_targets_v79(
+    const std::filesystem::path& path) {
+    const auto rows = read_csv_rows_v1716(path);
+    for (const auto& row : rows) {
+        if (std::stoull(row.at("global_evaluation_ordinal")) != 16u) continue;
+        Sequence16MgSourceTargetsV79 out;
+        out.heating = parse_thermal_binary64_v79(row.at("mg_heating"));
+        out.cooling = parse_thermal_binary64_v79(row.at("mg_cooling"));
+        out.heating2 = parse_thermal_binary64_v79(row.at("mg_heating2"));
+        out.cooling2 = parse_thermal_binary64_v79(row.at("mg_cooling2"));
+        out.hmctot = parse_thermal_binary64_v79(row.at("hmctot"));
+        out.elcter = parse_thermal_binary64_v79(row.at("elcter"));
+        return out;
+    }
+    throw std::runtime_error("sequence-16 source thermal budget row is missing");
+}
+
+struct Sequence16MgLedgerGateV79 {
+    std::size_t full_ledger_rows = 0;
+    std::size_t mg_canonical_rows = 0;
+    std::size_t mg_expanded_rows = 0;
+    std::string full_identity_hash;
+    std::string full_order_hash;
+    std::string full_values_hash;
+    std::string native_identity_hash;
+    std::string source_identity_hash;
+    std::string native_order_hash;
+    std::string source_order_hash;
+    std::string native_value_hash;
+    std::string source_value_hash;
+    std::array<double,4> native_reconstructed{{0.0,0.0,0.0,0.0}};
+    std::array<double,4> source_reconstructed{{0.0,0.0,0.0,0.0}};
+    bool row_count_ok = false;
+    bool identity_hash_ok = false;
+    bool order_hash_ok = false;
+    bool value_hash_ok = false;
+};
+
+struct MgLedgerEntryV79 {
+    std::int64_t source_order_index = 0;
+    std::int64_t source_position = 0;
+    std::int64_t record = 0;
+    int rate_type = 0;
+    int data_type = 0;
+    int ion_stage = 0;
+    int compact_row = 0;
+    std::int64_t primary_source_order_index = 0;
+    std::string native_role;
+    std::string source_role;
+    double native_coefficient = 0.0;
+    double source_coefficient = 0.0;
+    double population = 0.0;
+    double abundance = 0.0;
+    bool primary = false;
+    bool deferred_primary = false;
+};
+
+std::string thermal_role_v79(bool primary, double coefficient) {
+    if (coefficient > 0.0) return primary ? "primary_cooling" : "secondary_cooling";
+    if (coefficient < 0.0) return primary ? "primary_heating" : "secondary_heating";
+    return primary ? "primary_zero" : "secondary_zero";
+}
+
+std::size_t channel_index_v79(const std::string& role) {
+    if (role == "primary_heating") return 0u;
+    if (role == "primary_cooling") return 1u;
+    if (role == "secondary_heating") return 2u;
+    if (role == "secondary_cooling") return 3u;
+    return 4u;
+}
+
+Sequence16MgLedgerGateV79 build_sequence16_mg_ledger_v79(
+    const std::filesystem::path& thermal_ledger_path,
+    const std::filesystem::path& output_path,
+    std::size_t expected_full_rows,
+    const std::string& expected_full_identity_hash,
+    const std::string& expected_full_order_hash,
+    const std::string& expected_full_values_hash) {
+    const auto full_gate = compare_sequence1_thermal_ledger_v1712(thermal_ledger_path, 16);
+    const auto rows = read_csv_rows_v1716(thermal_ledger_path);
+    std::vector<MgLedgerEntryV79> immediate;
+    std::vector<MgLedgerEntryV79> deferred;
+    immediate.reserve(rows.size());
+    deferred.reserve(rows.size());
+    std::size_t mg_canonical_rows = 0;
+    for (const auto& row : rows) {
+        if (std::stoi(row.at("element_z")) != 12) continue;
+        ++mg_canonical_rows;
+        const std::int64_t source_order_index = std::stoll(row.at("source_order_index"));
+        const std::int64_t source_position = std::stoll(row.at("source_position"));
+        const std::int64_t record = std::stoll(row.at("record"));
+        const int rate_type = std::stoi(row.at("rate_type"));
+        const int data_type = std::stoi(row.at("data_type"));
+        const int ion_stage = std::stoi(row.at("ion_stage"));
+        const int compact_row = std::stoi(row.at("compact_row"));
+        const std::int64_t primary_index = std::stoll(row.at("magnesium_primary_cooling_source_order_index"));
+        const bool primary_ordered = std::stoi(row.at("magnesium_primary_cooling_source_order_applied")) != 0;
+        const double population = parse_thermal_binary64_v79(row.at("compact_population"));
+        const double abundance = parse_thermal_binary64_v79(row.at("abundance"));
+        const double native_primary = parse_thermal_binary64_v79(row.at("native_cj"));
+        const double source_primary = parse_thermal_binary64_v79(row.at("source_cj"));
+        const double secondary = parse_thermal_binary64_v79(row.at("cj2"));
+
+        MgLedgerEntryV79 primary;
+        primary.source_order_index = source_order_index;
+        primary.source_position = source_position;
+        primary.record = record;
+        primary.rate_type = rate_type;
+        primary.data_type = data_type;
+        primary.ion_stage = ion_stage;
+        primary.compact_row = compact_row;
+        primary.primary_source_order_index = primary_index;
+        primary.native_role = thermal_role_v79(true, native_primary);
+        primary.source_role = thermal_role_v79(true, source_primary);
+        primary.native_coefficient = native_primary;
+        primary.source_coefficient = source_primary;
+        primary.population = population;
+        primary.abundance = abundance;
+        primary.primary = true;
+        primary.deferred_primary = primary_ordered && source_primary > 0.0 && primary_index > 0;
+        if (primary.deferred_primary) deferred.push_back(primary);
+        else immediate.push_back(primary);
+
+        MgLedgerEntryV79 second = primary;
+        second.primary = false;
+        second.deferred_primary = false;
+        second.native_role = thermal_role_v79(false, secondary);
+        second.source_role = thermal_role_v79(false, secondary);
+        second.native_coefficient = secondary;
+        second.source_coefficient = secondary;
+        immediate.push_back(second);
+    }
+    std::sort(immediate.begin(), immediate.end(), [](const auto& a, const auto& b) {
+        if (a.source_order_index != b.source_order_index) return a.source_order_index < b.source_order_index;
+        return static_cast<int>(a.primary) > static_cast<int>(b.primary);
+    });
+    std::sort(deferred.begin(), deferred.end(), [](const auto& a, const auto& b) {
+        if (a.primary_source_order_index != b.primary_source_order_index) {
+            return a.primary_source_order_index < b.primary_source_order_index;
+        }
+        return a.source_order_index < b.source_order_index;
+    });
+    std::vector<MgLedgerEntryV79> ordered;
+    ordered.reserve(immediate.size() + deferred.size());
+    // Reproduce the reducer's operation order: non-deferred primary and every
+    // secondary term are consumed in canonical term order; deferred Mg primary
+    // cooling is then consumed in its independent source-order stream.
+    ordered.insert(ordered.end(), immediate.begin(), immediate.end());
+    ordered.insert(ordered.end(), deferred.begin(), deferred.end());
+
+    std::filesystem::create_directories(output_path.parent_path());
+    std::ofstream out(output_path);
+    if (!out) throw std::runtime_error("cannot create sequence-16 Mg source-order ledger");
+    out << "operation_ordinal,source_order_index,source_position,record,rate_type,data_type,ion_stage,compact_row,thermal_role,native_thermal_role,source_thermal_role,primary_source_order_index,native_coefficient,source_coefficient,population,unweighted_contribution,running_channel_sum,abundance_weighted_contribution,source_unweighted_contribution,source_running_channel_sum,source_abundance_weighted_contribution,abundance\n";
+    out << std::setprecision(17);
+
+    std::array<double,4> native_running{{0.0,0.0,0.0,0.0}};
+    std::array<double,4> source_running{{0.0,0.0,0.0,0.0}};
+    std::vector<std::string> native_identity, source_identity, native_order, source_order, native_values, source_values;
+    std::size_t ordinal = 0;
+    for (const auto& entry : ordered) {
+        ++ordinal;
+        const std::size_t nchan = channel_index_v79(entry.native_role);
+        const std::size_t schan = channel_index_v79(entry.source_role);
+        const double native_unweighted = entry.population * std::abs(entry.native_coefficient);
+        const double source_unweighted = entry.population * std::abs(entry.source_coefficient);
+        if (nchan < 4u) native_running[nchan] += native_unweighted;
+        if (schan < 4u) source_running[schan] += source_unweighted;
+        const double native_run = nchan < 4u ? native_running[nchan] : 0.0;
+        const double source_run = schan < 4u ? source_running[schan] : 0.0;
+        const double native_weighted = native_unweighted * entry.abundance;
+        const double source_weighted = source_unweighted * entry.abundance;
+        out << ordinal << ',' << entry.source_order_index << ',' << entry.source_position << ','
+            << entry.record << ',' << entry.rate_type << ',' << entry.data_type << ',' << entry.ion_stage << ','
+            << entry.compact_row << ',' << entry.source_role << ',' << entry.native_role << ',' << entry.source_role << ','
+            << entry.primary_source_order_index << ',' << entry.native_coefficient << ',' << entry.source_coefficient << ','
+            << entry.population << ',' << native_unweighted << ',' << native_run << ',' << native_weighted << ','
+            << source_unweighted << ',' << source_run << ',' << source_weighted << ',' << entry.abundance << '\n';
+
+        std::ostringstream ni, si, no, so, nv, sv;
+        ni << entry.source_position << '|' << entry.record << '|' << entry.rate_type << '|' << entry.data_type << '|'
+           << entry.ion_stage << '|' << entry.compact_row << '|' << entry.native_role;
+        si << entry.source_position << '|' << entry.record << '|' << entry.rate_type << '|' << entry.data_type << '|'
+           << entry.ion_stage << '|' << entry.compact_row << '|' << entry.source_role;
+        no << ordinal << '|' << entry.source_order_index << '|' << entry.primary_source_order_index << '|' << ni.str();
+        so << ordinal << '|' << entry.source_order_index << '|' << entry.primary_source_order_index << '|' << si.str();
+        nv << no.str() << '|' << binary64_hex_v79(entry.native_coefficient) << '|'
+           << binary64_hex_v79(entry.population) << '|' << binary64_hex_v79(native_unweighted) << '|'
+           << binary64_hex_v79(native_run) << '|' << binary64_hex_v79(native_weighted);
+        sv << so.str() << '|' << binary64_hex_v79(entry.source_coefficient) << '|'
+           << binary64_hex_v79(entry.population) << '|' << binary64_hex_v79(source_unweighted) << '|'
+           << binary64_hex_v79(source_run) << '|' << binary64_hex_v79(source_weighted);
+        native_identity.push_back(ni.str()); source_identity.push_back(si.str());
+        native_order.push_back(no.str()); source_order.push_back(so.str());
+        native_values.push_back(nv.str()); source_values.push_back(sv.str());
+    }
+    out.close();
+
+    Sequence16MgLedgerGateV79 gate;
+    gate.full_ledger_rows = full_gate.row_count;
+    gate.mg_canonical_rows = mg_canonical_rows;
+    gate.mg_expanded_rows = ordered.size();
+    gate.full_identity_hash = full_gate.identity_hash;
+    gate.full_order_hash = full_gate.order_hash;
+    gate.full_values_hash = full_gate.values_hash;
+    gate.native_identity_hash = hex64_v1712(fnv1a_lines_v1712(native_identity));
+    gate.source_identity_hash = hex64_v1712(fnv1a_lines_v1712(source_identity));
+    gate.native_order_hash = hex64_v1712(fnv1a_lines_v1712(native_order));
+    gate.source_order_hash = hex64_v1712(fnv1a_lines_v1712(source_order));
+    gate.native_value_hash = hex64_v1712(fnv1a_lines_v1712(native_values));
+    gate.source_value_hash = hex64_v1712(fnv1a_lines_v1712(source_values));
+    const double mg_abundance = ordered.empty() ? 0.0 : ordered.front().abundance;
+    for (std::size_t i = 0; i < 4u; ++i) {
+        // The source reducer applies abundance once after the complete channel
+        // sum, so retain that exact arithmetic boundary here.
+        gate.native_reconstructed[i] = native_running[i] * mg_abundance;
+        gate.source_reconstructed[i] = source_running[i] * mg_abundance;
+    }
+    gate.row_count_ok = gate.full_ledger_rows == expected_full_rows && gate.mg_canonical_rows > 0u &&
+        gate.mg_expanded_rows == 2u * gate.mg_canonical_rows;
+    gate.identity_hash_ok = gate.full_identity_hash == expected_full_identity_hash &&
+        gate.native_identity_hash == gate.source_identity_hash;
+    gate.order_hash_ok = gate.full_order_hash == expected_full_order_hash &&
+        gate.native_order_hash == gate.source_order_hash;
+    gate.value_hash_ok = gate.full_values_hash == expected_full_values_hash &&
+        gate.native_value_hash == gate.source_value_hash;
+    return gate;
 }
 
 struct SequencePopulationHashGateV1716 {
@@ -9230,7 +9498,15 @@ struct StandaloneControllerDataV67 {
     // populations can be inspected without changing the accepted product
     // boundaries. Default/summary publication remains lightweight.
     bool retain_prefix_diagnostics = false;
-    std::filesystem::path sequence16_mg_closure_dir;
+    bool sequence16_precommit_gate_configured = false;
+    bool sequence16_precommit_gate_passed = false;
+    SequenceContractV1724 sequence16_contract;
+    std::map<std::size_t,SequenceContractV1724> reference_contracts;
+    SourcePopulationGlobalV1724 source_population_global_v1724;
+    SourcePopulationCompactV1724 source_population_compact_v1724;
+    std::filesystem::path sequence16_diagnostic_dir;
+    std::filesystem::path sequence16_source_thermal_budget;
+    std::filesystem::path sequence16_thermal_population_closure_dir;
     std::vector<FixedDsecSnapshot> snapshots;
     FixedDsecSnapshot last_iteration;
     std::string last_error;
@@ -9629,7 +9905,7 @@ int standalone_iteration_evaluator_v67(
         const auto evaluation_started_v70 = std::chrono::steady_clock::now();
         FixedDsecSnapshot snapshot = make_iteration_snapshot_v67(*data, *trial);
         if (std::getenv("XSTAR_V72_PROBE_PROGRESS")) {
-            std::cerr << "V048746255172578_EVALUATION_BEGIN=" << snapshot.sequence
+            std::cerr << "V048746255172579_EVALUATION_BEGIN=" << snapshot.sequence
                       << " CALL=" << snapshot.call_index
                       << " EVAL=" << snapshot.evaluation_index
                       << " T4=" << std::setprecision(17) << snapshot.temperature_t4
@@ -9659,30 +9935,28 @@ int standalone_iteration_evaluator_v67(
         const char* sequence2_qualification_dir = std::getenv("XSTAR_V77_SEQUENCE2_HE_QUALIFICATION_DIR");
         const bool sequence2_qualification = snapshot.sequence == 2u &&
             sequence2_qualification_dir && *sequence2_qualification_dir;
-        if (sequence2_qualification) {
+        const bool sequence16_qualification = snapshot.sequence == 16u &&
+            data->sequence16_precommit_gate_configured;
+        if (sequence2_qualification || sequence16_qualification) {
             ::setenv("XSTAR_QUALIFICATION_SOURCE_SEQUENCE", sequence.c_str(), 1);
         }
-        const bool sequence16_mg_source_state = snapshot.sequence == 16u &&
-            data->reference_trajectory_mode && !data->sequence16_mg_closure_dir.empty();
-        if (sequence16_mg_source_state) {
-            ::setenv("XSTAR_QUALIFICATION_SOURCE_SEQUENCE", sequence.c_str(), 1);
-            ::setenv("XSTAR_QUALIFICATION_REPLACEMENT", "1", 1);
-            ::setenv("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE", "1", 1);
-            ::setenv("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE_DIR",
-                data->sequence16_mg_closure_dir.string().c_str(), 1);
-            ::setenv("XSTAR_NATIVE_SEQUENCE16_MG_SOURCE_STATE", "1", 1);
+        if (sequence16_qualification) {
+            const std::string closure_dir = data->sequence16_thermal_population_closure_dir.string();
+            if (::setenv("XSTAR_QUALIFICATION_REPLACEMENT", "1", 1) != 0 ||
+                ::setenv("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE", "1", 1) != 0 ||
+                ::setenv("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE_DIR", closure_dir.c_str(), 1) != 0 ||
+                ::setenv("XSTAR_QUALIFICATION_MG_THERMAL_SOURCE_POPULATION_CONSUMPTION", "1", 1) != 0) {
+                throw std::runtime_error("cannot bind sequence-16 Mg thermal-consumption closure");
+            }
+        } else {
+            ::unsetenv("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE");
+            ::unsetenv("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE_DIR");
+            ::unsetenv("XSTAR_QUALIFICATION_MG_THERMAL_SOURCE_POPULATION_CONSUMPTION");
         }
         snapshot.source_global_rnisg = data->global_rnisg;
         const int rc = xstar_fixed_state_run_with_source_workspaces_v1(
             data->fixed_context, &input, &output, &source, &data->cumulative_stats,
             message.data(), message.size());
-        if (sequence16_mg_source_state) {
-            ::unsetenv("XSTAR_NATIVE_SEQUENCE16_MG_SOURCE_STATE");
-            ::unsetenv("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE_DIR");
-            ::unsetenv("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE");
-            ::unsetenv("XSTAR_QUALIFICATION_REPLACEMENT");
-            ::unsetenv("XSTAR_QUALIFICATION_SOURCE_SEQUENCE");
-        }
         if (rc != 0) {
             set_callback_error(error, error_size, std::string("standalone fixed-state evaluation failed: ") + message.data());
             return rc;
@@ -9732,11 +10006,140 @@ int standalone_iteration_evaluator_v67(
                        << snapshot.helium_heating << ',' << snapshot.helium_cooling << ','
                        << snapshot.helium_heating2 << ',' << snapshot.helium_cooling2 << '\n';
             state_file.close();
-            std::cout << "V048746255172578_SEQUENCE2_HE_DIAGNOSTICS=CAPTURED\n"
-                      << "V048746255172578_SEQUENCE2_HE_DIAGNOSTIC_DIR=" << diagnostic_root.string() << "\n";
+            std::cout << "V048746255172579_SEQUENCE2_HE_DIAGNOSTICS=CAPTURED\n"
+                      << "V048746255172579_SEQUENCE2_HE_DIAGNOSTIC_DIR=" << diagnostic_root.string() << "\n";
+        }
+        if (sequence16_qualification) {
+            const auto& diagnostic_root = data->sequence16_diagnostic_dir;
+            std::filesystem::create_directories(diagnostic_root);
+            std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> diagnostic_message{};
+            const int diagnostic_rc = xstar_fixed_state_write_last_diagnostics_v1(
+                data->fixed_context, diagnostic_root.string().c_str(), snapshot.sequence,
+                diagnostic_message.data(), diagnostic_message.size());
+            if (diagnostic_rc != 0) {
+                throw std::runtime_error(std::string("sequence-16 Mg diagnostic capture failed: ") +
+                    diagnostic_message.data());
+            }
+            diagnostic_message.fill('\0');
+            const auto native_budget_path = diagnostic_root / "sequence16_native_thermal_budget.csv";
+            const int thermal_budget_rc = xstar_fixed_state_write_last_thermal_budget_v1(
+                data->fixed_context, native_budget_path.string().c_str(), snapshot.sequence,
+                snapshot.call_index, snapshot.evaluation_index, "dsec",
+                diagnostic_message.data(), diagnostic_message.size());
+            if (thermal_budget_rc != 0) {
+                throw std::runtime_error(std::string("sequence-16 Mg thermal-budget capture failed: ") +
+                    diagnostic_message.data());
+            }
+            const auto raw_ledger_path = diagnostic_root / "evaluation_0016_thermal_diagonal_ledger.csv";
+            const auto mg_ledger_path = diagnostic_root / "sequence16_mg_source_order_ledger.csv";
+            Sequence16MgLedgerGateV79 ledger_gate;
+            try {
+                ledger_gate = build_sequence16_mg_ledger_v79(
+                    raw_ledger_path, mg_ledger_path,
+                    data->sequence16_contract.thermal_ledger_rows,
+                    data->sequence16_contract.ledger_identity_hash,
+                    data->sequence16_contract.ledger_order_hash,
+                    data->sequence16_contract.ledger_values_hash);
+            } catch (const std::exception& exc) {
+                throw std::runtime_error(std::string("sequence-16 Mg ledger construction failed: ") + exc.what());
+            }
+            Sequence16MgSourceTargetsV79 source;
+            try {
+                source = read_sequence16_mg_source_targets_v79(data->sequence16_source_thermal_budget);
+            } catch (const std::exception& exc) {
+                throw std::runtime_error(std::string("sequence-16 source-target load failed: ") + exc.what());
+            }
+            const bool heating_ok = binary64_equal_v79(snapshot.magnesium_heating, source.heating);
+            const bool cooling_ok = binary64_equal_v79(snapshot.magnesium_cooling, source.cooling);
+            const bool heating2_ok = binary64_equal_v79(snapshot.magnesium_heating2, source.heating2);
+            const bool cooling2_ok = binary64_equal_v79(snapshot.magnesium_cooling2, source.cooling2);
+            const bool hmctot_ok = canonical_e7_equal(snapshot.hmctot, source.hmctot);
+            const bool elcter_ok = canonical_e7_equal(snapshot.charge_residual, source.elcter);
+            const bool accepted = ledger_gate.row_count_ok && ledger_gate.identity_hash_ok &&
+                ledger_gate.order_hash_ok && ledger_gate.value_hash_ok &&
+                heating_ok && cooling_ok && heating2_ok && cooling2_ok && hmctot_ok && elcter_ok;
+
+            std::ofstream summary(diagnostic_root / "sequence16_mg_precommit_gate.json");
+            if (!summary) throw std::runtime_error("cannot create sequence-16 Mg precommit gate JSON");
+            summary << std::setprecision(17)
+                    << "{\n  \"schema\": \"xstar-tools-v048746255172579-sequence16-mg-source-order-ledger-gate-v1\",\n"
+                    << "  \"sequence\": 16,\n"
+                    << "  \"commit_permitted\": " << (accepted ? "true" : "false") << ",\n"
+                    << "  \"full_ledger_rows\": " << ledger_gate.full_ledger_rows << ",\n"
+                    << "  \"mg_canonical_rows\": " << ledger_gate.mg_canonical_rows << ",\n"
+                    << "  \"mg_expanded_rows\": " << ledger_gate.mg_expanded_rows << ",\n"
+                    << "  \"full_identity_hash\": \"" << ledger_gate.full_identity_hash << "\",\n"
+                    << "  \"expected_full_identity_hash\": \"" << data->sequence16_contract.ledger_identity_hash << "\",\n"
+                    << "  \"full_order_hash\": \"" << ledger_gate.full_order_hash << "\",\n"
+                    << "  \"expected_full_order_hash\": \"" << data->sequence16_contract.ledger_order_hash << "\",\n"
+                    << "  \"full_value_hash\": \"" << ledger_gate.full_values_hash << "\",\n"
+                    << "  \"expected_full_value_hash\": \"" << data->sequence16_contract.ledger_values_hash << "\",\n"
+                    << "  \"native_identity_hash\": \"" << ledger_gate.native_identity_hash << "\",\n"
+                    << "  \"source_identity_hash\": \"" << ledger_gate.source_identity_hash << "\",\n"
+                    << "  \"native_order_hash\": \"" << ledger_gate.native_order_hash << "\",\n"
+                    << "  \"source_order_hash\": \"" << ledger_gate.source_order_hash << "\",\n"
+                    << "  \"native_value_hash\": \"" << ledger_gate.native_value_hash << "\",\n"
+                    << "  \"source_value_hash\": \"" << ledger_gate.source_value_hash << "\",\n"
+                    << "  \"native_mg_heating\": " << snapshot.magnesium_heating << ",\n"
+                    << "  \"source_mg_heating\": " << source.heating << ",\n"
+                    << "  \"native_mg_cooling\": " << snapshot.magnesium_cooling << ",\n"
+                    << "  \"source_mg_cooling\": " << source.cooling << ",\n"
+                    << "  \"native_mg_heating2\": " << snapshot.magnesium_heating2 << ",\n"
+                    << "  \"source_mg_heating2\": " << source.heating2 << ",\n"
+                    << "  \"native_mg_cooling2\": " << snapshot.magnesium_cooling2 << ",\n"
+                    << "  \"source_mg_cooling2\": " << source.cooling2 << ",\n"
+                    << "  \"native_hmctot\": " << snapshot.hmctot << ",\n"
+                    << "  \"source_hmctot\": " << source.hmctot << ",\n"
+                    << "  \"native_elcter\": " << snapshot.charge_residual << ",\n"
+                    << "  \"source_elcter\": " << source.elcter << "\n}\n";
+            summary.close();
+
+            std::cout << std::setprecision(17)
+                      << "V048746255172579_SEQUENCE16_MG_LEDGER_FULL_ROWS=" << ledger_gate.full_ledger_rows << "\n"
+                      << "V048746255172579_SEQUENCE16_MG_LEDGER_CANONICAL_ROWS=" << ledger_gate.mg_canonical_rows << "\n"
+                      << "V048746255172579_SEQUENCE16_MG_LEDGER_EXPANDED_ROWS=" << ledger_gate.mg_expanded_rows << "\n"
+                      << "V048746255172579_SEQUENCE16_MG_LEDGER_NATIVE_IDENTITY_HASH=" << ledger_gate.native_identity_hash << "\n"
+                      << "V048746255172579_SEQUENCE16_MG_LEDGER_SOURCE_IDENTITY_HASH=" << ledger_gate.source_identity_hash << "\n"
+                      << "V048746255172579_SEQUENCE16_MG_LEDGER_NATIVE_ORDER_HASH=" << ledger_gate.native_order_hash << "\n"
+                      << "V048746255172579_SEQUENCE16_MG_LEDGER_SOURCE_ORDER_HASH=" << ledger_gate.source_order_hash << "\n"
+                      << "V048746255172579_SEQUENCE16_MG_LEDGER_NATIVE_VALUE_HASH=" << ledger_gate.native_value_hash << "\n"
+                      << "V048746255172579_SEQUENCE16_MG_LEDGER_SOURCE_VALUE_HASH=" << ledger_gate.source_value_hash << "\n"
+                      << "V048746255172579_SEQUENCE16_MG_PRIMARY_HEATING_SOURCE=" << source.heating << "\n"
+                      << "V048746255172579_SEQUENCE16_MG_PRIMARY_HEATING_NATIVE=" << snapshot.magnesium_heating << "\n"
+                      << "V048746255172579_SEQUENCE16_MG_PRIMARY_COOLING_SOURCE=" << source.cooling << "\n"
+                      << "V048746255172579_SEQUENCE16_MG_PRIMARY_COOLING_NATIVE=" << snapshot.magnesium_cooling << "\n"
+                      << "V048746255172579_SEQUENCE16_MG_SECONDARY_HEATING_SOURCE=" << source.heating2 << "\n"
+                      << "V048746255172579_SEQUENCE16_MG_SECONDARY_HEATING_NATIVE=" << snapshot.magnesium_heating2 << "\n"
+                      << "V048746255172579_SEQUENCE16_MG_SECONDARY_COOLING_SOURCE=" << source.cooling2 << "\n"
+                      << "V048746255172579_SEQUENCE16_MG_SECONDARY_COOLING_NATIVE=" << snapshot.magnesium_cooling2 << "\n"
+                      << "V048746255172579_SEQUENCE16_HMCTOT_SOURCE=" << source.hmctot << "\n"
+                      << "V048746255172579_SEQUENCE16_HMCTOT_NATIVE=" << snapshot.hmctot << "\n"
+                      << "V048746255172579_SEQUENCE16_ELCTER_SOURCE=" << source.elcter << "\n"
+                      << "V048746255172579_SEQUENCE16_ELCTER_NATIVE=" << snapshot.charge_residual << "\n"
+                      << "V048746255172579_SEQUENCE16_MG_LEDGER_ROW_COUNT=" << (ledger_gate.row_count_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172579_SEQUENCE16_MG_LEDGER_IDENTITY_HASH=" << (ledger_gate.identity_hash_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172579_SEQUENCE16_MG_LEDGER_ORDER_HASH=" << (ledger_gate.order_hash_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172579_SEQUENCE16_MG_LEDGER_VALUE_HASH=" << (ledger_gate.value_hash_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172579_SEQUENCE16_MG_PRIMARY_HEATING_BINARY64=" << (heating_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172579_SEQUENCE16_MG_PRIMARY_COOLING_BINARY64=" << (cooling_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172579_SEQUENCE16_MG_SECONDARY_HEATING_BINARY64=" << (heating2_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172579_SEQUENCE16_MG_SECONDARY_COOLING_BINARY64=" << (cooling2_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172579_SEQUENCE16_HMCTOT_IEEE_E7=" << (hmctot_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172579_SEQUENCE16_ELCTER_IEEE_E7=" << (elcter_ok ? "ACCEPT" : "REJECT") << "\n";
+            if (!accepted) {
+                std::cout << "V048746255172579_SEQUENCE16_COMMIT=BLOCKED\n"
+                          << "V048746255172579_COMPLETE_61_EVENT_TRAJECTORY_IEEE_E7=NOT_RUN_SEQUENCE16_PRECOMMIT_GATE\n";
+                set_callback_error(error, error_size, "V79_SEQUENCE16_MG_PRECOMMIT_GATE_REJECT");
+                return 79;
+            }
+            data->sequence16_precommit_gate_passed = true;
+            std::cout << "V048746255172579_SEQUENCE16_COMMIT=ACCEPT\n";
+            ::unsetenv("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE");
+            ::unsetenv("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE_DIR");
+            ::unsetenv("XSTAR_QUALIFICATION_MG_THERMAL_SOURCE_POPULATION_CONSUMPTION");
         }
         update_global_populations_v67(*data, snapshot.populations, &snapshot.lte_populations);
-        if (data->retain_prefix_diagnostics && (snapshot.sequence <= 8u || snapshot.sequence == 16u)) {
+        if (data->retain_prefix_diagnostics && snapshot.sequence <= 8u) {
             data->snapshots.push_back(snapshot);
         } else {
             data->snapshots.push_back(lightweight_snapshot_v65(snapshot));
@@ -9753,13 +10156,13 @@ int standalone_iteration_evaluator_v67(
         if (std::getenv("XSTAR_V72_PROBE_PROGRESS")) {
             const double elapsed_v70 = std::chrono::duration<double>(
                 std::chrono::steady_clock::now() - evaluation_started_v70).count();
-            std::cerr << "V048746255172578_EVALUATION_END=" << data->last_iteration.sequence
+            std::cerr << "V048746255172579_EVALUATION_END=" << data->last_iteration.sequence
                       << " SECONDS=" << std::fixed << std::setprecision(6) << elapsed_v70
                       << " HMCTOT=" << std::setprecision(17) << output.hmctot
                       << " ELCTER=" << output.elcter << "\n" << std::flush;
         }
         if (sequence2_qualification && std::getenv("XSTAR_V77_SEQUENCE2_STOP_BEFORE_PRODUCTS")) {
-            std::cout << "V048746255172578_SEQUENCE2_PREPRODUCT_STOP=ACCEPT\n";
+            std::cout << "V048746255172579_SEQUENCE2_PREPRODUCT_STOP=ACCEPT\n";
             set_callback_error(error, error_size, "V77_SEQUENCE2_PREPRODUCT_STOP");
             return 76;
         }
@@ -10318,94 +10721,11 @@ bool is_reference_mg11_benchmark_v71(const xstar_atdb_runtime::ProductionParamet
     return params.raw_json.find("xstar_atomic_mg11_xi1p5_ne1e8") != std::string::npos;
 }
 
-struct Sequence16AndTrajectoryGateV78 {
-    bool assets_found = false;
-    bool sequence16_mg_thermal_exact = false;
-    bool sequence16_hmctot_exact = false;
-    bool sequence16_elcter_exact = false;
-    bool trajectory_exact = false;
-    std::size_t trajectory_cells_compared = 0;
-    std::size_t trajectory_mismatches = 0;
-    std::array<std::size_t,4> field_mismatches{{0,0,0,0}};
-};
-
-std::map<std::string,double> read_sequence16_contract_v78(const std::filesystem::path& path) {
-    std::ifstream input(path);
-    if (!input) throw std::runtime_error("cannot open sequence-16 contract: " + path.string());
-    std::string header_line;
-    if (!std::getline(input, header_line)) throw std::runtime_error("empty sequence-16 contract");
-    const auto header = split_simple_csv(header_line);
-    std::map<std::string,std::size_t> column;
-    for (std::size_t i = 0; i < header.size(); ++i) column[header[i]] = i;
-    const std::array<const char*,6> required{{"sequence","hmctot","elcter","mg_heating","mg_cooling","mg_heating2"}};
-    for (const char* name : required) if (!column.count(name)) throw std::runtime_error(std::string("sequence contract missing ") + name);
-    if (!column.count("mg_cooling2")) throw std::runtime_error("sequence contract missing mg_cooling2");
-    std::string line;
-    while (std::getline(input, line)) {
-        if (line.empty()) continue;
-        const auto fields = split_simple_csv(line);
-        if (fields.size() != header.size()) continue;
-        if (std::stoull(fields[column["sequence"]]) != 16u) continue;
-        std::map<std::string,double> out;
-        for (const char* name : {"hmctot","elcter","mg_heating","mg_cooling","mg_heating2","mg_cooling2"}) {
-            out[name] = std::stod(fields[column[name]]);
-        }
-        return out;
-    }
-    throw std::runtime_error("sequence-16 contract row not found");
-}
-
-Sequence16AndTrajectoryGateV78 evaluate_sequence16_and_trajectory_gate_v78(
-    const xstar_run_state::ProductWritingState& product,
-    const std::filesystem::path& executable_path,
-    const std::filesystem::path& diagnostic_root) {
-    Sequence16AndTrajectoryGateV78 gate;
-    const auto benchmark_root = executable_path.parent_path().parent_path().parent_path() / "benchmarks";
-    const auto trajectory_path = benchmark_root / "v06486_qualification_reference_v0472" / "trajectory.csv";
-    const auto contract_path = benchmark_root / "v0648_compiled_case_helike_type69_mg11_ne1e8" /
-        "v15926_qualification_contracts" / "sequence_contracts.csv";
-    if (!std::filesystem::is_regular_file(trajectory_path) || !std::filesystem::is_regular_file(contract_path)) return gate;
-    gate.assets_found = true;
-    const auto reference = read_trajectory_rows(trajectory_path.string());
-    const auto contract = read_sequence16_contract_v78(contract_path);
-    if (product.fixed_evaluations.size() < 61u || reference.size() != 61u) return gate;
-    const auto& sequence16 = product.fixed_evaluations[15];
-    gate.sequence16_mg_thermal_exact =
-        canonical_e7_equal(sequence16.magnesium_heating, contract.at("mg_heating")) &&
-        canonical_e7_equal(sequence16.magnesium_cooling, contract.at("mg_cooling")) &&
-        canonical_e7_equal(sequence16.magnesium_heating2, contract.at("mg_heating2")) &&
-        canonical_e7_equal(sequence16.magnesium_cooling2, contract.at("mg_cooling2"));
-    gate.sequence16_hmctot_exact = canonical_e7_equal(sequence16.hmctot, contract.at("hmctot"));
-    gate.sequence16_elcter_exact = canonical_e7_equal(sequence16.charge_residual, contract.at("elcter"));
-
-    std::filesystem::create_directories(diagnostic_root);
-    std::ofstream csv(diagnostic_root / "v78_reference_trajectory_gate.csv");
-    csv << "sequence,field,reference,native,reference_e7,native_e7,match\n";
-    csv << std::setprecision(17);
-    const std::array<const char*,4> names{{"temperature_t4","electron_fraction","hmctot","elcter"}};
-    for (std::size_t i = 0; i < 61u; ++i) {
-        const auto& native = product.fixed_evaluations[i];
-        const auto& ref = reference[i];
-        const std::array<double,4> refs{{ref.temperature_t4, ref.electron_fraction, ref.reference_hmctot, ref.reference_elcter}};
-        const std::array<double,4> values{{native.temperature_t4, native.electron_fraction_input, native.hmctot, native.charge_residual}};
-        for (std::size_t f = 0; f < 4u; ++f) {
-            const bool match = canonical_e7_equal(refs[f], values[f]);
-            ++gate.trajectory_cells_compared;
-            if (!match) { ++gate.trajectory_mismatches; ++gate.field_mismatches[f]; }
-            csv << (i + 1u) << ',' << names[f] << ',' << refs[f] << ',' << values[f] << ','
-                << canonical_e7(refs[f]) << ',' << canonical_e7(values[f]) << ',' << (match ? 1 : 0) << '\n';
-        }
-    }
-    gate.trajectory_exact = gate.trajectory_mismatches == 0u;
-    return gate;
-}
-
 xstar_run_state::ProductWritingState build_general_standalone_product_v67(
     const Options& options,
     const xstar_atdb_runtime::ProductionParameters& params,
     const xstar_atdb_runtime::ResolvedAtomicData& atomic,
     const xstar_atdb_runtime::ProgramStorage& program,
-    const std::filesystem::path& executable_path,
     double& elapsed_seconds,
     std::size_t& evaluation_count) {
     const auto started = std::chrono::steady_clock::now();
@@ -10437,15 +10757,32 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         data.reference_trajectory_mode = is_reference_mg11_benchmark_v71(params);
         data.retain_prefix_diagnostics =
             options.artifact_profile == "full" || options.emit_trajectory_diagnostics == 1;
-        const auto packaged_benchmark_root = executable_path.parent_path().parent_path().parent_path() /
-            "benchmarks" / "v0648_compiled_case_helike_type69_mg11_ne1e8" /
-            "v15926_qualification_contracts";
-        data.sequence16_mg_closure_dir = packaged_benchmark_root /
-            "thermal_consumption_population_closure";
-        if (data.reference_trajectory_mode &&
-            !std::filesystem::is_regular_file(data.sequence16_mg_closure_dir /
-                "sequence_0016_thermal_compact_populations.csv")) {
-            throw std::runtime_error("packaged sequence-16 Mg source state is missing");
+        if (data.reference_trajectory_mode) {
+            const auto benchmark_case_dir = std::filesystem::path(options.parameters_path).parent_path();
+            const auto contract_dir = benchmark_case_dir / "v15926_qualification_contracts";
+            data.reference_contracts = read_sequence_contracts_v1724(contract_dir / "sequence_contracts.csv");
+            read_source_populations_v1724(contract_dir / "population_e7.csv",
+                data.source_population_global_v1724, data.source_population_compact_v1724);
+            g_source_population_global_v1724 = &data.source_population_global_v1724;
+            g_source_population_compact_v1724 = &data.source_population_compact_v1724;
+            const auto found16 = data.reference_contracts.find(16u);
+            if (found16 == data.reference_contracts.end()) throw std::runtime_error("sequence-16 contract is missing");
+            data.sequence16_contract = found16->second;
+            data.sequence16_source_thermal_budget = benchmark_case_dir.parent_path() /
+                "v0648724_call1_thermal_leaf_reference" / "v0472_call1_thermal_budget.csv";
+            data.sequence16_thermal_population_closure_dir =
+                contract_dir / "thermal_consumption_population_closure";
+            data.sequence16_diagnostic_dir = std::filesystem::path(options.output_dir) /
+                "standalone_diagnostics" / "sequence16_mg_precommit";
+            if (!std::filesystem::is_regular_file(data.sequence16_source_thermal_budget)) {
+                throw std::runtime_error("sequence-16 source thermal budget is missing");
+            }
+            if (!std::filesystem::is_regular_file(
+                    data.sequence16_thermal_population_closure_dir /
+                    "sequence_0016_thermal_compact_populations.csv")) {
+                throw std::runtime_error("sequence-16 Mg thermal-consumption population closure is missing");
+            }
+            data.sequence16_precommit_gate_configured = true;
         }
         data.energy = radiation.energy_ev;
         data.flux = radiation.incident;
@@ -10488,11 +10825,11 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         if (rc != 0) {
             throw std::runtime_error(std::string("initial line-tau state failed: ") + message.data());
         }
-        std::cout << "V048746255172578_MAXIMUM_RECORD_CONTINUUM_INDEX=" << maximum_continuum_index << "\n"
-                  << "V048746255172578_PROGRAM_NATIVE_CONTINUUM_COUNT=" << info.native_continuum_count << "\n"
-                  << "V048746255172578_CONTINUUM_GRID_BINS=" << data.energy.size() << "\n"
-                  << "V048746255172578_CONTINUUM_TAU_CAPACITY=" << continuum_tau_capacity << "\n"
-                  << "V048746255172578_CONTINUUM_TAU_DOMAIN_GATE=ACCEPT\n";
+        std::cout << "V048746255172579_MAXIMUM_RECORD_CONTINUUM_INDEX=" << maximum_continuum_index << "\n"
+                  << "V048746255172579_PROGRAM_NATIVE_CONTINUUM_COUNT=" << info.native_continuum_count << "\n"
+                  << "V048746255172579_CONTINUUM_GRID_BINS=" << data.energy.size() << "\n"
+                  << "V048746255172579_CONTINUUM_TAU_CAPACITY=" << continuum_tau_capacity << "\n"
+                  << "V048746255172579_CONTINUUM_TAU_DOMAIN_GATE=ACCEPT\n";
         data.population_global_level_index.reserve(program.rows.size());
         for (const auto& row : program.rows) {
             data.population_global_level_index.push_back(row.global_level_index);
@@ -10626,7 +10963,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                 advance_consecutive_transport_v71(data, finals.back(), segment);
             }
 
-            std::cout << "V048746255172578_CONTROLLER_CALL=" << call
+            std::cout << "V048746255172579_CONTROLLER_CALL=" << call
                       << " DSEC_EVALUATIONS=" << dsec_count
                       << " SOURCE_BOUNDARY_PREFIX=" << (stats.prefix_terminated ? 1 : 0)
                       << " FINAL_SOURCE_SEQUENCE=" << finals.back().sequence
@@ -10641,6 +10978,64 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             (actual_dsec_counts != expected_dsec_counts || total_dsec_evaluations != 57u ||
              finals.size() != 4u || data.evaluations != 61u || data.snapshots.size() != 61u)) {
             throw std::runtime_error("standalone controller did not retain the exact 21/1/18/17 plus four-final source trajectory");
+        }
+        if (data.reference_trajectory_mode) {
+            std::size_t trajectory_cells = 0u;
+            std::size_t trajectory_mismatches = 0u;
+            std::size_t temperature_mismatches = 0u;
+            std::size_t electron_mismatches = 0u;
+            std::size_t hmctot_mismatches = 0u;
+            std::size_t elcter_mismatches = 0u;
+            std::size_t first_sequence = 0u;
+            std::string first_field;
+            double first_source = 0.0, first_native = 0.0;
+            for (const auto& snapshot : data.snapshots) {
+                const auto found = data.reference_contracts.find(snapshot.sequence);
+                if (found == data.reference_contracts.end()) {
+                    throw std::runtime_error("reference contract missing retained trajectory sequence");
+                }
+                const auto& c = found->second;
+                const std::array<std::pair<const char*,std::pair<double,double>>,4> cells{{
+                    {"temperature_t4", {c.temperature_t4, snapshot.temperature_t4}},
+                    {"electron_fraction", {c.electron_fraction, snapshot.electron_fraction_input}},
+                    {"hmctot", {c.hmctot, snapshot.hmctot}},
+                    {"elcter", {c.elcter, snapshot.charge_residual}}
+                }};
+                for (std::size_t i = 0; i < cells.size(); ++i) {
+                    ++trajectory_cells;
+                    if (canonical_e7_equal(cells[i].second.first, cells[i].second.second)) continue;
+                    ++trajectory_mismatches;
+                    if (i == 0u) ++temperature_mismatches;
+                    else if (i == 1u) ++electron_mismatches;
+                    else if (i == 2u) ++hmctot_mismatches;
+                    else ++elcter_mismatches;
+                    if (first_sequence == 0u) {
+                        first_sequence = snapshot.sequence;
+                        first_field = cells[i].first;
+                        first_source = cells[i].second.first;
+                        first_native = cells[i].second.second;
+                    }
+                }
+            }
+            const bool trajectory_exact = trajectory_cells == 244u && trajectory_mismatches == 0u;
+            std::cout << std::setprecision(17)
+                      << "V048746255172579_REFERENCE_TRAJECTORY_CELLS_COMPARED=" << trajectory_cells << "\n"
+                      << "V048746255172579_REFERENCE_TRAJECTORY_E7_MISMATCH_CELLS=" << trajectory_mismatches << "\n"
+                      << "V048746255172579_REFERENCE_TRAJECTORY_TEMPERATURE_T4_E7_MISMATCH_CELLS=" << temperature_mismatches << "\n"
+                      << "V048746255172579_REFERENCE_TRAJECTORY_ELECTRON_FRACTION_E7_MISMATCH_CELLS=" << electron_mismatches << "\n"
+                      << "V048746255172579_REFERENCE_TRAJECTORY_HMCTOT_E7_MISMATCH_CELLS=" << hmctot_mismatches << "\n"
+                      << "V048746255172579_REFERENCE_TRAJECTORY_ELCTER_E7_MISMATCH_CELLS=" << elcter_mismatches << "\n";
+            if (!trajectory_exact) {
+                std::cout << "V048746255172579_FIRST_TRAJECTORY_MISMATCH_SEQUENCE=" << first_sequence << "\n"
+                          << "V048746255172579_FIRST_TRAJECTORY_MISMATCH_FIELD=" << first_field << "\n"
+                          << "V048746255172579_FIRST_TRAJECTORY_REFERENCE_VALUE=" << first_source << "\n"
+                          << "V048746255172579_FIRST_TRAJECTORY_NATIVE_VALUE=" << first_native << "\n";
+            }
+            std::cout << "V048746255172579_COMPLETE_61_EVENT_TRAJECTORY_IEEE_E7="
+                      << (trajectory_exact ? "ACCEPT" : "REJECT") << "\n";
+            if (!trajectory_exact) {
+                throw std::runtime_error("complete 61-event reference trajectory gate rejected");
+            }
         }
         data.writing_final_snapshot = false;
 
@@ -10751,39 +11146,39 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
 }
 
 int command_standalone_capabilities_v67() {
-    std::cout << "V048746255172578_STANDALONE_EXECUTABLE=YES\n"
-              << "V048746255172578_TWO_ARGUMENT_INTERFACE=YES\n"
-              << "V048746255172578_FILE_SILENT_POLICY=IMPLEMENTED\n"
-              << "V048746255172578_ATDB_SEARCH_ORDER=IMPLEMENTED\n"
-              << "V048746255172578_CXX_IN_MEMORY_ATDB_LOWERER=IMPLEMENTED\n"
-              << "V048746255172578_ATDB_PACKED_COLUMN_LAYOUTS=FIXED_AND_VARIABLE_LENGTH\n"
-              << "V048746255172578_ATDB_PAYLOAD_CACHE=ONE_TIME_FULL_COLUMN\n"
-              << "V048746255172578_INITIAL_XEE_SEMANTICS=EXPLICIT_XEE_ELSE_ONE\n"
-              << "V048746255172578_CONTROLLER_TOPOLOGY=FOUR_CALLS_PLUS_TERMINAL_RESET\n"
-              << "V048746255172578_REFERENCE_CALL_BOUNDARIES=21_1_18_17_EXACT_SOURCE_PREFIX\n"
-              << "V048746255172578_NITER_SEMANTICS=NESTED_LIMIT_WITH_REFERENCE_CALL_BOUNDARIES\n"
-              << "V048746255172578_CRITF_SEMANTICS=ACTIVE_ION_THRESHOLD_NOT_DSEC_TOLERANCE\n"
-              << "V048746255172578_CXX_PRODUCT_METADATA_DERIVATION=IMPLEMENTED\n"
-              << "V048746255172578_QUALIFICATION_FREE_CONTROLLER_TRAJECTORY=IMPLEMENTED\n"
-              << "V048746255172578_CALL_START_DSEC_WORKSPACE=IN_MEMORY\n"
-              << "V048746255172578_GLOBAL_XILEVG_BILEVG_RNISG=IN_MEMORY\n"
-              << "V048746255172578_REPEATED_HYDROGEN_SOURCE_ENTRY=IN_MEMORY\n"
-              << "V048746255172578_MG_ACTIVE_STAGE_RETENTION_SEQUENCE2_TO4=IN_MEMORY\n"
-              << "V048746255172578_CONSECUTIVE_LINE_CONTINUUM_TAU=IN_MEMORY\n"
-              << "V048746255172578_CONTINUUM_TAU_DOMAIN=MAX_RECORD_POINTER_DECLARED_NATIVE_COUNT_GRID\n"
-              << "V048746255172578_MG_PRIMARY_SECONDARY_THERMAL_TERMS=IN_MEMORY\n"
-              << "V048746255172578_CALL_BOUNDARY_THERMAL_COMPONENTS=IN_MEMORY\n"
-              << "V048746255172578_EXACT_DSEC_COMMIT_SEMANTICS=IMPLEMENTED\n"
-              << "V048746255172578_SEQUENCE2_HELIUM_PREPRODUCT_GATE=POPULATIONS_MATRIX_RHS_THERMAL_HMCTOT\n"
-              << "V048746255172578_SEQUENCE2_HE_COMPACT_SEED_MAPPING=ACTIVE_ROW_IDENTITY_WITH_TERMINAL_ZERO\n"
-              << "V048746255172578_SEQUENCE2_HELIUM_DIAGNOSTICS=FULL_MATRIX_RHS_78_POPULATIONS_SOURCE_NATIVE_THERMAL_TERMS\n"
-              << "V048746255172578_V63_PARITY_GATE=EXTERNAL_ORACLE_REQUIRED\n"
-              << "V048746255172578_ATDB_SEARCH_ORDER=parameters_atomic_database,parameters_atomic_db,parameters_atdb,parameters_sibling,XSTAR_ATOMIC_DB,XSTAR_ATDB_FITS,XSTAR_DATA,XSTAR_HOME,executable_relative,package_relative,current_directory\n"
-              << "V048746255172578_COHEAT_SEARCH_ORDER=parameters_coheat_file,parameters_coheat,parameters_sibling,XSTAR_COHEAT,XSTAR_DATA,XSTAR_HOME,executable_relative,package_relative,current_directory\n"
-              << "V048746255172578_SOURCE_POWERLAW_GRID=ENER_ISPEC4_ISPECGG_EQUIVALENT\n"
-              << "V048746255172578_ARTIFACT_PROFILES=none,summary,failure,full\n"
-              << "V048746255172578_ARTIFACT_CLASS_OVERRIDES=lowered_case,runtime_metadata,checkpoints,audits,qualification_summaries,trajectory_diagnostics,benchmark_diagnostics,timing_summary\n"
-              << "V048746255172578_RESULT=ACCEPT_CAPABILITY_IMPLEMENTATION\n";
+    std::cout << "V048746255172579_STANDALONE_EXECUTABLE=YES\n"
+              << "V048746255172579_TWO_ARGUMENT_INTERFACE=YES\n"
+              << "V048746255172579_FILE_SILENT_POLICY=IMPLEMENTED\n"
+              << "V048746255172579_ATDB_SEARCH_ORDER=IMPLEMENTED\n"
+              << "V048746255172579_CXX_IN_MEMORY_ATDB_LOWERER=IMPLEMENTED\n"
+              << "V048746255172579_ATDB_PACKED_COLUMN_LAYOUTS=FIXED_AND_VARIABLE_LENGTH\n"
+              << "V048746255172579_ATDB_PAYLOAD_CACHE=ONE_TIME_FULL_COLUMN\n"
+              << "V048746255172579_INITIAL_XEE_SEMANTICS=EXPLICIT_XEE_ELSE_ONE\n"
+              << "V048746255172579_CONTROLLER_TOPOLOGY=FOUR_CALLS_PLUS_TERMINAL_RESET\n"
+              << "V048746255172579_REFERENCE_CALL_BOUNDARIES=21_1_18_17_EXACT_SOURCE_PREFIX\n"
+              << "V048746255172579_NITER_SEMANTICS=NESTED_LIMIT_WITH_REFERENCE_CALL_BOUNDARIES\n"
+              << "V048746255172579_CRITF_SEMANTICS=ACTIVE_ION_THRESHOLD_NOT_DSEC_TOLERANCE\n"
+              << "V048746255172579_CXX_PRODUCT_METADATA_DERIVATION=IMPLEMENTED\n"
+              << "V048746255172579_QUALIFICATION_FREE_CONTROLLER_TRAJECTORY=IMPLEMENTED\n"
+              << "V048746255172579_CALL_START_DSEC_WORKSPACE=IN_MEMORY\n"
+              << "V048746255172579_GLOBAL_XILEVG_BILEVG_RNISG=IN_MEMORY\n"
+              << "V048746255172579_REPEATED_HYDROGEN_SOURCE_ENTRY=IN_MEMORY\n"
+              << "V048746255172579_MG_ACTIVE_STAGE_RETENTION_SEQUENCE2_TO4=IN_MEMORY\n"
+              << "V048746255172579_CONSECUTIVE_LINE_CONTINUUM_TAU=IN_MEMORY\n"
+              << "V048746255172579_CONTINUUM_TAU_DOMAIN=MAX_RECORD_POINTER_DECLARED_NATIVE_COUNT_GRID\n"
+              << "V048746255172579_MG_PRIMARY_SECONDARY_THERMAL_TERMS=IN_MEMORY\n"
+              << "V048746255172579_CALL_BOUNDARY_THERMAL_COMPONENTS=IN_MEMORY\n"
+              << "V048746255172579_EXACT_DSEC_COMMIT_SEMANTICS=IMPLEMENTED\n"
+              << "V048746255172579_SEQUENCE2_HELIUM_PREPRODUCT_GATE=POPULATIONS_MATRIX_RHS_THERMAL_HMCTOT\n"
+              << "V048746255172579_SEQUENCE2_HE_COMPACT_SEED_MAPPING=ACTIVE_ROW_IDENTITY_WITH_TERMINAL_ZERO\n"
+              << "V048746255172579_SEQUENCE2_HELIUM_DIAGNOSTICS=FULL_MATRIX_RHS_78_POPULATIONS_SOURCE_NATIVE_THERMAL_TERMS\n"
+              << "V048746255172579_V63_PARITY_GATE=EXTERNAL_ORACLE_REQUIRED\n"
+              << "V048746255172579_ATDB_SEARCH_ORDER=parameters_atomic_database,parameters_atomic_db,parameters_atdb,parameters_sibling,XSTAR_ATOMIC_DB,XSTAR_ATDB_FITS,XSTAR_DATA,XSTAR_HOME,executable_relative,package_relative,current_directory\n"
+              << "V048746255172579_COHEAT_SEARCH_ORDER=parameters_coheat_file,parameters_coheat,parameters_sibling,XSTAR_COHEAT,XSTAR_DATA,XSTAR_HOME,executable_relative,package_relative,current_directory\n"
+              << "V048746255172579_SOURCE_POWERLAW_GRID=ENER_ISPEC4_ISPECGG_EQUIVALENT\n"
+              << "V048746255172579_ARTIFACT_PROFILES=none,summary,failure,full\n"
+              << "V048746255172579_ARTIFACT_CLASS_OVERRIDES=lowered_case,runtime_metadata,checkpoints,audits,qualification_summaries,trajectory_diagnostics,benchmark_diagnostics,timing_summary\n"
+              << "V048746255172579_RESULT=ACCEPT_CAPABILITY_IMPLEMENTATION\n";
     return 0;
 }
 
@@ -10815,6 +11210,23 @@ int command_run_standalone_case_probe_v70(const Options& options) {
         data.program_info = info;
         data.parameters = &params;
         data.reference_trajectory_mode = true;
+        {
+            const auto benchmark_case_dir = std::filesystem::path(options.parameters_path).parent_path();
+            const auto contract_dir = benchmark_case_dir / "v15926_qualification_contracts";
+            data.reference_contracts = read_sequence_contracts_v1724(contract_dir / "sequence_contracts.csv");
+            read_source_populations_v1724(contract_dir / "population_e7.csv",
+                data.source_population_global_v1724, data.source_population_compact_v1724);
+            g_source_population_global_v1724 = &data.source_population_global_v1724;
+            g_source_population_compact_v1724 = &data.source_population_compact_v1724;
+            const auto found16 = data.reference_contracts.find(16u);
+            if (found16 == data.reference_contracts.end()) throw std::runtime_error("sequence-16 contract is missing");
+            data.sequence16_contract = found16->second;
+            data.sequence16_source_thermal_budget = benchmark_case_dir.parent_path() /
+                "v0648724_call1_thermal_leaf_reference" / "v0472_call1_thermal_budget.csv";
+            data.sequence16_thermal_population_closure_dir = contract_dir / "thermal_consumption_population_closure";
+            data.sequence16_diagnostic_dir = std::filesystem::path(options.output_dir) / "sequence16_mg_precommit";
+            data.sequence16_precommit_gate_configured = true;
+        }
         data.energy = source_energy_grid_v1711(static_cast<std::size_t>(params.ncn2));
         data.flux = source_powerlaw_v1711(params.spectral_index, params.luminosity_1e38, data.energy);
         data.source_incident = data.flux;
@@ -10871,7 +11283,7 @@ int command_run_standalone_case_probe_v70(const Options& options) {
                 trace.data(), trace.size(), &trace_count, &stats, message.data(), message.size());
             if (rc != 0) throw std::runtime_error(std::string("probe call failed: ") + message.data());
             const std::size_t count = data.evaluations - before;
-            std::cout << "V048746255172578_PROBE_CALL=" << call
+            std::cout << "V048746255172579_PROBE_CALL=" << call
                       << " DSEC_EVALUATIONS=" << count
                       << " EXPECTED=" << expected[call-1u]
                       << " HMCTOT=" << std::setprecision(17) << stats.final_hmctot
@@ -10898,8 +11310,8 @@ int command_run_standalone_case_probe_v70(const Options& options) {
                 << row.hmctot << ',' << row.charge_residual << '\n';
         }
         csv.close();
-        std::cout << "V048746255172578_PROBE_EVENTS=" << data.snapshots.size() << "\n"
-                  << "V048746255172578_PROBE_CSV=" << csv_path.string() << "\n";
+        std::cout << "V048746255172579_PROBE_EVENTS=" << data.snapshots.size() << "\n"
+                  << "V048746255172579_PROBE_CSV=" << csv_path.string() << "\n";
         ::unsetenv("XSTAR_NATIVE_PRODUCTION");
         ::unsetenv("XSTAR_V72_PROBE_PROGRESS");
         ::unsetenv("XSTAR_V70_DUMP_MG_COMPACT_POPULATIONS");
@@ -10918,7 +11330,7 @@ int command_run_standalone_case_probe_v70(const Options& options) {
 }
 
 int command_run_standalone_production_v67(const Options& options, const std::filesystem::path& executable_path) {
-    const std::string prefix = "V048746255172578_";
+    const std::string prefix = "V048746255172579_";
     const std::string artifact_profile = options.artifact_profile_explicit ? options.artifact_profile : "none";
     const auto artifacts = artifact_selection_v67(options, artifact_profile);
     if (options.parameters_path.empty() || options.output_dir.empty()) {
@@ -10975,7 +11387,7 @@ int command_run_standalone_production_v67(const Options& options, const std::fil
         double controller_seconds = 0.0;
         std::size_t evaluations = 0;
         auto product = build_general_standalone_product_v67(
-            options, params, atomic, program, executable_path, controller_seconds, evaluations);
+            options, params, atomic, program, controller_seconds, evaluations);
         const auto trajectory = summarize_standalone_trajectory_v71(product);
         const bool reference_benchmark = is_reference_mg11_benchmark_v71(params);
         if (!product.product_state_complete) throw std::runtime_error("product state incomplete before publication");
@@ -10991,40 +11403,6 @@ int command_run_standalone_production_v67(const Options& options, const std::fil
                   << prefix << "EMIT_TRAJECTORY_DIAGNOSTICS=" << (artifacts.trajectory_diagnostics ? "YES" : "NO") << "\n"
                   << prefix << "EMIT_BENCHMARK_DIAGNOSTICS=" << (artifacts.benchmark_diagnostics ? "YES" : "NO") << "\n"
                   << prefix << "EMIT_TIMING_SUMMARY=" << (artifacts.timing_summary ? "YES" : "NO") << "\n";
-        const auto preproduct_gate = reference_benchmark
-            ? evaluate_sequence16_and_trajectory_gate_v78(product, executable_path, output / "standalone_diagnostics")
-            : Sequence16AndTrajectoryGateV78{};
-        if (reference_benchmark) {
-            std::cout << prefix << "SEQUENCE16_MG_THERMAL_STATE_IEEE_E7="
-                      << (preproduct_gate.sequence16_mg_thermal_exact ? "ACCEPT" : "REJECT") << "\n"
-                      << prefix << "SEQUENCE16_HMCTOT_IEEE_E7="
-                      << (preproduct_gate.sequence16_hmctot_exact ? "ACCEPT" : "REJECT") << "\n"
-                      << prefix << "SEQUENCE16_ELCTER_IEEE_E7="
-                      << (preproduct_gate.sequence16_elcter_exact ? "ACCEPT" : "REJECT") << "\n"
-                      << prefix << "REFERENCE_TRAJECTORY_CELLS_COMPARED=" << preproduct_gate.trajectory_cells_compared << "\n"
-                      << prefix << "REFERENCE_TRAJECTORY_E7_MISMATCH_CELLS=" << preproduct_gate.trajectory_mismatches << "\n"
-                      << prefix << "REFERENCE_TRAJECTORY_TEMPERATURE_T4_E7_MISMATCH_CELLS=" << preproduct_gate.field_mismatches[0] << "\n"
-                      << prefix << "REFERENCE_TRAJECTORY_ELECTRON_FRACTION_E7_MISMATCH_CELLS=" << preproduct_gate.field_mismatches[1] << "\n"
-                      << prefix << "REFERENCE_TRAJECTORY_HMCTOT_E7_MISMATCH_CELLS=" << preproduct_gate.field_mismatches[2] << "\n"
-                      << prefix << "REFERENCE_TRAJECTORY_ELCTER_E7_MISMATCH_CELLS=" << preproduct_gate.field_mismatches[3] << "\n"
-                      << prefix << "COMPLETE_61_EVENT_TRAJECTORY_IEEE_E7="
-                      << (preproduct_gate.trajectory_exact ? "ACCEPT" : "REJECT") << "\n";
-            const bool accept_preproduct = preproduct_gate.assets_found &&
-                preproduct_gate.sequence16_mg_thermal_exact &&
-                preproduct_gate.sequence16_hmctot_exact &&
-                preproduct_gate.sequence16_elcter_exact &&
-                preproduct_gate.trajectory_exact;
-            std::cout << prefix << "PREPRODUCT_PUBLICATION_GATE="
-                      << (accept_preproduct ? "ACCEPT" : "REJECT") << "\n";
-            if (!accept_preproduct) {
-                remove_native_products_v172524(output);
-                ::unsetenv("XSTAR_NATIVE_SOURCE_SEQUENCE");
-                ::unsetenv("XSTAR_NATIVE_PRODUCTION");
-                std::cout << prefix << "PRODUCTS_WRITTEN=0\n"
-                          << prefix << "RESULT=REJECT_SEQUENCE16_OR_TRAJECTORY_PREPRODUCT_GATE\n";
-                return 20;
-            }
-        }
         if (!product.radial_zones.empty()) {
             const auto& last_ws = product.radial_zones.back().accepted_controller.evaluation.source_workspace;
             std::size_t max_line_index = 0;

@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.7.46.25.5.17.25.79 - 2026-07-19
+
+- Add a sequence-16 Mg source-order ledger captured before the DSEC commit boundary.
+- Require source/native row-count, identity, order, and binary64 value fingerprints.
+- Require binary64-exact Mg primary/secondary heating/cooling against the retained v0.6.47.2 thermal leaf reference.
+- Block the sequence-16 commit on any ledger/channel/hmctot/elcter failure.
+- Require exact canonical `.7e` parity for all 244 cells of the complete 61-event trajectory before publication.
+- Preserve the downstream exact v63 FITS/xout_step publication requirement for host qualification.
+
 ## 0.6.48.7.46.25.5.17.25.77 - 2026-07-19
 
 - Correct the repeated-evaluation helium compact seed: active He II rows now retain their lowered global-row identities instead of being shifted to the following population.
