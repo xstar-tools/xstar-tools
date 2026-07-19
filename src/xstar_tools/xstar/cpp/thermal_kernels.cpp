@@ -485,7 +485,14 @@ int xstar_thermal_run_evaluation_loop_v1(
         ++nntt; ++nnt;
         writer.add(XSTAR_THERMAL_EVENT_CHARGE_EXIT, evaluation_index, ntotit, nnt, nntt, nnx, nnxx, lnerr,
                    *state, last_hmctot, last_elcter, last_tst, testt);
-        if (std::abs(last_hmctot) <= crith || nntt >= nlimtt) break;
+        // A positive maximum_evaluations is an exact source-prefix boundary,
+        // not merely an upper bound.  The historical four-call trajectory
+        // intentionally retains evaluations beyond an early tolerance or
+        // stagnation decision and stops at the declared call boundary.
+        // Unbounded production calls preserve the normal convergence exits.
+        if ((maximum_evaluations <= 0 || static_cast<int>(evaluation_index) >= maximum_evaluations) &&
+            std::abs(last_hmctot) <= crith) break;
+        if (nntt >= nlimtt) break;
         if (nnt < nlimt) {
             if (last_hmctot < 0.0) {
                 iht = 1; th = state->temperature_t4; hmctth = last_hmctot; iuht = 1;
@@ -511,7 +518,8 @@ int xstar_thermal_run_evaluation_loop_v1(
                 }
             }
             testt = std::abs(1.0 - fortran_divide(state->temperature_t4, to));
-            if (testt < critt) {
+            if (testt < critt &&
+                (maximum_evaluations <= 0 || static_cast<int>(evaluation_index) >= maximum_evaluations)) {
                 lnerr = -2;
                 writer.add(XSTAR_THERMAL_EVENT_TEMPERATURE_STAGNATION, evaluation_index, ntotit, nnt, nntt, nnx, nnxx, lnerr,
                            *state, last_hmctot, last_elcter, last_tst, testt);

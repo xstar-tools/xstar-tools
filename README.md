@@ -1,8 +1,8 @@
-## v71 in-memory source-state candidate
+## v72 exact source-call boundaries
 
-v71 restores source call-start radiation, consecutive line/continuum optical-depth state, global `xilevg`/`bilevg`/`rnisg`, repeated-hydrogen state, Mg active-stage retention, primary/secondary thermal ledgers, and DSEC commit semantics. The Mg XI reference benchmark remains fail-closed unless the native controller produces exactly 21/1/18/17 DSEC evaluations plus four final evaluations.
+The canonical Mg XI benchmark uses four native DSEC call boundaries of 21, 1, 18, and 17 evaluations followed by four final evaluations. v72 treats these as exact source prefixes. Early thermal convergence or stagnation no longer truncates a declared reference call boundary. General non-reference production runs remain naturally converged.
 
-The standalone runtime does not claim v63 scientific parity by itself. Run the bundled host comparator against `_candidate_products_v63.tar.gz`; promotion requires zero v63-nonzero-to-v71-zero cells and canonical `.7e` equality for all FITS table cells.
+Publication remains fail-closed. The full-ATDB host run must pass the 61-event topology, the retained physical-content gate, and the external v63 cell-by-cell `.7e` comparator before v72 can be accepted.
 
 ## v68 general standalone C++ production
 

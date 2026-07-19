@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.7.46.25.5.17.25.72 - 2026-07-19
+
+- Correct the canonical Mg XI four-call controller so `maximum_evaluations` is an exact source-prefix boundary rather than an upper bound that can terminate early on tolerance or stagnation.
+- Retain the required 21/1/18/17 DSEC call boundaries and four final evaluations, producing the 61-event reference topology before any product publication.
+- Keep non-reference standalone cases on ordinary natural-convergence semantics.
+- Preserve the v71 in-memory DSEC radiation, optical-depth, global-level, repeated-hydrogen, Mg-stage, thermal-ledger, and exact commit state.
+- Keep publication fail-closed behind the retained physical-content gate and the external v63 FITS `.7e` parity comparator.
+- Add v72 standalone and fixed/variable packed-ATDB regression scripts.
+
 # v0.6.48.7.46.25.5.17.25.71 - 2026-07-19
 
 - Restored the source call-start DSEC radiation and continuum optical-depth workspaces in memory.
