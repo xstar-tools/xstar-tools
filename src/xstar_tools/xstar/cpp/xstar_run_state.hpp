@@ -1,6 +1,7 @@
 #ifndef XSTAR_RUN_STATE_HPP
 #define XSTAR_RUN_STATE_HPP
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -133,6 +134,67 @@ struct LegacyPprintState {
     }
 };
 
+
+struct RecordProductDiagnosticState {
+    std::int64_t source_position = 0;
+    std::int64_t record = 0;
+    std::int32_t element_index = 0;
+    std::int32_t element_z = 0;
+    std::int32_t data_type = 0;
+    std::int32_t rate_type = 0;
+    std::int32_t ion_stage = 0;
+    std::int32_t lower_row = 0;
+    std::int32_t upper_row = 0;
+    bool spectral = false;
+    std::array<double,6> ans{};
+    double line_energy_ev = 0.0;
+    double atomic_mass_amu = 1.0;
+    double density_scale = 1.0;
+    double natural_width_ev = 0.0;
+    double opakab = 0.0;
+    bool type50_valid = false;
+    std::int32_t type50_line_index_one_based = 0;
+    double type50_wavelength_a = 0.0;
+    double type50_ptmp1 = 1.0;
+    double type50_ptmp2 = 1.0;
+    double type50_tau_in = 0.0;
+    double type50_tau_out = 0.0;
+    bool type53_valid = false;
+    bool type49_valid = false;
+    bool type99_valid = false;
+    std::int32_t continuum_index_one_based = 0;
+    double type53_threshold_ev = 0.0;
+    double type53_base_threshold_ev = 0.0;
+    double type49_threshold_ev = 0.0;
+    double type99_threshold_ev = 0.0;
+    double threshold_abs_sigma_cm2 = 0.0;
+    double threshold_stimulated_sigma_cm2 = 0.0;
+    double type53_ptmp1 = 1.0;
+    double type53_ptmp2 = 0.0;
+    double type53_tau_in = 0.0;
+    double type53_tau_out = 0.0;
+};
+
+struct ContinuumProductDiagnosticState {
+    std::int32_t full_bin_one_based = 0;
+    double energy_ev = 0.0;
+    double comp_sum1_contribution = 0.0;
+    double comp_sum2_contribution = 0.0;
+    double comp_sum3_contribution = 0.0;
+    double free_free_opacity_increment = 0.0;
+    double brcems = 0.0;
+    double running_htcomp = 0.0;
+    double running_clcomp = 0.0;
+    double running_htfreef = 0.0;
+    double running_clbrems = 0.0;
+};
+
+struct ElementThermalProductState {
+    std::int32_t element_z = 0;
+    double heating = 0.0;
+    double cooling = 0.0;
+};
+
 struct FixedEvaluationState {
     std::string kind;
     std::size_t sequence = 0;
@@ -151,10 +213,16 @@ struct FixedEvaluationState {
     double continuum_cooling = 0.0;
     double hydrogen_heating = 0.0;
     double hydrogen_cooling = 0.0;
+    double hydrogen_heating2 = 0.0;
+    double hydrogen_cooling2 = 0.0;
     double helium_heating = 0.0;
     double helium_cooling = 0.0;
+    double helium_heating2 = 0.0;
+    double helium_cooling2 = 0.0;
     double magnesium_heating = 0.0;
     double magnesium_cooling = 0.0;
+    double magnesium_heating2 = 0.0;
+    double magnesium_cooling2 = 0.0;
     double compton_heating = 0.0;
     double compton_cooling = 0.0;
     double brems_cooling = 0.0;
@@ -176,6 +244,9 @@ struct FixedEvaluationState {
     std::vector<double> spectrum;
     std::vector<double> opacity;
     ExactSourceWorkspaceState source_workspace;
+    std::vector<RecordProductDiagnosticState> record_product_diagnostics;
+    std::vector<ContinuumProductDiagnosticState> continuum_product_diagnostics;
+    std::vector<ElementThermalProductState> element_thermal_products;
 };
 
 struct AcceptedControllerState {

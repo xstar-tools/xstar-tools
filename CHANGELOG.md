@@ -1,5 +1,26 @@
 # CHANGELOG
 
+# v0.6.48.7.46.25.5.17.25.71 - 2026-07-19
+
+- Restored the source call-start DSEC radiation and continuum optical-depth workspaces in memory.
+- Transported `xilevg`, `bilevg`, and `rnisg` through every DSEC evaluation using the full source-workspace ABI, including LTE state.
+- Retained repeated-hydrogen source-entry state and the Mg active-stage window through source sequences 2-4.
+- Retained primary and secondary H/He/Mg thermal ledgers at every evaluation and accepted call boundary.
+- Re-bound consecutive line optical-depth state to the fixed-state context before the next controller call.
+- Preserved DSEC ownership of temperature and charge commits and enforced the exact 21/1/18/17 plus four-final, 61-event reference trajectory.
+- Added fail-closed physical-content checks for line/RRC emission, continuum opacity, H/He/Mg thermal channels, and high Mg stages.
+- Added an external v63 FITS comparator; runtime output no longer falsely claims v63 parity without executing the oracle comparison.
+- Production output is a candidate until `V63_NONZERO_TO_ZERO_CELLS=0` and `ALL_PHYSICAL_FITS_COLUMNS_IEEE_E7=ACCEPT` are reported by the host comparator.
+
+
+## 0.6.48.7.46.25.5.17.25.69
+
+- Cache production ATDB packed columns once in memory instead of rescanning FITS descriptors for every record.
+- Correct `xeemin` versus initial `xee` semantics.
+- Remove the erroneous `niter` callback prefix and `critf` DSEC tolerance override.
+- Replace ten independent zone controllers with the source four-call trajectory and terminal-reset product boundary.
+- Add phase timing/progress output and live Type-95 support-boundary derivation for standalone production.
+
 ## 0.6.48.7.46.25.5.17.25.69 - 2026-07-18
 
 - Cache production ATDB packed columns once in memory instead of rescanning FITS descriptors for every record.

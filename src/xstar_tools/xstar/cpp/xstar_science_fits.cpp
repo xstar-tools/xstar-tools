@@ -307,6 +307,19 @@ std::filesystem::path diagnostic_solve_rows_path(
     return state.native_diagnostics_path / stem.str();
 }
 
+const xstar_run_state::FixedEvaluationState* retained_evaluation_by_sequence(
+    const xstar_run_state::ProductWritingState& state,
+    std::size_t sequence) {
+    for (const auto& evaluation : state.fixed_evaluations) {
+        if (evaluation.sequence == sequence) return &evaluation;
+    }
+    for (const auto& zone : state.radial_zones) {
+        const auto& evaluation = zone.accepted_controller.evaluation;
+        if (evaluation.sequence == sequence) return &evaluation;
+    }
+    return nullptr;
+}
+
 std::map<std::int32_t,SolveRowValue> read_solve_rows_by_global(
     const xstar_run_state::ProductWritingState& state,
     std::size_t sequence) {
@@ -335,6 +348,53 @@ std::map<std::int32_t,SolveRowValue> read_solve_rows_by_global(
 std::vector<RecordDiag> read_record_diagnostics(
     const xstar_run_state::ProductWritingState& state,
     std::size_t sequence) {
+    if (const auto* evaluation = retained_evaluation_by_sequence(state, sequence);
+        evaluation && !evaluation->record_product_diagnostics.empty()) {
+        std::vector<RecordDiag> out;
+        out.reserve(evaluation->record_product_diagnostics.size());
+        for (const auto& source : evaluation->record_product_diagnostics) {
+            RecordDiag r;
+            r.source_position = source.source_position;
+            r.record = source.record;
+            r.element_index = source.element_index;
+            r.element_z = source.element_z;
+            r.data_type = source.data_type;
+            r.rate_type = source.rate_type;
+            r.ion_stage = source.ion_stage;
+            r.lower_row = source.lower_row;
+            r.upper_row = source.upper_row;
+            r.spectral = source.spectral;
+            r.ans = source.ans;
+            r.line_energy_ev = source.line_energy_ev;
+            r.atomic_mass_amu = source.atomic_mass_amu;
+            r.density_scale = source.density_scale;
+            r.natural_width_ev = source.natural_width_ev;
+            r.opakab = source.opakab;
+            r.threshold_abs_sigma_cm2 = source.threshold_abs_sigma_cm2;
+            r.threshold_stimulated_sigma_cm2 = source.threshold_stimulated_sigma_cm2;
+            r.type50_valid = source.type50_valid;
+            r.type50_line_index_one_based = source.type50_line_index_one_based;
+            r.continuum_index_one_based = source.continuum_index_one_based;
+            r.type50_wavelength_a = source.type50_wavelength_a;
+            r.type50_ptmp1 = source.type50_ptmp1;
+            r.type50_ptmp2 = source.type50_ptmp2;
+            r.type50_tau_in = source.type50_tau_in;
+            r.type50_tau_out = source.type50_tau_out;
+            r.type53_valid = source.type53_valid;
+            r.type49_valid = source.type49_valid;
+            r.type99_valid = source.type99_valid;
+            r.type53_threshold_ev = source.type53_threshold_ev;
+            r.type53_base_threshold_ev = source.type53_base_threshold_ev;
+            r.type49_threshold_ev = source.type49_threshold_ev;
+            r.type99_threshold_ev = source.type99_threshold_ev;
+            r.type53_ptmp1 = source.type53_ptmp1;
+            r.type53_ptmp2 = source.type53_ptmp2;
+            r.type53_tau_in = source.type53_tau_in;
+            r.type53_tau_out = source.type53_tau_out;
+            out.push_back(std::move(r));
+        }
+        return out;
+    }
     const auto path = diagnostic_records_path(state, sequence);
     std::ifstream input(path);
     if (!input) throw std::runtime_error("cannot open native record diagnostics: " + path.string());
@@ -8315,6 +8375,16 @@ std::vector<double> reference_energy_grid(const xstar_run_state::ProductWritingS
     }
     const auto metadata_root = state.product_metadata_path;
     std::vector<std::filesystem::path> candidates;
+    // The source-faithful benchmark/input surface keeps the exact ENER grid
+    // beside parameters.json.  Prefer that explicit input resource before
+    // attempting historical repository-relative discovery.  This is not a
+    // qualification contract: it is the radiation energy grid used to build
+    // the incident spectrum and public continuum products.
+    if (!state.parameters_path.empty()) {
+        candidates.push_back(state.parameters_path.parent_path() / "reference_radiation_v0472_full.csv");
+        candidates.push_back(state.parameters_path.parent_path() / "radiation.csv");
+        candidates.push_back(state.parameters_path.parent_path() / "spect.csv");
+    }
     candidates.push_back(metadata_root.parent_path().parent_path() / "src/xstar_tools/benchmarks/v06486_qualification_reference_v0472/reference_radiation_v0472_full.csv");
     candidates.push_back(metadata_root.parent_path().parent_path().parent_path() / "src/xstar_tools/benchmarks/v06486_qualification_reference_v0472/reference_radiation_v0472_full.csv");
     candidates.push_back(std::filesystem::current_path() / "src/xstar_tools/benchmarks/v06486_qualification_reference_v0472/reference_radiation_v0472_full.csv");
@@ -9784,6 +9854,23 @@ struct ContinuumDiagRow {
 std::vector<ContinuumDiagRow> read_continuum_diagnostics(
     const xstar_run_state::ProductWritingState& state,
     std::size_t sequence) {
+    if (const auto* evaluation = retained_evaluation_by_sequence(state, sequence);
+        evaluation && !evaluation->continuum_product_diagnostics.empty()) {
+        std::vector<ContinuumDiagRow> out;
+        out.reserve(evaluation->continuum_product_diagnostics.size());
+        for (const auto& source : evaluation->continuum_product_diagnostics) {
+            ContinuumDiagRow row;
+            row.full_bin_one_based = source.full_bin_one_based;
+            row.energy_ev = source.energy_ev;
+            row.comp_sum1_contribution = source.comp_sum1_contribution;
+            row.comp_sum2_contribution = source.comp_sum2_contribution;
+            row.comp_sum3_contribution = source.comp_sum3_contribution;
+            row.free_free_opacity_increment = source.free_free_opacity_increment;
+            row.brcems = source.brcems;
+            out.push_back(row);
+        }
+        return out;
+    }
     std::ostringstream stem;
     stem << "evaluation_" << std::setw(4) << std::setfill('0') << sequence << "_continuum_workspace.csv";
     const auto path = state.native_diagnostics_path / stem.str();
@@ -10340,6 +10427,15 @@ struct ElementThermalProductRow {
 std::map<int, ElementThermalProductRow> read_element_thermal_product_rows(
     const xstar_run_state::ProductWritingState& state,
     std::size_t sequence) {
+    if (const auto* evaluation = retained_evaluation_by_sequence(state, sequence);
+        evaluation && !evaluation->element_thermal_products.empty()) {
+        std::map<int, ElementThermalProductRow> out;
+        for (const auto& source : evaluation->element_thermal_products) {
+            if (source.element_z <= 0) continue;
+            out[source.element_z] = ElementThermalProductRow{source.heating, source.cooling};
+        }
+        return out;
+    }
     std::ostringstream stem;
     stem << "evaluation_" << std::setw(4) << std::setfill('0') << sequence << "_elements.csv";
     const auto path = state.native_diagnostics_path / stem.str();
@@ -10373,6 +10469,22 @@ struct ContinuumThermalProductTotals {
 ContinuumThermalProductTotals read_continuum_thermal_product_totals(
     const xstar_run_state::ProductWritingState& state,
     std::size_t sequence) {
+    if (const auto* evaluation = retained_evaluation_by_sequence(state, sequence)) {
+        ContinuumThermalProductTotals out;
+        out.compton_heating = evaluation->compton_heating;
+        out.compton_cooling = evaluation->compton_cooling;
+        out.brems_cooling = evaluation->brems_cooling;
+        if (!evaluation->continuum_product_diagnostics.empty()) {
+            const auto& final = evaluation->continuum_product_diagnostics.back();
+            out.compton_heating = final.running_htcomp;
+            out.compton_cooling = final.running_clcomp;
+            out.free_free_heating = final.running_htfreef;
+            out.brems_cooling = final.running_clbrems;
+        }
+        if (evaluation->thermal_families_native || !evaluation->continuum_product_diagnostics.empty()) {
+            return out;
+        }
+    }
     std::ostringstream stem;
     stem << "evaluation_" << std::setw(4) << std::setfill('0') << sequence << "_continuum_workspace.csv";
     const auto path = state.native_diagnostics_path / stem.str();

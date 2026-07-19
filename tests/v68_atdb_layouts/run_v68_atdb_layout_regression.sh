@@ -44,7 +44,7 @@ JSON
   --parameters "$WORK/parameters_${layout}.json" \
   --output-dir "$WORK/products_${layout}" > "$WORK/run_${layout}.log" 2>&1
 test "$(find "$WORK/products_${layout}" -mindepth 1 -maxdepth 1 -type f | wc -l)" -eq 10
-grep -q 'RESULT=ACCEPT_GENERAL_STANDALONE_PRODUCTION' "$WORK/run_${layout}.log"
+grep -q 'RESULT=ACCEPT_GENERAL_STANDALONE_CANDIDATE' "$WORK/run_${layout}.log"
 done
 python3 - "$WORK/products_fixed" "$WORK/products_variable" <<'PYCOMPARE'
 from pathlib import Path

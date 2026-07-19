@@ -1,3 +1,9 @@
+## v71 in-memory source-state candidate
+
+v71 restores source call-start radiation, consecutive line/continuum optical-depth state, global `xilevg`/`bilevg`/`rnisg`, repeated-hydrogen state, Mg active-stage retention, primary/secondary thermal ledgers, and DSEC commit semantics. The Mg XI reference benchmark remains fail-closed unless the native controller produces exactly 21/1/18/17 DSEC evaluations plus four final evaluations.
+
+The standalone runtime does not claim v63 scientific parity by itself. Run the bundled host comparator against `_candidate_products_v63.tar.gz`; promotion requires zero v63-nonzero-to-v71-zero cells and canonical `.7e` equality for all FITS table cells.
+
 ## v68 general standalone C++ production
 
 Build and run:

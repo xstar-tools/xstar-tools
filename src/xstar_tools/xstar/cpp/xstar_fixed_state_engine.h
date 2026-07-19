@@ -401,6 +401,78 @@ typedef struct xstar_fixed_state_thermal_components_v1 {
     double total_cooling;
 } xstar_fixed_state_thermal_components_v1;
 
+
+/* Typed in-memory product diagnostics. These are the file-silent equivalent
+ * of the final evaluation_*_records.csv, *_elements.csv, and
+ * *_continuum_workspace.csv surfaces consumed by the historical writers. */
+typedef struct xstar_fixed_state_product_diagnostic_counts_v1 {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    size_t record_count;
+    size_t continuum_count;
+    size_t element_count;
+} xstar_fixed_state_product_diagnostic_counts_v1;
+
+typedef struct xstar_fixed_record_product_diagnostic_v1 {
+    int64_t source_position;
+    int64_t record;
+    int32_t element_index;
+    int32_t element_z;
+    int32_t data_type;
+    int32_t rate_type;
+    int32_t ion_stage;
+    int32_t lower_row;
+    int32_t upper_row;
+    uint32_t spectral;
+    double ans[6];
+    double line_energy_ev;
+    double atomic_mass_amu;
+    double density_scale;
+    double natural_width_ev;
+    double opakab;
+    uint32_t type50_valid;
+    int32_t type50_line_index_one_based;
+    double type50_wavelength_a;
+    double type50_ptmp1;
+    double type50_ptmp2;
+    double type50_tau_in;
+    double type50_tau_out;
+    uint32_t type53_valid;
+    uint32_t type49_valid;
+    uint32_t type99_valid;
+    int32_t continuum_index_one_based;
+    double type53_threshold_ev;
+    double type53_base_threshold_ev;
+    double type49_threshold_ev;
+    double type99_threshold_ev;
+    double threshold_abs_sigma_cm2;
+    double threshold_stimulated_sigma_cm2;
+    double type53_ptmp1;
+    double type53_ptmp2;
+    double type53_tau_in;
+    double type53_tau_out;
+} xstar_fixed_record_product_diagnostic_v1;
+
+typedef struct xstar_fixed_continuum_product_diagnostic_v1 {
+    int32_t full_bin_one_based;
+    double energy_ev;
+    double comp_sum1_contribution;
+    double comp_sum2_contribution;
+    double comp_sum3_contribution;
+    double free_free_opacity_increment;
+    double brcems;
+    double running_htcomp;
+    double running_clcomp;
+    double running_htfreef;
+    double running_clbrems;
+} xstar_fixed_continuum_product_diagnostic_v1;
+
+typedef struct xstar_fixed_element_product_diagnostic_v1 {
+    int32_t element_z;
+    double heating;
+    double cooling;
+} xstar_fixed_element_product_diagnostic_v1;
+
 typedef struct xstar_fixed_state_context xstar_fixed_state_context;
 
 XSTAR_FIXED_STATE_EXPORT uint32_t xstar_fixed_state_engine_abi_version(void);
@@ -462,6 +534,36 @@ XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_get_last_thermal_components_v1(
     char* message,
     size_t message_size
 );
+
+
+XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_product_diagnostic_counts_init_v1(
+    xstar_fixed_state_product_diagnostic_counts_v1* counts);
+XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_get_last_product_diagnostic_counts_v1(
+    const xstar_fixed_state_context* context,
+    xstar_fixed_state_product_diagnostic_counts_v1* counts,
+    char* message,
+    size_t message_size);
+XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_get_last_record_product_diagnostics_v1(
+    const xstar_fixed_state_context* context,
+    xstar_fixed_record_product_diagnostic_v1* rows,
+    size_t capacity,
+    size_t* count,
+    char* message,
+    size_t message_size);
+XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_get_last_continuum_product_diagnostics_v1(
+    const xstar_fixed_state_context* context,
+    xstar_fixed_continuum_product_diagnostic_v1* rows,
+    size_t capacity,
+    size_t* count,
+    char* message,
+    size_t message_size);
+XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_get_last_element_product_diagnostics_v1(
+    const xstar_fixed_state_context* context,
+    xstar_fixed_element_product_diagnostic_v1* rows,
+    size_t capacity,
+    size_t* count,
+    char* message,
+    size_t message_size);
 
 XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_write_last_thermal_budget_v1(
     const xstar_fixed_state_context* context,

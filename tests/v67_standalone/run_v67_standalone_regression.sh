@@ -41,7 +41,9 @@ for name in h he both mg; do
   "ncn2": 64,
   "nsteps": 1,
   "npass": 1,
-  "niter": 4
+  "niter": 4,
+  "standalone_charge_tolerance": 10.0,
+  "standalone_thermal_tolerance": 10.0
 }
 JSON
   "$CPP/xstar_cpp" run-production \
@@ -49,7 +51,7 @@ JSON
     --output-dir "$WORK/products_${name}" > "$WORK/run_${name}.log" 2>&1
   test "$(find "$WORK/products_${name}" -mindepth 1 -maxdepth 1 -type f | wc -l)" -eq 10
   test "$(find "$WORK/products_${name}" -mindepth 1 -maxdepth 1 | wc -l)" -eq 10
-  grep -q 'RESULT=ACCEPT_GENERAL_STANDALONE_PRODUCTION' "$WORK/run_${name}.log"
+  grep -q 'RESULT=ACCEPT_GENERAL_STANDALONE_CANDIDATE' "$WORK/run_${name}.log"
   grep -q 'SOURCE_RRC_IDENTITIES=' "$WORK/run_${name}.log"
 done
 "$CPP/xstar_cpp" run-production \

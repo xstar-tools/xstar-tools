@@ -28,14 +28,6 @@ bool true_production_mode_v65() {
     return value && std::string(value) == "1";
 }
 
-bool legacy_option24_h_he_v65(const std::string& ion_label) {
-    std::string lower = ion_label;
-    std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    return lower.rfind("h_", 0) == 0 || lower.rfind("he_", 0) == 0 ||
-           lower.rfind("h ", 0) == 0 || lower.rfind("he ", 0) == 0;
-}
-
-
 std::size_t count_lines(const std::filesystem::path& path) {
     std::ifstream input(path);
     std::size_t count = 0;
@@ -718,7 +710,7 @@ void append_native_public_rrc_sections(std::ofstream& out,
         const double tau_out = slot < tauc_stride ? ws.tauc[tauc_stride + slot] : 0.0;
         const double lum_in = slot < elum_stride ? ws.elumab[slot] : 0.0;
         const double lum_out = slot < elum_stride ? ws.elumab[elum_stride + slot] : 0.0;
-        if (write_depth && legacy_option24_h_he_v65(id.ion_label) &&
+        if (write_depth &&
             (std::abs(tau_in) > 1.0e-49 || std::abs(tau_out) > 1.0e-49)) {
             out << std::setw(7) << id.continuum_index
                 << std::setw(6) << id.lower_local_index << " "

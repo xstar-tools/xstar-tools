@@ -8964,6 +8964,197 @@ int xstar_fixed_state_get_last_thermal_components_v1(
     return 0;
 }
 
+
+int xstar_fixed_state_product_diagnostic_counts_init_v1(
+    xstar_fixed_state_product_diagnostic_counts_v1* counts) {
+    if (!counts) return 1;
+    std::memset(counts, 0, sizeof(*counts));
+    counts->struct_size = sizeof(*counts);
+    counts->abi_version = XSTAR_FIXED_STATE_ENGINE_ABI_VERSION;
+    return 0;
+}
+
+int xstar_fixed_state_get_last_product_diagnostic_counts_v1(
+    const xstar_fixed_state_context* context,
+    xstar_fixed_state_product_diagnostic_counts_v1* counts,
+    char* message,
+    size_t message_size) {
+    if (!context || !counts) {
+        copy_text(message, message_size, "context and diagnostic counts are required");
+        return 1;
+    }
+    if (counts->struct_size != sizeof(*counts) ||
+        counts->abi_version != XSTAR_FIXED_STATE_ENGINE_ABI_VERSION) {
+        copy_text(message, message_size, "product-diagnostic counts ABI mismatch");
+        return 2;
+    }
+    counts->record_count = context->last_record_diagnostics.size();
+    counts->continuum_count = context->last_continuum_workspace_diagnostics.size();
+    counts->element_count = context->last_element_diagnostics.size();
+    copy_text(message, message_size, "native product-diagnostic counts returned");
+    return 0;
+}
+
+int xstar_fixed_state_get_last_record_product_diagnostics_v1(
+    const xstar_fixed_state_context* context,
+    xstar_fixed_record_product_diagnostic_v1* rows,
+    size_t capacity,
+    size_t* count,
+    char* message,
+    size_t message_size) {
+    if (!context || !count) {
+        copy_text(message, message_size, "context and record diagnostic count are required");
+        return 1;
+    }
+    std::vector<NativeRecordDiagnostic> source = context->last_record_diagnostics;
+    std::stable_sort(source.begin(), source.end(), [](const auto& a, const auto& b) {
+        return a.evaluated.contribution.source_position < b.evaluated.contribution.source_position;
+    });
+    *count = source.size();
+    if (!rows) {
+        copy_text(message, message_size, "native record product-diagnostic count returned");
+        return 0;
+    }
+    if (capacity < source.size()) {
+        copy_text(message, message_size, "record product-diagnostic output capacity too small");
+        return 3;
+    }
+    for (std::size_t i = 0; i < source.size(); ++i) {
+        const auto& d = source[i];
+        const auto& item = d.evaluated;
+        const auto& c = item.contribution;
+        auto& out = rows[i];
+        std::memset(&out, 0, sizeof(out));
+        out.source_position = c.source_position;
+        out.record = c.record;
+        out.element_index = d.element_index;
+        out.element_z = d.element_z;
+        out.data_type = c.data_type;
+        out.rate_type = c.rate_type;
+        out.ion_stage = c.ion_stage;
+        out.lower_row = c.lower_row;
+        out.upper_row = c.upper_row;
+        out.spectral = item.spectral ? 1u : 0u;
+        out.ans[0] = c.ans1; out.ans[1] = c.ans2; out.ans[2] = c.ans3;
+        out.ans[3] = c.ans4; out.ans[4] = c.ans5; out.ans[5] = c.ans6;
+        out.line_energy_ev = item.line_energy_ev;
+        out.atomic_mass_amu = item.atomic_mass_amu;
+        out.density_scale = c.density_scale;
+        out.natural_width_ev = item.natural_width_ev;
+        out.opakab = item.opakab;
+        out.type50_valid = item.type50_shadow.valid ? 1u : 0u;
+        out.type50_line_index_one_based = item.type50_shadow.line_index_one_based;
+        out.type50_wavelength_a = item.type50_shadow.stored_wavelength_a;
+        out.type50_ptmp1 = item.type50_shadow.ptmp1;
+        out.type50_ptmp2 = item.type50_shadow.ptmp2;
+        out.type50_tau_in = item.type50_shadow.line_tau_in;
+        out.type50_tau_out = item.type50_shadow.line_tau_out;
+        out.type53_valid = item.type53_shadow.valid ? 1u : 0u;
+        out.type49_valid = item.type49_shadow.valid ? 1u : 0u;
+        out.type99_valid = item.type99_shadow.valid ? 1u : 0u;
+        if (item.type49_shadow.valid) {
+            out.continuum_index_one_based = item.type49_shadow.continuum_index_one_based;
+        } else if (item.type53_shadow.valid) {
+            out.continuum_index_one_based = item.type53_shadow.continuum_index_one_based;
+        } else if (item.type99_shadow.valid) {
+            out.continuum_index_one_based = item.type99_shadow.nbinc_threshold_one_based;
+        } else {
+            out.continuum_index_one_based = item.continuum_index_one_based;
+        }
+        out.type53_threshold_ev = item.type53_shadow.threshold_ev;
+        out.type53_base_threshold_ev = item.type53_shadow.base_threshold_ev;
+        out.type49_threshold_ev = item.type49_shadow.threshold_ev;
+        out.type99_threshold_ev = item.type99_shadow.threshold_ev;
+        if (item.type49_shadow.valid) {
+            out.threshold_abs_sigma_cm2 = item.type49_shadow.threshold_cross_section_cm2;
+            out.threshold_stimulated_sigma_cm2 = item.type49_shadow.threshold_stimulated_cross_section_cm2;
+        } else if (item.type53_shadow.valid) {
+            out.threshold_abs_sigma_cm2 = item.type53_shadow.threshold_cross_section_cm2;
+            out.threshold_stimulated_sigma_cm2 = item.type53_shadow.threshold_stimulated_cross_section_cm2;
+        } else {
+            out.threshold_abs_sigma_cm2 = item.opakab;
+            out.threshold_stimulated_sigma_cm2 = 0.0;
+        }
+        out.type53_ptmp1 = item.type53_shadow.ptmp1;
+        out.type53_ptmp2 = item.type53_shadow.ptmp2;
+        out.type53_tau_in = item.type53_shadow.tau_in;
+        out.type53_tau_out = item.type53_shadow.tau_out;
+    }
+    copy_text(message, message_size, "native record product diagnostics returned");
+    return 0;
+}
+
+int xstar_fixed_state_get_last_continuum_product_diagnostics_v1(
+    const xstar_fixed_state_context* context,
+    xstar_fixed_continuum_product_diagnostic_v1* rows,
+    size_t capacity,
+    size_t* count,
+    char* message,
+    size_t message_size) {
+    if (!context || !count) {
+        copy_text(message, message_size, "context and continuum diagnostic count are required");
+        return 1;
+    }
+    const auto& source = context->last_continuum_workspace_diagnostics;
+    *count = source.size();
+    if (!rows) {
+        copy_text(message, message_size, "native continuum product-diagnostic count returned");
+        return 0;
+    }
+    if (capacity < source.size()) {
+        copy_text(message, message_size, "continuum product-diagnostic output capacity too small");
+        return 3;
+    }
+    for (std::size_t i = 0; i < source.size(); ++i) {
+        const auto& d = source[i];
+        auto& out = rows[i];
+        std::memset(&out, 0, sizeof(out));
+        out.full_bin_one_based = d.full_bin_one_based;
+        out.energy_ev = d.epim_ev;
+        out.comp_sum1_contribution = d.comp_sum1_contribution;
+        out.comp_sum2_contribution = d.comp_sum2_contribution;
+        out.comp_sum3_contribution = d.comp_sum3_contribution;
+        out.free_free_opacity_increment = d.free_free_opacity_increment;
+        out.brcems = d.brcems;
+        out.running_htcomp = d.running_htcomp;
+        out.running_clcomp = d.running_clcomp;
+        out.running_htfreef = d.running_htfreef;
+        out.running_clbrems = d.running_clbrems;
+    }
+    copy_text(message, message_size, "native continuum product diagnostics returned");
+    return 0;
+}
+
+int xstar_fixed_state_get_last_element_product_diagnostics_v1(
+    const xstar_fixed_state_context* context,
+    xstar_fixed_element_product_diagnostic_v1* rows,
+    size_t capacity,
+    size_t* count,
+    char* message,
+    size_t message_size) {
+    if (!context || !count) {
+        copy_text(message, message_size, "context and element diagnostic count are required");
+        return 1;
+    }
+    const auto& source = context->last_element_diagnostics;
+    *count = source.size();
+    if (!rows) {
+        copy_text(message, message_size, "native element product-diagnostic count returned");
+        return 0;
+    }
+    if (capacity < source.size()) {
+        copy_text(message, message_size, "element product-diagnostic output capacity too small");
+        return 3;
+    }
+    for (std::size_t i = 0; i < source.size(); ++i) {
+        rows[i].element_z = source[i].element_z;
+        rows[i].heating = source[i].heating;
+        rows[i].cooling = source[i].cooling;
+    }
+    copy_text(message, message_size, "native element product diagnostics returned");
+    return 0;
+}
+
 int xstar_fixed_state_write_last_thermal_budget_v1(
     const xstar_fixed_state_context* context,
     const char* output_csv,
