@@ -282,6 +282,82 @@ bool environment_flag_local(const char* name) {
     return value && std::string(value) == "1";
 }
 
+int optional_environment_integer_local(const char* name, int fallback) {
+    const char* value = std::getenv(name);
+    if (!value || !*value) return fallback;
+    char* end = nullptr;
+    const long parsed = std::strtol(value, &end, 10);
+    if (!end || *end != '\0' || parsed <= 0 || parsed > 1000000) return fallback;
+    return static_cast<int>(parsed);
+}
+
+int current_source_sequence_local() {
+    const char* value = std::getenv("XSTAR_NATIVE_SOURCE_SEQUENCE");
+    if (!value || !*value) value = std::getenv("XSTAR_QUALIFICATION_SOURCE_SEQUENCE");
+    if (!value || !*value) {
+        throw std::runtime_error("iteration-resolved trace requires a source sequence");
+    }
+    char* end = nullptr;
+    const long parsed = std::strtol(value, &end, 10);
+    if (!end || *end != '\0' || parsed <= 0 || parsed > 1000000) {
+        throw std::runtime_error("invalid source sequence for iteration-resolved trace");
+    }
+    return static_cast<int>(parsed);
+}
+
+void maybe_dump_element_input_v70(const xstar_element_input_v1& input) {
+    const char* root_value = std::getenv("XSTAR_V70_DUMP_ELEMENT_INPUT_DIR");
+    if (!root_value || !*root_value) return;
+    const char* sequence_value = std::getenv("XSTAR_NATIVE_SOURCE_SEQUENCE");
+    if (!sequence_value || !*sequence_value) return;
+    char* end = nullptr;
+    const long sequence_long = std::strtol(sequence_value, &end, 10);
+    if (!end || *end != '\0' || sequence_long <= 0 || sequence_long > 1000000) return;
+    const int sequence = static_cast<int>(sequence_long);
+    const int target_sequence = optional_environment_integer_local(
+        "XSTAR_V70_DUMP_ELEMENT_INPUT_SEQUENCE", 16);
+    const int target_element = optional_environment_integer_local(
+        "XSTAR_V70_DUMP_ELEMENT_INPUT_Z", 12);
+    if (sequence != target_sequence || input.element_z != target_element) return;
+
+    const std::filesystem::path root(root_value);
+    std::filesystem::create_directories(root);
+    std::ostringstream stem_builder;
+    stem_builder << "sequence_" << std::setw(4) << std::setfill('0') << sequence
+                 << "_element_" << std::setw(2) << std::setfill('0') << input.element_z;
+    const std::string stem = stem_builder.str();
+    const auto manifest_path = root / (stem + "_manifest.csv");
+    if (std::filesystem::is_regular_file(manifest_path)) return;
+
+    std::ofstream manifest(manifest_path);
+    std::ofstream rows(root / (stem + "_rows.csv"));
+    std::ofstream terms(root / (stem + "_terms.csv"));
+    if (!manifest || !rows || !terms) {
+        throw std::runtime_error("cannot create v70 element-input dump files");
+    }
+    manifest << "sequence,element_z,n_rows,n_superlevels,n_ions,normalization_row,max_lucy_iterations,max_fixed_point_iterations,lucy_tolerance,fixed_point_tolerance,term_count\n";
+    manifest << std::setprecision(17)
+             << sequence << ',' << input.element_z << ',' << input.n_rows << ','
+             << input.n_superlevels << ',' << input.n_ions << ','
+             << input.normalization_row << ',' << input.max_lucy_iterations << ','
+             << input.max_fixed_point_iterations << ',' << input.lucy_tolerance << ','
+             << input.fixed_point_tolerance << ',' << input.term_count << '\n';
+    rows << "row,superlevel,ion,initial_population\n" << std::setprecision(17);
+    for (int row = 0; row < input.n_rows; ++row) {
+        rows << row + 1 << ',' << input.superlevel_by_row[row] << ','
+             << input.ion_by_row[row] << ',' << input.initial_populations[row] << '\n';
+    }
+    terms << "source_position,term_index,record,data_type,rate_type,ion_index,ion_stage,row,column,aj1,aj2,cj,cj2\n"
+          << std::setprecision(17);
+    for (std::size_t index = 0; index < input.term_count; ++index) {
+        const auto& term = input.terms[index];
+        terms << term.source_position << ',' << term.term_index << ',' << term.record << ','
+              << term.data_type << ',' << term.rate_type << ',' << term.ion_index << ','
+              << term.ion_stage << ',' << term.row << ',' << term.column << ','
+              << term.aj1 << ',' << term.aj2 << ',' << term.cj << ',' << term.cj2 << '\n';
+    }
+}
+
 bool iteration_trace_target(int sequence, int element_z) {
     const char* raw = std::getenv("XSTAR_QUALIFICATION_ITERATION_TRACE_TARGETS");
     const std::string targets = raw && *raw ? raw : "1:1,6:1,1:2,1:12";
@@ -720,6 +796,8 @@ int run_element_impl(
     context.stats.matrix_assembly_seconds += output.matrix_assembly_seconds;
     context.stats.terms_committed += input.term_count;
 
+    maybe_dump_element_input_v70(input);
+
     const auto solver_t0 = clock_type::now();
     std::copy(input.initial_populations, input.initial_populations + n, w.x.begin());
     w.final_outer_start = w.x;
@@ -737,7 +815,7 @@ int run_element_impl(
     w.total_fixed_point_iterations_trace = 0;
     const bool capture_iteration_resolved_trace =
         environment_flag_local("XSTAR_QUALIFICATION_ITERATION_RESOLVED_TRACE") &&
-        iteration_trace_target(required_environment_integer_local("XSTAR_QUALIFICATION_SOURCE_SEQUENCE"), input.element_z);
+        iteration_trace_target(current_source_sequence_local(), input.element_z);
     w.iteration_outer_trace.clear();
     w.iteration_fixed_trace.clear();
 
@@ -957,7 +1035,7 @@ int run_element_impl(
         w.total_fixed_point_iterations_trace = total_fixed;
     }
     if (capture_iteration_resolved_trace) {
-        const int sequence = required_environment_integer_local("XSTAR_QUALIFICATION_SOURCE_SEQUENCE");
+        const int sequence = current_source_sequence_local();
         write_iteration_resolved_trace(input, w, sequence);
     }
 

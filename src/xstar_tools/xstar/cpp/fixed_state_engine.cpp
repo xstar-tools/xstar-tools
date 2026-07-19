@@ -1003,6 +1003,11 @@ struct Program {
     std::vector<ProgramRecord> records;
     std::vector<double> reals;
     std::vector<std::int64_t> ints;
+    // Native production runtime line optical-depth state.  This replaces the
+    // historical qualification-only binary files and is owned by the
+    // persistent fixed-state context.
+    std::vector<double> runtime_line_tau_in;
+    std::vector<double> runtime_line_tau_out;
 };
 
 struct Type53RecordContext {
@@ -5357,8 +5362,24 @@ EvaluatedRecord evaluate_record(
             int line_index_one_based = 0;
             double line_tau_in = 0.0;
             double line_tau_out = 0.0;
+            const bool native_runtime_escape = native_production_mode() &&
+                (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_LINE_TAU_ACTIVE) != 0u &&
+                record.line_index_one_based > 0 &&
+                program.runtime_line_tau_in.size() == program.runtime_line_tau_out.size() &&
+                static_cast<std::size_t>(record.line_index_one_based) <= program.runtime_line_tau_in.size();
+            if (native_runtime_escape) {
+                line_index_one_based = record.line_index_one_based;
+                const std::size_t line_index = static_cast<std::size_t>(line_index_one_based - 1);
+                line_tau_in = program.runtime_line_tau_in[line_index];
+                line_tau_out = program.runtime_line_tau_out[line_index];
+                ptmp1 = pescl_v0472_binary64(line_tau_in) * (1.0 - cfrac);
+                ptmp2 = pescl_v0472_binary64(line_tau_out) * (1.0 - cfrac) +
+                    2.0 * pescl_v0472_binary64(line_tau_in + line_tau_out) * cfrac;
+                hydrogen_escape_state_applied = element.element_z == 1;
+                magnesium_escape_state_applied = element.element_z == 12;
+            }
             const auto& hydrogen_escape = hydrogen_type50_escape_state_v04874618();
-            if (hydrogen_escape.enabled && element.element_z == 1) {
+            if (!native_runtime_escape && hydrogen_escape.enabled && element.element_z == 1) {
                 const auto found = hydrogen_escape.line_index_by_record.find(record.record);
                 if (found == hydrogen_escape.line_index_by_record.end()) {
                     throw std::runtime_error("hydrogen Type-50 record is missing from source line-index map");
@@ -5373,7 +5394,7 @@ EvaluatedRecord evaluate_record(
                 hydrogen_escape_state_applied = true;
             }
             const auto& magnesium_escape = magnesium_type50_escape_state_v04874619();
-            if (magnesium_escape.enabled && element.element_z == 12 &&
+            if (!native_runtime_escape && magnesium_escape.enabled && element.element_z == 12 &&
                 magnesium_escape.active_records.count(record.record) != 0) {
                 const auto found = magnesium_escape.line_index_by_record.find(record.record);
                 if (found == magnesium_escape.line_index_by_record.end()) {
@@ -7728,6 +7749,23 @@ int run_impl(
             }
             ctx.last_thermal_consumed_fixed_state_closure = true;
         }
+        if (native_production_mode() && element.element_z == 12 &&
+            environment_data_type("XSTAR_QUALIFICATION_SOURCE_SEQUENCE") == 16) {
+            const char* dump_path = std::getenv("XSTAR_V70_DUMP_MG_COMPACT_POPULATIONS");
+            if (dump_path && *dump_path) {
+                std::ofstream dump(dump_path);
+                if (!dump) throw std::runtime_error("cannot write v70 Mg compact-population probe");
+                dump << "compact_row,ion,ion_charge,superlevel,is_normalization_row,native_population\n";
+                dump << std::setprecision(17);
+                for (std::size_t row = 0; row < active.element.rows.size(); ++row) {
+                    const auto& meta = active.element.rows[row];
+                    dump << meta.row << ',' << (meta.ion + active.min_stage - 1) << ','
+                         << meta.ion_charge << ',' << meta.superlevel << ','
+                         << (meta.row == active.element.normalization_row ? 1 : 0) << ','
+                         << thermal_populations[row] << '\n';
+                }
+            }
+        }
         thermal_population_stream.insert(
             thermal_population_stream.end(), thermal_populations.begin(), thermal_populations.end());
 
@@ -8777,6 +8815,42 @@ int xstar_fixed_state_context_get_program_info_v1(
     return 0;
 }
 
+int xstar_fixed_state_context_set_runtime_line_tau_v1(
+    xstar_fixed_state_context* context,
+    const double* tau_in,
+    const double* tau_out,
+    size_t count,
+    char* message,
+    size_t message_size
+) {
+    if (!context || (count > 0 && (!tau_in || !tau_out))) {
+        copy_text(message, message_size, "context and line-tau arrays are required");
+        return 1;
+    }
+    try {
+        if (count == 0) {
+            context->program.runtime_line_tau_in.clear();
+            context->program.runtime_line_tau_out.clear();
+        } else {
+            context->program.runtime_line_tau_in.assign(tau_in, tau_in + count);
+            context->program.runtime_line_tau_out.assign(tau_out, tau_out + count);
+        }
+        for (std::size_t i = 0; i < count; ++i) {
+            if (!std::isfinite(context->program.runtime_line_tau_in[i]) ||
+                !std::isfinite(context->program.runtime_line_tau_out[i]) ||
+                context->program.runtime_line_tau_in[i] < 0.0 ||
+                context->program.runtime_line_tau_out[i] < 0.0) {
+                throw std::runtime_error("invalid native line optical-depth state");
+            }
+        }
+        copy_text(message, message_size, "native line optical-depth state retained");
+        return 0;
+    } catch (const std::exception& exc) {
+        copy_text(message, message_size, exc.what());
+        return 7;
+    }
+}
+
 int xstar_fixed_state_context_reset_v1(xstar_fixed_state_context* context, char* message, size_t message_size) {
     if (!context) return 1;
     std::array<char, XSTAR_FIXED_STATE_MESSAGE_SIZE> error{};
@@ -8839,6 +8913,55 @@ int xstar_fixed_state_run_with_source_workspaces_v1(
         copy_text(message, message_size, exc.what());
         return 7;
     }
+}
+
+int xstar_fixed_state_get_last_thermal_components_v1(
+    const xstar_fixed_state_context* context,
+    xstar_fixed_state_thermal_components_v1* components,
+    char* message,
+    size_t message_size
+) {
+    if (!context || !components) {
+        copy_text(message, message_size, "context and components are required");
+        return 1;
+    }
+    if (components->struct_size != sizeof(xstar_fixed_state_thermal_components_v1) ||
+        components->abi_version != XSTAR_FIXED_STATE_ENGINE_ABI_VERSION) {
+        copy_text(message, message_size, "thermal-components ABI mismatch");
+        return 2;
+    }
+    const auto get_budget = [&](int z) {
+        const auto it = context->last_element_thermal_budget.find(z);
+        return it == context->last_element_thermal_budget.end()
+            ? std::array<double,4>{{0.0,0.0,0.0,0.0}} : it->second;
+    };
+    const auto h = get_budget(1);
+    const auto he = get_budget(2);
+    const auto mg = get_budget(12);
+    components->hydrogen_heating = h[0];
+    components->hydrogen_cooling = h[1];
+    components->hydrogen_heating2 = h[2];
+    components->hydrogen_cooling2 = h[3];
+    components->helium_heating = he[0];
+    components->helium_cooling = he[1];
+    components->helium_heating2 = he[2];
+    components->helium_cooling2 = he[3];
+    components->magnesium_heating = mg[0];
+    components->magnesium_cooling = mg[1];
+    components->magnesium_heating2 = mg[2];
+    components->magnesium_cooling2 = mg[3];
+    components->compton_heating = context->last_continuum_compton_heating;
+    components->compton_cooling = context->last_continuum_compton_cooling;
+    components->free_free_heating = context->last_htfreef;
+    components->bremsstrahlung_cooling = context->last_clbrems;
+    components->element_heating = context->last_committed_element_thermal_budget[0];
+    components->element_cooling = context->last_committed_element_thermal_budget[1];
+    components->continuum_heating = context->last_committed_continuum_thermal_budget[0];
+    components->continuum_cooling = context->last_committed_continuum_thermal_budget[1];
+    components->total_heating = context->last_total_heating;
+    components->total_cooling = context->last_total_cooling;
+    copy_text(message, message_size, "native thermal components returned");
+    return 0;
 }
 
 int xstar_fixed_state_write_last_thermal_budget_v1(

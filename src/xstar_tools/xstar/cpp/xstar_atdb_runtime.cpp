@@ -691,6 +691,8 @@ ProductionParameters read_production_parameters(const std::filesystem::path& pat
     p.temperature_k=json_number(p.raw_json,"temperature_k",json_number(p.raw_json,"temperature",100.0)*1.0e4);
     p.column_cm2=json_number(p.raw_json,"column",p.column_cm2); p.log_xi=json_number(p.raw_json,"rlogxi",p.log_xi);
     p.initial_radius_cm=json_number(p.raw_json,"initial_radius_cm",p.initial_radius_cm); p.covering_fraction=json_number(p.raw_json,"cfrac",p.covering_fraction);
+    p.emission_multiplier=json_number(p.raw_json,"emult",p.emission_multiplier);
+    p.maximum_optical_depth=json_number(p.raw_json,"taumax",p.maximum_optical_depth);
     p.turbulent_velocity_km_s=json_number(p.raw_json,"vturbi",p.turbulent_velocity_km_s);
     // xeemin is a lower bound used by the source charge controller, not the
     // initial charge iterate.  Unless parameters explicitly provide xee or

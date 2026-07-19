@@ -94,7 +94,10 @@ typedef enum xstar_fixed_runtime_state_flags_v1 {
      * 9999-bin continuum and line-profile projection until a real product
      * boundary is being retained.  The controller gates depend on the
      * populations and thermal state, not on these derived public surfaces. */
-    XSTAR_FIXED_RUNTIME_STATE_DEFER_PRODUCT_PROJECTION = 1u << 6
+    XSTAR_FIXED_RUNTIME_STATE_DEFER_PRODUCT_PROJECTION = 1u << 6,
+    /* Calls 3-4 consume the live line optical-depth workspace; calls 1-2
+     * remain optically thin under source calc_hmc_ion semantics. */
+    XSTAR_FIXED_RUNTIME_STATE_LINE_TAU_ACTIVE = 1u << 7
 } xstar_fixed_runtime_state_flags_v1;
 
 typedef struct xstar_fixed_state_input_v1 {
@@ -371,6 +374,33 @@ typedef struct xstar_fixed_state_program_info_v1 {
     char message[XSTAR_FIXED_STATE_MESSAGE_SIZE];
 } xstar_fixed_state_program_info_v1;
 
+typedef struct xstar_fixed_state_thermal_components_v1 {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    double hydrogen_heating;
+    double hydrogen_cooling;
+    double hydrogen_heating2;
+    double hydrogen_cooling2;
+    double helium_heating;
+    double helium_cooling;
+    double helium_heating2;
+    double helium_cooling2;
+    double magnesium_heating;
+    double magnesium_cooling;
+    double magnesium_heating2;
+    double magnesium_cooling2;
+    double compton_heating;
+    double compton_cooling;
+    double free_free_heating;
+    double bremsstrahlung_cooling;
+    double element_heating;
+    double element_cooling;
+    double continuum_heating;
+    double continuum_cooling;
+    double total_heating;
+    double total_cooling;
+} xstar_fixed_state_thermal_components_v1;
+
 typedef struct xstar_fixed_state_context xstar_fixed_state_context;
 
 XSTAR_FIXED_STATE_EXPORT uint32_t xstar_fixed_state_engine_abi_version(void);
@@ -395,6 +425,15 @@ XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_context_get_program_info_v1(
     char* message,
     size_t message_size
 );
+XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_context_set_runtime_line_tau_v1(
+    xstar_fixed_state_context* context,
+    const double* tau_in,
+    const double* tau_out,
+    size_t count,
+    char* message,
+    size_t message_size
+);
+
 XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_context_reset_v1(
     xstar_fixed_state_context* context,
     char* message,
@@ -417,6 +456,13 @@ XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_run_with_source_workspaces_v1(
     char* message,
     size_t message_size
 );
+XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_get_last_thermal_components_v1(
+    const xstar_fixed_state_context* context,
+    xstar_fixed_state_thermal_components_v1* components,
+    char* message,
+    size_t message_size
+);
+
 XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_write_last_thermal_budget_v1(
     const xstar_fixed_state_context* context,
     const char* output_csv,

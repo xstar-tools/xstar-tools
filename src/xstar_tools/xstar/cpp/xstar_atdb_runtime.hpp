@@ -30,6 +30,8 @@ struct ProductionParameters {
     double log_xi = 1.5;
     double initial_radius_cm = 1.0e11;
     double covering_fraction = 1.0;
+    double emission_multiplier = 0.5;
+    double maximum_optical_depth = 5.0;
     double turbulent_velocity_km_s = 0.0;
     double initial_electron_fraction = 1.0;
     double minimum_electron_fraction = 0.1;
