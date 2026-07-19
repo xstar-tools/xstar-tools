@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.7.46.25.5.17.25.81 - 2026-07-19
+
+- Correct Mg compact-seed global indexing to use the source `npilev(local_ordinal, ion)` coordinate instead of looking up the Type-13 record selected by the packed local-level identifier.  Sequence-16 Mg contains packed identifiers whose order differs from Type-13 source order; the old lowering therefore attached many compact rows to the wrong committed `xilevg` slots.
+- Preserve source compact-vector construction semantics: each selected Mg stage is copied in Type-13 source-ordinal order, adjacent stage boundary rows overwrite the previous continuum row, and the terminal normalization row is forced to exact zero.  No pre-`msolvelucy` renormalization is applied to source-mapped H/He/Mg vectors; number conservation remains owned by the solver normalization row.
+- Validate the mapping against the exact v0.6.47.2 sequence-16 solve-stage capture.  All 552 transformed-initial Mg rows map bit-for-bit to the corresponding call-start `global_xilevg` source-ordinal slots, including the final forced-zero row.  The source capture remains comparison-only and is never controller input.
+- Add an explicit binary64 gate for all 552 transformed-initial Mg populations before the existing population, ion-total, charge-ledger, source-order thermal-ledger, `hmctot`, and `elcter` precommit gates.
+- Keep sequence 16 fail-closed before global population commit.  Reopen the complete 61-event canonical `.7e` trajectory only after every sequence-16 gate accepts; no FITS or `xout_step.log` product is written on rejection.
+
 ## 0.6.48.7.46.25.5.17.25.80 - 2026-07-19
 
 - Remove the native-only pre-`msolvelucy` normalization of live runtime-mapped Mg compact populations; source `calc_hmc_element` passes the committed `xilevg` scale through unchanged and the solver normalization row owns number conservation.

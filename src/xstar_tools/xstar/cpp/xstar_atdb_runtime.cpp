@@ -748,7 +748,25 @@ ProgramStorage lower_atdb_in_memory(const std::filesystem::path& atdb,const Prod
     for(std::size_t ei=0;ei<active.size();++ei){int z=active[ei];Layout l=build_layout(db,d,z,static_cast<int>(ei));auto rit=records_by_z.find(z);if(rit==records_by_z.end()||rit->second.empty())throw std::runtime_error("no executable records for active Z="+std::to_string(z));
         xstar_fixed_program_element_v1 e{};e.element_index=ei;e.element_z=z;e.abundance=parameters.abundances_by_z.at(z);e.n_rows=l.n_rows;e.n_superlevels=l.n_superlevels;e.n_ions=l.n_ions;e.normalization_row=l.normalization_row;e.record_head=global_record;e.record_count=rit->second.size();out.elements.push_back(e);
         xstar_run_state::ElementMetadataState em;em.element_index=ei;em.atomic_number=z;em.abundance=e.abundance;em.row_offset=row_offset;em.row_count=l.n_rows;em.ion_count=l.n_ions;out.element_metadata.push_back(em);
-        for(int row=1;row<=l.n_rows;++row){const auto& r=l.rows[row];const auto& lv=row_level(l,row);const auto& b=block_for(l,r.ion_index);xstar_fixed_program_row_v1 pr{};pr.element_index=ei;pr.row=row;pr.superlevel=r.superlevel;pr.ion=r.ion_counter;pr.ion_charge=std::max(0,b.ion_stage-1);pr.initial_population=row==1?1.0:0.0;pr.energy_ev=lv.energy;pr.statistical_weight=lv.weight;pr.principal_n=lv.principal_n;pr.orbital_l=lv.orbital_l;int global=d.level_global_by_record[lv.record];pr.global_level_index=global;out.rows.push_back(pr);
+        for(int row=1;row<=l.n_rows;++row){const auto& r=l.rows[row];const auto& lv=row_level(l,row);const auto& b=block_for(l,r.ion_index);xstar_fixed_program_row_v1 pr{};pr.element_index=ei;pr.row=row;pr.superlevel=r.superlevel;pr.ion=r.ion_counter;pr.ion_charge=std::max(0,b.ion_stage-1);pr.initial_population=row==1?1.0:0.0;pr.energy_ev=lv.energy;pr.statistical_weight=lv.weight;pr.principal_n=lv.principal_n;pr.orbital_l=lv.orbital_l;int global=d.level_global_by_record[lv.record];
+            // v0.6.48.7.46.25.5.17.25.81: XSTAR npilev is indexed by the
+            // Type-13 source ordinal within an ion, not by the packed local
+            // level identifier stored in the record.  Mg contains ions whose
+            // local identifiers are not source-record ordered.  The previous
+            // lowering therefore attached the correct compact row to the
+            // wrong global xilevg slot (e.g. sequence-16 Mg compact row 2
+            // resolved to 2860 instead of source ordinal 2818).  Preserve the
+            // literal setptrs npilev ordinal for Mg; this is native topology,
+            // not a qualification-value substitution.
+            if (z == 12 && r.local_level > 0 &&
+                static_cast<std::size_t>(r.local_level) < d.npilev.size() &&
+                r.ion_index > 0 &&
+                static_cast<std::size_t>(r.ion_index) < d.npilev[static_cast<std::size_t>(r.local_level)].size()) {
+                const int source_ordinal_global =
+                    d.npilev[static_cast<std::size_t>(r.local_level)][static_cast<std::size_t>(r.ion_index)];
+                if (source_ordinal_global > 0) global = source_ordinal_global;
+            }
+            pr.global_level_index=global;out.rows.push_back(pr);
             xstar_run_state::CompactRowMetadataState rm;rm.element_index=ei;rm.row=row;rm.superlevel=r.superlevel;rm.ion=r.ion_counter;rm.ion_charge=pr.ion_charge;rm.energy_ev=lv.energy;rm.statistical_weight=lv.weight;rm.principal_n=lv.principal_n;rm.orbital_l=lv.orbital_l;rm.global_level_index=global;rm.ion_label=normalized_ion_label(b);rm.level_label=lv.label;out.row_metadata.push_back(rm);
             xstar_run_state::LevelIdentityState id;id.global_index=global;id.ion_index=b.ion_stage;id.excitation_ev=lv.energy;id.ion_label=rm.ion_label;id.atomic_number=z;id.level_label=lv.label;id.upper_index=b.nlev; if(global>0)out.level_identities.push_back(id);
         }

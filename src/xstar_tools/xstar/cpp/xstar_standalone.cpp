@@ -7110,6 +7110,7 @@ struct Sequence16MgLedgerGateV80 {
     double source_charge_ledger = 0.0;
     std::size_t population_e7_mismatches = 0;
     std::size_t population_bit_mismatches = 0;
+    std::size_t transformed_initial_population_bit_mismatches = 0;
     std::size_t operand_population_bit_mismatches = 0;
     std::size_t unweighted_bit_mismatches = 0;
     std::size_t running_sum_bit_mismatches = 0;
@@ -7323,6 +7324,9 @@ Sequence16MgLedgerGateV80 build_sequence16_mg_ledger_v80(
             if (gate.first_population_mismatch_row == 0) gate.first_population_mismatch_row = compact_row;
         }
         if (!binary64_equal_v79(n.final_population, src.final_population)) ++gate.population_bit_mismatches;
+        if (!binary64_equal_v79(n.initial, src.initial)) {
+            ++gate.transformed_initial_population_bit_mismatches;
+        }
         if (gate.first_solve_phase_mismatch.empty()) {
             if (!binary64_equal_v79(n.initial, src.initial)) {
                 gate.first_solve_phase_mismatch = "transformed_initial_population";
@@ -10029,7 +10033,7 @@ int standalone_iteration_evaluator_v67(
         const auto evaluation_started_v70 = std::chrono::steady_clock::now();
         FixedDsecSnapshot snapshot = make_iteration_snapshot_v67(*data, *trial);
         if (std::getenv("XSTAR_V72_PROBE_PROGRESS")) {
-            std::cerr << "V048746255172580_EVALUATION_BEGIN=" << snapshot.sequence
+            std::cerr << "V048746255172581_EVALUATION_BEGIN=" << snapshot.sequence
                       << " CALL=" << snapshot.call_index
                       << " EVAL=" << snapshot.evaluation_index
                       << " T4=" << std::setprecision(17) << snapshot.temperature_t4
@@ -10123,8 +10127,8 @@ int standalone_iteration_evaluator_v67(
                        << snapshot.helium_heating << ',' << snapshot.helium_cooling << ','
                        << snapshot.helium_heating2 << ',' << snapshot.helium_cooling2 << '\n';
             state_file.close();
-            std::cout << "V048746255172580_SEQUENCE2_HE_DIAGNOSTICS=CAPTURED\n"
-                      << "V048746255172580_SEQUENCE2_HE_DIAGNOSTIC_DIR=" << diagnostic_root.string() << "\n";
+            std::cout << "V048746255172581_SEQUENCE2_HE_DIAGNOSTICS=CAPTURED\n"
+                      << "V048746255172581_SEQUENCE2_HE_DIAGNOSTIC_DIR=" << diagnostic_root.string() << "\n";
         }
         if (sequence16_qualification) {
             const auto& diagnostic_root = data->sequence16_diagnostic_dir;
@@ -10168,6 +10172,8 @@ int standalone_iteration_evaluator_v67(
                 throw std::runtime_error(std::string("sequence-16 source-target load failed: ") + exc.what());
             }
 
+            const bool transformed_initial_ok =
+                ledger_gate.transformed_initial_population_bit_mismatches == 0u;
             const bool population_operands_ok = ledger_gate.operand_population_bit_mismatches == 0u;
             const bool unweighted_ok = ledger_gate.unweighted_bit_mismatches == 0u;
             const bool running_sums_ok = ledger_gate.running_sum_bit_mismatches == 0u;
@@ -10185,13 +10191,13 @@ int standalone_iteration_evaluator_v67(
             const bool accepted = ledger_gate.row_count_ok && ledger_gate.identity_hash_match &&
                 ledger_gate.order_hash_match && ledger_gate.value_hash_match &&
                 ledger_gate.populations_e7_ok && ledger_gate.ion_totals_e7_ok && ledger_gate.charge_ledger_e7_ok &&
-                population_operands_ok && unweighted_ok && running_sums_ok && weighted_ok &&
+                transformed_initial_ok && population_operands_ok && unweighted_ok && running_sums_ok && weighted_ok &&
                 heating_ok && cooling_ok && heating2_ok && cooling2_ok && hmctot_ok && elcter_ok;
 
             std::ofstream summary(diagnostic_root / "sequence16_mg_precommit_gate.json");
             if (!summary) throw std::runtime_error("cannot create sequence-16 Mg precommit gate JSON");
             summary << std::setprecision(17)
-                    << "{\n  \"schema\": \"xstar-tools-v048746255172580-sequence16-mg-exact-source-state-gate-v1\",\n"
+                    << "{\n  \"schema\": \"xstar-tools-v048746255172581-sequence16-mg-source-ordinal-state-gate-v1\",\n"
                     << "  \"sequence\": 16,\n"
                     << "  \"commit_permitted\": " << (accepted ? "true" : "false") << ",\n"
                     << "  \"full_ledger_rows\": " << ledger_gate.full_ledger_rows << ",\n"
@@ -10205,6 +10211,7 @@ int standalone_iteration_evaluator_v67(
                     << "  \"source_value_hash\": \"" << ledger_gate.source_value_hash << "\",\n"
                     << "  \"population_e7_mismatches\": " << ledger_gate.population_e7_mismatches << ",\n"
                     << "  \"population_bit_mismatches\": " << ledger_gate.population_bit_mismatches << ",\n"
+                    << "  \"transformed_initial_population_bit_mismatches\": " << ledger_gate.transformed_initial_population_bit_mismatches << ",\n"
                     << "  \"operand_population_bit_mismatches\": " << ledger_gate.operand_population_bit_mismatches << ",\n"
                     << "  \"unweighted_bit_mismatches\": " << ledger_gate.unweighted_bit_mismatches << ",\n"
                     << "  \"running_sum_bit_mismatches\": " << ledger_gate.running_sum_bit_mismatches << ",\n"
@@ -10229,65 +10236,67 @@ int standalone_iteration_evaluator_v67(
             summary.close();
 
             std::cout << std::setprecision(17)
-                      << "V048746255172580_SEQUENCE16_MG_LEDGER_FULL_ROWS=" << ledger_gate.full_ledger_rows << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_LEDGER_CANONICAL_ROWS=" << ledger_gate.mg_canonical_rows << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_LEDGER_EXPANDED_ROWS=" << ledger_gate.mg_expanded_rows << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_LEDGER_NATIVE_IDENTITY_HASH=" << ledger_gate.native_identity_hash << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_LEDGER_SOURCE_IDENTITY_HASH=" << ledger_gate.source_identity_hash << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_LEDGER_NATIVE_ORDER_HASH=" << ledger_gate.native_order_hash << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_LEDGER_SOURCE_ORDER_HASH=" << ledger_gate.source_order_hash << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_LEDGER_NATIVE_VALUE_HASH=" << ledger_gate.native_value_hash << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_LEDGER_SOURCE_VALUE_HASH=" << ledger_gate.source_value_hash << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_POPULATION_E7_MISMATCHES=" << ledger_gate.population_e7_mismatches << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_POPULATION_BIT_MISMATCHES=" << ledger_gate.population_bit_mismatches << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_OPERAND_POPULATION_BIT_MISMATCHES=" << ledger_gate.operand_population_bit_mismatches << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_UNWEIGHTED_BIT_MISMATCHES=" << ledger_gate.unweighted_bit_mismatches << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_RUNNING_SUM_BIT_MISMATCHES=" << ledger_gate.running_sum_bit_mismatches << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_WEIGHTED_BIT_MISMATCHES=" << ledger_gate.weighted_bit_mismatches << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_FIRST_POPULATION_MISMATCH_ROW=" << ledger_gate.first_population_mismatch_row << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_FIRST_SOLVE_PHASE_MISMATCH=" << (ledger_gate.first_solve_phase_mismatch.empty() ? "NONE" : ledger_gate.first_solve_phase_mismatch) << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_FIRST_SOLVE_PHASE_MISMATCH_ROW=" << ledger_gate.first_solve_phase_mismatch_row << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_PRIMARY_HEATING_SOURCE=" << ledger_gate.source_reconstructed[0] << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_PRIMARY_HEATING_NATIVE=" << snapshot.magnesium_heating << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_PRIMARY_COOLING_SOURCE=" << ledger_gate.source_reconstructed[1] << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_PRIMARY_COOLING_NATIVE=" << snapshot.magnesium_cooling << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_SECONDARY_HEATING_SOURCE=" << ledger_gate.source_reconstructed[2] << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_SECONDARY_HEATING_NATIVE=" << snapshot.magnesium_heating2 << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_SECONDARY_COOLING_SOURCE=" << ledger_gate.source_reconstructed[3] << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_SECONDARY_COOLING_NATIVE=" << snapshot.magnesium_cooling2 << "\n"
-                      << "V048746255172580_SEQUENCE16_HMCTOT_SOURCE=" << contract_source.hmctot << "\n"
-                      << "V048746255172580_SEQUENCE16_HMCTOT_NATIVE=" << snapshot.hmctot << "\n"
-                      << "V048746255172580_SEQUENCE16_ELCTER_SOURCE=" << contract_source.elcter << "\n"
-                      << "V048746255172580_SEQUENCE16_ELCTER_NATIVE=" << snapshot.charge_residual << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_LEDGER_ROW_COUNT=" << (ledger_gate.row_count_ok ? "ACCEPT" : "REJECT") << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_LEDGER_IDENTITY_HASH_MATCH=" << (ledger_gate.identity_hash_match ? "ACCEPT" : "REJECT") << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_LEDGER_ORDER_HASH_MATCH=" << (ledger_gate.order_hash_match ? "ACCEPT" : "REJECT") << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_LEDGER_VALUE_HASH_MATCH=" << (ledger_gate.value_hash_match ? "ACCEPT" : "REJECT") << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_POPULATIONS_IEEE_E7=" << (ledger_gate.populations_e7_ok ? "ACCEPT" : "REJECT") << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_ION_TOTALS_IEEE_E7=" << (ledger_gate.ion_totals_e7_ok ? "ACCEPT" : "REJECT") << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_CHARGE_LEDGER_IEEE_E7=" << (ledger_gate.charge_ledger_e7_ok ? "ACCEPT" : "REJECT") << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_POPULATION_OPERANDS_BINARY64=" << (population_operands_ok ? "ACCEPT" : "REJECT") << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_UNWEIGHTED_CONTRIBUTIONS_BINARY64=" << (unweighted_ok ? "ACCEPT" : "REJECT") << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_RUNNING_SUMS_BINARY64=" << (running_sums_ok ? "ACCEPT" : "REJECT") << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_ABUNDANCE_WEIGHTED_CONTRIBUTIONS_BINARY64=" << (weighted_ok ? "ACCEPT" : "REJECT") << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_PRIMARY_HEATING_BINARY64=" << (heating_ok ? "ACCEPT" : "REJECT") << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_PRIMARY_COOLING_BINARY64=" << (cooling_ok ? "ACCEPT" : "REJECT") << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_SECONDARY_HEATING_BINARY64=" << (heating2_ok ? "ACCEPT" : "REJECT") << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_SECONDARY_COOLING_BINARY64=" << (cooling2_ok ? "ACCEPT" : "REJECT") << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_SOURCE_REPLAY_PRIMARY_HEATING_CONTRACT_BINARY64=" << (source_heating_contract_ok ? "ACCEPT" : "REJECT") << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_SOURCE_REPLAY_PRIMARY_COOLING_CONTRACT_BINARY64=" << (source_cooling_contract_ok ? "ACCEPT" : "REJECT") << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_SOURCE_REPLAY_SECONDARY_HEATING_CONTRACT_BINARY64=" << (source_heating2_contract_ok ? "ACCEPT" : "REJECT") << "\n"
-                      << "V048746255172580_SEQUENCE16_MG_SOURCE_REPLAY_SECONDARY_COOLING_CONTRACT_BINARY64=" << (source_cooling2_contract_ok ? "ACCEPT" : "REJECT") << "\n"
-                      << "V048746255172580_SEQUENCE16_HMCTOT_IEEE_E7=" << (hmctot_ok ? "ACCEPT" : "REJECT") << "\n"
-                      << "V048746255172580_SEQUENCE16_ELCTER_IEEE_E7=" << (elcter_ok ? "ACCEPT" : "REJECT") << "\n";
+                      << "V048746255172581_SEQUENCE16_MG_LEDGER_FULL_ROWS=" << ledger_gate.full_ledger_rows << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_LEDGER_CANONICAL_ROWS=" << ledger_gate.mg_canonical_rows << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_LEDGER_EXPANDED_ROWS=" << ledger_gate.mg_expanded_rows << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_LEDGER_NATIVE_IDENTITY_HASH=" << ledger_gate.native_identity_hash << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_LEDGER_SOURCE_IDENTITY_HASH=" << ledger_gate.source_identity_hash << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_LEDGER_NATIVE_ORDER_HASH=" << ledger_gate.native_order_hash << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_LEDGER_SOURCE_ORDER_HASH=" << ledger_gate.source_order_hash << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_LEDGER_NATIVE_VALUE_HASH=" << ledger_gate.native_value_hash << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_LEDGER_SOURCE_VALUE_HASH=" << ledger_gate.source_value_hash << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_POPULATION_E7_MISMATCHES=" << ledger_gate.population_e7_mismatches << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_POPULATION_BIT_MISMATCHES=" << ledger_gate.population_bit_mismatches << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_TRANSFORMED_INITIAL_POPULATION_BIT_MISMATCHES=" << ledger_gate.transformed_initial_population_bit_mismatches << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_OPERAND_POPULATION_BIT_MISMATCHES=" << ledger_gate.operand_population_bit_mismatches << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_UNWEIGHTED_BIT_MISMATCHES=" << ledger_gate.unweighted_bit_mismatches << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_RUNNING_SUM_BIT_MISMATCHES=" << ledger_gate.running_sum_bit_mismatches << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_WEIGHTED_BIT_MISMATCHES=" << ledger_gate.weighted_bit_mismatches << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_FIRST_POPULATION_MISMATCH_ROW=" << ledger_gate.first_population_mismatch_row << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_FIRST_SOLVE_PHASE_MISMATCH=" << (ledger_gate.first_solve_phase_mismatch.empty() ? "NONE" : ledger_gate.first_solve_phase_mismatch) << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_FIRST_SOLVE_PHASE_MISMATCH_ROW=" << ledger_gate.first_solve_phase_mismatch_row << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_PRIMARY_HEATING_SOURCE=" << ledger_gate.source_reconstructed[0] << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_PRIMARY_HEATING_NATIVE=" << snapshot.magnesium_heating << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_PRIMARY_COOLING_SOURCE=" << ledger_gate.source_reconstructed[1] << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_PRIMARY_COOLING_NATIVE=" << snapshot.magnesium_cooling << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_SECONDARY_HEATING_SOURCE=" << ledger_gate.source_reconstructed[2] << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_SECONDARY_HEATING_NATIVE=" << snapshot.magnesium_heating2 << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_SECONDARY_COOLING_SOURCE=" << ledger_gate.source_reconstructed[3] << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_SECONDARY_COOLING_NATIVE=" << snapshot.magnesium_cooling2 << "\n"
+                      << "V048746255172581_SEQUENCE16_HMCTOT_SOURCE=" << contract_source.hmctot << "\n"
+                      << "V048746255172581_SEQUENCE16_HMCTOT_NATIVE=" << snapshot.hmctot << "\n"
+                      << "V048746255172581_SEQUENCE16_ELCTER_SOURCE=" << contract_source.elcter << "\n"
+                      << "V048746255172581_SEQUENCE16_ELCTER_NATIVE=" << snapshot.charge_residual << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_LEDGER_ROW_COUNT=" << (ledger_gate.row_count_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_LEDGER_IDENTITY_HASH_MATCH=" << (ledger_gate.identity_hash_match ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_LEDGER_ORDER_HASH_MATCH=" << (ledger_gate.order_hash_match ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_LEDGER_VALUE_HASH_MATCH=" << (ledger_gate.value_hash_match ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_POPULATIONS_IEEE_E7=" << (ledger_gate.populations_e7_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_ION_TOTALS_IEEE_E7=" << (ledger_gate.ion_totals_e7_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_CHARGE_LEDGER_IEEE_E7=" << (ledger_gate.charge_ledger_e7_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_TRANSFORMED_INITIAL_POPULATIONS_BINARY64=" << (transformed_initial_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_POPULATION_OPERANDS_BINARY64=" << (population_operands_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_UNWEIGHTED_CONTRIBUTIONS_BINARY64=" << (unweighted_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_RUNNING_SUMS_BINARY64=" << (running_sums_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_ABUNDANCE_WEIGHTED_CONTRIBUTIONS_BINARY64=" << (weighted_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_PRIMARY_HEATING_BINARY64=" << (heating_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_PRIMARY_COOLING_BINARY64=" << (cooling_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_SECONDARY_HEATING_BINARY64=" << (heating2_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_SECONDARY_COOLING_BINARY64=" << (cooling2_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_SOURCE_REPLAY_PRIMARY_HEATING_CONTRACT_BINARY64=" << (source_heating_contract_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_SOURCE_REPLAY_PRIMARY_COOLING_CONTRACT_BINARY64=" << (source_cooling_contract_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_SOURCE_REPLAY_SECONDARY_HEATING_CONTRACT_BINARY64=" << (source_heating2_contract_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172581_SEQUENCE16_MG_SOURCE_REPLAY_SECONDARY_COOLING_CONTRACT_BINARY64=" << (source_cooling2_contract_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172581_SEQUENCE16_HMCTOT_IEEE_E7=" << (hmctot_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172581_SEQUENCE16_ELCTER_IEEE_E7=" << (elcter_ok ? "ACCEPT" : "REJECT") << "\n";
             if (!accepted) {
-                std::cout << "V048746255172580_SEQUENCE16_COMMIT=BLOCKED\n"
-                          << "V048746255172580_COMPLETE_61_EVENT_TRAJECTORY_IEEE_E7=NOT_RUN_SEQUENCE16_PRECOMMIT_GATE\n";
-                set_callback_error(error, error_size, "V80_SEQUENCE16_MG_PRECOMMIT_GATE_REJECT");
+                std::cout << "V048746255172581_SEQUENCE16_COMMIT=BLOCKED\n"
+                          << "V048746255172581_COMPLETE_61_EVENT_TRAJECTORY_IEEE_E7=NOT_RUN_SEQUENCE16_PRECOMMIT_GATE\n";
+                set_callback_error(error, error_size, "V81_SEQUENCE16_MG_PRECOMMIT_GATE_REJECT");
                 return 80;
             }
             data->sequence16_precommit_gate_passed = true;
-            std::cout << "V048746255172580_SEQUENCE16_COMMIT=ACCEPT\n";
+            std::cout << "V048746255172581_SEQUENCE16_COMMIT=ACCEPT\n";
         }
         update_global_populations_v67(*data, snapshot.populations, &snapshot.lte_populations);
         if (data->retain_prefix_diagnostics && snapshot.sequence <= 8u) {
@@ -10307,13 +10316,13 @@ int standalone_iteration_evaluator_v67(
         if (std::getenv("XSTAR_V72_PROBE_PROGRESS")) {
             const double elapsed_v70 = std::chrono::duration<double>(
                 std::chrono::steady_clock::now() - evaluation_started_v70).count();
-            std::cerr << "V048746255172580_EVALUATION_END=" << data->last_iteration.sequence
+            std::cerr << "V048746255172581_EVALUATION_END=" << data->last_iteration.sequence
                       << " SECONDS=" << std::fixed << std::setprecision(6) << elapsed_v70
                       << " HMCTOT=" << std::setprecision(17) << output.hmctot
                       << " ELCTER=" << output.elcter << "\n" << std::flush;
         }
         if (sequence2_qualification && std::getenv("XSTAR_V77_SEQUENCE2_STOP_BEFORE_PRODUCTS")) {
-            std::cout << "V048746255172580_SEQUENCE2_PREPRODUCT_STOP=ACCEPT\n";
+            std::cout << "V048746255172581_SEQUENCE2_PREPRODUCT_STOP=ACCEPT\n";
             set_callback_error(error, error_size, "V77_SEQUENCE2_PREPRODUCT_STOP");
             return 76;
         }
@@ -10928,9 +10937,9 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             if (!std::filesystem::is_regular_file(data.sequence16_source_thermal_budget)) {
                 throw std::runtime_error("sequence-16 source thermal budget is missing");
             }
-            const char* source_solve_rows = std::getenv("XSTAR_V80_SEQUENCE16_SOURCE_SOLVE_STAGE_ROWS");
+            const char* source_solve_rows = std::getenv("XSTAR_V81_SEQUENCE16_SOURCE_SOLVE_STAGE_ROWS");
             if (!source_solve_rows || !*source_solve_rows) {
-                throw std::runtime_error("XSTAR_V80_SEQUENCE16_SOURCE_SOLVE_STAGE_ROWS is required");
+                throw std::runtime_error("XSTAR_V81_SEQUENCE16_SOURCE_SOLVE_STAGE_ROWS is required");
             }
             data.sequence16_source_solve_stage_rows = std::filesystem::path(source_solve_rows);
             if (!std::filesystem::is_regular_file(data.sequence16_source_solve_stage_rows)) {
@@ -10979,11 +10988,11 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         if (rc != 0) {
             throw std::runtime_error(std::string("initial line-tau state failed: ") + message.data());
         }
-        std::cout << "V048746255172580_MAXIMUM_RECORD_CONTINUUM_INDEX=" << maximum_continuum_index << "\n"
-                  << "V048746255172580_PROGRAM_NATIVE_CONTINUUM_COUNT=" << info.native_continuum_count << "\n"
-                  << "V048746255172580_CONTINUUM_GRID_BINS=" << data.energy.size() << "\n"
-                  << "V048746255172580_CONTINUUM_TAU_CAPACITY=" << continuum_tau_capacity << "\n"
-                  << "V048746255172580_CONTINUUM_TAU_DOMAIN_GATE=ACCEPT\n";
+        std::cout << "V048746255172581_MAXIMUM_RECORD_CONTINUUM_INDEX=" << maximum_continuum_index << "\n"
+                  << "V048746255172581_PROGRAM_NATIVE_CONTINUUM_COUNT=" << info.native_continuum_count << "\n"
+                  << "V048746255172581_CONTINUUM_GRID_BINS=" << data.energy.size() << "\n"
+                  << "V048746255172581_CONTINUUM_TAU_CAPACITY=" << continuum_tau_capacity << "\n"
+                  << "V048746255172581_CONTINUUM_TAU_DOMAIN_GATE=ACCEPT\n";
         data.population_global_level_index.reserve(program.rows.size());
         for (const auto& row : program.rows) {
             data.population_global_level_index.push_back(row.global_level_index);
@@ -11117,7 +11126,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                 advance_consecutive_transport_v71(data, finals.back(), segment);
             }
 
-            std::cout << "V048746255172580_CONTROLLER_CALL=" << call
+            std::cout << "V048746255172581_CONTROLLER_CALL=" << call
                       << " DSEC_EVALUATIONS=" << dsec_count
                       << " SOURCE_BOUNDARY_PREFIX=" << (stats.prefix_terminated ? 1 : 0)
                       << " FINAL_SOURCE_SEQUENCE=" << finals.back().sequence
@@ -11173,19 +11182,19 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             }
             const bool trajectory_exact = trajectory_cells == 244u && trajectory_mismatches == 0u;
             std::cout << std::setprecision(17)
-                      << "V048746255172580_REFERENCE_TRAJECTORY_CELLS_COMPARED=" << trajectory_cells << "\n"
-                      << "V048746255172580_REFERENCE_TRAJECTORY_E7_MISMATCH_CELLS=" << trajectory_mismatches << "\n"
-                      << "V048746255172580_REFERENCE_TRAJECTORY_TEMPERATURE_T4_E7_MISMATCH_CELLS=" << temperature_mismatches << "\n"
-                      << "V048746255172580_REFERENCE_TRAJECTORY_ELECTRON_FRACTION_E7_MISMATCH_CELLS=" << electron_mismatches << "\n"
-                      << "V048746255172580_REFERENCE_TRAJECTORY_HMCTOT_E7_MISMATCH_CELLS=" << hmctot_mismatches << "\n"
-                      << "V048746255172580_REFERENCE_TRAJECTORY_ELCTER_E7_MISMATCH_CELLS=" << elcter_mismatches << "\n";
+                      << "V048746255172581_REFERENCE_TRAJECTORY_CELLS_COMPARED=" << trajectory_cells << "\n"
+                      << "V048746255172581_REFERENCE_TRAJECTORY_E7_MISMATCH_CELLS=" << trajectory_mismatches << "\n"
+                      << "V048746255172581_REFERENCE_TRAJECTORY_TEMPERATURE_T4_E7_MISMATCH_CELLS=" << temperature_mismatches << "\n"
+                      << "V048746255172581_REFERENCE_TRAJECTORY_ELECTRON_FRACTION_E7_MISMATCH_CELLS=" << electron_mismatches << "\n"
+                      << "V048746255172581_REFERENCE_TRAJECTORY_HMCTOT_E7_MISMATCH_CELLS=" << hmctot_mismatches << "\n"
+                      << "V048746255172581_REFERENCE_TRAJECTORY_ELCTER_E7_MISMATCH_CELLS=" << elcter_mismatches << "\n";
             if (!trajectory_exact) {
-                std::cout << "V048746255172580_FIRST_TRAJECTORY_MISMATCH_SEQUENCE=" << first_sequence << "\n"
-                          << "V048746255172580_FIRST_TRAJECTORY_MISMATCH_FIELD=" << first_field << "\n"
-                          << "V048746255172580_FIRST_TRAJECTORY_REFERENCE_VALUE=" << first_source << "\n"
-                          << "V048746255172580_FIRST_TRAJECTORY_NATIVE_VALUE=" << first_native << "\n";
+                std::cout << "V048746255172581_FIRST_TRAJECTORY_MISMATCH_SEQUENCE=" << first_sequence << "\n"
+                          << "V048746255172581_FIRST_TRAJECTORY_MISMATCH_FIELD=" << first_field << "\n"
+                          << "V048746255172581_FIRST_TRAJECTORY_REFERENCE_VALUE=" << first_source << "\n"
+                          << "V048746255172581_FIRST_TRAJECTORY_NATIVE_VALUE=" << first_native << "\n";
             }
-            std::cout << "V048746255172580_COMPLETE_61_EVENT_TRAJECTORY_IEEE_E7="
+            std::cout << "V048746255172581_COMPLETE_61_EVENT_TRAJECTORY_IEEE_E7="
                       << (trajectory_exact ? "ACCEPT" : "REJECT") << "\n";
             if (!trajectory_exact) {
                 throw std::runtime_error("complete 61-event reference trajectory gate rejected");
@@ -11300,39 +11309,39 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
 }
 
 int command_standalone_capabilities_v67() {
-    std::cout << "V048746255172580_STANDALONE_EXECUTABLE=YES\n"
-              << "V048746255172580_TWO_ARGUMENT_INTERFACE=YES\n"
-              << "V048746255172580_FILE_SILENT_POLICY=IMPLEMENTED\n"
-              << "V048746255172580_ATDB_SEARCH_ORDER=IMPLEMENTED\n"
-              << "V048746255172580_CXX_IN_MEMORY_ATDB_LOWERER=IMPLEMENTED\n"
-              << "V048746255172580_ATDB_PACKED_COLUMN_LAYOUTS=FIXED_AND_VARIABLE_LENGTH\n"
-              << "V048746255172580_ATDB_PAYLOAD_CACHE=ONE_TIME_FULL_COLUMN\n"
-              << "V048746255172580_INITIAL_XEE_SEMANTICS=EXPLICIT_XEE_ELSE_ONE\n"
-              << "V048746255172580_CONTROLLER_TOPOLOGY=FOUR_CALLS_PLUS_TERMINAL_RESET\n"
-              << "V048746255172580_REFERENCE_CALL_BOUNDARIES=21_1_18_17_EXACT_SOURCE_PREFIX\n"
-              << "V048746255172580_NITER_SEMANTICS=NESTED_LIMIT_WITH_REFERENCE_CALL_BOUNDARIES\n"
-              << "V048746255172580_CRITF_SEMANTICS=ACTIVE_ION_THRESHOLD_NOT_DSEC_TOLERANCE\n"
-              << "V048746255172580_CXX_PRODUCT_METADATA_DERIVATION=IMPLEMENTED\n"
-              << "V048746255172580_QUALIFICATION_FREE_CONTROLLER_TRAJECTORY=IMPLEMENTED\n"
-              << "V048746255172580_CALL_START_DSEC_WORKSPACE=IN_MEMORY\n"
-              << "V048746255172580_GLOBAL_XILEVG_BILEVG_RNISG=IN_MEMORY\n"
-              << "V048746255172580_REPEATED_HYDROGEN_SOURCE_ENTRY=IN_MEMORY\n"
-              << "V048746255172580_MG_ACTIVE_STAGE_RETENTION_SEQUENCE2_TO4=IN_MEMORY\n"
-              << "V048746255172580_CONSECUTIVE_LINE_CONTINUUM_TAU=IN_MEMORY\n"
-              << "V048746255172580_CONTINUUM_TAU_DOMAIN=MAX_RECORD_POINTER_DECLARED_NATIVE_COUNT_GRID\n"
-              << "V048746255172580_MG_PRIMARY_SECONDARY_THERMAL_TERMS=IN_MEMORY\n"
-              << "V048746255172580_CALL_BOUNDARY_THERMAL_COMPONENTS=IN_MEMORY\n"
-              << "V048746255172580_EXACT_DSEC_COMMIT_SEMANTICS=IMPLEMENTED\n"
-              << "V048746255172580_SEQUENCE2_HELIUM_PREPRODUCT_GATE=POPULATIONS_MATRIX_RHS_THERMAL_HMCTOT\n"
-              << "V048746255172580_SEQUENCE2_HE_COMPACT_SEED_MAPPING=ACTIVE_ROW_IDENTITY_WITH_TERMINAL_ZERO\n"
-              << "V048746255172580_SEQUENCE2_HELIUM_DIAGNOSTICS=FULL_MATRIX_RHS_78_POPULATIONS_SOURCE_NATIVE_THERMAL_TERMS\n"
-              << "V048746255172580_V63_PARITY_GATE=EXTERNAL_ORACLE_REQUIRED\n"
-              << "V048746255172580_ATDB_SEARCH_ORDER=parameters_atomic_database,parameters_atomic_db,parameters_atdb,parameters_sibling,XSTAR_ATOMIC_DB,XSTAR_ATDB_FITS,XSTAR_DATA,XSTAR_HOME,executable_relative,package_relative,current_directory\n"
-              << "V048746255172580_COHEAT_SEARCH_ORDER=parameters_coheat_file,parameters_coheat,parameters_sibling,XSTAR_COHEAT,XSTAR_DATA,XSTAR_HOME,executable_relative,package_relative,current_directory\n"
-              << "V048746255172580_SOURCE_POWERLAW_GRID=ENER_ISPEC4_ISPECGG_EQUIVALENT\n"
-              << "V048746255172580_ARTIFACT_PROFILES=none,summary,failure,full\n"
-              << "V048746255172580_ARTIFACT_CLASS_OVERRIDES=lowered_case,runtime_metadata,checkpoints,audits,qualification_summaries,trajectory_diagnostics,benchmark_diagnostics,timing_summary\n"
-              << "V048746255172580_RESULT=ACCEPT_CAPABILITY_IMPLEMENTATION\n";
+    std::cout << "V048746255172581_STANDALONE_EXECUTABLE=YES\n"
+              << "V048746255172581_TWO_ARGUMENT_INTERFACE=YES\n"
+              << "V048746255172581_FILE_SILENT_POLICY=IMPLEMENTED\n"
+              << "V048746255172581_ATDB_SEARCH_ORDER=IMPLEMENTED\n"
+              << "V048746255172581_CXX_IN_MEMORY_ATDB_LOWERER=IMPLEMENTED\n"
+              << "V048746255172581_ATDB_PACKED_COLUMN_LAYOUTS=FIXED_AND_VARIABLE_LENGTH\n"
+              << "V048746255172581_ATDB_PAYLOAD_CACHE=ONE_TIME_FULL_COLUMN\n"
+              << "V048746255172581_INITIAL_XEE_SEMANTICS=EXPLICIT_XEE_ELSE_ONE\n"
+              << "V048746255172581_CONTROLLER_TOPOLOGY=FOUR_CALLS_PLUS_TERMINAL_RESET\n"
+              << "V048746255172581_REFERENCE_CALL_BOUNDARIES=21_1_18_17_EXACT_SOURCE_PREFIX\n"
+              << "V048746255172581_NITER_SEMANTICS=NESTED_LIMIT_WITH_REFERENCE_CALL_BOUNDARIES\n"
+              << "V048746255172581_CRITF_SEMANTICS=ACTIVE_ION_THRESHOLD_NOT_DSEC_TOLERANCE\n"
+              << "V048746255172581_CXX_PRODUCT_METADATA_DERIVATION=IMPLEMENTED\n"
+              << "V048746255172581_QUALIFICATION_FREE_CONTROLLER_TRAJECTORY=IMPLEMENTED\n"
+              << "V048746255172581_CALL_START_DSEC_WORKSPACE=IN_MEMORY\n"
+              << "V048746255172581_GLOBAL_XILEVG_BILEVG_RNISG=IN_MEMORY\n"
+              << "V048746255172581_REPEATED_HYDROGEN_SOURCE_ENTRY=IN_MEMORY\n"
+              << "V048746255172581_MG_ACTIVE_STAGE_RETENTION_SEQUENCE2_TO4=IN_MEMORY\n"
+              << "V048746255172581_CONSECUTIVE_LINE_CONTINUUM_TAU=IN_MEMORY\n"
+              << "V048746255172581_CONTINUUM_TAU_DOMAIN=MAX_RECORD_POINTER_DECLARED_NATIVE_COUNT_GRID\n"
+              << "V048746255172581_MG_PRIMARY_SECONDARY_THERMAL_TERMS=IN_MEMORY\n"
+              << "V048746255172581_CALL_BOUNDARY_THERMAL_COMPONENTS=IN_MEMORY\n"
+              << "V048746255172581_EXACT_DSEC_COMMIT_SEMANTICS=IMPLEMENTED\n"
+              << "V048746255172581_SEQUENCE2_HELIUM_PREPRODUCT_GATE=POPULATIONS_MATRIX_RHS_THERMAL_HMCTOT\n"
+              << "V048746255172581_SEQUENCE2_HE_COMPACT_SEED_MAPPING=ACTIVE_ROW_IDENTITY_WITH_TERMINAL_ZERO\n"
+              << "V048746255172581_SEQUENCE2_HELIUM_DIAGNOSTICS=FULL_MATRIX_RHS_78_POPULATIONS_SOURCE_NATIVE_THERMAL_TERMS\n"
+              << "V048746255172581_V63_PARITY_GATE=EXTERNAL_ORACLE_REQUIRED\n"
+              << "V048746255172581_ATDB_SEARCH_ORDER=parameters_atomic_database,parameters_atomic_db,parameters_atdb,parameters_sibling,XSTAR_ATOMIC_DB,XSTAR_ATDB_FITS,XSTAR_DATA,XSTAR_HOME,executable_relative,package_relative,current_directory\n"
+              << "V048746255172581_COHEAT_SEARCH_ORDER=parameters_coheat_file,parameters_coheat,parameters_sibling,XSTAR_COHEAT,XSTAR_DATA,XSTAR_HOME,executable_relative,package_relative,current_directory\n"
+              << "V048746255172581_SOURCE_POWERLAW_GRID=ENER_ISPEC4_ISPECGG_EQUIVALENT\n"
+              << "V048746255172581_ARTIFACT_PROFILES=none,summary,failure,full\n"
+              << "V048746255172581_ARTIFACT_CLASS_OVERRIDES=lowered_case,runtime_metadata,checkpoints,audits,qualification_summaries,trajectory_diagnostics,benchmark_diagnostics,timing_summary\n"
+              << "V048746255172581_RESULT=ACCEPT_CAPABILITY_IMPLEMENTATION\n";
     return 0;
 }
 
@@ -11379,7 +11388,7 @@ int command_run_standalone_case_probe_v70(const Options& options) {
                 "v0648724_call1_thermal_leaf_reference" / "v0472_call1_thermal_budget.csv";
             data.sequence16_thermal_population_closure_dir = contract_dir / "thermal_consumption_population_closure";
             data.sequence16_diagnostic_dir = std::filesystem::path(options.output_dir) / "sequence16_mg_precommit";
-            const char* source_solve_rows = std::getenv("XSTAR_V80_SEQUENCE16_SOURCE_SOLVE_STAGE_ROWS");
+            const char* source_solve_rows = std::getenv("XSTAR_V81_SEQUENCE16_SOURCE_SOLVE_STAGE_ROWS");
             if (source_solve_rows && *source_solve_rows) {
                 data.sequence16_source_solve_stage_rows = std::filesystem::path(source_solve_rows);
             }
@@ -11441,7 +11450,7 @@ int command_run_standalone_case_probe_v70(const Options& options) {
                 trace.data(), trace.size(), &trace_count, &stats, message.data(), message.size());
             if (rc != 0) throw std::runtime_error(std::string("probe call failed: ") + message.data());
             const std::size_t count = data.evaluations - before;
-            std::cout << "V048746255172580_PROBE_CALL=" << call
+            std::cout << "V048746255172581_PROBE_CALL=" << call
                       << " DSEC_EVALUATIONS=" << count
                       << " EXPECTED=" << expected[call-1u]
                       << " HMCTOT=" << std::setprecision(17) << stats.final_hmctot
@@ -11468,8 +11477,8 @@ int command_run_standalone_case_probe_v70(const Options& options) {
                 << row.hmctot << ',' << row.charge_residual << '\n';
         }
         csv.close();
-        std::cout << "V048746255172580_PROBE_EVENTS=" << data.snapshots.size() << "\n"
-                  << "V048746255172580_PROBE_CSV=" << csv_path.string() << "\n";
+        std::cout << "V048746255172581_PROBE_EVENTS=" << data.snapshots.size() << "\n"
+                  << "V048746255172581_PROBE_CSV=" << csv_path.string() << "\n";
         ::unsetenv("XSTAR_NATIVE_PRODUCTION");
         ::unsetenv("XSTAR_V72_PROBE_PROGRESS");
         ::unsetenv("XSTAR_V70_DUMP_MG_COMPACT_POPULATIONS");
@@ -11488,7 +11497,7 @@ int command_run_standalone_case_probe_v70(const Options& options) {
 }
 
 int command_run_standalone_production_v67(const Options& options, const std::filesystem::path& executable_path) {
-    const std::string prefix = "V048746255172580_";
+    const std::string prefix = "V048746255172581_";
     const std::string artifact_profile = options.artifact_profile_explicit ? options.artifact_profile : "none";
     const auto artifacts = artifact_selection_v67(options, artifact_profile);
     if (options.parameters_path.empty() || options.output_dir.empty()) {

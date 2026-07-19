@@ -6648,6 +6648,19 @@ RuntimeInitialSeed source_faithful_runtime_initial_seed(
         return seed;
     }
 
+    // v0.6.48.7.46.25.5.17.25.81: calc_hmc_element maps each selected Mg
+    // ion through source npilev ordinal order, advances ipmat by nlev-1, and
+    // finally executes x(ipmat2+1)=0.  The corrected live ATDB lowering now
+    // gives every Mg compact row that ordinal global identity.  Preserve the
+    // mapped values exactly, but force the terminal normalization row to the
+    // literal source zero before msolvelucy.
+    if (e.element_z == 12 && compact_row == e.normalization_row) {
+        seed.global_level_index = row.global_level_index;
+        seed.value = 0.0;
+        seed.loaded = true;
+        return seed;
+    }
+
     const int global_level_index = row.global_level_index;
     if (global_level_index <= 0 ||
         static_cast<std::size_t>(global_level_index) > runtime_input->global_level_count) return seed;
@@ -6675,7 +6688,7 @@ ElementBuffers make_buffers(const ElementProgram& e, const xstar_fixed_state_inp
     b.row_residual.resize(n); b.row_scale.resize(n); b.relative_residual.resize(n);
     bool source_faithful_helium_runtime_seed = false;
     bool source_faithful_hydrogen_runtime_seed = false;
-    bool source_faithful_runtime_seed = false;
+    bool source_faithful_magnesium_runtime_seed = false;
     for (std::size_t k = 0; k < n; ++k) {
         b.superlevels[k] = e.rows[k].superlevel;
         b.ions[k] = e.rows[k].ion;
@@ -6690,7 +6703,7 @@ ElementBuffers make_buffers(const ElementProgram& e, const xstar_fixed_state_inp
             const RuntimeInitialSeed seed = source_faithful_runtime_initial_seed(e, k, runtime_input);
             if (seed.loaded) {
                 b.initial[k] = seed.value;
-                source_faithful_runtime_seed = true;
+                if (e.element_z == 12) source_faithful_magnesium_runtime_seed = true;
                 if (e.element_z == 2) source_faithful_helium_runtime_seed = true;
                 if (e.element_z == 1 && runtime_input &&
                     (runtime_input->runtime_state_flags &
@@ -6701,17 +6714,15 @@ ElementBuffers make_buffers(const ElementProgram& e, const xstar_fixed_state_inp
         }
     }
 
-    // The source passes the unnormalized helium compact vector into
-    // msolvelucy.  Number conservation is imposed by the solver normalization
-    // row; normalizing here changes every solve-state entry and duplicates the
-    // shared He I/He II boundary population.
-    // v0.6.48.7.46.25.5.17.25.80: calc_hmc_element maps the live committed
-    // global xilevg state directly into compact x.  It does not renormalize
-    // H, He, Mg, or any other runtime-mapped element before msolvelucy; the
-    // solver normalization row owns number conservation.  Earlier native
-    // code exempted only H/He and silently renormalized Mg at every later
-    // DSEC evaluation, changing the binary64 solve path at sequence 16.
-    if (!preserve_initial_seed && !source_faithful_runtime_seed &&
+    // Source-mapped H/He/Mg compact vectors are not renormalized here.
+    // calc_hmc_element writes the selected xilevg values directly into x,
+    // overwrites shared continuum rows through ipmat+=nlev-1, writes the final
+    // normalization row to zero, and lets msolvelucy impose number
+    // conservation.  v80 incorrectly made this exemption blanket for every
+    // runtime-mapped element.  v81 reverts that blanket behavior while
+    // retaining the exact source rule only for the three source-mapped active
+    // elements already qualified here.
+    if (!preserve_initial_seed && !source_faithful_magnesium_runtime_seed &&
         !source_faithful_helium_runtime_seed && !source_faithful_hydrogen_runtime_seed) {
         double initial_total = 0.0;
         for (double value : b.initial) initial_total += value;
