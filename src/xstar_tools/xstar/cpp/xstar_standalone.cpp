@@ -2719,6 +2719,23 @@ bool controller_state_ok_v172518(
     return temperature_ok && electron_fraction_ok;
 }
 
+std::size_t required_continuum_tau_capacity_v73(
+    std::size_t maximum_record_continuum_index_one_based,
+    std::size_t native_continuum_count,
+    std::size_t continuum_grid_bins) {
+    if (maximum_record_continuum_index_one_based == std::numeric_limits<std::size_t>::max() ||
+        native_continuum_count == std::numeric_limits<std::size_t>::max()) {
+        throw std::overflow_error("continuum tau domain exceeds addressable size");
+    }
+    // Slot zero is retained because the source ATDB pointers are one-based.
+    // The declared native continuum count can exceed the largest pointer used
+    // by the active records, especially for production packed-ATDB layouts.
+    return std::max<std::size_t>({
+        maximum_record_continuum_index_one_based + 1u,
+        native_continuum_count + 1u,
+        continuum_grid_bins});
+}
+
 int command_trajectory_alignment_self_test(const Options&) {
     const double proposed_t4 = 6.5615298855644753;
     const double expected_t4 = 6.561529885564275;
@@ -2761,10 +2778,25 @@ int command_controller_canonical_e7_self_test(const Options&) {
         canonical_e7_equal(accepted_source, accepted_native);
     const bool rejected_boundary = !canonical_e7_equal(rejected_source, rejected_native);
     const bool zero_floor = canonical_e7_equal(zero_left, zero_right);
-    const bool accepted = accepted_roundoff && rejected_boundary && zero_floor;
+    const std::size_t grid_dominant_capacity =
+        required_continuum_tau_capacity_v73(37u, 4096u, 9999u);
+    const std::size_t record_dominant_capacity =
+        required_continuum_tau_capacity_v73(12000u, 4096u, 9999u);
+    const std::size_t declared_domain_capacity =
+        required_continuum_tau_capacity_v73(37u, 12000u, 9999u);
+    const bool continuum_domain_capacity =
+        grid_dominant_capacity == 9999u &&
+        record_dominant_capacity == 12001u &&
+        declared_domain_capacity == 12001u;
+    const bool accepted = accepted_roundoff && rejected_boundary && zero_floor &&
+        continuum_domain_capacity;
     std::cout << "accepted_roundoff=" << (accepted_roundoff ? "true" : "false")
               << "\nrejected_boundary=" << (rejected_boundary ? "true" : "false")
               << "\nzero_floor=" << (zero_floor ? "true" : "false")
+              << "\ncontinuum_grid_dominant_capacity=" << grid_dominant_capacity
+              << "\ncontinuum_record_dominant_capacity=" << record_dominant_capacity
+              << "\ncontinuum_declared_domain_capacity=" << declared_domain_capacity
+              << "\ncontinuum_domain_capacity=" << (continuum_domain_capacity ? "true" : "false")
               << "\ncanonical_digits_after_decimal=7"
               << "\ncanonical_zero_floor=1e-30"
               << "\nRESULT=" << (accepted ? "ACCEPT" : "REJECT") << "\n";
@@ -9592,7 +9624,7 @@ int standalone_iteration_evaluator_v67(
         const auto evaluation_started_v70 = std::chrono::steady_clock::now();
         FixedDsecSnapshot snapshot = make_iteration_snapshot_v67(*data, *trial);
         if (std::getenv("XSTAR_V72_PROBE_PROGRESS")) {
-            std::cerr << "V048746255172572_EVALUATION_BEGIN=" << snapshot.sequence
+            std::cerr << "V048746255172573_EVALUATION_BEGIN=" << snapshot.sequence
                       << " CALL=" << snapshot.call_index
                       << " EVAL=" << snapshot.evaluation_index
                       << " T4=" << std::setprecision(17) << snapshot.temperature_t4
@@ -9655,7 +9687,7 @@ int standalone_iteration_evaluator_v67(
         if (std::getenv("XSTAR_V72_PROBE_PROGRESS")) {
             const double elapsed_v70 = std::chrono::duration<double>(
                 std::chrono::steady_clock::now() - evaluation_started_v70).count();
-            std::cerr << "V048746255172572_EVALUATION_END=" << data->last_iteration.sequence
+            std::cerr << "V048746255172573_EVALUATION_END=" << data->last_iteration.sequence
                       << " SECONDS=" << std::fixed << std::setprecision(6) << elapsed_v70
                       << " HMCTOT=" << std::setprecision(17) << output.hmctot
                       << " ELCTER=" << output.elcter << "\n" << std::flush;
@@ -9801,7 +9833,13 @@ FixedDsecSnapshot evaluate_full_boundary_v67(
     const std::size_t continuum_stride = snapshot.opakab.size();
     if (data.source_tau_in.size() < continuum_stride ||
         data.source_tau_out.size() < continuum_stride) {
-        throw std::runtime_error("runtime continuum tau workspace is shorter than ATDB continuum index domain");
+        std::ostringstream error;
+        error << "runtime continuum tau workspace is shorter than ATDB continuum index domain"
+              << " tau_in=" << data.source_tau_in.size()
+              << " tau_out=" << data.source_tau_out.size()
+              << " opakab=" << continuum_stride
+              << " declared_native_continua=" << data.program_info.native_continuum_count;
+        throw std::runtime_error(error.str());
     }
     for (std::size_t i = 0; i < continuum_stride; ++i) {
         const double increment = std::max(0.0, finite_or(snapshot.opakab[i], 0.0)) * std::max(0.0, delta_radius_cm);
@@ -10268,8 +10306,10 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                     static_cast<std::size_t>(record.continuum_index_one_based));
             }
         }
-        const std::size_t continuum_tau_capacity = std::max<std::size_t>(
-            maximum_continuum_index + 1u, data.energy.size());
+        const std::size_t continuum_tau_capacity = required_continuum_tau_capacity_v73(
+            maximum_continuum_index,
+            static_cast<std::size_t>(info.native_continuum_count),
+            data.energy.size());
         const std::size_t line_tau_capacity = maximum_line_index + 1u;
         data.source_tau_in.assign(continuum_tau_capacity, 0.0);
         data.source_tau_out.assign(continuum_tau_capacity, 0.0);
@@ -10281,6 +10321,11 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         if (rc != 0) {
             throw std::runtime_error(std::string("initial line-tau state failed: ") + message.data());
         }
+        std::cout << "V048746255172573_MAXIMUM_RECORD_CONTINUUM_INDEX=" << maximum_continuum_index << "\n"
+                  << "V048746255172573_PROGRAM_NATIVE_CONTINUUM_COUNT=" << info.native_continuum_count << "\n"
+                  << "V048746255172573_CONTINUUM_GRID_BINS=" << data.energy.size() << "\n"
+                  << "V048746255172573_CONTINUUM_TAU_CAPACITY=" << continuum_tau_capacity << "\n"
+                  << "V048746255172573_CONTINUUM_TAU_DOMAIN_GATE=ACCEPT\n";
         data.population_global_level_index.reserve(program.rows.size());
         for (const auto& row : program.rows) {
             data.population_global_level_index.push_back(row.global_level_index);
@@ -10414,7 +10459,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                 advance_consecutive_transport_v71(data, finals.back(), segment);
             }
 
-            std::cout << "V048746255172572_CONTROLLER_CALL=" << call
+            std::cout << "V048746255172573_CONTROLLER_CALL=" << call
                       << " DSEC_EVALUATIONS=" << dsec_count
                       << " SOURCE_BOUNDARY_PREFIX=" << (stats.prefix_terminated ? 1 : 0)
                       << " FINAL_SOURCE_SEQUENCE=" << finals.back().sequence
@@ -10539,35 +10584,36 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
 }
 
 int command_standalone_capabilities_v67() {
-    std::cout << "V048746255172572_STANDALONE_EXECUTABLE=YES\n"
-              << "V048746255172572_TWO_ARGUMENT_INTERFACE=YES\n"
-              << "V048746255172572_FILE_SILENT_POLICY=IMPLEMENTED\n"
-              << "V048746255172572_ATDB_SEARCH_ORDER=IMPLEMENTED\n"
-              << "V048746255172572_CXX_IN_MEMORY_ATDB_LOWERER=IMPLEMENTED\n"
-              << "V048746255172572_ATDB_PACKED_COLUMN_LAYOUTS=FIXED_AND_VARIABLE_LENGTH\n"
-              << "V048746255172572_ATDB_PAYLOAD_CACHE=ONE_TIME_FULL_COLUMN\n"
-              << "V048746255172572_INITIAL_XEE_SEMANTICS=EXPLICIT_XEE_ELSE_ONE\n"
-              << "V048746255172572_CONTROLLER_TOPOLOGY=FOUR_CALLS_PLUS_TERMINAL_RESET\n"
-              << "V048746255172572_REFERENCE_CALL_BOUNDARIES=21_1_18_17_EXACT_SOURCE_PREFIX\n"
-              << "V048746255172572_NITER_SEMANTICS=NESTED_LIMIT_WITH_REFERENCE_CALL_BOUNDARIES\n"
-              << "V048746255172572_CRITF_SEMANTICS=ACTIVE_ION_THRESHOLD_NOT_DSEC_TOLERANCE\n"
-              << "V048746255172572_CXX_PRODUCT_METADATA_DERIVATION=IMPLEMENTED\n"
-              << "V048746255172572_QUALIFICATION_FREE_CONTROLLER_TRAJECTORY=IMPLEMENTED\n"
-              << "V048746255172572_CALL_START_DSEC_WORKSPACE=IN_MEMORY\n"
-              << "V048746255172572_GLOBAL_XILEVG_BILEVG_RNISG=IN_MEMORY\n"
-              << "V048746255172572_REPEATED_HYDROGEN_SOURCE_ENTRY=IN_MEMORY\n"
-              << "V048746255172572_MG_ACTIVE_STAGE_RETENTION_SEQUENCE2_TO4=IN_MEMORY\n"
-              << "V048746255172572_CONSECUTIVE_LINE_CONTINUUM_TAU=IN_MEMORY\n"
-              << "V048746255172572_MG_PRIMARY_SECONDARY_THERMAL_TERMS=IN_MEMORY\n"
-              << "V048746255172572_CALL_BOUNDARY_THERMAL_COMPONENTS=IN_MEMORY\n"
-              << "V048746255172572_EXACT_DSEC_COMMIT_SEMANTICS=IMPLEMENTED\n"
-              << "V048746255172572_V63_PARITY_GATE=EXTERNAL_ORACLE_REQUIRED\n"
-              << "V048746255172572_ATDB_SEARCH_ORDER=parameters_atomic_database,parameters_atomic_db,parameters_atdb,parameters_sibling,XSTAR_ATOMIC_DB,XSTAR_ATDB_FITS,XSTAR_DATA,XSTAR_HOME,executable_relative,package_relative,current_directory\n"
-              << "V048746255172572_COHEAT_SEARCH_ORDER=parameters_coheat_file,parameters_coheat,parameters_sibling,XSTAR_COHEAT,XSTAR_DATA,XSTAR_HOME,executable_relative,package_relative,current_directory\n"
-              << "V048746255172572_SOURCE_POWERLAW_GRID=ENER_ISPEC4_ISPECGG_EQUIVALENT\n"
-              << "V048746255172572_ARTIFACT_PROFILES=none,summary,failure,full\n"
-              << "V048746255172572_ARTIFACT_CLASS_OVERRIDES=lowered_case,runtime_metadata,checkpoints,audits,qualification_summaries,trajectory_diagnostics,benchmark_diagnostics,timing_summary\n"
-              << "V048746255172572_RESULT=ACCEPT_CAPABILITY_IMPLEMENTATION\n";
+    std::cout << "V048746255172573_STANDALONE_EXECUTABLE=YES\n"
+              << "V048746255172573_TWO_ARGUMENT_INTERFACE=YES\n"
+              << "V048746255172573_FILE_SILENT_POLICY=IMPLEMENTED\n"
+              << "V048746255172573_ATDB_SEARCH_ORDER=IMPLEMENTED\n"
+              << "V048746255172573_CXX_IN_MEMORY_ATDB_LOWERER=IMPLEMENTED\n"
+              << "V048746255172573_ATDB_PACKED_COLUMN_LAYOUTS=FIXED_AND_VARIABLE_LENGTH\n"
+              << "V048746255172573_ATDB_PAYLOAD_CACHE=ONE_TIME_FULL_COLUMN\n"
+              << "V048746255172573_INITIAL_XEE_SEMANTICS=EXPLICIT_XEE_ELSE_ONE\n"
+              << "V048746255172573_CONTROLLER_TOPOLOGY=FOUR_CALLS_PLUS_TERMINAL_RESET\n"
+              << "V048746255172573_REFERENCE_CALL_BOUNDARIES=21_1_18_17_EXACT_SOURCE_PREFIX\n"
+              << "V048746255172573_NITER_SEMANTICS=NESTED_LIMIT_WITH_REFERENCE_CALL_BOUNDARIES\n"
+              << "V048746255172573_CRITF_SEMANTICS=ACTIVE_ION_THRESHOLD_NOT_DSEC_TOLERANCE\n"
+              << "V048746255172573_CXX_PRODUCT_METADATA_DERIVATION=IMPLEMENTED\n"
+              << "V048746255172573_QUALIFICATION_FREE_CONTROLLER_TRAJECTORY=IMPLEMENTED\n"
+              << "V048746255172573_CALL_START_DSEC_WORKSPACE=IN_MEMORY\n"
+              << "V048746255172573_GLOBAL_XILEVG_BILEVG_RNISG=IN_MEMORY\n"
+              << "V048746255172573_REPEATED_HYDROGEN_SOURCE_ENTRY=IN_MEMORY\n"
+              << "V048746255172573_MG_ACTIVE_STAGE_RETENTION_SEQUENCE2_TO4=IN_MEMORY\n"
+              << "V048746255172573_CONSECUTIVE_LINE_CONTINUUM_TAU=IN_MEMORY\n"
+              << "V048746255172573_CONTINUUM_TAU_DOMAIN=MAX_RECORD_POINTER_DECLARED_NATIVE_COUNT_GRID\n"
+              << "V048746255172573_MG_PRIMARY_SECONDARY_THERMAL_TERMS=IN_MEMORY\n"
+              << "V048746255172573_CALL_BOUNDARY_THERMAL_COMPONENTS=IN_MEMORY\n"
+              << "V048746255172573_EXACT_DSEC_COMMIT_SEMANTICS=IMPLEMENTED\n"
+              << "V048746255172573_V63_PARITY_GATE=EXTERNAL_ORACLE_REQUIRED\n"
+              << "V048746255172573_ATDB_SEARCH_ORDER=parameters_atomic_database,parameters_atomic_db,parameters_atdb,parameters_sibling,XSTAR_ATOMIC_DB,XSTAR_ATDB_FITS,XSTAR_DATA,XSTAR_HOME,executable_relative,package_relative,current_directory\n"
+              << "V048746255172573_COHEAT_SEARCH_ORDER=parameters_coheat_file,parameters_coheat,parameters_sibling,XSTAR_COHEAT,XSTAR_DATA,XSTAR_HOME,executable_relative,package_relative,current_directory\n"
+              << "V048746255172573_SOURCE_POWERLAW_GRID=ENER_ISPEC4_ISPECGG_EQUIVALENT\n"
+              << "V048746255172573_ARTIFACT_PROFILES=none,summary,failure,full\n"
+              << "V048746255172573_ARTIFACT_CLASS_OVERRIDES=lowered_case,runtime_metadata,checkpoints,audits,qualification_summaries,trajectory_diagnostics,benchmark_diagnostics,timing_summary\n"
+              << "V048746255172573_RESULT=ACCEPT_CAPABILITY_IMPLEMENTATION\n";
     return 0;
 }
 
@@ -10607,7 +10653,10 @@ int command_run_standalone_case_probe_v70(const Options& options) {
         const double source_fpr2 = static_cast<double>(static_cast<float>(12.56)) * radius_19 * radius_19;
         for (std::size_t i=0; i<data.flux.size(); ++i) data.dsec_bremsa[i] = data.flux[i] / source_fpr2;
         if (!data.dsec_bremsa.empty()) data.dsec_bremsa.back() = 0.0;
-        data.source_tau_in.assign(static_cast<std::size_t>(info.native_continuum_count) + 1u, 0.0);
+        data.source_tau_in.assign(required_continuum_tau_capacity_v73(
+            0u,
+            static_cast<std::size_t>(info.native_continuum_count),
+            data.energy.size()), 0.0);
         data.source_tau_out.assign(data.source_tau_in.size(), 0.0);
         data.line_tau_in.assign(static_cast<std::size_t>(info.native_line_count) + 1u, 0.0);
         data.line_tau_out.assign(data.line_tau_in.size(), 0.0);
@@ -10652,7 +10701,7 @@ int command_run_standalone_case_probe_v70(const Options& options) {
                 trace.data(), trace.size(), &trace_count, &stats, message.data(), message.size());
             if (rc != 0) throw std::runtime_error(std::string("probe call failed: ") + message.data());
             const std::size_t count = data.evaluations - before;
-            std::cout << "V048746255172572_PROBE_CALL=" << call
+            std::cout << "V048746255172573_PROBE_CALL=" << call
                       << " DSEC_EVALUATIONS=" << count
                       << " EXPECTED=" << expected[call-1u]
                       << " HMCTOT=" << std::setprecision(17) << stats.final_hmctot
@@ -10679,8 +10728,8 @@ int command_run_standalone_case_probe_v70(const Options& options) {
                 << row.hmctot << ',' << row.charge_residual << '\n';
         }
         csv.close();
-        std::cout << "V048746255172572_PROBE_EVENTS=" << data.snapshots.size() << "\n"
-                  << "V048746255172572_PROBE_CSV=" << csv_path.string() << "\n";
+        std::cout << "V048746255172573_PROBE_EVENTS=" << data.snapshots.size() << "\n"
+                  << "V048746255172573_PROBE_CSV=" << csv_path.string() << "\n";
         ::unsetenv("XSTAR_NATIVE_PRODUCTION");
         ::unsetenv("XSTAR_V72_PROBE_PROGRESS");
         ::unsetenv("XSTAR_V70_DUMP_MG_COMPACT_POPULATIONS");
@@ -10699,7 +10748,7 @@ int command_run_standalone_case_probe_v70(const Options& options) {
 }
 
 int command_run_standalone_production_v67(const Options& options, const std::filesystem::path& executable_path) {
-    const std::string prefix = "V048746255172572_";
+    const std::string prefix = "V048746255172573_";
     const std::string artifact_profile = options.artifact_profile_explicit ? options.artifact_profile : "none";
     const auto artifacts = artifact_selection_v67(options, artifact_profile);
     if (options.parameters_path.empty() || options.output_dir.empty()) {

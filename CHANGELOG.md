@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.7.46.25.5.17.25.73 - 2026-07-19
+
+- Size the standalone continuum optical-depth workspace from the complete declared runtime domain: the largest ATDB continuum pointer, `program_info.native_continuum_count`, and the public continuum grid.
+- Preserve slot zero and the full one-based ATDB pointer domain before the first controller evaluation, preventing the production-sized ATDB from expanding `opakab` beyond the retained `tauc` workspace.
+- Keep the fail-closed runtime domain check, but report the actual tau and `opakab` sizes when it rejects.
+- Add production markers for the record-pointer maximum, declared continuum count, grid bins, allocated tau capacity, and domain acceptance.
+- Extend the canonical controller self-test with sparse/high declared continuum-domain allocation cases.
+- Retain all v71 in-memory source state and v72 exact 21/1/18/17 plus four-final controller semantics unchanged.
+
 ## 0.6.48.7.46.25.5.17.25.72 - 2026-07-19
 
 - Correct the canonical Mg XI four-call controller so `maximum_evaluations` is an exact source-prefix boundary rather than an upper bound that can terminate early on tolerance or stagnation.
