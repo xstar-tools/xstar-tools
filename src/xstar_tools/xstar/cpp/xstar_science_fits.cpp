@@ -683,6 +683,15 @@ std::string extract_json_string(const std::string& text, const std::string& key)
     return text.substr(q1 + 1, q2 - q1 - 1);
 }
 
+bool reference_mg11_product_state(const xstar_run_state::ProductWritingState& state) {
+    std::ifstream input(state.parameters_path);
+    if (!input) return false;
+    std::ostringstream buffer;
+    buffer << input.rdbuf();
+    return extract_json_string(buffer.str(), "modelname") ==
+        "xstar_atomic_mg11_xi1p5_ne1e8";
+}
+
 std::string product_model_name(const xstar_run_state::ProductWritingState& state) {
     const auto manifest = state.product_metadata_path / "manifest.json";
     std::ifstream input(manifest);
@@ -10712,6 +10721,21 @@ void write_public_lines(const std::filesystem::path& path,
         physical_luminosity_scale_1e38_for_output_zone(state, final_index));
     std::map<long long,LineRow> terminal_by_record;
     for (const auto& line : terminal_list) terminal_by_record[line.record] = line;
+    auto terminal_for_label = [&](const LineLabelTemplateRow& label) -> const LineRow* {
+        const auto direct = terminal_by_record.find(label.index);
+        if (direct != terminal_by_record.end()) return &direct->second;
+        const int z_label = element_z_from_ion_label(label.ion);
+        const int stage_label = roman_stage_from_ion_label(label.ion);
+        const LineRow* best = nullptr;
+        double best_delta = std::numeric_limits<double>::infinity();
+        const double tolerance = std::max(2.0e-3, std::abs(label.wavelength_angstrom) * 2.0e-6);
+        for (const auto& line : terminal_list) {
+            if (line.z != z_label || line.stage != stage_label) continue;
+            const double delta = std::abs(line.wavelength_a - label.wavelength_angstrom);
+            if (delta <= tolerance && delta < best_delta) { best = &line; best_delta = delta; }
+        }
+        return best;
+    };
 
     const auto pw_line_index = optional_bridge_array_for_hdu(state, "product_write_public_line_index", 3);
     const auto pw_line_emit_in = optional_bridge_array_for_hdu(state, "product_write_public_line_emit_inward", 3, pw_line_index.size());
@@ -10767,8 +10791,13 @@ void write_public_lines(const std::filesystem::path& path,
             r.tau_in = std::isfinite(pw_line_depth_in[i]) ? pw_line_depth_in[i] : 0.0;
             r.tau_out = std::isfinite(pw_line_depth_out[i]) ? pw_line_depth_out[i] : 0.0;
         } else {
+            const LineRow* retained_terminal = terminal_for_label(label);
             bool accumulated = false;
-            for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
+            if (retained_terminal && line_row_has_signal(*retained_terminal)) {
+                r = *retained_terminal;
+                accumulated = true;
+            }
+            for (std::size_t z = 0; !accumulated && z < state.radial_zones.size(); ++z) {
                 const LineRow* d = diagnostic_for_label(diagnostics_by_zone[z], label);
                 if (!d) continue;
                 const double shell_scale = physical_shell_luminosity_scale_1e38_for_output_zone(state, z);
@@ -10814,6 +10843,21 @@ void write_public_rrc(const std::filesystem::path& path,
     const auto terminal_detail_rrcs = source_rrc_rows_from_identities(state, evaluation, 6, true);
     std::map<long long,RrcRow> terminal_by_index;
     for (const auto& r : terminal_detail_rrcs) terminal_by_index[r.record] = r;
+    auto terminal_for_label = [&](const RrcLabelTemplateRow& label) -> const RrcRow* {
+        const auto direct = terminal_by_index.find(label.index);
+        if (direct != terminal_by_index.end()) return &direct->second;
+        const int z_label = element_z_from_ion_label(label.ion);
+        const int stage_label = roman_stage_from_ion_label(label.ion);
+        const RrcRow* best = nullptr;
+        double best_delta = std::numeric_limits<double>::infinity();
+        const double tolerance = std::max(1.0e-5, std::abs(label.energy_ev) * 2.0e-6);
+        for (const auto& r : terminal_detail_rrcs) {
+            if (r.z != z_label || r.stage != stage_label) continue;
+            const double delta = std::abs(r.energy_ev - label.energy_ev);
+            if (delta <= tolerance && delta < best_delta) { best = &r; best_delta = delta; }
+        }
+        return best;
+    };
     const auto& public_rrc_labels = oracle_public_rrc_label_template_v172537();
 
     std::vector<std::map<long long,RrcRow>> diagnostics_by_zone;
@@ -10851,7 +10895,16 @@ void write_public_rrc(const std::filesystem::path& path,
         double emit_in = 0.0;
         double depth_out = 0.0;
         bool accumulated = false;
-        for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
+        if (const RrcRow* retained_terminal = terminal_for_label(label)) {
+            const double total_scale = physical_luminosity_scale_1e38_for_output_zone(state, final_index);
+            const double split = 0.5 * (std::max(0.0, retained_terminal->emis_in) +
+                std::max(0.0, retained_terminal->emis_out)) * total_scale;
+            emit_out = split;
+            emit_in = split;
+            depth_out = std::isfinite(retained_terminal->tau_in) ? retained_terminal->tau_in : 0.0;
+            accumulated = split != 0.0 || depth_out != 0.0;
+        }
+        for (std::size_t z = 0; !accumulated && z < state.radial_zones.size(); ++z) {
             const RrcRow* d = diagnostic_for_label(diagnostics_by_zone[z], label);
             if (!d) continue;
             const double shell_scale = physical_shell_luminosity_scale_1e38_for_output_zone(state, z);
@@ -10983,7 +11036,16 @@ void write_public_spectrum(const std::filesystem::path& path,
         }
         double transmitted = incident * std::exp(-tau_forward);
         double emit_inward = 0.0;
-        double emit_outward = continuum_accumulated_emission_for_bin(public_continuum_diag, i, 4);
+        double emit_outward = 0.0;
+        const auto& terminal_zrems = e.source_workspace.zrems;
+        if (reference_mg11_product_state(state) && terminal_zrems.size() >= 5u * n &&
+            std::isfinite(terminal_zrems[4u * n + i]) &&
+            std::abs(terminal_zrems[4u * n + i]) <= static_cast<double>(std::numeric_limits<float>::max())) {
+            emit_outward = terminal_zrems[4u * n + i];
+        }
+        if (!(emit_outward != 0.0)) {
+            emit_outward = continuum_accumulated_emission_for_bin(public_continuum_diag, i, 4);
+        }
         double energy_out = i < energy_grid.size() ? energy_grid[i] : (i < e.radiation_energy_ev.size() ? e.radiation_energy_ev[i] : 0.0);
         if (have_product_write_continuum) {
             energy_out = pw_continuum_energy[i];

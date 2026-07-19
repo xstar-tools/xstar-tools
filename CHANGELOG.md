@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.48.7.46.25.5.17.25.74 - 2026-07-19
+
+- Retry the v63 FITS comparator with `-lstdc++fs` for older GCC/libstdc++ hosts.
+- Prefer retained terminal line, RRC, and continuum product workspaces over zero/sparse public diagnostic reconstruction.
+- Report source `nry` rather than one-based continuum workspace allocation capacity.
+- Add a 61-event canonical `.7e` numerical trajectory gate separate from topology and nonzero-content gates.
+
 ## 0.6.48.7.46.25.5.17.25.73 - 2026-07-19
 
 - Size the standalone continuum optical-depth workspace from the complete declared runtime domain: the largest ATDB continuum pointer, `program_info.native_continuum_count`, and the public continuum grid.

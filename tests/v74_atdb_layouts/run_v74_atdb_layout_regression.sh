@@ -2,7 +2,7 @@
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 CPP="$ROOT/src/xstar_tools/xstar/cpp"
-TEST="$ROOT/tests/v73_atdb_layouts"
+TEST="$ROOT/tests/v74_atdb_layouts"
 FIXED_SRC="$ROOT/tests/v67_standalone/create_multielement_atdb.cpp"
 WORK=${1:-"$TEST/regression_output"}
 rm -rf "$WORK"
@@ -84,8 +84,8 @@ if normalized_step(left / "xout_step.log") != normalized_step(right / "xout_step
     raise SystemExit("fixed/variable ATDB layout changed xout_step.log science content")
 PYCOMPARE
 printf '%s\n' \
-  'V048746255172573_FIXED_WIDTH_PACKED_COLUMNS=ACCEPT' \
-  'V048746255172573_VARIABLE_LENGTH_PACKED_COLUMNS=ACCEPT' \
-  'V048746255172573_PACKED_LAYOUT_SCIENCE_EQUIVALENCE=ACCEPT' \
-  'V048746255172573_FILE_SILENT_PRODUCTS=ACCEPT' \
-  'V048746255172573_RESULT=ACCEPT'
+  'V048746255172574_FIXED_WIDTH_PACKED_COLUMNS=ACCEPT' \
+  'V048746255172574_VARIABLE_LENGTH_PACKED_COLUMNS=ACCEPT' \
+  'V048746255172574_PACKED_LAYOUT_SCIENCE_EQUIVALENCE=ACCEPT' \
+  'V048746255172574_FILE_SILENT_PRODUCTS=ACCEPT' \
+  'V048746255172574_RESULT=ACCEPT'

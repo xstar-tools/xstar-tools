@@ -1005,7 +1005,9 @@ Result write_native_step_log(
     std::size_t output_nry = 0;
     if (!state.radial_zones.empty()) {
         const auto& eval = state.radial_zones.back().accepted_controller.evaluation;
-        source_nry = eval.source_continuum_tau_workspace_count;
+        source_nry = eval.source_workspace.native_continuum_count > 0
+            ? eval.source_workspace.native_continuum_count
+            : eval.source_continuum_tau_workspace_count;
         output_nry = eval.radiation_energy_ev.size();
     }
     out << " nry= " << std::setw(11) << source_nry << std::setw(12) << output_nry << "\n";
