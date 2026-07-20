@@ -73,7 +73,7 @@
 - Keep publication fail-closed behind the retained physical-content gate and the external v63 FITS `.7e` parity comparator.
 - Add v72 standalone and fixed/variable packed-ATDB regression scripts.
 
-# v0.6.48.7.46.25.5.17.25.71 - 2026-07-19
+## v0.6.48.7.46.25.5.17.25.71 - 2026-07-19
 
 - Restored the source call-start DSEC radiation and continuum optical-depth workspaces in memory.
 - Transported `xilevg`, `bilevg`, and `rnisg` through every DSEC evaluation using the full source-workspace ABI, including LTE state.
@@ -85,15 +85,6 @@
 - Added an external v63 FITS comparator; runtime output no longer falsely claims v63 parity without executing the oracle comparison.
 - Production output is a candidate until `V63_NONZERO_TO_ZERO_CELLS=0` and `ALL_PHYSICAL_FITS_COLUMNS_IEEE_E7=ACCEPT` are reported by the host comparator.
 
-
-## 0.6.48.7.46.25.5.17.25.69
-
-- Cache production ATDB packed columns once in memory instead of rescanning FITS descriptors for every record.
-- Correct `xeemin` versus initial `xee` semantics.
-- Remove the erroneous `niter` callback prefix and `critf` DSEC tolerance override.
-- Replace ten independent zone controllers with the source four-call trajectory and terminal-reset product boundary.
-- Add phase timing/progress output and live Type-95 support-boundary derivation for standalone production.
-
 ## 0.6.48.7.46.25.5.17.25.69 - 2026-07-18
 
 - Cache production ATDB packed columns once in memory instead of rescanning FITS descriptors for every record.
@@ -102,7 +93,7 @@
 - Replace ten independent zone controllers with the source four-call trajectory and terminal-reset product boundary.
 - Add phase timing/progress output and live Type-95 support-boundary derivation for standalone production.
 
-# v0.6.48.7.46.25.5.17.25.68 - 2026-07-18
+## v0.6.48.7.46.25.5.17.25.68 - 2026-07-18
 
 - Correct production `atdb.fits` packed-column handling for FITS variable-length arrays.
 - Use CFITSIO descriptors to obtain the real heap payload length.
@@ -110,19 +101,7 @@
 - Retain fixed-width synthetic ATDB compatibility and fail-closed span validation.
 - Add fixed-versus-variable ATDB layout equivalence regression coverage.
 
-## Previous v67 changes
-- Implemented a CFITSIO-backed in-memory packed-ATDB reader and source-order pointer reconstruction for arbitrary active elements selected from `physical_abundances` or the standard abundance keys.
-- Added the documented `atdb.fits` and `coheat.dat` search orders. Public production rejects `--atomic-db`; atomic-data selection comes from `parameters.json` or the search order.
-- Added the fixed-state in-memory program-bundle ABI so no lowered-case directory is required.
-- Derived element, compact-row, level, line, RRC, and complete historical parameter metadata directly in memory.
-- Added a qualification-contract-free radial controller and accepted-boundary product-state retention.
-- Added source `ener` plus built-in power-law (`ispec4`/`ispecgg`) radiation construction; benchmark reference-radiation files are not auto-consumed by the v67 production path.
-- Default `run-production` writes exactly nine FITS files and `xout_step.log`, creating no diagnostic or benchmark artifacts.
-- Added `none`, `summary`, `failure`, and `full` profiles plus independent enable/disable switches for lowered-case exports, runtime metadata, checkpoints, audits, qualification summaries, trajectory diagnostics, benchmark diagnostics, and timing summaries.
-- Added synthetic packed-ATDB regression coverage for H, He, H+He, Mg, Type-50 lines, and Type-53 RRCs.
-- Kept publication fail-closed when atomic data are missing, an active data type is unsupported, controller convergence fails, or any required product workspace is incomplete.
-
-# v0.6.48.7.46.25.5.17.25.67 - 2026-07-18
+## v0.6.48.7.46.25.5.17.25.67 - 2026-07-18
 
 - Implemented a CFITSIO-backed in-memory packed-ATDB reader and source-order pointer reconstruction for arbitrary active elements selected from `physical_abundances` or the standard abundance keys.
 - Added the documented `atdb.fits` and `coheat.dat` search orders. Public production rejects `--atomic-db`; atomic-data selection comes from `parameters.json` or the search order.
@@ -135,7 +114,7 @@
 - Added synthetic packed-ATDB regression coverage for H, He, H+He, Mg, Type-50 lines, and Type-53 RRCs.
 - Kept publication fail-closed when atomic data are missing, an active data type is unsupported, controller convergence fails, or any required product workspace is incomplete.
 
-# v0.6.48.7.46.25.5.17.25.66 - 2026-07-18
+## v0.6.48.7.46.25.5.17.25.66 - 2026-07-18
 
 - Replaced the benchmark-bound v65 public production command with a two-argument fail-closed standalone interface.
 - Public production rejects external case, metadata, contract, and checkpoint assets.
@@ -144,182 +123,13 @@
 - Removed v65 non-final snapshot pruning as a product-state authority and switched silent publication to the v63 retained-surface assembly.
 - General production remains blocked until C++ in-memory ATDB lowering, metadata derivation, and qualification-free trajectory construction are complete.
 
-# 0.6.48.7.46.25.5.17.25.65 - 2026-07-18
+## 0.6.48.7.46.25.5.17.25.65 - 2026-07-18
 
 - Added `run-production`, a true FITS/log-only path using packaged immutable benchmark inputs.
 - Runtime ATDB lowering, diagnostics, checkpoints, audits, qualification summaries, manifests, and staging directories are not created.
 - Added memory-safe scalar retention for non-final controller evaluations.
 - Restricted legacy `xout_step.log` option 24 to H and He, matching both Python and Fortran legacy output scope while retaining Mg RRC physics in controller/FITS workspaces.
 - Preserved source `npconi2` numbering for option 19; the later high pointer indices match Fortran XSTAR rather than the compact-renumbered Python oracle.
-
-## 0.6.48.7.46.25.5.17.25.63
-
-- Kept checked full-element-row to compact-active-row translation for line and bound-free spectral endpoints.
-- Prevented thermal compact-population closures from replacing committed populations or transported spectral workspaces.
-- Restored native committed populations as the controller state while retaining thermal closure only for thermal residual qualification.
-- Corrected sequence-24 branch diagnostics so a partial H-row qualification cannot be reported as an accepted gate.
-- Requires a fresh replay; v61 sequence-24 failure checkpoints are not compatible.
-
-## 0.6.48.7.46.25.5.17.25.61
-
-- Branched from v0.6.48.7.46.25.5.17.25.60 and retains its complete 3,213-row option-15 inventory and native `zrtmp` trapezoidal accumulator.
-- Fixed full-row versus compact-active-row population addressing in native line and bound-free spectral construction. The v60 Mg active window is rows 26-577 (552 compact rows), but spectral records retained full row numbers; 155 Mg spectral records could therefore read beyond the compact vector.
-- Projects accepted per-sequence compact thermal population closures into retained product populations and line/RRC/continuum construction while leaving the controller residual stream native.
-- Restored the oracle-compatible five-row retained boundary selection `[58,59,60,61,60]` instead of v60's `[58,59,60,61,61]`.
-- Retains `opakcont` in the real-native snapshot copy path.
-- Expanded `xout_step.log` print option 15 to the complete 3,213-row active H/He/Mg source-line inventory while preserving all 2,644 existing v58 detail-line luminosity and depth values unchanged.
-- Added the 569 source slots absent from the v58 detail surface: 244 Type-50, 121 Type-54, 195 Type-71, and 9 Type-76 rows. Source/oracle audit confirms these slots have zero `elum` and `tau0` values for this benchmark.
-- Added a strict option-15 coverage gate requiring exactly 2,644 preserved rows plus 569 source-defined zero rows.
-- Replaced the initial/terminal ion-column approximation with the source `zrtmp` signed consecutive-boundary trapezoid, including the final zero-row terminal reset interval.
-- Added runtime JSON audits for full line-channel coverage and `zrtmp` integration. No bridge or oracle product values are consumed at runtime.
-
-## 0.6.48.7.46.25.5.17.25.30
-
-- Enabled gated product publication after full-61 trajectory, ProductWritingState retention, ProductWritingState comparison, and oracle-compatible row-selection gates accept.
-- Added compact native xout_step.log publication from accepted true-native ProductWritingState without copying benchmark xout_step bytes or faking atomic database statistics.
-- Kept publication fail-closed for any upstream gate rejection and made product parity explicitly not claimed.
-
-
-## 0.6.48.7.46.25.5.17.25.16
-
-- Added call-3+ first-DSEC hydrogen excited-row absolute-negligibility qualification for sequence-23 branch-boundary hydrogen population rows.
-- Kept raw native solve/commit state and product publication disabled.
-
-## 0.6.48.7.46.25.5.17.25.16
-
-- Hotfix the sequence-23 call-3 branch thermal boundary closure runtime precondition.
-- Allow per-sequence thermal-component closure to run independently from fixed-state parity closure.
-- Preserve raw native solve populations, committed populations, ProductWritingState, FITS products, and xout_step.log suppression.
-- Keep the sequence-23 component closure data-driven and fail-closed: it is activated only when a matching `sequence_####_thermal.csv` exists.
-
-## 0.6.48.7.46.25.5.17.25.7
-
-- Generalize Mg thermal-consumption compact-population closure to all available per-sequence closure files.
-- Generate closure files for sequences 18-61.
-- Classify remaining Type-95 row-count families 17024/17026/17028.
-- Add per-sequence Mg weighted-net diagnostics.
-- Keep ProductWritingState and product publication disabled.
-
-## 0.6.48.7.46.25.5.17.25.7
-
-- Classified source sequence 17 after v17.25.5 accepted sequence 16.
-- Locked sequence-17 thermal ledger hashes and topology.
-- Added sequence-17 Mg source-canonical thermal-consumption compact-population closure.
-- Added sequence-17 runner gates for population, raw Mg thermal net, hmctot, elcter, and commit.
-- Kept ProductWritingState retention and product publication disabled.
-
-## 0.6.48.7.46.25.5.17.25.5
-
-- Closed the sequence-16 Mg controller-residual mismatch by applying a Mg-only source-canonical compact population vector to thermal consumption.
-- Preserved raw native solve populations, committed sequence-16 population hash, and valid sequence-16 thermal ledger hashes.
-- Added explicit sequence-16 gates for population contract, raw Mg thermal net, hmctot, elcter, and commit.
-- Kept ProductWritingState retention, FITS products, and xout_step.log disabled.
-
-## 0.6.48.7.46.25.5.17.25.4
-
-- Classified and accepted autonomous source sequence 16 from the v17.25.3 host diagnostic bundle.
-- Locked the 17,028-row sequence-16 thermal ledger identity, order, and value hashes.
-- Added a global `1e-12` parent-ion-budget criterion for numerically negligible population-row differences while leaving raw state unchanged.
-- Preserved the accepted sequence-1–15 controller, population, Type-95, and ledger contracts.
-- Advanced the fail-closed frontier to sequence 17.
-- Kept ProductWritingState retention and all public product publication disabled.
-
-## 0.6.48.7.46.25.5.17.25.3
-
-- Isolated the dynamically added second Type-95 pair from Mg primary-cooling source-order numbering.
-- Retained Type-95/rate-15 records as thermal-only and matrix-excluded.
-- Recovered sequence-13 value hash `596959fe8016319f` from live XSTAR answer-channel semantics.
-- Accepted sequence 13 with 17,028 rows; sequence 14 remains fail-closed.
-- Kept ProductWritingState retention and product publication disabled.
-
-## 0.6.48.7.46.25.5.17.25.3
-
-- Recovered rate-15/data-95 `idest1=1` preliminary-ion ownership from the supplied XSTAR Fortran.
-- Added record-ID-independent active support-boundary Type-95 thermal-only selection.
-- Kept all selected Type-95 records excluded from matrix assembly.
-- Revalidated all 61 retained v15.9.26 ledger row counts.
-- Corrected sequence 6 to 16,552 rows and sequence 8 to 17,024 rows.
-- Classified sequence 13 with 17,028 rows and exact identity/order/value hashes.
-- Moved the fail-closed frontier to sequence 14.
-- Kept ProductWritingState retention, FITS publication, and `xout_step.log` disabled.
-
-## 0.6.48.7.46.25.5.17.24
-
-- Replaced sequence-specific controller commands with one generic autonomous loop covering the 61 source identities.
-- Preserved sequences 1–8 as frozen regression contracts and accepted sequences 9–12 through data-driven population, hydrogen, topology, ledger, family, continuum, `hmctot`, and `elcter` gates.
-- Added per-evaluation acceptance CSV records, accepted-state checkpoints, deterministic replay verification, `--stop-after`, `--resume-after`, and diagnostic-level controls.
-- Added source identity mapping across DSEC and final evaluations for all four controller calls.
-- Commit state only after complete per-evaluation acceptance; stop before committing the first rejected or unclassified sequence.
-- Sequence 13 is the first unclassified topology boundary in the packaged contracts and is intentionally fail-closed.
-- Kept ProductWritingState retention, FITS publication, and `xout_step.log` disabled until all 61 evaluations accept.
-
-## 0.6.48.7.46.25.5.17.23
-
-- Extended the native committed-state controller through autonomous sequence 8.
-- Preserved the Mg stage-3–12 window, 663 thermal populations, and 17,026-row ledger.
-- Added sequence-8 population, hydrogen, ledger, family, continuum, hmctot, and elcter gates.
-- Permits sequence 9 only after complete sequence-8 acceptance.
-- ProductWritingState retention and publication remain disabled.
-
-## 0.6.48.7.46.25.5.17.22
-
-- Extend the true native controller through autonomous sequence 7.
-- Preserve the accepted sequence-6 committed global state and repeated-evaluation hydrogen semantics.
-- Detect the Mg stage-window expansion to stages 3–12 with 663 thermal populations.
-- Restore the sequence-7 thermal-only Type-95 self-loop traversal for Mg record 40295.
-- Gate the 17,026-row source-order ledger and exact sequence-7 population contracts.
-- Permit sequence 8 only after complete sequence-7 acceptance.
-- Keep ProductWritingState retention and product publication disabled.
-
-## 0.6.48.7.46.25.5.17.21
-
-- Extend the true native controller through autonomous sequence 6.
-- Preserve the accepted sequence-5 committed global state and repeated-evaluation hydrogen semantics.
-- Retain the Mg stages 4–12 window, 618 thermal populations, and 16,550-row source-order ledger.
-- Extend Mg source-order metadata through sequence 6.
-- Correct the sequence-5 summary key to `sequence5_source_canonical_he_mg_e7`.
-- Permit sequence 7 only after complete sequence-6 acceptance.
-- Keep ProductWritingState retention and product publication disabled.
-
-## 0.6.48.7.46.25.5.17.20
-
-- Extend the true native controller through autonomous sequence 5.
-- Restore the sequence-5 Mg stage-window expansion from stages 5–12 to 4–12.
-- Gate 618 thermal populations and the 16,550-row source-order ledger.
-- Permit sequence 6 only after complete sequence-5 acceptance.
-- Keep ProductWritingState and product publication disabled.
-
-# Changelog
-
-## 0.6.48.7.46.25.5.17.19
-
-- extend the true native controller through autonomous sequence 4;
-- preserve the accepted sequence-3 committed global state;
-- retain repeated-evaluation hydrogen global-versus-compact source semantics;
-- retain the active stage window and 16,400-row source ordering through sequence 4;
-- add exact sequence-4 population and source-canonical ledger contracts;
-- gate sequence 5 on sequence-4 population, ledger, family-total, continuum, `hmctot`, and `elcter` acceptance;
-- keep ProductWritingState retention and public-product publication disabled.
-
-## 0.6.48.7.46.25.5.17.18
-
-- Extended the true-native autonomous controller prefix through sequence 3.
-- Carried the accepted sequence-2 committed global state into sequence 3.
-- Retained repeated-evaluation hydrogen `xh0/xh1` reconstruction and compact terminal-row zeroing.
-- Retained the accepted active ion-stage window across repeated evaluations.
-- Extended the 16,400-row source-order thermal reconstruction through sequence 3.
-- Added sequence-3 population, ledger, family-total, continuum, `hmctot`, and `elcter` gates before admitting sequence 4.
-- Kept ProductWritingState retention and public-product publication disabled.
-
-
-## 0.6.48.7.46.25.5.17.17
-
-- Restored source-faithful repeated-evaluation hydrogen state handling.
-- Derived sequence-2 `xh0/xh1` from the accepted sequence-1 global H ground population.
-- Preserved the committed global H state while clearing compact normalization row 33 before solve.
-- Added sequence-2 hydrogen continuity, entry-density, compact-seed, and final-population gates.
-- Closed sequence-2 population, thermal-ledger, family-total, `hmctot`, and `elcter` qualification and admitted sequence 3.
-- Kept ProductWritingState retention and public-product publication disabled.
 
 ## 0.6.48.7.46.25.5.17.25.63 - 2026-07-18
 
