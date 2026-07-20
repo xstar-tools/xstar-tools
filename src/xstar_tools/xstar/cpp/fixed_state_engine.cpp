@@ -4494,6 +4494,82 @@ bool evaluate_type53_source_integral(
         ++kl;
     }
 
+    // v82 patch 5.18: recompute only the phint53 threshold publication
+    // sample with the literal source nbinc() owner.  Do not perturb the
+    // accepted integral/rate accumulation above.  This isolates the
+    // cancellation-sensitive opakab sample from the broad continuum grid.
+    {
+        int exact_nb1_one_based = type99_nbinc_fortran_value(xs[0], source_energy_ev, source_bin_count);
+        while (exact_nb1_one_based < usable_grid &&
+               source_energy_ev[exact_nb1_one_based - 1] < xs[0]) {
+            ++exact_nb1_one_based;
+        }
+        exact_nb1_one_based = std::max(1, exact_nb1_one_based - 1);
+        const int exact_nb1 = exact_nb1_one_based - 1;
+        if (exact_nb1 + 3 < n_grid) {
+            std::vector<double> exact_sgbar(static_cast<std::size_t>(n_grid), 0.0);
+            exact_sgbar[static_cast<std::size_t>(std::max(0, exact_nb1 - 1))] = 0.0;
+            exact_sgbar[static_cast<std::size_t>(exact_nb1)] = 0.0;
+            int ek = exact_nb1;
+            int ej = 0;
+            double ee1 = source_energy_ev[ek];
+            double ee2 = xs[0];
+            double ss2 = ys[0];
+            if (ee1 < ee2 && ek + 1 < n_grid) { ++ek; ee1 = source_energy_ev[ek]; }
+            double ee1o = ee2, ee2o = ee2, ss2o = ss2, ss2t = ss2, ee2t = ee1;
+            double esum = 0.0;
+            bool edone = false;
+            int guard = 0;
+            const int guard_max = std::max(8, 4 * (n_grid + pair_count));
+            while (!edone && guard++ < guard_max && ek < n_grid) {
+                while (ee2 < ee1 && ej < pair_count - 2) {
+                    ++ej; ee2o = ee2; ss2o = ss2; ee2 = xs[static_cast<std::size_t>(ej)];
+                    ss2 = ys[static_cast<std::size_t>(ej)];
+                    esum += (ss2 + ss2o) * (ee2 - ee2o) / 2.0;
+                }
+                esum -= (ss2 + ss2o) * (ee2 - ee2o) / 2.0;
+                ee2t = ee1;
+                ss2t = (ee2 - ee2o > 1.0e-8)
+                    ? ss2o + (ss2 - ss2o) * (ee2t - ee2o) / (ee2 - ee2o + 1.0e-24)
+                    : ss2o;
+                esum += (ss2t + ss2o) * (ee2t - ee2o) / 2.0;
+                const double eden = ee1 - ee1o;
+                exact_sgbar[static_cast<std::size_t>(ek)] =
+                    std::abs(eden) > 1.0e-36 ? esum / eden : 0.0;
+                ee1o = ee1; ++ek; if (ek >= n_grid) break; ee1 = source_energy_ev[ek];
+                while (ee1 < ee2 && ek < n_grid - 1) {
+                    ee2t = ee1;
+                    ss2t = (ee2 - ee2o > 1.0e-8)
+                        ? ss2o + (ss2 - ss2o) * (ee2t - ee2o) / (ee2 - ee2o)
+                        : ss2o;
+                    esum = ss2t * (ee1 - ee1o);
+                    const double local_den = ee1 - ee1o;
+                    exact_sgbar[static_cast<std::size_t>(ek)] =
+                        std::abs(local_den) > 1.0e-36 ? esum / local_den : 0.0;
+                    ee1o = ee1; ++ek; if (ek >= n_grid) break; ee1 = source_energy_ev[ek];
+                }
+                esum = (ss2 + ss2t) * (ee2 - ee2t) / 2.0;
+                if (ek >= usable_grid - 1 || ej >= pair_count - 2) edone = true;
+            }
+            const int exact_klmax = std::max(exact_nb1, ek - 1);
+            const int publish_kl = exact_nb1 + 2;
+            if (publish_kl < exact_klmax && publish_kl + 1 < n_grid) {
+                const double source_sgtp = std::max(0.0, exact_sgbar[static_cast<std::size_t>(publish_kl)]);
+                const double previous_expt =
+                    (source_energy_ev[publish_kl] - threshold_ev) / bktm;
+                double source_exptmpp = 0.0;
+                if (previous_expt < 200.0) {
+                    const double next_expt =
+                        (source_energy_ev[publish_kl + 1] - threshold_ev) / bktm;
+                    source_exptmpp = type53_expo(-next_expt);
+                }
+                threshold_abs_sigma_cm2 = source_sgtp;
+                threshold_stimulated_sigma_cm2 =
+                    rnist * source_exptmpp * source_sgtp * ptmp_sum;
+            }
+        }
+    }
+
     // The immutable v0.6.47.2 source evaluation of the near-threshold
     // He I Type-53 record 688 lands one representable double below the
     // otherwise source-equivalent C++ accumulation.  Preserve that literal
@@ -8922,6 +8998,14 @@ int run_impl(
                     sc.opakab = std::max(0.0,
                         opacity_shadow->threshold_cross_section_cm2 -
                         population_ratio * opacity_shadow->threshold_stimulated_cross_section_cm2);
+                } else if (evaluated[k].type99_shadow.valid) {
+                    // v82 patch 5.18: keep the literal Type-99 UCalc scalar
+                    // opakab at source-zero, but retain the superlevel
+                    // phint53hunt threshold cross section as the distinct
+                    // calc_emisab/product transport opacity owner.  The
+                    // spectral engine converts this per-lower-population
+                    // coefficient to cm^-1 exactly once.
+                    sc.opakab = std::max(0.0, evaluated[k].type99_shadow.threshold_cross_section_cm2);
                 } else {
                     sc.opakab = 0.0;
                 }
@@ -9158,7 +9242,10 @@ int run_impl(
         // the calc_emisab-equivalent detail arrays.  The production arrays
         // above are already committed and are never modified by this block.
         if (!defer_product_projection && source_sequence_v82_patch511 == 59) {
-            const char* audit_path_text = std::getenv("XSTAR_V82_PATCH5171_RLBIN_AUDIT_PATH");
+            const char* audit_path_text = std::getenv("XSTAR_V82_PATCH518_RLBIN_AUDIT_PATH");
+            if (!audit_path_text || !*audit_path_text) {
+                audit_path_text = std::getenv("XSTAR_V82_PATCH5171_RLBIN_AUDIT_PATH");
+            }
             if (audit_path_text && *audit_path_text) {
                 std::map<std::pair<std::string,int>,SourceFeatureAuditCandidateV82Patch5171> identity_by_slot;
                 std::map<std::pair<std::string,int>,int> duplicate_counts;
