@@ -7185,6 +7185,15 @@ struct NativeBoundFreeCurve {
     int phextrap_max_points = 0;
 };
 
+struct SourceStrongRrcCandidateV82Patch517 {
+    NativeBoundFreeCurve curve;
+    EvaluatedRecord evaluated;
+    ProgramRecord record;
+    double lower_abundance = 0.0;
+    double upper_abundance = 0.0;
+    int continuum_index_one_based = 0;
+};
+
 struct Phint53GridMapV82Patch57 {
     std::vector<double> sgbar;
     int nb1_zero_based = -1;
@@ -7356,35 +7365,6 @@ Phint53GridMapV82Patch57 phint53_grid_map_v82_patch57(
     return out;
 }
 
-double interpolate_bound_free_sigma(const NativeBoundFreeCurve& curve, double energy_ev) {
-    if (!(energy_ev >= curve.threshold_ev) || curve.offset_ryd.empty() ||
-        curve.offset_ryd.size() != curve.sigma_cm2.size()) return 0.0;
-    const double x = (energy_ev - curve.threshold_ev) / kType53RydEv;
-    if (x <= curve.offset_ryd.front()) return std::max(0.0, curve.sigma_cm2.front());
-    if (x >= curve.offset_ryd.back()) {
-        if (curve.offset_ryd.size() < 2 || !(curve.offset_ryd.back() > 0.0) || !(x > 0.0)) {
-            return std::max(0.0, curve.sigma_cm2.back());
-        }
-        const std::size_t n = curve.offset_ryd.size();
-        const double x0 = std::max(curve.offset_ryd[n - 2], 1.0e-30);
-        const double x1 = std::max(curve.offset_ryd[n - 1], 1.0e-30);
-        const double s0 = std::max(curve.sigma_cm2[n - 2], 1.0e-300);
-        const double s1 = std::max(curve.sigma_cm2[n - 1], 1.0e-300);
-        double slope = -3.0;
-        if (x1 != x0 && s0 > 0.0 && s1 > 0.0) slope = std::log(s1 / s0) / std::log(x1 / x0);
-        if (!std::isfinite(slope)) slope = -3.0;
-        return std::max(0.0, s1 * std::pow(x / x1, slope));
-    }
-    const auto it = std::upper_bound(curve.offset_ryd.begin(), curve.offset_ryd.end(), x);
-    const std::size_t hi = static_cast<std::size_t>(it - curve.offset_ryd.begin());
-    const std::size_t lo = hi - 1;
-    const double x0 = curve.offset_ryd[lo], x1 = curve.offset_ryd[hi];
-    const double y0 = std::max(0.0, curve.sigma_cm2[lo]);
-    const double y1 = std::max(0.0, curve.sigma_cm2[hi]);
-    if (x1 == x0) return y0;
-    return std::max(0.0, y0 + (y1 - y0) * (x - x0) / (x1 - x0));
-}
-
 bool native_bound_free_curve(const Program& program,
                              const ProgramRecord& record,
                              const EvaluatedRecord& evaluated,
@@ -7442,11 +7422,12 @@ double effective_spectral_covering_fraction_v82_patch58(
         0.0, 1.0);
 }
 
-void accumulate_native_bound_free_surface(const NativeBoundFreeCurve& curve,
+void accumulate_native_bound_free_surface_from_abundances(
+                                          const NativeBoundFreeCurve& curve,
                                           const EvaluatedRecord& evaluated,
                                           const ProgramRecord& record,
-                                          const ActiveElementView& active,
-                                          const std::vector<double>& populations,
+                                          double lower_abundance,
+                                          double upper_abundance,
                                           const xstar_fixed_state_input_v1& input,
                                           std::vector<double>& opacity_cm1,
                                           std::vector<double>& rccemis,
@@ -7455,10 +7436,6 @@ void accumulate_native_bound_free_surface(const NativeBoundFreeCurve& curve,
     const std::size_t n = input.radiation_bin_count;
     if (n < 2 || opacity_cm1.size() != n || rccemis.size() != 2 * n ||
         record.lower_row < 1 || record.upper_row < 1) return;
-    const double lower_abundance =
-        active_population_for_full_row(active, populations, record.lower_row) * active.element.abundance;
-    const double upper_abundance =
-        active_population_for_full_row(active, populations, record.upper_row) * active.element.abundance;
     const double density = std::max(0.0, input.hydrogen_density_cm3);
     const bool type49_or_53 = record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE ||
         record.opcode == XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE;
@@ -7507,29 +7484,95 @@ void accumulate_native_bound_free_surface(const NativeBoundFreeCurve& curve,
         return;
     }
 
-    // v82 patch 5.1+: literal source ucalc Type-99 does not publish direct
-    // bound-free opacity. Retain the prior source-faithful Type-99 RRC fallback
-    // unchanged; patch 5.7 only replaces the Type-49/53 phint53 grid mapper.
-    if (!type99) return;
-    const double kt_ev = xstar_constants::kModernBoltzmannEvPerK * input.temperature_k;
-    std::vector<double> fallback_shape(n, 0.0);
-    for (std::size_t i = 0; i < n; ++i) {
-        const double energy = input.radiation_energy_ev[i];
-        const double sigma = interpolate_bound_free_sigma(curve, energy);
-        if (!(sigma > 0.0)) continue;
-        const double excess = std::max(0.0, energy - curve.threshold_ev);
-        const double expo = kt_ev > 0.0 ? limited_exp(-excess / kt_ev) : 0.0;
-        fallback_shape[i] = sigma * energy * energy * energy * expo;
+    // v82 patch 5.17: active ucalc Type-99 (label 99) uses calt99 +
+    // phint53hunt only for rate/thermal answers.  It does not publish opakc,
+    // opakcont, or rccemis.  Keep the direct Type-99 opacity/emissivity side
+    // effect exactly zero on the production spectral surface.
+    (void)type99;
+}
+
+void accumulate_native_bound_free_surface(const NativeBoundFreeCurve& curve,
+                                          const EvaluatedRecord& evaluated,
+                                          const ProgramRecord& record,
+                                          const ActiveElementView& active,
+                                          const std::vector<double>& populations,
+                                          const xstar_fixed_state_input_v1& input,
+                                          std::vector<double>& opacity_cm1,
+                                          std::vector<double>& rccemis,
+                                          std::size_t* phint53_records_mapped = nullptr,
+                                          std::size_t* phint53_bins_accumulated = nullptr) {
+    const double lower_abundance =
+        active_population_for_full_row(active, populations, record.lower_row) * active.element.abundance;
+    const double upper_abundance =
+        active_population_for_full_row(active, populations, record.upper_row) * active.element.abundance;
+    accumulate_native_bound_free_surface_from_abundances(
+        curve, evaluated, record, lower_abundance, upper_abundance, input,
+        opacity_cm1, rccemis, phint53_records_mapped, phint53_bins_accumulated);
+}
+
+struct SourceFeatureRankCandidateV82Patch517 {
+    int slot_one_based = 0;
+    double feature_energy_ev = 0.0;
+    double emission_sum = 0.0;
+    double opacity = 0.0;
+    double ranking_key = 0.0;
+};
+
+std::set<int> source_strong_feature_slots_v82_patch517(
+    const std::vector<SourceFeatureRankCandidateV82Patch517>& raw_candidates,
+    const double* energy_grid_ev,
+    std::size_t energy_count) {
+    // calc_emis_all + rlbin source semantics.  The source walks public
+    // feature slots in ascending slot order, bins the threshold/line energy,
+    // and maintains nrank=10 entries with strict-greater insertion.
+    constexpr int kSourceNrank = 10;
+    std::map<int,SourceFeatureRankCandidateV82Patch517> by_slot;
+    for (const auto& item : raw_candidates) {
+        if (item.slot_one_based <= 0) continue;
+        // Source arrays are one value per public line/RRC slot.  Preserve the
+        // final source-order write if duplicate native records target a slot.
+        by_slot[item.slot_one_based] = item;
     }
-    double integral = 0.0;
-    for (std::size_t i = 1; i < n; ++i) {
-        integral += 0.5 * (fallback_shape[i - 1] + fallback_shape[i]) *
-            std::max(0.0, input.radiation_energy_ev[i] - input.radiation_energy_ev[i - 1]);
+    std::vector<std::array<int,kSourceNrank>> bins(energy_count);
+    for (auto& row : bins) row.fill(0);
+    for (const auto& kv : by_slot) {
+        const auto& item = kv.second;
+        if (!(std::isfinite(item.feature_energy_ev) && item.feature_energy_ev > 0.0) ||
+            !energy_grid_ev || energy_count < 3) continue;
+        if ((item.opacity < 1.0e-37) && (item.emission_sum < 1.0e-37)) continue;
+        if (item.feature_energy_ev < energy_grid_ev[0] ||
+            item.feature_energy_ev > energy_grid_ev[energy_count - 1]) continue;
+        const int nb1 = phint53_nbinc_one_based_v82_patch57(
+            item.feature_energy_ev, energy_grid_ev, static_cast<int>(energy_count));
+        if (nb1 <= 0 || static_cast<std::size_t>(nb1) > bins.size()) continue;
+        auto& table = bins[static_cast<std::size_t>(nb1 - 1)];
+        int mm = 0;
+        bool done = false;
+        while (!done) {
+            ++mm;
+            const int existing_slot = table[static_cast<std::size_t>(mm - 1)];
+            if (existing_slot == 0 || item.slot_one_based == 0) {
+                done = true;
+            } else {
+                const auto found = by_slot.find(existing_slot);
+                const double existing_key = found == by_slot.end()
+                    ? 0.0 : found->second.ranking_key;
+                if (item.ranking_key > existing_key) done = true;
+                if (mm >= kSourceNrank) done = true;
+            }
+        }
+        if (mm >= kSourceNrank) continue;
+        for (int mm2 = kSourceNrank - 1; mm2 >= mm; --mm2) {
+            table[static_cast<std::size_t>(mm2)] =
+                table[static_cast<std::size_t>(mm2 - 1)];
+        }
+        table[static_cast<std::size_t>(mm - 1)] = item.slot_one_based;
     }
-    const double total_emission = std::max(0.0, -evaluated.contribution.ans3) * upper_abundance * density;
-    if (!(integral > 0.0) || !(total_emission > 0.0)) return;
-    const double normalization = total_emission / (12.56 * integral);
-    for (std::size_t i = 0; i < n; ++i) rccemis[n + i] += normalization * fallback_shape[i];
+    std::set<int> selected;
+    for (const auto& table : bins) {
+        for (int slot : table) if (slot > 0) selected.insert(slot);
+    }
+    return selected;
 }
 
 struct OpacityProducerTopV82Patch511 {
@@ -7877,6 +7920,15 @@ int run_impl(
     std::vector<xstar_spectral_contribution_v1> spectral;
     std::vector<double> native_bound_free_opacity(input.radiation_bin_count, 0.0);
     std::vector<double> native_rrc_continuum_emission(2 * input.radiation_bin_count, 0.0);
+    // v82 patch 5.17: calc_emisab_all computes all threshold products, then
+    // calc_emis_all clears the distributed continuum and republishes only
+    // source-ranked strong RRCs/lines.  Keep the all-record reconstruction
+    // comparison-only until the global rlbin ranking is known.
+    std::vector<double> unranked_bound_free_opacity_v82_patch517(input.radiation_bin_count, 0.0);
+    std::vector<double> unranked_rrc_emission_v82_patch517(2 * input.radiation_bin_count, 0.0);
+    std::vector<SourceStrongRrcCandidateV82Patch517> strong_rrc_candidates_v82_patch517;
+    std::size_t type76_distributed_rrc_suppressed_v82_patch517 = 0u;
+    std::size_t type99_distributed_rrc_suppressed_v82_patch517 = 0u;
     // v82 patch 5.11: comparison-only producer attribution for the accepted
     // call-2/final sequence-59 opacity.  The environment path is owned by the
     // standalone diagnostic harness; production arrays and source order are
@@ -8665,46 +8717,39 @@ int run_impl(
         // rows and nearly all xo01_detal4 continuum-opacity bins at zero.
         if (!defer_product_projection) for (std::size_t k = 0; k < evaluated.size() && k < evaluated_records.size(); ++k) {
             const auto& source_record = *evaluated_records[k];
-            if (source_record.data_type == 76 && input.radiation_bin_count > 1 &&
-                evaluated[k].line_energy_ev > 0.0) {
-                // ucalc Type 76: distribute the two-photon decay over the
-                // continuum as E^2(Emax-E), normalized to the total A value.
-                const double emax = evaluated[k].line_energy_ev;
-                std::vector<double> shape(input.radiation_bin_count, 0.0);
-                double integral = 0.0;
-                for (std::size_t j = 0; j < input.radiation_bin_count; ++j) {
-                    const double e = input.radiation_energy_ev[j];
-                    if (e > 0.0 && e < emax) shape[j] = e * e * (emax - e);
-                    if (j > 0) {
-                        integral += 0.5 * (shape[j - 1] + shape[j]) *
-                            (input.radiation_energy_ev[j] - input.radiation_energy_ev[j - 1]);
-                    }
-                }
-                const double upper_population = active_population_for_full_row(
-                    active, buffers.populations, source_record.upper_row);
-                const double source_density = upper_population * element.abundance *
-                    input.hydrogen_density_cm3;
-                const double aij = std::max(0.0, evaluated[k].contribution.ans2);
-                const double cfrac = effective_spectral_covering_fraction_v82_patch58(input);
-                const double ptmp1 = 0.5 * (1.0 - cfrac);
-                const double ptmp2 = 0.5 * (1.0 - cfrac) + cfrac;
-                if (integral > 0.0 && source_density > 0.0 && aij > 0.0) {
-                    for (std::size_t j = 0; j < input.radiation_bin_count; ++j) {
-                        const double ansar2 = shape[j] * aij * emax / integral;
-                        native_rrc_continuum_emission[j] +=
-                            source_density * ansar2 * ptmp1 / 12.56;
-                        native_rrc_continuum_emission[input.radiation_bin_count + j] +=
-                            source_density * ansar2 * ptmp2 / 12.56;
-                    }
-                }
+            if (source_record.data_type == 76) {
+                // Active xstarcalc calls Type-76 from calc_hmc_ion with
+                // abund1=abund2=0.  calc_emis_all/calc_emisab_all do not
+                // publish Type-76 into the final distributed rccemis surface.
+                // The former native standalone reconstruction invented a
+                // two-photon continuum here and created hundreds of native-
+                // nonzero/source-zero bins.
+                ++type76_distributed_rrc_suppressed_v82_patch517;
             }
             if (!evaluated[k].bound_free_spectral) continue;
             NativeBoundFreeCurve curve;
             if (!native_bound_free_curve(ctx.program, source_record, evaluated[k], curve)) continue;
             accumulate_native_bound_free_surface(
                 curve, evaluated[k], source_record, active, buffers.populations, input,
-                native_bound_free_opacity, native_rrc_continuum_emission,
+                unranked_bound_free_opacity_v82_patch517, unranked_rrc_emission_v82_patch517,
                 &phint53_records_mapped_v82_patch57, &phint53_bins_accumulated_v82_patch57);
+            if (source_record.data_type == 99) {
+                ++type99_distributed_rrc_suppressed_v82_patch517;
+            }
+            if (source_record.data_type == 49 || source_record.data_type == 53) {
+                SourceStrongRrcCandidateV82Patch517 candidate;
+                candidate.curve = curve;
+                candidate.evaluated = evaluated[k];
+                candidate.record = source_record;
+                candidate.lower_abundance = active_population_for_full_row(
+                    active, buffers.populations, source_record.lower_row) * element.abundance;
+                candidate.upper_abundance = active_population_for_full_row(
+                    active, buffers.populations, source_record.upper_row) * element.abundance;
+                candidate.continuum_index_one_based = source_record.continuum_index_one_based;
+                if (candidate.continuum_index_one_based > 0) {
+                    strong_rrc_candidates_v82_patch517.push_back(std::move(candidate));
+                }
+            }
             if (mg_type53_kernel_audit_v82_patch512 && element.element_z == 12 &&
                 source_record.data_type == 53 && source_record.opcode == XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE) {
                 MgType53OpacityKernelRowV82Patch512 row;
@@ -9036,6 +9081,146 @@ int run_impl(
         sw.fline = fline.data(); sw.fline_count = fline.size();
         sw.flinel = flinel.data(); sw.flinel_count = flinel.size();
         sw.epi_eV = input.radiation_energy_ev; sw.energy_count = continuum_capacity;
+        // v82 patch 5.17: source calc_emis_all ranks the threshold RRC
+        // and line ledgers before re-running distributed phint53/linopac.
+        // Threshold cemab/cabab/opakab and rcem/oplin remain available for all
+        // calc_emisab entries; only the distributed continuum profiles are
+        // restricted to the source rlbin strong-feature sets.
+        std::vector<SourceFeatureRankCandidateV82Patch517> rrc_rank_candidates;
+        rrc_rank_candidates.reserve(strong_rrc_candidates_v82_patch517.size());
+        for (const auto& candidate : strong_rrc_candidates_v82_patch517) {
+            SourceFeatureRankCandidateV82Patch517 rank;
+            rank.slot_one_based = candidate.continuum_index_one_based;
+            rank.feature_energy_ev = candidate.curve.threshold_ev;
+            const std::size_t slot = rank.slot_one_based > 0
+                ? static_cast<std::size_t>(rank.slot_one_based) : 0u;
+            // rlbin ranks the already-committed calc_emisab arrays, not a
+            // re-derived record-local approximation.  Read exactly those
+            // threshold products here so duplicate/shared slot semantics stay
+            // identical to the source public arrays.
+            rank.opacity = slot < opakab.size() && std::isfinite(opakab[slot])
+                ? std::max(0.0, opakab[slot]) : 0.0;
+            const double cem1 = slot < cemab.size() && std::isfinite(cemab[slot])
+                ? cemab[slot] : 0.0;
+            const double cem2 = continuum_capacity + slot < cemab.size() &&
+                std::isfinite(cemab[continuum_capacity + slot])
+                ? cemab[continuum_capacity + slot] : 0.0;
+            rank.emission_sum = std::max(0.0, cem1) + std::max(0.0, cem2);
+            rank.ranking_key = rank.opacity; // rlbin lopak=1
+            rrc_rank_candidates.push_back(rank);
+        }
+        const auto selected_rrc_slots_v82_patch517 = source_strong_feature_slots_v82_patch517(
+            rrc_rank_candidates, input.radiation_energy_ev, continuum_capacity);
+
+        std::vector<SourceFeatureRankCandidateV82Patch517> line_rank_candidates;
+        line_rank_candidates.reserve(spectral.size());
+        for (const auto& contribution : spectral) {
+            if (contribution.kind != XSTAR_SPECTRAL_KIND_FULL_LINE ||
+                contribution.output_index <= 0) continue;
+            SourceFeatureRankCandidateV82Patch517 rank;
+            rank.slot_one_based = contribution.output_index;
+            rank.feature_energy_ev = contribution.line_energy_eV;
+            const std::size_t slot = rank.slot_one_based > 0
+                ? static_cast<std::size_t>(rank.slot_one_based) : 0u;
+            const double rc1 = slot < rcem.size() && std::isfinite(rcem[slot])
+                ? rcem[slot] : 0.0;
+            const double rc2 = line_capacity + slot < rcem.size() &&
+                std::isfinite(rcem[line_capacity + slot])
+                ? rcem[line_capacity + slot] : 0.0;
+            rank.emission_sum = std::max(0.0, rc1) + std::max(0.0, rc2);
+            rank.opacity = slot < oplin.size() && std::isfinite(oplin[slot])
+                ? std::max(0.0, oplin[slot]) : 0.0;
+            rank.ranking_key = rank.emission_sum; // rlbin lopak=0
+            line_rank_candidates.push_back(rank);
+        }
+        const auto selected_line_slots_v82_patch517 = source_strong_feature_slots_v82_patch517(
+            line_rank_candidates, input.radiation_energy_ev, continuum_capacity);
+
+        // Reconstruct the source calc_emis_all distributed bound-free surface
+        // only from selected RRC slots.  Type-76 and Type-99 are deliberately
+        // absent here: neither is a final calc_emis_all distributed emitter in
+        // the active source call path.
+        std::fill(native_bound_free_opacity.begin(), native_bound_free_opacity.end(), 0.0);
+        std::fill(native_rrc_continuum_emission.begin(), native_rrc_continuum_emission.end(), 0.0);
+        std::size_t selected_rrc_record_count_v82_patch517 = 0u;
+        std::size_t selected_type49_record_count_v82_patch517 = 0u;
+        std::size_t selected_type53_record_count_v82_patch517 = 0u;
+        for (const auto& candidate : strong_rrc_candidates_v82_patch517) {
+            // calc_emis_ion rate type 42 (native Type-49 family) calls ucalc
+            // unconditionally after calc_emis_all resets the distributed
+            // surface.  Rate type 7 (native Type-53 family) is the branch that
+            // is gated by ncbin.  Type-49 slots still participate in rlbin and
+            // may displace Type-53 slots from the top-nrank table, but they are
+            // not themselves suppressed by that table.
+            const bool source_selected = candidate.record.data_type == 49 ||
+                selected_rrc_slots_v82_patch517.find(candidate.continuum_index_one_based) !=
+                    selected_rrc_slots_v82_patch517.end();
+            if (!source_selected) continue;
+            ++selected_rrc_record_count_v82_patch517;
+            if (candidate.record.data_type == 49) ++selected_type49_record_count_v82_patch517;
+            if (candidate.record.data_type == 53) ++selected_type53_record_count_v82_patch517;
+            accumulate_native_bound_free_surface_from_abundances(
+                candidate.curve, candidate.evaluated, candidate.record,
+                candidate.lower_abundance, candidate.upper_abundance, input,
+                native_bound_free_opacity, native_rrc_continuum_emission, nullptr, nullptr);
+        }
+
+        std::size_t selected_line_record_count_v82_patch517 = 0u;
+        for (auto& contribution : spectral) {
+            if (contribution.kind != XSTAR_SPECTRAL_KIND_FULL_LINE ||
+                contribution.output_index <= 0) continue;
+            if (selected_line_slots_v82_patch517.find(contribution.output_index) ==
+                selected_line_slots_v82_patch517.end()) {
+                // Keep calc_emisab rcem/oplin, but skip calc_emis fline/linopac.
+                contribution.kind = XSTAR_SPECTRAL_KIND_EMISAB_LINE;
+            } else {
+                ++selected_line_record_count_v82_patch517;
+            }
+        }
+
+        if (source_sequence_v82_patch511 == 59) {
+            std::size_t selected_bound_free_nonzero_bins_v82_patch517 = 0u;
+            std::size_t selected_rrc_out_nonzero_bins_v82_patch517 = 0u;
+            std::size_t selected_rrc_in_nonzero_bins_v82_patch517 = 0u;
+            for (std::size_t k = 0; k < continuum_capacity; ++k) {
+                if (std::isfinite(native_bound_free_opacity[k]) && native_bound_free_opacity[k] != 0.0)
+                    ++selected_bound_free_nonzero_bins_v82_patch517;
+                if (std::isfinite(native_rrc_continuum_emission[k]) && native_rrc_continuum_emission[k] != 0.0)
+                    ++selected_rrc_out_nonzero_bins_v82_patch517;
+                if (std::isfinite(native_rrc_continuum_emission[continuum_capacity + k]) &&
+                    native_rrc_continuum_emission[continuum_capacity + k] != 0.0)
+                    ++selected_rrc_in_nonzero_bins_v82_patch517;
+            }
+            std::cout
+                << "V048746255172582_CALL2_SOURCE_RLBIN_RRC_CANDIDATE_RECORDS="
+                << strong_rrc_candidates_v82_patch517.size() << "\n"
+                << "V048746255172582_CALL2_SOURCE_RLBIN_RRC_SELECTED_SLOTS="
+                << selected_rrc_slots_v82_patch517.size() << "\n"
+                << "V048746255172582_CALL2_SOURCE_RLBIN_RRC_SELECTED_RECORDS="
+                << selected_rrc_record_count_v82_patch517 << "\n"
+                << "V048746255172582_CALL2_SOURCE_RLBIN_RRC_SELECTED_TYPE49_RECORDS="
+                << selected_type49_record_count_v82_patch517 << "\n"
+                << "V048746255172582_CALL2_SOURCE_RLBIN_RRC_SELECTED_TYPE53_RECORDS="
+                << selected_type53_record_count_v82_patch517 << "\n"
+                << "V048746255172582_CALL2_SOURCE_RLBIN_LINE_CANDIDATE_RECORDS="
+                << line_rank_candidates.size() << "\n"
+                << "V048746255172582_CALL2_SOURCE_RLBIN_LINE_SELECTED_SLOTS="
+                << selected_line_slots_v82_patch517.size() << "\n"
+                << "V048746255172582_CALL2_SOURCE_RLBIN_LINE_SELECTED_RECORDS="
+                << selected_line_record_count_v82_patch517 << "\n"
+                << "V048746255172582_CALL2_SOURCE_RLBIN_BOUND_FREE_NONZERO_BINS="
+                << selected_bound_free_nonzero_bins_v82_patch517 << "\n"
+                << "V048746255172582_CALL2_SOURCE_RLBIN_RCCEMIS_OUT_NONZERO_BINS="
+                << selected_rrc_out_nonzero_bins_v82_patch517 << "\n"
+                << "V048746255172582_CALL2_SOURCE_RLBIN_RCCEMIS_IN_NONZERO_BINS="
+                << selected_rrc_in_nonzero_bins_v82_patch517 << "\n"
+                << "V048746255172582_CALL2_TYPE76_DISTRIBUTED_RCCEMIS_SUPPRESSED_RECORDS="
+                << type76_distributed_rrc_suppressed_v82_patch517 << "\n"
+                << "V048746255172582_CALL2_TYPE99_DISTRIBUTED_RCCEMIS_SUPPRESSED_RECORDS="
+                << type99_distributed_rrc_suppressed_v82_patch517 << "\n"
+                << "V048746255172582_CALL2_SOURCE_RLBIN_SPECTRAL_SELECTION=ACCEPT_SOURCE_CALC_EMIS_ALL\n";
+        }
+
         constexpr std::size_t seed_stride=21;
         std::vector<double> seeds(spectral.size()*seed_stride,0.0);
         for (std::size_t i=0;i<spectral.size();++i) {
@@ -9051,6 +9236,58 @@ int run_impl(
         std::array<char, XSTAR_FIXED_STATE_MESSAGE_SIZE> error{};
         const int rc = xstar_spectral_apply_contributions_v1(ctx.spectral_context, spectral.data(), spectral.size(), seeds.data(), seed_stride, &sw, &ss, error.data(), error.size());
         if (rc != 0) throw std::runtime_error(std::string("native spectral commit failed: ") + error.data());
+
+        if (source_sequence_v82_patch511 == 59) {
+            const char* component_path_text = std::getenv(
+                "XSTAR_V82_PATCH517_HEATT_COMPONENT_AUDIT_PATH");
+            if (component_path_text && *component_path_text) {
+                const std::filesystem::path component_path(component_path_text);
+                if (!component_path.parent_path().empty())
+                    std::filesystem::create_directories(component_path.parent_path());
+                std::ofstream component_csv(component_path);
+                if (!component_csv)
+                    throw std::runtime_error("cannot create patch5.17 heatt component audit");
+                component_csv << "runtime_slot,energy_ev,unranked_bound_free_opacity,selected_bound_free_opacity,"
+                    "selected_line_profile_opacity,selected_total_opacity,unranked_rrc_out,selected_rrc_out,"
+                    "unranked_rrc_in,selected_rrc_in\n";
+                component_csv << std::setprecision(17);
+                for (std::size_t k = 0; k < continuum_capacity; ++k) {
+                    component_csv << k << ',' << input.radiation_energy_ev[k] << ','
+                        << unranked_bound_free_opacity_v82_patch517[k] << ','
+                        << native_bound_free_opacity[k] << ','
+                        << line_profile_opacity[k] << ','
+                        << (native_bound_free_opacity[k] + line_profile_opacity[k] + source_thomson) << ','
+                        << unranked_rrc_emission_v82_patch517[k] << ','
+                        << native_rrc_continuum_emission[k] << ','
+                        << unranked_rrc_emission_v82_patch517[continuum_capacity + k] << ','
+                        << native_rrc_continuum_emission[continuum_capacity + k] << '\n';
+                }
+                if (!component_csv)
+                    throw std::runtime_error("cannot write patch5.17 heatt component audit");
+
+                auto feature_path = component_path;
+                feature_path.replace_filename("call2_source_rlbin_feature_selection.csv");
+                std::ofstream feature_csv(feature_path);
+                if (!feature_csv)
+                    throw std::runtime_error("cannot create patch5.17 rlbin feature audit");
+                feature_csv << "family,slot_one_based,feature_energy_ev,emission_sum,opacity,ranking_key,selected\n";
+                feature_csv << std::setprecision(17);
+                for (const auto& item : rrc_rank_candidates) {
+                    feature_csv << "RRC," << item.slot_one_based << ',' << item.feature_energy_ev << ','
+                        << item.emission_sum << ',' << item.opacity << ',' << item.ranking_key << ','
+                        << (selected_rrc_slots_v82_patch517.count(item.slot_one_based) ? 1 : 0) << '\n';
+                }
+                for (const auto& item : line_rank_candidates) {
+                    feature_csv << "LINE," << item.slot_one_based << ',' << item.feature_energy_ev << ','
+                        << item.emission_sum << ',' << item.opacity << ',' << item.ranking_key << ','
+                        << (selected_line_slots_v82_patch517.count(item.slot_one_based) ? 1 : 0) << '\n';
+                }
+                if (!feature_csv)
+                    throw std::runtime_error("cannot write patch5.17 rlbin feature audit");
+                std::cout << "V048746255172582_CALL2_HEATT_COMPONENT_PRECOMMIT_AUDIT=WRITTEN\n"
+                          << "V048746255172582_CALL2_SOURCE_RLBIN_FEATURE_SELECTION_AUDIT=WRITTEN\n";
+            }
+        }
 
         const std::size_t nlines=spectral.size();
         std::vector<double> dpthc(continuum_capacity,0.0), original(5*continuum_capacity,0.0), profiled(5*continuum_capacity,0.0);
