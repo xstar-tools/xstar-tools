@@ -558,6 +558,11 @@ ProductWritingState build_product_writing_state(const WholeRunAccumulatedState& 
     product.exact_legacy_pprint_state_retained = state.exact_legacy_pprint_state_retained;
     product.product_state_complete = state.native_product_inputs_complete;
     product.product_parity_qualified = false;
+    product.diagnostic_preview_partial = state.diagnostic_preview_partial;
+    product.physical_radial_boundaries_expected = state.physical_radial_boundaries_expected;
+    product.physical_radial_boundaries_retained = state.physical_radial_boundaries_retained;
+    product.physical_transport_intervals_completed = state.physical_transport_intervals_completed;
+    product.terminal_synthetic_row_present = state.terminal_synthetic_row_present;
     return product;
 }
 

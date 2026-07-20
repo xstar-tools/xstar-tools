@@ -9813,6 +9813,7 @@ struct StandaloneControllerDataV67 {
     std::vector<double> accumulated_zremsz;
     std::vector<double> source_incident;
     double cumulative_depth_cm = 0.0;
+    std::size_t physical_transport_intervals_completed = 0;
     std::array<CallStartWorkspace,4> call_start_workspaces;
     std::vector<double> global_xilevg;
     std::vector<double> global_bilevg;
@@ -12039,6 +12040,7 @@ void advance_consecutive_transport_v71(
     local_boundary.continuum_tau_out = data.grid_tau_out;
 
     data.cumulative_depth_cm += delta_radius_cm;
+    ++data.physical_transport_intervals_completed;
     std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> message{};
     const int rc = xstar_fixed_state_context_set_runtime_line_tau_v1(
         data.fixed_context, data.line_tau_in.data(), data.line_tau_out.data(),
@@ -13226,8 +13228,7 @@ void write_sequence23_diagnostic_preview_v82_patch513(
         preview.fixed_evaluations.push_back(copy_real_native_snapshot(snapshot, 0.0));
     }
 
-    const double total_depth_cm = params.column_cm2 / std::max(params.density_cm3, 1.0);
-    const double sequence23_depth_cm = 0.402446 * total_depth_cm;
+    const double sequence23_depth_cm = std::max(0.0, data.cumulative_depth_cm);
     auto append_preview_zone = [&](const FixedDsecSnapshot& snapshot,
                                    std::size_t zone_index,
                                    double depth_cm,
@@ -13276,16 +13277,22 @@ void write_sequence23_diagnostic_preview_v82_patch513(
         preview.abundance_radial_rows.push_back(abundance);
     };
 
-    // Three diagnostic rows align geometrically with the first three source
-    // radial surfaces: call-1 final at zero depth, call-2 final at zero depth,
-    // and the transported call-3 input boundary at 0.402446 of total depth.
+    // Three retained physical boundary snapshots are available at the
+    // sequence-23 rejection point.  The third uses the live consecutive-
+    // transport depth; no unreached shell or terminal synthetic reset is
+    // fabricated in the diagnostic preview.
     append_preview_zone(finals[0], 1u, 0.0,
         "diagnostic preview: accepted call-1 final", true);
     append_preview_zone(*call2_pretransport, 2u, 0.0,
         "diagnostic preview: accepted call-2 final before transport", true);
     append_preview_zone(finals[1], 3u, sequence23_depth_cm,
         "diagnostic preview: sequence-23 call-3 input after call-2 transport", false);
-    preview.abundance_radial_rows.back().terminal_row = true;
+
+    preview.diagnostic_preview_partial = true;
+    preview.physical_radial_boundaries_expected = 4u;
+    preview.physical_radial_boundaries_retained = preview.radial_zones.size();
+    preview.physical_transport_intervals_completed = data.physical_transport_intervals_completed;
+    preview.terminal_synthetic_row_present = false;
 
     preview.embedded_public_fits_payloads_absent = true;
     preview.embedded_full_xout_step_payload_absent = true;
@@ -13342,6 +13349,10 @@ void write_sequence23_diagnostic_preview_v82_patch513(
              << "  \"failure_reason\": \"" << json_escape_v67(failure_reason) << "\",\n"
              << "  \"retained_controller_events\": " << preview.fixed_evaluations.size() << ",\n"
              << "  \"preview_radial_rows\": " << preview.radial_zones.size() << ",\n"
+             << "  \"physical_radial_boundaries_retained\": " << preview.physical_radial_boundaries_retained << ",\n"
+             << "  \"physical_radial_boundaries_expected\": " << preview.physical_radial_boundaries_expected << ",\n"
+             << "  \"physical_transport_intervals_completed\": " << preview.physical_transport_intervals_completed << ",\n"
+             << "  \"terminal_synthetic_row_present\": " << preview.terminal_synthetic_row_present << ",\n"
              << "  \"source_radial_rows_expected\": 5,\n"
              << "  \"fits_products_written\": " << fits_count << ",\n"
              << "  \"xout_step_written\": " << step_written << "\n"
@@ -13351,6 +13362,10 @@ void write_sequence23_diagnostic_preview_v82_patch513(
     std::cout << "V048746255172582_DIAGNOSTIC_PREVIEW_ONLY=YES\n"
               << "V048746255172582_DIAGNOSTIC_PREVIEW_FAILURE_BOUNDARY=SEQUENCE23_CALL3_START\n"
               << "V048746255172582_DIAGNOSTIC_PREVIEW_RADIAL_ROWS=" << preview.radial_zones.size() << "\n"
+              << "V048746255172582_DIAGNOSTIC_PREVIEW_PHYSICAL_BOUNDARIES_RETAINED=" << preview.physical_radial_boundaries_retained << "\n"
+              << "V048746255172582_DIAGNOSTIC_PREVIEW_PHYSICAL_BOUNDARIES_EXPECTED=" << preview.physical_radial_boundaries_expected << "\n"
+              << "V048746255172582_DIAGNOSTIC_PREVIEW_PHYSICAL_TRANSPORT_INTERVALS_COMPLETED=" << preview.physical_transport_intervals_completed << "\n"
+              << "V048746255172582_DIAGNOSTIC_PREVIEW_TERMINAL_SYNTHETIC_ROW_PRESENT=" << (preview.terminal_synthetic_row_present ? "YES" : "NO") << "\n"
               << "V048746255172582_DIAGNOSTIC_PREVIEW_FITS_PRODUCTS_WRITTEN=" << fits_count << "\n"
               << "V048746255172582_DIAGNOSTIC_PREVIEW_XOUT_STEP_LOG_WRITTEN=" << (step_written ? 1 : 0) << "\n"
               << "V048746255172582_DIAGNOSTIC_PREVIEW_PUBLICATION="
@@ -13955,6 +13970,11 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             append_zone(snapshot, "qualification_free_native_call_final");
         }
         append_zone(finals.at(2), "qualification_free_native_terminal_reset");
+        whole.diagnostic_preview_partial = false;
+        whole.physical_radial_boundaries_expected = source_calls;
+        whole.physical_radial_boundaries_retained = finals.size();
+        whole.physical_transport_intervals_completed = data.physical_transport_intervals_completed;
+        whole.terminal_synthetic_row_present = true;
         retain_controller_owned_product_workspaces_v63(whole, options.parameters_path);
         // v71 retains the complete boundary event state in memory.  The
         // benchmark radial depth split is source-compatible with v63 and is

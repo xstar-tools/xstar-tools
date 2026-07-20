@@ -332,6 +332,13 @@ struct WholeRunAccumulatedState {
     bool exact_source_workspaces_retained = false;
     bool exact_accepted_radial_boundaries_retained = false;
     bool exact_legacy_pprint_state_retained = false;
+    // v82 patch 5.15: distinguish retained physical boundaries from the
+    // historical terminal synthetic abundance-reset row.
+    bool diagnostic_preview_partial = false;
+    std::size_t physical_radial_boundaries_expected = 0;
+    std::size_t physical_radial_boundaries_retained = 0;
+    std::size_t physical_transport_intervals_completed = 0;
+    bool terminal_synthetic_row_present = false;
 };
 
 struct ProductWritingState {
@@ -375,6 +382,11 @@ struct ProductWritingState {
     bool xout_step_computed_from_native_state = false;
     bool xout_step_timing_values_measured = false;
     double measured_run_seconds = 0.0;
+    bool diagnostic_preview_partial = false;
+    std::size_t physical_radial_boundaries_expected = 0;
+    std::size_t physical_radial_boundaries_retained = 0;
+    std::size_t physical_transport_intervals_completed = 0;
+    bool terminal_synthetic_row_present = false;
 };
 
 void prepare_native_product_state(

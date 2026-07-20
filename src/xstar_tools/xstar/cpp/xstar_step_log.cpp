@@ -230,7 +230,7 @@ void append_native_radial_summary(std::ofstream& out,
     // those rows without inventing a new geometry: shell 1 is the retained
     // first increment, shell 2 repeats the adaptive step, and shell 3 is the
     // retained total minus the first two increments.
-    if (rows.size() >= 4 && rows[2].dr > 0.0 && rows[3].dr > rows[2].dr) {
+    if (!state.diagnostic_preview_partial && rows.size() >= 4 && rows[2].dr > 0.0 && rows[3].dr > rows[2].dr) {
         const Row entry0 = rows[0];
         const Row entry1 = rows[1];
         Row shell1 = rows[2];
@@ -335,6 +335,13 @@ void append_native_radial_summary(std::ofstream& out,
         m.second=std::max(m.second,e.evaluation_index);
     }
     out << "\n running ...\n\n pass number= 1 -1\n print option:17\n";
+    if (state.diagnostic_preview_partial) {
+        out << " diagnostic partial radial trajectory: physical boundaries retained="
+            << state.physical_radial_boundaries_retained
+            << " expected=" << state.physical_radial_boundaries_expected
+            << " transport intervals completed=" << state.physical_transport_intervals_completed
+            << " terminal synthetic row=" << (state.terminal_synthetic_row_present ? "present" : "not reached") << "\n";
+    }
     out << "   log(r) delr/r log(N) log(xi) x_e   log(n) log(t) h-c(%) h-c(%) log(tau)\n";
     out << "                                                                  fwd    rev\n";
     auto safe_log=[](double v,double floor){return v>0.0?std::log10(v):floor;};
@@ -467,7 +474,8 @@ struct PublicLineLogRow {
 };
 
 void append_native_public_line_sections(std::ofstream& out,
-                                        const std::filesystem::path& output_dir) {
+                                        const std::filesystem::path& output_dir,
+                                        const xstar_run_state::ProductWritingState& state) {
     fitsfile* fptr=nullptr; int status=0;
     const auto path=output_dir/"xout_lines1.fits";
     fits_open_file(&fptr,path.c_str(),READONLY,&status);
@@ -480,12 +488,15 @@ void append_native_public_line_sections(std::ofstream& out,
     for(long long r=1;r<=nr;++r) rows.push_back({read_integer_cell(fptr,ci,r),read_string_cell(fptr,cion,r),read_double_cell(fptr,cw,r),read_double_cell(fptr,cei,r),read_double_cell(fptr,ceo,r),read_double_cell(fptr,cdi,r),read_double_cell(fptr,cdo,r)});
     int cs=0;fits_close_file(fptr,&cs);
     out<<"\n print option:11\n\n print option: 1\n emission line luminosities (erg/sec/10**38))\n";
+    if (state.diagnostic_preview_partial) out << " diagnostic partial trajectory values; later physical intervals not reached\n";
     out<<" index, ion, wavelength, reflected, transmitted\n";
     auto luminosity_rows=rows;
     std::stable_sort(luminosity_rows.begin(),luminosity_rows.end(),[](const auto&a,const auto&b){return (a.emit_in+a.emit_out)>(b.emit_in+b.emit_out);});
     const std::size_t luminosity_count=std::min<std::size_t>(500,luminosity_rows.size());
     for(std::size_t k=0;k<luminosity_count;++k){const auto&r=luminosity_rows[k];out<<std::setw(8)<<(k+1)<<std::setw(8)<<r.index<<" "<<std::left<<std::setw(10)<<r.ion<<std::right<<std::setw(14)<<std::uppercase<<std::scientific<<std::setprecision(5)<<r.wavelength<<std::setw(14)<<r.emit_in<<std::setw(14)<<r.emit_out<<"\n";}
-    out<<"\n print option:23\n line depths\n index, ion, wavelength, reflected, transmitted\n";
+    out<<"\n print option:23\n line depths\n";
+    if (state.diagnostic_preview_partial) out << " diagnostic partial trajectory depths; terminal ranking not yet available\n";
+    out<<" index, ion, wavelength, reflected, transmitted\n";
     // Source pprint option 23 ranks the complete detailed line inventory by
     // terminal backward depth.  xout_lines1 is a 600-row luminosity-selected
     // public subset and cannot reproduce the depth interval near rank 500.
@@ -969,7 +980,7 @@ void append_native_energy_sums(std::ofstream& out,const std::filesystem::path& o
 }
 
 void append_native_product_sections(std::ofstream& out,const std::filesystem::path& output_dir,const xstar_run_state::ProductWritingState& state){
-    append_native_public_line_sections(out,output_dir);
+    append_native_public_line_sections(out,output_dir,state);
     append_native_public_rrc_sections(out,output_dir,state,true,false);
     out<<" print option:16\n source CPU accumulators and per-rate call counts: unavailable (not retained by the native controller).\n\n";
     append_native_ion_columns(out,output_dir);
