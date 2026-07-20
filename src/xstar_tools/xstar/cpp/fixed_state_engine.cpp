@@ -1097,6 +1097,7 @@ struct Type53SourceShadow {
     double matrix_density_scale = 0.0;
     double threshold_cross_section_cm2 = 0.0;
     double threshold_stimulated_cross_section_cm2 = 0.0;
+    bool threshold_publication_reached = false;
     double base_threshold_ev = 0.0;
     double threshold_ev = 0.0;
     double bound_energy_ev = 0.0;
@@ -1304,6 +1305,12 @@ struct EvaluatedRecord {
     double opakab = 0.0;
     double type56_upsilon = std::numeric_limits<double>::quiet_NaN();
     Type53SourceShadow type53_shadow{};
+    // v82 patch 5.18.1: calc_emisab_all evaluates Type-53 on the reduced
+    // epim/bremsam workspace before calc_emis_all ranks and selectively
+    // revisits rate-7 records on the full radiation grid.  Keep those two
+    // lifetimes distinct so opakab can retain the reduced-grid seed when a
+    // selected full-grid phint53 revisit does not reach its publication bin.
+    Type53SourceShadow type53_calc_emisab_shadow{};
     Type53SourceShadow type49_shadow{};
     Type51SourceShadow type51_shadow{};
     Type50SourceShadow type50_shadow{};
@@ -4443,6 +4450,7 @@ bool evaluate_type53_source_integral(
     double tempcp2 = tempip * (epiip - threshold_ev);
     double threshold_abs_sigma_cm2 = 0.0;
     double threshold_stimulated_sigma_cm2 = 0.0;
+    bool threshold_publication_reached = false;
     int kl = nb1;
     while (kl < klmax && kl + 1 < n_grid) {
         const double sgtp = std::max(0.0, sgbar[static_cast<std::size_t>(kl)]);
@@ -4490,6 +4498,7 @@ bool evaluate_type53_source_integral(
         if (kl == nb1 + 2) {
             threshold_abs_sigma_cm2 = sgtp;
             threshold_stimulated_sigma_cm2 = rnist * exptmpp * sgtp * ptmp_sum;
+            threshold_publication_reached = true;
         }
         ++kl;
     }
@@ -4566,6 +4575,7 @@ bool evaluate_type53_source_integral(
                 threshold_abs_sigma_cm2 = source_sgtp;
                 threshold_stimulated_sigma_cm2 =
                     rnist * source_exptmpp * source_sgtp * ptmp_sum;
+                threshold_publication_reached = true;
             }
         }
     }
@@ -4654,6 +4664,7 @@ bool evaluate_type53_source_integral(
         shadow->threshold_cross_section_cm2 = std::max(0.0, threshold_abs_sigma_cm2);
         shadow->threshold_stimulated_cross_section_cm2 =
             std::max(0.0, threshold_stimulated_sigma_cm2);
+        shadow->threshold_publication_reached = threshold_publication_reached;
         shadow->base_threshold_ev = record_context && record_context->valid
             ? record_context->base_threshold_ev : threshold_ev;
         shadow->threshold_ev = threshold_ev;
@@ -4713,7 +4724,8 @@ EvaluatedRecord evaluate_record(
     const Program& program,
     const ElementProgram& element,
     const ProgramRecord& record,
-    const xstar_fixed_state_input_v1& input
+    const xstar_fixed_state_input_v1& input,
+    const SourceContinuumWorkspace* calc_emisab_workspace
 ) {
     const double* r = record.real_count ? program.reals.data() + record.real_offset : nullptr;
     const auto* ints = record.int_count ? program.ints.data() + record.int_offset : nullptr;
@@ -5098,6 +5110,26 @@ EvaluatedRecord evaluate_record(
                 contract_ptmp1 + contract_ptmp2, row46_contract,
                 record_context.valid ? &record_context : nullptr, record.record, false, false,
                 source_shadow, &out.type53_shadow);
+
+            // v82 patch 5.18.1: source calc_emisab_all consumes the reduced
+            // 999-bin epim/bremsam workspace.  Its opakab publication is the
+            // seed later ranked by rlbin.  calc_emis_ion then revisits only
+            // selected rate-7 identities on the full grid and may leave this
+            // seed untouched when phint53 does not reach kl=nb1+2.
+            if (calc_emisab_workspace && calc_emisab_workspace->epim.size() >= 3 &&
+                calc_emisab_workspace->bremsam.size() == calc_emisab_workspace->epim.size()) {
+                xstar_fixed_state_input_v1 calc_emisab_input = input;
+                calc_emisab_input.dsec_radiation_energy_ev = calc_emisab_workspace->epim.data();
+                calc_emisab_input.dsec_bremsa = calc_emisab_workspace->bremsam.data();
+                calc_emisab_input.dsec_radiation_bin_count = calc_emisab_workspace->epim.size();
+                xstar_element_contribution_v1 calc_emisab_contribution{};
+                const bool calc_emisab_exact = evaluate_type53_source_integral(
+                    r, pair_real_count, lower, upper, calc_emisab_input, source_threshold,
+                    contract_ptmp1 + contract_ptmp2, row46_contract,
+                    record_context.valid ? &record_context : nullptr, record.record, false, false,
+                    calc_emisab_contribution, &out.type53_calc_emisab_shadow);
+                if (!calc_emisab_exact) out.type53_calc_emisab_shadow = Type53SourceShadow{};
+            }
             out.type53_shadow.helium_live_escape_state_applied = helium_live_escape_applied;
             if (row46_contract) {
                 if (!source_exact) throw std::runtime_error("type53 row46 source-faithful evaluator did not produce a result");
@@ -8053,6 +8085,11 @@ int run_impl(
     std::vector<double> thermal_population_stream;
     std::size_t fixed_full_population_offset = 0;
     std::vector<xstar_spectral_contribution_v1> spectral;
+    // Retain evaluated source identities past the per-element traversal so
+    // call-2 calc_emis_all can perform its selected Type-53 revisit after the
+    // complete calc_emisab surface has been ranked.
+    std::map<std::pair<std::uint64_t,std::uint64_t>,EvaluatedRecord>
+        type53_revisit_evaluated_v82_patch5181;
     std::vector<double> native_bound_free_opacity(input.radiation_bin_count, 0.0);
     std::vector<double> native_rrc_continuum_emission(2 * input.radiation_bin_count, 0.0);
     // v82 patch 5.11: comparison-only producer attribution for the accepted
@@ -8086,6 +8123,22 @@ int run_impl(
         thermal_compact_population_closure_data = load_thermal_compact_population_closure_data();
     }
 
+    // calc_emisab_all receives the source reduced epim/bremsam workspace.
+    // Build it once per controller evaluation and share it with all Type-53
+    // records instead of reconstructing the 999-bin map per atomic record.
+    std::optional<SourceContinuumWorkspace> type53_calc_emisab_workspace_v82_patch5181;
+    {
+        const bool has_full_dsec = input.dsec_radiation_energy_ev && input.dsec_bremsa &&
+            input.dsec_radiation_bin_count >= 4;
+        const double* full_epi = has_full_dsec ? input.dsec_radiation_energy_ev : input.radiation_energy_ev;
+        const double* full_bremsa = has_full_dsec ? input.dsec_bremsa : input.radiation_flux;
+        const std::size_t full_count = has_full_dsec ? input.dsec_radiation_bin_count : input.radiation_bin_count;
+        if (full_epi && full_bremsa && full_count >= 4) {
+            type53_calc_emisab_workspace_v82_patch5181 = build_source_continuum_workspace(
+                full_epi, full_bremsa, full_count);
+        }
+    }
+
     const auto traversal_start = clock_type::now();
     for (const auto& element : ctx.program.elements) {
         ++stats.elements_attempted;
@@ -8109,7 +8162,16 @@ int run_impl(
             if (record.data_type == 56) ++stats.type56_records_evaluated;
             const auto rate_start = clock_type::now();
             try {
-                evaluated.push_back(evaluate_record(ctx.program, element, record, input));
+                EvaluatedRecord evaluated_item = evaluate_record(
+                    ctx.program, element, record, input,
+                    type53_calc_emisab_workspace_v82_patch5181
+                        ? &*type53_calc_emisab_workspace_v82_patch5181 : nullptr);
+                if (record.data_type == 53 && record.rate_type == 7) {
+                    type53_revisit_evaluated_v82_patch5181[std::make_pair(
+                        static_cast<std::uint64_t>(record.source_position),
+                        static_cast<std::uint64_t>(record.record))] = evaluated_item;
+                }
+                evaluated.push_back(std::move(evaluated_item));
                 evaluated_records.push_back(&record);
                 ++stats.records_evaluated;
             } catch (const std::exception&) {
@@ -8991,22 +9053,26 @@ int run_impl(
                 // The spectral engine multiplies sc.opakab by abund1*xpx,
                 // so retain the equivalent per-lower-population coefficient.
                 const Type53SourceShadow* opacity_shadow = nullptr;
-                if (evaluated[k].type53_shadow.valid) opacity_shadow = &evaluated[k].type53_shadow;
-                else if (evaluated[k].type49_shadow.valid) opacity_shadow = &evaluated[k].type49_shadow;
-                if (opacity_shadow && sc.abundance_lower > 0.0) {
+                if (evaluated[k].type53_shadow.valid) {
+                    // v82 patch 5.18.1: rank the calc_emisab-equivalent
+                    // reduced-grid threshold seed, not the later full-grid
+                    // calc_emis_ion revisit value.
+                    opacity_shadow = evaluated[k].type53_calc_emisab_shadow.valid
+                        ? &evaluated[k].type53_calc_emisab_shadow
+                        : &evaluated[k].type53_shadow;
+                } else if (evaluated[k].type49_shadow.valid) {
+                    opacity_shadow = &evaluated[k].type49_shadow;
+                }
+                if (opacity_shadow && sc.abundance_lower > 0.0 &&
+                    opacity_shadow->threshold_publication_reached) {
                     const double population_ratio = sc.abundance_upper / sc.abundance_lower;
                     sc.opakab = std::max(0.0,
                         opacity_shadow->threshold_cross_section_cm2 -
                         population_ratio * opacity_shadow->threshold_stimulated_cross_section_cm2);
-                } else if (evaluated[k].type99_shadow.valid) {
-                    // v82 patch 5.18: keep the literal Type-99 UCalc scalar
-                    // opakab at source-zero, but retain the superlevel
-                    // phint53hunt threshold cross section as the distinct
-                    // calc_emisab/product transport opacity owner.  The
-                    // spectral engine converts this per-lower-population
-                    // coefficient to cm^-1 exactly once.
-                    sc.opakab = std::max(0.0, evaluated[k].type99_shadow.threshold_cross_section_cm2);
                 } else {
+                    // Type-99 direct UCalc opakab is source-zero.  Patch 5.18
+                    // incorrectly projected phint53hunt's auxiliary shadow
+                    // cross section into this scalar publication slot.
                     sc.opakab = 0.0;
                 }
             }
@@ -9238,6 +9304,123 @@ int run_impl(
         const int rc = xstar_spectral_apply_contributions_v1(ctx.spectral_context, spectral.data(), spectral.size(), seeds.data(), seed_stride, &sw, &ss, error.data(), error.size());
         if (rc != 0) throw std::runtime_error(std::string("native spectral commit failed: ") + error.data());
 
+        // v82 patch 5.18.1: calc_emis_all ranks the calc_emisab threshold
+        // surface, then calc_emis_ion revisits only ncbin-selected rate-7
+        // records.  Preserve the seed for the diagnostic audit and apply the
+        // selected full-grid overwrite to opakab only; distributed opakc and
+        // rccemis remain on the accepted 5.17.1 production path.
+        const std::vector<double> opakab_calc_emisab_seed = opakab;
+        if (!defer_product_projection && source_sequence_v82_patch511 == 59) {
+            std::map<std::pair<std::string,int>,SourceFeatureAuditCandidateV82Patch5171> seed_identity_by_slot;
+            for (const auto& c : spectral) {
+                if (c.kind != XSTAR_SPECTRAL_KIND_EMISAB_BOUND_FREE || c.output_index <= 0 ||
+                    !(c.line_energy_eV > 0.0) || !std::isfinite(c.line_energy_eV)) continue;
+                SourceFeatureAuditCandidateV82Patch5171 m;
+                m.family = "RRC";
+                m.slot_one_based = c.output_index;
+                m.energy_ev = c.line_energy_eV;
+                m.wavelength_a = 12398.4016 / c.line_energy_eV;
+                m.source_position = c.source_position;
+                m.record = c.record;
+                m.data_type = c.data_type;
+                seed_identity_by_slot[{m.family, m.slot_one_based}] = m;
+            }
+            std::vector<SourceFeatureAuditCandidateV82Patch5171> seed_rrc_candidates;
+            seed_rrc_candidates.reserve(seed_identity_by_slot.size());
+            for (auto& kv : seed_identity_by_slot) {
+                auto c = kv.second;
+                const std::size_t slot = static_cast<std::size_t>(c.slot_one_based);
+                if (slot >= continuum_slot_capacity) continue;
+                c.opacity = std::isfinite(opakab_calc_emisab_seed[slot])
+                    ? std::max(0.0, opakab_calc_emisab_seed[slot]) : 0.0;
+                const double e1 = std::isfinite(cemab[slot]) ? cemab[slot] : 0.0;
+                const double e2 = std::isfinite(cemab[continuum_slot_capacity + slot])
+                    ? cemab[continuum_slot_capacity + slot] : 0.0;
+                c.emission_sum = e1 + e2;
+                seed_rrc_candidates.push_back(c);
+            }
+            const auto source_ncbin = source_rlbin_exact_audit_v82_patch5171(
+                seed_rrc_candidates, input.radiation_energy_ev, continuum_capacity, true);
+
+            const char* revisit_path_text = std::getenv("XSTAR_V82_PATCH5181_TYPE53_REVISIT_AUDIT_PATH");
+            std::ofstream revisit_csv;
+            if (revisit_path_text && *revisit_path_text) {
+                const std::filesystem::path revisit_path(revisit_path_text);
+                if (!revisit_path.parent_path().empty()) std::filesystem::create_directories(revisit_path.parent_path());
+                revisit_csv.open(revisit_path);
+                if (!revisit_csv) throw std::runtime_error("cannot create patch5.18.1 Type-53 selected-revisit audit");
+                revisit_csv << "slot_one_based,source_position,record,data_type,selected,final_rank,seed_opakab_cm1,lower_abundance,upper_abundance,seed_threshold_published,seed_abs_sigma_cm2,seed_stim_sigma_cm2,revisit_threshold_published,revisit_abs_sigma_cm2,revisit_stim_sigma_cm2,revisit_opakab_cm1,final_opakab_cm1,action,runtime_production_modified\n";
+                revisit_csv << std::setprecision(17);
+            }
+
+            std::size_t type53_candidates = 0u, type53_selected = 0u;
+            std::size_t type53_revisit_published = 0u, type53_seed_retained = 0u, type53_overwritten = 0u;
+            for (const auto& c : seed_rrc_candidates) {
+                if (c.data_type != 53) continue;
+                ++type53_candidates;
+                const bool selected = source_ncbin.selected_slots.count(c.slot_one_based) != 0u;
+                if (selected) ++type53_selected;
+                const auto eit = type53_revisit_evaluated_v82_patch5181.find(std::make_pair(
+                    static_cast<std::uint64_t>(c.source_position), static_cast<std::uint64_t>(c.record)));
+                if (eit == type53_revisit_evaluated_v82_patch5181.end()) continue;
+                const auto& item = eit->second;
+                const Type53SourceShadow& seed_shadow = item.type53_calc_emisab_shadow.valid
+                    ? item.type53_calc_emisab_shadow : item.type53_shadow;
+                const Type53SourceShadow& revisit_shadow = item.type53_shadow;
+                const xstar_spectral_contribution_v1* spectral_item = nullptr;
+                for (const auto& candidate : spectral) {
+                    if (candidate.kind == XSTAR_SPECTRAL_KIND_EMISAB_BOUND_FREE &&
+                        candidate.output_index == c.slot_one_based && candidate.source_position == c.source_position &&
+                        candidate.record == c.record) {
+                        spectral_item = &candidate;
+                        break;
+                    }
+                }
+                if (!spectral_item) continue;
+                const std::size_t slot = static_cast<std::size_t>(c.slot_one_based);
+                const double seed_opakab = slot < opakab_calc_emisab_seed.size()
+                    ? opakab_calc_emisab_seed[slot] : 0.0;
+                double revisit_opakab = seed_opakab;
+                std::string action = selected ? "RETAIN_SEED_NO_PUBLICATION" : "UNSELECTED_RETAIN_SEED";
+                bool modified = false;
+                if (selected && revisit_shadow.valid && revisit_shadow.threshold_publication_reached &&
+                    spectral_item->abundance_lower > 0.0) {
+                    const double ratio = spectral_item->abundance_upper / spectral_item->abundance_lower;
+                    const double coefficient = std::max(0.0,
+                        revisit_shadow.threshold_cross_section_cm2 -
+                        ratio * revisit_shadow.threshold_stimulated_cross_section_cm2);
+                    revisit_opakab = coefficient * spectral_item->abundance_lower * spectral_item->hydrogen_density;
+                    opakab[slot] = revisit_opakab;
+                    ++type53_revisit_published;
+                    ++type53_overwritten;
+                    modified = true;
+                    action = "OVERWRITE_SELECTED_REVISIT";
+                } else if (selected) {
+                    ++type53_seed_retained;
+                }
+                if (revisit_csv) {
+                    const auto rit = source_ncbin.final_rank.find(c.slot_one_based);
+                    revisit_csv << c.slot_one_based << ',' << c.source_position << ',' << c.record << ',' << c.data_type << ','
+                        << (selected ? 1 : 0) << ',' << (rit == source_ncbin.final_rank.end() ? 0 : rit->second) << ','
+                        << seed_opakab << ',' << spectral_item->abundance_lower << ',' << spectral_item->abundance_upper << ','
+                        << (seed_shadow.threshold_publication_reached ? 1 : 0) << ','
+                        << seed_shadow.threshold_cross_section_cm2 << ',' << seed_shadow.threshold_stimulated_cross_section_cm2 << ','
+                        << (revisit_shadow.threshold_publication_reached ? 1 : 0) << ','
+                        << revisit_shadow.threshold_cross_section_cm2 << ',' << revisit_shadow.threshold_stimulated_cross_section_cm2 << ','
+                        << revisit_opakab << ',' << opakab[slot] << ',' << action << ',' << (modified ? 1 : 0) << '\n';
+                }
+            }
+            if (revisit_csv && !revisit_csv) throw std::runtime_error("cannot write patch5.18.1 Type-53 selected-revisit audit");
+            std::cout
+                << "V048746255172582_CALL2_TYPE53_CALC_EMISAB_SEED_GRID_BINS=999\n"
+                << "V048746255172582_CALL2_TYPE53_SELECTED_REVISIT_CANDIDATES=" << type53_candidates << "\n"
+                << "V048746255172582_CALL2_TYPE53_SELECTED_REVISIT_SELECTED=" << type53_selected << "\n"
+                << "V048746255172582_CALL2_TYPE53_SELECTED_REVISIT_PUBLISHED=" << type53_revisit_published << "\n"
+                << "V048746255172582_CALL2_TYPE53_SELECTED_REVISIT_RETAINED_SEED=" << type53_seed_retained << "\n"
+                << "V048746255172582_CALL2_TYPE53_SELECTED_REVISIT_OVERWRITTEN=" << type53_overwritten << "\n"
+                << "V048746255172582_V82_PATCH5181_TYPE99_DIRECT_OPAKAB_PUBLICATION_BRANCH=SOURCE_ZERO\n";
+        }
+
         // v82 patch 5.17.1: run source rlbin/ncbin/nlbin as a pure audit over
         // the calc_emisab-equivalent detail arrays.  The production arrays
         // above are already committed and are never modified by this block.
@@ -9276,7 +9459,8 @@ int run_impl(
                     const std::size_t slot = static_cast<std::size_t>(c.slot_one_based);
                     if (c.family == "RRC") {
                         if (slot >= continuum_slot_capacity) continue;
-                        c.opacity = std::isfinite(opakab[slot]) ? std::max(0.0, opakab[slot]) : 0.0;
+                        c.opacity = std::isfinite(opakab_calc_emisab_seed[slot])
+                            ? std::max(0.0, opakab_calc_emisab_seed[slot]) : 0.0;
                         const double e1 = std::isfinite(cemab[slot]) ? cemab[slot] : 0.0;
                         const double e2 = std::isfinite(cemab[continuum_slot_capacity + slot])
                             ? cemab[continuum_slot_capacity + slot] : 0.0;
