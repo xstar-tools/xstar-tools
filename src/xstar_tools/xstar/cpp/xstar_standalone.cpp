@@ -12595,8 +12595,26 @@ int standalone_iteration_evaluator_v67(
                       << "V048746255172582_SEQUENCE23_HMCTOT_SCIENTIFIC_TOLERANCE=" << (hmctot_ok ? "ACCEPT" : "REJECT") << "\n"
                       << "V048746255172582_SEQUENCE23_ELCTER_SCIENTIFIC_TOLERANCE=" << (elcter_ok ? "ACCEPT" : "REJECT") << "\n";
             if (!hmctot_ok || !elcter_ok) {
-                set_callback_error(error, error_size, "V82_PATCH4_SEQUENCE23_SCIENTIFIC_GATE_REJECT");
-                return 82;
+                // v82 patch 5.16.1: the callback-level sequence-23 gate is the
+                // second fail-closed boundary after the call-start workspace audit.
+                // In diagnostic full-trajectory mode, latch the same first
+                // scientific failure but return a valid evaluation so calls 3 and
+                // 4 can be observed. Production qualification remains permanently
+                // false and normal product publication stays disabled.
+                if (data->diagnostic_full_trajectory_continue) {
+                    if (!data->diagnostic_first_failure_latched) {
+                        data->diagnostic_first_failure_latched = true;
+                        data->diagnostic_first_failure_sequence = 23u;
+                        data->diagnostic_first_failure_reason =
+                            "V82_PATCH4_SEQUENCE23_SCIENTIFIC_GATE_REJECT";
+                    }
+                    std::cout
+                        << "V048746255172582_SEQUENCE23_CALLBACK_SCIENTIFIC_GATE=DIAGNOSTIC_REJECT_CONTINUE\n"
+                        << "V048746255172582_SEQUENCE23_CALLBACK_PRODUCTION_COMMIT=DISQUALIFIED\n";
+                } else {
+                    set_callback_error(error, error_size, "V82_PATCH4_SEQUENCE23_SCIENTIFIC_GATE_REJECT");
+                    return 82;
+                }
             }
         }
         update_global_populations_v67(*data, snapshot.populations, &snapshot.lte_populations);
