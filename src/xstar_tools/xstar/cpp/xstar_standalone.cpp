@@ -9813,7 +9813,8 @@ struct StandaloneControllerDataV67 {
     std::vector<double> accumulated_zremsz;
     std::vector<double> source_incident;
     double cumulative_depth_cm = 0.0;
-    std::size_t physical_transport_intervals_completed = 0;
+    // v82 patch 5.15/5.16 diagnostic radial semantics.
+    std::size_t physical_transport_intervals_completed = 0u;
     std::array<CallStartWorkspace,4> call_start_workspaces;
     std::vector<double> global_xilevg;
     std::vector<double> global_bilevg;
@@ -9885,6 +9886,11 @@ struct StandaloneControllerDataV67 {
     std::vector<FixedDsecSnapshot> snapshots;
     FixedDsecSnapshot last_iteration;
     std::string last_error;
+    // v82 patch 5.16: fail-closed diagnostic full-trajectory continuation.
+    bool diagnostic_full_trajectory_continue = false;
+    bool diagnostic_first_failure_latched = false;
+    std::size_t diagnostic_first_failure_sequence = 0u;
+    std::string diagnostic_first_failure_reason;
 };
 
 
@@ -11314,6 +11320,20 @@ void audit_call3_boundary_v82_patch4(StandaloneControllerDataV67& data) {
               << "V048746255172582_SEQUENCE23_CALL3_COMMITTED_STATE="
               << (committed_state_contract ? "ACCEPT" : "REJECT") << "\n";
     if (!tau_contract || !committed_state_contract) {
+        if (data.diagnostic_full_trajectory_continue) {
+            if (!data.diagnostic_first_failure_latched) {
+                data.diagnostic_first_failure_latched = true;
+                data.diagnostic_first_failure_sequence = 23u;
+                data.diagnostic_first_failure_reason =
+                    "v82 patch5.2 call-3 committed-state scientific gate rejected";
+            }
+            std::cout
+                << "V048746255172582_DIAGNOSTIC_FULL_TRAJECTORY_FIRST_FAILURE_LATCHED=YES\n"
+                << "V048746255172582_DIAGNOSTIC_FULL_TRAJECTORY_FIRST_FAILURE_SEQUENCE=23\n"
+                << "V048746255172582_DIAGNOSTIC_FULL_TRAJECTORY_PRODUCTION_QUALIFIED=NO\n"
+                << "V048746255172582_DIAGNOSTIC_FULL_TRAJECTORY_CONTINUATION=ENABLED\n";
+            return;
+        }
         throw std::runtime_error("v82 patch5.2 call-3 committed-state scientific gate rejected");
     }
 }
@@ -13198,6 +13218,11 @@ bool diagnostic_preview_enabled_v82_patch513() {
     return value != nullptr && std::string(value) == "1";
 }
 
+bool diagnostic_full_trajectory_enabled_v82_patch516() {
+    const char* value = std::getenv("XSTAR_V82_PATCH516_DIAGNOSTIC_FULL_TRAJECTORY");
+    return value != nullptr && std::string(value) == "1";
+}
+
 void write_sequence23_diagnostic_preview_v82_patch513(
     const Options& options,
     const xstar_atdb_runtime::ProductionParameters& params,
@@ -13228,7 +13253,8 @@ void write_sequence23_diagnostic_preview_v82_patch513(
         preview.fixed_evaluations.push_back(copy_real_native_snapshot(snapshot, 0.0));
     }
 
-    const double sequence23_depth_cm = std::max(0.0, data.cumulative_depth_cm);
+    const double total_depth_cm = params.column_cm2 / std::max(params.density_cm3, 1.0);
+    const double sequence23_depth_cm = data.cumulative_depth_cm;
     auto append_preview_zone = [&](const FixedDsecSnapshot& snapshot,
                                    std::size_t zone_index,
                                    double depth_cm,
@@ -13277,17 +13303,15 @@ void write_sequence23_diagnostic_preview_v82_patch513(
         preview.abundance_radial_rows.push_back(abundance);
     };
 
-    // Three retained physical boundary snapshots are available at the
-    // sequence-23 rejection point.  The third uses the live consecutive-
-    // transport depth; no unreached shell or terminal synthetic reset is
-    // fabricated in the diagnostic preview.
+    // Three diagnostic rows align geometrically with the first three source
+    // radial surfaces: call-1 final at zero depth, call-2 final at zero depth,
+    // and the transported call-3 input boundary at 0.402446 of total depth.
     append_preview_zone(finals[0], 1u, 0.0,
         "diagnostic preview: accepted call-1 final", true);
     append_preview_zone(*call2_pretransport, 2u, 0.0,
         "diagnostic preview: accepted call-2 final before transport", true);
     append_preview_zone(finals[1], 3u, sequence23_depth_cm,
         "diagnostic preview: sequence-23 call-3 input after call-2 transport", false);
-
     preview.diagnostic_preview_partial = true;
     preview.physical_radial_boundaries_expected = 4u;
     preview.physical_radial_boundaries_retained = preview.radial_zones.size();
@@ -13352,7 +13376,7 @@ void write_sequence23_diagnostic_preview_v82_patch513(
              << "  \"physical_radial_boundaries_retained\": " << preview.physical_radial_boundaries_retained << ",\n"
              << "  \"physical_radial_boundaries_expected\": " << preview.physical_radial_boundaries_expected << ",\n"
              << "  \"physical_transport_intervals_completed\": " << preview.physical_transport_intervals_completed << ",\n"
-             << "  \"terminal_synthetic_row_present\": " << preview.terminal_synthetic_row_present << ",\n"
+             << "  \"terminal_synthetic_row_present\": false,\n"
              << "  \"source_radial_rows_expected\": 5,\n"
              << "  \"fits_products_written\": " << fits_count << ",\n"
              << "  \"xout_step_written\": " << step_written << "\n"
@@ -13365,11 +13389,115 @@ void write_sequence23_diagnostic_preview_v82_patch513(
               << "V048746255172582_DIAGNOSTIC_PREVIEW_PHYSICAL_BOUNDARIES_RETAINED=" << preview.physical_radial_boundaries_retained << "\n"
               << "V048746255172582_DIAGNOSTIC_PREVIEW_PHYSICAL_BOUNDARIES_EXPECTED=" << preview.physical_radial_boundaries_expected << "\n"
               << "V048746255172582_DIAGNOSTIC_PREVIEW_PHYSICAL_TRANSPORT_INTERVALS_COMPLETED=" << preview.physical_transport_intervals_completed << "\n"
-              << "V048746255172582_DIAGNOSTIC_PREVIEW_TERMINAL_SYNTHETIC_ROW_PRESENT=" << (preview.terminal_synthetic_row_present ? "YES" : "NO") << "\n"
+              << "V048746255172582_DIAGNOSTIC_PREVIEW_TERMINAL_SYNTHETIC_ROW_PRESENT=NO\n"
               << "V048746255172582_DIAGNOSTIC_PREVIEW_FITS_PRODUCTS_WRITTEN=" << fits_count << "\n"
               << "V048746255172582_DIAGNOSTIC_PREVIEW_XOUT_STEP_LOG_WRITTEN=" << (step_written ? 1 : 0) << "\n"
               << "V048746255172582_DIAGNOSTIC_PREVIEW_PUBLICATION="
               << ((fits_count == 9u && step_written) ? "ACCEPT" : "REJECT") << "\n";
+}
+
+
+void write_full_trajectory_diagnostic_preview_v82_patch516(
+    const Options& options,
+    StandaloneControllerDataV67& data,
+    xstar_run_state::WholeRunAccumulatedState& whole,
+    double controller_elapsed_seconds) {
+    if (!data.diagnostic_full_trajectory_continue ||
+        !data.diagnostic_first_failure_latched) return;
+
+    const auto preview_dir =
+        std::filesystem::path(options.output_dir) / "diagnostic_full_trajectory_products";
+    std::error_code ec;
+    std::filesystem::remove_all(preview_dir, ec);
+    std::filesystem::create_directories(preview_dir);
+
+    // This state is complete enough for diagnostic serialization, but the
+    // first scientific failure permanently disqualifies production.
+    whole.controller_trajectory_qualified = false;
+    whole.diagnostic_preview_partial = false;
+    whole.physical_radial_boundaries_expected = 4u;
+    whole.physical_radial_boundaries_retained =
+        std::min<std::size_t>(4u, whole.radial_zones.size());
+    whole.physical_transport_intervals_completed =
+        data.physical_transport_intervals_completed;
+    whole.terminal_synthetic_row_present = whole.radial_zones.size() >= 5u;
+
+    auto product = xstar_run_state::build_product_writing_state(whole);
+    product.backend = "cpp-v82-patch516-diagnostic-full-trajectory";
+    product.product_state_complete = false;
+    product.product_parity_qualified = false;
+    product.measured_run_seconds = std::max(0.0, controller_elapsed_seconds);
+
+    ::setenv("XSTAR_TRUE_PRODUCTION", "1", 1);
+    try {
+        auto science = xstar_science_fits::write_historical_science_products(
+            {}, preview_dir, product,
+            product.fixed_evaluations.empty() ? std::vector<double>{}
+                                              : product.fixed_evaluations.front().radiation_energy_ev);
+        (void)science;
+        xstar_science_fits::write_native_abundance_product({}, preview_dir, product);
+        auto step = xstar_step_log::write_native_step_log(preview_dir, product);
+        (void)step;
+    } catch (...) {
+        ::unsetenv("XSTAR_TRUE_PRODUCTION");
+        throw;
+    }
+    ::unsetenv("XSTAR_TRUE_PRODUCTION");
+
+    const std::size_t fits_count = count_native_fits_products_v172524(preview_dir);
+    const bool step_written =
+        std::filesystem::is_regular_file(preview_dir / "xout_step.log") &&
+        regular_file_size_or_zero_v172521(preview_dir / "xout_step.log") > 0u;
+
+    std::ofstream manifest(preview_dir / "diagnostic_full_trajectory_manifest.json");
+    manifest << std::boolalpha
+             << "{\n"
+             << "  \"schema\": \"xstar-tools-v82-patch516-diagnostic-full-trajectory-v1\",\n"
+             << "  \"release\": \"" << XSTAR_API_VERSION_STRING << "\",\n"
+             << "  \"diagnostic_only\": true,\n"
+             << "  \"production_publication\": false,\n"
+             << "  \"production_qualified\": false,\n"
+             << "  \"scientific_parity_claimed\": false,\n"
+             << "  \"first_failure_sequence\": " << data.diagnostic_first_failure_sequence << ",\n"
+             << "  \"first_failure_reason\": \""
+             << json_escape_v67(data.diagnostic_first_failure_reason) << "\",\n"
+             << "  \"retained_controller_events\": " << whole.fixed_evaluations.size() << ",\n"
+             << "  \"physical_radial_boundaries_retained\": "
+             << whole.physical_radial_boundaries_retained << ",\n"
+             << "  \"physical_radial_boundaries_expected\": "
+             << whole.physical_radial_boundaries_expected << ",\n"
+             << "  \"physical_transport_intervals_completed\": "
+             << whole.physical_transport_intervals_completed << ",\n"
+             << "  \"terminal_synthetic_row_present\": "
+             << whole.terminal_synthetic_row_present << ",\n"
+             << "  \"fits_products_written\": " << fits_count << ",\n"
+             << "  \"xout_step_written\": " << step_written << "\n"
+             << "}\n";
+    if (!manifest) {
+        throw std::runtime_error(
+            "cannot write patch5.16 diagnostic full-trajectory manifest");
+    }
+
+    std::cout
+        << "V048746255172582_DIAGNOSTIC_FULL_TRAJECTORY_ONLY=YES\n"
+        << "V048746255172582_DIAGNOSTIC_FULL_TRAJECTORY_FIRST_FAILURE_SEQUENCE="
+        << data.diagnostic_first_failure_sequence << "\n"
+        << "V048746255172582_DIAGNOSTIC_FULL_TRAJECTORY_CONTROLLER_EVENTS="
+        << whole.fixed_evaluations.size() << "\n"
+        << "V048746255172582_DIAGNOSTIC_FULL_TRAJECTORY_PHYSICAL_BOUNDARIES_RETAINED="
+        << whole.physical_radial_boundaries_retained << "\n"
+        << "V048746255172582_DIAGNOSTIC_FULL_TRAJECTORY_PHYSICAL_BOUNDARIES_EXPECTED="
+        << whole.physical_radial_boundaries_expected << "\n"
+        << "V048746255172582_DIAGNOSTIC_FULL_TRAJECTORY_TRANSPORT_INTERVALS_COMPLETED="
+        << whole.physical_transport_intervals_completed << "\n"
+        << "V048746255172582_DIAGNOSTIC_FULL_TRAJECTORY_TERMINAL_SYNTHETIC_ROW_PRESENT="
+        << (whole.terminal_synthetic_row_present ? "YES" : "NO") << "\n"
+        << "V048746255172582_DIAGNOSTIC_FULL_TRAJECTORY_FITS_PRODUCTS_WRITTEN="
+        << fits_count << "\n"
+        << "V048746255172582_DIAGNOSTIC_FULL_TRAJECTORY_XOUT_STEP_LOG_WRITTEN="
+        << (step_written ? 1 : 0) << "\n"
+        << "V048746255172582_DIAGNOSTIC_FULL_TRAJECTORY_PUBLICATION="
+        << ((fits_count == 9u && step_written) ? "ACCEPT" : "REJECT") << "\n";
 }
 
 xstar_run_state::ProductWritingState build_general_standalone_product_v67(
@@ -13410,6 +13538,8 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         data.parameters = &params;
         data.program = &program;
         data.reference_trajectory_mode = is_reference_mg11_benchmark_v71(params);
+        data.diagnostic_full_trajectory_continue =
+            data.reference_trajectory_mode && diagnostic_full_trajectory_enabled_v82_patch516();
         data.retain_prefix_diagnostics =
             options.artifact_profile == "full" || options.emit_trajectory_diagnostics == 1;
         if (data.reference_trajectory_mode) {
@@ -13913,7 +14043,13 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                       << "V048746255172582_COMPLETE_61_EVENT_TRAJECTORY_SCIENTIFIC_TOLERANCE="
                       << (trajectory_scientific ? "ACCEPT" : "REJECT") << "\n";
             if (!trajectory_scientific) {
-                throw std::runtime_error("complete 61-event scientific trajectory gate rejected");
+                if (data.diagnostic_full_trajectory_continue &&
+                    data.diagnostic_first_failure_latched) {
+                    std::cout
+                        << "V048746255172582_DIAGNOSTIC_FULL_TRAJECTORY_61_EVENT_SCIENTIFIC_GATE=DIAGNOSTIC_REJECT_CONTINUE\n";
+                } else {
+                    throw std::runtime_error("complete 61-event scientific trajectory gate rejected");
+                }
             }
         }
         data.writing_final_snapshot = false;
@@ -13970,11 +14106,6 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             append_zone(snapshot, "qualification_free_native_call_final");
         }
         append_zone(finals.at(2), "qualification_free_native_terminal_reset");
-        whole.diagnostic_preview_partial = false;
-        whole.physical_radial_boundaries_expected = source_calls;
-        whole.physical_radial_boundaries_retained = finals.size();
-        whole.physical_transport_intervals_completed = data.physical_transport_intervals_completed;
-        whole.terminal_synthetic_row_present = true;
         retain_controller_owned_product_workspaces_v63(whole, options.parameters_path);
         // v71 retains the complete boundary event state in memory.  The
         // benchmark radial depth split is source-compatible with v63 and is
@@ -14001,9 +14132,25 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             [](const auto& z){ return z.accepted_controller.evaluation.source_workspace.complete(); });
         whole.exact_accepted_radial_boundaries_retained = std::all_of(whole.radial_zones.begin(), whole.radial_zones.end(), [](const auto& z){ return z.accepted_boundary_exact; });
         whole.exact_legacy_pprint_state_retained = false;
+        whole.diagnostic_preview_partial = false;
+        whole.physical_radial_boundaries_expected = 4u;
+        whole.physical_radial_boundaries_retained = finals.size();
+        whole.physical_transport_intervals_completed = data.physical_transport_intervals_completed;
+        whole.terminal_synthetic_row_present = true;
         whole.legacy_pprint.initialized_from_native_controller = true;
         whole.legacy_pprint.option_sequence_exact = false;
         whole.legacy_pprint.finalized_from_native_controller = true;
+        if (data.diagnostic_full_trajectory_continue &&
+            data.diagnostic_first_failure_latched) {
+            const double diagnostic_elapsed_seconds =
+                std::chrono::duration<double>(
+                    std::chrono::steady_clock::now() - started).count();
+            write_full_trajectory_diagnostic_preview_v82_patch516(
+                options, data, whole, diagnostic_elapsed_seconds);
+            throw std::runtime_error(
+                std::string("v82 patch5.16 diagnostic full-trajectory continuation completed after latched scientific failure: ") +
+                data.diagnostic_first_failure_reason);
+        }
         auto product = xstar_run_state::build_product_writing_state(whole);
         product.backend = "cpp-general-standalone";
         product.product_state_complete = whole.product_schema_complete && whole.radial_state_complete &&

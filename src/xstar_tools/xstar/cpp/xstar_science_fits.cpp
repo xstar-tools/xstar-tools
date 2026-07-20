@@ -954,7 +954,7 @@ xstar_run_state::AbundanceRadialRowState fill_missing_abundance_geometry(
     std::size_t output_zone_index,
     xstar_run_state::AbundanceRadialRowState row,
     const xstar_run_state::RadialZoneState* zone) {
-    if (output_zone_index + 1 >= state.radial_zones.size() && state.terminal_synthetic_row_present) return row;
+    if (output_zone_index + 1 >= state.radial_zones.size()) return row;
     const double density = parameter_value(state, "density", zone ? zone->density_cm3 : 0.0);
     const double pressure = parameter_value(state, "pressure", zone ? zone->pressure_dyn_cm2 : 0.0);
     const double rlogxi = parameter_value(state, "rlogxi", zone ? zone->log_ionization_parameter : 0.0);
@@ -8413,15 +8413,6 @@ std::size_t source_zone_index(const xstar_run_state::ProductWritingState& state,
     return std::min(output_zone_index, state.radial_zones.size() - 1u);
 }
 
-
-std::size_t terminal_physical_zone_index(const xstar_run_state::ProductWritingState& state) {
-    if (state.radial_zones.empty()) return 0u;
-    if (state.terminal_synthetic_row_present && state.radial_zones.size() >= 2u) {
-        return state.radial_zones.size() - 2u;
-    }
-    return state.radial_zones.size() - 1u;
-}
-
 std::size_t detail_terminal_bridge_hdu_number(std::size_t hdu_number) {
     // The retained bridge ledger stores the terminal zone-4 snapshot at HDU 6
     // and the post-terminal convenience copy at HDU 7.  The detailed continuum
@@ -10388,7 +10379,7 @@ xstar_run_state::AbundanceRadialRowState abundance_base_row_for_zone(
     row.pressure_dyn_cm2 = zone.pressure_dyn_cm2;
     row.temperature_t4 = zone.temperature_t4;
     row.fractional_heat_error = 0.0;
-    row.terminal_row = state.terminal_synthetic_row_present && zone_index + 1 == state.radial_zones.size();
+    row.terminal_row = zone_index + 1 == state.radial_zones.size();
     return row;
 }
 
@@ -10542,7 +10533,8 @@ void write_abundances(const std::filesystem::path& path,
     std::vector<xstar_run_state::AbundanceRadialRowState> abundance_rows;
     for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
         const auto* zone = abundance_output_zone(state, z);
-        const bool terminal_reset = state.terminal_synthetic_row_present && z + 1u == state.radial_zones.size();
+        const bool terminal_reset =
+            state.terminal_synthetic_row_present && z + 1u == state.radial_zones.size();
         // pprint(12) appends a distinct terminal reset row to the abundance
         // ledger.  Its ion fractions and geometry are zero even though the
         // detailed level-population product may retain the preceding accepted
@@ -10712,6 +10704,14 @@ void write_abundances(const std::filesystem::path& path,
     close_fits(fptr);
 }
 
+std::size_t terminal_physical_zone_index(const xstar_run_state::ProductWritingState& state) {
+    if (state.radial_zones.empty()) return 0u;
+    if (state.terminal_synthetic_row_present && state.radial_zones.size() >= 2u) {
+        return state.radial_zones.size() - 2u;
+    }
+    return state.radial_zones.size() - 1u;
+}
+
 std::vector<LineRow> public_line_rows_from_identities(
     const xstar_run_state::ProductWritingState& state,
     const xstar_run_state::FixedEvaluationState& evaluation,
@@ -10806,22 +10806,7 @@ void write_public_lines(const std::filesystem::path& path,
         } else {
             const LineRow* retained_terminal = terminal_for_label(label);
             bool accumulated = false;
-            const auto& terminal_ws = final_zone.accepted_controller.evaluation.source_workspace;
-            const std::size_t elum_stride = terminal_ws.elum.size() >= 2u ? terminal_ws.elum.size() / 2u : 0u;
-            const std::size_t tau_stride = terminal_ws.tau0.size() >= 2u ? terminal_ws.tau0.size() / 2u : 0u;
-            const std::size_t line_slot = label.index > 0 ? static_cast<std::size_t>(label.index) : 0u;
-            if (line_slot < elum_stride) {
-                const double retained_in = terminal_ws.elum[line_slot];
-                const double retained_out = terminal_ws.elum[elum_stride + line_slot];
-                const double retained_tau_in = line_slot < tau_stride ? terminal_ws.tau0[line_slot] : 0.0;
-                const double retained_tau_out = line_slot < tau_stride ? terminal_ws.tau0[tau_stride + line_slot] : 0.0;
-                if (std::isfinite(retained_in)) r.emis_in = retained_in;
-                if (std::isfinite(retained_out)) r.emis_out = retained_out;
-                if (std::isfinite(retained_tau_in)) r.tau_in = retained_tau_in;
-                if (std::isfinite(retained_tau_out)) r.tau_out = retained_tau_out;
-                accumulated = line_row_has_signal(r);
-            }
-            if (!accumulated && retained_terminal && line_row_has_signal(*retained_terminal)) {
+            if (retained_terminal && line_row_has_signal(*retained_terminal)) {
                 r = *retained_terminal;
                 accumulated = true;
             }
@@ -10929,9 +10914,8 @@ void write_public_rrc(const std::filesystem::path& path,
         if (const RrcRow* retained_terminal = terminal_for_label(label)) {
             // heatt already accumulates elumab in public luminosity units and
             // tauc in optical-depth units.  Do not shell-scale them again.
-            // Source writespectra4 public orientation is plane 0 -> outward,
-            // plane 1 -> inward. source_rrc_rows_from_identities exposes the
-            // retained bridge in detail orientation, so swap only here.
+            // Source writespectra4 public orientation:
+            // plane 0 -> outward, plane 1 -> inward.
             emit_out = std::isfinite(retained_terminal->emis_in) ? retained_terminal->emis_in : 0.0;
             emit_in = std::isfinite(retained_terminal->emis_out) ? retained_terminal->emis_out : 0.0;
             depth_out = std::isfinite(retained_terminal->tau_in) ? retained_terminal->tau_in : 0.0;
