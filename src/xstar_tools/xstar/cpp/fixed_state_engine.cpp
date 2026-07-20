@@ -20,6 +20,7 @@
 #include <fstream>
 #include <filesystem>
 #include <iomanip>
+#include <iostream>
 #include <limits>
 #include <memory>
 #include <map>
@@ -53,6 +54,25 @@ extern "C" int xstar_engine_type63_rates_v1(
     double* out6
 );
 extern "C" int xstar_engine_anl1_v1(int ni, int nf, int lf, int iq, double* alm, double* alp);
+extern "C" int xstar_opacity_apply_line_profile_v1(
+    double optpp,
+    double line_energy_ev,
+    double vturb_km_s,
+    double temperature_1e4k,
+    double atomic_mass_amu,
+    double natural_width_ev,
+    const double* seed_profiles,
+    int seed_radius,
+    const double* epi,
+    int ncn2,
+    double* opakc,
+    double* rccemis,
+    long long* updated_bins,
+    double* opacity_seconds,
+    char* errbuf,
+    std::size_t errbuf_size
+);
+
 extern "C" int xstar_emissivity_build_binemis_profile(
     int ncn2, int nbtpp, int ncols, int n_line_slots, int n_lum_lines,
     double xlum, double temperature_1e4k, double turbulent_velocity_km_s,
@@ -992,6 +1012,24 @@ struct ProgramRecord {
     bool matrix_enabled = true;
 };
 
+struct LteIonTopology {
+    int element_index = 0;
+    int ion_stage = 0;
+    int start_row = 0;
+    int nlev = 0;
+    double terminal_energy_ev = 0.0;
+    double terminal_statistical_weight = 1.0;
+};
+
+struct LteLevelData {
+    int element_index = 0;
+    int ion_stage = 0;
+    int local_level = 0;
+    std::int64_t source_record = 0;
+    double energy_ev = 0.0;
+    double statistical_weight = 1.0;
+};
+
 struct Program {
     std::string id;
     bool active_atdb_lowered = false;
@@ -1001,6 +1039,8 @@ struct Program {
     std::size_t native_continuum_count = 0;
     std::vector<ElementProgram> elements;
     std::vector<ProgramRecord> records;
+    std::vector<LteIonTopology> lte_ion_topology;
+    std::vector<LteLevelData> lte_levels;
     std::vector<double> reals;
     std::vector<std::int64_t> ints;
     // Native production runtime line optical-depth state.  This replaces the
@@ -2920,7 +2960,8 @@ void validate_program(Program& p) {
 }
 
 Program load_program_bundle(const xstar_fixed_program_bundle_v1& bundle) {
-    if (bundle.struct_size < sizeof(bundle) || bundle.abi_version != XSTAR_FIXED_STATE_ENGINE_ABI_VERSION) {
+    constexpr std::size_t kHistoricalBundlePrefix = offsetof(xstar_fixed_program_bundle_v1, lte_ions);
+    if (bundle.struct_size < kHistoricalBundlePrefix || bundle.abi_version != XSTAR_FIXED_STATE_ENGINE_ABI_VERSION) {
         throw std::runtime_error("fixed-state in-memory program bundle ABI mismatch");
     }
     if (!bundle.program_id || !*bundle.program_id) throw std::runtime_error("in-memory program_id missing");
@@ -2939,6 +2980,40 @@ Program load_program_bundle(const xstar_fixed_program_bundle_v1& bundle) {
     p.native_continuum_count = bundle.native_continuum_count;
     p.reals.assign(bundle.reals, bundle.reals + bundle.real_count);
     p.ints.assign(bundle.ints, bundle.ints + bundle.int_count);
+    constexpr std::size_t kPatch54BundleSize = offsetof(xstar_fixed_program_bundle_v1, lte_levels);
+    if (bundle.struct_size >= kPatch54BundleSize && bundle.lte_ion_count > 0) {
+        if (!bundle.lte_ions) throw std::runtime_error("in-memory LTE ion topology pointer missing");
+        p.lte_ion_topology.reserve(bundle.lte_ion_count);
+        for (std::size_t i = 0; i < bundle.lte_ion_count; ++i) {
+            const auto& src = bundle.lte_ions[i];
+            LteIonTopology topo;
+            topo.element_index = src.element_index;
+            topo.ion_stage = src.ion_stage;
+            topo.start_row = src.start_row;
+            topo.nlev = src.nlev;
+            topo.terminal_energy_ev = src.terminal_energy_ev;
+            topo.terminal_statistical_weight = src.terminal_statistical_weight;
+            p.lte_ion_topology.push_back(topo);
+        }
+    }
+    if (bundle.struct_size >= sizeof(xstar_fixed_program_bundle_v1) && bundle.lte_level_count > 0) {
+        if (!bundle.lte_levels) throw std::runtime_error("in-memory complete Type-13 LTE leveltemp pointer missing");
+        p.lte_levels.reserve(bundle.lte_level_count);
+        for (std::size_t i = 0; i < bundle.lte_level_count; ++i) {
+            const auto& src = bundle.lte_levels[i];
+            if (src.local_level <= 0 || !(src.statistical_weight > 0.0) || !std::isfinite(src.energy_ev)) {
+                throw std::runtime_error("in-memory complete Type-13 LTE leveltemp row invalid");
+            }
+            LteLevelData level;
+            level.element_index = src.element_index;
+            level.ion_stage = src.ion_stage;
+            level.local_level = src.local_level;
+            level.source_record = src.source_record;
+            level.energy_ev = src.energy_ev;
+            level.statistical_weight = src.statistical_weight;
+            p.lte_levels.push_back(level);
+        }
+    }
     p.elements.reserve(bundle.element_count);
     for (std::size_t i = 0; i < bundle.element_count; ++i) {
         const auto& src = bundle.elements[i];
@@ -4387,6 +4462,12 @@ bool evaluate_type53_source_integral(
         sumh2 += temph2 * width + temphp2 * width;
         const double previous_exptst = exptst;
         exptst = (epiip - threshold_ev) / bktm;
+        // v82 patch 5.14: phint53.f90 resets exptmpp to zero on every
+        // continuum step before the previous-exponent cutoff.  Without this
+        // literal reset, an inactive recombination step retained the prior
+        // exponential and could over-subtract stimulated Type-53 opacity at
+        // the nb1+2 threshold publication point, clamping opakab to zero.
+        exptmpp = 0.0;
         if (previous_exptst < 200.0) {
             exptmpp = type53_expo(-exptst);
             bbnurjp = std::pow(std::min(2.0e4, epiip), 3.0) * 1.571e22 * 2.0;
@@ -5767,15 +5848,14 @@ EvaluatedRecord evaluate_record(
             if (evaluate_type99_source_faithful(record, r, ints, lower, upper, input, c, &out.type99_shadow)) {
                 out.spectral = true;
                 out.bound_free_spectral = true;
-                // type99_nbinc_threshold_one_based is a radiation-grid bin, not
-                // the atomic npconi2 RRC pointer.  Publishing it as opakab/cabab
-                // index collides with Type-49/53 rows and shifts fstepr3 output.
-                // Type-99 remains in the full continuum reconstruction and is
-                // mapped to the detailed RRC surface from its source diagnostic.
-                out.continuum_index_one_based = 0;
+                // v82 patch 5.1/5.2 source semantics: Type-99 retains its
+                // atomic npconi2 identity for diagnostics/RRC association, but
+                // the literal ucalc Type-99 branch (calt99 -> phint53hunt) never
+                // assigns direct opakab.  Keep the pointer; publish zero opacity.
+                out.continuum_index_one_based = record.continuum_index_one_based;
                 out.line_energy_ev = out.type99_shadow.threshold_ev;
                 out.atomic_mass_amu = record.atomic_mass_amu > 0.0 ? record.atomic_mass_amu : 1.0;
-                out.opakab = std::max(0.0, out.type99_shadow.threshold_cross_section_cm2);
+                out.opakab = 0.0;
                 break;
             }
             // Backward-compatible development-fixture path.  Strict v0.6.48.7.36
@@ -6758,9 +6838,266 @@ void bind_output(xstar_element_output_v1& out, ElementBuffers& b, int element_z)
 }
 
 
+std::vector<LteIonTopology> lte_topology_for_element_v82_patch54(
+    const Program& program,
+    const ElementProgram& element
+) {
+    std::vector<LteIonTopology> out;
+    for (const auto& topo : program.lte_ion_topology) {
+        if (topo.element_index == element.element_index) out.push_back(topo);
+    }
+    std::sort(out.begin(), out.end(), [](const auto& a, const auto& b) {
+        return a.ion_stage < b.ion_stage;
+    });
+    if (!out.empty()) return out;
+
+    // Backward-compatible fallback for historical program directories and
+    // bundles without the patch-5.4 sidecar.  It preserves the overlapping
+    // start/nlev topology, but the terminal continuum metadata necessarily
+    // comes from the shared compact row and therefore is diagnostic-only.
+    for (int stage = 1; stage <= element.n_ions; ++stage) {
+        const int start_row = ground_row_for_stage(element, stage);
+        if (start_row <= 0) continue;
+        int terminal_row = element.normalization_row;
+        if (stage < element.n_ions) {
+            const int next_ground = ground_row_for_stage(element, stage + 1);
+            if (next_ground > 0) terminal_row = next_ground;
+        }
+        if (terminal_row < start_row || terminal_row > element.n_rows) {
+            throw std::runtime_error("fallback LTE source ion topology is invalid");
+        }
+        const auto& terminal = element.rows.at(static_cast<std::size_t>(terminal_row - 1));
+        LteIonTopology topo;
+        topo.element_index = element.element_index;
+        topo.ion_stage = stage;
+        topo.start_row = start_row;
+        topo.nlev = terminal_row - start_row + 1;
+        topo.terminal_energy_ev = terminal.energy_ev;
+        topo.terminal_statistical_weight = terminal.statistical_weight;
+        out.push_back(topo);
+    }
+    return out;
+}
+
+const LteLevelData* lte_leveltemp_row_v82_patch56(
+    const Program& program, int element_index, int ion_stage, int local_level) {
+    for (const auto& level : program.lte_levels) {
+        if (level.element_index == element_index && level.ion_stage == ion_stage &&
+            level.local_level == local_level) return &level;
+    }
+    return nullptr;
+}
+
+std::vector<double> compute_element_lte_populations_v82_patch54(
+    const Program& program,
+    const ElementProgram& element,
+    const xstar_fixed_state_input_v1& input,
+    int active_min_stage,
+    int active_max_stage,
+    bool* used_exact_source_topology = nullptr
+) {
+    if (element.rows.empty() || element.n_rows <= 0) {
+        throw std::runtime_error("LTE population construction requires element rows");
+    }
+    const auto topology = lte_topology_for_element_v82_patch54(program, element);
+    if (topology.empty()) throw std::runtime_error("LTE source ion topology is empty");
+    const bool exact_topology = std::any_of(
+        program.lte_ion_topology.begin(), program.lte_ion_topology.end(),
+        [&](const auto& topo) { return topo.element_index == element.element_index; });
+    if (used_exact_source_topology) *used_exact_source_topology = exact_topology;
+    const bool exact_leveltemp = std::any_of(
+        program.lte_levels.begin(), program.lte_levels.end(),
+        [&](const auto& level) { return level.element_index == element.element_index; });
+
+    struct RnisiAuditRowV82Patch56 {
+        int stage = 0; int local = 0; int compact_row = 0; int global_level_index = 0;
+        std::int64_t source_record = 0;
+        double energy_ev = 0.0; double weight = 0.0;
+        double terminal_energy_ev = 0.0; double terminal_weight = 0.0;
+        double rnisi = 0.0; double recurrence_ratio = 0.0;
+        double raw_rnise = 0.0; double normalized_lte = 0.0;
+        bool active = false; bool fully_stripped = false;
+    };
+    std::vector<RnisiAuditRowV82Patch56> rnisi_audit;
+
+    int expected_full_rows = 1;
+    int expected_stage = 1;
+    for (const auto& topo : topology) {
+        if (topo.ion_stage != expected_stage++ || topo.nlev < 2 || topo.start_row != expected_full_rows ||
+            !(topo.terminal_statistical_weight > 0.0) || !std::isfinite(topo.terminal_energy_ev)) {
+            throw std::runtime_error("LTE source ion topology sidecar is inconsistent");
+        }
+        expected_full_rows += topo.nlev - 1;
+    }
+    if (expected_full_rows != element.n_rows || static_cast<int>(topology.size()) != element.n_ions) {
+        throw std::runtime_error("LTE source ion topology does not cover full compact element");
+    }
+
+    const double temperature_k = input.temperature_k;
+    const double source_xnx = input.hydrogen_density_cm3 * input.electron_fraction_xee;
+    // v82 patch 5.7: the v0.6.47.2 levwk trajectory uses XSTAR's historical
+    // 0.861707 eV per 10^4 K conversion.  This is intentionally distinct
+    // from the modern bk/ergsev constants used by newer continuum kernels.
+    const double bktm = xstar_constants::kLegacyBoltzmannEvPerT4 * (temperature_k / 1.0e4);
+    const double source_q2_constant = static_cast<double>(static_cast<float>(2.07e-16));
+    const double q2 = source_q2_constant * source_xnx * std::pow(temperature_k, -1.5);
+    const double source_floor37 = 1.0e-37;
+    const double source_floor97 = 1.0e-97;
+    const double source_cap66 = 1.0e66;
+
+    std::vector<double> rnise(static_cast<std::size_t>(element.n_rows) + 1u, 0.0);
+    std::vector<double> rnisi;
+    int last_nlev = 0;
+    int ipmatsv = 0;
+    for (const auto& topo : topology) {
+        const int nlev = topo.nlev;
+        const bool active = topo.ion_stage >= active_min_stage && topo.ion_stage <= active_max_stage;
+        if (active) {
+            const LteLevelData* terminal_level = exact_leveltemp
+                ? lte_leveltemp_row_v82_patch56(program, element.element_index, topo.ion_stage, nlev)
+                : nullptr;
+            if (exact_leveltemp && !terminal_level) {
+                throw std::runtime_error("complete Type-13 LTE leveltemp terminal row missing");
+            }
+            const double terminal_energy = terminal_level ? terminal_level->energy_ev : topo.terminal_energy_ev;
+            const double terminal_weight = terminal_level ? terminal_level->statistical_weight : topo.terminal_statistical_weight;
+            const double rs = q2 / terminal_weight;
+            rnisi.assign(static_cast<std::size_t>(nlev) + 1u, 0.0);
+            rnisi[static_cast<std::size_t>(nlev)] = 1.0;
+            double bb = 1.0;
+            for (int local = 1; local < nlev; ++local) {
+                const int compact_row = topo.start_row + local - 1;
+                const auto& compact_level = element.rows.at(static_cast<std::size_t>(compact_row - 1));
+                const LteLevelData* source_level = exact_leveltemp
+                    ? lte_leveltemp_row_v82_patch56(program, element.element_index, topo.ion_stage, local)
+                    : nullptr;
+                if (exact_leveltemp && !source_level) {
+                    throw std::runtime_error("complete Type-13 LTE leveltemp bound row missing");
+                }
+                const double level_energy = source_level ? source_level->energy_ev : compact_level.energy_ev;
+                const double level_weight = source_level ? source_level->statistical_weight : compact_level.statistical_weight;
+                const double ethsht = std::max(
+                    (terminal_energy - level_energy) / std::max(bktm, 1.0e-300), 0.0);
+                const double explev2 = std::exp(std::min(std::max(-ethsht, -60.0), 60.0));
+                const double value = level_weight / (explev2 / std::max(rs, 1.0e-300));
+                rnisi[static_cast<std::size_t>(local)] = value;
+                bb += value;
+            }
+            for (int local = 1; local <= nlev; ++local) {
+                rnisi[static_cast<std::size_t>(local)] /= bb;
+            }
+
+            if (topo.ion_stage == active_min_stage) {
+                rnise[static_cast<std::size_t>(1 + ipmatsv)] = rnisi[1];
+            }
+            for (int local = 2; local <= nlev; ++local) {
+                const int target = local + ipmatsv;
+                if (topo.ion_stage > active_min_stage) {
+                    rnise[static_cast<std::size_t>(target)] = std::min(
+                        source_cap66,
+                        rnise[static_cast<std::size_t>(target - 1)] *
+                            rnisi[static_cast<std::size_t>(local)] /
+                            (source_floor37 + rnisi[static_cast<std::size_t>(local - 1)]));
+                } else {
+                    rnise[static_cast<std::size_t>(target)] = rnisi[static_cast<std::size_t>(local)];
+                }
+            }
+            const LteLevelData* terminal_level_for_audit = exact_leveltemp
+                ? lte_leveltemp_row_v82_patch56(program, element.element_index, topo.ion_stage, nlev) : nullptr;
+            const double terminal_energy_for_audit = terminal_level_for_audit ? terminal_level_for_audit->energy_ev : topo.terminal_energy_ev;
+            const double terminal_weight_for_audit = terminal_level_for_audit ? terminal_level_for_audit->statistical_weight : topo.terminal_statistical_weight;
+            for (int local = 1; local <= nlev; ++local) {
+                const int compact_row = topo.start_row + local - 1;
+                const auto& compact_level = element.rows.at(static_cast<std::size_t>(compact_row - 1));
+                const LteLevelData* source_level = exact_leveltemp
+                    ? lte_leveltemp_row_v82_patch56(program, element.element_index, topo.ion_stage, local) : nullptr;
+                RnisiAuditRowV82Patch56 row;
+                row.stage = topo.ion_stage; row.local = local; row.compact_row = compact_row; row.active = true;
+                row.global_level_index = compact_level.global_level_index;
+                row.source_record = source_level ? source_level->source_record : 0;
+                row.energy_ev = source_level ? source_level->energy_ev : compact_level.energy_ev;
+                row.weight = source_level ? source_level->statistical_weight : compact_level.statistical_weight;
+                row.terminal_energy_ev = terminal_energy_for_audit; row.terminal_weight = terminal_weight_for_audit;
+                row.rnisi = rnisi[static_cast<std::size_t>(local)];
+                row.recurrence_ratio = local > 1 ? rnisi[static_cast<std::size_t>(local)] /
+                    (source_floor37 + rnisi[static_cast<std::size_t>(local - 1)]) : 0.0;
+                const int target = local + ipmatsv;
+                row.raw_rnise = target >= 1 && target < static_cast<int>(rnise.size())
+                    ? rnise[static_cast<std::size_t>(target)] : 0.0;
+                rnisi_audit.push_back(row);
+            }
+        } else {
+            // Literal levwkelement inactive-ion branch.  The shared terminal
+            // row is zeroed too; ipmatsv still advances by nlev-1.
+            for (int local = 1; local <= nlev; ++local) {
+                rnise[static_cast<std::size_t>(local + ipmatsv)] = 0.0;
+            }
+        }
+        ipmatsv += nlev - 1;
+        last_nlev = nlev;
+    }
+
+    if (last_nlev < 2 || ipmatsv + 1 != element.n_rows || rnisi.size() <= static_cast<std::size_t>(last_nlev)) {
+        throw std::runtime_error("LTE fully stripped source topology is invalid");
+    }
+    rnise[static_cast<std::size_t>(ipmatsv + 1)] =
+        rnise[static_cast<std::size_t>(ipmatsv)] *
+        rnisi[static_cast<std::size_t>(last_nlev)] /
+        (source_floor97 + rnisi[static_cast<std::size_t>(last_nlev - 1)]);
+    if (!rnisi_audit.empty()) {
+        auto& last = rnisi_audit.back();
+        last.fully_stripped = true;
+        last.recurrence_ratio = rnisi[static_cast<std::size_t>(last_nlev)] /
+            (source_floor97 + rnisi[static_cast<std::size_t>(last_nlev - 1)]);
+        last.raw_rnise = rnise[static_cast<std::size_t>(ipmatsv + 1)];
+    }
+
+    double total = 0.0;
+    for (int row = 1; row <= element.n_rows; ++row) total += rnise[static_cast<std::size_t>(row)];
+    const double denom = source_floor97 + total;
+    if (!(denom > 0.0) || !std::isfinite(denom)) {
+        throw std::runtime_error("LTE source partition normalization is non-positive");
+    }
+    std::vector<double> out(static_cast<std::size_t>(element.n_rows), 0.0);
+    for (int row = 1; row <= element.n_rows; ++row) {
+        out[static_cast<std::size_t>(row - 1)] = rnise[static_cast<std::size_t>(row)] / denom;
+    }
+
+    const char* sequence_env_patch56 = std::getenv("XSTAR_NATIVE_SOURCE_SEQUENCE");
+    const int source_sequence_patch56 = sequence_env_patch56 && *sequence_env_patch56 ? std::atoi(sequence_env_patch56) : 0;
+    const char* audit_path_patch56 = std::getenv("XSTAR_V82_PATCH56_SEQUENCE58_RNISI_AUDIT_PATH");
+    if (source_sequence_patch56 == 58 && element.element_z == 12 && audit_path_patch56 && *audit_path_patch56) {
+        std::filesystem::path audit_path(audit_path_patch56);
+        if (!audit_path.parent_path().empty()) std::filesystem::create_directories(audit_path.parent_path());
+        std::ofstream csv(audit_path);
+        if (!csv) throw std::runtime_error("cannot create patch5.6 sequence58 rnisi audit");
+        csv << "ion_stage,active,start_row,nlev,local_level,target_compact_row,target_global_level_index,source_type13_record,level_energy_ev,level_statistical_weight,terminal_energy_ev,terminal_statistical_weight,rnisi,transition_applied,transition_ratio,raw_rnise,normalized_rnise,fully_stripped\n";
+        for (auto& row : rnisi_audit) {
+            if (row.compact_row >= 1 && static_cast<std::size_t>(row.compact_row) <= out.size()) {
+                row.normalized_lte = out[static_cast<std::size_t>(row.compact_row - 1)];
+            }
+            const auto topo_it = std::find_if(topology.begin(), topology.end(), [&](const auto& t) { return t.ion_stage == row.stage; });
+            const int start_row = topo_it == topology.end() ? 0 : topo_it->start_row;
+            const int nlev = topo_it == topology.end() ? 0 : topo_it->nlev;
+            csv << row.stage << ',' << (row.active ? 1 : 0) << ',' << start_row << ',' << nlev << ','
+                << row.local << ',' << row.compact_row << ',' << row.global_level_index << ',' << row.source_record << ','
+                << std::setprecision(17) << row.energy_ev << ',' << row.weight << ',' << row.terminal_energy_ev << ','
+                << row.terminal_weight << ',' << row.rnisi << ',' << (row.local > 1 ? 1 : 0) << ','
+                << row.recurrence_ratio << ',' << row.raw_rnise << ',' << row.normalized_lte << ','
+                << (row.fully_stripped ? 1 : 0) << '\n';
+        }
+        std::cout << "V048746255172582_SEQUENCE58_MG_TYPE13_LEVELTEMP_ROWS=" << rnisi_audit.size() << "\n"
+                  << "V048746255172582_SEQUENCE58_MG_TYPE13_LEVELTEMP_SOURCE_SEMANTICS="
+                  << (exact_leveltemp ? "ACCEPT" : "FALLBACK") << "\n"
+                  << "V048746255172582_SEQUENCE58_MG_RNISI_AUDIT=WRITTEN\n";
+    }
+    return out;
+}
+
 std::vector<double> compute_exact_lte_populations(
     const Program& program,
-    const xstar_fixed_state_input_v1& input
+    const xstar_fixed_state_input_v1& input,
+    const std::map<int, std::pair<int,int>>& active_stage_windows
 ) {
     if (!(input.temperature_k > 0.0) || !(input.electron_density_cm3 >= 0.0)) {
         throw std::runtime_error("LTE population inputs are invalid");
@@ -6769,89 +7106,56 @@ std::vector<double> compute_exact_lte_populations(
     std::size_t total_rows = 0;
     for (const auto& element : program.elements) total_rows += static_cast<std::size_t>(element.n_rows);
     all.reserve(total_rows);
-    const double bktm = xstar_constants::kSourceCollisionBoltzmannEvPerK * input.temperature_k;
-    const double q2 = 2.07e-16 * input.electron_density_cm3 * std::pow(input.temperature_k, -1.5);
+
+    const char* sequence_env = std::getenv("XSTAR_NATIVE_SOURCE_SEQUENCE");
+    const int source_sequence = sequence_env && *sequence_env ? std::atoi(sequence_env) : 0;
+
     for (const auto& element : program.elements) {
-        if (element.rows.empty() || element.n_rows <= 0) {
-            throw std::runtime_error("LTE population construction requires element rows");
+        int active_min_stage = 1;
+        int active_max_stage = element.n_ions;
+        const auto retained = active_stage_windows.find(element.element_z);
+        if (retained != active_stage_windows.end()) {
+            active_min_stage = retained->second.first;
+            active_max_stage = retained->second.second;
         }
-        std::vector<int> block_starts;
-        block_starts.push_back(1);
-        int previous_ion = element.rows.front().ion;
-        for (const auto& row : element.rows) {
-            if (row.ion != previous_ion) {
-                block_starts.push_back(row.row);
-                previous_ion = row.ion;
-            }
-        }
-        std::vector<double> rnise(static_cast<std::size_t>(element.n_rows) + 1, 0.0);
-        int ipmatsv = 0;
-        std::vector<double> last_rnisi;
-        int last_nlev = 0;
-        const int min_ion = element.rows.front().ion;
-        for (std::size_t block_index = 0; block_index < block_starts.size(); ++block_index) {
-            const int start = block_starts[block_index];
-            const int end = block_index + 1 < block_starts.size()
-                ? block_starts[block_index + 1]
-                : element.n_rows;
-            const int nlev = end - start + 1;
-            if (nlev < 1 || start < 1 || end > element.n_rows) {
-                throw std::runtime_error("LTE compact ion block is invalid");
-            }
-            const auto& continuum = element.rows.at(static_cast<std::size_t>(end - 1));
-            if (!(continuum.statistical_weight > 0.0)) {
-                throw std::runtime_error("LTE continuum statistical weight is non-positive");
-            }
-            const double rs = q2 / continuum.statistical_weight;
-            const double ethion = continuum.energy_ev;
-            std::vector<double> rnisi(static_cast<std::size_t>(nlev) + 1, 0.0);
-            rnisi[static_cast<std::size_t>(nlev)] = 1.0;
-            double bb = 1.0;
-            for (int local = 1; local < nlev; ++local) {
-                const auto& level = element.rows.at(static_cast<std::size_t>(start + local - 2));
-                const double ethsht = std::max((ethion - level.energy_ev) / std::max(bktm, 1.0e-300), 0.0);
-                const double explev2 = std::exp(std::max(-ethsht, -60.0));
-                rnisi[static_cast<std::size_t>(local)] =
-                    level.statistical_weight / (explev2 / std::max(rs, 1.0e-300));
-                bb += rnisi[static_cast<std::size_t>(local)];
-            }
-            for (int local = 1; local <= nlev; ++local) {
-                rnisi[static_cast<std::size_t>(local)] /= std::max(bb, 1.0e-300);
-            }
-            const int ion = element.rows.at(static_cast<std::size_t>(start - 1)).ion;
-            if (ion == min_ion) rnise[static_cast<std::size_t>(1 + ipmatsv)] = rnisi[1];
-            for (int local = 2; local <= nlev; ++local) {
-                const int target = local + ipmatsv;
-                if (ion > min_ion) {
-                    rnise[static_cast<std::size_t>(target)] = std::min(
-                        1.0e66,
-                        rnise[static_cast<std::size_t>(target - 1)] *
-                            rnisi[static_cast<std::size_t>(local)] /
-                            (1.0e-37 + rnisi[static_cast<std::size_t>(local - 1)])
-                    );
-                } else {
-                    rnise[static_cast<std::size_t>(target)] = rnisi[static_cast<std::size_t>(local)];
+        bool exact_topology = false;
+        auto full_lte = compute_element_lte_populations_v82_patch54(
+            program, element, input, active_min_stage, active_max_stage, &exact_topology);
+
+        if (source_sequence == 58 && element.element_z == 12) {
+            const auto topology = lte_topology_for_element_v82_patch54(program, element);
+            int active_rows = 1;
+            std::ostringstream nlev_stream;
+            bool stage_order_ok = topology.size() == 12u;
+            for (std::size_t i = 0; i < topology.size(); ++i) {
+                const auto& topo = topology[i];
+                if (i) nlev_stream << ':';
+                nlev_stream << topo.ion_stage << '=' << topo.nlev;
+                stage_order_ok = stage_order_ok && topo.ion_stage == static_cast<int>(i) + 1;
+                if (topo.ion_stage >= active_min_stage && topo.ion_stage <= active_max_stage) {
+                    active_rows += topo.nlev - 1;
                 }
             }
-            ipmatsv += nlev - 1;
-            last_rnisi = std::move(rnisi);
-            last_nlev = nlev;
+            std::size_t nonzero = 0;
+            for (double value : full_lte) if (std::isfinite(value) && value != 0.0) ++nonzero;
+            const bool source_topology_accept = exact_topology && stage_order_ok &&
+                element.n_rows == 577 && active_rows == 552 &&
+                active_min_stage == 3 && active_max_stage == 12;
+            std::cout << "V048746255172582_SEQUENCE58_MG_LTE_FULL_ROWS=" << element.n_rows << "\n"
+                      << "V048746255172582_SEQUENCE58_MG_LTE_ACTIVE_ROWS=" << active_rows << "\n"
+                      << "V048746255172582_SEQUENCE58_MG_LTE_ACTIVE_MIN_STAGE=" << active_min_stage << "\n"
+                      << "V048746255172582_SEQUENCE58_MG_LTE_ACTIVE_MAX_STAGE=" << active_max_stage << "\n"
+                      << "V048746255172582_SEQUENCE58_MG_LTE_NONZERO_COMPACT_ROWS=" << nonzero << "\n"
+                      << "V048746255172582_SEQUENCE58_MG_SOURCE_NLEV=" << nlev_stream.str() << "\n"
+                      << "V048746255172582_SEQUENCE58_MG_SOURCE_NLEV_TOPOLOGY="
+                      << (source_topology_accept ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172582_SEQUENCE58_MG_LTE_ACTIVE_WINDOW_SOURCE_SEMANTICS="
+                      << (source_topology_accept ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172582_SEQUENCE58_LEVWK_BOLTZMANN_EV_PER_T4="
+                      << std::setprecision(17) << xstar_constants::kLegacyBoltzmannEvPerT4 << "\n"
+                      << "V048746255172582_SEQUENCE58_LEVWK_BOLTZMANN_SOURCE_SEMANTICS=ACCEPT_HISTORICAL\n";
         }
-        if (last_nlev < 2 || ipmatsv + 1 != element.n_rows) {
-            throw std::runtime_error("LTE fully stripped compact row is invalid");
-        }
-        rnise[static_cast<std::size_t>(ipmatsv + 1)] =
-            rnise[static_cast<std::size_t>(ipmatsv)] *
-            last_rnisi[static_cast<std::size_t>(last_nlev)] /
-            (1.0e-97 + last_rnisi[static_cast<std::size_t>(last_nlev - 1)]);
-        double total = 0.0;
-        for (int row = 1; row <= element.n_rows; ++row) total += rnise[static_cast<std::size_t>(row)];
-        if (!(total > 0.0) || !std::isfinite(total)) {
-            throw std::runtime_error("LTE population normalization is non-positive");
-        }
-        for (int row = 1; row <= element.n_rows; ++row) {
-            all.push_back(rnise[static_cast<std::size_t>(row)] / total);
-        }
+        all.insert(all.end(), full_lte.begin(), full_lte.end());
     }
     return all;
 }
@@ -6876,7 +7180,181 @@ struct NativeBoundFreeCurve {
     double threshold_ev = 0.0;
     std::vector<double> offset_ryd;
     std::vector<double> sigma_cm2;
+    bool type49_semantics = false;
+    bool apply_source_phextrap = false;
+    int phextrap_max_points = 0;
 };
+
+struct Phint53GridMapV82Patch57 {
+    std::vector<double> sgbar;
+    int nb1_zero_based = -1;
+    int klmax_zero_based = -1;
+    int effective_pair_count = 0;
+    bool phextrap_applied = false;
+    bool valid = false;
+};
+
+int phint53_nbinc_one_based_v82_patch57(double energy_ev, const double* epi, int ncn2) {
+    if (!epi || ncn2 < 3) return 1;
+    const int numcon2 = std::max(2, ncn2 / 50);
+    const int n = std::max(1, ncn2 - numcon2);
+    int jlo = 1;
+    if (n < 2) return jlo;
+    const double xtmp = std::max(energy_ev, epi[1]);
+    if (!(energy_ev < 1.0e-34 || epi[0] <= 1.0e-34 || epi[n - 1] <= 1.0e-34)) {
+        const double denom = std::log(epi[n - 1] / epi[0]);
+        if (std::isfinite(denom) && denom != 0.0) {
+            jlo = static_cast<int>((n - 1) * std::log(xtmp / epi[0]) / denom) + 1;
+        }
+        jlo = std::clamp(jlo, 1, n);
+        if (jlo < n) {
+            const double tst = std::abs(std::log(energy_ev / (1.0e-34 + epi[jlo - 1])));
+            const double tst2 = std::abs(std::log(energy_ev / (1.0e-34 + epi[jlo])));
+            if (tst2 < tst) ++jlo;
+        }
+    }
+    return std::clamp(jlo, 1, n);
+}
+
+void phextrap_source_v82_patch57(const NativeBoundFreeCurve& curve,
+                                 int ncn2,
+                                 std::vector<double>& energy_ryd,
+                                 std::vector<double>& sigma_cm2) {
+    if (!curve.apply_source_phextrap || energy_ryd.size() < 2 ||
+        energy_ryd.size() != sigma_cm2.size()) return;
+    const int ntmp_initial = static_cast<int>(energy_ryd.size());
+    const int limit = curve.phextrap_max_points > 0
+        ? std::min(curve.phextrap_max_points, ncn2) : ncn2;
+    if (limit <= 1) return;
+    int nadd = 0;
+    double s1 = sigma_cm2[static_cast<std::size_t>(ntmp_initial - 2)];
+    double e1 = energy_ryd[static_cast<std::size_t>(ntmp_initial - 2)] * 13.6 + curve.threshold_ev;
+    while (s1 > 1.0e-27 && nadd + ntmp_initial < limit && e1 < 2.0e5) {
+        const double e2 = e1 * 1.3;
+        const double s2 = s1 / (1.3 * 1.3 * 1.3);
+        ++nadd;
+        // Literal phextrap.f90 writes stmp(nadd+ntmp-1), so the first
+        // extrapolated point replaces the original final tabulated point.
+        const std::size_t target = static_cast<std::size_t>(nadd + ntmp_initial - 2);
+        if (target >= energy_ryd.size()) {
+            energy_ryd.resize(target + 1u);
+            sigma_cm2.resize(target + 1u);
+        }
+        sigma_cm2[target] = s2;
+        energy_ryd[target] = (e2 - curve.threshold_ev) / 13.6;
+        e1 = e2;
+        s1 = s2;
+    }
+    const int ntmp_final = nadd + ntmp_initial - 1;
+    if (ntmp_final >= 2) {
+        energy_ryd.resize(static_cast<std::size_t>(ntmp_final));
+        sigma_cm2.resize(static_cast<std::size_t>(ntmp_final));
+    }
+}
+
+Phint53GridMapV82Patch57 phint53_grid_map_v82_patch57(
+    const NativeBoundFreeCurve& curve, const double* epi, int ncn2) {
+    Phint53GridMapV82Patch57 out;
+    if (!epi || ncn2 < 3 || curve.offset_ryd.size() < 2 ||
+        curve.offset_ryd.size() != curve.sigma_cm2.size() || !(curve.threshold_ev > 0.0)) return out;
+    std::vector<double> energy_ryd = curve.offset_ryd;
+    std::vector<double> sigma_cm2 = curve.sigma_cm2;
+    const std::size_t before = energy_ryd.size();
+    phextrap_source_v82_patch57(curve, ncn2, energy_ryd, sigma_cm2);
+    out.phextrap_applied = curve.apply_source_phextrap && energy_ryd.size() != before;
+    const int ntmp = static_cast<int>(std::min(energy_ryd.size(), sigma_cm2.size()));
+    if (ntmp < 2) return out;
+    out.effective_pair_count = ntmp;
+    const int numcon2 = std::max(2, ncn2 / 50);
+    const int nphint = ncn2 - numcon2;
+    if (nphint < 2) return out;
+
+    std::vector<double> xs(static_cast<std::size_t>(ntmp), 0.0);
+    std::vector<double> ys(static_cast<std::size_t>(ntmp), 0.0);
+    for (int j = 0; j < ntmp; ++j) {
+        xs[static_cast<std::size_t>(j)] = curve.threshold_ev +
+            energy_ryd[static_cast<std::size_t>(j)] * kType53RydEv;
+        ys[static_cast<std::size_t>(j)] = std::max(0.0, sigma_cm2[static_cast<std::size_t>(j)]);
+    }
+
+    const double ener = xs[0];
+    int nb1 = phint53_nbinc_one_based_v82_patch57(ener, epi, ncn2);
+    while (nb1 >= 1 && nb1 <= ncn2 && epi[nb1 - 1] < ener && nb1 < nphint) ++nb1;
+    --nb1;
+    nb1 = std::max(nb1, 1);
+    if (nb1 >= nphint) return out;
+    const int nb = nb1 - 1;
+
+    out.sgbar.assign(static_cast<std::size_t>(ncn2), 0.0);
+    out.sgbar[static_cast<std::size_t>(std::max(0, nb - 1))] = 0.0;
+    out.sgbar[static_cast<std::size_t>(nb)] = 0.0;
+    int kl = nb;
+    int jk = 0;
+    double e1 = epi[kl];
+    double e2 = xs[0];
+    double s2 = ys[0];
+    if (e1 < e2 && kl + 1 < ncn2) { ++kl; e1 = epi[kl]; }
+    double e1o = e2;
+    double sum = 0.0;
+    double e2o = e2;
+    double s2o = s2;
+    double e2t = e1;
+    double s2t = s2;
+    bool done = false;
+    int iterations = 0;
+    const int max_iterations = std::max(8, 4 * (ncn2 + ntmp));
+    while (!done && iterations < max_iterations && kl < ncn2) {
+        ++iterations;
+        bool advanced = false;
+        while (e2 < e1 && jk < ntmp - 2) {
+            ++jk;
+            e2o = e2;
+            s2o = s2;
+            e2 = xs[static_cast<std::size_t>(jk)];
+            s2 = ys[static_cast<std::size_t>(jk)];
+            sum += (s2 + s2o) * (e2 - e2o) / 2.0;
+            advanced = true;
+        }
+        // Source phint53 reaches this branch with a populated previous segment
+        // for physical threshold records.  Preserve deterministic behavior for
+        // degenerate records rather than depending on undefined Fortran locals.
+        if (!advanced && iterations == 1) { e2o = e2; s2o = s2; }
+        sum -= (s2 + s2o) * (e2 - e2o) / 2.0;
+        e2t = e1;
+        s2t = (e2 - e2o > 1.0e-8)
+            ? s2o + (s2 - s2o) * (e2t - e2o) / (e2 - e2o + 1.0e-24)
+            : s2o;
+        sum += (s2t + s2o) * (e2t - e2o) / 2.0;
+        const double den = e1 - e1o;
+        out.sgbar[static_cast<std::size_t>(kl)] = std::abs(den) > 1.0e-36 ? sum / den : 0.0;
+        e1o = e1;
+        ++kl;
+        if (kl >= ncn2) break;
+        e1 = epi[kl];
+        while (e1 < e2 && kl < ncn2 - 1) {
+            e2t = e1;
+            s2t = (e2 - e2o > 1.0e-8)
+                ? s2o + (s2 - s2o) * (e2t - e2o) / (e2 - e2o)
+                : s2o;
+            const double s2to = s2t;
+            sum = (s2t + s2to) * (e1 - e1o) / 2.0;
+            const double local_den = e1 - e1o;
+            out.sgbar[static_cast<std::size_t>(kl)] =
+                std::abs(local_den) > 1.0e-36 ? sum / local_den : 0.0;
+            e1o = e1;
+            ++kl;
+            if (kl >= ncn2) break;
+            e1 = epi[kl];
+        }
+        sum = (s2 + s2t) * (e2 - e2t) / 2.0;
+        if (kl > nphint - 1 || jk >= ntmp - 2) done = true;
+    }
+    if (iterations >= max_iterations) return out;
+    out.nb1_zero_based = nb;
+    out.klmax_zero_based = kl - 1;
+    out.valid = out.klmax_zero_based > out.nb1_zero_based;
+    return out;
+}
 
 double interpolate_bound_free_sigma(const NativeBoundFreeCurve& curve, double energy_ev) {
     if (!(energy_ev >= curve.threshold_ev) || curve.offset_ryd.empty() ||
@@ -6923,6 +7401,9 @@ bool native_bound_free_curve(const Program& program,
             : static_cast<int>(record.real_count / 2);
         if (pair_count < 2 || static_cast<std::size_t>(2 * pair_count) > record.real_count) return false;
         curve.threshold_ev = shadow.threshold_ev > 0.0 ? shadow.threshold_ev : evaluated.line_energy_ev;
+        curve.type49_semantics = record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE;
+        curve.apply_source_phextrap = curve.type49_semantics && shadow.phextrap_applied;
+        curve.phextrap_max_points = shadow.phextrap_max_points;
         curve.offset_ryd.reserve(static_cast<std::size_t>(pair_count));
         curve.sigma_cm2.reserve(static_cast<std::size_t>(pair_count));
         for (int i = 0; i < pair_count; ++i) {
@@ -6952,6 +7433,15 @@ bool native_bound_free_curve(const Program& program,
     return false;
 }
 
+double effective_spectral_covering_fraction_v82_patch58(
+    const xstar_fixed_state_input_v1& input) {
+    const bool has_dsec_covering =
+        (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_DSEC_COVERING_FRACTION) != 0u;
+    return std::clamp(
+        has_dsec_covering ? input.dsec_covering_fraction : input.covering_fraction,
+        0.0, 1.0);
+}
+
 void accumulate_native_bound_free_surface(const NativeBoundFreeCurve& curve,
                                           const EvaluatedRecord& evaluated,
                                           const ProgramRecord& record,
@@ -6959,59 +7449,78 @@ void accumulate_native_bound_free_surface(const NativeBoundFreeCurve& curve,
                                           const std::vector<double>& populations,
                                           const xstar_fixed_state_input_v1& input,
                                           std::vector<double>& opacity_cm1,
-                                          std::vector<double>& rccemis) {
+                                          std::vector<double>& rccemis,
+                                          std::size_t* phint53_records_mapped = nullptr,
+                                          std::size_t* phint53_bins_accumulated = nullptr) {
     const std::size_t n = input.radiation_bin_count;
     if (n < 2 || opacity_cm1.size() != n || rccemis.size() != 2 * n ||
         record.lower_row < 1 || record.upper_row < 1) return;
     const double lower_abundance =
-        active_population_for_full_row(active, populations, record.lower_row) *
-        active.element.abundance;
+        active_population_for_full_row(active, populations, record.lower_row) * active.element.abundance;
     const double upper_abundance =
-        active_population_for_full_row(active, populations, record.upper_row) *
-        active.element.abundance;
+        active_population_for_full_row(active, populations, record.upper_row) * active.element.abundance;
     const double density = std::max(0.0, input.hydrogen_density_cm3);
-    const double kt_ev = xstar_constants::kModernBoltzmannEvPerK * input.temperature_k;
+    const bool type49_or_53 = record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE ||
+        record.opcode == XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE;
     const bool type99 = record.opcode == XSTAR_FIXED_OPCODE_TYPE99_SUPERLEVEL_BOUND_FREE;
-    // The H/He Type-99 superlevel records contribute rate/cooling terms but the
-    // legacy phint53/fstepr3 surfaces do not publish their threshold opacity.
-    // Including them was the source of the ~15x low-energy opakc excess in v51.
-    const bool publish_type99_opacity = !(type99 && active.element.element_z <= 2);
     const Type53SourceShadow* shadow = nullptr;
     if (record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE) shadow = &evaluated.type49_shadow;
     else if (record.opcode == XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE) shadow = &evaluated.type53_shadow;
 
+    if (type49_or_53) {
+        const auto mapped = phint53_grid_map_v82_patch57(
+            curve, input.radiation_energy_ev, static_cast<int>(n));
+        if (!mapped.valid) return;
+        if (phint53_records_mapped) ++*phint53_records_mapped;
+        const double bktm = xstar_constants::kBoltzmannErgPerK * input.temperature_k /
+            xstar_constants::kModernErgPerEv;
+        const double covering = effective_spectral_covering_fraction_v82_patch58(input);
+        const double ptmp1 = covering >= 1.0 - 1.0e-15 ? 0.0 :
+            (shadow && shadow->valid ? std::max(0.0, shadow->ptmp1) : 0.5 * (1.0 - covering));
+        const double ptmp2 = covering >= 1.0 - 1.0e-15 ? 1.0 :
+            (shadow && shadow->valid ? std::max(0.0, shadow->ptmp2) : 0.5 * (1.0 - covering) + covering);
+        double exptst = (input.radiation_energy_ev[mapped.nb1_zero_based] - curve.threshold_ev) /
+            std::max(bktm, 1.0e-300);
+        for (int kl = mapped.nb1_zero_based; kl < mapped.klmax_zero_based && kl + 1 < static_cast<int>(n); ++kl) {
+            const double sgtp = std::max(0.0, mapped.sgbar[static_cast<std::size_t>(kl)]);
+            const double sgtpp = std::max(0.0, mapped.sgbar[static_cast<std::size_t>(kl + 1)]);
+            if (sgtp > 0.0 && lower_abundance > 0.0 && density > 0.0) {
+                opacity_cm1[static_cast<std::size_t>(kl)] += lower_abundance * density * sgtp;
+                if (phint53_bins_accumulated) ++*phint53_bins_accumulated;
+            }
+            const double previous_exptst = exptst;
+            const double epiip = input.radiation_energy_ev[static_cast<std::size_t>(kl + 1)];
+            exptst = (epiip - curve.threshold_ev) / std::max(bktm, 1.0e-300);
+            if (shadow && shadow->valid && shadow->rnist > 0.0 && previous_exptst < 200.0 &&
+                sgtpp > 0.0 && upper_abundance > 0.0 && density > 0.0 && epiip > 0.0) {
+                const double exptmpp = limited_exp(-exptst);
+                const double bbnurjp = std::pow(std::min(2.0e4, epiip), 3.0) * 1.571e22 * 2.0;
+                // phint53.f90 forms atmp2=tempip*epiip where
+                // tempip=rnist*bbnurjp*sgtpp*exp(-dE/kT)*12.56/epiip;
+                // the following /12.56 in rctmp cancels exactly.
+                const double common = upper_abundance * density * shadow->rnist *
+                    bbnurjp * sgtpp * exptmpp;
+                rccemis[static_cast<std::size_t>(kl)] += common * ptmp1;
+                rccemis[n + static_cast<std::size_t>(kl)] += common * ptmp2;
+            }
+        }
+        return;
+    }
+
+    // v82 patch 5.1+: literal source ucalc Type-99 does not publish direct
+    // bound-free opacity. Retain the prior source-faithful Type-99 RRC fallback
+    // unchanged; patch 5.7 only replaces the Type-49/53 phint53 grid mapper.
+    if (!type99) return;
+    const double kt_ev = xstar_constants::kModernBoltzmannEvPerK * input.temperature_k;
     std::vector<double> fallback_shape(n, 0.0);
     for (std::size_t i = 0; i < n; ++i) {
         const double energy = input.radiation_energy_ev[i];
         const double sigma = interpolate_bound_free_sigma(curve, energy);
         if (!(sigma > 0.0)) continue;
-        if (publish_type99_opacity) opacity_cm1[i] += sigma * lower_abundance * density;
         const double excess = std::max(0.0, energy - curve.threshold_ev);
         const double expo = kt_ev > 0.0 ? limited_exp(-excess / kt_ev) : 0.0;
-        if (shadow && shadow->valid && shadow->rnist > 0.0) {
-            // phint53.f90:
-            // rccemis(l,kl) += abund2*xpx*rnist*bbnur*sgtpp*exp(-dE/kT)*ptmp_l
-            const double bbnur = std::pow(std::min(2.0e4, energy), 3.0) * 1.571e22 * 2.0;
-            const double common = upper_abundance * density * shadow->rnist * bbnur * sigma * expo;
-            // calc_emisab_ion/calc_emis_ion multiply the reverse escape
-            // probability by (1-cfrac).  For the benchmark cfrac=1 this plane
-            // is identically zero; captured qualification anchors that retain
-            // ptmp1=1 must not leak into the production continuum workspace.
-            const double covering = std::clamp(input.covering_fraction, 0.0, 1.0);
-            const double ptmp1 = covering >= 1.0 - 1.0e-15 ? 0.0 : std::max(0.0, shadow->ptmp1);
-            const double ptmp2 = covering >= 1.0 - 1.0e-15 ? 1.0 : std::max(0.0, shadow->ptmp2);
-            rccemis[i] += common * ptmp1;
-            rccemis[n + i] += common * ptmp2;
-        } else {
-            fallback_shape[i] = sigma * energy * energy * energy * expo;
-        }
+        fallback_shape[i] = sigma * energy * energy * energy * expo;
     }
-    if (shadow && shadow->valid && shadow->rnist > 0.0) return;
-
-    // Type-99 does not retain the phint53 rnist workspace. Normalize its
-    // distributed recombination continuum to the accepted integrated cooling
-    // and place it in the source outward plane for cfrac=1, rather than the
-    // incorrect equal two-plane split used by v51.
     double integral = 0.0;
     for (std::size_t i = 1; i < n; ++i) {
         integral += 0.5 * (fallback_shape[i - 1] + fallback_shape[i]) *
@@ -7022,6 +7531,40 @@ void accumulate_native_bound_free_surface(const NativeBoundFreeCurve& curve,
     const double normalization = total_emission / (12.56 * integral);
     for (std::size_t i = 0; i < n; ++i) rccemis[n + i] += normalization * fallback_shape[i];
 }
+
+struct OpacityProducerTopV82Patch511 {
+    double contribution = 0.0;
+    std::int64_t source_position = 0;
+    std::int64_t record = 0;
+    int data_type = 0;
+    int element_z = 0;
+    int ion_stage = 0;
+    int lower_row = 0;
+    int upper_row = 0;
+};
+
+struct MgType53OpacityKernelRowV82Patch512 {
+    std::int64_t source_position = 0;
+    std::int64_t record = 0;
+    int continuum_index_one_based = 0;
+    int ion_stage = 0;
+    int lower_full_row = 0;
+    int upper_full_row = 0;
+    int lower_compact_row = 0;
+    int upper_compact_row = 0;
+    int lower_global_level_index = 0;
+    int upper_global_level_index = 0;
+    double threshold_ev = 0.0;
+    double native_lower_population = 0.0;
+    double native_upper_population = 0.0;
+    double abundance = 0.0;
+    double hydrogen_density_cm3 = 0.0;
+    std::size_t mapped_bin_count = 0;
+    double sigma_bin_sum_cm2 = 0.0;
+    double native_opacity_bin_sum_cm1 = 0.0;
+    double threshold_cross_section_cm2 = 0.0;
+    double threshold_stimulated_cross_section_cm2 = 0.0;
+};
 
 int run_impl(
     xstar_fixed_state_context_impl& ctx,
@@ -7334,6 +7877,26 @@ int run_impl(
     std::vector<xstar_spectral_contribution_v1> spectral;
     std::vector<double> native_bound_free_opacity(input.radiation_bin_count, 0.0);
     std::vector<double> native_rrc_continuum_emission(2 * input.radiation_bin_count, 0.0);
+    // v82 patch 5.11: comparison-only producer attribution for the accepted
+    // call-2/final sequence-59 opacity.  The environment path is owned by the
+    // standalone diagnostic harness; production arrays and source order are
+    // unchanged.
+    const char* source_sequence_env_v82_patch511 = std::getenv("XSTAR_NATIVE_SOURCE_SEQUENCE");
+    const int source_sequence_v82_patch511 = source_sequence_env_v82_patch511 && *source_sequence_env_v82_patch511
+        ? std::atoi(source_sequence_env_v82_patch511) : 0;
+    const char* opacity_producer_path_v82_patch511 = std::getenv("XSTAR_V82_PATCH511_OPAKC_PRODUCER_AUDIT_PATH");
+    const bool opacity_producer_audit_v82_patch511 = !defer_product_projection &&
+        source_sequence_v82_patch511 == 59 && opacity_producer_path_v82_patch511 && *opacity_producer_path_v82_patch511;
+    const char* mg_type53_kernel_path_v82_patch512 = std::getenv("XSTAR_V82_PATCH512_MG_TYPE53_KERNEL_AUDIT_PATH");
+    const bool mg_type53_kernel_audit_v82_patch512 = !defer_product_projection &&
+        source_sequence_v82_patch511 == 59 && mg_type53_kernel_path_v82_patch512 && *mg_type53_kernel_path_v82_patch512;
+    std::vector<MgType53OpacityKernelRowV82Patch512> mg_type53_kernel_rows_v82_patch512;
+    std::vector<OpacityProducerTopV82Patch511> bound_free_top_v82_patch511(input.radiation_bin_count);
+    std::vector<OpacityProducerTopV82Patch511> line_top_v82_patch511(input.radiation_bin_count);
+    std::vector<double> producer_temp_opacity_v82_patch511(input.radiation_bin_count, 0.0);
+    std::vector<double> producer_temp_rrc_v82_patch511(2 * input.radiation_bin_count, 0.0);
+    std::size_t phint53_records_mapped_v82_patch57 = 0;
+    std::size_t phint53_bins_accumulated_v82_patch57 = 0;
     std::optional<SourceCompactOracle> source_compact_oracle;
     if (source_compact_basis_seed) source_compact_oracle = load_source_compact_oracle();
     std::optional<FixedStateClosureData> fixed_state_closure_data;
@@ -8122,7 +8685,7 @@ int run_impl(
                 const double source_density = upper_population * element.abundance *
                     input.hydrogen_density_cm3;
                 const double aij = std::max(0.0, evaluated[k].contribution.ans2);
-                const double cfrac = std::clamp(input.covering_fraction, 0.0, 1.0);
+                const double cfrac = effective_spectral_covering_fraction_v82_patch58(input);
                 const double ptmp1 = 0.5 * (1.0 - cfrac);
                 const double ptmp2 = 0.5 * (1.0 - cfrac) + cfrac;
                 if (integral > 0.0 && source_density > 0.0 && aij > 0.0) {
@@ -8140,7 +8703,67 @@ int run_impl(
             if (!native_bound_free_curve(ctx.program, source_record, evaluated[k], curve)) continue;
             accumulate_native_bound_free_surface(
                 curve, evaluated[k], source_record, active, buffers.populations, input,
-                native_bound_free_opacity, native_rrc_continuum_emission);
+                native_bound_free_opacity, native_rrc_continuum_emission,
+                &phint53_records_mapped_v82_patch57, &phint53_bins_accumulated_v82_patch57);
+            if (mg_type53_kernel_audit_v82_patch512 && element.element_z == 12 &&
+                source_record.data_type == 53 && source_record.opcode == XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE) {
+                MgType53OpacityKernelRowV82Patch512 row;
+                row.source_position = source_record.source_position;
+                row.record = source_record.record;
+                row.continuum_index_one_based = source_record.continuum_index_one_based;
+                row.ion_stage = source_record.ion_stage;
+                row.lower_full_row = source_record.lower_row;
+                row.upper_full_row = source_record.upper_row;
+                if (source_record.lower_row >= active.full_row_start && source_record.lower_row <= active.full_row_end)
+                    row.lower_compact_row = source_record.lower_row - active.full_row_start + 1;
+                if (source_record.upper_row >= active.full_row_start && source_record.upper_row <= active.full_row_end)
+                    row.upper_compact_row = source_record.upper_row - active.full_row_start + 1;
+                if (source_record.lower_row > 0 && static_cast<std::size_t>(source_record.lower_row) <= element.rows.size())
+                    row.lower_global_level_index = element.rows[static_cast<std::size_t>(source_record.lower_row - 1)].global_level_index;
+                if (source_record.upper_row > 0 && static_cast<std::size_t>(source_record.upper_row) <= element.rows.size())
+                    row.upper_global_level_index = element.rows[static_cast<std::size_t>(source_record.upper_row - 1)].global_level_index;
+                row.threshold_ev = curve.threshold_ev;
+                row.native_lower_population = active_population_for_full_row(active, buffers.populations, source_record.lower_row);
+                row.native_upper_population = active_population_for_full_row(active, buffers.populations, source_record.upper_row);
+                row.abundance = element.abundance;
+                row.hydrogen_density_cm3 = std::max(0.0, input.hydrogen_density_cm3);
+                const auto mapped = phint53_grid_map_v82_patch57(curve, input.radiation_energy_ev, static_cast<int>(input.radiation_bin_count));
+                if (mapped.valid) {
+                    for (int kl = mapped.nb1_zero_based; kl < mapped.klmax_zero_based && kl + 1 < static_cast<int>(input.radiation_bin_count); ++kl) {
+                        const double sigma = std::max(0.0, mapped.sgbar[static_cast<std::size_t>(kl)]);
+                        if (!(sigma > 0.0)) continue;
+                        ++row.mapped_bin_count;
+                        row.sigma_bin_sum_cm2 += sigma;
+                    }
+                }
+                row.native_opacity_bin_sum_cm1 = row.native_lower_population * row.abundance *
+                    row.hydrogen_density_cm3 * row.sigma_bin_sum_cm2;
+                if (evaluated[k].type53_shadow.valid) {
+                    row.threshold_cross_section_cm2 = evaluated[k].type53_shadow.threshold_cross_section_cm2;
+                    row.threshold_stimulated_cross_section_cm2 = evaluated[k].type53_shadow.threshold_stimulated_cross_section_cm2;
+                }
+                mg_type53_kernel_rows_v82_patch512.push_back(row);
+            }
+            if (opacity_producer_audit_v82_patch511) {
+                std::fill(producer_temp_opacity_v82_patch511.begin(), producer_temp_opacity_v82_patch511.end(), 0.0);
+                std::fill(producer_temp_rrc_v82_patch511.begin(), producer_temp_rrc_v82_patch511.end(), 0.0);
+                accumulate_native_bound_free_surface(
+                    curve, evaluated[k], source_record, active, buffers.populations, input,
+                    producer_temp_opacity_v82_patch511, producer_temp_rrc_v82_patch511, nullptr, nullptr);
+                for (std::size_t bin = 0; bin < producer_temp_opacity_v82_patch511.size(); ++bin) {
+                    const double value = producer_temp_opacity_v82_patch511[bin];
+                    if (!(std::isfinite(value) && std::abs(value) > std::abs(bound_free_top_v82_patch511[bin].contribution))) continue;
+                    auto& top = bound_free_top_v82_patch511[bin];
+                    top.contribution = value;
+                    top.source_position = source_record.source_position;
+                    top.record = source_record.record;
+                    top.data_type = source_record.data_type;
+                    top.element_z = element.element_z;
+                    top.ion_stage = source_record.ion_stage;
+                    top.lower_row = source_record.lower_row;
+                    top.upper_row = source_record.upper_row;
+                }
+            }
         }
 
         for (std::size_t k = 0; k < evaluated.size(); ++k) {
@@ -8201,7 +8824,7 @@ int run_impl(
                     sc.opakab = 0.0;
                 }
             }
-            const double cfrac = std::clamp(input.covering_fraction, 0.0, 1.0);
+            const double cfrac = effective_spectral_covering_fraction_v82_patch58(input);
             sc.ptmp1 = 1.0 - cfrac;
             sc.ptmp2 = 1.0 + cfrac;
             if (!evaluated[k].bound_free_spectral && evaluated[k].type50_shadow.valid) {
@@ -8269,7 +8892,8 @@ int run_impl(
             source_workspaces->abi_version != XSTAR_FIXED_STATE_ENGINE_ABI_VERSION) {
             throw std::runtime_error("fixed-state source-workspace ABI mismatch");
         }
-        const auto lte_populations = compute_exact_lte_populations(ctx.program, input);
+        const auto lte_populations = compute_exact_lte_populations(
+            ctx.program, input, ctx.retained_active_stage_windows);
         source_workspaces->lte_populations_count = lte_populations.size();
         if (source_workspaces->lte_populations) {
             if (source_workspaces->lte_populations_capacity < lte_populations.size()) {
@@ -8355,7 +8979,7 @@ int run_impl(
             // radio free-free coefficient produced the v54 ~0.54 continuum
             // opacity/depth ratio and the wrong option-5 absorbed energy.
             const double temperature_t4 = std::max(input.temperature_k * 1.0e-4, 1.0e-30);
-            const double ekt_source_ev = 0.861707 * temperature_t4;
+            const double ekt_source_ev = xstar_constants::kLegacyBoltzmannEvPerT4 * temperature_t4;
             const double xnx = std::max(input.electron_density_cm3, 0.0);
             const double freef_cc = static_cast<double>(static_cast<float>(2.614e-37));
             const double ion_z2_factor = static_cast<double>(static_cast<float>(1.4));
@@ -8393,7 +9017,10 @@ int run_impl(
         // Keep the profile in a separate construction buffer, then add it only
         // to opakc after the continuum contributions are complete.
         std::vector<double> line_profile_opacity(continuum_capacity, 0.0);
-        std::vector<double> opakcont(continuum_capacity, 0.0);
+        const double source_thomson = input.hydrogen_density_cm3 * input.electron_fraction_xee *
+            kSigmaT * std::max(0.0, 1.0 - effective_spectral_covering_fraction_v82_patch58(input));
+        std::vector<double> opakcont(continuum_capacity, source_thomson);
+        for (std::size_t k = 0; k < continuum_capacity; ++k) output.opacity[k] += source_thomson;
         std::vector<double> fline(2 * line_capacity, 0.0);
         std::vector<double> flinel(continuum_capacity, 0.0);
         xstar_spectral_workspace_v1 sw{};
@@ -8462,8 +9089,124 @@ int run_impl(
         if (!defer_product_projection) {
             for (std::size_t k = 0; k < continuum_capacity; ++k) {
                 output.opacity[k] += native_bound_free_opacity[k];
+                opakcont[k] += native_bound_free_opacity[k];
                 rccemis[k] += native_rrc_continuum_emission[k];
                 rccemis[continuum_capacity + k] += native_rrc_continuum_emission[continuum_capacity + k];
+            }
+        }
+
+        const char* source_sequence_env_v82_patch57 = std::getenv("XSTAR_NATIVE_SOURCE_SEQUENCE");
+        const int source_sequence_v82_patch57 = source_sequence_env_v82_patch57 && *source_sequence_env_v82_patch57
+            ? std::atoi(source_sequence_env_v82_patch57) : 0;
+        if (!defer_product_projection && source_sequence_v82_patch57 == 59) {
+            std::size_t bound_free_nonzero = 0;
+            for (double v : native_bound_free_opacity) if (std::isfinite(v) && v != 0.0) ++bound_free_nonzero;
+            std::cout << "V048746255172582_CALL2_PHINT53_GRID_MAPPED_RECORDS="
+                      << phint53_records_mapped_v82_patch57 << "\n"
+                      << "V048746255172582_CALL2_PHINT53_GRID_ACCUMULATED_RECORD_BIN_EVENTS="
+                      << phint53_bins_accumulated_v82_patch57 << "\n"
+                      << "V048746255172582_CALL2_PHINT53_BOUND_FREE_NONZERO_BINS="
+                      << bound_free_nonzero << "\n"
+                      << "V048746255172582_CALL2_PHINT53_CONTINUUM_BIN_MAPPING=ACCEPT_SOURCE_BIN_AVERAGED\n";
+
+            if (opacity_producer_audit_v82_patch511) {
+                // Re-evaluate each line into a zeroed comparison-only profile
+                // with the exact same native linopac kernel and seed profile.
+                // This records ownership only; it never feeds the temporary
+                // profile back into line_profile_opacity or opakc.
+                std::unordered_map<std::int64_t,const ProgramRecord*> record_by_source_position;
+                record_by_source_position.reserve(ctx.program.records.size());
+                for (const auto& record : ctx.program.records) record_by_source_position[record.source_position] = &record;
+                std::unordered_map<int,int> element_z_by_index;
+                for (const auto& element : ctx.program.elements) element_z_by_index[element.element_index] = element.element_z;
+                for (std::size_t j = 0; j < spectral.size(); ++j) {
+                    const auto& c = spectral[j];
+                    if (!(c.kind == XSTAR_SPECTRAL_KIND_EMIS_LINE || c.kind == XSTAR_SPECTRAL_KIND_FULL_LINE)) continue;
+                    const double optpp = c.opakab * c.abundance_lower * c.hydrogen_density;
+                    if (!(std::isfinite(optpp) && optpp > 0.0)) continue;
+                    std::fill(producer_temp_opacity_v82_patch511.begin(), producer_temp_opacity_v82_patch511.end(), 0.0);
+                    std::fill(producer_temp_rrc_v82_patch511.begin(), producer_temp_rrc_v82_patch511.end(), 0.0);
+                    long long updated = 0;
+                    double opacity_elapsed = 0.0;
+                    std::array<char,512> opacity_error{};
+                    const double* seed = seeds.data() + j * seed_stride;
+                    const int profile_rc = xstar_opacity_apply_line_profile_v1(
+                        optpp, c.line_energy_eV, c.turbulent_velocity_km_s,
+                        c.temperature_1e4K, c.atomic_mass_amu, c.natural_width_eV,
+                        seed, 10, input.radiation_energy_ev, static_cast<int>(continuum_capacity),
+                        producer_temp_opacity_v82_patch511.data(), producer_temp_rrc_v82_patch511.data(),
+                        &updated, &opacity_elapsed, opacity_error.data(), opacity_error.size());
+                    if (profile_rc != 0) {
+                        throw std::runtime_error(std::string("patch5.11 line producer diagnostic failed: ") + opacity_error.data());
+                    }
+                    const auto found_record = record_by_source_position.find(static_cast<std::int64_t>(c.source_position));
+                    const ProgramRecord* source_record = found_record != record_by_source_position.end() ? found_record->second : nullptr;
+                    for (std::size_t bin = 0; bin < producer_temp_opacity_v82_patch511.size(); ++bin) {
+                        const double value = producer_temp_opacity_v82_patch511[bin];
+                        if (!(std::isfinite(value) && std::abs(value) > std::abs(line_top_v82_patch511[bin].contribution))) continue;
+                        auto& top = line_top_v82_patch511[bin];
+                        top.contribution = value;
+                        top.source_position = static_cast<std::int64_t>(c.source_position);
+                        top.record = c.record;
+                        top.data_type = c.data_type;
+                        if (source_record) {
+                            const auto ez = element_z_by_index.find(source_record->element_index);
+                            top.element_z = ez != element_z_by_index.end() ? ez->second : 0;
+                            top.ion_stage = source_record->ion_stage;
+                            top.lower_row = source_record->lower_row;
+                            top.upper_row = source_record->upper_row;
+                        }
+                    }
+                }
+
+                const std::filesystem::path producer_path(opacity_producer_path_v82_patch511);
+                if (!producer_path.parent_path().empty()) std::filesystem::create_directories(producer_path.parent_path());
+                std::ofstream producer_csv(producer_path);
+                if (!producer_csv) throw std::runtime_error("cannot create patch5.11 opacity producer inventory");
+                producer_csv << "runtime_slot,energy_ev,bound_free_total,bound_free_top_contribution,bound_free_top_fraction,bound_free_source_position,bound_free_record,bound_free_data_type,bound_free_element_z,bound_free_ion_stage,bound_free_lower_row,bound_free_upper_row,line_total,line_top_contribution,line_top_fraction,line_source_position,line_record,line_data_type,line_element_z,line_ion_stage,line_lower_row,line_upper_row\n";
+                producer_csv << std::setprecision(17);
+                std::size_t bf_top_nonzero = 0, line_top_nonzero = 0;
+                for (std::size_t bin = 0; bin < continuum_capacity; ++bin) {
+                    const double bf_total = native_bound_free_opacity[bin];
+                    const double line_total = line_profile_opacity[bin];
+                    const auto& bf = bound_free_top_v82_patch511[bin];
+                    const auto& ln = line_top_v82_patch511[bin];
+                    if (bf.contribution != 0.0) ++bf_top_nonzero;
+                    if (ln.contribution != 0.0) ++line_top_nonzero;
+                    const double bf_fraction = bf_total != 0.0 ? bf.contribution / bf_total : 0.0;
+                    const double line_fraction = line_total != 0.0 ? ln.contribution / line_total : 0.0;
+                    producer_csv << bin << ',' << input.radiation_energy_ev[bin] << ','
+                                 << bf_total << ',' << bf.contribution << ',' << bf_fraction << ','
+                                 << bf.source_position << ',' << bf.record << ',' << bf.data_type << ','
+                                 << bf.element_z << ',' << bf.ion_stage << ',' << bf.lower_row << ',' << bf.upper_row << ','
+                                 << line_total << ',' << ln.contribution << ',' << line_fraction << ','
+                                 << ln.source_position << ',' << ln.record << ',' << ln.data_type << ','
+                                 << ln.element_z << ',' << ln.ion_stage << ',' << ln.lower_row << ',' << ln.upper_row << '\n';
+                }
+                std::cout << "V048746255172582_CALL2_OPAKC_PRODUCER_INVENTORY_ROWS=" << continuum_capacity << "\n"
+                          << "V048746255172582_CALL2_BOUND_FREE_TOP_PRODUCER_NONZERO_BINS=" << bf_top_nonzero << "\n"
+                          << "V048746255172582_CALL2_LINE_TOP_PRODUCER_NONZERO_BINS=" << line_top_nonzero << "\n"
+                          << "V048746255172582_CALL2_OPAKC_PRODUCER_INVENTORY=WRITTEN\n";
+            }
+            if (mg_type53_kernel_audit_v82_patch512) {
+                const std::filesystem::path kernel_path(mg_type53_kernel_path_v82_patch512);
+                if (!kernel_path.parent_path().empty()) std::filesystem::create_directories(kernel_path.parent_path());
+                std::ofstream kernel_csv(kernel_path);
+                if (!kernel_csv) throw std::runtime_error("cannot create patch5.12 Mg Type-53 opacity-kernel audit");
+                kernel_csv << "source_position,record,data_type,element_z,ion_stage,continuum_index_one_based,lower_full_row,upper_full_row,lower_compact_row,upper_compact_row,lower_global_level_index,upper_global_level_index,threshold_ev,native_lower_population,native_upper_population,abundance,hydrogen_density_cm3,mapped_bin_count,sigma_bin_sum_cm2,native_opacity_bin_sum_cm1,threshold_cross_section_cm2,threshold_stimulated_cross_section_cm2\n";
+                kernel_csv << std::setprecision(17);
+                for (const auto& row : mg_type53_kernel_rows_v82_patch512) {
+                    kernel_csv << row.source_position << ',' << row.record << ",53,12," << row.ion_stage << ','
+                               << row.continuum_index_one_based << ',' << row.lower_full_row << ',' << row.upper_full_row << ','
+                               << row.lower_compact_row << ',' << row.upper_compact_row << ','
+                               << row.lower_global_level_index << ',' << row.upper_global_level_index << ','
+                               << row.threshold_ev << ',' << row.native_lower_population << ',' << row.native_upper_population << ','
+                               << row.abundance << ',' << row.hydrogen_density_cm3 << ',' << row.mapped_bin_count << ','
+                               << row.sigma_bin_sum_cm2 << ',' << row.native_opacity_bin_sum_cm1 << ','
+                               << row.threshold_cross_section_cm2 << ',' << row.threshold_stimulated_cross_section_cm2 << '\n';
+                }
+                std::cout << "V048746255172582_CALL2_MG_TYPE53_OPACITY_KERNEL_ROWS=" << mg_type53_kernel_rows_v82_patch512.size() << "\n"
+                          << "V048746255172582_CALL2_MG_TYPE53_OPACITY_KERNEL_AUDIT=WRITTEN\n";
             }
         }
 
@@ -8479,11 +9222,9 @@ int run_impl(
             for (std::size_t k = 0; k < continuum_capacity; ++k) {
                 const double continuum_value = std::isfinite(output.opacity[k]) && output.opacity[k] > 0.0
                     ? output.opacity[k] : 0.0;
-                const double continuum_only = std::isfinite(opakcont[k]) && opakcont[k] > 0.0
-                    ? opakcont[k] : 0.0;
                 const double line_value = std::isfinite(line_profile_opacity[k]) && line_profile_opacity[k] > 0.0
                     ? line_profile_opacity[k] : 0.0;
-                const double combined = continuum_value + continuum_only + line_value;
+                const double combined = continuum_value + line_value;
                 opakc_exact[k] = std::isfinite(combined) && combined > 0.0 ? combined : 0.0;
             }
             auto copy_workspace = [](const std::vector<double>& source, double* destination,
@@ -8545,11 +9286,9 @@ int run_impl(
                     + profiled[2*continuum_capacity+k] + profiled[3*continuum_capacity+k];
                 if (std::isfinite(spectrum_add)) output.spectrum[k] += spectrum_add;
                 if (!std::isfinite(output.spectrum[k])) output.spectrum[k] = 0.0;
-                const double continuum_only = std::isfinite(opakcont[k]) && opakcont[k] > 0.0
-                    ? opakcont[k] : 0.0;
                 const double line_value = std::isfinite(line_profile_opacity[k]) && line_profile_opacity[k] > 0.0
                     ? line_profile_opacity[k] : 0.0;
-                const double combined = output.opacity[k] + continuum_only + line_value;
+                const double combined = output.opacity[k] + line_value;
                 output.opacity[k] = std::isfinite(combined) && combined > 0.0 ? combined : 0.0;
             }
         }
@@ -9604,7 +10343,7 @@ int xstar_fixed_state_write_last_diagnostics_v1(
         ion_file << std::setprecision(17);
         population_file << std::setprecision(17);
         thermal_population_file << std::setprecision(17);
-        const int source_sequence = required_environment_integer("XSTAR_QUALIFICATION_SOURCE_SEQUENCE");
+        const int source_sequence = static_cast<int>(evaluation_ordinal);
         std::size_t global_offset = 0;
         for (const auto& diagnostic : context->last_element_diagnostics) {
             const auto& source = context->program.elements.at(static_cast<std::size_t>(diagnostic.element_index));

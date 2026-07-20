@@ -1,4 +1,5 @@
 #include "xstar_step_log.hpp"
+#include "xstar_constants.h"
 
 #include <algorithm>
 #include <chrono>
@@ -379,7 +380,7 @@ void append_native_radial_summary(std::ofstream& out,
         };
         const double u1=denom>0.0?photon_integral(13.6,std::numeric_limits<double>::infinity())/denom:0.0;
         const double ux=denom>0.0?photon_integral(100.0,10000.0)/denom:0.0;
-        const double ekt=r.temperature*0.861707*1.602176634e-12;
+        const double ekt=r.temperature*xstar_constants::kLegacyBoltzmannEvPerT4*xstar_constants::kModernErgPerEv;
         const double xi_linear=std::pow(10.0,r.logxi);
         const double xi_pressure=(ekt>0.0)?xi_linear/12.56/((1.0+r.xee)*ekt*3.0e10):0.0;
         double gamma=0.0;

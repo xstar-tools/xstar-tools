@@ -682,6 +682,8 @@ xstar_fixed_program_bundle_v1 ProgramStorage::bundle() const {
     b.unsupported_record_count=unsupported_record_count; b.native_line_count=native_line_count; b.native_continuum_count=native_continuum_count;
     b.elements=elements.data(); b.element_count=elements.size(); b.rows=rows.data(); b.row_count=rows.size();
     b.records=records.data(); b.record_count=records.size(); b.reals=reals.data(); b.real_count=reals.size(); b.ints=ints.data(); b.int_count=ints.size();
+    b.lte_ions=lte_ion_topology.data(); b.lte_ion_count=lte_ion_topology.size();
+    b.lte_levels=lte_levels.data(); b.lte_level_count=lte_levels.size();
     return b;
 }
 
@@ -748,6 +750,38 @@ ProgramStorage lower_atdb_in_memory(const std::filesystem::path& atdb,const Prod
     for(std::size_t ei=0;ei<active.size();++ei){int z=active[ei];Layout l=build_layout(db,d,z,static_cast<int>(ei));auto rit=records_by_z.find(z);if(rit==records_by_z.end()||rit->second.empty())throw std::runtime_error("no executable records for active Z="+std::to_string(z));
         xstar_fixed_program_element_v1 e{};e.element_index=ei;e.element_z=z;e.abundance=parameters.abundances_by_z.at(z);e.n_rows=l.n_rows;e.n_superlevels=l.n_superlevels;e.n_ions=l.n_ions;e.normalization_row=l.normalization_row;e.record_head=global_record;e.record_count=rit->second.size();out.elements.push_back(e);
         xstar_run_state::ElementMetadataState em;em.element_index=ei;em.atomic_number=z;em.abundance=e.abundance;em.row_offset=row_offset;em.row_count=l.n_rows;em.ion_count=l.n_ions;out.element_metadata.push_back(em);
+        for (const auto& block : l.blocks) {
+            const auto* terminal = find_level(l, block.ion_index, block.nlev);
+            if (!terminal || !(terminal->weight > 0.0)) {
+                throw std::runtime_error("source LTE terminal Type-13 metadata missing");
+            }
+            xstar_fixed_lte_ion_topology_v1 topo{};
+            topo.element_index = static_cast<int32_t>(ei);
+            topo.ion_stage = block.ion_stage;
+            topo.start_row = block.compact_start;
+            topo.nlev = block.nlev;
+            topo.terminal_energy_ev = terminal->energy;
+            topo.terminal_statistical_weight = terminal->weight;
+            out.lte_ion_topology.push_back(topo);
+
+            // v82 patch 5.6: calc_rates_level_lte rebuilds leveltemp from every
+            // Type-13 record in source order.  Preserve every local level here,
+            // not only the terminal continuum metadata retained by patch 5.4.
+            for (int local = 1; local <= block.nlev; ++local) {
+                const auto* lv = find_level(l, block.ion_index, local);
+                if (!lv || !(lv->weight > 0.0) || !std::isfinite(lv->energy)) {
+                    throw std::runtime_error("complete source LTE Type-13 leveltemp metadata missing");
+                }
+                xstar_fixed_lte_level_v1 level{};
+                level.element_index = static_cast<int32_t>(ei);
+                level.ion_stage = block.ion_stage;
+                level.local_level = local;
+                level.source_record = lv->record;
+                level.energy_ev = lv->energy;
+                level.statistical_weight = lv->weight;
+                out.lte_levels.push_back(level);
+            }
+        }
         for(int row=1;row<=l.n_rows;++row){const auto& r=l.rows[row];const auto& lv=row_level(l,row);const auto& b=block_for(l,r.ion_index);xstar_fixed_program_row_v1 pr{};pr.element_index=ei;pr.row=row;pr.superlevel=r.superlevel;pr.ion=r.ion_counter;pr.ion_charge=std::max(0,b.ion_stage-1);pr.initial_population=row==1?1.0:0.0;pr.energy_ev=lv.energy;pr.statistical_weight=lv.weight;pr.principal_n=lv.principal_n;pr.orbital_l=lv.orbital_l;int global=d.level_global_by_record[lv.record];
             // v0.6.48.7.46.25.5.17.25.81: XSTAR npilev is indexed by the
             // Type-13 source ordinal within an ion, not by the packed local
@@ -767,6 +801,39 @@ ProgramStorage lower_atdb_in_memory(const std::filesystem::path& atdb,const Prod
                 if (source_ordinal_global > 0) global = source_ordinal_global;
             }
             pr.global_level_index=global;out.rows.push_back(pr);
+            std::vector<std::int32_t> global_aliases;
+            std::vector<std::uint8_t> terminal_aliases;
+            for (const auto& role : l.role_to_row) {
+                if (role.second != row) continue;
+                const int role_ion = role.first.first;
+                const int role_local = role.first.second;
+                const auto* role_level = find_level(l, role_ion, role_local);
+                if (!role_level) continue;
+                int role_global = d.level_global_by_record[role_level->record];
+                if (z == 12 && role_local > 0 &&
+                    static_cast<std::size_t>(role_local) < d.npilev.size() &&
+                    role_ion > 0 && static_cast<std::size_t>(role_ion) < d.npilev[static_cast<std::size_t>(role_local)].size()) {
+                    const int source_ordinal_global =
+                        d.npilev[static_cast<std::size_t>(role_local)][static_cast<std::size_t>(role_ion)];
+                    if (source_ordinal_global > 0) role_global = source_ordinal_global;
+                }
+                if (role_global <= 0) continue;
+                const auto& role_block = block_for(l, role_ion);
+                const std::uint8_t terminal = role_local == role_block.nlev ? 1u : 0u;
+                auto found = std::find(global_aliases.begin(), global_aliases.end(), role_global);
+                if (found == global_aliases.end()) {
+                    global_aliases.push_back(role_global);
+                    terminal_aliases.push_back(terminal);
+                } else if (terminal) {
+                    terminal_aliases[static_cast<std::size_t>(found - global_aliases.begin())] = 1u;
+                }
+            }
+            if (global > 0 && std::find(global_aliases.begin(), global_aliases.end(), global) == global_aliases.end()) {
+                global_aliases.push_back(global);
+                terminal_aliases.push_back(r.local_level == b.nlev ? 1u : 0u);
+            }
+            out.row_global_level_aliases.push_back(std::move(global_aliases));
+            out.row_global_level_terminal_roles.push_back(std::move(terminal_aliases));
             xstar_run_state::CompactRowMetadataState rm;rm.element_index=ei;rm.row=row;rm.superlevel=r.superlevel;rm.ion=r.ion_counter;rm.ion_charge=pr.ion_charge;rm.energy_ev=lv.energy;rm.statistical_weight=lv.weight;rm.principal_n=lv.principal_n;rm.orbital_l=lv.orbital_l;rm.global_level_index=global;rm.ion_label=normalized_ion_label(b);rm.level_label=lv.label;out.row_metadata.push_back(rm);
             xstar_run_state::LevelIdentityState id;id.global_index=global;id.ion_index=b.ion_stage;id.excitation_ev=lv.energy;id.ion_label=rm.ion_label;id.atomic_number=z;id.level_label=lv.label;id.upper_index=b.nlev; if(global>0)out.level_identities.push_back(id);
         }

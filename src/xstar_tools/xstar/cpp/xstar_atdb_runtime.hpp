@@ -56,6 +56,8 @@ struct ProgramStorage {
     std::vector<xstar_fixed_program_element_v1> elements;
     std::vector<xstar_fixed_program_row_v1> rows;
     std::vector<xstar_fixed_program_record_v1> records;
+    std::vector<xstar_fixed_lte_ion_topology_v1> lte_ion_topology;
+    std::vector<xstar_fixed_lte_level_v1> lte_levels;
     std::vector<double> reals;
     std::vector<std::int64_t> ints;
     std::vector<xstar_run_state::LevelIdentityState> level_identities;
@@ -63,6 +65,12 @@ struct ProgramStorage {
     std::vector<xstar_run_state::RrcIdentityState> rrc_identities;
     std::vector<xstar_run_state::ElementMetadataState> element_metadata;
     std::vector<xstar_run_state::CompactRowMetadataState> row_metadata;
+    // v82 patch 5.2: compact XSTAR rows can carry more than one source global
+    // level role because adjacent ion blocks share their continuum/ground
+    // boundary row.  Preserve every source global identity and whether that
+    // identity is the terminal-continuum role of its ion.
+    std::vector<std::vector<std::int32_t>> row_global_level_aliases;
+    std::vector<std::vector<std::uint8_t>> row_global_level_terminal_roles;
     std::uint64_t topology_record_count = 0;
     std::uint64_t unsupported_record_count = 0;
     std::size_t native_line_count = 0;

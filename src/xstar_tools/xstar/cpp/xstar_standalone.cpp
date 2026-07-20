@@ -2131,6 +2131,7 @@ struct FixedDsecSnapshot {
     std::size_t evaluation_index = 0;
     double temperature_t4 = 0.0;
     double electron_fraction_input = 0.0;
+    double spectral_covering_fraction = 0.0;
     double entry_neutral_h_density_cm3 = 0.0;
     double entry_ionized_h_density_cm3 = 0.0;
     double entry_hydrogen_ground_fraction = 0.0;
@@ -2215,6 +2216,7 @@ FixedDsecSnapshot lightweight_snapshot_v65(const FixedDsecSnapshot& source) {
     out.evaluation_index = source.evaluation_index;
     out.temperature_t4 = source.temperature_t4;
     out.electron_fraction_input = source.electron_fraction_input;
+    out.spectral_covering_fraction = source.spectral_covering_fraction;
     out.entry_neutral_h_density_cm3 = source.entry_neutral_h_density_cm3;
     out.entry_ionized_h_density_cm3 = source.entry_ionized_h_density_cm3;
     out.entry_hydrogen_ground_fraction = source.entry_hydrogen_ground_fraction;
@@ -2734,6 +2736,30 @@ std::size_t required_continuum_tau_capacity_v73(
         maximum_record_continuum_index_one_based + 1u,
         native_continuum_count + 1u,
         continuum_grid_bins});
+}
+
+// v82 patch 4: the fixed-state runtime escape workspace is zero-based.
+// A source pointer N is consumed from runtime slot N-1, so it needs N slots,
+// not N+1.  Retained product opakab/tauc/elumab arrays remain one-based and
+// continue to reserve source slot zero independently.
+std::size_t required_runtime_continuum_tau_capacity_v82_patch4(
+    std::size_t maximum_record_continuum_index_one_based,
+    std::size_t native_continuum_count) {
+    return std::max(maximum_record_continuum_index_one_based, native_continuum_count);
+}
+
+constexpr double kTrajectoryZeroFloorV82 = 1.0e-40;
+constexpr double kTrajectoryRelativeToleranceV82 = 5.0e-7;
+constexpr double kTrajectoryAbsoluteToleranceV82 = 1.0e-12;
+
+bool scientific_close_v82(double source, double native) {
+    if (!std::isfinite(source) || !std::isfinite(native)) return false;
+    if (std::abs(source) <= kTrajectoryZeroFloorV82 &&
+        std::abs(native) <= kTrajectoryZeroFloorV82) return true;
+    const double diff = std::abs(native - source);
+    if (diff <= kTrajectoryAbsoluteToleranceV82) return true;
+    const double scale = std::max({std::abs(source), std::abs(native), kTrajectoryZeroFloorV82});
+    return diff / scale <= kTrajectoryRelativeToleranceV82;
 }
 
 int command_trajectory_alignment_self_test(const Options&) {
@@ -9765,10 +9791,17 @@ struct StandaloneControllerDataV67 {
     std::vector<double> energy;
     std::vector<double> flux;
     std::vector<double> dsec_bremsa;
+    // Runtime escape arrays are zero-based because fixed_state_engine consumes
+    // source one-based pointers as tau[index-1]. Product workspaces retain the
+    // original one-based slot domain (slot zero is the source sentinel).
     std::vector<double> source_tau_in;
     std::vector<double> source_tau_out;
     std::vector<double> line_tau_in;
     std::vector<double> line_tau_out;
+    std::vector<double> product_line_tau_in;
+    std::vector<double> product_line_tau_out;
+    std::vector<double> product_rrc_tau_in;
+    std::vector<double> product_rrc_tau_out;
     std::vector<double> line_luminosity;
     std::vector<double> rrc_luminosity;
     std::vector<double> grid_tau_in;
@@ -9776,6 +9809,7 @@ struct StandaloneControllerDataV67 {
     std::vector<double> grid_cont_tau_in;
     std::vector<double> grid_cont_tau_out;
     std::vector<double> accumulated_zrems;
+    std::vector<double> accumulated_zremso;
     std::vector<double> accumulated_zremsz;
     std::vector<double> source_incident;
     double cumulative_depth_cm = 0.0;
@@ -9784,6 +9818,14 @@ struct StandaloneControllerDataV67 {
     std::vector<double> global_bilevg;
     std::vector<double> global_rnisg;
     std::vector<int> population_global_level_index;
+    std::vector<std::vector<std::int32_t>> population_global_level_aliases;
+    std::vector<std::vector<std::uint8_t>> population_global_level_terminal_roles;
+    std::vector<std::uint8_t> global_terminal_continuum_role;
+    std::vector<double> call2_entry_global_rnisg;
+    std::string call2_entry_global_rnisg_hash;
+    bool call2_entry_global_rnisg_retained = false;
+    std::size_t global_shared_boundary_row_count = 0;
+    std::size_t global_alias_role_count = 0;
     std::size_t global_level_count = 0;
     std::size_t hydrogen_ground_population_index = std::numeric_limits<std::size_t>::max();
     bool global_workspace_initialized = false;
@@ -9808,10 +9850,523 @@ struct StandaloneControllerDataV67 {
     std::filesystem::path sequence16_source_thermal_budget;
     std::filesystem::path sequence16_source_solve_stage_rows;
     std::filesystem::path sequence16_thermal_population_closure_dir;
+    bool sequence23_boundary_gate_configured = false;
+    CallStartWorkspace sequence23_source_workspace;
+    // v82 patch 5.10: sequence 23 consumes the population boundary produced by
+    // the call-2 final evaluation (source sequence 59).  Retain that exact
+    // comparison-only input workspace and solve-stage table so the audit
+    // attributes the boundary to its actual producer rather than sequence 23.
+    bool sequence59_boundary_reference_configured = false;
+    CallStartWorkspace sequence59_source_workspace;
+    std::filesystem::path sequence23_source_solve_stage_rows;
+    bool sequence22_boundary_reference_configured = false;
+    CallStartWorkspace sequence22_source_workspace;
+    bool sequence58_lte_reference_configured = false;
+    CallStartWorkspace sequence58_source_workspace;
+    bool sequence58_lte_scientific_accept = false;
+    // v82 patch 5.11: retain the native sequence-58 projected global boundary
+    // until sequence 59 has exposed its raw call-start state.  This is
+    // diagnostic-only state used to distinguish solve/projection/commit
+    // ownership for the sequence-23 population residuals.
+    bool sequence58_population_boundary_captured = false;
+    std::vector<double> sequence58_native_projected_global_xilevg;
+    // v82 patch 5.12: comparison-only call-1 DSEC population sweep.  Source
+    // workspaces remain external reference assets and are never assigned to
+    // runtime state.  First-divergence bookkeeping is diagnostic only.
+    std::filesystem::path call1_source_workspaces_root;
+    std::filesystem::path call1_dsec_population_sweep_dir;
+    std::vector<double> call1_current_input_global_xilevg;
+    std::map<int,int> call1_dsec_first_relative_sequence;
+    std::map<int,std::string> call1_dsec_first_relative_phase;
+    std::map<int,int> call1_dsec_first_scientific_sequence;
+    std::map<int,std::string> call1_dsec_first_scientific_phase;
+    std::filesystem::path sequence23_diagnostic_dir;
     std::vector<FixedDsecSnapshot> snapshots;
     FixedDsecSnapshot last_iteration;
     std::string last_error;
 };
+
+
+struct Sequence23PopulationSolveRowV82Patch510 {
+    int element_z = 0;
+    int compact_row = 0;
+    int full_row = 0;
+    double raw_call_start = 0.0;
+    double loaded_call_start = 0.0;
+    double transformed_initial = 0.0;
+    double final_outer_start = 0.0;
+    double after_condensed = 0.0;
+    double fixed_before = 0.0;
+    double fixed_after = 0.0;
+    double final_population = 0.0;
+    double rhs = 0.0;
+};
+
+using PopulationSolveKeyV82Patch510 = std::pair<int,int>;
+
+std::map<PopulationSolveKeyV82Patch510,Sequence23PopulationSolveRowV82Patch510>
+read_sequence59_source_solve_rows_v82_patch510(const std::filesystem::path& path) {
+    const auto rows = read_csv_rows_v1716(path);
+    std::map<PopulationSolveKeyV82Patch510,Sequence23PopulationSolveRowV82Patch510> out;
+    for (const auto& row : rows) {
+        if (std::stoi(row.at("sequence")) != 59) continue;
+        Sequence23PopulationSolveRowV82Patch510 item;
+        item.element_z = std::stoi(row.at("element_z"));
+        item.compact_row = std::stoi(row.at("compact_row"));
+        item.transformed_initial = parse_thermal_binary64_v79(row.at("transformed_initial_population"));
+        item.final_outer_start = parse_thermal_binary64_v79(row.at("final_outer_start_population"));
+        item.after_condensed = parse_thermal_binary64_v79(row.at("population_after_condensed"));
+        item.fixed_before = parse_thermal_binary64_v79(row.at("final_fixed_point_population_before"));
+        item.fixed_after = parse_thermal_binary64_v79(row.at("final_fixed_point_population_after"));
+        item.final_population = parse_thermal_binary64_v79(row.at("final_population"));
+        item.rhs = parse_thermal_binary64_v79(row.at("rhs"));
+        out[{item.element_z,item.compact_row}] = item;
+    }
+    if (out.empty()) throw std::runtime_error("sequence-59 source solve-stage inventory is empty");
+    return out;
+}
+
+std::map<PopulationSolveKeyV82Patch510,Sequence23PopulationSolveRowV82Patch510>
+read_sequence59_native_solve_rows_v82_patch510(
+    const std::filesystem::path& response_path,
+    const std::filesystem::path& stage_path) {
+    const auto response_rows = read_csv_rows_v1716(response_path);
+    const auto stage_rows = read_csv_rows_v1716(stage_path);
+    std::map<PopulationSolveKeyV82Patch510,Sequence23PopulationSolveRowV82Patch510> out;
+    for (const auto& row : response_rows) {
+        Sequence23PopulationSolveRowV82Patch510 item;
+        item.element_z = std::stoi(row.at("element_z"));
+        item.compact_row = std::stoi(row.at("compact_row"));
+        item.full_row = std::stoi(row.at("full_row"));
+        item.raw_call_start = parse_thermal_binary64_v79(row.at("raw_call_start_xilevg"));
+        item.loaded_call_start = parse_thermal_binary64_v79(row.at("loaded_call_start_xilevg"));
+        item.transformed_initial = parse_thermal_binary64_v79(row.at("initial_population"));
+        item.final_outer_start = parse_thermal_binary64_v79(row.at("final_outer_start_population"));
+        item.final_population = parse_thermal_binary64_v79(row.at("final_population"));
+        item.rhs = parse_thermal_binary64_v79(row.at("rhs"));
+        out[{item.element_z,item.compact_row}] = item;
+    }
+    for (const auto& row : stage_rows) {
+        const PopulationSolveKeyV82Patch510 key{std::stoi(row.at("element_z")), std::stoi(row.at("compact_row"))};
+        auto found = out.find(key);
+        if (found == out.end()) continue;
+        found->second.after_condensed = parse_thermal_binary64_v79(row.at("population_after_condensed"));
+        found->second.fixed_before = parse_thermal_binary64_v79(row.at("final_fixed_point_population_before"));
+        found->second.fixed_after = parse_thermal_binary64_v79(row.at("final_fixed_point_population_after"));
+    }
+    if (out.empty()) throw std::runtime_error("sequence-59 native solve-stage inventory is empty");
+    return out;
+}
+
+std::string sequence23_population_first_owner_v82_patch510(
+    double source_call_start,
+    const Sequence23PopulationSolveRowV82Patch510& source,
+    const Sequence23PopulationSolveRowV82Patch510& native,
+    double source_projected_global,
+    double native_projected_global) {
+    if (!scientific_close_v82(source_call_start, native.loaded_call_start)) return "INITIAL_STATE";
+    if (!scientific_close_v82(source.transformed_initial, native.transformed_initial)) return "TRANSFORM";
+    if (!scientific_close_v82(source.rhs, native.rhs)) return "MATRIX_OR_RATE_OPERANDS";
+    if (!scientific_close_v82(source.final_outer_start, native.final_outer_start) ||
+        !scientific_close_v82(source.after_condensed, native.after_condensed) ||
+        !scientific_close_v82(source.fixed_before, native.fixed_before) ||
+        !scientific_close_v82(source.fixed_after, native.fixed_after)) return "SOLVE";
+    if (!scientific_close_v82(source.final_population, native.final_population)) return "NORMALIZATION";
+    if (!scientific_close_v82(source_projected_global, native_projected_global)) return "GLOBAL_ALIAS_PROJECTION";
+    return "CLOSED_OR_UNRESOLVED";
+}
+
+void write_sequence23_population_owner_audit_v82_patch510(
+    StandaloneControllerDataV67& data,
+    const FixedDsecSnapshot& boundary,
+    const std::filesystem::path& native_diagnostic_root) {
+    if (!data.reference_trajectory_mode || data.call_index != 2u ||
+        !data.sequence23_boundary_gate_configured || !data.sequence59_boundary_reference_configured) return;
+    if (data.sequence23_source_solve_stage_rows.empty()) {
+        throw std::runtime_error("patch5.10 sequence-59 source solve rows are not configured");
+    }
+    const auto native_response = native_diagnostic_root / "evaluation_0059_all_element_solve_rows.csv";
+    const auto native_stage = native_diagnostic_root / "evaluation_0059_all_element_solve_stage_rows.csv";
+    if (!std::filesystem::is_regular_file(native_response) || !std::filesystem::is_regular_file(native_stage)) {
+        throw std::runtime_error("patch5.10 native sequence-59 solve diagnostics are missing");
+    }
+    const auto source_rows = read_sequence59_source_solve_rows_v82_patch510(data.sequence23_source_solve_stage_rows);
+    const auto native_rows = read_sequence59_native_solve_rows_v82_patch510(native_response, native_stage);
+    static constexpr std::array<int,12> targets{{67,68,69,70,2816,2817,2818,2862,2863,2864,2865,2874}};
+    const auto output_path = data.sequence23_diagnostic_dir / "sequence23_population_owner_audit.csv";
+    std::filesystem::create_directories(data.sequence23_diagnostic_dir);
+    std::ofstream csv(output_path);
+    if (!csv) throw std::runtime_error("cannot create patch5.10 sequence23 population-owner audit");
+    csv << "consumer_sequence,producer_sequence,global_slot,element_z,full_row,active_compact_row,ion_stage,ion_charge,terminal_alias,ion_label,level_label,source_call2_final_input_global,native_raw_call_start,native_loaded_call_start,source_transformed_initial,native_transformed_initial,source_final_outer_start,native_final_outer_start,source_after_condensed,native_after_condensed,source_fixed_before,native_fixed_before,source_fixed_after,native_fixed_after,source_rhs,native_rhs,source_final_compact,native_final_compact,source_call3_projected_global,native_projected_global,first_scientific_mismatch_phase\n";
+    csv << std::setprecision(17);
+    std::map<std::string,std::size_t> owners;
+    std::string first_owner = "NONE";
+    std::size_t rows_written = 0;
+    const auto element_z_for_index = [&](std::int32_t element_index) {
+        if (!data.program) return 0;
+        for (const auto& element : data.program->element_metadata) {
+            if (element.element_index == element_index) return element.atomic_number;
+        }
+        return 0;
+    };
+    for (int global_slot : targets) {
+        bool mapped = false;
+        for (std::size_t row = 0; data.program && row < data.program->row_global_level_aliases.size() && row < data.program->row_metadata.size(); ++row) {
+            const auto& aliases = data.program->row_global_level_aliases[row];
+            const auto found_alias = std::find(aliases.begin(), aliases.end(), global_slot);
+            if (found_alias == aliases.end()) continue;
+            const std::size_t alias_index = static_cast<std::size_t>(found_alias - aliases.begin());
+            const auto& meta = data.program->row_metadata[row];
+            const int z = element_z_for_index(meta.element_index);
+            const int full_row = meta.row;
+            PopulationSolveKeyV82Patch510 native_key{};
+            bool native_found = false;
+            for (const auto& item : native_rows) {
+                if (item.first.first == z && item.second.full_row == full_row) {
+                    native_key = item.first;
+                    native_found = true;
+                    break;
+                }
+            }
+            if (!native_found) continue;
+            const auto nfind = native_rows.find(native_key);
+            const auto sfind = source_rows.find(native_key);
+            if (nfind == native_rows.end() || sfind == source_rows.end()) continue;
+            const auto& nrow = nfind->second;
+            const auto& srow = sfind->second;
+            const std::size_t gi = static_cast<std::size_t>(global_slot - 1);
+            const double source_input_global = gi < data.sequence59_source_workspace.global_xilevg.size()
+                ? data.sequence59_source_workspace.global_xilevg[gi] : 0.0;
+            const double source_projected = gi < data.sequence23_source_workspace.global_xilevg.size()
+                ? data.sequence23_source_workspace.global_xilevg[gi] : srow.final_population;
+            const double native_projected = row < boundary.populations.size()
+                ? boundary.populations[row] : nrow.final_population;
+            const bool terminal = row < data.program->row_global_level_terminal_roles.size() &&
+                alias_index < data.program->row_global_level_terminal_roles[row].size() &&
+                data.program->row_global_level_terminal_roles[row][alias_index] != 0u;
+            const std::string owner = sequence23_population_first_owner_v82_patch510(
+                source_input_global, srow, nrow, source_projected, native_projected);
+            ++owners[owner];
+            if (first_owner == "NONE" && owner != "CLOSED_OR_UNRESOLVED") first_owner = owner;
+            csv << 23 << ',' << 59 << ',' << global_slot << ',' << z << ',' << full_row << ',' << native_key.second << ','
+                << meta.ion << ',' << meta.ion_charge << ',' << (terminal ? 1 : 0) << ',' << meta.ion_label << ',' << meta.level_label << ','
+                << source_input_global << ',' << nrow.raw_call_start << ',' << nrow.loaded_call_start << ','
+                << srow.transformed_initial << ',' << nrow.transformed_initial << ','
+                << srow.final_outer_start << ',' << nrow.final_outer_start << ','
+                << srow.after_condensed << ',' << nrow.after_condensed << ','
+                << srow.fixed_before << ',' << nrow.fixed_before << ','
+                << srow.fixed_after << ',' << nrow.fixed_after << ','
+                << srow.rhs << ',' << nrow.rhs << ','
+                << srow.final_population << ',' << nrow.final_population << ','
+                << source_projected << ',' << native_projected << ',' << owner << '\n';
+            ++rows_written;
+            mapped = true;
+            break;
+        }
+        if (!mapped) throw std::runtime_error("patch5.10 cannot map target global population slot " + std::to_string(global_slot));
+    }
+    std::cout << "V048746255172582_SEQUENCE23_POPULATION_OWNER_AUDIT_ROWS=" << rows_written << "\n"
+              << "V048746255172582_SEQUENCE23_POPULATION_OWNER_PRODUCER_SEQUENCE=59\n"
+              << "V048746255172582_SEQUENCE23_POPULATION_OWNER_FIRST_PHASE=" << first_owner << "\n"
+              << "V048746255172582_SEQUENCE23_POPULATION_OWNER_INITIAL_STATE_ROWS=" << owners["INITIAL_STATE"] << "\n"
+              << "V048746255172582_SEQUENCE23_POPULATION_OWNER_TRANSFORM_ROWS=" << owners["TRANSFORM"] << "\n"
+              << "V048746255172582_SEQUENCE23_POPULATION_OWNER_MATRIX_OR_RATE_ROWS=" << owners["MATRIX_OR_RATE_OPERANDS"] << "\n"
+              << "V048746255172582_SEQUENCE23_POPULATION_OWNER_SOLVE_ROWS=" << owners["SOLVE"] << "\n"
+              << "V048746255172582_SEQUENCE23_POPULATION_OWNER_NORMALIZATION_ROWS=" << owners["NORMALIZATION"] << "\n"
+              << "V048746255172582_SEQUENCE23_POPULATION_OWNER_ALIAS_PROJECTION_ROWS=" << owners["GLOBAL_ALIAS_PROJECTION"] << "\n"
+              << "V048746255172582_SEQUENCE23_POPULATION_OWNER_UNRESOLVED_ROWS=" << owners["CLOSED_OR_UNRESOLVED"] << "\n"
+              << "V048746255172582_SEQUENCE23_POPULATION_OWNER_AUDIT=WRITTEN\n";
+}
+
+std::map<PopulationSolveKeyV82Patch510,Sequence23PopulationSolveRowV82Patch510>
+read_source_solve_rows_for_sequence_v82_patch511(const std::filesystem::path& path, int sequence);
+std::map<PopulationSolveKeyV82Patch510,Sequence23PopulationSolveRowV82Patch510>
+read_native_solve_rows_v82_patch511(const std::filesystem::path& response_path, const std::filesystem::path& stage_path);
+bool relative_close_v82_patch511(double source, double native);
+
+std::filesystem::path call1_source_workspace_dir_v82_patch512(
+    const StandaloneControllerDataV67& data, int sequence) {
+    std::ostringstream name;
+    name << "evaluation_" << std::setw(4) << std::setfill('0') << sequence;
+    return data.call1_source_workspaces_root / name.str();
+}
+
+std::filesystem::path native_call1_sweep_dir_v82_patch512(
+    const StandaloneControllerDataV67& data, int sequence) {
+    std::ostringstream name;
+    name << "evaluation_" << std::setw(4) << std::setfill('0') << sequence;
+    return data.call1_dsec_population_sweep_dir / "native" / name.str();
+}
+
+void append_call1_dsec_population_sweep_v82_patch512(
+    StandaloneControllerDataV67& data,
+    const FixedDsecSnapshot& snapshot,
+    const std::filesystem::path& native_root) {
+    if (!data.reference_trajectory_mode || snapshot.call_index != 1u ||
+        snapshot.sequence < 1u || snapshot.sequence > 21u ||
+        data.call1_source_workspaces_root.empty() || data.sequence23_source_solve_stage_rows.empty()) return;
+
+    const int sequence = static_cast<int>(snapshot.sequence);
+    std::ostringstream stem;
+    stem << "evaluation_" << std::setw(4) << std::setfill('0') << sequence;
+    const auto native_response = native_root / (stem.str() + "_all_element_solve_rows.csv");
+    const auto native_stage = native_root / (stem.str() + "_all_element_solve_stage_rows.csv");
+    if (!std::filesystem::is_regular_file(native_response) || !std::filesystem::is_regular_file(native_stage)) {
+        throw std::runtime_error("patch5.12 call-1 native solve diagnostics missing for sequence " + std::to_string(sequence));
+    }
+    const auto source_rows = read_source_solve_rows_for_sequence_v82_patch511(data.sequence23_source_solve_stage_rows, sequence);
+    const auto native_rows = read_native_solve_rows_v82_patch511(native_response, native_stage);
+
+    RuntimeStateWorkspace source_current_spec;
+    source_current_spec.call_index = 1;
+    source_current_spec.directory = call1_source_workspace_dir_v82_patch512(data, sequence);
+    const auto source_current = read_runtime_state_workspace_values(source_current_spec);
+
+    RuntimeStateWorkspace source_next_spec;
+    source_next_spec.call_index = sequence < 21 ? 1 : 1;
+    source_next_spec.directory = sequence < 21
+        ? call1_source_workspace_dir_v82_patch512(data, sequence + 1)
+        : call1_source_workspace_dir_v82_patch512(data, 58);
+    const auto source_next = read_runtime_state_workspace_values(source_next_spec);
+
+    std::filesystem::create_directories(data.call1_dsec_population_sweep_dir);
+    const auto sweep_path = data.call1_dsec_population_sweep_dir / "call1_dsec_population_first_divergence_sweep.csv";
+    const bool write_header = !std::filesystem::exists(sweep_path) || std::filesystem::file_size(sweep_path) == 0u;
+    std::ofstream csv(sweep_path, std::ios::app);
+    if (!csv) throw std::runtime_error("cannot create patch5.12 call-1 DSEC population sweep");
+    if (write_header) {
+        csv << "sequence,global_slot,element_z,full_row,active_in_native_solve,active_compact_row,ion_stage,ion_charge,terminal_alias,ion_label,level_label,"
+               "source_input_global,native_raw_call_start,native_loaded_call_start,source_transformed_initial,native_transformed_initial,"
+               "source_final_outer_start,native_final_outer_start,source_after_condensed,native_after_condensed,source_fixed_before,native_fixed_before,"
+               "source_fixed_after,native_fixed_after,source_rhs,native_rhs,source_final_compact,native_final_compact,"
+               "source_next_input_global,native_projected_global,first_relative_mismatch_phase,first_scientific_mismatch_phase\n";
+    }
+    csv << std::setprecision(17);
+    static constexpr std::array<int,12> targets{{67,68,69,70,2816,2817,2818,2862,2863,2864,2865,2874}};
+    const auto element_z_for_index = [&](std::int32_t element_index) {
+        if (!data.program) return 0;
+        for (const auto& element : data.program->element_metadata)
+            if (element.element_index == element_index) return element.atomic_number;
+        return 0;
+    };
+    const auto classify = [&](double source_input,
+                              const Sequence23PopulationSolveRowV82Patch510& source,
+                              const Sequence23PopulationSolveRowV82Patch510& native,
+                              double source_projected, double native_projected, bool scientific) {
+        const auto close = [&](double a, double b) {
+            return scientific ? scientific_close_v82(a,b) : relative_close_v82_patch511(a,b);
+        };
+        if (!close(source_input, native.loaded_call_start)) return std::string("INPUT");
+        if (!close(source.transformed_initial, native.transformed_initial)) return std::string("TRANSFORM");
+        if (!close(source.rhs, native.rhs)) return std::string("MATRIX_OR_RATE_OPERANDS");
+        if (!close(source.final_outer_start, native.final_outer_start) ||
+            !close(source.after_condensed, native.after_condensed) ||
+            !close(source.fixed_before, native.fixed_before) ||
+            !close(source.fixed_after, native.fixed_after)) return std::string("SOLVE");
+        if (!close(source.final_population, native.final_population)) return std::string("NORMALIZATION");
+        if (!close(source_projected, native_projected)) return std::string("GLOBAL_ALIAS_PROJECTION");
+        return std::string("CLOSED_OR_UNRESOLVED");
+    };
+
+    std::size_t rows_written = 0;
+    for (int global_slot : targets) {
+        bool mapped = false;
+        for (std::size_t row = 0; data.program && row < data.program->row_global_level_aliases.size() && row < data.program->row_metadata.size(); ++row) {
+            const auto& aliases = data.program->row_global_level_aliases[row];
+            const auto found_alias = std::find(aliases.begin(), aliases.end(), global_slot);
+            if (found_alias == aliases.end()) continue;
+            const std::size_t alias_index = static_cast<std::size_t>(found_alias - aliases.begin());
+            const auto& meta = data.program->row_metadata[row];
+            const int z = element_z_for_index(meta.element_index);
+            const int full_row = meta.row;
+            PopulationSolveKeyV82Patch510 key{};
+            bool found_key = false;
+            for (const auto& item : native_rows) {
+                if (item.first.first == z && item.second.full_row == full_row) {
+                    key = item.first; found_key = true; break;
+                }
+            }
+            const std::size_t gi = static_cast<std::size_t>(global_slot - 1);
+            const double source_input = gi < source_current.global_xilevg.size() ? source_current.global_xilevg[gi] : 0.0;
+            const double native_input = gi < data.call1_current_input_global_xilevg.size() ? data.call1_current_input_global_xilevg[gi] : 0.0;
+            const double source_projected = gi < source_next.global_xilevg.size() ? source_next.global_xilevg[gi] : source_input;
+            const double native_projected = gi < data.global_xilevg.size() ? data.global_xilevg[gi] : native_input;
+            Sequence23PopulationSolveRowV82Patch510 source_row{}, native_row{};
+            bool active = false;
+            if (found_key) {
+                const auto s_it = source_rows.find(key), n_it = native_rows.find(key);
+                if (s_it != source_rows.end() && n_it != native_rows.end()) {
+                    source_row = s_it->second; native_row = n_it->second; active = true;
+                }
+            }
+            auto inactive_classify = [&](bool scientific) {
+                const auto close = [&](double a, double b) { return scientific ? scientific_close_v82(a,b) : relative_close_v82_patch511(a,b); };
+                if (!close(source_input,native_input)) return std::string("INPUT");
+                if (!close(source_projected,native_projected)) return std::string("GLOBAL_ALIAS_PROJECTION");
+                return std::string("INACTIVE_PASSTHROUGH");
+            };
+            const std::string relative_phase = active
+                ? classify(source_input, source_row, native_row, source_projected, native_projected, false)
+                : inactive_classify(false);
+            const std::string scientific_phase = active
+                ? classify(source_input, source_row, native_row, source_projected, native_projected, true)
+                : inactive_classify(true);
+            if (relative_phase != "CLOSED_OR_UNRESOLVED" && relative_phase != "INACTIVE_PASSTHROUGH" && !data.call1_dsec_first_relative_sequence.count(global_slot)) {
+                data.call1_dsec_first_relative_sequence[global_slot] = sequence;
+                data.call1_dsec_first_relative_phase[global_slot] = relative_phase;
+            }
+            if (scientific_phase != "CLOSED_OR_UNRESOLVED" && scientific_phase != "INACTIVE_PASSTHROUGH" && !data.call1_dsec_first_scientific_sequence.count(global_slot)) {
+                data.call1_dsec_first_scientific_sequence[global_slot] = sequence;
+                data.call1_dsec_first_scientific_phase[global_slot] = scientific_phase;
+            }
+            const bool terminal = row < data.program->row_global_level_terminal_roles.size() &&
+                alias_index < data.program->row_global_level_terminal_roles[row].size() &&
+                data.program->row_global_level_terminal_roles[row][alias_index] != 0u;
+            csv << sequence << ',' << global_slot << ',' << z << ',' << full_row << ',' << (active?1:0) << ',' << (active?key.second:0) << ','
+                << meta.ion << ',' << meta.ion_charge << ',' << (terminal?1:0) << ',' << meta.ion_label << ',' << meta.level_label << ','
+                << source_input << ',' << (active?native_row.raw_call_start:native_input) << ',' << (active?native_row.loaded_call_start:native_input) << ','
+                << source_row.transformed_initial << ',' << native_row.transformed_initial << ','
+                << source_row.final_outer_start << ',' << native_row.final_outer_start << ','
+                << source_row.after_condensed << ',' << native_row.after_condensed << ','
+                << source_row.fixed_before << ',' << native_row.fixed_before << ','
+                << source_row.fixed_after << ',' << native_row.fixed_after << ','
+                << source_row.rhs << ',' << native_row.rhs << ','
+                << source_row.final_population << ',' << native_row.final_population << ','
+                << source_projected << ',' << native_projected << ',' << relative_phase << ',' << scientific_phase << '\n';
+            ++rows_written; mapped = true; break;
+        }
+        if (!mapped) throw std::runtime_error("patch5.12 could not map call-1 target global slot " + std::to_string(global_slot));
+    }
+
+    std::cout << "V048746255172582_CALL1_DSEC_POPULATION_SWEEP_SEQUENCE=" << sequence
+              << " ROWS=" << rows_written << "\n";
+    if (sequence == 21) {
+        const auto summary_path = data.call1_dsec_population_sweep_dir / "call1_dsec_population_first_divergence_summary.csv";
+        std::ofstream summary(summary_path);
+        if (!summary) throw std::runtime_error("cannot create patch5.12 call-1 DSEC first-divergence summary");
+        summary << "global_slot,first_relative_sequence,first_relative_phase,first_scientific_sequence,first_scientific_phase\n";
+        int first_rel = 0, first_sci = 0;
+        std::string first_rel_phase = "NONE", first_sci_phase = "NONE";
+        std::size_t rel_targets = 0, sci_targets = 0;
+        for (int global_slot : targets) {
+            const auto ri = data.call1_dsec_first_relative_sequence.find(global_slot);
+            const auto si = data.call1_dsec_first_scientific_sequence.find(global_slot);
+            const int rs = ri == data.call1_dsec_first_relative_sequence.end() ? 0 : ri->second;
+            const int ss = si == data.call1_dsec_first_scientific_sequence.end() ? 0 : si->second;
+            const std::string rp = rs ? data.call1_dsec_first_relative_phase[global_slot] : "NONE";
+            const std::string sp = ss ? data.call1_dsec_first_scientific_phase[global_slot] : "NONE";
+            summary << global_slot << ',' << rs << ',' << rp << ',' << ss << ',' << sp << '\n';
+            if (rs) { ++rel_targets; if (!first_rel || rs < first_rel) { first_rel=rs; first_rel_phase=rp; } }
+            if (ss) { ++sci_targets; if (!first_sci || ss < first_sci) { first_sci=ss; first_sci_phase=sp; } }
+        }
+        std::cout << "V048746255172582_CALL1_DSEC_POPULATION_SWEEP_ROWS=" << (21u * targets.size()) << "\n"
+                  << "V048746255172582_CALL1_DSEC_POPULATION_FIRST_RELATIVE_SEQUENCE=" << (first_rel ? std::to_string(first_rel) : "NONE") << "\n"
+                  << "V048746255172582_CALL1_DSEC_POPULATION_FIRST_RELATIVE_PHASE=" << first_rel_phase << "\n"
+                  << "V048746255172582_CALL1_DSEC_POPULATION_RELATIVE_TARGETS=" << rel_targets << "\n"
+                  << "V048746255172582_CALL1_DSEC_POPULATION_FIRST_SCIENTIFIC_SEQUENCE=" << (first_sci ? std::to_string(first_sci) : "NONE") << "\n"
+                  << "V048746255172582_CALL1_DSEC_POPULATION_FIRST_SCIENTIFIC_PHASE=" << first_sci_phase << "\n"
+                  << "V048746255172582_CALL1_DSEC_POPULATION_SCIENTIFIC_TARGETS=" << sci_targets << "\n"
+                  << "V048746255172582_CALL1_DSEC_POPULATION_FIRST_DIVERGENCE_SWEEP=WRITTEN\n";
+    }
+}
+
+void write_mg_type53_source_native_opacity_record_attribution_v82_patch512(
+    StandaloneControllerDataV67& data) {
+    if (!data.reference_trajectory_mode || data.sequence23_diagnostic_dir.empty() ||
+        data.sequence23_source_solve_stage_rows.empty()) return;
+    const auto transfer_dir = data.sequence23_diagnostic_dir / "continuum_transfer";
+    const auto kernel_path = transfer_dir / "mg_type53_native_record_kernels.csv";
+    const auto opakab_path = data.sequence23_diagnostic_dir / "call2_opakab_source_nonzero_audit.csv";
+    const auto producer_decomp_path = transfer_dir / "call3_continuum_opacity_producer_decomposition.csv";
+    if (!std::filesystem::is_regular_file(kernel_path)) {
+        throw std::runtime_error("patch5.12 Mg Type-53 native kernel inventory is missing");
+    }
+    const auto source59 = read_source_solve_rows_for_sequence_v82_patch511(data.sequence23_source_solve_stage_rows, 59);
+    auto kernels = read_csv_rows_v1716(kernel_path);
+    std::sort(kernels.begin(), kernels.end(), [](const auto& a, const auto& b) {
+        return std::stoll(a.at("source_position")) < std::stoll(b.at("source_position"));
+    });
+    std::set<std::pair<long long,long long>> missing_opakab;
+    if (std::filesystem::is_regular_file(opakab_path)) {
+        for (const auto& row : read_csv_rows_v1716(opakab_path)) {
+            if (row.at("status") != "SOURCE_NONZERO_NATIVE_ZERO") continue;
+            if (std::stoi(row.at("data_type")) != 53 || std::stoi(row.at("element_z")) != 12) continue;
+            missing_opakab.emplace(std::stoll(row.at("source_position")), std::stoll(row.at("record")));
+        }
+    }
+    const auto output_path = transfer_dir / "mg_type53_source_native_opacity_record_attribution.csv";
+    std::ofstream csv(output_path);
+    if (!csv) throw std::runtime_error("cannot create patch5.12 Mg Type-53 source/native opacity record attribution");
+    csv << "source_position,record,ion_stage,continuum_index_one_based,lower_full_row,upper_full_row,lower_compact_row,upper_compact_row,lower_global_level_index,upper_global_level_index,threshold_ev,source_lower_population,native_lower_population,source_upper_population,native_upper_population,abundance,hydrogen_density_cm3,mapped_bin_count,sigma_bin_sum_cm2,source_opacity_bin_sum_cm1,native_opacity_bin_sum_cm1,required_minus_native,relative_delta,cumulative_source_opacity,cumulative_native_opacity,cumulative_relative_delta,missing_type53_opakab_identity\n";
+    csv << std::setprecision(17);
+    double cumulative_source = 0.0, cumulative_native = 0.0;
+    std::size_t mismatch_records = 0, missing_intersection = 0;
+    long long first_record = 0, first_source_position = 0, first_cumulative_record = 0;
+    std::map<int,std::size_t> mismatch_by_ion;
+    std::set<std::pair<long long,long long>> mismatch_keys;
+    for (const auto& row : kernels) {
+        const long long source_position = std::stoll(row.at("source_position"));
+        const long long record = std::stoll(row.at("record"));
+        const int ion_stage = std::stoi(row.at("ion_stage"));
+        const int lower_compact = std::stoi(row.at("lower_compact_row"));
+        const int upper_compact = std::stoi(row.at("upper_compact_row"));
+        const auto lower_it = source59.find({12,lower_compact});
+        const auto upper_it = source59.find({12,upper_compact});
+        const double source_lower = lower_it != source59.end() ? lower_it->second.final_population : 0.0;
+        const double source_upper = upper_it != source59.end() ? upper_it->second.final_population : 0.0;
+        const double native_lower = parse_thermal_binary64_v79(row.at("native_lower_population"));
+        const double native_upper = parse_thermal_binary64_v79(row.at("native_upper_population"));
+        const double abundance = parse_thermal_binary64_v79(row.at("abundance"));
+        const double density = parse_thermal_binary64_v79(row.at("hydrogen_density_cm3"));
+        const double sigma_sum = parse_thermal_binary64_v79(row.at("sigma_bin_sum_cm2"));
+        const double source_opacity = source_lower * abundance * density * sigma_sum;
+        const double native_opacity = parse_thermal_binary64_v79(row.at("native_opacity_bin_sum_cm1"));
+        const double delta = source_opacity - native_opacity;
+        const double scale = std::max({std::abs(source_opacity),std::abs(native_opacity),1.0e-40});
+        const double relative = std::abs(delta) / scale;
+        const bool mismatch = !relative_close_v82_patch511(source_opacity,native_opacity);
+        if (mismatch) {
+            ++mismatch_records; ++mismatch_by_ion[ion_stage]; mismatch_keys.emplace(source_position,record);
+            if (!first_record) { first_record=record; first_source_position=source_position; }
+        }
+        cumulative_source += source_opacity;
+        cumulative_native += native_opacity;
+        const double cumulative_scale = std::max({std::abs(cumulative_source),std::abs(cumulative_native),1.0e-40});
+        const double cumulative_relative = std::abs(cumulative_source-cumulative_native)/cumulative_scale;
+        if (!first_cumulative_record && !relative_close_v82_patch511(cumulative_source,cumulative_native)) first_cumulative_record=record;
+        const bool missing = missing_opakab.count({source_position,record}) != 0u;
+        if (missing) ++missing_intersection;
+        csv << source_position << ',' << record << ',' << ion_stage << ',' << row.at("continuum_index_one_based") << ','
+            << row.at("lower_full_row") << ',' << row.at("upper_full_row") << ',' << lower_compact << ',' << upper_compact << ','
+            << row.at("lower_global_level_index") << ',' << row.at("upper_global_level_index") << ',' << row.at("threshold_ev") << ','
+            << source_lower << ',' << native_lower << ',' << source_upper << ',' << native_upper << ',' << abundance << ',' << density << ','
+            << row.at("mapped_bin_count") << ',' << sigma_sum << ',' << source_opacity << ',' << native_opacity << ',' << delta << ',' << relative << ','
+            << cumulative_source << ',' << cumulative_native << ',' << cumulative_relative << ',' << (missing?1:0) << '\n';
+    }
+    std::size_t residual_rows_mg53 = 0, residual_rows_mismatch_record = 0;
+    if (std::filesystem::is_regular_file(producer_decomp_path)) {
+        for (const auto& row : read_csv_rows_v1716(producer_decomp_path)) {
+            if (row.at("producer_family") != "BOUND_FREE" || std::stoi(row.at("producer_data_type")) != 53 ||
+                std::stoi(row.at("producer_element_z")) != 12) continue;
+            ++residual_rows_mg53;
+            const auto key = std::make_pair(std::stoll(row.at("producer_source_position")), std::stoll(row.at("producer_record")));
+            if (mismatch_keys.count(key)) ++residual_rows_mismatch_record;
+        }
+    }
+    std::cout << "V048746255172582_CALL2_MG_TYPE53_SOURCE_NATIVE_RECORD_ROWS=" << kernels.size() << "\n"
+              << "V048746255172582_CALL2_MG_TYPE53_SOURCE_NATIVE_MISMATCH_RECORDS=" << mismatch_records << "\n"
+              << "V048746255172582_CALL2_MG_TYPE53_SOURCE_NATIVE_FIRST_MISMATCH_SOURCE_POSITION=" << (first_source_position ? std::to_string(first_source_position) : "NONE") << "\n"
+              << "V048746255172582_CALL2_MG_TYPE53_SOURCE_NATIVE_FIRST_MISMATCH_RECORD=" << (first_record ? std::to_string(first_record) : "NONE") << "\n"
+              << "V048746255172582_CALL2_MG_TYPE53_SOURCE_NATIVE_FIRST_CUMULATIVE_MISMATCH_RECORD=" << (first_cumulative_record ? std::to_string(first_cumulative_record) : "NONE") << "\n"
+              << "V048746255172582_CALL2_MG_TYPE53_MISSING_OPAKAB_IDENTITY_INTERSECTION=" << missing_intersection << "\n"
+              << "V048746255172582_CALL3_MG_TYPE53_RESIDUAL_TOP_PRODUCER_ROWS=" << residual_rows_mg53 << "\n"
+              << "V048746255172582_CALL3_MG_TYPE53_RESIDUAL_TOP_PRODUCER_MISMATCH_RECORD_ROWS=" << residual_rows_mismatch_record << "\n";
+    for (const auto& item : mismatch_by_ion) {
+        std::cout << "V048746255172582_CALL2_MG_TYPE53_SOURCE_NATIVE_MISMATCH_ION:" << item.first << '=' << item.second << "\n";
+    }
+    std::cout << "V048746255172582_CALL2_MG_TYPE53_SOURCE_NATIVE_OPACITY_SEMANTICS=COMMON_KERNEL_SOURCE_FINAL_POPULATION\n"
+              << "V048746255172582_CALL2_MG_TYPE53_SOURCE_NATIVE_OPACITY_RECORD_ATTRIBUTION=WRITTEN\n";
+}
 
 bool validate_coheat_file_v67(const std::filesystem::path& path, std::size_t& rows) {
     rows = 0;
@@ -9831,10 +10386,253 @@ bool validate_coheat_file_v67(const std::filesystem::path& path, std::size_t& ro
     return rows >= 100;
 }
 
+double global_bilevg_floor_v82_patch52(
+    const StandaloneControllerDataV67& data,
+    std::size_t global_zero_based) {
+    if (global_zero_based < data.global_terminal_continuum_role.size() &&
+        data.global_terminal_continuum_role[global_zero_based] != 0u) {
+        return 1.0e-48;
+    }
+    return 1.0e-37;
+}
+
+void recompute_global_bilevg_v82_patch52(StandaloneControllerDataV67& data) {
+    if (data.global_bilevg.size() != data.global_level_count) {
+        data.global_bilevg.assign(data.global_level_count, 0.0);
+    }
+    for (std::size_t i = 0; i < data.global_level_count; ++i) {
+        const double x = i < data.global_xilevg.size() && std::isfinite(data.global_xilevg[i])
+            ? data.global_xilevg[i] : 0.0;
+        const double rn = i < data.global_rnisg.size() && std::isfinite(data.global_rnisg[i])
+            ? data.global_rnisg[i] : 0.0;
+        const double denominator = rn + global_bilevg_floor_v82_patch52(data, i);
+        data.global_bilevg[i] = denominator > 0.0 ? x / denominator : 0.0;
+    }
+}
+
+std::map<PopulationSolveKeyV82Patch510,Sequence23PopulationSolveRowV82Patch510>
+read_source_solve_rows_for_sequence_v82_patch511(const std::filesystem::path& path, int sequence) {
+    const auto rows = read_csv_rows_v1716(path);
+    std::map<PopulationSolveKeyV82Patch510,Sequence23PopulationSolveRowV82Patch510> out;
+    for (const auto& row : rows) {
+        if (std::stoi(row.at("sequence")) != sequence) continue;
+        Sequence23PopulationSolveRowV82Patch510 item;
+        item.element_z = std::stoi(row.at("element_z"));
+        item.compact_row = std::stoi(row.at("compact_row"));
+        item.transformed_initial = parse_thermal_binary64_v79(row.at("transformed_initial_population"));
+        item.final_outer_start = parse_thermal_binary64_v79(row.at("final_outer_start_population"));
+        item.after_condensed = parse_thermal_binary64_v79(row.at("population_after_condensed"));
+        item.fixed_before = parse_thermal_binary64_v79(row.at("final_fixed_point_population_before"));
+        item.fixed_after = parse_thermal_binary64_v79(row.at("final_fixed_point_population_after"));
+        item.final_population = parse_thermal_binary64_v79(row.at("final_population"));
+        item.rhs = parse_thermal_binary64_v79(row.at("rhs"));
+        out[{item.element_z,item.compact_row}] = item;
+    }
+    if (out.empty()) throw std::runtime_error("patch5.11 source solve-stage inventory is empty for sequence " + std::to_string(sequence));
+    return out;
+}
+
+std::map<PopulationSolveKeyV82Patch510,Sequence23PopulationSolveRowV82Patch510>
+read_native_solve_rows_v82_patch511(
+    const std::filesystem::path& response_path,
+    const std::filesystem::path& stage_path) {
+    return read_sequence59_native_solve_rows_v82_patch510(response_path, stage_path);
+}
+
+bool relative_close_v82_patch511(double source, double native) {
+    if (!std::isfinite(source) || !std::isfinite(native)) return false;
+    if (source == native) return true;
+    if (std::abs(source) < 1.0e-40 && std::abs(native) < 1.0e-40) return true;
+    const double scale = std::max({std::abs(source), std::abs(native), 1.0e-40});
+    return std::abs(source - native) / scale <= 5.0e-7;
+}
+
+std::string sequence58_population_first_phase_v82_patch511(
+    double source_input_global,
+    const Sequence23PopulationSolveRowV82Patch510& source,
+    const Sequence23PopulationSolveRowV82Patch510& native,
+    double source_committed_global,
+    double native_projected_global,
+    double native_next_raw_call_start,
+    bool use_scientific) {
+    const auto close = [&](double a, double b) {
+        return use_scientific ? scientific_close_v82(a,b) : relative_close_v82_patch511(a,b);
+    };
+    if (!close(source_input_global, native.loaded_call_start)) return "SEQUENCE58_INPUT";
+    if (!close(source.transformed_initial, native.transformed_initial)) return "TRANSFORM";
+    if (!close(source.rhs, native.rhs)) return "MATRIX_OR_RATE_OPERANDS";
+    if (!close(source.final_outer_start, native.final_outer_start) ||
+        !close(source.after_condensed, native.after_condensed) ||
+        !close(source.fixed_before, native.fixed_before) ||
+        !close(source.fixed_after, native.fixed_after)) return "SOLVE";
+    if (!close(source.final_population, native.final_population)) return "NORMALIZATION";
+    if (!close(source_committed_global, native_projected_global)) return "GLOBAL_ALIAS_PROJECTION";
+    if (!close(native_projected_global, native_next_raw_call_start)) return "CALL1_TO_CALL2_COMMIT";
+    return "CLOSED_OR_UNRESOLVED";
+}
+
+void write_sequence58_final_population_boundary_audit_v82_patch511(
+    StandaloneControllerDataV67& data,
+    const std::filesystem::path& sequence58_native_root,
+    const std::filesystem::path& sequence59_native_root) {
+    if (!data.reference_trajectory_mode || data.call_index != 2u ||
+        !data.sequence58_population_boundary_captured || !data.sequence58_lte_reference_configured ||
+        !data.sequence59_boundary_reference_configured || data.sequence23_source_solve_stage_rows.empty()) return;
+    const auto seq58_response = sequence58_native_root / "evaluation_0058_all_element_solve_rows.csv";
+    const auto seq58_stage = sequence58_native_root / "evaluation_0058_all_element_solve_stage_rows.csv";
+    const auto seq59_response = sequence59_native_root / "evaluation_0059_all_element_solve_rows.csv";
+    const auto seq59_stage = sequence59_native_root / "evaluation_0059_all_element_solve_stage_rows.csv";
+    if (!std::filesystem::is_regular_file(seq58_response) || !std::filesystem::is_regular_file(seq58_stage) ||
+        !std::filesystem::is_regular_file(seq59_response) || !std::filesystem::is_regular_file(seq59_stage)) {
+        throw std::runtime_error("patch5.11 native sequence-58/59 solve diagnostics are missing");
+    }
+    const auto source58 = read_source_solve_rows_for_sequence_v82_patch511(data.sequence23_source_solve_stage_rows, 58);
+    const auto native58 = read_native_solve_rows_v82_patch511(seq58_response, seq58_stage);
+    const auto native59 = read_native_solve_rows_v82_patch511(seq59_response, seq59_stage);
+    static constexpr std::array<int,12> targets{{67,68,69,70,2816,2817,2818,2862,2863,2864,2865,2874}};
+    const auto output_path = data.sequence23_diagnostic_dir / "sequence58_final_population_boundary_audit.csv";
+    std::ofstream csv(output_path);
+    if (!csv) throw std::runtime_error("cannot create patch5.11 sequence58 final-population boundary audit");
+    csv << "consumer_sequence,causal_sequence,global_slot,element_z,full_row,active_compact_row,ion_stage,ion_charge,terminal_alias,ion_label,level_label,source_sequence58_input_global,native_sequence58_raw_call_start,native_sequence58_loaded_call_start,source_transformed_initial,native_transformed_initial,source_final_outer_start,native_final_outer_start,source_after_condensed,native_after_condensed,source_fixed_before,native_fixed_before,source_fixed_after,native_fixed_after,source_rhs,native_rhs,source_final_compact,native_final_compact,source_sequence59_committed_global,native_sequence58_projected_global,native_sequence59_raw_call_start,native_sequence59_loaded_call_start,first_relative_mismatch_phase,first_scientific_mismatch_phase\n";
+    csv << std::setprecision(17);
+    std::map<std::string,std::size_t> relative_owners, scientific_owners;
+    std::string first_relative = "NONE", first_scientific = "NONE";
+    std::size_t rows_written = 0;
+    const auto element_z_for_index = [&](std::int32_t element_index) {
+        if (!data.program) return 0;
+        for (const auto& element : data.program->element_metadata) if (element.element_index == element_index) return element.atomic_number;
+        return 0;
+    };
+    for (int global_slot : targets) {
+        bool mapped = false;
+        for (std::size_t row = 0; data.program && row < data.program->row_global_level_aliases.size() && row < data.program->row_metadata.size(); ++row) {
+            const auto& aliases = data.program->row_global_level_aliases[row];
+            const auto found_alias = std::find(aliases.begin(), aliases.end(), global_slot);
+            if (found_alias == aliases.end()) continue;
+            const std::size_t alias_index = static_cast<std::size_t>(found_alias - aliases.begin());
+            const auto& meta = data.program->row_metadata[row];
+            const int z = element_z_for_index(meta.element_index);
+            const int full_row = meta.row;
+            PopulationSolveKeyV82Patch510 key{};
+            bool found_key = false;
+            for (const auto& item : native58) {
+                if (item.first.first == z && item.second.full_row == full_row) { key=item.first; found_key=true; break; }
+            }
+            if (!found_key) continue;
+            const auto s_it = source58.find(key), n58_it = native58.find(key), n59_it = native59.find(key);
+            if (s_it == source58.end() || n58_it == native58.end() || n59_it == native59.end()) continue;
+            const std::size_t gi = static_cast<std::size_t>(global_slot - 1);
+            const double source_input = gi < data.sequence58_source_workspace.global_xilevg.size() ? data.sequence58_source_workspace.global_xilevg[gi] : 0.0;
+            const double source_committed = gi < data.sequence59_source_workspace.global_xilevg.size() ? data.sequence59_source_workspace.global_xilevg[gi] : s_it->second.final_population;
+            const double native_projected = gi < data.sequence58_native_projected_global_xilevg.size() ? data.sequence58_native_projected_global_xilevg[gi] : n58_it->second.final_population;
+            const std::string relative_phase = sequence58_population_first_phase_v82_patch511(source_input, s_it->second, n58_it->second, source_committed, native_projected, n59_it->second.raw_call_start, false);
+            const std::string scientific_phase = sequence58_population_first_phase_v82_patch511(source_input, s_it->second, n58_it->second, source_committed, native_projected, n59_it->second.raw_call_start, true);
+            ++relative_owners[relative_phase]; ++scientific_owners[scientific_phase];
+            if (first_relative == "NONE" && relative_phase != "CLOSED_OR_UNRESOLVED") first_relative = relative_phase;
+            if (first_scientific == "NONE" && scientific_phase != "CLOSED_OR_UNRESOLVED") first_scientific = scientific_phase;
+            const bool terminal = row < data.program->row_global_level_terminal_roles.size() && alias_index < data.program->row_global_level_terminal_roles[row].size() && data.program->row_global_level_terminal_roles[row][alias_index] != 0u;
+            csv << 23 << ',' << 58 << ',' << global_slot << ',' << z << ',' << full_row << ',' << key.second << ','
+                << meta.ion << ',' << meta.ion_charge << ',' << (terminal?1:0) << ','
+                << meta.ion_label << ',' << meta.level_label << ','
+                << source_input << ',' << n58_it->second.raw_call_start << ',' << n58_it->second.loaded_call_start << ','
+                << s_it->second.transformed_initial << ',' << n58_it->second.transformed_initial << ','
+                << s_it->second.final_outer_start << ',' << n58_it->second.final_outer_start << ','
+                << s_it->second.after_condensed << ',' << n58_it->second.after_condensed << ','
+                << s_it->second.fixed_before << ',' << n58_it->second.fixed_before << ','
+                << s_it->second.fixed_after << ',' << n58_it->second.fixed_after << ','
+                << s_it->second.rhs << ',' << n58_it->second.rhs << ','
+                << s_it->second.final_population << ',' << n58_it->second.final_population << ','
+                << source_committed << ',' << native_projected << ',' << n59_it->second.raw_call_start << ',' << n59_it->second.loaded_call_start << ','
+                << relative_phase << ',' << scientific_phase << '\n';
+            ++rows_written; mapped=true; break;
+        }
+        if (!mapped) throw std::runtime_error("patch5.11 could not map sequence58 target global slot " + std::to_string(global_slot));
+    }
+    const auto count = [](const std::map<std::string,std::size_t>& m, const std::string& k) { auto it=m.find(k); return it==m.end()?0u:it->second; };
+    std::cout << "V048746255172582_SEQUENCE58_FINAL_POPULATION_BOUNDARY_AUDIT_ROWS=" << rows_written << "\n"
+              << "V048746255172582_SEQUENCE58_FINAL_POPULATION_FIRST_RELATIVE_PHASE=" << first_relative << "\n"
+              << "V048746255172582_SEQUENCE58_FINAL_POPULATION_RELATIVE_INPUT_ROWS=" << count(relative_owners,"SEQUENCE58_INPUT") << "\n"
+              << "V048746255172582_SEQUENCE58_FINAL_POPULATION_RELATIVE_TRANSFORM_ROWS=" << count(relative_owners,"TRANSFORM") << "\n"
+              << "V048746255172582_SEQUENCE58_FINAL_POPULATION_RELATIVE_MATRIX_OR_RATE_ROWS=" << count(relative_owners,"MATRIX_OR_RATE_OPERANDS") << "\n"
+              << "V048746255172582_SEQUENCE58_FINAL_POPULATION_RELATIVE_SOLVE_ROWS=" << count(relative_owners,"SOLVE") << "\n"
+              << "V048746255172582_SEQUENCE58_FINAL_POPULATION_RELATIVE_NORMALIZATION_ROWS=" << count(relative_owners,"NORMALIZATION") << "\n"
+              << "V048746255172582_SEQUENCE58_FINAL_POPULATION_RELATIVE_ALIAS_ROWS=" << count(relative_owners,"GLOBAL_ALIAS_PROJECTION") << "\n"
+              << "V048746255172582_SEQUENCE58_FINAL_POPULATION_RELATIVE_COMMIT_ROWS=" << count(relative_owners,"CALL1_TO_CALL2_COMMIT") << "\n"
+              << "V048746255172582_SEQUENCE58_FINAL_POPULATION_RELATIVE_UNRESOLVED_ROWS=" << count(relative_owners,"CLOSED_OR_UNRESOLVED") << "\n"
+              << "V048746255172582_SEQUENCE58_FINAL_POPULATION_FIRST_SCIENTIFIC_PHASE=" << first_scientific << "\n"
+              << "V048746255172582_SEQUENCE58_FINAL_POPULATION_SCIENTIFIC_INPUT_ROWS=" << count(scientific_owners,"SEQUENCE58_INPUT") << "\n"
+              << "V048746255172582_SEQUENCE58_FINAL_POPULATION_SCIENTIFIC_SOLVE_ROWS=" << count(scientific_owners,"SOLVE") << "\n"
+              << "V048746255172582_SEQUENCE58_FINAL_POPULATION_SCIENTIFIC_NORMALIZATION_ROWS=" << count(scientific_owners,"NORMALIZATION") << "\n"
+              << "V048746255172582_SEQUENCE58_FINAL_POPULATION_SCIENTIFIC_ALIAS_ROWS=" << count(scientific_owners,"GLOBAL_ALIAS_PROJECTION") << "\n"
+              << "V048746255172582_SEQUENCE58_FINAL_POPULATION_SCIENTIFIC_COMMIT_ROWS=" << count(scientific_owners,"CALL1_TO_CALL2_COMMIT") << "\n"
+              << "V048746255172582_SEQUENCE58_FINAL_POPULATION_SCIENTIFIC_UNRESOLVED_ROWS=" << count(scientific_owners,"CLOSED_OR_UNRESOLVED") << "\n"
+              << "V048746255172582_SEQUENCE58_FINAL_POPULATION_BOUNDARY_AUDIT=WRITTEN\n";
+}
+
+void write_call3_opacity_producer_decomposition_v82_patch511(
+    StandaloneControllerDataV67& data,
+    const std::filesystem::path& transfer_dir) {
+    const auto component_path = transfer_dir / "call3_continuum_opacity_component_attribution.csv";
+    const auto producer_path = transfer_dir / "native_opacity_producer_inventory.csv";
+    if (!std::filesystem::is_regular_file(component_path) || !std::filesystem::is_regular_file(producer_path)) {
+        throw std::runtime_error("patch5.11 opacity component/producer inputs are missing");
+    }
+    const auto component_rows = read_csv_rows_v1716(component_path);
+    const auto producer_rows = read_csv_rows_v1716(producer_path);
+    std::map<std::size_t,std::map<std::string,std::string>> producer_by_slot;
+    for (const auto& row : producer_rows) producer_by_slot[static_cast<std::size_t>(std::stoull(row.at("runtime_slot")))] = row;
+    const auto output_path = transfer_dir / "call3_continuum_opacity_producer_decomposition.csv";
+    std::ofstream csv(output_path);
+    if (!csv) throw std::runtime_error("cannot create patch5.11 call3 opacity producer decomposition");
+    csv << "runtime_slot,energy_ev,component_owner,source_required_post_gsmooth_opacity,native_post_gsmooth_opacity,required_minus_native,producer_family,producer_source_position,producer_record,producer_data_type,producer_element_z,producer_ion_stage,producer_lower_row,producer_upper_row,producer_pre_gsmooth_top_contribution,producer_pre_gsmooth_family_total,producer_pre_gsmooth_fraction,producer_concentration\n";
+    csv << std::setprecision(17);
+    std::map<std::string,std::size_t> owner_counts, type_counts, element_counts, ion_counts, concentration_counts;
+    std::string first_identity = "NONE";
+    std::size_t rows_written=0;
+    for (const auto& c : component_rows) {
+        const std::size_t slot=static_cast<std::size_t>(std::stoull(c.at("runtime_slot")));
+        const auto p_it=producer_by_slot.find(slot);
+        if (p_it==producer_by_slot.end()) throw std::runtime_error("patch5.11 producer inventory lacks residual runtime slot");
+        const auto& p=p_it->second;
+        const std::string owner=c.at("owner");
+        std::string family="NONE", prefix;
+        if (owner=="BOUND_FREE") { family="BOUND_FREE"; prefix="bound_free_"; }
+        else if (owner=="LINE") { family="LINE"; prefix="line_"; }
+        else { family=owner; }
+        std::int64_t source_position=0, record=0; int data_type=0, z=0, ion_stage=0, lower=0, upper=0;
+        double top=0.0,total=0.0,fraction=0.0;
+        if (!prefix.empty()) {
+            source_position=std::stoll(p.at(prefix+"source_position")); record=std::stoll(p.at(prefix+"record"));
+            data_type=std::stoi(p.at(prefix+"data_type")); z=std::stoi(p.at(prefix+"element_z")); ion_stage=std::stoi(p.at(prefix+"ion_stage"));
+            lower=std::stoi(p.at(prefix+"lower_row")); upper=std::stoi(p.at(prefix+"upper_row"));
+            top=std::stod(p.at(prefix+"top_contribution")); total=std::stod(p.at(prefix=="bound_free_"?"bound_free_total":"line_total"));
+            fraction=std::stod(p.at(prefix+"top_fraction"));
+        }
+        const double af=std::abs(fraction);
+        const std::string concentration = af >= 0.75 ? "SINGLE_RECORD_DOMINANT" : af >= 0.25 ? "MULTI_RECORD_CONCENTRATED" : "DISTRIBUTED";
+        ++owner_counts[owner]; ++type_counts[family+":"+std::to_string(data_type)]; ++element_counts[family+":"+std::to_string(z)]; ++ion_counts[family+":"+std::to_string(z)+":"+std::to_string(ion_stage)]; ++concentration_counts[family+":"+concentration];
+        if (first_identity=="NONE" && !prefix.empty()) first_identity=family+":Z"+std::to_string(z)+":ION"+std::to_string(ion_stage)+":TYPE"+std::to_string(data_type)+":RECORD"+std::to_string(record);
+        csv << slot << ',' << c.at("energy_ev") << ',' << owner << ',' << c.at("source_required_post_gsmooth_opacity") << ',' << c.at("native_post_gsmooth_opacity") << ',' << c.at("required_minus_native") << ','
+            << family << ',' << source_position << ',' << record << ',' << data_type << ',' << z << ',' << ion_stage << ',' << lower << ',' << upper << ',' << top << ',' << total << ',' << fraction << ',' << concentration << '\n';
+        ++rows_written;
+    }
+    auto emit_counts=[](const std::string& prefix,const std::map<std::string,std::size_t>& counts){
+        for (const auto& kv:counts) std::cout << prefix << kv.first << '=' << kv.second << "\n";
+    };
+    std::cout << "V048746255172582_CALL3_CONTINUUM_OPACITY_PRODUCER_DECOMPOSITION_ROWS=" << rows_written << "\n"
+              << "V048746255172582_CALL3_CONTINUUM_OPACITY_FIRST_PRODUCER_IDENTITY=" << first_identity << "\n";
+    emit_counts("V048746255172582_CALL3_CONTINUUM_OPACITY_PRODUCER_DATA_TYPE_",type_counts);
+    emit_counts("V048746255172582_CALL3_CONTINUUM_OPACITY_PRODUCER_ELEMENT_",element_counts);
+    emit_counts("V048746255172582_CALL3_CONTINUUM_OPACITY_PRODUCER_ION_",ion_counts);
+    emit_counts("V048746255172582_CALL3_CONTINUUM_OPACITY_PRODUCER_CONCENTRATION_",concentration_counts);
+    std::cout << "V048746255172582_CALL3_CONTINUUM_OPACITY_PRODUCER_DECOMPOSITION=WRITTEN\n";
+}
+
 void update_global_populations_v67(
     StandaloneControllerDataV67& data,
     const std::vector<double>& populations,
-    const std::vector<double>* lte = nullptr) {
+    const std::vector<double>* lte = nullptr,
+    bool update_rnisg = true) {
     if (data.global_level_count == 0) return;
     data.global_workspace_initialized = true;
     if (data.global_xilevg.size() != data.global_level_count) {
@@ -9843,23 +10641,54 @@ void update_global_populations_v67(
         data.global_rnisg.assign(data.global_level_count, 0.0);
     }
     for (std::size_t row = 0; row < populations.size() && row < data.population_global_level_index.size(); ++row) {
-        const int global = data.population_global_level_index[row];
-        if (global <= 0 || static_cast<std::size_t>(global) > data.global_level_count) continue;
-        data.global_xilevg[static_cast<std::size_t>(global - 1)] = populations[row];
-        if (lte && row < lte->size()) {
-            const double lte_value = (*lte)[row];
-            data.global_bilevg[static_cast<std::size_t>(global - 1)] = lte_value;
-            // XSTAR's global rnisg surface is the source LTE population
-            // workspace indexed by the same global-level identity.
-            data.global_rnisg[static_cast<std::size_t>(global - 1)] = lte_value;
+        const auto write_role = [&](int global, std::uint8_t terminal) {
+            if (global <= 0 || static_cast<std::size_t>(global) > data.global_level_count) return;
+            const std::size_t gi = static_cast<std::size_t>(global - 1);
+            data.global_xilevg[gi] = populations[row];
+            if (terminal && gi < data.global_terminal_continuum_role.size()) {
+                data.global_terminal_continuum_role[gi] = 1u;
+            }
+            if (lte && update_rnisg && row < lte->size()) {
+                data.global_rnisg[gi] = (*lte)[row];
+            }
+        };
+        bool wrote_alias = false;
+        if (row < data.population_global_level_aliases.size()) {
+            const auto& aliases = data.population_global_level_aliases[row];
+            const auto& terminals = row < data.population_global_level_terminal_roles.size()
+                ? data.population_global_level_terminal_roles[row]
+                : std::vector<std::uint8_t>{};
+            for (std::size_t j = 0; j < aliases.size(); ++j) {
+                write_role(aliases[j], j < terminals.size() ? terminals[j] : 0u);
+                wrote_alias = true;
+            }
         }
+        if (!wrote_alias) write_role(data.population_global_level_index[row], 0u);
     }
+    recompute_global_bilevg_v82_patch52(data);
     if (data.call_index >= 1u && data.call_index <= data.call_start_workspaces.size()) {
         auto& workspace = data.call_start_workspaces[data.call_index - 1u];
         workspace.global_xilevg = data.global_xilevg;
         workspace.global_bilevg = data.global_bilevg;
         workspace.global_rnisg = data.global_rnisg;
     }
+}
+
+void commit_call2_to_call3_global_state_v82_patch52(
+    StandaloneControllerDataV67& data,
+    const FixedDsecSnapshot& boundary) {
+    // Source call-2 -> call-3 semantics retain the LTE workspace (rnisg)
+    // from call entry while committing the newly solved xilevg boundary.
+    // Never import reference values here: the retained copy is native call-2
+    // input state captured before the call begins.
+    update_global_populations_v67(data, boundary.populations, nullptr, false);
+    if (!data.call2_entry_global_rnisg_retained ||
+        data.call2_entry_global_rnisg.size() != data.global_level_count) {
+        throw std::runtime_error("v82 patch5.2 call-2 retained rnisg is unavailable");
+    }
+    data.global_rnisg = data.call2_entry_global_rnisg;
+    recompute_global_bilevg_v82_patch52(data);
+    data.global_workspace_initialized = true;
 }
 
 void fill_standalone_input_v67(
@@ -9946,6 +10775,10 @@ void prepare_call_start_workspace_v71(
         throw std::runtime_error("v71 call-start workspace index outside 1..4");
     }
     auto& workspace = data.call_start_workspaces[call_index - 1u];
+    if (call_index == 2u && data.global_workspace_initialized && !data.call2_entry_global_rnisg_retained) {
+        data.call2_entry_global_rnisg = data.global_rnisg;
+        data.call2_entry_global_rnisg_retained = true;
+    }
     workspace.radiation_energy = data.energy;
     workspace.bremsa = data.dsec_bremsa;
     workspace.continuum_tau_in = data.source_tau_in;
@@ -9961,30 +10794,1250 @@ void prepare_call_start_workspace_v71(
     }
 }
 
+struct VectorAuditV82Patch4 {
+    std::size_t source_rows = 0;
+    std::size_t native_rows = 0;
+    std::size_t source_nonzero = 0;
+    std::size_t native_nonzero = 0;
+    std::size_t source_nonzero_native_zero = 0;
+    std::size_t native_nonzero_source_zero = 0;
+    std::size_t first_mismatch_zero_based = std::numeric_limits<std::size_t>::max();
+    std::size_t first_scientific_mismatch_zero_based = std::numeric_limits<std::size_t>::max();
+    std::size_t first_source_nonzero_native_zero_zero_based = std::numeric_limits<std::size_t>::max();
+    std::size_t scientific_mismatch_count = 0;
+    double max_abs_delta = 0.0;
+    double max_relative_delta = 0.0;
+    bool shape = false;
+    bool e7 = false;
+    bool scientific = false;
+};
+
+VectorAuditV82Patch4 audit_vector_v82_patch4(
+    const std::vector<double>& source,
+    const std::vector<double>& native) {
+    VectorAuditV82Patch4 out;
+    out.source_rows = source.size();
+    out.native_rows = native.size();
+    out.source_nonzero = static_cast<std::size_t>(std::count_if(
+        source.begin(), source.end(), [](double v) { return std::isfinite(v) && v != 0.0; }));
+    out.native_nonzero = static_cast<std::size_t>(std::count_if(
+        native.begin(), native.end(), [](double v) { return std::isfinite(v) && v != 0.0; }));
+    out.shape = source.size() == native.size();
+    const std::size_t common = std::min(source.size(), native.size());
+    out.e7 = out.shape;
+    out.scientific = out.shape;
+    for (std::size_t i = 0; i < common; ++i) {
+        const double a = source[i];
+        const double b = native[i];
+        const bool source_nz = std::isfinite(a) && a != 0.0;
+        const bool native_nz = std::isfinite(b) && b != 0.0;
+        if (source_nz && !native_nz) {
+            ++out.source_nonzero_native_zero;
+            if (out.first_source_nonzero_native_zero_zero_based == std::numeric_limits<std::size_t>::max()) {
+                out.first_source_nonzero_native_zero_zero_based = i;
+            }
+        }
+        if (native_nz && !source_nz) ++out.native_nonzero_source_zero;
+        if (std::isfinite(a) && std::isfinite(b)) {
+            const double diff = std::abs(a - b);
+            out.max_abs_delta = std::max(out.max_abs_delta, diff);
+            const double scale = std::max({std::abs(a), std::abs(b), kTrajectoryZeroFloorV82});
+            out.max_relative_delta = std::max(out.max_relative_delta, diff / scale);
+        } else if (!(std::isnan(a) && std::isnan(b))) {
+            out.max_abs_delta = std::numeric_limits<double>::infinity();
+            out.max_relative_delta = std::numeric_limits<double>::infinity();
+        }
+        if (!scientific_close_v82(a, b)) {
+            out.scientific = false;
+            ++out.scientific_mismatch_count;
+            if (out.first_scientific_mismatch_zero_based == std::numeric_limits<std::size_t>::max()) {
+                out.first_scientific_mismatch_zero_based = i;
+            }
+        }
+        if (!canonical_e7_equal(a, b)) {
+            out.e7 = false;
+            if (out.first_mismatch_zero_based == std::numeric_limits<std::size_t>::max()) {
+                out.first_mismatch_zero_based = i;
+            }
+        }
+    }
+    if (!out.shape && out.first_mismatch_zero_based == std::numeric_limits<std::size_t>::max()) {
+        out.first_mismatch_zero_based = common;
+    }
+    if (!out.shape) {
+        out.scientific = false;
+        const std::size_t extra = source.size() > native.size()
+            ? source.size() - native.size() : native.size() - source.size();
+        out.scientific_mismatch_count += extra;
+        if (out.first_scientific_mismatch_zero_based == std::numeric_limits<std::size_t>::max()) {
+            out.first_scientific_mismatch_zero_based = common;
+        }
+    }
+    return out;
+}
+
+std::string binary64_vector_hash_v82_patch4(const std::vector<double>& values) {
+    std::uint64_t hash = 1469598103934665603ULL;
+    for (double value : values) {
+        std::uint64_t bits = 0;
+        static_assert(sizeof(bits) == sizeof(value));
+        std::memcpy(&bits, &value, sizeof(bits));
+        for (unsigned shift = 0; shift < 64; shift += 8) {
+            hash ^= static_cast<unsigned char>((bits >> shift) & 0xffu);
+            hash *= 1099511628211ULL;
+        }
+    }
+    return hex64_v1712(hash);
+}
+
+std::string audit_slot_text_v82_patch4(std::size_t slot) {
+    return slot == std::numeric_limits<std::size_t>::max()
+        ? std::string("NONE") : std::to_string(slot);
+}
+
+int program_element_z_v82_patch4(const xstar_atdb_runtime::ProgramStorage& program, int element_index) {
+    for (const auto& element : program.elements) {
+        if (element.element_index == element_index) return element.element_z;
+    }
+    return 0;
+}
+
+std::optional<std::size_t> program_population_index_v82_patch4(
+    const xstar_atdb_runtime::ProgramStorage& program,
+    int element_index,
+    int local_row) {
+    if (local_row <= 0) return std::nullopt;
+    for (std::size_t i = 0; i < program.rows.size(); ++i) {
+        if (program.rows[i].element_index == element_index && program.rows[i].row == local_row) return i;
+    }
+    return std::nullopt;
+}
+
+void audit_call2_final_opakab_v82_patch4(
+    StandaloneControllerDataV67& data,
+    const FixedDsecSnapshot& boundary,
+    double call2_to_call3_delta_radius_cm) {
+    std::size_t nonzero = 0;
+    std::size_t first = 0;
+    std::size_t last = 0;
+    double maximum = 0.0;
+    for (std::size_t source_slot = 1; source_slot < boundary.opakab.size(); ++source_slot) {
+        const double value = boundary.opakab[source_slot];
+        if (std::isfinite(value) && value != 0.0) {
+            ++nonzero;
+            if (first == 0u) first = source_slot;
+            last = source_slot;
+            maximum = std::max(maximum, std::abs(value));
+        }
+    }
+
+    const auto& source_tau = data.sequence23_source_workspace.continuum_tau_in;
+    std::size_t source_nonzero = 0;
+    std::size_t missing = 0;
+    std::size_t spurious = 0;
+    std::size_t missing_type49 = 0;
+    std::size_t missing_type53 = 0;
+    std::size_t missing_type99 = 0;
+    std::size_t missing_other = 0;
+    std::size_t missing_h = 0;
+    std::size_t missing_he = 0;
+    std::size_t missing_mg = 0;
+    std::size_t overlap_e7_mismatches = 0;
+    std::size_t source_tau_associated_type99 = 0;
+    std::size_t source_tau_associated_native_zero_type99 = 0;
+    std::size_t type99_native_nonzero_source_zero = 0;
+    std::size_t first_missing_source_slot = 0;
+    double max_overlap_abs_delta = 0.0;
+
+    std::ofstream csv;
+    if (!data.sequence23_diagnostic_dir.empty()) {
+        std::filesystem::create_directories(data.sequence23_diagnostic_dir);
+        csv.open(data.sequence23_diagnostic_dir / "call2_opakab_source_nonzero_audit.csv");
+        csv << "runtime_slot_zero_based,source_slot_one_based,source_tau_in,source_tau_over_segment_diagnostic,native_opakab,"
+               "source_position,record,data_type,rate_type,element_z,ion_stage,lower_row,upper_row,"
+               "lower_population,upper_population,line_energy_ev,real_offset,real_count,int_offset,int_count,status\n";
+    }
+
+    const std::size_t runtime_rows = std::min(source_tau.size(), data.source_tau_in.size());
+    for (std::size_t runtime_slot = 0; runtime_slot < runtime_rows; ++runtime_slot) {
+        const std::size_t source_slot = runtime_slot + 1u;
+        const double source_tau_value = source_tau[runtime_slot];
+        const double native_opacity = source_slot < boundary.opakab.size()
+            ? boundary.opakab[source_slot] : 0.0;
+        const bool source_nz = std::isfinite(source_tau_value) && source_tau_value != 0.0;
+        const bool native_nz = std::isfinite(native_opacity) && native_opacity > 0.0;
+        if (source_nz) ++source_nonzero;
+        if (source_nz && !native_nz) {
+            ++missing;
+            if (first_missing_source_slot == 0u) first_missing_source_slot = source_slot;
+        }
+        if (!source_nz && native_nz) ++spurious;
+        const double source_tau_over_segment_diagnostic = call2_to_call3_delta_radius_cm > 0.0
+            ? source_tau_value / call2_to_call3_delta_radius_cm : 0.0;
+        if (source_nz && native_nz) {
+            max_overlap_abs_delta = std::max(max_overlap_abs_delta,
+                std::abs(source_tau_over_segment_diagnostic - native_opacity));
+            if (!canonical_e7_equal(source_tau_over_segment_diagnostic, native_opacity)) ++overlap_e7_mismatches;
+        }
+
+        std::vector<const xstar_fixed_program_record_v1*> matches;
+        if (data.program) {
+            for (const auto& record : data.program->records) {
+                if (record.continuum_index_one_based == static_cast<int32_t>(source_slot)) {
+                    matches.push_back(&record);
+                }
+            }
+        }
+        const bool type99_associated = std::any_of(matches.begin(), matches.end(), [](const auto* record) {
+            return record && record->data_type == 99;
+        });
+        if (source_nz && type99_associated) {
+            ++source_tau_associated_type99;
+            if (!native_nz) ++source_tau_associated_native_zero_type99;
+        }
+        if (!source_nz && native_nz && type99_associated) ++type99_native_nonzero_source_zero;
+        if (!source_nz) continue;
+
+        if (source_nz && !native_nz) {
+            bool classified = false;
+            std::set<int> zs;
+            for (const auto* record : matches) {
+                if (record->data_type == 49) { ++missing_type49; classified = true; }
+                else if (record->data_type == 53) { ++missing_type53; classified = true; }
+                else if (record->data_type == 99) { ++missing_type99; classified = true; }
+                const int z = data.program ? program_element_z_v82_patch4(*data.program, record->element_index) : 0;
+                zs.insert(z);
+            }
+            if (!classified) ++missing_other;
+            if (zs.count(1)) ++missing_h;
+            if (zs.count(2)) ++missing_he;
+            if (zs.count(12)) ++missing_mg;
+        }
+
+        if (csv) {
+            if (matches.empty()) matches.push_back(nullptr);
+            for (const auto* record : matches) {
+                int element_z = 0;
+                double lower_population = 0.0;
+                double upper_population = 0.0;
+                if (record && data.program) {
+                    element_z = program_element_z_v82_patch4(*data.program, record->element_index);
+                    const auto lower = program_population_index_v82_patch4(*data.program, record->element_index, record->lower_row);
+                    const auto upper = program_population_index_v82_patch4(*data.program, record->element_index, record->upper_row);
+                    if (lower && *lower < boundary.populations.size()) lower_population = boundary.populations[*lower];
+                    if (upper && *upper < boundary.populations.size()) upper_population = boundary.populations[*upper];
+                }
+                csv << runtime_slot << ',' << source_slot << ',' << std::setprecision(17)
+                    << source_tau_value << ',' << source_tau_over_segment_diagnostic << ',' << native_opacity << ',';
+                if (record) {
+                    csv << record->source_position << ',' << record->record << ',' << record->data_type << ','
+                        << record->rate_type << ',' << element_z << ',' << record->ion_stage << ','
+                        << record->lower_row << ',' << record->upper_row << ','
+                        << lower_population << ',' << upper_population << ',' << record->line_energy_ev << ','
+                        << record->real_offset << ',' << record->real_count << ','
+                        << record->int_offset << ',' << record->int_count << ',';
+                } else {
+                    csv << "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,";
+                }
+                csv << (native_nz ? "OVERLAP" : "SOURCE_NONZERO_NATIVE_ZERO") << '\n';
+            }
+        }
+    }
+
+    std::cout << std::setprecision(17)
+              << "V048746255172582_CALL2_FINAL_OPAKAB_NONZERO_COUNT=" << nonzero << "\n"
+              << "V048746255172582_CALL2_FINAL_OPAKAB_FIRST_NONZERO_SLOT=" << first << "\n"
+              << "V048746255172582_CALL2_FINAL_OPAKAB_LAST_NONZERO_SLOT=" << last << "\n"
+              << "V048746255172582_CALL2_FINAL_OPAKAB_MAX=" << maximum << "\n"
+              << "V048746255172582_CALL2_FINAL_OPAKAB_HASH="
+              << binary64_vector_hash_v82_patch4(boundary.opakab) << "\n"
+              << "V048746255172582_CALL2_FINAL_OPAKAB_SOURCE_NONZERO_COUNT=" << source_nonzero << "\n"
+              << "V048746255172582_CALL2_FINAL_OPAKAB_SOURCE_NONZERO_NATIVE_ZERO_COUNT=" << missing << "\n"
+              << "V048746255172582_CALL2_FINAL_OPAKAB_NATIVE_NONZERO_SOURCE_ZERO_COUNT=" << spurious << "\n"
+              << "V048746255172582_CALL2_FINAL_OPAKAB_FIRST_SOURCE_NONZERO_NATIVE_ZERO_SLOT="
+              << (first_missing_source_slot == 0u ? std::string("NONE") : std::to_string(first_missing_source_slot)) << "\n"
+              << "V048746255172582_CALL2_FINAL_OPAKAB_SOURCE_NONZERO_NATIVE_ZERO_TYPE49=" << missing_type49 << "\n"
+              << "V048746255172582_CALL2_FINAL_OPAKAB_SOURCE_NONZERO_NATIVE_ZERO_TYPE53=" << missing_type53 << "\n"
+              << "V048746255172582_CALL2_FINAL_OPAKAB_SOURCE_NONZERO_NATIVE_ZERO_TYPE99=" << missing_type99 << "\n"
+              << "V048746255172582_CALL2_FINAL_OPAKAB_SOURCE_NONZERO_NATIVE_ZERO_OTHER=" << missing_other << "\n"
+              << "V048746255172582_CALL2_FINAL_OPAKAB_SOURCE_NONZERO_NATIVE_ZERO_H=" << missing_h << "\n"
+              << "V048746255172582_CALL2_FINAL_OPAKAB_SOURCE_NONZERO_NATIVE_ZERO_HE=" << missing_he << "\n"
+              << "V048746255172582_CALL2_FINAL_OPAKAB_SOURCE_NONZERO_NATIVE_ZERO_MG=" << missing_mg << "\n"
+              << "V048746255172582_CALL2_FINAL_OPAKAB_OVERLAP_E7_MISMATCH_COUNT=" << overlap_e7_mismatches << "\n"
+              << "V048746255172582_CALL2_FINAL_OPAKAB_OVERLAP_MAX_ABS_DELTA=" << max_overlap_abs_delta << "\n"
+              << "V048746255172582_CALL2_FINAL_OPAKAB_SOURCE_TAU_ASSOCIATED_TYPE99_COUNT=" << source_tau_associated_type99 << "\n"
+              << "V048746255172582_CALL2_FINAL_OPAKAB_SOURCE_TAU_ASSOCIATED_NATIVE_ZERO_TYPE99=" << source_tau_associated_native_zero_type99 << "\n"
+              << "V048746255172582_CALL2_FINAL_OPAKAB_TYPE99_NATIVE_NONZERO_SOURCE_ZERO_COUNT=" << type99_native_nonzero_source_zero << "\n"
+              << "V048746255172582_TYPE99_DIRECT_OPAKAB_SOURCE_SEMANTICS=" << (type99_native_nonzero_source_zero == 0u ? "ACCEPT" : "REJECT") << "\n"
+              << "V048746255172582_CALL2_FINAL_OPAKAB_MISSING_TYPE99=NOT_APPLICABLE_SOURCE_UCALC99_NO_DIRECT_OPAKAB\n"
+              << "V048746255172582_CALL2_FINAL_OPAKAB_TYPE99_PUBLICATION=" << (type99_native_nonzero_source_zero == 0u ? "ACCEPT_SOURCE_ZERO" : "REJECT_SPURIOUS_NATIVE") << "\n";
+}
+
+void print_vector_audit_v82_patch4(const char* name, const VectorAuditV82Patch4& audit) {
+    std::cout << "V048746255172582_CALL3_" << name << "_SOURCE_ROWS=" << audit.source_rows << "\n"
+              << "V048746255172582_CALL3_" << name << "_NATIVE_ROWS=" << audit.native_rows << "\n"
+              << "V048746255172582_CALL3_" << name << "_SHAPE=" << (audit.shape ? "ACCEPT" : "REJECT") << "\n"
+              << "V048746255172582_CALL3_" << name << "_FIRST_MISMATCH_RUNTIME_SLOT="
+              << audit_slot_text_v82_patch4(audit.first_mismatch_zero_based) << "\n"
+              << "V048746255172582_CALL3_" << name << "_FIRST_SCIENTIFIC_MISMATCH_RUNTIME_SLOT="
+              << audit_slot_text_v82_patch4(audit.first_scientific_mismatch_zero_based) << "\n"
+              << "V048746255172582_CALL3_" << name << "_SCIENTIFIC_MISMATCH_COUNT="
+              << audit.scientific_mismatch_count << "\n"
+              << "V048746255172582_CALL3_" << name << "_MAX_ABS_DELTA=" << std::setprecision(17) << audit.max_abs_delta << "\n"
+              << "V048746255172582_CALL3_" << name << "_MAX_RELATIVE_DELTA=" << std::setprecision(17) << audit.max_relative_delta << "\n"
+              << "V048746255172582_CALL3_" << name << "_IEEE_E7=" << (audit.e7 ? "ACCEPT" : "REJECT") << "\n"
+              << "V048746255172582_CALL3_" << name << "_SCIENTIFIC_STATE=" << (audit.scientific ? "ACCEPT" : "REJECT") << "\n";
+}
+
+void audit_sequence58_lte_v82_patch53(
+    StandaloneControllerDataV67& data,
+    const FixedDsecSnapshot& snapshot) {
+    if (!data.reference_trajectory_mode || snapshot.sequence != 58u) return;
+    if (!data.sequence58_lte_reference_configured) {
+        throw std::runtime_error("v82 patch5.3 sequence-58 source LTE workspace is not configured");
+    }
+    const auto& source = data.sequence58_source_workspace.global_rnisg;
+    const auto audit = audit_vector_v82_patch4(source, data.global_rnisg);
+    data.sequence58_lte_scientific_accept = audit.scientific;
+    const char* source_t4_env = std::getenv("XSTAR_V82_SEQUENCE58_SOURCE_T4");
+    const char* source_xee_env = std::getenv("XSTAR_V82_SEQUENCE58_SOURCE_XEE");
+    const double source_t4 = source_t4_env && *source_t4_env ? std::strtod(source_t4_env, nullptr) : snapshot.temperature_t4;
+    const double source_xee = source_xee_env && *source_xee_env ? std::strtod(source_xee_env, nullptr) : snapshot.electron_fraction_input;
+    const bool lte_input_state = scientific_close_v82(source_t4, snapshot.temperature_t4) &&
+        scientific_close_v82(source_xee, snapshot.electron_fraction_input);
+
+    const auto dir = data.sequence23_diagnostic_dir.parent_path() / "sequence58_final_call1_lte";
+    std::filesystem::create_directories(dir);
+    std::ofstream csv(dir / "sequence58_global_rnisg_audit.csv");
+    if (!csv) throw std::runtime_error("cannot create sequence-58 LTE audit CSV");
+    csv << "global_level_index,source_rnisg,native_rnisg,canonical_e7,scientific_close,abs_delta,relative_delta\n";
+    const std::size_t common = std::min(source.size(), data.global_rnisg.size());
+    for (std::size_t i = 0; i < common; ++i) {
+        const double a = source[i];
+        const double b = data.global_rnisg[i];
+        const double abs_delta = std::isfinite(a) && std::isfinite(b)
+            ? std::abs(a - b) : std::numeric_limits<double>::infinity();
+        const double scale = std::max({std::abs(a), std::abs(b), kTrajectoryZeroFloorV82});
+        const double rel_delta = std::isfinite(abs_delta) ? abs_delta / scale
+            : std::numeric_limits<double>::infinity();
+        csv << (i + 1u) << ',' << std::setprecision(17) << a << ',' << b << ','
+            << (canonical_e7_equal(a, b) ? 1 : 0) << ','
+            << (scientific_close_v82(a, b) ? 1 : 0) << ','
+            << abs_delta << ',' << rel_delta << '\n';
+    }
+    csv.close();
+
+    std::cout << std::setprecision(17)
+              << "V048746255172582_SEQUENCE58_LTE_INPUT_TEMPERATURE_T4_NATIVE=" << snapshot.temperature_t4 << "\n"
+              << "V048746255172582_SEQUENCE58_LTE_INPUT_XEE_NATIVE=" << snapshot.electron_fraction_input << "\n"
+              << "V048746255172582_SEQUENCE58_LTE_INPUT_HYDROGEN_DENSITY_NATIVE=" << data.parameters->density_cm3 << "\n"
+              << "V048746255172582_SEQUENCE58_LTE_INPUT_TEMPERATURE_T4_SOURCE=" << source_t4 << "\n"
+              << "V048746255172582_SEQUENCE58_LTE_INPUT_XEE_SOURCE=" << source_xee << "\n"
+              << "V048746255172582_SEQUENCE58_LTE_INPUT_STATE=" << (lte_input_state ? "ACCEPT" : "REJECT") << "\n"
+              << "V048746255172582_SEQUENCE58_GLOBAL_RNISG_SOURCE_ROWS=" << audit.source_rows << "\n"
+              << "V048746255172582_SEQUENCE58_GLOBAL_RNISG_NATIVE_ROWS=" << audit.native_rows << "\n"
+              << "V048746255172582_SEQUENCE58_GLOBAL_RNISG_FIRST_MISMATCH_RUNTIME_SLOT="
+              << audit_slot_text_v82_patch4(audit.first_mismatch_zero_based) << "\n"
+              << "V048746255172582_SEQUENCE58_GLOBAL_RNISG_FIRST_SCIENTIFIC_MISMATCH_RUNTIME_SLOT="
+              << audit_slot_text_v82_patch4(audit.first_scientific_mismatch_zero_based) << "\n"
+              << "V048746255172582_SEQUENCE58_GLOBAL_RNISG_SCIENTIFIC_MISMATCH_COUNT="
+              << audit.scientific_mismatch_count << "\n"
+              << "V048746255172582_SEQUENCE58_GLOBAL_RNISG_MAX_ABS_DELTA=" << audit.max_abs_delta << "\n"
+              << "V048746255172582_SEQUENCE58_GLOBAL_RNISG_MAX_RELATIVE_DELTA=" << audit.max_relative_delta << "\n"
+              << "V048746255172582_SEQUENCE58_GLOBAL_RNISG_SOURCE_HASH="
+              << binary64_vector_hash_v82_patch4(source) << "\n"
+              << "V048746255172582_SEQUENCE58_GLOBAL_RNISG_NATIVE_HASH="
+              << binary64_vector_hash_v82_patch4(data.global_rnisg) << "\n"
+              << "V048746255172582_SEQUENCE58_GLOBAL_RNISG_IEEE_E7=" << (audit.e7 ? "ACCEPT" : "REJECT") << "\n"
+              << "V048746255172582_SEQUENCE58_GLOBAL_RNISG_SCIENTIFIC_STATE="
+              << (audit.scientific ? "ACCEPT" : "REJECT") << "\n";
+}
+
+void audit_call3_boundary_v82_patch4(StandaloneControllerDataV67& data) {
+    if (!data.reference_trajectory_mode) return;
+    if (!data.sequence23_boundary_gate_configured) {
+        throw std::runtime_error("v82 patch5.2 sequence-23 source workspace is not configured");
+    }
+    const auto& native = data.call_start_workspaces[2u];
+    const auto& source = data.sequence23_source_workspace;
+    const auto tau = audit_vector_v82_patch4(source.continuum_tau_in, native.continuum_tau_in);
+    const auto bremsa = audit_vector_v82_patch4(source.bremsa, native.bremsa);
+    const auto xilevg = audit_vector_v82_patch4(source.global_xilevg, native.global_xilevg);
+    const auto bilevg = audit_vector_v82_patch4(source.global_bilevg, native.global_bilevg);
+    const auto rnisg = audit_vector_v82_patch4(source.global_rnisg, native.global_rnisg);
+    const bool tau_contract = tau.shape && tau.source_rows == 301301u && tau.native_rows == 301301u && tau.scientific;
+    const bool committed_state_contract = data.sequence58_lte_scientific_accept &&
+        bremsa.scientific && xilevg.scientific && bilevg.scientific && rnisg.scientific;
+
+    std::size_t bilevg_residual_rows = 0;
+    std::string bilevg_first_owner = "NONE";
+    std::size_t bilevg_xilevg_dominant_rows = 0;
+    std::size_t bilevg_denominator_dominant_rows = 0;
+    std::size_t bilevg_mixed_rows = 0;
+    std::size_t xilevg_attribution_rows = 0;
+    if (!data.sequence23_diagnostic_dir.empty()) {
+        std::filesystem::create_directories(data.sequence23_diagnostic_dir);
+        std::ofstream csv(data.sequence23_diagnostic_dir / "global_bilevg_residual_audit.csv");
+        std::ofstream xcsv(data.sequence23_diagnostic_dir / "global_xilevg_residual_attribution.csv");
+        if (!csv || !xcsv) throw std::runtime_error("cannot create patch5.9 global residual audits");
+        csv << "global_slot,source_xilevg,native_xilevg,source_rnisg,native_rnisg,source_bilevg,native_bilevg,terminal_role,native_floor,native_denominator,source_implied_denominator,bilevg_from_native_x_source_den,bilevg_from_source_x_native_den,xilevg_component_abs,denominator_component_abs,actual_bilevg_abs_error,xilevg_component_fraction,denominator_component_fraction,owner\n";
+        xcsv << "global_slot,source_xilevg,native_xilevg,abs_delta,relative_delta,xilevg_scientific,bilevg_scientific,compact_row_index,element_index,atomic_number,element_local_row,ion_stage,ion_charge,global_alias_terminal_role,primary_global_level_index,ion_label,level_label\n";
+        csv << std::setprecision(17);
+        xcsv << std::setprecision(17);
+        const std::size_t n = std::min({source.global_bilevg.size(), native.global_bilevg.size(),
+            source.global_xilevg.size(), native.global_xilevg.size(),
+            source.global_rnisg.size(), native.global_rnisg.size()});
+        const auto atomic_number_for_element = [&](std::int32_t element_index) {
+            if (!data.program) return 0;
+            for (const auto& element : data.program->element_metadata) {
+                if (element.element_index == element_index) return element.atomic_number;
+            }
+            return 0;
+        };
+        for (std::size_t i = 0; i < n; ++i) {
+            if (scientific_close_v82(source.global_bilevg[i], native.global_bilevg[i])) continue;
+            ++bilevg_residual_rows;
+            const bool x_ok = scientific_close_v82(source.global_xilevg[i], native.global_xilevg[i]);
+            const bool terminal = i < data.global_terminal_continuum_role.size() &&
+                data.global_terminal_continuum_role[i] != 0u;
+            const double floor = global_bilevg_floor_v82_patch52(data, i);
+            const double native_den = native.global_rnisg[i] + floor;
+            const double source_den = source.global_bilevg[i] != 0.0
+                ? source.global_xilevg[i] / source.global_bilevg[i]
+                : source.global_rnisg[i] + floor;
+            const double from_native_x_source_den = source_den != 0.0
+                ? native.global_xilevg[i] / source_den : 0.0;
+            const double from_source_x_native_den = native_den != 0.0
+                ? source.global_xilevg[i] / native_den : 0.0;
+            const double x_component = std::abs(from_native_x_source_den - source.global_bilevg[i]);
+            const double den_component = std::abs(from_source_x_native_den - source.global_bilevg[i]);
+            const double actual_error = std::abs(native.global_bilevg[i] - source.global_bilevg[i]);
+            const double component_sum = x_component + den_component;
+            const double x_fraction = component_sum > 0.0 ? x_component / component_sum : 0.0;
+            const double den_fraction = component_sum > 0.0 ? den_component / component_sum : 0.0;
+            const char* owner = "MIXED";
+            if (x_component > 4.0 * den_component) { owner = "XILEVG_DOMINANT"; ++bilevg_xilevg_dominant_rows; }
+            else if (den_component > 4.0 * x_component) { owner = "DENOMINATOR_DOMINANT"; ++bilevg_denominator_dominant_rows; }
+            else { ++bilevg_mixed_rows; }
+            if (bilevg_first_owner == "NONE") bilevg_first_owner = owner;
+            csv << (i + 1u) << ',' << source.global_xilevg[i] << ',' << native.global_xilevg[i] << ','
+                << source.global_rnisg[i] << ',' << native.global_rnisg[i] << ','
+                << source.global_bilevg[i] << ',' << native.global_bilevg[i] << ','
+                << (terminal ? 1 : 0) << ',' << floor << ',' << native_den << ',' << source_den << ','
+                << from_native_x_source_den << ',' << from_source_x_native_den << ','
+                << x_component << ',' << den_component << ',' << actual_error << ','
+                << x_fraction << ',' << den_fraction << ',' << owner << '\n';
+
+            // Attribute every bilevg-sensitive xilevg residual back through the
+            // retained compact-row alias topology. Shared continuum/ground rows
+            // intentionally emit one row per source global role.
+            bool emitted_owner = false;
+            if (data.program) {
+                const auto& aliases = data.program->row_global_level_aliases;
+                const auto& roles = data.program->row_global_level_terminal_roles;
+                for (std::size_t row = 0; row < aliases.size() && row < data.program->row_metadata.size(); ++row) {
+                    for (std::size_t a = 0; a < aliases[row].size(); ++a) {
+                        if (aliases[row][a] != static_cast<std::int32_t>(i + 1u)) continue;
+                        const auto& meta = data.program->row_metadata[row];
+                        const bool alias_terminal = row < roles.size() && a < roles[row].size() && roles[row][a] != 0u;
+                        const double xd = std::abs(native.global_xilevg[i] - source.global_xilevg[i]);
+                        const double xs = std::max({std::abs(native.global_xilevg[i]), std::abs(source.global_xilevg[i]), 1.0e-40});
+                        xcsv << (i + 1u) << ',' << source.global_xilevg[i] << ',' << native.global_xilevg[i] << ','
+                             << xd << ',' << xd / xs << ',' << (x_ok ? 0 : 1) << ",1,"
+                             << (row + 1u) << ',' << meta.element_index << ',' << atomic_number_for_element(meta.element_index) << ','
+                             << meta.row << ',' << meta.ion << ',' << meta.ion_charge << ',' << (alias_terminal ? 1 : 0) << ','
+                             << meta.global_level_index << ',' << meta.ion_label << ',' << meta.level_label << '\n';
+                        ++xilevg_attribution_rows;
+                        emitted_owner = true;
+                    }
+                }
+            }
+            if (!emitted_owner) {
+                const double xd = std::abs(native.global_xilevg[i] - source.global_xilevg[i]);
+                const double xs = std::max({std::abs(native.global_xilevg[i]), std::abs(source.global_xilevg[i]), 1.0e-40});
+                xcsv << (i + 1u) << ',' << source.global_xilevg[i] << ',' << native.global_xilevg[i] << ','
+                     << xd << ',' << xd / xs << ',' << (x_ok ? 0 : 1)
+                     << ",1,0,0,0,0,0,0,0,0,UNMAPPED,UNMAPPED\n";
+                ++xilevg_attribution_rows;
+            }
+        }
+    }
+
+    std::cout << std::setprecision(17)
+              << "V048746255172582_CALL3_CONTINUUM_TAU_IN_SOURCE_ROWS=" << tau.source_rows << "\n"
+              << "V048746255172582_CALL3_CONTINUUM_TAU_IN_NATIVE_ROWS=" << tau.native_rows << "\n"
+              << "V048746255172582_CALL3_CONTINUUM_TAU_IN_ROWS=" << tau.native_rows << "\n"
+              << "V048746255172582_CALL3_CONTINUUM_TAU_IN_SHAPE=" << (tau.shape ? "ACCEPT" : "REJECT") << "\n"
+              << "V048746255172582_CALL3_CONTINUUM_TAU_IN_SOURCE_NONZERO_COUNT=" << tau.source_nonzero << "\n"
+              << "V048746255172582_CALL3_CONTINUUM_TAU_IN_NATIVE_NONZERO_COUNT=" << tau.native_nonzero << "\n"
+              << "V048746255172582_CALL3_CONTINUUM_TAU_IN_NONZERO_COUNT=" << tau.native_nonzero << "\n"
+              << "V048746255172582_CALL3_CONTINUUM_TAU_IN_SOURCE_NONZERO_NATIVE_ZERO_COUNT=" << tau.source_nonzero_native_zero << "\n"
+              << "V048746255172582_CALL3_CONTINUUM_TAU_IN_NATIVE_NONZERO_SOURCE_ZERO_COUNT=" << tau.native_nonzero_source_zero << "\n"
+              << "V048746255172582_CALL3_CONTINUUM_TAU_IN_FIRST_MISMATCH_RUNTIME_SLOT="
+              << audit_slot_text_v82_patch4(tau.first_mismatch_zero_based) << "\n"
+              << "V048746255172582_CALL3_CONTINUUM_TAU_IN_FIRST_SCIENTIFIC_MISMATCH_RUNTIME_SLOT="
+              << audit_slot_text_v82_patch4(tau.first_scientific_mismatch_zero_based) << "\n"
+              << "V048746255172582_CALL3_CONTINUUM_TAU_IN_FIRST_SOURCE_NONZERO_NATIVE_ZERO_RUNTIME_SLOT="
+              << audit_slot_text_v82_patch4(tau.first_source_nonzero_native_zero_zero_based) << "\n"
+              << "V048746255172582_CALL3_CONTINUUM_TAU_IN_SCIENTIFIC_MISMATCH_COUNT=" << tau.scientific_mismatch_count << "\n"
+              << "V048746255172582_CALL3_CONTINUUM_TAU_IN_MAX_ABS_DELTA=" << tau.max_abs_delta << "\n"
+              << "V048746255172582_CALL3_CONTINUUM_TAU_IN_MAX_RELATIVE_DELTA=" << tau.max_relative_delta << "\n"
+              << "V048746255172582_CALL3_CONTINUUM_TAU_IN_IEEE_E7=" << (tau.e7 ? "ACCEPT" : "REJECT") << "\n"
+              << "V048746255172582_CALL3_CONTINUUM_TAU_IN_SCIENTIFIC_STATE=" << (tau.scientific ? "ACCEPT" : "REJECT") << "\n";
+    print_vector_audit_v82_patch4("BREMSA", bremsa);
+    print_vector_audit_v82_patch4("GLOBAL_XILEVG", xilevg);
+    print_vector_audit_v82_patch4("GLOBAL_BILEVG", bilevg);
+    std::cout << "V048746255172582_CALL3_GLOBAL_BILEVG_RESIDUAL_AUDIT_ROWS=" << bilevg_residual_rows << "\n"
+              << "V048746255172582_CALL3_GLOBAL_BILEVG_XILEVG_DOMINANT_ROWS=" << bilevg_xilevg_dominant_rows << "\n"
+              << "V048746255172582_CALL3_GLOBAL_BILEVG_DENOMINATOR_DOMINANT_ROWS=" << bilevg_denominator_dominant_rows << "\n"
+              << "V048746255172582_CALL3_GLOBAL_BILEVG_MIXED_ROWS=" << bilevg_mixed_rows << "\n"
+              << "V048746255172582_CALL3_GLOBAL_BILEVG_FIRST_RESIDUAL_OWNER=" << bilevg_first_owner << "\n"
+              << "V048746255172582_CALL3_GLOBAL_BILEVG_RESIDUAL_AUDIT=WRITTEN\n"
+              << "V048746255172582_CALL3_GLOBAL_XILEVG_RESIDUAL_ATTRIBUTION_ROWS=" << xilevg_attribution_rows << "\n"
+              << "V048746255172582_CALL3_GLOBAL_XILEVG_RESIDUAL_ATTRIBUTION=WRITTEN\n";
+    print_vector_audit_v82_patch4("GLOBAL_RNISG", rnisg);
+    std::cout << "V048746255172582_CALL3_BREMSA_SOURCE_HASH=" << binary64_vector_hash_v82_patch4(source.bremsa) << "\n"
+              << "V048746255172582_CALL3_BREMSA_NATIVE_HASH=" << binary64_vector_hash_v82_patch4(native.bremsa) << "\n"
+              << "V048746255172582_CALL3_GLOBAL_XILEVG_SOURCE_HASH=" << binary64_vector_hash_v82_patch4(source.global_xilevg) << "\n"
+              << "V048746255172582_CALL3_GLOBAL_XILEVG_NATIVE_HASH=" << binary64_vector_hash_v82_patch4(native.global_xilevg) << "\n"
+              << "V048746255172582_CALL3_GLOBAL_BILEVG_SOURCE_HASH=" << binary64_vector_hash_v82_patch4(source.global_bilevg) << "\n"
+              << "V048746255172582_CALL3_GLOBAL_BILEVG_NATIVE_HASH=" << binary64_vector_hash_v82_patch4(native.global_bilevg) << "\n"
+              << "V048746255172582_CALL3_GLOBAL_RNISG_SOURCE_HASH=" << binary64_vector_hash_v82_patch4(source.global_rnisg) << "\n"
+              << "V048746255172582_CALL3_GLOBAL_RNISG_NATIVE_HASH=" << binary64_vector_hash_v82_patch4(native.global_rnisg) << "\n";
+    std::cout << "V048746255172582_SEQUENCE23_CALL3_SEQUENCE58_LTE_PREREQUISITE="
+              << (data.sequence58_lte_scientific_accept ? "ACCEPT" : "REJECT") << "\n"
+              << "V048746255172582_SEQUENCE23_CALL3_TYPE99_DIRECT_OPAKAB_SOURCE_SEMANTICS=ACCEPT\n"
+              << "V048746255172582_SEQUENCE23_CALL3_TYPE99_OPAKAB=ACCEPT_SOURCE_ZERO\n"
+              << "V048746255172582_SEQUENCE23_CALL3_CONTINUUM_TAU_IN="
+              << (tau_contract ? "ACCEPT" : "REJECT") << "\n"
+              << "V048746255172582_SEQUENCE23_CALL3_COMMITTED_STATE="
+              << (committed_state_contract ? "ACCEPT" : "REJECT") << "\n";
+    if (!tau_contract || !committed_state_contract) {
+        throw std::runtime_error("v82 patch5.2 call-3 committed-state scientific gate rejected");
+    }
+}
+
+void write_binary64_vector_v82_patch52(
+    const std::filesystem::path& path,
+    const std::vector<double>& values) {
+    std::ofstream out(path, std::ios::binary);
+    if (!out) throw std::runtime_error("cannot create v82 patch5.2 transfer diagnostic: " + path.string());
+    if (!values.empty()) {
+        out.write(reinterpret_cast<const char*>(values.data()),
+            static_cast<std::streamsize>(values.size() * sizeof(double)));
+    }
+    if (!out) throw std::runtime_error("cannot write v82 patch5.2 transfer diagnostic: " + path.string());
+}
+
+void write_continuum_transfer_stage_v82_patch52(
+    StandaloneControllerDataV67& data,
+    const std::string& name,
+    const std::vector<double>& values) {
+    if (!data.reference_trajectory_mode || data.call_index != 2u || data.sequence23_diagnostic_dir.empty()) return;
+    const auto dir = data.sequence23_diagnostic_dir / "continuum_transfer";
+    std::filesystem::create_directories(dir);
+    write_binary64_vector_v82_patch52(dir / (name + ".bin"), values);
+}
+
+std::vector<double> brcems_from_boundary_v82_patch52(
+    const FixedDsecSnapshot& boundary,
+    std::size_t bins) {
+    std::vector<double> out(bins, 0.0);
+    for (const auto& row : boundary.continuum_product_diagnostics) {
+        if (row.full_bin_one_based <= 0) continue;
+        const std::size_t i = static_cast<std::size_t>(row.full_bin_one_based - 1);
+        if (i < out.size() && std::isfinite(row.brcems)) out[i] = row.brcems;
+    }
+    return out;
+}
+
+std::vector<double> dense_bremem_source_v82_patch56(
+    const FixedDsecSnapshot& boundary,
+    const std::vector<double>& energy_ev,
+    double hydrogen_density_cm3) {
+    // Literal bremem.f90 arithmetic with default-REAL constants promoted to
+    // REAL(8).  The source xee argument is the accepted controller input, not
+    // the charge-residual/computed electron-fraction output.
+    if (!(boundary.temperature_t4 > 0.0) || !(boundary.electron_fraction_input > 0.0) ||
+        !(hydrogen_density_cm3 > 0.0)) {
+        throw std::runtime_error("v82 patch5.6 dense bremem requires positive controller input state");
+    }
+    const double cc = static_cast<double>(static_cast<float>(1.032e-13));
+    const double ekt = boundary.temperature_t4 * static_cast<double>(static_cast<float>(xstar_constants::kLegacyBoltzmannEvPerT4));
+    const double xnx = hydrogen_density_cm3 * boundary.electron_fraction_input;
+    const double enz2 = static_cast<double>(static_cast<float>(1.4)) * xnx;
+    const double prefactor = cc * xnx * enz2 / std::sqrt(boundary.temperature_t4);
+    std::vector<double> out(energy_ev.size(), 0.0);
+    for (std::size_t i = 0; i < energy_ev.size(); ++i) {
+        out[i] = prefactor * std::exp(-energy_ev[i] / ekt);
+    }
+    return out;
+}
+
+void gsmooth2_source_v82_patch54(
+    double vtherm_cm_s,
+    const std::vector<double>& energy_ev,
+    std::vector<double>& values) {
+    const std::size_t n = energy_ev.size();
+    if (values.size() != n || n < 4u) {
+        throw std::runtime_error("v82 patch5.4 gsmooth2 workspace shape mismatch");
+    }
+    std::vector<double> product = values;
+    const double c_light = static_cast<double>(static_cast<float>(3.0e10));
+    const double emax = static_cast<double>(static_cast<float>(2.0e4));
+    const double kernel_cut = static_cast<double>(static_cast<float>(30.0));
+    const double denom_floor = static_cast<double>(static_cast<float>(1.0e-38));
+
+    // Literal Fortran indexing is kl=3..ncn2.  Keep bins 1-2 unchanged.
+    for (std::size_t kl = 2u; kl < n; ++kl) {
+        product[kl] = values[kl];
+        if (!(energy_ev[kl] < emax)) continue;
+        const double dele = energy_ev[kl] * vtherm_cm_s / c_light;
+        if (!(dele > 0.0) || !std::isfinite(dele)) continue;
+
+        double sum1p = 0.0, sum2p = 0.0, sum1m = 0.0, sum2m = 0.0;
+        double tmp1p = 0.0, tmp2p = 0.0, tmp1m = 0.0, tmp2m = 0.0;
+        bool done_minus = false, done_plus = false;
+        std::size_t klm = 1u;
+        while (!done_minus || !done_plus) {
+            if (!done_plus) {
+                const std::size_t kp = kl + klm;
+                // Source marks done at kl2p >= ncn2-1 but still includes that
+                // sample.  The fixed-size native grid has no ncn2+1 sentinel,
+                // so stop once the source index would be outside the grid.
+                if (kp >= n) {
+                    done_plus = true;
+                } else {
+                    if (kp + 2u >= n) done_plus = true; // 1-based kp >= ncn2-1
+                    const double old1 = tmp1p;
+                    const double old2 = tmp2p;
+                    const double arg = (energy_ev[kp] - energy_ev[kl]) / dele;
+                    const double earg = arg * arg;
+                    if (earg >= kernel_cut) done_plus = true;
+                    const double kernel = std::exp(-earg);
+                    tmp1p = kernel * values[kp];
+                    tmp2p = kernel;
+                    const double de = energy_ev[kp] - energy_ev[kp - 1u];
+                    sum1p += (tmp1p + old1) * de / 2.0;
+                    sum2p += (tmp2p + old2) * de / 2.0;
+                }
+            }
+            if (!done_minus) {
+                if (kl < klm) {
+                    done_minus = true;
+                } else {
+                    const std::size_t km = kl - klm;
+                    if (km <= 2u) done_minus = true; // 1-based kl2m <= 3
+                    const double old1 = tmp1m;
+                    const double old2 = tmp2m;
+                    const double arg = (energy_ev[km] - energy_ev[kl]) / dele;
+                    const double earg = arg * arg;
+                    if (earg >= kernel_cut) done_minus = true;
+                    const double kernel = std::exp(-earg);
+                    tmp1m = kernel * values[km];
+                    tmp2m = kernel;
+                    const double de = std::abs(energy_ev[km] - energy_ev[km + 1u]);
+                    sum1m += (tmp1m + old1) * de / 2.0;
+                    sum2m += (tmp2m + old2) * de / 2.0;
+                }
+            }
+            ++klm;
+            if (klm > n + 2u) throw std::runtime_error("v82 patch5.4 gsmooth2 loop guard");
+        }
+        product[kl] = (sum1p + sum1m) / std::max(denom_floor, sum2p + sum2m);
+    }
+    for (std::size_t kl = 2u; kl < n; ++kl) values[kl] = product[kl];
+}
+
+void gsmooth_source_v82_patch54(
+    double temperature_t4,
+    double turbulent_velocity_km_s,
+    const std::vector<double>& energy_ev,
+    std::vector<double>& opakc,
+    std::vector<double>& rccemis,
+    std::vector<double>& brcems) {
+    const std::size_t n = energy_ev.size();
+    if (opakc.size() != n || brcems.size() != n || rccemis.size() != 2u * n) {
+        throw std::runtime_error("v82 patch5.4 gsmooth workspace shape mismatch");
+    }
+    const double one_e5 = static_cast<double>(static_cast<float>(1.0e5));
+    const double one_29e6 = static_cast<double>(static_cast<float>(1.29e6));
+    const double vt = turbulent_velocity_km_s * one_e5;
+    const double thermal = one_29e6 / std::sqrt(1.0 / temperature_t4);
+    const double vtherm = std::sqrt(vt * vt + thermal * thermal);
+
+    gsmooth2_source_v82_patch54(vtherm, energy_ev, brcems);
+    std::vector<double> out(rccemis.begin(), rccemis.begin() + static_cast<std::ptrdiff_t>(n));
+    std::vector<double> in(rccemis.begin() + static_cast<std::ptrdiff_t>(n), rccemis.end());
+    gsmooth2_source_v82_patch54(vtherm, energy_ev, out);
+    gsmooth2_source_v82_patch54(vtherm, energy_ev, in);
+    std::copy(out.begin(), out.end(), rccemis.begin());
+    std::copy(in.begin(), in.end(), rccemis.begin() + static_cast<std::ptrdiff_t>(n));
+    gsmooth2_source_v82_patch54(vtherm, energy_ev, opakc);
+}
+
+void advance_source_continuum_radiation_v82_patch52(
+    StandaloneControllerDataV67& data,
+    FixedDsecSnapshot& boundary,
+    double delta_radius_cm,
+    double radius_cm) {
+    if (!(delta_radius_cm > 0.0) || !std::isfinite(delta_radius_cm)) return;
+    if (!data.thermal_context) {
+        throw std::runtime_error("v82 patch5.2 continuum transport requires thermal context");
+    }
+    if (!data.parameters) {
+        throw std::runtime_error("v82 patch5.2 continuum transport requires production parameters");
+    }
+    const std::size_t n = data.energy.size();
+    if (n == 0u || boundary.opakc.size() != n || boundary.opakcont.size() != n ||
+        boundary.rccemis.size() != 2u * n || data.dsec_bremsa.size() != n) {
+        throw std::runtime_error("v82 patch5.2 continuum transfer workspace shape mismatch");
+    }
+    if (data.accumulated_zrems.size() != 5u * n || data.accumulated_zremso.size() != 5u * n) {
+        throw std::runtime_error("v82 patch5.2 retained zrems workspace shape mismatch");
+    }
+
+    const auto pre_bremsa = data.dsec_bremsa;
+    const auto sparse_reduced_brcems = brcems_from_boundary_v82_patch52(boundary, n);
+    auto brcems = dense_bremem_source_v82_patch56(
+        boundary, data.energy, data.parameters->density_cm3);
+    auto smoothed_opakc = boundary.opakc;
+    auto smoothed_rccemis = boundary.rccemis;
+    auto zrems = data.accumulated_zrems;
+    const auto zrems_before_heatt = zrems;
+    const auto zremso_before = data.accumulated_zremso;
+
+    write_continuum_transfer_stage_v82_patch52(data, "00_pre_transfer_bremsa", pre_bremsa);
+    write_continuum_transfer_stage_v82_patch52(data, "00b_sparse_reduced_brcems", sparse_reduced_brcems);
+    write_continuum_transfer_stage_v82_patch52(data, "01_pre_gsmooth_brcems", brcems);
+    write_continuum_transfer_stage_v82_patch52(data, "02_pre_gsmooth_opakc", smoothed_opakc);
+    write_continuum_transfer_stage_v82_patch52(data, "03_pre_gsmooth_rccemis_out", std::vector<double>(smoothed_rccemis.begin(), smoothed_rccemis.begin() + static_cast<std::ptrdiff_t>(n)));
+    write_continuum_transfer_stage_v82_patch52(data, "04_pre_gsmooth_rccemis_in", std::vector<double>(smoothed_rccemis.begin() + static_cast<std::ptrdiff_t>(n), smoothed_rccemis.end()));
+
+    const auto pre_gsmooth_brcems = brcems;
+    const auto pre_gsmooth_opakc = smoothed_opakc;
+    const auto pre_gsmooth_rccemis = smoothed_rccemis;
+
+    // v82 patch 5.10: decompose the already-accepted total opakc surface into
+    // source-owned additive families without changing the production array.
+    // opakcont owns Thomson + bound-free; fixed-state continuum diagnostics
+    // retain literal freef increments; the residual is line-profile opacity.
+    const double patch510_thomson_cover = std::max(0.0, 1.0 - boundary.spectral_covering_fraction);
+    const double patch510_thomson_value = data.parameters->density_cm3 * boundary.electron_fraction_input *
+        6.6524587321e-25 * patch510_thomson_cover;
+    std::vector<double> bound_free_opakc_pre(n, 0.0);
+    std::vector<double> free_free_opakc_pre(n, 0.0);
+    std::vector<double> line_opakc_pre(n, 0.0);
+    std::vector<double> thomson_opakc_pre(n, patch510_thomson_value);
+    for (const auto& row : boundary.continuum_product_diagnostics) {
+        if (row.full_bin_one_based <= 0) continue;
+        const std::size_t k = static_cast<std::size_t>(row.full_bin_one_based - 1);
+        if (k < n && std::isfinite(row.free_free_opacity_increment)) {
+            free_free_opakc_pre[k] = row.free_free_opacity_increment;
+        }
+    }
+    for (std::size_t k = 0; k < n; ++k) {
+        const double continuum = std::isfinite(boundary.opakcont[k]) ? boundary.opakcont[k] : 0.0;
+        bound_free_opakc_pre[k] = continuum - thomson_opakc_pre[k];
+        line_opakc_pre[k] = pre_gsmooth_opakc[k] - continuum - free_free_opakc_pre[k];
+    }
+    auto bound_free_opakc_post = bound_free_opakc_pre;
+    auto free_free_opakc_post = free_free_opakc_pre;
+    auto line_opakc_post = line_opakc_pre;
+    auto thomson_opakc_post = thomson_opakc_pre;
+
+    const double source_gsmooth_threshold = static_cast<double>(static_cast<float>(1.0e-34));
+    const bool gsmooth_active = data.parameters->turbulent_velocity_km_s > source_gsmooth_threshold;
+    if (gsmooth_active) {
+        gsmooth_source_v82_patch54(
+            boundary.temperature_t4, data.parameters->turbulent_velocity_km_s,
+            data.energy, smoothed_opakc, smoothed_rccemis, brcems);
+        const double one_e5 = static_cast<double>(static_cast<float>(1.0e5));
+        const double one_29e6 = static_cast<double>(static_cast<float>(1.29e6));
+        const double vt = data.parameters->turbulent_velocity_km_s * one_e5;
+        const double thermal = one_29e6 / std::sqrt(1.0 / boundary.temperature_t4);
+        const double vtherm = std::sqrt(vt * vt + thermal * thermal);
+        gsmooth2_source_v82_patch54(vtherm, data.energy, bound_free_opakc_post);
+        gsmooth2_source_v82_patch54(vtherm, data.energy, free_free_opakc_post);
+        gsmooth2_source_v82_patch54(vtherm, data.energy, line_opakc_post);
+        gsmooth2_source_v82_patch54(vtherm, data.energy, thomson_opakc_post);
+    }
+    // Source gsmooth mutates opakc/rccemis in place before heatt.  Retain that
+    // state on the accepted boundary as well as passing it to the kernel.
+    boundary.opakc = smoothed_opakc;
+    boundary.rccemis = smoothed_rccemis;
+
+    write_continuum_transfer_stage_v82_patch52(data, "05_post_gsmooth_brcems", brcems);
+    write_continuum_transfer_stage_v82_patch52(data, "06_post_gsmooth_opakc", boundary.opakc);
+    write_continuum_transfer_stage_v82_patch52(data, "07_post_gsmooth_rccemis_out", std::vector<double>(boundary.rccemis.begin(), boundary.rccemis.begin() + static_cast<std::ptrdiff_t>(n)));
+    write_continuum_transfer_stage_v82_patch52(data, "08_post_gsmooth_rccemis_in", std::vector<double>(boundary.rccemis.begin() + static_cast<std::ptrdiff_t>(n), boundary.rccemis.end()));
+    write_continuum_transfer_stage_v82_patch52(data, "09_opakcont_unsmoothed", boundary.opakcont);
+    write_continuum_transfer_stage_v82_patch52(data, "09a_bound_free_opakc_pre_gsmooth", bound_free_opakc_pre);
+    write_continuum_transfer_stage_v82_patch52(data, "09b_free_free_opakc_pre_gsmooth", free_free_opakc_pre);
+    write_continuum_transfer_stage_v82_patch52(data, "09c_line_opakc_pre_gsmooth", line_opakc_pre);
+    write_continuum_transfer_stage_v82_patch52(data, "09d_thomson_opakc_pre_gsmooth", thomson_opakc_pre);
+    write_continuum_transfer_stage_v82_patch52(data, "09e_bound_free_opakc_post_gsmooth", bound_free_opakc_post);
+    write_continuum_transfer_stage_v82_patch52(data, "09f_free_free_opakc_post_gsmooth", free_free_opakc_post);
+    write_continuum_transfer_stage_v82_patch52(data, "09g_line_opakc_post_gsmooth", line_opakc_post);
+    write_continuum_transfer_stage_v82_patch52(data, "09h_thomson_opakc_post_gsmooth", thomson_opakc_post);
+    write_continuum_transfer_stage_v82_patch52(data, "10_flinel", boundary.flinel);
+    write_continuum_transfer_stage_v82_patch52(data, "11_zremso_plane1", std::vector<double>(zremso_before.begin(), zremso_before.begin() + static_cast<std::ptrdiff_t>(n)));
+
+    // Patch 5.3: expose every scalar/vector operand entering the source-like
+    // continuum part of heatt.  These are diagnostic reconstructions only;
+    // the native heatt kernel below remains the state owner.
+    constexpr double kHeattOpacityFloorV82Patch53 = 1.0e-49;
+    const double source_four_pi_v82_patch53 = static_cast<double>(static_cast<float>(12.56));
+    const double r19_v82_patch53 = radius_cm / 1.0e19;
+    const double fpr2_v82_patch53 = source_four_pi_v82_patch53 * r19_v82_patch53 * r19_v82_patch53;
+    std::vector<double> heatt_optp2(n, 0.0);
+    std::vector<double> heatt_fac(n, 0.0);
+    std::vector<double> heatt_tmph(n, 0.0);
+    std::vector<double> heatt_tmpc1(n, 0.0);
+    std::vector<double> heatt_tmpc2(n, 0.0);
+    std::vector<double> heatt_plane1_delta(n, 0.0);
+    for (std::size_t i = 0; i < n; ++i) {
+        const double optp2 = std::max(kHeattOpacityFloorV82Patch53, boundary.opakc[i]);
+        const double tau = optp2 * delta_radius_cm;
+        const double fac = tau > static_cast<double>(static_cast<float>(0.01)) ? (1.0 - std::exp(-tau)) / tau : 1.0;
+        const double tmph = pre_bremsa[i] * optp2;
+        const double tmpc1 = boundary.rccemis[i] + brcems[i] * (1.0 - data.parameters->covering_fraction) / 2.0;
+        const double tmpc2 = boundary.rccemis[n + i] + brcems[i] * (1.0 + data.parameters->covering_fraction) / 2.0;
+        heatt_optp2[i] = optp2;
+        heatt_fac[i] = fac;
+        heatt_tmph[i] = tmph;
+        heatt_tmpc1[i] = tmpc1;
+        heatt_tmpc2[i] = tmpc2;
+        heatt_plane1_delta[i] = -(tmph - source_four_pi_v82_patch53 * (tmpc1 + tmpc2)) * fac * delta_radius_cm * fpr2_v82_patch53;
+    }
+    write_continuum_transfer_stage_v82_patch52(data, "12_heatt_optp2", heatt_optp2);
+    write_continuum_transfer_stage_v82_patch52(data, "13_heatt_fac", heatt_fac);
+    write_continuum_transfer_stage_v82_patch52(data, "14_heatt_tmph", heatt_tmph);
+    write_continuum_transfer_stage_v82_patch52(data, "15_heatt_tmpc1", heatt_tmpc1);
+    write_continuum_transfer_stage_v82_patch52(data, "16_heatt_tmpc2", heatt_tmpc2);
+    write_continuum_transfer_stage_v82_patch52(data, "17_heatt_plane1_delta", heatt_plane1_delta);
+
+    xstar_heatt_workspace_v1 workspace{};
+    xstar_heatt_workspace_init_v1(&workspace);
+    workspace.temperature_t4 = boundary.temperature_t4;
+    workspace.radius_cm = radius_cm;
+    workspace.covering_fraction = data.parameters->covering_fraction;
+    workspace.zone_thickness_cm = delta_radius_cm;
+    workspace.electron_fraction_xee = std::isfinite(boundary.computed_electron_fraction) && boundary.computed_electron_fraction > 0.0
+        ? boundary.computed_electron_fraction : boundary.electron_fraction_input;
+    workspace.hydrogen_density_cm3 = data.parameters->density_cm3;
+    workspace.epi_eV = data.energy.data();
+    workspace.bremsa = data.dsec_bremsa.data();
+    workspace.opakc = boundary.opakc.data();
+    workspace.opakcont = boundary.opakcont.data();
+    workspace.flinel = boundary.flinel.empty() ? nullptr : boundary.flinel.data();
+    workspace.brcems = brcems.data();
+    workspace.ncn2 = n;
+    workspace.zrems = zrems.data();
+    workspace.zremso = zremso_before.data();
+    workspace.zrems_count = zrems.size();
+    workspace.elum = nullptr;
+    workspace.elumo = nullptr;
+    workspace.rcem = nullptr;
+    workspace.n_lines = 0u;
+    workspace.elumab = nullptr;
+    workspace.elumabo = nullptr;
+    workspace.cemab = nullptr;
+    workspace.n_continua = 0u;
+    workspace.rccemis = boundary.rccemis.data();
+    workspace.rccemis_count = boundary.rccemis.size();
+
+    xstar_heatt_stats_v1 stats{};
+    xstar_heatt_stats_init_v1(&stats);
+    std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> message{};
+    const int rc = xstar_thermal_apply_heatt_v1(
+        data.thermal_context, &workspace, nullptr, 0u, nullptr, 0u,
+        &stats, message.data(), message.size());
+    if (rc != 0) {
+        throw std::runtime_error(std::string("v82 patch5.2 native heatt continuum transfer failed: ") + message.data());
+    }
+
+    data.accumulated_zrems = zrems;
+    // Literal source trnfrn copies all five continuum planes to zremso.
+    for (std::size_t plane = 0; plane < 5u; ++plane) {
+        const std::size_t begin = plane * n;
+        std::copy(zrems.begin() + static_cast<std::ptrdiff_t>(begin),
+                  zrems.begin() + static_cast<std::ptrdiff_t>(begin + n),
+                  data.accumulated_zremso.begin() + static_cast<std::ptrdiff_t>(begin));
+    }
+    boundary.zrems = data.accumulated_zrems;
+    write_continuum_transfer_stage_v82_patch52(data, "18_post_heatt_zrems_plane1",
+        std::vector<double>(zrems.begin(), zrems.begin() + static_cast<std::ptrdiff_t>(n)));
+
+    // Literal source order: heatt executes at the old radius, then xstar moves
+    // r += delr, trnfrn commits zremso, and the next zone's trnfrc(-1) projects
+    // zrems(1,:) at the new radius.  Only the final ncn2 bin remains zero.
+    const double next_radius_cm = radius_cm + delta_radius_cm;
+    const double r19 = next_radius_cm / 1.0e19;
+    const double fpr2 = 12.56 * r19 * r19;
+    if (!(fpr2 > 0.0) || !std::isfinite(fpr2)) {
+        throw std::runtime_error("v82 patch5.2 next-radius trnfrc normalization is invalid");
+    }
+    data.dsec_bremsa.assign(n, 0.0);
+    if (n >= 2u) {
+        for (std::size_t reverse = 1u; reverse <= n - 1u; ++reverse) {
+            const std::size_t i = (n - 1u) - reverse;
+            data.dsec_bremsa[i] = data.accumulated_zrems[i] / fpr2;
+        }
+    }
+    write_continuum_transfer_stage_v82_patch52(data, "19_post_trnfrc_bremsa", data.dsec_bremsa);
+
+    if (data.reference_trajectory_mode && data.call_index == 2u && data.sequence23_boundary_gate_configured) {
+        if (!data.sequence22_boundary_reference_configured) {
+            throw std::runtime_error("v82 patch5.3 sequence-22 source workspace is not configured");
+        }
+        const auto pre_audit = audit_vector_v82_patch4(data.sequence22_source_workspace.bremsa, pre_bremsa);
+        const auto post_audit = audit_vector_v82_patch4(data.sequence23_source_workspace.bremsa, data.dsec_bremsa);
+        std::vector<double> source_post_heatt_zrems1(n, 0.0);
+        for (std::size_t i = 0; i < n; ++i) {
+            source_post_heatt_zrems1[i] = data.sequence23_source_workspace.bremsa[i] * fpr2;
+        }
+        const auto native_post_heatt_zrems1 = std::vector<double>(
+            zrems.begin(), zrems.begin() + static_cast<std::ptrdiff_t>(n));
+        const auto heatt_output_audit = audit_vector_v82_patch4(
+            source_post_heatt_zrems1, native_post_heatt_zrems1);
+
+        const auto transfer_dir = data.sequence23_diagnostic_dir / "continuum_transfer";
+        std::filesystem::create_directories(transfer_dir);
+        std::size_t continuum_residual_rows = 0;
+        std::size_t continuum_first_residual = std::numeric_limits<std::size_t>::max();
+        std::size_t opacity_bound_free_owner_rows = 0;
+        std::size_t opacity_line_owner_rows = 0;
+        std::size_t opacity_free_free_owner_rows = 0;
+        std::size_t opacity_thomson_owner_rows = 0;
+        std::size_t opacity_mixed_owner_rows = 0;
+        std::string opacity_first_owner = "NONE";
+        std::vector<double> component_sum_pre(n, 0.0);
+        std::vector<double> component_sum_post(n, 0.0);
+        for (std::size_t k = 0; k < n; ++k) {
+            component_sum_pre[k] = bound_free_opakc_pre[k] + free_free_opakc_pre[k] + line_opakc_pre[k] + thomson_opakc_pre[k];
+            component_sum_post[k] = bound_free_opakc_post[k] + free_free_opakc_post[k] + line_opakc_post[k] + thomson_opakc_post[k];
+        }
+        const auto component_pre_audit = audit_vector_v82_patch4(pre_gsmooth_opakc, component_sum_pre);
+        const auto component_post_audit = audit_vector_v82_patch4(boundary.opakc, component_sum_post);
+        std::ofstream opacity_attribution(transfer_dir / "call3_continuum_opacity_component_attribution.csv");
+        if (!opacity_attribution) throw std::runtime_error("cannot create patch5.10 opacity component attribution");
+        opacity_attribution << "runtime_slot,energy_ev,source_required_post_gsmooth_opacity,native_post_gsmooth_opacity,required_minus_native,bound_free_pre,bound_free_post,bound_free_required_if_others_fixed,bound_free_relative_correction,free_free_pre,free_free_post,free_free_required_if_others_fixed,free_free_relative_correction,line_pre,line_post,line_required_if_others_fixed,line_relative_correction,thomson_pre,thomson_post,thomson_required_if_others_fixed,thomson_relative_correction,smallest_relative_correction,owner\n";
+        opacity_attribution << std::setprecision(17);
+        {
+            std::ofstream residual(transfer_dir / "call3_continuum_residual_decomposition.csv");
+            if (!residual) throw std::runtime_error("cannot create patch5.9 continuum residual decomposition");
+            residual << "runtime_slot,energy_ev,source_pre_bremsa,native_pre_bremsa,source_post_heatt_zrems1,native_post_heatt_zrems1,post_heatt_abs_residual,pre_gsmooth_opakc,post_gsmooth_opakc,opakcont,pre_gsmooth_brcems,post_gsmooth_brcems,pre_gsmooth_rccemis_out,post_gsmooth_rccemis_out,pre_gsmooth_rccemis_in,post_gsmooth_rccemis_in,heatt_optp2,heatt_fac,heatt_tmph,heatt_tmpc1,heatt_tmpc2,native_effective_net,native_plane1_delta,source_required_plane1_delta,source_required_effective_net,source_required_tmph_if_native_emission,source_required_emission_sum_if_native_tmph\n";
+            residual << std::setprecision(17);
+            for (std::size_t i = 0; i < n; ++i) {
+                if (scientific_close_v82(source_post_heatt_zrems1[i], native_post_heatt_zrems1[i])) continue;
+                if (continuum_first_residual == std::numeric_limits<std::size_t>::max()) continuum_first_residual = i;
+                ++continuum_residual_rows;
+                const double native_emission_sum = heatt_tmpc1[i] + heatt_tmpc2[i];
+                const double native_net = heatt_tmph[i] - source_four_pi_v82_patch53 * native_emission_sum;
+                const double source_required_delta = source_post_heatt_zrems1[i] - zrems_before_heatt[i];
+                const double denom = heatt_fac[i] * delta_radius_cm * fpr2_v82_patch53;
+                const double source_required_net = denom != 0.0 ? -source_required_delta / denom : 0.0;
+                const double source_required_tmph = source_required_net + source_four_pi_v82_patch53 * native_emission_sum;
+                const double source_required_emission_sum = source_four_pi_v82_patch53 != 0.0
+                    ? (heatt_tmph[i] - source_required_net) / source_four_pi_v82_patch53 : 0.0;
+                residual << i << ',' << data.energy[i] << ','
+                         << data.sequence22_source_workspace.bremsa[i] << ',' << pre_bremsa[i] << ','
+                         << source_post_heatt_zrems1[i] << ',' << native_post_heatt_zrems1[i] << ','
+                         << std::abs(native_post_heatt_zrems1[i] - source_post_heatt_zrems1[i]) << ','
+                         << pre_gsmooth_opakc[i] << ',' << boundary.opakc[i] << ',' << boundary.opakcont[i] << ','
+                         << pre_gsmooth_brcems[i] << ',' << brcems[i] << ','
+                         << pre_gsmooth_rccemis[i] << ',' << boundary.rccemis[i] << ','
+                         << pre_gsmooth_rccemis[n + i] << ',' << boundary.rccemis[n + i] << ','
+                         << heatt_optp2[i] << ',' << heatt_fac[i] << ',' << heatt_tmph[i] << ','
+                         << heatt_tmpc1[i] << ',' << heatt_tmpc2[i] << ',' << native_net << ','
+                         << heatt_plane1_delta[i] << ',' << source_required_delta << ',' << source_required_net << ','
+                         << source_required_tmph << ',' << source_required_emission_sum << '\n';
+                const double required_opacity = pre_bremsa[i] != 0.0
+                    ? source_required_tmph / pre_bremsa[i] : heatt_optp2[i];
+                const double opacity_delta = required_opacity - boundary.opakc[i];
+                const auto relative_component_correction = [&](double native_component) {
+                    const double required_component = native_component + opacity_delta;
+                    const double scale = std::max({std::abs(native_component), std::abs(required_component), 1.0e-40});
+                    return std::abs(opacity_delta) / scale;
+                };
+                const double bound_free_required = bound_free_opakc_post[i] + opacity_delta;
+                const double free_free_required = free_free_opakc_post[i] + opacity_delta;
+                const double line_required = line_opakc_post[i] + opacity_delta;
+                const double thomson_required = thomson_opakc_post[i] + opacity_delta;
+                const double bound_free_correction = relative_component_correction(bound_free_opakc_post[i]);
+                const double free_free_correction = relative_component_correction(free_free_opakc_post[i]);
+                const double line_correction = relative_component_correction(line_opakc_post[i]);
+                const double thomson_correction = relative_component_correction(thomson_opakc_post[i]);
+                const std::array<std::pair<const char*,double>,4> corrections{{
+                    {"BOUND_FREE", bound_free_correction},
+                    {"LINE", line_correction},
+                    {"FREE_FREE", free_free_correction},
+                    {"THOMSON", thomson_correction}}};
+                auto ranked = corrections;
+                std::sort(ranked.begin(), ranked.end(), [](const auto& a, const auto& b) { return a.second < b.second; });
+                const char* owner = ranked[0].first;
+                if (!std::isfinite(required_opacity) || !std::isfinite(ranked[0].second) ||
+                    std::abs(ranked[0].second - ranked[1].second) <= 1.0e-15 * std::max({1.0, ranked[0].second, ranked[1].second})) {
+                    owner = "MIXED";
+                }
+                if (std::string(owner) == "BOUND_FREE") ++opacity_bound_free_owner_rows;
+                else if (std::string(owner) == "LINE") ++opacity_line_owner_rows;
+                else if (std::string(owner) == "FREE_FREE") ++opacity_free_free_owner_rows;
+                else if (std::string(owner) == "THOMSON") ++opacity_thomson_owner_rows;
+                else ++opacity_mixed_owner_rows;
+                if (opacity_first_owner == "NONE") opacity_first_owner = owner;
+                opacity_attribution << i << ',' << data.energy[i] << ',' << required_opacity << ',' << boundary.opakc[i] << ','
+                    << opacity_delta << ','
+                    << bound_free_opakc_pre[i] << ',' << bound_free_opakc_post[i] << ',' << bound_free_required << ',' << bound_free_correction << ','
+                    << free_free_opakc_pre[i] << ',' << free_free_opakc_post[i] << ',' << free_free_required << ',' << free_free_correction << ','
+                    << line_opakc_pre[i] << ',' << line_opakc_post[i] << ',' << line_required << ',' << line_correction << ','
+                    << thomson_opakc_pre[i] << ',' << thomson_opakc_post[i] << ',' << thomson_required << ',' << thomson_correction << ','
+                    << ranked[0].second << ',' << owner << '\n';
+            }
+        }
+        opacity_attribution.close();
+        std::ofstream summary(transfer_dir / "heatt_input_summary.csv");
+        if (!summary) throw std::runtime_error("cannot create patch5.3 heatt input summary");
+        summary << "name,rows,nonzero,max_abs,hash\n";
+        const auto emit_summary = [&](const char* name, const std::vector<double>& values) {
+            std::size_t nz = 0;
+            double max_abs = 0.0;
+            for (double value : values) {
+                if (std::isfinite(value) && value != 0.0) ++nz;
+                if (std::isfinite(value)) max_abs = std::max(max_abs, std::abs(value));
+            }
+            summary << name << ',' << values.size() << ',' << nz << ','
+                    << std::setprecision(17) << max_abs << ','
+                    << binary64_vector_hash_v82_patch4(values) << '\n';
+        };
+        emit_summary("pre_bremsa", pre_bremsa);
+        emit_summary("pre_gsmooth_brcems", pre_gsmooth_brcems);
+        emit_summary("post_gsmooth_brcems", brcems);
+        emit_summary("pre_gsmooth_opakc", pre_gsmooth_opakc);
+        emit_summary("post_gsmooth_opakc", boundary.opakc);
+        emit_summary("bound_free_opakc_pre_gsmooth", bound_free_opakc_pre);
+        emit_summary("free_free_opakc_pre_gsmooth", free_free_opakc_pre);
+        emit_summary("line_opakc_pre_gsmooth", line_opakc_pre);
+        emit_summary("thomson_opakc_pre_gsmooth", thomson_opakc_pre);
+        emit_summary("bound_free_opakc_post_gsmooth", bound_free_opakc_post);
+        emit_summary("free_free_opakc_post_gsmooth", free_free_opakc_post);
+        emit_summary("line_opakc_post_gsmooth", line_opakc_post);
+        emit_summary("thomson_opakc_post_gsmooth", thomson_opakc_post);
+        emit_summary("pre_gsmooth_rccemis_out", std::vector<double>(pre_gsmooth_rccemis.begin(), pre_gsmooth_rccemis.begin() + static_cast<std::ptrdiff_t>(n)));
+        emit_summary("post_gsmooth_rccemis_out", std::vector<double>(boundary.rccemis.begin(), boundary.rccemis.begin() + static_cast<std::ptrdiff_t>(n)));
+        emit_summary("pre_gsmooth_rccemis_in", std::vector<double>(pre_gsmooth_rccemis.begin() + static_cast<std::ptrdiff_t>(n), pre_gsmooth_rccemis.end()));
+        emit_summary("post_gsmooth_rccemis_in", std::vector<double>(boundary.rccemis.begin() + static_cast<std::ptrdiff_t>(n), boundary.rccemis.end()));
+        emit_summary("brcems", brcems);
+        emit_summary("opakc", boundary.opakc);
+        emit_summary("opakcont", boundary.opakcont);
+        emit_summary("flinel", boundary.flinel);
+        emit_summary("rccemis_out", std::vector<double>(boundary.rccemis.begin(), boundary.rccemis.begin() + static_cast<std::ptrdiff_t>(n)));
+        emit_summary("rccemis_in", std::vector<double>(boundary.rccemis.begin() + static_cast<std::ptrdiff_t>(n), boundary.rccemis.end()));
+        emit_summary("zremso_plane1", std::vector<double>(zremso_before.begin(), zremso_before.begin() + static_cast<std::ptrdiff_t>(n)));
+        emit_summary("heatt_optp2", heatt_optp2);
+        emit_summary("heatt_fac", heatt_fac);
+        emit_summary("heatt_tmph", heatt_tmph);
+        emit_summary("heatt_tmpc1", heatt_tmpc1);
+        emit_summary("heatt_tmpc2", heatt_tmpc2);
+        emit_summary("heatt_plane1_delta", heatt_plane1_delta);
+        emit_summary("post_heatt_zrems1", native_post_heatt_zrems1);
+        summary.close();
+        std::size_t opakcont_nonzero = 0;
+        for (double value : boundary.opakcont) if (std::isfinite(value) && value != 0.0) ++opakcont_nonzero;
+        std::size_t bremem_nonzero = 0;
+        std::size_t sparse_bremem_nonzero = 0;
+        for (double value : pre_gsmooth_brcems) if (std::isfinite(value) && value != 0.0) ++bremem_nonzero;
+        for (double value : sparse_reduced_brcems) if (std::isfinite(value) && value != 0.0) ++sparse_bremem_nonzero;
+        const double source_thomson_cover = std::max(0.0, 1.0 - boundary.spectral_covering_fraction);
+        const double source_thomson = data.parameters->density_cm3 * boundary.electron_fraction_input *
+            6.6524587321e-25 * source_thomson_cover;
+        std::size_t opakcont_zero_bins = 0;
+        for (double value : boundary.opakcont) if (std::isfinite(value) && value == 0.0) ++opakcont_zero_bins;
+        std::cout << std::setprecision(17)
+                  << "V048746255172582_CALL2_BREMEM_ROWS=" << brcems.size() << "\n"
+                  << "V048746255172582_CALL2_BREMEM_NONZERO_COUNT=" << bremem_nonzero << "\n"
+                  << "V048746255172582_CALL2_BREMEM_SPARSE_DIAGNOSTIC_NONZERO_COUNT=" << sparse_bremem_nonzero << "\n"
+                  << "V048746255172582_CALL2_BREMEM_SPARSE_MISSING_COUNT=" << (bremem_nonzero >= sparse_bremem_nonzero ? bremem_nonzero - sparse_bremem_nonzero : 0u) << "\n"
+                  << "V048746255172582_CALL2_BREMEM_XEE_CONTROLLER_INPUT=" << boundary.electron_fraction_input << "\n"
+                  << "V048746255172582_CALL2_BREMEM_XEE_COMPUTED_DIAGNOSTIC=" << boundary.computed_electron_fraction << "\n"
+                  << "V048746255172582_CALL2_BREMEM_SOURCE_SEMANTICS=ACCEPT_CONTROLLER_INPUT_XEE\n"
+                  << "V048746255172582_CALL2_FIXED_STATE_EMULT=" << data.parameters->emission_multiplier << "\n"
+                  << "V048746255172582_CALL2_FIXED_STATE_DSEC_CFRAC=" << data.parameters->covering_fraction << "\n"
+                  << "V048746255172582_CALL2_SPECTRAL_EFFECTIVE_CFRAC=" << boundary.spectral_covering_fraction << "\n"
+                  << "V048746255172582_CALL2_THOMSON_COVER_FACTOR=" << source_thomson_cover << "\n"
+                  << "V048746255172582_CALL2_THOMSON_OPACITY_CM1=" << source_thomson << "\n"
+                  << "V048746255172582_CALL2_THOMSON_COVERING_FRACTION_SOURCE_SEMANTICS="
+                  << ((boundary.spectral_covering_fraction == 1.0 && source_thomson == 0.0) ? "ACCEPT_ZERO" : "REJECT") << "\n"
+                  << "V048746255172582_CALL2_OPAKCONT_ZERO_BIN_COUNT=" << opakcont_zero_bins << "\n"
+                  << "V048746255172582_CALL2_OPAKCONT_ALL_GRID_THOMSON_BASELINE_ZERO="
+                  << ((boundary.spectral_covering_fraction == 1.0 && source_thomson == 0.0 && opakcont_zero_bins > 0u) ? "ACCEPT" : "REJECT") << "\n"
+                  << "V048746255172582_CALL2_GSMOOTH_ACTIVE=" << (gsmooth_active ? "YES" : "NO") << "\n"
+                  << "V048746255172582_CALL2_GSMOOTH_PRE_BRCEMS_HASH=" << binary64_vector_hash_v82_patch4(pre_gsmooth_brcems) << "\n"
+                  << "V048746255172582_CALL2_GSMOOTH_POST_BRCEMS_HASH=" << binary64_vector_hash_v82_patch4(brcems) << "\n"
+                  << "V048746255172582_CALL2_GSMOOTH_PRE_OPAKC_HASH=" << binary64_vector_hash_v82_patch4(pre_gsmooth_opakc) << "\n"
+                  << "V048746255172582_CALL2_GSMOOTH_POST_OPAKC_HASH=" << binary64_vector_hash_v82_patch4(boundary.opakc) << "\n"
+                  << "V048746255172582_CALL2_GSMOOTH_PRE_RCCEMIS_HASH=" << binary64_vector_hash_v82_patch4(pre_gsmooth_rccemis) << "\n"
+                  << "V048746255172582_CALL2_GSMOOTH_POST_RCCEMIS_HASH=" << binary64_vector_hash_v82_patch4(boundary.rccemis) << "\n"
+                  << "V048746255172582_CALL2_GSMOOTH_SOURCE_SEMANTICS=" << (gsmooth_active ? "ACCEPT" : "NOT_ACTIVE") << "\n"
+                  << "V048746255172582_CALL2_OPAKCONT_NONZERO_COUNT=" << opakcont_nonzero << "\n"
+                  << "V048746255172582_CALL2_OPAKCONT_SOURCE_SEPARATION=ACCEPT\n"
+                  << "V048746255172582_CALL3_CONTINUUM_TRANSFER_PRE_BREMSA_HASH=" << binary64_vector_hash_v82_patch4(pre_bremsa) << "\n"
+                  << "V048746255172582_CALL3_CONTINUUM_TRANSFER_BRCEMS_HASH=" << binary64_vector_hash_v82_patch4(brcems) << "\n"
+                  << "V048746255172582_CALL3_CONTINUUM_TRANSFER_OPAKC_HASH=" << binary64_vector_hash_v82_patch4(boundary.opakc) << "\n"
+                  << "V048746255172582_CALL3_CONTINUUM_TRANSFER_OPAKCONT_HASH=" << binary64_vector_hash_v82_patch4(boundary.opakcont) << "\n"
+                  << "V048746255172582_CALL3_CONTINUUM_TRANSFER_POST_HEATT_ZREMS1_HASH="
+                  << binary64_vector_hash_v82_patch4(std::vector<double>(zrems.begin(), zrems.begin() + static_cast<std::ptrdiff_t>(n))) << "\n"
+                  << "V048746255172582_CALL3_CONTINUUM_TRANSFER_POST_TRNFRC_BREMSA_HASH=" << binary64_vector_hash_v82_patch4(data.dsec_bremsa) << "\n"
+                  << "V048746255172582_CALL2_HEATT_INPUT_PRE_BREMSA_SOURCE_HASH=" << binary64_vector_hash_v82_patch4(data.sequence22_source_workspace.bremsa) << "\n"
+                  << "V048746255172582_CALL2_HEATT_INPUT_PRE_BREMSA_NATIVE_HASH=" << binary64_vector_hash_v82_patch4(pre_bremsa) << "\n"
+                  << "V048746255172582_CALL2_HEATT_INPUT_PRE_BREMSA_FIRST_SCIENTIFIC_MISMATCH_RUNTIME_SLOT="
+                  << audit_slot_text_v82_patch4(pre_audit.first_scientific_mismatch_zero_based) << "\n"
+                  << "V048746255172582_CALL2_HEATT_INPUT_PRE_BREMSA_SCIENTIFIC_MISMATCH_COUNT=" << pre_audit.scientific_mismatch_count << "\n"
+                  << "V048746255172582_CALL2_HEATT_INPUT_PRE_BREMSA_SCIENTIFIC_STATE=" << (pre_audit.scientific ? "ACCEPT" : "REJECT") << "\n"
+                  << "V048746255172582_CALL2_POST_HEATT_ZREMS1_FIRST_SCIENTIFIC_MISMATCH_RUNTIME_SLOT="
+                  << audit_slot_text_v82_patch4(heatt_output_audit.first_scientific_mismatch_zero_based) << "\n"
+                  << "V048746255172582_CALL2_POST_HEATT_ZREMS1_SCIENTIFIC_MISMATCH_COUNT=" << heatt_output_audit.scientific_mismatch_count << "\n"
+                  << "V048746255172582_CALL2_POST_HEATT_ZREMS1_MAX_ABS_DELTA=" << heatt_output_audit.max_abs_delta << "\n"
+                  << "V048746255172582_CALL2_POST_HEATT_ZREMS1_MAX_RELATIVE_DELTA=" << heatt_output_audit.max_relative_delta << "\n"
+                  << "V048746255172582_CALL2_POST_HEATT_ZREMS1_SCIENTIFIC_STATE=" << (heatt_output_audit.scientific ? "ACCEPT" : "REJECT") << "\n"
+                  << "V048746255172582_CALL3_CONTINUUM_TRANSFER_PRE_BREMSA_FIRST_SCIENTIFIC_MISMATCH_RUNTIME_SLOT="
+                  << audit_slot_text_v82_patch4(pre_audit.first_scientific_mismatch_zero_based) << "\n"
+                  << "V048746255172582_CALL3_CONTINUUM_TRANSFER_PRE_BREMSA_SCIENTIFIC_MISMATCH_COUNT=" << pre_audit.scientific_mismatch_count << "\n"
+                  << "V048746255172582_CALL3_CONTINUUM_TRANSFER_POST_TRNFRC_FIRST_SCIENTIFIC_MISMATCH_RUNTIME_SLOT="
+                  << audit_slot_text_v82_patch4(post_audit.first_scientific_mismatch_zero_based) << "\n"
+                  << "V048746255172582_CALL3_CONTINUUM_TRANSFER_POST_TRNFRC_SCIENTIFIC_MISMATCH_COUNT=" << post_audit.scientific_mismatch_count << "\n"
+                  << "V048746255172582_CALL3_CONTINUUM_TRANSFER_POST_TRNFRC_MAX_ABS_DELTA=" << post_audit.max_abs_delta << "\n"
+                  << "V048746255172582_CALL3_CONTINUUM_TRANSFER_POST_TRNFRC_MAX_RELATIVE_DELTA=" << post_audit.max_relative_delta << "\n"
+                  << "V048746255172582_CALL2_HEATT_INPUT_BRCEMS_HASH=" << binary64_vector_hash_v82_patch4(brcems) << "\n"
+                  << "V048746255172582_CALL2_HEATT_INPUT_OPAKC_HASH=" << binary64_vector_hash_v82_patch4(boundary.opakc) << "\n"
+                  << "V048746255172582_CALL2_HEATT_INPUT_OPAKCONT_HASH=" << binary64_vector_hash_v82_patch4(boundary.opakcont) << "\n"
+                  << "V048746255172582_CALL2_HEATT_INPUT_FLINEL_HASH=" << binary64_vector_hash_v82_patch4(boundary.flinel) << "\n"
+                  << "V048746255172582_CALL2_OPAKC_COMPONENT_SUM_PRE_GSMOOTH_SCIENTIFIC_MISMATCH_COUNT=" << component_pre_audit.scientific_mismatch_count << "\n"
+                  << "V048746255172582_CALL2_OPAKC_COMPONENT_SUM_PRE_GSMOOTH_SCIENTIFIC_STATE=" << (component_pre_audit.scientific ? "ACCEPT" : "REJECT") << "\n"
+                  << "V048746255172582_CALL2_OPAKC_COMPONENT_SUM_POST_GSMOOTH_SCIENTIFIC_MISMATCH_COUNT=" << component_post_audit.scientific_mismatch_count << "\n"
+                  << "V048746255172582_CALL2_OPAKC_COMPONENT_SUM_POST_GSMOOTH_SCIENTIFIC_STATE=" << (component_post_audit.scientific ? "ACCEPT" : "REJECT") << "\n"
+                  << "V048746255172582_CALL3_CONTINUUM_OPACITY_ATTRIBUTION_ROWS=" << continuum_residual_rows << "\n"
+                  << "V048746255172582_CALL3_CONTINUUM_OPACITY_BOUND_FREE_OWNER_ROWS=" << opacity_bound_free_owner_rows << "\n"
+                  << "V048746255172582_CALL3_CONTINUUM_OPACITY_LINE_OWNER_ROWS=" << opacity_line_owner_rows << "\n"
+                  << "V048746255172582_CALL3_CONTINUUM_OPACITY_FREE_FREE_OWNER_ROWS=" << opacity_free_free_owner_rows << "\n"
+                  << "V048746255172582_CALL3_CONTINUUM_OPACITY_THOMSON_OWNER_ROWS=" << opacity_thomson_owner_rows << "\n"
+                  << "V048746255172582_CALL3_CONTINUUM_OPACITY_MIXED_OWNER_ROWS=" << opacity_mixed_owner_rows << "\n"
+                  << "V048746255172582_CALL3_CONTINUUM_OPACITY_FIRST_OWNER=" << opacity_first_owner << "\n"
+                  << "V048746255172582_CALL3_CONTINUUM_OPACITY_COMPONENT_ATTRIBUTION=WRITTEN\n"
+                  << "V048746255172582_CALL3_CONTINUUM_RESIDUAL_FIRST_RUNTIME_SLOT="
+                  << audit_slot_text_v82_patch4(continuum_first_residual) << "\n"
+                  << "V048746255172582_CALL3_CONTINUUM_RESIDUAL_DECOMPOSITION_ROWS=" << continuum_residual_rows << "\n"
+                  << "V048746255172582_CALL3_CONTINUUM_RESIDUAL_DECOMPOSITION=WRITTEN\n"
+                  << "V048746255172582_CALL2_HEATT_INPUT_DECOMPOSITION=WRITTEN\n"
+                  << "V048746255172582_CALL3_CONTINUUM_TRANSFER_DECOMPOSITION=WRITTEN\n";
+        write_call3_opacity_producer_decomposition_v82_patch511(data, transfer_dir);
+    }
+}
+
 void advance_consecutive_transport_v71(
     StandaloneControllerDataV67& data,
-    const FixedDsecSnapshot& local_boundary,
-    double delta_radius_cm) {
+    FixedDsecSnapshot& local_boundary,
+    double delta_radius_cm,
+    double radius_cm) {
     if (!(delta_radius_cm > 0.0) || !std::isfinite(delta_radius_cm)) return;
-    if (data.line_tau_in.size() < local_boundary.oplin.size()) {
-        data.line_tau_in.resize(local_boundary.oplin.size(), 0.0);
-        data.line_tau_out.resize(local_boundary.oplin.size(), 0.0);
+
+    advance_source_continuum_radiation_v82_patch52(data, local_boundary, delta_radius_cm, radius_cm);
+
+    const std::size_t line_stride = local_boundary.oplin.size();
+    if (data.line_tau_in.size() < line_stride) {
+        data.line_tau_in.resize(line_stride, 0.0);
+        data.line_tau_out.resize(line_stride, 0.0);
     }
-    // npass=1 advances the source lind=1/first transport plane only.
-    for (std::size_t i = 0; i < local_boundary.oplin.size(); ++i) {
-        const double opacity = std::isfinite(local_boundary.oplin[i]) && local_boundary.oplin[i] > 0.0
-            ? local_boundary.oplin[i] : 0.0;
-        data.line_tau_in[i] += opacity * delta_radius_cm;
+    if (data.product_line_tau_in.size() != line_stride) {
+        data.product_line_tau_in.assign(line_stride, 0.0);
+        data.product_line_tau_out.assign(line_stride, 0.0);
     }
-    if (data.source_tau_in.size() < local_boundary.opakab.size()) {
-        data.source_tau_in.resize(local_boundary.opakab.size(), 0.0);
-        data.source_tau_out.resize(local_boundary.opakab.size(), 0.0);
+    if (data.line_luminosity.size() != 2u * line_stride) {
+        data.line_luminosity.assign(2u * line_stride, 0.0);
     }
-    for (std::size_t i = 0; i < local_boundary.opakab.size(); ++i) {
-        const double opacity = std::isfinite(local_boundary.opakab[i]) && local_boundary.opakab[i] > 0.0
-            ? local_boundary.opakab[i] : 0.0;
-        data.source_tau_in[i] += opacity * delta_radius_cm;
+    const std::size_t rcem_stride = local_boundary.rcem.size() >= 2u
+        ? local_boundary.rcem.size() / 2u : 0u;
+    const double fpr2 = 12.56 * std::pow(std::max(radius_cm, 0.0) * 1.0e-19, 2.0);
+
+    for (std::size_t source_slot = 1; source_slot < line_stride; ++source_slot) {
+        const double opacity = std::isfinite(local_boundary.oplin[source_slot]) &&
+            local_boundary.oplin[source_slot] > 0.0 ? local_boundary.oplin[source_slot] : 0.0;
+        const std::size_t runtime_slot = source_slot - 1u;
+        data.line_tau_in[runtime_slot] += opacity * delta_radius_cm;
+        data.product_line_tau_in[source_slot] += opacity * delta_radius_cm;
+        for (std::size_t plane = 0; plane < 2u; ++plane) {
+            const std::size_t source_at = plane * rcem_stride + source_slot;
+            const double local = source_at < local_boundary.rcem.size()
+                ? finite_or(local_boundary.rcem[source_at], 0.0) : 0.0;
+            data.line_luminosity[plane * line_stride + source_slot] = std::max(0.0,
+                data.line_luminosity[plane * line_stride + source_slot] + local * delta_radius_cm * fpr2);
+        }
     }
+
+    const std::size_t continuum_stride = local_boundary.opakab.size();
+    const std::size_t runtime_continuum_stride = continuum_stride > 0u ? continuum_stride - 1u : 0u;
+    if (data.source_tau_in.size() < runtime_continuum_stride ||
+        data.source_tau_out.size() < runtime_continuum_stride) {
+        throw std::runtime_error("v82 patch4 runtime continuum tau workspace is shorter than source pointer domain");
+    }
+    if (data.product_rrc_tau_in.size() != continuum_stride) {
+        data.product_rrc_tau_in.assign(continuum_stride, 0.0);
+        data.product_rrc_tau_out.assign(continuum_stride, 0.0);
+    }
+    if (data.rrc_luminosity.size() != 2u * continuum_stride) {
+        data.rrc_luminosity.assign(2u * continuum_stride, 0.0);
+    }
+    const std::size_t cemab_stride = local_boundary.cemab.size() >= 2u
+        ? local_boundary.cemab.size() / 2u : 0u;
+
+    // Critical patch-3 correction: source opakab[continuum_index_one_based]
+    // becomes runtime tau[continuum_index_one_based-1]. Patch 2 used tau[i].
+    for (std::size_t source_slot = 1; source_slot < continuum_stride; ++source_slot) {
+        const double opacity = std::isfinite(local_boundary.opakab[source_slot]) &&
+            local_boundary.opakab[source_slot] > 0.0 ? local_boundary.opakab[source_slot] : 0.0;
+        const std::size_t runtime_slot = source_slot - 1u;
+        data.source_tau_in[runtime_slot] += opacity * delta_radius_cm;
+        data.product_rrc_tau_in[source_slot] += opacity * delta_radius_cm;
+        const double inward = source_slot < cemab_stride
+            ? finite_or(local_boundary.cemab[source_slot], 0.0) : 0.0;
+        const std::size_t outward_at = cemab_stride + source_slot;
+        const double outward = outward_at < local_boundary.cemab.size()
+            ? finite_or(local_boundary.cemab[outward_at], 0.0) : 0.0;
+        const double increment = 0.5 * (inward + outward) * delta_radius_cm * fpr2;
+        data.rrc_luminosity[source_slot] = std::max(0.0,
+            data.rrc_luminosity[source_slot] + increment);
+        data.rrc_luminosity[continuum_stride + source_slot] = std::max(0.0,
+            data.rrc_luminosity[continuum_stride + source_slot] + increment);
+    }
+
+    local_boundary.tau0.clear();
+    local_boundary.tau0.reserve(2u * line_stride);
+    local_boundary.tau0.insert(local_boundary.tau0.end(), data.product_line_tau_in.begin(), data.product_line_tau_in.end());
+    local_boundary.tau0.insert(local_boundary.tau0.end(), data.product_line_tau_out.begin(), data.product_line_tau_out.end());
+    local_boundary.elum = data.line_luminosity;
+    local_boundary.tauc.clear();
+    local_boundary.tauc.reserve(2u * continuum_stride);
+    local_boundary.tauc.insert(local_boundary.tauc.end(), data.product_rrc_tau_in.begin(), data.product_rrc_tau_in.end());
+    local_boundary.tauc.insert(local_boundary.tauc.end(), data.product_rrc_tau_out.begin(), data.product_rrc_tau_out.end());
+    local_boundary.elumab = data.rrc_luminosity;
+    local_boundary.source_continuum_tau_workspace_count = data.source_tau_in.size();
+
+    // Radiation-grid continuum depth is also a shell transport quantity. The
+    // accepted-boundary evaluator has zero width, so advance it here together
+    // with the source-indexed line/RRC depths.
+    if (data.grid_tau_in.size() != local_boundary.opacity.size()) {
+        data.grid_tau_in.assign(local_boundary.opacity.size(), 0.0);
+        data.grid_tau_out.assign(local_boundary.opacity.size(), 0.0);
+    }
+    for (std::size_t i = 0; i < local_boundary.opacity.size(); ++i) {
+        const double opacity = std::isfinite(local_boundary.opacity[i]) && local_boundary.opacity[i] > 0.0
+            ? local_boundary.opacity[i] : 0.0;
+        data.grid_tau_in[i] += opacity * delta_radius_cm;
+    }
+    local_boundary.continuum_tau_in = data.grid_tau_in;
+    local_boundary.continuum_tau_out = data.grid_tau_out;
+
     data.cumulative_depth_cm += delta_radius_cm;
     std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> message{};
     const int rc = xstar_fixed_state_context_set_runtime_line_tau_v1(
@@ -10214,6 +12267,15 @@ int standalone_iteration_evaluator_v67(
         }
         xstar_fixed_state_input_v1 input{};
         fill_standalone_input_v67(*data, *trial, input);
+        if (data->reference_trajectory_mode && snapshot.call_index == 1u && snapshot.sequence >= 1u && snapshot.sequence <= 21u &&
+            input.global_xilevg && input.global_level_count > 0u) {
+            data->call1_current_input_global_xilevg.assign(input.global_xilevg, input.global_xilevg + input.global_level_count);
+        } else {
+            data->call1_current_input_global_xilevg.clear();
+        }
+        snapshot.spectral_covering_fraction =
+            (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_DSEC_COVERING_FRACTION) != 0u
+                ? input.dsec_covering_fraction : input.covering_fraction;
         fill_continuum_shape_v67(snapshot, input, data->energy);
         input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_DEFER_PRODUCT_PROJECTION;
         snapshot.lte_populations.assign(
@@ -10269,6 +12331,18 @@ int standalone_iteration_evaluator_v67(
         snapshot.continuum_heating = output.continuum_heating;
         snapshot.continuum_cooling = output.continuum_cooling;
         attach_native_thermal_components_v70(data->fixed_context, snapshot);
+        std::filesystem::path call1_sweep_native_root_v82_patch512;
+        if (data->reference_trajectory_mode && snapshot.call_index == 1u && snapshot.sequence >= 1u && snapshot.sequence <= 21u) {
+            call1_sweep_native_root_v82_patch512 = native_call1_sweep_dir_v82_patch512(*data, static_cast<int>(snapshot.sequence));
+            std::filesystem::create_directories(call1_sweep_native_root_v82_patch512);
+            std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> sweep_message{};
+            const int sweep_rc = xstar_fixed_state_write_last_diagnostics_v1(
+                data->fixed_context, call1_sweep_native_root_v82_patch512.string().c_str(), snapshot.sequence,
+                sweep_message.data(), sweep_message.size());
+            if (sweep_rc != 0) {
+                throw std::runtime_error(std::string("patch5.12 call-1 DSEC population diagnostic capture failed: ") + sweep_message.data());
+            }
+        }
         if (sequence2_qualification) {
             const std::filesystem::path diagnostic_root(sequence2_qualification_dir);
             std::filesystem::create_directories(diagnostic_root);
@@ -10483,7 +12557,30 @@ int standalone_iteration_evaluator_v67(
             data->sequence16_precommit_gate_passed = true;
             std::cout << "V048746255172582_SEQUENCE16_COMMIT=ACCEPT\n";
         }
+        if (data->reference_trajectory_mode && snapshot.sequence == 23u) {
+            const auto found23 = data->reference_contracts.find(23u);
+            if (found23 == data->reference_contracts.end()) {
+                set_callback_error(error, error_size, "V82_PATCH4_SEQUENCE23_CONTRACT_MISSING");
+                return 81;
+            }
+            const bool hmctot_ok = scientific_close_v82(found23->second.hmctot, snapshot.hmctot);
+            const bool elcter_ok = scientific_close_v82(found23->second.elcter, snapshot.charge_residual);
+            std::cout << std::setprecision(17)
+                      << "V048746255172582_SEQUENCE23_HMCTOT_SOURCE=" << found23->second.hmctot << "\n"
+                      << "V048746255172582_SEQUENCE23_HMCTOT_NATIVE=" << snapshot.hmctot << "\n"
+                      << "V048746255172582_SEQUENCE23_ELCTER_SOURCE=" << found23->second.elcter << "\n"
+                      << "V048746255172582_SEQUENCE23_ELCTER_NATIVE=" << snapshot.charge_residual << "\n"
+                      << "V048746255172582_SEQUENCE23_HMCTOT_SCIENTIFIC_TOLERANCE=" << (hmctot_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172582_SEQUENCE23_ELCTER_SCIENTIFIC_TOLERANCE=" << (elcter_ok ? "ACCEPT" : "REJECT") << "\n";
+            if (!hmctot_ok || !elcter_ok) {
+                set_callback_error(error, error_size, "V82_PATCH4_SEQUENCE23_SCIENTIFIC_GATE_REJECT");
+                return 82;
+            }
+        }
         update_global_populations_v67(*data, snapshot.populations, &snapshot.lte_populations);
+        if (!call1_sweep_native_root_v82_patch512.empty()) {
+            append_call1_dsec_population_sweep_v82_patch512(*data, snapshot, call1_sweep_native_root_v82_patch512);
+        }
         if (data->retain_prefix_diagnostics && snapshot.sequence <= 8u) {
             data->snapshots.push_back(snapshot);
         } else {
@@ -10536,8 +12633,18 @@ FixedDsecSnapshot evaluate_full_boundary_v67(
     std::size_t transport_plane) {
     FixedDsecSnapshot snapshot = make_iteration_snapshot_v67(data, accepted_state);
     snapshot.kind = "final";
+    (void)delta_radius_cm;
+    (void)radius_cm;
+    (void)transport_plane;
     xstar_fixed_state_input_v1 input{};
     fill_standalone_input_v67(data, accepted_state, input);
+    // v82 patch 5.9: the accepted-boundary snapshot must retain the same
+    // effective spectral covering fraction that the fixed-state engine sees.
+    // Patch 5.8 fixed the physics ownership (DSEC cfrac vs thermal emult), but
+    // this final-boundary diagnostic field was left at its default zero.
+    snapshot.spectral_covering_fraction =
+        (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_DSEC_COVERING_FRACTION) != 0u
+            ? input.dsec_covering_fraction : input.covering_fraction;
     fill_continuum_shape_v67(snapshot, input, data.energy);
     const std::size_t line_capacity = std::max<std::size_t>({
         data.line_tau_in.size(),
@@ -10585,6 +12692,15 @@ FixedDsecSnapshot evaluate_full_boundary_v67(
     std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> message{};
     const std::string sequence = std::to_string(snapshot.sequence);
     ::setenv("XSTAR_NATIVE_SOURCE_SEQUENCE", sequence.c_str(), 1);
+    if (data.reference_trajectory_mode && snapshot.sequence == 59u) {
+        const auto producer_path = data.sequence23_diagnostic_dir / "continuum_transfer" / "native_opacity_producer_inventory.csv";
+        const auto mg53_kernel_path = data.sequence23_diagnostic_dir / "continuum_transfer" / "mg_type53_native_record_kernels.csv";
+        ::setenv("XSTAR_V82_PATCH511_OPAKC_PRODUCER_AUDIT_PATH", producer_path.string().c_str(), 1);
+        ::setenv("XSTAR_V82_PATCH512_MG_TYPE53_KERNEL_AUDIT_PATH", mg53_kernel_path.string().c_str(), 1);
+    } else {
+        ::unsetenv("XSTAR_V82_PATCH511_OPAKC_PRODUCER_AUDIT_PATH");
+        ::unsetenv("XSTAR_V82_PATCH512_MG_TYPE53_KERNEL_AUDIT_PATH");
+    }
     const int rc = xstar_fixed_state_run_with_source_workspaces_v1(
         data.fixed_context, &input, &output, &source, &data.cumulative_stats,
         message.data(), message.size());
@@ -10620,82 +12736,91 @@ FixedDsecSnapshot evaluate_full_boundary_v67(
     attach_native_thermal_components_v70(data.fixed_context, snapshot);
     attach_native_product_diagnostics_v70(data.fixed_context, snapshot);
 
-    const std::size_t line_stride = snapshot.oplin.size();
-    if (data.line_tau_in.size() != line_stride) {
-        data.line_tau_in.assign(line_stride, 0.0);
-        data.line_tau_out.assign(line_stride, 0.0);
+    // v82 patch 5.10: the call-3 population boundary is produced by the
+    // accepted call-2 final solve (source sequence 59).  Capture that native
+    // solve trace and compare only against the v0.6.47.2 diagnostic cache; no
+    // source value is assigned to runtime state.
+    if (data.reference_trajectory_mode && data.call_index == 2u && data.sequence23_boundary_gate_configured) {
+        const auto population_root = data.sequence23_diagnostic_dir / "population_owner";
+        std::filesystem::create_directories(population_root);
+        std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> diagnostic_message{};
+        const int diagnostic_rc = xstar_fixed_state_write_last_diagnostics_v1(
+            data.fixed_context, population_root.string().c_str(), snapshot.sequence,
+            diagnostic_message.data(), diagnostic_message.size());
+        if (diagnostic_rc != 0) {
+            throw std::runtime_error(std::string("patch5.10 sequence-59 population diagnostic capture failed: ") +
+                diagnostic_message.data());
+        }
+        write_sequence23_population_owner_audit_v82_patch510(data, snapshot, population_root);
+        const auto sequence58_population_root = data.sequence23_diagnostic_dir / "sequence58_population_owner";
+        write_sequence58_final_population_boundary_audit_v82_patch511(
+            data, sequence58_population_root, population_root);
     }
-    const std::size_t line_plane = transport_plane > 0u ? 1u : 0u;
-    for (std::size_t i = 0; i < line_stride; ++i) {
-        const double increment = std::max(0.0, finite_or(snapshot.oplin[i], 0.0)) * std::max(0.0, delta_radius_cm);
-        (line_plane == 0u ? data.line_tau_in[i] : data.line_tau_out[i]) += increment;
-    }
-    snapshot.tau0.reserve(data.line_tau_in.size() + data.line_tau_out.size());
-    snapshot.tau0.insert(snapshot.tau0.end(), data.line_tau_in.begin(), data.line_tau_in.end());
-    snapshot.tau0.insert(snapshot.tau0.end(), data.line_tau_out.begin(), data.line_tau_out.end());
 
-    const double fpr2 = 12.56 * std::pow(std::max(radius_cm, 0.0) * 1.0e-19, 2.0);
+    const std::size_t line_stride = snapshot.oplin.size();
+    if (data.product_line_tau_in.size() != line_stride) {
+        data.product_line_tau_in.assign(line_stride, 0.0);
+        data.product_line_tau_out.assign(line_stride, 0.0);
+    }
     if (data.line_luminosity.size() != 2u * line_stride) {
         data.line_luminosity.assign(2u * line_stride, 0.0);
     }
-    const std::size_t rcem_stride = snapshot.rcem.size() >= 2u ? snapshot.rcem.size() / 2u : 0u;
-    for (std::size_t plane = 0; plane < 2u; ++plane) {
-        for (std::size_t slot = 0; slot < line_stride; ++slot) {
-            const std::size_t source_at = plane * rcem_stride + slot;
-            const double local = source_at < snapshot.rcem.size() ? finite_or(snapshot.rcem[source_at], 0.0) : 0.0;
-            data.line_luminosity[plane * line_stride + slot] = std::max(0.0,
-                data.line_luminosity[plane * line_stride + slot] + local * std::max(0.0, delta_radius_cm) * fpr2);
-        }
-    }
+    snapshot.tau0.clear();
+    snapshot.tau0.reserve(2u * line_stride);
+    snapshot.tau0.insert(snapshot.tau0.end(), data.product_line_tau_in.begin(), data.product_line_tau_in.end());
+    snapshot.tau0.insert(snapshot.tau0.end(), data.product_line_tau_out.begin(), data.product_line_tau_out.end());
     snapshot.elum = data.line_luminosity;
 
     const std::size_t continuum_stride = snapshot.opakab.size();
-    if (data.source_tau_in.size() < continuum_stride ||
-        data.source_tau_out.size() < continuum_stride) {
+    const std::size_t runtime_continuum_stride = continuum_stride > 0u ? continuum_stride - 1u : 0u;
+    if (data.source_tau_in.size() < runtime_continuum_stride ||
+        data.source_tau_out.size() < runtime_continuum_stride) {
         std::ostringstream error;
-        error << "runtime continuum tau workspace is shorter than ATDB continuum index domain"
+        error << "runtime continuum tau workspace is shorter than zero-based ATDB continuum pointer domain"
               << " tau_in=" << data.source_tau_in.size()
               << " tau_out=" << data.source_tau_out.size()
-              << " opakab=" << continuum_stride
+              << " product_opakab=" << continuum_stride
+              << " required_runtime=" << runtime_continuum_stride
               << " declared_native_continua=" << data.program_info.native_continuum_count;
         throw std::runtime_error(error.str());
     }
-    for (std::size_t i = 0; i < continuum_stride; ++i) {
-        const double increment = std::max(0.0, finite_or(snapshot.opakab[i], 0.0)) * std::max(0.0, delta_radius_cm);
-        (line_plane == 0u ? data.source_tau_in[i] : data.source_tau_out[i]) += increment;
+    if (data.product_rrc_tau_in.size() != continuum_stride) {
+        data.product_rrc_tau_in.assign(continuum_stride, 0.0);
+        data.product_rrc_tau_out.assign(continuum_stride, 0.0);
     }
-    snapshot.tauc.reserve(data.source_tau_in.size() + data.source_tau_out.size());
-    snapshot.tauc.insert(snapshot.tauc.end(), data.source_tau_in.begin(), data.source_tau_in.end());
-    snapshot.tauc.insert(snapshot.tauc.end(), data.source_tau_out.begin(), data.source_tau_out.end());
-    snapshot.source_continuum_tau_workspace_count = data.source_tau_in.size();
-
     if (data.rrc_luminosity.size() != 2u * continuum_stride) {
         data.rrc_luminosity.assign(2u * continuum_stride, 0.0);
     }
-    const std::size_t cemab_stride = snapshot.cemab.size() >= 2u ? snapshot.cemab.size() / 2u : 0u;
-    for (std::size_t slot = 0; slot < continuum_stride; ++slot) {
-        const double inward = slot < cemab_stride ? finite_or(snapshot.cemab[slot], 0.0) : 0.0;
-        const double outward_at = cemab_stride + slot;
-        const double outward = outward_at < snapshot.cemab.size() ? finite_or(snapshot.cemab[outward_at], 0.0) : 0.0;
-        const double increment = 0.5 * (inward + outward) * std::max(0.0, delta_radius_cm) * fpr2;
-        data.rrc_luminosity[slot] = std::max(0.0, data.rrc_luminosity[slot] + increment);
-        data.rrc_luminosity[continuum_stride + slot] = std::max(0.0, data.rrc_luminosity[continuum_stride + slot] + increment);
-    }
+    snapshot.tauc.clear();
+    snapshot.tauc.reserve(2u * continuum_stride);
+    snapshot.tauc.insert(snapshot.tauc.end(), data.product_rrc_tau_in.begin(), data.product_rrc_tau_in.end());
+    snapshot.tauc.insert(snapshot.tauc.end(), data.product_rrc_tau_out.begin(), data.product_rrc_tau_out.end());
     snapshot.elumab = data.rrc_luminosity;
+    snapshot.source_continuum_tau_workspace_count = data.source_tau_in.size();
 
     if (data.grid_tau_in.size() != snapshot.opacity.size()) {
         data.grid_tau_in.assign(snapshot.opacity.size(), 0.0);
         data.grid_tau_out.assign(snapshot.opacity.size(), 0.0);
     }
-    snapshot.continuum_tau_in.resize(snapshot.opacity.size());
-    snapshot.continuum_tau_out.resize(snapshot.opacity.size());
-    for (std::size_t i = 0; i < snapshot.opacity.size(); ++i) {
-        const double increment = std::max(0.0, finite_or(snapshot.opacity[i], 0.0)) * std::max(0.0, delta_radius_cm);
-        (line_plane == 0u ? data.grid_tau_in[i] : data.grid_tau_out[i]) += increment;
-        snapshot.continuum_tau_in[i] = data.grid_tau_in[i];
-        snapshot.continuum_tau_out[i] = data.grid_tau_out[i];
-    }
+    snapshot.continuum_tau_in = data.grid_tau_in;
+    snapshot.continuum_tau_out = data.grid_tau_out;
     update_global_populations_v67(data, snapshot.populations, &snapshot.lte_populations);
+    if (data.reference_trajectory_mode && snapshot.sequence == 58u) {
+        data.sequence58_native_projected_global_xilevg = data.global_xilevg;
+        data.sequence58_population_boundary_captured = true;
+        const auto sequence58_population_root = data.sequence23_diagnostic_dir / "sequence58_population_owner";
+        std::filesystem::create_directories(sequence58_population_root);
+        std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> diagnostic_message{};
+        const int diagnostic_rc = xstar_fixed_state_write_last_diagnostics_v1(
+            data.fixed_context, sequence58_population_root.string().c_str(), snapshot.sequence,
+            diagnostic_message.data(), diagnostic_message.size());
+        if (diagnostic_rc != 0) {
+            throw std::runtime_error(std::string("patch5.11 sequence-58 population diagnostic capture failed: ") +
+                diagnostic_message.data());
+        }
+        std::cout << "V048746255172582_SEQUENCE58_FINAL_POPULATION_NATIVE_BOUNDARY_CAPTURE=ACCEPT\n";
+    }
+    audit_sequence58_lte_v82_patch53(data, snapshot);
     data.last_iteration = snapshot;
     return snapshot;
 }
@@ -11066,6 +13191,172 @@ bool is_reference_mg11_benchmark_v71(const xstar_atdb_runtime::ProductionParamet
     return params.raw_json.find("xstar_atomic_mg11_xi1p5_ne1e8") != std::string::npos;
 }
 
+bool diagnostic_preview_enabled_v82_patch513() {
+    const char* value = std::getenv("XSTAR_V82_PATCH513_DIAGNOSTIC_PREVIEW");
+    return value != nullptr && std::string(value) == "1";
+}
+
+void write_sequence23_diagnostic_preview_v82_patch513(
+    const Options& options,
+    const xstar_atdb_runtime::ProductionParameters& params,
+    const xstar_atdb_runtime::ResolvedAtomicData& atomic,
+    const StandaloneControllerDataV67& data,
+    const xstar_run_state::WholeRunAccumulatedState& seed,
+    const std::vector<FixedDsecSnapshot>& finals,
+    const std::optional<FixedDsecSnapshot>& call2_pretransport,
+    const std::string& failure_reason,
+    double controller_elapsed_seconds) {
+    if (!diagnostic_preview_enabled_v82_patch513()) return;
+    if (finals.size() < 2u || !call2_pretransport.has_value()) {
+        throw std::runtime_error("patch5.13 diagnostic preview requires call-1/call-2 final boundaries");
+    }
+
+    const auto preview_dir = std::filesystem::path(options.output_dir) / "diagnostic_preview_products";
+    remove_native_products_v172524(preview_dir);
+    std::filesystem::create_directories(preview_dir);
+
+    xstar_run_state::WholeRunAccumulatedState preview = seed;
+    preview.backend = "cpp-sequence23-diagnostic-preview";
+    preview.native_run_id = std::string("sequence23-diagnostic-preview-") + XSTAR_API_VERSION_STRING;
+    preview.fixed_evaluations.clear();
+    preview.accepted_controller_states.clear();
+    preview.radial_zones.clear();
+    preview.abundance_radial_rows.clear();
+    for (const auto& snapshot : data.snapshots) {
+        preview.fixed_evaluations.push_back(copy_real_native_snapshot(snapshot, 0.0));
+    }
+
+    const double total_depth_cm = params.column_cm2 / std::max(params.density_cm3, 1.0);
+    const double sequence23_depth_cm = 0.402446 * total_depth_cm;
+    auto append_preview_zone = [&](const FixedDsecSnapshot& snapshot,
+                                   std::size_t zone_index,
+                                   double depth_cm,
+                                   const std::string& provenance,
+                                   bool exact_controller_boundary) {
+        xstar_run_state::AcceptedControllerState accepted;
+        accepted.call_index = snapshot.call_index;
+        accepted.accepted_sequence = snapshot.sequence;
+        accepted.acceptance_reason = provenance;
+        accepted.evaluation = copy_real_native_snapshot(snapshot, 0.0);
+        preview.accepted_controller_states.push_back(accepted);
+
+        xstar_run_state::RadialZoneState zone;
+        zone.zone_index = zone_index;
+        zone.pass_index = 1u;
+        zone.radius_cm = params.initial_radius_cm + std::max(depth_cm, 0.0);
+        zone.outer_radius_cm = zone.radius_cm;
+        zone.delta_radius_cm = depth_cm;
+        zone.density_cm3 = params.density_cm3;
+        zone.pressure_dyn_cm2 = params.pressure_dyn_cm2;
+        zone.ionization_parameter = std::pow(10.0, params.log_xi);
+        zone.log_ionization_parameter = params.log_xi;
+        zone.column_density_cm2 = params.density_cm3 * std::max(depth_cm, 0.0);
+        zone.temperature_t4 = accepted.evaluation.temperature_t4;
+        zone.electron_fraction = accepted.evaluation.computed_electron_fraction;
+        zone.provisional_from_controller = !exact_controller_boundary;
+        zone.accepted_boundary_exact = exact_controller_boundary;
+        zone.boundary_provenance = provenance;
+        zone.accepted_controller = accepted;
+        preview.radial_zones.push_back(zone);
+
+        xstar_run_state::AbundanceRadialRowState abundance;
+        abundance.row_index = zone_index;
+        abundance.radius_cm = zone.radius_cm;
+        abundance.delta_radius_cm = depth_cm;
+        abundance.log_ionization_parameter = params.log_xi;
+        abundance.electron_fraction = zone.electron_fraction;
+        abundance.density_cm3 = params.density_cm3;
+        abundance.pressure_dyn_cm2 = params.pressure_dyn_cm2;
+        abundance.temperature_t4 = zone.temperature_t4;
+        abundance.fractional_heat_error = accepted.evaluation.total_heating != 0.0
+            ? (accepted.evaluation.total_heating - accepted.evaluation.total_cooling) /
+              std::abs(accepted.evaluation.total_heating)
+            : 0.0;
+        abundance.terminal_row = false;
+        preview.abundance_radial_rows.push_back(abundance);
+    };
+
+    // Three diagnostic rows align geometrically with the first three source
+    // radial surfaces: call-1 final at zero depth, call-2 final at zero depth,
+    // and the transported call-3 input boundary at 0.402446 of total depth.
+    append_preview_zone(finals[0], 1u, 0.0,
+        "diagnostic preview: accepted call-1 final", true);
+    append_preview_zone(*call2_pretransport, 2u, 0.0,
+        "diagnostic preview: accepted call-2 final before transport", true);
+    append_preview_zone(finals[1], 3u, sequence23_depth_cm,
+        "diagnostic preview: sequence-23 call-3 input after call-2 transport", false);
+    preview.abundance_radial_rows.back().terminal_row = true;
+
+    preview.embedded_public_fits_payloads_absent = true;
+    preview.embedded_full_xout_step_payload_absent = true;
+    preview.controller_trajectory_qualified = false;
+    preview.product_schema_complete = true;
+    preview.radial_state_complete = true;
+    preview.native_product_inputs_complete = !preview.fixed_evaluations.empty();
+    preview.native_detail_state_retained = true;
+    preview.continuum_depths_derived_from_native_opacity = true;
+    preview.exact_source_metadata_retained = !preview.element_metadata.empty() && !preview.row_metadata.empty();
+    preview.exact_source_workspaces_retained = false;
+    preview.exact_accepted_radial_boundaries_retained = false;
+    preview.exact_legacy_pprint_state_retained = false;
+    preview.legacy_pprint.initialized_from_native_controller = true;
+    preview.legacy_pprint.option_sequence_exact = false;
+    preview.legacy_pprint.finalized_from_native_controller = true;
+
+    auto product = xstar_run_state::build_product_writing_state(preview);
+    product.backend = "cpp-sequence23-diagnostic-preview";
+    product.product_state_complete = false;
+    product.product_parity_qualified = false;
+    product.measured_run_seconds = std::max(0.0, controller_elapsed_seconds);
+
+    ::setenv("XSTAR_TRUE_PRODUCTION", "1", 1);
+    try {
+        auto science = xstar_science_fits::write_historical_science_products(
+            {}, preview_dir, product,
+            product.fixed_evaluations.empty() ? std::vector<double>{}
+                                              : product.fixed_evaluations.front().radiation_energy_ev);
+        (void)science;
+        xstar_science_fits::write_native_abundance_product({}, preview_dir, product);
+        auto step = xstar_step_log::write_native_step_log(preview_dir, product);
+        (void)step;
+    } catch (...) {
+        ::unsetenv("XSTAR_TRUE_PRODUCTION");
+        throw;
+    }
+    ::unsetenv("XSTAR_TRUE_PRODUCTION");
+
+    const std::size_t fits_count = count_native_fits_products_v172524(preview_dir);
+    const bool step_written = std::filesystem::is_regular_file(preview_dir / "xout_step.log") &&
+        regular_file_size_or_zero_v172521(preview_dir / "xout_step.log") > 0u;
+
+    std::ofstream manifest(preview_dir / "diagnostic_preview_manifest.json");
+    manifest << std::boolalpha
+             << "{\n"
+             << "  \"schema\": \"xstar-tools-v82-patch513-sequence23-diagnostic-preview-v1\",\n"
+             << "  \"release\": \"" << XSTAR_API_VERSION_STRING << "\",\n"
+             << "  \"diagnostic_preview_only\": true,\n"
+             << "  \"production_publication\": false,\n"
+             << "  \"trajectory_complete\": false,\n"
+             << "  \"scientific_parity_claimed\": false,\n"
+             << "  \"failure_boundary\": \"sequence23_call3_start\",\n"
+             << "  \"failure_reason\": \"" << json_escape_v67(failure_reason) << "\",\n"
+             << "  \"retained_controller_events\": " << preview.fixed_evaluations.size() << ",\n"
+             << "  \"preview_radial_rows\": " << preview.radial_zones.size() << ",\n"
+             << "  \"source_radial_rows_expected\": 5,\n"
+             << "  \"fits_products_written\": " << fits_count << ",\n"
+             << "  \"xout_step_written\": " << step_written << "\n"
+             << "}\n";
+    if (!manifest) throw std::runtime_error("cannot write patch5.13 diagnostic preview manifest");
+
+    std::cout << "V048746255172582_DIAGNOSTIC_PREVIEW_ONLY=YES\n"
+              << "V048746255172582_DIAGNOSTIC_PREVIEW_FAILURE_BOUNDARY=SEQUENCE23_CALL3_START\n"
+              << "V048746255172582_DIAGNOSTIC_PREVIEW_RADIAL_ROWS=" << preview.radial_zones.size() << "\n"
+              << "V048746255172582_DIAGNOSTIC_PREVIEW_FITS_PRODUCTS_WRITTEN=" << fits_count << "\n"
+              << "V048746255172582_DIAGNOSTIC_PREVIEW_XOUT_STEP_LOG_WRITTEN=" << (step_written ? 1 : 0) << "\n"
+              << "V048746255172582_DIAGNOSTIC_PREVIEW_PUBLICATION="
+              << ((fits_count == 9u && step_written) ? "ACCEPT" : "REJECT") << "\n";
+}
+
 xstar_run_state::ProductWritingState build_general_standalone_product_v67(
     const Options& options,
     const xstar_atdb_runtime::ProductionParameters& params,
@@ -11096,6 +13387,10 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         }
         StandaloneControllerDataV67 data;
         data.fixed_context = fixed;
+        // v82 patch 5.1 wiring retained by patch 5.2: call-boundary continuum
+        // transport invokes the native heatt kernel and therefore owns the same
+        // persistent thermal context as the DSEC controller.
+        data.thermal_context = thermal;
         data.program_info = info;
         data.parameters = &params;
         data.program = &program;
@@ -11131,6 +13426,68 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                 throw std::runtime_error("sequence-16 exact v0.6.47.2 solve-stage rows are missing");
             }
             data.sequence16_precommit_gate_configured = true;
+            const char* source_call3_workspace = std::getenv("XSTAR_V82_SEQUENCE23_SOURCE_WORKSPACE_DIR");
+            if (!source_call3_workspace || !*source_call3_workspace) {
+                throw std::runtime_error("XSTAR_V82_SEQUENCE23_SOURCE_WORKSPACE_DIR is required");
+            }
+            RuntimeStateWorkspace sequence23_workspace;
+            sequence23_workspace.call_index = 3;
+            sequence23_workspace.directory = std::filesystem::path(source_call3_workspace);
+            data.sequence23_source_workspace = read_runtime_state_workspace_values(sequence23_workspace);
+            data.sequence23_diagnostic_dir = std::filesystem::path(options.output_dir) /
+                "standalone_diagnostics" / "sequence23_call3_boundary";
+            data.sequence23_boundary_gate_configured = true;
+            const char* source_sequence59_workspace = std::getenv("XSTAR_V82_SEQUENCE59_SOURCE_WORKSPACE_DIR");
+            if (!source_sequence59_workspace || !*source_sequence59_workspace) {
+                throw std::runtime_error("XSTAR_V82_SEQUENCE59_SOURCE_WORKSPACE_DIR is required");
+            }
+            RuntimeStateWorkspace sequence59_workspace;
+            sequence59_workspace.call_index = 2;
+            sequence59_workspace.directory = std::filesystem::path(source_sequence59_workspace);
+            data.sequence59_source_workspace = read_runtime_state_workspace_values(sequence59_workspace);
+            data.sequence59_boundary_reference_configured = true;
+            const char* source_sequence23_solve_rows = std::getenv("XSTAR_V82_SEQUENCE23_SOURCE_SOLVE_STAGE_ROWS");
+            if (!source_sequence23_solve_rows || !*source_sequence23_solve_rows) {
+                throw std::runtime_error("XSTAR_V82_SEQUENCE23_SOURCE_SOLVE_STAGE_ROWS is required");
+            }
+            data.sequence23_source_solve_stage_rows = std::filesystem::path(source_sequence23_solve_rows);
+            if (!std::filesystem::is_regular_file(data.sequence23_source_solve_stage_rows)) {
+                throw std::runtime_error("sequence-23 population-owner source solve-stage rows are missing");
+            }
+            const char* call1_source_workspaces_root = std::getenv("XSTAR_V82_CALL1_SOURCE_WORKSPACES_ROOT");
+            if (!call1_source_workspaces_root || !*call1_source_workspaces_root) {
+                throw std::runtime_error("XSTAR_V82_CALL1_SOURCE_WORKSPACES_ROOT is required");
+            }
+            data.call1_source_workspaces_root = std::filesystem::path(call1_source_workspaces_root);
+            if (!std::filesystem::is_directory(data.call1_source_workspaces_root)) {
+                throw std::runtime_error("call-1 source-workspace root is missing");
+            }
+            data.call1_dsec_population_sweep_dir = std::filesystem::path(options.output_dir) /
+                "standalone_diagnostics" / "call1_dsec_population_sweep";
+            const auto sequence58_rnisi_audit_path = data.sequence23_diagnostic_dir.parent_path() /
+                "sequence58_final_call1_lte" / "sequence58_native_rnisi_audit.csv";
+            ::setenv("XSTAR_V82_PATCH56_SEQUENCE58_RNISI_AUDIT_PATH",
+                sequence58_rnisi_audit_path.string().c_str(), 1);
+
+            const char* source_call2_workspace = std::getenv("XSTAR_V82_SEQUENCE22_SOURCE_WORKSPACE_DIR");
+            if (!source_call2_workspace || !*source_call2_workspace) {
+                throw std::runtime_error("XSTAR_V82_SEQUENCE22_SOURCE_WORKSPACE_DIR is required");
+            }
+            RuntimeStateWorkspace sequence22_workspace;
+            sequence22_workspace.call_index = 2;
+            sequence22_workspace.directory = std::filesystem::path(source_call2_workspace);
+            data.sequence22_source_workspace = read_runtime_state_workspace_values(sequence22_workspace);
+            data.sequence22_boundary_reference_configured = true;
+
+            const char* source_sequence58_workspace = std::getenv("XSTAR_V82_SEQUENCE58_SOURCE_WORKSPACE_DIR");
+            if (!source_sequence58_workspace || !*source_sequence58_workspace) {
+                throw std::runtime_error("XSTAR_V82_SEQUENCE58_SOURCE_WORKSPACE_DIR is required");
+            }
+            RuntimeStateWorkspace sequence58_workspace;
+            sequence58_workspace.call_index = 1;
+            sequence58_workspace.directory = std::filesystem::path(source_sequence58_workspace);
+            data.sequence58_source_workspace = read_runtime_state_workspace_values(sequence58_workspace);
+            data.sequence58_lte_reference_configured = true;
         }
         data.energy = radiation.energy_ev;
         data.flux = radiation.incident;
@@ -11145,7 +13502,22 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         for (std::size_t i = 0; i < data.flux.size(); ++i) {
             data.dsec_bremsa[i] = data.flux[i] / source_fpr2;
         }
-        if (!data.dsec_bremsa.empty()) data.dsec_bremsa.back() = 0.0;
+        if (!data.dsec_bremsa.empty()) {
+            // Source trnfrc seeds the last two bins at zero but immediately
+            // recomputes ncn2-1 inside its reverse loop; only ncn2 remains zero.
+            data.dsec_bremsa.back() = 0.0;
+        }
+        // Source xstar initialization: zrems(1,:)=zremsz and
+        // zremso(1,:)=zremsz; all other continuum planes begin at zero.
+        const std::size_t radiation_bins = data.flux.size();
+        data.source_incident = data.flux;
+        data.accumulated_zremsz = data.flux;
+        data.accumulated_zrems.assign(5u * radiation_bins, 0.0);
+        data.accumulated_zremso.assign(5u * radiation_bins, 0.0);
+        for (std::size_t i = 0; i < radiation_bins; ++i) {
+            data.accumulated_zrems[i] = data.flux[i];
+            data.accumulated_zremso[i] = data.flux[i];
+        }
         std::size_t maximum_line_index = 0;
         std::size_t maximum_continuum_index = 0;
         for (const auto& record : program.records) {
@@ -11158,10 +13530,9 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                     static_cast<std::size_t>(record.continuum_index_one_based));
             }
         }
-        const std::size_t continuum_tau_capacity = required_continuum_tau_capacity_v73(
+        const std::size_t continuum_tau_capacity = required_runtime_continuum_tau_capacity_v82_patch4(
             maximum_continuum_index,
-            static_cast<std::size_t>(info.native_continuum_count),
-            data.energy.size());
+            static_cast<std::size_t>(info.native_continuum_count));
         const std::size_t line_tau_capacity = maximum_line_index + 1u;
         data.source_tau_in.assign(continuum_tau_capacity, 0.0);
         data.source_tau_out.assign(continuum_tau_capacity, 0.0);
@@ -11176,16 +13547,49 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         std::cout << "V048746255172582_MAXIMUM_RECORD_CONTINUUM_INDEX=" << maximum_continuum_index << "\n"
                   << "V048746255172582_PROGRAM_NATIVE_CONTINUUM_COUNT=" << info.native_continuum_count << "\n"
                   << "V048746255172582_CONTINUUM_GRID_BINS=" << data.energy.size() << "\n"
+                  << "V048746255172582_RUNTIME_CONTINUUM_TAU_CAPACITY=" << continuum_tau_capacity << "\n"
+                  << "V048746255172582_PRODUCT_CONTINUUM_ONE_BASED_CAPACITY=" << (static_cast<std::size_t>(info.native_continuum_count) + 1u) << "\n"
                   << "V048746255172582_CONTINUUM_TAU_CAPACITY=" << continuum_tau_capacity << "\n"
+                  << "V048746255172582_CONTINUUM_RUNTIME_PRODUCT_DOMAIN_SPLIT=ACCEPT\n"
                   << "V048746255172582_CONTINUUM_TAU_DOMAIN_GATE=ACCEPT\n";
         data.population_global_level_index.reserve(program.rows.size());
-        for (const auto& row : program.rows) {
+        data.population_global_level_aliases = program.row_global_level_aliases;
+        data.population_global_level_terminal_roles = program.row_global_level_terminal_roles;
+        for (std::size_t row_index = 0; row_index < program.rows.size(); ++row_index) {
+            const auto& row = program.rows[row_index];
             data.population_global_level_index.push_back(row.global_level_index);
-            if (row.global_level_index > 0) data.global_level_count = std::max(data.global_level_count, static_cast<std::size_t>(row.global_level_index));
+            if (row.global_level_index > 0) {
+                data.global_level_count = std::max(data.global_level_count, static_cast<std::size_t>(row.global_level_index));
+            }
+            if (row_index < data.population_global_level_aliases.size()) {
+                const auto& aliases = data.population_global_level_aliases[row_index];
+                data.global_alias_role_count += aliases.size();
+                if (aliases.size() > 1u) ++data.global_shared_boundary_row_count;
+                for (const int global : aliases) {
+                    if (global > 0) data.global_level_count = std::max(data.global_level_count, static_cast<std::size_t>(global));
+                }
+            }
         }
         data.global_xilevg.assign(data.global_level_count, 0.0);
         data.global_bilevg.assign(data.global_level_count, 0.0);
         data.global_rnisg.assign(data.global_level_count, 0.0);
+        data.global_terminal_continuum_role.assign(data.global_level_count, 0u);
+        for (std::size_t row_index = 0; row_index < data.population_global_level_aliases.size(); ++row_index) {
+            const auto& aliases = data.population_global_level_aliases[row_index];
+            const auto& terminals = row_index < data.population_global_level_terminal_roles.size()
+                ? data.population_global_level_terminal_roles[row_index]
+                : std::vector<std::uint8_t>{};
+            for (std::size_t j = 0; j < aliases.size(); ++j) {
+                const int global = aliases[j];
+                if (global > 0 && static_cast<std::size_t>(global) <= data.global_level_count &&
+                    j < terminals.size() && terminals[j]) {
+                    data.global_terminal_continuum_role[static_cast<std::size_t>(global - 1)] = 1u;
+                }
+            }
+        }
+        std::cout << "V048746255172582_GLOBAL_ALIAS_ROLE_COUNT=" << data.global_alias_role_count << "\n"
+                  << "V048746255172582_GLOBAL_SHARED_BOUNDARY_ROWS=" << data.global_shared_boundary_row_count << "\n"
+                  << "V048746255172582_GLOBAL_LEVEL_ALIAS_TOPOLOGY=ACCEPT\n";
         for (const auto& e : program.element_metadata) {
             if (e.atomic_number == 1 && e.row_count > 0) {
                 data.hydrogen_ground_population_index = static_cast<std::size_t>(e.row_offset);
@@ -11231,10 +13635,29 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         std::array<std::size_t,4> actual_dsec_counts{{0u,0u,0u,0u}};
         std::vector<FixedDsecSnapshot> finals;
         finals.reserve(source_calls);
+        std::optional<FixedDsecSnapshot> call2_pretransport_v82_patch513;
 
         for (std::size_t call = 1; call <= source_calls; ++call) {
             data.call_index = call;
             prepare_call_start_workspace_v71(data, call);
+            if (call == 3u && data.reference_trajectory_mode) {
+                try {
+                    audit_call3_boundary_v82_patch4(data);
+                } catch (const std::exception& exc) {
+                    const double partial_seconds = std::chrono::duration<double>(
+                        std::chrono::steady_clock::now() - started).count();
+                    try {
+                        write_sequence23_diagnostic_preview_v82_patch513(
+                            options, params, atomic, data, whole, finals,
+                            call2_pretransport_v82_patch513, exc.what(), partial_seconds);
+                    } catch (const std::exception& preview_exc) {
+                        std::cerr << "patch5.13 diagnostic preview publication failed: "
+                                  << preview_exc.what() << '\n';
+                        std::cout << "V048746255172582_DIAGNOSTIC_PREVIEW_PUBLICATION=REJECT_ERROR\n";
+                    }
+                    throw;
+                }
+            }
             data.evaluation_index = 0;
             data.writing_final_snapshot = false;
             xstar_dsec_config_v1 config{};
@@ -11302,14 +13725,29 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             if (!snapshot_complete_v67(boundary, info, data.energy.size(), completeness_reason)) {
                 throw std::runtime_error("accepted product boundary incomplete: " + completeness_reason);
             }
-            data.snapshots.push_back(boundary);
-            finals.push_back(std::move(boundary));
             data.writing_final_snapshot = false;
+            if (call == 2u && data.reference_trajectory_mode) {
+                const double call2_to_call3_segment = source_boundary_depth_cm[2u] - source_boundary_depth_cm[1u];
+                audit_call2_final_opakab_v82_patch4(data, boundary, call2_to_call3_segment);
+                commit_call2_to_call3_global_state_v82_patch52(data, boundary);
+                std::cout << "V048746255172582_CALL2_TO_CALL3_RNISG_RETAINED_NATIVE_HASH="
+                          << binary64_vector_hash_v82_patch4(data.global_rnisg) << "\n"
+                          << "V048746255172582_CALL2_TO_CALL3_RNISG_RETAINED_FROM_CALL2="
+                          << (data.global_rnisg == data.call2_entry_global_rnisg ? "ACCEPT" : "REJECT") << "\n";
+            }
             if (call < source_calls) {
                 const double segment = source_boundary_depth_cm[call] -
                     source_boundary_depth_cm[call - 1u];
-                advance_consecutive_transport_v71(data, finals.back(), segment);
+                if (call == 2u && data.reference_trajectory_mode) {
+                    call2_pretransport_v82_patch513 = boundary;
+                }
+                advance_consecutive_transport_v71(data, boundary, segment, boundary_radius_cm);
             }
+            if (call == 2u && data.reference_trajectory_mode) {
+                write_mg_type53_source_native_opacity_record_attribution_v82_patch512(data);
+            }
+            data.snapshots.push_back(boundary);
+            finals.push_back(std::move(boundary));
 
             std::cout << "V048746255172582_CONTROLLER_CALL=" << call
                       << " DSEC_EVALUATIONS=" << dsec_count
@@ -11335,19 +13773,6 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             // relative 5e-7 with an absolute 1e-12 fallback.  Electron fraction
             // remains at strict canonical .7e because it is already exact across
             // the accepted 61-event trajectory.
-            constexpr double kTrajectoryZeroFloorV82 = 1.0e-40;
-            constexpr double kTrajectoryRelativeToleranceV82 = 5.0e-7;
-            constexpr double kTrajectoryAbsoluteToleranceV82 = 1.0e-12;
-            auto scientific_close_v82 = [](double source, double native) {
-                if (!std::isfinite(source) || !std::isfinite(native)) return false;
-                if (std::abs(source) <= kTrajectoryZeroFloorV82 &&
-                    std::abs(native) <= kTrajectoryZeroFloorV82) return true;
-                const double diff = std::abs(native - source);
-                if (diff <= kTrajectoryAbsoluteToleranceV82) return true;
-                const double scale = std::max({std::abs(source), std::abs(native), kTrajectoryZeroFloorV82});
-                return diff / scale <= kTrajectoryRelativeToleranceV82;
-            };
-
             std::size_t trajectory_cells = 0u;
             std::size_t trajectory_mismatches = 0u;
             std::size_t temperature_mismatches = 0u;
@@ -11678,10 +14103,9 @@ int command_run_standalone_case_probe_v70(const Options& options) {
         const double source_fpr2 = static_cast<double>(static_cast<float>(12.56)) * radius_19 * radius_19;
         for (std::size_t i=0; i<data.flux.size(); ++i) data.dsec_bremsa[i] = data.flux[i] / source_fpr2;
         if (!data.dsec_bremsa.empty()) data.dsec_bremsa.back() = 0.0;
-        data.source_tau_in.assign(required_continuum_tau_capacity_v73(
+        data.source_tau_in.assign(required_runtime_continuum_tau_capacity_v82_patch4(
             0u,
-            static_cast<std::size_t>(info.native_continuum_count),
-            data.energy.size()), 0.0);
+            static_cast<std::size_t>(info.native_continuum_count)), 0.0);
         data.source_tau_out.assign(data.source_tau_in.size(), 0.0);
         data.line_tau_in.assign(static_cast<std::size_t>(info.native_line_count) + 1u, 0.0);
         data.line_tau_out.assign(data.line_tau_in.size(), 0.0);

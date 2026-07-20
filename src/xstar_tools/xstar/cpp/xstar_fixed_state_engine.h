@@ -302,6 +302,32 @@ typedef struct xstar_fixed_program_row_v1 {
     int32_t global_level_index;
 } xstar_fixed_program_row_v1;
 
+typedef struct xstar_fixed_lte_ion_topology_v1 {
+    int32_t element_index;
+    int32_t ion_stage;
+    int32_t start_row;
+    int32_t nlev;
+    /* Exact Type-13 terminal-continuum metadata for this ion.  The compact
+     * terminal row is shared with the next-ion ground state, so these values
+     * cannot be recovered from xstar_fixed_program_row_v1 alone. */
+    double terminal_energy_ev;
+    double terminal_statistical_weight;
+} xstar_fixed_lte_ion_topology_v1;
+
+/* v82 patch 5.6: exact calc_rates_level_lte Type-13 leveltemp data.
+ * Every source Type-13 level is retained by ion/local ordinal, including the
+ * shared terminal continuum row.  levwk consumes energy and statistical
+ * weight from this surface rather than from the compact-row owner. */
+typedef struct xstar_fixed_lte_level_v1 {
+    int32_t element_index;
+    int32_t ion_stage;
+    int32_t local_level;
+    int32_t reserved0;
+    int64_t source_record;
+    double energy_ev;
+    double statistical_weight;
+} xstar_fixed_lte_level_v1;
+
 typedef struct xstar_fixed_program_record_v1 {
     int64_t source_position;
     int64_t record;
@@ -348,6 +374,17 @@ typedef struct xstar_fixed_program_bundle_v1 {
     size_t real_count;
     const int64_t* ints;
     size_t int_count;
+
+    /* v82 patch 5.4 optional append-only source-LTE topology sidecar.
+     * Callers with the historical prefix remain valid when struct_size ends
+     * before lte_ions. */
+    const xstar_fixed_lte_ion_topology_v1* lte_ions;
+    size_t lte_ion_count;
+
+    /* v82 patch 5.6 optional append-only complete Type-13 LTE leveltemp
+     * sidecar.  Historical callers ending at lte_ion_count remain valid. */
+    const xstar_fixed_lte_level_v1* lte_levels;
+    size_t lte_level_count;
 } xstar_fixed_program_bundle_v1;
 
 XSTAR_FIXED_STATE_EXPORT int xstar_fixed_program_bundle_init_v1(
