@@ -20,9 +20,9 @@ from typing import Any
 
 from . import v0472_all61_type88_rate_lifetime_capture_v82_patch51941 as base
 
-RELEASE = "0.6.48.7.46.25.5.17.25.82-patch5.20.3"
-SCHEMA = "xstar-tools-v82-patch5203-v0472-rank-absorption-capture-v1"
-VERIFY_SCHEMA = "xstar-tools-v82-patch5203-v0472-rank-absorption-oracle-v1"
+RELEASE = "0.6.48.7.46.25.5.17.25.82-patch5.20.3.1"
+SCHEMA = "xstar-tools-v82-patch52031-v0472-rank-absorption-capture-v1"
+VERIFY_SCHEMA = "xstar-tools-v82-patch52031-v0472-rank-absorption-oracle-v1"
 HEATT_NAME = "v0472_all61_heatt_zrems_running_sum.csv"
 CALC_EMIS_NAME = "v0472_all61_calc_emis_selection_summary.csv"
 RANK_INPUT_NAME = "v0472_all61_calc_emis_rank_input.csv"
@@ -32,6 +32,14 @@ VERIFY_NAME = "all61_heatt_zrems_running_sum_capture_verification.json"
 BUNDLE_MANIFEST_NAME = "all61_heatt_zrems_running_sum_capture_manifest.json"
 
 _PROBE = base._PROBE
+# 5.20.3.1: the dynamically generated probe is a standalone module and
+# must import every module it uses itself.  The 5.20.3 target-bin wrapper
+# references os.environ/os.path, so add os to the generated probe header.
+_PROBE = _PROBE.replace(
+    "import csv, gc, hashlib, json, math, pathlib, struct, threading",
+    "import csv, gc, hashlib, json, math, os, pathlib, struct, threading",
+    1,
+)
 _PROBE = _PROBE.replace(
     '"type88_rate_lifetime": [], "type88_rate_last": {}, "active_call_id": 0, "active_local_eval": 0, '
     '"linear_solve_trace_current": [], "final_counter": 0}',
