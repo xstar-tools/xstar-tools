@@ -18,7 +18,7 @@ from typing import Any
 
 from . import v0472_all61_source_record_contribution_capture_v82_patch5193 as base
 
-RELEASE = "0.6.48.7.46.25.5.17.25.82-patch5.19.4.1"
+RELEASE = "0.6.48.7.46.25.5.17.25.82-patch5.19.4.1.1"
 SCHEMA = "xstar-tools-v82-patch51941-v0472-type88-rate-lifetime-capture-v1"
 VERIFY_SCHEMA = "xstar-tools-v82-patch51941-v0472-type88-rate-lifetime-oracle-v1"
 LIFETIME_NAME = "v0472_all61_type88_rate_lifetime.csv"
@@ -253,6 +253,12 @@ def capture(source_archive: Path, atdb_path: Path, output_dir: Path,
     historical = output_dir / "capture_report.json"
     if historical.is_file():
         import shutil
+        # The single runtime probe emits one generic capture_report.json, but
+        # the nested 5.19.3 verifier stack expects both the solve-stage parent
+        # report and the source-record contribution report. Preserve the same
+        # authoritative runtime report under every verifier-owned name before
+        # moving the generic file to the 5.19.4.1 lifetime report.
+        shutil.copy2(historical, output_dir / base.base.REPORT_NAME)
         shutil.copy2(historical, output_dir / base.REPORT_NAME)
         historical.replace(output_dir / REPORT_NAME)
     result = verify(output_dir)
