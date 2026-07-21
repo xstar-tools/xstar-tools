@@ -1098,6 +1098,9 @@ struct Type53SourceShadow {
     double threshold_cross_section_cm2 = 0.0;
     double threshold_stimulated_cross_section_cm2 = 0.0;
     bool threshold_publication_reached = false;
+    // v82 patch 5.20.5: xstarsetup owns a separate errc ranking coordinate.
+    // This must not reuse the later spectral/threshold energy.
+    double source_errc_rank_energy_ev = 0.0;
     double base_threshold_ev = 0.0;
     double threshold_ev = 0.0;
     double bound_energy_ev = 0.0;
@@ -1245,6 +1248,8 @@ struct Type99SourceShadow {
     bool valid = false;
     std::array<double,6> ans{};
     double threshold_ev = 0.0;
+    // v82 patch 5.20.5: literal xstarsetup errc energy retained by the lowerer.
+    double source_errc_rank_energy_ev = 0.0;
     double destination_energy_ev = 0.0;
     double bound_energy_ev = 0.0;
     double parent_energy_ev = 0.0;
@@ -3901,12 +3906,15 @@ Type99PersistentLeveltempContextV048746223 parse_type99_persistent_leveltemp_con
 ) {
     constexpr std::int64_t kLayoutMagic = 223;
     constexpr std::size_t kContextRealCount = 83;  // v36 compatibility 3 + v21.13 context 80
+    constexpr std::size_t kContextRealCountWithErrcV82Patch5205 = 84;
     constexpr int kContextIntCount = 8;
     Type99PersistentLeveltempContextV048746223 context{};
     const bool has_magic = ints && record.int_count >= kContextIntCount &&
         ints[record.int_count - 1] == kLayoutMagic;
     if (!has_magic) return context;
-    if (!payload || record.real_count != core_real_count + kContextRealCount) {
+    if (!payload ||
+        (record.real_count != core_real_count + kContextRealCount &&
+         record.real_count != core_real_count + kContextRealCountWithErrcV82Patch5205)) {
         throw std::runtime_error("Mg Type-99 persistent leveltemp real payload is malformed");
     }
     const int ibase = record.int_count - kContextIntCount;
@@ -4143,6 +4151,18 @@ bool evaluate_type99_source_faithful(
         shadow->valid = true;
         shadow->ans = {{contribution.ans1, contribution.ans2, contribution.ans3, contribution.ans4, contribution.ans5, contribution.ans6}};
         shadow->threshold_ev = threshold_ev;
+        // Lowerers append the literal xstarsetup errc energy after the pre-5.20.5
+        // Type-99 payload.  Mg v21.13 context has 83 reals beyond the core;
+        // H/He compatibility payload has only the three destination values.
+        constexpr std::int64_t kType99LayoutMagicV82Patch5205 = 223;
+        const bool mg_context_v82_patch5205 = record.int_count >= 8 &&
+            ints[record.int_count - 1] == kType99LayoutMagicV82Patch5205;
+        if (mg_context_v82_patch5205 && record.real_count >= need + 84)
+            shadow->source_errc_rank_energy_ev = payload[need + 83];
+        else if (!mg_context_v82_patch5205 && record.real_count >= need + 4)
+            shadow->source_errc_rank_energy_ev = payload[need + 3];
+        else
+            shadow->source_errc_rank_energy_ev = std::max(0.1, threshold_ev);
         shadow->destination_energy_ev = destination_energy_ev;
         shadow->bound_energy_ev = bound_energy_ev;
         shadow->parent_energy_ev = parent_energy_ev;
@@ -4667,6 +4687,7 @@ bool evaluate_type53_source_integral(
         shadow->threshold_publication_reached = threshold_publication_reached;
         shadow->base_threshold_ev = record_context && record_context->valid
             ? record_context->base_threshold_ev : threshold_ev;
+        shadow->source_errc_rank_energy_ev = std::max(0.1, shadow->base_threshold_ev);
         shadow->threshold_ev = threshold_ev;
         shadow->bound_energy_ev = bound_energy;
         shadow->continuum_energy_ev = continuum_energy;
@@ -5487,6 +5508,11 @@ EvaluatedRecord evaluate_record(
             out.type49_shadow.continuum_index_one_based = continuum_index;
             out.type49_shadow.dsec_radiation_bin_count = input.dsec_radiation_bin_count;
             out.type49_shadow.continuum_tau_count = input.continuum_tau_count;
+            // xstarsetup.f90 special-cases Type-49: eth = rdat1(np1r) * 13.598.
+            // The lowered pair payload preserves that first source energy in Rydbergs.
+            out.type49_shadow.source_errc_rank_energy_ev =
+                (r && pair_real_count >= 2) ? std::max(0.1, r[0] * 13.598)
+                                            : std::max(0.1, out.type49_shadow.base_threshold_ev);
             if (magnesium_replacement &&
                 (out.type49_shadow.committed_nonfinite || out.type49_shadow.committed_implausible)) {
                 throw std::runtime_error("Mg Type-49 finite-state replacement remained nonfinite or implausibly large");
@@ -8196,6 +8222,11 @@ int run_impl(
     std::vector<double> thermal_population_stream;
     std::size_t fixed_full_population_offset = 0;
     std::vector<xstar_spectral_contribution_v1> spectral;
+    // v82 patch 5.20.5: source xstarsetup owns errc independently of the
+    // spectral threshold/line energy.  Keep this sidecar keyed by exact record
+    // identity so no public ABI structure changes.
+    std::map<std::pair<std::uint64_t,std::int64_t>,double>
+        source_errc_rank_energy_by_identity_v82_patch5205;
     // Retain evaluated source identities past the per-element traversal so
     // call-2 calc_emis_all can perform its selected Type-53 revisit after the
     // complete calc_emisab surface has been ranked.
@@ -9317,6 +9348,22 @@ int run_impl(
             sc.natural_width_eV = evaluated[k].natural_width_ev;
             sc.turbulent_velocity_km_s = input.turbulent_velocity_km_s;
             sc.temperature_1e4K = input.temperature_k / 1.0e4;
+            if (evaluated[k].bound_free_spectral && rec.rate_type == 7) {
+                double errc_energy_v82_patch5205 = evaluated[k].line_energy_ev;
+                if (rec.data_type == 49 && evaluated[k].type49_shadow.valid &&
+                    evaluated[k].type49_shadow.source_errc_rank_energy_ev > 0.0)
+                    errc_energy_v82_patch5205 = evaluated[k].type49_shadow.source_errc_rank_energy_ev;
+                else if (rec.data_type == 53 && evaluated[k].type53_shadow.valid &&
+                         evaluated[k].type53_shadow.source_errc_rank_energy_ev > 0.0)
+                    errc_energy_v82_patch5205 = evaluated[k].type53_shadow.source_errc_rank_energy_ev;
+                else if (rec.data_type == 99 && evaluated[k].type99_shadow.valid &&
+                         evaluated[k].type99_shadow.source_errc_rank_energy_ev > 0.0)
+                    errc_energy_v82_patch5205 = evaluated[k].type99_shadow.source_errc_rank_energy_ev;
+                if (errc_energy_v82_patch5205 > 0.0 && std::isfinite(errc_energy_v82_patch5205))
+                    source_errc_rank_energy_by_identity_v82_patch5205[
+                        {static_cast<std::uint64_t>(rec.source_position), rec.record}] =
+                        errc_energy_v82_patch5205;
+            }
             spectral.push_back(sc);
         }
     }
@@ -9548,8 +9595,13 @@ int run_impl(
                 SourceFeatureAuditCandidateV82Patch5171 m;
                 m.family = "RRC";
                 m.slot_one_based = c.output_index;
-                m.energy_ev = c.line_energy_eV;
-                m.wavelength_a = 12398.4016 / c.line_energy_eV;
+                const auto errc_it_v82_patch5205 = source_errc_rank_energy_by_identity_v82_patch5205.find(
+                    {static_cast<std::uint64_t>(c.source_position), static_cast<std::int64_t>(c.record)});
+                const double errc_energy_v82_patch5205 =
+                    errc_it_v82_patch5205 != source_errc_rank_energy_by_identity_v82_patch5205.end()
+                        ? errc_it_v82_patch5205->second : c.line_energy_eV;
+                m.energy_ev = errc_energy_v82_patch5205;
+                m.wavelength_a = 12398.4016 / errc_energy_v82_patch5205;
                 m.source_position = c.source_position;
                 m.record = c.record;
                 m.data_type = c.data_type;
@@ -9672,8 +9724,15 @@ int run_impl(
                     SourceFeatureAuditCandidateV82Patch5171 m;
                     m.family = family;
                     m.slot_one_based = c.output_index;
-                    m.energy_ev = c.line_energy_eV;
-                    m.wavelength_a = 12398.4016 / c.line_energy_eV;
+                    double feature_energy_v82_patch5205 = c.line_energy_eV;
+                    if (is_rrc) {
+                        const auto errc_it_v82_patch5205 = source_errc_rank_energy_by_identity_v82_patch5205.find(
+                            {static_cast<std::uint64_t>(c.source_position), static_cast<std::int64_t>(c.record)});
+                        if (errc_it_v82_patch5205 != source_errc_rank_energy_by_identity_v82_patch5205.end())
+                            feature_energy_v82_patch5205 = errc_it_v82_patch5205->second;
+                    }
+                    m.energy_ev = feature_energy_v82_patch5205;
+                    m.wavelength_a = 12398.4016 / feature_energy_v82_patch5205;
                     m.source_position = c.source_position;
                     m.record = c.record;
                     m.data_type = c.data_type;
@@ -9892,7 +9951,8 @@ int run_impl(
                 std::cout << "\n"
                           << "V048746255172582_V82_PATCH520_HEATT_RRC_EMISSION_NONZERO_CELLS="
                           << rrc_nonzero_v82_patch520 << "\n"
-                          << "V048746255172582_V82_PATCH520_RRC_SELECTION_SEMANTICS=SOURCE_CALC_EMIS_NCBIN_RATE7_PLUS_UNGATED_RATE42\n";
+                          << "V048746255172582_V82_PATCH520_RRC_SELECTION_SEMANTICS=SOURCE_CALC_EMIS_NCBIN_RATE7_PLUS_UNGATED_RATE42\n"
+                          << "V048746255172582_V82_PATCH5205_RRC_RANK_COORDINATE=SOURCE_XSTARSETUP_ERRC\n";
             }
         }
 

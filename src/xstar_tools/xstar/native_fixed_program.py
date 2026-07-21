@@ -1255,7 +1255,8 @@ def _lower_record(
     elif dt == 99:
         if len(raw_ints) < 4 or len(raw_reals) < 8:
             raise ValueError(f"type99 record {rec} has short payload")
-        id1 = min(int(raw_ints[-2]), max(int(block.nlev) - 1, 1))
+        setup_idest1 = int(raw_ints[-2])
+        id1 = min(setup_idest1, max(int(block.nlev) - 1, 1))
         id2 = int(block.nlev) + int(raw_ints[-4]) - 1
         lower_row = _compact_row_for_local(basis, ion_index, id1)
         upper_row = _compact_row_for_idest(basis, block, id2)
@@ -1265,9 +1266,15 @@ def _lower_record(
             current_table = _source_type13_table(master, derived, ion_index)
         current_snapshot = leveltemp_value_snapshots.get(ion_index, {})
         bound_literal = current_table.get(id1)
+        setup_bound_literal = current_table.get(setup_idest1)
         parent_literal = current_table.get(int(block.nlev))
-        if not bound_literal or not parent_literal:
+        if not bound_literal or not setup_bound_literal or not parent_literal:
             raise ValueError(f"type99 record {rec} lacks literal bound/parent Type-13 levels")
+        source_errc_rank_energy = max(
+            0.1,
+            float(setup_bound_literal["ionization_potential_ev"]) -
+            float(setup_bound_literal["energy_ev"]),
+        )
 
         bound_energy = float(bound_literal["energy_ev"])
         bound_weight = float(bound_literal["statistical_weight"])
@@ -1382,6 +1389,9 @@ def _lower_record(
                 bound_mask, parent_mask, destination_mask,
                 excited_parent_mode, TYPE99_LEVELTEMP_LAYOUT_MAGIC_V048746223,
             ])
+        # v82 patch 5.20.5: retain xstarsetup's independent errc owner after
+        # the existing Type-99 compatibility/persistent-leveltemp context.
+        payload_reals.append(float(source_errc_rank_energy))
         line_energy = float(threshold_ev)
     else:  # pragma: no cover - guarded above
         raise ValueError(f"unhandled active-lowerer type {dt}")
