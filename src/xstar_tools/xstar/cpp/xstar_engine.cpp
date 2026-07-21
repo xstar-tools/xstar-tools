@@ -529,26 +529,13 @@ double native_type88_photo_rate(const double* raw,int raw_count,double threshold
     if (n0<=0||threshold<=0.0||n_grid<3||phextrap_limit<3) return 0.0;
     std::vector<double> e,s;e.reserve(n_grid);s.reserve(n_grid);
     for (int j=0;j<n0;++j) {e.push_back(raw[2*j]);s.push_back(std::max(0.0,raw[2*j+1]*1.0e-18));}
-    const double source_dele=static_cast<double>(static_cast<float>(1.3));
-    const double source_dels=source_dele*source_dele*source_dele;
-    const double source_ryd_extrap=static_cast<double>(static_cast<float>(13.6));
-    const double source_sigma_floor=static_cast<double>(static_cast<float>(1.0e-27));
-    const double source_energy_limit=static_cast<double>(static_cast<float>(2.0e5));
-    const int original_ntmp=n0;
-    int nadd=0;
-    double e1=e[static_cast<std::size_t>(original_ntmp-2)]*source_ryd_extrap+threshold;
-    double s1=s[static_cast<std::size_t>(original_ntmp-2)];
-    while (s1>source_sigma_floor&&nadd+original_ntmp<phextrap_limit&&e1<source_energy_limit) {
-        const double e2=e1*source_dele,s2=s1/source_dels;
-        ++nadd;
-        const std::size_t target=static_cast<std::size_t>(nadd+original_ntmp-2);
-        if (target<e.size()) {e[target]=(e2-threshold)/source_ryd_extrap;s[target]=s2;}
-        else {e.push_back((e2-threshold)/source_ryd_extrap);s.push_back(s2);}
-        e1=e2;s1=s2;
+    int base=std::max(static_cast<int>(e.size())-2,0);
+    double e1=e[base]*13.6+threshold,s1=s[base];
+    while (s1>1.0e-27&&static_cast<int>(e.size())<phextrap_limit&&e1<2.0e5) {
+        const double e2=e1*1.3,s2=s1/(1.3*1.3*1.3);
+        e.push_back((e2-threshold)/13.6);s.push_back(s2);e1=e2;s1=s2;
     }
-    const int ntmp=nadd+original_ntmp-1;
-    if (ntmp<=0) return 0.0;
-    e.resize(static_cast<std::size_t>(ntmp));s.resize(static_cast<std::size_t>(ntmp));
+    const int ntmp=std::min(e.size(),s.size());
     if (ntmp<=0) return 0.0;
     const int numcon2=std::max(2,n_grid/50),nphint1=n_grid-numcon2;
     std::vector<double> sgbar(n_grid,0.0),xs(ntmp),ys(ntmp);

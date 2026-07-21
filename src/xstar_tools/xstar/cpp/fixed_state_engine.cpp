@@ -4209,43 +4209,16 @@ int sequence1_type88_lower_bracket(double energy,const double* grid,int n) {
 
 double sequence1_type88_photo_rate(const double* raw,int raw_count,double threshold,const double* epi,const double* bremsa,int n_grid,int phextrap_limit) {
     const int n0=raw_count/2;
-    if (n0<=1||threshold<=0.0||n_grid<3||phextrap_limit<3) return 0.0;
-    std::vector<double> e,s;e.reserve(static_cast<std::size_t>(phextrap_limit));s.reserve(static_cast<std::size_t>(phextrap_limit));
+    if (n0<=0||threshold<=0.0||n_grid<3||phextrap_limit<3) return 0.0;
+    std::vector<double> e,s;e.reserve(n_grid);s.reserve(n_grid);
     for (int j=0;j<n0;++j) {e.push_back(raw[2*j]);s.push_back(std::max(0.0,raw[2*j+1]));}
-
-    // v82 patch 5.19.4: literal v0.6.47.2 phextrap semantics for Type-88.
-    // Fortran starts from stmp(ntmp-1), writes the first extrapolated point
-    // into stmp(ntmp) (overwriting the original final input point), and then
-    // returns ntmp=nadd+ntmp-1.  Keeping the original final point makes the
-    // cross-section grid non-source-equivalent for the three sequence-14
-    // owner records proved by the patch-5.19.3 runtime capture.
-    const double source_dele = static_cast<double>(static_cast<float>(1.3));
-    const double source_dels = source_dele * source_dele * source_dele;
-    const double source_ryd_extrap = static_cast<double>(static_cast<float>(13.6));
-    const double source_sigma_floor = static_cast<double>(static_cast<float>(1.0e-27));
-    const double source_energy_limit = static_cast<double>(static_cast<float>(2.0e5));
-    const int original_ntmp = n0;
-    int nadd = 0;
-    double e1=e[static_cast<std::size_t>(original_ntmp-2)]*source_ryd_extrap+threshold;
-    double s1=s[static_cast<std::size_t>(original_ntmp-2)];
-    while (s1>source_sigma_floor && nadd+original_ntmp<phextrap_limit && e1<source_energy_limit) {
-        const double e2=e1*source_dele;
-        const double s2=s1/source_dels;
-        ++nadd;
-        const std::size_t target=static_cast<std::size_t>(nadd+original_ntmp-2);
-        if (target<e.size()) {
-            e[target]=(e2-threshold)/source_ryd_extrap;
-            s[target]=s2;
-        } else {
-            e.push_back((e2-threshold)/source_ryd_extrap);
-            s.push_back(s2);
-        }
-        e1=e2;s1=s2;
+    int base=std::max(static_cast<int>(e.size())-2,0);
+    double e1=e[base]*13.6+threshold,s1=s[base];
+    while (s1>1.0e-27&&static_cast<int>(e.size())<phextrap_limit&&e1<2.0e5) {
+        const double e2=e1*1.3,s2=s1/(1.3*1.3*1.3);
+        e.push_back((e2-threshold)/13.6);s.push_back(s2);e1=e2;s1=s2;
     }
-    const int ntmp=nadd+original_ntmp-1;
-    if (ntmp<=0) return 0.0;
-    e.resize(static_cast<std::size_t>(ntmp));
-    s.resize(static_cast<std::size_t>(ntmp));
+    const int ntmp=std::min(e.size(),s.size());
     if (ntmp<=0) return 0.0;
     const int numcon2=std::max(2,n_grid/50),nphint1=n_grid-numcon2;
     std::vector<double> sgbar(n_grid,0.0),xs(ntmp),ys(ntmp);
@@ -5951,27 +5924,12 @@ EvaluatedRecord evaluate_record(
             if (!r || record.real_count < 4) {
                 throw std::runtime_error("type88 payload requires energy/sigma pairs");
             }
-            // v82 patch 5.19.4: the literal source solve path is
-            // dsec -> calc_hmc_all -> ucalc(Type-88) with epim/bremsam,
-            // not the later full epi/bremsa spectral workspace.  Reuse the
-            // already-built source bremsmap workspace that patch 5.18.1 keeps
-            // per evaluation.  This is restricted to Type-88; the failed
-            // patch-5.19 Type-49/53 reduced-grid promotion remains absent.
-            const bool has_reduced_source_workspace = calc_emisab_workspace &&
-                calc_emisab_workspace->epim.size() >= 3 &&
-                calc_emisab_workspace->bremsam.size() == calc_emisab_workspace->epim.size();
-            const double* source_energy_ev = has_reduced_source_workspace
-                ? calc_emisab_workspace->epim.data()
-                : (input.dsec_radiation_energy_ev && input.dsec_radiation_bin_count >= 3
-                    ? input.dsec_radiation_energy_ev : input.radiation_energy_ev);
-            const double* source_bremsa = has_reduced_source_workspace
-                ? calc_emisab_workspace->bremsam.data()
-                : (input.dsec_bremsa && input.dsec_radiation_bin_count >= 3
-                    ? input.dsec_bremsa : input.radiation_flux);
-            const std::size_t source_bins = has_reduced_source_workspace
-                ? calc_emisab_workspace->epim.size()
-                : (input.dsec_radiation_energy_ev && input.dsec_bremsa && input.dsec_radiation_bin_count >= 3
-                    ? input.dsec_radiation_bin_count : input.radiation_bin_count);
+            const double* source_energy_ev = input.dsec_radiation_energy_ev && input.dsec_radiation_bin_count >= 3
+                ? input.dsec_radiation_energy_ev : input.radiation_energy_ev;
+            const double* source_bremsa = input.dsec_bremsa && input.dsec_radiation_bin_count >= 3
+                ? input.dsec_bremsa : input.radiation_flux;
+            const std::size_t source_bins = input.dsec_radiation_energy_ev && input.dsec_bremsa && input.dsec_radiation_bin_count >= 3
+                ? input.dsec_radiation_bin_count : input.radiation_bin_count;
             if (!source_energy_ev || !source_bremsa || source_bins < 3) {
                 throw std::runtime_error("type88 requires live full radiation grid");
             }
@@ -5987,10 +5945,10 @@ EvaluatedRecord evaluate_record(
                 c.ans1 = 0.0; c.ans2 = 0.0; c.ans3 = 0.0; c.ans4 = 0.0; c.ans5 = 0.0; c.ans6 = 0.0;
                 break;
             }
-            const int phextrap_limit = std::max(3, static_cast<int>(source_bins));
+            const int reduced_limit = std::max(3, static_cast<int>(source_bins / 10));
             c.ans1 = sequence1_type88_photo_rate(
                 r, static_cast<int>(pair_reals), threshold, source_energy_ev, source_bremsa,
-                static_cast<int>(source_bins), phextrap_limit);
+                static_cast<int>(source_bins), reduced_limit);
             c.ans2 = 0.0; c.ans3 = 0.0; c.ans4 = 0.0; c.ans5 = 0.0; c.ans6 = 0.0;
             break;
         }
