@@ -1213,18 +1213,15 @@ def _lower_record(
         else:
             threshold_ev = abs(_row_energy(rows, upper_row) - _row_energy(rows, lower_row))
 
-        # Five low-ion Mg Type-88 records are owned by the source superlevel
-        # continuum rather than the local Type-13 ionization-potential row.
-        # Retain the resolved source-owner threshold explicitly.  These values
-        # are the binary64 source thresholds that reproduce the corresponding
-        # v0.6.47.2 superlevel photoionization records; they are keyed by the
-        # immutable ATDB record identity, never by compact-row position.
+        # v82 patch 5.19.5: actual v0.6.47.2 calc_hmc_ion second-pass
+        # lifetime capture proves records 40294/40379/40380 consume the
+        # ordinary local Type-13 threshold computed above.  The previous
+        # cross-stage owner overrides for those three records are therefore
+        # removed.  Keep 39812/39854 unchanged because the 5.19.5 source
+        # capture did not establish a replacement for those independent rows.
         low_ion_mg_owner_threshold_ev = {
             39812: 1521.5673489870824,
             39854: 1885.3930248406186,
-            40294: 3218.8308973316320,
-            40379: 3253.7611491350726,
-            40380: 3128.8854495945640,
         }
         owner_stage = ion_index
         if int(getattr(block, "element_z", 0) or 0) == 12 and rec in low_ion_mg_owner_threshold_ev:
