@@ -4327,17 +4327,19 @@ bool evaluate_type53_source_integral(
         ys[static_cast<std::size_t>(j)] = pair_sigma_cm2[static_cast<std::size_t>(j)];
     }
 
-    // v82 patch 5.19: phint53 does not binary-search the physical grid.
-    // It calls nbinc()/huntf(), advances while epi(nb1) < ener, then
-    // decrements once.  Preserve that literal source ordering for the rate
-    // integration as well as the threshold-publication sample.
-    int nb1_one_based = type99_nbinc_fortran_value(xs[0], source_energy_ev, source_bin_count);
-    while (nb1_one_based < usable_grid &&
-           source_energy_ev[static_cast<std::size_t>(nb1_one_based - 1)] < xs[0]) {
-        ++nb1_one_based;
-    }
-    nb1_one_based = std::max(1, nb1_one_based - 1);
-    const int nb1 = nb1_one_based - 1;
+    const auto lower_bracket = [&](double energy) -> int {
+        if (energy <= source_energy_ev[0]) return 0;
+        int lo = 0;
+        int hi = usable_grid - 1;
+        while (lo + 1 < hi) {
+            const int mid = (lo + hi) / 2;
+            if (source_energy_ev[mid] <= energy) lo = mid;
+            else hi = mid;
+        }
+        return source_energy_ev[hi] <= energy ? hi : lo;
+    };
+
+    const int nb1 = lower_bracket(xs[0]);
     if (nb1 + 1 >= usable_grid) return false;
     std::vector<double> sgbar(static_cast<std::size_t>(n_grid), 0.0);
     sgbar[static_cast<std::size_t>(std::max(0, nb1 - 1))] = 0.0;
@@ -5110,19 +5112,18 @@ EvaluatedRecord evaluate_record(
                 source_shadow, &out.type53_shadow);
 
             // v82 patch 5.18.1: source calc_emisab_all consumes the reduced
-            // 999-bin epim/bremsam workspace.  Patch 5.19 also uses this
-            // exact workspace for the Mg population solve: xstarcalc passes
-            // epim/ncn2m/bremsam into dsec -> calc_hmc_all, while only the
-            // later calc_emis_all spectral revisit receives the full grid.
-            xstar_element_contribution_v1 calc_emisab_contribution{};
-            bool calc_emisab_exact = false;
+            // 999-bin epim/bremsam workspace.  Its opakab publication is the
+            // seed later ranked by rlbin.  calc_emis_ion then revisits only
+            // selected rate-7 identities on the full grid and may leave this
+            // seed untouched when phint53 does not reach kl=nb1+2.
             if (calc_emisab_workspace && calc_emisab_workspace->epim.size() >= 3 &&
                 calc_emisab_workspace->bremsam.size() == calc_emisab_workspace->epim.size()) {
                 xstar_fixed_state_input_v1 calc_emisab_input = input;
                 calc_emisab_input.dsec_radiation_energy_ev = calc_emisab_workspace->epim.data();
                 calc_emisab_input.dsec_bremsa = calc_emisab_workspace->bremsam.data();
                 calc_emisab_input.dsec_radiation_bin_count = calc_emisab_workspace->epim.size();
-                calc_emisab_exact = evaluate_type53_source_integral(
+                xstar_element_contribution_v1 calc_emisab_contribution{};
+                const bool calc_emisab_exact = evaluate_type53_source_integral(
                     r, pair_real_count, lower, upper, calc_emisab_input, source_threshold,
                     contract_ptmp1 + contract_ptmp2, row46_contract,
                     record_context.valid ? &record_context : nullptr, record.record, false, false,
@@ -5189,19 +5190,16 @@ EvaluatedRecord evaluate_record(
                     throw std::runtime_error(
                         "Mg Type-53 finite-state replacement requires XSTAR_QUALIFICATION_REPLACEMENT=1");
                 }
-                if (magnesium_replacement && (!source_exact || !calc_emisab_exact)) {
-                    throw std::runtime_error(
-                        "Mg Type-53 source solve requires both reduced-grid solve and full-grid spectral shadows");
+                if (magnesium_replacement && !source_exact) {
+                    throw std::runtime_error("Mg Type-53 finite-state shadow did not produce a result");
                 }
                 if (source_exact && (hydrogen_source_faithful || helium_source_faithful || magnesium_replacement)) {
-                    const xstar_element_contribution_v1& committed_shadow = magnesium_replacement
-                        ? calc_emisab_contribution : source_shadow;
-                    c.ans1 = committed_shadow.ans1;
-                    c.ans2 = committed_shadow.ans2;
-                    c.ans3 = committed_shadow.ans3;
-                    c.ans4 = committed_shadow.ans4;
-                    c.ans5 = committed_shadow.ans5;
-                    c.ans6 = committed_shadow.ans6;
+                    c.ans1 = source_shadow.ans1;
+                    c.ans2 = source_shadow.ans2;
+                    c.ans3 = source_shadow.ans3;
+                    c.ans4 = source_shadow.ans4;
+                    c.ans5 = source_shadow.ans5;
+                    c.ans6 = source_shadow.ans6;
                 }
                 out.type53_shadow.legacy_ans = legacy_type53_ans;
                 out.type53_shadow.legacy_max_abs = 0.0;
@@ -5433,27 +5431,6 @@ EvaluatedRecord evaluate_record(
                     nullptr, record_context.valid ? &record_context : nullptr, record.record,
                     true, true, source_shadow, &out.type49_shadow);
             }
-            // v82 patch 5.19: the population/thermal solve consumes the same
-            // reduced epim/bremsam continuum passed by xstarcalc to dsec and
-            // calc_hmc_all.  Keep the full-grid Type-49 shadow for later
-            // product diagnostics, but commit Mg matrix rates from the
-            // reduced source workspace.
-            xstar_element_contribution_v1 type49_solve_shadow = source_shadow;
-            Type53SourceShadow type49_solve_metadata{};
-            bool type49_solve_exact = source_exact;
-            if (element.element_z == 12 && !source_zero_gate && calc_emisab_workspace &&
-                calc_emisab_workspace->epim.size() >= 3 &&
-                calc_emisab_workspace->bremsam.size() == calc_emisab_workspace->epim.size()) {
-                xstar_fixed_state_input_v1 solve_input = input;
-                solve_input.dsec_radiation_energy_ev = calc_emisab_workspace->epim.data();
-                solve_input.dsec_bremsa = calc_emisab_workspace->bremsam.data();
-                solve_input.dsec_radiation_bin_count = calc_emisab_workspace->epim.size();
-                type49_solve_exact = evaluate_type53_source_integral(
-                    r, pair_real_count, lower, upper, solve_input, source_threshold, ptmp1 + ptmp2,
-                    nullptr, record_context.valid ? &record_context : nullptr, record.record,
-                    true, true, type49_solve_shadow, &type49_solve_metadata);
-            }
-
             const bool magnesium_finite_state = element.element_z == 12 &&
                 environment_flag("XSTAR_QUALIFICATION_MG_BOUND_FREE_FINITE_STATE");
             const bool magnesium_source_faithful = element.element_z == 12 &&
@@ -5471,17 +5448,16 @@ EvaluatedRecord evaluate_record(
             if (magnesium_replacement && !has_continuum_workspace) {
                 throw std::runtime_error("Mg Type-49 finite-state replacement requires canonical live continuum state");
             }
-            if (magnesium_replacement && (!source_exact || !type49_solve_exact)) {
-                throw std::runtime_error(
-                    "Mg Type-49 source solve requires both reduced-grid solve and full-grid spectral shadows");
+            if (magnesium_replacement && !source_exact) {
+                throw std::runtime_error("Mg Type-49 finite-state shadow did not produce a result");
             }
-            if (magnesium_replacement && source_exact && type49_solve_exact) {
-                c.ans1 = type49_solve_shadow.ans1;
-                c.ans2 = type49_solve_shadow.ans2;
-                c.ans3 = type49_solve_shadow.ans3;
-                c.ans4 = type49_solve_shadow.ans4;
-                c.ans5 = type49_solve_shadow.ans5;
-                c.ans6 = type49_solve_shadow.ans6;
+            if (magnesium_replacement && source_exact) {
+                c.ans1 = source_shadow.ans1;
+                c.ans2 = source_shadow.ans2;
+                c.ans3 = source_shadow.ans3;
+                c.ans4 = source_shadow.ans4;
+                c.ans5 = source_shadow.ans5;
+                c.ans6 = source_shadow.ans6;
             }
             out.type49_shadow.legacy_ans = legacy_type49_ans;
             out.type49_shadow.legacy_max_abs = 0.0;
