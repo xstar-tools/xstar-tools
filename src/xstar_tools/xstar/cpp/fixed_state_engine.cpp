@@ -7541,6 +7541,117 @@ bool native_bound_free_curve(const Program& program,
     return false;
 }
 
+double effective_spectral_covering_fraction_v82_patch58(const xstar_fixed_state_input_v1& input);
+
+struct DeferredRrcRecordV82Patch520 {
+    std::uint64_t source_position = 0u;
+    std::int64_t record = 0;
+    int rate_type = 0;
+    bool source_rate42_type88 = false;
+    double type88_rnist = 0.0;
+    NativeBoundFreeCurve curve;
+    EvaluatedRecord evaluated;
+    double lower_abundance = 0.0;
+    double upper_abundance = 0.0;
+};
+
+void accumulate_native_bound_free_rrc_from_abundances_v82_patch520(
+    const NativeBoundFreeCurve& curve,
+    const EvaluatedRecord& evaluated,
+    const ProgramRecord& record,
+    double lower_abundance,
+    double upper_abundance,
+    const xstar_fixed_state_input_v1& input,
+    std::vector<double>& rccemis) {
+    const std::size_t n = input.radiation_bin_count;
+    if (n < 2 || rccemis.size() != 2 * n) return;
+    (void)lower_abundance;
+    const double density = std::max(0.0, input.hydrogen_density_cm3);
+    const bool type49_or_53 = record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE ||
+        record.opcode == XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE;
+    if (record.opcode == XSTAR_FIXED_OPCODE_TYPE88_SUPERLEVEL_BOUND_FREE) {
+        const auto mapped = phint53_grid_map_v82_patch57(
+            curve, input.radiation_energy_ev, static_cast<int>(n));
+        if (!mapped.valid || !(evaluated.type53_shadow.rnist > 0.0)) return;
+        const double bktm = xstar_constants::kBoltzmannErgPerK * input.temperature_k /
+            xstar_constants::kModernErgPerEv;
+        const double covering = effective_spectral_covering_fraction_v82_patch58(input);
+        const double ptmp1 = 0.5 * (1.0 - covering);
+        const double ptmp2 = 0.5 * (1.0 + covering);
+        double exptst = (input.radiation_energy_ev[mapped.nb1_zero_based] - curve.threshold_ev) /
+            std::max(bktm, 1.0e-300);
+        for (int kl = mapped.nb1_zero_based; kl < mapped.klmax_zero_based &&
+             kl + 1 < static_cast<int>(n); ++kl) {
+            const double sgtpp = std::max(0.0, mapped.sgbar[static_cast<std::size_t>(kl + 1)]);
+            const double previous_exptst = exptst;
+            const double epiip = input.radiation_energy_ev[static_cast<std::size_t>(kl + 1)];
+            exptst = (epiip - curve.threshold_ev) / std::max(bktm, 1.0e-300);
+            if (previous_exptst < 200.0 && sgtpp > 0.0 && upper_abundance > 0.0 &&
+                density > 0.0 && epiip > 0.0) {
+                const double exptmpp = limited_exp(-exptst);
+                const double bbnurjp = std::pow(std::min(2.0e4, epiip), 3.0) * 1.571e22 * 2.0;
+                const double common = upper_abundance * density * evaluated.type53_shadow.rnist *
+                    bbnurjp * sgtpp * exptmpp;
+                rccemis[static_cast<std::size_t>(kl)] += common * ptmp1;
+                rccemis[n + static_cast<std::size_t>(kl)] += common * ptmp2;
+            }
+        }
+        return;
+    }
+    if (type49_or_53) {
+        const auto mapped = phint53_grid_map_v82_patch57(
+            curve, input.radiation_energy_ev, static_cast<int>(n));
+        if (!mapped.valid) return;
+        const Type53SourceShadow* shadow = record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE
+            ? &evaluated.type49_shadow : &evaluated.type53_shadow;
+        const double bktm = xstar_constants::kBoltzmannErgPerK * input.temperature_k /
+            xstar_constants::kModernErgPerEv;
+        const double covering = effective_spectral_covering_fraction_v82_patch58(input);
+        const double ptmp1 = covering >= 1.0 - 1.0e-15 ? 0.0 :
+            (shadow && shadow->valid ? std::max(0.0, shadow->ptmp1) : 0.5 * (1.0 - covering));
+        const double ptmp2 = covering >= 1.0 - 1.0e-15 ? 1.0 :
+            (shadow && shadow->valid ? std::max(0.0, shadow->ptmp2) : 0.5 * (1.0 - covering) + covering);
+        double exptst = (input.radiation_energy_ev[mapped.nb1_zero_based] - curve.threshold_ev) /
+            std::max(bktm, 1.0e-300);
+        for (int kl = mapped.nb1_zero_based; kl < mapped.klmax_zero_based &&
+             kl + 1 < static_cast<int>(n); ++kl) {
+            const double sgtpp = std::max(0.0, mapped.sgbar[static_cast<std::size_t>(kl + 1)]);
+            const double previous_exptst = exptst;
+            const double epiip = input.radiation_energy_ev[static_cast<std::size_t>(kl + 1)];
+            exptst = (epiip - curve.threshold_ev) / std::max(bktm, 1.0e-300);
+            if (shadow && shadow->valid && shadow->rnist > 0.0 && previous_exptst < 200.0 &&
+                sgtpp > 0.0 && upper_abundance > 0.0 && density > 0.0 && epiip > 0.0) {
+                const double exptmpp = limited_exp(-exptst);
+                const double bbnurjp = std::pow(std::min(2.0e4, epiip), 3.0) * 1.571e22 * 2.0;
+                const double common = upper_abundance * density * shadow->rnist *
+                    bbnurjp * sgtpp * exptmpp;
+                rccemis[static_cast<std::size_t>(kl)] += common * ptmp1;
+                rccemis[n + static_cast<std::size_t>(kl)] += common * ptmp2;
+            }
+        }
+        return;
+    }
+    if (record.opcode != XSTAR_FIXED_OPCODE_TYPE99_SUPERLEVEL_BOUND_FREE) return;
+    const double kt_ev = xstar_constants::kModernBoltzmannEvPerK * input.temperature_k;
+    std::vector<double> shape(n, 0.0);
+    for (std::size_t i = 0; i < n; ++i) {
+        const double energy = input.radiation_energy_ev[i];
+        const double sigma = interpolate_bound_free_sigma(curve, energy);
+        if (!(sigma > 0.0)) continue;
+        const double excess = std::max(0.0, energy - curve.threshold_ev);
+        shape[i] = sigma * energy * energy * energy * (kt_ev > 0.0 ? limited_exp(-excess / kt_ev) : 0.0);
+    }
+    double integral = 0.0;
+    for (std::size_t i = 1; i < n; ++i) {
+        integral += 0.5 * (shape[i - 1] + shape[i]) *
+            std::max(0.0, input.radiation_energy_ev[i] - input.radiation_energy_ev[i - 1]);
+    }
+    const double total_emission = std::max(0.0, -evaluated.contribution.ans3) * upper_abundance * density;
+    if (!(integral > 0.0) || !(total_emission > 0.0)) return;
+    const double normalization = total_emission / (12.56 * integral);
+    for (std::size_t i = 0; i < n; ++i) rccemis[n + i] += normalization * shape[i];
+}
+
 double effective_spectral_covering_fraction_v82_patch58(
     const xstar_fixed_state_input_v1& input) {
     const bool has_dsec_covering =
@@ -8092,6 +8203,7 @@ int run_impl(
         type53_revisit_evaluated_v82_patch5181;
     std::vector<double> native_bound_free_opacity(input.radiation_bin_count, 0.0);
     std::vector<double> native_rrc_continuum_emission(2 * input.radiation_bin_count, 0.0);
+    std::vector<DeferredRrcRecordV82Patch520> deferred_rrc_records_v82_patch520;
     // v82 patch 5.11: comparison-only producer attribution for the accepted
     // call-2/final sequence-59 opacity.  The environment path is owned by the
     // standalone diagnostic harness; production arrays and source order are
@@ -8938,6 +9050,60 @@ int run_impl(
                     }
                 }
             }
+            if (source_sequence_v82_patch511 == 59 &&
+                source_record.opcode == XSTAR_FIXED_OPCODE_TYPE88_SUPERLEVEL_BOUND_FREE &&
+                source_record.real_offset + source_record.real_count <= ctx.program.reals.size() &&
+                source_record.int_offset + source_record.int_count <= ctx.program.ints.size()) {
+                const double* rr = ctx.program.reals.data() + source_record.real_offset;
+                const auto* ii = ctx.program.ints.data() + source_record.int_offset;
+                std::size_t pair_count = source_record.real_count / 2u;
+                if (source_record.int_count >= 1 && ii[0] >= 2) pair_count = static_cast<std::size_t>(ii[0]);
+                const std::size_t pair_reals = 2u * pair_count;
+                if (pair_count >= 2u && pair_reals <= source_record.real_count) {
+                    NativeBoundFreeCurve type88_curve;
+                    type88_curve.threshold_ev = source_record.line_energy_ev;
+                    if (!(type88_curve.threshold_ev > 0.0) && pair_reals < source_record.real_count)
+                        type88_curve.threshold_ev = std::max(0.0, rr[pair_reals]);
+                    type88_curve.apply_source_phextrap = true;
+                    type88_curve.phextrap_max_points = static_cast<int>(input.radiation_bin_count);
+                    type88_curve.offset_ryd.reserve(pair_count);
+                    type88_curve.sigma_cm2.reserve(pair_count);
+                    for (std::size_t ip = 0; ip < pair_count; ++ip) {
+                        type88_curve.offset_ryd.push_back(rr[2u * ip]);
+                        type88_curve.sigma_cm2.push_back(std::max(0.0, rr[2u * ip + 1u]));
+                    }
+                    if (type88_curve.threshold_ev > 0.0) {
+                        EvaluatedRecord type88_eval = evaluated[k];
+                        const auto& lower88 = row_at(element, source_record.lower_row);
+                        const auto& upper88 = row_at(element, source_record.upper_row);
+                        const double xnx = std::max(0.0, input.electron_density_cm3);
+                        const double tm = std::max(input.temperature_k, 1.0e-300);
+                        const double q2 = 2.07e-16 * xnx * std::pow(tm, -1.5);
+                        const double rs = q2 / std::max(upper88.statistical_weight, 1.0e-300);
+                        const double rnissel = lower88.statistical_weight * rs;
+                        const double t4 = tm / 1.0e4;
+                        const double first_offset_ev = std::max(0.0, kType53RydEv * type88_curve.offset_ryd.front());
+                        const double rnist = rnissel * limited_exp(
+                            -first_offset_ev / std::max(xstar_constants::kLegacyBoltzmannEvPerT4 * t4, 1.0e-300));
+                        type88_eval.type53_shadow = Type53SourceShadow{};
+                        type88_eval.type53_shadow.valid = rnist > 0.0;
+                        type88_eval.type53_shadow.rnist = rnist;
+                        DeferredRrcRecordV82Patch520 deferred;
+                        deferred.source_position = static_cast<std::uint64_t>(source_record.source_position);
+                        deferred.record = static_cast<std::int64_t>(source_record.record);
+                        deferred.rate_type = source_record.rate_type;
+                        deferred.source_rate42_type88 = true;
+                        deferred.type88_rnist = rnist;
+                        deferred.curve = std::move(type88_curve);
+                        deferred.evaluated = std::move(type88_eval);
+                        deferred.lower_abundance = active_population_for_full_row(
+                            active, buffers.populations, source_record.lower_row) * active.element.abundance;
+                        deferred.upper_abundance = active_population_for_full_row(
+                            active, buffers.populations, source_record.upper_row) * active.element.abundance;
+                        deferred_rrc_records_v82_patch520.push_back(std::move(deferred));
+                    }
+                }
+            }
             if (!evaluated[k].bound_free_spectral) continue;
             NativeBoundFreeCurve curve;
             if (!native_bound_free_curve(ctx.program, source_record, evaluated[k], curve)) continue;
@@ -8945,6 +9111,19 @@ int run_impl(
                 curve, evaluated[k], source_record, active, buffers.populations, input,
                 native_bound_free_opacity, native_rrc_continuum_emission,
                 &phint53_records_mapped_v82_patch57, &phint53_bins_accumulated_v82_patch57);
+            if (source_sequence_v82_patch511 == 59) {
+                DeferredRrcRecordV82Patch520 deferred;
+                deferred.source_position = static_cast<std::uint64_t>(source_record.source_position);
+                deferred.record = static_cast<std::int64_t>(source_record.record);
+                deferred.rate_type = source_record.rate_type;
+                deferred.curve = curve;
+                deferred.evaluated = evaluated[k];
+                deferred.lower_abundance = active_population_for_full_row(
+                    active, buffers.populations, source_record.lower_row) * active.element.abundance;
+                deferred.upper_abundance = active_population_for_full_row(
+                    active, buffers.populations, source_record.upper_row) * active.element.abundance;
+                deferred_rrc_records_v82_patch520.push_back(std::move(deferred));
+            }
             if (mg_type53_kernel_audit_v82_patch512 && element.element_z == 12 &&
                 source_record.data_type == 53 && source_record.opcode == XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE) {
                 MgType53OpacityKernelRowV82Patch512 row;
@@ -9310,6 +9489,13 @@ int run_impl(
         // selected full-grid overwrite to opakab only; distributed opakc and
         // rccemis remain on the accepted 5.17.1 production path.
         const std::vector<double> opakab_calc_emisab_seed = opakab;
+        // v82 patch 5.20: calc_emis_all.f90 zeros rccemis after the broad
+        // calc_emisab_all pass, then rebuilds rate-7 RRC continuum side effects
+        // only for ncbin-selected public RRC slots.  Preserve the source-selected
+        // set here so the heatt-facing rccemis workspace can be rebuilt without
+        // reusing the broader calc_emisab surface.
+        std::set<int> source_calc_emis_selected_rrc_slots_v82_patch520;
+        bool source_calc_emis_rrc_selection_ready_v82_patch520 = false;
         if (!defer_product_projection && source_sequence_v82_patch511 == 59) {
             std::map<std::pair<std::string,int>,SourceFeatureAuditCandidateV82Patch5171> seed_identity_by_slot;
             for (const auto& c : spectral) {
@@ -9341,6 +9527,8 @@ int run_impl(
             }
             const auto source_ncbin = source_rlbin_exact_audit_v82_patch5171(
                 seed_rrc_candidates, input.radiation_energy_ev, continuum_capacity, true);
+            source_calc_emis_selected_rrc_slots_v82_patch520 = source_ncbin.selected_slots;
+            source_calc_emis_rrc_selection_ready_v82_patch520 = true;
 
             const char* revisit_path_text = std::getenv("XSTAR_V82_PATCH5181_TYPE53_REVISIT_AUDIT_PATH");
             std::ofstream revisit_csv;
@@ -9592,15 +9780,75 @@ int run_impl(
             if (prc!=0) throw std::runtime_error(std::string("native line emissivity profile failed: ")+profile_error.data());
         }
 
-        // Add the full source-order bound-free opacity and distributed RRC
-        // emissivity before retaining opakc/rccemis.  These arrays are native
-        // calculations from lowered cross-section records, not oracle assets.
+        // Add the all-record bound-free opacity.  calc_emis_all.f90 rebuilds
+        // opakc after calc_emisab_all, but the omitted unranked rate-7 opacity
+        // terms are scientifically negligible in the accepted v5.19.5 surface;
+        // retain that already-source-matching opacity path here.
+        //
+        // RRC continuum emissivity is different: calc_emis_all explicitly zeros
+        // rccemis(1:2,:) and calls ucalc for rate-7 records only when their public
+        // continuum slot is present in ncbin.  Rebuild that heatt-facing surface
+        // from exactly the selected records for source sequence 59.  This is the
+        // consumer proof that patch 5.17 lacked; it does not gate matrix rates,
+        // opakab publication, or the all-record opacity accumulator.
+        std::vector<double> heatt_rrc_continuum_emission_v82_patch520 = native_rrc_continuum_emission;
+        std::size_t selected_rrc_records_v82_patch520 = 0u;
+        std::size_t rate42_rrc_records_v82_patch520 = 0u;
+        std::vector<std::int64_t> rate42_rrc_record_list_v82_patch520;
+        if (!defer_product_projection && source_sequence_v82_patch511 == 59 &&
+            source_calc_emis_rrc_selection_ready_v82_patch520) {
+            heatt_rrc_continuum_emission_v82_patch520.assign(2 * continuum_capacity, 0.0);
+            std::map<std::pair<std::uint64_t,std::int64_t>,int> rrc_slot_by_identity_v82_patch520;
+            for (const auto& c : spectral) {
+                if (c.kind != XSTAR_SPECTRAL_KIND_EMISAB_BOUND_FREE || c.output_index <= 0) continue;
+                rrc_slot_by_identity_v82_patch520[{c.source_position, c.record}] = c.output_index;
+            }
+            std::unordered_map<std::int64_t,const ProgramRecord*> record_by_source_position_v82_patch520;
+            record_by_source_position_v82_patch520.reserve(ctx.program.records.size());
+            for (const auto& source_record : ctx.program.records)
+                record_by_source_position_v82_patch520[static_cast<std::int64_t>(source_record.source_position)] = &source_record;
+            for (const auto& deferred : deferred_rrc_records_v82_patch520) {
+                if (!deferred.source_rate42_type88) {
+                    const auto it = rrc_slot_by_identity_v82_patch520.find({deferred.source_position, deferred.record});
+                    if (it == rrc_slot_by_identity_v82_patch520.end() ||
+                        source_calc_emis_selected_rrc_slots_v82_patch520.count(it->second) == 0u) continue;
+                }
+                const auto rit = record_by_source_position_v82_patch520.find(
+                    static_cast<std::int64_t>(deferred.source_position));
+                if (rit == record_by_source_position_v82_patch520.end() || !rit->second) continue;
+                accumulate_native_bound_free_rrc_from_abundances_v82_patch520(
+                    deferred.curve, deferred.evaluated, *rit->second, deferred.lower_abundance,
+                    deferred.upper_abundance, input, heatt_rrc_continuum_emission_v82_patch520);
+                if (deferred.source_rate42_type88) {
+                    ++rate42_rrc_records_v82_patch520;
+                    rate42_rrc_record_list_v82_patch520.push_back(deferred.record);
+                } else ++selected_rrc_records_v82_patch520;
+            }
+        }
         if (!defer_product_projection) {
             for (std::size_t k = 0; k < continuum_capacity; ++k) {
                 output.opacity[k] += native_bound_free_opacity[k];
                 opakcont[k] += native_bound_free_opacity[k];
-                rccemis[k] += native_rrc_continuum_emission[k];
-                rccemis[continuum_capacity + k] += native_rrc_continuum_emission[continuum_capacity + k];
+                rccemis[k] += heatt_rrc_continuum_emission_v82_patch520[k];
+                rccemis[continuum_capacity + k] += heatt_rrc_continuum_emission_v82_patch520[continuum_capacity + k];
+            }
+            if (source_sequence_v82_patch511 == 59) {
+                std::size_t rrc_nonzero_v82_patch520 = 0u;
+                for (double value : heatt_rrc_continuum_emission_v82_patch520)
+                    if (std::isfinite(value) && value != 0.0) ++rrc_nonzero_v82_patch520;
+                std::cout << "V048746255172582_V82_PATCH520_CALC_EMIS_SELECTED_RRC_RECORDS="
+                          << selected_rrc_records_v82_patch520 << "\n"
+                          << "V048746255172582_V82_PATCH520_CALC_EMIS_RATE42_TYPE88_RECORDS="
+                          << rate42_rrc_records_v82_patch520 << "\n"
+                          << "V048746255172582_V82_PATCH520_CALC_EMIS_RATE42_TYPE88_RECORD_LIST=";
+                for (std::size_t i = 0; i < rate42_rrc_record_list_v82_patch520.size(); ++i) {
+                    if (i) std::cout << ";";
+                    std::cout << rate42_rrc_record_list_v82_patch520[i];
+                }
+                std::cout << "\n"
+                          << "V048746255172582_V82_PATCH520_HEATT_RRC_EMISSION_NONZERO_CELLS="
+                          << rrc_nonzero_v82_patch520 << "\n"
+                          << "V048746255172582_V82_PATCH520_RRC_SELECTION_SEMANTICS=SOURCE_CALC_EMIS_NCBIN_RATE7_PLUS_UNGATED_RATE42\n";
             }
         }
 
