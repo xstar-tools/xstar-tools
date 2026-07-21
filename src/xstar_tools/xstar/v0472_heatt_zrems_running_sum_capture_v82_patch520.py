@@ -20,11 +20,13 @@ from typing import Any
 
 from . import v0472_all61_type88_rate_lifetime_capture_v82_patch51941 as base
 
-RELEASE = "0.6.48.7.46.25.5.17.25.82-patch5.20.2"
-SCHEMA = "xstar-tools-v82-patch5202-v0472-heatt-zrems-running-sum-capture-v1"
-VERIFY_SCHEMA = "xstar-tools-v82-patch5202-v0472-heatt-zrems-running-sum-oracle-v1"
+RELEASE = "0.6.48.7.46.25.5.17.25.82-patch5.20.3"
+SCHEMA = "xstar-tools-v82-patch5203-v0472-rank-absorption-capture-v1"
+VERIFY_SCHEMA = "xstar-tools-v82-patch5203-v0472-rank-absorption-oracle-v1"
 HEATT_NAME = "v0472_all61_heatt_zrems_running_sum.csv"
 CALC_EMIS_NAME = "v0472_all61_calc_emis_selection_summary.csv"
+RANK_INPUT_NAME = "v0472_all61_calc_emis_rank_input.csv"
+ABSORPTION_NAME = "v0472_all61_heatt_absorption_contributions.csv"
 REPORT_NAME = "all61_heatt_zrems_running_sum_capture_report.json"
 VERIFY_NAME = "all61_heatt_zrems_running_sum_capture_verification.json"
 BUNDLE_MANIFEST_NAME = "all61_heatt_zrems_running_sum_capture_manifest.json"
@@ -35,7 +37,7 @@ _PROBE = _PROBE.replace(
     '"linear_solve_trace_current": [], "final_counter": 0}',
     '"type88_rate_lifetime": [], "type88_rate_last": {}, "active_call_id": 0, "active_local_eval": 0, '
     '"patch520_heatt_rows": [], "patch520_calc_emis_summary": [], "patch520_last_gsmooth": None, '
-    '"patch520_calc_emis_event": 0, "patch520_heatt_event": 0, '
+    '"patch520_calc_emis_event": 0, "patch520_heatt_event": 0, "patch5203_rank_rows": [], "patch5203_absorption_rows": [], "patch5203_absorption_order": 0, "patch5203_last_ucalc": None, '
     '"linear_solve_trace_current": [], "final_counter": 0}',
     1,
 )
@@ -56,6 +58,16 @@ V82_PATCH520_CALC_EMIS_FIELDS = [
  "rate42_rows","rate42_type88_rows","selected_slot_list","rate42_record_list",
  "rccemis1_nonzero","rccemis2_nonzero","rccemis1_sum","rccemis2_sum"
 ]
+V82_PATCH5203_RANK_FIELDS = [
+ "sequence","dsec_call_id","evaluation_index","calc_emis_event","slot_one_based","active_candidate",
+ "wavelength_angstrom","energy_ev","energy_bin_one_based","cemab1","cemab2","emission_sum","opakab",
+ "insertion_rank_one_based","insertion_stored","insertion_reason","final_rank_one_based","rank_selected",
+ "consumer_selected","consumer_records","consumer_rate_types","consumer_data_types","consumer_ion_stages"
+]
+V82_PATCH5203_ABSORPTION_FIELDS = [
+ "sequence","dsec_call_id","evaluation_index","calc_emis_event","source_order","runtime_slot","producer_family",
+ "record","data_type","rate_type","ion_stage","contribution_cm_inv"
+]
 
 def _v82_patch520_install_continuum_wrappers():
     from xstar_tools.xstar import emergent_emissivity as ee
@@ -64,8 +76,94 @@ def _v82_patch520_install_continuum_wrappers():
     if getattr(ee.calc_emis_all, "_v82_patch520_wrapped", False):
         return
 
+    target_bins = set()
+    target_path = os.environ.get("XSTAR_V82_PATCH5203_TARGET_BINS_PATH", "")
+    if target_path and os.path.isfile(target_path):
+        try:
+            with open(target_path) as handle:
+                for token in handle.read().replace(",", " ").split():
+                    value = int(token)
+                    if 0 <= value < 9999:
+                        target_bins.add(value)
+        except Exception:
+            target_bins = set()
+
+    def _append_absorption(family, result, values, ion_stage=0):
+        if int(_STATE.get("active_call_id",0) or 0) != 2 or int(_STATE.get("active_local_eval",0) or 0) != 1:
+            return
+        arr=np.asarray(values,dtype=float).reshape(-1)
+        for kl in sorted(target_bins):
+            if kl >= arr.size: continue
+            value=float(arr[kl])
+            if not np.isfinite(value) or value == 0.0: continue
+            _STATE["patch5203_absorption_order"] = int(_STATE.get("patch5203_absorption_order",0)) + 1
+            _STATE["patch5203_absorption_rows"].append({
+              "sequence":int(_STATE.get("global_eval",0) or 0),
+              "dsec_call_id":int(_STATE.get("active_call_id",0) or 0),
+              "evaluation_index":int(_STATE.get("active_local_eval",0) or 0),
+              "calc_emis_event":int(_STATE.get("patch520_calc_emis_event",0) or 0)+1,
+              "source_order":int(_STATE["patch5203_absorption_order"]),"runtime_slot":int(kl),
+              "producer_family":str(family),"record":int(getattr(result,"record",0) if result is not None else 0),
+              "data_type":int(getattr(result,"data_type",0) if result is not None else 0),
+              "rate_type":int(getattr(result,"rate_type",0) if result is not None else 0),
+              "ion_stage":int(ion_stage),"contribution_cm_inv":value,
+            })
+
+    original_accumulate = ee._accumulate_ucalc_continuum
+    def wrapped_accumulate(workspace, result):
+        _STATE["patch5203_last_ucalc"] = result
+        diagnostics=getattr(result,"diagnostics",{}) or {}
+        values=diagnostics.get("opakc_cm^-1")
+        if values is not None:
+            _append_absorption("BOUND_FREE", result, values)
+        return original_accumulate(workspace, result)
+    ee._accumulate_ucalc_continuum = wrapped_accumulate
+
+    original_linopac = ee._source_linopac_into_opakc
+    def wrapped_linopac(*args, **kwargs):
+        opakc=kwargs.get("opakc")
+        if opakc is None or not target_bins:
+            return original_linopac(*args, **kwargs)
+        before=np.asarray(opakc,dtype=float).copy()
+        result=original_linopac(*args, **kwargs)
+        after=np.asarray(opakc,dtype=float)
+        delta=after-before
+        last=_STATE.get("patch5203_last_ucalc")
+        _append_absorption("LINE", last, delta)
+        return result
+    ee._source_linopac_into_opakc = wrapped_linopac
+
+    original_freef = ee.freef
+    def wrapped_freef(epi, bremsa, opakc, *args, **kwargs):
+        before=np.asarray(opakc,dtype=float).copy()
+        result=original_freef(epi, bremsa, opakc, *args, **kwargs)
+        after=np.asarray(getattr(result,"opakc_after_cm_inv",before),dtype=float)
+        _append_absorption("FREE_FREE", None, after-before)
+        return result
+    ee.freef = wrapped_freef
+
+    original_bremem = ee.bremem
+    def wrapped_bremem(epi, brcems, opakc, *args, **kwargs):
+        before=np.asarray(opakc,dtype=float).copy()
+        result=original_bremem(epi, brcems, opakc, *args, **kwargs)
+        after=np.asarray(getattr(result,"opakc_after_cm_inv",before),dtype=float)
+        _append_absorption("BREMEM_OPACITY", None, after-before)
+        return result
+    ee.bremem = wrapped_bremem
+
     original_calc_emis_all = ee.calc_emis_all
     def wrapped_calc_emis_all(context):
+        upcoming_event=int(_STATE.get("patch520_calc_emis_event",0) or 0)+1
+        rank_snapshot=None
+        if int(_STATE.get("active_call_id",0) or 0)==2 and int(_STATE.get("active_local_eval",0) or 0)==1:
+            epi0,_,_=ee._high_resolution_radiation(context.radiation)
+            active=np.asarray(ee._feature_indices_from_context(context,"continuum"),dtype=int).reshape(-1)
+            rank_snapshot={
+              "epi":np.asarray(epi0,dtype=float).copy(),"active":active.copy(),
+              "wave":np.asarray(context.rrc_wavelength_angstrom,dtype=float).copy(),
+              "cemab":np.asarray(context.workspace.base.cemab,dtype=float).copy(),
+              "opakab":np.asarray(context.workspace.base.opakab,dtype=float).copy(),
+            }
         # The physical all-61 run disables Python trace materialization for
         # performance.  Patch 5.20.2 temporarily enables traces only around
         # this qualification-only source call; calc_emis_all physics does not
@@ -82,6 +180,49 @@ def _v82_patch520_install_continuum_wrappers():
         rate7 = [r for r in traces if int(getattr(r, "rate_type", 0)) == 7]
         rate42 = [r for r in traces if int(getattr(r, "rate_type", 0)) == 42]
         slots = sorted({int(getattr(r, "retained_continuum_index", 0)) for r in rate7 if int(getattr(r, "retained_continuum_index", 0)) > 0})
+        if rank_snapshot is not None:
+            rank_trace={int(getattr(t,"feature_index",0)):t for t in getattr(result,"rank_traces",()) if str(getattr(t,"feature_kind",""))=="continuum"}
+            consumers={}
+            for tr in rate7:
+                slot=int(getattr(tr,"retained_continuum_index",0))
+                if slot<=0: continue
+                consumers.setdefault(slot,[]).append(tr)
+            table=np.asarray(getattr(result,"continuum_rank_table",np.zeros((1,1),dtype=int)),dtype=int)
+            for slot in rank_snapshot["active"]:
+                slot=int(slot)
+                if slot<=0 or slot>=rank_snapshot["wave"].size: continue
+                tr=rank_trace.get(slot)
+                wave=float(rank_snapshot["wave"][slot])
+                energy=12398.41/(1.0e-34+wave) if wave>0 else 0.0
+                bin1=int(getattr(tr,"bin_one_based",0)) if tr is not None else 0
+                final_rank=0
+                if bin1>0 and bin1<table.shape[1]:
+                    for rr in range(1,table.shape[0]):
+                        if int(table[rr,bin1])==slot:
+                            final_rank=rr; break
+                cc=consumers.get(slot,[])
+                cem1=float(rank_snapshot["cemab"][0,slot]) if rank_snapshot["cemab"].ndim==2 and slot<rank_snapshot["cemab"].shape[1] else 0.0
+                cem2=float(rank_snapshot["cemab"][1,slot]) if rank_snapshot["cemab"].ndim==2 and slot<rank_snapshot["cemab"].shape[1] else 0.0
+                opak=float(rank_snapshot["opakab"][slot]) if slot<rank_snapshot["opakab"].size else 0.0
+                _STATE["patch5203_rank_rows"].append({
+                  "sequence":int(_STATE.get("global_eval",0) or 0),"dsec_call_id":int(_STATE.get("active_call_id",0) or 0),
+                  "evaluation_index":int(_STATE.get("active_local_eval",0) or 0),"calc_emis_event":upcoming_event,
+                  "slot_one_based":slot,"active_candidate":1,"wavelength_angstrom":wave,"energy_ev":energy,
+                  "energy_bin_one_based":bin1,"cemab1":cem1,"cemab2":cem2,"emission_sum":cem1+cem2,"opakab":opak,
+                  "insertion_rank_one_based":int(getattr(tr,"rank_one_based",0)) if tr is not None else 0,
+                  "insertion_stored":int(bool(getattr(tr,"stored",False))) if tr is not None else 0,
+                  "insertion_reason":str(getattr(tr,"reason","missing_trace")) if tr is not None else "missing_trace",
+                  "final_rank_one_based":final_rank,"rank_selected":int(final_rank>0),"consumer_selected":int(bool(cc)),
+                  "consumer_records":";".join(str(int(getattr(x,"record",0))) for x in cc),
+                  "consumer_rate_types":";".join(str(int(getattr(x,"rate_type",0))) for x in cc),
+                  "consumer_data_types":";".join(str(int(getattr(x,"data_type",0))) for x in cc),
+                  "consumer_ion_stages":";".join(str(int(getattr(x,"ion_stage",0))) for x in cc),
+                })
+            # Backfill ion-stage metadata into bound-free source ledger rows.
+            stage_by_record={int(getattr(x,"record",0)):int(getattr(x,"ion_stage",0)) for x in traces}
+            for row0 in _STATE["patch5203_absorption_rows"]:
+                if int(row0.get("dsec_call_id",0))==2 and int(row0.get("evaluation_index",0))==1 and int(row0.get("ion_stage",0))==0:
+                    row0["ion_stage"]=stage_by_record.get(int(row0.get("record",0)),0)
         ws = getattr(context, "workspace", None)
         rcc = np.asarray(getattr(getattr(ws, "base", None), "rccemis", np.zeros((2,0))), dtype=float)
         row = {
@@ -218,6 +359,20 @@ _PROBE = _PROBE.replace(
     '      ("v0472_all61_calc_emis_selection_summary.csv", V82_PATCH520_CALC_EMIS_FIELDS, _STATE["patch520_calc_emis_summary"]),\n',
     1,
 )
+_PROBE = _PROBE.replace(
+    '      "v0472_all61_calc_emis_selection_summary.csv": lambda row: int(row["calc_emis_event"]),\n',
+    '      "v0472_all61_calc_emis_selection_summary.csv": lambda row: int(row["calc_emis_event"]),\n'
+    '      "v0472_all61_calc_emis_rank_input.csv": lambda row: (int(row["calc_emis_event"]), int(row["slot_one_based"])),\n'
+    '      "v0472_all61_heatt_absorption_contributions.csv": lambda row: int(row["source_order"]),\n',
+    1,
+)
+_PROBE = _PROBE.replace(
+    '      ("v0472_all61_calc_emis_selection_summary.csv", V82_PATCH520_CALC_EMIS_FIELDS, _STATE["patch520_calc_emis_summary"]),\n',
+    '      ("v0472_all61_calc_emis_selection_summary.csv", V82_PATCH520_CALC_EMIS_FIELDS, _STATE["patch520_calc_emis_summary"]),\n'
+    '      ("v0472_all61_calc_emis_rank_input.csv", V82_PATCH5203_RANK_FIELDS, _STATE["patch5203_rank_rows"]),\n'
+    '      ("v0472_all61_heatt_absorption_contributions.csv", V82_PATCH5203_ABSORPTION_FIELDS, _STATE["patch5203_absorption_rows"]),\n',
+    1,
+)
 _PROBE = _PROBE.replace(f'"schema": "{base.SCHEMA}"', f'"schema": "{SCHEMA}"')
 
 _DRIVER = base._DRIVER.replace(
@@ -253,12 +408,20 @@ def verify(bundle: Path) -> dict[str, Any]:
         errors.append("parent_51941_source_capture_reject")
     heatt_path = bundle / HEATT_NAME
     calc_path = bundle / CALC_EMIS_NAME
+    rank_path = bundle / RANK_INPUT_NAME
+    absorption_path = bundle / ABSORPTION_NAME
     heatt = _read_csv(heatt_path) if heatt_path.is_file() else []
     calc = _read_csv(calc_path) if calc_path.is_file() else []
+    rank_rows = _read_csv(rank_path) if rank_path.is_file() else []
+    absorption_rows = _read_csv(absorption_path) if absorption_path.is_file() else []
     if not heatt:
         errors.append(f"missing_or_empty:{HEATT_NAME}")
     if not calc:
         errors.append(f"missing_or_empty:{CALC_EMIS_NAME}")
+    if not rank_rows:
+        errors.append(f"missing_or_empty:{RANK_INPUT_NAME}")
+    if not absorption_rows:
+        errors.append(f"missing_or_empty:{ABSORPTION_NAME}")
     events = sorted({int(r["heatt_event"]) for r in heatt}) if heatt else []
     bad_replay = sum(int(r.get("plane1_replay_bit_equal", "0")) != 1 for r in heatt)
     # The authoritative row is the actual post-heatt source state.  The replay
@@ -305,6 +468,8 @@ def verify(bundle: Path) -> dict[str, Any]:
         "heatt_plane1_replay_bit_mismatches": bad_replay,
         "heatt_plane1_replay_scientific_mismatches": bad_replay_scientific,
         "calc_emis_events": len(calc),
+        "call2_rank_input_rows": sum(int(r.get("dsec_call_id","0"))==2 and int(r.get("evaluation_index","0"))==1 for r in rank_rows),
+        "call2_absorption_contribution_rows": sum(int(r.get("dsec_call_id","0"))==2 and int(r.get("evaluation_index","0"))==1 for r in absorption_rows),
         "max_selected_rate7_rows": max(selected_rate7, default=0),
         "max_rate42_type88_rows": max(rate42, default=0),
     }

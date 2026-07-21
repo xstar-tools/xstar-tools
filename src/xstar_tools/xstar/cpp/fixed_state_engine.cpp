@@ -8214,6 +8214,40 @@ int run_impl(
     const char* opacity_producer_path_v82_patch511 = std::getenv("XSTAR_V82_PATCH511_OPAKC_PRODUCER_AUDIT_PATH");
     const bool opacity_producer_audit_v82_patch511 = !defer_product_projection &&
         source_sequence_v82_patch511 == 59 && opacity_producer_path_v82_patch511 && *opacity_producer_path_v82_patch511;
+    // v82 patch 5.20.3: diagnostic-only exact opacity contribution ledger for
+    // the bins already proven to alter the source heatt absorption operand.
+    // This never feeds production arrays: it reuses the existing comparison
+    // kernels and writes only sidecar rows selected by a zero-based bin file.
+    const char* exact_absorption_path_v82_patch5203 = std::getenv("XSTAR_V82_PATCH5203_EXACT_ABSORPTION_LEDGER_PATH");
+    const char* target_bins_path_v82_patch5203 = std::getenv("XSTAR_V82_PATCH5203_TARGET_BINS_PATH");
+    const bool exact_absorption_audit_v82_patch5203 = !defer_product_projection &&
+        source_sequence_v82_patch511 == 59 && exact_absorption_path_v82_patch5203 && *exact_absorption_path_v82_patch5203 &&
+        target_bins_path_v82_patch5203 && *target_bins_path_v82_patch5203;
+    std::set<std::size_t> target_bins_v82_patch5203;
+    std::ofstream exact_absorption_csv_v82_patch5203;
+    std::size_t exact_absorption_rows_v82_patch5203 = 0u;
+    if (exact_absorption_audit_v82_patch5203) {
+        std::ifstream bins_in(target_bins_path_v82_patch5203);
+        std::size_t bin = 0u;
+        while (bins_in >> bin) if (bin < input.radiation_bin_count) target_bins_v82_patch5203.insert(bin);
+        const std::filesystem::path exact_path(exact_absorption_path_v82_patch5203);
+        if (!exact_path.parent_path().empty()) std::filesystem::create_directories(exact_path.parent_path());
+        exact_absorption_csv_v82_patch5203.open(exact_path);
+        if (!exact_absorption_csv_v82_patch5203) throw std::runtime_error("cannot create patch5.20.3 exact absorption ledger");
+        exact_absorption_csv_v82_patch5203
+            << "runtime_slot,energy_ev,producer_family,source_position,record,data_type,rate_type,element_z,ion_stage,lower_row,upper_row,contribution_cm_inv\n";
+        exact_absorption_csv_v82_patch5203 << std::setprecision(17);
+    }
+    auto write_exact_absorption_v82_patch5203 = [&](std::size_t runtime_slot, const char* family,
+            std::int64_t source_position, std::int64_t record, int data_type, int rate_type,
+            int element_z, int ion_stage, int lower_row, int upper_row, double contribution) {
+        if (!exact_absorption_audit_v82_patch5203 || !target_bins_v82_patch5203.count(runtime_slot) ||
+            !std::isfinite(contribution) || contribution == 0.0) return;
+        exact_absorption_csv_v82_patch5203 << runtime_slot << ',' << input.radiation_energy_ev[runtime_slot] << ','
+            << family << ',' << source_position << ',' << record << ',' << data_type << ',' << rate_type << ','
+            << element_z << ',' << ion_stage << ',' << lower_row << ',' << upper_row << ',' << contribution << '\n';
+        ++exact_absorption_rows_v82_patch5203;
+    };
     const char* mg_type53_kernel_path_v82_patch512 = std::getenv("XSTAR_V82_PATCH512_MG_TYPE53_KERNEL_AUDIT_PATH");
     const bool mg_type53_kernel_audit_v82_patch512 = !defer_product_projection &&
         source_sequence_v82_patch511 == 59 && mg_type53_kernel_path_v82_patch512 && *mg_type53_kernel_path_v82_patch512;
@@ -9163,7 +9197,7 @@ int run_impl(
                 }
                 mg_type53_kernel_rows_v82_patch512.push_back(row);
             }
-            if (opacity_producer_audit_v82_patch511) {
+            if (opacity_producer_audit_v82_patch511 || exact_absorption_audit_v82_patch5203) {
                 std::fill(producer_temp_opacity_v82_patch511.begin(), producer_temp_opacity_v82_patch511.end(), 0.0);
                 std::fill(producer_temp_rrc_v82_patch511.begin(), producer_temp_rrc_v82_patch511.end(), 0.0);
                 accumulate_native_bound_free_surface(
@@ -9171,7 +9205,11 @@ int run_impl(
                     producer_temp_opacity_v82_patch511, producer_temp_rrc_v82_patch511, nullptr, nullptr);
                 for (std::size_t bin = 0; bin < producer_temp_opacity_v82_patch511.size(); ++bin) {
                     const double value = producer_temp_opacity_v82_patch511[bin];
-                    if (!(std::isfinite(value) && std::abs(value) > std::abs(bound_free_top_v82_patch511[bin].contribution))) continue;
+                    write_exact_absorption_v82_patch5203(bin, "BOUND_FREE", source_record.source_position,
+                        source_record.record, source_record.data_type, source_record.rate_type, element.element_z,
+                        source_record.ion_stage, source_record.lower_row, source_record.upper_row, value);
+                    if (!opacity_producer_audit_v82_patch511 ||
+                        !(std::isfinite(value) && std::abs(value) > std::abs(bound_free_top_v82_patch511[bin].contribution))) continue;
                     auto& top = bound_free_top_v82_patch511[bin];
                     top.contribution = value;
                     top.source_position = source_record.source_position;
@@ -9420,8 +9458,11 @@ int run_impl(
             const double e_cube = environment_flag("XSTAR_QUALIFICATION_FREEF_REAL_EXPONENT_POW")
                 ? std::pow(safe_e, 3.0)
                 : safe_e * safe_e * safe_e;
-            output.opacity[k] += freef_cc * xnx * enz2 /
+            const double freef_opacity_v82_patch5203 = freef_cc * xnx * enz2 /
                 std::sqrt(temperature_t4) / e_cube * stim;
+            output.opacity[k] += freef_opacity_v82_patch5203;
+            write_exact_absorption_v82_patch5203(k, "FREE_FREE", 0, 0, 0, 0, 0, 0, 0, 0,
+                freef_opacity_v82_patch5203);
         }
         if (shape_sum > 0.0) for (std::size_t k=0;k<input.radiation_bin_count;++k) output.spectrum[k] += clbrems * shape[k] / shape_sum;
         stats.continuum_bins += input.radiation_bin_count;
@@ -9451,7 +9492,10 @@ int run_impl(
         const double source_thomson = input.hydrogen_density_cm3 * input.electron_fraction_xee *
             kSigmaT * std::max(0.0, 1.0 - effective_spectral_covering_fraction_v82_patch58(input));
         std::vector<double> opakcont(continuum_capacity, source_thomson);
-        for (std::size_t k = 0; k < continuum_capacity; ++k) output.opacity[k] += source_thomson;
+        for (std::size_t k = 0; k < continuum_capacity; ++k) {
+            output.opacity[k] += source_thomson;
+            write_exact_absorption_v82_patch5203(k, "THOMSON", 0, 0, 0, 0, 0, 0, 0, 0, source_thomson);
+        }
         std::vector<double> fline(2 * line_capacity, 0.0);
         std::vector<double> flinel(continuum_capacity, 0.0);
         xstar_spectral_workspace_v1 sw{};
@@ -9866,8 +9910,8 @@ int run_impl(
                       << bound_free_nonzero << "\n"
                       << "V048746255172582_CALL2_PHINT53_CONTINUUM_BIN_MAPPING=ACCEPT_SOURCE_BIN_AVERAGED\n";
 
-            if (opacity_producer_audit_v82_patch511) {
-                // Re-evaluate each line into a zeroed comparison-only profile
+            if (opacity_producer_audit_v82_patch511 || exact_absorption_audit_v82_patch5203) {
+                // Re-evaluate every line contribution into a comparison-only profile
                 // with the exact same native linopac kernel and seed profile.
                 // This records ownership only; it never feeds the temporary
                 // profile back into line_profile_opacity or opakc.
@@ -9900,7 +9944,13 @@ int run_impl(
                     const ProgramRecord* source_record = found_record != record_by_source_position.end() ? found_record->second : nullptr;
                     for (std::size_t bin = 0; bin < producer_temp_opacity_v82_patch511.size(); ++bin) {
                         const double value = producer_temp_opacity_v82_patch511[bin];
-                        if (!(std::isfinite(value) && std::abs(value) > std::abs(line_top_v82_patch511[bin].contribution))) continue;
+                        write_exact_absorption_v82_patch5203(bin, "LINE", static_cast<std::int64_t>(c.source_position),
+                            c.record, c.data_type, source_record ? source_record->rate_type : 0,
+                            source_record ? (element_z_by_index.count(source_record->element_index) ? element_z_by_index[source_record->element_index] : 0) : 0,
+                            source_record ? source_record->ion_stage : 0, source_record ? source_record->lower_row : 0,
+                            source_record ? source_record->upper_row : 0, value);
+                        if (!opacity_producer_audit_v82_patch511 ||
+                            !(std::isfinite(value) && std::abs(value) > std::abs(line_top_v82_patch511[bin].contribution))) continue;
                         auto& top = line_top_v82_patch511[bin];
                         top.contribution = value;
                         top.source_position = static_cast<std::int64_t>(c.source_position);
@@ -9916,6 +9966,9 @@ int run_impl(
                     }
                 }
 
+                if (!opacity_producer_audit_v82_patch511) {
+                    // Exact-ledger-only mode does not require the legacy top-producer inventory.
+                } else {
                 const std::filesystem::path producer_path(opacity_producer_path_v82_patch511);
                 if (!producer_path.parent_path().empty()) std::filesystem::create_directories(producer_path.parent_path());
                 std::ofstream producer_csv(producer_path);
@@ -9944,6 +9997,15 @@ int run_impl(
                           << "V048746255172582_CALL2_BOUND_FREE_TOP_PRODUCER_NONZERO_BINS=" << bf_top_nonzero << "\n"
                           << "V048746255172582_CALL2_LINE_TOP_PRODUCER_NONZERO_BINS=" << line_top_nonzero << "\n"
                           << "V048746255172582_CALL2_OPAKC_PRODUCER_INVENTORY=WRITTEN\n";
+                }
+            }
+            if (exact_absorption_audit_v82_patch5203) {
+                exact_absorption_csv_v82_patch5203.flush();
+                std::cout << "V048746255172582_V82_PATCH5203_EXACT_ABSORPTION_LEDGER_ROWS="
+                          << exact_absorption_rows_v82_patch5203 << "\n"
+                          << "V048746255172582_V82_PATCH5203_EXACT_ABSORPTION_TARGET_BINS="
+                          << target_bins_v82_patch5203.size() << "\n"
+                          << "V048746255172582_V82_PATCH5203_EXACT_ABSORPTION_LEDGER=WRITTEN\n";
             }
             if (mg_type53_kernel_audit_v82_patch512) {
                 const std::filesystem::path kernel_path(mg_type53_kernel_path_v82_patch512);
