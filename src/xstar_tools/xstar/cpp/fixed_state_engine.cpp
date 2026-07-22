@@ -1313,13 +1313,16 @@ struct EvaluatedRecord {
     // v82 patch 5.18.1: calc_emisab_all evaluates Type-53 on the reduced
     // epim/bremsam workspace before calc_emis_all ranks and selectively
     // revisits rate-7 records on the full radiation grid.  Keep those two
-    // lifetimes distinct so opakab can retain the reduced-grid seed when a
-    // selected full-grid phint53 revisit does not reach its publication bin.
+    // lifetimes distinct.  A selected full-grid UCalc revisit starts with
+    // opakab=0 and either publishes its own threshold value or leaves zero.
     Type53SourceShadow type53_calc_emisab_shadow{};
+    // v82 patch 5.20.14: distinct full-grid calc_emis_ion revisit.
+    Type53SourceShadow type53_calc_emis_shadow{};
     // v82 patch 5.20.8: calc_emisab_all uses the same reduced epim/bremsam
     // workspace for Type-49 rate-7 records.  Keep the reduced-grid seed
     // distinct from the later full-grid calc_emis_ion evaluation.
     Type53SourceShadow type49_calc_emisab_shadow{};
+    Type53SourceShadow type49_calc_emis_shadow{};
     Type53SourceShadow type49_shadow{};
     Type51SourceShadow type51_shadow{};
     Type50SourceShadow type50_shadow{};
@@ -5153,9 +5156,10 @@ EvaluatedRecord evaluate_record(
 
             // v82 patch 5.18.1: source calc_emisab_all consumes the reduced
             // 999-bin epim/bremsam workspace.  Its opakab publication is the
-            // seed later ranked by rlbin.  calc_emis_ion then revisits only
-            // selected rate-7 identities on the full grid and may leave this
-            // seed untouched when phint53 does not reach kl=nb1+2.
+            // seed later ranked by rlbin.  calc_emis_ion then makes a new
+            // UCalc call for selected rate-7 identities on the full grid.
+            // UCalc resets scalar opakab to zero at entry, so a selected
+            // revisit that does not reach the threshold publication clears it.
             if (calc_emisab_workspace && calc_emisab_workspace->epim.size() >= 3 &&
                 calc_emisab_workspace->bremsam.size() == calc_emisab_workspace->epim.size()) {
                 xstar_fixed_state_input_v1 calc_emisab_input = input;
@@ -5169,6 +5173,18 @@ EvaluatedRecord evaluate_record(
                     record_context.valid ? &record_context : nullptr, record.record, false, false,
                     calc_emisab_contribution, &out.type53_calc_emisab_shadow);
                 if (!calc_emisab_exact) out.type53_calc_emisab_shadow = Type53SourceShadow{};
+            }
+            // v82 patch 5.20.14: selected calc_emis_ion is a second UCalc
+            // call on the full epi/ncn2/bremsa workspace.  Keep it distinct
+            // from the reduced calc_hmc and calc_emisab caller lifetimes.
+            {
+                xstar_element_contribution_v1 calc_emis_contribution{};
+                const bool calc_emis_exact = evaluate_type53_source_integral(
+                    r, pair_real_count, lower, upper, input, source_threshold,
+                    contract_ptmp1 + contract_ptmp2, row46_contract,
+                    record_context.valid ? &record_context : nullptr, record.record, false, false,
+                    calc_emis_contribution, &out.type53_calc_emis_shadow);
+                if (!calc_emis_exact) out.type53_calc_emis_shadow = Type53SourceShadow{};
             }
             out.type53_shadow.helium_live_escape_state_applied = helium_live_escape_applied;
             if (row46_contract) {
@@ -5491,6 +5507,26 @@ EvaluatedRecord evaluate_record(
                     record.record, true, true, calc_emisab_contribution,
                     &out.type49_calc_emisab_shadow);
                 if (!calc_emisab_exact) out.type49_calc_emisab_shadow = Type53SourceShadow{};
+            }
+            // v82 patch 5.20.14: preserve the later full-grid calc_emis_ion
+            // UCalc result independently from the reduced matrix/seed stages.
+            if (source_zero_gate) {
+                out.type49_calc_emis_shadow = out.type49_shadow;
+            } else {
+                xstar_element_contribution_v1 calc_emis_contribution{};
+                Type53RecordContext calc_emis_record_context = record_context;
+                // ucalc.f90 Type49 passes the current caller ncn2 directly
+                // to phextrap.  The full calc_emis caller therefore owns the
+                // 9999-bin capacity, while matrix/calc_emisab remain 999.
+                const std::size_t full_calc_emis_bins =
+                    input.dsec_radiation_energy_ev && input.dsec_bremsa && input.dsec_radiation_bin_count >= 3
+                        ? input.dsec_radiation_bin_count : input.radiation_bin_count;
+                calc_emis_record_context.phextrap_max_points = static_cast<int>(full_calc_emis_bins);
+                const bool calc_emis_exact = evaluate_type53_source_integral(
+                    r, pair_real_count, lower, upper, input, source_threshold, ptmp1 + ptmp2,
+                    nullptr, calc_emis_record_context.valid ? &calc_emis_record_context : nullptr, record.record,
+                    true, true, calc_emis_contribution, &out.type49_calc_emis_shadow);
+                if (!calc_emis_exact) out.type49_calc_emis_shadow = Type53SourceShadow{};
             }
             const bool magnesium_finite_state = element.element_z == 12 &&
                 environment_flag("XSTAR_QUALIFICATION_MG_BOUND_FREE_FINITE_STATE");
@@ -10054,11 +10090,11 @@ int run_impl(
                 audit.stimulated_sigma_cm2 = scalar.stimulated_sigma_cm2;
                 audit.prior_opakab_cm1 = opakab[slot];
                 audit.type88_opakab_cm1 = scalar.threshold_publication_reached
-                    ? scalar.opakab_cm1 : opakab[slot];
+                    ? scalar.opakab_cm1 : 0.0;
                 audit.publication_reached = scalar.threshold_publication_reached;
-                // phint53 leaves the caller scalar unchanged if the threshold
-                // publication cell is never reached.
-                if (scalar.threshold_publication_reached) opakab[slot] = scalar.opakab_cm1;
+                // Literal calc_emis_ion calls UCalc, whose entry statement is
+                // opakab=0.; non-publication therefore clears the stale slot.
+                opakab[slot] = scalar.threshold_publication_reached ? scalar.opakab_cm1 : 0.0;
                 type88_stale_audit_rows_v82_patch52010.push_back(audit);
             }
 
@@ -10280,7 +10316,7 @@ int run_impl(
             }
 
             std::size_t type53_candidates = 0u, type53_selected = 0u;
-            std::size_t type53_revisit_published = 0u, type53_seed_retained = 0u, type53_overwritten = 0u;
+            std::size_t type53_revisit_published = 0u, type53_seed_retained = 0u, type53_selected_zero_no_publication = 0u, type53_overwritten = 0u;
             for (const auto& c : seed_rrc_candidates) {
                 if (c.data_type != 53) continue;
                 ++type53_candidates;
@@ -10295,7 +10331,7 @@ int run_impl(
                 const auto& item = eit->second;
                 const Type53SourceShadow& seed_shadow = item.type53_calc_emisab_shadow.valid
                     ? item.type53_calc_emisab_shadow : item.type53_shadow;
-                const Type53SourceShadow& revisit_shadow = item.type53_shadow;
+                const Type53SourceShadow& revisit_shadow = item.type53_calc_emis_shadow;
                 const xstar_spectral_contribution_v1* spectral_item = nullptr;
                 for (const auto& candidate : spectral) {
                     if (candidate.kind == XSTAR_SPECTRAL_KIND_EMISAB_BOUND_FREE &&
@@ -10310,7 +10346,7 @@ int run_impl(
                 const double seed_opakab = slot < opakab_calc_emisab_seed.size()
                     ? opakab_calc_emisab_seed[slot] : 0.0;
                 double revisit_opakab = seed_opakab;
-                std::string action = selected ? "RETAIN_SEED_NO_PUBLICATION" : "UNSELECTED_RETAIN_SEED";
+                std::string action = selected ? "SELECTED_UCALC_ZERO_NO_PUBLICATION" : "UNSELECTED_RETAIN_SEED";
                 bool modified = false;
                 if (selected && revisit_shadow.valid && revisit_shadow.threshold_publication_reached &&
                     spectral_item->abundance_lower > 0.0) {
@@ -10325,7 +10361,13 @@ int run_impl(
                     modified = true;
                     action = "OVERWRITE_SELECTED_REVISIT";
                 } else if (selected) {
-                    ++type53_seed_retained;
+                    // ucalc.f90 resets opakab=0. before dispatch.  If the
+                    // selected full-grid phint53 call does not publish at the
+                    // threshold cell, the caller-owned scalar remains zero.
+                    revisit_opakab = 0.0;
+                    modified = opakab[slot] != 0.0;
+                    opakab[slot] = 0.0;
+                    ++type53_selected_zero_no_publication;
                 }
                 if (revisit_csv) {
                     const auto rit = source_ncbin.final_rank.find(c.slot_one_based);
@@ -10346,7 +10388,11 @@ int run_impl(
                 << "V048746255172582_CALL2_TYPE53_SELECTED_REVISIT_SELECTED=" << type53_selected << "\n"
                 << "V048746255172582_CALL2_TYPE53_SELECTED_REVISIT_PUBLISHED=" << type53_revisit_published << "\n"
                 << "V048746255172582_CALL2_TYPE53_SELECTED_REVISIT_RETAINED_SEED=" << type53_seed_retained << "\n"
+                << "V048746255172582_PATCH52014_TYPE53_SELECTED_ZERO_NO_PUBLICATION=" << type53_selected_zero_no_publication << "\n"
                 << "V048746255172582_CALL2_TYPE53_SELECTED_REVISIT_OVERWRITTEN=" << type53_overwritten << "\n"
+                << "V048746255172582_PATCH52014_TYPE53_MATRIX_GRID_BINS=999\n"
+                << "V048746255172582_PATCH52014_TYPE53_CALC_EMISAB_GRID_BINS=999\n"
+                << "V048746255172582_PATCH52014_TYPE53_CALC_EMIS_GRID_BINS=9999\n"
                 << "V048746255172582_V82_PATCH5181_TYPE99_DIRECT_OPAKAB_PUBLICATION_BRANCH=SOURCE_ZERO\n";
 
             // v82 patch 5.20.8.2: Type-49 three-stage ownership audit and
@@ -10398,7 +10444,7 @@ int run_impl(
                     static_cast<std::uint64_t>(c.source_position), static_cast<std::uint64_t>(c.record)));
                 if (eit_v82_patch52082 == type49_revisit_evaluated_v82_patch52082.end()) continue;
                 const auto& item_v82_patch52082 = eit_v82_patch52082->second;
-                const Type53SourceShadow& full_shadow_v82_patch52082 = item_v82_patch52082.type49_shadow;
+                const Type53SourceShadow& full_shadow_v82_patch52082 = item_v82_patch52082.type49_calc_emis_shadow;
                 const Type53SourceShadow& reduced_shadow_v82_patch52082 =
                     item_v82_patch52082.type49_calc_emisab_shadow;
 
@@ -10460,7 +10506,9 @@ int run_impl(
                 } else if (!selected_v82_patch52082) {
                     ++type49_unselected_full_seed_v82_patch52082;
                 } else {
-                    action_v82_patch52082 = "SELECTED_RETAIN_FULLGRID_SEED_NO_PUBLICATION";
+                    modified_v82_patch52082 = opakab[slot_v82_patch52082] != 0.0;
+                    opakab[slot_v82_patch52082] = 0.0;
+                    action_v82_patch52082 = "SELECTED_UCALC_ZERO_NO_PUBLICATION";
                 }
 
                 if (type49_revisit_csv_v82_patch52082) {
@@ -10497,7 +10545,11 @@ int run_impl(
                 << "V048746255172582_PATCH52082_TYPE49_UNSELECTED_FULLGRID_SEED="
                 << type49_unselected_full_seed_v82_patch52082 << "\n"
                 << "V048746255172582_PATCH52082_TYPE49_REDUCED_FULL_DIFFERENT="
-                << type49_reduced_full_different_v82_patch52082 << "\n";
+                << type49_reduced_full_different_v82_patch52082 << "\n"
+                << "V048746255172582_PATCH52014_TYPE49_MATRIX_GRID_BINS=999\n"
+                << "V048746255172582_PATCH52014_TYPE49_CALC_EMISAB_GRID_BINS=999\n"
+                << "V048746255172582_PATCH52014_TYPE49_CALC_EMIS_GRID_BINS=9999\n"
+                << "V048746255172582_PATCH52014_TYPE49_CALC_EMIS_PHEXTRAP_MAX_POINTS=9999\n";
         }
 
         // v82 patch 5.17.1: run source rlbin/ncbin/nlbin as a pure audit over

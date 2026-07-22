@@ -10170,16 +10170,13 @@ void write_spectrum_detail(const std::filesystem::path& path,
             // Splitting their sum a second time (v52) erased source asymmetry
             // and corrupted `emis in`, zrems(2/3), and zrems(4/5).
             const auto directional_rcc = [&](std::size_t i) -> std::pair<double,double> {
+                // Literal fstepr4 writes rccemis(1,:) and rccemis(2,:)
+                // directly.  Do not re-split or merge these caller-owned
+                // directional planes according to cfrac at writer time.
                 const double plane0 = i < ws.rccemis.size() && std::isfinite(ws.rccemis[i])
-                    ? std::max(0.0, ws.rccemis[i]) : 0.0;
+                    ? ws.rccemis[i] : 0.0;
                 const double plane1 = n + i < ws.rccemis.size() && std::isfinite(ws.rccemis[n + i])
-                    ? std::max(0.0, ws.rccemis[n + i]) : 0.0;
-                // For full covering the source/public benchmark has no reverse
-                // continuum-emission column.  Both retained phint53 planes
-                // contribute to the forward/inward field.  In v54 their split
-                // produced 3,629 false `emis out` cells, while plane0+plane1
-                // reproduced the oracle `emis in` surface.
-                if (cfrac >= 1.0 - 1.0e-12) return {0.0, plane0 + plane1};
+                    ? ws.rccemis[n + i] : 0.0;
                 return {plane0, plane1};
             };
             const bool have_retained_accumulated_zrems =
@@ -10254,16 +10251,34 @@ void write_spectrum_detail(const std::filesystem::path& path,
                 const double rcc_in = rcc.second;
                 write_int(fptr, 1, row, static_cast<int>(i + 1));
                 write_real4(fptr, 2, row, e.radiation_energy_ev[i]);
-                write_real4(fptr, 3, row, z1[i]);
-                write_real4(fptr, 4, row, 0.0);
-                write_real4(fptr, 5, row, z3[i]);
-                write_real4(fptr, 6, row, 0.0);
-                write_real4(fptr, 7, row, z5[i]);
-                write_real4(fptr, 8, row, continuum_opacity(i));
-                write_real4(fptr, 9, row, rcc_out);
-                write_real4(fptr, 10, row, rcc_in);
-                write_real4(fptr, 11, row, forward_depth[i]);
-                write_real4(fptr, 12, row, 0.0);
+                // fstepr4.f90 publishes the live five-plane zrems, opakc,
+                // rccemis, and dpthc workspaces verbatim (apart from float32
+                // FITS conversion).  When the standalone controller retained
+                // those full-grid arrays, use them directly rather than a
+                // product-time reconstruction.
+                const bool exact_fstepr4 = ws.zrems.size() == 5u * n &&
+                    ws.opakc.size() == n && ws.rccemis.size() == 2u * n &&
+                    ws.dpthc.size() == 2u * n;
+                const double out_z1 = exact_fstepr4 ? ws.zrems[i] : z1[i];
+                const double out_z2 = exact_fstepr4 ? ws.zrems[n + i] : 0.0;
+                const double out_z3 = exact_fstepr4 ? ws.zrems[2u * n + i] : z3[i];
+                const double out_z4 = exact_fstepr4 ? ws.zrems[3u * n + i] : 0.0;
+                const double out_z5 = exact_fstepr4 ? ws.zrems[4u * n + i] : z5[i];
+                const double out_opacity = exact_fstepr4 ? ws.opakc[i] : continuum_opacity(i);
+                const double out_emis = exact_fstepr4 ? ws.rccemis[i] : rcc_out;
+                const double in_emis = exact_fstepr4 ? ws.rccemis[n + i] : rcc_in;
+                const double out_fwd_depth = exact_fstepr4 ? ws.dpthc[i] : forward_depth[i];
+                const double out_back_depth = exact_fstepr4 ? ws.dpthc[n + i] : 0.0;
+                write_real4(fptr, 3, row, out_z1);
+                write_real4(fptr, 4, row, out_z2);
+                write_real4(fptr, 5, row, out_z3);
+                write_real4(fptr, 6, row, out_z4);
+                write_real4(fptr, 7, row, out_z5);
+                write_real4(fptr, 8, row, out_opacity);
+                write_real4(fptr, 9, row, out_emis);
+                write_real4(fptr, 10, row, in_emis);
+                write_real4(fptr, 11, row, out_fwd_depth);
+                write_real4(fptr, 12, row, out_back_depth);
             }
         }
         close_fits(fptr);
