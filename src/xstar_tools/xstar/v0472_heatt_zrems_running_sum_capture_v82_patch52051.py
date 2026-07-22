@@ -21,9 +21,9 @@ from typing import Any
 
 from . import v0472_heatt_zrems_running_sum_capture_v82_patch520 as base
 
-RELEASE = "0.6.48.7.46.25.5.17.25.82-patch5.20.5.1"
+RELEASE = "0.6.48.7.46.25.5.17.25.82-patch5.20.5.1.1"
 SCHEMA = "xstar-tools-v82-patch52051-v0472-literal-type49-errc-capture-v1"
-VERIFY_SCHEMA = "xstar-tools-v82-patch52051-v0472-literal-type49-errc-oracle-v1"
+VERIFY_SCHEMA = "xstar-tools-v82-patch520511-v0472-literal-type49-errc-oracle-v1"
 VERIFY_NAME = "all61_literal_type49_errc_capture_verification.json"
 
 # Extend the generated standalone probe without changing its physical source
@@ -128,9 +128,9 @@ def verify(bundle: Path) -> dict[str, Any]:
             bad_energy.append(r)
     if len(call2) != 1957:
         errors.append(f"call2_rank_rows={len(call2)}")
-    if len(type49) != 797:
+    if len(type49) != 809:
         errors.append(f"literal_type49_rows={len(type49)}")
-    if len(missing_owner) != 105:
+    if len(missing_owner) != 0:
         errors.append(f"ownerless_source_candidate_rows={len(missing_owner)}")
     if wrong_kind:
         errors.append(f"wrong_type49_oracle_kind_rows={len(wrong_kind)}")
