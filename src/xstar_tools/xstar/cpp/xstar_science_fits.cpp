@@ -1,4 +1,5 @@
 #include "xstar_science_fits.hpp"
+#include "xstar_constants.h"
 
 #include <fitsio.h>
 
@@ -601,14 +602,14 @@ double public_detail_population_for_level(
         return compact_population_by_public_global(evaluation, compact_by_global, global_index);
     };
     double value = std::numeric_limits<double>::quiet_NaN();
-    // The public detail population stream has the legacy XSTAR continuum-boundary
-    // ordering: after He I continuum, He II public rows consume the preceding
-    // compact population slot; Mg inserted-continuum rows consume the next ion
-    // ground slot.  This fixes the He/Mg shifted population columns without
-    // changing the already-correct identity and LTE surfaces.
-    if (level.ion_label == "he_ii") value = get(level.global_index - 1);
+    // Public level identities are keyed by their actual ATDB global index.
+    // A previous compatibility patch shifted every He II row by one after the
+    // explicit He I continuum boundary.  Fresh Python/FORTRAN products show
+    // that this is wrong: the shared boundary makes the He I continuum and
+    // He II ground numerically equal, but He II excited rows retain their own
+    // global identities.  Keep only the Mg inserted-continuum fallback below.
+    value = get(level.global_index);
     if (!std::isfinite(value) && level.atomic_number == 12 && level.level_label.find("continu") != std::string::npos) value = get(level.global_index + 1);
-    if (!std::isfinite(value)) value = get(level.global_index);
     if (!std::isfinite(value)) return fallback;
     return value;
 }
@@ -8560,16 +8561,10 @@ void write_population_detail(const std::filesystem::path& path,
         const auto& oracle_lte_surface = oracle_detail_lte_template_v172537();
         const bool have_oracle_detail_lte_surface = oracle_lte_surface.size() == detail_levels.size();
         auto solve_value_for_level = [&](const xstar_run_state::LevelIdentityState& level) -> const SolveRowValue* {
-            // The public level table contains an explicit He I continuum row at
-            // global index 79, while the native solver population stream stores
-            // the He II ground population at that slot.  Therefore every He II
-            // public level is addressed by global_index - 1 in the solver-side
-            // typed population state.  This is an index-map correction, not a
-            // pprint/log value patch.
-            if (level.ion_label == "he_ii" && level.global_index > 1) {
-                auto shifted = solve_rows.find(level.global_index - 1);
-                if (shifted != solve_rows.end()) return &shifted->second;
-            }
+            // Fresh source-product comparison confirms that public He II rows
+            // are addressed by their own global level index.  The explicit He I
+            // continuum row shares the He II ground value but does not shift the
+            // subsequent He II population stream.
             auto found = solve_rows.find(level.global_index);
             if (found != solve_rows.end()) return &found->second;
             return nullptr;
@@ -8747,27 +8742,32 @@ std::size_t safe_workspace_index(long long one_based, std::size_t fallback) {
     return one_based > 0 ? static_cast<std::size_t>(one_based - 1) : fallback;
 }
 
-double vector_value_compact_then_direct(const std::vector<double>& values,
+double vector_value_direct_then_compact(const std::vector<double>& values,
                                         std::size_t direct_index,
                                         std::size_t compact_index) {
-    if (compact_index < values.size() && values[compact_index] != 0.0) return values[compact_index];
-    if (direct_index < values.size()) return values[direct_index];
+    // Native fixed-state line workspaces are indexed by the physical one-based
+    // nplini line pointer.  A compact ordinal is valid only for compact bridge
+    // arrays and must never shadow a live native slot simply because it is
+    // nonzero.  The old compact-first lookup mapped, for example, line 411 to
+    // the value stored at compact ordinal 519/520.
+    if (direct_index < values.size() && std::isfinite(values[direct_index])) return values[direct_index];
+    if (compact_index < values.size() && std::isfinite(values[compact_index])) return values[compact_index];
     return 0.0;
 }
 
-double two_plane_compact_then_direct(const std::vector<double>& values,
+double two_plane_direct_then_compact(const std::vector<double>& values,
                                      std::size_t plane_count,
                                      std::size_t plane,
                                      std::size_t direct_index,
                                      std::size_t compact_index) {
     if (plane_count > 0) {
-        const std::size_t compact = plane * plane_count + compact_index;
-        if (compact_index < plane_count && compact < values.size() && values[compact] != 0.0) return values[compact];
         const std::size_t direct = plane * plane_count + direct_index;
-        if (direct_index < plane_count && direct < values.size()) return values[direct];
+        if (direct_index < plane_count && direct < values.size() && std::isfinite(values[direct])) return values[direct];
+        const std::size_t compact = plane * plane_count + compact_index;
+        if (compact_index < plane_count && compact < values.size() && std::isfinite(values[compact])) return values[compact];
     }
-    if (compact_index < values.size() && values[compact_index] != 0.0) return values[compact_index];
-    if (direct_index < values.size()) return values[direct_index];
+    if (direct_index < values.size() && std::isfinite(values[direct_index])) return values[direct_index];
+    if (compact_index < values.size() && std::isfinite(values[compact_index])) return values[compact_index];
     return 0.0;
 }
 
@@ -8904,19 +8904,46 @@ LineRow line_row_from_identity(const xstar_run_state::LineIdentityState& id,
     // Validate line_indices -> rcem/oplin/tau0 against the physical line index.
     // Compact ordinal addressing is only a fallback/refinement and is never
     // allowed to silently replace a physical line-index miss.
-    const double fallback_raw_emis_out = vector_value_compact_then_direct(ws.elum, direct, compact);
-    const double fallback_emis_out = fallback_raw_emis_out * (public_units ? luminosity_scale_1e38 : density_cm3);
-    const double fallback_opacity = vector_value_compact_then_direct(ws.oplin, direct, compact) * density_cm3;
-    const double fallback_tau_in = two_plane_compact_then_direct(ws.tau0, n, 0, direct, compact);
-    const double fallback_tau_out = two_plane_compact_then_direct(ws.tau0, n, 1, direct, compact);
+    const double fallback_raw_emis_in = two_plane_direct_then_compact(ws.elum, n, 0, direct, compact);
+    const double fallback_raw_emis_out = two_plane_direct_then_compact(ws.elum, n, 1, direct, compact);
+    // ws.elum is already the source cumulative line luminosity in erg/s/1e38.
+    // It must be published directly.  Multiplying it by the shell luminosity
+    // scale a second time inflated option-1/xout_lines1 by ~1e9 in this case.
+    const double fallback_emis_in = fallback_raw_emis_in * (public_units ? 1.0 : density_cm3);
+    const double fallback_emis_out = fallback_raw_emis_out * (public_units ? 1.0 : density_cm3);
+    const double fallback_opacity = vector_value_direct_then_compact(ws.oplin, direct, compact) * density_cm3;
+    const double fallback_tau_in = two_plane_direct_then_compact(ws.tau0, n, 0, direct, compact);
+    const double fallback_tau_out = two_plane_direct_then_compact(ws.tau0, n, 1, direct, compact);
     const bool explicit_final_public = bridge_hit && public_units && bridge && bridge->final_public_complete;
     const bool explicit_final_detail = bridge_hit && !public_units && bridge && bridge->final_detail_complete;
-    if (!bridge_hit || !line_row_has_signal(row)) {
+    // The retained source workspace is the authoritative owner of public line
+    // luminosity.  Historical exact-product bridges may carry rcem*geometry
+    // projections rather than cumulative elum and can therefore be larger by
+    // ~1e9-1e10.  When native elum is present, override only the public
+    // luminosity columns with it; keep final bridge depth semantics intact.
+    const bool native_public_elum = public_units &&
+        (fallback_raw_emis_in != 0.0 || fallback_raw_emis_out != 0.0);
+    if (native_public_elum) {
+        row.emis_in = fallback_raw_emis_in;
+        row.emis_out = fallback_raw_emis_out;
+    }
+    // Public line depths have the same native one-based nplini ownership as
+    // elum.  A compact bridge row can be nonzero yet belong to another line,
+    // so for native publication the live tau0 slot is authoritative even when
+    // a bridge value is present.
+    const bool native_public_tau = public_units && direct < n && ws.tau0.size() >= 2u * n;
+    if (native_public_tau) {
+        row.tau_in = fallback_tau_in;
+        row.tau_out = fallback_tau_out;
+    }
+    if (!bridge_hit || (!native_public_elum && !line_row_has_signal(row))) {
+        row.emis_in = fallback_emis_in;
         row.emis_out = fallback_emis_out;
         row.opacity = fallback_opacity;
         row.tau_in = fallback_tau_in;
         row.tau_out = (explicit_final_public || explicit_final_detail) ? row.tau_out : fallback_tau_out;
     } else {
+        if (row.emis_in == 0.0 && fallback_emis_in != 0.0) row.emis_in = fallback_emis_in;
         if (row.emis_out == 0.0 && fallback_emis_out != 0.0) row.emis_out = fallback_emis_out;
         if (row.opacity == 0.0 && fallback_opacity != 0.0) row.opacity = fallback_opacity;
         if (row.tau_in == 0.0 && fallback_tau_in != 0.0) row.tau_in = fallback_tau_in;
@@ -10155,7 +10182,24 @@ void write_spectrum_detail(const std::filesystem::path& path,
                 if (cfrac >= 1.0 - 1.0e-12) return {0.0, plane0 + plane1};
                 return {plane0, plane1};
             };
-            if (oz == 0) z1 = e.radiation_flux;
+            const bool have_retained_accumulated_zrems =
+                native_standalone_product_state(state) && ws.zrems.size() == 5u * n;
+            if (have_retained_accumulated_zrems) {
+                // advance_source_continuum_radiation_v82_patch52 runs the same
+                // dense bremem + gsmooth + heatt + trnfrn path as the native
+                // controller and stores the cumulative five-plane zrems state
+                // on every accepted boundary.  Publish that state directly.
+                // Reconstructing it here from ContinuumProductDiagnosticState
+                // used only the sparse reduced brcems rows and suppressed the
+                // continuum luminosity by ~2.58 in 5.20.7.3.
+                for (std::size_t i = 0; i < n; ++i) {
+                    z1[i] = std::isfinite(ws.zrems[i]) ? ws.zrems[i] : 0.0;
+                    z3[i] = std::isfinite(ws.zrems[2u * n + i]) ? ws.zrems[2u * n + i] : 0.0;
+                    z5[i] = std::isfinite(ws.zrems[4u * n + i]) ? ws.zrems[4u * n + i] : 0.0;
+                }
+            } else if (oz == 0) {
+                z1 = e.radiation_flux;
+            }
             const auto continuum_diag = read_continuum_diagnostics_expanded_to_full_bins(
                 state, zone.accepted_controller.accepted_sequence, n);
             const double radius = [&]() {
@@ -10169,7 +10213,7 @@ void write_spectrum_detail(const std::filesystem::path& path,
             const double emission_depth = line_tau_depth_cm_for_output_zone(state, emission_depth_index);
             const double emission_shell = std::max(0.0, emission_depth - previous_emission_depth);
             previous_emission_depth = std::max(previous_emission_depth, emission_depth);
-            if (emission_shell > 0.0 && fpr2 > 0.0) {
+            if (!have_retained_accumulated_zrems && emission_shell > 0.0 && fpr2 > 0.0) {
                 for (std::size_t i = 0; i < n; ++i) {
                     const double opacity = continuum_opacity(i);
                     const double tau = opacity * emission_shell;
@@ -10417,8 +10461,22 @@ xstar_run_state::AbundanceRadialRowState abundance_output_base_row_for_zone(
         row.pressure_dyn_cm2 = zone.pressure_dyn_cm2;
         row.temperature_t4 = zone.temperature_t4;
     }
-    const double denom = std::abs(eval.total_heating) > 0.0 ? std::abs(eval.total_heating) : 1.0;
-    row.fractional_heat_error = (eval.total_heating - eval.total_cooling) / denom;
+    // The fourth physical pprint(12) row is emitted after the final residual
+    // transport.  Its thermodynamic state is the call-4 state, but its public
+    // cumulative rdel has reached the full column/density depth.  Keeping the
+    // pre-transport call-4 depth (2*d1 = 0.804892 D) shortened every zrtmp
+    // ion-column integral by the same 0.804892 factor.
+    const bool final_physical_row = state.terminal_synthetic_row_present &&
+        state.radial_zones.size() >= 2u && output_zone_index + 2u == state.radial_zones.size();
+    if (final_physical_row) {
+        const double terminal_depth = benchmark_total_depth_cm_from_parameters(state);
+        if (terminal_depth > 0.0 && std::isfinite(terminal_depth)) row.delta_radius_cm = terminal_depth;
+    }
+
+    // pprint option 17 and xout_abund1 use the controller-owned source
+    // quantity hmctot = 2*(httot-cltot)/(httot+cltot).  Do not reconstruct
+    // a different fractional residual from total_heating alone.
+    row.fractional_heat_error = std::isfinite(eval.hmctot) ? eval.hmctot : 0.0;
     row.terminal_row = false;
     return fill_missing_abundance_geometry(state, output_zone_index, row, &zone);
 }
@@ -10645,6 +10703,13 @@ void write_abundances(const std::filesystem::path& path,
     create_table(fptr, ASCII_TBL, static_cast<long>(state.radial_zones.size()), "HEATING", heating, ascii_e_formats(heating.size()), abundance_units(heating));
     for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
         const long row = static_cast<long>(z + 1);
+        const bool source_unfilled_terminal_thermal_row =
+            state.terminal_synthetic_row_present && z + 1u == state.radial_zones.size();
+        if (source_unfilled_terminal_thermal_row) {
+            write_abundance_base(fptr, row, xstar_run_state::AbundanceRadialRowState{});
+            for (int col = 9; col <= 40; ++col) write_real4(fptr, col, row, 0.0);
+            continue;
+        }
         write_abundance_base(fptr, row, abundance_output_base_row_for_zone(state, z));
         const auto* zone = abundance_output_zone(state, z);
         const xstar_run_state::FixedEvaluationState st_zero{};
@@ -10671,6 +10736,13 @@ void write_abundances(const std::filesystem::path& path,
     create_table(fptr, ASCII_TBL, static_cast<long>(state.radial_zones.size()), "COOLING", cooling, ascii_e_formats(cooling.size()), abundance_units(cooling));
     for (std::size_t z = 0; z < state.radial_zones.size(); ++z) {
         const long row = static_cast<long>(z + 1);
+        const bool source_unfilled_terminal_thermal_row =
+            state.terminal_synthetic_row_present && z + 1u == state.radial_zones.size();
+        if (source_unfilled_terminal_thermal_row) {
+            write_abundance_base(fptr, row, xstar_run_state::AbundanceRadialRowState{});
+            for (int col = 9; col <= 41; ++col) write_real4(fptr, col, row, 0.0);
+            continue;
+        }
         write_abundance_base(fptr, row, abundance_output_base_row_for_zone(state, z));
         const auto* zone = abundance_output_zone(state, z);
         const xstar_run_state::FixedEvaluationState st_zero{};
@@ -10757,6 +10829,7 @@ void write_public_lines(const std::filesystem::path& path,
     const auto pw_line_depth_out = optional_bridge_array_for_hdu(state, "product_write_public_line_depth_outward", 3, pw_line_index.size());
     const auto& public_line_labels = oracle_public_line_label_template_v172537();
     const bool have_product_write_public_lines =
+        !native_standalone_product_state(state) &&
         state.exact_source_workspaces_retained &&
         pw_line_index.size() == public_line_labels.size() &&
         pw_line_emit_in.size() == public_line_labels.size() &&
@@ -10850,118 +10923,105 @@ void write_public_rrc(const std::filesystem::path& path,
                       const xstar_run_state::ProductWritingState& state,
                       const std::vector<ElementMeta>& elements,
                       const std::vector<RowMeta>& rows) {
-    const std::size_t final_index = terminal_physical_zone_index(state);
-    const auto& final_zone = state.radial_zones[final_index];
-    const auto& evaluation = final_zone.accepted_controller.evaluation;
-    // Public RRC emission/depth is the accumulated elumab/tauc surface, not
-    // the local detailed cemab/opakab surface.
-    const auto terminal_detail_rrcs = source_rrc_rows_from_identities(state, evaluation, 6, false);
-    std::map<long long,RrcRow> terminal_by_index;
-    for (const auto& r : terminal_detail_rrcs) terminal_by_index[r.record] = r;
-    auto terminal_for_label = [&](const RrcLabelTemplateRow& label) -> const RrcRow* {
-        const auto direct = terminal_by_index.find(label.index);
-        if (direct != terminal_by_index.end()) return &direct->second;
-        const int z_label = element_z_from_ion_label(label.ion);
-        const int stage_label = roman_stage_from_ion_label(label.ion);
-        const RrcRow* best = nullptr;
-        double best_delta = std::numeric_limits<double>::infinity();
-        const double tolerance = std::max(1.0e-5, std::abs(label.energy_ev) * 2.0e-6);
-        for (const auto& r : terminal_detail_rrcs) {
-            if (r.z != z_label || r.stage != stage_label) continue;
-            const double delta = std::abs(r.energy_ev - label.energy_ev);
-            if (delta <= tolerance && delta < best_delta) { best = &r; best_delta = delta; }
-        }
-        return best;
-    };
-    const auto& public_rrc_labels = oracle_public_rrc_label_template_v172537();
+    (void)elements;
+    (void)rows;
 
-    std::vector<std::map<long long,RrcRow>> diagnostics_by_zone;
-    diagnostics_by_zone.reserve(state.radial_zones.size());
-    for (const auto& zone : state.radial_zones) {
-        diagnostics_by_zone.push_back(diagnostic_rrc_rows_by_index(
-            state, zone.accepted_controller.evaluation, elements, rows,
-            zone.accepted_controller.accepted_sequence));
+    // writespectra4.f90 consumes the *post-transport*, one-based npconi2
+    // accumulators directly and dynamically publishes every live rate-7 RRC
+    // whose accumulated luminosity exceeds the historical 1.e-36 floor:
+    //   elumab(1,kkkl) -> emit_outward
+    //   elumab(2,kkkl) -> emit_inward
+    //   tauc(1,kkkl)   -> depth_outward
+    //   tauc(2,kkkl)   -> depth_inward
+    //
+    // Older native writers selected rows from the frozen 994-row
+    // oracle_public_rrc_label_template_v172537().  That was only a snapshot of
+    // an older Python product and suppressed 58 legitimate Mg VI-IX rows in the
+    // current source-faithful trajectory.  Derive both the public row set and
+    // its metadata from the live native RRC identity/workspace instead.
+    const xstar_run_state::ExactSourceWorkspaceState* public_ws = nullptr;
+    if (!state.radial_zones.empty()) {
+        const auto& ws = state.radial_zones.back().accepted_controller.evaluation.source_workspace;
+        if (ws.elumab.size() >= 4u && ws.tauc.size() >= 4u &&
+            ws.elumab.size() % 2u == 0u && ws.tauc.size() % 2u == 0u) {
+            public_ws = &ws;
+        }
     }
-    auto diagnostic_for_label = [&](const std::map<long long,RrcRow>& diagnostics,
-                                    const RrcLabelTemplateRow& label) -> const RrcRow* {
-        const auto direct = diagnostics.find(label.index);
-        if (direct != diagnostics.end()) return &direct->second;
-        const int z_label = element_z_from_ion_label(label.ion);
-        const int stage_label = roman_stage_from_ion_label(label.ion);
-        const RrcRow* best = nullptr;
-        double best_score = std::numeric_limits<double>::infinity();
-        const double energy_tol = std::max(1.0e-5, std::abs(label.energy_ev) * 2.0e-6);
-        for (const auto& kv : diagnostics) {
-            const auto& d = kv.second;
-            if (d.z != z_label || d.stage != stage_label) continue;
-            const double de = std::abs(d.energy_ev - label.energy_ev);
-            if (de <= energy_tol && de < best_score) { best = &d; best_score = de; }
-        }
-        return best;
-    };
+    const std::size_t elumab_stride = public_ws ? public_ws->elumab.size() / 2u : 0u;
+    const std::size_t tauc_stride = public_ws ? public_ws->tauc.size() / 2u : 0u;
 
-    fitsfile* fptr = create_fits(path, state); write_parameters(fptr, state.parameter_rows);
-    create_table(fptr, ASCII_TBL, static_cast<long>(public_rrc_labels.size()), "XSTAR_SPECTRA",
-        {"index","ion","level","energy","emit_outward","emit_inward","depth_outward","depth_inward"},
-        {native_standalone_product_state(state) ? "I12" : "I6","A9","A20","E13.5","E13.5","E13.5","E13.5","E13.5"}, {"","","","eV","erg","erg","",""});
-    for (std::size_t i = 0; i < public_rrc_labels.size(); ++i) {
-        const auto& label = public_rrc_labels[i];
+    // Retain the old identity/diagnostic path only as a fail-safe when a
+    // non-standalone caller has no native accumulated source workspace.
+    std::map<long long,RrcRow> fallback_by_index;
+    if (!public_ws) {
+        const std::size_t final_index = terminal_physical_zone_index(state);
+        const auto& evaluation = state.radial_zones[final_index].accepted_controller.evaluation;
+        for (const auto& r : source_rrc_rows_from_identities(state, evaluation, 6, false)) {
+            fallback_by_index[r.record] = r;
+        }
+    }
+
+    struct PublicRrcRowV82Patch52094 {
+        const xstar_run_state::RrcIdentityState* identity = nullptr;
         double emit_out = 0.0;
         double emit_in = 0.0;
         double depth_out = 0.0;
         double depth_in = 0.0;
-        bool accumulated = false;
-        if (const RrcRow* retained_terminal = terminal_for_label(label)) {
-            // heatt already accumulates elumab in public luminosity units and
-            // tauc in optical-depth units.  Do not shell-scale them again.
-            // Source writespectra4 public orientation:
-            // plane 0 -> outward, plane 1 -> inward.
-            emit_out = std::isfinite(retained_terminal->emis_in) ? retained_terminal->emis_in : 0.0;
-            emit_in = std::isfinite(retained_terminal->emis_out) ? retained_terminal->emis_out : 0.0;
-            depth_out = std::isfinite(retained_terminal->tau_in) ? retained_terminal->tau_in : 0.0;
-            depth_in = std::isfinite(retained_terminal->tau_out) ? retained_terminal->tau_out : 0.0;
-            accumulated = emit_out != 0.0 || emit_in != 0.0 || depth_out != 0.0 || depth_in != 0.0;
-        }
-        for (std::size_t z = 0; !accumulated && z < state.radial_zones.size(); ++z) {
-            const RrcRow* d = diagnostic_for_label(diagnostics_by_zone[z], label);
-            if (!d) continue;
-            const double shell_scale = physical_shell_luminosity_scale_1e38_for_output_zone(state, z);
-            const double shell_depth = physical_incremental_shell_depth_cm_for_output_zone(state, z);
-            if (shell_scale > 0.0) {
-                // heatt.f90 public RRC luminosity uses (cemab1+cemab2)/2
-                // for each direction, independent of the local escape split.
-                const double split = 0.5 * (std::max(0.0, d->emis_in) + std::max(0.0, d->emis_out)) * shell_scale;
-                emit_out += split;
-                emit_in += split;
-                accumulated = true;
+    };
+    std::vector<PublicRrcRowV82Patch52094> public_rows;
+    public_rows.reserve(state.rrc_identities.size());
+    for (const auto& identity : state.rrc_identities) {
+        if (identity.continuum_index <= 0) continue;
+        const std::size_t slot = static_cast<std::size_t>(identity.continuum_index);
+        PublicRrcRowV82Patch52094 row;
+        row.identity = &identity;
+        if (public_ws) {
+            if (slot < elumab_stride) {
+                const double v0 = public_ws->elumab[slot];
+                const double v1 = public_ws->elumab[elumab_stride + slot];
+                row.emit_out = std::isfinite(v0) ? v0 : 0.0;
+                row.emit_in = std::isfinite(v1) ? v1 : 0.0;
             }
-            if (shell_depth > 0.0 && d->opacity > 0.0) {
-                depth_out += d->opacity * shell_depth;
-                accumulated = true;
+            if (slot < tauc_stride) {
+                const double v0 = public_ws->tauc[slot];
+                const double v1 = public_ws->tauc[tauc_stride + slot];
+                row.depth_out = std::isfinite(v0) ? v0 : 0.0;
+                row.depth_in = std::isfinite(v1) ? v1 : 0.0;
             }
-        }
-        if (!accumulated) {
-            const auto found = terminal_by_index.find(label.index);
-            if (found != terminal_by_index.end()) {
-                emit_out = std::isfinite(found->second.emis_in) ? found->second.emis_in : 0.0;
-                emit_in = std::isfinite(found->second.emis_out) ? found->second.emis_out : 0.0;
-                depth_out = std::isfinite(found->second.tau_in) ? found->second.tau_in : 0.0;
-                depth_in = std::isfinite(found->second.tau_out) ? found->second.tau_out : 0.0;
+        } else {
+            const auto found = fallback_by_index.find(identity.continuum_index);
+            if (found != fallback_by_index.end()) {
+                row.emit_out = std::isfinite(found->second.emis_in) ? found->second.emis_in : 0.0;
+                row.emit_in = std::isfinite(found->second.emis_out) ? found->second.emis_out : 0.0;
+                row.depth_out = std::isfinite(found->second.tau_in) ? found->second.tau_in : 0.0;
+                row.depth_in = std::isfinite(found->second.tau_out) ? found->second.tau_out : 0.0;
             }
         }
+        if (row.emit_out > xstar_constants::kLegacyWritespectra4RrcLuminosityFloor ||
+            row.emit_in > xstar_constants::kLegacyWritespectra4RrcLuminosityFloor) {
+            public_rows.push_back(row);
+        }
+    }
+
+    fitsfile* fptr = create_fits(path, state); write_parameters(fptr, state.parameter_rows);
+    create_table(fptr, ASCII_TBL, static_cast<long>(public_rows.size()), "XSTAR_SPECTRA",
+        {"index","ion","level","energy","emit_outward","emit_inward","depth_outward","depth_inward"},
+        {"I6","A9","A20","E13.5","E13.5","E13.5","E13.5","E13.5"}, {"","","","eV","erg/s","erg/s","",""});
+    for (std::size_t i = 0; i < public_rows.size(); ++i) {
+        const auto& row_data = public_rows[i];
+        const auto& label = *row_data.identity;
         const long row = static_cast<long>(i + 1);
-        write_int(fptr, 1, row, label.index);
-        write_string(fptr, 2, row, oracle_ion_label(label.ion));
+        write_int(fptr, 1, row, label.continuum_index);
+        write_string(fptr, 2, row, label.ion_label);
         write_string(fptr, 3, row, label.lower_level);
-        write_real4(fptr, 4, row, label.energy_ev);
-        write_real4(fptr, 5, row, emit_out);
-        write_real4(fptr, 6, row, emit_in);
-        write_real4(fptr, 7, row, depth_out);
-        write_real4(fptr, 8, row, depth_in);
+        write_real4(fptr, 4, row, label.threshold_ev);
+        write_real4(fptr, 5, row, row_data.emit_out);
+        write_real4(fptr, 6, row, row_data.emit_in);
+        write_real4(fptr, 7, row, row_data.depth_out);
+        write_real4(fptr, 8, row, row_data.depth_in);
     }
     close_fits(fptr);
 }
-
 
 void write_public_spectrum(const std::filesystem::path& path,
                            const xstar_run_state::ProductWritingState& state,

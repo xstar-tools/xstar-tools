@@ -602,6 +602,39 @@ const LevelValue* find_snapshot(const Layout& l,int ion,int column) {
     auto ti=l.snapshots.find(ion); if (ti==l.snapshots.end()) return nullptr; auto vi=ti->second.find(column); return vi==ti->second.end()?nullptr:&vi->second;
 }
 
+// v82 patch 5.20.7: literal ucalc/deleafnd Type-50 damping ownership.
+// Source ucalc first asks deleafnd(jkion,idest1), which walks rate-type 41
+// records for the same parent ion and matches idat1(np1i+1) to the upper
+// local level.  If no match is found, ucalc falls back to the Type-50 Aij.
+// Both source branches convert s^-1 to eV with the historical 4.136e-15
+// factor before linopac computes its Voigt damping parameter.
+constexpr double kSourcePlanckEvSecondV82Patch5207 = 4.136e-15;
+
+double type50_natural_width_ev_v82_patch5207(
+    AtdbReader& db, const Derived& d, int ion, int upper_local, double fallback_aij_s
+) {
+    if (ion > 0 && upper_local > 0 && 41 <= d.max_rate &&
+        static_cast<std::size_t>(ion) < d.npfi[41].size()) {
+        int rec = d.npfi[41][ion];
+        const int parent = rec > 0 && rec < static_cast<int>(d.npar.size()) ? d.npar[rec] : 0;
+        int guard = 0;
+        while (rec > 0 && rec < static_cast<int>(d.npar.size()) && d.npar[rec] == parent) {
+            const auto iv = db.ints(rec);
+            const auto rv = db.reals(rec);
+            if (iv.size() >= 2 && static_cast<int>(iv[1]) == upper_local && rv.size() >= 3 &&
+                std::isfinite(rv[2])) {
+                return rv[2] * kSourcePlanckEvSecondV82Patch5207;
+            }
+            const int next = d.npnxt[rec];
+            if (next == rec) throw std::runtime_error("Type-41 damping record self-cycle");
+            rec = next;
+            if (++guard > static_cast<int>(db.record_count()))
+                throw std::runtime_error("Type-41 damping record cycle");
+        }
+    }
+    return fallback_aij_s * kSourcePlanckEvSecondV82Patch5207;
+}
+
 LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int rec,int element_index,
                            const std::unordered_map<int,int>& ion_record_to_index) {
     const auto& h=db.header(rec); const int dt=h.data_type, rt=h.rate_type;
@@ -625,7 +658,11 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
         if ((e1/(1.0e-24+e2)-1.0)<1.0e-8) { lower=r1; upper=r2; } else { lower=r2; upper=r1; }
         auto scalar=local_pair(l,ion,id1,id2); double wavelength=std::abs(rr[0]),aij=rr[2]; double gup=row_weight(l,scalar.second),glo=row_weight(l,scalar.first);
         double oscillator=wavelength<=0?0.0:1.0e-16*aij*gup*wavelength*wavelength/(0.667274*glo); energy=std::abs(e1-e2);
-        out.reals={aij,oscillator,wavelength,energy,e1,e2}; out.ints={id1,id2}; width=0.0;
+        // Literal ucalc swaps idest1/idest2 only when the first endpoint energy
+        // is lower, then passes that source upper local level to deleafnd.
+        const int source_upper_local = e1 < e2 ? id2 : id1;
+        width=type50_natural_width_ev_v82_patch5207(db,d,ion,source_upper_local,aij);
+        out.reals={aij,oscillator,wavelength,energy,e1,e2}; out.ints={id1,id2};
     }
     else if (dt==51 || dt==56 || dt==69) { need(ii.size()>=2,"short integer payload"); int a=0,c=0; if(dt==51){need(ii.size()>=3,"short integer payload");a=ii[2];c=ii[1];out.ints={ii[0]};}else{a=ii[0];c=ii[1];out.ints.clear();} auto q=local_pair(l,ion,a,c);lower=q.first;upper=q.second;energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
     else if (dt==54) { need(ii.size()>=4,"short integer payload"); int a=ii[ii.size()-4],c=ii[ii.size()-3],iq=ii[ii.size()-2];auto q=local_pair(l,ion,a,c);lower=q.first;upper=q.second;int ni=row_n(l,upper),nf=row_n(l,lower),li=row_l(l,upper),lf=row_l(l,lower);need(ni>0&&nf>0&&li>=0&&lf>=0&&iq>0,"missing quantum numbers");if(ni<nf)std::swap(ni,nf);out.reals.clear();out.ints={ni,nf,li,lf,iq};energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
@@ -654,7 +691,15 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
         // calculated above.  Do not replace those values with the historical
         // cross-stage owner thresholds.  Retain the two older overrides that
         // are outside the proved 5.19.5 correction scope.
-        static const std::map<int,double> special={{39812,1521.5673489870824},{39854,1885.3930248406186}};int owner=ion;auto si=special.find(rec);if(si!=special.end()){threshold=si->second;owner=ion+1;}out.reals.clear();for(std::size_t k=0;k<rr.size();++k)out.reals.push_back(k%2?rr[k]*1.0e-18:rr[k]);out.reals.push_back(threshold);out.reals.push_back(bound->energy);out.ints={static_cast<std::int64_t>(rr.size()/2),owner,local};energy=threshold; }
+        static const std::map<int,double> special={{39812,1521.5673489870824},{39854,1885.3930248406186}};int owner=ion;auto si=special.find(rec);if(si!=special.end()){threshold=si->second;owner=ion+1;}out.reals.clear();for(std::size_t k=0;k<rr.size();++k)out.reals.push_back(k%2?rr[k]*1.0e-18:rr[k]);out.reals.push_back(threshold);out.reals.push_back(bound->energy);
+        // v82 patch 5.20.10: calc_emis_ion rate-42 computes abund2 from
+        // the raw caller idest2 (idat1(np1i+nidt-4)) before UCalc label 88
+        // resets idest2 to nlevp for its Milne/statistical-weight work.
+        // Retain that caller endpoint as internal metadata.  The legacy
+        // three-field payload remains accepted by the fixed-state engine so
+        // old compact fixtures continue to load.
+        const int calc_emis_idest2=ii.size()>=4?ii[ii.size()-4]:b.nlev;
+        out.ints={static_cast<std::int64_t>(rr.size()/2),owner,local,calc_emis_idest2};energy=threshold; }
     else if (dt==95) { need(rr.size()>=6&&ii.size()>=2,"short payload");if(rt==5){int id1=ii[0],id2=b.nlev-1+(ii.size()>=3?ii[1]:1);lower=row_for_local(l,ion,id1);upper=row_for_idest(l,b,id2);}else lower=upper=row_for_local(l,ion,1);out.ints.push_back(row_for_local(l,ion,b.nlev));energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
     else if (dt==99) {
         need(ii.size()>=4&&rr.size()>=8,"short payload");int setup_idest1=ii[ii.size()-2];int id1=std::min<int>(setup_idest1,std::max(b.nlev-1,1)),id2=b.nlev+ii[ii.size()-4]-1;lower=row_for_local(l,ion,id1);upper=row_for_idest(l,b,id2);const auto* bound=find_level(l,ion,id1);const auto* setup_bound=find_level(l,ion,setup_idest1);const auto* parentlv=find_level(l,ion,b.nlev);need(bound&&setup_bound&&parentlv,"lacks literal bound/parent levels");const double source_errc_rank_energy=std::max(0.1,setup_bound->ionpot-setup_bound->energy);double dest_e=parentlv->energy,dest_w=parentlv->weight,ex_e=0,ex_w=0,threshold=0;int ex_mode=0;
@@ -850,7 +895,31 @@ ProgramStorage lower_atdb_in_memory(const std::filesystem::path& atdb,const Prod
         for(std::size_t li=0;li<rit->second.size();++li){int rec=rit->second[li];auto lr=lower_record(db,d,l,rec,ei,ion_record_to_index);lr.record.source_position=4*static_cast<std::int64_t>(global_record+1);lr.record.next_index=(li+1<rit->second.size())?static_cast<int>(global_record+1):-1;lr.record.real_offset=out.reals.size();lr.record.real_count=lr.reals.size();lr.record.int_offset=out.ints.size();lr.record.int_count=lr.ints.size();out.reals.insert(out.reals.end(),lr.reals.begin(),lr.reals.end());out.ints.insert(out.ints.end(),lr.ints.begin(),lr.ints.end());out.records.push_back(lr.record);++global_record;
             const auto& h=db.header(rec);const int parent=d.npar[rec];const int ion=ion_record_to_index[parent];const auto& b=block_for(l,ion);auto iv=db.ints(rec);auto rv=db.reals(rec);
             if(d.nplini[rec]>0){xstar_run_state::LineIdentityState id;id.line_index=d.nplini[rec];id.wavelength_angstrom=!rv.empty()?std::abs(rv[0]):(lr.record.line_energy_ev>0?kEvAngstrom/lr.record.line_energy_ev:0.0);id.ion_label=normalized_ion_label(b);int a=iv.size()>=2?iv[0]:1,c=iv.size()>=2?iv[1]:b.nlev;const auto* la=find_level(l,ion,a);const auto* lc=find_level(l,ion,c);id.lower_level=la?la->label:"";id.upper_level=lc?lc->label:"";id.rate_type=h.rate_type;id.data_type=h.data_type;id.atomic_mass=mass_for_z(z);id.natural_rate_s=rv.size()>=3?rv[2]:0.0;id.source_record=rec;id.lower_local_index=a;id.upper_local_index=c;out.line_identities.push_back(id);}
-            if(d.npconi2[rec]>0){xstar_run_state::RrcIdentityState id;id.continuum_index=d.npconi2[rec];int local=iv.size()>=2?iv[iv.size()-2]:1;const auto* lv=find_level(l,ion,local);id.level_global_index=lv?d.level_global_by_record[lv->record]:0;id.threshold_ev=lr.record.line_energy_ev;id.ion_label=normalized_ion_label(b);id.lower_level=lv?lv->label:"";id.upper_level="continuum";id.lower_local_index=local;id.upper_local_index=b.nlev;out.rrc_identities.push_back(id);}
+            if(d.npconi2[rec]>0){
+                // Literal pprint.f90/writespectra4.f90 identity metadata is
+                // distinct from the UCalc physical threshold used by the
+                // bound-free kernel.  The public edge energy is
+                //   rlev(4,idest1)-rlev(1,idest1),
+                // while idest2 is nlevp + the fourth-to-last packed INTEGER
+                // seed - 1.  Do not publish lr.record.line_energy_ev here:
+                // Type-53 may include the excited-parent correction in that
+                // kernel coordinate, and Type-49 carries its setup/rank
+                // coordinate separately.
+                xstar_run_state::RrcIdentityState id;
+                id.continuum_index=d.npconi2[rec];
+                const int local=iv.size()>=2?static_cast<int>(iv[iv.size()-2]):1;
+                const int upper_seed=iv.size()>=4?static_cast<int>(iv[iv.size()-4]):0;
+                const auto* lv=find_level(l,ion,local);
+                id.level_global_index=lv?d.level_global_by_record[lv->record]:0;
+                const double source_threshold=lv?(lv->ionpot-lv->energy):lr.record.line_energy_ev;
+                id.threshold_ev=std::isfinite(source_threshold)?source_threshold:lr.record.line_energy_ev;
+                id.ion_label=normalized_ion_label(b);
+                id.lower_level=lv?lv->label:"";
+                id.upper_level="continuum";
+                id.lower_local_index=local;
+                id.upper_local_index=upper_seed>0?b.nlev+upper_seed-1:0;
+                out.rrc_identities.push_back(id);
+            }
         }
     }
     std::sort(out.level_identities.begin(),out.level_identities.end(),[](const auto&a,const auto&b){return a.global_index<b.global_index;});out.level_identities.erase(std::unique(out.level_identities.begin(),out.level_identities.end(),[](const auto&a,const auto&b){return a.global_index==b.global_index;}),out.level_identities.end());

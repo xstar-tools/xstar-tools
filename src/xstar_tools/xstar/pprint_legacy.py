@@ -730,7 +730,7 @@ def _option24_absorption_edge_depths(state: XSTARPythonState, buf: LegacyPprintB
         " ",
         " print option:24",
         " absorption edge depths",
-        " index, local endpoint, ion, level, energy (eV), depth ",
+        " index, ion, level, energy (eV), depth ",
     ])
     out_index = 0
     for row in _active_rrc_rows_by_index(state, rows):
@@ -751,9 +751,13 @@ def _option24_absorption_edge_depths(state: XSTARPythonState, buf: LegacyPprintB
         upper = str(getattr(row, "upper_level", "continuum")).strip()[:20]
         energy = float(getattr(row, "threshold_eV", 0.0))
         level = int(getattr(row, "level_global_index", 0))
-        local_endpoint = int(getattr(row, "lower_local_index", 0) or getattr(row, "upper_local_index", 0) or level)
+        lower_local = int(getattr(row, "lower_local_index", 0) or 0)
+        upper_local = int(getattr(row, "upper_local_index", 0) or 0)
+        # pprint.f90 label 9293: kkkl, mmlv, ion, idest1, idest2, labels,
+        # threshold, inward depth, outward depth.  Option 24 uses the same
+        # row format as option 19.
         buf.log_lines.append(
-            f"{ci:7d}{local_endpoint:6d} {ion:<8s}{level:8d} {lower:<20s} {upper:<20s}"
+            f"{ci:7d}{level:6d} {ion:<8s}{lower_local:6d}{upper_local:6d} {lower:<20s} {upper:<20s}"
             f"{energy:13.3E}{backward:13.3E}{forward:13.3E}"
         )
     buf.source_calls.append("pprint(24)")
@@ -823,8 +827,8 @@ def _option19_recombination_continuum_luminosities(state: XSTARPythonState, buf:
         " recombination continuum luminosities(erg/sec/10**38))",
         " index, ion, level, energy (eV), RRC luminosity ",
     ])
-    for out_index, row in enumerate(_active_rrc_rows_by_index(state, rows), start=1):
-        ci = int(getattr(row, "continuum_index", out_index))
+    for row in _active_rrc_rows_by_index(state, rows):
+        ci = int(getattr(row, "continuum_index", 0))
         idx = ci - 1
         if idx < 0 or idx >= elumab.shape[1]:
             continue
@@ -844,7 +848,7 @@ def _option19_recombination_continuum_luminosities(state: XSTARPythonState, buf:
         # continuum/destination ordinal, not the global packed level index.
         # Keep the global level only as an internal metadata field.
         buf.log_lines.append(
-            f"{out_index:7d}{level:6d} {ion:<8s}{lower_local:8d}{upper_local:6d} {lower:<20s} {upper:<20s}"
+            f"{ci:7d}{level:6d} {ion:<8s}{lower_local:6d}{upper_local:6d} {lower:<20s} {upper:<20s}"
             f"{energy:13.3E}{out_lum:13.3E}{in_lum:13.3E}"
         )
     buf.source_calls.append("pprint(19)")
@@ -891,6 +895,31 @@ def _option5_energy_sums(state: XSTARPythonState, buf: LegacyPprintBuffers) -> N
         f" energy sums: abs, cont, line, err:{absorbed:13.5E}{cont:13.5E}{line:13.5E}{err:13.5E}",
     ])
     buf.source_calls.append("pprint(5)")
+
+
+def _final_zero_thickness_print(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
+    """Emit xstar.f90's post-radial ``final print`` block.
+
+    The block is not pprint(17).  Source XSTAR performs a final
+    ``xstarcalc`` with ``delr=1.e-15`` and ``nlimd=0``, then HEATT/STPCUT,
+    writes ``t, httot, cltot, hmctot`` with ``4(1pe16.8)``, and only then
+    calls pprint(22).  ``run_output_writer_sequence`` owns that recompute and
+    records the exact resulting scalars here.
+    """
+    payload = state.outputs.get("final_local_recompute")
+    if not isinstance(payload, Mapping):
+        return
+    required = ("temperature_t4", "httot", "cltot", "hmctot")
+    if not all(key in payload for key in required):
+        return
+    lpri = int(state.control.get("requested_lpri", state.control.get("lpri", 0)))
+    buf.log_lines.extend([
+        " ",
+        f"  final print:{lpri:12d}",
+        "".join(f"{float(payload[key]):16.8E}" for key in required),
+        " ",
+    ])
+    buf.source_calls.append("xstar(final-zero-thickness-print)")
 
 
 def _option22_final_lines(state: XSTARPythonState, buf: LegacyPprintBuffers) -> tuple[str, str, str, str]:
@@ -1055,6 +1084,7 @@ def finalize_legacy_pprint(
         return (), {}
     buf = initialize_legacy_pprint(state)
     requested_lpri = int(state.control.get("requested_lpri", state.control.get("lpri", 0)))
+    _final_zero_thickness_print(state, buf)
     _option22_final_lines(state, buf)
     buf.log_lines.extend([" ", " print option:11"])
     if "pprint(11)" not in buf.source_calls:

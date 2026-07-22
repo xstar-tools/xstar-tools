@@ -446,7 +446,7 @@ void prepare_native_product_state(
     const bool native_live_product_surface_ready =
         state.parameter_rows.size() >= 56u &&
         state.line_identities.size() >= 600u &&
-        state.rrc_identities.size() >= 994u;
+        state.rrc_identities.size() >= 1849u;
     const bool native_live_retention_ready = !bridge_manifest_present && native_live_product_surface_ready;
     const bool product_state_ready = native_loader_ready || native_live_retention_ready;
     const bool native_product_write_gate_enabled = native_live_retention_ready || (manifest_bool(bridge_manifest, "cfitsio_public_product_writing_enabled") &&

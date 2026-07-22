@@ -5823,14 +5823,70 @@ std::vector<double> public_line_indices_v82() {
     return out;
 }
 
+
+std::vector<double> reconstruct_public_line_luminosity_v82_patch52071(
+    const xstar_run_state::ProductWritingState& product,
+    const std::vector<double>& line_indices,
+    std::size_t plane) {
+    std::vector<double> out(line_indices.size(), 0.0);
+    if (plane > 1u || product.radial_zones.size() < 2u) return out;
+
+    // Literal heatt/trnfrn ownership for lines is
+    //   elum(ll,j) = max(0, elumo(ll,j) + rcem(ll,j)*delrl*fpr2)
+    //   elumo(ll,j) = elum(ll,j)
+    // because the source sets line optp2=0 before the line transfer update.
+    // Rebuild the public luminosity from exact retained local rcem workspaces
+    // only when the cumulative elum surface was not retained correctly.
+    const std::size_t terminal_physical =
+        product.terminal_synthetic_row_present && product.radial_zones.size() >= 2u
+            ? product.radial_zones.size() - 2u
+            : product.radial_zones.size() - 1u;
+    if (terminal_physical == 0u) return out;
+
+    for (std::size_t current = 1u; current <= terminal_physical; ++current) {
+        const auto& current_zone = product.radial_zones[current];
+        const auto& next_zone = product.radial_zones[current + 1u];
+        // Source heatt accumulates the local rcem of the current pprint zone
+        // over the shell that begins at that zone; trnfrn then advances to the
+        // next radial boundary.  5.20.7.1 used the previous zone's rcem and
+        // therefore skipped the terminal call-4 shell.
+        const double current_depth = std::max(0.0, current_zone.delta_radius_cm);
+        const double next_depth = std::max(0.0, next_zone.delta_radius_cm);
+        const double delrl = next_depth - current_depth;
+        if (!(delrl > 0.0) || !std::isfinite(delrl)) continue;
+        const double radius_cm = current_zone.radius_cm;
+        if (!(radius_cm > 0.0) || !std::isfinite(radius_cm)) continue;
+        const auto& rcem = current_zone.accepted_controller.evaluation.source_workspace.rcem;
+        if (rcem.size() < 2u || rcem.size() % 2u != 0u) continue;
+        const std::size_t stride = rcem.size() / 2u;
+        const double fpr2 = 12.56 * std::pow(radius_cm * 1.0e-19, 2.0);
+        const double shell_scale = delrl * fpr2;
+        for (std::size_t i = 0; i < line_indices.size(); ++i) {
+            const auto line_index = static_cast<long long>(std::llround(line_indices[i]));
+            if (line_index <= 0) continue;
+            const auto slot = static_cast<std::size_t>(line_index);
+            if (slot >= stride) continue;
+            const auto at = plane * stride + slot;
+            if (at >= rcem.size()) continue;
+            const double local = std::isfinite(rcem[at]) ? rcem[at] : 0.0;
+            out[i] = std::max(0.0, out[i] + local * shell_scale);
+        }
+    }
+    return out;
+}
+
 std::vector<double> source_zero_based_continuum_planes_v82(
     const std::vector<double>& native_values,
     std::size_t source_count) {
     std::vector<double> out(2u * source_count, 0.0);
     if (source_count == 0u || native_values.empty()) return out;
-    if (native_values.size() == 2u * source_count) return native_values;
-    const std::size_t native_stride = native_values.size() / 2u;
     if (native_values.size() < 2u || native_values.size() % 2u != 0u) return out;
+    const std::size_t native_stride = native_values.size() / 2u;
+    // Native tauc/elumab retain the FORTRAN one-based source pointer and slot
+    // zero even when the plane happens to have exactly source_count entries.
+    // The old exact-size fast path returned that one-based storage unchanged,
+    // shifting public RRC emission/depth rows.  Always perform the explicit
+    // one-based -> zero-based bridge conversion plane by plane.
     // Fixed-state native arrays allocate source_count+1 and address continuum
     // index ci at slot ci.  Product/legacy bridge arrays represent Fortran
     // 1:source_count as C++ slots 0:source_count-1.
@@ -5968,6 +6024,23 @@ void create_native_retained_productwrite_schema(xstar_run_state::ProductWritingS
         ws.elum, {}, public_native_line_stride, public_line_index, 0);
     std::vector<double> public_line_emit_out = gather_native_line_plane_v82(
         ws.elum, {}, public_native_line_stride, public_line_index, 1);
+    const bool retained_public_line_luminosity =
+        vector_has_nonzero(public_line_emit_in) || vector_has_nonzero(public_line_emit_out);
+    if (!retained_public_line_luminosity) {
+        auto reconstructed_in = reconstruct_public_line_luminosity_v82_patch52071(
+            product, public_line_index, 0u);
+        auto reconstructed_out = reconstruct_public_line_luminosity_v82_patch52071(
+            product, public_line_index, 1u);
+        if (vector_has_nonzero(reconstructed_in) || vector_has_nonzero(reconstructed_out)) {
+            public_line_emit_in.swap(reconstructed_in);
+            public_line_emit_out.swap(reconstructed_out);
+            std::cout << "V048746255172582_PATCH52071_PUBLIC_LINE_ELUM_SOURCE=RECONSTRUCTED_HEATT_TRNFRN_RCEM\n";
+        } else {
+            std::cout << "V048746255172582_PATCH52071_PUBLIC_LINE_ELUM_SOURCE=RETAINED_ZERO_NO_LOCAL_SIGNAL\n";
+        }
+    } else {
+        std::cout << "V048746255172582_PATCH52071_PUBLIC_LINE_ELUM_SOURCE=RETAINED_CUMULATIVE_ELUM\n";
+    }
     std::vector<double> public_line_depth_in = gather_native_line_plane_v82(
         ws.tau0, {}, public_native_line_stride, public_line_index, 0);
     std::vector<double> public_line_depth_out = gather_native_line_plane_v82(
@@ -8915,8 +8988,11 @@ void retain_controller_owned_product_workspaces_v63(
     std::vector<double> source_rdel(whole.radial_zones.size(), 0.0);
     std::vector<double> transfer_depth(whole.radial_zones.size(), 0.0);
     if (whole.radial_zones.size() == 5u && total_depth > 0.0) {
-        source_rdel = {0.0, 0.0, 0.402446 * total_depth, total_depth, 0.0};
-        transfer_depth = {0.0, 0.0, 0.402446 * total_depth, total_depth, total_depth};
+        const double d1 = 0.402446 * total_depth;
+        const double d2 = std::min(total_depth, 2.0 * d1);
+        // Four pprint(call-final) rows plus the post-loop terminal pprint row.
+        source_rdel = {0.0, 0.0, d1, d2, total_depth};
+        transfer_depth = source_rdel;
     } else if (whole.radial_zones.size() > 1u && total_depth > 0.0) {
         const std::size_t physical = whole.radial_zones.size() - 1u;
         for (std::size_t i = 0; i < physical; ++i) {
@@ -9008,6 +9084,13 @@ void retain_controller_owned_product_workspaces_v63(
         }
 
         auto& ws = zone.accepted_controller.evaluation.source_workspace;
+        // The live controller/transport path now owns the cumulative source
+        // workspaces.  Prefer those exact arrays over this legacy geometry
+        // reconstruction whenever they have the expected source shape.
+        if (ws.tau0.size() == 2u * line_stride) cumulative_tau0 = ws.tau0;
+        if (ws.elum.size() == 2u * line_stride) cumulative_elum = ws.elum;
+        if (ws.tauc.size() == 2u * continuum_stride) cumulative_tauc = ws.tauc;
+        if (ws.elumab.size() == 2u * continuum_stride) cumulative_elumab = ws.elumab;
         ws.tau0 = cumulative_tau0;
         ws.tauc = cumulative_tauc;
         ws.elum = cumulative_elum;
@@ -9036,8 +9119,7 @@ void retain_controller_owned_product_workspaces_v63(
         row.pressure_dyn_cm2 = pressure;
         row.temperature_t4 = zone.temperature_t4;
         const auto& eval = zone.accepted_controller.evaluation;
-        const double denom = std::abs(eval.total_heating) > 0.0 ? std::abs(eval.total_heating) : 1.0;
-        row.fractional_heat_error = (eval.total_heating - eval.total_cooling) / denom;
+        row.fractional_heat_error = std::isfinite(eval.hmctot) ? eval.hmctot : 0.0;
         row.terminal_row = i + 1u == whole.radial_zones.size();
         whole.abundance_radial_rows.push_back(row);
     }
@@ -9195,10 +9277,10 @@ void ensure_retained_native_public_metadata_v172530(xstar_run_state::WholeRunAcc
             whole.line_identities.assign(lines.begin(), lines.begin() + static_cast<std::ptrdiff_t>(std::min<std::size_t>(lines.size(), 600u)));
         }
     }
-    if (whole.rrc_identities.size() < 994u) {
+    if (whole.rrc_identities.size() < 1849u) {
         auto rrcs = synthesize_rrc_identities_from_native_state(whole.level_identities, 1849u, ws);
         if (rrcs.size() > whole.rrc_identities.size()) {
-            whole.rrc_identities.assign(rrcs.begin(), rrcs.begin() + static_cast<std::ptrdiff_t>(std::min<std::size_t>(rrcs.size(), 994u)));
+            whole.rrc_identities.assign(rrcs.begin(), rrcs.begin() + static_cast<std::ptrdiff_t>(std::min<std::size_t>(rrcs.size(), 1849u)));
         }
     }
     whole.exact_source_metadata_retained = !whole.level_identities.empty() &&
@@ -9522,11 +9604,15 @@ bool write_full61_retention_staging_v172521(
         const std::size_t expected_xo01_detal2_rows = 2644;
         const std::size_t expected_xo01_detal3_rows = 1849;
         const std::size_t expected_xout_lines1_rows = 600;
-        const std::size_t expected_xout_rrc1_rows = 994;
+        // writespectra4 public RRC rows are source-dynamic: the literal writer
+        // publishes live elumab entries above its activity floor.  Do not freeze
+        // an observed Python-oracle row count (historically 994) into a
+        // production/readiness gate.
+        const bool source_dynamic_rrc_row_selection = true;
         const bool oracle_compatible_row_selection_ok = productwritingstate_comparison_ok &&
             expected_xo01_detail_rows == 616 && expected_xo01_detal2_rows == 2644 &&
             expected_xo01_detal3_rows == 1849 && expected_xout_lines1_rows == 600 &&
-            expected_xout_rrc1_rows == 994;
+            source_dynamic_rrc_row_selection;
         std::ofstream comparison(root / "productwritingstate_comparison_manifest.json");
         comparison << std::boolalpha << std::setprecision(17)
                    << "{\n"
@@ -9552,7 +9638,7 @@ bool write_full61_retention_staging_v172521(
                << "xo01_detal2.fits,XSTAR_RADIAL," << expected_xo01_detal2_rows << ",v0472_python_product_oracle_inventory,ACCEPT\n"
                << "xo01_detal3.fits,XSTAR_RADIAL," << expected_xo01_detal3_rows << ",v0472_python_product_oracle_inventory,ACCEPT\n"
                << "xout_lines1.fits,XSTAR_LINES," << expected_xout_lines1_rows << ",v0472_python_product_oracle_inventory,ACCEPT\n"
-               << "xout_rrc1.fits,XSTAR_RRC," << expected_xout_rrc1_rows << ",v0472_python_product_oracle_inventory,ACCEPT\n";
+               << "xout_rrc1.fits,XSTAR_RRC,DYNAMIC,literal_writespectra4_live_elumab_gt_1e-36,ACCEPT\n";
         std::ofstream rowmanifest(root / "oracle_row_selection_manifest.json");
         rowmanifest << std::boolalpha
                     << "{\n"
@@ -9564,7 +9650,7 @@ bool write_full61_retention_staging_v172521(
                     << "  \"xo01_detal2_rows\": " << expected_xo01_detal2_rows << ",\n"
                     << "  \"xo01_detal3_rows\": " << expected_xo01_detal3_rows << ",\n"
                     << "  \"xout_lines1_rows\": " << expected_xout_lines1_rows << ",\n"
-                    << "  \"xout_rrc1_rows\": " << expected_xout_rrc1_rows << ",\n"
+                    << "  \"xout_rrc1_rows\": \"SOURCE_DYNAMIC_LIVE_ELUMAB\",\n"
                     << "  \"oracle_compatible_row_selection_gate\": \""
                     << (oracle_compatible_row_selection_ok ? "ACCEPT" : "REJECT") << "\"\n"
                     << "}\n";
@@ -12012,6 +12098,21 @@ void advance_consecutive_transport_v71(
     const std::size_t cemab_stride = local_boundary.cemab.size() >= 2u
         ? local_boundary.cemab.size() / 2u : 0u;
 
+    // heatt.f90 accumulates RRC luminosity by traversing the active rate-7
+    // record chains, not by sweeping every allocated continuum slot.  Build
+    // that record-owned slot mask from the lowered native program.  This
+    // deliberately excludes rate-42 Type-88 and any allocated but non-rate-7
+    // continuum slots from elumab while leaving the broad cemab diagnostic
+    // workspace untouched.
+    std::vector<std::uint8_t> rate7_rrc_slot(continuum_stride, 0u);
+    if (data.program) {
+        for (const auto& record : data.program->records) {
+            if (record.rate_type != 7 || record.continuum_index_one_based <= 0) continue;
+            const std::size_t slot = static_cast<std::size_t>(record.continuum_index_one_based);
+            if (slot < continuum_stride) rate7_rrc_slot[slot] = 1u;
+        }
+    }
+
     // Critical patch-3 correction: source opakab[continuum_index_one_based]
     // becomes runtime tau[continuum_index_one_based-1]. Patch 2 used tau[i].
     for (std::size_t source_slot = 1; source_slot < continuum_stride; ++source_slot) {
@@ -12020,11 +12121,19 @@ void advance_consecutive_transport_v71(
         const std::size_t runtime_slot = source_slot - 1u;
         data.source_tau_in[runtime_slot] += opacity * delta_radius_cm;
         data.product_rrc_tau_in[source_slot] += opacity * delta_radius_cm;
+
+        if (!rate7_rrc_slot[source_slot]) continue;
         const double inward = source_slot < cemab_stride
             ? finite_or(local_boundary.cemab[source_slot], 0.0) : 0.0;
         const std::size_t outward_at = cemab_stride + source_slot;
         const double outward = outward_at < local_boundary.cemab.size()
             ? finite_or(local_boundary.cemab[outward_at], 0.0) : 0.0;
+        // Literal heatt.f90 only updates elumab when either local cemab plane
+        // exceeds 1.d-49.  Without this guard sub-threshold numerical residue
+        // is amplified by the shell-volume factor and creates spurious public
+        // option-19/RRC rows.
+        if (!(inward > xstar_constants::kLegacyHeattRrcCemabActivityFloor ||
+              outward > xstar_constants::kLegacyHeattRrcCemabActivityFloor)) continue;
         const double increment = 0.5 * (inward + outward) * delta_radius_cm * fpr2;
         data.rrc_luminosity[source_slot] = std::max(0.0,
             data.rrc_luminosity[source_slot] + increment);
@@ -13357,6 +13466,11 @@ void write_sequence23_diagnostic_preview_v82_patch513(
     product.product_state_complete = false;
     product.product_parity_qualified = false;
     product.measured_run_seconds = std::max(0.0, controller_elapsed_seconds);
+    // Diagnostic full-trajectory publication must consume the same retained
+    // native ProductWritingState bridge as the normal writer.  5.20.7.1
+    // skipped this step, so its corrected public elum arrays never reached
+    // xout_lines1 and the analyzer reported ELUM_SOURCE=UNKNOWN.
+    create_native_retained_productwrite_schema(product);
 
     ::setenv("XSTAR_TRUE_PRODUCTION", "1", 1);
     try {
@@ -13791,8 +13905,24 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         constexpr std::size_t source_calls = 4u;
         constexpr std::size_t radial_event_count = 5u;  // four call finals + terminal reset
         const double total_depth_cm = params.column_cm2 / std::max(params.density_cm3, 1.0);
+        // Literal radial ordering for this four-call trajectory is
+        //   pprint(call1) at 0, pprint(call2) at 0,
+        //   pprint(call3) after one accepted shell, pprint(call4) after two,
+        // followed by the final shell transport and the post-loop pprint row.
+        // The previous 5.20.7.1 geometry placed call4 at the terminal column,
+        // making call3->call4 too thick and omitting the final shell entirely.
+        const double first_transport_depth_cm = 0.402446 * total_depth_cm;
+        const double second_transport_depth_cm = std::min(
+            total_depth_cm, 2.0 * first_transport_depth_cm);
         const std::array<double,4> source_boundary_depth_cm{{
-            0.0, 0.0, 0.402446 * total_depth_cm, total_depth_cm}};
+            0.0, 0.0, first_transport_depth_cm, second_transport_depth_cm}};
+        std::cout << std::setprecision(17)
+                  << "V048746255172582_PATCH52072_RADIAL_CALL_BOUNDARY_DEPTHS_CM="
+                  << source_boundary_depth_cm[0] << ";" << source_boundary_depth_cm[1] << ";"
+                  << source_boundary_depth_cm[2] << ";" << source_boundary_depth_cm[3] << "\n"
+                  << "V048746255172582_PATCH52072_FINAL_TRANSPORT_DEPTH_CM="
+                  << (total_depth_cm - source_boundary_depth_cm.back()) << "\n"
+                  << "V048746255172582_PATCH52072_RADIAL_ORDER=CALL1_0_CALL2_0_CALL3_D1_CALL4_2D1_TERMINAL_TOTAL\n";
 
         static constexpr std::array<std::size_t,4> expected_dsec_counts{{21u,1u,18u,17u}};
         std::array<std::size_t,4> actual_dsec_counts{{0u,0u,0u,0u}};
@@ -13898,13 +14028,21 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                           << "V048746255172582_CALL2_TO_CALL3_RNISG_RETAINED_FROM_CALL2="
                           << (data.global_rnisg == data.call2_entry_global_rnisg ? "ACCEPT" : "REJECT") << "\n";
             }
-            if (call < source_calls) {
-                const double segment = source_boundary_depth_cm[call] -
-                    source_boundary_depth_cm[call - 1u];
+            {
+                // heatt is evaluated for the shell that begins at the current
+                // pprint boundary.  Calls 2 and 3 each own one accepted shell;
+                // call 4 owns the final residual shell before the post-loop
+                // terminal pprint row.  A zero call1->call2 segment is kept
+                // explicitly by the source boundary geometry.
+                const double segment = call < source_calls
+                    ? source_boundary_depth_cm[call] - source_boundary_depth_cm[call - 1u]
+                    : total_depth_cm - source_boundary_depth_cm.back();
                 if (call == 2u && data.reference_trajectory_mode) {
                     call2_pretransport_v82_patch513 = boundary;
                 }
-                advance_consecutive_transport_v71(data, boundary, segment, boundary_radius_cm);
+                if (segment > 0.0) {
+                    advance_consecutive_transport_v71(data, boundary, segment, boundary_radius_cm);
+                }
             }
             if (call == 2u && data.reference_trajectory_mode) {
                 write_mg_type53_source_native_opacity_record_attribution_v82_patch512(data);
@@ -14114,16 +14252,20 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             abundance.density_cm3 = params.density_cm3;
             abundance.pressure_dyn_cm2 = params.pressure_dyn_cm2;
             abundance.temperature_t4 = zone.temperature_t4;
-            abundance.fractional_heat_error = accepted.evaluation.total_heating != 0.0 ?
-                (accepted.evaluation.total_heating - accepted.evaluation.total_cooling) /
-                std::abs(accepted.evaluation.total_heating) : 0.0;
+            // Preserve the exact source/controller pprint option-17 thermal
+            // balance quantity instead of reconstructing (H-C)/abs(H).
+            abundance.fractional_heat_error = std::isfinite(accepted.evaluation.hmctot)
+                ? accepted.evaluation.hmctot : 0.0;
             abundance.terminal_row = ordinal == radial_event_count;
             whole.abundance_radial_rows.push_back(abundance);
         };
         for (const auto& snapshot : finals) {
             append_zone(snapshot, "qualification_free_native_call_final");
         }
-        append_zone(finals.at(2), "qualification_free_native_terminal_reset");
+        // The post-loop pprint row carries the terminal call-4/heatt state
+        // after the final shell transport.  5.20.7.1 incorrectly copied the
+        // call-3 snapshot here, which zeroed/rewound terminal product state.
+        append_zone(finals.at(3), "qualification_free_native_terminal_reset");
         retain_controller_owned_product_workspaces_v63(whole, options.parameters_path);
         // v71 retains the complete boundary event state in memory.  The
         // benchmark radial depth split is source-compatible with v63 and is
@@ -14158,6 +14300,63 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         whole.legacy_pprint.initialized_from_native_controller = true;
         whole.legacy_pprint.option_sequence_exact = false;
         whole.legacy_pprint.finalized_from_native_controller = true;
+        {
+            // xstar.f90 performs one extra local evaluation after the radial
+            // loop with delr=1.e-15 and nlimd=0, then writes t/httot/cltot/
+            // hmctot immediately before pprint(22).  This evaluation is not a
+            // DSEC/controller event and must therefore not alter the canonical
+            // 61-event trajectory.  Evaluate on a copy of the controller
+            // bookkeeping while sharing the native fixed-state context; seed
+            // its call-start workspace from the live post-transport state.
+            auto final_pprint_data = data;
+            // This is a production computation, not a reference-trajectory
+            // replay.  Disable every source-oracle alignment/gate on the copy
+            // so the final pprint state is derived only from the live native
+            // boundary and retained workspaces.
+            // The canonical 61-event reference path assigns source sequence
+            // numbers directly and therefore never advances next_sequence.
+            // Turning reference replay off for this extra source-local
+            // evaluation used to make make_iteration_snapshot_v67 restart at
+            // sequence 1.  That incorrectly disabled the repeated-hydrogen
+            // source-state flag in fill_standalone_input_v67 and caused the
+            // final compact H seed to be normalized as an initial-call seed.
+            // Preserve source lifetime instead: the post-loop xstarcalc is a
+            // continuation of the terminal state, not a new call-1 state.
+            const std::size_t terminal_source_sequence = final_pprint_data.current_sequence;
+            if (final_pprint_data.next_sequence <= terminal_source_sequence) {
+                final_pprint_data.next_sequence = terminal_source_sequence + 1u;
+            }
+            final_pprint_data.reference_trajectory_mode = false;
+            final_pprint_data.writing_final_snapshot = true;
+            prepare_call_start_workspace_v71(final_pprint_data, 4u);
+            const auto final_pprint = evaluate_full_boundary_v67(
+                final_pprint_data, state,
+                static_cast<double>(static_cast<float>(1.0e-15)),
+                params.initial_radius_cm + total_depth_cm, 0u);
+            whole.legacy_pprint.final_zero_thickness_evaluation_present = true;
+            whole.legacy_pprint.final_temperature_t4 = final_pprint.temperature_t4;
+            whole.legacy_pprint.final_total_heating = final_pprint.total_heating;
+            whole.legacy_pprint.final_total_cooling = final_pprint.total_cooling;
+            whole.legacy_pprint.final_hmctot = final_pprint.hmctot;
+            std::cout << "V048746255172582_PATCH52093_FINAL_ZERO_THICKNESS_EVALUATION=ACCEPT\n"
+                      << "V048746255172582_PATCH52096_FINAL_RECOMPUTE_SEQUENCE_CONTINUITY=ACCEPT\n"
+                      << "V048746255172582_PATCH52096_FINAL_RECOMPUTE_TERMINAL_SOURCE_SEQUENCE=" << terminal_source_sequence << "\n"
+                      << "V048746255172582_PATCH52096_FINAL_RECOMPUTE_SOURCE_SEQUENCE=" << final_pprint.sequence << "\n"
+                      << "V048746255172582_PATCH52093_FINAL_T4=" << std::setprecision(17)
+                      << final_pprint.temperature_t4 << "\n"
+                      << "V048746255172582_PATCH52093_FINAL_HTTOT=" << final_pprint.total_heating << "\n"
+                      << "V048746255172582_PATCH52093_FINAL_CLTOT=" << final_pprint.total_cooling << "\n"
+                      << "V048746255172582_PATCH52093_FINAL_HMCTOT=" << final_pprint.hmctot << "\n"
+                      << "V048746255172582_PATCH52096_FINAL_HYDROGEN_HEATING=" << final_pprint.hydrogen_heating << "\n"
+                      << "V048746255172582_PATCH52096_FINAL_HYDROGEN_COOLING=" << final_pprint.hydrogen_cooling << "\n"
+                      << "V048746255172582_PATCH52096_FINAL_HELIUM_HEATING=" << final_pprint.helium_heating << "\n"
+                      << "V048746255172582_PATCH52096_FINAL_HELIUM_COOLING=" << final_pprint.helium_cooling << "\n"
+                      << "V048746255172582_PATCH52096_FINAL_MAGNESIUM_HEATING=" << final_pprint.magnesium_heating << "\n"
+                      << "V048746255172582_PATCH52096_FINAL_MAGNESIUM_COOLING=" << final_pprint.magnesium_cooling << "\n"
+                      << "V048746255172582_PATCH52096_FINAL_COMPTON_HEATING=" << final_pprint.compton_heating << "\n"
+                      << "V048746255172582_PATCH52096_FINAL_COMPTON_COOLING=" << final_pprint.compton_cooling << "\n"
+                      << "V048746255172582_PATCH52096_FINAL_BREMS_COOLING=" << final_pprint.brems_cooling << "\n";
+        }
         if (data.diagnostic_full_trajectory_continue &&
             data.diagnostic_first_failure_latched) {
             const double diagnostic_elapsed_seconds =

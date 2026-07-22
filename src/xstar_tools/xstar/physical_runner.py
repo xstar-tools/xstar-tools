@@ -1073,6 +1073,16 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
             if 0 < local_index < derived.npilev.shape[0]
             else 0
         )
+        data_type = int(continuum_rows[pos, 1])
+        # Literal xstarsetup.f90 rate-7 rank coordinate.  Type 49 is special:
+        #   eth = rdat1(np1r) * 13.598
+        # with 13.598 a default REAL literal and with no 0.1-eV floor.  Other
+        # rate-7 families use max(0.1d0, rlev(4)-rlev(1)).  Keep this distinct
+        # from threshold_eV, which remains the physical fstepr3/UCalc edge.
+        if data_type == 49:
+            rank_threshold = float(fallback_threshold[pos]) * float(np.float32(13.598))
+        else:
+            rank_threshold = max(0.1, float(threshold))
         rrcs.append(
             RRCOutputMetadata(
                 continuum_index=int(continuum_index),
@@ -1082,6 +1092,9 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
                 lower_level=(level.level_label if level else f"level_{local_index}"),
                 lower_local_index=local_index,
                 upper_local_index=upper_local_index,
+                source_record=int(continuum_records[pos]),
+                data_type=data_type,
+                rank_threshold_eV=float(rank_threshold),
             )
         )
     return SourceOutputMetadata(
@@ -1436,8 +1449,14 @@ def _bind_emissivity_contexts(state: XSTARPythonState, parameters: NormalizedXST
             line_wavelength[row.line_index] = row.wavelength_angstrom
     rrc_wavelength = np.zeros(int(state.control["ncsvn"]) + 1, dtype=float)
     for row in output_metadata.rrcs:
-        if 1 <= row.continuum_index < rrc_wavelength.size and row.threshold_eV > 0.0:
-            rrc_wavelength[row.continuum_index] = HC_EV_ANGSTROM / row.threshold_eV
+        rank_threshold = float(getattr(row, "rank_threshold_eV", 0.0))
+        if not (rank_threshold > 0.0):
+            rank_threshold = float(row.threshold_eV)
+        if 1 <= row.continuum_index < rrc_wavelength.size and rank_threshold > 0.0:
+            # xstarsetup stores errc in wavelength units using the default-REAL
+            # 12398.4016 literal.  HC_EV_ANGSTROM already carries that exact
+            # float32->float64 promotion.
+            rrc_wavelength[row.continuum_index] = HC_EV_ANGSTROM / max(1.0e-34, rank_threshold)
 
     common = dict(
         master=state.atomic.master,

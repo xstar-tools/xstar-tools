@@ -1,13 +1,12 @@
 """Source-aligned XSTAR data-type 53 photoionization/Milne evaluator.
 
 This module ports the rate-grid kernel in ``xstarlib/src/phint53.f90`` and the
-surrounding type-53 branch in ``ucalc.f90``.  For the continuum side effects
-that populate ``opakc``, ``opakcont`` and ``rccemis(1:2)``, the physical runner
-supplies the live high-resolution radiation state: ``epi``, ``bremsa`` and
-``bremsint``.  The dataclass field name ``epim_eV`` is retained for compatibility
-with older callers, but the production type-53 path must not use the reduced
-``epim``/``bremsam`` grid.  No analytic or empirical continuum normalization is
-accepted.
+surrounding type-53 branch in ``ucalc.f90``.  The radiation grid is owned by
+the caller exactly as in source XSTAR: ``calc_emisab_all`` supplies reduced
+``epim/bremsam`` while ``calc_emis_all`` supplies full ``epi/bremsa``.  The
+dataclass field name ``epim_eV`` is retained as a generic historical field name;
+it may therefore hold either caller-owned grid.  No analytic or empirical
+continuum normalization is accepted.
 
 The matrix gate primarily uses ``ans1`` (photoionization) and ``ans2`` (Milne
 recombination).  The implementation also returns the two heating/cooling pairs
@@ -45,8 +44,9 @@ def _finite_float(value: Any, default: float = 0.0) -> float:
 class Type53LiveRadiationState:
     """One exact radiation state supplied to ``phint53``.
 
-    In production this is the full high-resolution continuum grid used by
-    ``fstepr4``/``xoNN_detal4``.  ``bremsint`` is carried as a first-class array
+    In production this is the exact continuum grid supplied by the active
+    source caller (reduced for ``calc_emisab_all``, full for ``calc_emis_all``).
+    ``bremsint`` is carried as a first-class array
     because it is part of the XSTAR call state, although the current
     ``phint53.f90`` implementation consumes the energy grid and radiation field
     directly.

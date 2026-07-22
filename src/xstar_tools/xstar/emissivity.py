@@ -241,6 +241,11 @@ class CalcEmisabContext:
     initial_leveltemp_workspace: Optional[UCalcLevelTable] = None
     retain_traces: bool = True
     profile_control: Optional[MutableMapping[str, Any]] = None
+    # Literal xstarcalc passes the reduced epim/bremsam workspace to
+    # calc_emisab_all.  calc_emis_all uses the full epi/bremsa workspace.
+    # Shared UCalc helpers need this explicit role because the radiation state
+    # carries both grids.
+    ucalc_radiation_grid_role: str = "reduced"
 
     @property
     def temperature_k(self) -> float:
@@ -452,6 +457,50 @@ def _evaluate_ucalc(context: CalcEmisabContext, record: int, ucontext: UCalcCont
     )
 
 
+def _next_ion_parent_destination_context(
+    context: CalcEmisabContext, ion: _IonDescriptor
+) -> tuple[dict[int, float], dict[int, float]]:
+    """Build literal next-ion Type-13 parent maps for bound-free UCalc.
+
+    Type 53 consumes both the parent excitation energy and statistical weight;
+    Type 49 keeps its own physical threshold but consumes the excited-parent
+    statistical weight in the Milne/recombination branch.  A shared source
+    map therefore keeps both families on the same literal next-ion topology.
+
+    ``ucalc.f90`` label 53 corrects an excited-parent threshold by walking the
+    next ion's Type-13 level table and adding ``rdat1(np1r2)`` for local level
+    ``idest2-nlevp+1``.  The old calc_emis/calc_emisab Python context omitted
+    these maps, causing ``SourceFaithfulUCalc._parent_destination_context`` to
+    fall back to the *current-ion continuum energy*.  For Mg VIII record 43025
+    that changed the source threshold from 283.4485 eV to 531.5909 eV and
+    displaced hundreds of Type-53 opacity bins.
+    """
+    derived = context.derived
+    element_z = int(ion.element_z)
+    target_stage = int(ion.ion_stage) + 1
+    parent_ion_index = 0
+    for candidate in range(1, int(derived.n_ions) + 1):
+        if (int(derived.ion_element_z[candidate]) == element_z and
+                int(derived.ion_stage[candidate]) == target_stage):
+            parent_ion_index = candidate
+            break
+    energy: dict[int, float] = {}
+    weight: dict[int, float] = {}
+    if parent_ion_index > 0:
+        parent_levels = build_level_table(context.master, derived, parent_ion_index)
+        for parent_local in range(2, int(parent_levels.nlev) + 1):
+            destination = int(ion.nlev) + parent_local - 1
+            level = parent_levels.require(parent_local)
+            energy[destination] = float(level.energy_ev)
+            weight[destination] = float(level.statistical_weight)
+    return energy, weight
+
+
+# Backward diagnostic/readiness name retained from patch 5.20.9.2.  The
+# implementation is now named for its actual shared Type49/Type53 role.
+_type53_parent_destination_context = _next_ion_parent_destination_context
+
+
 def _ucalc_context(
     context: CalcEmisabContext,
     *,
@@ -465,6 +514,7 @@ def _ucalc_context(
     abund1: float,
     abund2: float,
 ) -> UCalcContext:
+    parent_energy, parent_weight = _next_ion_parent_destination_context(context, ion)
     return UCalcContext(
         temperature_k=context.temperature_k,
         hydrogen_density_cm3=xpx,
@@ -490,6 +540,10 @@ def _ucalc_context(
             "zone_thickness_cm": context.zone_thickness_cm,
             "radiation_temperature": context.radiation_temperature,
             "lfpi": 2,
+            "parent_level_energy_ev_by_destination": parent_energy,
+            "parent_level_stat_weight_by_destination": parent_weight,
+            "type53_parent_context_source": "literal_next_ion_type13",
+            "bound_free_radiation_grid_role": str(context.ucalc_radiation_grid_role),
         },
     )
 

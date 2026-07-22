@@ -194,6 +194,39 @@ bool finite_nonzero_vector(const std::vector<double>& values) {
     });
 }
 
+
+bool source_option17_radiation_balance_percent(
+    const xstar_run_state::FixedEvaluationState& evaluation,
+    double& percent) {
+    const auto& energy = evaluation.radiation_energy_ev;
+    const auto& ws = evaluation.source_workspace;
+    const std::size_t n = energy.size();
+    if (n < 2u || ws.zrems.size() < n) return false;
+    const auto& incident = ws.zremsz.size() >= n ? ws.zremsz : evaluation.radiation_flux;
+    if (incident.size() < n) return false;
+    double sum_in = 0.0;
+    double sum_out = 0.0;
+    double in_previous = std::isfinite(incident[0]) ? incident[0] : 0.0;
+    double out_previous = std::isfinite(ws.zrems[0]) ? ws.zrems[0] : 0.0;
+    for (std::size_t i = 1u; i < n; ++i) {
+        const double in_current = std::isfinite(incident[i]) ? incident[i] : 0.0;
+        const double out_current = std::isfinite(ws.zrems[i]) ? ws.zrems[i] : 0.0;
+        const double de = energy[i] - energy[i - 1u];
+        if (std::isfinite(de)) {
+            // ergsev cancels from the source terr ratio, so retaining it would
+            // only multiply numerator and denominator by the same constant.
+            sum_in += 0.5 * (in_current + in_previous) * de;
+            sum_out += 0.5 * (out_current + out_previous) * de;
+        }
+        in_previous = in_current;
+        out_previous = out_current;
+    }
+    const double denom = sum_in + 1.0e-24;
+    if (!std::isfinite(sum_in) || !std::isfinite(sum_out) || denom == 0.0) return false;
+    percent = 100.0 * (sum_in - sum_out) / denom;
+    return std::isfinite(percent);
+}
+
 void append_native_radial_summary(std::ofstream& out,
                                   const std::filesystem::path& output_dir,
                                   const xstar_run_state::ProductWritingState& state) {
@@ -242,6 +275,20 @@ void append_native_radial_summary(std::ofstream& out,
         Row shell2 = rows[3]; shell2.dr = 2.0 * rows[2].dr;
         Row shell3 = rows[3];
         rows = {entry0, entry1, shell1, shell2, shell3};
+    }
+    // pprint option 17 prints the controller-owned hmctot directly.  Keep the
+    // FITS abundance table only as the geometry source; thermal balance comes
+    // from the retained accepted boundary state.
+    if (!state.radial_zones.empty()) {
+        const std::size_t terminal_physical =
+            state.terminal_synthetic_row_present && state.radial_zones.size() >= 2u
+                ? state.radial_zones.size() - 2u
+                : state.radial_zones.size() - 1u;
+        for (std::size_t i = 0; i < rows.size(); ++i) {
+            const std::size_t source_index = std::min(i, terminal_physical);
+            const double hmctot = state.radial_zones[source_index].accepted_controller.evaluation.hmctot;
+            if (std::isfinite(hmctot)) rows[i].heat_error = hmctot;
+        }
     }
     std::vector<std::pair<double,double>> depth_logs;
     std::vector<std::pair<double,double>> reference_depths;
@@ -329,6 +376,31 @@ void append_native_radial_summary(std::ofstream& out,
                 ? 100.0 * (source_integral - current_integral) / source_integral : 0.0);
         }
     }
+    // Prefer the literal pprint option-17 source surfaces retained at each
+    // accepted boundary: terr = integral(zremsz-zrems(1))/integral(zremsz).
+    // This avoids feeding xout_step through already-projected FITS planes.
+    std::vector<double> retained_heat_balance_percent;
+    retained_heat_balance_percent.reserve(rows.size());
+    bool retained_heat_balance_complete = !state.radial_zones.empty();
+    if (retained_heat_balance_complete) {
+        const std::size_t terminal_physical =
+            state.terminal_synthetic_row_present && state.radial_zones.size() >= 2u
+                ? state.radial_zones.size() - 2u
+                : state.radial_zones.size() - 1u;
+        for (std::size_t i = 0; i < rows.size(); ++i) {
+            const std::size_t source_index = std::min(i, terminal_physical);
+            double percent = 0.0;
+            if (!source_option17_radiation_balance_percent(
+                    state.radial_zones[source_index].accepted_controller.evaluation, percent)) {
+                retained_heat_balance_complete = false;
+                break;
+            }
+            retained_heat_balance_percent.push_back(percent);
+        }
+    }
+    if (retained_heat_balance_complete && !retained_heat_balance_percent.empty()) {
+        heat_balance_percent.swap(retained_heat_balance_percent);
+    }
     std::map<std::size_t,std::pair<double,std::size_t>> call_metrics;
     for(const auto& e:state.fixed_evaluations){
         auto& m=call_metrics[e.call_index];
@@ -361,21 +433,36 @@ void append_native_radial_summary(std::ofstream& out,
            <<std::setw(7)<<r.logxi<<std::setw(7)<<r.xee
            <<std::setw(7)<<safe_log(r.density,-10.0)
            <<std::setw(7)<<(r.temperature>0?4.0+std::log10(r.temperature):-10.0)
-           <<std::setw(7)<<100.0*r.heat_error
-           <<std::setw(7)<<(i<heat_balance_percent.size()?heat_balance_percent[i]:0.0)
+           <<std::setw(7)<<std::clamp(100.0*r.heat_error,-99.99,99.99)
+           <<std::setw(7)<<std::clamp((i<heat_balance_percent.size()?heat_balance_percent[i]:0.0),-99.99,99.99)
            <<std::setw(7)<<depths.first<<std::setw(7)<<depths.second
            <<std::setw(3)<<(cm.second>0?cm.second-1:0)<<"\n";
     }
     out.unsetf(std::ios::floatfield); out<<std::setprecision(17);
+    if (state.legacy_pprint.final_zero_thickness_evaluation_present) {
+        const long long lpri = static_cast<long long>(std::llround(
+            parameter_number(state, "lprint", 0.0)));
+        out << "\n  final print:" << std::setw(12) << lpri << "\n"
+            << std::uppercase << std::scientific << std::setprecision(8)
+            << std::setw(16) << state.legacy_pprint.final_temperature_t4
+            << std::setw(16) << state.legacy_pprint.final_total_heating
+            << std::setw(16) << state.legacy_pprint.final_total_cooling
+            << std::setw(16) << state.legacy_pprint.final_hmctot << "\n\n";
+        out.unsetf(std::ios::floatfield); out << std::setprecision(17);
+    }
     if (!rows.empty() && (!state.radial_zones.empty() || !state.fixed_evaluations.empty())) {
         const auto& r=rows.back();
         const auto& eval=state.radial_zones.empty()?state.fixed_evaluations.back():state.radial_zones.back().accepted_controller.evaluation;
+        const bool have_final = state.legacy_pprint.final_zero_thickness_evaluation_present;
+        const double final_t4 = have_final ? state.legacy_pprint.final_temperature_t4 : r.temperature;
+        const double final_heating = have_final ? state.legacy_pprint.final_total_heating : eval.total_heating;
+        const double final_cooling = have_final ? state.legacy_pprint.final_total_cooling : eval.total_cooling;
         const double tf=reference_depths.empty()?0.0:reference_depths.back().first;
         const double tb=reference_depths.empty()?0.0:reference_depths.back().second;
         out<<" print option:22\n";
-        out<<" r=  "<<e3(r.radius)<<" t=  "<<e3(r.temperature)<<" log(xi)=  "<<e3(r.logxi)
+        out<<" r=  "<<e3(r.radius)<<" t=  "<<e3(final_t4)<<" log(xi)=  "<<e3(r.logxi)
            <<" n_e=  "<<e3(r.xee*r.density)<<" n_p=  "<<e3(r.density)<<"\n";
-        out<<"httot=  "<<e3(eval.total_heating)<<" cltot=  "<<e3(eval.total_cooling)
+        out<<"httot=  "<<e3(final_heating)<<" cltot=  "<<e3(final_cooling)
            <<" taulc=  "<<e3(tf)<<" taulcb=  "<<e3(tb)<<"\n";
         const double r19=r.radius*1.0e-19;
         const double denom=12.56*r.density*r19*r19*3.0e10;
@@ -591,6 +678,10 @@ std::string source_ion_label(long long element_z, long long ion_index) {
     return symbol + "_" + roman_lower(ion_index);
 }
 
+bool hydrogen_or_helium_ion_label(const std::string& label) {
+    return label.rfind("h_", 0) == 0 || label.rfind("he_", 0) == 0;
+}
+
 std::map<std::pair<long long,long long>,long long> load_native_ion_row_minima(
     const std::filesystem::path& output_dir,
     const xstar_run_state::ProductWritingState& state) {
@@ -715,7 +806,7 @@ void append_native_public_rrc_sections(std::ofstream& out,
     const std::size_t elum_stride = ws.elumab.size() >= 2u ? ws.elumab.size() / 2u : 0u;
     if (write_depth) {
         out << " print option:24\n absorption edge depths\n"
-               " index, local endpoint, ion, level, energy (eV), depth \n";
+               " index, ion, level, energy (eV), depth \n";
     }
     if (write_luminosity) {
         out << " print option:19\n recombination continuum luminosities(erg/sec/10**38))\n"
@@ -730,12 +821,15 @@ void append_native_public_rrc_sections(std::ofstream& out,
         const double tau_out = slot < tauc_stride ? ws.tauc[tauc_stride + slot] : 0.0;
         const double lum_in = slot < elum_stride ? ws.elumab[slot] : 0.0;
         const double lum_out = slot < elum_stride ? ws.elumab[elum_stride + slot] : 0.0;
-        if (write_depth &&
+        if (write_depth && hydrogen_or_helium_ion_label(id.ion_label) &&
             (std::abs(tau_in) > 1.0e-49 || std::abs(tau_out) > 1.0e-49)) {
+            // pprint.f90 label 9293 is shared by options 24 and 19:
+            // kkkl(npconi2), mmlv(npilev), ion, idest1, idest2, labels.
             out << std::setw(7) << id.continuum_index
-                << std::setw(6) << id.lower_local_index << " "
+                << std::setw(6) << id.level_global_index << " "
                 << std::left << std::setw(8) << id.ion_label << std::right
-                << std::setw(8) << id.level_global_index << " "
+                << std::setw(6) << id.lower_local_index
+                << std::setw(6) << id.upper_local_index << " "
                 << std::left << std::setw(20) << id.lower_level << " "
                 << std::setw(20) << id.upper_level << std::right
                 << std::setw(13) << std::uppercase << std::scientific
@@ -953,7 +1047,7 @@ double trapezoid_values(const std::vector<double>& energy,const std::vector<doub
     return sum;
 }
 
-void append_native_energy_sums(std::ofstream& out,const std::filesystem::path& output_dir){
+void append_native_energy_sums(std::ofstream& out,const std::filesystem::path& output_dir,const xstar_run_state::ProductWritingState& state){
     std::vector<double> ce,de;std::vector<std::vector<double>> cv,dv;
     bool have_incident=read_spectrum_column(output_dir/"xout_spect1.fits","XSTAR_SPECTRA","energy",{"incident"},ce,cv) &&
         !cv.empty() && finite_nonzero_vector(cv.front());
@@ -972,10 +1066,30 @@ void append_native_energy_sums(std::ofstream& out,const std::filesystem::path& o
         }
     }
     const bool have_detail=read_spectrum_column(output_dir/"xo01_detal4.fits","XSTAR_RADIAL","energy",{"zrems(2)","zrems(3)","fwd dpth"},de,dv);
-    double line_sum=0.0;bool have_lines=false;fitsfile*f=nullptr;int status=0;
-    fits_open_file(&f,(output_dir/"xout_lines1.fits").c_str(),READONLY,&status);
-    if(status==0&&move_to_last_named_hdu(f,"XSTAR_LINES")){const int ci=column_number(f,"emit_inward"),co=column_number(f,"emit_outward");if(ci>0&&co>0){have_lines=true;for(long long row=1;row<=table_rows(f);++row)line_sum+=read_double_cell(f,ci,row)+read_double_cell(f,co,row);}}
-    if(f){int cs=0;fits_close_file(f,&cs);}
+    // pprint(5) sums the full nlsvn cumulative elum surface, not the
+    // luminosity-ranked 500/600-row public xout_lines1 subset.
+    double line_sum=0.0;
+    bool have_lines=false;
+    if (!state.radial_zones.empty()) {
+        const std::size_t final_zone = state.terminal_synthetic_row_present && state.radial_zones.size() >= 2u
+            ? state.radial_zones.size() - 2u : state.radial_zones.size() - 1u;
+        const auto& ws = state.radial_zones[final_zone].accepted_controller.evaluation.source_workspace;
+        if (ws.elum.size() >= 2u && ws.elum.size() % 2u == 0u) {
+            const std::size_t stride = ws.elum.size() / 2u;
+            std::set<long long> seen;
+            for (const auto& id : state.line_identities) {
+                const long long li = id.line_index;
+                if (li <= 0 || !seen.insert(li).second) continue;
+                if (!(id.wavelength_angstrom > 1.0 && id.wavelength_angstrom < 1.0e8)) continue;
+                const std::size_t slot = static_cast<std::size_t>(li);
+                if (slot >= stride || stride + slot >= ws.elum.size()) continue;
+                const double inward = std::isfinite(ws.elum[slot]) ? ws.elum[slot] : 0.0;
+                const double outward = std::isfinite(ws.elum[stride + slot]) ? ws.elum[stride + slot] : 0.0;
+                line_sum += inward + outward;
+                have_lines = true;
+            }
+        }
+    }
     out<<" print option: 5\n";
     if(!have_incident||!have_detail||!have_lines||ce.size()!=de.size()){
         out<<" source energy sums unavailable: required native continuum/detail/line products are incomplete.\n\n";return;
@@ -994,7 +1108,7 @@ void append_native_product_sections(std::ofstream& out,const std::filesystem::pa
     append_native_ion_columns(out,output_dir);
     append_native_detail_line_section(out,output_dir,state);
     append_native_public_rrc_sections(out,output_dir,state,false,true);
-    append_native_energy_sums(out,output_dir);
+    append_native_energy_sums(out,output_dir,state);
 }
 
 void append_source_like_timing_footer(std::ofstream& out,

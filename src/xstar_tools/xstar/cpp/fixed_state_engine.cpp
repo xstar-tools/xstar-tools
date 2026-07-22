@@ -1316,6 +1316,10 @@ struct EvaluatedRecord {
     // lifetimes distinct so opakab can retain the reduced-grid seed when a
     // selected full-grid phint53 revisit does not reach its publication bin.
     Type53SourceShadow type53_calc_emisab_shadow{};
+    // v82 patch 5.20.8: calc_emisab_all uses the same reduced epim/bremsam
+    // workspace for Type-49 rate-7 records.  Keep the reduced-grid seed
+    // distinct from the later full-grid calc_emis_ion evaluation.
+    Type53SourceShadow type49_calc_emisab_shadow{};
     Type53SourceShadow type49_shadow{};
     Type51SourceShadow type51_shadow{};
     Type50SourceShadow type50_shadow{};
@@ -5452,6 +5456,27 @@ EvaluatedRecord evaluate_record(
                     nullptr, record_context.valid ? &record_context : nullptr, record.record,
                     true, true, source_shadow, &out.type49_shadow);
             }
+            // v82 patch 5.20.8: literal calc_emisab_all is called with
+            // epim/ncn2m/bremsam before calc_emis_all revisits rate-7 on the
+            // full epi/ncn2/bremsa workspace.  Type-49 shares that first-stage
+            // reduced-grid UCalc path; do not seed cemab/opakab from the later
+            // full-grid answer.
+            if (source_zero_gate) {
+                out.type49_calc_emisab_shadow = out.type49_shadow;
+            } else if (calc_emisab_workspace && calc_emisab_workspace->epim.size() >= 3 &&
+                       calc_emisab_workspace->bremsam.size() == calc_emisab_workspace->epim.size()) {
+                xstar_fixed_state_input_v1 calc_emisab_input = input;
+                calc_emisab_input.dsec_radiation_energy_ev = calc_emisab_workspace->epim.data();
+                calc_emisab_input.dsec_bremsa = calc_emisab_workspace->bremsam.data();
+                calc_emisab_input.dsec_radiation_bin_count = calc_emisab_workspace->epim.size();
+                xstar_element_contribution_v1 calc_emisab_contribution{};
+                const bool calc_emisab_exact = evaluate_type53_source_integral(
+                    r, pair_real_count, lower, upper, calc_emisab_input, source_threshold,
+                    ptmp1 + ptmp2, nullptr, record_context.valid ? &record_context : nullptr,
+                    record.record, true, true, calc_emisab_contribution,
+                    &out.type49_calc_emisab_shadow);
+                if (!calc_emisab_exact) out.type49_calc_emisab_shadow = Type53SourceShadow{};
+            }
             const bool magnesium_finite_state = element.element_z == 12 &&
                 environment_flag("XSTAR_QUALIFICATION_MG_BOUND_FREE_FINITE_STATE");
             const bool magnesium_source_faithful = element.element_z == 12 &&
@@ -5508,11 +5533,17 @@ EvaluatedRecord evaluate_record(
             out.type49_shadow.continuum_index_one_based = continuum_index;
             out.type49_shadow.dsec_radiation_bin_count = input.dsec_radiation_bin_count;
             out.type49_shadow.continuum_tau_count = input.continuum_tau_count;
-            // xstarsetup.f90 special-cases Type-49: eth = rdat1(np1r) * 13.598.
-            // The lowered pair payload preserves that first source energy in Rydbergs.
+            // v82 patch 5.20.9: literal xstarsetup.f90 gives Type-49 its own
+            // setup/rank geometry: eth=rdat1(np1r)*13.598, with 13.598 a
+            // default-REAL literal.  Unlike Type-53/99, Type-49 has no 0.1-eV
+            // floor here; only the later errc denominator uses max(1.d-34,eth).
+            // Keep this setup coordinate separate from the UCalc kernel threshold.
+            const double source_type49_rydberg_ev_v82_patch5209 =
+                static_cast<double>(static_cast<float>(xstar_constants::kLegacyXstarSetupRydbergEv));
             out.type49_shadow.source_errc_rank_energy_ev =
-                (r && pair_real_count >= 2) ? std::max(0.1, r[0] * 13.598)
-                                            : std::max(0.1, out.type49_shadow.base_threshold_ev);
+                (r && pair_real_count >= 2)
+                    ? std::max(1.0e-34, r[0] * source_type49_rydberg_ev_v82_patch5209)
+                    : std::max(1.0e-34, out.type49_shadow.base_threshold_ev);
             if (magnesium_replacement &&
                 (out.type49_shadow.committed_nonfinite || out.type49_shadow.committed_implausible)) {
                 throw std::runtime_error("Mg Type-49 finite-state replacement remained nonfinite or implausibly large");
@@ -7581,6 +7612,66 @@ struct DeferredRrcRecordV82Patch520 {
     double upper_abundance = 0.0;
 };
 
+struct Type88StaleOpakabV82Patch52010 {
+    bool mapped = false;
+    bool threshold_publication_reached = false;
+    int nb1_one_based = 0;
+    int publish_kl_one_based = 0;
+    double absorption_sigma_cm2 = 0.0;
+    double stimulated_sigma_cm2 = 0.0;
+    double opakab_cm1 = 0.0;
+};
+
+// Literal calc_emis_ion rate-42 side effect.  The physical Type-88 UCalc
+// threshold and full-grid opakc/rccemis calculation are independent of the
+// stale kkkl/errc/tauc values retained by the caller.  However, phint53 writes
+// its scalar opakab result through the caller-owned opakab(kkkl) argument.
+// Reconstruct only that scalar publication here; the existing Type-88
+// full-grid continuum kernels remain untouched.
+Type88StaleOpakabV82Patch52010 source_type88_stale_opakab_v82_patch52010(
+    const NativeBoundFreeCurve& curve,
+    double rnist,
+    double lower_abundance,
+    double upper_abundance,
+    const xstar_fixed_state_input_v1& input
+) {
+    Type88StaleOpakabV82Patch52010 out;
+    const std::size_t n = input.radiation_bin_count;
+    if (n < 4 || !input.radiation_energy_ev || !(curve.threshold_ev > 0.0) || !(rnist > 0.0)) return out;
+    const auto mapped = phint53_grid_map_v82_patch57(
+        curve, input.radiation_energy_ev, static_cast<int>(n));
+    if (!mapped.valid) return out;
+    out.mapped = true;
+    out.nb1_one_based = mapped.nb1_zero_based + 1;
+    const int publish_kl = mapped.nb1_zero_based + 2;
+    out.publish_kl_one_based = publish_kl + 1;
+    if (publish_kl >= mapped.klmax_zero_based || publish_kl + 1 >= static_cast<int>(n)) return out;
+
+    const double sgtp = std::max(0.0, mapped.sgbar[static_cast<std::size_t>(publish_kl)]);
+    const double bktm = xstar_constants::kBoltzmannErgPerK * input.temperature_k /
+        xstar_constants::kModernErgPerEv;
+    const double previous_exptst =
+        (input.radiation_energy_ev[static_cast<std::size_t>(publish_kl)] - curve.threshold_ev) /
+        std::max(bktm, 1.0e-300);
+    double exptmpp = 0.0;
+    if (previous_exptst < 200.0) {
+        const double next_exptst =
+            (input.radiation_energy_ev[static_cast<std::size_t>(publish_kl + 1)] - curve.threshold_ev) /
+            std::max(bktm, 1.0e-300);
+        exptmpp = limited_exp(-next_exptst);
+    }
+    // rate-42 has ptmp1=(1-cfrac)/2 and ptmp2=(1+cfrac)/2, so their
+    // literal sum in phint53 is exactly one.
+    out.absorption_sigma_cm2 = sgtp;
+    out.stimulated_sigma_cm2 = rnist * exptmpp * sgtp;
+    const double density = std::max(0.0, input.hydrogen_density_cm3);
+    const double optmp = lower_abundance * density * out.absorption_sigma_cm2;
+    const double optmp2 = upper_abundance * density * out.stimulated_sigma_cm2;
+    out.opakab_cm1 = std::max(0.0, optmp - optmp2);
+    out.threshold_publication_reached = true;
+    return out;
+}
+
 void accumulate_native_bound_free_rrc_from_abundances_v82_patch520(
     const NativeBoundFreeCurve& curve,
     const EvaluatedRecord& evaluated,
@@ -7851,15 +7942,20 @@ SourceRlbinAuditResultV82Patch5171 source_rlbin_exact_audit_v82_patch5171(
     // metadata, while rank values come from the already committed slot arrays.
     std::map<int,SourceFeatureAuditCandidateV82Patch5171> by_slot;
     for (const auto& c : raw) if (c.slot_one_based > 0) by_slot[c.slot_one_based] = c;
-    const double emaxa = 12398.4016 / energy_grid_ev[0];
-    const double emina = 12398.4016 / energy_grid_ev[energy_count - 1u];
+    // rlbin.f90 literals are default REAL even though its working arrays are
+    // real(8).  Reproduce the literal rounding at this source boundary.
+    const double source_hc = static_cast<double>(static_cast<float>(12398.4016));
+    const double source_rank_floor = static_cast<double>(static_cast<float>(1.0e-37));
+    const double source_wavelength_floor = static_cast<double>(static_cast<float>(1.0e-34));
+    const double emaxa = source_hc / energy_grid_ev[0];
+    const double emina = source_hc / energy_grid_ev[energy_count - 1u];
 
     for (const auto& kv : by_slot) {
         const auto& c = kv.second;
         if (c.slot_one_based <= 0) continue;
-        if ((c.opacity < 1.0e-37) && (c.emission_sum < 1.0e-37)) continue;
+        if ((c.opacity < source_rank_floor) && (c.emission_sum < source_rank_floor)) continue;
         if (!(c.wavelength_a >= emina && c.wavelength_a <= emaxa)) continue;
-        const double ener = 12398.4016 / (1.0e-34 + c.wavelength_a);
+        const double ener = source_hc / (source_wavelength_floor + c.wavelength_a);
         const int nb1 = phint53_nbinc_one_based_v82_patch57(
             ener, energy_grid_ev, static_cast<int>(energy_count));
         if (nb1 <= 0 || static_cast<std::size_t>(nb1) > out.table.size()) continue;
@@ -7900,10 +7996,103 @@ SourceRlbinAuditResultV82Patch5171 source_rlbin_exact_audit_v82_patch5171(
     return out;
 }
 
+// v82 patch 5.20.8: literal calc_emis_ion does not consume the union of all
+// ncbin/nlbin slots.  It recomputes nb1 for each record and searches only the
+// rank column belonging to that record's feature energy.
+struct SourceConsumerDecisionV82Patch5208 {
+    int nb1_one_based = 0;
+    int rank_in_bin = 0;
+    bool pointer_valid = false;
+    bool destination_valid = false;
+    bool source_range_pass = true;
+    bool selected_anywhere = false;
+    bool selected_in_nb1 = false;
+    bool sentinel_accept = false;
+    bool actual_consumer = false;
+    std::string rejection_reason;
+};
+
+inline double source_real_literal_v82_patch5208(double value) {
+    return static_cast<double>(static_cast<float>(value));
+}
+
+SourceConsumerDecisionV82Patch5208 source_calc_emis_consumer_v82_patch5208(
+    int slot_one_based,
+    double wavelength_a,
+    bool rrc_rate7,
+    bool destination_valid,
+    const SourceRlbinAuditResultV82Patch5171& rank_table,
+    const double* energy_grid_ev,
+    std::size_t energy_count) {
+    SourceConsumerDecisionV82Patch5208 out;
+    out.pointer_valid = slot_one_based > 0 &&
+        static_cast<std::size_t>(slot_one_based) <= 100000000u;
+    out.destination_valid = destination_valid;
+    out.selected_anywhere = rank_table.selected_slots.count(slot_one_based) != 0u;
+    if (!out.pointer_valid) {
+        out.rejection_reason = "INVALID_POINTER";
+        return out;
+    }
+    if (!destination_valid) {
+        out.rejection_reason = "INVALID_DESTINATION";
+        return out;
+    }
+    if (!energy_grid_ev || energy_count < 2u || rank_table.table.empty()) {
+        out.rejection_reason = "MISSING_RANK_TABLE";
+        return out;
+    }
+    if (!(wavelength_a > 0.0) || !std::isfinite(wavelength_a)) {
+        out.rejection_reason = "INVALID_FEATURE_WAVELENGTH";
+        return out;
+    }
+
+    // calc_emis_ion.f90 rate-7 has a literal mixed-unit guard: errc is a
+    // wavelength array while epi is an energy array.  Preserve that behavior
+    // rather than replacing it with a dimensionally corrected range test.
+    if (rrc_rate7) {
+        out.source_range_pass = wavelength_a > energy_grid_ev[0] &&
+            wavelength_a < energy_grid_ev[energy_count - 1u];
+        if (!out.source_range_pass) {
+            out.rejection_reason = "SOURCE_ERRC_RANGE_GUARD";
+            return out;
+        }
+    }
+
+    const double feature_energy_ev =
+        source_real_literal_v82_patch5208(12398.4016) /
+        (wavelength_a + (rrc_rate7 ? 0.0 : 1.0e-36));
+    out.nb1_one_based = phint53_nbinc_one_based_v82_patch57(
+        feature_energy_ev, energy_grid_ev, static_cast<int>(energy_count));
+    if (out.nb1_one_based <= 0 ||
+        static_cast<std::size_t>(out.nb1_one_based) > rank_table.table.size()) {
+        out.rejection_reason = "NB1_OUT_OF_RANGE";
+        return out;
+    }
+    const auto& row = rank_table.table[static_cast<std::size_t>(out.nb1_one_based - 1)];
+    out.sentinel_accept = row[0] == 9999999;
+    for (std::size_t rank = 0; rank < row.size(); ++rank) {
+        if (row[rank] == slot_one_based) {
+            out.selected_in_nb1 = true;
+            out.rank_in_bin = static_cast<int>(rank + 1u);
+            break;
+        }
+        // Literal search stops on the first zero entry.
+        if (row[rank] == 0) break;
+    }
+    out.actual_consumer = out.selected_in_nb1 || out.sentinel_accept;
+    if (!out.actual_consumer) {
+        out.rejection_reason = out.selected_anywhere
+            ? "SELECTED_IN_DIFFERENT_BIN" : "NOT_RANK_SELECTED";
+    } else {
+        out.rejection_reason = "ACCEPT";
+    }
+    return out;
+}
+
 std::string source_feature_consumer_v82_patch5171(const std::string& family, int data_type) {
     if (family == "RRC") {
-        if (data_type == 53) return "RATE7_NCBIN_GATED";
-        if (data_type == 49) return "RATE42_UNCONDITIONAL";
+        if (data_type == 49 || data_type == 53 || data_type == 99) return "RATE7_NCBIN_GATED";
+        if (data_type == 88) return "RATE42_UNCONDITIONAL";
         return "NO_DIRECT_NCBIN_GATE";
     }
     return "NLBIN_GATED_LINE";
@@ -8252,16 +8441,46 @@ int run_impl(
     std::vector<double> thermal_population_stream;
     std::size_t fixed_full_population_offset = 0;
     std::vector<xstar_spectral_contribution_v1> spectral;
-    // v82 patch 5.20.5: source xstarsetup owns errc independently of the
-    // spectral threshold/line energy.  Keep this sidecar keyed by exact record
-    // identity so no public ABI structure changes.
+    // v82 patch 5.20.5 retained xstarsetup's errc coordinate per record.
+    // v82 patch 5.20.9 closes the missing ownership rule: errc is actually a
+    // continuum-SLOT array.  Every rate-7 record writes errc(npconi2(record))
+    // during setup, so the last source-order writer owns the coordinate later
+    // consumed by BOTH rlbin and calc_emis_ion for every record sharing that slot.
+    // Keep the identity map only for the 5.20.8-vs-5.20.9 ownership audit.
     std::map<std::pair<std::uint64_t,std::int64_t>,double>
         source_errc_rank_energy_by_identity_v82_patch5205;
+    // Comparison-only reconstruction of the 5.20.8.2 identity-owned decision.
+    // This never feeds production and exists solely to classify the consumers
+    // gained/lost by the literal slot-ownership correction.
+    std::map<std::pair<std::uint64_t,std::int64_t>,double>
+        source_errc_rank_energy_by_identity_patch52082_audit_v82_patch5209;
+    std::map<int,double> source_errc_rank_energy_by_slot_v82_patch5209;
+    std::map<int,std::tuple<std::uint64_t,std::int64_t,int>>
+        source_errc_owner_by_slot_v82_patch5209;
+    const auto source_errc_rank_energy_for_slot_v82_patch5209 =
+        [&](int slot_one_based, std::uint64_t source_position, std::int64_t record, double fallback) {
+            const auto slot_it = source_errc_rank_energy_by_slot_v82_patch5209.find(slot_one_based);
+            if (slot_it != source_errc_rank_energy_by_slot_v82_patch5209.end()) return slot_it->second;
+            const auto identity_it = source_errc_rank_energy_by_identity_v82_patch5205.find(
+                {source_position, record});
+            if (identity_it != source_errc_rank_energy_by_identity_v82_patch5205.end()) return identity_it->second;
+            return fallback;
+        };
+    // v82 patch 5.20.8: retain the literal line wavelength owner used by
+    // calc_emis_ion when it recomputes nb1 for nlbin.
+    std::map<std::pair<std::uint64_t,std::int64_t>,double>
+        source_line_wavelength_by_identity_v82_patch5208;
     // Retain evaluated source identities past the per-element traversal so
-    // call-2 calc_emis_all can perform its selected Type-53 revisit after the
-    // complete calc_emisab surface has been ranked.
+    // call-2 calc_emis_all can perform selected full-grid revisits after the
+    // complete calc_emisab surface has been ranked.  Type-53 already used this
+    // state in patch 5.18.1.  Patch 5.20.8.2 adds the same explicit retained
+    // full-grid owner for Type-49 while its reduced-grid calc_emisab shadow is
+    // kept diagnostic-only until the source phextrap/reduced-grid discrepancy
+    // is closed.
     std::map<std::pair<std::uint64_t,std::uint64_t>,EvaluatedRecord>
         type53_revisit_evaluated_v82_patch5181;
+    std::map<std::pair<std::uint64_t,std::uint64_t>,EvaluatedRecord>
+        type49_revisit_evaluated_v82_patch52082;
     std::vector<double> native_bound_free_opacity(input.radiation_bin_count, 0.0);
     std::vector<double> native_rrc_continuum_emission(2 * input.radiation_bin_count, 0.0);
     std::vector<DeferredRrcRecordV82Patch520> deferred_rrc_records_v82_patch520;
@@ -8377,6 +8596,10 @@ int run_impl(
                     type53_revisit_evaluated_v82_patch5181[std::make_pair(
                         static_cast<std::uint64_t>(record.source_position),
                         static_cast<std::uint64_t>(record.record))] = evaluated_item;
+                } else if (record.data_type == 49 && record.rate_type == 7) {
+                    type49_revisit_evaluated_v82_patch52082[std::make_pair(
+                        static_cast<std::uint64_t>(record.source_position),
+                        static_cast<std::uint64_t>(record.record))] = evaluated_item;
                 }
                 evaluated.push_back(std::move(evaluated_item));
                 evaluated_records.push_back(&record);
@@ -8423,6 +8646,47 @@ int run_impl(
             element, active, evaluated);
         apply_magnesium_type53_persistent_leveltemp_v048746221(
             element, active, evaluated);
+
+        // v82 patch 5.20.9: reproduce xstarsetup's slot-owned errc lifetime
+        // before abundance/product filtering.  xstarsetup traverses every rate-7
+        // record and overwrites errc(kkkl); a later zero-emissivity record can
+        // therefore still own the rank coordinate of a slot populated by an
+        // earlier record.  The per-element linked traversal is source ordered,
+        // and Program validation guarantees monotonically increasing source
+        // positions.  Type-49, Type-53 and Type-99 all participate in this same
+        // rate-7 errc slot workspace.
+        for (std::size_t k = 0; k < evaluated.size() && k < evaluated_records.size(); ++k) {
+            const ProgramRecord* pr = evaluated_records[k];
+            if (!pr || pr->rate_type != 7 || pr->continuum_index_one_based <= 0) continue;
+            const auto& item = evaluated[k];
+            double rank_energy_ev = 0.0;
+            if (pr->data_type == 49 && item.type49_shadow.valid)
+                rank_energy_ev = item.type49_shadow.source_errc_rank_energy_ev;
+            else if (pr->data_type == 53 && item.type53_shadow.valid)
+                rank_energy_ev = item.type53_shadow.source_errc_rank_energy_ev;
+            else if (pr->data_type == 99 && item.type99_shadow.valid)
+                rank_energy_ev = item.type99_shadow.source_errc_rank_energy_ev;
+            if (!(rank_energy_ev > 0.0) || !std::isfinite(rank_energy_ev)) continue;
+            const auto identity = std::make_pair(
+                static_cast<std::uint64_t>(pr->source_position),
+                static_cast<std::int64_t>(pr->record));
+            source_errc_rank_energy_by_identity_v82_patch5205[identity] = rank_energy_ev;
+            double patch52082_identity_energy_ev = rank_energy_ev;
+            if (pr->data_type == 49 && pr->real_count >= 2 &&
+                pr->real_offset < ctx.program.reals.size()) {
+                // Exact pre-5.20.9 behavior: identity-owned Type-49 setup energy
+                // used a double 13.598 literal and incorrectly imposed 0.1 eV.
+                patch52082_identity_energy_ev = std::max(
+                    0.1, ctx.program.reals[pr->real_offset] * 13.598);
+            }
+            source_errc_rank_energy_by_identity_patch52082_audit_v82_patch5209[identity] =
+                patch52082_identity_energy_ev;
+            source_errc_rank_energy_by_slot_v82_patch5209[pr->continuum_index_one_based] = rank_energy_ev;
+            source_errc_owner_by_slot_v82_patch5209[pr->continuum_index_one_based] =
+                std::make_tuple(static_cast<std::uint64_t>(pr->source_position),
+                                static_cast<std::int64_t>(pr->record), pr->data_type);
+        }
+
         std::vector<xstar_element_contribution_v1> contributions;
         contributions.reserve(evaluated.size());
         std::vector<xstar_element_contribution_v1> thermal_only_contributions;
@@ -9193,8 +9457,18 @@ int run_impl(
                         deferred.evaluated = std::move(type88_eval);
                         deferred.lower_abundance = active_population_for_full_row(
                             active, buffers.populations, source_record.lower_row) * active.element.abundance;
+                        // calc_emis_ion computes rate-42 abund2 from the raw
+                        // caller idest2 before UCalc label 88 resets idest2 to
+                        // nlevp.  New ATDB lowering retains that local endpoint
+                        // as the fourth Type-88 payload integer.  Older compact
+                        // fixtures fall back to the historical nlev row.
+                        int calc_emis_upper_row_v82_patch52010 = source_record.upper_row;
+                        if (source_record.int_count >= 4u && ii[2] > 0 && ii[3] > 0) {
+                            calc_emis_upper_row_v82_patch52010 =
+                                source_record.lower_row - static_cast<int>(ii[2]) + static_cast<int>(ii[3]);
+                        }
                         deferred.upper_abundance = active_population_for_full_row(
-                            active, buffers.populations, source_record.upper_row) * active.element.abundance;
+                            active, buffers.populations, calc_emis_upper_row_v82_patch52010) * active.element.abundance;
                         deferred_rrc_records_v82_patch520.push_back(std::move(deferred));
                     }
                 }
@@ -9287,6 +9561,16 @@ int run_impl(
         for (std::size_t k = 0; k < evaluated.size(); ++k) {
             if (!evaluated[k].spectral) continue;
             const auto& rec = evaluated[k].contribution;
+            // Literal calc_emisab_element/calc_emis_element call the per-ion
+            // emissivity routines only for ion stages inside mml(jk)..mmu(jk).
+            // The fixed-state evaluator intentionally visits the complete
+            // lowered record inventory for matrix/diagnostic purposes, so
+            // apply the source active-stage gate when constructing the
+            // spectral/publication stream.  Without it inactive Mg II rate-7
+            // records leak nonzero cemab/elumab into options 19/24 and
+            // xout_rrc1 even though FORTRAN and the Python backend never call
+            // calc_emisab_ion for that ion stage.
+            if (rec.ion_stage < active.min_stage || rec.ion_stage > active.max_stage) continue;
             xstar_spectral_contribution_v1 sc{};
             sc.source_position = static_cast<std::uint64_t>(rec.source_position);
             sc.record = rec.record;
@@ -9315,6 +9599,17 @@ int run_impl(
                 evaluated[k].type50_shadow.stored_wavelength_a > 0.0) {
                 spectral_feature_energy_ev_v82_patch5206 =
                     12398.4016 / evaluated[k].type50_shadow.stored_wavelength_a;
+            }
+            if (!evaluated[k].bound_free_spectral && spectral_feature_energy_ev_v82_patch5206 > 0.0) {
+                double source_line_wavelength_v82_patch5208 =
+                    source_real_literal_v82_patch5208(12398.4016) / spectral_feature_energy_ev_v82_patch5206;
+                if (evaluated[k].type50_shadow.valid &&
+                    evaluated[k].type50_shadow.stored_wavelength_a > 0.0) {
+                    source_line_wavelength_v82_patch5208 = evaluated[k].type50_shadow.stored_wavelength_a;
+                }
+                source_line_wavelength_by_identity_v82_patch5208[
+                    {static_cast<std::uint64_t>(rec.source_position), rec.record}] =
+                    source_line_wavelength_v82_patch5208;
             }
             sc.bin_one_based = 1;
             if (input.radiation_bin_count > 0) {
@@ -9354,7 +9649,18 @@ int run_impl(
                         ? &evaluated[k].type53_calc_emisab_shadow
                         : &evaluated[k].type53_shadow;
                 } else if (evaluated[k].type49_shadow.valid) {
-                    opacity_shadow = &evaluated[k].type49_shadow;
+                    // v82 patch 5.20.9.4: literal xstarcalc calls
+                    // calc_emisab_all on epim/bremsam before the full-grid
+                    // calc_emis_all revisit.  rlbin ranks the record-local
+                    // Type-49 opakab/cemab produced by that reduced call.
+                    // The old 5.20.8.2 full-grid seed matched the stale Python
+                    // capture, but the fresh Python/FORTRAN product comparison
+                    // exposes non-source Mg II RRC luminosity from that owner.
+                    // Keep full-grid Type-49 only for the later selected
+                    // calc_emis replay; broad rank/public seed is reduced.
+                    opacity_shadow = evaluated[k].type49_calc_emisab_shadow.valid
+                        ? &evaluated[k].type49_calc_emisab_shadow
+                        : &evaluated[k].type49_shadow;
                 }
                 if (opacity_shadow && sc.abundance_lower > 0.0 &&
                     opacity_shadow->threshold_publication_reached) {
@@ -9386,6 +9692,24 @@ int run_impl(
             }
             sc.hydrogen_density = input.hydrogen_density_cm3;
             sc.ans1 = rec.ans1; sc.ans2 = rec.ans2; sc.ans3 = rec.ans3; sc.ans4 = rec.ans4;
+            // v82 patch 5.20.9.4: the broad bound-free spectral commit is
+            // exactly the calc_emisab_all phase.  Both Type-53 and Type-49
+            // therefore publish their reduced epim/bremsam answers into
+            // record-local opakab/cemab.  calc_emis_all may later overwrite
+            // selected opakab and full-grid opakc/rccemis, but it does not
+            // overwrite cemab.
+            if (evaluated[k].bound_free_spectral && evaluated[k].type53_calc_emisab_shadow.valid) {
+                sc.ans1 = evaluated[k].type53_calc_emisab_shadow.ans[0];
+                sc.ans2 = evaluated[k].type53_calc_emisab_shadow.ans[1];
+                sc.ans3 = evaluated[k].type53_calc_emisab_shadow.ans[2];
+                sc.ans4 = evaluated[k].type53_calc_emisab_shadow.ans[3];
+            } else if (evaluated[k].bound_free_spectral &&
+                       evaluated[k].type49_calc_emisab_shadow.valid) {
+                sc.ans1 = evaluated[k].type49_calc_emisab_shadow.ans[0];
+                sc.ans2 = evaluated[k].type49_calc_emisab_shadow.ans[1];
+                sc.ans3 = evaluated[k].type49_calc_emisab_shadow.ans[2];
+                sc.ans4 = evaluated[k].type49_calc_emisab_shadow.ans[3];
+            }
             if (!evaluated[k].bound_free_spectral) sc.opakab = evaluated[k].opakab;
             sc.line_energy_eV = spectral_feature_energy_ev_v82_patch5206;
             sc.bin_width_eV = input.radiation_bin_count > 1 ? std::abs(input.radiation_energy_ev[1] - input.radiation_energy_ev[0]) : 1.0;
@@ -9393,22 +9717,9 @@ int run_impl(
             sc.natural_width_eV = evaluated[k].natural_width_ev;
             sc.turbulent_velocity_km_s = input.turbulent_velocity_km_s;
             sc.temperature_1e4K = input.temperature_k / 1.0e4;
-            if (evaluated[k].bound_free_spectral && rec.rate_type == 7) {
-                double errc_energy_v82_patch5205 = evaluated[k].line_energy_ev;
-                if (rec.data_type == 49 && evaluated[k].type49_shadow.valid &&
-                    evaluated[k].type49_shadow.source_errc_rank_energy_ev > 0.0)
-                    errc_energy_v82_patch5205 = evaluated[k].type49_shadow.source_errc_rank_energy_ev;
-                else if (rec.data_type == 53 && evaluated[k].type53_shadow.valid &&
-                         evaluated[k].type53_shadow.source_errc_rank_energy_ev > 0.0)
-                    errc_energy_v82_patch5205 = evaluated[k].type53_shadow.source_errc_rank_energy_ev;
-                else if (rec.data_type == 99 && evaluated[k].type99_shadow.valid &&
-                         evaluated[k].type99_shadow.source_errc_rank_energy_ev > 0.0)
-                    errc_energy_v82_patch5205 = evaluated[k].type99_shadow.source_errc_rank_energy_ev;
-                if (errc_energy_v82_patch5205 > 0.0 && std::isfinite(errc_energy_v82_patch5205))
-                    source_errc_rank_energy_by_identity_v82_patch5205[
-                        {static_cast<std::uint64_t>(rec.source_position), rec.record}] =
-                        errc_energy_v82_patch5205;
-            }
+            // Rate-7 errc ownership was captured above from every evaluated
+            // record before this calc_emisab abundance gate.  Do not rewrite it
+            // here from only the subset that survives spectral publication.
             spectral.push_back(sc);
         }
     }
@@ -9619,6 +9930,156 @@ int run_impl(
         const int rc = xstar_spectral_apply_contributions_v1(ctx.spectral_context, spectral.data(), spectral.size(), seeds.data(), seed_stride, &sw, &ss, error.data(), error.size());
         if (rc != 0) throw std::runtime_error(std::string("native spectral commit failed: ") + error.data());
 
+        // v82 patch 5.20.10: literal calc_emis_ion does not assign kkkl in
+        // the rate-42 branch.  Each Type-88 record therefore reuses the last
+        // rate-7 npconi2 pointer visited for that ion and phint53 writes its
+        // scalar opakab result through opakab(kkkl).  The stale errc/tauc
+        // reads do not alter the Type-88 continuum kernel because rate-42
+        // ptmp1+ptmp2 is exactly one and UCalc recomputes the physical Type-88
+        // threshold.  Preserve only the source-proved stale scalar side effect
+        // here, after the broad rate-7 spectral commit and before STPCUT sees
+        // the source workspace.
+        struct RetainedRate7SlotV82Patch52010 {
+            int slot_one_based = 0;
+            std::int64_t record = 0;
+            std::uint64_t source_position = 0u;
+        };
+        struct Type88StaleAuditRowV82Patch52010 {
+            std::uint64_t source_position = 0u;
+            std::int64_t record = 0;
+            int element_index = 0;
+            int element_z = 0;
+            int ion_stage = 0;
+            std::int64_t retained_rate7_record = 0;
+            std::uint64_t retained_rate7_source_position = 0u;
+            int retained_slot_one_based = 0;
+            double stale_errc_rank_energy_ev = 0.0;
+            double stale_tau_in = 0.0;
+            double stale_tau_out = 0.0;
+            double lower_abundance = 0.0;
+            double upper_abundance = 0.0;
+            int nb1_one_based = 0;
+            int publish_kl_one_based = 0;
+            double absorption_sigma_cm2 = 0.0;
+            double stimulated_sigma_cm2 = 0.0;
+            double prior_opakab_cm1 = 0.0;
+            double type88_opakab_cm1 = 0.0;
+            bool publication_reached = false;
+        };
+        std::vector<Type88StaleAuditRowV82Patch52010> type88_stale_audit_rows_v82_patch52010;
+        if (!defer_product_projection) {
+            std::map<std::pair<int,int>, RetainedRate7SlotV82Patch52010> retained_rate7_v82_patch52010;
+            std::map<std::pair<std::uint64_t,std::int64_t>, const DeferredRrcRecordV82Patch520*> type88_deferred_v82_patch52010;
+            for (const auto& deferred : deferred_rrc_records_v82_patch520) {
+                if (deferred.source_rate42_type88)
+                    type88_deferred_v82_patch52010[{deferred.source_position,deferred.record}] = &deferred;
+            }
+            std::unordered_map<int,int> element_z_by_index_v82_patch52010;
+            for (const auto& em : ctx.program.elements)
+                element_z_by_index_v82_patch52010[em.element_index] = em.element_z;
+            std::vector<const ProgramRecord*> source_order_v82_patch52010;
+            source_order_v82_patch52010.reserve(ctx.program.records.size());
+            for (const auto& pr : ctx.program.records) source_order_v82_patch52010.push_back(&pr);
+            std::stable_sort(source_order_v82_patch52010.begin(), source_order_v82_patch52010.end(),
+                [](const ProgramRecord* a, const ProgramRecord* b) {
+                    return a->source_position < b->source_position;
+                });
+            for (const ProgramRecord* prp : source_order_v82_patch52010) {
+                if (!prp) continue;
+                const ProgramRecord& pr = *prp;
+                const auto key = std::make_pair(pr.element_index, pr.ion_index);
+                if (pr.rate_type == 7 && pr.continuum_index_one_based > 0) {
+                    retained_rate7_v82_patch52010[key] = RetainedRate7SlotV82Patch52010{
+                        pr.continuum_index_one_based, pr.record,
+                        static_cast<std::uint64_t>(pr.source_position)};
+                    continue;
+                }
+                if (pr.rate_type != 42 || pr.opcode != XSTAR_FIXED_OPCODE_TYPE88_SUPERLEVEL_BOUND_FREE) continue;
+                const auto dit = type88_deferred_v82_patch52010.find({
+                    static_cast<std::uint64_t>(pr.source_position), pr.record});
+                if (dit == type88_deferred_v82_patch52010.end() || !dit->second) continue;
+                const auto rit = retained_rate7_v82_patch52010.find(key);
+                if (rit == retained_rate7_v82_patch52010.end() || rit->second.slot_one_based <= 0) {
+                    throw std::runtime_error("Type-88 rate-42 reached before a retained rate-7 kkkl slot");
+                }
+                const int slot_one_based = rit->second.slot_one_based;
+                const std::size_t slot = static_cast<std::size_t>(slot_one_based);
+                if (slot >= opakab.size()) throw std::runtime_error("Type-88 retained kkkl exceeds opakab workspace");
+                const auto& deferred = *dit->second;
+                const auto scalar = source_type88_stale_opakab_v82_patch52010(
+                    deferred.curve, deferred.type88_rnist,
+                    deferred.lower_abundance, deferred.upper_abundance, input);
+
+                Type88StaleAuditRowV82Patch52010 audit;
+                audit.source_position = deferred.source_position;
+                audit.record = deferred.record;
+                audit.element_index = pr.element_index;
+                audit.element_z = element_z_by_index_v82_patch52010.count(pr.element_index)
+                    ? element_z_by_index_v82_patch52010[pr.element_index] : 0;
+                audit.ion_stage = pr.ion_stage;
+                audit.retained_rate7_record = rit->second.record;
+                audit.retained_rate7_source_position = rit->second.source_position;
+                audit.retained_slot_one_based = slot_one_based;
+                audit.stale_errc_rank_energy_ev = source_errc_rank_energy_for_slot_v82_patch5209(
+                    slot_one_based, rit->second.source_position, rit->second.record, 0.0);
+                if (input.continuum_tau_in && slot > 0u && slot - 1u < input.continuum_tau_count)
+                    audit.stale_tau_in = input.continuum_tau_in[slot - 1u];
+                if (input.continuum_tau_out && slot > 0u && slot - 1u < input.continuum_tau_count)
+                    audit.stale_tau_out = input.continuum_tau_out[slot - 1u];
+                audit.lower_abundance = deferred.lower_abundance;
+                audit.upper_abundance = deferred.upper_abundance;
+                audit.nb1_one_based = scalar.nb1_one_based;
+                audit.publish_kl_one_based = scalar.publish_kl_one_based;
+                audit.absorption_sigma_cm2 = scalar.absorption_sigma_cm2;
+                audit.stimulated_sigma_cm2 = scalar.stimulated_sigma_cm2;
+                audit.prior_opakab_cm1 = opakab[slot];
+                audit.type88_opakab_cm1 = scalar.threshold_publication_reached
+                    ? scalar.opakab_cm1 : opakab[slot];
+                audit.publication_reached = scalar.threshold_publication_reached;
+                // phint53 leaves the caller scalar unchanged if the threshold
+                // publication cell is never reached.
+                if (scalar.threshold_publication_reached) opakab[slot] = scalar.opakab_cm1;
+                type88_stale_audit_rows_v82_patch52010.push_back(audit);
+            }
+
+            if (source_sequence_v82_patch511 == 59) {
+                const char* audit_path_text = std::getenv("XSTAR_V82_PATCH52010_TYPE88_STALE_AUDIT_PATH");
+                if (audit_path_text && *audit_path_text) {
+                    const std::filesystem::path audit_path(audit_path_text);
+                    if (!audit_path.parent_path().empty()) std::filesystem::create_directories(audit_path.parent_path());
+                    std::ofstream csv(audit_path);
+                    if (!csv) throw std::runtime_error("cannot create patch5.20.10 Type-88 stale-state audit");
+                    csv << "source_position,record,element_index,element_z,ion_stage,retained_rate7_record,retained_rate7_source_position,retained_slot_one_based,stale_errc_rank_energy_ev,stale_tau_in,stale_tau_out,lower_abundance,upper_abundance,nb1_one_based,publish_kl_one_based,absorption_sigma_cm2,stimulated_sigma_cm2,prior_opakab_cm1,type88_opakab_cm1,publication_reached\n";
+                    csv << std::setprecision(17);
+                    for (const auto& a : type88_stale_audit_rows_v82_patch52010) {
+                        csv << a.source_position << ',' << a.record << ',' << a.element_index << ',' << a.element_z << ','
+                            << a.ion_stage << ',' << a.retained_rate7_record << ',' << a.retained_rate7_source_position << ','
+                            << a.retained_slot_one_based << ',' << a.stale_errc_rank_energy_ev << ',' << a.stale_tau_in << ','
+                            << a.stale_tau_out << ',' << a.lower_abundance << ',' << a.upper_abundance << ','
+                            << a.nb1_one_based << ',' << a.publish_kl_one_based << ',' << a.absorption_sigma_cm2 << ','
+                            << a.stimulated_sigma_cm2 << ',' << a.prior_opakab_cm1 << ',' << a.type88_opakab_cm1 << ','
+                            << (a.publication_reached ? 1 : 0) << '\n';
+                    }
+                }
+                std::set<int> retained_slots_v82_patch52010;
+                std::size_t publication_count_v82_patch52010 = 0u;
+                for (const auto& a : type88_stale_audit_rows_v82_patch52010) {
+                    retained_slots_v82_patch52010.insert(a.retained_slot_one_based);
+                    if (a.publication_reached) ++publication_count_v82_patch52010;
+                }
+                std::cout
+                    << "V048746255172582_PATCH52010_TYPE88_RATE42_STALE_ROWS=" << type88_stale_audit_rows_v82_patch52010.size() << "\n"
+                    << "V048746255172582_PATCH52010_TYPE88_RATE42_RETAINED_SLOTS=" << retained_slots_v82_patch52010.size() << "\n"
+                    << "V048746255172582_PATCH52010_TYPE88_RATE42_THRESHOLD_PUBLICATIONS=" << publication_count_v82_patch52010 << "\n"
+                    << "V048746255172582_PATCH52010_TYPE88_STALE_ERRC_ROLE=NB1_DIAGNOSTIC_ONLY_PHYSICAL_THRESHOLD_RECOMPUTED_IN_UCALC\n"
+                    << "V048746255172582_PATCH52010_TYPE88_STALE_TAUC_ROLE=READ_ONLY_RATE42_PTMP_SUM_FIXED_ONE\n"
+                    << "V048746255172582_PATCH52010_TYPE88_STALE_OPAKAB_ROLE=WRITE_THROUGH_RETAINED_RATE7_KKKL\n"
+                    << "V048746255172582_PATCH52010_TYPE88_STALE_AUDIT="
+                    << ((std::getenv("XSTAR_V82_PATCH52010_TYPE88_STALE_AUDIT_PATH") &&
+                         *std::getenv("XSTAR_V82_PATCH52010_TYPE88_STALE_AUDIT_PATH")) ? "WRITTEN" : "NOT_REQUESTED") << "\n";
+            }
+        }
+
         // v82 patch 5.18.1: calc_emis_all ranks the calc_emisab threshold
         // surface, then calc_emis_ion revisits only ncbin-selected rate-7
         // records.  Preserve the seed for the diagnostic audit and apply the
@@ -9632,10 +10093,21 @@ int run_impl(
         // product projection -- never copy a source/oracle selection list.
         std::set<int> source_calc_emis_selected_rrc_slots_v82_patch5206;
         std::set<int> source_calc_emis_selected_line_slots_v82_patch5206;
+        // v82 patch 5.20.8: retain the full ncbin/nlbin table.  Literal
+        // calc_emis_ion searches only the column for each record's own nb1;
+        // the flattened selected-slot sets remain diagnostics only.
+        SourceRlbinAuditResultV82Patch5171 source_calc_emis_ncbin_v82_patch5208;
+        // Diagnostic-only reconstruction of the 5.20.8.2 identity-owned RRC
+        // rank table. Production uses the slot-owned table above/below.
+        SourceRlbinAuditResultV82Patch5171
+            source_calc_emis_ncbin_patch52082_audit_v82_patch5209;
+        SourceRlbinAuditResultV82Patch5171 source_calc_emis_nlbin_v82_patch5208;
         bool source_calc_emis_selection_ready_v82_patch5206 = false;
         if (!defer_product_projection) {
             std::map<std::pair<std::string,int>,SourceFeatureAuditCandidateV82Patch5171>
                 identity_by_slot_v82_patch5206;
+            std::map<int,SourceFeatureAuditCandidateV82Patch5171>
+                legacy_rrc_identity_by_slot_v82_patch5209;
             for (const auto& c : spectral) {
                 if (c.output_index <= 0 || !(c.line_energy_eV > 0.0) || !std::isfinite(c.line_energy_eV))
                     continue;
@@ -9645,18 +10117,35 @@ int run_impl(
                 m.slot_one_based = c.output_index;
                 double feature_energy = c.line_energy_eV;
                 if (is_rrc) {
-                    const auto errc_it = source_errc_rank_energy_by_identity_v82_patch5205.find(
-                        {static_cast<std::uint64_t>(c.source_position), static_cast<std::int64_t>(c.record)});
-                    if (errc_it != source_errc_rank_energy_by_identity_v82_patch5205.end())
-                        feature_energy = errc_it->second;
+                    feature_energy = source_errc_rank_energy_for_slot_v82_patch5209(
+                        c.output_index, static_cast<std::uint64_t>(c.source_position),
+                        static_cast<std::int64_t>(c.record), c.line_energy_eV);
                 }
                 if (!(feature_energy > 0.0) || !std::isfinite(feature_energy)) continue;
                 m.energy_ev = feature_energy;
-                m.wavelength_a = 12398.4016 / feature_energy;
+                m.wavelength_a = source_real_literal_v82_patch5208(12398.4016) /
+                    std::max(1.0e-34, feature_energy);
                 m.source_position = c.source_position;
                 m.record = c.record;
                 m.data_type = c.data_type;
                 identity_by_slot_v82_patch5206[{m.family, m.slot_one_based}] = m;
+                if (is_rrc) {
+                    auto legacy = m;
+                    const auto legacy_it =
+                        source_errc_rank_energy_by_identity_patch52082_audit_v82_patch5209.find(
+                            {static_cast<std::uint64_t>(c.source_position),
+                             static_cast<std::int64_t>(c.record)});
+                    if (legacy_it !=
+                        source_errc_rank_energy_by_identity_patch52082_audit_v82_patch5209.end()) {
+                        legacy.energy_ev = legacy_it->second;
+                        legacy.wavelength_a = source_real_literal_v82_patch5208(12398.4016) /
+                            std::max(1.0e-34, legacy.energy_ev);
+                    }
+                    legacy.source_position = c.source_position;
+                    legacy.record = c.record;
+                    legacy.data_type = c.data_type;
+                    legacy_rrc_identity_by_slot_v82_patch5209[c.output_index] = legacy;
+                }
             }
             std::vector<SourceFeatureAuditCandidateV82Patch5171> rrc_candidates_v82_patch5206;
             std::vector<SourceFeatureAuditCandidateV82Patch5171> line_candidates_v82_patch5206;
@@ -9682,12 +10171,31 @@ int run_impl(
                     line_candidates_v82_patch5206.push_back(c);
                 }
             }
-            const auto ncbin_v82_patch5206 = source_rlbin_exact_audit_v82_patch5171(
+            source_calc_emis_ncbin_v82_patch5208 = source_rlbin_exact_audit_v82_patch5171(
                 rrc_candidates_v82_patch5206, input.radiation_energy_ev, continuum_capacity, true);
-            const auto nlbin_v82_patch5206 = source_rlbin_exact_audit_v82_patch5171(
+            std::vector<SourceFeatureAuditCandidateV82Patch5171>
+                legacy_rrc_candidates_v82_patch5209;
+            legacy_rrc_candidates_v82_patch5209.reserve(legacy_rrc_identity_by_slot_v82_patch5209.size());
+            for (auto& kv : legacy_rrc_identity_by_slot_v82_patch5209) {
+                auto c = kv.second;
+                const std::size_t slot = static_cast<std::size_t>(c.slot_one_based);
+                if (slot >= continuum_slot_capacity) continue;
+                c.opacity = std::isfinite(opakab_calc_emisab_seed[slot])
+                    ? std::max(0.0, opakab_calc_emisab_seed[slot]) : 0.0;
+                const double e1 = std::isfinite(cemab[slot]) ? cemab[slot] : 0.0;
+                const double e2 = std::isfinite(cemab[continuum_slot_capacity + slot])
+                    ? cemab[continuum_slot_capacity + slot] : 0.0;
+                c.emission_sum = e1 + e2;
+                legacy_rrc_candidates_v82_patch5209.push_back(c);
+            }
+            source_calc_emis_ncbin_patch52082_audit_v82_patch5209 =
+                source_rlbin_exact_audit_v82_patch5171(
+                    legacy_rrc_candidates_v82_patch5209, input.radiation_energy_ev,
+                    continuum_capacity, true);
+            source_calc_emis_nlbin_v82_patch5208 = source_rlbin_exact_audit_v82_patch5171(
                 line_candidates_v82_patch5206, input.radiation_energy_ev, continuum_capacity, false);
-            source_calc_emis_selected_rrc_slots_v82_patch5206 = ncbin_v82_patch5206.selected_slots;
-            source_calc_emis_selected_line_slots_v82_patch5206 = nlbin_v82_patch5206.selected_slots;
+            source_calc_emis_selected_rrc_slots_v82_patch5206 = source_calc_emis_ncbin_v82_patch5208.selected_slots;
+            source_calc_emis_selected_line_slots_v82_patch5206 = source_calc_emis_nlbin_v82_patch5208.selected_slots;
             source_calc_emis_selection_ready_v82_patch5206 = true;
             if (source_sequence_v82_patch511 == 59) {
                 std::cout
@@ -9711,13 +10219,13 @@ int run_impl(
                 SourceFeatureAuditCandidateV82Patch5171 m;
                 m.family = "RRC";
                 m.slot_one_based = c.output_index;
-                const auto errc_it_v82_patch5205 = source_errc_rank_energy_by_identity_v82_patch5205.find(
-                    {static_cast<std::uint64_t>(c.source_position), static_cast<std::int64_t>(c.record)});
-                const double errc_energy_v82_patch5205 =
-                    errc_it_v82_patch5205 != source_errc_rank_energy_by_identity_v82_patch5205.end()
-                        ? errc_it_v82_patch5205->second : c.line_energy_eV;
-                m.energy_ev = errc_energy_v82_patch5205;
-                m.wavelength_a = 12398.4016 / errc_energy_v82_patch5205;
+                const double errc_energy_v82_patch5209 =
+                    source_errc_rank_energy_for_slot_v82_patch5209(
+                        c.output_index, static_cast<std::uint64_t>(c.source_position),
+                        static_cast<std::int64_t>(c.record), c.line_energy_eV);
+                m.energy_ev = errc_energy_v82_patch5209;
+                m.wavelength_a = source_real_literal_v82_patch5208(12398.4016) /
+                    std::max(1.0e-34, errc_energy_v82_patch5209);
                 m.source_position = c.source_position;
                 m.record = c.record;
                 m.data_type = c.data_type;
@@ -9756,7 +10264,10 @@ int run_impl(
             for (const auto& c : seed_rrc_candidates) {
                 if (c.data_type != 53) continue;
                 ++type53_candidates;
-                const bool selected = source_ncbin.selected_slots.count(c.slot_one_based) != 0u;
+                const auto consumer_decision_v82_patch5208 = source_calc_emis_consumer_v82_patch5208(
+                    c.slot_one_based, c.wavelength_a, true, true, source_ncbin,
+                    input.radiation_energy_ev, continuum_capacity);
+                const bool selected = consumer_decision_v82_patch5208.actual_consumer;
                 if (selected) ++type53_selected;
                 const auto eit = type53_revisit_evaluated_v82_patch5181.find(std::make_pair(
                     static_cast<std::uint64_t>(c.source_position), static_cast<std::uint64_t>(c.record)));
@@ -9817,6 +10328,156 @@ int run_impl(
                 << "V048746255172582_CALL2_TYPE53_SELECTED_REVISIT_RETAINED_SEED=" << type53_seed_retained << "\n"
                 << "V048746255172582_CALL2_TYPE53_SELECTED_REVISIT_OVERWRITTEN=" << type53_overwritten << "\n"
                 << "V048746255172582_V82_PATCH5181_TYPE99_DIRECT_OPAKAB_PUBLICATION_BRANCH=SOURCE_ZERO\n";
+
+            // v82 patch 5.20.8.2: Type-49 three-stage ownership audit and
+            // selected full-grid revisit.  The 5.20.8 reduced-grid Type-49
+            // scalar seed is intentionally quarantined from production because
+            // the host result moved 795/795 changed Type-49 identities away
+            // from the captured source state and inflated call-3 tau mismatch
+            // 168 -> 561.  Preserve the reduced answer as a diagnostic stage,
+            // rank from the pre-5.20.8 full-grid Type-49 seed, and explicitly
+            // replay selected Type-49 identities from the retained full-grid
+            // evaluation.  This restores the non-regressed baseline while
+            // exposing the exact reduced/full disagreement for patch 5.20.9.
+            const char* type49_revisit_path_v82_patch52082 =
+                std::getenv("XSTAR_V82_PATCH52082_TYPE49_REVISIT_AUDIT_PATH");
+            std::ofstream type49_revisit_csv_v82_patch52082;
+            if (type49_revisit_path_v82_patch52082 && *type49_revisit_path_v82_patch52082) {
+                const std::filesystem::path type49_path_v82_patch52082(type49_revisit_path_v82_patch52082);
+                if (!type49_path_v82_patch52082.parent_path().empty())
+                    std::filesystem::create_directories(type49_path_v82_patch52082.parent_path());
+                type49_revisit_csv_v82_patch52082.open(type49_path_v82_patch52082);
+                if (!type49_revisit_csv_v82_patch52082)
+                    throw std::runtime_error("cannot create patch5.20.8.2 Type-49 three-stage audit");
+                type49_revisit_csv_v82_patch52082
+                    << "slot_one_based,source_position,record,selected,final_rank,full_seed_opakab_cm1,"
+                    << "lower_abundance,upper_abundance,reduced_threshold_published,reduced_abs_sigma_cm2,"
+                    << "reduced_stim_sigma_cm2,reduced_hypothetical_opakab_cm1,full_threshold_published,"
+                    << "full_abs_sigma_cm2,full_stim_sigma_cm2,full_revisit_opakab_cm1,final_opakab_cm1,"
+                    << "action,runtime_production_modified\n";
+                type49_revisit_csv_v82_patch52082 << std::setprecision(17);
+            }
+
+            std::unordered_map<std::int64_t,const ProgramRecord*>
+                type49_record_by_position_v82_patch52082;
+            type49_record_by_position_v82_patch52082.reserve(ctx.program.records.size());
+            for (const auto& source_record_v82_patch52082 : ctx.program.records)
+                type49_record_by_position_v82_patch52082[
+                    static_cast<std::int64_t>(source_record_v82_patch52082.source_position)] =
+                    &source_record_v82_patch52082;
+
+            std::size_t type49_candidates_v82_patch52082 = 0u;
+            std::size_t type49_selected_v82_patch52082 = 0u;
+            std::size_t type49_revisit_published_v82_patch52082 = 0u;
+            std::size_t type49_unselected_full_seed_v82_patch52082 = 0u;
+            std::size_t type49_reduced_full_different_v82_patch52082 = 0u;
+            for (const auto& c : seed_rrc_candidates) {
+                if (c.data_type != 49) continue;
+                ++type49_candidates_v82_patch52082;
+                const auto eit_v82_patch52082 = type49_revisit_evaluated_v82_patch52082.find(std::make_pair(
+                    static_cast<std::uint64_t>(c.source_position), static_cast<std::uint64_t>(c.record)));
+                if (eit_v82_patch52082 == type49_revisit_evaluated_v82_patch52082.end()) continue;
+                const auto& item_v82_patch52082 = eit_v82_patch52082->second;
+                const Type53SourceShadow& full_shadow_v82_patch52082 = item_v82_patch52082.type49_shadow;
+                const Type53SourceShadow& reduced_shadow_v82_patch52082 =
+                    item_v82_patch52082.type49_calc_emisab_shadow;
+
+                const xstar_spectral_contribution_v1* spectral_item_v82_patch52082 = nullptr;
+                for (const auto& candidate_v82_patch52082 : spectral) {
+                    if (candidate_v82_patch52082.kind == XSTAR_SPECTRAL_KIND_EMISAB_BOUND_FREE &&
+                        candidate_v82_patch52082.output_index == c.slot_one_based &&
+                        candidate_v82_patch52082.source_position == c.source_position &&
+                        candidate_v82_patch52082.record == c.record) {
+                        spectral_item_v82_patch52082 = &candidate_v82_patch52082;
+                        break;
+                    }
+                }
+                if (!spectral_item_v82_patch52082) continue;
+                const auto prit_v82_patch52082 = type49_record_by_position_v82_patch52082.find(
+                    static_cast<std::int64_t>(c.source_position));
+                const bool destination_valid_v82_patch52082 =
+                    prit_v82_patch52082 != type49_record_by_position_v82_patch52082.end() &&
+                    prit_v82_patch52082->second && prit_v82_patch52082->second->lower_row > 0;
+                const auto consumer_v82_patch52082 = source_calc_emis_consumer_v82_patch5208(
+                    c.slot_one_based, c.wavelength_a, true, destination_valid_v82_patch52082, source_ncbin,
+                    input.radiation_energy_ev, continuum_capacity);
+                const bool selected_v82_patch52082 = consumer_v82_patch52082.actual_consumer;
+                if (selected_v82_patch52082) ++type49_selected_v82_patch52082;
+
+                const std::size_t slot_v82_patch52082 = static_cast<std::size_t>(c.slot_one_based);
+                const double full_seed_opakab_v82_patch52082 =
+                    slot_v82_patch52082 < opakab_calc_emisab_seed.size()
+                        ? opakab_calc_emisab_seed[slot_v82_patch52082] : 0.0;
+                const double lower_v82_patch52082 = spectral_item_v82_patch52082->abundance_lower;
+                const double upper_v82_patch52082 = spectral_item_v82_patch52082->abundance_upper;
+                const double density_v82_patch52082 = spectral_item_v82_patch52082->hydrogen_density;
+                auto published_opakab_v82_patch52082 = [&](const Type53SourceShadow& shadow) {
+                    if (!shadow.valid || !shadow.threshold_publication_reached ||
+                        !(lower_v82_patch52082 > 0.0)) return 0.0;
+                    const double ratio_v82_patch52082 = upper_v82_patch52082 / lower_v82_patch52082;
+                    const double coefficient_v82_patch52082 = std::max(0.0,
+                        shadow.threshold_cross_section_cm2 -
+                        ratio_v82_patch52082 * shadow.threshold_stimulated_cross_section_cm2);
+                    return coefficient_v82_patch52082 * lower_v82_patch52082 * density_v82_patch52082;
+                };
+                const double reduced_hypothetical_v82_patch52082 =
+                    published_opakab_v82_patch52082(reduced_shadow_v82_patch52082);
+                const double full_revisit_v82_patch52082 =
+                    published_opakab_v82_patch52082(full_shadow_v82_patch52082);
+                if (reduced_hypothetical_v82_patch52082 != full_revisit_v82_patch52082)
+                    ++type49_reduced_full_different_v82_patch52082;
+
+                bool modified_v82_patch52082 = false;
+                std::string action_v82_patch52082 = "UNSELECTED_RETAIN_FULLGRID_SEED";
+                if (selected_v82_patch52082 && full_shadow_v82_patch52082.valid &&
+                    full_shadow_v82_patch52082.threshold_publication_reached &&
+                    lower_v82_patch52082 > 0.0) {
+                    opakab[slot_v82_patch52082] = full_revisit_v82_patch52082;
+                    ++type49_revisit_published_v82_patch52082;
+                    modified_v82_patch52082 =
+                        opakab[slot_v82_patch52082] != full_seed_opakab_v82_patch52082;
+                    action_v82_patch52082 = "SELECTED_FULLGRID_REVISIT";
+                } else if (!selected_v82_patch52082) {
+                    ++type49_unselected_full_seed_v82_patch52082;
+                } else {
+                    action_v82_patch52082 = "SELECTED_RETAIN_FULLGRID_SEED_NO_PUBLICATION";
+                }
+
+                if (type49_revisit_csv_v82_patch52082) {
+                    const auto rank_it_v82_patch52082 = source_ncbin.final_rank.find(c.slot_one_based);
+                    type49_revisit_csv_v82_patch52082
+                        << c.slot_one_based << ',' << c.source_position << ',' << c.record << ','
+                        << (selected_v82_patch52082 ? 1 : 0) << ','
+                        << (rank_it_v82_patch52082 == source_ncbin.final_rank.end()
+                                ? 0 : rank_it_v82_patch52082->second) << ','
+                        << full_seed_opakab_v82_patch52082 << ',' << lower_v82_patch52082 << ','
+                        << upper_v82_patch52082 << ','
+                        << (reduced_shadow_v82_patch52082.threshold_publication_reached ? 1 : 0) << ','
+                        << reduced_shadow_v82_patch52082.threshold_cross_section_cm2 << ','
+                        << reduced_shadow_v82_patch52082.threshold_stimulated_cross_section_cm2 << ','
+                        << reduced_hypothetical_v82_patch52082 << ','
+                        << (full_shadow_v82_patch52082.threshold_publication_reached ? 1 : 0) << ','
+                        << full_shadow_v82_patch52082.threshold_cross_section_cm2 << ','
+                        << full_shadow_v82_patch52082.threshold_stimulated_cross_section_cm2 << ','
+                        << full_revisit_v82_patch52082 << ',' << opakab[slot_v82_patch52082] << ','
+                        << action_v82_patch52082 << ',' << (modified_v82_patch52082 ? 1 : 0) << '\n';
+                }
+            }
+            if (type49_revisit_csv_v82_patch52082 && !type49_revisit_csv_v82_patch52082)
+                throw std::runtime_error("cannot write patch5.20.8.2 Type-49 three-stage audit");
+            std::cout
+                << "V048746255172582_PATCH52082_TYPE49_REDUCED_SEED_PUBLICATION=RESTORED_SOURCE_OWNER_PATCH52094\n"
+                << "V048746255172582_PATCH52082_TYPE49_PRODUCTION_SEED=CALC_EMISAB_REDUCED_OWNER_PATCH52094\n"
+                << "V048746255172582_PATCH52082_TYPE49_REVISIT_CANDIDATES="
+                << type49_candidates_v82_patch52082 << "\n"
+                << "V048746255172582_PATCH52082_TYPE49_REVISIT_SELECTED="
+                << type49_selected_v82_patch52082 << "\n"
+                << "V048746255172582_PATCH52082_TYPE49_REVISIT_PUBLISHED="
+                << type49_revisit_published_v82_patch52082 << "\n"
+                << "V048746255172582_PATCH52082_TYPE49_UNSELECTED_FULLGRID_SEED="
+                << type49_unselected_full_seed_v82_patch52082 << "\n"
+                << "V048746255172582_PATCH52082_TYPE49_REDUCED_FULL_DIFFERENT="
+                << type49_reduced_full_different_v82_patch52082 << "\n";
         }
 
         // v82 patch 5.17.1: run source rlbin/ncbin/nlbin as a pure audit over
@@ -9838,18 +10499,26 @@ int run_impl(
                     SourceFeatureAuditCandidateV82Patch5171 m;
                     m.family = family;
                     m.slot_one_based = c.output_index;
-                    double feature_energy_v82_patch5205 = c.line_energy_eV;
+                    double feature_energy_v82_patch5209 = c.line_energy_eV;
                     if (is_rrc) {
-                        const auto errc_it_v82_patch5205 = source_errc_rank_energy_by_identity_v82_patch5205.find(
-                            {static_cast<std::uint64_t>(c.source_position), static_cast<std::int64_t>(c.record)});
-                        if (errc_it_v82_patch5205 != source_errc_rank_energy_by_identity_v82_patch5205.end())
-                            feature_energy_v82_patch5205 = errc_it_v82_patch5205->second;
+                        feature_energy_v82_patch5209 = source_errc_rank_energy_for_slot_v82_patch5209(
+                            c.output_index, static_cast<std::uint64_t>(c.source_position),
+                            static_cast<std::int64_t>(c.record), c.line_energy_eV);
                     }
-                    m.energy_ev = feature_energy_v82_patch5205;
-                    m.wavelength_a = 12398.4016 / feature_energy_v82_patch5205;
+                    m.energy_ev = feature_energy_v82_patch5209;
+                    m.wavelength_a = source_real_literal_v82_patch5208(12398.4016) /
+                        std::max(1.0e-34, feature_energy_v82_patch5209);
                     m.source_position = c.source_position;
                     m.record = c.record;
                     m.data_type = c.data_type;
+                    if (is_rrc) {
+                        const auto owner_it_v82_patch5209 = source_errc_owner_by_slot_v82_patch5209.find(c.output_index);
+                        if (owner_it_v82_patch5209 != source_errc_owner_by_slot_v82_patch5209.end()) {
+                            m.source_position = std::get<0>(owner_it_v82_patch5209->second);
+                            m.record = std::get<1>(owner_it_v82_patch5209->second);
+                            m.data_type = std::get<2>(owner_it_v82_patch5209->second);
+                        }
+                    }
                     identity_by_slot[key] = m;
                     ++duplicate_counts[key];
                 }
@@ -9975,9 +10644,22 @@ int run_impl(
             selected_lines_v82_patch5206.reserve(source_calc_emis_selected_line_slots_v82_patch5206.size());
             for (const auto& original_c : spectral) {
                 if (original_c.kind == XSTAR_SPECTRAL_KIND_EMISAB_BOUND_FREE ||
-                    original_c.output_index <= 0 ||
-                    source_calc_emis_selected_line_slots_v82_patch5206.count(original_c.output_index) == 0u)
+                    original_c.output_index <= 0)
                     continue;
+                const auto wavelength_it_v82_patch5208 =
+                    source_line_wavelength_by_identity_v82_patch5208.find(
+                        {static_cast<std::uint64_t>(original_c.source_position),
+                         static_cast<std::int64_t>(original_c.record)});
+                const double source_line_wavelength_v82_patch5208 =
+                    wavelength_it_v82_patch5208 != source_line_wavelength_by_identity_v82_patch5208.end()
+                        ? wavelength_it_v82_patch5208->second
+                        : (original_c.line_energy_eV > 0.0
+                            ? source_real_literal_v82_patch5208(12398.4016) / original_c.line_energy_eV
+                            : 0.0);
+                const auto line_consumer_v82_patch5208 = source_calc_emis_consumer_v82_patch5208(
+                    original_c.output_index, source_line_wavelength_v82_patch5208, false, true,
+                    source_calc_emis_nlbin_v82_patch5208, input.radiation_energy_ev, continuum_capacity);
+                if (!line_consumer_v82_patch5208.actual_consumer) continue;
                 auto c = original_c;
                 // Literal ordinary Type-50 ucalc calls linopac only above the
                 // opakb1 > 1e-34 guard, while fline is still published.
@@ -10097,18 +10779,30 @@ int run_impl(
             for (const auto& source_record : ctx.program.records)
                 record_by_source_position_v82_patch520[static_cast<std::int64_t>(source_record.source_position)] = &source_record;
             for (const auto& deferred : deferred_rrc_records_v82_patch520) {
-                if (!deferred.source_rate42_type88) {
-                    // Literal calc_emis_ion rank gating applies to rate-7
-                    // RRC consumers only.  Other deferred identities are not
-                    // promoted through this public bound-free replay.
-                    if (deferred.rate_type != 7) continue;
-                    const auto it = rrc_slot_by_identity_v82_patch520.find({deferred.source_position, deferred.record});
-                    if (it == rrc_slot_by_identity_v82_patch520.end() ||
-                        source_calc_emis_selected_rrc_slots_v82_patch5206.count(it->second) == 0u) continue;
-                }
                 const auto rit = record_by_source_position_v82_patch520.find(
                     static_cast<std::int64_t>(deferred.source_position));
                 if (rit == record_by_source_position_v82_patch520.end() || !rit->second) continue;
+                if (!deferred.source_rate42_type88) {
+                    // Literal calc_emis_ion rank gating applies to rate-7
+                    // RRC consumers only.  Crucially, selection is local to
+                    // ncbin(:,nb1) for this exact record, not the flattened
+                    // union of slots selected in any bin.
+                    if (deferred.rate_type != 7) continue;
+                    const auto it = rrc_slot_by_identity_v82_patch520.find({deferred.source_position, deferred.record});
+                    if (it == rrc_slot_by_identity_v82_patch520.end()) continue;
+                    const double rank_energy_ev_v82_patch5209 =
+                        source_errc_rank_energy_for_slot_v82_patch5209(
+                            it->second, deferred.source_position, deferred.record, deferred.curve.threshold_ev);
+                    const double errc_wavelength_a_v82_patch5209 = rank_energy_ev_v82_patch5209 > 0.0
+                        ? source_real_literal_v82_patch5208(12398.4016) /
+                            std::max(1.0e-34, rank_energy_ev_v82_patch5209)
+                        : 0.0;
+                    const bool destination_valid_v82_patch5208 = rit->second->lower_row > 0;
+                    const auto consumer_v82_patch5208 = source_calc_emis_consumer_v82_patch5208(
+                        it->second, errc_wavelength_a_v82_patch5209, true, destination_valid_v82_patch5208,
+                        source_calc_emis_ncbin_v82_patch5208, input.radiation_energy_ev, continuum_capacity);
+                    if (!consumer_v82_patch5208.actual_consumer) continue;
+                }
                 accumulate_native_bound_free_opacity_from_abundances_v82_patch5206(
                     deferred.curve, *rit->second, deferred.lower_abundance, input,
                     heatt_bound_free_opacity_v82_patch5206);
@@ -10121,6 +10815,267 @@ int run_impl(
                 } else ++selected_rrc_records_v82_patch520;
             }
         }
+        // v82 patch 5.20.8: diagnostic ledger separating rank membership
+        // from the literal record-local calc_emis_ion consumer decision.
+        const char* consumer_ledger_path_v82_patch5208 =
+            std::getenv("XSTAR_V82_PATCH5208_CONSUMER_LEDGER_PATH");
+        if (!defer_product_projection && source_sequence_v82_patch511 == 59 &&
+            consumer_ledger_path_v82_patch5208 && *consumer_ledger_path_v82_patch5208) {
+            const std::filesystem::path ledger_path_v82_patch5208(consumer_ledger_path_v82_patch5208);
+            if (!ledger_path_v82_patch5208.parent_path().empty())
+                std::filesystem::create_directories(ledger_path_v82_patch5208.parent_path());
+            std::ofstream ledger_v82_patch5208(ledger_path_v82_patch5208);
+            if (!ledger_v82_patch5208)
+                throw std::runtime_error("cannot create patch5.20.8 calc_emis consumer ledger");
+            ledger_v82_patch5208
+                << "family,source_position,record,data_type,rate_type,element_z,ion_stage,slot_one_based,"
+                << "feature_wavelength_a,feature_energy_ev,nb1_one_based,rank_in_bin,rank_selected_anywhere,"
+                << "rank_selected_in_nb1,source_range_pass,pointer_valid,destination_valid,actual_consumer,"
+                << "opacity_owner,emission_owner,rejection_reason\n";
+            ledger_v82_patch5208 << std::setprecision(17);
+
+            std::unordered_map<std::int64_t,const ProgramRecord*> record_by_position_v82_patch5208;
+            std::unordered_map<int,int> element_z_by_index_v82_patch5208;
+            for (const auto& pr : ctx.program.records)
+                record_by_position_v82_patch5208[pr.source_position] = &pr;
+            for (const auto& em : ctx.program.elements)
+                element_z_by_index_v82_patch5208[em.element_index] = em.element_z;
+            std::map<std::pair<std::uint64_t,std::int64_t>,int> rrc_slot_by_identity_v82_patch5208;
+            for (const auto& c : spectral) {
+                if (c.kind == XSTAR_SPECTRAL_KIND_EMISAB_BOUND_FREE && c.output_index > 0)
+                    rrc_slot_by_identity_v82_patch5208[{c.source_position,c.record}] = c.output_index;
+            }
+
+            std::size_t ledger_rrc_consumers_v82_patch5208 = 0u;
+            std::size_t ledger_line_consumers_v82_patch5208 = 0u;
+            std::size_t ledger_cross_bin_rejects_v82_patch5208 = 0u;
+            for (const auto& deferred : deferred_rrc_records_v82_patch520) {
+                const auto pr_it = record_by_position_v82_patch5208.find(
+                    static_cast<std::int64_t>(deferred.source_position));
+                const ProgramRecord* pr = pr_it == record_by_position_v82_patch5208.end() ? nullptr : pr_it->second;
+                const int element_z = pr && element_z_by_index_v82_patch5208.count(pr->element_index)
+                    ? element_z_by_index_v82_patch5208[pr->element_index] : 0;
+                const int ion_stage = pr ? pr->ion_stage : 0;
+                int slot_one_based = 0;
+                auto sit = rrc_slot_by_identity_v82_patch5208.find({deferred.source_position,deferred.record});
+                if (sit != rrc_slot_by_identity_v82_patch5208.end()) slot_one_based = sit->second;
+                const double feature_energy = source_errc_rank_energy_for_slot_v82_patch5209(
+                    slot_one_based, deferred.source_position, deferred.record, deferred.curve.threshold_ev);
+                const double wavelength = feature_energy > 0.0
+                    ? source_real_literal_v82_patch5208(12398.4016) / feature_energy : 0.0;
+                SourceConsumerDecisionV82Patch5208 decision;
+                std::string opacity_owner = "NONE";
+                std::string emission_owner = "NONE";
+                if (deferred.source_rate42_type88) {
+                    decision.pointer_valid = true;
+                    decision.destination_valid = pr && pr->lower_row > 0;
+                    decision.source_range_pass = true;
+                    decision.actual_consumer = decision.destination_valid;
+                    decision.rejection_reason = decision.actual_consumer ? "RATE42_UNGATED" : "INVALID_DESTINATION";
+                    opacity_owner = decision.actual_consumer ? "TYPE88_RATE42_PHINT53" : "NONE";
+                    emission_owner = decision.actual_consumer ? "TYPE88_RATE42_RRC" : "NONE";
+                } else if (deferred.rate_type == 7) {
+                    decision = source_calc_emis_consumer_v82_patch5208(
+                        slot_one_based, wavelength, true, pr && pr->lower_row > 0,
+                        source_calc_emis_ncbin_v82_patch5208, input.radiation_energy_ev, continuum_capacity);
+                    if (decision.rejection_reason == "SELECTED_IN_DIFFERENT_BIN")
+                        ++ledger_cross_bin_rejects_v82_patch5208;
+                    if (decision.actual_consumer) {
+                        opacity_owner = pr && pr->data_type == 99 ? "SOURCE_ZERO_TYPE99" : "RATE7_PHINT53";
+                        emission_owner = "RATE7_RRC";
+                    }
+                } else {
+                    decision.rejection_reason = "NOT_RATE7_OR_RATE42";
+                }
+                if (decision.actual_consumer) ++ledger_rrc_consumers_v82_patch5208;
+                ledger_v82_patch5208 << "RRC," << deferred.source_position << ',' << deferred.record << ','
+                    << (pr ? pr->data_type : 0) << ',' << deferred.rate_type << ',' << element_z << ',' << ion_stage << ','
+                    << slot_one_based << ',' << wavelength << ',' << feature_energy << ',' << decision.nb1_one_based << ','
+                    << decision.rank_in_bin << ',' << (decision.selected_anywhere ? 1 : 0) << ','
+                    << (decision.selected_in_nb1 ? 1 : 0) << ',' << (decision.source_range_pass ? 1 : 0) << ','
+                    << (decision.pointer_valid ? 1 : 0) << ',' << (decision.destination_valid ? 1 : 0) << ','
+                    << (decision.actual_consumer ? 1 : 0) << ',' << opacity_owner << ',' << emission_owner << ','
+                    << decision.rejection_reason << '\n';
+            }
+
+            for (const auto& c : spectral) {
+                if (c.kind == XSTAR_SPECTRAL_KIND_EMISAB_BOUND_FREE || c.output_index <= 0) continue;
+                const auto pr_it = record_by_position_v82_patch5208.find(static_cast<std::int64_t>(c.source_position));
+                const ProgramRecord* pr = pr_it == record_by_position_v82_patch5208.end() ? nullptr : pr_it->second;
+                const int element_z = pr && element_z_by_index_v82_patch5208.count(pr->element_index)
+                    ? element_z_by_index_v82_patch5208[pr->element_index] : 0;
+                const auto wit = source_line_wavelength_by_identity_v82_patch5208.find(
+                    {static_cast<std::uint64_t>(c.source_position), static_cast<std::int64_t>(c.record)});
+                const double wavelength = wit != source_line_wavelength_by_identity_v82_patch5208.end()
+                    ? wit->second : (c.line_energy_eV > 0.0
+                        ? source_real_literal_v82_patch5208(12398.4016) / c.line_energy_eV : 0.0);
+                const double feature_energy = wavelength > 0.0
+                    ? source_real_literal_v82_patch5208(12398.4016) / (wavelength + 1.0e-36) : 0.0;
+                const auto decision = source_calc_emis_consumer_v82_patch5208(
+                    c.output_index, wavelength, false, pr && pr->lower_row > 0,
+                    source_calc_emis_nlbin_v82_patch5208, input.radiation_energy_ev, continuum_capacity);
+                if (decision.actual_consumer) ++ledger_line_consumers_v82_patch5208;
+                if (decision.rejection_reason == "SELECTED_IN_DIFFERENT_BIN")
+                    ++ledger_cross_bin_rejects_v82_patch5208;
+                ledger_v82_patch5208 << "LINE," << c.source_position << ',' << c.record << ',' << c.data_type << ','
+                    << c.rate_type << ',' << element_z << ',' << (pr ? pr->ion_stage : 0) << ',' << c.output_index << ','
+                    << wavelength << ',' << feature_energy << ',' << decision.nb1_one_based << ',' << decision.rank_in_bin << ','
+                    << (decision.selected_anywhere ? 1 : 0) << ',' << (decision.selected_in_nb1 ? 1 : 0) << ','
+                    << (decision.source_range_pass ? 1 : 0) << ',' << (decision.pointer_valid ? 1 : 0) << ','
+                    << (decision.destination_valid ? 1 : 0) << ',' << (decision.actual_consumer ? 1 : 0) << ','
+                    << (decision.actual_consumer ? "NLBIN_LINE_OPACITY" : "NONE") << ','
+                    << (decision.actual_consumer ? "NLBIN_LINE_EMISSION" : "NONE") << ','
+                    << decision.rejection_reason << '\n';
+            }
+            if (!ledger_v82_patch5208)
+                throw std::runtime_error("cannot write patch5.20.8 calc_emis consumer ledger");
+            std::cout
+                << "V048746255172582_PATCH5208_ACTUAL_RRC_CONSUMERS=" << ledger_rrc_consumers_v82_patch5208 << "\n"
+                << "V048746255172582_PATCH5208_ACTUAL_LINE_CONSUMERS=" << ledger_line_consumers_v82_patch5208 << "\n"
+                << "V048746255172582_PATCH5208_SELECTED_DIFFERENT_BIN_REJECTIONS=" << ledger_cross_bin_rejects_v82_patch5208 << "\n"
+                << "V048746255172582_PATCH5208_CONSUMER_LEDGER=WRITTEN\n";
+        }
+
+        // v82 patch 5.20.9: explicit Type-49/53 ownership-delta ledger.
+        // Compare the previous identity-owned 5.20.8.2 reconstruction against
+        // the literal xstarsetup slot-owned errc + calc_emis_ion decision. This
+        // diagnostic never feeds a production array.
+        const char* ownership_ledger_path_v82_patch5209 =
+            std::getenv("XSTAR_V82_PATCH5209_BOUND_FREE_OWNERSHIP_LEDGER_PATH");
+        if (!defer_product_projection && source_sequence_v82_patch511 == 59 &&
+            ownership_ledger_path_v82_patch5209 && *ownership_ledger_path_v82_patch5209) {
+            const std::filesystem::path ownership_path_v82_patch5209(
+                ownership_ledger_path_v82_patch5209);
+            if (!ownership_path_v82_patch5209.parent_path().empty())
+                std::filesystem::create_directories(ownership_path_v82_patch5209.parent_path());
+            std::ofstream ownership_v82_patch5209(ownership_path_v82_patch5209);
+            if (!ownership_v82_patch5209)
+                throw std::runtime_error("cannot create patch5.20.9 bound-free ownership ledger");
+            ownership_v82_patch5209
+                << "source_position,record,data_type,rate_type,element_z,ion_stage,slot_one_based,"
+                << "identity_rank_energy_ev,slot_rank_energy_ev,slot_owner_source_position,"
+                << "slot_owner_record,slot_owner_data_type,identity_nb1_one_based,slot_nb1_one_based,"
+                << "patch52082_identity_consumer,literal_slot_consumer,ownership_delta,"
+                << "identity_rejection_reason,slot_rejection_reason,kernel_available\n";
+            ownership_v82_patch5209 << std::setprecision(17);
+
+            std::unordered_map<std::int64_t,const ProgramRecord*> record_by_position_v82_patch5209;
+            std::unordered_map<int,int> element_z_by_index_v82_patch5209;
+            for (const auto& pr : ctx.program.records)
+                record_by_position_v82_patch5209[pr.source_position] = &pr;
+            for (const auto& em : ctx.program.elements)
+                element_z_by_index_v82_patch5209[em.element_index] = em.element_z;
+
+            std::array<std::size_t,2> source_only_v82_patch5209{{0u,0u}};
+            std::array<std::size_t,2> native_only_v82_patch5209{{0u,0u}};
+            std::array<std::size_t,2> both_v82_patch5209{{0u,0u}};
+            std::array<std::size_t,2> neither_v82_patch5209{{0u,0u}};
+            std::array<std::size_t,2> total_v82_patch5209{{0u,0u}};
+            std::size_t slot_owner_cross_type_v82_patch5209 = 0u;
+
+            for (const auto& deferred : deferred_rrc_records_v82_patch520) {
+                if (deferred.source_rate42_type88 || deferred.rate_type != 7) continue;
+                const auto pr_it = record_by_position_v82_patch5209.find(
+                    static_cast<std::int64_t>(deferred.source_position));
+                if (pr_it == record_by_position_v82_patch5209.end() || !pr_it->second) continue;
+                const ProgramRecord& pr = *pr_it->second;
+                if (pr.data_type != 49 && pr.data_type != 53) continue;
+                const int family_index = pr.data_type == 49 ? 0 : 1;
+                ++total_v82_patch5209[static_cast<std::size_t>(family_index)];
+                const int slot_one_based = pr.continuum_index_one_based;
+                const auto identity = std::make_pair(
+                    deferred.source_position, deferred.record);
+                double identity_energy_v82_patch5209 = deferred.curve.threshold_ev;
+                const auto legacy_energy_it_v82_patch5209 =
+                    source_errc_rank_energy_by_identity_patch52082_audit_v82_patch5209.find(identity);
+                if (legacy_energy_it_v82_patch5209 !=
+                    source_errc_rank_energy_by_identity_patch52082_audit_v82_patch5209.end())
+                    identity_energy_v82_patch5209 = legacy_energy_it_v82_patch5209->second;
+                const double slot_energy_v82_patch5209 =
+                    source_errc_rank_energy_for_slot_v82_patch5209(
+                        slot_one_based, deferred.source_position, deferred.record,
+                        deferred.curve.threshold_ev);
+                const double identity_wavelength_v82_patch5209 = identity_energy_v82_patch5209 > 0.0
+                    ? source_real_literal_v82_patch5208(12398.4016) /
+                        std::max(1.0e-34, identity_energy_v82_patch5209) : 0.0;
+                const double slot_wavelength_v82_patch5209 = slot_energy_v82_patch5209 > 0.0
+                    ? source_real_literal_v82_patch5208(12398.4016) /
+                        std::max(1.0e-34, slot_energy_v82_patch5209) : 0.0;
+                const bool destination_valid_v82_patch5209 = pr.lower_row > 0;
+                const auto legacy_decision_v82_patch5209 = source_calc_emis_consumer_v82_patch5208(
+                    slot_one_based, identity_wavelength_v82_patch5209, true,
+                    destination_valid_v82_patch5209,
+                    source_calc_emis_ncbin_patch52082_audit_v82_patch5209,
+                    input.radiation_energy_ev, continuum_capacity);
+                const auto source_decision_v82_patch5209 = source_calc_emis_consumer_v82_patch5208(
+                    slot_one_based, slot_wavelength_v82_patch5209, true,
+                    destination_valid_v82_patch5209,
+                    source_calc_emis_ncbin_v82_patch5208,
+                    input.radiation_energy_ev, continuum_capacity);
+
+                std::string delta_v82_patch5209 = "NEITHER";
+                if (source_decision_v82_patch5209.actual_consumer &&
+                    legacy_decision_v82_patch5209.actual_consumer) {
+                    delta_v82_patch5209 = "BOTH";
+                    ++both_v82_patch5209[static_cast<std::size_t>(family_index)];
+                } else if (source_decision_v82_patch5209.actual_consumer) {
+                    delta_v82_patch5209 = "LITERAL_ONLY";
+                    ++source_only_v82_patch5209[static_cast<std::size_t>(family_index)];
+                } else if (legacy_decision_v82_patch5209.actual_consumer) {
+                    delta_v82_patch5209 = "PATCH52082_ONLY";
+                    ++native_only_v82_patch5209[static_cast<std::size_t>(family_index)];
+                } else {
+                    ++neither_v82_patch5209[static_cast<std::size_t>(family_index)];
+                }
+
+                std::uint64_t slot_owner_position_v82_patch5209 = 0u;
+                std::int64_t slot_owner_record_v82_patch5209 = 0;
+                int slot_owner_type_v82_patch5209 = 0;
+                const auto owner_it_v82_patch5209 =
+                    source_errc_owner_by_slot_v82_patch5209.find(slot_one_based);
+                if (owner_it_v82_patch5209 != source_errc_owner_by_slot_v82_patch5209.end()) {
+                    slot_owner_position_v82_patch5209 = std::get<0>(owner_it_v82_patch5209->second);
+                    slot_owner_record_v82_patch5209 = std::get<1>(owner_it_v82_patch5209->second);
+                    slot_owner_type_v82_patch5209 = std::get<2>(owner_it_v82_patch5209->second);
+                    if (slot_owner_type_v82_patch5209 != 0 &&
+                        slot_owner_type_v82_patch5209 != pr.data_type)
+                        ++slot_owner_cross_type_v82_patch5209;
+                }
+                const int element_z_v82_patch5209 =
+                    element_z_by_index_v82_patch5209.count(pr.element_index)
+                        ? element_z_by_index_v82_patch5209[pr.element_index] : 0;
+                ownership_v82_patch5209
+                    << pr.source_position << ',' << pr.record << ',' << pr.data_type << ','
+                    << pr.rate_type << ',' << element_z_v82_patch5209 << ',' << pr.ion_stage << ','
+                    << slot_one_based << ',' << identity_energy_v82_patch5209 << ','
+                    << slot_energy_v82_patch5209 << ',' << slot_owner_position_v82_patch5209 << ','
+                    << slot_owner_record_v82_patch5209 << ',' << slot_owner_type_v82_patch5209 << ','
+                    << legacy_decision_v82_patch5209.nb1_one_based << ','
+                    << source_decision_v82_patch5209.nb1_one_based << ','
+                    << (legacy_decision_v82_patch5209.actual_consumer ? 1 : 0) << ','
+                    << (source_decision_v82_patch5209.actual_consumer ? 1 : 0) << ','
+                    << delta_v82_patch5209 << ','
+                    << legacy_decision_v82_patch5209.rejection_reason << ','
+                    << source_decision_v82_patch5209.rejection_reason << ",1\n";
+            }
+            if (!ownership_v82_patch5209)
+                throw std::runtime_error("cannot write patch5.20.9 bound-free ownership ledger");
+            std::cout
+                << "V048746255172582_PATCH5209_TYPE49_CONSUMER_CANDIDATES=" << total_v82_patch5209[0] << "\n"
+                << "V048746255172582_PATCH5209_TYPE49_LITERAL_SLOT_ONLY_CONSUMERS=" << source_only_v82_patch5209[0] << "\n"
+                << "V048746255172582_PATCH5209_TYPE49_PATCH52082_IDENTITY_ONLY_CONSUMERS=" << native_only_v82_patch5209[0] << "\n"
+                << "V048746255172582_PATCH5209_TYPE49_COMMON_CONSUMERS=" << both_v82_patch5209[0] << "\n"
+                << "V048746255172582_PATCH5209_TYPE49_NONCONSUMERS=" << neither_v82_patch5209[0] << "\n"
+                << "V048746255172582_PATCH5209_TYPE53_CONSUMER_CANDIDATES=" << total_v82_patch5209[1] << "\n"
+                << "V048746255172582_PATCH5209_TYPE53_LITERAL_SLOT_ONLY_CONSUMERS=" << source_only_v82_patch5209[1] << "\n"
+                << "V048746255172582_PATCH5209_TYPE53_PATCH52082_IDENTITY_ONLY_CONSUMERS=" << native_only_v82_patch5209[1] << "\n"
+                << "V048746255172582_PATCH5209_TYPE53_COMMON_CONSUMERS=" << both_v82_patch5209[1] << "\n"
+                << "V048746255172582_PATCH5209_TYPE53_NONCONSUMERS=" << neither_v82_patch5209[1] << "\n"
+                << "V048746255172582_PATCH5209_CROSS_TYPE_SLOT_OWNERS=" << slot_owner_cross_type_v82_patch5209 << "\n"
+                << "V048746255172582_PATCH5209_ERRC_OWNERSHIP=SOURCE_ORDER_LAST_WRITER_PER_NPCONI2_SLOT\n"
+                << "V048746255172582_PATCH5209_BOUND_FREE_OWNERSHIP_LEDGER=WRITTEN\n";
+        }
+
         if (!defer_product_projection) {
             for (std::size_t k = 0; k < continuum_capacity; ++k) {
                 output.opacity[k] += heatt_bound_free_opacity_v82_patch5206[k];
@@ -10186,6 +11141,8 @@ int run_impl(
 
             // Bound-free rows in literal source-consumer order.
             for (const auto& deferred : deferred_rrc_records_v82_patch520) {
+                const auto rit = record_by_position_v82_patch5206.find(static_cast<std::int64_t>(deferred.source_position));
+                if (rit == record_by_position_v82_patch5206.end() || !rit->second) continue;
                 if (!deferred.source_rate42_type88) {
                     if (deferred.rate_type != 7) continue;
                     int slot_one_based = 0;
@@ -10195,11 +11152,16 @@ int run_impl(
                             slot_one_based = c.output_index; break;
                         }
                     }
-                    if (slot_one_based <= 0 ||
-                        source_calc_emis_selected_rrc_slots_v82_patch5206.count(slot_one_based) == 0u) continue;
+                    const double rank_energy_v82_patch5209 = source_errc_rank_energy_for_slot_v82_patch5209(
+                        slot_one_based, deferred.source_position, deferred.record, deferred.curve.threshold_ev);
+                    const double errc_wavelength_v82_patch5209 = rank_energy_v82_patch5209 > 0.0
+                        ? source_real_literal_v82_patch5208(12398.4016) /
+                            std::max(1.0e-34, rank_energy_v82_patch5209) : 0.0;
+                    const auto consumer_v82_patch5208 = source_calc_emis_consumer_v82_patch5208(
+                        slot_one_based, errc_wavelength_v82_patch5209, true, rit->second->lower_row > 0,
+                        source_calc_emis_ncbin_v82_patch5208, input.radiation_energy_ev, continuum_capacity);
+                    if (!consumer_v82_patch5208.actual_consumer) continue;
                 }
-                const auto rit = record_by_position_v82_patch5206.find(static_cast<std::int64_t>(deferred.source_position));
-                if (rit == record_by_position_v82_patch5206.end() || !rit->second) continue;
                 std::vector<double> one(continuum_capacity, 0.0);
                 accumulate_native_bound_free_opacity_from_abundances_v82_patch5206(
                     deferred.curve, *rit->second, deferred.lower_abundance, input, one);

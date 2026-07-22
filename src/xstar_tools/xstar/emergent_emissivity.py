@@ -747,6 +747,7 @@ def _as_emisab_context(context: CalcEmisContext) -> CalcEmisabContext:
         ucalc_engine=context.ucalc_engine,
         ucalc_evaluator=context.ucalc_evaluator,
         initial_leveltemp_workspace=context.initial_leveltemp_workspace,
+        ucalc_radiation_grid_role="full",
     )
 
 

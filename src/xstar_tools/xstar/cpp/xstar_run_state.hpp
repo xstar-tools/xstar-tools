@@ -127,6 +127,14 @@ struct LegacyPprintState {
     bool initialized_from_native_controller = false;
     bool option_sequence_exact = false;
     bool finalized_from_native_controller = false;
+    // Literal xstar.f90 post-radial block: one zero-thickness xstarcalc with
+    // nlimd=0, followed by heatt/stpcut and a 4(1pe16.8) scalar write before
+    // pprint(22).  These are computed native values, never oracle inputs.
+    bool final_zero_thickness_evaluation_present = false;
+    double final_temperature_t4 = 0.0;
+    double final_total_heating = 0.0;
+    double final_total_cooling = 0.0;
+    double final_hmctot = 0.0;
 
     bool complete() const {
         return initialized_from_native_controller && option_sequence_exact &&

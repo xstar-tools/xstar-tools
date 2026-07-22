@@ -128,6 +128,12 @@ class RRCOutputMetadata:
     upper_level: str = "continuum"
     lower_local_index: int = 0
     upper_local_index: int = 0
+    # Source record metadata retained for literal xstarsetup/calc_emis rank
+    # geometry.  Type 49 does not rank on the generic fstepr3 threshold: it
+    # uses rdat1(np1r)*13.598 with default-REAL literal semantics.
+    source_record: int = 0
+    data_type: int = 0
+    rank_threshold_eV: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -2271,6 +2277,12 @@ def run_output_writer_sequence(
             "nlimd": 0,
             "dsec_skipped": True,
             "source_order": list(source_order),
+            # xstar.f90 immediately writes these four scalars after the final
+            # xstarcalc -> heatt -> stpcut sequence (format 4(1pe16.8)).
+            "temperature_t4": float(state.plasma.temperature) / 1.0e4,
+            "httot": float(state.thermal.heating),
+            "cltot": float(state.thermal.cooling),
+            "hmctot": float(state.thermal.residual),
         }
 
     pprint_paths: dict[str, str] = {}

@@ -1249,22 +1249,30 @@ class SourceFaithfulUCalc:
         return float(level.energy_ev) if level is not None else float(fallback)
 
     def _live_type53_state(self, context: UCalcContext) -> Any:
-        """Return the radiation state used by type-53 ``phint53`` side effects.
+        """Return the literal caller-owned radiation grid for ``phint53``.
 
-        Most ``ucalc`` continuum-rate helpers consume the reduced ``epim`` /
-        ``bremsam`` grid.  The type-53 ``phint53`` side effects are different:
-        they add directly to the full ``opakc``, ``opakcont`` and
-        ``rccemis(1:2)`` arrays that are later written by ``fstepr4``.  Using the
-        reduced grid here compresses threshold bins by about a factor of ten in
-        the normal 9999-bin run, which is the observed ``xo01_detal4.emis in``
-        failure mode.
+        XSTAR calls UCalc from two distinct emissivity phases.
+
+        * ``calc_emisab_all`` receives the reduced ``epim/bremsam`` grid.
+        * ``calc_emis_all`` receives the full ``epi/bremsa`` grid.
+
+        The Python radiation object can carry both arrays at once, so choosing
+        a grid merely because the full arrays exist is not source-faithful.
+        The shared emissivity context therefore supplies
+        ``bound_free_radiation_grid_role``.  Legacy/direct UCalc callers that
+        omit the role retain the previous full-grid preference.
         """
         from xstar_tools.rates_type53 import Type53LiveRadiationState
 
         radiation = context.radiation
         if isinstance(radiation, Type53LiveRadiationState):
             return radiation
-        cached = getattr(radiation, "_type53_full_live_state", None)
+
+        role = str(context.extras.get("bound_free_radiation_grid_role", "auto") or "auto").strip().lower()
+        if role not in {"reduced", "full", "auto"}:
+            role = "auto"
+        cache_name = "_type53_reduced_live_state" if role == "reduced" else "_type53_full_live_state"
+        cached = getattr(radiation, cache_name, None)
         if isinstance(cached, Type53LiveRadiationState):
             return cached
 
@@ -1276,22 +1284,46 @@ class SourceFaithfulUCalc:
         full_bremsa = np.asarray(getattr(radiation, "bremsa", ()), dtype=float).reshape(-1)
         full_bremsint = np.asarray(getattr(radiation, "bremsint", ()), dtype=float).reshape(-1)
         reduced_epi = np.asarray(getattr(radiation, "epim_eV", getattr(radiation, "epim", ())), dtype=float).reshape(-1)
+        reduced_bremsa = np.asarray(getattr(radiation, "bremsam", ()), dtype=float).reshape(-1)
 
-        full_ready = (
-            full_epi.size >= 3
-            and full_bremsa.size >= full_epi.size
-            and np.all(np.isfinite(full_epi))
-            and np.all(np.isfinite(full_bremsa[: full_epi.size]))
-            and np.all(np.diff(full_epi) > 0.0)
-        )
-        if full_ready:
+        def valid_grid(epi: np.ndarray, brem: np.ndarray) -> bool:
+            return bool(
+                epi.size >= 3 and brem.size >= epi.size
+                and np.all(np.isfinite(epi))
+                and np.all(np.isfinite(brem[: epi.size]))
+                and np.all(np.diff(epi) > 0.0)
+            )
+
+        use_reduced = role == "reduced"
+        use_full = role in {"full", "auto"}
+        if use_reduced and valid_grid(reduced_epi, reduced_bremsa):
+            epi = reduced_epi
+            brem = reduced_bremsa[: reduced_epi.size]
+            # bremsint is regenerated on the reduced grid by bremsmap and is
+            # the array passed to calc_emisab_all.  It may have caller tail
+            # capacity; consume only the active prefix.
+            if full_bremsint.size >= reduced_epi.size:
+                bint = full_bremsint[: reduced_epi.size]
+            else:
+                bint = np.zeros(reduced_epi.size, dtype=float)
+            metadata = {
+                **base_metadata,
+                "type53_grid_policy": "literal_calc_emisab_reduced_epim_bremsam",
+                "type53_grid_source": "reduced_epim_bremsam",
+                "type53_full_grid_points": int(full_epi.size),
+                "type53_reduced_grid_points": int(reduced_epi.size),
+            }
+            if full_epi.size >= 3 and np.all(np.isfinite(full_epi)) and np.all(np.diff(full_epi) > 0.0):
+                metadata["type53_full_epi_eV"] = tuple(float(v) for v in full_epi)
+            state = Type53LiveRadiationState.from_sequences(epi, brem, bint, metadata=metadata)
+        elif use_full and valid_grid(full_epi, full_bremsa):
             if full_bremsint.size >= full_epi.size:
                 bint = full_bremsint[: full_epi.size]
             else:
                 bint = np.zeros(full_epi.size, dtype=float)
             metadata = {
                 **base_metadata,
-                "type53_grid_policy": "full_high_resolution_epi_bremsa_for_side_effects",
+                "type53_grid_policy": "literal_calc_emis_full_epi_bremsa",
                 "type53_grid_source": "full_epi_bremsa",
                 "type53_full_grid_points": int(full_epi.size),
                 "type53_reduced_grid_points": int(reduced_epi.size),
@@ -1303,17 +1335,17 @@ class SourceFaithfulUCalc:
             epi, brem, bint = _radiation_arrays(radiation)
             metadata = {
                 **base_metadata,
-                "type53_grid_policy": "fallback_reduced_grid_due_to_missing_full_epi_bremsa",
-                "type53_grid_source": "fallback_reduced_epim_bremsam",
+                "type53_grid_policy": "fallback_active_ucalc_radiation_arrays",
+                "type53_grid_source": "fallback_ucalc_arrays",
                 "type53_full_grid_points": int(full_epi.size),
-                "type53_reduced_grid_points": int(epi.size),
+                "type53_reduced_grid_points": int(reduced_epi.size),
             }
             if full_epi.size >= 3 and np.all(np.isfinite(full_epi)) and np.all(np.diff(full_epi) > 0.0):
                 metadata["type53_full_epi_eV"] = tuple(float(v) for v in full_epi)
             state = Type53LiveRadiationState.from_sequences(epi, brem, bint, metadata=metadata)
 
         try:
-            setattr(radiation, "_type53_full_live_state", state)
+            setattr(radiation, cache_name, state)
         except Exception:
             pass
         return state
@@ -1601,6 +1633,36 @@ class SourceFaithfulUCalc:
 
     def _mapped_grid(self, c: UCalcContext) -> np.ndarray:
         return _radiation_arrays(c.radiation)[0]
+
+    def _bound_free_caller_grid(self, c: UCalcContext) -> np.ndarray:
+        """Return the continuum grid passed by the literal emissivity caller.
+
+        ``calc_emisab_all`` calls UCalc on the reduced ``epim`` grid while
+        ``calc_emis_all`` calls it on the full ``epi`` grid.  The Python
+        radiation workspace carries both arrays simultaneously, so generic
+        ``_radiation_arrays`` preference is not enough to reproduce the
+        caller-owned grid.  Emissivity contexts explicitly publish
+        ``bound_free_radiation_grid_role``; direct/legacy UCalc callers that
+        omit it retain the historical mapped-grid behavior.
+        """
+
+        role = str(c.extras.get("bound_free_radiation_grid_role", "auto") or "auto").strip().lower()
+        radiation = c.radiation
+        if role == "full":
+            epi = np.asarray(
+                getattr(radiation, "epi_eV", getattr(radiation, "epi", ())),
+                dtype=float,
+            ).reshape(-1)
+            if epi.size >= 3 and np.all(np.isfinite(epi)) and np.all(np.diff(epi) > 0.0):
+                return epi
+        elif role == "reduced":
+            epim = np.asarray(
+                getattr(radiation, "epim_eV", getattr(radiation, "epim", ())),
+                dtype=float,
+            ).reshape(-1)
+            if epim.size >= 3 and np.all(np.isfinite(epim)) and np.all(np.diff(epim) > 0.0):
+                return epim
+        return self._mapped_grid(c)
 
     def _eval_type19(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         if len(r.reals)<5 or not r.integers: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type19_short_record")
@@ -1915,9 +1977,12 @@ class SourceFaithfulUCalc:
         threshold=self._level_threshold(c,id1)
         e=np.asarray(r.reals[0::2],float); xs=np.maximum(np.asarray(r.reals[1::2],float)*1e-18,0.0); n=min(e.size,xs.size)
         if n<2: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type49_missing_cross_section_pairs")
-        e,xs=phextrap(e[:n],xs[:n],threshold,len(self._mapped_grid(c)))
+        caller_grid = self._bound_free_caller_grid(c)
+        e,xs=phextrap(e[:n],xs[:n],threshold,len(caller_grid))
         out=self._type53_from_pairs(r,c,s,energy_ryd=e,sigma_cm2=xs,threshold_ev=threshold,idest1=id1,idest2=id2)
         return replace(out, diagnostics={**dict(out.diagnostics),
+            "type49_phextrap_grid_role": str(c.extras.get("bound_free_radiation_grid_role", "auto") or "auto"),
+            "type49_phextrap_grid_points": int(caller_grid.size),
             "type49_parent_offset_packed_index": -4,
             "type49_idest4_packed_index": -3,
             "type49_parent_offset": off,
