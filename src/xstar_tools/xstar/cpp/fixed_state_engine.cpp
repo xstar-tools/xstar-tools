@@ -7672,6 +7672,10 @@ Type88StaleOpakabV82Patch52010 source_type88_stale_opakab_v82_patch52010(
     return out;
 }
 
+// v82 patch 5.20.11: the heatt-facing phint53 RRC reconstruction must use
+// expo.f90 (historical +/-60 clamp), exactly like the accepted rate/integral
+// evaluator and the pure-Python source port.  A generic +/-700 exponential
+// suppresses the high-excess-energy recombination tail and perturbs heatt.
 void accumulate_native_bound_free_rrc_from_abundances_v82_patch520(
     const NativeBoundFreeCurve& curve,
     const EvaluatedRecord& evaluated,
@@ -7705,7 +7709,7 @@ void accumulate_native_bound_free_rrc_from_abundances_v82_patch520(
             exptst = (epiip - curve.threshold_ev) / std::max(bktm, 1.0e-300);
             if (previous_exptst < 200.0 && sgtpp > 0.0 && upper_abundance > 0.0 &&
                 density > 0.0 && epiip > 0.0) {
-                const double exptmpp = limited_exp(-exptst);
+                const double exptmpp = type53_expo(-exptst);
                 const double bbnurjp = std::pow(std::min(2.0e4, epiip), 3.0) * 1.571e22 * 2.0;
                 const double common = upper_abundance * density * evaluated.type53_shadow.rnist *
                     bbnurjp * sgtpp * exptmpp;
@@ -7738,7 +7742,7 @@ void accumulate_native_bound_free_rrc_from_abundances_v82_patch520(
             exptst = (epiip - curve.threshold_ev) / std::max(bktm, 1.0e-300);
             if (shadow && shadow->valid && shadow->rnist > 0.0 && previous_exptst < 200.0 &&
                 sgtpp > 0.0 && upper_abundance > 0.0 && density > 0.0 && epiip > 0.0) {
-                const double exptmpp = limited_exp(-exptst);
+                const double exptmpp = type53_expo(-exptst);
                 const double bbnurjp = std::pow(std::min(2.0e4, epiip), 3.0) * 1.571e22 * 2.0;
                 const double common = upper_abundance * density * shadow->rnist *
                     bbnurjp * sgtpp * exptmpp;

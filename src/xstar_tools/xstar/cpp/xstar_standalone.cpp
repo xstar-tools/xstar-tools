@@ -11780,19 +11780,32 @@ void advance_source_continuum_radiation_v82_patch52(
     // r += delr, trnfrn commits zremso, and the next zone's trnfrc(-1) projects
     // zrems(1,:) at the new radius.  Only the final ncn2 bin remains zero.
     const double next_radius_cm = radius_cm + delta_radius_cm;
-    const double r19 = next_radius_cm / 1.0e19;
-    const double fpr2 = 12.56 * r19 * r19;
-    if (!(fpr2 > 0.0) || !std::isfinite(fpr2)) {
-        throw std::runtime_error("v82 patch5.2 next-radius trnfrc normalization is invalid");
+    // v82 patch 5.20.11: trnfrc.f90 declares both 12.56 and 1.e+19 as
+    // default-REAL literals.  Use the exact binary32-promoted historical
+    // constants rather than binary64 spellings; this projection is also the
+    // reference inverse used to reconstruct the source post-heatt zrems.
+    const double trnfrc_r19 = next_radius_cm / xstar_constants::kLegacyTrnfrcRadiusScaleCm;
+    const double trnfrc_fpr2 = xstar_constants::kLegacyTrnfrcGeometryFactor *
+        trnfrc_r19 * trnfrc_r19;
+    if (!(trnfrc_fpr2 > 0.0) || !std::isfinite(trnfrc_fpr2)) {
+        throw std::runtime_error("v82 patch5.20.11 next-radius trnfrc normalization is invalid");
     }
     data.dsec_bremsa.assign(n, 0.0);
     if (n >= 2u) {
         for (std::size_t reverse = 1u; reverse <= n - 1u; ++reverse) {
             const std::size_t i = (n - 1u) - reverse;
-            data.dsec_bremsa[i] = data.accumulated_zrems[i] / fpr2;
+            data.dsec_bremsa[i] = data.accumulated_zrems[i] / trnfrc_fpr2;
         }
     }
     write_continuum_transfer_stage_v82_patch52(data, "19_post_trnfrc_bremsa", data.dsec_bremsa);
+    if (data.reference_trajectory_mode && data.call_index == 2u) {
+        std::cout << std::setprecision(17)
+                  << "V048746255172582_PATCH52011_TRNFRC_RADIUS_SCALE_CM="
+                  << xstar_constants::kLegacyTrnfrcRadiusScaleCm << "\n"
+                  << "V048746255172582_PATCH52011_TRNFRC_GEOMETRY_FACTOR="
+                  << xstar_constants::kLegacyTrnfrcGeometryFactor << "\n"
+                  << "V048746255172582_PATCH52011_TRNFRC_FPR2=" << trnfrc_fpr2 << "\n";
+    }
 
     if (data.reference_trajectory_mode && data.call_index == 2u && data.sequence23_boundary_gate_configured) {
         if (!data.sequence22_boundary_reference_configured) {
@@ -11802,7 +11815,7 @@ void advance_source_continuum_radiation_v82_patch52(
         const auto post_audit = audit_vector_v82_patch4(data.sequence23_source_workspace.bremsa, data.dsec_bremsa);
         std::vector<double> source_post_heatt_zrems1(n, 0.0);
         for (std::size_t i = 0; i < n; ++i) {
-            source_post_heatt_zrems1[i] = data.sequence23_source_workspace.bremsa[i] * fpr2;
+            source_post_heatt_zrems1[i] = data.sequence23_source_workspace.bremsa[i] * trnfrc_fpr2;
         }
         const auto native_post_heatt_zrems1 = std::vector<double>(
             zrems.begin(), zrems.begin() + static_cast<std::ptrdiff_t>(n));
@@ -12065,7 +12078,8 @@ void advance_consecutive_transport_v71(
     }
     const std::size_t rcem_stride = local_boundary.rcem.size() >= 2u
         ? local_boundary.rcem.size() / 2u : 0u;
-    const double fpr2 = 12.56 * std::pow(std::max(radius_cm, 0.0) * 1.0e-19, 2.0);
+    const double fpr2 = xstar_constants::kLegacyHeattGeometryFactor *
+        std::pow(std::max(radius_cm, 0.0) * 1.0e-19, 2.0);
 
     for (std::size_t source_slot = 1; source_slot < line_stride; ++source_slot) {
         const double opacity = std::isfinite(local_boundary.oplin[source_slot]) &&
@@ -12153,20 +12167,50 @@ void advance_consecutive_transport_v71(
     local_boundary.elumab = data.rrc_luminosity;
     local_boundary.source_continuum_tau_workspace_count = data.source_tau_in.size();
 
-    // Radiation-grid continuum depth is also a shell transport quantity. The
-    // accepted-boundary evaluator has zero width, so advance it here together
-    // with the source-indexed line/RRC depths.
-    if (data.grid_tau_in.size() != local_boundary.opacity.size()) {
-        data.grid_tau_in.assign(local_boundary.opacity.size(), 0.0);
-        data.grid_tau_out.assign(local_boundary.opacity.size(), 0.0);
+    // Literal stpcut.f90 advances two distinct radiation-grid optical-depth
+    // surfaces after heatt: dpthc from opakc (+ optpp, which is source-zero in
+    // this benchmark) and dpthcont from opakcont.  Do not reconstruct either
+    // from the generic public opacity surface; keep their ownership separate.
+    const std::size_t grid_stride = local_boundary.opakc.size();
+    if (data.grid_tau_in.size() != grid_stride) {
+        data.grid_tau_in.assign(grid_stride, 0.0);
+        data.grid_tau_out.assign(grid_stride, 0.0);
     }
-    for (std::size_t i = 0; i < local_boundary.opacity.size(); ++i) {
-        const double opacity = std::isfinite(local_boundary.opacity[i]) && local_boundary.opacity[i] > 0.0
-            ? local_boundary.opacity[i] : 0.0;
-        data.grid_tau_in[i] += opacity * delta_radius_cm;
+    if (data.grid_cont_tau_in.size() != grid_stride) {
+        data.grid_cont_tau_in.assign(grid_stride, 0.0);
+        data.grid_cont_tau_out.assign(grid_stride, 0.0);
+    }
+    for (std::size_t i = 0; i < grid_stride; ++i) {
+        const double opakc = std::isfinite(local_boundary.opakc[i]) && local_boundary.opakc[i] > 0.0
+            ? local_boundary.opakc[i] : 0.0;
+        const double opakcont = i < local_boundary.opakcont.size() &&
+            std::isfinite(local_boundary.opakcont[i]) && local_boundary.opakcont[i] > 0.0
+            ? local_boundary.opakcont[i] : 0.0;
+        data.grid_tau_in[i] += opakc * delta_radius_cm;
+        data.grid_cont_tau_in[i] += opakcont * delta_radius_cm;
     }
     local_boundary.continuum_tau_in = data.grid_tau_in;
     local_boundary.continuum_tau_out = data.grid_tau_out;
+    local_boundary.dpthc.clear();
+    local_boundary.dpthc.reserve(2u * grid_stride);
+    local_boundary.dpthc.insert(local_boundary.dpthc.end(), data.grid_tau_in.begin(), data.grid_tau_in.end());
+    local_boundary.dpthc.insert(local_boundary.dpthc.end(), data.grid_tau_out.begin(), data.grid_tau_out.end());
+    local_boundary.dpthcont.clear();
+    local_boundary.dpthcont.reserve(2u * grid_stride);
+    local_boundary.dpthcont.insert(local_boundary.dpthcont.end(), data.grid_cont_tau_in.begin(), data.grid_cont_tau_in.end());
+    local_boundary.dpthcont.insert(local_boundary.dpthcont.end(), data.grid_cont_tau_out.begin(), data.grid_cont_tau_out.end());
+
+    std::cout << std::setprecision(17)
+              << "V048746255172582_PATCH52011_TRANSPORT_INTERVAL="
+              << (data.physical_transport_intervals_completed + 1u) << "\n"
+              << "V048746255172582_PATCH52011_TRANSPORT_DELTA_RADIUS_CM="
+              << delta_radius_cm << "\n"
+              << "V048746255172582_PATCH52011_TRANSPORT_CUMULATIVE_DEPTH_CM="
+              << (data.cumulative_depth_cm + delta_radius_cm) << "\n"
+              << "V048746255172582_PATCH52011_DPTHC_MAX="
+              << (data.grid_tau_in.empty() ? 0.0 : *std::max_element(data.grid_tau_in.begin(), data.grid_tau_in.end())) << "\n"
+              << "V048746255172582_PATCH52011_DPTHCONT_MAX="
+              << (data.grid_cont_tau_in.empty() ? 0.0 : *std::max_element(data.grid_cont_tau_in.begin(), data.grid_cont_tau_in.end())) << "\n";
 
     data.cumulative_depth_cm += delta_radius_cm;
     ++data.physical_transport_intervals_completed;
@@ -14296,6 +14340,15 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         whole.physical_radial_boundaries_expected = 4u;
         whole.physical_radial_boundaries_retained = finals.size();
         whole.physical_transport_intervals_completed = data.physical_transport_intervals_completed;
+        std::cout << std::setprecision(17)
+                  << "V048746255172582_PATCH52011_TERMINAL_TRANSPORT_INTERVALS="
+                  << data.physical_transport_intervals_completed << "\n"
+                  << "V048746255172582_PATCH52011_TERMINAL_CUMULATIVE_DEPTH_CM="
+                  << data.cumulative_depth_cm << "\n"
+                  << "V048746255172582_PATCH52011_TERMINAL_DPTHC_STATE="
+                  << ((!data.grid_tau_in.empty() && data.grid_tau_in.size() == data.energy.size()) ? "RETAINED" : "REJECT") << "\n"
+                  << "V048746255172582_PATCH52011_TERMINAL_DPTHCONT_STATE="
+                  << ((!data.grid_cont_tau_in.empty() && data.grid_cont_tau_in.size() == data.energy.size()) ? "RETAINED" : "REJECT") << "\n";
         whole.terminal_synthetic_row_present = true;
         whole.legacy_pprint.initialized_from_native_controller = true;
         whole.legacy_pprint.option_sequence_exact = false;
