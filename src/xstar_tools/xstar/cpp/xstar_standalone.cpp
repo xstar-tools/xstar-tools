@@ -11583,6 +11583,104 @@ void gsmooth_source_v82_patch54(
     gsmooth2_source_v82_patch54(vtherm, energy_ev, opakc);
 }
 
+
+struct SourceStepResultV82Patch520111 {
+    double delta_radius_cm = 0.0;
+    std::size_t limiting_bin_one_based = 0u;
+    double limiting_energy_ev = 0.0;
+    double limiting_opacity_cm1 = 0.0;
+    double radius_limit_cm = 0.0;
+    double column_limit_cm = 0.0;
+    double remaining_column_limit_cm = 0.0;
+};
+
+std::vector<double> source_step_smoothed_opakc_v82_patch520111(
+    const StandaloneControllerDataV67& data,
+    const FixedDsecSnapshot& boundary) {
+    auto opakc = boundary.opakc;
+    if (!data.parameters || opakc.size() != data.energy.size()) {
+        throw std::runtime_error("v82 patch5.20.11.1 STEP opakc workspace shape mismatch");
+    }
+    const double source_gsmooth_threshold = static_cast<double>(static_cast<float>(1.0e-34));
+    if (data.parameters->turbulent_velocity_km_s <= source_gsmooth_threshold) return opakc;
+
+    // Literal gsmooth.f90 construction used before STEP consumes the previous
+    // zone's post-gsmooth opakc.  Call 1 has zero thickness in this benchmark,
+    // so advance_consecutive_transport does not execute there; smooth a local
+    // copy solely for STEP without mutating the accepted call-1 boundary.
+    const double one_e5 = static_cast<double>(static_cast<float>(1.0e5));
+    const double one_29e6 = static_cast<double>(static_cast<float>(1.29e6));
+    const double vt = data.parameters->turbulent_velocity_km_s * one_e5;
+    const double thermal = one_29e6 / std::sqrt(1.0 / boundary.temperature_t4);
+    const double vtherm = std::sqrt(vt * vt + thermal * thermal);
+    gsmooth2_source_v82_patch54(vtherm, data.energy, opakc);
+    return opakc;
+}
+
+SourceStepResultV82Patch520111 source_step_v82_patch520111(
+    const StandaloneControllerDataV67& data,
+    const std::vector<double>& post_gsmooth_opakc,
+    double radius_cm,
+    double cumulative_column_cm2) {
+    if (!data.parameters) {
+        throw std::runtime_error("v82 patch5.20.11.1 STEP requires production parameters");
+    }
+    const auto& params = *data.parameters;
+    const std::size_t n = data.energy.size();
+    if (post_gsmooth_opakc.size() != n || data.accumulated_zrems.size() < n) {
+        throw std::runtime_error("v82 patch5.20.11.1 STEP input workspace shape mismatch");
+    }
+    if (!(params.density_cm3 > 0.0) || !std::isfinite(params.density_cm3) ||
+        params.nsteps <= 0 || !(radius_cm > 0.0) || !std::isfinite(radius_cm)) {
+        throw std::runtime_error("v82 patch5.20.11.1 STEP invalid scalar input");
+    }
+
+    // Literal step.f90:
+    //   rmax=xpxcol/xpx
+    //   delr=min(rmax,r/numrec0)
+    //   ... tst=emult/max(opakc,1.d-49)
+    //   ... epi>1.d0, dpthc(1)<=taumax, zrems(1)>1.e-12
+    //   delrmn=(xpxcol-xcol)/xpx
+    //   delr=min(delr,delrmn)
+    // rccemis/dell is evaluated in the source but immediately overwritten by
+    // tst=emult/optp2, so it cannot own the selected shell width.
+    SourceStepResultV82Patch520111 out;
+    out.column_limit_cm = params.column_cm2 / params.density_cm3;
+    out.radius_limit_cm = radius_cm / static_cast<double>(params.nsteps);
+    out.remaining_column_limit_cm = std::max(0.0,
+        (params.column_cm2 - cumulative_column_cm2) / params.density_cm3);
+    out.delta_radius_cm = std::min(out.column_limit_cm, out.radius_limit_cm);
+
+    constexpr double opacity_floor = 1.0e-49; // source is DOUBLE PRECISION 1.d-49
+    constexpr double energy_cutoff_ev = 1.0;  // xstar.f90 sets ectt=1.d0
+    const double zrems_gate = xstar_constants::kLegacyStepZremsGate;
+    for (std::size_t k = 0; k < n; ++k) {
+        const double opacity = std::max(
+            std::isfinite(post_gsmooth_opakc[k]) ? post_gsmooth_opakc[k] : 0.0,
+            opacity_floor);
+        const double tau = k < data.grid_tau_in.size() && std::isfinite(data.grid_tau_in[k])
+            ? data.grid_tau_in[k] : 0.0;
+        const double zrems1 = std::isfinite(data.accumulated_zrems[k])
+            ? data.accumulated_zrems[k] : 0.0;
+        if (!(data.energy[k] > energy_cutoff_ev) || tau > params.maximum_optical_depth ||
+            !(zrems1 > zrems_gate)) {
+            continue;
+        }
+        const double candidate = params.emission_multiplier / opacity;
+        if (candidate < out.delta_radius_cm) {
+            out.delta_radius_cm = candidate;
+            out.limiting_bin_one_based = k + 1u;
+            out.limiting_energy_ev = data.energy[k];
+            out.limiting_opacity_cm1 = opacity;
+        }
+    }
+    out.delta_radius_cm = std::min(out.delta_radius_cm, out.remaining_column_limit_cm);
+    if (!(out.delta_radius_cm >= 0.0) || !std::isfinite(out.delta_radius_cm)) {
+        throw std::runtime_error("v82 patch5.20.11.1 STEP produced invalid shell width");
+    }
+    return out;
+}
+
 void advance_source_continuum_radiation_v82_patch52(
     StandaloneControllerDataV67& data,
     FixedDsecSnapshot& boundary,
@@ -13950,23 +14048,16 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         constexpr std::size_t radial_event_count = 5u;  // four call finals + terminal reset
         const double total_depth_cm = params.column_cm2 / std::max(params.density_cm3, 1.0);
         // Literal radial ordering for this four-call trajectory is
-        //   pprint(call1) at 0, pprint(call2) at 0,
-        //   pprint(call3) after one accepted shell, pprint(call4) after two,
-        // followed by the final shell transport and the post-loop pprint row.
-        // The previous 5.20.7.1 geometry placed call4 at the terminal column,
-        // making call3->call4 too thick and omitting the final shell entirely.
-        const double first_transport_depth_cm = 0.402446 * total_depth_cm;
-        const double second_transport_depth_cm = std::min(
-            total_depth_cm, 2.0 * first_transport_depth_cm);
-        const std::array<double,4> source_boundary_depth_cm{{
-            0.0, 0.0, first_transport_depth_cm, second_transport_depth_cm}};
-        std::cout << std::setprecision(17)
-                  << "V048746255172582_PATCH52072_RADIAL_CALL_BOUNDARY_DEPTHS_CM="
-                  << source_boundary_depth_cm[0] << ";" << source_boundary_depth_cm[1] << ";"
-                  << source_boundary_depth_cm[2] << ";" << source_boundary_depth_cm[3] << "\n"
-                  << "V048746255172582_PATCH52072_FINAL_TRANSPORT_DEPTH_CM="
-                  << (total_depth_cm - source_boundary_depth_cm.back()) << "\n"
-                  << "V048746255172582_PATCH52072_RADIAL_ORDER=CALL1_0_CALL2_0_CALL3_D1_CALL4_2D1_TERMINAL_TOTAL\n";
+        //   pprint(call1) at 0, STEP, pprint(call2) at 0,
+        //   transport, STEP, pprint(call3), transport, STEP, pprint(call4),
+        //   final transport, post-loop pprint.
+        // v82 patch 5.20.11.1 removes the historical rounded 0.402446 depth
+        // owner.  Each non-zero shell now comes from literal step.f90 applied
+        // to the preceding zone's post-gsmooth opakc, retained zrems/dpthc,
+        // current radius, and remaining column.
+        std::array<double,4> source_boundary_depth_cm{{0.0, 0.0, 0.0, 0.0}};
+        std::array<double,3> source_transport_segment_cm{{0.0, 0.0, 0.0}};
+        double pending_transport_segment_cm = 0.0;
 
         static constexpr std::array<std::size_t,4> expected_dsec_counts{{21u,1u,18u,17u}};
         std::array<std::size_t,4> actual_dsec_counts{{0u,0u,0u,0u}};
@@ -14052,10 +14143,11 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             }
 
             data.writing_final_snapshot = true;
-            const double boundary_radius_cm = params.initial_radius_cm +
-                source_boundary_depth_cm[call - 1u];
+            source_boundary_depth_cm[call - 1u] = data.cumulative_depth_cm;
+            const double boundary_radius_cm = params.initial_radius_cm + data.cumulative_depth_cm;
             // Retain the local source workspace first.  Radial transport is
-            // committed only across the actual next consecutive boundary.
+            // committed only across the shell selected by the previous
+            // source STEP evaluation (call 1 itself has zero thickness).
             auto boundary = evaluate_full_boundary_v67(
                 data, state, 0.0, boundary_radius_cm, 0u);
             std::string completeness_reason;
@@ -14063,30 +14155,53 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                 throw std::runtime_error("accepted product boundary incomplete: " + completeness_reason);
             }
             data.writing_final_snapshot = false;
+
+            const double segment = pending_transport_segment_cm;
             if (call == 2u && data.reference_trajectory_mode) {
-                const double call2_to_call3_segment = source_boundary_depth_cm[2u] - source_boundary_depth_cm[1u];
-                audit_call2_final_opakab_v82_patch4(data, boundary, call2_to_call3_segment);
+                audit_call2_final_opakab_v82_patch4(data, boundary, segment);
                 commit_call2_to_call3_global_state_v82_patch52(data, boundary);
                 std::cout << "V048746255172582_CALL2_TO_CALL3_RNISG_RETAINED_NATIVE_HASH="
                           << binary64_vector_hash_v82_patch4(data.global_rnisg) << "\n"
                           << "V048746255172582_CALL2_TO_CALL3_RNISG_RETAINED_FROM_CALL2="
                           << (data.global_rnisg == data.call2_entry_global_rnisg ? "ACCEPT" : "REJECT") << "\n";
             }
-            {
-                // heatt is evaluated for the shell that begins at the current
-                // pprint boundary.  Calls 2 and 3 each own one accepted shell;
-                // call 4 owns the final residual shell before the post-loop
-                // terminal pprint row.  A zero call1->call2 segment is kept
-                // explicitly by the source boundary geometry.
-                const double segment = call < source_calls
-                    ? source_boundary_depth_cm[call] - source_boundary_depth_cm[call - 1u]
-                    : total_depth_cm - source_boundary_depth_cm.back();
-                if (call == 2u && data.reference_trajectory_mode) {
-                    call2_pretransport_v82_patch513 = boundary;
+            if (call == 2u && data.reference_trajectory_mode) {
+                call2_pretransport_v82_patch513 = boundary;
+            }
+            if (segment > 0.0) {
+                const std::size_t transport_index = call >= 2u ? call - 2u : 0u;
+                if (transport_index < source_transport_segment_cm.size()) {
+                    source_transport_segment_cm[transport_index] = segment;
                 }
+                advance_consecutive_transport_v71(data, boundary, segment, boundary_radius_cm);
+            }
+
+            // Source xstar.f90 calls STEP at the beginning of the *next* zone,
+            // after the current zone's heatt/stpcut/trnfrn and radius/column
+            // commit.  Computing it here is state-equivalent and keeps the
+            // selected shell ready for the next controller call.  The call-1
+            // zero-thickness path never entered advance_consecutive_transport,
+            // so only that boundary needs a local gsmooth copy for STEP.
+            if (call < source_calls) {
+                std::vector<double> step_opakc;
                 if (segment > 0.0) {
-                    advance_consecutive_transport_v71(data, boundary, segment, boundary_radius_cm);
+                    step_opakc = boundary.opakc; // advance retained post-gsmooth opakc
+                } else {
+                    step_opakc = source_step_smoothed_opakc_v82_patch520111(data, boundary);
                 }
+                const double step_radius_cm = params.initial_radius_cm + data.cumulative_depth_cm;
+                const double current_column_cm2 = params.density_cm3 * data.cumulative_depth_cm;
+                const auto step_result = source_step_v82_patch520111(
+                    data, step_opakc, step_radius_cm, current_column_cm2);
+                pending_transport_segment_cm = step_result.delta_radius_cm;
+                std::cout << std::setprecision(17)
+                          << "V048746255172582_PATCH520111_STEP_AFTER_CALL=" << call << "\n"
+                          << "V048746255172582_PATCH520111_STEP_DELTA_RADIUS_CM=" << step_result.delta_radius_cm << "\n"
+                          << "V048746255172582_PATCH520111_STEP_LIMITING_BIN=" << step_result.limiting_bin_one_based << "\n"
+                          << "V048746255172582_PATCH520111_STEP_LIMITING_ENERGY_EV=" << step_result.limiting_energy_ev << "\n"
+                          << "V048746255172582_PATCH520111_STEP_LIMITING_OPACITY_CM1=" << step_result.limiting_opacity_cm1 << "\n"
+                          << "V048746255172582_PATCH520111_STEP_RADIUS_LIMIT_CM=" << step_result.radius_limit_cm << "\n"
+                          << "V048746255172582_PATCH520111_STEP_REMAINING_COLUMN_LIMIT_CM=" << step_result.remaining_column_limit_cm << "\n";
             }
             if (call == 2u && data.reference_trajectory_mode) {
                 write_mg_type53_source_native_opacity_record_attribution_v82_patch512(data);
@@ -14102,6 +14217,21 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                       << " HMCTOT=" << std::setprecision(9) << stats.final_hmctot
                       << " ELCTER=" << stats.final_elcter << "\n";
         }
+
+        std::cout << std::setprecision(17)
+                  << "V048746255172582_PATCH520111_RADIAL_CALL_BOUNDARY_DEPTHS_CM="
+                  << source_boundary_depth_cm[0] << ";" << source_boundary_depth_cm[1] << ";"
+                  << source_boundary_depth_cm[2] << ";" << source_boundary_depth_cm[3] << "\n"
+                  << "V048746255172582_PATCH520111_TRANSPORT_SEGMENTS_CM="
+                  << source_transport_segment_cm[0] << ";" << source_transport_segment_cm[1] << ";"
+                  << source_transport_segment_cm[2] << "\n"
+                  << "V048746255172582_PATCH520111_TERMINAL_DEPTH_CM=" << data.cumulative_depth_cm << "\n"
+                  << "V048746255172582_PATCH52072_RADIAL_CALL_BOUNDARY_DEPTHS_CM="
+                  << source_boundary_depth_cm[0] << ";" << source_boundary_depth_cm[1] << ";"
+                  << source_boundary_depth_cm[2] << ";" << source_boundary_depth_cm[3] << "\n"
+                  << "V048746255172582_PATCH52072_FINAL_TRANSPORT_DEPTH_CM="
+                  << source_transport_segment_cm[2] << "\n"
+                  << "V048746255172582_PATCH52072_RADIAL_ORDER=CALL1_0_CALL2_0_CALL3_STEP1_CALL4_STEP1_PLUS_STEP2_TERMINAL_TOTAL\n";
 
         const std::size_t total_dsec_evaluations = std::accumulate(
             actual_dsec_counts.begin(), actual_dsec_counts.end(), std::size_t{0});

@@ -1,5 +1,6 @@
 #include "xstar_backend_common.hpp"
 #include "xstar_spectral_engine.h"
+#include "xstar_constants.h"
 
 #include <algorithm>
 #include <cmath>
@@ -239,11 +240,12 @@ int xstar_opacity_apply_line_profile_v1(
         return 0;
     }
     const int nbtpp = 20000;
-    const double dpcrit = 1.0e-6;
+    const double dpcrit = xstar_constants::kLegacyLinopacDpcrit;
     int ml1 = nbinc(line_energy_ev, epi, n);
     ml1 = std::max(2, std::min(n - 1, ml1));
     const double mass = std::max(atomic_mass_amu, 1.0e-30);
-    const double vth = source_mul(12.9, std::sqrt(source_div(temperature_1e4k, mass)));
+    const double vth = source_mul(xstar_constants::kLegacyLinopacThermalSpeedCoefficient,
+        std::sqrt(source_div(temperature_1e4k, mass)));
     const double deleturb = source_div(source_mul(line_energy_ev, vturb_km_s), 3.0e5);
     const double deleth = source_div(source_mul(line_energy_ev, vth), 3.0e5);
     const double dele = std::sqrt(source_add(source_mul(deleth, deleth), source_mul(deleturb, deleturb)));
@@ -251,13 +253,15 @@ int xstar_opacity_apply_line_profile_v1(
         write_message(errbuf, errbuf_size, "native opacity profile zero-width no-op");
         return 0;
     }
-    const double aasmall = source_div(source_div(natural_width_ev, source_add(1.0e-24, dele)), 12.56);
-    const bool use_voigt = aasmall > 1.0e-9;
+    const double aasmall = source_div(
+        source_div(natural_width_ev, source_add(xstar_constants::kLegacyLinopacWidthFloorEv, dele)),
+        xstar_constants::kLegacyLinopacDampingGeometryFactor);
+    const bool use_voigt = aasmall > xstar_constants::kLegacyLinopacWingVoigtThreshold;
     const double e00 = epi[ml1 - 1];
     const double deleepi = source_sub(epi[ml1], epi[ml1 - 1]);
     int ncut = static_cast<int>(deleepi / dele);
     ncut = std::max(1, std::min(nbtpp / 10, ncut));
-    const double deleused = source_div(deleepi, static_cast<double>(ncut));
+    const double deleused = source_div(deleepi, static_cast<double>(static_cast<float>(ncut)));
     int mlc = 0, ldir = 1, ldon0 = 0, ldon1 = 0;
     int mlmin = nbtpp, mlmax = 1, ml1min = n + 1, ml1max = 0;
     const int ml2 = nbtpp / 2;
@@ -270,9 +274,9 @@ int xstar_opacity_apply_line_profile_v1(
     // the lower continuum-grid boundary, not the exact line center.
     // The source uses the stricter 1e-6 Voigt threshold at this center
     // point (the outward temporary points retain the 1e-9 threshold).
-    const double center_profile = aasmall > 1.0e-6
-        ? voigte(std::abs(delet), aasmall) / 1.772
-        : std::exp(-delet * delet) / 1.772;
+    const double center_profile = aasmall > xstar_constants::kLegacyLinopacCenterVoigtThreshold
+        ? source_div(voigte(std::abs(delet), aasmall), xstar_constants::kLegacyLinopacProfileNormalization)
+        : source_div(std::exp(-delet * delet), xstar_constants::kLegacyLinopacProfileNormalization);
     double profile = std::isfinite(center_profile) && center_profile > 0.0
         ? center_profile : 0.0;
     etpp[ml2 - 1] = e00;
@@ -285,7 +289,8 @@ int xstar_opacity_apply_line_profile_v1(
             int& ldon = (ij == 0) ? ldon0 : ldon1;
             if (ldon == 1) continue;
             const int mlm = ml2 + ldir * mlc;
-            const double etptst = source_add(e00, source_mul(static_cast<double>(ldir * mlc), deleused));
+            const double etptst = source_add(e00,
+                source_mul(static_cast<double>(static_cast<float>(ldir * mlc)), deleused));
             if (mlm <= nbtpp && mlm >= 1 && etptst > 0.0 && etptst < epi[n - 1]) {
                 mlmin = std::min(mlmin, mlm);
                 mlmax = std::max(mlmax, mlm);
@@ -299,8 +304,9 @@ int xstar_opacity_apply_line_profile_v1(
                 // can overpopulate entire optical/UV bins by many orders of
                 // magnitude.  Retain seeds only as an API/qualification
                 // precondition; compute the live Gaussian/Voigt value here.
-                profile = use_voigt ? voigte(std::abs(delet), aasmall) / 1.772
-                                     : std::exp(-delet * delet) / 1.772;
+                profile = use_voigt
+                    ? source_div(voigte(std::abs(delet), aasmall), xstar_constants::kLegacyLinopacProfileNormalization)
+                    : source_div(std::exp(-delet * delet), xstar_constants::kLegacyLinopacProfileNormalization);
                 optpp2[mlm - 1] = optpp * profile;
                 tst = profile;
             }

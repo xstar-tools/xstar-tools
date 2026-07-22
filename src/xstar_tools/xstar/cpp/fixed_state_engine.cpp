@@ -9602,7 +9602,8 @@ int run_impl(
             if (!evaluated[k].bound_free_spectral && evaluated[k].type50_shadow.valid &&
                 evaluated[k].type50_shadow.stored_wavelength_a > 0.0) {
                 spectral_feature_energy_ev_v82_patch5206 =
-                    12398.4016 / evaluated[k].type50_shadow.stored_wavelength_a;
+                    xstar_constants::kLegacyLinopacPhotonEnergyAngstromEv /
+                    evaluated[k].type50_shadow.stored_wavelength_a;
             }
             if (!evaluated[k].bound_free_spectral && spectral_feature_energy_ev_v82_patch5206 > 0.0) {
                 double source_line_wavelength_v82_patch5208 =
