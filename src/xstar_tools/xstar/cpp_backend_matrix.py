@@ -1292,17 +1292,26 @@ def accumulate_mg_ion_source_simple_terms_cpp_detailed(
 
 
 def _radiation_grid_arrays_for_type49(radiation: Any) -> tuple[np.ndarray, np.ndarray]:
-    """Return the live high-resolution radiation grid used by type-49/53 rates."""
-    cached = getattr(radiation, "_type53_full_live_state", None)
-    if cached is not None:
+    """Return literal calc_hmc caller-owned reduced epim/bremsam arrays.
+
+    These C++ bridge functions are matrix/rate accumulators used by
+    calc_hmc_all, not calc_emis_all.  Literal XSTAR passes epim/ncn2m/bremsam
+    here.  Full epi/bremsa remains owned by the later spectral emissivity pass.
+    """
+    for e_name, b_name in (("epim_eV", "bremsam"), ("epim", "bremsam")):
+        if not hasattr(radiation, e_name) or not hasattr(radiation, b_name):
+            continue
         try:
-            epi = np.asarray(getattr(cached, "epim_eV"), dtype=np.float64).reshape(-1)
-            brem = np.asarray(getattr(cached, "bremsam"), dtype=np.float64).reshape(-1)
-            if epi.size >= 3 and brem.size >= epi.size and np.all(np.diff(epi) > 0.0):
+            epi = np.asarray(getattr(radiation, e_name), dtype=np.float64).reshape(-1)
+            brem = np.asarray(getattr(radiation, b_name), dtype=np.float64).reshape(-1)
+            if (epi.size >= 3 and brem.size >= epi.size and np.all(np.isfinite(epi))
+                    and np.all(np.isfinite(brem[: epi.size])) and np.all(np.diff(epi) > 0.0)):
                 return np.ascontiguousarray(epi), np.ascontiguousarray(brem[: epi.size])
         except Exception:
-            pass
-    for e_name in ("epi_eV", "epi", "epim_eV", "epim"):
+            continue
+    # Development-fixture compatibility only: old fixtures may not expose
+    # the reduced workspace.  Production/readiness gates require 999 bins.
+    for e_name in ("epi_eV", "epi"):
         if hasattr(radiation, e_name):
             try:
                 epi = np.asarray(getattr(radiation, e_name), dtype=np.float64).reshape(-1)
@@ -1312,17 +1321,10 @@ def _radiation_grid_arrays_for_type49(radiation: Any) -> tuple[np.ndarray, np.nd
                 continue
     else:
         epi = np.zeros(0, dtype=np.float64)
-    for b_name in ("bremsa", "bremsam"):
-        if hasattr(radiation, b_name):
-            try:
-                brem = np.asarray(getattr(radiation, b_name), dtype=np.float64).reshape(-1)
-                if brem.size >= epi.size:
-                    return np.ascontiguousarray(epi), np.ascontiguousarray(brem[: epi.size])
-            except Exception:
-                continue
-    return np.ascontiguousarray(epi), np.zeros(int(epi.size), dtype=np.float64)
-
-
+    brem = np.asarray(getattr(radiation, "bremsa", ()), dtype=np.float64).reshape(-1)
+    if brem.size < epi.size:
+        brem = np.zeros(int(epi.size), dtype=np.float64)
+    return np.ascontiguousarray(epi), np.ascontiguousarray(brem[: epi.size])
 
 def _radiation_extrap_max_points_for_type49(radiation: Any, full_grid_size: int) -> int:
     """Return Python ``phextrap`` capacity for type49/type53 shadow parity.
@@ -1343,14 +1345,7 @@ def _radiation_extrap_max_points_for_type49(radiation: Any, full_grid_size: int)
 
 
 def _radiation_grid_arrays_for_type53(radiation: Any) -> tuple[np.ndarray, np.ndarray]:
-    """Return the same live high-resolution radiation grid used by type-49.
-
-    v0.6.0a14/a15 enabled the type-53 accumulator but accidentally called an
-    undefined helper here, so every type-53 candidate fell into Python fallback
-    before libxstar_matrix.so could see it.  Type-53 and type-49 both use the
-    source-faithful phint53-like continuum/photoionization grid, so share the
-    same live grid accessor.
-    """
+    """Return the calc_hmc reduced grid shared by Type49 and Type53 matrix rates."""
     return _radiation_grid_arrays_for_type49(radiation)
 
 

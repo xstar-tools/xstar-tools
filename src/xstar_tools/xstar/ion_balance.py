@@ -640,6 +640,12 @@ def calc_ion_rates(
                 "lfpi": 1,
                 "requested_lfast": int(context.lfast),
                 "calc_ion_rates_lfast": 1,
+                # v82 patch 5.20.12.1: literal calc_hmc_all/calc_ion_rates
+                # receives epim/ncn2m/bremsam.  Do not let the presence of
+                # full epi/bremsa promote Type49/53/88/99 matrix rates to
+                # the 9999-bin spectral grid.
+                "bound_free_radiation_grid_role": "reduced",
+                "bound_free_radiation_grid_owner": "calc_hmc_all.calc_ion_rates",
                 "parent_level_energy_ev_by_destination": parent_energy,
                 "parent_level_stat_weight_by_destination": parent_weight,
             },

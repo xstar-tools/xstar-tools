@@ -4762,6 +4762,21 @@ EvaluatedRecord evaluate_record(
     const double t4 = input.temperature_k / 1.0e4;
     const double sqrt_t4 = std::sqrt(std::max(t4, 1.0e-300));
     const double kt_ev = kBoltzmannEvK * input.temperature_k;
+    // v82 patch 5.20.12.1: evaluate_record is the calc_hmc scalar/matrix
+    // UCalc stage.  Literal xstarcalc passes epim/ncn2m/bremsam here, while
+    // the later calc_emis_all spectral pass owns full epi/ncn2/bremsa.
+    // Reuse the already-built reduced calc_emisab workspace as the exact
+    // source caller grid for bound-free matrix rates.
+    xstar_fixed_state_input_v1 calc_hmc_input = input;
+    const bool has_calc_hmc_reduced_grid = calc_emisab_workspace &&
+        calc_emisab_workspace->epim.size() >= 3 &&
+        calc_emisab_workspace->bremsam.size() == calc_emisab_workspace->epim.size();
+    if (has_calc_hmc_reduced_grid) {
+        calc_hmc_input.dsec_radiation_energy_ev = calc_emisab_workspace->epim.data();
+        calc_hmc_input.dsec_bremsa = calc_emisab_workspace->bremsam.data();
+        calc_hmc_input.dsec_radiation_bin_count = calc_emisab_workspace->epim.size();
+    }
+
     EvaluatedRecord out;
     auto& c = out.contribution;
     c.source_position = record.source_position;
@@ -5131,7 +5146,7 @@ EvaluatedRecord evaluate_record(
             const double source_threshold = row46_contract ? row46_contract->threshold_ev : threshold;
             xstar_element_contribution_v1 source_shadow{};
             const bool source_exact = evaluate_type53_source_integral(
-                r, pair_real_count, lower, upper, input, source_threshold,
+                r, pair_real_count, lower, upper, calc_hmc_input, source_threshold,
                 contract_ptmp1 + contract_ptmp2, row46_contract,
                 record_context.valid ? &record_context : nullptr, record.record, false, false,
                 source_shadow, &out.type53_shadow);
@@ -5185,7 +5200,7 @@ EvaluatedRecord evaluate_record(
                     input.continuum_tau_out && row46_contract->continuum_index_one_based > 0 &&
                     static_cast<std::size_t>(row46_contract->continuum_index_one_based) <= input.continuum_tau_count;
                 out.type53_shadow.continuum_index_one_based = row46_contract->continuum_index_one_based;
-                out.type53_shadow.dsec_radiation_bin_count = input.dsec_radiation_bin_count;
+                out.type53_shadow.dsec_radiation_bin_count = calc_hmc_input.dsec_radiation_bin_count;
                 out.type53_shadow.continuum_tau_count = input.continuum_tau_count;
             } else {
                 if (hydrogen_source_faithful && !source_exact) {
@@ -5205,7 +5220,7 @@ EvaluatedRecord evaluate_record(
                         input.continuum_tau_out && record_context.continuum_index_one_based > 0 &&
                         static_cast<std::size_t>(record_context.continuum_index_one_based) <= input.continuum_tau_count;
                     out.type53_shadow.continuum_index_one_based = record_context.continuum_index_one_based;
-                    out.type53_shadow.dsec_radiation_bin_count = input.dsec_radiation_bin_count;
+                    out.type53_shadow.dsec_radiation_bin_count = calc_hmc_input.dsec_radiation_bin_count;
                     out.type53_shadow.continuum_tau_count = input.continuum_tau_count;
                 }
                 const bool helium_source_faithful =
@@ -5452,7 +5467,7 @@ EvaluatedRecord evaluate_record(
                 out.type49_shadow.matrix_density_scale = static_cast<double>(input.hydrogen_density_cm3);
             } else {
                 source_exact = evaluate_type53_source_integral(
-                    r, pair_real_count, lower, upper, input, source_threshold, ptmp1 + ptmp2,
+                    r, pair_real_count, lower, upper, calc_hmc_input, source_threshold, ptmp1 + ptmp2,
                     nullptr, record_context.valid ? &record_context : nullptr, record.record,
                     true, true, source_shadow, &out.type49_shadow);
             }
@@ -5531,7 +5546,7 @@ EvaluatedRecord evaluate_record(
                 input.dsec_radiation_energy_ev && input.dsec_bremsa && input.dsec_radiation_bin_count >= 3 &&
                 has_continuum_workspace;
             out.type49_shadow.continuum_index_one_based = continuum_index;
-            out.type49_shadow.dsec_radiation_bin_count = input.dsec_radiation_bin_count;
+            out.type49_shadow.dsec_radiation_bin_count = calc_hmc_input.dsec_radiation_bin_count;
             out.type49_shadow.continuum_tau_count = input.continuum_tau_count;
             // v82 patch 5.20.9: literal xstarsetup.f90 gives Type-49 its own
             // setup/rank geometry: eth=rdat1(np1r)*13.598, with 13.598 a
@@ -5981,14 +5996,14 @@ EvaluatedRecord evaluate_record(
             if (!r || record.real_count < 4) {
                 throw std::runtime_error("type88 payload requires energy/sigma pairs");
             }
-            const double* source_energy_ev = input.dsec_radiation_energy_ev && input.dsec_radiation_bin_count >= 3
-                ? input.dsec_radiation_energy_ev : input.radiation_energy_ev;
-            const double* source_bremsa = input.dsec_bremsa && input.dsec_radiation_bin_count >= 3
-                ? input.dsec_bremsa : input.radiation_flux;
-            const std::size_t source_bins = input.dsec_radiation_energy_ev && input.dsec_bremsa && input.dsec_radiation_bin_count >= 3
-                ? input.dsec_radiation_bin_count : input.radiation_bin_count;
+            const double* source_energy_ev = calc_hmc_input.dsec_radiation_energy_ev && calc_hmc_input.dsec_radiation_bin_count >= 3
+                ? calc_hmc_input.dsec_radiation_energy_ev : calc_hmc_input.radiation_energy_ev;
+            const double* source_bremsa = calc_hmc_input.dsec_bremsa && calc_hmc_input.dsec_radiation_bin_count >= 3
+                ? calc_hmc_input.dsec_bremsa : calc_hmc_input.radiation_flux;
+            const std::size_t source_bins = calc_hmc_input.dsec_radiation_energy_ev && calc_hmc_input.dsec_bremsa && calc_hmc_input.dsec_radiation_bin_count >= 3
+                ? calc_hmc_input.dsec_radiation_bin_count : calc_hmc_input.radiation_bin_count;
             if (!source_energy_ev || !source_bremsa || source_bins < 3) {
-                throw std::runtime_error("type88 requires live full radiation grid");
+                throw std::runtime_error("type88 calc_hmc requires live reduced radiation grid");
             }
             std::size_t pair_count = record.real_count / 2;
             double threshold = delta_ev;
@@ -6010,7 +6025,7 @@ EvaluatedRecord evaluate_record(
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE99_SUPERLEVEL_BOUND_FREE: {
-            if (evaluate_type99_source_faithful(record, r, ints, lower, upper, input, c, &out.type99_shadow)) {
+            if (evaluate_type99_source_faithful(record, r, ints, lower, upper, calc_hmc_input, c, &out.type99_shadow)) {
                 out.spectral = true;
                 out.bound_free_spectral = true;
                 // v82 patch 5.1/5.2 source semantics: Type-99 retains its

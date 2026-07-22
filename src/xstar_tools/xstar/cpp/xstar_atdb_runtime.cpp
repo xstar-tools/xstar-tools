@@ -910,20 +910,15 @@ ProgramStorage lower_atdb_in_memory(const std::filesystem::path& atdb,const Prod
                 const int local=iv.size()>=2?static_cast<int>(iv[iv.size()-2]):1;
                 const int upper_seed=iv.size()>=4?static_cast<int>(iv[iv.size()-4]):0;
                 const auto* lv=find_level(l,ion,local);
-                // v82 patch 5.20.12: pprint.f90 options 19/24 publish
-                // mmlv=npilev(idest1,jkk).  Mg Type-13 packed local ids are
-                // not always source ordinals, so level_global_by_record can
-                // name a different global row even though the physical level
-                // record is otherwise correct.  Use literal setptrs npilev
-                // ownership for the RRC identity, with the record-derived
-                // value only as a topology fallback.
-                int rrc_global_level=0;
+                // v82 patch 5.20.12: literal pprint/writespectra4 publishes
+                // mmlv=npilev(idest1,jkk).  Packed Type-13 local identifiers
+                // are not guaranteed to map to the same global source ordinal.
+                int source_global = 0;
                 if (local > 0 && static_cast<std::size_t>(local) < d.npilev.size() &&
                     ion > 0 && static_cast<std::size_t>(ion) < d.npilev[static_cast<std::size_t>(local)].size()) {
-                    rrc_global_level=d.npilev[static_cast<std::size_t>(local)][static_cast<std::size_t>(ion)];
+                    source_global = d.npilev[static_cast<std::size_t>(local)][static_cast<std::size_t>(ion)];
                 }
-                if (rrc_global_level <= 0 && lv) rrc_global_level=d.level_global_by_record[lv->record];
-                id.level_global_index=rrc_global_level;
+                id.level_global_index=source_global>0?source_global:(lv?d.level_global_by_record[lv->record]:0);
                 const double source_threshold=lv?(lv->ionpot-lv->energy):lr.record.line_energy_ev;
                 id.threshold_ev=std::isfinite(source_threshold)?source_threshold:lr.record.line_energy_ev;
                 id.ion_label=normalized_ion_label(b);

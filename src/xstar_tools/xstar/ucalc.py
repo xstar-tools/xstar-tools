@@ -329,7 +329,17 @@ def _phint53hunt_exact(
     sigma = np.asarray(cross_section_cm2, dtype=float)
     if egrid.size < 2 or egrid.size != sigma.size:
         return {"status": "not_evaluated_bad_cross_section_grid"}
-    epi, bremsa, _ = _radiation_arrays(context.radiation)
+    role = str(context.extras.get("bound_free_radiation_grid_role", "auto") or "auto").strip().lower()
+    if role == "reduced":
+        radiation = context.radiation
+        epi = np.asarray(getattr(radiation, "epim_eV", getattr(radiation, "epim", ())), dtype=float).reshape(-1)
+        bremsa = np.asarray(getattr(radiation, "bremsam", ()), dtype=float).reshape(-1)
+        if epi.size < 3 or bremsa.size < epi.size or not np.all(np.diff(epi) > 0.0):
+            epi, bremsa, _ = _radiation_arrays(context.radiation)
+        else:
+            bremsa = bremsa[: epi.size]
+    else:
+        epi, bremsa, _ = _radiation_arrays(context.radiation)
     n = int(epi.size)
     numcon2 = max(2, n // 50)
     numcon3 = n - numcon2
@@ -2051,7 +2061,7 @@ class SourceFaithfulUCalc:
         from .ucalc_leaves import phextrap
         if len(r.integers)<2 or len(r.reals)<4: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type88_short_record")
         id1=int(r.integers[-2]); id2=c.nlevp; threshold=self._level_threshold(c,id1); e=np.asarray(r.reals[0::2],float); xs=np.maximum(np.asarray(r.reals[1::2],float)*1e-18,0.0); n=min(e.size,xs.size)
-        e,xs=phextrap(e[:n],xs[:n],threshold,len(self._mapped_grid(c)))
+        e,xs=phextrap(e[:n],xs[:n],threshold,len(self._bound_free_caller_grid(c)))
         return self._type53_from_pairs(r,c,s,energy_ryd=e,sigma_cm2=xs,threshold_ev=threshold,idest1=id1,idest2=id2,zero_reverse=True,zero_all_heating=True)
 
     def _eval_type89(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
