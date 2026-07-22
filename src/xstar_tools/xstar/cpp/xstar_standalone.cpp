@@ -9918,6 +9918,13 @@ struct StandaloneControllerDataV67 {
     std::size_t hydrogen_ground_population_index = std::numeric_limits<std::size_t>::max();
     bool global_workspace_initialized = false;
     bool reference_trajectory_mode = false;
+    // v82 patch 5.20.12.1.2: the corrected Python/source trajectory is sparse
+    // in historical source-sequence numbering (21/40/57 are no longer DSEC
+    // evaluations).  Own the replay identity from the current cache instead
+    // of reconstructing it from the former 21/1/18/17 counts.
+    std::array<std::vector<std::size_t>,4> reference_dsec_sequences;
+    std::array<std::size_t,4> reference_final_sequences{{0u,0u,0u,0u}};
+    std::array<std::size_t,4> reference_final_evaluation_indices{{0u,0u,0u,0u}};
     std::size_t current_sequence = 0;
     std::size_t next_sequence = 1;
     std::size_t evaluations = 0;
@@ -10196,7 +10203,8 @@ void append_call1_dsec_population_sweep_v82_patch512(
     const FixedDsecSnapshot& snapshot,
     const std::filesystem::path& native_root) {
     if (!data.reference_trajectory_mode || snapshot.call_index != 1u ||
-        snapshot.sequence < 1u || snapshot.sequence > 21u ||
+        snapshot.evaluation_index == 0u ||
+        snapshot.evaluation_index > data.reference_dsec_sequences[0].size() ||
         data.call1_source_workspaces_root.empty() || data.sequence23_source_solve_stage_rows.empty()) return;
 
     const int sequence = static_cast<int>(snapshot.sequence);
@@ -10216,10 +10224,14 @@ void append_call1_dsec_population_sweep_v82_patch512(
     const auto source_current = read_runtime_state_workspace_values(source_current_spec);
 
     RuntimeStateWorkspace source_next_spec;
-    source_next_spec.call_index = sequence < 21 ? 1 : 1;
-    source_next_spec.directory = sequence < 21
-        ? call1_source_workspace_dir_v82_patch512(data, sequence + 1)
-        : call1_source_workspace_dir_v82_patch512(data, 58);
+    source_next_spec.call_index = 1;
+    const auto& call1_sequences = data.reference_dsec_sequences[0];
+    const std::size_t next_source_sequence =
+        snapshot.evaluation_index < call1_sequences.size()
+            ? call1_sequences[snapshot.evaluation_index]
+            : data.reference_final_sequences[0];
+    source_next_spec.directory = call1_source_workspace_dir_v82_patch512(
+        data, static_cast<int>(next_source_sequence));
     const auto source_next = read_runtime_state_workspace_values(source_next_spec);
 
     std::filesystem::create_directories(data.call1_dsec_population_sweep_dir);
@@ -10352,7 +10364,7 @@ void append_call1_dsec_population_sweep_v82_patch512(
             if (rs) { ++rel_targets; if (!first_rel || rs < first_rel) { first_rel=rs; first_rel_phase=rp; } }
             if (ss) { ++sci_targets; if (!first_sci || ss < first_sci) { first_sci=ss; first_sci_phase=sp; } }
         }
-        std::cout << "V048746255172582_CALL1_DSEC_POPULATION_SWEEP_ROWS=" << (21u * targets.size()) << "\n"
+        std::cout << "V048746255172582_CALL1_DSEC_POPULATION_SWEEP_ROWS=" << (data.reference_dsec_sequences[0].size() * targets.size()) << "\n"
                   << "V048746255172582_CALL1_DSEC_POPULATION_FIRST_RELATIVE_SEQUENCE=" << (first_rel ? std::to_string(first_rel) : "NONE") << "\n"
                   << "V048746255172582_CALL1_DSEC_POPULATION_FIRST_RELATIVE_PHASE=" << first_rel_phase << "\n"
                   << "V048746255172582_CALL1_DSEC_POPULATION_RELATIVE_TARGETS=" << rel_targets << "\n"
@@ -12334,10 +12346,20 @@ FixedDsecSnapshot make_iteration_snapshot_v67(
         throw std::runtime_error("standalone source call index outside 1..4");
     }
     if (data.reference_trajectory_mode) {
-        static constexpr std::array<std::size_t,4> dsec_source_offsets{{0u,21u,22u,40u}};
-        snapshot.sequence = data.writing_final_snapshot
-            ? 57u + snapshot.call_index
-            : dsec_source_offsets[snapshot.call_index - 1u] + snapshot.evaluation_index;
+        const std::size_t slot = snapshot.call_index - 1u;
+        if (data.writing_final_snapshot) {
+            snapshot.sequence = data.reference_final_sequences[slot];
+            snapshot.evaluation_index = data.reference_final_evaluation_indices[slot];
+            if (snapshot.sequence == 0u) {
+                throw std::runtime_error("current-cache final source identity is missing");
+            }
+        } else {
+            const auto& sequences = data.reference_dsec_sequences[slot];
+            if (snapshot.evaluation_index == 0u || snapshot.evaluation_index > sequences.size()) {
+                throw std::runtime_error("current-cache DSEC source identity inventory exhausted");
+            }
+            snapshot.sequence = sequences[snapshot.evaluation_index - 1u];
+        }
     } else {
         snapshot.sequence = data.next_sequence++;
     }
@@ -12540,7 +12562,8 @@ int standalone_iteration_evaluator_v67(
         }
         xstar_fixed_state_input_v1 input{};
         fill_standalone_input_v67(*data, *trial, input);
-        if (data->reference_trajectory_mode && snapshot.call_index == 1u && snapshot.sequence >= 1u && snapshot.sequence <= 21u &&
+        if (data->reference_trajectory_mode && snapshot.call_index == 1u && snapshot.evaluation_index >= 1u &&
+            snapshot.evaluation_index <= data->reference_dsec_sequences[0].size() &&
             input.global_xilevg && input.global_level_count > 0u) {
             data->call1_current_input_global_xilevg.assign(input.global_xilevg, input.global_xilevg + input.global_level_count);
         } else {
@@ -12605,7 +12628,8 @@ int standalone_iteration_evaluator_v67(
         snapshot.continuum_cooling = output.continuum_cooling;
         attach_native_thermal_components_v70(data->fixed_context, snapshot);
         std::filesystem::path call1_sweep_native_root_v82_patch512;
-        if (data->reference_trajectory_mode && snapshot.call_index == 1u && snapshot.sequence >= 1u && snapshot.sequence <= 21u) {
+        if (data->reference_trajectory_mode && snapshot.call_index == 1u && snapshot.evaluation_index >= 1u &&
+            snapshot.evaluation_index <= data->reference_dsec_sequences[0].size()) {
             call1_sweep_native_root_v82_patch512 = native_call1_sweep_dir_v82_patch512(*data, static_cast<int>(snapshot.sequence));
             std::filesystem::create_directories(call1_sweep_native_root_v82_patch512);
             std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> sweep_message{};
@@ -13822,6 +13846,65 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             data.reference_contracts = read_sequence_contracts_v1724(contract_dir / "sequence_contracts.csv");
             read_source_populations_v1724(contract_dir / "population_e7.csv",
                 data.source_population_global_v1724, data.source_population_compact_v1724);
+            // 5.20.12.1.2: trajectory identity/count ownership follows the
+            // corrected current-Python cache rather than the historical
+            // qualification contract.  The old contract remains diagnostic.
+            const char* current_fixed_rows_env = std::getenv("XSTAR_V82_CURRENT_CACHE_FIXED_STATE_ROWS");
+            if (!current_fixed_rows_env || !*current_fixed_rows_env) {
+                throw std::runtime_error("XSTAR_V82_CURRENT_CACHE_FIXED_STATE_ROWS is required");
+            }
+            const std::filesystem::path current_fixed_rows(current_fixed_rows_env);
+            if (!std::filesystem::is_regular_file(current_fixed_rows)) {
+                throw std::runtime_error("current-cache fixed-state rows are missing");
+            }
+            const auto current_rows = read_csv_rows_v1716(current_fixed_rows);
+            std::set<std::size_t> current_sequences_seen;
+            for (const auto& row : current_rows) {
+                const std::size_t sequence = static_cast<std::size_t>(std::stoull(row.at("sequence")));
+                const std::size_t call = static_cast<std::size_t>(std::stoull(row.at("dsec_call_id")));
+                const std::size_t evaluation_index = static_cast<std::size_t>(std::stoull(row.at("evaluation_index")));
+                const std::string kind = row.at("kind");
+                if (sequence < 1u || sequence > 61u || call < 1u || call > 4u ||
+                    !current_sequences_seen.insert(sequence).second) {
+                    throw std::runtime_error("current-cache fixed-state sequence inventory is invalid");
+                }
+                const std::size_t slot = call - 1u;
+                if (kind == "dsec") {
+                    if (evaluation_index != data.reference_dsec_sequences[slot].size() + 1u) {
+                        throw std::runtime_error("current-cache DSEC local evaluation order is invalid");
+                    }
+                    data.reference_dsec_sequences[slot].push_back(sequence);
+                } else if (kind == "final") {
+                    if (data.reference_final_sequences[slot] != 0u) {
+                        throw std::runtime_error("current-cache has duplicate final state for a call");
+                    }
+                    data.reference_final_sequences[slot] = sequence;
+                    data.reference_final_evaluation_indices[slot] = evaluation_index;
+                } else {
+                    throw std::runtime_error("current-cache fixed-state kind is invalid");
+                }
+            }
+            const std::size_t current_dsec_total =
+                data.reference_dsec_sequences[0].size() + data.reference_dsec_sequences[1].size() +
+                data.reference_dsec_sequences[2].size() + data.reference_dsec_sequences[3].size();
+            if (current_rows.size() != current_dsec_total + 4u ||
+                std::any_of(data.reference_final_sequences.begin(), data.reference_final_sequences.end(),
+                    [](std::size_t value) { return value == 0u; })) {
+                throw std::runtime_error("current-cache fixed-state inventory is incomplete");
+            }
+            std::cout << "V048746255172582_PATCH5201212_CURRENT_CACHE_DSEC_COUNTS="
+                      << data.reference_dsec_sequences[0].size() << ";"
+                      << data.reference_dsec_sequences[1].size() << ";"
+                      << data.reference_dsec_sequences[2].size() << ";"
+                      << data.reference_dsec_sequences[3].size() << "\n"
+                      << "V048746255172582_PATCH5201212_CURRENT_CACHE_DSEC_TOTAL="
+                      << current_dsec_total << "\n"
+                      << "V048746255172582_PATCH5201212_CURRENT_CACHE_RETAINED_STATES="
+                      << current_rows.size() << "\n"
+                      << "V048746255172582_PATCH5201212_CURRENT_CACHE_FINAL_SEQUENCES="
+                      << data.reference_final_sequences[0] << ";" << data.reference_final_sequences[1] << ";"
+                      << data.reference_final_sequences[2] << ";" << data.reference_final_sequences[3] << "\n"
+                      << "V048746255172582_PATCH5201212_CURRENT_CACHE_SEQUENCE_INVENTORY=ACCEPT\n";
             g_source_population_global_v1724 = &data.source_population_global_v1724;
             g_source_population_compact_v1724 = &data.source_population_compact_v1724;
             const auto found16 = data.reference_contracts.find(16u);
@@ -14064,7 +14147,11 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         std::array<double,3> source_transport_segment_cm{{0.0, 0.0, 0.0}};
         double pending_transport_segment_cm = 0.0;
 
-        static constexpr std::array<std::size_t,4> expected_dsec_counts{{21u,1u,18u,17u}};
+        const std::array<std::size_t,4> expected_dsec_counts{{
+            data.reference_trajectory_mode ? data.reference_dsec_sequences[0].size() : 0u,
+            data.reference_trajectory_mode ? data.reference_dsec_sequences[1].size() : 0u,
+            data.reference_trajectory_mode ? data.reference_dsec_sequences[2].size() : 0u,
+            data.reference_trajectory_mode ? data.reference_dsec_sequences[3].size() : 0u}};
         std::array<std::size_t,4> actual_dsec_counts{{0u,0u,0u,0u}};
         std::vector<FixedDsecSnapshot> finals;
         finals.reserve(source_calls);
@@ -14097,7 +14184,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             xstar_dsec_config_init_v1(&config);
             config.nlim = params.niter;
             // The native four-call product trajectory has explicit source-call
-            // boundaries at 21/1/18/17 DSEC evaluations.  These are not a
+            // boundaries owned by the current-cache DSEC inventory. These are not a
             // generic callback limit and are applied only to the canonical
             // Mg XI benchmark.  General standalone cases remain naturally
             // converged with no evaluation prefix.
@@ -14240,10 +14327,24 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
 
         const std::size_t total_dsec_evaluations = std::accumulate(
             actual_dsec_counts.begin(), actual_dsec_counts.end(), std::size_t{0});
-        if (data.reference_trajectory_mode &&
-            (actual_dsec_counts != expected_dsec_counts || total_dsec_evaluations != 57u ||
-             finals.size() != 4u || data.evaluations != 61u || data.snapshots.size() != 61u)) {
-            throw std::runtime_error("standalone controller did not retain the exact 21/1/18/17 plus four-final source trajectory");
+        if (data.reference_trajectory_mode) {
+            const std::size_t expected_total_dsec = std::accumulate(
+                expected_dsec_counts.begin(), expected_dsec_counts.end(), std::size_t{0});
+            const std::size_t expected_retained_states = expected_total_dsec + 4u;
+            if (actual_dsec_counts != expected_dsec_counts ||
+                total_dsec_evaluations != expected_total_dsec ||
+                finals.size() != 4u || data.evaluations != expected_retained_states ||
+                data.snapshots.size() != expected_retained_states) {
+                throw std::runtime_error("standalone controller did not retain the current-cache DSEC plus four-final trajectory");
+            }
+            std::cout << "V048746255172582_PATCH5201212_CONTROLLER_DSEC_COUNTS="
+                      << actual_dsec_counts[0] << ";" << actual_dsec_counts[1] << ";"
+                      << actual_dsec_counts[2] << ";" << actual_dsec_counts[3] << "\n"
+                      << "V048746255172582_PATCH5201212_CONTROLLER_DSEC_TOTAL="
+                      << total_dsec_evaluations << "\n"
+                      << "V048746255172582_PATCH5201212_CONTROLLER_RETAINED_STATES="
+                      << data.evaluations << "\n"
+                      << "V048746255172582_PATCH5201212_CONTROLLER_CACHE_TRAJECTORY=ACCEPT\n";
         }
         if (data.reference_trajectory_mode) {
             // v82 trajectory policy completion: preserve canonical .7e parity as a
