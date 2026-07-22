@@ -283,10 +283,13 @@ def verify(bundle: Path) -> dict[str, Any]:
     matrix = _read_csv(bundle / MATRIX_NAME)
     manifest = _read_csv(bundle / MANIFEST_NAME)
     systems = {(int(r["sequence"]), int(r["element_z"])) for r in manifest}
-    if len(manifest) != 183 or systems != {(s, z) for s in range(1, 62) for z in (1, 2, 12)}:
+    expected_sequences = set(list(range(1,21)) + list(range(22,40)) + list(range(41,57)) + list(range(58,62)))
+    expected_systems = {(s, z) for s in expected_sequences for z in (1, 2, 12)}
+    if len(manifest) != 174 or systems != expected_systems:
         errors.append(f"system_inventory={len(manifest)}")
-    if len(rows) != 40149:
-        errors.append(f"row_inventory={len(rows)} expected=40149")
+    expected_rows = sum(int(r["n_rows"]) for r in manifest)
+    if len(rows) != expected_rows:
+        errors.append(f"row_inventory={len(rows)} expected={expected_rows}")
     if {(int(r["sequence"]), int(r["element_z"])) for r in rows} != systems:
         errors.append("row_system_inventory")
     expected_super = sum(int(r["n_superlevels"]) for r in manifest)

@@ -13827,8 +13827,13 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             const auto found16 = data.reference_contracts.find(16u);
             if (found16 == data.reference_contracts.end()) throw std::runtime_error("sequence-16 contract is missing");
             data.sequence16_contract = found16->second;
-            data.sequence16_source_thermal_budget = benchmark_case_dir.parent_path() /
-                "v0648724_call1_thermal_leaf_reference" / "v0472_call1_thermal_budget.csv";
+            const char* source_thermal_budget = std::getenv("XSTAR_V82_SEQUENCE16_SOURCE_THERMAL_BUDGET");
+            if (source_thermal_budget && *source_thermal_budget) {
+                data.sequence16_source_thermal_budget = std::filesystem::path(source_thermal_budget);
+            } else {
+                data.sequence16_source_thermal_budget = benchmark_case_dir.parent_path() /
+                    "v0648724_call1_thermal_leaf_reference" / "v0472_call1_thermal_budget.csv";
+            }
             data.sequence16_thermal_population_closure_dir =
                 contract_dir / "thermal_consumption_population_closure";
             data.sequence16_diagnostic_dir = std::filesystem::path(options.output_dir) /
@@ -14652,8 +14657,13 @@ int command_run_standalone_case_probe_v70(const Options& options) {
             const auto found16 = data.reference_contracts.find(16u);
             if (found16 == data.reference_contracts.end()) throw std::runtime_error("sequence-16 contract is missing");
             data.sequence16_contract = found16->second;
-            data.sequence16_source_thermal_budget = benchmark_case_dir.parent_path() /
-                "v0648724_call1_thermal_leaf_reference" / "v0472_call1_thermal_budget.csv";
+            const char* source_thermal_budget = std::getenv("XSTAR_V82_SEQUENCE16_SOURCE_THERMAL_BUDGET");
+            if (source_thermal_budget && *source_thermal_budget) {
+                data.sequence16_source_thermal_budget = std::filesystem::path(source_thermal_budget);
+            } else {
+                data.sequence16_source_thermal_budget = benchmark_case_dir.parent_path() /
+                    "v0648724_call1_thermal_leaf_reference" / "v0472_call1_thermal_budget.csv";
+            }
             data.sequence16_thermal_population_closure_dir = contract_dir / "thermal_consumption_population_closure";
             data.sequence16_diagnostic_dir = std::filesystem::path(options.output_dir) / "sequence16_mg_precommit";
             const char* source_solve_rows = std::getenv("XSTAR_V82_SEQUENCE16_SOURCE_SOLVE_STAGE_ROWS");

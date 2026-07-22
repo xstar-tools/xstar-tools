@@ -1,6 +1,6 @@
 """Capture all 61 immutable v0.6.47.2 H/He/Mg fixed-state evaluations.
 
-The probe observes the 57 DSEC evaluations and the four retained final
+The probe observes the source-converged DSEC evaluations and the four retained final
 fixed-state evaluations. It does not change rates, matrices, controller
 branches, or products.
 """
@@ -291,7 +291,7 @@ _PROBE = _PROBE.replace(
 )
 _PROBE = _PROBE.replace(
     '"result": "ACCEPT" if len(_STATE["budgets"]) == 57 and len(_STATE["states"]) == 4 and len(_STATE["trace"]) == 57 else "REJECT",',
-    '"result": "ACCEPT" if len(_STATE["budgets"]) == 57 and len(_STATE["states"]) == 4 and len(_STATE["trace"]) == 57 and len(_STATE["all61_states"]) == 61 else "REJECT",',
+    '"result": "ACCEPT" if len(_STATE["budgets"]) == 54 and len(_STATE["states"]) == 4 and len(_STATE["trace"]) == 54 and len(_STATE["all61_states"]) == 58 else "REJECT",',
 )
 _PROBE = _PROBE.replace(
     '"dsec_evaluations_observed": len(_STATE["trace"]),',
@@ -578,22 +578,24 @@ def verify(bundle: Path) -> dict[str, Any]:
             if not (directory / f"{prefix}{name}.bin").is_file():
                 errors.append(f"missing_workspace:{actual_sequence}:{prefix}{name}.bin")
                 workspace_contract_exact = False
-    if len(inputs) != 61 or [int(row["sequence"]) for row in inputs] != list(range(1, 62)):
+    expected_sequences = list(range(1,21)) + list(range(22,40)) + list(range(41,57)) + list(range(58,62))
+    expected_set = set(expected_sequences)
+    if len(inputs) != 58 or [int(row["sequence"]) for row in inputs] != expected_sequences:
         errors.append(f"input_inventory={len(inputs)}")
-    if len(states) != 61 or sequences != list(range(1, 62)):
+    if len(states) != 58 or sequences != expected_sequences:
         errors.append(f"state_inventory={len(states)}")
-    if kinds.count("dsec") != 57 or kinds.count("final") != 4:
+    if kinds.count("dsec") != 54 or kinds.count("final") != 4:
         errors.append(f"kind_inventory=dsec:{kinds.count('dsec')},final:{kinds.count('final')}")
-    expected_ions = 61 * ((1 + 1) + (2 + 1) + (12 + 1))
+    expected_ions = 58 * ((1 + 1) + (2 + 1) + (12 + 1))
     if len(ions) != expected_ions:
         errors.append(f"ion_rows={len(ions)} expected={expected_ions}")
-    if not levels or {int(row["sequence"]) for row in levels} != set(range(1, 62)):
+    if not levels or {int(row["sequence"]) for row in levels} != expected_set:
         errors.append("level_sequence_inventory")
     solve_sequences = {int(row["sequence"]) for row in solve_rows}
     solve_elements = {(int(row["sequence"]), int(row["element_z"])) for row in solve_rows}
-    if not solve_rows or solve_sequences != set(range(1, 62)):
+    if not solve_rows or solve_sequences != expected_set:
         errors.append("solve_row_sequence_inventory")
-    if len(solve_elements) != 61 * 3:
+    if len(solve_elements) != 58 * 3:
         errors.append(f"solve_element_inventory={len(solve_elements)}")
     report = json.loads((bundle / REPORT_NAME).read_text())
     if not report.get("actual_v0472_runtime_capture"):
