@@ -376,6 +376,40 @@ void append_native_radial_summary(std::ofstream& out,
                 ? 100.0 * (source_integral - current_integral) / source_integral : 0.0);
         }
     }
+    // patch 5.20.14.5: option 17 is a pprint surface and therefore reads
+    // dpthc directly from each retained HEATT-before-STPCUT boundary.  Do not
+    // route it through xo01_detal4, whose FITS projection has its own product
+    // lifetime and can hide a one-zone offset.  The fifth row is the genuine
+    // terminal post-STPCUT boundary.
+    std::vector<std::pair<double,double>> retained_depth_logs;
+    std::vector<std::pair<double,double>> retained_reference_depths;
+    retained_depth_logs.reserve(state.radial_zones.size());
+    retained_reference_depths.reserve(state.radial_zones.size());
+    bool retained_depth_complete = !state.radial_zones.empty();
+    for (const auto& zone : state.radial_zones) {
+        const auto& eval = zone.accepted_controller.evaluation;
+        const auto& energy = eval.radiation_energy_ev;
+        const auto& dpthc = eval.source_workspace.dpthc;
+        const std::size_t n = energy.size();
+        if (n < 2u || dpthc.size() < 2u * n) {
+            retained_depth_complete = false;
+            break;
+        }
+        const auto it = std::upper_bound(energy.begin(), energy.end(), 13.6);
+        std::size_t reference_bin = static_cast<std::size_t>(it - energy.begin());
+        if (reference_bin + 1u < n) ++reference_bin;
+        if (reference_bin >= n) reference_bin = n - 1u;
+        const double fwd = std::max(0.0, dpthc[reference_bin]);
+        const double rev = std::max(0.0, dpthc[n + reference_bin]);
+        retained_depth_logs.push_back({fwd > 0.0 ? std::log10(fwd) : -10.0,
+                                       rev > 0.0 ? std::log10(rev) : -10.0});
+        retained_reference_depths.push_back({fwd, rev});
+    }
+    if (retained_depth_complete && retained_depth_logs.size() >= rows.size()) {
+        depth_logs = retained_depth_logs;
+        reference_depths = retained_reference_depths;
+    }
+
     // Prefer the literal pprint option-17 source surfaces retained at each
     // accepted boundary: terr = integral(zremsz-zrems(1))/integral(zremsz).
     // This avoids feeding xout_step through already-projected FITS planes.

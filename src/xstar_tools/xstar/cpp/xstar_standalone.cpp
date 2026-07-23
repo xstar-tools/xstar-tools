@@ -5869,7 +5869,7 @@ std::vector<double> reconstruct_public_line_luminosity_v82_patch52071(
         const auto& rcem = current_zone.accepted_controller.evaluation.source_workspace.rcem;
         if (rcem.size() < 2u || rcem.size() % 2u != 0u) continue;
         const std::size_t stride = rcem.size() / 2u;
-        const double fpr2 = 12.56 * std::pow(radius_cm * 1.0e-19, 2.0);
+        const double fpr2 = xstar_constants::kLegacyHeattGeometryFactor * std::pow(radius_cm * 1.0e-19, 2.0);
         const double shell_scale = delrl * fpr2;
         for (std::size_t i = 0; i < line_indices.size(); ++i) {
             const auto line_index = static_cast<long long>(std::llround(line_indices[i]));
@@ -6007,18 +6007,32 @@ bool build_writer_time_binemis_v82_patch520142(
     const std::size_t n = final_eval.radiation_energy_ev.size();
     const std::size_t line_count = product.line_identities.size();
     if (n < 3u || line_count == 0u || ws.zrems.size() < 5u * n ||
-        ws.dpthc.size() < 2u * n || ws.elum.empty()) return false;
+        ws.dpthc.size() < 2u * n) return false;
     const std::size_t native_stride = native_line_plane_stride_v82(ws);
     if (native_stride == 0u) return false;
 
     std::vector<double> compact_elum(2u * line_count, 0.0);
+    std::vector<double> all_line_indices(line_count, 0.0);
+    for (std::size_t j = 0; j < line_count; ++j) {
+        all_line_indices[j] = static_cast<double>(product.line_identities[j].line_index);
+    }
+    const auto reconstructed_elum_in = reconstruct_public_line_luminosity_v82_patch52071(
+        product, all_line_indices, 0u);
+    const auto reconstructed_elum_out = reconstruct_public_line_luminosity_v82_patch52071(
+        product, all_line_indices, 1u);
+    const bool reconstructed_elum_ready =
+        vector_has_nonzero(reconstructed_elum_in) || vector_has_nonzero(reconstructed_elum_out);
     std::vector<double> wavelength(line_count, 0.0), mass(line_count, 1.0),
         natural_rate(line_count, 0.0), auger_width(line_count, 0.0), auger_rate(line_count, 0.0);
     std::vector<long long> dtype(line_count, 50);
     for (std::size_t j = 0; j < line_count; ++j) {
         const auto& id = product.line_identities[j];
-        compact_elum[j] = native_line_plane_v82(ws.elum, native_stride, 0u, id.line_index);
-        compact_elum[line_count + j] = native_line_plane_v82(ws.elum, native_stride, 1u, id.line_index);
+        compact_elum[j] = reconstructed_elum_ready
+            ? reconstructed_elum_in[j]
+            : native_line_plane_v82(ws.elum, native_stride, 0u, id.line_index);
+        compact_elum[line_count + j] = reconstructed_elum_ready
+            ? reconstructed_elum_out[j]
+            : native_line_plane_v82(ws.elum, native_stride, 1u, id.line_index);
         wavelength[j] = std::abs(id.wavelength_angstrom);
         dtype[j] = static_cast<long long>(id.data_type);
         mass[j] = std::max(id.atomic_mass, std::numeric_limits<double>::min());
@@ -6050,6 +6064,8 @@ bool build_writer_time_binemis_v82_patch520142(
         return false;
     }
     std::cout
+        << "V048746255172582_PATCH520145_WRITER_BINEMIS_ELUM_SOURCE="
+        << (reconstructed_elum_ready ? "SOURCE_HEATT_RADIAL_RCEM_RECONSTRUCTION" : "FINAL_CUMULATIVE_ELUM") << "\n"
         << "V048746255172582_PATCH520142_WRITER_BINEMIS_SOURCE=FINAL_CUMULATIVE_ELUM\n"
         << "V048746255172582_PATCH520142_WRITER_BINEMIS_XLUM=" << std::setprecision(17) << xlum << "\n"
         << "V048746255172582_PATCH520142_WRITER_BINEMIS_RANKED_SLOTS=" << slots.size() << "\n"
@@ -6187,22 +6203,21 @@ void create_native_retained_productwrite_schema(xstar_run_state::ProductWritingS
         ws.elum, {}, public_native_line_stride, public_line_index, 0);
     std::vector<double> public_line_emit_out = gather_native_line_plane_v82(
         ws.elum, {}, public_native_line_stride, public_line_index, 1);
-    const bool retained_public_line_luminosity =
-        vector_has_nonzero(public_line_emit_in) || vector_has_nonzero(public_line_emit_out);
-    if (!retained_public_line_luminosity) {
-        auto reconstructed_in = reconstruct_public_line_luminosity_v82_patch52071(
-            product, public_line_index, 0u);
-        auto reconstructed_out = reconstruct_public_line_luminosity_v82_patch52071(
-            product, public_line_index, 1u);
-        if (vector_has_nonzero(reconstructed_in) || vector_has_nonzero(reconstructed_out)) {
-            public_line_emit_in.swap(reconstructed_in);
-            public_line_emit_out.swap(reconstructed_out);
-            std::cout << "V048746255172582_PATCH52071_PUBLIC_LINE_ELUM_SOURCE=RECONSTRUCTED_HEATT_TRNFRN_RCEM\n";
-        } else {
-            std::cout << "V048746255172582_PATCH52071_PUBLIC_LINE_ELUM_SOURCE=RETAINED_ZERO_NO_LOCAL_SIGNAL\n";
-        }
+    // patch 5.20.14.5: public line luminosity is the HEATT radial integral of
+    // the retained local rcem workspaces.  Reconstruct it from the exact live
+    // shell boundaries rather than trusting a final-writer copy of elum whose
+    // lifetime is independent of the local zero-thickness recompute.  This is
+    // the literal source formula and avoids the 5.20.14.4 two-shell truncation.
+    auto reconstructed_in = reconstruct_public_line_luminosity_v82_patch52071(
+        product, public_line_index, 0u);
+    auto reconstructed_out = reconstruct_public_line_luminosity_v82_patch52071(
+        product, public_line_index, 1u);
+    if (vector_has_nonzero(reconstructed_in) || vector_has_nonzero(reconstructed_out)) {
+        public_line_emit_in.swap(reconstructed_in);
+        public_line_emit_out.swap(reconstructed_out);
+        std::cout << "V048746255172582_PATCH520145_PUBLIC_LINE_ELUM_SOURCE=SOURCE_HEATT_RADIAL_RCEM_RECONSTRUCTION\n";
     } else {
-        std::cout << "V048746255172582_PATCH52071_PUBLIC_LINE_ELUM_SOURCE=RETAINED_CUMULATIVE_ELUM\n";
+        std::cout << "V048746255172582_PATCH520145_PUBLIC_LINE_ELUM_SOURCE=RETAINED_CUMULATIVE_ELUM_NO_LOCAL_SIGNAL\n";
     }
     std::vector<double> public_line_depth_in = gather_native_line_plane_v82(
         ws.tau0, {}, public_native_line_stride, public_line_index, 0);
@@ -12366,15 +12381,117 @@ void advance_source_continuum_radiation_v82_patch52(
     }
 }
 
-void advance_consecutive_transport_v71(
+void advance_atomic_luminosities_v82_patch520145(
     StandaloneControllerDataV67& data,
     FixedDsecSnapshot& local_boundary,
     double delta_radius_cm,
     double radius_cm) {
     if (!(delta_radius_cm > 0.0) || !std::isfinite(delta_radius_cm)) return;
 
-    advance_source_continuum_radiation_v82_patch52(data, local_boundary, delta_radius_cm, radius_cm);
+    const std::size_t line_stride = local_boundary.oplin.size();
+    if (data.line_luminosity.size() != 2u * line_stride) {
+        data.line_luminosity.assign(2u * line_stride, 0.0);
+    }
+    const std::size_t rcem_stride = local_boundary.rcem.size() >= 2u
+        ? local_boundary.rcem.size() / 2u : 0u;
+    const double fpr2 = xstar_constants::kLegacyHeattGeometryFactor *
+        std::pow(std::max(radius_cm, 0.0) * 1.0e-19, 2.0);
+    for (std::size_t source_slot = 1; source_slot < line_stride; ++source_slot) {
+        for (std::size_t plane = 0; plane < 2u; ++plane) {
+            const std::size_t source_at = plane * rcem_stride + source_slot;
+            const double local = source_at < local_boundary.rcem.size()
+                ? finite_or(local_boundary.rcem[source_at], 0.0) : 0.0;
+            data.line_luminosity[plane * line_stride + source_slot] = std::max(0.0,
+                data.line_luminosity[plane * line_stride + source_slot] +
+                local * delta_radius_cm * fpr2);
+        }
+    }
+    local_boundary.elum = data.line_luminosity;
 
+    const std::size_t continuum_stride = local_boundary.opakab.size();
+    if (data.rrc_luminosity.size() != 2u * continuum_stride) {
+        data.rrc_luminosity.assign(2u * continuum_stride, 0.0);
+    }
+    const std::size_t cemab_stride = local_boundary.cemab.size() >= 2u
+        ? local_boundary.cemab.size() / 2u : 0u;
+    std::vector<std::uint8_t> rate7_rrc_slot(continuum_stride, 0u);
+    if (data.program) {
+        for (const auto& record : data.program->records) {
+            if (record.rate_type != 7 || record.continuum_index_one_based <= 0) continue;
+            const std::size_t slot = static_cast<std::size_t>(record.continuum_index_one_based);
+            if (slot < continuum_stride) rate7_rrc_slot[slot] = 1u;
+        }
+    }
+    for (std::size_t source_slot = 1; source_slot < continuum_stride; ++source_slot) {
+        if (!rate7_rrc_slot[source_slot]) continue;
+        const double inward = source_slot < cemab_stride
+            ? finite_or(local_boundary.cemab[source_slot], 0.0) : 0.0;
+        const std::size_t outward_at = cemab_stride + source_slot;
+        const double outward = outward_at < local_boundary.cemab.size()
+            ? finite_or(local_boundary.cemab[outward_at], 0.0) : 0.0;
+        if (!(inward > xstar_constants::kLegacyHeattRrcCemabActivityFloor ||
+              outward > xstar_constants::kLegacyHeattRrcCemabActivityFloor)) continue;
+        const double increment = 0.5 * (inward + outward) * delta_radius_cm * fpr2;
+        data.rrc_luminosity[source_slot] = std::max(0.0,
+            data.rrc_luminosity[source_slot] + increment);
+        data.rrc_luminosity[continuum_stride + source_slot] = std::max(0.0,
+            data.rrc_luminosity[continuum_stride + source_slot] + increment);
+    }
+    local_boundary.elumab = data.rrc_luminosity;
+}
+
+void retain_pre_stpcut_cumulative_state_v82_patch520145(
+    StandaloneControllerDataV67& data,
+    FixedDsecSnapshot& local_boundary) {
+    const std::size_t line_stride = local_boundary.oplin.size();
+    if (data.product_line_tau_in.size() != line_stride) {
+        data.product_line_tau_in.assign(line_stride, 0.0);
+        data.product_line_tau_out.assign(line_stride, 0.0);
+    }
+    local_boundary.tau0.clear();
+    local_boundary.tau0.reserve(2u * line_stride);
+    local_boundary.tau0.insert(local_boundary.tau0.end(), data.product_line_tau_in.begin(), data.product_line_tau_in.end());
+    local_boundary.tau0.insert(local_boundary.tau0.end(), data.product_line_tau_out.begin(), data.product_line_tau_out.end());
+    local_boundary.elum = data.line_luminosity;
+
+    const std::size_t continuum_stride = local_boundary.opakab.size();
+    if (data.product_rrc_tau_in.size() != continuum_stride) {
+        data.product_rrc_tau_in.assign(continuum_stride, 0.0);
+        data.product_rrc_tau_out.assign(continuum_stride, 0.0);
+    }
+    local_boundary.tauc.clear();
+    local_boundary.tauc.reserve(2u * continuum_stride);
+    local_boundary.tauc.insert(local_boundary.tauc.end(), data.product_rrc_tau_in.begin(), data.product_rrc_tau_in.end());
+    local_boundary.tauc.insert(local_boundary.tauc.end(), data.product_rrc_tau_out.begin(), data.product_rrc_tau_out.end());
+    local_boundary.elumab = data.rrc_luminosity;
+    local_boundary.source_continuum_tau_workspace_count = data.source_tau_in.size();
+
+    const std::size_t grid_stride = local_boundary.opakc.size();
+    if (data.grid_tau_in.size() != grid_stride) {
+        data.grid_tau_in.assign(grid_stride, 0.0);
+        data.grid_tau_out.assign(grid_stride, 0.0);
+    }
+    if (data.grid_cont_tau_in.size() != grid_stride) {
+        data.grid_cont_tau_in.assign(grid_stride, 0.0);
+        data.grid_cont_tau_out.assign(grid_stride, 0.0);
+    }
+    local_boundary.continuum_tau_in = data.grid_tau_in;
+    local_boundary.continuum_tau_out = data.grid_tau_out;
+    local_boundary.dpthc.clear();
+    local_boundary.dpthc.reserve(2u * grid_stride);
+    local_boundary.dpthc.insert(local_boundary.dpthc.end(), data.grid_tau_in.begin(), data.grid_tau_in.end());
+    local_boundary.dpthc.insert(local_boundary.dpthc.end(), data.grid_tau_out.begin(), data.grid_tau_out.end());
+    local_boundary.dpthcont.clear();
+    local_boundary.dpthcont.reserve(2u * grid_stride);
+    local_boundary.dpthcont.insert(local_boundary.dpthcont.end(), data.grid_cont_tau_in.begin(), data.grid_cont_tau_in.end());
+    local_boundary.dpthcont.insert(local_boundary.dpthcont.end(), data.grid_cont_tau_out.begin(), data.grid_cont_tau_out.end());
+}
+
+void advance_stpcut_depths_v82_patch520145(
+    StandaloneControllerDataV67& data,
+    FixedDsecSnapshot& local_boundary,
+    double delta_radius_cm) {
+    if (!(delta_radius_cm > 0.0) || !std::isfinite(delta_radius_cm)) return;
     const std::size_t line_stride = local_boundary.oplin.size();
     if (data.line_tau_in.size() < line_stride) {
         data.line_tau_in.resize(line_stride, 0.0);
@@ -12384,27 +12501,12 @@ void advance_consecutive_transport_v71(
         data.product_line_tau_in.assign(line_stride, 0.0);
         data.product_line_tau_out.assign(line_stride, 0.0);
     }
-    if (data.line_luminosity.size() != 2u * line_stride) {
-        data.line_luminosity.assign(2u * line_stride, 0.0);
-    }
-    const std::size_t rcem_stride = local_boundary.rcem.size() >= 2u
-        ? local_boundary.rcem.size() / 2u : 0u;
-    const double fpr2 = xstar_constants::kLegacyHeattGeometryFactor *
-        std::pow(std::max(radius_cm, 0.0) * 1.0e-19, 2.0);
-
     for (std::size_t source_slot = 1; source_slot < line_stride; ++source_slot) {
         const double opacity = std::isfinite(local_boundary.oplin[source_slot]) &&
             local_boundary.oplin[source_slot] > 0.0 ? local_boundary.oplin[source_slot] : 0.0;
         const std::size_t runtime_slot = source_slot - 1u;
         data.line_tau_in[runtime_slot] += opacity * delta_radius_cm;
         data.product_line_tau_in[source_slot] += opacity * delta_radius_cm;
-        for (std::size_t plane = 0; plane < 2u; ++plane) {
-            const std::size_t source_at = plane * rcem_stride + source_slot;
-            const double local = source_at < local_boundary.rcem.size()
-                ? finite_or(local_boundary.rcem[source_at], 0.0) : 0.0;
-            data.line_luminosity[plane * line_stride + source_slot] = std::max(0.0,
-                data.line_luminosity[plane * line_stride + source_slot] + local * delta_radius_cm * fpr2);
-        }
     }
 
     const std::size_t continuum_stride = local_boundary.opakab.size();
@@ -12417,71 +12519,14 @@ void advance_consecutive_transport_v71(
         data.product_rrc_tau_in.assign(continuum_stride, 0.0);
         data.product_rrc_tau_out.assign(continuum_stride, 0.0);
     }
-    if (data.rrc_luminosity.size() != 2u * continuum_stride) {
-        data.rrc_luminosity.assign(2u * continuum_stride, 0.0);
-    }
-    const std::size_t cemab_stride = local_boundary.cemab.size() >= 2u
-        ? local_boundary.cemab.size() / 2u : 0u;
-
-    // heatt.f90 accumulates RRC luminosity by traversing the active rate-7
-    // record chains, not by sweeping every allocated continuum slot.  Build
-    // that record-owned slot mask from the lowered native program.  This
-    // deliberately excludes rate-42 Type-88 and any allocated but non-rate-7
-    // continuum slots from elumab while leaving the broad cemab diagnostic
-    // workspace untouched.
-    std::vector<std::uint8_t> rate7_rrc_slot(continuum_stride, 0u);
-    if (data.program) {
-        for (const auto& record : data.program->records) {
-            if (record.rate_type != 7 || record.continuum_index_one_based <= 0) continue;
-            const std::size_t slot = static_cast<std::size_t>(record.continuum_index_one_based);
-            if (slot < continuum_stride) rate7_rrc_slot[slot] = 1u;
-        }
-    }
-
-    // Critical patch-3 correction: source opakab[continuum_index_one_based]
-    // becomes runtime tau[continuum_index_one_based-1]. Patch 2 used tau[i].
     for (std::size_t source_slot = 1; source_slot < continuum_stride; ++source_slot) {
         const double opacity = std::isfinite(local_boundary.opakab[source_slot]) &&
             local_boundary.opakab[source_slot] > 0.0 ? local_boundary.opakab[source_slot] : 0.0;
         const std::size_t runtime_slot = source_slot - 1u;
         data.source_tau_in[runtime_slot] += opacity * delta_radius_cm;
         data.product_rrc_tau_in[source_slot] += opacity * delta_radius_cm;
-
-        if (!rate7_rrc_slot[source_slot]) continue;
-        const double inward = source_slot < cemab_stride
-            ? finite_or(local_boundary.cemab[source_slot], 0.0) : 0.0;
-        const std::size_t outward_at = cemab_stride + source_slot;
-        const double outward = outward_at < local_boundary.cemab.size()
-            ? finite_or(local_boundary.cemab[outward_at], 0.0) : 0.0;
-        // Literal heatt.f90 only updates elumab when either local cemab plane
-        // exceeds 1.d-49.  Without this guard sub-threshold numerical residue
-        // is amplified by the shell-volume factor and creates spurious public
-        // option-19/RRC rows.
-        if (!(inward > xstar_constants::kLegacyHeattRrcCemabActivityFloor ||
-              outward > xstar_constants::kLegacyHeattRrcCemabActivityFloor)) continue;
-        const double increment = 0.5 * (inward + outward) * delta_radius_cm * fpr2;
-        data.rrc_luminosity[source_slot] = std::max(0.0,
-            data.rrc_luminosity[source_slot] + increment);
-        data.rrc_luminosity[continuum_stride + source_slot] = std::max(0.0,
-            data.rrc_luminosity[continuum_stride + source_slot] + increment);
     }
 
-    local_boundary.tau0.clear();
-    local_boundary.tau0.reserve(2u * line_stride);
-    local_boundary.tau0.insert(local_boundary.tau0.end(), data.product_line_tau_in.begin(), data.product_line_tau_in.end());
-    local_boundary.tau0.insert(local_boundary.tau0.end(), data.product_line_tau_out.begin(), data.product_line_tau_out.end());
-    local_boundary.elum = data.line_luminosity;
-    local_boundary.tauc.clear();
-    local_boundary.tauc.reserve(2u * continuum_stride);
-    local_boundary.tauc.insert(local_boundary.tauc.end(), data.product_rrc_tau_in.begin(), data.product_rrc_tau_in.end());
-    local_boundary.tauc.insert(local_boundary.tauc.end(), data.product_rrc_tau_out.begin(), data.product_rrc_tau_out.end());
-    local_boundary.elumab = data.rrc_luminosity;
-    local_boundary.source_continuum_tau_workspace_count = data.source_tau_in.size();
-
-    // Literal stpcut.f90 advances two distinct radiation-grid optical-depth
-    // surfaces after heatt: dpthc from opakc (+ optpp, which is source-zero in
-    // this benchmark) and dpthcont from opakcont.  Do not reconstruct either
-    // from the generic public opacity surface; keep their ownership separate.
     const std::size_t grid_stride = local_boundary.opakc.size();
     if (data.grid_tau_in.size() != grid_stride) {
         data.grid_tau_in.assign(grid_stride, 0.0);
@@ -12500,16 +12545,7 @@ void advance_consecutive_transport_v71(
         data.grid_tau_in[i] += opakc * delta_radius_cm;
         data.grid_cont_tau_in[i] += opakcont * delta_radius_cm;
     }
-    local_boundary.continuum_tau_in = data.grid_tau_in;
-    local_boundary.continuum_tau_out = data.grid_tau_out;
-    local_boundary.dpthc.clear();
-    local_boundary.dpthc.reserve(2u * grid_stride);
-    local_boundary.dpthc.insert(local_boundary.dpthc.end(), data.grid_tau_in.begin(), data.grid_tau_in.end());
-    local_boundary.dpthc.insert(local_boundary.dpthc.end(), data.grid_tau_out.begin(), data.grid_tau_out.end());
-    local_boundary.dpthcont.clear();
-    local_boundary.dpthcont.reserve(2u * grid_stride);
-    local_boundary.dpthcont.insert(local_boundary.dpthcont.end(), data.grid_cont_tau_in.begin(), data.grid_cont_tau_in.end());
-    local_boundary.dpthcont.insert(local_boundary.dpthcont.end(), data.grid_cont_tau_out.begin(), data.grid_cont_tau_out.end());
+    retain_pre_stpcut_cumulative_state_v82_patch520145(data, local_boundary);
 
     std::cout << std::setprecision(17)
               << "V048746255172582_PATCH52011_TRANSPORT_INTERVAL="
@@ -12532,6 +12568,17 @@ void advance_consecutive_transport_v71(
     if (rc != 0) {
         throw std::runtime_error(std::string("v71 consecutive line-tau commit failed: ") + message.data());
     }
+}
+
+void advance_consecutive_transport_v71(
+    StandaloneControllerDataV67& data,
+    FixedDsecSnapshot& local_boundary,
+    double delta_radius_cm,
+    double radius_cm) {
+    if (!(delta_radius_cm > 0.0) || !std::isfinite(delta_radius_cm)) return;
+    advance_source_continuum_radiation_v82_patch52(data, local_boundary, delta_radius_cm, radius_cm);
+    advance_atomic_luminosities_v82_patch520145(data, local_boundary, delta_radius_cm, radius_cm);
+    advance_stpcut_depths_v82_patch520145(data, local_boundary, delta_radius_cm);
 }
 
 FixedDsecSnapshot make_iteration_snapshot_v67(
@@ -14388,19 +14435,30 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                 call2_pretransport_v82_patch513 = boundary;
             }
 
-            // Literal xstar.f90/pprint/savd lifetime: retain the radial detail
-            // boundary before STEP/STPCUT/TRNFRN mutates cumulative tau and
-            // radiation state.  Previous C++ retained `boundary` only after
-            // advance_consecutive_transport_v71, shifting detail tau/fwd-depth
-            // one shell early.
-            FixedDsecSnapshot pretransport_boundary_v82_patch520144 = boundary;
-
+            // patch 5.20.14.5: literal source lifetime is HEATT -> pprint/savd
+            // -> STPCUT -> TRNFRN.  The old C++ transport helper bundled HEATT
+            // and STPCUT, so 5.20.14.4 could only snapshot either too early
+            // (missing local zrems/luminosity) or too late (depth shifted one
+            // shell).  Execute the source-local HEATT work first, retain the
+            // current shell with the *previous* cumulative depth, and only then
+            // commit STPCUT depths.  The continuum helper also prepares the
+            // next-zone radiation projection; that does not alter the retained
+            // pprint boundary arrays.
             if (segment > 0.0) {
                 const std::size_t transport_index = call >= 2u ? call - 2u : 0u;
                 if (transport_index < source_transport_segment_cm.size()) {
                     source_transport_segment_cm[transport_index] = segment;
                 }
-                advance_consecutive_transport_v71(data, boundary, segment, boundary_radius_cm);
+                advance_source_continuum_radiation_v82_patch52(
+                    data, boundary, segment, boundary_radius_cm);
+                advance_atomic_luminosities_v82_patch520145(
+                    data, boundary, segment, boundary_radius_cm);
+            }
+            retain_pre_stpcut_cumulative_state_v82_patch520145(data, boundary);
+            FixedDsecSnapshot pretransport_boundary_v82_patch520145 = boundary;
+
+            if (segment > 0.0) {
+                advance_stpcut_depths_v82_patch520145(data, boundary, segment);
             }
             if (call == source_calls) {
                 terminal_transport_boundary_v82_patch520144 = boundary;
@@ -14436,8 +14494,8 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             if (call == 2u && data.reference_trajectory_mode) {
                 write_mg_type53_source_native_opacity_record_attribution_v82_patch512(data);
             }
-            data.snapshots.push_back(pretransport_boundary_v82_patch520144);
-            finals.push_back(std::move(pretransport_boundary_v82_patch520144));
+            data.snapshots.push_back(pretransport_boundary_v82_patch520145);
+            finals.push_back(std::move(pretransport_boundary_v82_patch520145));
 
             std::cout << "V048746255172582_CONTROLLER_CALL=" << call
                       << " DSEC_EVALUATIONS=" << dsec_count
@@ -14774,13 +14832,25 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             // opacity/luminosity arrays from the completed third transport
             // interval while using this recompute's local zrems/opakc state.
             const double final_writer_delr = static_cast<double>(static_cast<float>(1.0e-15));
+            if (!terminal_transport_boundary_v82_patch520144) {
+                throw std::runtime_error("missing terminal boundary for patch5.20.14.5 final writer recompute");
+            }
+            const auto& terminal_writer_state = *terminal_transport_boundary_v82_patch520144;
+            // The source post-loop HEATT starts from the final transported
+            // zremso/zrems state.  The fixed-state evaluator above does not own
+            // those caller arrays.  Seed both retained continuum workspaces
+            // explicitly from the genuine terminal boundary before applying
+            // the source-REAL 1.e-15 local update.  5.20.14.4 relied on the
+            // controller copy's incidental accumulator lifetime, which allowed
+            // the final public continuum to collapse to the tiny local HEATT
+            // increment instead of retaining the transported spectrum.
+            if (terminal_writer_state.zrems.size() == 5u * final_pprint.radiation_energy_ev.size()) {
+                final_pprint_data.accumulated_zrems = terminal_writer_state.zrems;
+                final_pprint_data.accumulated_zremso = terminal_writer_state.zrems;
+            }
             advance_source_continuum_radiation_v82_patch52(
                 final_pprint_data, final_pprint, final_writer_delr,
                 params.initial_radius_cm + total_depth_cm);
-            if (!terminal_transport_boundary_v82_patch520144) {
-                throw std::runtime_error("missing terminal boundary for patch5.20.14.4 final writer recompute");
-            }
-            const auto& terminal_writer_state = *terminal_transport_boundary_v82_patch520144;
             final_pprint.tau0 = terminal_writer_state.tau0;
             final_pprint.elum = terminal_writer_state.elum;
             final_pprint.tauc = terminal_writer_state.tauc;
