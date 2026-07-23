@@ -8553,7 +8553,7 @@ void write_population_detail(const std::filesystem::path& path,
         const auto pw_level_population = optional_bridge_array_for_hdu(state, "product_write_detail_level_population", static_cast<int>(oz + 3), detail_levels.size());
         const auto pw_level_lte = optional_bridge_array_for_hdu(state, "product_write_detail_level_lte", static_cast<int>(oz + 3), detail_levels.size());
         const bool have_product_write_detail_levels = !native_standalone_product_state(state) && pw_level_population.size() == detail_levels.size();
-        const bool have_product_write_detail_lte = pw_level_lte.size() == detail_levels.size();
+        const bool have_product_write_detail_lte = !native_standalone_product_state(state) && pw_level_lte.size() == detail_levels.size();
         const auto solve_rows = read_solve_rows_by_global(state, zone.accepted_controller.accepted_sequence);
         const auto& oracle_lte_surface = oracle_detail_lte_template_v172537();
         const bool have_oracle_detail_lte_surface = oracle_lte_surface.size() == detail_levels.size();
@@ -8580,7 +8580,9 @@ void write_population_detail(const std::filesystem::path& path,
                     ? public_detail_population_for_level(evaluation, compact_by_global, level, fallback_pop)
                     : fallback_pop);
             const double lte = have_product_write_detail_lte ? pw_level_lte[i] :
-                (have_oracle_detail_lte_surface ? oracle_lte_surface[i] : source_lte_for_level(evaluation, elements, rows, level));
+                (native_standalone_product_state(state)
+                    ? source_lte_for_level(evaluation, elements, rows, level)
+                    : (have_oracle_detail_lte_surface ? oracle_lte_surface[i] : source_lte_for_level(evaluation, elements, rows, level)));
             const long fits_row = static_cast<long>(i + 1);
             write_int(fptr, 1, fits_row, static_cast<int>(level.global_index));
             write_short(fptr, 2, fits_row, static_cast<short>(level.ion_index));
@@ -9767,7 +9769,23 @@ void write_rrc_detail(const std::filesystem::path& path,
                 ? static_cast<std::size_t>(label.index) : 0u;
             const std::size_t retained_cemab_stride = ws.cemab.size() / 2u;
             const std::size_t retained_tauc_stride = ws.tauc.size() / 2u;
-            if (source_continuum_slot > 0u && retained_cemab_stride > source_continuum_slot &&
+            // v82 patch 5.20.15.2: cemab may be retained in compact public-RRC
+            // order (one entry per RRC identity) rather than at the sparse
+            // one-based continuum pointer.  Directly indexing a compact 1957
+            // row surface with label.index silently zeroed/misassigned low He
+            // rows after the identity-mapped diagnostic row had already been
+            // reconstructed.  Only use the direct source pointer when the
+            // plane is large enough to address the complete public RRC index
+            // domain; otherwise preserve the identity-mapped row above.
+            std::size_t max_detail_rrc_index = 0u;
+            for (const auto& detail_label : detail_rrc_labels) {
+                if (detail_label.index > 0) {
+                    max_detail_rrc_index = std::max(max_detail_rrc_index,
+                        static_cast<std::size_t>(detail_label.index));
+                }
+            }
+            const bool cemab_source_indexed = retained_cemab_stride > max_detail_rrc_index;
+            if (cemab_source_indexed && source_continuum_slot > 0u && retained_cemab_stride > source_continuum_slot &&
                 ws.cemab.size() >= 2u * retained_cemab_stride) {
                 r.emis_in = std::isfinite(ws.cemab[source_continuum_slot])
                     ? ws.cemab[source_continuum_slot] : 0.0;
@@ -10816,8 +10834,25 @@ void write_public_lines(const std::filesystem::path& path,
         state, final_zone.accepted_controller.evaluation,
         physical_density_cm3_for_output_zone(state, final_index),
         physical_luminosity_scale_1e38_for_output_zone(state, final_index));
+    // v82 patch 5.20.15.2: line luminosities belong to the final physical
+    // shell, but fstepr/writespectra publish line optical depths after the
+    // terminal transport interval.  Keep these owners independent so the
+    // accepted final-shell elum is not moved to the synthetic writer row.
+    std::vector<LineRow> terminal_depth_list;
+    if (state.terminal_synthetic_row_present && !state.radial_zones.empty()) {
+        const std::size_t depth_index = state.radial_zones.size() - 1u;
+        const auto& depth_zone = state.radial_zones[depth_index];
+        terminal_depth_list = public_line_rows_from_identities(
+            state, depth_zone.accepted_controller.evaluation,
+            physical_density_cm3_for_output_zone(state, depth_index),
+            physical_luminosity_scale_1e38_for_output_zone(state, depth_index));
+    } else {
+        terminal_depth_list = terminal_list;
+    }
     std::map<long long,LineRow> terminal_by_record;
+    std::map<long long,LineRow> terminal_depth_by_record;
     for (const auto& line : terminal_list) terminal_by_record[line.record] = line;
+    for (const auto& line : terminal_depth_list) terminal_depth_by_record[line.record] = line;
     auto terminal_for_label = [&](const LineLabelTemplateRow& label) -> const LineRow* {
         const auto direct = terminal_by_record.find(label.index);
         if (direct != terminal_by_record.end()) return &direct->second;
@@ -10827,6 +10862,21 @@ void write_public_lines(const std::filesystem::path& path,
         double best_delta = std::numeric_limits<double>::infinity();
         const double tolerance = std::max(2.0e-3, std::abs(label.wavelength_angstrom) * 2.0e-6);
         for (const auto& line : terminal_list) {
+            if (line.z != z_label || line.stage != stage_label) continue;
+            const double delta = std::abs(line.wavelength_a - label.wavelength_angstrom);
+            if (delta <= tolerance && delta < best_delta) { best = &line; best_delta = delta; }
+        }
+        return best;
+    };
+    auto terminal_depth_for_label = [&](const LineLabelTemplateRow& label) -> const LineRow* {
+        const auto direct = terminal_depth_by_record.find(label.index);
+        if (direct != terminal_depth_by_record.end()) return &direct->second;
+        const int z_label = element_z_from_ion_label(label.ion);
+        const int stage_label = roman_stage_from_ion_label(label.ion);
+        const LineRow* best = nullptr;
+        double best_delta = std::numeric_limits<double>::infinity();
+        const double tolerance = std::max(2.0e-3, std::abs(label.wavelength_angstrom) * 2.0e-6);
+        for (const auto& line : terminal_depth_list) {
             if (line.z != z_label || line.stage != stage_label) continue;
             const double delta = std::abs(line.wavelength_a - label.wavelength_angstrom);
             if (delta <= tolerance && delta < best_delta) { best = &line; best_delta = delta; }
@@ -10914,7 +10964,11 @@ void write_public_lines(const std::filesystem::path& path,
                 const auto found = terminal_by_record.find(label.index);
                 if (found != terminal_by_record.end()) r = found->second;
             }
-            r.tau_out = 0.0;
+            if (const LineRow* terminal_depth = terminal_depth_for_label(label)) {
+                if (std::isfinite(terminal_depth->tau_in)) r.tau_in = terminal_depth->tau_in;
+                if (std::isfinite(terminal_depth->tau_out)) r.tau_out = terminal_depth->tau_out;
+            }
+            if (!std::isfinite(r.tau_out)) r.tau_out = 0.0;
         }
         const long row = static_cast<long>(i + 1);
         write_int(fptr, 1, row, label.index);

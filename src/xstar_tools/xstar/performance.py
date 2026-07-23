@@ -1401,7 +1401,7 @@ def summarize_rate_payload_four_family_product(
             ] if schema_version == "0.6.40.3" else [
                 "v0.6.41 promotes the position-safe, order-preserving four-family product qualified by all 61 v0.6.40.3 evaluations.",
                 "Normal production execution disables the reverse oracle but retains whole-evaluation fallback and structural Type-51 ordering.",
-                "The upstream Type-4 C++ product uses pow(v2, 3.0) in the Voigt far wing and an exact parity gate to preserve detal4 payloads.",
+                "The upstream Type-4 C++ product reproduces the literal default-REAL Voigt constants and v2*v2*v2 far-wing arithmetic with an exact parity gate.",
             ] if schema_version == "0.6.41" else [
                 "The complete accepted path remains the oracle for every Type-50/63/88 scalar and all four family rows.",
                 "C++ rows are replaced in-place with the accepted composite identity and original term index.",

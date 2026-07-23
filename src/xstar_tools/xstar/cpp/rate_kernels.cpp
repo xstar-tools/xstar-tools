@@ -14,6 +14,7 @@
 #include <cmath>
 #include <algorithm>
 #include <vector>
+#include "xstar_constants.h"
 
 namespace {
 constexpr int XSTAR_RATES_ABI_VERSION = 2;
@@ -42,6 +43,10 @@ bool finite6(double a, double b, double c, double d, double e, double f) {
 inline double source_real_literal(double value) {
     return static_cast<double>(static_cast<float>(value));
 }
+inline double source_add(double a, double b) { volatile double x=a,y=b,z=x+y; return z; }
+inline double source_sub(double a, double b) { volatile double x=a,y=b,z=x-y; return z; }
+inline double source_mul(double a, double b) { volatile double x=a,y=b,z=x*y; return z; }
+inline double source_div(double a, double b) { volatile double x=a,y=b,z=x/y; return z; }
 }  // namespace
 
 extern "C" {
@@ -51,7 +56,7 @@ int xstar_rates_abi_version() {
 }
 
 const char* xstar_rates_backend_name() {
-    return "xstar_rates_mg_type7_type4_linopac_type50_voigt_pow3_exact_v2";
+    return "xstar_rates_mg_type7_type4_linopac_type50_source_real_v3";
 }
 
 int xstar_rates_feature_flags() {
@@ -292,61 +297,39 @@ int xstar_rates_build_mg_type4_line_emissivity(
 
 static double xstar_rates_voigte(double vs, double a) {
     static const double ak[19] = {
-        -1.12470432, -0.15516677, 3.28867591, -2.34357915, 0.42139162,
-        -4.48480194, 9.39456063, -6.61487486, 1.98919585, -0.22041650,
-        0.554153432, 0.278711796, -0.188325687, 0.042991293,
-        -0.003278278, 0.979895023, -0.962846325, 0.532770573,
-        -0.122727278
+        source_real_literal(-1.12470432), source_real_literal(-0.15516677), source_real_literal(3.28867591), source_real_literal(-2.34357915), source_real_literal(0.42139162),
+        source_real_literal(-4.48480194), source_real_literal(9.39456063), source_real_literal(-6.61487486), source_real_literal(1.98919585), source_real_literal(-0.22041650),
+        source_real_literal(0.554153432), source_real_literal(0.278711796), source_real_literal(-0.188325687), source_real_literal(0.042991293), source_real_literal(-0.003278278),
+        source_real_literal(0.979895023), source_real_literal(-0.962846325), source_real_literal(0.532770573), source_real_literal(-0.122727278)
     };
-    const double sqp = 1.772453851;
-    const double sq2 = 1.414213562;
-    const double v = std::abs(vs);
-    const double aa = a;
-    const double u = aa + v;
-    const double v2 = v * v;
-    if (aa == 0.0) {
-        return v2 >= 100.0 ? 0.0 : std::exp(-v2);
+    const double un=source_real_literal(1.0), two=source_real_literal(2.0);
+    const double sqp=source_real_literal(1.772453851), sq2=source_real_literal(1.414213562);
+    const double v=std::abs(vs), aa=a, u=aa+v, v2=v*v;
+    if (aa == source_real_literal(0.0)) return v2 >= source_real_literal(100.0) ? 0.0 : std::exp(-v2);
+    if (aa <= source_real_literal(0.2) && v >= source_real_literal(5.0))
+        return aa*(source_real_literal(15.0)+source_real_literal(6.0)*v2+source_real_literal(4.0)*v2*v2)/(source_real_literal(4.0)*v2*v2*v2*sqp);
+    if (aa > source_real_literal(1.4) || u > source_real_literal(3.2)) {
+        const double a2=aa*aa, uu=sq2*(a2+v2), u2=un/(uu*uu);
+        return sq2/sqp*aa/uu*(un+u2*(source_real_literal(3.0)*v2-a2)+u2*u2*(source_real_literal(15.0)*v2*v2-source_real_literal(30.0)*v2*a2+source_real_literal(3.0)*a2*a2));
     }
-    if (aa <= 0.2 && v >= 5.0) {
-        // Python's accepted voigte translation spells the denominator as
-        // ``v2**3``.  Use the corresponding libm power operation here rather
-        // than reassociating it into three multiplications; the latter shifts
-        // far-wing results by a few binary64 ULPs and can cross a float32
-        // science-output rounding boundary after many opacity additions.
-        return aa * (15.0 + 6.0 * v2 + 4.0 * v2 * v2) /
-               (4.0 * std::pow(v2, 3.0) * sqp);
-    }
-    if (aa > 1.4 || u > 3.2) {
-        const double a2 = aa * aa;
-        const double uu = sq2 * (a2 + v2);
-        const double u2 = 1.0 / (uu * uu);
-        return sq2 / sqp * aa / uu * (1.0 + u2 * (3.0 * v2 - a2) + u2 * u2 * (15.0 * v2 * v2 - 30.0 * v2 * a2 + 3.0 * a2 * a2));
-    }
-    const double ex = v2 >= 100.0 ? 0.0 : std::exp(-v2);
-    double quo = 1.0;
-    int start = 0;
-    if (v >= 2.4) {
-        quo = 1.0 / (v2 - 1.5);
-        start = 10;
-    } else if (v >= 1.3) {
-        start = 5;
-    }
-    const double h1 = quo * (ak[start] + v * (ak[start + 1] + v * (ak[start + 2] + v * (ak[start + 3] + v * ak[start + 4]))));
-    if (aa <= 0.2) {
-        return h1 * aa + ex * (1.0 + aa * aa * (1.0 - 2.0 * v2));
-    }
-    const double pqs = 2.0 / sqp;
-    const double h1p = h1 + pqs * ex;
-    const double h2p = pqs * h1p - 2.0 * v2 * ex;
-    const double h3p = (pqs * (1.0 - ex * (1.0 - 2.0 * v2)) - 2.0 * v2 * h1p) / 3.0 + pqs * h2p;
-    const double h4p = (2.0 * v2 * v2 * ex - pqs * h1p) / 3.0 + pqs * h3p;
-    const double psi = ak[15] + aa * (ak[16] + aa * (ak[17] + aa * ak[18]));
-    return psi * (ex + aa * (h1p + aa * (h2p + aa * (h3p + aa * h4p))));
+    const double ex=v2 >= source_real_literal(100.0) ? 0.0 : std::exp(-v2);
+    double quo=un; int start=0;
+    if (v >= source_real_literal(2.4)) { quo=un/(v2-source_real_literal(1.5)); start=10; }
+    else if (v >= source_real_literal(1.3)) start=5;
+    const double h1=quo*(ak[start]+v*(ak[start+1]+v*(ak[start+2]+v*(ak[start+3]+v*ak[start+4]))));
+    if (aa <= source_real_literal(0.2)) return h1*aa+ex*(un+aa*aa*(un-two*v2));
+    const double pqs=two/sqp;
+    const double h1p=h1+pqs*ex;
+    const double h2p=pqs*h1p-two*v2*ex;
+    const double h3p=(pqs*(un-ex*(un-two*v2))-two*v2*h1p)/source_real_literal(3.0)+pqs*h2p;
+    const double h4p=(two*v2*v2*ex-pqs*h1p)/source_real_literal(3.0)+pqs*h3p;
+    const double psi=ak[15]+aa*(ak[16]+aa*(ak[17]+aa*ak[18]));
+    return psi*(ex+aa*(h1p+aa*(h2p+aa*(h3p+aa*h4p))));
 }
 
 static int xstar_rates_huntf(const double* xx, int n, double x) {
     if (!xx || n < 2) return 1;
-    const double floor = 1.0e-24;
+    const double floor = source_real_literal(1.0e-34);
     const double xx1 = xx[0];
     const double xx2 = xx[1];
     const double xxn = xx[n - 1];
@@ -424,32 +407,32 @@ int xstar_rates_apply_linopac_profile(
         return 0;
     }
     const int nbtpp = 20000;
-    const double dpcrit = 1.0e-6;
+    const double dpcrit = xstar_constants::kLegacyLinopacDpcrit;
     int ml1 = xstar_rates_nbinc(line_energy_ev, epi, n);
     if (ml1 < 2) ml1 = 2;
     if (ml1 > n - 1) ml1 = n - 1;
     const double mass = std::max(atomic_mass_amu, 1.0e-30);
-    const double vth = 12.9 * std::sqrt(temperature_1e4k / mass);
+    const double vth = source_mul(xstar_constants::kLegacyLinopacThermalSpeedCoefficient, std::sqrt(source_div(temperature_1e4k, mass)));
     const double e0 = line_energy_ev;
-    const double deleturb = e0 * (vturb_km_s / 3.0e5);
-    const double deleth = e0 * (vth / 3.0e5);
-    const double dele = std::sqrt(deleth * deleth + deleturb * deleturb);
+    const double deleturb = source_mul(e0, source_div(vturb_km_s, source_real_literal(3.0e5)));
+    const double deleth = source_mul(e0, source_div(vth, source_real_literal(3.0e5)));
+    const double dele = std::sqrt(source_add(source_mul(deleth,deleth), source_mul(deleturb,deleturb)));
     if (dele <= 0.0) {
         out_i64[2] = ml1;
         write_message(errbuf, errbuf_size, "xstar_rates_apply_linopac_profile no-width no-op");
         return 0;
     }
-    const double aasmall = natural_width_ev / (1.0e-24 + dele) / 12.56;
+    const double aasmall = source_div(source_div(natural_width_ev, source_add(xstar_constants::kLegacyLinopacWidthFloorEv, dele)), xstar_constants::kLegacyLinopacDampingGeometryFactor);
     // The accepted seed contains the center sample with its stricter 1e-6
     // branch threshold. The remaining C++ scan uses linopac's 1e-9 threshold.
-    const bool use_voigt = (aasmall > 1.0e-9);
+    const bool use_voigt = (aasmall > xstar_constants::kLegacyLinopacWingVoigtThreshold);
     const double e00 = epi[ml1 - 1];
     const double etmp = e0;
-    const double deleepi = epi[ml1] - epi[ml1 - 1];
+    const double deleepi = source_sub(epi[ml1], epi[ml1 - 1]);
     int ncut = static_cast<int>(deleepi / dele);
     if (ncut < 1) ncut = 1;
     if (ncut > nbtpp / 10) ncut = nbtpp / 10;
-    const double deleused = deleepi / static_cast<double>(ncut);
+    const double deleused = source_div(deleepi, static_cast<double>(static_cast<float>(ncut)));
     const double prftmp = (ml1 >= 2 && ml1 < n) ? (2.0 / (epi[ml1] - epi[ml1 - 2])) : 0.0;
     const double opsv4 = optpp * dele;
     int mlc = 0;
@@ -475,7 +458,7 @@ int xstar_rates_apply_linopac_profile(
             int& ldon = (ij == 0) ? ldon0 : ldon1;
             if (ldon == 1) continue;
             const int mlm = ml2 + ldir * mlc;
-            const double etptst = e00 + static_cast<double>(ldir * mlc) * deleused;
+            const double etptst = source_add(e00, source_mul(static_cast<double>(static_cast<float>(ldir * mlc)), deleused));
             if (mlm <= nbtpp && mlm >= 1 && etptst > 0.0 && etptst < epi[n - 1]) {
                 if (mlm < mlmin) mlmin = mlm;
                 if (mlm > mlmax) mlmax = mlm;
@@ -485,7 +468,7 @@ int xstar_rates_apply_linopac_profile(
                     const int seed_index = 2 * mlc - ((ldir < 0) ? 1 : 0);
                     profile = seed_profiles[seed_index];
                 } else {
-                    profile = use_voigt ? (xstar_rates_voigte(std::abs(delet), aasmall) / 1.772) : (std::exp(-delet * delet) / 1.772);
+                    profile = use_voigt ? source_div(xstar_rates_voigte(std::abs(delet), aasmall), xstar_constants::kLegacyLinopacProfileNormalization) : source_div(std::exp(-source_mul(delet,delet)), xstar_constants::kLegacyLinopacProfileNormalization);
                 }
                 optpp2[mlm - 1] = optpp * profile;
                 tst = profile;

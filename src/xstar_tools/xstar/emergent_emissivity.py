@@ -33,6 +33,15 @@ import numpy as np
 
 from .bremsstrahlung import BremsstrahlungResult, bremem
 from .compton import XSTAR_THOMSON_CROSS_SECTION_CM2
+from .constants import (
+    kLegacyLinopacThermalSpeedCoefficient,
+    kLegacyLinopacWidthFloorEv,
+    kLegacyLinopacDampingGeometryFactor,
+    kLegacyLinopacProfileNormalization,
+    kLegacyLinopacCenterVoigtThreshold,
+    kLegacyLinopacWingVoigtThreshold,
+    kLegacyLinopacDpcrit,
+)
 from .driver import XSTARPythonDriver, XSTARSourceRoutine
 from .element_equilibrium import EscapeProbabilityContext, build_level_table, pescl, pescv
 from .emissivity import (
@@ -479,26 +488,26 @@ def _source_linopac_into_opakc(
     if line_energy_eV <= float(epi[0]) or line_energy_eV >= float(epi[n - 1]):
         return {"updated_bins": 0, "max_added_opacity": 0.0, "center_bin_one_based": 0}
     nbtpp = 20000
-    dpcrit = 1.0e-6
+    dpcrit = kLegacyLinopacDpcrit
     ml1 = int(nbinc(line_energy_eV, epi, n))
     ml1 = max(min(n - 1, ml1), 2)
     mass = max(float(atomic_mass_amu), 1.0e-30)
-    vth = 12.9 * np.sqrt(float(temperature_1e4K) / mass)
+    vth = kLegacyLinopacThermalSpeedCoefficient * np.sqrt(float(temperature_1e4K) / mass)
     vturb = float(vturb_km_s)
     e0 = float(line_energy_eV)
-    deleturb = e0 * (vturb / 3.0e5)
-    deleth = e0 * (vth / 3.0e5)
+    deleturb = e0 * (vturb / float(np.float32(3.0e5)))
+    deleth = e0 * (vth / float(np.float32(3.0e5)))
     dele = float(np.sqrt(deleth * deleth + deleturb * deleturb))
     if dele <= 0.0:
         return {"updated_bins": 0, "max_added_opacity": 0.0, "center_bin_one_based": ml1}
-    aasmall = float(natural_width_eV) / (1.0e-24 + dele) / 12.56
+    aasmall = float(natural_width_eV) / (kLegacyLinopacWidthFloorEv + dele) / kLegacyLinopacDampingGeometryFactor
     e00 = float(epi[ml1 - 1])
     etmp = e0
     deleepi = float(epi[ml1] - epi[ml1 - 1])
     ncut = int(deleepi / dele)
     ncut = max(ncut, 1)
     ncut = min(ncut, nbtpp // 10)
-    deleused = deleepi / float(ncut)
+    deleused = deleepi / float(np.float32(ncut))
     prftmp = 2.0 / (float(epi[ml1]) - float(epi[ml1 - 2])) if ml1 >= 2 and ml1 < len(epi) else 0.0
     opsv4 = float(optpp) * float(dele)
     mlc = 0
@@ -513,11 +522,11 @@ def _source_linopac_into_opakc(
     optpp2 = np.zeros(nbtpp, dtype=float)
 
     delet = (e00 - etmp) / dele
-    if aasmall > 1.0e-6:
+    if aasmall > kLegacyLinopacCenterVoigtThreshold:
         from .output_writers import voigte
-        profile = voigte(abs(delet), aasmall) / 1.772
+        profile = voigte(abs(delet), aasmall) / kLegacyLinopacProfileNormalization
     else:
-        profile = float(np.exp(-delet * delet) / 1.772)
+        profile = float(np.exp(-delet * delet) / kLegacyLinopacProfileNormalization)
     etpp[ml2 - 1] = e00
     optpp2[ml2 - 1] = float(optpp) * profile
     tst = 1.0
@@ -528,17 +537,17 @@ def _source_linopac_into_opakc(
             if ldon[ij] == 1:
                 continue
             mlm = ml2 + ldir * mlc
-            etptst = e00 + float(ldir * mlc) * deleused
+            etptst = e00 + float(np.float32(ldir * mlc)) * deleused
             if mlm <= nbtpp and mlm >= 1 and etptst > 0.0 and etptst < float(epi[n - 1]):
                 mlmin = min(mlm, mlmin)
                 mlmax = max(mlm, mlmax)
                 etpp[mlm - 1] = etptst
                 delet = (etptst - etmp) / dele
-                if aasmall > 1.0e-9:
+                if aasmall > kLegacyLinopacWingVoigtThreshold:
                     from .output_writers import voigte
-                    profile = voigte(abs(delet), aasmall) / 1.772
+                    profile = voigte(abs(delet), aasmall) / kLegacyLinopacProfileNormalization
                 else:
-                    profile = float(np.exp(-delet * delet) / 1.772)
+                    profile = float(np.exp(-delet * delet) / kLegacyLinopacProfileNormalization)
                 optpp2[mlm - 1] = float(optpp) * profile
                 # Source-faithful v0.5.19: linopac.f90 does *not* update
                 # ml1min/ml1max inside this temporary-grid construction loop.
@@ -670,29 +679,30 @@ def _source_linopac_seed_profiles(
         return tuple(0.0 for _ in range(21))
     ml1 = max(min(n - 1, int(nbinc(e0, epi, n))), 2)
     mass = max(float(atomic_mass_amu), 1.0e-30)
-    vth = 12.9 * np.sqrt(float(temperature_1e4K) / mass)
-    deleturb = e0 * (float(vturb_km_s) / 3.0e5)
-    deleth = e0 * (vth / 3.0e5)
+    vth = kLegacyLinopacThermalSpeedCoefficient * np.sqrt(float(temperature_1e4K) / mass)
+    deleturb = e0 * (float(vturb_km_s) / float(np.float32(3.0e5)))
+    deleth = e0 * (vth / float(np.float32(3.0e5)))
     dele = float(np.sqrt(deleth * deleth + deleturb * deleturb))
     if dele <= 0.0:
         return tuple(0.0 for _ in range(21))
-    aasmall = float(natural_width_eV) / (1.0e-24 + dele) / 12.56
+    aasmall = float(natural_width_eV) / (kLegacyLinopacWidthFloorEv + dele) / kLegacyLinopacDampingGeometryFactor
     e00 = float(epi[ml1 - 1])
     deleepi = float(epi[ml1] - epi[ml1 - 1])
     ncut = max(1, min(int(deleepi / dele), 2000))
-    deleused = deleepi / float(ncut)
+    deleused = deleepi / float(np.float32(ncut))
 
     def _profile(etptst: float, threshold: float) -> float:
         delet = (float(etptst) - e0) / dele
         if aasmall > threshold:
             from .output_writers import voigte
-            return float(voigte(abs(delet), aasmall) / 1.772)
-        return float(np.exp(-delet * delet) / 1.772)
+            return float(voigte(abs(delet), aasmall) / kLegacyLinopacProfileNormalization)
+        return float(np.exp(-delet * delet) / kLegacyLinopacProfileNormalization)
 
-    values = [_profile(e00, 1.0e-6)]
+    values = [_profile(e00, kLegacyLinopacCenterVoigtThreshold)]
     for offset in range(1, 11):
-        values.append(_profile(e00 - float(offset) * deleused, 1.0e-9))
-        values.append(_profile(e00 + float(offset) * deleused, 1.0e-9))
+        step = float(np.float32(offset)) * deleused
+        values.append(_profile(e00 - step, kLegacyLinopacWingVoigtThreshold))
+        values.append(_profile(e00 + step, kLegacyLinopacWingVoigtThreshold))
     return tuple(values)
 
 

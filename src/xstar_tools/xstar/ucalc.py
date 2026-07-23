@@ -20,6 +20,7 @@ from .constants import (
     COLLISION_RATE_COEFFICIENT_PER_SQRT_T4,
     LEGACY_BOLTZMANN_EV_PER_T4,
     LEGACY_COLLISION_ERG_PER_EV,
+    kLegacyPhint53RydbergEv,
     MODERN_ERG_PER_EV,
 )
 
@@ -354,7 +355,7 @@ def _phint53hunt_exact(
             "nb1_fortran": nb1,
         }
 
-    emax = threshold_ev + float(egrid[-1]) * 13.605692
+    emax = threshold_ev + float(egrid[-1]) * kLegacyPhint53RydbergEv
     nphint = _xstar_nbinc_fortran_value(emax, epi)
     ndelt = max(nphint - nb1, 1)
     itmp = int(math.log(float(ndelt)) / 0.69315 + 0.5)
@@ -363,7 +364,7 @@ def _phint53hunt_exact(
         nphint = nb1 + ndelt
         etst = 0.0
         if nphint <= numcon3:
-            etst = (float(epi[nphint - 1]) - threshold_ev) / 13.605692
+            etst = (float(epi[nphint - 1]) - threshold_ev) / kLegacyPhint53RydbergEv
         if nphint > numcon3 or etst > float(egrid[-1]):
             itmp -= 1
             if itmp > 1:
@@ -405,7 +406,7 @@ def _phint53hunt_exact(
             sgtmp = 0.0
             if ener >= threshold_ev:
                 if luse[k] == 0:
-                    efnd = (ener - threshold_ev) / 13.605692
+                    efnd = (ener - threshold_ev) / kLegacyPhint53RydbergEv
                     sgtmp = _find53_cross_section(egrid, sigma, efnd)
                     exptmp = _expo(-(epii - threshold_ev) / max(bktm, 1.0e-48))
                     bbnurj = min(2.0e4, epii) ** 3
@@ -1697,7 +1698,7 @@ class SourceFaithfulUCalc:
     def _eval_type35(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         if len(r.reals)<5 or len(r.integers)<3: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type35_short_record")
         eth=r.reals[0]; pairs=(len(r.reals)-1)//2; xs=np.asarray(r.reals[2:2+2*pairs:2],float); ys=np.asarray(r.reals[1:1+2*pairs:2],float)
-        epi=self._mapped_grid(c); ef=(epi-eth)/13.605692; sig=np.where(epi>=eth,np.interp(ef,xs,ys,left=ys[0],right=ys[-1]),0.0)
+        epi=self._mapped_grid(c); ef=(epi-eth)/kLegacyPhint53RydbergEv; sig=np.where(epi>=eth,np.interp(ef,xs,ys,left=ys[0],right=ys[-1]),0.0)
         id1=r.integers[5] if len(r.integers)>5 else r.integers[-2]; id2=(r.integers[4] if len(r.integers)>4 else c.nlevp)-(r.integers[6] if len(r.integers)>6 else 0)
         sw=c.levels.weight(1)/max(c.levels.weight(c.nlevp),1e-48)
         return _photo_result_swapped(self,r,c,s,sigma=sig,threshold=eth,swrat=sw,id1=id1,id2=id2)
@@ -2006,7 +2007,7 @@ class SourceFaithfulUCalc:
         id1=int(r.integers[-2]); id2=c.nlevp; threshold=abs(c.levels.energy(c.nlevp)-c.levels.energy(id1))
         if threshold<=1e-5: return self._base_result(r,s,UCalcStatus.SOURCE_REJECTED,reason="type64_nonpositive_threshold")
         nq=max(int(r.integers[0]),1); l=max(int(r.integers[1]),0); charge=max(int(r.integers[2]),1)
-        epi=self._mapped_grid(c); e_ryd=np.maximum((epi-threshold)/13.605692,0.0); sig_mb=np.asarray([hphotx(x,charge,nq)[min(l,nq-1)] for x in e_ryd]); sigma=sig_mb*1e-18
+        epi=self._mapped_grid(c); e_ryd=np.maximum((epi-threshold)/kLegacyPhint53RydbergEv,0.0); sig_mb=np.asarray([hphotx(x,charge,nq)[min(l,nq-1)] for x in e_ryd]); sigma=sig_mb*1e-18
         sw=c.levels.weight(id1)
         out=_photo_result_swapped(self,r,c,s,sigma=sigma,threshold=threshold,swrat=sw,id1=id1,id2=id2)
         alpha=milne(c.temperature_k,e_ryd,sig_mb,threshold/13.6)*sw
@@ -2054,7 +2055,7 @@ class SourceFaithfulUCalc:
         from .ucalc_leaves import pexs
         if len(r.integers)<3 or len(r.reals)<5: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type85_short_record")
         id1=int(r.integers[-2]); id2=1; id3=int(r.integers[-1]); epi=self._mapped_grid(c); nmin=int(r.integers[0]); zc=float(id3-114); eion=float(r.reals[1]); far=float(r.reals[2]); gam=float(r.reals[3]); scal=float(r.reals[4])
-        sig_mb=pexs(nmin,zc,eion,far,gam,scal,epi/13.605692); ph=_phintfo_exact(sigma_cm2=sig_mb*1e-18,threshold_ev=eion*13.605692*.8,context=c,swrat=1.0)
+        sig_mb=pexs(nmin,zc,eion,far,gam,scal,epi/kLegacyPhint53RydbergEv); ph=_phintfo_exact(sigma_cm2=sig_mb*1e-18,threshold_ev=eion*kLegacyPhint53RydbergEv*.8,context=c,swrat=1.0)
         return self._ctx_result(r,s,ans1=ph["ans1"],ans2=0.0,ans3=0.0,ans4=-ph["ans3"],ans5=0.0,ans6=-ph["ans5"],idest1=id1,idest2=id2,opakab=0.0,diagnostics={**ph,"pexs_nmin":nmin,"pexs_zc":zc,"source_swrat_uninitialized_assumed_one":True},context_fields_used=("temperature_k","xpx","xee","radiation"))
 
     def _eval_type88(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
