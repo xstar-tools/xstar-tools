@@ -11096,24 +11096,31 @@ void write_public_spectrum(const std::filesystem::path& path,
     }
 
     std::vector<double> forward_depth_surface;
-    if (dpthcont.size() >= n && has_finite_nonzero_signal(dpthcont)) {
+    // Literal writers own different cumulative depths.  writespectra3 uses
+    // dpthcont(1,:) while writespectra/binemis uses the full dpthc(1,:).
+    // The old fallback always preferred dpthcont, which made the 62 bins with
+    // important line/full opacity transmit as though tau_full were zero.
+    const auto dpthc = optional_bridge_array_for_hdu(state, "dpthc", 6, 2 * n);
+    if (full_spectrum && dpthc.size() >= n && has_finite_nonzero_signal(dpthc)) {
+        forward_depth_surface.assign(dpthc.begin(), dpthc.begin() + static_cast<std::ptrdiff_t>(n));
+    } else if (!full_spectrum && dpthcont.size() >= n && has_finite_nonzero_signal(dpthcont)) {
         forward_depth_surface.assign(dpthcont.begin(), dpthcont.begin() + static_cast<std::ptrdiff_t>(n));
-    } else {
-        const auto dpthc = optional_bridge_array_for_hdu(state, "dpthc", 6, 2 * n);
-        if (dpthc.size() >= n && has_finite_nonzero_signal(dpthc)) {
-            forward_depth_surface.assign(dpthc.begin(), dpthc.begin() + static_cast<std::ptrdiff_t>(n));
-        }
+    } else if (dpthc.size() >= n && has_finite_nonzero_signal(dpthc)) {
+        forward_depth_surface.assign(dpthc.begin(), dpthc.begin() + static_cast<std::ptrdiff_t>(n));
+    } else if (dpthcont.size() >= n && has_finite_nonzero_signal(dpthcont)) {
+        forward_depth_surface.assign(dpthcont.begin(), dpthcont.begin() + static_cast<std::ptrdiff_t>(n));
     }
     fitsfile* fptr = create_fits(path, state); write_parameters(fptr, state.parameter_rows);
     create_table(fptr, ASCII_TBL, static_cast<long>(n), "XSTAR_SPECTRA",
         {"energy","incident","transmitted","emit_inward","emit_outward"}, {"E13.5","E13.5","E13.5","E13.5","E13.5"},
         {"eV","erg/s/erg","erg/s/erg","erg/s/erg","erg/s/erg"});
-    const std::size_t inward_row = 1;
-    // Retained zrems planes use distinct product orientations.  Continuum
-    // products use plane 2 for outward emission; full-spectrum products retain
-    // the legacy/source accumulated spectrum in plane 4.  This is typed native
-    // ProductWritingState data, not a pprint/xout_step patch.
-    const std::size_t outward_row = full_spectrum ? 4 : 2;
+    // Literal writespectra/binemis packs saved zrems(2) and zrems(3) into
+    // inward/outward spectrum rows before adding line profiles.
+    // Literal writespectra3 uses zrems(4) and zrems(5) for the continuum-only
+    // product.  Keep the fallback correct even if retained product-write arrays
+    // are unavailable.
+    const std::size_t inward_row = full_spectrum ? 1 : 3;
+    const std::size_t outward_row = full_spectrum ? 2 : 4;
     const auto public_continuum_diag = read_continuum_diagnostics_expanded_to_full_bins(state,
         state.radial_zones.empty() ? 0u : state.radial_zones[terminal_index].accepted_controller.accepted_sequence, n);
     for (std::size_t i = 0; i < n; ++i) {

@@ -652,7 +652,12 @@ def build_binemis_spectrum(
     ):
         raise OutputWriterPortError("binemis arrays are shorter than active source ranges")
 
-    nbtpp = int(epi.size)
+    # Literal binemis.f90 uses the fixed NBT continuum-profile scratch
+    # capacity (20000), independent of the active 9999-point output grid.
+    # emergent_emissivity.py and the native C++ kernel already preserve this
+    # source dimension; the output-writer translation had incorrectly reduced
+    # it to ``epi.size`` during the original Python port.
+    nbtpp = 20000
     out = np.asarray(original, dtype=float).copy()
     saved = np.asarray(original, dtype=float).copy()
     out[:, :n] = 0.0

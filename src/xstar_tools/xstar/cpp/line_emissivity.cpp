@@ -142,8 +142,8 @@ int xstar_emissivity_build_binemis_profile(
     for (int i = 0; i < 16; ++i) stats[i] = 0.0;
     const int n = ncn2;
     const int rows = 5;
-    const double gate = 1.0e-15 * xlum;
-    const double dpcrit = 1.0e-6;
+    const double gate = source_real_literal(1.0e-15) * xlum;
+    const double dpcrit = source_real_literal(1.0e-6);
     // Source contract: copy original tail, zero active rows first.
     for (int r = 0; r < rows; ++r) {
         for (int k = 0; k < ncols; ++k) out_flat[r * ncols + k] = original_flat[r * ncols + k];

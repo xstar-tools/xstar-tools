@@ -6050,8 +6050,10 @@ bool build_writer_time_binemis_v82_patch520142(
     spectrum_rows.assign(5u * n, 0.0);
     std::array<double,16> stats{};
     std::array<char,512> error{};
+    // Literal binemis.f90 uses the fixed NBT scratch capacity, not ncn2.
+    constexpr int kSourceBinemisScratchPoints = 20000;
     const int rc = xstar_emissivity_build_binemis_profile(
-        static_cast<int>(n), 20000, static_cast<int>(n),
+        static_cast<int>(n), kSourceBinemisScratchPoints, static_cast<int>(n),
         static_cast<int>(slots.size()), static_cast<int>(line_count),
         xlum, final_eval.temperature_t4, vturbi,
         final_eval.radiation_energy_ev.data(), ws.dpthc.data(), compact_elum.data(),
@@ -6068,6 +6070,7 @@ bool build_writer_time_binemis_v82_patch520142(
         << (reconstructed_elum_ready ? "SOURCE_HEATT_RADIAL_RCEM_RECONSTRUCTION" : "FINAL_CUMULATIVE_ELUM") << "\n"
         << "V048746255172582_PATCH520142_WRITER_BINEMIS_SOURCE=FINAL_CUMULATIVE_ELUM\n"
         << "V048746255172582_PATCH520142_WRITER_BINEMIS_XLUM=" << std::setprecision(17) << xlum << "\n"
+        << "V048746255172582_PATCH520146_WRITER_BINEMIS_NBTPP=" << kSourceBinemisScratchPoints << "\n"
         << "V048746255172582_PATCH520142_WRITER_BINEMIS_RANKED_SLOTS=" << slots.size() << "\n"
         << "V048746255172582_PATCH520142_WRITER_BINEMIS_ATTEMPTED=" << stats[0] << "\n"
         << "V048746255172582_PATCH520142_WRITER_BINEMIS_APPLIED=" << stats[1] << "\n";
@@ -13961,6 +13964,18 @@ void write_full_trajectory_diagnostic_preview_v82_patch516(
     product.product_state_complete = false;
     product.product_parity_qualified = false;
     product.measured_run_seconds = std::max(0.0, controller_elapsed_seconds);
+    // General standalone historically has no external product-metadata path.
+    // Give the diagnostic product a private writable bridge root so retained
+    // writer arrays are constructed from this run rather than any template.
+    product.product_metadata_path = preview_dir / "_native_product_state";
+
+    // v82 patch 5.20.14.6: diagnostic full-trajectory products must exercise
+    // the same retained writer-time arrays as the normal product path.  The
+    // 5.20.14.2--5.20.14.5 diagnostic path skipped this call, so
+    // write_public_spectrum() silently fell back to terminal-zone arrays and
+    // never consumed the writer-time binemis result or final dpthc plane.
+    create_native_retained_productwrite_schema(product);
+    std::cout << "V048746255172582_PATCH520146_DIAGNOSTIC_PRODUCTWRITE_SCHEMA=CREATED\n";
 
     ::setenv("XSTAR_TRUE_PRODUCTION", "1", 1);
     try {
