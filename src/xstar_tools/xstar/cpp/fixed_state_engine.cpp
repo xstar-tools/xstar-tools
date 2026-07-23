@@ -4684,6 +4684,10 @@ bool evaluate_type53_source_integral(
         shadow->electron_density_cm3 = input.electron_density_cm3;
         shadow->hydrogen_density_cm3 = input.hydrogen_density_cm3;
         shadow->matrix_density_scale = static_cast<double>(input.hydrogen_density_cm3);
+        // v82 patch 5.20.14.2: retain the grid actually consumed by this
+        // UCalc invocation.  This catches accidental fallback to the reduced
+        // DSEC aliases in full calc_emis shadows.
+        shadow->dsec_radiation_bin_count = source_bin_count;
         // phint53 publishes opakab only when the integration loop reaches
         // kl == nb1 + 2.  A positive first tabulated cross section is not a
         // substitute for that source slot: if the loop never reaches the
@@ -5178,9 +5182,21 @@ EvaluatedRecord evaluate_record(
             // call on the full epi/ncn2/bremsa workspace.  Keep it distinct
             // from the reduced calc_hmc and calc_emisab caller lifetimes.
             {
+                // v82 patch 5.20.14.2: calc_emis_all is the literal full-grid
+                // caller.  The parent input also carries the reduced DSEC
+                // epim/bremsam workspace for calc_hmc; evaluate_type53_source_integral
+                // intentionally prefers that workspace when it is present.
+                // Therefore a mere copy of `input` silently re-ran this supposed
+                // full-grid revisit on 999 bins.  Explicitly clear only the DSEC
+                // radiation aliases so this UCalc call consumes epi/bremsa (9999),
+                // while retaining the same live continuum-tau and covering state.
+                xstar_fixed_state_input_v1 calc_emis_input = input;
+                calc_emis_input.dsec_radiation_energy_ev = nullptr;
+                calc_emis_input.dsec_bremsa = nullptr;
+                calc_emis_input.dsec_radiation_bin_count = 0;
                 xstar_element_contribution_v1 calc_emis_contribution{};
                 const bool calc_emis_exact = evaluate_type53_source_integral(
-                    r, pair_real_count, lower, upper, input, source_threshold,
+                    r, pair_real_count, lower, upper, calc_emis_input, source_threshold,
                     contract_ptmp1 + contract_ptmp2, row46_contract,
                     record_context.valid ? &record_context : nullptr, record.record, false, false,
                     calc_emis_contribution, &out.type53_calc_emis_shadow);
@@ -5518,12 +5534,19 @@ EvaluatedRecord evaluate_record(
                 // ucalc.f90 Type49 passes the current caller ncn2 directly
                 // to phextrap.  The full calc_emis caller therefore owns the
                 // 9999-bin capacity, while matrix/calc_emisab remain 999.
-                const std::size_t full_calc_emis_bins =
-                    input.dsec_radiation_energy_ev && input.dsec_bremsa && input.dsec_radiation_bin_count >= 3
-                        ? input.dsec_radiation_bin_count : input.radiation_bin_count;
+                const std::size_t full_calc_emis_bins = input.radiation_bin_count;
                 calc_emis_record_context.phextrap_max_points = static_cast<int>(full_calc_emis_bins);
+                // v82 patch 5.20.14.2: same caller-lifetime correction as Type53.
+                // `input` retains the 999-bin DSEC workspace for the matrix stage,
+                // and evaluate_type53_source_integral prefers it whenever non-null.
+                // Clear those aliases for the later calc_emis UCalc revisit so the
+                // Type49 phextrap/phint53 path actually sees full epi/ncn2/bremsa.
+                xstar_fixed_state_input_v1 calc_emis_input = input;
+                calc_emis_input.dsec_radiation_energy_ev = nullptr;
+                calc_emis_input.dsec_bremsa = nullptr;
+                calc_emis_input.dsec_radiation_bin_count = 0;
                 const bool calc_emis_exact = evaluate_type53_source_integral(
-                    r, pair_real_count, lower, upper, input, source_threshold, ptmp1 + ptmp2,
+                    r, pair_real_count, lower, upper, calc_emis_input, source_threshold, ptmp1 + ptmp2,
                     nullptr, calc_emis_record_context.valid ? &calc_emis_record_context : nullptr, record.record,
                     true, true, calc_emis_contribution, &out.type49_calc_emis_shadow);
                 if (!calc_emis_exact) out.type49_calc_emis_shadow = Type53SourceShadow{};
@@ -10393,6 +10416,7 @@ int run_impl(
                 << "V048746255172582_PATCH52014_TYPE53_MATRIX_GRID_BINS=999\n"
                 << "V048746255172582_PATCH52014_TYPE53_CALC_EMISAB_GRID_BINS=999\n"
                 << "V048746255172582_PATCH52014_TYPE53_CALC_EMIS_GRID_BINS=9999\n"
+                << "V048746255172582_PATCH520142_TYPE53_CALC_EMIS_GRID_OWNER=FULL_INPUT_RADIATION_NO_DSEC_ALIAS\n"
                 << "V048746255172582_V82_PATCH5181_TYPE99_DIRECT_OPAKAB_PUBLICATION_BRANCH=SOURCE_ZERO\n";
 
             // v82 patch 5.20.8.2: Type-49 three-stage ownership audit and
@@ -10549,7 +10573,8 @@ int run_impl(
                 << "V048746255172582_PATCH52014_TYPE49_MATRIX_GRID_BINS=999\n"
                 << "V048746255172582_PATCH52014_TYPE49_CALC_EMISAB_GRID_BINS=999\n"
                 << "V048746255172582_PATCH52014_TYPE49_CALC_EMIS_GRID_BINS=9999\n"
-                << "V048746255172582_PATCH52014_TYPE49_CALC_EMIS_PHEXTRAP_MAX_POINTS=9999\n";
+                << "V048746255172582_PATCH52014_TYPE49_CALC_EMIS_PHEXTRAP_MAX_POINTS=9999\n"
+                << "V048746255172582_PATCH520142_TYPE49_CALC_EMIS_GRID_OWNER=FULL_INPUT_RADIATION_NO_DSEC_ALIAS\n";
         }
 
         // v82 patch 5.17.1: run source rlbin/ncbin/nlbin as a pure audit over

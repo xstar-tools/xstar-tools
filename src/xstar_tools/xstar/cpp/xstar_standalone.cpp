@@ -30,6 +30,17 @@
 #include <string>
 #include <vector>
 
+extern "C" int xstar_emissivity_build_binemis_profile(
+    int ncn2, int nbtpp, int ncols, int n_line_slots, int n_lum_lines,
+    double xlum, double temperature_1e4k, double turbulent_velocity_km_s,
+    const double* epi_ev, const double* dpthc_flat, const double* elum_flat,
+    const double* original_flat, const double* incident,
+    const long long* slot_line_index, const double* line_wavelength,
+    const long long* line_data_type, const double* line_atomic_mass,
+    const double* line_natural_rate_s, const double* line_auger_width_ev,
+    const double* line_auger_rate_s, double* out_flat, double* stats,
+    char* errbuf, std::size_t errbuf_size);
+
 namespace {
 
 struct Options {
@@ -5900,6 +5911,154 @@ std::vector<double> source_zero_based_continuum_planes_v82(
     return out;
 }
 
+
+double source_real_literal_v82_patch520142(double value) {
+    return static_cast<double>(static_cast<float>(value));
+}
+
+double public_parameter_real_v82_patch520142(
+    const xstar_run_state::ProductWritingState& product,
+    const std::string& name,
+    double fallback) {
+    for (const auto& row : product.parameter_rows) {
+        if (row.parameter != name || row.type != "real") continue;
+        float value = 0.0f;
+        static_assert(sizeof(value) == sizeof(row.value_bits));
+        std::uint32_t bits = row.value_bits;
+        std::memcpy(&value, &bits, sizeof(value));
+        if (std::isfinite(value)) return static_cast<double>(value);
+    }
+    return fallback;
+}
+
+std::vector<long long> rank_writer_binemis_lines_v82_patch520142(
+    const xstar_run_state::ProductWritingState& product,
+    const std::vector<double>& compact_elum,
+    const std::vector<double>& epi,
+    double xlum) {
+    constexpr int nrank = 10;
+    const std::size_t line_count = product.line_identities.size();
+    if (line_count == 0 || compact_elum.size() != 2u * line_count || epi.size() < 3u) return {};
+    const double gate = source_real_literal_v82_patch520142(1.0e-15) * xlum;
+    const double activity_floor = source_real_literal_v82_patch520142(1.0e-37);
+    const double conv = source_real_literal_v82_patch520142(12398.4016);
+    const double tiny = source_real_literal_v82_patch520142(1.0e-34);
+    const double emaxa = conv / epi.front();
+    const double emina = conv / epi.back();
+    std::vector<std::array<int,nrank>> ranked(epi.size());
+    for (auto& row : ranked) row.fill(0);
+
+    std::vector<std::size_t> order(line_count);
+    std::iota(order.begin(), order.end(), 0u);
+    std::sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) {
+        return product.line_identities[a].line_index < product.line_identities[b].line_index;
+    });
+    for (const std::size_t j : order) {
+        const auto& id = product.line_identities[j];
+        const double in = compact_elum[j];
+        const double out = compact_elum[line_count + j];
+        if (!(in > gate || out > gate)) continue;
+        const double strength = in + out;
+        if (strength < activity_floor) continue;
+        const double wavelength = std::abs(id.wavelength_angstrom);
+        if (wavelength > emaxa || wavelength < emina) continue;
+        const double energy = conv / (tiny + wavelength);
+        const std::size_t nb1 = source_nbinc_v67(energy, epi);
+        if (nb1 < 1u || nb1 > epi.size()) continue;
+        auto& bin = ranked[nb1 - 1u];
+        int mm = 0;
+        bool done = false;
+        while (!done) {
+            ++mm;
+            const int existing_compact_one = bin[static_cast<std::size_t>(mm - 1)];
+            if (existing_compact_one == 0) {
+                done = true;
+            } else {
+                const std::size_t oldj = static_cast<std::size_t>(existing_compact_one - 1);
+                const double old_strength = compact_elum[oldj] + compact_elum[line_count + oldj];
+                if (strength > old_strength) done = true;
+                if (mm >= nrank) done = true;
+            }
+        }
+        // Literal rlbin returns without insertion when mm >= nrank.
+        if (mm >= nrank) continue;
+        for (int mm2 = nrank - 1; mm2 >= mm; --mm2) {
+            bin[static_cast<std::size_t>(mm2)] = bin[static_cast<std::size_t>(mm2 - 1)];
+        }
+        // Store the compact 1-based metadata/luminosity index.  The source
+        // ordering above still follows the true line_index namespace.
+        bin[static_cast<std::size_t>(mm - 1)] = static_cast<int>(j + 1u);
+    }
+
+    std::vector<long long> slots;
+    for (std::size_t k = 0; k < ranked.size(); ++k) {
+        for (int mm = 0; mm < nrank; ++mm) {
+            const int compact_one = ranked[k][static_cast<std::size_t>(mm)];
+            if (compact_one > 0) slots.push_back(static_cast<long long>(compact_one));
+        }
+    }
+    return slots;
+}
+
+bool build_writer_time_binemis_v82_patch520142(
+    const xstar_run_state::ProductWritingState& product,
+    const xstar_run_state::FixedEvaluationState& final_eval,
+    std::vector<double>& spectrum_rows) {
+    const auto& ws = final_eval.source_workspace;
+    const std::size_t n = final_eval.radiation_energy_ev.size();
+    const std::size_t line_count = product.line_identities.size();
+    if (n < 3u || line_count == 0u || ws.zrems.size() < 5u * n ||
+        ws.dpthc.size() < 2u * n || ws.elum.empty()) return false;
+    const std::size_t native_stride = native_line_plane_stride_v82(ws);
+    if (native_stride == 0u) return false;
+
+    std::vector<double> compact_elum(2u * line_count, 0.0);
+    std::vector<double> wavelength(line_count, 0.0), mass(line_count, 1.0),
+        natural_rate(line_count, 0.0), auger_width(line_count, 0.0), auger_rate(line_count, 0.0);
+    std::vector<long long> dtype(line_count, 50);
+    for (std::size_t j = 0; j < line_count; ++j) {
+        const auto& id = product.line_identities[j];
+        compact_elum[j] = native_line_plane_v82(ws.elum, native_stride, 0u, id.line_index);
+        compact_elum[line_count + j] = native_line_plane_v82(ws.elum, native_stride, 1u, id.line_index);
+        wavelength[j] = std::abs(id.wavelength_angstrom);
+        dtype[j] = static_cast<long long>(id.data_type);
+        mass[j] = std::max(id.atomic_mass, std::numeric_limits<double>::min());
+        natural_rate[j] = id.natural_rate_s;
+        auger_width[j] = id.auger_width_ev;
+        auger_rate[j] = id.auger_rate_s;
+    }
+    const double xlum = public_parameter_real_v82_patch520142(product, "rlrad38", 1.0e6);
+    const double vturbi = public_parameter_real_v82_patch520142(product, "vturbi", 100.0);
+    const auto slots = rank_writer_binemis_lines_v82_patch520142(
+        product, compact_elum, final_eval.radiation_energy_ev, xlum);
+    if (slots.empty()) return false;
+    const std::vector<double> incident = ws.zremsz.size() == n
+        ? ws.zremsz : resize_or_zero(final_eval.radiation_flux, n);
+    spectrum_rows.assign(5u * n, 0.0);
+    std::array<double,16> stats{};
+    std::array<char,512> error{};
+    const int rc = xstar_emissivity_build_binemis_profile(
+        static_cast<int>(n), 20000, static_cast<int>(n),
+        static_cast<int>(slots.size()), static_cast<int>(line_count),
+        xlum, final_eval.temperature_t4, vturbi,
+        final_eval.radiation_energy_ev.data(), ws.dpthc.data(), compact_elum.data(),
+        ws.zrems.data(), incident.data(), slots.data(), wavelength.data(), dtype.data(),
+        mass.data(), natural_rate.data(), auger_width.data(), auger_rate.data(),
+        spectrum_rows.data(), stats.data(), error.data(), error.size());
+    if (rc != 0) {
+        std::cerr << "V048746255172582_PATCH520142_WRITER_BINEMIS_ERROR=" << error.data() << "\n";
+        spectrum_rows.clear();
+        return false;
+    }
+    std::cout
+        << "V048746255172582_PATCH520142_WRITER_BINEMIS_SOURCE=FINAL_CUMULATIVE_ELUM\n"
+        << "V048746255172582_PATCH520142_WRITER_BINEMIS_XLUM=" << std::setprecision(17) << xlum << "\n"
+        << "V048746255172582_PATCH520142_WRITER_BINEMIS_RANKED_SLOTS=" << slots.size() << "\n"
+        << "V048746255172582_PATCH520142_WRITER_BINEMIS_ATTEMPTED=" << stats[0] << "\n"
+        << "V048746255172582_PATCH520142_WRITER_BINEMIS_APPLIED=" << stats[1] << "\n";
+    return true;
+}
+
 void create_native_retained_productwrite_schema(xstar_run_state::ProductWritingState& product) {
     if (product.product_metadata_path.empty()) {
         throw std::runtime_error("native ProductWritingState cannot create retained arrays without product_metadata_path");
@@ -6060,23 +6219,34 @@ void create_native_retained_productwrite_schema(xstar_run_state::ProductWritingS
     std::vector<double> continuum_transmitted(n, 0.0), spectrum_transmitted(n, 0.0);
     std::vector<double> continuum_emit_in(n, 0.0), continuum_emit_out(n, 0.0);
     std::vector<double> spectrum_emit_in(n, 0.0), spectrum_emit_out(n, 0.0);
+    std::vector<double> writer_binemis;
+    const bool writer_binemis_ready = build_writer_time_binemis_v82_patch520142(
+        product, final_eval, writer_binemis);
     for (std::size_t i = 0; i < n; ++i) {
         const double incident = vector_at_or_zero(incident_surface, i);
         const double tau_cont = ws.dpthcont.size() >= n ? std::max(0.0, ws.dpthcont[i]) : 0.0;
         const double tau_full = ws.dpthc.size() >= n ? std::max(0.0, ws.dpthc[i]) : tau_cont;
         continuum_transmitted[i] = incident * std::exp(-tau_cont);
-        spectrum_transmitted[i] = incident * std::exp(-tau_full);
         // writespectra3: zrtmp(4)=zrems(4), zrtmp(5)=zrems(5).
         continuum_emit_in[i] = vector_at_or_zero(ws.zrems, 3 * n + i);
         continuum_emit_out[i] = vector_at_or_zero(ws.zrems, 4 * n + i);
-        // binemis: output plane 3 = original zrems(2) + line inward;
-        // output plane 4 = original zrems(3) + line outward.  The retained
-        // line_profile_workspace was generated with zero input zrems, so its
-        // planes 3/4 are exactly the line additions.
-        const double line_in = vector_at_or_zero(ws.line_profile_workspace, 2 * n + i);
-        const double line_out = vector_at_or_zero(ws.line_profile_workspace, 3 * n + i);
-        spectrum_emit_in[i] = vector_at_or_zero(ws.zrems, n + i) + line_in;
-        spectrum_emit_out[i] = vector_at_or_zero(ws.zrems, 2 * n + i) + line_out;
+        if (writer_binemis_ready && writer_binemis.size() >= 5u * n) {
+            // Literal writespectra calls binemis on final cumulative elum,
+            // current zrems, zremsz, and dpthc.  Consume its packed rows
+            // directly instead of reusing the earlier local-fline profile.
+            spectrum_transmitted[i] = writer_binemis[n + i];
+            spectrum_emit_in[i] = writer_binemis[2u * n + i];
+            spectrum_emit_out[i] = writer_binemis[3u * n + i];
+        } else {
+            // Fail-soft diagnostic fallback preserves prior products if the
+            // retained full line metadata is unavailable, while making the
+            // ownership failure visible in the log.
+            spectrum_transmitted[i] = incident * std::exp(-tau_full);
+            const double line_in = vector_at_or_zero(ws.line_profile_workspace, 2 * n + i);
+            const double line_out = vector_at_or_zero(ws.line_profile_workspace, 3 * n + i);
+            spectrum_emit_in[i] = vector_at_or_zero(ws.zrems, n + i) + line_in;
+            spectrum_emit_out[i] = vector_at_or_zero(ws.zrems, 2 * n + i) + line_out;
+        }
     }
     append_native_array(inventory, product, hdu, "product_write_continuum_energy", final_eval.radiation_energy_ev);
     append_native_array(inventory, product, hdu, "product_write_continuum_incident", incident_surface);
@@ -6089,7 +6259,7 @@ void create_native_retained_productwrite_schema(xstar_run_state::ProductWritingS
     append_native_array(inventory, product, hdu, "product_write_spectrum_emit_inward", spectrum_emit_in);
     append_native_array(inventory, product, hdu, "product_write_spectrum_emit_outward", spectrum_emit_out);
     std::cout << "V048746255172582_PATCH52014_PUBLIC_CONTINUUM_PLANE_OWNERSHIP=WRITESPECTRA3_ZREMS4_ZREMS5_DPTHCONT1\n"
-              << "V048746255172582_PATCH52014_PUBLIC_SPECTRUM_PLANE_OWNERSHIP=BINEMIS_ZREMS2_ZREMS3_PLUS_LINE_PROFILE_DPTHC1\n";
+              << "V048746255172582_PATCH520142_PUBLIC_SPECTRUM_PLANE_OWNERSHIP=WRITER_TIME_BINEMIS_FINAL_ELUM_ZREMS_DPTHC1\n";
 
     auto body = build_true_native_xout_step_equivalent(product);
     product.legacy_pprint.buffered_lines = body;
