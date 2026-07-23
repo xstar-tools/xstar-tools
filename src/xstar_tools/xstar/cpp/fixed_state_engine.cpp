@@ -8608,6 +8608,11 @@ int run_impl(
         type49_revisit_evaluated_v82_patch52082;
     std::vector<double> native_bound_free_opacity(input.radiation_bin_count, 0.0);
     std::vector<double> native_rrc_continuum_emission(2 * input.radiation_bin_count, 0.0);
+    // Type-76 is a literal UCalc side effect rather than a later selected-RRC
+    // product projection.  Keep it separate so it can be retained even when
+    // the broad bound-free projection is deferred, without accidentally
+    // publishing unselected Type49/53/88 continuum emission.
+    std::vector<double> native_type76_continuum_emission(2 * input.radiation_bin_count, 0.0);
     std::vector<DeferredRrcRecordV82Patch520> deferred_rrc_records_v82_patch520;
     // v82 patch 5.11: comparison-only producer attribution for the accepted
     // call-2/final sequence-59 opacity.  The environment path is owned by the
@@ -9499,41 +9504,63 @@ int run_impl(
         // the source cross-section records.  The former product path retained
         // only one threshold cell per RRC, which left most xo01_detal3 opacity
         // rows and nearly all xo01_detal4 continuum-opacity bins at zero.
-        if (!defer_product_projection) for (std::size_t k = 0; k < evaluated.size() && k < evaluated_records.size(); ++k) {
+        // v82 patch 5.20.15.3: Type-76 is not a derived product projection.
+        // ucalc.f90 writes its two-photon continuum directly into rccemis, so
+        // retain that side effect even while the expensive bound-free/line
+        // product projection is deferred during the controller trajectory.
+        for (std::size_t k = 0; k < evaluated.size() && k < evaluated_records.size(); ++k) {
             const auto& source_record = *evaluated_records[k];
             if (source_record.data_type == 76 && input.radiation_bin_count > 1 &&
                 evaluated[k].line_energy_ev > 0.0) {
-                // ucalc Type 76: distribute the two-photon decay over the
-                // continuum as E^2(Emax-E), normalized to the total A value.
+                // Literal ucalc.f90 label 76.  nbmx is the source nbinc value;
+                // the polynomial endpoint is epi(nbmx), while the energy
+                // normalization uses the physical upper-lower level gap emax.
+                // The source initializes ansar2=0 before the first trapezoid
+                // and visits every bin 2..nbmx because enxt(lfastl=0) returns
+                // nskp=1.
                 const double emax = evaluated[k].line_energy_ev;
-                std::vector<double> shape(input.radiation_bin_count, 0.0);
-                double integral = 0.0;
-                for (std::size_t j = 0; j < input.radiation_bin_count; ++j) {
-                    const double e = input.radiation_energy_ev[j];
-                    if (e > 0.0 && e < emax) shape[j] = e * e * (emax - e);
-                    if (j > 0) {
-                        integral += 0.5 * (shape[j - 1] + shape[j]) *
-                            (input.radiation_energy_ev[j] - input.radiation_energy_ev[j - 1]);
+                const int nbmx_one_based = type99_nbinc_fortran_value(
+                    emax, input.radiation_energy_ev, input.radiation_bin_count);
+                const std::size_t nbmx = static_cast<std::size_t>(
+                    std::max(1, std::min(static_cast<int>(input.radiation_bin_count), nbmx_one_based)));
+                double rcemsum = 0.0;
+                double ansar2 = 0.0;
+                if (nbmx >= 2u) {
+                    const double grid_endpoint = input.radiation_energy_ev[nbmx - 1u];
+                    for (std::size_t ll = 2u; ll <= nbmx; ++ll) {
+                        const double ansar2o = ansar2;
+                        const double energy = input.radiation_energy_ev[ll - 1u];
+                        ansar2 = energy * energy * std::max(0.0, grid_endpoint - energy);
+                        rcemsum += (ansar2 + ansar2o) *
+                            (energy - input.radiation_energy_ev[ll - 2u]) / 2.0;
                     }
-                }
-                const double upper_population = active_population_for_full_row(
-                    active, buffers.populations, source_record.upper_row);
-                const double source_density = upper_population * element.abundance *
-                    input.hydrogen_density_cm3;
-                const double aij = std::max(0.0, evaluated[k].contribution.ans2);
-                const double cfrac = effective_spectral_covering_fraction_v82_patch58(input);
-                const double ptmp1 = 0.5 * (1.0 - cfrac);
-                const double ptmp2 = 0.5 * (1.0 - cfrac) + cfrac;
-                if (integral > 0.0 && source_density > 0.0 && aij > 0.0) {
-                    for (std::size_t j = 0; j < input.radiation_bin_count; ++j) {
-                        const double ansar2 = shape[j] * aij * emax / integral;
-                        native_rrc_continuum_emission[j] +=
-                            source_density * ansar2 * ptmp1 / 12.56;
-                        native_rrc_continuum_emission[input.radiation_bin_count + j] +=
-                            source_density * ansar2 * ptmp2 / 12.56;
+                    const double upper_population = active_population_for_full_row(
+                        active, buffers.populations, source_record.upper_row);
+                    const double abund2 = upper_population * element.abundance *
+                        input.hydrogen_density_cm3;
+                    const double aij = std::max(0.0, evaluated[k].contribution.ans2);
+                    const double cfrac = effective_spectral_covering_fraction_v82_patch58(input);
+                    // Literal calc_emis_ion rate-type 9 prepass sets tau1=tau2=0
+                    // before the unconditional UCalc call. Type-76 is not an
+                    // nlbin-ranked line in the active inventory, so this is
+                    // the source escape state that owns its retained continuum.
+                    const double ptmp1 = (1.0 - cfrac) / 2.0;
+                    const double ptmp2 = (1.0 + cfrac) / 2.0;
+                    const double denominator = 1.0e-24 + rcemsum;
+                    if (abund2 > 0.0 && aij > 0.0 && denominator > 0.0) {
+                        for (std::size_t ll = 2u; ll <= nbmx; ++ll) {
+                            const double energy = input.radiation_energy_ev[ll - 1u];
+                            double emitted = energy * energy * std::max(0.0, grid_endpoint - energy);
+                            emitted = emitted * aij * emax / denominator;
+                            native_type76_continuum_emission[ll - 1u] +=
+                                abund2 * emitted * ptmp1 / xstar_constants::kLegacyTwoPhotonGeometryFactor;
+                            native_type76_continuum_emission[input.radiation_bin_count + ll - 1u] +=
+                                abund2 * emitted * ptmp2 / xstar_constants::kLegacyTwoPhotonGeometryFactor;
+                        }
                     }
                 }
             }
+            if (defer_product_projection) continue;
             if (source_record.opcode == XSTAR_FIXED_OPCODE_TYPE88_SUPERLEVEL_BOUND_FREE &&
                 source_record.rate_type == 42 &&
                 source_record.real_offset + source_record.real_count <= ctx.program.reals.size() &&
@@ -10024,6 +10051,14 @@ int run_impl(
         std::vector<double> cabab(continuum_slot_capacity, 0.0);
         std::vector<double> opakab(continuum_slot_capacity, 0.0);
         std::vector<double> rccemis(2 * continuum_capacity, 0.0);
+        // Literal ucalc.f90 Type-76 has already accumulated into rccemis before
+        // calc_emis returns.  This side effect survives the controller's
+        // DEFER_PRODUCT_PROJECTION mode; only derived/selective projections
+        // remain deferred.
+        if (native_type76_continuum_emission.size() == rccemis.size()) {
+            for (std::size_t k = 0; k < rccemis.size(); ++k)
+                rccemis[k] += native_type76_continuum_emission[k];
+        }
         // XSTAR heatt defines opakc as continuum opacity with line profiles
         // binned in, while opakcont is the lines-excluded continuum surface.
         // Keep the profile in a separate construction buffer, then add it only

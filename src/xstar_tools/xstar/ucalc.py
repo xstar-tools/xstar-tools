@@ -21,6 +21,7 @@ from .constants import (
     LEGACY_BOLTZMANN_EV_PER_T4,
     LEGACY_COLLISION_ERG_PER_EV,
     MODERN_ERG_PER_EV,
+    kLegacyTwoPhotonGeometryFactor,
 )
 
 from dataclasses import dataclass, field, replace
@@ -3039,6 +3040,65 @@ class SourceFaithfulUCalc:
         id2 = c.nlevp + r.integers[-5] - 1
         return self._ctx_result(r, s, ans1=r.reals[1], idest1=id1, idest2=id2)
 
+    @staticmethod
+    def _type76_two_photon_continuum(c: UCalcContext, *, emax_ev: float, aij_s: float) -> dict[str, Any]:
+        """Literal ``ucalc.f90`` Type-76 ``rccemis`` side effect.
+
+        The source normalizes ``E**2 * (epi(nbmx)-E)`` on the live continuum
+        grid, with ``nbmx=nbinc(emax)``.  The first trapezoid deliberately
+        starts from a zero previous ordinate at bin 1, matching the Fortran
+        ``ansar2=0`` initialization.  ``enxt`` runs with ``lfastl=0`` here,
+        so both source loops visit every bin from 2 through ``nbmx``.
+        """
+        epi, _, _ = _radiation_arrays(c.radiation)
+        n = int(epi.size)
+        inward = np.zeros(n, dtype=float)
+        outward = np.zeros(n, dtype=float)
+        if n < 2 or not (emax_ev > 0.0) or not (aij_s > 0.0):
+            return {
+                "rccemis_inward": inward, "rccemis_outward": outward,
+                "type76_nbmx_one_based": 0, "type76_rcemsum": 0.0,
+                "type76_emax_ev": float(emax_ev),
+                "type76_grid_endpoint_ev": 0.0,
+                "type76_source_semantics": "literal_E2_Emax_minus_E",
+            }
+        nbmx = _xstar_nbinc_fortran_value(float(emax_ev), epi)
+        nbmx = max(1, min(int(nbmx), n))
+        if nbmx < 2:
+            return {
+                "rccemis_inward": inward, "rccemis_outward": outward,
+                "type76_nbmx_one_based": nbmx, "type76_rcemsum": 0.0,
+                "type76_emax_ev": float(emax_ev),
+                "type76_grid_endpoint_ev": float(epi[nbmx - 1]),
+                "type76_source_semantics": "literal_E2_Emax_minus_E",
+            }
+        grid_endpoint = float(epi[nbmx - 1])
+        rcemsum = 0.0
+        ansar2 = 0.0
+        for ll in range(2, nbmx + 1):
+            ansar2o = ansar2
+            energy = float(epi[ll - 1])
+            ansar2 = energy * energy * max(0.0, grid_endpoint - energy)
+            rcemsum += (ansar2 + ansar2o) * (energy - float(epi[ll - 2])) / 2.0
+        denom = 1.0e-24 + rcemsum
+        for ll in range(2, nbmx + 1):
+            energy = float(epi[ll - 1])
+            ansar2 = energy * energy * max(0.0, grid_endpoint - energy)
+            ansar2 = ansar2 * float(aij_s) * float(emax_ev) / denom
+            inward[ll - 1] = (
+                float(c.abund2) * ansar2 * float(c.ptmp1) / kLegacyTwoPhotonGeometryFactor
+            )
+            outward[ll - 1] = (
+                float(c.abund2) * ansar2 * float(c.ptmp2) / kLegacyTwoPhotonGeometryFactor
+            )
+        return {
+            "rccemis_inward": inward, "rccemis_outward": outward,
+            "type76_nbmx_one_based": nbmx, "type76_rcemsum": float(rcemsum),
+            "type76_emax_ev": float(emax_ev),
+            "type76_grid_endpoint_ev": grid_endpoint,
+            "type76_source_semantics": "literal_E2_Emax_minus_E",
+        }
+
     def _eval_type76(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         if len(r.integers) < 2 or len(r.reals) < 1:
             return self._base_result(r, s, UCalcStatus.INVALID_RECORD, reason="type76_short_record")
@@ -3050,6 +3110,11 @@ class SourceFaithfulUCalc:
         id1, id2 = int(r.integers[0]), int(r.integers[1])
         aij = max(float(r.reals[0]), 0.0)
         de = abs(c.levels.energy(id1) - c.levels.energy(id2))
+        diagnostics: Mapping[str, Any] = {}
+        context_fields = ["levels"]
+        if bool(c.extras.get("emit_ucalc_continuum_side_effects", False)):
+            diagnostics = self._type76_two_photon_continuum(c, emax_ev=de, aij_s=aij)
+            context_fields.extend(("radiation", "abund2", "ptmp1", "ptmp2"))
         return self._ctx_result(
             r,
             s,
@@ -3059,7 +3124,8 @@ class SourceFaithfulUCalc:
             ans4=0.0,
             idest1=id1,
             idest2=id2,
-            context_fields_used=("levels",),
+            diagnostics=diagnostics,
+            context_fields_used=tuple(context_fields),
         )
 
     def _eval_type77(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:

@@ -544,6 +544,7 @@ def _ucalc_context(
             "parent_level_stat_weight_by_destination": parent_weight,
             "type53_parent_context_source": "literal_next_ion_type13",
             "bound_free_radiation_grid_role": str(context.ucalc_radiation_grid_role),
+            "emit_ucalc_continuum_side_effects": True,
         },
     )
 
