@@ -671,7 +671,7 @@ def photon_number_luminosity(zremsz: Sequence[float], epi_eV: Sequence[float]) -
     return float(total)
 
 
-OUTPUT_METADATA_CACHE_FORMAT_VERSION = 8
+OUTPUT_METADATA_CACHE_FORMAT_VERSION = 9
 
 
 def default_output_metadata_cache_path(fitsfile: str | Path) -> Path:
@@ -753,6 +753,14 @@ def save_source_output_metadata_cache(
                 rrc_upper_level=_string_array([row.upper_level for row in metadata.rrcs]),
                 rrc_lower_local_index=np.asarray([row.lower_local_index for row in metadata.rrcs], dtype=np.int32),
                 rrc_upper_local_index=np.asarray([row.upper_local_index for row in metadata.rrcs], dtype=np.int32),
+                # v82 patch 5.20.15.1: these fields are part of the literal
+                # xstarsetup/calc_emis rate-7 rank identity.  Omitting them
+                # from the sidecar made every cache hit silently fall back to
+                # the public RRC threshold; Type 49 must instead rank on
+                # rdat1(np1r)*13.598 with default-REAL literal semantics.
+                rrc_source_record=np.asarray([row.source_record for row in metadata.rrcs], dtype=np.int64),
+                rrc_data_type=np.asarray([row.data_type for row in metadata.rrcs], dtype=np.int16),
+                rrc_rank_threshold_eV=np.asarray([row.rank_threshold_eV for row in metadata.rrcs], dtype=np.float64),
             )
         os.replace(temporary_name, target)
     except Exception:
@@ -801,11 +809,13 @@ def load_source_output_metadata_cache(master: Any, path: str | Path) -> SourceOu
                 continuum_index=int(a), level_global_index=int(b), threshold_eV=float(c),
                 ion_label=str(d), lower_level=str(e), upper_level=str(f),
                 lower_local_index=int(g), upper_local_index=int(h),
+                source_record=int(i), data_type=int(j), rank_threshold_eV=float(k),
             )
-            for a, b, c, d, e, f, g, h in zip(
+            for a, b, c, d, e, f, g, h, i, j, k in zip(
                 z["rrc_continuum_index"], z["rrc_level_global_index"], z["rrc_threshold_eV"],
                 z["rrc_ion_label"], z["rrc_lower_level"], z["rrc_upper_level"],
                 z["rrc_lower_local_index"], z["rrc_upper_local_index"],
+                z["rrc_source_record"], z["rrc_data_type"], z["rrc_rank_threshold_eV"],
             )
         )
     return SourceOutputMetadata(
@@ -1104,7 +1114,7 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
         provenance={
             "source": "readtbl/setptrs packed ATDB pointers",
             "source_faithful": True,
-            "metadata_builder": "vectorized_numpy_v7_rrc_pprint19_nlev_no_extra_offset",
+            "metadata_builder": "vectorized_numpy_v9_rrc_literal_rank_cache",
             "metadata_cache_status": "built",
         },
     )

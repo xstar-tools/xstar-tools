@@ -7821,21 +7821,38 @@ void accumulate_native_bound_free_rrc_from_abundances_v82_patch520(
         const auto mapped = phint53_grid_map_v82_patch57(
             curve, input.radiation_energy_ev, static_cast<int>(n));
         if (!mapped.valid) return;
-        // v82 patch 5.20.14.8: keep the 5.20.14.7 full calc_emis curve for
-        // opacity/depth, but restore the 5.20.14.6 emission-side escape state
-        // until the source tauc/tau_in workspace is corrected in 5.20.15.
-        // Literal calc_emis_ion does depend on tauc here; activating that
-        // dependency against the currently mismatched tau workspace caused the
-        // 5.20.14.7 inward/outward emission regression.
+        // v82 patch 5.20.15.1: the output-metadata cache now preserves the
+        // literal Type-49 xstarsetup rank coordinate, so the regenerated
+        // solve-stage cache carries the selected full-grid opakab -> STPCUT
+        // tauc state.  Re-enable the source calc_emis_ion escape semantics:
+        //   ptmp1=pescv(tauc(1,kkkl))*(1-cfrac)
+        //   ptmp2=pescv(tauc(2,kkkl))*(1-cfrac)
+        //         +2*pescv(tauc(1,kkkl)+tauc(2,kkkl))*cfrac
+        // Keep the 5.20.14.9 dual curve ownership untouched: curve here is
+        // still the dedicated emission curve, not the full opacity curve.
         const Type53SourceShadow* shadow = record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE
             ? &evaluated.type49_shadow : &evaluated.type53_shadow;
         const double bktm = xstar_constants::kBoltzmannErgPerK * input.temperature_k /
             xstar_constants::kModernErgPerEv;
         const double covering = effective_spectral_covering_fraction_v82_patch58(input);
-        const double ptmp1 = covering >= 1.0 - 1.0e-15 ? 0.0 :
+        const int continuum_index = record.continuum_index_one_based;
+        const bool live_tau_available = continuum_index > 0 &&
+            static_cast<std::size_t>(continuum_index) <= input.continuum_tau_count &&
+            input.continuum_tau_in && input.continuum_tau_out;
+        double ptmp1 = covering >= 1.0 - 1.0e-15 ? 0.0 :
             (shadow && shadow->valid ? std::max(0.0, shadow->ptmp1) : 0.5 * (1.0 - covering));
-        const double ptmp2 = covering >= 1.0 - 1.0e-15 ? 1.0 :
+        double ptmp2 = covering >= 1.0 - 1.0e-15 ? 1.0 :
             (shadow && shadow->valid ? std::max(0.0, shadow->ptmp2) : 0.5 * (1.0 - covering) + covering);
+        if (live_tau_available) {
+            const double tau1 = input.continuum_tau_in[static_cast<std::size_t>(continuum_index - 1)];
+            const double tau2 = input.continuum_tau_out[static_cast<std::size_t>(continuum_index - 1)];
+            const auto pescv_source = [](double tau) {
+                return std::max(std::exp(-tau), 1.0e-12) / 2.0;
+            };
+            ptmp1 = pescv_source(tau1) * (1.0 - covering);
+            ptmp2 = pescv_source(tau2) * (1.0 - covering) +
+                2.0 * pescv_source(tau1 + tau2) * covering;
+        }
         double exptst = (input.radiation_energy_ev[mapped.nb1_zero_based] - curve.threshold_ev) /
             std::max(bktm, 1.0e-300);
         for (int kl = mapped.nb1_zero_based; kl < mapped.klmax_zero_based &&
