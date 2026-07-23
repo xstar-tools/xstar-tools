@@ -10304,7 +10304,14 @@ int run_impl(
         // only for ncbin-selected public RRC slots.  Preserve the source-selected
         // set here so the heatt-facing rccemis workspace can be rebuilt without
         // reusing the broader calc_emisab surface.
-        if (!defer_product_projection && source_sequence_v82_patch511 == 59) {
+        if (!defer_product_projection) {
+            // patch 5.20.14.4: literal calc_emis_all runs at every accepted
+            // physical shell.  Earlier C++ code accidentally restricted the
+            // selected 9999-bin Type49/53 scalar opacity revisit to source
+            // sequence 59 (call 2), leaving calls 3/4 at the reduced 999-bin
+            // calc_emisab seed.  Keep legacy CSV diagnostics call-2-only, but
+            // apply the physical revisit on every non-deferred final boundary.
+            const bool patch520144_call2_audit = source_sequence_v82_patch511 == 59;
             std::map<std::pair<std::string,int>,SourceFeatureAuditCandidateV82Patch5171> seed_identity_by_slot;
             for (const auto& c : spectral) {
                 if (c.kind != XSTAR_SPECTRAL_KIND_EMISAB_BOUND_FREE || c.output_index <= 0 ||
@@ -10343,7 +10350,7 @@ int run_impl(
 
             const char* revisit_path_text = std::getenv("XSTAR_V82_PATCH5181_TYPE53_REVISIT_AUDIT_PATH");
             std::ofstream revisit_csv;
-            if (revisit_path_text && *revisit_path_text) {
+            if (patch520144_call2_audit && revisit_path_text && *revisit_path_text) {
                 const std::filesystem::path revisit_path(revisit_path_text);
                 if (!revisit_path.parent_path().empty()) std::filesystem::create_directories(revisit_path.parent_path());
                 revisit_csv.open(revisit_path);
@@ -10420,6 +10427,10 @@ int run_impl(
             }
             if (revisit_csv && !revisit_csv) throw std::runtime_error("cannot write patch5.18.1 Type-53 selected-revisit audit");
             std::cout
+                << "V048746255172582_PATCH520144_CALC_EMIS_REVISIT_SOURCE_SEQUENCE=" << source_sequence_v82_patch511 << "\n"
+                << "V048746255172582_PATCH520144_TYPE53_SELECTED_REVISIT_SELECTED=" << type53_selected << "\n"
+                << "V048746255172582_PATCH520144_TYPE53_SELECTED_REVISIT_PUBLISHED=" << type53_revisit_published << "\n";
+            if (patch520144_call2_audit) std::cout
                 << "V048746255172582_CALL2_TYPE53_CALC_EMISAB_SEED_GRID_BINS=999\n"
                 << "V048746255172582_CALL2_TYPE53_SELECTED_REVISIT_CANDIDATES=" << type53_candidates << "\n"
                 << "V048746255172582_CALL2_TYPE53_SELECTED_REVISIT_SELECTED=" << type53_selected << "\n"
@@ -10446,7 +10457,7 @@ int run_impl(
             const char* type49_revisit_path_v82_patch52082 =
                 std::getenv("XSTAR_V82_PATCH52082_TYPE49_REVISIT_AUDIT_PATH");
             std::ofstream type49_revisit_csv_v82_patch52082;
-            if (type49_revisit_path_v82_patch52082 && *type49_revisit_path_v82_patch52082) {
+            if (patch520144_call2_audit && type49_revisit_path_v82_patch52082 && *type49_revisit_path_v82_patch52082) {
                 const std::filesystem::path type49_path_v82_patch52082(type49_revisit_path_v82_patch52082);
                 if (!type49_path_v82_patch52082.parent_path().empty())
                     std::filesystem::create_directories(type49_path_v82_patch52082.parent_path());
@@ -10572,6 +10583,11 @@ int run_impl(
             if (type49_revisit_csv_v82_patch52082 && !type49_revisit_csv_v82_patch52082)
                 throw std::runtime_error("cannot write patch5.20.8.2 Type-49 three-stage audit");
             std::cout
+                << "V048746255172582_PATCH520144_TYPE49_SELECTED_REVISIT_SELECTED="
+                << type49_selected_v82_patch52082 << "\n"
+                << "V048746255172582_PATCH520144_TYPE49_SELECTED_REVISIT_PUBLISHED="
+                << type49_revisit_published_v82_patch52082 << "\n";
+            if (patch520144_call2_audit) std::cout
                 << "V048746255172582_PATCH52082_TYPE49_REDUCED_SEED_PUBLICATION=RESTORED_SOURCE_OWNER_PATCH52094\n"
                 << "V048746255172582_PATCH52082_TYPE49_PRODUCTION_SEED=CALC_EMISAB_REDUCED_OWNER_PATCH52094\n"
                 << "V048746255172582_PATCH52082_TYPE49_REVISIT_CANDIDATES="

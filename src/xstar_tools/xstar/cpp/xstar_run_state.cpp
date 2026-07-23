@@ -534,6 +534,7 @@ ProductWritingState build_product_writing_state(const WholeRunAccumulatedState& 
     product.native_diagnostics_path = state.native_diagnostics_path;
     product.native_run_id = state.native_run_id;
     product.fixed_evaluations = state.fixed_evaluations;
+    product.final_writer_evaluation = state.final_writer_evaluation;
     product.radial_zones = state.radial_zones;
     product.parameter_rows = state.parameter_rows;
     product.element_metadata = state.element_metadata;
@@ -583,6 +584,7 @@ void write_run_state_manifest(
         << "  \"native_diagnostics_path\": \"" << json_escape(product.native_diagnostics_path.string()) << "\",\n"
         << "  \"native_run_id\": \"" << json_escape(product.native_run_id) << "\",\n"
         << "  \"fixed_evaluations\": " << whole.fixed_evaluations.size() << ",\n"
+        << "  \"final_writer_evaluation_present\": " << (product.final_writer_evaluation ? "true" : "false") << ",\n"
         << "  \"accepted_controller_states\": " << whole.accepted_controller_states.size() << ",\n"
         << "  \"radial_zones\": " << whole.radial_zones.size() << ",\n"
         << "  \"exact_source_metadata_retained\": " << (product.exact_source_metadata_retained ? "true" : "false") << ",\n"

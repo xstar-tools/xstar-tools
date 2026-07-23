@@ -5848,13 +5848,12 @@ std::vector<double> reconstruct_public_line_luminosity_v82_patch52071(
     // because the source sets line optp2=0 before the line transfer update.
     // Rebuild the public luminosity from exact retained local rcem workspaces
     // only when the cumulative elum surface was not retained correctly.
-    const std::size_t terminal_physical =
-        product.terminal_synthetic_row_present && product.radial_zones.size() >= 2u
-            ? product.radial_zones.size() - 2u
-            : product.radial_zones.size() - 1u;
-    if (terminal_physical == 0u) return out;
+    // The final radial zone is the post-transport boundary; the last local
+    // emissivity shell is therefore the preceding call-4 pretransport zone.
+    const std::size_t terminal_local = product.radial_zones.size() - 2u;
+    if (terminal_local == 0u) return out;
 
-    for (std::size_t current = 1u; current <= terminal_physical; ++current) {
+    for (std::size_t current = 1u; current <= terminal_local; ++current) {
         const auto& current_zone = product.radial_zones[current];
         const auto& next_zone = product.radial_zones[current + 1u];
         // Source heatt accumulates the local rcem of the current pprint zone
@@ -6070,12 +6069,17 @@ void create_native_retained_productwrite_schema(xstar_run_state::ProductWritingS
     const auto level_indices = level_identity_indices(product);
     const auto line_indices_all = line_identity_indices(product);
     const auto rrc_indices_all = rrc_identity_indices(product);
-    // Public products consume the terminal accepted radial boundary.  The
-    // final radial_zones entry is the source post-loop pprint(12) convenience
-    // reset event, not the terminal physical shell.
-    const auto final_eval = product.radial_zones.empty()
-        ? (product.fixed_evaluations.empty() ? xstar_run_state::FixedEvaluationState{} : product.fixed_evaluations.back())
-        : product.radial_zones[product.radial_zones.size() >= 2u ? product.radial_zones.size() - 2u : product.radial_zones.size() - 1u].accepted_controller.evaluation;
+    // patch 5.20.14.4: public writers consume the literal post-loop local
+    // recomputation when available.  Its local zrems/opakc state comes from
+    // xstarcalc+HEATT at delr=1.e-15, while its cumulative elum/tauc/dpth*
+    // planes are grafted from the genuine terminal post-transport boundary.
+    // This state is intentionally separate from the 58 retained trajectory
+    // evaluations and from the five radial detail snapshots.
+    const auto final_eval = product.final_writer_evaluation
+        ? *product.final_writer_evaluation
+        : (product.radial_zones.empty()
+            ? (product.fixed_evaluations.empty() ? xstar_run_state::FixedEvaluationState{} : product.fixed_evaluations.back())
+            : product.radial_zones.back().accepted_controller.evaluation);
 
     for (std::size_t zi = 0; zi < product.radial_zones.size(); ++zi) {
         const std::size_t hdu = zi + 3;
@@ -9168,13 +9172,29 @@ void retain_controller_owned_product_workspaces_v63(
     // patch populations or final ion columns.
     std::vector<double> source_rdel(whole.radial_zones.size(), 0.0);
     std::vector<double> transfer_depth(whole.radial_zones.size(), 0.0);
-    if (whole.radial_zones.size() == 5u && total_depth > 0.0) {
+    bool exact_live_geometry = !whole.radial_zones.empty();
+    double previous_live_depth = -1.0;
+    for (std::size_t i = 0; i < whole.radial_zones.size(); ++i) {
+        const auto& zone = whole.radial_zones[i];
+        const double depth = zone.delta_radius_cm;
+        if (!zone.accepted_boundary_exact || !std::isfinite(depth) || depth < 0.0 ||
+            (i > 0u && depth + 1.0e-12 < previous_live_depth)) {
+            exact_live_geometry = false;
+            break;
+        }
+        source_rdel[i] = depth;
+        transfer_depth[i] = depth;
+        previous_live_depth = depth;
+    }
+    if (!exact_live_geometry && whole.radial_zones.size() == 5u && total_depth > 0.0) {
         const double d1 = 0.402446 * total_depth;
         const double d2 = std::min(total_depth, 2.0 * d1);
-        // Four pprint(call-final) rows plus the post-loop terminal pprint row.
+        // Compatibility fallback only.  The standalone source path now passes
+        // exact STEP-owned cumulative boundaries, so production must not
+        // replace them with this historical benchmark approximation.
         source_rdel = {0.0, 0.0, d1, d2, total_depth};
         transfer_depth = source_rdel;
-    } else if (whole.radial_zones.size() > 1u && total_depth > 0.0) {
+    } else if (!exact_live_geometry && whole.radial_zones.size() > 1u && total_depth > 0.0) {
         const std::size_t physical = whole.radial_zones.size() - 1u;
         for (std::size_t i = 0; i < physical; ++i) {
             source_rdel[i] = total_depth * static_cast<double>(i) /
@@ -9184,6 +9204,9 @@ void retain_controller_owned_product_workspaces_v63(
         source_rdel.back() = 0.0;
         transfer_depth.back() = total_depth;
     }
+
+    std::cout << "V048746255172582_PATCH520144_RADIAL_GEOMETRY_OWNER="
+              << (exact_live_geometry ? "LIVE_STEP_BOUNDARIES" : "LEGACY_FALLBACK") << "\n";
 
     std::size_t line_stride = 0;
     std::size_t continuum_stride = 0;
@@ -9221,13 +9244,17 @@ void retain_controller_owned_product_workspaces_v63(
         zone.temperature_t4 = zone.accepted_controller.evaluation.temperature_t4;
         zone.electron_fraction = zone.accepted_controller.evaluation.computed_electron_fraction;
         zone.provisional_from_controller = false;
-        // Event identity/order is native, but the accepted delr/rdel geometry is
-        // still reconstructed until the radial step controller exposes it.
-        zone.accepted_boundary_exact = false;
-        if (zone.boundary_provenance.empty()) {
+        if (!exact_live_geometry) {
+            zone.accepted_boundary_exact = false;
+            if (zone.boundary_provenance.empty()) {
+                zone.boundary_provenance = i + 1u == whole.radial_zones.size()
+                    ? "native pprint(12) terminal event; reconstructed geometry"
+                    : "native pprint(12) accepted call-final event; reconstructed geometry";
+            }
+        } else if (zone.boundary_provenance.empty()) {
             zone.boundary_provenance = i + 1u == whole.radial_zones.size()
-                ? "native pprint(12) terminal reset event; reconstructed geometry"
-                : "native pprint(12) accepted call-final event; reconstructed geometry";
+                ? "native pprint(12) terminal post-transport event; exact STEP geometry"
+                : "native pprint(12) accepted pre-transport event; exact STEP geometry";
         }
 
         if (i > 0u) {
@@ -14254,6 +14281,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         std::array<std::size_t,4> actual_dsec_counts{{0u,0u,0u,0u}};
         std::vector<FixedDsecSnapshot> finals;
         finals.reserve(source_calls);
+        std::optional<FixedDsecSnapshot> terminal_transport_boundary_v82_patch520144;
         std::optional<FixedDsecSnapshot> call2_pretransport_v82_patch513;
 
         for (std::size_t call = 1; call <= source_calls; ++call) {
@@ -14359,12 +14387,23 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             if (call == 2u && data.reference_trajectory_mode) {
                 call2_pretransport_v82_patch513 = boundary;
             }
+
+            // Literal xstar.f90/pprint/savd lifetime: retain the radial detail
+            // boundary before STEP/STPCUT/TRNFRN mutates cumulative tau and
+            // radiation state.  Previous C++ retained `boundary` only after
+            // advance_consecutive_transport_v71, shifting detail tau/fwd-depth
+            // one shell early.
+            FixedDsecSnapshot pretransport_boundary_v82_patch520144 = boundary;
+
             if (segment > 0.0) {
                 const std::size_t transport_index = call >= 2u ? call - 2u : 0u;
                 if (transport_index < source_transport_segment_cm.size()) {
                     source_transport_segment_cm[transport_index] = segment;
                 }
                 advance_consecutive_transport_v71(data, boundary, segment, boundary_radius_cm);
+            }
+            if (call == source_calls) {
+                terminal_transport_boundary_v82_patch520144 = boundary;
             }
 
             // Source xstar.f90 calls STEP at the beginning of the *next* zone,
@@ -14397,8 +14436,8 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             if (call == 2u && data.reference_trajectory_mode) {
                 write_mg_type53_source_native_opacity_record_attribution_v82_patch512(data);
             }
-            data.snapshots.push_back(boundary);
-            finals.push_back(std::move(boundary));
+            data.snapshots.push_back(pretransport_boundary_v82_patch520144);
+            finals.push_back(std::move(pretransport_boundary_v82_patch520144));
 
             std::cout << "V048746255172582_CONTROLLER_CALL=" << call
                       << " DSEC_EVALUATIONS=" << dsec_count
@@ -14587,7 +14626,8 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         for (const auto& snapshot : data.snapshots) {
             whole.fixed_evaluations.push_back(copy_real_native_snapshot(snapshot, 0.0));
         }
-        auto append_zone = [&](const FixedDsecSnapshot& snapshot, const std::string& reason) {
+        auto append_zone = [&](const FixedDsecSnapshot& snapshot, const std::string& reason,
+                               double source_depth) {
             xstar_run_state::AcceptedControllerState accepted;
             accepted.call_index = snapshot.call_index;
             accepted.accepted_sequence = snapshot.sequence;
@@ -14598,10 +14638,6 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             const std::size_t ordinal = whole.radial_zones.size() + 1u;
             zone.zone_index = ordinal;
             zone.pass_index = 1;
-            const std::size_t source_slot = ordinal <= source_boundary_depth_cm.size()
-                ? ordinal - 1u : 0u;
-            const double source_depth = ordinal <= source_boundary_depth_cm.size()
-                ? source_boundary_depth_cm[source_slot] : 0.0;
             zone.radius_cm = params.initial_radius_cm + source_depth;
             zone.delta_radius_cm = source_depth;
             zone.outer_radius_cm = zone.radius_cm;
@@ -14633,13 +14669,19 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             abundance.terminal_row = ordinal == radial_event_count;
             whole.abundance_radial_rows.push_back(abundance);
         };
-        for (const auto& snapshot : finals) {
-            append_zone(snapshot, "qualification_free_native_call_final");
+        for (std::size_t i = 0; i < finals.size(); ++i) {
+            append_zone(finals[i], "qualification_free_native_call_final_pretransport",
+                        source_boundary_depth_cm[i]);
         }
-        // The post-loop pprint row carries the terminal call-4/heatt state
-        // after the final shell transport.  5.20.7.1 incorrectly copied the
-        // call-3 snapshot here, which zeroed/rewound terminal product state.
-        append_zone(finals.at(3), "qualification_free_native_terminal_reset");
+        // Source saves a distinct terminal row after the last radial transfer.
+        // Keep the actual transported call-4 workspace rather than duplicating
+        // the pretransport call-4 snapshot.
+        if (!terminal_transport_boundary_v82_patch520144) {
+            throw std::runtime_error("missing patch5.20.14.4 terminal post-transport boundary");
+        }
+        append_zone(*terminal_transport_boundary_v82_patch520144,
+                    "qualification_free_native_terminal_posttransport",
+                    data.cumulative_depth_cm);
         retain_controller_owned_product_workspaces_v63(whole, options.parameters_path);
         // v71 retains the complete boundary event state in memory.  The
         // benchmark radial depth split is source-compatible with v63 and is
@@ -14679,6 +14721,12 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                   << ((!data.grid_tau_in.empty() && data.grid_tau_in.size() == data.energy.size()) ? "RETAINED" : "REJECT") << "\n"
                   << "V048746255172582_PATCH52011_TERMINAL_DPTHCONT_STATE="
                   << ((!data.grid_cont_tau_in.empty() && data.grid_cont_tau_in.size() == data.energy.size()) ? "RETAINED" : "REJECT") << "\n";
+        // The fifth radial detail zone now carries the literal post-transport
+        // transfer workspace, but the public abundance/heating/cooling tables
+        // still have the source terminal reset-row semantics.  Keep this flag
+        // true for those product families and for final-physical-zone selection;
+        // transfer/detail writers consume radial_zones directly and therefore
+        // still see the genuine post-transport state in zone 5.
         whole.terminal_synthetic_row_present = true;
         whole.legacy_pprint.initialized_from_native_controller = true;
         whole.legacy_pprint.option_sequence_exact = false;
@@ -14712,16 +14760,53 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             final_pprint_data.reference_trajectory_mode = false;
             final_pprint_data.writing_final_snapshot = true;
             prepare_call_start_workspace_v71(final_pprint_data, 4u);
-            const auto final_pprint = evaluate_full_boundary_v67(
+            auto final_pprint = evaluate_full_boundary_v67(
                 final_pprint_data, state,
                 static_cast<double>(static_cast<float>(1.0e-15)),
                 params.initial_radius_cm + total_depth_cm, 0u);
+            // Literal post-loop writer lifetime is not just the extra
+            // xstarcalc thermal solve above: xstar.f90 immediately executes
+            // HEATT and STPCUT at the source REAL 1.e-15 shell width before
+            // pprint/writespectra*.  Reproduce the local HEATT continuum
+            // state on the controller copy so it cannot perturb the accepted
+            // radial trajectory.  The 1.e-15 STPCUT increments are below the
+            // scientific scale here; retain the exact cumulative terminal
+            // opacity/luminosity arrays from the completed third transport
+            // interval while using this recompute's local zrems/opakc state.
+            const double final_writer_delr = static_cast<double>(static_cast<float>(1.0e-15));
+            advance_source_continuum_radiation_v82_patch52(
+                final_pprint_data, final_pprint, final_writer_delr,
+                params.initial_radius_cm + total_depth_cm);
+            if (!terminal_transport_boundary_v82_patch520144) {
+                throw std::runtime_error("missing terminal boundary for patch5.20.14.4 final writer recompute");
+            }
+            const auto& terminal_writer_state = *terminal_transport_boundary_v82_patch520144;
+            final_pprint.tau0 = terminal_writer_state.tau0;
+            final_pprint.elum = terminal_writer_state.elum;
+            final_pprint.tauc = terminal_writer_state.tauc;
+            final_pprint.elumab = terminal_writer_state.elumab;
+            final_pprint.dpthc = terminal_writer_state.dpthc;
+            final_pprint.dpthcont = terminal_writer_state.dpthcont;
+            final_pprint.continuum_tau_in = terminal_writer_state.continuum_tau_in;
+            final_pprint.continuum_tau_out = terminal_writer_state.continuum_tau_out;
+            if (final_pprint_data.accumulated_zremsz.size() == final_pprint.radiation_energy_ev.size()) {
+                final_pprint.zremsz = final_pprint_data.accumulated_zremsz;
+            } else if (terminal_writer_state.zremsz.size() == final_pprint.radiation_energy_ev.size()) {
+                final_pprint.zremsz = terminal_writer_state.zremsz;
+            } else {
+                final_pprint.zremsz = final_pprint.radiation_flux;
+            }
+            final_pprint.kind = "final_writer_zero_thickness";
+            whole.final_writer_evaluation = copy_real_native_snapshot(final_pprint, 0.0);
             whole.legacy_pprint.final_zero_thickness_evaluation_present = true;
             whole.legacy_pprint.final_temperature_t4 = final_pprint.temperature_t4;
             whole.legacy_pprint.final_total_heating = final_pprint.total_heating;
             whole.legacy_pprint.final_total_cooling = final_pprint.total_cooling;
             whole.legacy_pprint.final_hmctot = final_pprint.hmctot;
             std::cout << "V048746255172582_PATCH52093_FINAL_ZERO_THICKNESS_EVALUATION=ACCEPT\n"
+                      << "V048746255172582_PATCH520144_FINAL_WRITER_LOCAL_RECOMPUTE=XSTARCALC_HEATT_SOURCE_REAL_1E15\n"
+                      << "V048746255172582_PATCH520144_FINAL_WRITER_CUMULATIVE_OWNER=TERMINAL_POSTTRANSPORT\n"
+                      << "V048746255172582_PATCH520144_FINAL_WRITER_STATE=RETAINED_SEPARATELY_FROM_58_TRAJECTORY\n"
                       << "V048746255172582_PATCH52096_FINAL_RECOMPUTE_SEQUENCE_CONTINUITY=ACCEPT\n"
                       << "V048746255172582_PATCH52096_FINAL_RECOMPUTE_TERMINAL_SOURCE_SEQUENCE=" << terminal_source_sequence << "\n"
                       << "V048746255172582_PATCH52096_FINAL_RECOMPUTE_SOURCE_SEQUENCE=" << final_pprint.sequence << "\n"

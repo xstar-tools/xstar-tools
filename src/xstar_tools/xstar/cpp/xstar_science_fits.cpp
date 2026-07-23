@@ -8415,12 +8415,9 @@ std::size_t source_zone_index(const xstar_run_state::ProductWritingState& state,
 }
 
 std::size_t detail_terminal_bridge_hdu_number(std::size_t hdu_number) {
-    // The retained bridge ledger stores the terminal zone-4 snapshot at HDU 6
-    // and the post-terminal convenience copy at HDU 7.  The detailed continuum
-    // product writes the historical surface order where the fourth radial HDU
-    // uses the post-terminal copy and the fifth uses the terminal copy.
-    if (hdu_number == 6) return 7;
-    if (hdu_number == 7) return 6;
+    // patch 5.20.14.4: retained detail rows are now already in literal source
+    // order: four pre-transport pprint/savd boundaries followed by the actual
+    // post-transport terminal row.  No terminal HDU swap is source-faithful.
     return hdu_number;
 }
 

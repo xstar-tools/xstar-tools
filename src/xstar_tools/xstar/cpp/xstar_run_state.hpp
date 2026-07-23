@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -317,6 +318,11 @@ struct WholeRunAccumulatedState {
     std::filesystem::path native_diagnostics_path;
     std::string native_run_id;
     std::vector<FixedEvaluationState> fixed_evaluations;
+    // v82 patch 5.20.14.4: literal xstar.f90 performs one additional
+    // zero-thickness local recomputation after the radial loop and uses that
+    // local HEATT state for writespectra/writespectra3.  It is deliberately
+    // separate from the canonical fixed-state/DSEC trajectory.
+    std::optional<FixedEvaluationState> final_writer_evaluation;
     std::vector<AcceptedControllerState> accepted_controller_states;
     std::vector<RadialZoneState> radial_zones;
     std::vector<ParameterRowState> parameter_rows;
@@ -359,6 +365,7 @@ struct ProductWritingState {
     std::filesystem::path native_diagnostics_path;
     std::string native_run_id;
     std::vector<FixedEvaluationState> fixed_evaluations;
+    std::optional<FixedEvaluationState> final_writer_evaluation;
     std::vector<RadialZoneState> radial_zones;
     std::vector<ParameterRowState> parameter_rows;
     std::vector<ElementMetadataState> element_metadata;
