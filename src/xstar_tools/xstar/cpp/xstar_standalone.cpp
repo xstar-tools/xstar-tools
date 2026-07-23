@@ -10207,7 +10207,7 @@ void append_call1_dsec_population_sweep_v82_patch512(
     const FixedDsecSnapshot& snapshot,
     const std::filesystem::path& native_root) {
     if (!data.reference_trajectory_mode || snapshot.call_index != 1u ||
-        snapshot.sequence < 1u || snapshot.sequence > 21u ||
+        snapshot.sequence < 1u || snapshot.sequence > 20u ||
         data.call1_source_workspaces_root.empty() || data.sequence23_source_solve_stage_rows.empty()) return;
 
     const int sequence = static_cast<int>(snapshot.sequence);
@@ -10227,8 +10227,13 @@ void append_call1_dsec_population_sweep_v82_patch512(
     const auto source_current = read_runtime_state_workspace_values(source_current_spec);
 
     RuntimeStateWorkspace source_next_spec;
-    source_next_spec.call_index = sequence < 21 ? 1 : 1;
-    source_next_spec.directory = sequence < 21
+    source_next_spec.call_index = 1;
+    // v82 patch 5.20.14.1: option-17/source-faithful convergence is 20 DSEC
+    // evaluations in call 1.  Sequence 21 belongs only to the older
+    // 21/1/18/17 Python trajectory and is absent from the corrected sparse
+    // cache.  After DSEC sequence 20, compare against the retained call-1
+    // final state at canonical source sequence 58.
+    source_next_spec.directory = sequence < 20
         ? call1_source_workspace_dir_v82_patch512(data, sequence + 1)
         : call1_source_workspace_dir_v82_patch512(data, 58);
     const auto source_next = read_runtime_state_workspace_values(source_next_spec);
@@ -10363,7 +10368,7 @@ void append_call1_dsec_population_sweep_v82_patch512(
             if (rs) { ++rel_targets; if (!first_rel || rs < first_rel) { first_rel=rs; first_rel_phase=rp; } }
             if (ss) { ++sci_targets; if (!first_sci || ss < first_sci) { first_sci=ss; first_sci_phase=sp; } }
         }
-        std::cout << "V048746255172582_CALL1_DSEC_POPULATION_SWEEP_ROWS=" << (21u * targets.size()) << "\n"
+        std::cout << "V048746255172582_CALL1_DSEC_POPULATION_SWEEP_ROWS=" << (20u * targets.size()) << "\n"
                   << "V048746255172582_CALL1_DSEC_POPULATION_FIRST_RELATIVE_SEQUENCE=" << (first_rel ? std::to_string(first_rel) : "NONE") << "\n"
                   << "V048746255172582_CALL1_DSEC_POPULATION_FIRST_RELATIVE_PHASE=" << first_rel_phase << "\n"
                   << "V048746255172582_CALL1_DSEC_POPULATION_RELATIVE_TARGETS=" << rel_targets << "\n"
@@ -12551,7 +12556,7 @@ int standalone_iteration_evaluator_v67(
         }
         xstar_fixed_state_input_v1 input{};
         fill_standalone_input_v67(*data, *trial, input);
-        if (data->reference_trajectory_mode && snapshot.call_index == 1u && snapshot.sequence >= 1u && snapshot.sequence <= 21u &&
+        if (data->reference_trajectory_mode && snapshot.call_index == 1u && snapshot.sequence >= 1u && snapshot.sequence <= 20u &&
             input.global_xilevg && input.global_level_count > 0u) {
             data->call1_current_input_global_xilevg.assign(input.global_xilevg, input.global_xilevg + input.global_level_count);
         } else {
@@ -12616,7 +12621,7 @@ int standalone_iteration_evaluator_v67(
         snapshot.continuum_cooling = output.continuum_cooling;
         attach_native_thermal_components_v70(data->fixed_context, snapshot);
         std::filesystem::path call1_sweep_native_root_v82_patch512;
-        if (data->reference_trajectory_mode && snapshot.call_index == 1u && snapshot.sequence >= 1u && snapshot.sequence <= 21u) {
+        if (data->reference_trajectory_mode && snapshot.call_index == 1u && snapshot.sequence >= 1u && snapshot.sequence <= 20u) {
             call1_sweep_native_root_v82_patch512 = native_call1_sweep_dir_v82_patch512(*data, static_cast<int>(snapshot.sequence));
             std::filesystem::create_directories(call1_sweep_native_root_v82_patch512);
             std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> sweep_message{};
