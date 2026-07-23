@@ -75,19 +75,45 @@ def natural_cubic_spline(x: Sequence[float], y: Sequence[float], value: float) -
 
 
 def phextrap(energy_ryd: Sequence[float], sigma_cm2: Sequence[float], threshold_ev: float, max_points: int) -> tuple[np.ndarray,np.ndarray]:
-    """Translation of ``phextrap.f90``."""
-    e=list(float(v) for v in energy_ryd); s=list(max(float(v),0.0) for v in sigma_cm2)
+    """Literal translation of ``phextrap.f90``.
+
+    The source deliberately starts from ``ntmp-1`` (Fortran one-based) and
+    writes the first extrapolated point to ``nadd+ntmp-1``.  Consequently the
+    original final tabulated point is discarded/replaced, and even when no
+    extrapolation point is added the returned logical length is ``ntmp-1``.
+    Earlier Python code kept that final point and appended after it, which is
+    not source-faithful and materially changes Type-49 threshold opacity.
+    """
+    e=[float(v) for v in energy_ryd]
+    s=[max(float(v),0.0) for v in sigma_cm2]
     n=min(len(e),len(s))
-    if n <= 0: return np.asarray([],float),np.asarray([],float)
+    if n <= 0:
+        return np.asarray([],float),np.asarray([],float)
     e=e[:n]; s=s[:n]
-    # The source uses ntmp-1 as the last physical point.
-    base=max(n-2,0); e1=e[base]*13.6+threshold_ev; s1=s[base]
-    while s1 > 1e-27 and len(e) < max_points and e1 < 2e5:
-        e2=e1*1.3; s2=s1/(1.3**3)
-        # The source overwrites/extends from ntmp-1.
-        e.append((e2-threshold_ev)/13.6); s.append(s2)
+    if n == 1:
+        # The source's ntmp-1 reference requires at least two pairs in every
+        # active caller.  Keep the single value defensively for malformed data.
+        return np.asarray(e,float),np.asarray(s,float)
+
+    ntmp_initial=n
+    base=ntmp_initial-2
+    e1=e[base]*13.6+threshold_ev
+    s1=s[base]
+    nadd=0
+    # Source final logical array initially ends at ntmp-1.  New points are
+    # written beginning at the old final slot, replacing that tabulated value.
+    out_e=e[:ntmp_initial-1]
+    out_s=s[:ntmp_initial-1]
+    limit=max(int(max_points),0)
+    while s1 > 1e-27 and nadd + ntmp_initial < limit and e1 < 2e5:
+        e2=e1*1.3
+        s2=s1/(1.3**3)
+        nadd += 1
+        out_e.append((e2-threshold_ev)/13.6)
+        out_s.append(s2)
         e1,s1=e2,s2
-    return np.asarray(e,float),np.asarray(s,float)
+    # Literal: ntmp = nadd + ntmp_initial - 1.
+    return np.asarray(out_e,float),np.asarray(out_s,float)
 
 
 def bkhsgo(epi_ev: Sequence[float], threshold_ev: float, d: float, b: Sequence[float], coeff: Sequence[Sequence[float]]) -> np.ndarray:

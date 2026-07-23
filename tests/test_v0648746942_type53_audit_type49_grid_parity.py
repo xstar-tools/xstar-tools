@@ -25,13 +25,19 @@ def test_type49_reduced_grid_capacity_contract() -> None:
     energy = [float(i) / 10.0 for i in range(993)]
     sigma = [1.0e-18 / (i + 1.0) for i in range(993)]
     out_energy, out_sigma = audit._reference_phextrap(energy, sigma, 80.0, 999)
-    assert len(out_energy) == len(out_sigma) == 999
+    # Literal Fortran loop condition is nadd+ntmp<ncn2 and the original
+    # final tabulated point is replaced, so 993 input pairs become 998.
+    assert len(out_energy) == len(out_sigma) == 998
+    assert out_energy[:992] == energy[:992]
+    assert out_sigma[:992] == sigma[:992]
+    assert out_energy[992] != energy[992]
 
     long_energy = [float(i) / 10.0 for i in range(1173)]
     long_sigma = [1.0e-18 / (i + 1.0) for i in range(1173)]
     held_energy, held_sigma = audit._reference_phextrap(long_energy, long_sigma, 80.0, 999)
-    assert held_energy == long_energy
-    assert held_sigma == long_sigma
+    # With no room to extrapolate, phextrap still sets ntmp=ntmp_initial-1.
+    assert held_energy == long_energy[:-1]
+    assert held_sigma == long_sigma[:-1]
 
 
 def test_binary64_hash_is_stable_and_order_sensitive() -> None:
@@ -69,7 +75,7 @@ def test_native_uses_lowered_phextrap_capacity_and_hashes() -> None:
     cpp = (root() / "src/xstar_tools/xstar/cpp/fixed_state_engine.cpp").read_text()
     assert "payload_ints.append(TYPE49_PHEXTRAP_MAX_POINTS)" in lowerer_text
     assert "record_context.phextrap_max_points" in cpp
-    assert "pair_energy_ryd.size()) < phextrap_max_points" in cpp
+    assert "nadd + ntmp_initial < phextrap_max_points" in cpp
     assert "pair_energy_ryd.size()) < n_grid" not in cpp
     for marker in (
         "phextrap_input_energy_hash", "phextrap_input_sigma_hash",

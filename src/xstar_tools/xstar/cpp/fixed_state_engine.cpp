@@ -4239,11 +4239,17 @@ double sequence1_type88_photo_rate(const double* raw,int raw_count,double thresh
     if (n0<=0||threshold<=0.0||n_grid<3||phextrap_limit<3) return 0.0;
     std::vector<double> e,s;e.reserve(n_grid);s.reserve(n_grid);
     for (int j=0;j<n0;++j) {e.push_back(raw[2*j]);s.push_back(std::max(0.0,raw[2*j+1]));}
-    int base=std::max(static_cast<int>(e.size())-2,0);
+    // Literal phextrap.f90 semantics: ntmp-1 is the seed point, the original
+    // final tabulated point is discarded, and the first extrapolated point
+    // replaces that final slot.
+    const int ntmp_initial=static_cast<int>(e.size());
+    int base=std::max(ntmp_initial-2,0);
     double e1=e[base]*13.6+threshold,s1=s[base];
-    while (s1>1.0e-27&&static_cast<int>(e.size())<phextrap_limit&&e1<2.0e5) {
+    if (ntmp_initial>=2) { e.resize(static_cast<std::size_t>(ntmp_initial-1)); s.resize(static_cast<std::size_t>(ntmp_initial-1)); }
+    int nadd=0;
+    while (s1>1.0e-27&&nadd+ntmp_initial<phextrap_limit&&e1<2.0e5) {
         const double e2=e1*1.3,s2=s1/(1.3*1.3*1.3);
-        e.push_back((e2-threshold)/13.6);s.push_back(s2);e1=e2;s1=s2;
+        ++nadd; e.push_back((e2-threshold)/13.6);s.push_back(s2);e1=e2;s1=s2;
     }
     const int ntmp=std::min(e.size(),s.size());
     if (ntmp<=0) return 0.0;
@@ -4328,15 +4334,23 @@ bool evaluate_type53_source_integral(
         phextrap_max_points = record_context->phextrap_max_points;
     }
     if (phextrap_pairs) {
-        const int base = std::max(pair_count - 2, 0);
+        const int ntmp_initial = pair_count;
+        const int base = std::max(ntmp_initial - 2, 0);
         double e1 = pair_energy_ryd[static_cast<std::size_t>(base)] * 13.6 + threshold_ev;
         double s1 = pair_sigma_cm2[static_cast<std::size_t>(base)];
-        // v0.6.47.2 calls phextrap with len(_mapped_grid(c)); the physical
-        // runner's reduced ucalc grid is ncn2m=999.  Do not use the full
-        // 9999-bin phint53 integration grid as extrapolation capacity.
-        while (s1 > 1.0e-27 && static_cast<int>(pair_energy_ryd.size()) < phextrap_max_points && e1 < 2.0e5) {
+        // Literal phextrap.f90: the source seeds from ntmp-1, then writes
+        // stmp(nadd+ntmp-1).  Thus the original final tabulated pair is
+        // discarded/replaced and the loop limit is nadd+ntmp<ncn2 rather
+        // than a vector-size append test.
+        if (ntmp_initial >= 2) {
+            pair_energy_ryd.resize(static_cast<std::size_t>(ntmp_initial - 1));
+            pair_sigma_cm2.resize(static_cast<std::size_t>(ntmp_initial - 1));
+        }
+        int nadd = 0;
+        while (s1 > 1.0e-27 && nadd + ntmp_initial < phextrap_max_points && e1 < 2.0e5) {
             const double e2 = e1 * 1.3;
             const double s2 = s1 / (1.3 * 1.3 * 1.3);
+            ++nadd;
             pair_energy_ryd.push_back((e2 - threshold_ev) / 13.6);
             pair_sigma_cm2.push_back(s2);
             e1 = e2;

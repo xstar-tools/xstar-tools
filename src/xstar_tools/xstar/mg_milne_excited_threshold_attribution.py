@@ -105,22 +105,28 @@ def _read_numeric_lines(path: Path, cast: type[float] | type[int]) -> list[float
 def _reference_phextrap(
     energy_ryd: list[float], sigma_cm2: list[float], threshold_ev: float, max_points: int
 ) -> tuple[list[float], list[float]]:
-    """Literal frozen v0.6.47.2 phextrap behavior.
+    """Literal frozen ``phextrap.f90`` behavior.
 
-    The Python reference appends from the penultimate physical point and uses
-    the reduced mapped-grid length (999) as its capacity.  Records already
-    longer than that capacity are left unchanged.
+    XSTAR seeds from one-based ``ntmp-1`` and writes the first extrapolated
+    point to one-based ``ntmp``.  The original final tabulated point is
+    therefore replaced, and the final logical length is always
+    ``nadd + ntmp_initial - 1``.
     """
     energy = list(energy_ryd)
     sigma = [max(0.0, value) for value in sigma_cm2]
     if len(energy) < 2 or len(energy) != len(sigma):
         return energy, sigma
-    base = max(len(energy) - 2, 0)
+    ntmp_initial = len(energy)
+    base = ntmp_initial - 2
     e1 = energy[base] * 13.6 + threshold_ev
     s1 = sigma[base]
-    while s1 > 1.0e-27 and len(energy) < max_points and e1 < 2.0e5:
+    energy = energy[: ntmp_initial - 1]
+    sigma = sigma[: ntmp_initial - 1]
+    nadd = 0
+    while s1 > 1.0e-27 and nadd + ntmp_initial < max_points and e1 < 2.0e5:
         e2 = e1 * 1.3
         s2 = s1 / (1.3 * 1.3 * 1.3)
+        nadd += 1
         energy.append((e2 - threshold_ev) / 13.6)
         sigma.append(s2)
         e1 = e2
