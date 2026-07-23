@@ -6,6 +6,6 @@ Top-level imports are intentionally lightweight.  Use subpackages such as
 
 from __future__ import annotations
 
-__version__ = "0.6.48.7.46.25.5.17.25.68"
+__version__ = "0.6.48.7.46.25.5.17.25.69"
 
 __all__ = ["__version__"]

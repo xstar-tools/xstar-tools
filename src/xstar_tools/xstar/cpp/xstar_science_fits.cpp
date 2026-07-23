@@ -547,18 +547,31 @@ double source_lte_for_level(const xstar_run_state::FixedEvaluationState& evaluat
     const auto* row = row_meta_by_global(rows, level.global_index);
     if (row) {
         const auto& element = element_for(elements, row->element_index);
+        const bool continuum_public_row =
+            level.level_label.find("continu") != std::string::npos ||
+            level.level_label.find("continuum") != std::string::npos;
         const std::size_t packed = static_cast<std::size_t>(element.row_offset + row->row - 1);
         if (packed < evaluation.source_workspace.lte_populations.size()) {
-            return evaluation.source_workspace.lte_populations[packed];
+            const double packed_lte = evaluation.source_workspace.lte_populations[packed];
+            // v82 patch 5.20.15.2.2: inserted continuum pseudo-levels are not
+            // ordinary solver rows.  Their packed slot can legitimately be a
+            // structural zero while the source LTE owner is the immediately
+            // following ion-ground row.  Do not let that structural zero make
+            // the continuum fallback unreachable.  Ordinary physical levels
+            // retain zero as a valid source value.
+            if (!continuum_public_row || (std::isfinite(packed_lte) && packed_lte != 0.0)) {
+                return std::isfinite(packed_lte) ? packed_lte : 0.0;
+            }
         }
-        // Continuum public rows sometimes point at the next ion ground row in
-        // the population surface.  Use the same source-LTE packed family only
-        // when the adjacent native row exists; never fall back to population.
-        if ((level.level_label.find("continu") != std::string::npos ||
-             level.level_label.find("continuum") != std::string::npos) && row->row + 1 <= element.n_rows) {
+        // Continuum public rows point at the next ion ground row in the
+        // source packed LTE surface when their inserted pseudo-level slot is
+        // structural zero.  Stay within the same retained source-LTE family;
+        // never substitute the population surface.
+        if (continuum_public_row && row->row + 1 <= element.n_rows) {
             const std::size_t adjacent = static_cast<std::size_t>(element.row_offset + row->row);
             if (adjacent < evaluation.source_workspace.lte_populations.size()) {
-                return evaluation.source_workspace.lte_populations[adjacent];
+                const double adjacent_lte = evaluation.source_workspace.lte_populations[adjacent];
+                if (std::isfinite(adjacent_lte)) return adjacent_lte;
             }
         }
     }
@@ -9627,8 +9640,23 @@ std::vector<RrcRow> source_rrc_rows_from_identities(
             if (found_rrc != rrc_bridge.index_map.end() && found_rrc->second < rrc_bridge.count) {
                 const std::size_t bi = found_rrc->second;
                 if (detail_inventory && rrc_bridge.cemab.size() == 2 * rrc_bridge.count) {
-                    row.emis_in = rrc_bridge.cemab[bi];
-                    row.emis_out = rrc_bridge.cemab[rrc_bridge.count + bi];
+                    const double compact_emis_in = rrc_bridge.cemab[bi];
+                    const double compact_emis_out = rrc_bridge.cemab[rrc_bridge.count + bi];
+                    // v82 patch 5.20.15.2.2: the compact cemab bridge is a
+                    // selected/public RRC surface.  For the full 1849-row
+                    // detailed inventory, a structural zero in that compact
+                    // surface must not erase a nonzero source-indexed elumab
+                    // value already reconstructed above.  A finite nonzero
+                    // compact value remains authoritative; zero fills only a
+                    // row that is already zero.
+                    if (std::isfinite(compact_emis_in) &&
+                        (compact_emis_in != 0.0 || row.emis_in == 0.0)) {
+                        row.emis_in = compact_emis_in;
+                    }
+                    if (std::isfinite(compact_emis_out) &&
+                        (compact_emis_out != 0.0 || row.emis_out == 0.0)) {
+                        row.emis_out = compact_emis_out;
+                    }
                 }
                 row.absorption = rrc_bridge.cabab[bi];
                 row.opacity = rrc_bridge.opakab[bi];
