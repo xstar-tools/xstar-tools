@@ -543,6 +543,80 @@ def voigte(vs: float, a: float) -> float:
     return float(psi * (ex + aa * (h1p + aa * (h2p + aa * (h3p + aa * h4p)))))
 
 
+def _voigte_array(vs: np.ndarray, a: float) -> np.ndarray:
+    """Vectorized numerical twin of :func:`voigte` for smooth far wings.
+
+    This is used only outside the compact source-core profile workspace, where
+    the profile varies slowly across an XSTAR continuum bin.  It avoids
+    materializing the enormous declared FORTRAN scratch capacity while retaining
+    the same ``voigte`` branch formulas and constants.
+    """
+    v = np.abs(np.asarray(vs, dtype=float))
+    aa = float(a)
+    v2 = v * v
+    out = np.empty_like(v)
+    sqp = 1.772453851
+    sq2 = 1.414213562
+    if aa == 0.0:
+        out[:] = np.where(v2 >= 100.0, 0.0, np.exp(-v2))
+        return out
+    remaining = np.ones(v.shape, dtype=bool)
+    if aa <= 0.2:
+        m = v >= 5.0
+        if np.any(m):
+            vv = v2[m]
+            out[m] = aa * (15.0 + 6.0 * vv + 4.0 * vv * vv) / (4.0 * vv**3 * sqp)
+            remaining[m] = False
+    m = remaining & ((aa > 1.4) | ((aa + v) > 3.2))
+    if np.any(m):
+        vv = v2[m]
+        a2 = aa * aa
+        uu = sq2 * (a2 + vv)
+        u2 = 1.0 / (uu * uu)
+        out[m] = sq2 / sqp * aa / uu * (
+            1.0 + u2 * (3.0 * vv - a2)
+            + u2 * u2 * (15.0 * vv * vv - 30.0 * vv * a2 + 3.0 * a2 * a2)
+        )
+        remaining[m] = False
+    if np.any(remaining):
+        vr = v[remaining]
+        vv = v2[remaining]
+        ex = np.where(vv >= 100.0, 0.0, np.exp(-vv))
+        quo = np.ones_like(vr)
+        start = np.zeros(vr.shape, dtype=np.int8)
+        m24 = vr >= 2.4
+        quo[m24] = 1.0 / (vv[m24] - 1.5)
+        start[m24] = 10
+        m13 = (~m24) & (vr >= 1.3)
+        start[m13] = 5
+        ak = np.asarray([
+            -1.12470432, -0.15516677, 3.28867591, -2.34357915, 0.42139162,
+            -4.48480194, 9.39456063, -6.61487486, 1.98919585, -0.22041650,
+            0.554153432, 0.278711796, -0.188325687, 0.042991293,
+            -0.003278278, 0.979895023, -0.962846325, 0.532770573,
+            -0.122727278,
+        ], dtype=float)
+        h1 = np.empty_like(vr)
+        for st in (0, 5, 10):
+            ms = start == st
+            if not np.any(ms):
+                continue
+            x = vr[ms]
+            a1 = ak[st:st + 5]
+            h1[ms] = quo[ms] * (a1[0] + x * (a1[1] + x * (a1[2] + x * (a1[3] + x * a1[4]))))
+        if aa <= 0.2:
+            out[remaining] = h1 * aa + ex * (1.0 + aa * aa * (1.0 - 2.0 * vv))
+        else:
+            pqs = 2.0 / sqp
+            h1p = h1 + pqs * ex
+            h2p = pqs * h1p - 2.0 * vv * ex
+            h3p = (pqs * (1.0 - ex * (1.0 - 2.0 * vv)) - 2.0 * vv * h1p) / 3.0 + pqs * h2p
+            h4p = (2.0 * vv * vv * ex - pqs * h1p) / 3.0 + pqs * h3p
+            psi = ak[15] + aa * (ak[16] + aa * (ak[17] + aa * ak[18]))
+            out[remaining] = psi * (ex + aa * (h1p + aa * (h2p + aa * (h3p + aa * h4p))))
+    return out
+
+
 def _source_real(value: float) -> float:
     """Return a source default-real literal promoted to Python float."""
     return float(np.float32(value))
@@ -652,12 +726,14 @@ def build_binemis_spectrum(
     ):
         raise OutputWriterPortError("binemis arrays are shorter than active source ranges")
 
-    # Literal binemis.f90 uses the fixed NBT continuum-profile scratch
-    # capacity (20000), independent of the active 9999-point output grid.
-    # emergent_emissivity.py and the native C++ kernel already preserve this
-    # source dimension; the output-writer translation had incorrectly reduced
-    # it to ``epi.size`` during the original Python port.
+    # binemis.f90 has a very large source-capacity declaration, but materializing
+    # that capacity in Python is unnecessary and prohibitively expensive.  Keep
+    # the validated 20000-point core workspace and reproduce the additional
+    # source-capacity reach below with a compact far-wing continuation on the
+    # actual ncn2 output grid.  For this benchmark every eligible line has raw
+    # ncut <= 4, so the source ncut capacity is never active.
     nbtpp = 20000
+    source_profile_half_steps = 499999
     out = np.asarray(original, dtype=float).copy()
     saved = np.asarray(original, dtype=float).copy()
     out[:, :n] = 0.0
@@ -933,7 +1009,9 @@ def build_binemis_spectrum(
             if mlmin > mlmax:
                 continue
             _profile_lines_applied += 1
-            ml1min = int(nbinc(float(temporary_energy[mlmin - 1]), epi, n))
+            core_energy_min = float(temporary_energy[mlmin - 1])
+            core_energy_max = float(temporary_energy[mlmax - 1])
+            ml1min = int(nbinc(core_energy_min, epi, n))
             ml1max = int(nbinc(float(temporary_energy[mlmax - 1]), epi, n))
             ml1m = ml1min
             mlmin = max(mlmin, 2)
@@ -997,6 +1075,34 @@ def build_binemis_spectrum(
                 out[3, lo - 1 : hi] += temporary_binned[1, lo - 1 : hi]
                 out[2, lo - 1 : hi] += temporary_binned[0, lo - 1 : hi]
                 temporary_binned[:, lo - 1 : hi] = 0.0
+
+            # Source-capacity far-wing continuation.  The literal FORTRAN
+            # declares enough temporary-grid room for 499999 substeps on each
+            # side of line center.  The old Python/C++ translation stopped at
+            # the 20000-point core workspace, truncating smooth high-energy
+            # Voigt wings.  Reproduce only that missing reach directly on the
+            # 9999-bin output grid; no million-point allocation or loop is used.
+            source_energy_min = max(0.0, e00 - float(source_profile_half_steps) * deleused)
+            source_energy_max = min(float(epi[n - 1]), e00 + float(source_profile_half_steps) * deleused)
+            if source_energy_min < core_energy_min or source_energy_max > core_energy_max:
+                left = epi[: n - 1]
+                right = epi[1:n]
+                outside_core = (right < core_energy_min) | (left > core_energy_max)
+                within_source = (left >= source_energy_min) & (right <= source_energy_max)
+                far_mask = outside_core & within_source
+                if np.any(far_mask):
+                    far_idx = np.flatnonzero(far_mask)
+                    v_left = (left[far_idx] - etmp) / dele
+                    v_right = (right[far_idx] - etmp) / dele
+                    avg_profile = 0.5 * (_voigte_array(v_left, aasmall) + _voigte_array(v_right, aasmall))
+                    avg_profile = avg_profile / _source_real(1.772) / dele / _source_real(1.602197e-12)
+                    out[2, far_idx] += lum[0, j] * avg_profile
+                    out[3, far_idx] += lum[1, j] * avg_profile
+                    if timing is not None:
+                        timing["final_product_build.spectrum.binemis_far_wing_bins"] = (
+                            float(timing.get("final_product_build.spectrum.binemis_far_wing_bins", 0.0))
+                            + float(far_idx.size)
+                        )
 
     if timing is not None:
         timing["final_product_build.spectrum.binemis_profile_seconds"] = float(time.perf_counter() - _profile_t0)

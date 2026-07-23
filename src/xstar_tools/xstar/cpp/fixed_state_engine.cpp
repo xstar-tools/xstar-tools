@@ -7647,8 +7647,15 @@ bool native_bound_free_curve(const Program& program,
     const double* r = program.reals.data() + record.real_offset;
     if (record.opcode == XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE ||
         record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE) {
-        const Type53SourceShadow& shadow = record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE
+        // This curve is consumed by the full-grid calc_emis/HEATT spectral
+        // replay.  Prefer the retained full calc_emis shadow; the base shadow
+        // belongs to calc_hmc on the reduced DSEC grid.  In particular,
+        // Type49 phextrap must retain the full caller ncn2=9999 limit here.
+        const Type53SourceShadow& base_shadow = record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE
             ? evaluated.type49_shadow : evaluated.type53_shadow;
+        const Type53SourceShadow& calc_emis_shadow = record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE
+            ? evaluated.type49_calc_emis_shadow : evaluated.type53_calc_emis_shadow;
+        const Type53SourceShadow& shadow = calc_emis_shadow.valid ? calc_emis_shadow : base_shadow;
         const int pair_count = shadow.phextrap_input_pair_count > 0
             ? shadow.phextrap_input_pair_count
             : static_cast<int>(record.real_count / 2);
@@ -7811,15 +7818,35 @@ void accumulate_native_bound_free_rrc_from_abundances_v82_patch520(
         const auto mapped = phint53_grid_map_v82_patch57(
             curve, input.radiation_energy_ev, static_cast<int>(n));
         if (!mapped.valid) return;
-        const Type53SourceShadow* shadow = record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE
+        const Type53SourceShadow* base_shadow = record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE
             ? &evaluated.type49_shadow : &evaluated.type53_shadow;
+        const Type53SourceShadow* full_shadow = record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE
+            ? &evaluated.type49_calc_emis_shadow : &evaluated.type53_calc_emis_shadow;
+        const Type53SourceShadow* shadow = full_shadow && full_shadow->valid ? full_shadow : base_shadow;
+        const Type53SourceShadow* escape_shadow = base_shadow;
         const double bktm = xstar_constants::kBoltzmannErgPerK * input.temperature_k /
             xstar_constants::kModernErgPerEv;
         const double covering = effective_spectral_covering_fraction_v82_patch58(input);
-        const double ptmp1 = covering >= 1.0 - 1.0e-15 ? 0.0 :
-            (shadow && shadow->valid ? std::max(0.0, shadow->ptmp1) : 0.5 * (1.0 - covering));
-        const double ptmp2 = covering >= 1.0 - 1.0e-15 ? 1.0 :
-            (shadow && shadow->valid ? std::max(0.0, shadow->ptmp2) : 0.5 * (1.0 - covering) + covering);
+        const auto pescv_source_v82_patch520147 = [](double tau) {
+            return std::max(std::exp(-tau), 1.0e-12) / 2.0;
+        };
+        double fallback_tau_in = 0.0;
+        double fallback_tau_out = 0.0;
+        if (record.continuum_index_one_based > 0 && input.continuum_tau_in &&
+            input.continuum_tau_out &&
+            static_cast<std::size_t>(record.continuum_index_one_based) <= input.continuum_tau_count) {
+            fallback_tau_in = input.continuum_tau_in[record.continuum_index_one_based - 1];
+            fallback_tau_out = input.continuum_tau_out[record.continuum_index_one_based - 1];
+        }
+        // Literal calc_emis_ion never replaces the cfrac=1 outward escape
+        // factor with unity.  It still evaluates 2*pescv(tau1+tau2).
+        const double ptmp1 = escape_shadow && escape_shadow->valid
+            ? std::max(0.0, escape_shadow->ptmp1)
+            : pescv_source_v82_patch520147(fallback_tau_in) * (1.0 - covering);
+        const double ptmp2 = escape_shadow && escape_shadow->valid
+            ? std::max(0.0, escape_shadow->ptmp2)
+            : pescv_source_v82_patch520147(fallback_tau_out) * (1.0 - covering) +
+                2.0 * pescv_source_v82_patch520147(fallback_tau_in + fallback_tau_out) * covering;
         double exptst = (input.radiation_energy_ev[mapped.nb1_zero_based] - curve.threshold_ev) /
             std::max(bktm, 1.0e-300);
         for (int kl = mapped.nb1_zero_based; kl < mapped.klmax_zero_based &&
@@ -7921,9 +7948,17 @@ void accumulate_native_bound_free_surface(const NativeBoundFreeCurve& curve,
     const bool type49_or_53 = record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE ||
         record.opcode == XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE;
     const bool type99 = record.opcode == XSTAR_FIXED_OPCODE_TYPE99_SUPERLEVEL_BOUND_FREE;
-    const Type53SourceShadow* shadow = nullptr;
-    if (record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE) shadow = &evaluated.type49_shadow;
-    else if (record.opcode == XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE) shadow = &evaluated.type53_shadow;
+    const Type53SourceShadow* base_shadow = nullptr;
+    const Type53SourceShadow* full_shadow = nullptr;
+    if (record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE) {
+        base_shadow = &evaluated.type49_shadow;
+        full_shadow = &evaluated.type49_calc_emis_shadow;
+    } else if (record.opcode == XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE) {
+        base_shadow = &evaluated.type53_shadow;
+        full_shadow = &evaluated.type53_calc_emis_shadow;
+    }
+    const Type53SourceShadow* shadow = full_shadow && full_shadow->valid ? full_shadow : base_shadow;
+    const Type53SourceShadow* escape_shadow = base_shadow;
 
     if (type49_or_53) {
         const auto mapped = phint53_grid_map_v82_patch57(
@@ -7933,10 +7968,26 @@ void accumulate_native_bound_free_surface(const NativeBoundFreeCurve& curve,
         const double bktm = xstar_constants::kBoltzmannErgPerK * input.temperature_k /
             xstar_constants::kModernErgPerEv;
         const double covering = effective_spectral_covering_fraction_v82_patch58(input);
-        const double ptmp1 = covering >= 1.0 - 1.0e-15 ? 0.0 :
-            (shadow && shadow->valid ? std::max(0.0, shadow->ptmp1) : 0.5 * (1.0 - covering));
-        const double ptmp2 = covering >= 1.0 - 1.0e-15 ? 1.0 :
-            (shadow && shadow->valid ? std::max(0.0, shadow->ptmp2) : 0.5 * (1.0 - covering) + covering);
+        const auto pescv_source_v82_patch520147 = [](double tau) {
+            return std::max(std::exp(-tau), 1.0e-12) / 2.0;
+        };
+        double fallback_tau_in = 0.0;
+        double fallback_tau_out = 0.0;
+        if (record.continuum_index_one_based > 0 && input.continuum_tau_in &&
+            input.continuum_tau_out &&
+            static_cast<std::size_t>(record.continuum_index_one_based) <= input.continuum_tau_count) {
+            fallback_tau_in = input.continuum_tau_in[record.continuum_index_one_based - 1];
+            fallback_tau_out = input.continuum_tau_out[record.continuum_index_one_based - 1];
+        }
+        // Literal calc_emis_ion never replaces the cfrac=1 outward escape
+        // factor with unity.  It still evaluates 2*pescv(tau1+tau2).
+        const double ptmp1 = escape_shadow && escape_shadow->valid
+            ? std::max(0.0, escape_shadow->ptmp1)
+            : pescv_source_v82_patch520147(fallback_tau_in) * (1.0 - covering);
+        const double ptmp2 = escape_shadow && escape_shadow->valid
+            ? std::max(0.0, escape_shadow->ptmp2)
+            : pescv_source_v82_patch520147(fallback_tau_out) * (1.0 - covering) +
+                2.0 * pescv_source_v82_patch520147(fallback_tau_in + fallback_tau_out) * covering;
         double exptst = (input.radiation_energy_ev[mapped.nb1_zero_based] - curve.threshold_ev) /
             std::max(bktm, 1.0e-300);
         for (int kl = mapped.nb1_zero_based; kl < mapped.klmax_zero_based && kl + 1 < static_cast<int>(n); ++kl) {

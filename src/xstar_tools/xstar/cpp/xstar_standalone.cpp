@@ -6050,7 +6050,9 @@ bool build_writer_time_binemis_v82_patch520142(
     spectrum_rows.assign(5u * n, 0.0);
     std::array<double,16> stats{};
     std::array<char,512> error{};
-    // Literal binemis.f90 uses the fixed NBT scratch capacity, not ncn2.
+    // Keep a compact 20000-point core workspace.  The much larger declared
+    // FORTRAN source capacity is reproduced by the kernel's far-wing
+    // continuation on the actual ncn2 output grid, not by materializing it.
     constexpr int kSourceBinemisScratchPoints = 20000;
     const int rc = xstar_emissivity_build_binemis_profile(
         static_cast<int>(n), kSourceBinemisScratchPoints, static_cast<int>(n),
@@ -6070,7 +6072,7 @@ bool build_writer_time_binemis_v82_patch520142(
         << (reconstructed_elum_ready ? "SOURCE_HEATT_RADIAL_RCEM_RECONSTRUCTION" : "FINAL_CUMULATIVE_ELUM") << "\n"
         << "V048746255172582_PATCH520142_WRITER_BINEMIS_SOURCE=FINAL_CUMULATIVE_ELUM\n"
         << "V048746255172582_PATCH520142_WRITER_BINEMIS_XLUM=" << std::setprecision(17) << xlum << "\n"
-        << "V048746255172582_PATCH520146_WRITER_BINEMIS_NBTPP=" << kSourceBinemisScratchPoints << "\n"
+        << "V048746255172582_PATCH520147_WRITER_BINEMIS_NBTPP=" << kSourceBinemisScratchPoints << "\n"
         << "V048746255172582_PATCH520142_WRITER_BINEMIS_RANKED_SLOTS=" << slots.size() << "\n"
         << "V048746255172582_PATCH520142_WRITER_BINEMIS_ATTEMPTED=" << stats[0] << "\n"
         << "V048746255172582_PATCH520142_WRITER_BINEMIS_APPLIED=" << stats[1] << "\n";

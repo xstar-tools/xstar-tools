@@ -498,8 +498,15 @@ def evaluate_type53_ucalc_record(
     lfast: int = 2,
     abund1: float = 0.0,
     abund2: float = 0.0,
+    type49_rnist_semantics: bool = False,
 ) -> dict[str, Any]:
-    """Evaluate the complete XSTAR ``ucalc`` type-53 branch for one record."""
+    """Evaluate the XSTAR ``ucalc`` Type-53/Type-49 ``phint53`` branch.
+
+    Type 49 and Type 53 share ``phint53`` but not the Milne partition
+    exponent constructed by ``ucalc.f90``.  Type 49 uses only the first
+    packed photoionization offset; Type 53 additionally includes the
+    excited-parent threshold correction ``ethtmp``.
+    """
     e_ryd = [float(v) for v in record.get("energy_above_threshold_ryd", [])]
     sigma = [float(v) for v in record.get("cross_section_cm2", [])]
     threshold = _finite_float(record.get("threshold_eV"), 0.0)
@@ -525,7 +532,14 @@ def evaluate_type53_ucalc_record(
     rs = q2 / continuum_g
     rnissel = bound_g * rs
     ethtmp = max(0.0, threshold - continuum_energy)
-    exponent_energy = max(0.0, ethtmp + RYDBERG_EV * e_ryd[0])
+    first_offset_eV = RYDBERG_EV * e_ryd[0]
+    # Literal ucalc.f90 family split:
+    #   Type49: exp(-max(0,13.605692*etmpp(1))/(0.861707*t))
+    #   Type53: exp(-max(0,ethtmp+13.605692*etmpp(1))/(0.861707*t))
+    exponent_energy = max(
+        0.0,
+        first_offset_eV if type49_rnist_semantics else ethtmp + first_offset_eV,
+    )
     rnist = rnissel * _expo(-exponent_energy / XSTAR_KT_EV_PER_1E4K / t)
     swrat = bound_g / max(destination_g, 1.0e-300)
 
@@ -566,7 +580,11 @@ def evaluate_type53_ucalc_record(
 
     return {
         "status": "evaluated",
-        "source_branch": "ucalc_type53_phint53_exact_live_rate_grid",
+        "source_branch": (
+            "ucalc_type49_phint53_exact_live_rate_grid"
+            if type49_rnist_semantics
+            else "ucalc_type53_phint53_exact_live_rate_grid"
+        ),
         "ans1_photoionization_s^-1": ans1,
         "ans2_milne_recombination_s^-1": ans2,
         "ans3_cooling_signed_erg_s^-1": ans3,
@@ -581,6 +599,11 @@ def evaluate_type53_ucalc_record(
         "phint53_rrcl2_erg_s^-1": ph.rrcl2_erg_s_inv,
         "rnist": rnist,
         "swrat": swrat,
+        "rnist_family": "type49" if type49_rnist_semantics else "type53",
+        "rnist_first_offset_eV": float(first_offset_eV),
+        "rnist_excited_parent_ethtmp_eV": float(ethtmp),
+        "rnist_exponent_includes_ethtmp": not bool(type49_rnist_semantics),
+        "rnist_exponent_energy_eV": float(exponent_energy),
         "sumr": float(ph.diagnostics.get("sumr", 0.0)),
         "sumi": float(ph.diagnostics.get("sumi", 0.0)),
         "sumh": float(ph.diagnostics.get("sumh", 0.0)),

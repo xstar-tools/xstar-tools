@@ -1360,7 +1360,7 @@ class SourceFaithfulUCalc:
             pass
         return state
 
-    def _type53_from_pairs(self, record: UCalcRecord, context: UCalcContext, spec: UCalcBranchSpec, *, energy_ryd: Sequence[float], sigma_cm2: Sequence[float], threshold_ev: float, idest1: int, idest2: int, zero_reverse: bool = False, zero_all_heating: bool = False) -> UCalcResult:
+    def _type53_from_pairs(self, record: UCalcRecord, context: UCalcContext, spec: UCalcBranchSpec, *, energy_ryd: Sequence[float], sigma_cm2: Sequence[float], threshold_ev: float, idest1: int, idest2: int, zero_reverse: bool = False, zero_all_heating: bool = False, type49_rnist_semantics: bool = False) -> UCalcResult:
         from xstar_tools.rates_type53 import evaluate_type53_ucalc_record
         physical_dest_energy,dest_weight=self._parent_destination_context(context,idest2)
         continuum=context.levels.require(context.nlevp); bound=context.levels.require(idest1)
@@ -1381,7 +1381,7 @@ class SourceFaithfulUCalc:
             "leveltemp_destination_energy_eV":leveltemp_dest_energy,
             "leveltemp_workspace_semantics":"persistent_higher_columns",
         }
-        ev=evaluate_type53_ucalc_record(decoded,self._live_type53_state(context),temperature_k=context.temperature_k,xpx_cm3=context.hydrogen_density_cm3,electron_fraction_xee=context.electron_fraction_xee,ptmp1=context.ptmp1,ptmp2=context.ptmp2,lfast=context.lfast,abund1=context.abund1,abund2=context.abund2)
+        ev=evaluate_type53_ucalc_record(decoded,self._live_type53_state(context),temperature_k=context.temperature_k,xpx_cm3=context.hydrogen_density_cm3,electron_fraction_xee=context.electron_fraction_xee,ptmp1=context.ptmp1,ptmp2=context.ptmp2,lfast=context.lfast,abund1=context.abund1,abund2=context.abund2,type49_rnist_semantics=type49_rnist_semantics)
         ev = {
             **dict(ev),
             "physical_parent_destination_energy_eV": physical_dest_energy,
@@ -1989,7 +1989,7 @@ class SourceFaithfulUCalc:
         if n<2: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type49_missing_cross_section_pairs")
         caller_grid = self._bound_free_caller_grid(c)
         e,xs=phextrap(e[:n],xs[:n],threshold,len(caller_grid))
-        out=self._type53_from_pairs(r,c,s,energy_ryd=e,sigma_cm2=xs,threshold_ev=threshold,idest1=id1,idest2=id2)
+        out=self._type53_from_pairs(r,c,s,energy_ryd=e,sigma_cm2=xs,threshold_ev=threshold,idest1=id1,idest2=id2,type49_rnist_semantics=True)
         return replace(out, diagnostics={**dict(out.diagnostics),
             "type49_phextrap_grid_role": str(c.extras.get("bound_free_radiation_grid_role", "auto") or "auto"),
             "type49_phextrap_grid_points": int(caller_grid.size),

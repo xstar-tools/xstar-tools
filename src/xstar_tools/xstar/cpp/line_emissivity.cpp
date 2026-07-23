@@ -154,7 +154,7 @@ int xstar_emissivity_build_binemis_profile(
     double* temp_prof0 = new double[static_cast<std::size_t>(nbtpp)]();
     double* temp_prof1 = new double[static_cast<std::size_t>(nbtpp)]();
     double* temp_energy = new double[static_cast<std::size_t>(nbtpp)]();
-    long long attempted = 0, applied = 0;
+    long long attempted = 0, applied = 0, far_wing_bins = 0;
     for (int s = 0; s < n_line_slots; ++s) {
         const long long line_index_ll = slot_line_index[s];
         if (line_index_ll <= 0 || line_index_ll > n_lum_lines) continue;
@@ -239,8 +239,10 @@ int xstar_emissivity_build_binemis_profile(
         }
         if (mlmin > mlmax) continue;
         ++applied;
-        ml1min = nbinc_cpp(temp_energy[mlmin - 1], epi_ev, n);
-        ml1max = nbinc_cpp(temp_energy[mlmax - 1], epi_ev, n);
+        const double core_energy_min = temp_energy[mlmin - 1];
+        const double core_energy_max = temp_energy[mlmax - 1];
+        ml1min = nbinc_cpp(core_energy_min, epi_ev, n);
+        ml1max = nbinc_cpp(core_energy_max, epi_ev, n);
         int ml1m = ml1min;
         mlmin = std::max(mlmin, 2);
         mlmax = std::min(mlmax, nbtpp);
@@ -275,6 +277,37 @@ int xstar_emissivity_build_binemis_profile(
                 temp_binned1[k - 1] = 0.0;
             }
         }
+
+        // binemis.f90 declares enough source workspace for 499999 profile
+        // substeps on either side of line center.  Materializing that array is
+        // unnecessary: outside the compact core the Voigt wing is smooth on
+        // the XSTAR continuum grid, so continue the source reach directly by
+        // trapezoid-averaging the same profile formula over each output bin.
+        constexpr long long kSourceProfileHalfSteps = 499999LL;
+        const double source_energy_min = std::max(0.0,
+            e00 - static_cast<double>(kSourceProfileHalfSteps) * deleused);
+        const double source_energy_max = std::min(epi_ev[n - 1],
+            e00 + static_cast<double>(kSourceProfileHalfSteps) * deleused);
+        if (source_energy_min < core_energy_min || source_energy_max > core_energy_max) {
+            const auto profile_at = [&](double energy) {
+                const double dv = (energy - etmp) / dele;
+                double h = aasmall > source_real_literal(1.0e-9)
+                    ? voigte_cpp(std::fabs(dv), aasmall)
+                    : std::exp(-dv * dv);
+                return h / source_real_literal(1.772) / dele / source_real_literal(1.602197e-12);
+            };
+            for (int k = 0; k + 1 < n; ++k) {
+                const double left = epi_ev[k];
+                const double right = epi_ev[k + 1];
+                const bool outside_core = right < core_energy_min || left > core_energy_max;
+                const bool within_source = left >= source_energy_min && right <= source_energy_max;
+                if (!outside_core || !within_source) continue;
+                const double avg_profile = 0.5 * (profile_at(left) + profile_at(right));
+                out_flat[2 * ncols + k] += lum0 * avg_profile;
+                out_flat[3 * ncols + k] += lum1 * avg_profile;
+                ++far_wing_bins;
+            }
+        }
     }
     for (int kl = 0; kl < n; ++kl) {
         out_flat[2 * ncols + kl] += original_flat[1 * ncols + kl];
@@ -286,6 +319,9 @@ int xstar_emissivity_build_binemis_profile(
     stats[0] = static_cast<double>(attempted);
     stats[1] = static_cast<double>(applied);
     stats[2] = static_cast<double>(n_line_slots);
+    stats[3] = static_cast<double>(far_wing_bins);
+    stats[4] = 499999.0;
+    stats[5] = static_cast<double>(nbtpp);
     delete[] temp_binned0; delete[] temp_binned1; delete[] temp_prof0; delete[] temp_prof1; delete[] temp_energy;
     write_message(errbuf, errbuf_size, "xstar_emissivity_build_binemis_profile evaluated");
     return 0;

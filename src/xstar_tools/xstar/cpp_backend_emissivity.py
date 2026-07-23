@@ -163,7 +163,7 @@ def build_binemis_profile_cpp(
     stats = np.zeros(16, dtype=np.float64)
     buf = ctypes.create_string_buffer(512)
     rc = lib.xstar_emissivity_build_binemis_profile(
-        int(ncn2), int(epi.size), int(original2.shape[1]), int(slots.size), int(lum2.shape[1]),
+        int(ncn2), 20000, int(original2.shape[1]), int(slots.size), int(lum2.shape[1]),
         float(xlum), float(temperature_1e4K), float(turbulent_velocity_km_s),
         epi, np.ascontiguousarray(dp), lum, original, incident,
         slots, wavelength, data_type, atomic_mass, natural, auger_width, auger_rate,
