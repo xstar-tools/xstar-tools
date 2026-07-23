@@ -7703,7 +7703,8 @@ struct DeferredRrcRecordV82Patch520 {
     int rate_type = 0;
     bool source_rate42_type88 = false;
     double type88_rnist = 0.0;
-    NativeBoundFreeCurve curve;
+    NativeBoundFreeCurve opacity_curve;
+    NativeBoundFreeCurve emission_curve;
     EvaluatedRecord evaluated;
     double lower_abundance = 0.0;
     double upper_abundance = 0.0;
@@ -9560,7 +9561,8 @@ int run_impl(
                         deferred.rate_type = source_record.rate_type;
                         deferred.source_rate42_type88 = true;
                         deferred.type88_rnist = rnist;
-                        deferred.curve = std::move(type88_curve);
+                        deferred.opacity_curve = type88_curve;
+                        deferred.emission_curve = std::move(type88_curve);
                         deferred.evaluated = std::move(type88_eval);
                         deferred.lower_abundance = active_population_for_full_row(
                             active, buffers.populations, source_record.lower_row) * active.element.abundance;
@@ -9592,11 +9594,17 @@ int run_impl(
                 deferred.source_position = static_cast<std::uint64_t>(source_record.source_position);
                 deferred.record = static_cast<std::int64_t>(source_record.record);
                 deferred.rate_type = source_record.rate_type;
-                NativeBoundFreeCurve emission_curve_v82_patch520148;
+                // v82 patch 5.20.14.9: split the deferred calc_emis consumer
+                // into its literal opacity/depth and emission views.  The full
+                // calc_emis curve is required by opakc/dpthc; the base curve
+                // remains the stable emission owner until 5.20.15 corrects the
+                // retained tauc workspace and re-enables literal pescv(tauc).
+                deferred.opacity_curve = curve;
+                NativeBoundFreeCurve emission_curve_v82_patch520149;
                 if (!native_bound_free_curve(ctx.program, source_record, evaluated[k],
-                        emission_curve_v82_patch520148, false))
-                    emission_curve_v82_patch520148 = curve;
-                deferred.curve = std::move(emission_curve_v82_patch520148);
+                        emission_curve_v82_patch520149, false))
+                    emission_curve_v82_patch520149 = curve;
+                deferred.emission_curve = std::move(emission_curve_v82_patch520149);
                 deferred.evaluated = evaluated[k];
                 deferred.lower_abundance = active_population_for_full_row(
                     active, buffers.populations, source_record.lower_row) * active.element.abundance;
@@ -10119,7 +10127,7 @@ int run_impl(
                 if (slot >= opakab.size()) throw std::runtime_error("Type-88 retained kkkl exceeds opakab workspace");
                 const auto& deferred = *dit->second;
                 const auto scalar = source_type88_stale_opakab_v82_patch52010(
-                    deferred.curve, deferred.type88_rnist,
+                    deferred.opacity_curve, deferred.type88_rnist,
                     deferred.lower_abundance, deferred.upper_abundance, input);
 
                 Type88StaleAuditRowV82Patch52010 audit;
@@ -10938,7 +10946,7 @@ int run_impl(
                     if (it == rrc_slot_by_identity_v82_patch520.end()) continue;
                     const double rank_energy_ev_v82_patch5209 =
                         source_errc_rank_energy_for_slot_v82_patch5209(
-                            it->second, deferred.source_position, deferred.record, deferred.curve.threshold_ev);
+                            it->second, deferred.source_position, deferred.record, deferred.opacity_curve.threshold_ev);
                     const double errc_wavelength_a_v82_patch5209 = rank_energy_ev_v82_patch5209 > 0.0
                         ? source_real_literal_v82_patch5208(12398.4016) /
                             std::max(1.0e-34, rank_energy_ev_v82_patch5209)
@@ -10950,10 +10958,10 @@ int run_impl(
                     if (!consumer_v82_patch5208.actual_consumer) continue;
                 }
                 accumulate_native_bound_free_opacity_from_abundances_v82_patch5206(
-                    deferred.curve, *rit->second, deferred.lower_abundance, input,
+                    deferred.opacity_curve, *rit->second, deferred.lower_abundance, input,
                     heatt_bound_free_opacity_v82_patch5206);
                 accumulate_native_bound_free_rrc_from_abundances_v82_patch520(
-                    deferred.curve, deferred.evaluated, *rit->second, deferred.lower_abundance,
+                    deferred.emission_curve, deferred.evaluated, *rit->second, deferred.lower_abundance,
                     deferred.upper_abundance, input, heatt_rrc_continuum_emission_v82_patch520);
                 if (deferred.source_rate42_type88) {
                     ++rate42_rrc_records_v82_patch520;
@@ -11006,7 +11014,7 @@ int run_impl(
                 auto sit = rrc_slot_by_identity_v82_patch5208.find({deferred.source_position,deferred.record});
                 if (sit != rrc_slot_by_identity_v82_patch5208.end()) slot_one_based = sit->second;
                 const double feature_energy = source_errc_rank_energy_for_slot_v82_patch5209(
-                    slot_one_based, deferred.source_position, deferred.record, deferred.curve.threshold_ev);
+                    slot_one_based, deferred.source_position, deferred.record, deferred.opacity_curve.threshold_ev);
                 const double wavelength = feature_energy > 0.0
                     ? source_real_literal_v82_patch5208(12398.4016) / feature_energy : 0.0;
                 SourceConsumerDecisionV82Patch5208 decision;
@@ -11131,7 +11139,7 @@ int run_impl(
                 const int slot_one_based = pr.continuum_index_one_based;
                 const auto identity = std::make_pair(
                     deferred.source_position, deferred.record);
-                double identity_energy_v82_patch5209 = deferred.curve.threshold_ev;
+                double identity_energy_v82_patch5209 = deferred.opacity_curve.threshold_ev;
                 const auto legacy_energy_it_v82_patch5209 =
                     source_errc_rank_energy_by_identity_patch52082_audit_v82_patch5209.find(identity);
                 if (legacy_energy_it_v82_patch5209 !=
@@ -11140,7 +11148,7 @@ int run_impl(
                 const double slot_energy_v82_patch5209 =
                     source_errc_rank_energy_for_slot_v82_patch5209(
                         slot_one_based, deferred.source_position, deferred.record,
-                        deferred.curve.threshold_ev);
+                        deferred.opacity_curve.threshold_ev);
                 const double identity_wavelength_v82_patch5209 = identity_energy_v82_patch5209 > 0.0
                     ? source_real_literal_v82_patch5208(12398.4016) /
                         std::max(1.0e-34, identity_energy_v82_patch5209) : 0.0;
@@ -11299,7 +11307,7 @@ int run_impl(
                         }
                     }
                     const double rank_energy_v82_patch5209 = source_errc_rank_energy_for_slot_v82_patch5209(
-                        slot_one_based, deferred.source_position, deferred.record, deferred.curve.threshold_ev);
+                        slot_one_based, deferred.source_position, deferred.record, deferred.opacity_curve.threshold_ev);
                     const double errc_wavelength_v82_patch5209 = rank_energy_v82_patch5209 > 0.0
                         ? source_real_literal_v82_patch5208(12398.4016) /
                             std::max(1.0e-34, rank_energy_v82_patch5209) : 0.0;
@@ -11310,7 +11318,7 @@ int run_impl(
                 }
                 std::vector<double> one(continuum_capacity, 0.0);
                 accumulate_native_bound_free_opacity_from_abundances_v82_patch5206(
-                    deferred.curve, *rit->second, deferred.lower_abundance, input, one);
+                    deferred.opacity_curve, *rit->second, deferred.lower_abundance, input, one);
                 const ProgramRecord& pr = *rit->second;
                 const int ez = element_z_by_index_v82_patch5206.count(pr.element_index)
                     ? element_z_by_index_v82_patch5206[pr.element_index] : 0;
