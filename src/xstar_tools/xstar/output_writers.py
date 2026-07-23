@@ -504,48 +504,41 @@ def build_detail_shell_output(
 
 
 def voigte(vs: float, a: float) -> float:
-    """Literal translation of ``voigte.f90`` with default-REAL literals.
-
-    ``voigte.f90`` declares the working values REAL(8), but its DATA,
-    PARAMETER and branch literals are unsuffixed default REAL.  Round those
-    literals to binary32 before promotion, matching the compiled source and
-    the C++ source-faithful kernel.
-    """
-    r4 = lambda value: float(np.float32(value))
+    """Literal translation of ``voigte.f90`` used by ``binemis``."""
     ak = np.asarray([
-        r4(-1.12470432), r4(-0.15516677), r4(3.28867591), r4(-2.34357915), r4(0.42139162),
-        r4(-4.48480194), r4(9.39456063), r4(-6.61487486), r4(1.98919585), r4(-0.22041650),
-        r4(0.554153432), r4(0.278711796), r4(-0.188325687), r4(0.042991293),
-        r4(-0.003278278), r4(0.979895023), r4(-0.962846325), r4(0.532770573),
-        r4(-0.122727278),
+        -1.12470432, -0.15516677, 3.28867591, -2.34357915, 0.42139162,
+        -4.48480194, 9.39456063, -6.61487486, 1.98919585, -0.22041650,
+        0.554153432, 0.278711796, -0.188325687, 0.042991293,
+        -0.003278278, 0.979895023, -0.962846325, 0.532770573,
+        -0.122727278,
     ], dtype=float)
-    un = r4(1.0); two = r4(2.0)
-    sqp = r4(1.772453851); sq2 = r4(1.414213562)
+    sqp = 1.772453851
+    sq2 = 1.414213562
     v = abs(float(vs)); aa = float(a); u = aa + v; v2 = v * v
-    if aa == r4(0.0):
-        return 0.0 if v2 >= r4(100.0) else float(np.exp(-v2))
-    if aa <= r4(0.2) and v >= r4(5.0):
-        return aa * (r4(15.0) + r4(6.0) * v2 + r4(4.0) * v2 * v2) / (r4(4.0) * v2 * v2 * v2 * sqp)
-    if aa > r4(1.4) or u > r4(3.2):
-        a2 = aa * aa; uu = sq2 * (a2 + v2); u2 = un / (uu * uu)
-        return sq2 / sqp * aa / uu * (un + u2 * (r4(3.0) * v2 - a2) + u2 * u2 * (r4(15.0) * v2 * v2 - r4(30.0) * v2 * a2 + r4(3.0) * a2 * a2))
-    ex = 0.0 if v2 >= r4(100.0) else float(np.exp(-v2))
-    quo = un
-    if v >= r4(2.4):
-        quo = un / (v2 - r4(1.5)); start = 10
-    elif v >= r4(1.3):
+    if aa == 0.0:
+        return 0.0 if v2 >= 100.0 else float(np.exp(-v2))
+    if aa <= 0.2 and v >= 5.0:
+        return aa * (15.0 + 6.0 * v2 + 4.0 * v2 * v2) / (4.0 * v2**3 * sqp)
+    if aa > 1.4 or u > 3.2:
+        a2 = aa * aa; uu = sq2 * (a2 + v2); u2 = 1.0 / (uu * uu)
+        return sq2 / sqp * aa / uu * (1.0 + u2 * (3.0 * v2 - a2) + u2 * u2 * (15.0 * v2 * v2 - 30.0 * v2 * a2 + 3.0 * a2 * a2))
+    ex = 0.0 if v2 >= 100.0 else float(np.exp(-v2))
+    quo = 1.0
+    if v >= 2.4:
+        quo = 1.0 / (v2 - 1.5); start = 10
+    elif v >= 1.3:
         start = 5
     else:
         start = 0
     a1 = ak[start:start + 5]
     h1 = quo * (a1[0] + v * (a1[1] + v * (a1[2] + v * (a1[3] + v * a1[4]))))
-    if aa <= r4(0.2):
-        return float(h1 * aa + ex * (un + aa * aa * (un - two * v2)))
-    pqs = two / sqp
+    if aa <= 0.2:
+        return float(h1 * aa + ex * (1.0 + aa * aa * (1.0 - 2.0 * v2)))
+    pqs = 2.0 / sqp
     h1p = h1 + pqs * ex
-    h2p = pqs * h1p - two * v2 * ex
-    h3p = (pqs * (un - ex * (un - two * v2)) - two * v2 * h1p) / r4(3.0) + pqs * h2p
-    h4p = (two * v2 * v2 * ex - pqs * h1p) / r4(3.0) + pqs * h3p
+    h2p = pqs * h1p - 2.0 * v2 * ex
+    h3p = (pqs * (1.0 - ex * (1.0 - 2.0 * v2)) - 2.0 * v2 * h1p) / 3.0 + pqs * h2p
+    h4p = (2.0 * v2 * v2 * ex - pqs * h1p) / 3.0 + pqs * h3p
     psi = ak[15] + aa * (ak[16] + aa * (ak[17] + aa * ak[18]))
     return float(psi * (ex + aa * (h1p + aa * (h2p + aa * (h3p + aa * h4p)))))
 
@@ -562,39 +555,39 @@ def _voigte_array(vs: np.ndarray, a: float) -> np.ndarray:
     aa = float(a)
     v2 = v * v
     out = np.empty_like(v)
-    sqp = float(np.float32(1.772453851))
-    sq2 = float(np.float32(1.414213562))
-    if aa == float(np.float32(0.0)):
+    sqp = 1.772453851
+    sq2 = 1.414213562
+    if aa == 0.0:
         out[:] = np.where(v2 >= 100.0, 0.0, np.exp(-v2))
         return out
     remaining = np.ones(v.shape, dtype=bool)
-    if aa <= float(np.float32(0.2)):
-        m = v >= float(np.float32(5.0))
+    if aa <= 0.2:
+        m = v >= 5.0
         if np.any(m):
             vv = v2[m]
-            out[m] = aa * (float(np.float32(15.0)) + float(np.float32(6.0)) * vv + float(np.float32(4.0)) * vv * vv) / (float(np.float32(4.0)) * vv**3 * sqp)
+            out[m] = aa * (15.0 + 6.0 * vv + 4.0 * vv * vv) / (4.0 * vv**3 * sqp)
             remaining[m] = False
-    m = remaining & ((aa > float(np.float32(1.4))) | ((aa + v) > float(np.float32(3.2))))
+    m = remaining & ((aa > 1.4) | ((aa + v) > 3.2))
     if np.any(m):
         vv = v2[m]
         a2 = aa * aa
         uu = sq2 * (a2 + vv)
         u2 = 1.0 / (uu * uu)
         out[m] = sq2 / sqp * aa / uu * (
-            float(np.float32(1.0)) + u2 * (float(np.float32(3.0)) * vv - a2)
-            + u2 * u2 * (float(np.float32(15.0)) * vv * vv - float(np.float32(30.0)) * vv * a2 + float(np.float32(3.0)) * a2 * a2)
+            1.0 + u2 * (3.0 * vv - a2)
+            + u2 * u2 * (15.0 * vv * vv - 30.0 * vv * a2 + 3.0 * a2 * a2)
         )
         remaining[m] = False
     if np.any(remaining):
         vr = v[remaining]
         vv = v2[remaining]
         ex = np.where(vv >= 100.0, 0.0, np.exp(-vv))
-        quo = np.full_like(vr, float(np.float32(1.0)))
+        quo = np.ones_like(vr)
         start = np.zeros(vr.shape, dtype=np.int8)
-        m24 = vr >= float(np.float32(2.4))
-        quo[m24] = float(np.float32(1.0)) / (vv[m24] - float(np.float32(1.5)))
+        m24 = vr >= 2.4
+        quo[m24] = 1.0 / (vv[m24] - 1.5)
         start[m24] = 10
-        m13 = (~m24) & (vr >= float(np.float32(1.3)))
+        m13 = (~m24) & (vr >= 1.3)
         start[m13] = 5
         ak = np.asarray([
             -1.12470432, -0.15516677, 3.28867591, -2.34357915, 0.42139162,
@@ -602,7 +595,7 @@ def _voigte_array(vs: np.ndarray, a: float) -> np.ndarray:
             0.554153432, 0.278711796, -0.188325687, 0.042991293,
             -0.003278278, 0.979895023, -0.962846325, 0.532770573,
             -0.122727278,
-        ], dtype=np.float32).astype(float)
+        ], dtype=float)
         h1 = np.empty_like(vr)
         for st in (0, 5, 10):
             ms = start == st
@@ -611,7 +604,7 @@ def _voigte_array(vs: np.ndarray, a: float) -> np.ndarray:
             x = vr[ms]
             a1 = ak[st:st + 5]
             h1[ms] = quo[ms] * (a1[0] + x * (a1[1] + x * (a1[2] + x * (a1[3] + x * a1[4]))))
-        if aa <= float(np.float32(0.2)):
+        if aa <= 0.2:
             out[remaining] = h1 * aa + ex * (1.0 + aa * aa * (1.0 - 2.0 * vv))
         else:
             pqs = 2.0 / sqp

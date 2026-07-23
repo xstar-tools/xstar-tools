@@ -18,14 +18,6 @@ from typing import Sequence
 import numpy as np
 
 from .radiation import nbinc
-from .constants import (
-    kLegacyLinopacThermalSpeedCoefficient,
-    kLegacyLinopacWidthFloorEv,
-    kLegacyLinopacDampingGeometryFactor,
-    kLegacyLinopacProfileNormalization,
-    kLegacyLinopacCenterVoigtThreshold,
-    kLegacyLinopacWingVoigtThreshold,
-)
 
 EXACT_GRID_MAGIC = 60472.0
 EXACT_GRID_POINTS = 20000
@@ -45,49 +37,51 @@ class SourceLinopacExactGrid:
     valid_points: int
 
 
-def _r4(value: float) -> float:
-    return float(np.float32(value))
-
-
 def _voigte(vs: float, a: float) -> float:
-    # voigte.f90 working values are REAL(8), while DATA/PARAMETER/branch
-    # literals are default REAL. Round source literals to binary32 first.
     ak = (
-        _r4(-1.12470432), _r4(-0.15516677), _r4(3.28867591), _r4(-2.34357915), _r4(0.42139162),
-        _r4(-4.48480194), _r4(9.39456063), _r4(-6.61487486), _r4(1.98919585), _r4(-0.22041650),
-        _r4(0.554153432), _r4(0.278711796), _r4(-0.188325687), _r4(0.042991293),
-        _r4(-0.003278278), _r4(0.979895023), _r4(-0.962846325), _r4(0.532770573),
-        _r4(-0.122727278),
+        -1.12470432, -0.15516677, 3.28867591, -2.34357915, 0.42139162,
+        -4.48480194, 9.39456063, -6.61487486, 1.98919585, -0.22041650,
+        0.554153432, 0.278711796, -0.188325687, 0.042991293,
+        -0.003278278, 0.979895023, -0.962846325, 0.532770573,
+        -0.122727278,
     )
-    un = _r4(1.0); two = _r4(2.0)
-    sqp = _r4(1.772453851); sq2 = _r4(1.414213562)
-    v = abs(float(vs)); aa = float(a); u = aa + v; v2 = v * v
-    if aa == _r4(0.0):
-        return 0.0 if v2 >= _r4(100.0) else float(np.exp(-v2))
-    if aa <= _r4(0.2) and v >= _r4(5.0):
-        return aa * (_r4(15.0) + _r4(6.0) * v2 + _r4(4.0) * v2 * v2) / (_r4(4.0) * v2 * v2 * v2 * sqp)
-    if aa > _r4(1.4) or u > _r4(3.2):
-        a2 = aa * aa; uu = sq2 * (a2 + v2); u2 = un / (uu * uu)
+    sqp = 1.772453851
+    sq2 = 1.414213562
+    v = abs(float(vs))
+    aa = float(a)
+    u = aa + v
+    v2 = v * v
+    if aa == 0.0:
+        return 0.0 if v2 >= 100.0 else float(np.exp(-v2))
+    if aa <= 0.2 and v >= 5.0:
+        return aa * (15.0 + 6.0 * v2 + 4.0 * v2 * v2) / (4.0 * (v2 ** 3) * sqp)
+    if aa > 1.4 or u > 3.2:
+        a2 = aa * aa
+        uu = sq2 * (a2 + v2)
+        u2 = 1.0 / (uu * uu)
         return sq2 / sqp * aa / uu * (
-            un + u2 * (_r4(3.0) * v2 - a2)
-            + u2 * u2 * (_r4(15.0) * v2 * v2 - _r4(30.0) * v2 * a2 + _r4(3.0) * a2 * a2)
+            1.0 + u2 * (3.0 * v2 - a2)
+            + u2 * u2 * (15.0 * v2 * v2 - 30.0 * v2 * a2 + 3.0 * a2 * a2)
         )
-    ex = 0.0 if v2 >= _r4(100.0) else float(np.exp(-v2))
-    quo = un
-    if v >= _r4(2.4):
-        quo = un / (v2 - _r4(1.5)); start = 10
-    elif v >= _r4(1.3):
+    ex = 0.0 if v2 >= 100.0 else float(np.exp(-v2))
+    quo = 1.0
+    start = 0
+    if v >= 2.4:
+        quo = 1.0 / (v2 - 1.5)
+        start = 10
+    elif v >= 1.3:
         start = 5
-    else:
-        start = 0
-    h1 = quo * (ak[start] + v * (ak[start + 1] + v * (ak[start + 2] + v * (ak[start + 3] + v * ak[start + 4]))))
-    if aa <= _r4(0.2):
-        return h1 * aa + ex * (un + aa * aa * (un - two * v2))
-    pqs = two / sqp
+    h1 = quo * (
+        ak[start]
+        + v * (ak[start + 1] + v * (ak[start + 2] + v * (ak[start + 3] + v * ak[start + 4])))
+    )
+    if aa <= 0.2:
+        return h1 * aa + ex * (1.0 + aa * aa * (1.0 - 2.0 * v2))
+    pqs = 2.0 / sqp
     h1p = h1 + pqs * ex
-    h2p = pqs * h1p - two * v2 * ex
-    h3p = (pqs * (un - ex * (un - two * v2)) - two * v2 * h1p) / _r4(3.0) + pqs * h2p
-    h4p = (two * v2 * v2 * ex - pqs * h1p) / _r4(3.0) + pqs * h3p
+    h2p = pqs * h1p - 2.0 * v2 * ex
+    h3p = (pqs * (1.0 - ex * (1.0 - 2.0 * v2)) - 2.0 * v2 * h1p) / 3.0 + pqs * h2p
+    h4p = (2.0 * v2 * v2 * ex - pqs * h1p) / 3.0 + pqs * h3p
     psi = ak[15] + aa * (ak[16] + aa * (ak[17] + aa * ak[18]))
     return psi * (ex + aa * (h1p + aa * (h2p + aa * (h3p + aa * h4p))))
 
@@ -109,17 +103,17 @@ def _source_geometry(
         return None
     ml1 = max(2, min(n - 1, int(nbinc(e0, grid, n))))
     mass = max(float(atomic_mass_amu), 1.0e-30)
-    vth = kLegacyLinopacThermalSpeedCoefficient * float(np.sqrt(float(temperature_1e4K) / mass))
-    deleturb = e0 * (float(vturb_km_s) / _r4(3.0e5))
-    deleth = e0 * (vth / _r4(3.0e5))
+    vth = 12.9 * float(np.sqrt(float(temperature_1e4K) / mass))
+    deleturb = e0 * (float(vturb_km_s) / 3.0e5)
+    deleth = e0 * (vth / 3.0e5)
     dele = float(np.sqrt(deleth * deleth + deleturb * deleturb))
     if not math.isfinite(dele) or dele <= 0.0:
         return None
-    aasmall = float(natural_width_eV) / (kLegacyLinopacWidthFloorEv + dele) / kLegacyLinopacDampingGeometryFactor
+    aasmall = float(natural_width_eV) / (1.0e-24 + dele) / 12.56
     e00 = float(grid[ml1 - 1])
     deleepi = float(grid[ml1] - grid[ml1 - 1])
     ncut = max(1, min(int(deleepi / dele), EXACT_GRID_POINTS // 10))
-    deleused = deleepi / _r4(ncut)
+    deleused = deleepi / float(ncut)
     return grid, ml1, dele, aasmall, deleused
 
 
@@ -157,13 +151,13 @@ def source_linopac_profile_samples(
     def profile(energy: float, threshold: float) -> float:
         delet = (float(energy) - e0) / dele
         if aasmall > threshold:
-            return float(_voigte(abs(delet), aasmall) / kLegacyLinopacProfileNormalization)
-        return float(np.exp(-delet * delet) / kLegacyLinopacProfileNormalization)
+            return float(_voigte(abs(delet), aasmall) / 1.772)
+        return float(np.exp(-delet * delet) / 1.772)
 
-    values[0] = profile(e00, kLegacyLinopacCenterVoigtThreshold)
+    values[0] = profile(e00, 1.0e-6)
     for offset in range(1, radius + 1):
-        values[2 * offset - 1] = profile(e00 - _r4(offset) * deleused, kLegacyLinopacWingVoigtThreshold)
-        values[2 * offset] = profile(e00 + _r4(offset) * deleused, kLegacyLinopacWingVoigtThreshold)
+        values[2 * offset - 1] = profile(e00 - float(offset) * deleused, 1.0e-9)
+        values[2 * offset] = profile(e00 + float(offset) * deleused, 1.0e-9)
     return values
 
 
@@ -214,10 +208,10 @@ def source_linopac_exact_grid(
     def profile(energy: float, threshold: float) -> float:
         delet = (float(energy) - e0) / dele
         if aasmall > threshold:
-            return float(_voigte(abs(delet), aasmall) / kLegacyLinopacProfileNormalization)
-        return float(np.exp(-delet * delet) / kLegacyLinopacProfileNormalization)
+            return float(_voigte(abs(delet), aasmall) / 1.772)
+        return float(np.exp(-delet * delet) / 1.772)
 
-    optpp2[ml2 - 1] = float(optpp) * profile(e00, kLegacyLinopacCenterVoigtThreshold)
+    optpp2[ml2 - 1] = float(optpp) * profile(e00, 1.0e-6)
     mlmin = EXACT_GRID_POINTS
     mlmax = 1
     valid = 1
@@ -227,12 +221,12 @@ def source_linopac_exact_grid(
     for offset in range(1, EXACT_GRID_POINTS // 2 + 1):
         for direction in (-1, 1):
             mlm = ml2 + direction * offset
-            etptst = e00 + _r4(direction * offset) * deleused
+            etptst = e00 + float(direction * offset) * deleused
             if 1 <= mlm <= EXACT_GRID_POINTS and 0.0 < etptst < float(grid[n - 1]):
                 mlmin = min(mlmin, mlm)
                 mlmax = max(mlmax, mlm)
                 etpp[mlm - 1] = etptst
-                optpp2[mlm - 1] = float(optpp) * profile(etptst, kLegacyLinopacWingVoigtThreshold)
+                optpp2[mlm - 1] = float(optpp) * profile(etptst, 1.0e-9)
                 valid += 1
 
     if mlmin > mlmax:

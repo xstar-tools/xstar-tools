@@ -43,7 +43,7 @@ constexpr double kRydEv = 13.60569253;
 // The v0.6.47.2 type-53 evaluator uses the historical rounded Rydberg
 // constant.  Keep it separate from the newer global constant: changing this
 // value moves the cross-section grid and breaks IEEE parity.
-constexpr double kType53RydEv = xstar_constants::kLegacyPhint53RydbergEv;
+constexpr double kType53RydEv = 13.605692;
 constexpr double kSigmaT = 6.6524587321e-25;
 
 extern "C" int xstar_engine_type63_rates_v1(
@@ -3314,7 +3314,7 @@ Type51UpsilonEvaluation type51_upsilon(
     result.bt_type = static_cast<int>(ints[0]);
     result.point_count = n == 7 ? 5 : (n >= 11 ? 9 : 0);
     result.eij_ryd = r[0];
-    result.eij_ev = result.eij_ryd * kType53RydEv;
+    result.eij_ev = result.eij_ryd * 13.605692;
     result.scaling_c = r[1];
     result.physical_temperature_k = temperature_k;
     const double wavelength_a = 12398.4016 / result.eij_ev;
@@ -3479,7 +3479,7 @@ bool type57_coefficients(int n, double temperature, double density, double e1, d
     const double ciono=type57_irc(n,temp,rc,rno);
     if (!(ciono>0.0)) return true;
     if (temperature<tmin) {
-        const double cb=kType53RydEv*1.6021e-19/1.3805e-23;
+        const double cb=13.605692*1.6021e-19/1.3805e-23;
         const double beta=0.25*(std::sqrt((100.0*rc+91.0)/(4.0*rc+3.0))-5.0);
         const double wte=std::pow(std::log(1.0+temperature/cb/rio),beta/(1.0+temperature/cb*rio));
         const double wtm=std::pow(std::log(1.0+tmin/cb/rio),beta/(1.0+tmin/cb*rio));
@@ -4039,106 +4039,44 @@ bool evaluate_type99_source_faithful(
     if (!(threshold_ev > 0.0) || !(bound_weight > 0.0) || !(parent_weight > 0.0) ||
         !(destination_weight > 0.0)) return false;
     const double threshold_ryd = threshold_ev / 13.6;
-    std::vector<double> dens_grid(static_cast<std::size_t>(nden), 0.0);
-    for (int i = 0; i < nden; ++i) dens_grid[static_cast<std::size_t>(i)] = payload[i];
+    const double* dens_grid = payload;
     const double* temp_grid = payload + nden;
     const double* table = payload + nden + ntem;
     const double* xs = payload + nden + ntem + nden * ntem;
-    double logn = std::log10(input.hydrogen_density_cm3);
-    const double logt = std::log10(input.temperature_k);
-    // Literal ucalc type-99 dispatch enters source label 70 and calls
-    // calt70.f90.  The old translation used a calt99-like table layout and
-    // log-converted positive table cells.  calt70 instead stores log10(rec)
-    // directly with density-major / temperature-fastest indexing and has its
-    // own linear/quadratic density interpolation.
-    if (nden > 1) {
-        dens_grid[1] = std::min(dens_grid[1], 8.0);
-        if (logn > dens_grid[static_cast<std::size_t>(nden - 1)])
-            logn = std::min(logn, dens_grid[static_cast<std::size_t>(nden - 1)]);
+    const double logn = std::log10(input.hydrogen_density_cm3);
+    double logt = std::log10(input.temperature_k);
+    if (logt < temp_grid[0] || logt > temp_grid[ntem - 1]) {
+        logt = std::min(0.999 * temp_grid[ntem - 1], std::max(1.001 * temp_grid[0], logt));
     }
-    int in_fortran = 1;
+    int in_fortran = 0;
     if (nden > 1) {
-        if (logn <= dens_grid[0]) {
-            in_fortran = 1;
-        }
+        if (logn <= dens_grid[0]) in_fortran = 1;
         else {
-            const double denominator = dens_grid[static_cast<std::size_t>(nden - 1)];
-            in_fortran = denominator != 0.0
-                ? static_cast<int>(logn / denominator * static_cast<double>(nden)) - 1
-                : 0;
-            if (in_fortran >= nden) --in_fortran;
-            for (int guard = 0; guard < 2 * nden + 8; ++guard) {
-                ++in_fortran;
-                if (in_fortran < nden && logn >= dens_grid[static_cast<std::size_t>(in_fortran)])
-                    continue;
-                if (logn < dens_grid[static_cast<std::size_t>(in_fortran - 1)]) {
-                    in_fortran -= 2;
-                    continue;
-                }
-                break;
+            for (int i = 1; i < nden; ++i) {
+                if (logn >= dens_grid[i - 1] && logn <= dens_grid[i]) in_fortran = i;
             }
-            in_fortran = std::max(1, std::min(nden, in_fortran));
+            in_fortran = std::max(in_fortran, 1);
         }
+    } else in_fortran = 1;
+    const int in0 = in_fortran - 1;
+    int it0 = 0;
+    for (int k = 0; k < ntem - 1; ++k) {
+        if (temp_grid[k] <= logt && logt < temp_grid[k + 1]) { it0 = k; break; }
     }
-    int it_fortran = 1;
-    if (logt < temp_grid[0]) {
-        it_fortran = 1;
-    } else {
-        const double dt = (temp_grid[ntem - 1] - temp_grid[0]) / static_cast<double>(ntem);
-        it_fortran = dt != 0.0 ? static_cast<int>((logt - temp_grid[0]) / dt) : 0;
-        for (int guard = 0; guard < 2 * ntem + 8; ++guard) {
-            ++it_fortran;
-            if (it_fortran >= ntem) {
-                it_fortran = ntem - 1;
-                break;
-            }
-            if (logt >= temp_grid[it_fortran]) continue;
-            if (logt < temp_grid[it_fortran - 1]) {
-                it_fortran -= 2;
-                continue;
-            }
-            break;
-        }
-    }
-    it_fortran = std::max(1, std::min(ntem - 1, it_fortran));
-    const auto table_logrec = [&](int id_fortran, int it_fortran_local) {
-        return table[(id_fortran - 1) * ntem + (it_fortran_local - 1)];
+    it0 = std::max(0, std::min(ntem - 2, it0));
+    const auto rcoef = [&](int jt, int jn) {
+        const double value = table[jt * nden + jn];
+        return value > -1.0e-31 ? std::log10(value + 1.0e-30) : value;
     };
-    const double t0 = temp_grid[it_fortran - 1], t1 = temp_grid[it_fortran];
+    const double t0 = temp_grid[it0], t1 = temp_grid[it0 + 1];
     if (t1 == t0) return false;
-    const double rec1a = table_logrec(in_fortran, it_fortran);
-    const double rec1b = table_logrec(in_fortran, it_fortran + 1);
-    const double rec1 = rec1a + (rec1b - rec1a) / (t1 - t0) * (logt - t0);
+    const double rec1 = rcoef(it0, in0) + (rcoef(it0 + 1, in0) - rcoef(it0, in0)) / (t1 - t0) * (logt - t0);
     double logrec = rec1;
-    if (nden > 1) {
-        if (nden > 2 && in_fortran > 1 && in_fortran < nden) {
-            const int in1 = in_fortran - 1, in2 = in_fortran, in3 = in_fortran + 1;
-            const double y2 = rec1;
-            const double x2 = dens_grid[static_cast<std::size_t>(in2 - 1)];
-            const double y3a = table_logrec(in3, it_fortran);
-            const double y3b = table_logrec(in3, it_fortran + 1);
-            const double y3 = y3a + (y3b - y3a) / (t1 - t0) * (logt - t0);
-            const double x3 = dens_grid[static_cast<std::size_t>(in3 - 1)];
-            const double y1a = table_logrec(in1, it_fortran);
-            const double y1b = table_logrec(in1, it_fortran + 1);
-            const double y1 = y1a + (y1b - y1a) / (t1 - t0) * (logt - t0);
-            const double x1 = dens_grid[static_cast<std::size_t>(in1 - 1)];
-            const double denomq = (x1*x1-x2*x2)*(x1-x3) - (x1*x1-x3*x3)*(x1-x2);
-            if (denomq == 0.0) return false;
-            const double aa = ((y1-y2)*(x1-x3) - (y1-y3)*(x1-x2)) / denomq;
-            const double bb = -((y1-y2)*(x1*x1-x3*x3) - (y1-y3)*(x1*x1-x2*x2)) / denomq;
-            const double cc = y1 - aa*x1*x1 - bb*x1;
-            logrec = aa*logn*logn + bb*logn + cc;
-        } else {
-            if (in_fortran >= nden) in_fortran = nden - 1;
-            const double rec2a = table_logrec(in_fortran + 1, it_fortran);
-            const double rec2b = table_logrec(in_fortran + 1, it_fortran + 1);
-            const double rec2 = rec2a + (rec2b - rec2a) / (t1 - t0) * (logt - t0);
-            const double n0 = dens_grid[static_cast<std::size_t>(in_fortran - 1)];
-            const double n1 = dens_grid[static_cast<std::size_t>(in_fortran)];
-            if (n1 == n0) return false;
-            logrec = rec1 + (rec2 - rec1) / (n1 - n0) * (logn - n0);
-        }
+    if (!(in_fortran == nden || in_fortran <= 1)) {
+        const double n0 = dens_grid[in0], n1 = dens_grid[in0 + 1];
+        if (n1 == n0) return false;
+        const double rec2 = rcoef(it0, in0 + 1) + (rcoef(it0 + 1, in0 + 1) - rcoef(it0, in0 + 1)) / (t1 - t0) * (logt - t0);
+        logrec = rec1 + (rec2 - rec1) / (n1 - n0) * (logn - n0);
     }
     const double rec = std::pow(10.0, logrec);
     if (!(rec >= 0.0) || !std::isfinite(rec)) return false;
@@ -4150,17 +4088,9 @@ bool evaluate_type99_source_faithful(
     }
     const double alpha = type99_milne_alpha(energy_ryd, sigma_mb, threshold_ryd, input.temperature_k);
     if (!(alpha > 0.0)) return false;
-    const double cross_section_scale = rec / (1.0e-24 + alpha);
-    int imax = 1;
-    for (int i = 0; i < nxs; ++i) {
-        sigma_mb[static_cast<std::size_t>(i)] = std::min(
-            std::max(sigma_mb[static_cast<std::size_t>(i)] * cross_section_scale, 0.0), 1.0e6);
-        if (sigma_mb[static_cast<std::size_t>(i)] > sigma_mb.front() * 1.0e-6) imax = i + 1;
-    }
-    energy_ryd.resize(static_cast<std::size_t>(imax));
-    sigma_mb.resize(static_cast<std::size_t>(imax));
-    std::vector<double> sigma_cm2(static_cast<std::size_t>(imax), 0.0);
-    for (int i = 0; i < imax; ++i) sigma_cm2[static_cast<std::size_t>(i)] = sigma_mb[static_cast<std::size_t>(i)] * 1.0e-18;
+    const double cross_section_scale = rec / alpha;
+    std::vector<double> sigma_cm2(static_cast<std::size_t>(nxs), 0.0);
+    for (int i = 0; i < nxs; ++i) sigma_cm2[static_cast<std::size_t>(i)] = sigma_mb[static_cast<std::size_t>(i)] * cross_section_scale * 1.0e-18;
     const bool has_dsec = input.dsec_radiation_energy_ev && input.dsec_bremsa && input.dsec_radiation_bin_count >= 3;
     std::vector<double> reduced_epi;
     std::vector<double> reduced_bremsa;
@@ -4325,7 +4255,7 @@ double sequence1_type88_photo_rate(const double* raw,int raw_count,double thresh
     if (ntmp<=0) return 0.0;
     const int numcon2=std::max(2,n_grid/50),nphint1=n_grid-numcon2;
     std::vector<double> sgbar(n_grid,0.0),xs(ntmp),ys(ntmp);
-    for (int j=0;j<ntmp;++j) {xs[j]=threshold+e[j]*kType53RydEv;ys[j]=std::max(0.0,s[j]);}
+    for (int j=0;j<ntmp;++j) {xs[j]=threshold+e[j]*13.605692;ys[j]=std::max(0.0,s[j]);}
     int nb1=sequence1_type88_lower_bracket(xs[0],epi,nphint1);
     if (nb1+1>=nphint1) return 0.0;
     sgbar[std::max(0,nb1-1)]=0.0;sgbar[nb1]=0.0;

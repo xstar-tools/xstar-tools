@@ -18,7 +18,7 @@ def test_voigt_far_wing_cpp_profile_is_binary64_exact() -> None:
     status = rates_backend_status()
     if not status.cpp_available:
         raise unittest.SkipTest(f"optional C++ rates backend is not built: {status.cpp_import_error}")
-    assert "source_real_v3" in str(status.cpp_backend_name)
+    assert "voigt_pow3_exact_v2" in str(status.cpp_backend_name)
     epi = np.geomspace(0.1, 1.0e5, 9999).astype(np.float64)
     cases = (
         (1.0e-8, 1000.0, 35.0, 180.0, 24.305, 1.0e-2),
@@ -85,4 +85,4 @@ def test_v0641_runner_enables_exact_products_without_oracle() -> None:
     assert "XSTAR_ATOMIC_RATE_PAYLOAD_FOUR_FAMILY_VERIFY_OLD=0" in runner
     assert "XSTAR_ATOMIC_EMISSIVITY_UPSTREAM_TYPE4_PRODUCT_CPP=1" in runner
     source = (root / "src/xstar_tools/xstar/cpp/rate_kernels.cpp").read_text()
-    assert "v2*v2*v2" in source
+    assert "std::pow(v2, 3.0)" in source

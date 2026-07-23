@@ -2090,14 +2090,7 @@ def _xstar_calt71_rate(
         out["type71_calt71_status"] = "not_evaluated_nonpositive_temperature_or_density"
         return out
 
-    # Literal ``ucalc.f90`` label 70 (the branch selected for data type 99)
-    # calls ``calt70``, not the older calt99-style interpolation that used to
-    # live here.  calt70 stores the recombination table density-major, with
-    # temperature varying fastest, and the table values are *already log10*
-    # recombination coefficients.  Preserve its slightly unusual bracket and
-    # quadratic-density behavior rather than normalizing the table to a more
-    # conventional interpolation scheme.
-    dens_grid = list(rd[:nden])
+    dens_grid = rd[:nden]
     temp_grid = rd[nden:nden + ntem]
     table0 = nden + ntem
     wav = rd[nden * ntem + nden + ntem]
@@ -2358,10 +2351,10 @@ def _xstar_calt99_superlevel_bound_free(
     ints: Sequence[int],
     radiation_context_rows: Sequence[dict] | None = None,
 ) -> dict:
-    """Evaluate literal XSTAR ``calt70.f90`` plus the type-99 ``phint53hunt`` closure.
+    """Evaluate XSTAR ``calt99.f90`` plus the type-99 ``phint53hunt`` closure.
 
-    XSTAR's data-type-99 dispatch enters ucalc label 70 and calls ``calt70``
-    to get a density/temperature recombination coefficient ``rec`` and a scaled
+    XSTAR's type-99 branch in ``ucalc.f90`` calls ``calt99`` to get a
+    density/temperature recombination coefficient ``rec`` and a scaled
     superlevel photoionization cross section.  It then calls ``phint53hunt`` and
     rescales the forward PI integral so that the inverse recombination side is
     exactly ``rec*xnx``::
@@ -2398,7 +2391,7 @@ def _xstar_calt99_superlevel_bound_free(
         "type99_phint53hunt_forward_unscaled_s^-1": None,
         "type99_threshold_ry": threshold_ry,
         "type99_threshold_eV": (float(threshold_ry) * 13.6 if threshold_ry else None),
-        "type99_source_file": "xstarlib/src/calt70.f90; xstarlib/src/ucalc.f90 type 99(label 70); xstarlib/src/phint53hunt.f90",
+        "type99_source_file": "xstarlib/src/calt99.f90; xstarlib/src/ucalc.f90 type 99; xstarlib/src/phint53hunt.f90",
         "type99_note": "",
     }
     if len(it) < 3:
@@ -2429,117 +2422,66 @@ def _xstar_calt99_superlevel_bound_free(
     temp_grid = rd[nden:nden + ntem]
     table0 = nden + ntem
     xs0 = table0 + nden * ntem
-    # ucalc.f90's type-99 branch passes ``den=xpx`` to calt70, while the later
+    # calt99 stores recombination coefficients in linear scale except for
+    # already-negative log-like entries.  XSTAR converts positives to log10.
+    def rcoef(it_idx: int, id_idx: int) -> float:
+        val = rd[table0 + it_idx * nden + id_idx]
+        return math.log10(val + 1.0e-30) if val > -1.0e-31 else float(val)
+
+    # ucalc.f90 label 99 passes ``den=xpx`` to calt99, while the later
     # phint53hunt/Milne normalization receives ``xnx=xpx*xee``.  Keep the two
     # densities distinct.
     rne = math.log10(density_for_calt99)
     rte = math.log10(float(temperature))
     notes = []
-    if nden > 1:
-        # calt70 mutates rdat(np1r+1) in-place.  Use a private copy so the
-        # translated record remains immutable while retaining the source value
-        # seen by the interpolation itself.
-        dens_grid[1] = min(float(dens_grid[1]), 8.0)
-        if rne > dens_grid[-1]:
-            rne = min(rne, float(dens_grid[-1]))
-            notes.append("logden_above_grid_max_clamped_to_last_density")
+    # calt99 clips temperature to just inside the tabulated range.
+    if rte < temp_grid[0] or rte > temp_grid[-1]:
+        rte_old = rte
+        rte = min(0.999 * temp_grid[-1], max(1.001 * temp_grid[0], rte))
+        notes.append(f"logT_clipped_from_{rte_old:g}_to_{rte:g}")
 
-    # Literal calt70 one-based density bracket (label 5).
+    # Literal calt99 one-based density-bracket semantics.  ``in`` starts at
+    # zero, becomes one below the grid minimum, and is set only when a tabulated
+    # interval contains rne.  Above the maximum the source therefore falls back
+    # to the first density branch after ``in=max(in,1)``.
+    in_fortran = 0
     if nden > 1:
-        if rne <= float(dens_grid[0]):
+        if rne <= dens_grid[0]:
             in_fortran = 1
+            notes.append("logden_at_or_below_grid_min_uses_first_density_branch")
         else:
-            denom = float(dens_grid[-1])
-            in_fortran = int(rne / denom * nden) - 1 if denom != 0.0 else 0
-            if in_fortran >= nden:
-                in_fortran -= 1
-            # Reproduce the goto-5 search, with a finite guard for malformed
-            # tables.  Source-valid records converge in a handful of steps.
-            for _ in range(2 * nden + 8):
-                in_fortran += 1
-                if in_fortran < nden and rne >= float(dens_grid[in_fortran]):
-                    continue
-                if rne < float(dens_grid[in_fortran - 1]):
-                    in_fortran -= 2
-                    continue
-                break
-            in_fortran = max(1, min(nden, in_fortran))
+            for i_fortran in range(1, nden):
+                if dens_grid[i_fortran - 1] <= rne <= dens_grid[i_fortran]:
+                    in_fortran = i_fortran
+            in_fortran = max(in_fortran, 1)
+            if rne > dens_grid[-1]:
+                notes.append("logden_above_grid_max_source_falls_back_to_first_density_branch")
     else:
         in_fortran = 1
-
-    # Literal calt70 temperature bracket (label 6).  Note the source initial
-    # estimate divides by ``ntem`` rather than ``ntem-1``.
-    if rte < float(temp_grid[0]):
-        it_fortran = 1
-    else:
-        dt = (float(temp_grid[-1]) - float(temp_grid[0])) / float(ntem)
-        it_fortran = int((rte - float(temp_grid[0])) / dt) if dt != 0.0 else 0
-        for _ in range(2 * ntem + 8):
-            it_fortran += 1
-            if it_fortran >= ntem:
-                it_fortran = ntem - 1
-                break
-            if rte >= float(temp_grid[it_fortran]):
-                continue
-            if rte < float(temp_grid[it_fortran - 1]):
-                it_fortran -= 2
-                continue
+    in0 = in_fortran - 1
+    it0 = 0
+    for k in range(ntem - 1):
+        if temp_grid[k] <= rte < temp_grid[k + 1]:
+            it0 = k
             break
-    it_fortran = max(1, min(ntem - 1, it_fortran))
-
-    def table_logrec(id_fortran: int, it_fortran_local: int) -> float:
-        # calt70: kt = nden+ntem+(in-1)*ntem+it; access rdat(np1r-1+kt)
-        return float(rd[table0 + (id_fortran - 1) * ntem + (it_fortran_local - 1)])
-
-    t0 = float(temp_grid[it_fortran - 1])
-    t1 = float(temp_grid[it_fortran])
+    it0 = min(max(it0, 0), ntem - 2)
+    t0, t1 = temp_grid[it0], temp_grid[it0 + 1]
     if t1 == t0:
         out["type99_calt99_status"] = "not_evaluated_degenerate_temperature_grid"
         return out
-    y2 = table_logrec(in_fortran, it_fortran)
-    y2_next = table_logrec(in_fortran, it_fortran + 1)
-    rec1 = y2 + (y2_next - y2) / (t1 - t0) * (rte - t0)
-
-    if nden > 1:
-        if nden > 2 and in_fortran > 1 and in_fortran < nden:
-            in1, in2, in3 = in_fortran - 1, in_fortran, in_fortran + 1
-            y2q = rec1
-            x2 = float(dens_grid[in2 - 1])
-            y3a = table_logrec(in3, it_fortran)
-            y3b = table_logrec(in3, it_fortran + 1)
-            y3 = y3a + (y3b - y3a) / (t1 - t0) * (rte - t0)
-            x3 = float(dens_grid[in3 - 1])
-            y1a = table_logrec(in1, it_fortran)
-            y1b = table_logrec(in1, it_fortran + 1)
-            y1 = y1a + (y1b - y1a) / (t1 - t0) * (rte - t0)
-            x1 = float(dens_grid[in1 - 1])
-            denomq = ((x1*x1 - x2*x2)*(x1 - x3) - (x1*x1 - x3*x3)*(x1 - x2))
-            if denomq == 0.0:
-                out["type99_calt99_status"] = "not_evaluated_degenerate_quadratic_density_grid"
-                return out
-            aa = ((y1-y2q)*(x1-x3) - (y1-y3)*(x1-x2)) / denomq
-            bb = -((y1-y2q)*(x1*x1-x3*x3) - (y1-y3)*(x1*x1-x2*x2)) / denomq
-            cc = y1 - aa*x1*x1 - bb*x1
-            log_rec = aa*rne*rne + bb*rne + cc
-            notes.append("literal_calt70_quadratic_density_interpolation")
-        else:
-            if in_fortran >= nden:
-                # This is reachable only at the upper endpoint.  calt70's
-                # bracket search normally leaves ``in=nden-1`` there; clamp
-                # defensively to preserve the final interval.
-                in_fortran = nden - 1
-            rec2a = table_logrec(in_fortran + 1, it_fortran)
-            rec2b = table_logrec(in_fortran + 1, it_fortran + 1)
-            rec2 = rec2a + (rec2b - rec2a) / (t1 - t0) * (rte - t0)
-            xlo = float(dens_grid[in_fortran - 1])
-            xhi = float(dens_grid[in_fortran])
-            if xhi == xlo:
-                out["type99_calt99_status"] = "not_evaluated_degenerate_density_grid"
-                return out
-            rme = (rec2 - rec1) / (xhi - xlo)
-            log_rec = rec1 + rme * (rne - xlo)
-    else:
+    rec1 = rcoef(it0, in0) + (rcoef(it0 + 1, in0) - rcoef(it0, in0)) / (t1 - t0) * (rte - t0)
+    # Source-code branch: ``if (in.eq.nden .or. in.le.1)``.  In normal
+    # bracket selection ``in`` spans 1..nden-1, so only the first branch skips
+    # density interpolation; the final interval is still interpolated.
+    if in_fortran == nden or in_fortran <= 1:
         log_rec = rec1
+    else:
+        n0, n1 = dens_grid[in0], dens_grid[in0 + 1]
+        if n1 == n0:
+            out["type99_calt99_status"] = "not_evaluated_degenerate_density_grid"
+            return out
+        rec2 = rcoef(it0, in0 + 1) + (rcoef(it0 + 1, in0 + 1) - rcoef(it0, in0 + 1)) / (t1 - t0) * (rte - t0)
+        log_rec = rec1 + (rec2 - rec1) / (n1 - n0) * (rne - n0)
     rec = 10.0 ** log_rec
     if not math.isfinite(rec) or rec < 0.0:
         out["type99_calt99_status"] = "not_evaluated_bad_interpolated_recombination"
@@ -2552,21 +2494,12 @@ def _xstar_calt99_superlevel_bound_free(
         out.update(milne)
         out["type99_calt99_status"] = "not_evaluated_milne_alpha_nonpositive"
         return out
-    scale_xs = rec / (1.0e-24 + float(alpha))
-    xs_mb_scaled = [min(max(x * scale_xs, 0.0), 1.0e6) for x in xs_mb_raw]
-    if xs_mb_scaled:
-        crit_xs = 1.0e-6
-        imax = 1
-        for i, value in enumerate(xs_mb_scaled, start=1):
-            if value > xs_mb_scaled[0] * crit_xs:
-                imax = i
-        e_ry = e_ry[:imax]
-        xs_mb_scaled = xs_mb_scaled[:imax]
-        nxs = imax
+    scale_xs = rec / float(alpha)
+    xs_mb_scaled = [max(x * scale_xs, 0.0) for x in xs_mb_raw]
     sigma_cm2_scaled = [x * 1.0e-18 for x in xs_mb_scaled]
     out.update(milne)
     out.update({
-        "type99_calt99_status": "evaluated_literal_calt70_density_temperature_interpolation_and_milne_scaled_cross_section",
+        "type99_calt99_status": "evaluated_calt99_logT_logne_interpolation_and_milne_scaled_cross_section",
         "type99_calt99_rec_cm3_s": float(rec),
         "type99_calt99_alpha_milne_cm3_s": float(alpha),
         "type99_calt99_scale_rec_over_alpha": float(scale_xs),
@@ -2575,11 +2508,11 @@ def _xstar_calt99_superlevel_bound_free(
         "type99_calt99_log10_ne_used": float(rne),
         "type99_calt99_density_cm3_used": float(density_for_calt99),
         "type99_calt99_density_semantics": (
-            "explicit_calt70_hydrogen_density" if calt99_density is not None else "electron_density_legacy_default"
+            "explicit_calt99_density" if calt99_density is not None else "electron_density_legacy_default"
         ),
         "type99_calt99_log10_temperature_used": float(rte),
-        "type99_calt99_density_bracket_index0": int(in_fortran - 1),
-        "type99_calt99_temperature_bracket_index0": int(it_fortran - 1),
+        "type99_calt99_density_bracket_index0": int(in0),
+        "type99_calt99_temperature_bracket_index0": int(it0),
         "type99_cross_section_energy_ry_min": min(e_ry) if e_ry else None,
         "type99_cross_section_energy_ry_max": max(e_ry) if e_ry else None,
         "type99_cross_section_scaled_mb_min": min(xs_mb_scaled) if xs_mb_scaled else None,
