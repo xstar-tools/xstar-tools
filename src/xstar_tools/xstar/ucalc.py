@@ -738,8 +738,8 @@ class UCalcBranchSpec:
 # the supplied ucalc.f90.  Returning zeros for these is source behavior, not a
 # fallback approximation.
 _SOURCE_NOOP_TYPES = {
-    13, 14, 24, 29, 40, 41, 42, 43, 44, 45, 46, 47, 48, 52, 58, 61,
-    78, 80, 83, 84, 87, 90, 91, 93, 94, 100,
+    13, 14, 24, 29, 40, 41, 42, 43, 44, 45, 46, 47, 48, 58, 61,
+    78, 80, 83, 84, 87, 90, 93, 94, 100,
 }
 
 _DATA_TYPE_NAMES: Dict[int, str] = {
@@ -785,6 +785,7 @@ _DATA_TYPE_NAMES: Dict[int, str] = {
     49: "op_inner_shell_photoionization",
     50: "op_bound_bound_radiative",
     51: "op_chianti_burgess_tully_collision",
+    52: "verner_photoionization_rate7_alias_type59",
     53: "op_photoionization",
     54: "bautista_hlike_collision_hlike_ion",
     55: "bautista_hydrogenic_photoionization",
@@ -819,7 +820,7 @@ _DATA_TYPE_NAMES: Dict[int, str] = {
     86: "iron_k_auger",
     88: "iron_inner_shell_resonance_excitation",
     89: "saf_bound_bound_radiative",
-    91: "aped_line_wavelength_metadata",
+    91: "aped_bound_bound_radiative_alias_type50",
     92: "aped_collision_strength",
     93: "op_photoionization_powerlaw_1",
     94: "op_photoionization_powerlaw_2",
@@ -841,6 +842,7 @@ _SOURCE_CALLS: Dict[int, Tuple[str, ...]] = {
     50: ("deleafnd", "drd", "enxt", "linopac"), 53: ("dprinto", "drd", "milne", "phextrap", "phint53"),
     54: ("anl1",), 55: ("drd", "enxt", "phintfo"), 56: ("hunt3",),
     57: ("calt57",), 59: ("drd", "enxt", "phintfo"),
+    52: ("drd", "enxt", "phintfo"),
     60: ("calt6062",), 62: ("calt6062",),
     63: ("amcrs", "anl1", "erc"), 64: ("enxt", "hphotx", "milne", "phintfo"),
     65: ("szirco",), 66: ("calt66",), 67: ("calt67",), 68: ("calt68",), 69: ("calt69",),
@@ -848,6 +850,7 @@ _SOURCE_CALLS: Dict[int, Tuple[str, ...]] = {
     73: ("calt73",), 74: ("calt74",), 75: ("calt72",), 77: ("calt77",),
     82: ("drd", "linopac"), 84: ("phextrap", "phint5384"), 85: ("pexs", "phintfo"),
     88: ("dprinto", "drd", "phextrap", "phint53"), 89: ("deleafnd", "drd", "linopac"),
+    91: ("deleafnd", "drd", "enxt", "linopac"),
     92: ("calc_maxwell_rates", "calt66", "drd", "eint", "expint"),
     93: ("dprinto", "drd", "phint53pl"), 94: ("dprinto", "drd", "phint53pl"),
     95: ("eint",), 97: ("drd",), 99: ("calt99", "drd", "phint53hunt"), 101: ("hunt3",),
@@ -880,7 +883,7 @@ def complete_ucalc_branch_catalog() -> Dict[int, UCalcBranchSpec]:
         33: "translated_formula", 34: "translated_formula", 35: "translated_formula", 36: "translated_formula",
         37: "translated_formula", 38: "translated_formula",
         39: "translated_formula", 49: "translated_formula", 50: "validated_selected_system", 51: "validated_selected_system",
-        54: "translated_formula", 55: "translated_formula", 59: "translated_formula",
+        52: "translated_alias_to_type59", 54: "translated_formula", 55: "translated_formula", 59: "translated_formula",
         60: "translated_formula", 62: "translated_formula", 64: "translated_formula",
         65: "translated_formula", 66: "translated_formula",
         53: "translated_pending_real_context_parity", 56: "translated_formula",
@@ -888,7 +891,7 @@ def complete_ucalc_branch_catalog() -> Dict[int, UCalcBranchSpec]:
         68: "translated_formula", 69: "translated_formula", 70: "translated_formula", 71: "validated_selected_system",
         73: "translated_formula",
         72: "translated_formula", 74: "translated_formula", 75: "translated_formula", 76: "translated_formula",
-        79: "translated_formula", 81: "translated_formula", 82: "translated_formula", 85: "translated_formula", 86: "translated_formula", 88: "translated_formula", 89: "translated_formula", 92: "translated_formula",
+        79: "translated_formula", 81: "translated_formula", 82: "translated_formula", 85: "translated_formula", 86: "translated_formula", 88: "translated_formula", 89: "translated_formula", 91: "translated_alias_to_type50", 92: "translated_formula",
         77: "translated_formula", 95: "translated_formula", 96: "translated_formula", 97: "translated_formula",
         101: "translated_formula", 102: "translated_formula",
         98: "translated_formula", 99: "translated_formula",
@@ -1158,6 +1161,10 @@ class SourceFaithfulUCalc:
         self._evaluators.update({
             50: self._eval_type50,
             51: self._eval_type51,
+            # Literal ucalc.f90 label 52 executes the label-59 Verner branch.
+            # Preserve the original record data_type/rate_type in provenance
+            # while reusing the exact Type-59 arithmetic.
+            52: self._eval_type59,
             53: self._eval_type53,
             54: self._eval_type54,
             56: self._eval_collision_generic,
@@ -1172,6 +1179,9 @@ class SourceFaithfulUCalc:
             69: self._eval_collision_generic,
             71: self._eval_type71,
             73: self._eval_type73,
+            # Literal ucalc.f90 label 91 is an APED radiative-line record
+            # that jumps directly to the Type-50 branch.
+            91: self._eval_type50,
             98: self._eval_collision_generic,
             101: self._eval_type101,
             102: self._eval_type102,
