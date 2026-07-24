@@ -157,90 +157,110 @@ XSTAR converts the sequential packed records into navigation arrays. The most im
 
 ### 3.6 Data-type catalog
 
-The following labels are those currently carried by `xstar_atomic.hierarchy`. Some codes are historical or database-version dependent; unlabeled codes are deliberately kept as such instead of assigning an unsupported interpretation.
+This catalog now distinguishes **current XSTAR record semantics** from historical short labels.  The primary descriptive authority is XSTAR Manual Release 2.5x, Section 12.1.2 and Mendoza et al. (2021), Appendix A.  For historical types omitted from those current lists, the supplied canonical `ucalc.f90` branch and its `kdesc` string are used.  When a historical `kdesc` conflicts with executable `ucalc.f90`, the executable branch wins (notably Type 21).  A data type being listed here does not imply that it is active in a particular ATDB/model.
 
-| Code | XSTAR data-type label used by `xstar-atomic` |
+| Code | Canonical XSTAR data-type meaning used by this implementation guide |
 |---:|---|
-| 1 | radiative recombination: Aldrovandi & Pequignot |
-| 2 | charge exchange H0: Kingdon & Ferland |
-| 3 | autoionization: Hamilton, Sarazin, Chevalier |
-| 4 | line data radiative: Mendoza; Raymond & Smith |
-| 5 | 2 photon transition collisional |
-| 6 | level data |
-| 7 | dielectronic recombination: Aldrovandi & Pequignot |
-| 8 | dielectronic recombination: Arnaud & Raymond |
-| 9 | charge exchange H0 Kingdon & Ferland |
-| 10 | charge exchange H+ Kingdon & Ferland |
-| 11 | 2 photon radiative |
-| 12 | photoionization, excited levels: hydrogenic |
-| 13 | element data |
-| 14 | ion data |
+| 1 | radiative recombination rate coefficient (Aldrovandi & Pequignot) |
+| 2 | H0 charge-exchange recombination rate coefficient (Kingdon & Ferland) |
+| 3 | autoionization rate (Hamilton, Sarazin & Chevalier; historical source type) |
+| 4 | bound-bound radiative line data (Mendoza; Raymond & Smith; historical source type) |
+| 5 | two-photon collisional transition data (historical source type) |
+| 6 | level data / level attributes |
+| 7 | dielectronic recombination rate coefficient (Aldrovandi & Pequignot) |
+| 8 | dielectronic recombination rate coefficient (Arnaud & Raymond; historical source type) |
+| 9 | H0 charge exchange (Kingdon & Ferland; includes the source He/H0 convention where applicable) |
+| 10 | H+ charge-transfer ionization (Kingdon & Ferland) |
+| 11 | two-photon radiative data (historical source type) |
+| 12 | photoionization of excited levels: hydrogenic (historical source type) |
+| 13 | element data / metadata |
+| 14 | ion data; current manual: ionization potential and ion identity |
 | 15 | photoionization: Barfield, Koontz & Huebner |
-| 16 | Arnaud & Raymond collisional ionization |
-| 17 | collisional excitation hydrogenic: Cota |
-| 18 | radiative recombination hydrogenic: Cota |
+| 16 | collisional ionization: Arnaud & Raymond |
+| 17 | hydrogenic collisional excitation: Cota |
+| 18 | hydrogenic radiative recombination: Cota |
 | 19 | photoionization: HULLAC |
-| 20 | charge exchange H+ Kingdon & Ferland |
-| 21 | PI cross section continued |
-| 22 | dielectronic recombination: Storey |
-| 23 | photoionization, excited levels: Clark |
-| 24 | PI cross section Clark continued |
+| 20 | H+ charge-transfer ionization (Kingdon & Ferland total-rate form) |
+| 21 | H charge exchange: Dalgarno & Butler (literal current `ucalc.f90`; historical `kdesc` text is stale) |
+| 22 | dielectronic recombination rate coefficient: Storey |
+| 23 | photoionization of excited levels: Clark |
+| 24 | Clark photoionization cross-section continuation / auxiliary record |
 | 25 | collisional ionization: Raymond & Smith |
-| 26 | collisional ionization hydrogenic: Cota |
-| 27 | photoionization: hydrogenic |
-| 28 | line data collisional: Mendoza; Raymond & Smith |
-| 29 | collisional ionization data: scaled hydrogenic |
-| 30 | radiative recombination hydrogenic: Gould & Thakur |
-| 31 | line data no levels |
+| 26 | hydrogenic collisional ionization: Cota |
+| 27 | hydrogenic photoionization |
+| 28 | bound-bound collisional line data: Mendoza; Raymond & Smith |
+| 29 | scaled-hydrogenic collisional-ionization / detailed-balance data |
+| 30 | total hydrogenic radiative recombination (Gould & Thakur) |
+| 31 | line data without explicit levels |
 | 32 | collisional ionization: Cota |
-| 33 | line data collisional: HULLAC |
-| 34 | line data radiative: Mendoza; Raymond & Smith |
-| 35 | photoionization: table from BKH |
-| 36 | photoionization, excited levels: hydrogenic no level |
-| 49 | OP PI cross sections for inner shells |
-| 50 | OP line radiative rates |
-| 51 | OP and CHIANTI line collisional rates |
-| 52 | same as 59 but rate type 7 |
-| 53 | OP PI cross sections |
-| 54 | H-like Cij, Bautista, H-like ion |
-| 55 | hydrogenic PI cross sections, Bautista format |
-| 56 | tabulated collision strength, Bautista |
-| 57 | effective charge for collisional ionization |
-| 58 | H-like recombination rates, Bautista |
-| 59 | Verner PI cross sections |
-| 60 | Calloway H-like collision strength |
-| 61 | H-like Cij, Bautista, non-H-like ion |
-| 62 | Calloway H-like collision strength |
-| 63 | H-like Cij, Bautista, H-like ion |
-| 64 | hydrogenic PI cross sections, Bautista format |
-| 65 | effective charge for collisional ionization |
-| 66 | like type 69 but fine-structure data |
-| 67 | effective collision strengths from Keenan et al. |
-| 68 | He-like collision strengths by Zhang & Sampson |
-| 69 | Kato & Nakazaki fit to He-like collision strengths |
-| 70 | coefficients for photoionization cross sections of superlevels |
-| 71 | transition rates from superlevel to spectroscopic levels |
+| 33 | bound-bound collisional line data: HULLAC |
+| 34 | bound-bound radiative line data: Mendoza; Raymond & Smith |
+| 35 | tabulated BKH photoionization |
+| 36 | hydrogenic excited-level photoionization without explicit level |
+| 37 | Badnell Fe 3p/q dielectronic-recombination data (historical source type) |
+| 38 | total radiative recombination coefficient: Badnell / AMDPP |
+| 39 | total dielectronic recombination coefficient: Badnell / AMDPP |
+| 43 | tabulated total photoionization cross sections (historical source type) |
+| 49 | partial inner-shell photoionization cross sections (OP format) |
+| 50 | bound-bound line radiation rates (OP/CHIANTI-compatible format) |
+| 51 | electron-impact effective collision strengths (OP/CHIANTI Burgess-Tully format) |
+| 52 | Verner photoionization form, same arithmetic as Type 59 but rate type 7 (literal `ucalc.f90` alias) |
+| 53 | TOPbase/OP partial photoionization cross sections |
+| 54 | radiative transition probability Aki computed by quantum-defect theory or hydrogenic approximation |
+| 55 | hydrogenic photoionization cross sections, Bautista format |
+| 56 | tabulated electron-impact effective collision strengths, Bautista format |
+| 57 | effective ion charge used for collisional-ionization rates |
+| 58 | H-like recombination/cascade rates, Bautista; marked defunct in the supplied `ucalc.f90` |
+| 59 | Verner partial photoionization cross sections |
+| 60 | analytic H-like effective collision strengths (Callaway/Calloway form) |
+| 61 | legacy Bautista H-like Cij for non-H-like ions; disabled/unimplemented in the supplied `ucalc.f90` |
+| 62 | analytic H-like effective collision strengths (Callaway/Calloway alias family) |
+| 63 | collisional transition probability Cik computed by quantum-defect theory or hydrogenic approximation |
+| 64 | hydrogenic photoionization cross sections, Bautista format |
+| 65 | effective ion charge used for collisional-ionization rates |
+| 66 | fits to fine-structure collision strengths for He-like ions |
+| 67 | effective collision strengths for He-like ions (Keenan et al.) |
+| 68 | He-like effective collision strengths (Zhang & Sampson) |
+| 69 | He-like LS collision-strength fit (Kato & Nakazaki) |
+| 70 | coefficients for recombination and photoionization cross sections of superlevels; recombination table stored in log form |
+| 71 | radiative transition rates from superlevels to spectroscopic levels |
 | 72 | autoionization rates for satellite levels |
-| 73 | fit to collisional strengths, satellite levels, He-like ions |
-| 74 | delta functions added to photoionization cross sections for DR |
-| 75 | autoionization data for Fe XXIV satellites |
-| 76 | 2 photon decay |
-| 77 | collisional rates from 71 |
-| 78 | Auger level data |
+| 73 | effective-collision-strength fit for satellite levels of He-like ions |
+| 74 | delta-function photoionization contributions used to reproduce dielectronic recombination |
+| 75 | autoionization data for Fe XXIV satellite levels |
+| 76 | two-photon radiation/decay rate; `ucalc.f90` also constructs the normalized two-photon continuum side effect |
+| 77 | collisional transition rates from superlevels to spectroscopic levels (partner of Type 71) |
+| 78 | Auger level data / metadata (historical source type) |
 | 79 | fluorescence line data |
-| 80 | collisional ionization rates, ground of Fe and Ni |
-| 81 | Bhatia Fe XIX collision strengths |
-| 82 | Fe UTA radiative rates |
+| 80 | ground-state collisional-ionization rates for Fe and Ni |
+| 81 | Fe XIX collision strengths (Bhatia) |
+| 82 | Fe UTA radiative decay rates |
 | 83 | Fe UTA level data |
-| 84 | Iron K PI cross sections, spectator Auger binned |
-| 85 | Iron K PI cross sections, spectator Auger summed |
-| 86 | Iron K Auger data |
-| 88 | unlabeled XSTAR data type 88 |
-| 91 | unlabeled XSTAR data type 91 |
-| 92 | unlabeled XSTAR data type 92 |
-| 95 | Bryans collisional ionization / CI total rates |
-| 98 | CHIANTI 2016 collisional excitation rates |
-| 99 | unlabeled XSTAR data type 99 |
+| 84 | Iron-K photoionization cross sections with spectator-Auger structure binned; branch disabled in the supplied canonical `ucalc.f90` |
+| 85 | Iron-K photoionization cross sections with spectator-Auger resonances summed |
+| 86 | radiative and Auger widths of K-vacancy levels / Iron-K Auger data |
+| 88 | damped-excess photoionization cross section leaving the parent ion in `superlevel_[K]` (inner-shell resonance-excitation opacity) |
+| 89 | SAF bound-bound radiative line data; same Type-50 arithmetic |
+| 91 | APED line radiation rates; same Type-50 arithmetic in literal `ucalc.f90` |
+| 92 | APED collision strengths |
+| 93 | historical OP photoionization form; disabled/no-op in the supplied canonical `ucalc.f90` |
+| 94 | historical OP photoionization form; disabled/no-op in the supplied canonical `ucalc.f90` |
+| 95 | collisional-ionization rates (Bryans et al.; total and level-to-level forms) |
+| 96 | Fe XXIV satellite emission/autoionization data from Safranova |
+| 97 | inner-shell collisional-ionization rates (Palmeri 2016) |
+| 98 | CHIANTI 2016 electron-impact effective collision strengths |
+| 99 | coefficients for recombination and photoionization cross sections of superlevels; linear recombination table; current source dispatch uses the Type-70/calt70 family |
+| 101 | SPEX tabulated electron-collision data, analogous to Type 56 |
+| 102 | SPEX analytic electron-collision data, analogous to Type 51 |
+| 103 | CHIANTI radiative rates (added in XSTAR 2.59d; newer than the supplied canonical `ucalc.f90` baseline) |
+
+Implementation-status cautions:
+
+- Type 52 is **not** a source no-op: literal `ucalc.f90` aliases it to Type 59 with rate type 7.
+- Type 91 is **not** a source no-op: literal `ucalc.f90` aliases APED radiative rates to Type 50.
+- Types 84, 93, and 94 branch directly to the source exit in the supplied canonical `ucalc.f90`; dormant code below those exits is not part of the canonical benchmark behavior.
+- Type 99 is not "unlabeled": the current manual defines it as coefficients for recombination and photoionization cross sections of superlevels.  It is closely related to Type 70, with a different recombination-table convention.
+- Type 103 is documented by the 2.59d manual revision but is newer than the supplied canonical FORTRAN source used for the present benchmark.
 
 ### 3.7 Key record layouts used in the current implementation
 
@@ -923,6 +943,8 @@ Primary code reference: the XSTAR Fortran source distributed with the reviewed p
 
 Scientific references carried with the development review:
 
+- XSTAR Team (2025), *XSTAR Manual*, Release 2.5x, especially Section 12.1.2 (data types).
+- Mendoza et al. (2021), *Atoms*, **9**, 12, especially Appendix A (data types).
 - Kallman et al. (1996), *ApJ*, 465, 994.
 - Kallman & Bautista (2001), *ApJS*, 133, 221.
 - Bautista & Kallman (2001), *ApJS*, 134, 139.

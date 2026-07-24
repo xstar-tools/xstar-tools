@@ -944,6 +944,73 @@ def _add_cpp_counter_totals(total: dict[str, float], stats: Mapping[str, Any]) -
         except Exception:
             continue
 
+
+def _record_type76_rccemis_checkpoint(
+    context: "CalcEmisContext",
+    phase: str,
+    rccemis: np.ndarray,
+    *,
+    type76_buffer: np.ndarray | None = None,
+) -> None:
+    """Record call-local Type-76 retention at diagnostic continuum energies.
+
+    Patch 5.20.15.3.2 uses this to locate the first lifecycle boundary at which
+    the already-validated two-photon spectrum disappears.  It deliberately
+    records state only; it does not alter the Type-76 formula or normalization.
+    """
+    try:
+        epi, _, _ = _high_resolution_radiation(context.radiation)
+        arr = np.asarray(rccemis, dtype=float)
+        if arr.ndim != 2 or arr.shape[0] < 2:
+            return
+        n = min(int(arr.shape[1]), int(len(epi)))
+        if n <= 0:
+            return
+        sentinels = []
+        for energy in (900.0, 1000.0, 1200.0):
+            j = int(np.argmin(np.abs(np.asarray(epi[:n], dtype=float) - energy)))
+            sentinels.append({
+                "requested_energy_eV": float(energy),
+                "bin_one_based": int(j + 1),
+                "energy_eV": float(epi[j]),
+                "rccemis_inward": float(arr[0, j]),
+                "rccemis_outward": float(arr[1, j]),
+                "type76_buffer_outward": (
+                    float(np.asarray(type76_buffer, dtype=float)[1, j])
+                    if type76_buffer is not None and np.asarray(type76_buffer).ndim == 2
+                    and np.asarray(type76_buffer).shape[0] >= 2
+                    and np.asarray(type76_buffer).shape[1] > j
+                    else 0.0
+                ),
+            })
+        summary = _spectral_summary_bucket(context)
+        rows = summary.setdefault("type76_first_loss_trace", [])
+        rows.append({
+            "call_index": int(getattr(context, "diagnostic_call_index", 0) or 0),
+            "pass_index": int(getattr(context, "diagnostic_pass_index", 0) or 0),
+            "zone_index": int(getattr(context, "diagnostic_zone_index", 0) or 0),
+            "phase": str(phase),
+            "rccemis_inward_sum": float(np.sum(arr[0, :n])),
+            "rccemis_outward_sum": float(np.sum(arr[1, :n])),
+            "type76_buffer_inward_sum": (
+                float(np.sum(np.asarray(type76_buffer, dtype=float)[0, :n]))
+                if type76_buffer is not None else 0.0
+            ),
+            "type76_buffer_outward_sum": (
+                float(np.sum(np.asarray(type76_buffer, dtype=float)[1, :n]))
+                if type76_buffer is not None else 0.0
+            ),
+            "sentinels": sentinels,
+        })
+    except Exception as exc:  # diagnostics must never change physical execution
+        try:
+            _spectral_summary_bucket(context).setdefault("type76_first_loss_trace_errors", []).append(
+                f"{phase}:{type(exc).__name__}:{exc}"
+            )
+        except Exception:
+            pass
+
+
 def calc_emis_ion(
     context: CalcEmisContext,
     *,
@@ -1037,15 +1104,14 @@ def calc_emis_ion(
 
     pending_native_spectral_rows: list[dict[str, Any]] = []
     native_spectral_source_position = 0
-    # v82 patch 5.20.15.3.1: literal ucalc.f90 Type-76 writes its two-photon
-    # continuum directly into rccemis during the rate-type-9 prepass.  The
-    # translated Python path also supports deferred/native spectral replay at
-    # the end of each ion.  Keep the Type-76 source side effect in an
-    # independent full-grid accumulator until that replay is complete so no
-    # product/backend replay can replace or discard it.  This mirrors the
-    # dedicated native_type76_continuum_emission buffer that closed the C++
-    # 5.20.15.3 continuum residual.
-    type76_retained_rccemis: np.ndarray | None = None
+    # v82 patch 5.20.15.3.2: Type-76 ownership is calc_emis_all-wide, not
+    # per-ion.  A later ion/backend replay must never be able to replace a
+    # two-photon contribution emitted by an earlier ion.  Direct calc_emis_ion
+    # fixtures still create a private accumulator and merge it on return.
+    type76_retained_rccemis = getattr(context, "_type76_calc_emis_all_rccemis", None)
+    type76_owned_by_calc_emis_all = type76_retained_rccemis is not None
+    if type76_retained_rccemis is None:
+        type76_retained_rccemis = np.zeros_like(context.workspace.base.rccemis)
     type76_retained_records = 0
 
     def _apply_native_spectral_row(row: Mapping[str, Any], target: CalcEmisWorkspace, *, status: str = "") -> None:
@@ -1143,7 +1209,7 @@ def calc_emis_ion(
     _rate_type_elapsed: dict[int, float] = {}
 
     def evaluate(rec: int, ptmp1: float, ptmp2: float, abund1: float, abund2: float) -> UCalcResult:
-        nonlocal calls, type76_retained_rccemis, type76_retained_records
+        nonlocal calls, type76_retained_records
         result = _evaluate_ucalc(shared, rec, _ucalc_context(
             shared, ion=ion, levels=levels, xpx=xpx, xh0=xh0, xh1=xh1,
             ptmp1=ptmp1, ptmp2=ptmp2, abund1=abund1, abund2=abund2,
@@ -1166,8 +1232,6 @@ def calc_emis_ion(
                 # per-ion native spectral replay below is a derived product
                 # projection.  Accumulate Type-76 independently and merge it
                 # only after that replay so its lifetime matches C++ 5.20.15.3.
-                if type76_retained_rccemis is None:
-                    type76_retained_rccemis = np.zeros_like(context.workspace.base.rccemis)
                 diag = result.diagnostics
                 inward = diag.get("rccemis_inward")
                 outward = diag.get("rccemis_outward")
@@ -2350,15 +2414,17 @@ def calc_emis_ion(
 
     # v82 patch 5.20.15.3.1 retained-rccemis commit.  This is the source
     # Type-76 UCalc side effect, not a FITS/product reconstruction.
-    if type76_retained_rccemis is not None:
+    if type76_owned_by_calc_emis_all:
+        setattr(
+            context, "_type76_calc_emis_all_records",
+            int(getattr(context, "_type76_calc_emis_all_records", 0) or 0) + int(type76_retained_records),
+        )
+    elif type76_retained_records:
+        # Preserve direct calc_emis_ion fixture semantics outside calc_emis_all.
         context.workspace.base.rccemis += type76_retained_rccemis
         shadow_workspace = getattr(context, "_native_spectral_shadow_workspace", None)
         if shadow_workspace is not None:
             shadow_workspace.base.rccemis += type76_retained_rccemis
-        summary = _spectral_summary_bucket(context)
-        summary["type76_retained_rccemis_records"] = int(summary.get("type76_retained_rccemis_records", 0)) + int(type76_retained_records)
-        summary["type76_retained_rccemis_inward_sum"] = float(summary.get("type76_retained_rccemis_inward_sum", 0.0)) + float(np.sum(type76_retained_rccemis[0]))
-        summary["type76_retained_rccemis_outward_sum"] = float(summary.get("type76_retained_rccemis_outward_sum", 0.0)) + float(np.sum(type76_retained_rccemis[1]))
 
     if any(float(v) != 0.0 for v in cpp_mg_type4_stats.values()):
         record_profile_event(
@@ -2524,6 +2590,12 @@ def calc_emis_all(context: CalcEmisContext) -> CalcEmisResult:
     xnx = xpx * context.electron_fraction_xee
     thomson = xnx * XSTAR_THOMSON_CROSS_SECTION_CM2 * max(0.0, 1.0 - context.covering_fraction)
     context.workspace.base.rccemis[:, :n] = 0.0
+    # One source call to calc_emis_all owns one complete Type-76 continuum.
+    # Accumulate across every active element/ion and merge exactly once after
+    # all deferred/native per-ion spectral replay has completed.
+    type76_calc_emis_all_rccemis = np.zeros_like(context.workspace.base.rccemis)
+    setattr(context, "_type76_calc_emis_all_rccemis", type76_calc_emis_all_rccemis)
+    setattr(context, "_type76_calc_emis_all_records", 0)
     context.workspace.base.opakc[:n] = thomson
     context.workspace.base.opakcont[:n] = thomson
     native_spectral_product = _native_spectral_requested(product=True)
@@ -2595,6 +2667,35 @@ def calc_emis_all(context: CalcEmisContext) -> CalcEmisResult:
                 ))
         element_record = int(context.derived.npnxt[element_record])
 
+    # v82 patch 5.20.15.3.2 lifecycle repair: this is the first point at
+    # which every per-ion replay is complete.  Literal Type-76 UCalc side
+    # effects therefore become live rccemis here, once per calc_emis_all call.
+    _record_type76_rccemis_checkpoint(
+        context, "calc_emis_all_pre_type76_merge", context.workspace.base.rccemis,
+        type76_buffer=type76_calc_emis_all_rccemis,
+    )
+    context.workspace.base.rccemis += type76_calc_emis_all_rccemis
+    shadow_workspace = getattr(context, "_native_spectral_shadow_workspace", None)
+    if shadow_workspace is not None:
+        shadow_workspace.base.rccemis += type76_calc_emis_all_rccemis
+    _record_type76_rccemis_checkpoint(
+        context, "calc_emis_all_post_type76_merge", context.workspace.base.rccemis,
+        type76_buffer=type76_calc_emis_all_rccemis,
+    )
+    summary = _spectral_summary_bucket(context)
+    call_records = int(getattr(context, "_type76_calc_emis_all_records", 0) or 0)
+    summary["type76_retained_rccemis_records"] = int(summary.get("type76_retained_rccemis_records", 0)) + call_records
+    summary["type76_retained_rccemis_inward_sum"] = float(summary.get("type76_retained_rccemis_inward_sum", 0.0)) + float(np.sum(type76_calc_emis_all_rccemis[0]))
+    summary["type76_retained_rccemis_outward_sum"] = float(summary.get("type76_retained_rccemis_outward_sum", 0.0)) + float(np.sum(type76_calc_emis_all_rccemis[1]))
+    summary.setdefault("type76_calc_emis_all_calls", []).append({
+        "call_index": int(getattr(context, "diagnostic_call_index", 0) or 0),
+        "pass_index": int(getattr(context, "diagnostic_pass_index", 0) or 0),
+        "zone_index": int(getattr(context, "diagnostic_zone_index", 0) or 0),
+        "records": call_records,
+        "inward_sum": float(np.sum(type76_calc_emis_all_rccemis[0])),
+        "outward_sum": float(np.sum(type76_calc_emis_all_rccemis[1])),
+    })
+
     shadow_workspace = getattr(context, "_native_spectral_shadow_workspace", None)
     if shadow_workspace is not None:
         summary = _spectral_summary_bucket(context)
@@ -2622,6 +2723,12 @@ def calc_emis_all(context: CalcEmisContext) -> CalcEmisResult:
     )
     context.workspace.base.brcems[:n] = br.brcems_after
     context.workspace.base.opakc[:n] = br.opakc_after_cm_inv
+    _record_type76_rccemis_checkpoint(
+        context, "calc_emis_all_return", context.workspace.base.rccemis,
+        type76_buffer=type76_calc_emis_all_rccemis,
+    )
+    # Do not let a subsequent direct ion call accidentally reuse this call's buffer.
+    setattr(context, "_type76_calc_emis_all_rccemis", None)
 
     return CalcEmisResult(
         hydrogen_density_cm3=xpx, electron_density_cm3=xnx,

@@ -32,7 +32,7 @@ from .driver import (
     XSTARSourceRoutine,
     UnportedXSTARSourceRoutine,
 )
-from .emergent_emissivity import CalcEmisWorkspace
+from .emergent_emissivity import CalcEmisWorkspace, _record_type76_rccemis_checkpoint
 from .heatt import (
     HeattResult,
     heatt,
@@ -842,6 +842,7 @@ def apply_gsmooth_to_state(state: XSTARPythonState) -> GSmoothResult:
             "translated gsmooth requires state.control['calc_emis_context']"
         )
     ncn2 = int(state.control["ncn2"])
+    _record_type76_rccemis_checkpoint(context, "pre_gsmooth", workspace.rccemis)
     result = gsmooth(
         temperature_1e4K=float(getattr(context, "temperature_1e4K")),
         turbulent_velocity_km_s=float(state.control.get("vturbi", 0.0)),
@@ -854,6 +855,7 @@ def apply_gsmooth_to_state(state: XSTARPythonState) -> GSmoothResult:
     workspace.opakc[:] = result.opakc_after
     workspace.rccemis[:, :] = result.rccemis_after
     workspace.emissivity.base.brcems[:] = result.brcems_after
+    _record_type76_rccemis_checkpoint(context, "post_gsmooth", workspace.rccemis)
     state.transfer.source_arrays["gsmooth"] = result
     state.transfer.provenance["gsmooth"] = {
         "source_file": result.source_file,
@@ -884,6 +886,7 @@ def apply_heatt_to_state(state: XSTARPythonState) -> HeattResult:
     n_continua = int(state.control.get("ncsvn", workspace.elumab.shape[1]))
     calc_emis_result = state.local_zone.source_arrays.get("calc_emis_all")
     leveltemp = getattr(calc_emis_result, "leveltemp_workspace", None)
+    _record_type76_rccemis_checkpoint(context, "heatt_input", workspace.rccemis)
     if leveltemp is None:
         calc_emisab_result = state.local_zone.source_arrays.get("calc_emisab_all")
         leveltemp = getattr(calc_emisab_result, "leveltemp_workspace", None)
@@ -921,6 +924,37 @@ def apply_heatt_to_state(state: XSTARPythonState) -> HeattResult:
     workspace.zrems[:, :] = result.zrems_after
     workspace.elum[:, :] = result.elum_after
     workspace.elumab[:, :] = result.elumab_after
+    _record_type76_rccemis_checkpoint(context, "heatt_output_rccemis_unchanged", workspace.rccemis)
+    try:
+        epi = np.asarray(state.radiation.epi, dtype=float)
+        rows = []
+        for energy in (900.0, 1000.0, 1200.0):
+            j = int(np.argmin(np.abs(epi[:ncn2] - energy)))
+            rows.append({
+                "requested_energy_eV": float(energy),
+                "bin_one_based": int(j + 1),
+                "energy_eV": float(epi[j]),
+                "zrems3": float(workspace.zrems[2, j]),
+                "zrems5": float(workspace.zrems[4, j]),
+            })
+        control = getattr(context, "profile_control", None)
+        if control is None:
+            control = state.control
+        summary = control.setdefault("native_spectral_engine_summary", {})
+        summary.setdefault("type76_heatt_output_trace", []).append({
+            "call_index": int(getattr(context, "diagnostic_call_index", 0) or 0),
+            "pass_index": int(getattr(context, "diagnostic_pass_index", 0) or 0),
+            "zone_index": int(getattr(context, "diagnostic_zone_index", 0) or 0),
+            "phase": "heatt_output",
+            "sentinels": rows,
+        })
+    except Exception as exc:
+        control = getattr(context, "profile_control", None)
+        if control is None:
+            control = state.control
+        control.setdefault("native_spectral_engine_summary", {}).setdefault(
+            "type76_first_loss_trace_errors", []
+        ).append(f"heatt_output:{type(exc).__name__}:{exc}")
     if leveltemp is not None:
         leveltemp.levels.clear()
         leveltemp.levels.update(result.leveltemp_workspace.levels)
