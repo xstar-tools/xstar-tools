@@ -7998,29 +7998,14 @@ void accumulate_native_bound_free_surface(const NativeBoundFreeCurve& curve,
         return;
     }
 
-    // v82 patch 5.1+: literal source ucalc Type-99 does not publish direct
-    // bound-free opacity. Retain the prior source-faithful Type-99 RRC fallback
-    // unchanged; patch 5.7 only replaces the Type-49/53 phint53 grid mapper.
-    if (!type99) return;
-    const double kt_ev = xstar_constants::kModernBoltzmannEvPerK * input.temperature_k;
-    std::vector<double> fallback_shape(n, 0.0);
-    for (std::size_t i = 0; i < n; ++i) {
-        const double energy = input.radiation_energy_ev[i];
-        const double sigma = interpolate_bound_free_sigma(curve, energy);
-        if (!(sigma > 0.0)) continue;
-        const double excess = std::max(0.0, energy - curve.threshold_ev);
-        const double expo = kt_ev > 0.0 ? limited_exp(-excess / kt_ev) : 0.0;
-        fallback_shape[i] = sigma * energy * energy * energy * expo;
-    }
-    double integral = 0.0;
-    for (std::size_t i = 1; i < n; ++i) {
-        integral += 0.5 * (fallback_shape[i - 1] + fallback_shape[i]) *
-            std::max(0.0, input.radiation_energy_ev[i] - input.radiation_energy_ev[i - 1]);
-    }
-    const double total_emission = std::max(0.0, -evaluated.contribution.ans3) * upper_abundance * density;
-    if (!(integral > 0.0) || !(total_emission > 0.0)) return;
-    const double normalization = total_emission / (12.56 * integral);
-    for (std::size_t i = 0; i < n; ++i) rccemis[n + i] += normalization * fallback_shape[i];
+    // v82 patch 5.20.17.3: literal ucalc.f90 Type-99 computes scalar
+    // rate/thermal answers through calt99 + phint53hunt but does not publish
+    // a direct continuum opakc/rccemis profile.  The historical synthetic
+    // inward-only RRC fallback created one source-nonexistent 0.1-eV cell in
+    // every detal4 HDU.  Keep Type-99 scalar evaluation above, but make its
+    // spectral side effect a source-faithful no-op here.
+    if (type99) return;
+
 }
 
 

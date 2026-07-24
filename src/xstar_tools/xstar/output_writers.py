@@ -503,119 +503,127 @@ def build_detail_shell_output(
     )
 
 
+def _source_real_literal(value: float) -> float:
+    """Promote a FORTRAN default-REAL literal through binary32 to binary64."""
+    return float(np.float32(value))
+
+
 def voigte(vs: float, a: float) -> float:
-    """Literal translation of ``voigte.f90`` used by ``binemis``."""
+    """Literal ``voigte.f90`` with default-REAL literal promotion.
+
+    ``voigte.f90`` declares its working variables REAL(8), but DATA/PARAMETER
+    values and branch literals are default REAL.  C++ opacity parity already
+    preserves that binary32 rounding before promotion; Python must do the same
+    for Type-50 ``linopac`` parity.
+    """
+    sr = _source_real_literal
     ak = np.asarray([
-        -1.12470432, -0.15516677, 3.28867591, -2.34357915, 0.42139162,
-        -4.48480194, 9.39456063, -6.61487486, 1.98919585, -0.22041650,
-        0.554153432, 0.278711796, -0.188325687, 0.042991293,
-        -0.003278278, 0.979895023, -0.962846325, 0.532770573,
-        -0.122727278,
+        sr(-1.12470432), sr(-0.15516677), sr(3.28867591), sr(-2.34357915), sr(0.42139162),
+        sr(-4.48480194), sr(9.39456063), sr(-6.61487486), sr(1.98919585), sr(-0.22041650),
+        sr(0.554153432), sr(0.278711796), sr(-0.188325687), sr(0.042991293),
+        sr(-0.003278278), sr(0.979895023), sr(-0.962846325), sr(0.532770573),
+        sr(-0.122727278),
     ], dtype=float)
-    sqp = 1.772453851
-    sq2 = 1.414213562
+    un = sr(1.0); two = sr(2.0)
+    sqp = sr(1.772453851); sq2 = sr(1.414213562)
     v = abs(float(vs)); aa = float(a); u = aa + v; v2 = v * v
-    if aa == 0.0:
-        return 0.0 if v2 >= 100.0 else float(np.exp(-v2))
-    if aa <= 0.2 and v >= 5.0:
-        return aa * (15.0 + 6.0 * v2 + 4.0 * v2 * v2) / (4.0 * v2**3 * sqp)
-    if aa > 1.4 or u > 3.2:
-        a2 = aa * aa; uu = sq2 * (a2 + v2); u2 = 1.0 / (uu * uu)
-        return sq2 / sqp * aa / uu * (1.0 + u2 * (3.0 * v2 - a2) + u2 * u2 * (15.0 * v2 * v2 - 30.0 * v2 * a2 + 3.0 * a2 * a2))
-    ex = 0.0 if v2 >= 100.0 else float(np.exp(-v2))
-    quo = 1.0
-    if v >= 2.4:
-        quo = 1.0 / (v2 - 1.5); start = 10
-    elif v >= 1.3:
+    if aa == sr(0.0):
+        return 0.0 if v2 >= sr(100.0) else float(np.exp(-v2))
+    if aa <= sr(0.2) and v >= sr(5.0):
+        return aa * (sr(15.0) + sr(6.0) * v2 + sr(4.0) * v2 * v2) / (sr(4.0) * v2 * v2 * v2 * sqp)
+    if aa > sr(1.4) or u > sr(3.2):
+        a2 = aa * aa; uu = sq2 * (a2 + v2); u2 = un / (uu * uu)
+        return sq2 / sqp * aa / uu * (
+            un + u2 * (sr(3.0) * v2 - a2) +
+            u2 * u2 * (sr(15.0) * v2 * v2 - sr(30.0) * v2 * a2 + sr(3.0) * a2 * a2)
+        )
+    ex = 0.0 if v2 >= sr(100.0) else float(np.exp(-v2))
+    quo = un
+    if v >= sr(2.4):
+        quo = un / (v2 - sr(1.5)); start = 10
+    elif v >= sr(1.3):
         start = 5
     else:
         start = 0
     a1 = ak[start:start + 5]
     h1 = quo * (a1[0] + v * (a1[1] + v * (a1[2] + v * (a1[3] + v * a1[4]))))
-    if aa <= 0.2:
-        return float(h1 * aa + ex * (1.0 + aa * aa * (1.0 - 2.0 * v2)))
-    pqs = 2.0 / sqp
+    if aa <= sr(0.2):
+        return float(h1 * aa + ex * (un + aa * aa * (un - two * v2)))
+    pqs = two / sqp
     h1p = h1 + pqs * ex
-    h2p = pqs * h1p - 2.0 * v2 * ex
-    h3p = (pqs * (1.0 - ex * (1.0 - 2.0 * v2)) - 2.0 * v2 * h1p) / 3.0 + pqs * h2p
-    h4p = (2.0 * v2 * v2 * ex - pqs * h1p) / 3.0 + pqs * h3p
+    h2p = pqs * h1p - two * v2 * ex
+    h3p = (pqs * (un - ex * (un - two * v2)) - two * v2 * h1p) / sr(3.0) + pqs * h2p
+    h4p = (two * v2 * v2 * ex - pqs * h1p) / sr(3.0) + pqs * h3p
     psi = ak[15] + aa * (ak[16] + aa * (ak[17] + aa * ak[18]))
     return float(psi * (ex + aa * (h1p + aa * (h2p + aa * (h3p + aa * h4p)))))
 
-
 def _voigte_array(vs: np.ndarray, a: float) -> np.ndarray:
-    """Vectorized numerical twin of :func:`voigte` for smooth far wings.
-
-    This is used only outside the compact source-core profile workspace, where
-    the profile varies slowly across an XSTAR continuum bin.  It avoids
-    materializing the enormous declared FORTRAN scratch capacity while retaining
-    the same ``voigte`` branch formulas and constants.
-    """
+    """Vectorized source-REAL twin of :func:`voigte` for far wings."""
+    sr = _source_real_literal
     v = np.abs(np.asarray(vs, dtype=float))
     aa = float(a)
     v2 = v * v
     out = np.empty_like(v)
-    sqp = 1.772453851
-    sq2 = 1.414213562
-    if aa == 0.0:
-        out[:] = np.where(v2 >= 100.0, 0.0, np.exp(-v2))
+    sqp = sr(1.772453851)
+    sq2 = sr(1.414213562)
+    un = sr(1.0); two = sr(2.0)
+    if aa == sr(0.0):
+        out[:] = np.where(v2 >= sr(100.0), 0.0, np.exp(-v2))
         return out
     remaining = np.ones(v.shape, dtype=bool)
-    if aa <= 0.2:
-        m = v >= 5.0
+    if aa <= sr(0.2):
+        m = v >= sr(5.0)
         if np.any(m):
             vv = v2[m]
-            out[m] = aa * (15.0 + 6.0 * vv + 4.0 * vv * vv) / (4.0 * vv**3 * sqp)
+            out[m] = aa * (sr(15.0) + sr(6.0) * vv + sr(4.0) * vv * vv) / (sr(4.0) * vv**3 * sqp)
             remaining[m] = False
-    m = remaining & ((aa > 1.4) | ((aa + v) > 3.2))
+    m = remaining & ((aa > sr(1.4)) | ((aa + v) > sr(3.2)))
     if np.any(m):
         vv = v2[m]
         a2 = aa * aa
         uu = sq2 * (a2 + vv)
-        u2 = 1.0 / (uu * uu)
+        u2 = un / (uu * uu)
         out[m] = sq2 / sqp * aa / uu * (
-            1.0 + u2 * (3.0 * vv - a2)
-            + u2 * u2 * (15.0 * vv * vv - 30.0 * vv * a2 + 3.0 * a2 * a2)
+            un + u2 * (sr(3.0) * vv - a2) +
+            u2 * u2 * (sr(15.0) * vv * vv - sr(30.0) * vv * a2 + sr(3.0) * a2 * a2)
         )
         remaining[m] = False
     if np.any(remaining):
-        vr = v[remaining]
-        vv = v2[remaining]
-        ex = np.where(vv >= 100.0, 0.0, np.exp(-vv))
-        quo = np.ones_like(vr)
-        start = np.zeros(vr.shape, dtype=np.int8)
-        m24 = vr >= 2.4
-        quo[m24] = 1.0 / (vv[m24] - 1.5)
-        start[m24] = 10
-        m13 = (~m24) & (vr >= 1.3)
-        start[m13] = 5
         ak = np.asarray([
-            -1.12470432, -0.15516677, 3.28867591, -2.34357915, 0.42139162,
-            -4.48480194, 9.39456063, -6.61487486, 1.98919585, -0.22041650,
-            0.554153432, 0.278711796, -0.188325687, 0.042991293,
-            -0.003278278, 0.979895023, -0.962846325, 0.532770573,
-            -0.122727278,
+            sr(-1.12470432), sr(-0.15516677), sr(3.28867591), sr(-2.34357915), sr(0.42139162),
+            sr(-4.48480194), sr(9.39456063), sr(-6.61487486), sr(1.98919585), sr(-0.22041650),
+            sr(0.554153432), sr(0.278711796), sr(-0.188325687), sr(0.042991293), sr(-0.003278278),
+            sr(0.979895023), sr(-0.962846325), sr(0.532770573), sr(-0.122727278),
         ], dtype=float)
+        vr = v[remaining]
+        vr2 = v2[remaining]
+        ex = np.where(vr2 >= sr(100.0), 0.0, np.exp(-vr2))
+        quo = np.ones_like(vr) * un
+        start_idx = np.zeros(vr.shape, dtype=int)
+        hi = vr >= sr(2.4)
+        quo[hi] = un / (vr2[hi] - sr(1.5))
+        start_idx[hi] = 10
+        mid = (~hi) & (vr >= sr(1.3))
+        start_idx[mid] = 5
         h1 = np.empty_like(vr)
-        for st in (0, 5, 10):
-            ms = start == st
-            if not np.any(ms):
+        for st in (0,5,10):
+            m2 = start_idx == st
+            if not np.any(m2):
                 continue
-            x = vr[ms]
-            a1 = ak[st:st + 5]
-            h1[ms] = quo[ms] * (a1[0] + x * (a1[1] + x * (a1[2] + x * (a1[3] + x * a1[4]))))
-        if aa <= 0.2:
-            out[remaining] = h1 * aa + ex * (1.0 + aa * aa * (1.0 - 2.0 * vv))
+            vv = vr[m2]
+            a1 = ak[st:st+5]
+            h1[m2] = quo[m2] * (a1[0] + vv * (a1[1] + vv * (a1[2] + vv * (a1[3] + vv * a1[4]))))
+        if aa <= sr(0.2):
+            out[remaining] = h1 * aa + ex * (un + aa * aa * (un - two * vr2))
         else:
-            pqs = 2.0 / sqp
+            pqs = two / sqp
             h1p = h1 + pqs * ex
-            h2p = pqs * h1p - 2.0 * vv * ex
-            h3p = (pqs * (1.0 - ex * (1.0 - 2.0 * vv)) - 2.0 * vv * h1p) / 3.0 + pqs * h2p
-            h4p = (2.0 * vv * vv * ex - pqs * h1p) / 3.0 + pqs * h3p
+            h2p = pqs * h1p - two * vr2 * ex
+            h3p = (pqs * (un - ex * (un - two * vr2)) - two * vr2 * h1p) / sr(3.0) + pqs * h2p
+            h4p = (two * vr2 * vr2 * ex - pqs * h1p) / sr(3.0) + pqs * h3p
             psi = ak[15] + aa * (ak[16] + aa * (ak[17] + aa * ak[18]))
             out[remaining] = psi * (ex + aa * (h1p + aa * (h2p + aa * (h3p + aa * h4p))))
     return out
-
 
 def _source_real(value: float) -> float:
     """Return a source default-real literal promoted to Python float."""

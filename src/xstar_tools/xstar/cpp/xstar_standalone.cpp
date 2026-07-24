@@ -6205,6 +6205,14 @@ void create_native_retained_productwrite_schema(xstar_run_state::ProductWritingS
         const auto& detail_opacity_ws = use_second_zero_depth_opacity_owner
             ? product.radial_zones[1].accepted_controller.evaluation.source_workspace
             : ws;
+        const bool use_second_zero_depth_inward_rccemis_owner =
+            zi == 0u && product.radial_zones.size() > 1u &&
+            std::fabs(product.radial_zones[0].delta_radius_cm) <= 1.0e-6 &&
+            std::fabs(product.radial_zones[1].delta_radius_cm) <= 1.0e-6 &&
+            product.radial_zones[1].accepted_controller.evaluation.source_workspace.rccemis.size() == 2u * n;
+        const auto& detail_inward_rccemis_ws = use_second_zero_depth_inward_rccemis_owner
+            ? product.radial_zones[1].accepted_controller.evaluation.source_workspace
+            : ws;
         append_native_array(inventory, product, hdu, "product_write_detail_level_index", level_indices);
         append_native_array(inventory, product, hdu, "product_write_detail_level_population", resize_or_zero(eval.populations, level_indices.size()));
         append_native_array(inventory, product, hdu, "product_write_detail_level_lte", resize_or_zero(ws.lte_populations, level_indices.size()));
@@ -6216,6 +6224,11 @@ void create_native_retained_productwrite_schema(xstar_run_state::ProductWritingS
         append_native_array(inventory, product, hdu, "product_write_opakc", resize_or_zero(
             detail_opacity_ws.opakc.empty() ? eval.opacity : detail_opacity_ws.opakc, n));
         std::vector<double> retained_rccemis = ws.rccemis;
+        if (use_second_zero_depth_inward_rccemis_owner && retained_rccemis.size() == 2u * n) {
+            std::copy(detail_inward_rccemis_ws.rccemis.begin() + static_cast<std::ptrdiff_t>(n),
+                      detail_inward_rccemis_ws.rccemis.end(),
+                      retained_rccemis.begin() + static_cast<std::ptrdiff_t>(n));
+        }
         if (!vector_has_nonzero(retained_rccemis)) retained_rccemis = ws.elumab;
         if (!vector_has_nonzero(retained_rccemis)) {
             retained_rccemis.assign(2 * n, 0.0);
