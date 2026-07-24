@@ -671,7 +671,7 @@ def photon_number_luminosity(zremsz: Sequence[float], epi_eV: Sequence[float]) -
     return float(total)
 
 
-OUTPUT_METADATA_CACHE_FORMAT_VERSION = 9
+OUTPUT_METADATA_CACHE_FORMAT_VERSION = 10
 
 
 def default_output_metadata_cache_path(fitsfile: str | Path) -> Path:
@@ -856,6 +856,44 @@ def _record_to_ion_index(derived: Any) -> np.ndarray:
     return result
 
 
+def _build_binemis_type86_damping_map(
+    master: Any, derived: Any
+) -> dict[tuple[int, int], tuple[float, float, int]]:
+    """Return literal ``binemis.f90`` Type-86 damping by (ion, upper level).
+
+    ``binemis`` walks the rate-type-41 chain for an ion and matches the line
+    upper local level to the second INTEGER in the Type-86 record.  On the
+    first match, the third REAL is the Auger damping rate and the fourth REAL
+    replaces the radiative ``egam`` rate.  Conversion to eV is deliberately
+    deferred to the writer, where the source uses default-REAL ``4.14e-15``.
+    """
+    out: dict[tuple[int, int], tuple[float, float, int]] = {}
+    if int(getattr(derived, "max_rate_type", 0)) < 41 or derived.npfi.shape[0] <= 41:
+        return out
+    npar = np.asarray(derived.npar, dtype=np.int64)
+    npnxt = np.asarray(derived.npnxt, dtype=np.int64)
+    for ion in range(1, int(derived.n_ions) + 1):
+        rec = int(derived.npfi[41, ion])
+        parent = int(npar[rec]) if 0 < rec < npar.size else 0
+        guard = 0
+        while 0 < rec < npar.size and int(npar[rec]) == parent:
+            ints86 = np.asarray(master.record_integers(rec), dtype=np.int64).reshape(-1)
+            reals86 = np.asarray(master.record_reals(rec), dtype=np.float64).reshape(-1)
+            if ints86.size >= 2 and reals86.size >= 4:
+                upper86 = int(ints86[1])
+                key86 = (ion, upper86)
+                if upper86 > 0 and key86 not in out:
+                    out[key86] = (float(reals86[2]), float(reals86[3]), rec)
+            nxt = int(npnxt[rec]) if rec < npnxt.size else 0
+            if nxt == rec:
+                raise AtomicDatabaseError(f"Type-86 record self-cycle at {rec}")
+            rec = nxt
+            guard += 1
+            if guard > int(npar.size):
+                raise AtomicDatabaseError("Type-86 record cycle")
+    return out
+
+
 def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetadata:
     """Resolve packed ATDB pointers into writer metadata with vectorized reads.
 
@@ -974,12 +1012,16 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
     if np.any(has_upper):
         upper[has_upper] = master.idat1.gather(line_iptr[has_upper] + 1, dtype=np.int64)
     natural = np.zeros(line_records.size, dtype=np.float64)
-    natural_mask = (np.asarray(line_rows[:, 1], dtype=np.int64) == 50) & (line_nreal > 2)
+    natural_mask = line_nreal > 2
     if np.any(natural_mask):
         natural[natural_mask] = master.rdat1.gather(
             line_rptr[natural_mask] + 2,
             dtype=np.float64,
         )
+
+    # v82 patch 5.20.15.4: resolve the writer-only Type-86 Auger damping
+    # before constructing public line metadata.
+    type86_by_ion_upper = _build_binemis_type86_damping_map(master, derived)
 
     lines: list[LineOutputMetadata] = []
     for pos, (line_index, ion_index) in enumerate(zip(line_indices, line_ions)):
@@ -991,6 +1033,11 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
         up = int(upper[pos])
         low_row = levels_by_key.get((ion, low))
         up_row = levels_by_key.get((ion, up))
+        auger = type86_by_ion_upper.get((ion, up))
+        binemis_natural_rate = float(natural[pos])
+        binemis_auger_rate = 0.0
+        if auger is not None:
+            binemis_auger_rate, binemis_natural_rate, _type86_record = auger
         lines.append(
             LineOutputMetadata(
                 line_index=int(line_index),
@@ -1001,7 +1048,8 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
                 rate_type=int(line_rows[pos, 2]),
                 data_type=int(line_rows[pos, 1]),
                 atomic_mass=float(ATOMIC_MASS[z - 1]),
-                natural_rate_s=float(natural[pos]),
+                natural_rate_s=binemis_natural_rate,
+                auger_rate_s=binemis_auger_rate,
                 source_record=int(line_records[pos]),
                 lower_local_index=low,
                 upper_local_index=up,

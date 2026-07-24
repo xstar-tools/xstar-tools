@@ -635,6 +635,46 @@ double type50_natural_width_ev_v82_patch5207(
     return fallback_aij_s * kSourcePlanckEvSecondV82Patch5207;
 }
 
+// v82 patch 5.20.15.4: literal binemis.f90 Type-86 writer damping.
+// This is intentionally separate from the ucalc/deleafnd Type-50 width above:
+// binemis uses source-REAL 4.14e-15 and, on an upper-level match, takes the
+// third Type-86 REAL as the Auger rate and the fourth REAL as the replacement
+// radiative rate (egam).
+struct BinemisType86DampingV82Patch520154 {
+    bool matched = false;
+    double auger_rate_s = 0.0;
+    double radiative_rate_s = 0.0;
+    int source_record = 0;
+};
+
+BinemisType86DampingV82Patch520154 binemis_type86_damping_v82_patch520154(
+    AtdbReader& db, const Derived& d, int ion, int upper_local
+) {
+    BinemisType86DampingV82Patch520154 out;
+    if (ion <= 0 || upper_local <= 0 || 41 > d.max_rate ||
+        static_cast<std::size_t>(ion) >= d.npfi[41].size()) return out;
+    int rec = d.npfi[41][ion];
+    const int parent = rec > 0 && rec < static_cast<int>(d.npar.size()) ? d.npar[rec] : 0;
+    int guard = 0;
+    while (rec > 0 && rec < static_cast<int>(d.npar.size()) && d.npar[rec] == parent) {
+        const auto iv = db.ints(rec);
+        const auto rv = db.reals(rec);
+        if (iv.size() >= 2 && static_cast<int>(iv[1]) == upper_local && rv.size() >= 4) {
+            out.matched = true;
+            out.auger_rate_s = rv[2];
+            out.radiative_rate_s = rv[3];
+            out.source_record = rec;
+            return out;
+        }
+        const int next = d.npnxt[rec];
+        if (next == rec) throw std::runtime_error("Type-86 binemis record self-cycle");
+        rec = next;
+        if (++guard > static_cast<int>(db.record_count()))
+            throw std::runtime_error("Type-86 binemis record cycle");
+    }
+    return out;
+}
+
 LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int rec,int element_index,
                            const std::unordered_map<int,int>& ion_record_to_index) {
     const auto& h=db.header(rec); const int dt=h.data_type, rt=h.rate_type;
@@ -894,7 +934,7 @@ ProgramStorage lower_atdb_in_memory(const std::filesystem::path& atdb,const Prod
         row_offset+=l.n_rows;
         for(std::size_t li=0;li<rit->second.size();++li){int rec=rit->second[li];auto lr=lower_record(db,d,l,rec,ei,ion_record_to_index);lr.record.source_position=4*static_cast<std::int64_t>(global_record+1);lr.record.next_index=(li+1<rit->second.size())?static_cast<int>(global_record+1):-1;lr.record.real_offset=out.reals.size();lr.record.real_count=lr.reals.size();lr.record.int_offset=out.ints.size();lr.record.int_count=lr.ints.size();out.reals.insert(out.reals.end(),lr.reals.begin(),lr.reals.end());out.ints.insert(out.ints.end(),lr.ints.begin(),lr.ints.end());out.records.push_back(lr.record);++global_record;
             const auto& h=db.header(rec);const int parent=d.npar[rec];const int ion=ion_record_to_index[parent];const auto& b=block_for(l,ion);auto iv=db.ints(rec);auto rv=db.reals(rec);
-            if(d.nplini[rec]>0){xstar_run_state::LineIdentityState id;id.line_index=d.nplini[rec];id.wavelength_angstrom=!rv.empty()?std::abs(rv[0]):(lr.record.line_energy_ev>0?kEvAngstrom/lr.record.line_energy_ev:0.0);id.ion_label=normalized_ion_label(b);int a=iv.size()>=2?iv[0]:1,c=iv.size()>=2?iv[1]:b.nlev;const auto* la=find_level(l,ion,a);const auto* lc=find_level(l,ion,c);id.lower_level=la?la->label:"";id.upper_level=lc?lc->label:"";id.rate_type=h.rate_type;id.data_type=h.data_type;id.atomic_mass=mass_for_z(z);id.natural_rate_s=rv.size()>=3?rv[2]:0.0;id.source_record=rec;id.lower_local_index=a;id.upper_local_index=c;out.line_identities.push_back(id);}
+            if(d.nplini[rec]>0){xstar_run_state::LineIdentityState id;id.line_index=d.nplini[rec];id.wavelength_angstrom=!rv.empty()?std::abs(rv[0]):(lr.record.line_energy_ev>0?kEvAngstrom/lr.record.line_energy_ev:0.0);id.ion_label=normalized_ion_label(b);int a=iv.size()>=2?iv[0]:1,c=iv.size()>=2?iv[1]:b.nlev;const auto* la=find_level(l,ion,a);const auto* lc=find_level(l,ion,c);id.lower_level=la?la->label:"";id.upper_level=lc?lc->label:"";id.rate_type=h.rate_type;id.data_type=h.data_type;id.atomic_mass=mass_for_z(z);id.natural_rate_s=rv.size()>=3?rv[2]:0.0;const auto type86=binemis_type86_damping_v82_patch520154(db,d,ion,c);if(type86.matched){id.auger_rate_s=type86.auger_rate_s;id.natural_rate_s=type86.radiative_rate_s;}id.source_record=rec;id.lower_local_index=a;id.upper_local_index=c;out.line_identities.push_back(id);}
             if(d.npconi2[rec]>0){
                 // Literal pprint.f90/writespectra4.f90 identity metadata is
                 // distinct from the UCalc physical threshold used by the
