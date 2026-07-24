@@ -12573,6 +12573,24 @@ void retain_pre_stpcut_cumulative_state_v82_patch520145(
     local_boundary.dpthcont.reserve(2u * grid_stride);
     local_boundary.dpthcont.insert(local_boundary.dpthcont.end(), data.grid_cont_tau_in.begin(), data.grid_cont_tau_in.end());
     local_boundary.dpthcont.insert(local_boundary.dpthcont.end(), data.grid_cont_tau_out.begin(), data.grid_cont_tau_out.end());
+
+    // v82 patch 5.20.17.1: zrems/zremsz are caller-owned source continuum
+    // accumulators, not arrays produced by xstarcalc.  The production controller
+    // has retained them in StandaloneControllerData since initialization, but
+    // the accepted-boundary projection historically copied only dpthc/dpthcont.
+    // That omission left source_workspace.accumulated_output_workspace_exact
+    // false for the live five-zone product trajectory and blocked publication
+    // after all 58 native scientific gates had already passed.  Retain the
+    // literal current accumulators on every accepted pprint boundary instead of
+    // weakening ExactSourceWorkspaceState::complete().
+    if (data.accumulated_zrems.size() != 5u * grid_stride) {
+        throw std::runtime_error("5.20.17.1 retained zrems workspace shape mismatch");
+    }
+    if (data.accumulated_zremsz.size() != grid_stride) {
+        throw std::runtime_error("5.20.17.1 retained zremsz workspace shape mismatch");
+    }
+    local_boundary.zrems = data.accumulated_zrems;
+    local_boundary.zremsz = data.accumulated_zremsz;
 }
 
 void advance_stpcut_depths_v82_patch520145(
@@ -14999,10 +15017,19 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         whole.native_detail_state_retained = true;
         whole.continuum_depths_derived_from_native_opacity = true;
         whole.exact_source_metadata_retained = !whole.element_metadata.empty() && !whole.row_metadata.empty();
-        whole.exact_source_workspaces_retained = std::all_of(
-            whole.radial_zones.begin(), whole.radial_zones.end(),
-            [](const auto& z){ return z.accepted_controller.evaluation.source_workspace.complete(); });
+        const std::size_t patch520171_complete_workspace_zones =
+            static_cast<std::size_t>(std::count_if(
+                whole.radial_zones.begin(), whole.radial_zones.end(),
+                [](const auto& z){ return z.accepted_controller.evaluation.source_workspace.complete(); }));
+        whole.exact_source_workspaces_retained =
+            patch520171_complete_workspace_zones == whole.radial_zones.size();
         whole.exact_accepted_radial_boundaries_retained = std::all_of(whole.radial_zones.begin(), whole.radial_zones.end(), [](const auto& z){ return z.accepted_boundary_exact; });
+        std::cout << "V048746255172582_PATCH520171_PRODUCT_WORKSPACE_ZONES="
+                  << whole.radial_zones.size() << "\n"
+                  << "V048746255172582_PATCH520171_PRODUCT_WORKSPACE_ZONES_COMPLETE="
+                  << patch520171_complete_workspace_zones << "\n"
+                  << "V048746255172582_PATCH520171_EXACT_SOURCE_WORKSPACES="
+                  << (whole.exact_source_workspaces_retained ? "ACCEPT" : "REJECT") << "\n";
         whole.exact_legacy_pprint_state_retained = false;
         whole.diagnostic_preview_partial = false;
         whole.physical_radial_boundaries_expected = 4u;
