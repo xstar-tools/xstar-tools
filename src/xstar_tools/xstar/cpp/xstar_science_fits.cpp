@@ -10999,6 +10999,13 @@ void write_public_lines(const std::filesystem::path& path,
         }
     }
     if (public_line_labels.size() != 600u) {
+        // 5.20.17: the historical frozen 600-row template is no longer a
+        // production compatibility path.  Production must carry the live
+        // writespectra2-selected physical line inventory retained by 5.20.16.4.
+        const bool true_production = std::getenv("XSTAR_TRUE_PRODUCTION") != nullptr;
+        if (true_production) {
+            throw std::runtime_error("5.20.17 production public-line selection is missing live 600-row ranking");
+        }
         const auto& fallback = oracle_public_line_label_template_v172537();
         public_line_labels.assign(fallback.begin(), fallback.end());
     }

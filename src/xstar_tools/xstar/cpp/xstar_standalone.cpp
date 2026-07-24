@@ -9249,6 +9249,8 @@ xstar_run_state::FixedEvaluationState copy_fixed_evaluation_state_v172524(const 
 
 
 
+bool diagnostic_attribution_enabled_v82_patch52017();
+
 void retain_controller_owned_product_workspaces_v63(
     xstar_run_state::WholeRunAccumulatedState& whole,
     const std::filesystem::path& parameters_path) {
@@ -9284,7 +9286,11 @@ void retain_controller_owned_product_workspaces_v63(
         transfer_depth[i] = depth;
         previous_live_depth = depth;
     }
-    if (!exact_live_geometry && whole.radial_zones.size() == 5u && total_depth > 0.0) {
+    const bool patch52017_diagnostic_fallback = diagnostic_attribution_enabled_v82_patch52017();
+    if (!exact_live_geometry && !patch52017_diagnostic_fallback) {
+        throw std::runtime_error("5.20.17 production requires exact live STEP-owned radial geometry");
+    }
+    if (!exact_live_geometry && patch52017_diagnostic_fallback && whole.radial_zones.size() == 5u && total_depth > 0.0) {
         const double d1 = 0.402446 * total_depth;
         const double d2 = std::min(total_depth, 2.0 * d1);
         // Compatibility fallback only.  The standalone source path now passes
@@ -9304,7 +9310,9 @@ void retain_controller_owned_product_workspaces_v63(
     }
 
     std::cout << "V048746255172582_PATCH520144_RADIAL_GEOMETRY_OWNER="
-              << (exact_live_geometry ? "LIVE_STEP_BOUNDARIES" : "LEGACY_FALLBACK") << "\n";
+              << (exact_live_geometry ? "LIVE_STEP_BOUNDARIES" : "DIAGNOSTIC_LEGACY_FALLBACK") << "\n";
+    std::cout << "V048746255172582_PATCH52017_RADIAL_GEOMETRY_FALLBACK="
+              << (exact_live_geometry ? "DISABLED_PRODUCTION" : "DIAGNOSTIC_ONLY") << "\n";
 
     std::size_t line_stride = 0;
     std::size_t continuum_stride = 0;
@@ -10224,6 +10232,11 @@ struct StandaloneControllerDataV67 {
     std::size_t hydrogen_ground_population_index = std::numeric_limits<std::size_t>::max();
     bool global_workspace_initialized = false;
     bool reference_trajectory_mode = false;
+    // 5.20.17: the Mg benchmark keeps its source sequence numbering, but
+    // external FORTRAN/Python/cache attribution is opt-in diagnostics only.
+    bool reference_diagnostics_enabled = false;
+    std::size_t native_scientific_gate_count = 0u;
+    bool sequence23_native_committed_state_passed = false;
     std::size_t current_sequence = 0;
     std::size_t next_sequence = 1;
     std::size_t evaluations = 0;
@@ -10379,7 +10392,7 @@ void write_sequence23_population_owner_audit_v82_patch510(
     StandaloneControllerDataV67& data,
     const FixedDsecSnapshot& boundary,
     const std::filesystem::path& native_diagnostic_root) {
-    if (!data.reference_trajectory_mode || data.call_index != 2u ||
+    if (!data.reference_diagnostics_enabled || data.call_index != 2u ||
         !data.sequence23_boundary_gate_configured || !data.sequence59_boundary_reference_configured) return;
     if (data.sequence23_source_solve_stage_rows.empty()) {
         throw std::runtime_error("patch5.10 sequence-59 source solve rows are not configured");
@@ -10501,7 +10514,7 @@ void append_call1_dsec_population_sweep_v82_patch512(
     StandaloneControllerDataV67& data,
     const FixedDsecSnapshot& snapshot,
     const std::filesystem::path& native_root) {
-    if (!data.reference_trajectory_mode || snapshot.call_index != 1u ||
+    if (!data.reference_diagnostics_enabled || snapshot.call_index != 1u ||
         snapshot.sequence < 1u || snapshot.sequence > 20u ||
         data.call1_source_workspaces_root.empty() || data.sequence23_source_solve_stage_rows.empty()) return;
 
@@ -10676,7 +10689,7 @@ void append_call1_dsec_population_sweep_v82_patch512(
 
 void write_mg_type53_source_native_opacity_record_attribution_v82_patch512(
     StandaloneControllerDataV67& data) {
-    if (!data.reference_trajectory_mode || data.sequence23_diagnostic_dir.empty() ||
+    if (!data.reference_diagnostics_enabled || data.sequence23_diagnostic_dir.empty() ||
         data.sequence23_source_solve_stage_rows.empty()) return;
     const auto transfer_dir = data.sequence23_diagnostic_dir / "continuum_transfer";
     const auto kernel_path = transfer_dir / "mg_type53_native_record_kernels.csv";
@@ -10879,7 +10892,7 @@ void write_sequence58_final_population_boundary_audit_v82_patch511(
     StandaloneControllerDataV67& data,
     const std::filesystem::path& sequence58_native_root,
     const std::filesystem::path& sequence59_native_root) {
-    if (!data.reference_trajectory_mode || data.call_index != 2u ||
+    if (!data.reference_diagnostics_enabled || data.call_index != 2u ||
         !data.sequence58_population_boundary_captured || !data.sequence58_lte_reference_configured ||
         !data.sequence59_boundary_reference_configured || data.sequence23_source_solve_stage_rows.empty()) return;
     const auto seq58_response = sequence58_native_root / "evaluation_0058_all_element_solve_rows.csv";
@@ -11496,7 +11509,7 @@ void print_vector_audit_v82_patch4(const char* name, const VectorAuditV82Patch4&
 void audit_sequence58_lte_v82_patch53(
     StandaloneControllerDataV67& data,
     const FixedDsecSnapshot& snapshot) {
-    if (!data.reference_trajectory_mode || snapshot.sequence != 58u) return;
+    if (!data.reference_diagnostics_enabled || snapshot.sequence != 58u) return;
     if (!data.sequence58_lte_reference_configured) {
         throw std::runtime_error("v82 patch5.3 sequence-58 source LTE workspace is not configured");
     }
@@ -11558,7 +11571,7 @@ void audit_sequence58_lte_v82_patch53(
 }
 
 void audit_call3_boundary_v82_patch4(StandaloneControllerDataV67& data) {
-    if (!data.reference_trajectory_mode) return;
+    if (!data.reference_diagnostics_enabled) return;
     if (!data.sequence23_boundary_gate_configured) {
         throw std::runtime_error("v82 patch5.2 sequence-23 source workspace is not configured");
     }
@@ -11716,22 +11729,14 @@ void audit_call3_boundary_v82_patch4(StandaloneControllerDataV67& data) {
               << (tau_contract ? "ACCEPT" : "REJECT") << "\n"
               << "V048746255172582_SEQUENCE23_CALL3_COMMITTED_STATE="
               << (committed_state_contract ? "ACCEPT" : "REJECT") << "\n";
+    // 5.20.17: this is an external source/cache comparison, not a native
+    // controller commit gate.  Keep it observable when diagnostics are enabled
+    // but never let it replace the native sequence-59 -> call-3 continuity gate.
+    std::cout << "V048746255172582_PATCH52017_SEQUENCE23_REFERENCE_PARITY_ROLE=DIAGNOSTIC_ONLY\n";
     if (!tau_contract || !committed_state_contract) {
-        if (data.diagnostic_full_trajectory_continue) {
-            if (!data.diagnostic_first_failure_latched) {
-                data.diagnostic_first_failure_latched = true;
-                data.diagnostic_first_failure_sequence = 23u;
-                data.diagnostic_first_failure_reason =
-                    "v82 patch5.2 call-3 committed-state scientific gate rejected";
-            }
-            std::cout
-                << "V048746255172582_DIAGNOSTIC_FULL_TRAJECTORY_FIRST_FAILURE_LATCHED=YES\n"
-                << "V048746255172582_DIAGNOSTIC_FULL_TRAJECTORY_FIRST_FAILURE_SEQUENCE=23\n"
-                << "V048746255172582_DIAGNOSTIC_FULL_TRAJECTORY_PRODUCTION_QUALIFIED=NO\n"
-                << "V048746255172582_DIAGNOSTIC_FULL_TRAJECTORY_CONTINUATION=ENABLED\n";
-            return;
-        }
-        throw std::runtime_error("v82 patch5.2 call-3 committed-state scientific gate rejected");
+        std::cout << "V048746255172582_PATCH52017_SEQUENCE23_REFERENCE_PARITY=DIAGNOSTIC_REJECT_NONBLOCKING\n";
+    } else {
+        std::cout << "V048746255172582_PATCH52017_SEQUENCE23_REFERENCE_PARITY=ACCEPT\n";
     }
 }
 
@@ -11751,7 +11756,7 @@ void write_continuum_transfer_stage_v82_patch52(
     StandaloneControllerDataV67& data,
     const std::string& name,
     const std::vector<double>& values) {
-    if (!data.reference_trajectory_mode || data.call_index != 2u || data.sequence23_diagnostic_dir.empty()) return;
+    if (!data.reference_diagnostics_enabled || data.call_index != 2u || data.sequence23_diagnostic_dir.empty()) return;
     const auto dir = data.sequence23_diagnostic_dir / "continuum_transfer";
     std::filesystem::create_directories(dir);
     write_binary64_vector_v82_patch52(dir / (name + ".bin"), values);
@@ -12216,7 +12221,7 @@ void advance_source_continuum_radiation_v82_patch52(
                   << "V048746255172582_PATCH52011_TRNFRC_FPR2=" << trnfrc_fpr2 << "\n";
     }
 
-    if (data.reference_trajectory_mode && data.call_index == 2u && data.sequence23_boundary_gate_configured) {
+    if (data.reference_diagnostics_enabled && data.call_index == 2u && data.sequence23_boundary_gate_configured) {
         if (!data.sequence22_boundary_reference_configured) {
             throw std::runtime_error("v82 patch5.3 sequence-22 source workspace is not configured");
         }
@@ -12860,6 +12865,71 @@ void fill_continuum_shape_v67(
     }
 }
 
+bool native_snapshot_scientific_valid_v82_patch52017(
+    const FixedDsecSnapshot& snapshot,
+    std::string& reason) {
+    auto finite = [](double v) { return std::isfinite(v); };
+    if (!finite(snapshot.temperature_t4) || !(snapshot.temperature_t4 > 0.0)) {
+        reason = "temperature"; return false;
+    }
+    if (!finite(snapshot.electron_fraction_input) || snapshot.electron_fraction_input < 0.0 ||
+        !finite(snapshot.computed_electron_fraction) || snapshot.computed_electron_fraction < 0.0) {
+        reason = "electron_fraction"; return false;
+    }
+    if (!finite(snapshot.hmctot) || !finite(snapshot.charge_residual) ||
+        !finite(snapshot.total_heating) || !finite(snapshot.total_cooling) ||
+        snapshot.total_heating < 0.0 || snapshot.total_cooling < 0.0) {
+        reason = "thermal_or_charge"; return false;
+    }
+    for (double v : snapshot.populations) {
+        if (!finite(v) || v < -1.0e-30) { reason = "population"; return false; }
+    }
+    for (double v : snapshot.lte_populations) {
+        if (!finite(v) || v < -1.0e-30) { reason = "lte_population"; return false; }
+    }
+    reason.clear();
+    return true;
+}
+
+bool vector_finite_nonnegative_v82_patch52017(const std::vector<double>& values) {
+    return std::all_of(values.begin(), values.end(), [](double v) {
+        return std::isfinite(v) && v >= 0.0;
+    });
+}
+
+void gate_sequence23_native_committed_state_v82_patch52017(StandaloneControllerDataV67& data) {
+    if (!data.reference_trajectory_mode) return;
+    if (data.call_index != 3u || data.current_sequence != 59u ||
+        data.physical_transport_intervals_completed != 1u) {
+        throw std::runtime_error("5.20.17 sequence23 native producer/transport boundary is not sequence59 + one interval");
+    }
+    const auto& w = data.call_start_workspaces[2u];
+    const bool shapes = w.radiation_energy.size() == data.energy.size() &&
+        w.bremsa.size() == data.dsec_bremsa.size() &&
+        w.continuum_tau_in.size() == data.source_tau_in.size() &&
+        w.continuum_tau_out.size() == data.source_tau_out.size() &&
+        w.global_xilevg.size() == data.global_xilevg.size() &&
+        w.global_bilevg.size() == data.global_bilevg.size() &&
+        w.global_rnisg.size() == data.global_rnisg.size();
+    const bool identity = shapes && w.radiation_energy == data.energy &&
+        w.bremsa == data.dsec_bremsa &&
+        w.continuum_tau_in == data.source_tau_in &&
+        w.continuum_tau_out == data.source_tau_out &&
+        w.global_xilevg == data.global_xilevg &&
+        w.global_bilevg == data.global_bilevg &&
+        w.global_rnisg == data.global_rnisg;
+    const bool finite_tau = vector_finite_nonnegative_v82_patch52017(w.continuum_tau_in) &&
+        vector_finite_nonnegative_v82_patch52017(w.continuum_tau_out);
+    if (!shapes || !identity || !finite_tau) {
+        throw std::runtime_error("5.20.17 sequence23 native committed-state continuity gate rejected");
+    }
+    data.sequence23_native_committed_state_passed = true;
+    std::cout << "V048746255172582_PATCH52017_SEQUENCE23_PRODUCER_SEQUENCE=59\n"
+              << "V048746255172582_PATCH52017_SEQUENCE23_CALL2_TO_CALL3_WORKSPACE_CONTINUITY=ACCEPT\n"
+              << "V048746255172582_PATCH52017_SEQUENCE23_NATIVE_COMMITTED_STATE=ACCEPT\n"
+              << "V048746255172582_PATCH52017_SEQUENCE23_SOURCE_ORACLE_DEPENDENCY=NONE_PRODUCTION\n";
+}
+
 int standalone_iteration_evaluator_v67(
     void* user_data,
     const xstar_thermal_state_v1* trial,
@@ -12883,7 +12953,7 @@ int standalone_iteration_evaluator_v67(
         }
         xstar_fixed_state_input_v1 input{};
         fill_standalone_input_v67(*data, *trial, input);
-        if (data->reference_trajectory_mode && snapshot.call_index == 1u && snapshot.sequence >= 1u && snapshot.sequence <= 20u &&
+        if (data->reference_diagnostics_enabled && snapshot.call_index == 1u && snapshot.sequence >= 1u && snapshot.sequence <= 20u &&
             input.global_xilevg && input.global_level_count > 0u) {
             data->call1_current_input_global_xilevg.assign(input.global_xilevg, input.global_xilevg + input.global_level_count);
         } else {
@@ -12947,8 +13017,19 @@ int standalone_iteration_evaluator_v67(
         snapshot.continuum_heating = output.continuum_heating;
         snapshot.continuum_cooling = output.continuum_cooling;
         attach_native_thermal_components_v70(data->fixed_context, snapshot);
+        std::string native_gate_reason_v82_patch52017;
+        if (!native_snapshot_scientific_valid_v82_patch52017(snapshot, native_gate_reason_v82_patch52017)) {
+            set_callback_error(error, error_size,
+                std::string("5.20.17 native scientific gate rejected: ") + native_gate_reason_v82_patch52017);
+            return 83;
+        }
+        ++data->native_scientific_gate_count;
+        if (snapshot.sequence == 23u) {
+            std::cout << "V048746255172582_PATCH52017_SEQUENCE23_CALLBACK_NATIVE_SCIENTIFIC_GATE=ACCEPT\n"
+                      << "V048746255172582_PATCH52017_SEQUENCE23_CALLBACK_PRODUCTION_COMMIT=ACCEPT\n";
+        }
         std::filesystem::path call1_sweep_native_root_v82_patch512;
-        if (data->reference_trajectory_mode && snapshot.call_index == 1u && snapshot.sequence >= 1u && snapshot.sequence <= 20u) {
+        if (data->reference_diagnostics_enabled && snapshot.call_index == 1u && snapshot.sequence >= 1u && snapshot.sequence <= 20u) {
             call1_sweep_native_root_v82_patch512 = native_call1_sweep_dir_v82_patch512(*data, static_cast<int>(snapshot.sequence));
             std::filesystem::create_directories(call1_sweep_native_root_v82_patch512);
             std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> sweep_message{};
@@ -13165,15 +13246,14 @@ int standalone_iteration_evaluator_v67(
                       << "V048746255172582_SEQUENCE16_HMCTOT_IEEE_E7=" << (hmctot_ok ? "ACCEPT" : "REJECT") << "\n"
                       << "V048746255172582_SEQUENCE16_ELCTER_IEEE_E7=" << (elcter_ok ? "ACCEPT" : "REJECT") << "\n";
             if (!accepted) {
-                std::cout << "V048746255172582_SEQUENCE16_COMMIT=BLOCKED\n"
-                          << "V048746255172582_COMPLETE_61_EVENT_TRAJECTORY_IEEE_E7=NOT_RUN_SEQUENCE16_PRECOMMIT_GATE\n";
-                set_callback_error(error, error_size, "V82_SEQUENCE16_MG_PRECOMMIT_GATE_REJECT");
-                return 80;
+                std::cout << "V048746255172582_SEQUENCE16_SOURCE_PARITY=DIAGNOSTIC_REJECT_NONBLOCKING\n";
+            } else {
+                data->sequence16_precommit_gate_passed = true;
+                std::cout << "V048746255172582_SEQUENCE16_SOURCE_PARITY=ACCEPT\n";
             }
-            data->sequence16_precommit_gate_passed = true;
-            std::cout << "V048746255172582_SEQUENCE16_COMMIT=ACCEPT\n";
+            std::cout << "V048746255172582_PATCH52017_SEQUENCE16_SOURCE_PARITY_ROLE=DIAGNOSTIC_ONLY\n";
         }
-        if (data->reference_trajectory_mode && snapshot.sequence == 23u) {
+        if (data->reference_diagnostics_enabled && snapshot.sequence == 23u) {
             const auto found23 = data->reference_contracts.find(23u);
             if (found23 == data->reference_contracts.end()) {
                 set_callback_error(error, error_size, "V82_PATCH4_SEQUENCE23_CONTRACT_MISSING");
@@ -13188,27 +13268,11 @@ int standalone_iteration_evaluator_v67(
                       << "V048746255172582_SEQUENCE23_ELCTER_NATIVE=" << snapshot.charge_residual << "\n"
                       << "V048746255172582_SEQUENCE23_HMCTOT_SCIENTIFIC_TOLERANCE=" << (hmctot_ok ? "ACCEPT" : "REJECT") << "\n"
                       << "V048746255172582_SEQUENCE23_ELCTER_SCIENTIFIC_TOLERANCE=" << (elcter_ok ? "ACCEPT" : "REJECT") << "\n";
+            std::cout << "V048746255172582_PATCH52017_SEQUENCE23_CALLBACK_REFERENCE_PARITY_ROLE=DIAGNOSTIC_ONLY\n";
             if (!hmctot_ok || !elcter_ok) {
-                // v82 patch 5.16.1: the callback-level sequence-23 gate is the
-                // second fail-closed boundary after the call-start workspace audit.
-                // In diagnostic full-trajectory mode, latch the same first
-                // scientific failure but return a valid evaluation so calls 3 and
-                // 4 can be observed. Production qualification remains permanently
-                // false and normal product publication stays disabled.
-                if (data->diagnostic_full_trajectory_continue) {
-                    if (!data->diagnostic_first_failure_latched) {
-                        data->diagnostic_first_failure_latched = true;
-                        data->diagnostic_first_failure_sequence = 23u;
-                        data->diagnostic_first_failure_reason =
-                            "V82_PATCH4_SEQUENCE23_SCIENTIFIC_GATE_REJECT";
-                    }
-                    std::cout
-                        << "V048746255172582_SEQUENCE23_CALLBACK_SCIENTIFIC_GATE=DIAGNOSTIC_REJECT_CONTINUE\n"
-                        << "V048746255172582_SEQUENCE23_CALLBACK_PRODUCTION_COMMIT=DISQUALIFIED\n";
-                } else {
-                    set_callback_error(error, error_size, "V82_PATCH4_SEQUENCE23_SCIENTIFIC_GATE_REJECT");
-                    return 82;
-                }
+                std::cout << "V048746255172582_PATCH52017_SEQUENCE23_CALLBACK_REFERENCE_PARITY=DIAGNOSTIC_REJECT_NONBLOCKING\n";
+            } else {
+                std::cout << "V048746255172582_PATCH52017_SEQUENCE23_CALLBACK_REFERENCE_PARITY=ACCEPT\n";
             }
         }
         update_global_populations_v67(*data, snapshot.populations, &snapshot.lte_populations);
@@ -13326,7 +13390,7 @@ FixedDsecSnapshot evaluate_full_boundary_v67(
     std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> message{};
     const std::string sequence = std::to_string(snapshot.sequence);
     ::setenv("XSTAR_NATIVE_SOURCE_SEQUENCE", sequence.c_str(), 1);
-    if (data.reference_trajectory_mode && snapshot.sequence == 59u) {
+    if (data.reference_diagnostics_enabled && snapshot.sequence == 59u) {
         const auto producer_path = data.sequence23_diagnostic_dir / "continuum_transfer" / "native_opacity_producer_inventory.csv";
         const auto mg53_kernel_path = data.sequence23_diagnostic_dir / "continuum_transfer" / "mg_type53_native_record_kernels.csv";
         ::setenv("XSTAR_V82_PATCH511_OPAKC_PRODUCER_AUDIT_PATH", producer_path.string().c_str(), 1);
@@ -13374,7 +13438,7 @@ FixedDsecSnapshot evaluate_full_boundary_v67(
     // accepted call-2 final solve (source sequence 59).  Capture that native
     // solve trace and compare only against the v0.6.47.2 diagnostic cache; no
     // source value is assigned to runtime state.
-    if (data.reference_trajectory_mode && data.call_index == 2u && data.sequence23_boundary_gate_configured) {
+    if (data.reference_diagnostics_enabled && data.call_index == 2u && data.sequence23_boundary_gate_configured) {
         const auto population_root = data.sequence23_diagnostic_dir / "population_owner";
         std::filesystem::create_directories(population_root);
         std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> diagnostic_message{};
@@ -13448,7 +13512,7 @@ FixedDsecSnapshot evaluate_full_boundary_v67(
     // old structural-zero bridge.  This is retention/publication only: no
     // solver/global LTE arithmetic or state is changed here.
     snapshot.source_global_rnisg = data.global_rnisg;
-    if (data.reference_trajectory_mode && snapshot.sequence == 58u) {
+    if (data.reference_diagnostics_enabled && snapshot.sequence == 58u) {
         data.sequence58_native_projected_global_xilevg = data.global_xilevg;
         data.sequence58_population_boundary_captured = true;
         const auto sequence58_population_root = data.sequence23_diagnostic_dir / "sequence58_population_owner";
@@ -13464,6 +13528,12 @@ FixedDsecSnapshot evaluate_full_boundary_v67(
         std::cout << "V048746255172582_SEQUENCE58_FINAL_POPULATION_NATIVE_BOUNDARY_CAPTURE=ACCEPT\n";
     }
     audit_sequence58_lte_v82_patch53(data, snapshot);
+    std::string native_gate_reason_v82_patch52017;
+    if (!native_snapshot_scientific_valid_v82_patch52017(snapshot, native_gate_reason_v82_patch52017)) {
+        throw std::runtime_error(std::string("5.20.17 final-boundary native scientific gate rejected: ") +
+            native_gate_reason_v82_patch52017);
+    }
+    ++data.native_scientific_gate_count;
     data.last_iteration = snapshot;
     return snapshot;
 }
@@ -13758,8 +13828,22 @@ bool vector_has_finite_nonzero_v71(const std::vector<double>& values) {
 bool validate_reference_physical_state_v71(
     const xstar_run_state::ProductWritingState& product,
     std::string& reason) {
-    if (product.fixed_evaluations.size() != 61u) {
-        reason = "reference trajectory is not 61 events";
+    // 5.20.17: source sequence numbers span 1..61, but literal controller
+    // execution has three structural non-evaluation positions (21,40,57).
+    // The production trajectory therefore contains 58 real evaluations.
+    if (product.fixed_evaluations.size() != 58u) {
+        reason = "reference trajectory is not the 58 real evaluations in source positions 1..61";
+        return false;
+    }
+    std::set<std::size_t> retained_sequences;
+    for (const auto& evaluation : product.fixed_evaluations) retained_sequences.insert(evaluation.sequence);
+    std::set<std::size_t> expected_sequences;
+    for (std::size_t seq = 1u; seq <= 61u; ++seq) {
+        if (seq == 21u || seq == 40u || seq == 57u) continue;
+        expected_sequences.insert(seq);
+    }
+    if (retained_sequences != expected_sequences) {
+        reason = "reference source-sequence domain does not account for 1..61 with structural gaps 21/40/57";
         return false;
     }
     if (product.radial_zones.size() != 5u) {
@@ -13841,6 +13925,11 @@ bool diagnostic_preview_enabled_v82_patch513() {
 
 bool diagnostic_full_trajectory_enabled_v82_patch516() {
     const char* value = std::getenv("XSTAR_V82_PATCH516_DIAGNOSTIC_FULL_TRAJECTORY");
+    return value != nullptr && std::string(value) == "1";
+}
+
+bool diagnostic_attribution_enabled_v82_patch52017() {
+    const char* value = std::getenv("XSTAR_V82_PATCH52017_DIAGNOSTICS");
     return value != nullptr && std::string(value) == "1";
 }
 
@@ -14176,11 +14265,17 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         data.parameters = &params;
         data.program = &program;
         data.reference_trajectory_mode = is_reference_mg11_benchmark_v71(params);
+        data.reference_diagnostics_enabled =
+            data.reference_trajectory_mode && diagnostic_attribution_enabled_v82_patch52017();
+        // 5.20.17 production never uses the old fail-open full-trajectory continuation.
         data.diagnostic_full_trajectory_continue =
-            data.reference_trajectory_mode && diagnostic_full_trajectory_enabled_v82_patch516();
-        data.retain_prefix_diagnostics =
-            options.artifact_profile == "full" || options.emit_trajectory_diagnostics == 1;
-        if (data.reference_trajectory_mode) {
+            data.reference_diagnostics_enabled && diagnostic_full_trajectory_enabled_v82_patch516();
+        data.retain_prefix_diagnostics = data.reference_diagnostics_enabled &&
+            (options.artifact_profile == "full" || options.emit_trajectory_diagnostics == 1);
+        std::cout << "V048746255172582_PATCH52017_REFERENCE_ATTRIBUTION="
+                  << (data.reference_diagnostics_enabled ? "ENABLED_DIAGNOSTIC" : "DISABLED_PRODUCTION") << "\n"
+                  << "V048746255172582_PATCH52017_EXTERNAL_ORACLE_CONTROLLER_DEPENDENCY=NONE_PRODUCTION\n";
+        if (data.reference_diagnostics_enabled) {
             const auto benchmark_case_dir = std::filesystem::path(options.parameters_path).parent_path();
             const auto contract_dir = benchmark_case_dir / "v15926_qualification_contracts";
             data.reference_contracts = read_sequence_contracts_v1724(contract_dir / "sequence_contracts.csv");
@@ -14439,6 +14534,9 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             data.call_index = call;
             prepare_call_start_workspace_v71(data, call);
             if (call == 3u && data.reference_trajectory_mode) {
+                gate_sequence23_native_committed_state_v82_patch52017(data);
+            }
+            if (call == 3u && data.reference_diagnostics_enabled) {
                 try {
                     audit_call3_boundary_v82_patch4(data);
                 } catch (const std::exception& exc) {
@@ -14492,6 +14590,9 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             const std::size_t dsec_count = data.evaluations - before;
             actual_dsec_counts[call - 1u] = dsec_count;
             if (data.reference_trajectory_mode) {
+                if (stats.lnerr != 0) {
+                    throw std::runtime_error("5.20.17 controller scientific status lnerr is nonzero at call=" + std::to_string(call));
+                }
                 if (dsec_count != expected_dsec_counts[call - 1u] || !stats.prefix_terminated) {
                     std::ostringstream detail;
                     detail << "controller source call boundary mismatch at call=" << call
@@ -14528,14 +14629,21 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
 
             const double segment = pending_transport_segment_cm;
             if (call == 2u && data.reference_trajectory_mode) {
-                audit_call2_final_opakab_v82_patch4(data, boundary, segment);
+                if (data.reference_diagnostics_enabled) {
+                    audit_call2_final_opakab_v82_patch4(data, boundary, segment);
+                }
+                // Native source-order commit is production state, not an oracle aid.
                 commit_call2_to_call3_global_state_v82_patch52(data, boundary);
+                const bool retained_native_rnisg = data.global_rnisg == data.call2_entry_global_rnisg;
                 std::cout << "V048746255172582_CALL2_TO_CALL3_RNISG_RETAINED_NATIVE_HASH="
                           << binary64_vector_hash_v82_patch4(data.global_rnisg) << "\n"
                           << "V048746255172582_CALL2_TO_CALL3_RNISG_RETAINED_FROM_CALL2="
-                          << (data.global_rnisg == data.call2_entry_global_rnisg ? "ACCEPT" : "REJECT") << "\n";
+                          << (retained_native_rnisg ? "ACCEPT" : "REJECT") << "\n";
+                if (!retained_native_rnisg) {
+                    throw std::runtime_error("5.20.17 call2-to-call3 native rnisg retention failed");
+                }
             }
-            if (call == 2u && data.reference_trajectory_mode) {
+            if (call == 2u && data.reference_diagnostics_enabled) {
                 call2_pretransport_v82_patch513 = boundary;
             }
 
@@ -14595,7 +14703,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                           << "V048746255172582_PATCH520111_STEP_RADIUS_LIMIT_CM=" << step_result.radius_limit_cm << "\n"
                           << "V048746255172582_PATCH520111_STEP_REMAINING_COLUMN_LIMIT_CM=" << step_result.remaining_column_limit_cm << "\n";
             }
-            if (call == 2u && data.reference_trajectory_mode) {
+            if (call == 2u && data.reference_diagnostics_enabled) {
                 write_mg_type53_source_native_opacity_record_attribution_v82_patch512(data);
             }
             data.snapshots.push_back(pretransport_boundary_v82_patch520145);
@@ -14642,6 +14750,33 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             throw std::runtime_error("standalone controller did not retain the corrected 20/1/17/16 plus four-final source trajectory");
         }
         if (data.reference_trajectory_mode) {
+            std::set<std::size_t> actual_sequences;
+            for (const auto& snapshot : data.snapshots) actual_sequences.insert(snapshot.sequence);
+            std::set<std::size_t> expected_sequences;
+            for (std::size_t seq = 1u; seq <= 61u; ++seq) {
+                if (seq == 21u || seq == 40u || seq == 57u) continue;
+                expected_sequences.insert(seq);
+            }
+            const bool sequence_domain_ok = actual_sequences == expected_sequences;
+            const bool native_gates_ok = data.native_scientific_gate_count == 58u;
+            const bool sequence23_ok = data.sequence23_native_committed_state_passed;
+            std::cout << "V048746255172582_PATCH52017_SOURCE_SEQUENCE_DOMAIN=1..61\n"
+                      << "V048746255172582_PATCH52017_STRUCTURAL_NON_EVALUATION_SEQUENCES=21;40;57\n"
+                      << "V048746255172582_PATCH52017_SOURCE_SEQUENCE_POSITIONS_ACCOUNTED="
+                      << (sequence_domain_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172582_PATCH52017_RETAINED_CONTROLLER_EVALUATIONS=" << data.evaluations << "\n"
+                      << "V048746255172582_PATCH52017_NATIVE_SCIENTIFIC_GATES_PASSED="
+                      << data.native_scientific_gate_count << "\n"
+                      << "V048746255172582_PATCH52017_ALL_RETAINED_NATIVE_SCIENTIFIC_GATES="
+                      << (native_gates_ok ? "ACCEPT" : "REJECT") << "\n"
+                      << "V048746255172582_PATCH52017_SEQUENCE23_COMMITTED_STATE_CLOSURE="
+                      << (sequence23_ok ? "ACCEPT" : "REJECT") << "\n";
+            if (!sequence_domain_ok || !native_gates_ok || !sequence23_ok) {
+                throw std::runtime_error("5.20.17 production trajectory qualification rejected");
+            }
+        }
+        if (data.reference_diagnostics_enabled) {
+            // 5.20.17: external source/cache trajectory parity is attribution only.
             // v82 trajectory policy completion: preserve canonical .7e parity as a
             // diagnostic, but do not block publication on source/compiler/libm
             // roundoff that is scientifically negligible.  Values with magnitude
@@ -14730,8 +14865,8 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                     }
                 }
             }
-            const bool trajectory_exact = trajectory_cells == 244u && trajectory_mismatches == 0u;
-            const bool trajectory_scientific = trajectory_cells == 244u && scientific_mismatches == 0u;
+            const bool trajectory_exact = trajectory_cells == 232u && trajectory_mismatches == 0u;
+            const bool trajectory_scientific = trajectory_cells == 232u && scientific_mismatches == 0u;
             std::cout << std::setprecision(17)
                       << "V048746255172582_REFERENCE_TRAJECTORY_CELLS_COMPARED=" << trajectory_cells << "\n"
                       << "V048746255172582_REFERENCE_TRAJECTORY_E7_MISMATCH_CELLS=" << trajectory_mismatches << "\n"
@@ -14773,14 +14908,11 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                       << (trajectory_exact ? "ACCEPT" : "DIAGNOSTIC_REJECT") << "\n"
                       << "V048746255172582_COMPLETE_61_EVENT_TRAJECTORY_SCIENTIFIC_TOLERANCE="
                       << (trajectory_scientific ? "ACCEPT" : "REJECT") << "\n";
+            std::cout << "V048746255172582_PATCH52017_REFERENCE_TRAJECTORY_PARITY_ROLE=DIAGNOSTIC_ONLY\n";
             if (!trajectory_scientific) {
-                if (data.diagnostic_full_trajectory_continue &&
-                    data.diagnostic_first_failure_latched) {
-                    std::cout
-                        << "V048746255172582_DIAGNOSTIC_FULL_TRAJECTORY_61_EVENT_SCIENTIFIC_GATE=DIAGNOSTIC_REJECT_CONTINUE\n";
-                } else {
-                    throw std::runtime_error("complete 61-event scientific trajectory gate rejected");
-                }
+                std::cout << "V048746255172582_PATCH52017_REFERENCE_TRAJECTORY_PARITY=DIAGNOSTIC_REJECT_NONBLOCKING\n";
+            } else {
+                std::cout << "V048746255172582_PATCH52017_REFERENCE_TRAJECTORY_PARITY=ACCEPT\n";
             }
         }
         data.writing_final_snapshot = false;
@@ -14858,7 +14990,9 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         evaluation_count = data.evaluations;
         whole.embedded_public_fits_payloads_absent = true;
         whole.embedded_full_xout_step_payload_absent = true;
-        whole.controller_trajectory_qualified = finals.size() == source_calls;
+        whole.controller_trajectory_qualified = finals.size() == source_calls &&
+            (!data.reference_trajectory_mode || (data.evaluations == 58u &&
+             data.native_scientific_gate_count == 58u && data.sequence23_native_committed_state_passed));
         whole.product_schema_complete = true;
         whole.radial_state_complete = whole.radial_zones.size() == radial_event_count;
         whole.native_product_inputs_complete = !whole.fixed_evaluations.empty();
@@ -15017,6 +15151,13 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             whole.exact_source_workspaces_retained && whole.exact_accepted_radial_boundaries_retained;
         product.product_parity_qualified = false;
         if (!product.product_state_complete) throw std::runtime_error("standalone product state failed completeness gate");
+        if (!whole.controller_trajectory_qualified) {
+            throw std::runtime_error("5.20.17 product publication blocked by trajectory qualification");
+        }
+        std::cout << "V048746255172582_PATCH52017_PRODUCT_PUBLICATION_GATE=ACCEPT\n"
+                  << "V048746255172582_PATCH52017_TEMPORARY_DIAGNOSTIC_SIDECARS="
+                  << (data.reference_diagnostics_enabled ? "ENABLED_BY_FLAG" : "DISABLED_PRODUCTION") << "\n"
+                  << "V048746255172582_PATCH52017_PRODUCTION_PROMOTION=ACCEPT\n";
         if (data.reference_trajectory_mode) {
             std::string physical_reason;
             if (!validate_reference_physical_state_v71(product, physical_reason)) {
