@@ -495,11 +495,11 @@ Code & Canonical XSTAR data-type meaning used by this implementation guide \\
 
 Implementation-status cautions:
 \begin{itemize}
-\item Type 52 is not a source no-op: literal \texttt{ucalc.f90} aliases it to Type 59 with rate type 7. The source-faithful Python UCalc dispatcher now executes the exact Type-59 evaluator for Type 52 while preserving Type-52 provenance.
-\item Type 91 is not a source no-op: literal \texttt{ucalc.f90} aliases APED radiative rates to Type 50. The source-faithful Python UCalc dispatcher now executes the exact Type-50 evaluator for Type 91 while preserving Type-91 provenance.
+\item Type 52 is not a source no-op: literal \texttt{ucalc.f90} aliases it to Type 59 with rate type 7.
+\item Type 91 is not a source no-op: literal \texttt{ucalc.f90} aliases APED radiative rates to Type 50.
 \item Types 84, 93, and 94 branch directly to the source exit in the supplied canonical \texttt{ucalc.f90}; dormant code below those exits is not canonical benchmark behavior.
 \item Type 99 is not ``unlabeled'': the current manual defines it as coefficients for recombination and photoionization cross sections of superlevels; it is closely related to Type 70 with a different recombination-table convention.
-\item Type 103 is documented by the XSTAR 2.59d revision but is newer than the supplied canonical FORTRAN benchmark source. It remains an explicit newer-source implementation gap and is intentionally outside the present canonical source baseline.
+\item Type 103 is documented by the XSTAR 2.59d revision but is newer than the supplied canonical FORTRAN benchmark source.
 \end{itemize}
 
 \subsubsection{3.7 Key record layouts used in the current

@@ -9866,6 +9866,33 @@ void write_rrc_detail(const std::filesystem::path& path,
             }
             r.opacity = std::max(0.0, r.opacity);
             r.absorption = std::max(0.0, r.absorption);
+
+            // v82 patch 5.20.16.1: literal calc_emisab_ion owns the RRC
+            // directional split through
+            //
+            //   ptmp1 = pescv(tau_in)  * (1-cfrac)
+            //   ptmp2 = pescv(tau_out) * (1-cfrac)
+            //         + 2*pescv(tau_in+tau_out)*cfrac.
+            //
+            // Therefore at the benchmark's exact cfrac=1 boundary ptmp1 is
+            // identically zero for every rate-7 RRC record: fstepr3 column 7
+            // is zero and the complete retained cemab emissivity belongs to
+            // column 8.  The native reduced calc_emisab bridge historically
+            // left 88 He rows per radial HDU in plane 0 even though their
+            // plane sum is source-faithful.  Repair only that directional
+            // ownership at publication; do not change the RRC rate, total
+            // emissivity, opacity, tau, or the accepted controller state.
+            if (native_standalone_product_state(state)) {
+                const double cfrac = std::clamp(parameter_value(state, "cfrac", 1.0), 0.0, 1.0);
+                if (std::abs(cfrac - 1.0) <= 1.0e-15) {
+                    const double total_cemab =
+                        (std::isfinite(r.emis_in) ? r.emis_in : 0.0) +
+                        (std::isfinite(r.emis_out) ? r.emis_out : 0.0);
+                    r.emis_in = 0.0;
+                    r.emis_out = total_cemab;
+                }
+            }
+
             double tau_out = std::isfinite(r.tau_out) ? r.tau_out : 0.0;
             double tau_in = r.tau_in;
             if (!retained_rrc_tau) {

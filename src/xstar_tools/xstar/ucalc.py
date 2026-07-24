@@ -785,7 +785,7 @@ _DATA_TYPE_NAMES: Dict[int, str] = {
     49: "op_inner_shell_photoionization",
     50: "op_bound_bound_radiative",
     51: "op_chianti_burgess_tully_collision",
-    52: "verner_photoionization_rate7_alias_type59",
+    52: "verner_photoionization_alias_rate7",
     53: "op_photoionization",
     54: "bautista_hlike_collision_hlike_ion",
     55: "bautista_hydrogenic_photoionization",
@@ -839,10 +839,9 @@ _SOURCE_CALLS: Dict[int, Tuple[str, ...]] = {
     28: ("hunt3",), 31: ("drd", "linopac"), 34: ("linopac",),
     35: ("enxt", "hunt3", "phintfo"), 36: ("drd", "enxt", "phintfo"),
     49: ("dprinto", "drd", "phextrap", "phint53"),
-    50: ("deleafnd", "drd", "enxt", "linopac"), 53: ("dprinto", "drd", "milne", "phextrap", "phint53"),
+    50: ("deleafnd", "drd", "enxt", "linopac"), 52: ("drd", "enxt", "phintfo"), 53: ("dprinto", "drd", "milne", "phextrap", "phint53"),
     54: ("anl1",), 55: ("drd", "enxt", "phintfo"), 56: ("hunt3",),
     57: ("calt57",), 59: ("drd", "enxt", "phintfo"),
-    52: ("drd", "enxt", "phintfo"),
     60: ("calt6062",), 62: ("calt6062",),
     63: ("amcrs", "anl1", "erc"), 64: ("enxt", "hphotx", "milne", "phintfo"),
     65: ("szirco",), 66: ("calt66",), 67: ("calt67",), 68: ("calt68",), 69: ("calt69",),
@@ -883,7 +882,8 @@ def complete_ucalc_branch_catalog() -> Dict[int, UCalcBranchSpec]:
         33: "translated_formula", 34: "translated_formula", 35: "translated_formula", 36: "translated_formula",
         37: "translated_formula", 38: "translated_formula",
         39: "translated_formula", 49: "translated_formula", 50: "validated_selected_system", 51: "validated_selected_system",
-        52: "translated_alias_to_type59", 54: "translated_formula", 55: "translated_formula", 59: "translated_formula",
+        52: "translated_alias_to_type59",
+        54: "translated_formula", 55: "translated_formula", 59: "translated_formula",
         60: "translated_formula", 62: "translated_formula", 64: "translated_formula",
         65: "translated_formula", 66: "translated_formula",
         53: "translated_pending_real_context_parity", 56: "translated_formula",
@@ -1161,9 +1161,6 @@ class SourceFaithfulUCalc:
         self._evaluators.update({
             50: self._eval_type50,
             51: self._eval_type51,
-            # Literal ucalc.f90 label 52 executes the label-59 Verner branch.
-            # Preserve the original record data_type/rate_type in provenance
-            # while reusing the exact Type-59 arithmetic.
             52: self._eval_type59,
             53: self._eval_type53,
             54: self._eval_type54,
@@ -1179,8 +1176,6 @@ class SourceFaithfulUCalc:
             69: self._eval_collision_generic,
             71: self._eval_type71,
             73: self._eval_type73,
-            # Literal ucalc.f90 label 91 is an APED radiative-line record
-            # that jumps directly to the Type-50 branch.
             91: self._eval_type50,
             98: self._eval_collision_generic,
             101: self._eval_type101,
