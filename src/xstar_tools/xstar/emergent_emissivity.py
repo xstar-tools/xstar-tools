@@ -1037,6 +1037,16 @@ def calc_emis_ion(
 
     pending_native_spectral_rows: list[dict[str, Any]] = []
     native_spectral_source_position = 0
+    # v82 patch 5.20.15.3.1: literal ucalc.f90 Type-76 writes its two-photon
+    # continuum directly into rccemis during the rate-type-9 prepass.  The
+    # translated Python path also supports deferred/native spectral replay at
+    # the end of each ion.  Keep the Type-76 source side effect in an
+    # independent full-grid accumulator until that replay is complete so no
+    # product/backend replay can replace or discard it.  This mirrors the
+    # dedicated native_type76_continuum_emission buffer that closed the C++
+    # 5.20.15.3 continuum residual.
+    type76_retained_rccemis: np.ndarray | None = None
+    type76_retained_records = 0
 
     def _apply_native_spectral_row(row: Mapping[str, Any], target: CalcEmisWorkspace, *, status: str = "") -> None:
         # Queue one compact row and cross the FFI boundary once per ion.
@@ -1133,7 +1143,7 @@ def calc_emis_ion(
     _rate_type_elapsed: dict[int, float] = {}
 
     def evaluate(rec: int, ptmp1: float, ptmp2: float, abund1: float, abund2: float) -> UCalcResult:
-        nonlocal calls
+        nonlocal calls, type76_retained_rccemis, type76_retained_records
         result = _evaluate_ucalc(shared, rec, _ucalc_context(
             shared, ion=ion, levels=levels, xpx=xpx, xh0=xh0, xh1=xh1,
             ptmp1=ptmp1, ptmp2=ptmp2, abund1=abund1, abund2=abund2,
@@ -1150,10 +1160,33 @@ def calc_emis_ion(
             abund2=abund2,
         )
         if result.ready:
-            _accumulate_ucalc_continuum(context.workspace.base, result)
-            shadow_workspace = getattr(context, "_native_spectral_shadow_workspace", None)
-            if shadow_workspace is not None:
-                _accumulate_ucalc_continuum(shadow_workspace.base, result)
+            if int(result.data_type) == 76:
+                # Do not commit Type-76 into the live workspace yet.  The
+                # literal contribution is source-owned, but the translated
+                # per-ion native spectral replay below is a derived product
+                # projection.  Accumulate Type-76 independently and merge it
+                # only after that replay so its lifetime matches C++ 5.20.15.3.
+                if type76_retained_rccemis is None:
+                    type76_retained_rccemis = np.zeros_like(context.workspace.base.rccemis)
+                diag = result.diagnostics
+                inward = diag.get("rccemis_inward")
+                outward = diag.get("rccemis_outward")
+                if inward is not None:
+                    arr = np.asarray(inward, dtype=float).reshape(-1)
+                    if arr.size > type76_retained_rccemis.shape[1]:
+                        raise CalcEmisPortError("Type-76 inward continuum exceeds retained workspace")
+                    type76_retained_rccemis[0, :arr.size] += arr
+                if outward is not None:
+                    arr = np.asarray(outward, dtype=float).reshape(-1)
+                    if arr.size > type76_retained_rccemis.shape[1]:
+                        raise CalcEmisPortError("Type-76 outward continuum exceeds retained workspace")
+                    type76_retained_rccemis[1, :arr.size] += arr
+                type76_retained_records += 1
+            else:
+                _accumulate_ucalc_continuum(context.workspace.base, result)
+                shadow_workspace = getattr(context, "_native_spectral_shadow_workspace", None)
+                if shadow_workspace is not None:
+                    _accumulate_ucalc_continuum(shadow_workspace.base, result)
         return result
 
     def _linopac_cpp_parity_limit() -> int:
@@ -2314,6 +2347,18 @@ def calc_emis_ion(
                 )
                 if _env_true("XSTAR_ATOMIC_SPECTRAL_ENGINE_CPP_STRICT"):
                     raise
+
+    # v82 patch 5.20.15.3.1 retained-rccemis commit.  This is the source
+    # Type-76 UCalc side effect, not a FITS/product reconstruction.
+    if type76_retained_rccemis is not None:
+        context.workspace.base.rccemis += type76_retained_rccemis
+        shadow_workspace = getattr(context, "_native_spectral_shadow_workspace", None)
+        if shadow_workspace is not None:
+            shadow_workspace.base.rccemis += type76_retained_rccemis
+        summary = _spectral_summary_bucket(context)
+        summary["type76_retained_rccemis_records"] = int(summary.get("type76_retained_rccemis_records", 0)) + int(type76_retained_records)
+        summary["type76_retained_rccemis_inward_sum"] = float(summary.get("type76_retained_rccemis_inward_sum", 0.0)) + float(np.sum(type76_retained_rccemis[0]))
+        summary["type76_retained_rccemis_outward_sum"] = float(summary.get("type76_retained_rccemis_outward_sum", 0.0)) + float(np.sum(type76_retained_rccemis[1]))
 
     if any(float(v) != 0.0 for v in cpp_mg_type4_stats.values()):
         record_profile_event(
