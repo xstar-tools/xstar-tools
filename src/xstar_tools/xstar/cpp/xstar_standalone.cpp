@@ -5915,6 +5915,77 @@ double source_real_literal_v82_patch520142(double value) {
     return static_cast<double>(static_cast<float>(value));
 }
 
+
+struct PublicLineSelectionV82Patch520164 {
+    std::vector<double> indices;
+    std::vector<double> emit_inward;
+    std::vector<double> emit_outward;
+};
+
+PublicLineSelectionV82Patch520164 select_public_lines_v82_patch520164(
+    const xstar_run_state::ProductWritingState& product) {
+    constexpr std::size_t kMaxPublicLines = 600u;
+    PublicLineSelectionV82Patch520164 out;
+    if (product.line_identities.empty()) return out;
+
+    // writespectra2.f90 scans the physical line namespace in source order and
+    // maintains a 600-entry descending list by mean cumulative luminosity.
+    // Reconstruct the complete cumulative elum surface first; selecting from a
+    // frozen historical 600-row inventory is not source faithful because small
+    // state changes can legitimately move near-cutoff or near-degenerate rows.
+    std::vector<std::size_t> order(product.line_identities.size());
+    std::iota(order.begin(), order.end(), 0u);
+    std::sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) {
+        return product.line_identities[a].line_index < product.line_identities[b].line_index;
+    });
+    std::vector<double> all_indices(order.size(), 0.0);
+    for (std::size_t i = 0; i < order.size(); ++i) {
+        all_indices[i] = static_cast<double>(product.line_identities[order[i]].line_index);
+    }
+    const auto all_in = reconstruct_public_line_luminosity_v82_patch52071(product, all_indices, 0u);
+    const auto all_out = reconstruct_public_line_luminosity_v82_patch52071(product, all_indices, 1u);
+    if (all_in.size() != order.size() || all_out.size() != order.size()) return out;
+
+    struct RankedLine {
+        std::size_t sorted_position = 0u;
+        double mean_luminosity = 0.0;
+    };
+    std::vector<RankedLine> ranked;
+    ranked.reserve(kMaxPublicLines);
+    const double eliml = source_real_literal_v82_patch520142(0.1);
+    const double elimh = source_real_literal_v82_patch520142(1.0e10);
+    const double hard_elimh = source_real_literal_v82_patch520142(8.9e6);
+    const double activity_floor = source_real_literal_v82_patch520142(1.0e-36);
+
+    for (std::size_t si = 0; si < order.size(); ++si) {
+        const auto& id = product.line_identities[order[si]];
+        if (id.line_index <= 0 || id.rate_type == 9 || id.rate_type == 14) continue;
+        const double wavelength = std::abs(id.wavelength_angstrom);
+        if (!(wavelength >= eliml && wavelength <= elimh && wavelength <= hard_elimh)) continue;
+        const double mean = (all_out[si] + all_in[si]) / source_real_literal_v82_patch520142(2.0);
+        if (!(mean > activity_floor) || !std::isfinite(mean)) continue;
+
+        // Literal writespectra2 comparison is strictly `elmmtpp < elcomp`.
+        // Therefore a later exactly-equal line is inserted before the existing
+        // equal-strength row; lower-strength rows are traversed in order.
+        std::size_t pos = 0u;
+        while (pos < ranked.size() && mean < ranked[pos].mean_luminosity) ++pos;
+        ranked.insert(ranked.begin() + static_cast<std::ptrdiff_t>(pos), RankedLine{si, mean});
+        if (ranked.size() > kMaxPublicLines) ranked.pop_back();
+    }
+
+    out.indices.reserve(ranked.size());
+    out.emit_inward.reserve(ranked.size());
+    out.emit_outward.reserve(ranked.size());
+    for (const auto& entry : ranked) {
+        const std::size_t si = entry.sorted_position;
+        out.indices.push_back(all_indices[si]);
+        out.emit_inward.push_back(all_in[si]);
+        out.emit_outward.push_back(all_out[si]);
+    }
+    return out;
+}
+
 double public_parameter_real_v82_patch520142(
     const xstar_run_state::ProductWritingState& product,
     const std::string& name,
@@ -6214,35 +6285,27 @@ void create_native_retained_productwrite_schema(xstar_run_state::ProductWritingS
     const std::size_t hdu = 3;
     const auto& ws = final_eval.source_workspace;
     const std::size_t n = final_eval.radiation_energy_ev.size();
-    const auto public_line_index = public_line_indices_v82();
+    // v82 patch 5.20.16.4: writespectra2 does not own a fixed public-line
+    // inventory.  It scans all source lines and ranks the strongest 600 from
+    // the final cumulative elum state.  Build that selection literally and
+    // retain its physical one-based indices together with matching elum/tau0.
+    const auto public_selection = select_public_lines_v82_patch520164(product);
+    const auto& public_line_index = public_selection.indices;
     const std::size_t public_native_line_stride = native_line_plane_stride_v82(ws);
-    // Public line luminosities are the radially accumulated elum planes;
-    // depths are the accumulated tau0 planes.  Address both by the physical
-    // one-based line pointer carried by XSTAR, not by compact identity ordinal.
-    std::vector<double> public_line_emit_in = gather_native_line_plane_v82(
-        ws.elum, {}, public_native_line_stride, public_line_index, 0);
-    std::vector<double> public_line_emit_out = gather_native_line_plane_v82(
-        ws.elum, {}, public_native_line_stride, public_line_index, 1);
-    // patch 5.20.14.5: public line luminosity is the HEATT radial integral of
-    // the retained local rcem workspaces.  Reconstruct it from the exact live
-    // shell boundaries rather than trusting a final-writer copy of elum whose
-    // lifetime is independent of the local zero-thickness recompute.  This is
-    // the literal source formula and avoids the 5.20.14.4 two-shell truncation.
-    auto reconstructed_in = reconstruct_public_line_luminosity_v82_patch52071(
-        product, public_line_index, 0u);
-    auto reconstructed_out = reconstruct_public_line_luminosity_v82_patch52071(
-        product, public_line_index, 1u);
-    if (vector_has_nonzero(reconstructed_in) || vector_has_nonzero(reconstructed_out)) {
-        public_line_emit_in.swap(reconstructed_in);
-        public_line_emit_out.swap(reconstructed_out);
-        std::cout << "V048746255172582_PATCH520145_PUBLIC_LINE_ELUM_SOURCE=SOURCE_HEATT_RADIAL_RCEM_RECONSTRUCTION\n";
-    } else {
-        std::cout << "V048746255172582_PATCH520145_PUBLIC_LINE_ELUM_SOURCE=RETAINED_CUMULATIVE_ELUM_NO_LOCAL_SIGNAL\n";
+    std::vector<double> public_line_emit_in = public_selection.emit_inward;
+    std::vector<double> public_line_emit_out = public_selection.emit_outward;
+    if (public_line_index.size() != 600u ||
+        public_line_emit_in.size() != public_line_index.size() ||
+        public_line_emit_out.size() != public_line_index.size()) {
+        throw std::runtime_error("patch5.20.16.4 writespectra2 public-line ranking did not produce 600 rows");
     }
+    std::cout << "V048746255172582_PATCH520164_PUBLIC_LINE_SELECTION=SOURCE_WRITESPECTRA2_DYNAMIC_RANKING\n";
+    std::cout << "V048746255172582_PATCH520164_PUBLIC_LINE_COUNT=" << public_line_index.size() << "\n";
     std::vector<double> public_line_depth_in = gather_native_line_plane_v82(
         ws.tau0, {}, public_native_line_stride, public_line_index, 0);
     std::vector<double> public_line_depth_out = gather_native_line_plane_v82(
         ws.tau0, {}, public_native_line_stride, public_line_index, 1);
+    std::cout << "V048746255172582_PATCH520164_PUBLIC_LINE_DEPTH_OWNER=FINAL_WRITER_TERMINAL_CUMULATIVE_TAU0\n";
     append_native_array(inventory, product, hdu, "product_write_public_line_index", public_line_index);
     append_native_array(inventory, product, hdu, "product_write_public_line_emit_inward", public_line_emit_in);
     append_native_array(inventory, product, hdu, "product_write_public_line_emit_outward", public_line_emit_out);

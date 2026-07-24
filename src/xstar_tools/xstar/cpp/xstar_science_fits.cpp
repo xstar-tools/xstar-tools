@@ -10976,10 +10976,33 @@ void write_public_lines(const std::filesystem::path& path,
     const auto pw_line_emit_out = optional_bridge_array_for_hdu(state, "product_write_public_line_emit_outward", 3, pw_line_index.size());
     const auto pw_line_depth_in = optional_bridge_array_for_hdu(state, "product_write_public_line_depth_inward", 3, pw_line_index.size());
     const auto pw_line_depth_out = optional_bridge_array_for_hdu(state, "product_write_public_line_depth_outward", 3, pw_line_index.size());
-    const auto& public_line_labels = oracle_public_line_label_template_v172537();
+
+    // v82 patch 5.20.16.4: writespectra2 chooses its 600 public rows from
+    // the live final elum ranking.  When the retained ProductWritingState
+    // bridge carries that selection, derive labels from the physical line
+    // identities themselves instead of imposing the historical frozen 600-row
+    // label template.  This keeps identity, order, luminosity, and terminal
+    // tau0 addressed by the same source line pointer.
+    std::vector<LineLabelTemplateRow> public_line_labels;
+    if (pw_line_index.size() == 600u) {
+        public_line_labels.reserve(pw_line_index.size());
+        for (const double raw_index : pw_line_index) {
+            const auto line_index = static_cast<long long>(std::llround(raw_index));
+            const auto* id = line_identity_by_index(state, line_index);
+            if (!id) {
+                public_line_labels.clear();
+                break;
+            }
+            public_line_labels.push_back(LineLabelTemplateRow{
+                static_cast<int>(line_index), id->wavelength_angstrom, id->ion_label.c_str(),
+                id->lower_level.c_str(), id->upper_level.c_str()});
+        }
+    }
+    if (public_line_labels.size() != 600u) {
+        const auto& fallback = oracle_public_line_label_template_v172537();
+        public_line_labels.assign(fallback.begin(), fallback.end());
+    }
     const bool have_product_write_public_lines =
-        !native_standalone_product_state(state) &&
-        state.exact_source_workspaces_retained &&
         pw_line_index.size() == public_line_labels.size() &&
         pw_line_emit_in.size() == public_line_labels.size() &&
         pw_line_emit_out.size() == public_line_labels.size() &&
