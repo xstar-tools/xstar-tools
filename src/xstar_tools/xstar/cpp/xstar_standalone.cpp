@@ -13361,6 +13361,15 @@ FixedDsecSnapshot evaluate_full_boundary_v67(
     snapshot.continuum_tau_in = data.grid_tau_in;
     snapshot.continuum_tau_out = data.grid_tau_out;
     update_global_populations_v67(data, snapshot.populations, &snapshot.lte_populations);
+    // v82 patch 5.20.16.2.1: final-boundary product snapshots must retain
+    // the global LTE/rnisg projection produced above.  The ordinary DSEC
+    // evaluation path already copies data.global_rnisg into its snapshot,
+    // but evaluate_full_boundary_v67 historically omitted that copy.  As a
+    // result, public continuum pseudo-level rows reached the 5.20.16.2 LTE
+    // writer with an empty source_global_rnisg vector and fell through to the
+    // old structural-zero bridge.  This is retention/publication only: no
+    // solver/global LTE arithmetic or state is changed here.
+    snapshot.source_global_rnisg = data.global_rnisg;
     if (data.reference_trajectory_mode && snapshot.sequence == 58u) {
         data.sequence58_native_projected_global_xilevg = data.global_xilevg;
         data.sequence58_population_boundary_captured = true;
