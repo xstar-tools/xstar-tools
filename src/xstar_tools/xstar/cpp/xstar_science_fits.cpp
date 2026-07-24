@@ -8592,10 +8592,24 @@ void write_population_detail(const std::filesystem::path& path,
                 ((level.ion_label == "he_ii" || level.atomic_number == 12)
                     ? public_detail_population_for_level(evaluation, compact_by_global, level, fallback_pop)
                     : fallback_pop);
-            const double lte = have_product_write_detail_lte ? pw_level_lte[i] :
-                (native_standalone_product_state(state)
-                    ? source_lte_for_level(evaluation, elements, rows, level)
-                    : (have_oracle_detail_lte_surface ? oracle_lte_surface[i] : source_lte_for_level(evaluation, elements, rows, level)));
+            // v82 patch 5.20.16.2: public continuum pseudo-level LTE is
+            // owned by the retained source global-rnisg slot at the *public
+            // global index*.  The native product-write bridge is a compact
+            // writer snapshot and carries structural zero for the synthetic
+            // Mg continuum rows (2816, 2862, 2869, ...).  Do not reinterpret
+            // those zeros as physical LTE values.  This is publication-only:
+            // the sequence-58 global-rnisg scientific state is already
+            // source-compatible and no solver/global LTE state is changed.
+            const bool continuum_public_level =
+                level.level_label.find("continu") != std::string::npos;
+            const bool cpp_continuum_pseudo_level =
+                continuum_public_level && state.backend.rfind("cpp", 0) == 0;
+            const double lte = cpp_continuum_pseudo_level
+                ? source_lte_for_level(evaluation, elements, rows, level)
+                : (have_product_write_detail_lte ? pw_level_lte[i] :
+                    (native_standalone_product_state(state)
+                        ? source_lte_for_level(evaluation, elements, rows, level)
+                        : (have_oracle_detail_lte_surface ? oracle_lte_surface[i] : source_lte_for_level(evaluation, elements, rows, level))));
             const long fits_row = static_cast<long>(i + 1);
             write_int(fptr, 1, fits_row, static_cast<int>(level.global_index));
             write_short(fptr, 2, fits_row, static_cast<short>(level.ion_index));
