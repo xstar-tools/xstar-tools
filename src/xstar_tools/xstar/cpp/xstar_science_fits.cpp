@@ -10238,8 +10238,24 @@ void write_spectrum_detail(const std::filesystem::path& path,
             const auto& zone = state.radial_zones[src];
             const auto& e = zone.accepted_controller.evaluation;
             const auto& ws = e.source_workspace;
+            // v82 patch 5.20.16.3: the source trajectory carries two leading
+            // zero-depth savd boundaries.  The first native retained opacity
+            // surface is a pre-repeat line-opacity workspace and is not the
+            // stable fstepr4 opacity owner (49 dominant product failures),
+            // while the immediately following zero-depth workspace reproduces
+            // the literal significant opacity surface.  Select that second
+            // retained zero-depth opakc for opacity publication only.  Do not
+            // move zrems/rccemis/dpthc or any transported state.
+            const bool use_second_zero_depth_opacity_owner =
+                oz == 0u && state.radial_zones.size() > 1u &&
+                std::fabs(state.radial_zones[0].delta_radius_cm) <= 1.0e-6 &&
+                std::fabs(state.radial_zones[1].delta_radius_cm) <= 1.0e-6 &&
+                state.radial_zones[1].accepted_controller.evaluation.source_workspace.opakc.size() == n;
+            const auto& detail_opacity_ws = use_second_zero_depth_opacity_owner
+                ? state.radial_zones[1].accepted_controller.evaluation.source_workspace
+                : ws;
             if (e.radiation_energy_ev.size() != n || e.radiation_flux.size() != n ||
-                (ws.opakc.size() != n && e.opacity.size() != n)) {
+                (detail_opacity_ws.opakc.size() != n && ws.opakc.size() != n && e.opacity.size() != n)) {
                 throw std::runtime_error("native xo01_detal4 radial continuum shape mismatch");
             }
             // fstepr4/heatt consume the complete opakc workspace.  The reduced
@@ -10348,7 +10364,9 @@ void write_spectrum_detail(const std::filesystem::path& path,
                 const double out_z3 = exact_fstepr4 ? ws.zrems[2u * n + i] : z3[i];
                 const double out_z4 = exact_fstepr4 ? ws.zrems[3u * n + i] : 0.0;
                 const double out_z5 = exact_fstepr4 ? ws.zrems[4u * n + i] : z5[i];
-                const double out_opacity = exact_fstepr4 ? ws.opakc[i] : continuum_opacity(i);
+                const double out_opacity = detail_opacity_ws.opakc.size() == n
+                    ? detail_opacity_ws.opakc[i]
+                    : (exact_fstepr4 ? ws.opakc[i] : continuum_opacity(i));
                 const double out_emis = exact_fstepr4 ? ws.rccemis[i] : rcc_out;
                 const double in_emis = exact_fstepr4 ? ws.rccemis[n + i] : rcc_in;
                 const double out_fwd_depth = exact_fstepr4 ? ws.dpthc[i] : forward_depth[i];

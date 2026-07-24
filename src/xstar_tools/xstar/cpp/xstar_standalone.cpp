@@ -6107,14 +6107,29 @@ void create_native_retained_productwrite_schema(xstar_run_state::ProductWritingS
         const auto& eval = product.radial_zones[zi].accepted_controller.evaluation;
         const auto& ws = eval.source_workspace;
         const std::size_t n = eval.radiation_energy_ev.size();
+        // v82 patch 5.20.16.3: mirror the detailed-continuum writer's
+        // significant-opacity owner in the retained bridge.  The two leading
+        // source boundaries are both zero-depth; only the second one owns the
+        // stable public opakc surface.  This is an opacity-publication owner
+        // correction only and must not alter any other radial workspace.
+        const bool use_second_zero_depth_opacity_owner =
+            zi == 0u && product.radial_zones.size() > 1u &&
+            std::fabs(product.radial_zones[0].delta_radius_cm) <= 1.0e-6 &&
+            std::fabs(product.radial_zones[1].delta_radius_cm) <= 1.0e-6 &&
+            product.radial_zones[1].accepted_controller.evaluation.source_workspace.opakc.size() == n;
+        const auto& detail_opacity_ws = use_second_zero_depth_opacity_owner
+            ? product.radial_zones[1].accepted_controller.evaluation.source_workspace
+            : ws;
         append_native_array(inventory, product, hdu, "product_write_detail_level_index", level_indices);
         append_native_array(inventory, product, hdu, "product_write_detail_level_population", resize_or_zero(eval.populations, level_indices.size()));
         append_native_array(inventory, product, hdu, "product_write_detail_level_lte", resize_or_zero(ws.lte_populations, level_indices.size()));
 
         append_native_array(inventory, product, hdu, "detail_energy_ev", eval.radiation_energy_ev);
         append_native_array(inventory, product, hdu, "product_write_detail_energy_ev", eval.radiation_energy_ev);
-        append_native_array(inventory, product, hdu, "opakc", resize_or_zero(ws.opakc.empty() ? eval.opacity : ws.opakc, n));
-        append_native_array(inventory, product, hdu, "product_write_opakc", resize_or_zero(ws.opakc.empty() ? eval.opacity : ws.opakc, n));
+        append_native_array(inventory, product, hdu, "opakc", resize_or_zero(
+            detail_opacity_ws.opakc.empty() ? eval.opacity : detail_opacity_ws.opakc, n));
+        append_native_array(inventory, product, hdu, "product_write_opakc", resize_or_zero(
+            detail_opacity_ws.opakc.empty() ? eval.opacity : detail_opacity_ws.opakc, n));
         std::vector<double> retained_rccemis = ws.rccemis;
         if (!vector_has_nonzero(retained_rccemis)) retained_rccemis = ws.elumab;
         if (!vector_has_nonzero(retained_rccemis)) {
