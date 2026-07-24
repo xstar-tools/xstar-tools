@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
@@ -397,6 +398,10 @@ struct ProductWritingState {
     bool xout_step_computed_from_native_state = false;
     bool xout_step_timing_values_measured = false;
     double measured_run_seconds = 0.0;
+    // v82 patch 5.20.17.2: file-silent production carries the exact
+    // product-write arrays in memory.  Diagnostic/replay modes may still
+    // persist the same arrays through exact_product_state_bridge.
+    std::map<std::string,std::vector<double>> retained_product_arrays;
     // v82 patch 5.15: copied from WholeRunAccumulatedState.
     bool diagnostic_preview_partial = false;
     std::size_t physical_radial_boundaries_expected = 0;

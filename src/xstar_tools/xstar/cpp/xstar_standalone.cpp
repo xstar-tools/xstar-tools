@@ -5594,13 +5594,21 @@ struct NativeArrayInventoryRow {
     bool nonzero = false;
 };
 
+std::string retained_product_array_memory_key(std::size_t hdu, const std::string& name) {
+    return std::to_string(hdu) + ":" + name;
+}
+
 void append_native_array(std::vector<NativeArrayInventoryRow>& inventory,
-                         const xstar_run_state::ProductWritingState& product,
+                         xstar_run_state::ProductWritingState& product,
                          std::size_t hdu,
                          const std::string& name,
                          const std::vector<double>& values) {
-    const auto path = retained_product_array_path(product, hdu, name);
-    write_retained_double_array_file(path, values);
+    product.retained_product_arrays[retained_product_array_memory_key(hdu, name)] = values;
+    std::filesystem::path path;
+    if (!product.product_metadata_path.empty()) {
+        path = retained_product_array_path(product, hdu, name);
+        write_retained_double_array_file(path, values);
+    }
     inventory.push_back(NativeArrayInventoryRow{hdu, name, path, values.size(), vector_has_nonzero(values)});
 }
 
@@ -6151,11 +6159,17 @@ bool build_writer_time_binemis_v82_patch520142(
 }
 
 void create_native_retained_productwrite_schema(xstar_run_state::ProductWritingState& product) {
-    if (product.product_metadata_path.empty()) {
-        throw std::runtime_error("native ProductWritingState cannot create retained arrays without product_metadata_path");
-    }
-    const auto bridge = product.product_metadata_path / "exact_product_state_bridge";
-    std::filesystem::create_directories(bridge / "arrays");
+    // v82 patch 5.20.17.2: this is now the single product-write projection
+    // routine for both diagnostic bridges and file-silent production.  The
+    // arrays are always retained in ProductWritingState memory; filesystem
+    // serialization is optional and occurs only when product_metadata_path is
+    // explicitly supplied.
+    const bool persist_bridge = !product.product_metadata_path.empty();
+    const auto bridge = persist_bridge
+        ? product.product_metadata_path / "exact_product_state_bridge"
+        : std::filesystem::path{};
+    if (persist_bridge) std::filesystem::create_directories(bridge / "arrays");
+    product.retained_product_arrays.clear();
     std::vector<NativeArrayInventoryRow> inventory;
 
     const auto level_indices = level_identity_indices(product);
@@ -6370,23 +6384,28 @@ void create_native_retained_productwrite_schema(xstar_run_state::ProductWritingS
     product.legacy_pprint.finalized_from_native_controller = true;
     product.exact_legacy_pprint_state_retained = true;
     product.embedded_full_xout_step_payload_absent = true;
-    {
-        std::ofstream out(bridge / "xout_step_body_native_equivalent.log");
-        for (const auto& line : body) out << line << '\n';
+    if (persist_bridge) {
+        {
+            std::ofstream out(bridge / "xout_step_body_native_equivalent.log");
+            for (const auto& line : body) out << line << '\n';
+        }
+        write_native_productwrite_csvs(product, bridge, inventory);
+        {
+            std::ofstream out(bridge / "native_product_write_schema_manifest.json");
+            out << "{\n"
+                << "  \"schema\": \"xstar-tools-v048746255179-native-productwrite-full-trajectory-row-gate-v1\",\n"
+                << "  \"source\": \"native_cpp_controller_retained_arrays\",\n"
+                << "  \"manifest_json_intentionally_absent\": true,\n"
+                << "  \"array_count\": " << inventory.size() << ",\n"
+                << "  \"xout_step_body\": \"xout_step_body_native_equivalent.log\",\n"
+                << "  \"product_parity\": \"NOT_CLAIMED\"\n"
+                << "}\n";
+        }
     }
-
-    write_native_productwrite_csvs(product, bridge, inventory);
-    {
-        std::ofstream out(bridge / "native_product_write_schema_manifest.json");
-        out << "{\n"
-            << "  \"schema\": \"xstar-tools-v048746255179-native-productwrite-full-trajectory-row-gate-v1\",\n"
-            << "  \"source\": \"native_cpp_controller_retained_arrays\",\n"
-            << "  \"manifest_json_intentionally_absent\": true,\n"
-            << "  \"array_count\": " << inventory.size() << ",\n"
-            << "  \"xout_step_body\": \"xout_step_body_native_equivalent.log\",\n"
-            << "  \"product_parity\": \"NOT_CLAIMED\"\n"
-            << "}\n";
-    }
+    std::cout << "V048746255172582_PATCH520172_PRODUCTWRITE_HANDOFF="
+              << (persist_bridge ? "IN_MEMORY_AND_DIAGNOSTIC_BRIDGE" : "IN_MEMORY_ONLY") << "\n"
+              << "V048746255172582_PATCH520172_PRODUCTWRITE_ARRAY_COUNT="
+              << product.retained_product_arrays.size() << "\n";
 }
 
 void validate_complete_productwrite_schema(const xstar_run_state::ProductWritingState& product) {
@@ -15173,6 +15192,24 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         }
         auto product = xstar_run_state::build_product_writing_state(whole);
         product.backend = "cpp-general-standalone";
+
+        // v82 patch 5.20.17.2: project the full writer-owned surface into
+        // ProductWritingState memory before file-silent publication.  This
+        // includes the 5.20.16.4 dynamic 600-line ranking, terminal tau0,
+        // writer-time binemis spectrum, continuum planes, and detailed arrays.
+        // No exact-product bridge directory is created because the production
+        // ProductWritingState has no product_metadata_path.
+        create_native_retained_productwrite_schema(product);
+        if (product.retained_product_arrays.count(
+                retained_product_array_memory_key(3u, "product_write_public_line_index")) == 0u ||
+            product.retained_product_arrays.at(
+                retained_product_array_memory_key(3u, "product_write_public_line_index")).size() != 600u) {
+            throw std::runtime_error(
+                "5.20.17.2 production public-line in-memory handoff is incomplete");
+        }
+        std::cout << "V048746255172582_PATCH520172_PUBLIC_LINE_HANDOFF=IN_MEMORY\n"
+                  << "V048746255172582_PATCH520172_PUBLIC_LINE_COUNT=600\n";
+
         product.product_state_complete = whole.product_schema_complete && whole.radial_state_complete &&
             whole.native_product_inputs_complete && whole.exact_source_metadata_retained &&
             whole.exact_source_workspaces_retained && whole.exact_accepted_radial_boundaries_retained;

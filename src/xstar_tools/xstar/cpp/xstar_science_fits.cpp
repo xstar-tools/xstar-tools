@@ -8244,6 +8244,23 @@ bool has_finite_monotonic_energy(const std::vector<double>& values) {
     return true;
 }
 
+std::string retained_product_array_memory_key_v82_patch520172(
+    std::size_t hdu_number, const std::string& name) {
+    return std::to_string(hdu_number) + ":" + name;
+}
+
+std::vector<double> in_memory_product_array_for_hdu_v82_patch520172(
+    const xstar_run_state::ProductWritingState& state,
+    const std::string& name,
+    std::size_t hdu_number,
+    std::size_t expected_count = 0) {
+    const auto it = state.retained_product_arrays.find(
+        retained_product_array_memory_key_v82_patch520172(hdu_number, name));
+    if (it == state.retained_product_arrays.end()) return {};
+    if (expected_count != 0u && it->second.size() != expected_count) return {};
+    return it->second;
+}
+
 std::vector<double> native_workspace_array_for_hdu(
     const xstar_run_state::ProductWritingState& state,
     const std::string& name,
@@ -8292,6 +8309,11 @@ std::vector<double> bridge_array(
     const xstar_run_state::ProductWritingState& state,
     const std::string& name,
     std::size_t expected_count) {
+    for (int hdu = 7; hdu >= 3; --hdu) {
+        auto live = in_memory_product_array_for_hdu_v82_patch520172(
+            state, name, static_cast<std::size_t>(hdu), expected_count);
+        if (!live.empty()) return live;
+    }
     try {
         auto values = read_binary_double_array(bridge_array_path(state, name));
         if (values.size() != expected_count) {
@@ -8326,6 +8348,11 @@ std::vector<double> bridge_array_for_hdu(
     const std::string& name,
     std::size_t hdu_number,
     std::size_t expected_count) {
+    auto live = in_memory_product_array_for_hdu_v82_patch520172(
+        state, name, hdu_number, expected_count);
+    if (!live.empty() || expected_count == 0u) {
+        if (!live.empty()) return live;
+    }
     try {
         auto values = read_binary_double_array(bridge_array_path_for_hdu(state, name, hdu_number));
         if (values.size() != expected_count) {
@@ -8347,6 +8374,9 @@ std::vector<double> optional_bridge_array_for_hdu(
     const std::string& name,
     std::size_t hdu_number,
     std::size_t expected_count = 0) {
+    auto live = in_memory_product_array_for_hdu_v82_patch520172(
+        state, name, hdu_number, expected_count);
+    if (!live.empty()) return live;
     try {
         const auto path = bridge_array_path_for_hdu(state, name, hdu_number);
         auto values = read_binary_double_array(path);
