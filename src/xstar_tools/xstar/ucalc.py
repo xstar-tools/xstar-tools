@@ -3050,7 +3050,26 @@ class SourceFaithfulUCalc:
         ``ansar2=0`` initialization.  ``enxt`` runs with ``lfastl=0`` here,
         so both source loops visit every bin from 2 through ``nbmx``.
         """
-        epi, _, _ = _radiation_arrays(c.radiation)
+        grid_role = str(c.extras.get("bound_free_radiation_grid_role", "reduced") or "reduced").strip().lower()
+        if grid_role == "full":
+            # calc_emis_all.f90 passes the full ``epi``/``ncn2`` grid to
+            # ucalc.  The generic Python _radiation_arrays() helper is owned
+            # by calc_emisab and deliberately prefers the reduced ``epim``
+            # grid, so using it here silently compressed the Type-76 spectrum
+            # into the first ~999 slots of the 9999-bin rccemis workspace.
+            # Select the source-owned full grid explicitly for calc_emis_all.
+            epi = np.asarray(
+                getattr(c.radiation, "epi_eV", getattr(c.radiation, "epi", ())),
+                dtype=float,
+            ).reshape(-1)
+            if (
+                epi.size < 3
+                or np.any(np.diff(epi) <= 0.0)
+                or not np.all(np.isfinite(epi))
+            ):
+                raise ValueError("invalid full radiation grid for Type-76 continuum")
+        else:
+            epi, _, _ = _radiation_arrays(c.radiation)
         n = int(epi.size)
         inward = np.zeros(n, dtype=float)
         outward = np.zeros(n, dtype=float)
@@ -3061,6 +3080,8 @@ class SourceFaithfulUCalc:
                 "type76_emax_ev": float(emax_ev),
                 "type76_grid_endpoint_ev": 0.0,
                 "type76_source_semantics": "literal_E2_Emax_minus_E",
+                "type76_radiation_grid_role": grid_role,
+                "type76_radiation_grid_points": n,
             }
         nbmx = _xstar_nbinc_fortran_value(float(emax_ev), epi)
         nbmx = max(1, min(int(nbmx), n))
@@ -3071,6 +3092,8 @@ class SourceFaithfulUCalc:
                 "type76_emax_ev": float(emax_ev),
                 "type76_grid_endpoint_ev": float(epi[nbmx - 1]),
                 "type76_source_semantics": "literal_E2_Emax_minus_E",
+                "type76_radiation_grid_role": grid_role,
+                "type76_radiation_grid_points": n,
             }
         grid_endpoint = float(epi[nbmx - 1])
         rcemsum = 0.0
@@ -3097,6 +3120,8 @@ class SourceFaithfulUCalc:
             "type76_emax_ev": float(emax_ev),
             "type76_grid_endpoint_ev": grid_endpoint,
             "type76_source_semantics": "literal_E2_Emax_minus_E",
+            "type76_radiation_grid_role": grid_role,
+            "type76_radiation_grid_points": n,
         }
 
     def _eval_type76(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
