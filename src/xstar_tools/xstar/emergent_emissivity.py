@@ -90,6 +90,28 @@ XSTAR_LINE_OPACITY_DIAGNOSTIC_MAX_ROWS = 2000
 XSTAR_TYPE50_LINE_STRENGTH_TARGET_LINES = (119, 120, 410, 411, 1983, 1984)
 
 
+def _line_profile_opacity_target(context: "CalcEmisContext") -> np.ndarray:
+    """Return the caller-owned line-profile opacity plane when calc_emis_all owns one.
+
+    v82 patch 5.20.17.3.3 mirrors the accepted C++ ownership split: selected
+    ``linopac`` profiles accumulate independently from continuum opacity and are
+    merged into public ``opakc`` only after bound-free/free-free/brems continuum
+    work is complete.  Direct ``calc_emis_ion`` fixtures retain the historical
+    single-array behavior by falling back to ``workspace.base.opakc``.
+    """
+    target = getattr(context, "_patch5201733_line_profile_opacity", None)
+    if target is None:
+        return context.workspace.base.opakc
+    return np.asarray(target, dtype=float)
+
+
+def _workspace_line_profile_opacity_target(workspace: "CalcEmisWorkspace") -> np.ndarray:
+    """Return a retained line-profile plane attached to one workspace."""
+    target = getattr(workspace, "_patch5201733_line_profile_opacity", None)
+    if target is None:
+        return workspace.base.opakc
+    return np.asarray(target, dtype=float)
+
 
 class CalcEmisPortError(RuntimeError):
     """Raised when the translated ``calc_emis_all`` contract is invalid."""
@@ -1159,7 +1181,7 @@ def calc_emis_ion(
                     temperature_1e4K=float(row.get("temperature_1e4K", 0.0)),
                     atomic_mass_amu=float(row.get("atomic_mass_amu", 0.0)),
                     natural_width_eV=float(row.get("natural_width_eV", 0.0)),
-                    epi=epi, opakc=target.base.opakc, rccemis=target.base.rccemis,
+                    epi=epi, opakc=_workspace_line_profile_opacity_target(target), rccemis=target.base.rccemis,
                     ncn2=len(epi), diagnostic_bins_one_based=(),
                 )
 
@@ -1311,6 +1333,7 @@ def calc_emis_ion(
         conservative while moving the live side-effect update to C++ only after
         agreement has been demonstrated.
         """
+        line_opacity_target = _line_profile_opacity_target(context)
         if not use_cpp_mg_type4_line or linopac_cpp_gate.get("failed"):
             cpp_mg_type4_stats["linopac_cpp_fallback_count"] = cpp_mg_type4_stats.get("linopac_cpp_fallback_count", 0.0) + 1.0
             return _source_linopac_into_opakc(
@@ -1323,7 +1346,7 @@ def calc_emis_ion(
                 atomic_mass_amu=atomic_mass_amu,
                 natural_width_eV=natural_width_eV,
                 epi=epi,
-                opakc=context.workspace.base.opakc,
+                opakc=line_opacity_target,
                 rccemis=context.workspace.base.rccemis,
                 ncn2=len(epi),
                 diagnostic_bins_one_based=XSTAR_LINE_OPACITY_DIAGNOSTIC_BINS,
@@ -1331,9 +1354,9 @@ def calc_emis_ion(
         parity_limit = int(linopac_cpp_gate.get("parity_limit", 16))
         checked = int(linopac_cpp_gate.get("checked", 0))
         if checked < parity_limit:
-            py_opakc = context.workspace.base.opakc.copy()
+            py_opakc = line_opacity_target.copy()
             py_rcc = context.workspace.base.rccemis.copy()
-            cpp_opakc = context.workspace.base.opakc.copy()
+            cpp_opakc = line_opacity_target.copy()
             cpp_rcc = context.workspace.base.rccemis.copy()
             py_diag = _source_linopac_into_opakc(
                 optpp=optpp,
@@ -1397,7 +1420,7 @@ def calc_emis_ion(
                         atomic_mass_amu=atomic_mass_amu,
                         natural_width_eV=natural_width_eV,
                         epi=epi,
-                        opakc=context.workspace.base.opakc,
+                        opakc=line_opacity_target,
                         rccemis=context.workspace.base.rccemis,
                         ncn2=len(epi),
                         diagnostic_bins_one_based=XSTAR_LINE_OPACITY_DIAGNOSTIC_BINS,
@@ -1416,7 +1439,7 @@ def calc_emis_ion(
                     atomic_mass_amu=atomic_mass_amu,
                     natural_width_eV=natural_width_eV,
                     epi=epi,
-                    opakc=context.workspace.base.opakc,
+                    opakc=line_opacity_target,
                     rccemis=context.workspace.base.rccemis,
                     ncn2=len(epi),
                     diagnostic_bins_one_based=XSTAR_LINE_OPACITY_DIAGNOSTIC_BINS,
@@ -1441,7 +1464,7 @@ def calc_emis_ion(
                     ncn2=len(epi),
                 ),
                 epi=epi,
-                opakc=context.workspace.base.opakc,
+                opakc=line_opacity_target,
                 rccemis=context.workspace.base.rccemis,
                 ncn2=len(epi),
             )
@@ -1460,7 +1483,7 @@ def calc_emis_ion(
                 atomic_mass_amu=atomic_mass_amu,
                 natural_width_eV=natural_width_eV,
                 epi=epi,
-                opakc=context.workspace.base.opakc,
+                opakc=line_opacity_target,
                 rccemis=context.workspace.base.rccemis,
                 ncn2=len(epi),
                 diagnostic_bins_one_based=XSTAR_LINE_OPACITY_DIAGNOSTIC_BINS,
@@ -1584,10 +1607,10 @@ def calc_emis_ion(
                     cpp_flinel[int(nb1) - 1] += float(row["flinel_delta"])
                 # The scalar C++ helper does not own linopac side effects; mirror Python
                 # for array-scope comparison so this probe isolates scalar line products.
-                cpp_opakc = context.workspace.base.opakc.copy()
+                cpp_opakc = _line_profile_opacity_target(context).copy()
                 cpp_rcc = context.workspace.base.rccemis.copy()
             py_arrays = {
-                "opakc": context.workspace.base.opakc,
+                "opakc": _line_profile_opacity_target(context),
                 "rccemis": context.workspace.base.rccemis,
                 "oplin": context.workspace.base.oplin,
                 "fline": context.workspace.fline,
@@ -1708,7 +1731,7 @@ def calc_emis_ion(
             atomic_mass_amu=atomic_mass_0,
             natural_width_eV=natural_width_0,
             epi=epi,
-            opakc=context.workspace.base.opakc,
+            opakc=_line_profile_opacity_target(context),
             rccemis=context.workspace.base.rccemis,
             ncn2=len(epi),
             diagnostic_bins_one_based=XSTAR_LINE_OPACITY_DIAGNOSTIC_BINS,
@@ -1775,7 +1798,7 @@ def calc_emis_ion(
                 atomic_mass_amu=float(atomic_mass),
                 erg_per_ev=XSTAR_CALC_EMISAB_ERG_PER_EV,
                 epi=epi,
-                opakc=context.workspace.base.opakc,
+                opakc=_line_profile_opacity_target(context),
                 rccemis=context.workspace.base.rccemis,
                 oplin=context.workspace.base.oplin,
                 fline=context.workspace.fline,
@@ -2229,13 +2252,14 @@ def calc_emis_ion(
                     _upstream_type4_shadow_before = None
                     if upstream_type4_shadow_enabled and int(rate_type) == 4:
                         _upstream_type4_shadow_before = {
-                            "opakc": context.workspace.base.opakc.copy(),
+                            "opakc": _line_profile_opacity_target(context).copy(),
                             "rccemis": context.workspace.base.rccemis.copy(),
                             "oplin": context.workspace.base.oplin.copy(),
                             "fline": context.workspace.fline.copy(),
                             "flinel": context.workspace.flinel.copy(),
                         }
-                    _line_opakc_before = context.workspace.base.opakc.copy() if diagnostics_enabled else None
+                    _line_opacity_target = _line_profile_opacity_target(context)
+                    _line_opakc_before = _line_opacity_target.copy() if diagnostics_enabled else None
                     _linopac_diag = _source_linopac_into_opakc(
                         optpp=opakb1,
                         rcem1=rcem1,
@@ -2246,12 +2270,12 @@ def calc_emis_ion(
                         atomic_mass_amu=atomic_mass,
                         natural_width_eV=natural_width,
                         epi=epi,
-                        opakc=context.workspace.base.opakc,
+                        opakc=_line_opacity_target,
                         rccemis=context.workspace.base.rccemis,
                         ncn2=len(epi),
                         diagnostic_bins_one_based=XSTAR_LINE_OPACITY_DIAGNOSTIC_BINS,
                     )
-                    _line_opakc_after = context.workspace.base.opakc
+                    _line_opakc_after = _line_opacity_target
                     _target_add = ({
                         str(_b): (float(_line_opakc_after[_b - 1] - _line_opakc_before[_b - 1]) if _line_opakc_before is not None and 0 < _b <= _line_opakc_after.size else 0.0)
                         for _b in XSTAR_LINE_OPACITY_DIAGNOSTIC_BINS
@@ -2410,7 +2434,7 @@ def calc_emis_ion(
                     pending_native_spectral_rows,
                     rcem=target.base.rcem, oplin=target.base.oplin,
                     cemab=target.base.cemab, cabab=target.base.cabab, opakab=target.base.opakab,
-                    rccemis=target.base.rccemis, opakc=target.base.opakc, opakcont=target.base.opakcont,
+                    rccemis=target.base.rccemis, opakc=_workspace_line_profile_opacity_target(target), opakcont=target.base.opakcont,
                     fline=target.fline, flinel=target.flinel, epi_eV=epi,
                     exact_profile_oracle=(
                         native_spectral_shadow and not native_spectral_product
@@ -2621,6 +2645,13 @@ def calc_emis_all(context: CalcEmisContext) -> CalcEmisResult:
     setattr(context, "_type76_calc_emis_all_records", 0)
     context.workspace.base.opakc[:n] = thomson
     context.workspace.base.opakcont[:n] = thomson
+    # v82 patch 5.20.17.3.3: the accepted C++ path keeps selected linopac
+    # profiles in a dedicated owner plane until all continuum opacity work has
+    # completed.  This prevents source-order line additions from changing the
+    # continuum accumulation/rounding lifetime.
+    line_profile_opacity = np.zeros_like(context.workspace.base.opakc, dtype=float)
+    setattr(context, "_patch5201733_line_profile_opacity", line_profile_opacity)
+    setattr(context.workspace, "_patch5201733_line_profile_opacity", line_profile_opacity)
     _patch5201732_attribution_checkpoint(context, "calc_emis_all_post_reset_thomson", context.workspace.base.opakc[:n])
     native_spectral_product = _native_spectral_requested(product=True)
     native_spectral_shadow = _native_spectral_requested(shadow=True)
@@ -2636,9 +2667,11 @@ def calc_emis_all(context: CalcEmisContext) -> CalcEmisResult:
             cabab=context.workspace.base.cabab.copy(),
             opakab=context.workspace.base.opakab.copy(),
         )
-        setattr(context, "_native_spectral_shadow_workspace", CalcEmisWorkspace(
+        _shadow_workspace = CalcEmisWorkspace(
             base=shadow_base, fline=context.workspace.fline.copy(), flinel=context.workspace.flinel.copy()
-        ))
+        )
+        setattr(_shadow_workspace, "_patch5201733_line_profile_opacity", np.zeros_like(shadow_base.opakc, dtype=float))
+        setattr(context, "_native_spectral_shadow_workspace", _shadow_workspace)
     else:
         setattr(context, "_native_spectral_shadow_workspace", None)
 
@@ -2729,10 +2762,12 @@ def calc_emis_all(context: CalcEmisContext) -> CalcEmisResult:
     shadow_workspace = getattr(context, "_native_spectral_shadow_workspace", None)
     if shadow_workspace is not None:
         summary = _spectral_summary_bucket(context)
+        _live_shadow_opakc = context.workspace.base.opakc + _line_profile_opacity_target(context)
+        _shadow_combined_opakc = shadow_workspace.base.opakc + _workspace_line_profile_opacity_target(shadow_workspace)
         shadow_status, shadow_detail = _classify_spectral_shadow_arrays((
             ("oplin", context.workspace.base.oplin, shadow_workspace.base.oplin),
             ("opakab", context.workspace.base.opakab, shadow_workspace.base.opakab),
-            ("opakc", context.workspace.base.opakc, shadow_workspace.base.opakc),
+            ("opakc", _live_shadow_opakc, _shadow_combined_opakc),
             ("rccemis", context.workspace.base.rccemis, shadow_workspace.base.rccemis),
             ("fline", context.workspace.fline, shadow_workspace.fline),
             ("flinel", context.workspace.flinel, shadow_workspace.flinel),
@@ -2755,6 +2790,17 @@ def calc_emis_all(context: CalcEmisContext) -> CalcEmisResult:
     context.workspace.base.brcems[:n] = br.brcems_after
     context.workspace.base.opakc[:n] = br.opakc_after_cm_inv
     _patch5201732_attribution_checkpoint(
+        context, "calc_emis_all_pre_line_profile_merge", context.workspace.base.opakc[:n],
+    )
+    _continuum_opacity = np.asarray(context.workspace.base.opakc[:n], dtype=float)
+    _line_opacity = np.asarray(line_profile_opacity[:n], dtype=float)
+    _continuum_opacity = np.where(np.isfinite(_continuum_opacity) & (_continuum_opacity > 0.0), _continuum_opacity, 0.0)
+    _line_opacity = np.where(np.isfinite(_line_opacity) & (_line_opacity > 0.0), _line_opacity, 0.0)
+    context.workspace.base.opakc[:n] = _continuum_opacity + _line_opacity
+    _patch5201732_attribution_checkpoint(
+        context, "calc_emis_all_post_line_profile_merge", context.workspace.base.opakc[:n],
+    )
+    _patch5201732_attribution_checkpoint(
         context, "calc_emis_all_return", context.workspace.base.opakc[:n],
         dump_name="python_live_opakc_return.bin",
     )
@@ -2762,8 +2808,13 @@ def calc_emis_all(context: CalcEmisContext) -> CalcEmisResult:
         context, "calc_emis_all_return", context.workspace.base.rccemis,
         type76_buffer=type76_calc_emis_all_rccemis,
     )
-    # Do not let a subsequent direct ion call accidentally reuse this call's buffer.
+    # Do not let a subsequent direct ion call accidentally reuse this call's buffers.
     setattr(context, "_type76_calc_emis_all_rccemis", None)
+    setattr(context, "_patch5201733_line_profile_opacity", None)
+    try:
+        delattr(context.workspace, "_patch5201733_line_profile_opacity")
+    except AttributeError:
+        pass
 
     return CalcEmisResult(
         hydrogen_density_cm3=xpx, electron_density_cm3=xnx,
