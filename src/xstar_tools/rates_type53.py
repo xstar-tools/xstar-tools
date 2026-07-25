@@ -187,12 +187,48 @@ def _full_grid_mapping_diagnostics(
     }
 
 
+def _source_huntf_nbinc_one_based(energy_eV: float, grid_eV: Sequence[float], ncn2: int) -> int:
+    """Literal ``nbinc -> huntf`` starting index used by ``phint53.f90``.
+
+    ``huntf.f90`` does not return a simple lower bracket.  It assumes the
+    continuum grid is logarithmically spaced, estimates the nearest index in
+    log space, and may advance to the neighbouring grid point before
+    ``phint53`` performs its own increment/decrement sequence.  C++ has used
+    these semantics for the accepted full-grid Type49 opacity owner since
+    v82 patch 5.20.14.x.
+    """
+    ncn = min(len(grid_eV), max(1, int(ncn2)))
+    numcon2 = max(2, ncn // 50)
+    n = max(1, ncn - numcon2)
+    if n <= 1:
+        return 1
+    x = float(energy_eV)
+    xx0 = float(grid_eV[0])
+    xx1 = float(grid_eV[1])
+    xxn = float(grid_eV[n - 1])
+    jlo = 1
+    if x < 1.0e-34 or xx0 <= 1.0e-34 or xxn <= 1.0e-34:
+        return jlo
+    xtmp = max(x, xx1)
+    denom = math.log(xxn / xx0)
+    if math.isfinite(denom) and denom != 0.0:
+        jlo = int((n - 1) * math.log(xtmp / xx0) / denom) + 1
+    jlo = max(1, min(n, jlo))
+    if jlo < n:
+        tst = abs(math.log(x / (1.0e-34 + float(grid_eV[jlo - 1]))))
+        tst2 = abs(math.log(x / (1.0e-34 + float(grid_eV[jlo]))))
+        if tst2 < tst:
+            jlo += 1
+    return max(1, min(n, jlo))
+
+
 def _map_cross_section_phint53(
     *,
     energy_above_threshold_ryd: Sequence[float],
     cross_section_cm2: Sequence[float],
     threshold_eV: float,
     epim_eV: Sequence[float],
+    source_huntf_nbinc: bool = False,
 ) -> tuple[list[float], int, int, dict[str, Any]]:
     """Port the ``sgbar`` mapping loop in ``phint53.f90``.
 
@@ -211,7 +247,22 @@ def _map_cross_section_phint53(
     xs = [float(threshold_eV) + float(energy_above_threshold_ryd[i]) * RYDBERG_EV for i in range(ntmp)]
     ys = [max(0.0, float(cross_section_cm2[i])) for i in range(ntmp)]
     ener = xs[0]
-    nb1 = _lower_bracket_index(ener, epim_eV, nphint_1)
+    if source_huntf_nbinc:
+        # phint53.f90:
+        #   nb1=nbinc(ener,epi,ncn2)
+        #   do while (epi(nb1).lt.ener .and. nb1.lt.nphint) nb1=nb1+1
+        #   nb1=nb1-1; nb1=max(nb1,1)
+        nb1_one = _source_huntf_nbinc_one_based(ener, epim_eV, ncn2)
+        while (
+            1 <= nb1_one <= ncn2
+            and float(epim_eV[nb1_one - 1]) < ener
+            and nb1_one < nphint_1
+        ):
+            nb1_one += 1
+        nb1_one = max(1, nb1_one - 1)
+        nb1 = nb1_one - 1
+    else:
+        nb1 = _lower_bracket_index(ener, epim_eV, nphint_1)
     if nb1 + 1 >= nphint_1:
         return sgbar, nb1, nb1, {"status": "threshold_in_guard_tail", "nphint_1based": nphint_1}
 
@@ -297,6 +348,7 @@ def _map_cross_section_phint53(
         "mapping_iterations": iterations,
         "cross_section_cursor_1based": j + 1,
         "source_last_packed_point_used_as_upper_marker": ntmp >= 2,
+        "source_huntf_nbinc": bool(source_huntf_nbinc),
     }
 
 
@@ -314,6 +366,7 @@ def evaluate_phint53_exact(
     abund1: float = 0.0,
     abund2: float = 0.0,
     xpx_cm3: float = 0.0,
+    source_huntf_nbinc: bool = False,
 ) -> Type53PhintResult:
     """Evaluate the complete ``phint53.f90`` kernel on a live rate grid."""
     validation = live_radiation.validate()
@@ -336,6 +389,7 @@ def evaluate_phint53_exact(
         cross_section_cm2=cross_section_cm2[:ntmp],
         threshold_eV=float(threshold_eV),
         epim_eV=epi,
+        source_huntf_nbinc=bool(source_huntf_nbinc),
     )
     grid_diag = _full_grid_mapping_diagnostics(
         threshold_eV=float(threshold_eV),

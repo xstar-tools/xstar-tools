@@ -1954,6 +1954,53 @@ def _fnappend_detail_filename(name: str, pass_index: int) -> str:
         raise OutputWriterPortError("detail filename is shorter than four characters")
     return text[:2] + f"{kk:02d}" + text[4:]
 
+def _detail_continuum_publication_tables_v82_patch5201731(
+    store: DetailOutputStore,
+) -> list[OutputTable]:
+    """Return source-owned detail-continuum tables for publication.
+
+    The source trajectory retains two leading zero-depth shell states.  The
+    first is the call-58 final state; the second is the settled call-59 state
+    that literal ``fstepr4`` semantics use for the first public continuum
+    opacity surface.  Patch 5.20.16.3 established the same retained-owner
+    correction in C++.  Only ``opakc``/``opacity`` changes owner here; RRC
+    emissivity, zrems, dpthc and every other column remain owned by the first
+    record.
+    """
+    tables = [record.continuum for record in store.records]
+    if len(tables) < 2:
+        return tables
+    first, second = tables[0], tables[1]
+    try:
+        first_depth = float(first.header_keywords.get("RDEL", float("nan")))
+        second_depth = float(second.header_keywords.get("RDEL", float("nan")))
+    except Exception:
+        return tables
+    if first_depth != 0.0 or second_depth != 0.0:
+        return tables
+    if "opacity" not in first.values or "opacity" not in second.values:
+        return tables
+    first_opacity = np.asarray(first.values["opacity"])
+    second_opacity = np.asarray(second.values["opacity"])
+    if first_opacity.shape != second_opacity.shape:
+        raise OutputWriterPortError(
+            "5.20.17.3.1 first-zero-depth opacity workspace shape mismatch"
+        )
+    values = dict(first.values)
+    values["opacity"] = np.array(second_opacity, copy=True)
+    tables[0] = OutputTable(
+        extension_name=first.extension_name,
+        columns=first.columns,
+        units=first.units,
+        values=values,
+        formats=first.formats,
+        binary=first.binary,
+        header_keywords=first.header_keywords,
+        source_file=first.source_file,
+    )
+    return tables
+
+
 def write_detail_output_files(
     store: DetailOutputStore,
     *, out_dir: str | Path,
@@ -1980,7 +2027,11 @@ def write_detail_output_files(
             _primary_hdu(model_name=model_name, atomic_data_date=atomic_data_date),
             _table_hdu(parameter_table),
         ]
-        hdus.extend(_table_hdu(getattr(record, attr)) for record in store.records)
+        if attr == "continuum":
+            detail_tables = _detail_continuum_publication_tables_v82_patch5201731(store)
+        else:
+            detail_tables = [getattr(record, attr) for record in store.records]
+        hdus.extend(_table_hdu(table) for table in detail_tables)
         _record_fits_timing(
             timing,
             filename=filename,
