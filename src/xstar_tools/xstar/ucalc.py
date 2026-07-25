@@ -1367,7 +1367,7 @@ class SourceFaithfulUCalc:
         return state
 
     def _type53_from_pairs(self, record: UCalcRecord, context: UCalcContext, spec: UCalcBranchSpec, *, energy_ryd: Sequence[float], sigma_cm2: Sequence[float], threshold_ev: float, idest1: int, idest2: int, zero_reverse: bool = False, zero_all_heating: bool = False, type49_rnist_semantics: bool = False) -> UCalcResult:
-        from xstar_tools.rates_type53 import evaluate_type53_ucalc_record, evaluate_phint53_exact
+        from xstar_tools.rates_type53 import evaluate_type53_ucalc_record
         physical_dest_energy,dest_weight=self._parent_destination_context(context,idest2)
         continuum=context.levels.require(context.nlevp); bound=context.levels.require(idest1)
         leveltemp_dest_energy=self._leveltemp_destination_energy(
@@ -1387,43 +1387,13 @@ class SourceFaithfulUCalc:
             "leveltemp_destination_energy_eV":leveltemp_dest_energy,
             "leveltemp_workspace_semantics":"persistent_higher_columns",
         }
-        live_state = self._live_type53_state(context)
-        ev=evaluate_type53_ucalc_record(decoded,live_state,temperature_k=context.temperature_k,xpx_cm3=context.hydrogen_density_cm3,electron_fraction_xee=context.electron_fraction_xee,ptmp1=context.ptmp1,ptmp2=context.ptmp2,lfast=context.lfast,abund1=context.abund1,abund2=context.abund2,type49_rnist_semantics=type49_rnist_semantics)
+        ev=evaluate_type53_ucalc_record(decoded,self._live_type53_state(context),temperature_k=context.temperature_k,xpx_cm3=context.hydrogen_density_cm3,electron_fraction_xee=context.electron_fraction_xee,ptmp1=context.ptmp1,ptmp2=context.ptmp2,lfast=context.lfast,abund1=context.abund1,abund2=context.abund2,type49_rnist_semantics=type49_rnist_semantics)
         ev = {
             **dict(ev),
             "physical_parent_destination_energy_eV": physical_dest_energy,
             "leveltemp_destination_energy_eV": leveltemp_dest_energy,
             "leveltemp_workspace_semantics": "persistent_higher_columns",
         }
-        # v82 patch 5.20.17.3.1: Type49 has two calc_emis consumers.
-        # Keep the already-qualified scalar/RRC-emission result on the stable
-        # shared Type49/53 path, but rebuild only the full-grid opacity planes
-        # with literal phint53 nbinc->huntf starting-bin semantics.  The C++
-        # owner that closed detal4 opacity/depth uses this exact split.  Do not
-        # apply it to reduced calc_hmc/calc_emisab calls or to Type53.
-        grid_role = str(context.extras.get("bound_free_radiation_grid_role", "auto") or "auto").strip().lower()
-        if type49_rnist_semantics and grid_role == "full" and str(ev.get("status", "")) == "evaluated":
-            opacity_ph = evaluate_phint53_exact(
-                energy_above_threshold_ryd=energy_ryd,
-                cross_section_cm2=sigma_cm2,
-                threshold_eV=float(threshold_ev),
-                live_radiation=live_state,
-                temperature_1e4K=float(context.temperature_k) / 1.0e4,
-                rnist=float(ev.get("rnist", 0.0) or 0.0),
-                ptmp1=float(context.ptmp1),
-                ptmp2=float(context.ptmp2),
-                lfast=int(context.lfast),
-                abund1=float(context.abund1),
-                abund2=float(context.abund2),
-                xpx_cm3=float(context.hydrogen_density_cm3),
-                source_huntf_nbinc=True,
-            )
-            if str(opacity_ph.diagnostics.get("status", "")).startswith("evaluated"):
-                ev["opakc_cm^-1"] = list(opacity_ph.opakc_cm_inv)
-                ev["opakcont_cm^-1"] = list(opacity_ph.opakcont_cm_inv)
-                ev["type49_fullgrid_opacity_owner"] = "SOURCE_PHINT53_HUNTF_NBINC"
-                ev["type49_fullgrid_opacity_emission_split"] = True
-                ev["type49_fullgrid_opacity_mapping"] = dict(opacity_ph.diagnostics)
         if ev.get("status")!="evaluated":
             return self._context_blocked(record,spec,str(ev.get("status")),diagnostics=ev)
         ans=[float(ev[f"ans{k}_{name}"]) for k,name in ((1,"photoionization_s^-1"),(2,"milne_recombination_s^-1"),(3,"cooling_signed_erg_s^-1"),(4,"heating_signed_erg_s^-1"),(5,"electron_pov_cooling_signed_erg_s^-1"),(6,"electron_pov_heating_signed_erg_s^-1"))]

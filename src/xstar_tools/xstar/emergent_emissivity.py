@@ -66,6 +66,13 @@ from .continuum_diagnostics import (
     append_ucalc_continuum_side_effect_diagnostic,
     UCALC_SIDE_EFFECT_KEY,
 )
+from .bound_free_opacity_attribution import (
+    initialize_call as _patch5201732_attribution_initialize,
+    checkpoint as _patch5201732_attribution_checkpoint,
+    record_ucalc_bound_free as _patch5201732_record_bound_free,
+    finalize_bound_free_sum as _patch5201732_finalize_bound_free_sum,
+    enabled as _patch5201732_attribution_enabled,
+)
 
 
 XSTAR_CALC_EMIS_WAVELENGTH_EV_ANGSTROM = float(np.float32(12398.4016))
@@ -1249,7 +1256,17 @@ def calc_emis_ion(
                     type76_retained_rccemis[1, :arr.size] += arr
                 type76_retained_records += 1
             else:
-                _accumulate_ucalc_continuum(context.workspace.base, result)
+                if _patch5201732_attribution_enabled(context):
+                    _patch5201732_before = context.workspace.base.opakc.copy()
+                    _accumulate_ucalc_continuum(context.workspace.base, result)
+                    _patch5201732_record_bound_free(
+                        context, result=result, ion=ion, record=rec,
+                        abund1=abund1, abund2=abund2,
+                        workspace_before=_patch5201732_before,
+                        workspace_after=context.workspace.base.opakc,
+                    )
+                else:
+                    _accumulate_ucalc_continuum(context.workspace.base, result)
                 shadow_workspace = getattr(context, "_native_spectral_shadow_workspace", None)
                 if shadow_workspace is not None:
                     _accumulate_ucalc_continuum(shadow_workspace.base, result)
@@ -2591,6 +2608,10 @@ def calc_emis_all(context: CalcEmisContext) -> CalcEmisResult:
     )
     xnx = xpx * context.electron_fraction_xee
     thomson = xnx * XSTAR_THOMSON_CROSS_SECTION_CM2 * max(0.0, 1.0 - context.covering_fraction)
+    # v82 patch 5.20.17.3.2: diagnostic-only producer/lifetime attribution.
+    # Capture the incoming broad continuum state before calc_emis_all performs
+    # its literal rccemis/opakc reset.  The helper never feeds production arrays.
+    _patch5201732_attribution_initialize(context, context.workspace.base.opakc[:n].copy())
     context.workspace.base.rccemis[:, :n] = 0.0
     # One source call to calc_emis_all owns one complete Type-76 continuum.
     # Accumulate across every active element/ion and merge exactly once after
@@ -2600,6 +2621,7 @@ def calc_emis_all(context: CalcEmisContext) -> CalcEmisResult:
     setattr(context, "_type76_calc_emis_all_records", 0)
     context.workspace.base.opakc[:n] = thomson
     context.workspace.base.opakcont[:n] = thomson
+    _patch5201732_attribution_checkpoint(context, "calc_emis_all_post_reset_thomson", context.workspace.base.opakc[:n])
     native_spectral_product = _native_spectral_requested(product=True)
     native_spectral_shadow = _native_spectral_requested(shadow=True)
     if native_spectral_shadow and not native_spectral_product:
@@ -2669,6 +2691,12 @@ def calc_emis_all(context: CalcEmisContext) -> CalcEmisResult:
                 ))
         element_record = int(context.derived.npnxt[element_record])
 
+    _patch5201732_finalize_bound_free_sum(context)
+    _patch5201732_attribution_checkpoint(
+        context, "calc_emis_all_post_elements", context.workspace.base.opakc[:n],
+        dump_name="python_live_opakc_post_elements.bin",
+    )
+
     # v82 patch 5.20.15.3.2 lifecycle repair: this is the first point at
     # which every per-ion replay is complete.  Literal Type-76 UCalc side
     # effects therefore become live rccemis here, once per calc_emis_all call.
@@ -2718,6 +2746,7 @@ def calc_emis_all(context: CalcEmisContext) -> CalcEmisResult:
         electron_fraction_xee=context.electron_fraction_xee, ncn2=n,
     )
     context.workspace.base.opakc[:n] = ff.opakc_after_cm_inv
+    _patch5201732_attribution_checkpoint(context, "calc_emis_all_post_freef", context.workspace.base.opakc[:n])
     br = bremem(
         epi, context.workspace.base.brcems, context.workspace.base.opakc,
         temperature_k=context.temperature_k, hydrogen_density_cm3=xpx,
@@ -2725,6 +2754,10 @@ def calc_emis_all(context: CalcEmisContext) -> CalcEmisResult:
     )
     context.workspace.base.brcems[:n] = br.brcems_after
     context.workspace.base.opakc[:n] = br.opakc_after_cm_inv
+    _patch5201732_attribution_checkpoint(
+        context, "calc_emis_all_return", context.workspace.base.opakc[:n],
+        dump_name="python_live_opakc_return.bin",
+    )
     _record_type76_rccemis_checkpoint(
         context, "calc_emis_all_return", context.workspace.base.rccemis,
         type76_buffer=type76_calc_emis_all_rccemis,

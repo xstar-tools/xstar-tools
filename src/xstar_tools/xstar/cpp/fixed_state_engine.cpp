@@ -10969,6 +10969,31 @@ int run_impl(
             record_by_source_position_v82_patch520.reserve(ctx.program.records.size());
             for (const auto& source_record : ctx.program.records)
                 record_by_source_position_v82_patch520[static_cast<std::int64_t>(source_record.source_position)] = &source_record;
+            const char* attribution_dir_v82_patch5201732 =
+                std::getenv("XSTAR_V82_PATCH5201732_CPP_ATTRIBUTION_DIR");
+            const bool attribution_v82_patch5201732 =
+                source_sequence_v82_patch511 == 59 && attribution_dir_v82_patch5201732 && *attribution_dir_v82_patch5201732;
+            std::ofstream attribution_records_v82_patch5201732;
+            std::size_t attribution_record_order_v82_patch5201732 = 0u;
+            if (attribution_v82_patch5201732) {
+                const std::filesystem::path dir_v82_patch5201732(attribution_dir_v82_patch5201732);
+                std::filesystem::create_directories(dir_v82_patch5201732);
+                attribution_records_v82_patch5201732.open(dir_v82_patch5201732 / "cpp_bound_free_records.csv");
+                if (!attribution_records_v82_patch5201732)
+                    throw std::runtime_error("cannot create patch5.20.17.3.2 C++ bound-free record ledger");
+                attribution_records_v82_patch5201732
+                    << "source_sequence,record_order,source_position,record,data_type,rate_type,element_z,ion_stage,"
+                    << "continuum_slot,threshold_ev,lower_abundance,upper_abundance,hydrogen_density_cm3,raw_pair_count,phextrap_max_points,"
+                    << "nb1_one_based,klmax_one_based,selected_for_opacity,contribution_nonzero_bins,"
+                    << "contribution_first_nonzero_one_based,contribution_last_nonzero_one_based,contribution_sum,"
+                    << "contribution_abs_sum,contribution_max,contribution_hash,shape_nonzero_bins,shape_sum_cm2,shape_max_cm2,shape_hash\n";
+                attribution_records_v82_patch5201732 << std::setprecision(17);
+            }
+            const auto element_z_for_index_v82_patch5201732 = [&](int element_index) {
+                for (const auto& em : ctx.program.elements)
+                    if (em.element_index == element_index) return em.element_z;
+                return 0;
+            };
             for (const auto& deferred : deferred_rrc_records_v82_patch520) {
                 const auto rit = record_by_source_position_v82_patch520.find(
                     static_cast<std::int64_t>(deferred.source_position));
@@ -10993,6 +11018,72 @@ int run_impl(
                         it->second, errc_wavelength_a_v82_patch5209, true, destination_valid_v82_patch5208,
                         source_calc_emis_ncbin_v82_patch5208, input.radiation_energy_ev, continuum_capacity);
                     if (!consumer_v82_patch5208.actual_consumer) continue;
+                }
+                if (attribution_v82_patch5201732) {
+                    std::vector<double> contribution_v82_patch5201732(continuum_capacity, 0.0);
+                    accumulate_native_bound_free_opacity_from_abundances_v82_patch5206(
+                        deferred.opacity_curve, *rit->second, deferred.lower_abundance, input,
+                        contribution_v82_patch5201732);
+                    const auto mapped_v82_patch5201732 = phint53_grid_map_v82_patch57(
+                        deferred.opacity_curve, input.radiation_energy_ev, static_cast<int>(continuum_capacity));
+                    std::size_t nz_v82_patch5201732 = 0u;
+                    std::size_t first_v82_patch5201732 = 0u;
+                    std::size_t last_v82_patch5201732 = 0u;
+                    double sum_v82_patch5201732 = 0.0;
+                    double abs_sum_v82_patch5201732 = 0.0;
+                    double max_v82_patch5201732 = 0.0;
+                    for (std::size_t kk = 0; kk < contribution_v82_patch5201732.size(); ++kk) {
+                        const double value = contribution_v82_patch5201732[kk];
+                        if (std::isfinite(value)) {
+                            sum_v82_patch5201732 += value;
+                            abs_sum_v82_patch5201732 += std::abs(value);
+                            max_v82_patch5201732 = std::max(max_v82_patch5201732, value);
+                        }
+                        if (std::isfinite(value) && value != 0.0) {
+                            if (nz_v82_patch5201732 == 0u) first_v82_patch5201732 = kk + 1u;
+                            last_v82_patch5201732 = kk + 1u;
+                            ++nz_v82_patch5201732;
+                        }
+                    }
+                    const double density_v82_patch5201732 = std::max(0.0, input.hydrogen_density_cm3);
+                    const double scale_v82_patch5201732 = deferred.lower_abundance * density_v82_patch5201732;
+                    std::vector<double> shape_v82_patch5201732(contribution_v82_patch5201732.size(), 0.0);
+                    if (scale_v82_patch5201732 > 0.0) {
+                        for (std::size_t kk = 0; kk < contribution_v82_patch5201732.size(); ++kk)
+                            shape_v82_patch5201732[kk] = contribution_v82_patch5201732[kk] / scale_v82_patch5201732;
+                    }
+                    std::size_t shape_nz_v82_patch5201732 = 0u;
+                    double shape_sum_v82_patch5201732 = 0.0;
+                    double shape_max_v82_patch5201732 = 0.0;
+                    for (double value : shape_v82_patch5201732) {
+                        if (std::isfinite(value)) {
+                            shape_sum_v82_patch5201732 += value;
+                            shape_max_v82_patch5201732 = std::max(shape_max_v82_patch5201732, value);
+                        }
+                        if (std::isfinite(value) && value != 0.0) ++shape_nz_v82_patch5201732;
+                    }
+                    ++attribution_record_order_v82_patch5201732;
+                    attribution_records_v82_patch5201732
+                        << source_sequence_v82_patch511 << ','
+                        << attribution_record_order_v82_patch5201732 << ','
+                        << deferred.source_position << ',' << deferred.record << ','
+                        << rit->second->data_type << ',' << rit->second->rate_type << ','
+                        << element_z_for_index_v82_patch5201732(rit->second->element_index) << ','
+                        << rit->second->ion_stage << ',' << rit->second->continuum_index_one_based << ','
+                        << deferred.opacity_curve.threshold_ev << ',' << deferred.lower_abundance << ','
+                        << deferred.upper_abundance << ',' << density_v82_patch5201732 << ','
+                        << deferred.opacity_curve.offset_ryd.size() << ','
+                        << deferred.opacity_curve.phextrap_max_points << ','
+                        << (mapped_v82_patch5201732.valid ? mapped_v82_patch5201732.nb1_zero_based + 1 : 0) << ','
+                        << (mapped_v82_patch5201732.valid ? mapped_v82_patch5201732.klmax_zero_based + 1 : 0) << ','
+                        << (nz_v82_patch5201732 > 0u ? 1 : 0) << ',' << nz_v82_patch5201732 << ','
+                        << first_v82_patch5201732 << ',' << last_v82_patch5201732 << ','
+                        << sum_v82_patch5201732 << ',' << abs_sum_v82_patch5201732 << ','
+                        << max_v82_patch5201732 << ','
+                        << hex_u64(binary64_sequence_fnv1a(contribution_v82_patch5201732)) << ','
+                        << shape_nz_v82_patch5201732 << ',' << shape_sum_v82_patch5201732 << ','
+                        << shape_max_v82_patch5201732 << ','
+                        << hex_u64(binary64_sequence_fnv1a(shape_v82_patch5201732)) << "\n";
                 }
                 accumulate_native_bound_free_opacity_from_abundances_v82_patch5206(
                     deferred.opacity_curve, *rit->second, deferred.lower_abundance, input,
@@ -11268,11 +11359,59 @@ int run_impl(
         }
 
         if (!defer_product_projection) {
+            const char* attribution_dir_commit_v82_patch5201732 =
+                std::getenv("XSTAR_V82_PATCH5201732_CPP_ATTRIBUTION_DIR");
+            const bool attribution_commit_v82_patch5201732 =
+                source_sequence_v82_patch511 == 59 && attribution_dir_commit_v82_patch5201732 && *attribution_dir_commit_v82_patch5201732;
+            std::vector<double> output_opacity_before_v82_patch5201732;
+            if (attribution_commit_v82_patch5201732)
+                output_opacity_before_v82_patch5201732.assign(output.opacity, output.opacity + continuum_capacity);
             for (std::size_t k = 0; k < continuum_capacity; ++k) {
                 output.opacity[k] += heatt_bound_free_opacity_v82_patch5206[k];
                 opakcont[k] += heatt_bound_free_opacity_v82_patch5206[k];
                 rccemis[k] += heatt_rrc_continuum_emission_v82_patch520[k];
                 rccemis[continuum_capacity + k] += heatt_rrc_continuum_emission_v82_patch520[continuum_capacity + k];
+            }
+            if (attribution_commit_v82_patch5201732) {
+                const std::filesystem::path dir_v82_patch5201732(attribution_dir_commit_v82_patch5201732);
+                std::filesystem::create_directories(dir_v82_patch5201732);
+                const auto write_stats_v82_patch5201732 = [&](std::ofstream& stream, const char* phase, const std::vector<double>& values) {
+                    std::size_t nz = 0u, first = 0u, last = 0u;
+                    double sum = 0.0, abs_sum = 0.0, vmax = 0.0, vmin = 0.0;
+                    bool have = false;
+                    for (std::size_t i = 0; i < values.size(); ++i) {
+                        const double value = values[i];
+                        if (std::isfinite(value)) {
+                            sum += value; abs_sum += std::abs(value);
+                            if (!have) { vmax = vmin = value; have = true; }
+                            else { vmax = std::max(vmax, value); vmin = std::min(vmin, value); }
+                        }
+                        if (std::isfinite(value) && value != 0.0) {
+                            if (nz == 0u) first = i + 1u; last = i + 1u; ++nz;
+                        }
+                    }
+                    stream << source_sequence_v82_patch511 << ',' << phase << ',' << values.size() << ','
+                           << nz << ',' << first << ',' << last << ',' << sum << ',' << abs_sum << ','
+                           << vmax << ',' << vmin << ',' << hex_u64(binary64_sequence_fnv1a(values)) << "\n";
+                };
+                std::ofstream checkpoints_v82_patch5201732(dir_v82_patch5201732 / "cpp_opacity_checkpoints.csv");
+                if (!checkpoints_v82_patch5201732)
+                    throw std::runtime_error("cannot create patch5.20.17.3.2 C++ opacity checkpoints");
+                checkpoints_v82_patch5201732 << "source_sequence,phase,count,nonzero_bins,first_nonzero_one_based,last_nonzero_one_based,sum,abs_sum,max,min,hash\n";
+                checkpoints_v82_patch5201732 << std::setprecision(17);
+                write_stats_v82_patch5201732(checkpoints_v82_patch5201732, "bound_free_accumulator_complete", heatt_bound_free_opacity_v82_patch5206);
+                write_stats_v82_patch5201732(checkpoints_v82_patch5201732, "output_before_bound_free_commit", output_opacity_before_v82_patch5201732);
+                std::vector<double> output_opacity_after_v82_patch5201732(output.opacity, output.opacity + continuum_capacity);
+                write_stats_v82_patch5201732(checkpoints_v82_patch5201732, "output_after_bound_free_commit", output_opacity_after_v82_patch5201732);
+                std::ofstream bins_v82_patch5201732(dir_v82_patch5201732 / "cpp_bound_free_sum.csv");
+                if (!bins_v82_patch5201732)
+                    throw std::runtime_error("cannot create patch5.20.17.3.2 C++ bound-free sum");
+                bins_v82_patch5201732 << "bin_one_based,energy_ev,opacity_cm1\n" << std::setprecision(17);
+                for (std::size_t i = 0; i < heatt_bound_free_opacity_v82_patch5206.size(); ++i)
+                    bins_v82_patch5201732 << i + 1u << ',' << input.radiation_energy_ev[i] << ',' << heatt_bound_free_opacity_v82_patch5206[i] << "\n";
+                std::cout << "V048746255172582_PATCH5201732_CPP_ATTRIBUTION=WRITTEN\n"
+                          << "V048746255172582_PATCH5201732_CPP_ATTRIBUTION_RECORDS="
+                          << (selected_rrc_records_v82_patch520 + rate42_rrc_records_v82_patch520) << "\n";
             }
             if (source_sequence_v82_patch511 == 59) {
                 std::size_t rrc_nonzero_v82_patch520 = 0u;
