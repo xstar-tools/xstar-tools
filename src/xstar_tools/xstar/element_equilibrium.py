@@ -33,6 +33,7 @@ import time
 import numpy as np
 
 from .atomic_database import XSTARMasterData, XSTARDerivedPointers
+from .type50_profile_provenance import cpp_parity_atomic_mass_amu
 from .linear_algebra import XSTARLinearAlgebraError, leqt2f
 from .performance import profile_component, profile_level_at_least, record_profile_event
 from .cpp_backend_rates import build_mg_type7_terms_cpp_detailed, rates_backend_status
@@ -3014,13 +3015,11 @@ def _rate_payload_four_family_product_promoted_enabled(
 def _parent_element_atomic_mass(
     master: XSTARMasterData, derived: XSTARDerivedPointers, record: int
 ) -> float:
-    """Return the exact parent-element mass consumed by Type-50 ``ucalc``."""
-    ion_record = int(derived.npar[int(record)])
-    element_record = int(derived.npar[ion_record]) if ion_record > 0 else 0
-    values = master.record_reals(element_record) if element_record > 0 else ()
-    if len(values) <= 1 or not math.isfinite(float(values[1])) or float(values[1]) <= 0.0:
-        raise RuntimeError(f"Type-50 record {record} has no positive parent-element atomic mass")
-    return float(values[1])
+    """Return the accepted C++-parity Type-50 atomic mass."""
+    value = cpp_parity_atomic_mass_amu(master, derived, int(record))
+    if not math.isfinite(float(value)) or float(value) <= 0.0:
+        raise RuntimeError(f"Type-50 record {record} has no positive atomic mass")
+    return float(value)
 
 
 def _run_rate_payload_four_family_product_candidate(

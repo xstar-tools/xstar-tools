@@ -32,6 +32,7 @@ from typing import Any, Callable, Dict, Iterable, Mapping, MutableMapping, Optio
 import numpy as np
 
 from .atomic_database import XSTARMasterData
+from .type50_profile_provenance import cpp_parity_atomic_mass_amu
 
 ERG_PER_EV = LEGACY_COLLISION_ERG_PER_EV
 XSTAR_KT_EV_PER_1E4K = LEGACY_BOLTZMANN_EV_PER_T4
@@ -2201,7 +2202,12 @@ class SourceFaithfulUCalc:
         try:
             wavelength = float(decoded.get("wavelength_A") or 0.0)
             flin = float(decoded.get("f_osc_from_A") or 0.0)
-            mass = self._atomic_mass(r, c)
+            if c.master is not None and c.derived_pointers is not None:
+                mass = cpp_parity_atomic_mass_amu(
+                    c.master, c.derived_pointers, int(r.record), ion_index=int(c.jkion)
+                )
+            else:
+                mass = self._atomic_mass(r, c)
             if wavelength > 0.0 and flin > 0.0 and mass is not None and mass > 0.0 and wavelength <= 0.99e9:
                 vtherm = math.sqrt((c.turbulent_velocity_km_s * 1.0e5) ** 2 + (1.29e6 / math.sqrt(max(float(mass) / c.t, 1.0e-48))) ** 2)
                 if vtherm > 0.0:
@@ -2210,6 +2216,7 @@ class SourceFaithfulUCalc:
             opakab = 0.0
         diag = dict(ev)
         diag["type50_line_center_opakab_cm2"] = opakab
+        diag["type50_atomic_mass_amu_patch5201735"] = float(mass) if "mass" in locals() else 0.0
         return self._ctx_result(
             r, s, ans1=float(ev["ans1_photoexcitation_s^-1"]),
             ans2=float(ev["ans2_escaped_decay_s^-1"]),

@@ -60,6 +60,10 @@ from .cpp_backend_rates import apply_linopac_profile_cpp, apply_mg_type4_type50_
 from .radiation import nbinc
 from .state import XSTARPythonState
 from .ucalc import SourceFaithfulUCalc, UCalcLevelTable, UCalcResult, UCalcStatus
+from .type50_profile_provenance import (
+    cpp_parity_atomic_mass_amu,
+    source_type50_natural_width_ev,
+)
 from . import constants as xstar_constants
 from .continuum_diagnostics import (
     append_phase_snapshot,
@@ -440,17 +444,47 @@ def _feature_is_ranked(table: np.ndarray, feature_index: int, bin_one_based: int
     )
 
 
-def _parent_element_atomic_mass(master: Any, derived: Any, record: int) -> float:
-    """Return the source parent-element atomic mass used by ``linopac``."""
-    try:
-        ion_record = int(derived.npar[int(record)])
-        element_record = int(derived.npar[ion_record]) if ion_record > 0 else 0
-        reals = master.record_reals(element_record) if element_record > 0 else ()
-        if len(reals) > 1 and float(reals[1]) > 0.0:
-            return float(reals[1])
-    except Exception:
-        pass
-    return 1.0
+def _parent_element_atomic_mass(master: Any, derived: Any, record: int, *, ion_index: int | None = None) -> float:
+    """Return the accepted C++-parity Type-50 atomic mass (patch 5.20.17.3.5)."""
+    return cpp_parity_atomic_mass_amu(master, derived, int(record), ion_index=ion_index)
+
+
+def _type50_natural_width_ev(
+    master: Any, derived: Any, *, ion_index: int, upper_local: int, fallback_aij_s: float
+) -> tuple[float, int, bool]:
+    """Return literal ``deleafnd`` Type-50 damping plus provenance."""
+    return source_type50_natural_width_ev(
+        master, derived, ion_index=int(ion_index), upper_local=int(upper_local),
+        fallback_aij_s=float(fallback_aij_s),
+    )
+
+
+def _type50_profile_scalars(
+    master: Any, derived: Any, *, record: int, ion_index: int, levels: UCalcLevelTable | None = None
+) -> tuple[float, float, int, int, bool]:
+    """Resolve live Type-50 mass and source ``deleafnd`` damping inputs.
+
+    Returns ``(mass_amu, width_eV, source_upper_local, damping_record, matched)``.
+    """
+    rec = int(record)
+    ints = master.record_integers(rec)
+    reals = master.record_reals(rec)
+    id1 = int(ints[0]) if len(ints) > 0 else 0
+    id2 = int(ints[1]) if len(ints) > 1 else 0
+    aij = float(reals[2]) if len(reals) > 2 else 0.0
+    view = levels if levels is not None else build_level_table(master, derived, int(ion_index))
+    source_upper = id1
+    if id1 > 0 and id2 > 0:
+        try:
+            if float(view.energy(id1)) < float(view.energy(id2)):
+                source_upper = id2
+        except Exception:
+            source_upper = id1
+    mass = _parent_element_atomic_mass(master, derived, rec, ion_index=int(ion_index))
+    width, damping_record, matched = _type50_natural_width_ev(
+        master, derived, ion_index=int(ion_index), upper_local=int(source_upper), fallback_aij_s=aij
+    )
+    return float(mass), float(width), int(source_upper), int(damping_record), bool(matched)
 
 
 def _source_linopac_into_opakc(
@@ -677,14 +711,9 @@ def _patch5201734_replay_selected_line_producers(
             continue
         wave = float(context.line_wavelength_angstrom[line_index])
         energy = XSTAR_CALC_EMIS_WAVELENGTH_EV_ANGSTROM / (wave + XSTAR_CALC_EMIS_LINE_WAVELENGTH_FLOOR)
-        atomic_mass = _parent_element_atomic_mass(context.master, context.derived, int(trace.record))
-        natural_width = 0.0
-        try:
-            reals = context.master.record_reals(int(trace.record))
-            if len(reals) > 2:
-                natural_width = float(reals[2]) * 4.136e-15
-        except Exception:
-            natural_width = 0.0
+        atomic_mass, natural_width, _source_upper, _damping_record, _damping_matched = _type50_profile_scalars(
+            context.master, context.derived, record=int(trace.record), ion_index=int(trace.ion_index)
+        )
         contribution = np.zeros(n, dtype=float)
         dummy_rcc = np.zeros((2, n), dtype=float)
         _source_linopac_into_opakc(
@@ -1794,14 +1823,9 @@ def calc_emis_ion(
         flinel_delta_0 = (rcem1_0 + rcem2_0) * 2.0 / width_0 / XSTAR_CALC_EMISAB_ERG_PER_EV
         if line_index_0 > 0 and line_index_0 < context.workspace.base.oplin.size:
             context.workspace.base.oplin[line_index_0] = opakb1_0
-        atomic_mass_0 = _parent_element_atomic_mass(context.master, context.derived, rec0)
-        natural_width_0 = 0.0
-        try:
-            reals_for_line_0 = context.master.record_reals(rec0)
-            if len(reals_for_line_0) > 2:
-                natural_width_0 = float(reals_for_line_0[2]) * 4.136e-15
-        except Exception:
-            natural_width_0 = 0.0
+        atomic_mass_0, natural_width_0, _source_upper_0, _damping_record_0, _damping_matched_0 = _type50_profile_scalars(
+            context.master, context.derived, record=rec0, ion_index=int(ion.ion_index), levels=levels
+        )
         _source_linopac_into_opakc(
             optpp=opakb1_0, rcem1=rcem1_0, rcem2=rcem2_0,
             line_energy_eV=energy_0,
@@ -1949,14 +1973,9 @@ def calc_emis_ion(
             flinel_delta_0 = (rcem1_0 + rcem2_0) * 2.0 / width_0 / XSTAR_CALC_EMISAB_ERG_PER_EV
         if line_index_0 > 0 and line_index_0 < context.workspace.base.oplin.size:
             context.workspace.base.oplin[line_index_0] = opakb1_0
-        atomic_mass_0 = _parent_element_atomic_mass(context.master, context.derived, rec0)
-        natural_width_0 = 0.0
-        try:
-            reals_for_line_0 = context.master.record_reals(rec0)
-            if len(reals_for_line_0) > 2:
-                natural_width_0 = float(reals_for_line_0[2]) * 4.136e-15
-        except Exception:
-            natural_width_0 = 0.0
+        atomic_mass_0, natural_width_0, _source_upper_0, _damping_record_0, _damping_matched_0 = _type50_profile_scalars(
+            context.master, context.derived, record=rec0, ion_index=int(ion.ion_index), levels=levels
+        )
         _apply_linopac_with_cpp_gate(
             optpp=opakb1_0,
             rcem1=rcem1_0,
@@ -2174,11 +2193,10 @@ def calc_emis_ion(
                         reals_for_cpp = context.master.record_reals(rec)
                         wavelength_cpp = abs(float(reals_for_cpp[0])) if len(reals_for_cpp) > 0 else 0.0
                         aij_cpp = float(reals_for_cpp[2]) if len(reals_for_cpp) > 2 else 0.0
-                        natural_width_cpp = aij_cpp * 4.136e-15
-                        source_upper_id = int(idest1)
-                        source_lower_id = int(idest2)
-                        if float(e1) < float(e2):
-                            source_upper_id, source_lower_id = int(idest2), int(idest1)
+                        atomic_mass_cpp, natural_width_cpp, source_upper_id, _damping_record_cpp, _damping_matched_cpp = _type50_profile_scalars(
+                            context.master, context.derived, record=rec, ion_index=int(ion.ion_index), levels=levels
+                        )
+                        source_lower_id = int(idest2) if int(source_upper_id) == int(idest1) else int(idest1)
                         source_upper_weight = float(levels.weight(source_upper_id))
                         source_lower_weight = float(levels.weight(source_lower_id))
                         bremsa_nb1 = float(_brem_for_cpp[nb1]) if int(nb1) >= 0 and int(nb1) < len(_brem_for_cpp) else 0.0
@@ -2193,7 +2211,7 @@ def calc_emis_ion(
                                 line_energy_eV=float(np.float32(12398.4016)) / max(float(wavelength_cpp), 1.0e-49),
                                 vturb_km_s=float(context.turbulent_velocity_km_s),
                                 temperature_1e4K=float(context.temperature_1e4K),
-                                atomic_mass_amu=float(_parent_element_atomic_mass(context.master, context.derived, rec)),
+                                atomic_mass_amu=float(atomic_mass_cpp),
                                 natural_width_eV=float(natural_width_cpp),
                                 epi=epi,
                                 ncn2=len(epi),
@@ -2279,14 +2297,9 @@ def calc_emis_ion(
                         flinel_delta = (rcem1 + rcem2) * 2.0 / width / XSTAR_CALC_EMISAB_ERG_PER_EV
                     if (not native_spectral_product) and line_index > 0 and line_index < context.workspace.base.oplin.size:
                         context.workspace.base.oplin[line_index] = opakb1
-                    atomic_mass = _parent_element_atomic_mass(context.master, context.derived, rec)
-                    natural_width = 0.0
-                    try:
-                        reals_for_line = context.master.record_reals(rec)
-                        if len(reals_for_line) > 2:
-                            natural_width = float(reals_for_line[2]) * 4.136e-15
-                    except Exception:
-                        natural_width = 0.0
+                    atomic_mass, natural_width, source_upper_local, damping_record, damping_matched = _type50_profile_scalars(
+                        context.master, context.derived, record=rec, ion_index=int(ion.ion_index), levels=levels
+                    )
                     if native_spectral_product or native_spectral_shadow:
                         _spectral_line_row = {
                             "source_position": 1, "record": int(rec), "kind": 4,
