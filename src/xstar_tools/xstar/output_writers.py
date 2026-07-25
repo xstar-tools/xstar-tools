@@ -1954,45 +1954,6 @@ def _fnappend_detail_filename(name: str, pass_index: int) -> str:
         raise OutputWriterPortError("detail filename is shorter than four characters")
     return text[:2] + f"{kk:02d}" + text[4:]
 
-def _patch5201733_detail_table_for_write(
-    store: DetailOutputStore, record_index: int, attr: str
-) -> OutputTable:
-    """Return one detail table with the source-backed first-opacity owner.
-
-    v82 patch 5.20.16.3 established in C++ that the two leading retained
-    radial boundaries are both zero-depth, but only the second carries the
-    stable public ``opakc`` surface.  v82 patch 5.20.17.3.3 mirrors that
-    publication owner in Python *for the first xo01_detal4 opacity column
-    only*.  Every other continuum field, and every other detail product,
-    remains owned by the original record.
-    """
-    record = store.records[int(record_index)]
-    table = getattr(record, attr)
-    if attr != "continuum" or int(record_index) != 0 or len(store.records) < 2:
-        return table
-    second = store.records[1].continuum
-    try:
-        first_depth = float(table.header_keywords.get("RDEL", float("nan")))
-        second_depth = float(second.header_keywords.get("RDEL", float("nan")))
-        first_opacity = np.asarray(table.values["opacity"])
-        second_opacity = np.asarray(second.values["opacity"])
-    except Exception:
-        return table
-    if not (np.isfinite(first_depth) and np.isfinite(second_depth)):
-        return table
-    if abs(first_depth) > 1.0e-6 or abs(second_depth) > 1.0e-6:
-        return table
-    if first_opacity.shape != second_opacity.shape:
-        raise OutputWriterPortError("5.20.17.3.3 first/second zero-depth opacity shape mismatch")
-    values = dict(table.values)
-    values["opacity"] = np.asarray(second_opacity).copy()
-    return OutputTable(
-        extension_name=table.extension_name, columns=table.columns, units=table.units,
-        values=values, formats=table.formats, binary=table.binary,
-        header_keywords=table.header_keywords, source_file=table.source_file,
-    )
-
-
 def write_detail_output_files(
     store: DetailOutputStore,
     *, out_dir: str | Path,
@@ -2019,10 +1980,7 @@ def write_detail_output_files(
             _primary_hdu(model_name=model_name, atomic_data_date=atomic_data_date),
             _table_hdu(parameter_table),
         ]
-        hdus.extend(
-            _table_hdu(_patch5201733_detail_table_for_write(store, i, attr))
-            for i, _record in enumerate(store.records)
-        )
+        hdus.extend(_table_hdu(getattr(record, attr)) for record in store.records)
         _record_fits_timing(
             timing,
             filename=filename,

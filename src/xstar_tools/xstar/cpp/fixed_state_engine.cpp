@@ -10904,6 +10904,103 @@ int run_impl(
             line_profile_opacity.swap(selected_line_profile);
             fline.swap(selected_fline);
             flinel.swap(selected_flinel);
+
+            // v82 patch 5.20.17.3.4: diagnostic-only selected-line producer
+            // attribution.  Replay each already-selected line into a private
+            // zero opacity plane with the same linopac kernel/seeds used above.
+            // No diagnostic value is ever fed back into production state.
+            const char* line_attr_dir_v82_patch5201734 =
+                std::getenv("XSTAR_V82_PATCH5201734_CPP_ATTRIBUTION_DIR");
+            if (source_sequence_v82_patch511 == 59 && line_attr_dir_v82_patch5201734 && *line_attr_dir_v82_patch5201734) {
+                const std::filesystem::path dir_v82_patch5201734(line_attr_dir_v82_patch5201734);
+                std::filesystem::create_directories(dir_v82_patch5201734);
+                std::ofstream records_v82_patch5201734(dir_v82_patch5201734 / "cpp_selected_line_records.csv");
+                if (!records_v82_patch5201734)
+                    throw std::runtime_error("cannot create patch5.20.17.3.4 C++ selected-line records");
+                records_v82_patch5201734
+                    << "source_sequence,record_order,source_position,record,data_type,rate_type,element_z,ion_stage,line_index_one_based,line_energy_ev,optpp_cm1,abundance_lower_cm3,abundance_upper_cm3,hydrogen_density_cm3,atomic_mass_amu,natural_width_ev,contribution_nonzero_bins,contribution_first_nonzero_one_based,contribution_last_nonzero_one_based,contribution_sum,contribution_abs_sum,contribution_max,contribution_hash,shape_nonzero_bins,shape_sum,shape_max,shape_hash\n";
+                records_v82_patch5201734 << std::setprecision(17);
+                std::unordered_map<std::int64_t,const ProgramRecord*> record_by_position_v82_patch5201734;
+                for (const auto& record : ctx.program.records)
+                    record_by_position_v82_patch5201734[static_cast<std::int64_t>(record.source_position)] = &record;
+                std::unordered_map<int,int> element_z_by_index_v82_patch5201734;
+                for (const auto& element : ctx.program.elements)
+                    element_z_by_index_v82_patch5201734[element.element_index] = element.element_z;
+                std::vector<double> temp_opacity_v82_patch5201734(continuum_capacity, 0.0);
+                std::vector<double> temp_rcc_v82_patch5201734(2 * continuum_capacity, 0.0);
+                std::vector<double> temp_shape_v82_patch5201734(continuum_capacity, 0.0);
+                std::vector<double> replayed_sum_v82_patch5201734(continuum_capacity, 0.0);
+                for (std::size_t j = 0; j < selected_lines_v82_patch5206.size(); ++j) {
+                    const auto& c = selected_lines_v82_patch5206[j];
+                    std::fill(temp_opacity_v82_patch5201734.begin(), temp_opacity_v82_patch5201734.end(), 0.0);
+                    std::fill(temp_rcc_v82_patch5201734.begin(), temp_rcc_v82_patch5201734.end(), 0.0);
+                    const double optpp = c.opakab * c.abundance_lower * c.hydrogen_density;
+                    long long updated = 0;
+                    double elapsed_profile = 0.0;
+                    std::array<char,512> profile_error{};
+                    const double* seed = selected_seeds.data() + j * seed_stride;
+                    const int profile_rc = xstar_opacity_apply_line_profile_v1(
+                        optpp, c.line_energy_eV, c.turbulent_velocity_km_s,
+                        c.temperature_1e4K, c.atomic_mass_amu, c.natural_width_eV,
+                        seed, 10, input.radiation_energy_ev, static_cast<int>(continuum_capacity),
+                        temp_opacity_v82_patch5201734.data(), temp_rcc_v82_patch5201734.data(),
+                        &updated, &elapsed_profile, profile_error.data(), profile_error.size());
+                    if (profile_rc != 0)
+                        throw std::runtime_error(std::string("patch5.20.17.3.4 C++ line producer replay failed: ") + profile_error.data());
+                    std::size_t nz = 0u, first = 0u, last = 0u;
+                    double sum = 0.0, abs_sum = 0.0, vmax = 0.0;
+                    for (std::size_t k = 0; k < temp_opacity_v82_patch5201734.size(); ++k) {
+                        const double value = temp_opacity_v82_patch5201734[k];
+                        if (std::isfinite(value)) {
+                            sum += value; abs_sum += std::abs(value); vmax = std::max(vmax, value);
+                        }
+                        if (std::isfinite(value) && value != 0.0) {
+                            if (nz == 0u) first = k + 1u;
+                            last = k + 1u; ++nz;
+                        }
+                        temp_shape_v82_patch5201734[k] = optpp > 0.0 ? value / optpp : 0.0;
+                        replayed_sum_v82_patch5201734[k] += value;
+                    }
+                    std::size_t shape_nz = 0u;
+                    double shape_sum = 0.0, shape_max = 0.0;
+                    for (double value : temp_shape_v82_patch5201734) {
+                        if (std::isfinite(value)) {
+                            shape_sum += value; shape_max = std::max(shape_max, value);
+                        }
+                        if (std::isfinite(value) && value != 0.0) ++shape_nz;
+                    }
+                    const auto found = record_by_position_v82_patch5201734.find(static_cast<std::int64_t>(c.source_position));
+                    const ProgramRecord* source_record = found != record_by_position_v82_patch5201734.end() ? found->second : nullptr;
+                    int element_z = 0, ion_stage = 0;
+                    if (source_record) {
+                        const auto ez = element_z_by_index_v82_patch5201734.find(source_record->element_index);
+                        if (ez != element_z_by_index_v82_patch5201734.end()) element_z = ez->second;
+                        ion_stage = source_record->ion_stage;
+                    }
+                    records_v82_patch5201734
+                        << source_sequence_v82_patch511 << ',' << (j + 1u) << ',' << c.source_position << ',' << c.record << ','
+                        << c.data_type << ',' << c.rate_type << ',' << element_z << ',' << ion_stage << ',' << c.output_index << ','
+                        << c.line_energy_eV << ',' << optpp << ',' << (c.abundance_lower * c.hydrogen_density) << ','
+                        << (c.abundance_upper * c.hydrogen_density) << ',' << c.hydrogen_density << ',' << c.atomic_mass_amu << ','
+                        << c.natural_width_eV << ',' << nz << ',' << first << ',' << last << ',' << sum << ',' << abs_sum << ','
+                        << vmax << ',' << hex_u64(binary64_sequence_fnv1a(temp_opacity_v82_patch5201734)) << ',' << shape_nz << ','
+                        << shape_sum << ',' << shape_max << ',' << hex_u64(binary64_sequence_fnv1a(temp_shape_v82_patch5201734)) << '\n';
+                }
+                std::ofstream line_sum_v82_patch5201734(dir_v82_patch5201734 / "cpp_selected_line_sum.csv");
+                if (!line_sum_v82_patch5201734)
+                    throw std::runtime_error("cannot create patch5.20.17.3.4 C++ selected-line sum");
+                line_sum_v82_patch5201734 << "bin_one_based,energy_ev,opacity_cm1\n" << std::setprecision(17);
+                for (std::size_t k = 0; k < line_profile_opacity.size(); ++k)
+                    line_sum_v82_patch5201734 << (k + 1u) << ',' << input.radiation_energy_ev[k] << ',' << line_profile_opacity[k] << '\n';
+                std::ofstream replayed_sum_file_v82_patch5201734(dir_v82_patch5201734 / "cpp_selected_line_replayed_sum.csv");
+                if (!replayed_sum_file_v82_patch5201734)
+                    throw std::runtime_error("cannot create patch5.20.17.3.4 C++ replayed selected-line sum");
+                replayed_sum_file_v82_patch5201734 << "bin_one_based,energy_ev,opacity_cm1\n" << std::setprecision(17);
+                for (std::size_t k = 0; k < replayed_sum_v82_patch5201734.size(); ++k)
+                    replayed_sum_file_v82_patch5201734 << (k + 1u) << ',' << input.radiation_energy_ev[k] << ',' << replayed_sum_v82_patch5201734[k] << '\n';
+                std::cout << "V048746255172582_PATCH5201734_CPP_SELECTED_LINE_ATTRIBUTION=WRITTEN\n"
+                          << "V048746255172582_PATCH5201734_CPP_SELECTED_LINE_RECORDS=" << selected_lines_v82_patch5206.size() << "\n";
+            }
             if (source_sequence_v82_patch511 == 59) {
                 std::size_t nonzero_bins = 0u;
                 for (double value : line_profile_opacity)
@@ -11371,6 +11468,24 @@ int run_impl(
                 opakcont[k] += heatt_bound_free_opacity_v82_patch5206[k];
                 rccemis[k] += heatt_rrc_continuum_emission_v82_patch520[k];
                 rccemis[continuum_capacity + k] += heatt_rrc_continuum_emission_v82_patch520[continuum_capacity + k];
+            }
+            const char* line_attr_commit_dir_v82_patch5201734 =
+                std::getenv("XSTAR_V82_PATCH5201734_CPP_ATTRIBUTION_DIR");
+            if (source_sequence_v82_patch511 == 59 && line_attr_commit_dir_v82_patch5201734 && *line_attr_commit_dir_v82_patch5201734) {
+                const std::filesystem::path dir_v82_patch5201734(line_attr_commit_dir_v82_patch5201734);
+                std::filesystem::create_directories(dir_v82_patch5201734);
+                auto write_plane_v82_patch5201734 = [&](const char* name, bool combine_line) {
+                    std::ofstream plane(dir_v82_patch5201734 / name);
+                    if (!plane) throw std::runtime_error(std::string("cannot create patch5.20.17.3.4 C++ plane: ") + name);
+                    plane << "bin_one_based,energy_ev,opacity_cm1\n" << std::setprecision(17);
+                    for (std::size_t k = 0; k < continuum_capacity; ++k) {
+                        const double value = output.opacity[k] + (combine_line ? line_profile_opacity[k] : 0.0);
+                        plane << (k + 1u) << ',' << input.radiation_energy_ev[k] << ',' << value << '\n';
+                    }
+                };
+                write_plane_v82_patch5201734("cpp_continuum_pre_line.csv", false);
+                write_plane_v82_patch5201734("cpp_combined_opacity.csv", true);
+                std::cout << "V048746255172582_PATCH5201734_CPP_OPACITY_PLANES=WRITTEN\n";
             }
             if (attribution_commit_v82_patch5201732) {
                 const std::filesystem::path dir_v82_patch5201732(attribution_dir_commit_v82_patch5201732);
