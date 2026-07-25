@@ -3,7 +3,7 @@
 This module must never feed production physics.  It records exact binary64
 fingerprints and scalar summaries of the Python ``calc_emis_all`` bound-free
 producer stream so the accepted C++ deferred replay can be compared record by
-record at the stable call-2 final state (Python calc_emis_all call 23 / source
+record at the stable call-2 final state (Python calc_emis_all call 2 / source
 sequence 59).
 """
 from __future__ import annotations
@@ -17,7 +17,7 @@ import numpy as np
 
 _ENV_DIR = "XSTAR_V82_PATCH5201732_PYTHON_ATTRIBUTION_DIR"
 _ENV_CALL = "XSTAR_V82_PATCH5201732_PYTHON_CALL_INDEX"
-_DEFAULT_CALL = 23
+_DEFAULT_CALL = 2
 
 
 def _target_call() -> int:
