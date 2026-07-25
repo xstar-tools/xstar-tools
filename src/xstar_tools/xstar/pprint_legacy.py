@@ -50,6 +50,7 @@ from astropy.io import fits
 
 from .radiation import nbinc
 from .state import XSTARPythonState
+from .fits_provenance import apply_python_primary_fits_header
 
 
 class LegacyPprintPortError(RuntimeError):
@@ -1050,9 +1051,11 @@ def write_xout_abund1(
     cool_units = base_units + ("",) * (nelem + 3)
 
     primary = fits.PrimaryHDU()
-    primary.header["CREATOR"] = "XSTAR version 2.59g"
-    primary.header["MODEL"] = str(state.control.get("kmodelname", "xstar-python"))[:30]
-    primary.header["ATDATA"] = str(state.control.get("atcredate", ""))[:63]
+    apply_python_primary_fits_header(
+        primary.header,
+        model_name=str(state.control.get("kmodelname", "xstar-python"))[:30],
+        atomic_data_date=str(state.control.get("atcredate", ""))[:63],
+    )
     hdul = fits.HDUList([
         primary,
         _ascii_table_hdu("ABUNDANCES", abund_columns),
@@ -1062,12 +1065,16 @@ def write_xout_abund1(
     ])
     output = Path(path)
     output.parent.mkdir(parents=True, exist_ok=True)
-    hdul.writeto(output, overwrite=overwrite, checksum=True)
+    hdul.writeto(output, overwrite=overwrite, checksum=False)
+    from .output_writers import (
+        _refresh_fits_checksums,
+        _rewrite_fits_ascii_table_intercolumn_gaps,
+    )
     try:
-        from .output_writers import _rewrite_fits_ascii_table_intercolumn_gaps
         _rewrite_fits_ascii_table_intercolumn_gaps(output)
     except Exception:
         pass
+    _refresh_fits_checksums(output)
     if "pprint(11)" not in buf.source_calls:
         buf.source_calls.append("pprint(11)")
     return str(output)

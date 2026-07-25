@@ -69,7 +69,7 @@ def test_v0469_fits_products_have_source_layout_and_checksums(output_summary):
     assert {path.name for path in root.glob("*.fits")} == expected
     with fits.open(root / "xout_spect1.fits", checksum=True) as hdul:
         assert [hdu.name for hdu in hdul] == ["PRIMARY", "PARAMETERS", "XSTAR_SPECTRA"]
-        assert hdul[0].header["CREATOR"] == "XSTAR version 2.59g"
+        assert hdul[0].header["CREATOR"].startswith("xstar_tools pure-python ")
 
 
 def test_v0469_caller_owned_state_and_explicit_pprint_boundary(output_summary):

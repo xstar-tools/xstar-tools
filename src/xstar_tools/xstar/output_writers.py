@@ -54,6 +54,7 @@ _install_astropy_numpy_compatibility()
 from astropy.io import fits
 
 from .state import XSTARPythonState
+from .fits_provenance import apply_python_primary_fits_header
 
 
 class OutputWriterPortError(RuntimeError):
@@ -155,6 +156,7 @@ class ShellOutputHeader:
     electron_fraction: float
     density_cm3: float
     logxi: float
+    state_source: str = ""
 
     def real4_keywords(self) -> dict[str, float]:
         return {
@@ -169,6 +171,26 @@ class ShellOutputHeader:
             "LOGXI": _r4(self.logxi),
         }
 
+    def fits_keywords(self) -> dict[str, object]:
+        values = self.real4_keywords()
+        comments = {
+            "RINNER": "[cm] Inner shell radius",
+            "ROUTER": "[cm] Outer shell radius",
+            "RDEL": "[cm] distance from face",
+            "TEMPERAT": "[10**4K] Shell Temperature",
+            "PRESSURE": "[dynes/cm**2] Shell Pressure",
+            "COLUMN": "[/cm**2] Column",
+            "XEE": "electron fraction",
+            "DENSITY": "[/cm**3] Density",
+            "LOGXI": "[erg cm/s] log(ionization parameter)",
+        }
+        out: dict[str, object] = {
+            key: (value, comments[key]) for key, value in values.items()
+        }
+        if self.state_source:
+            out["STATESRC"] = self.state_source
+        return out
+
 
 @dataclass(frozen=True)
 class OutputTable:
@@ -178,7 +200,7 @@ class OutputTable:
     values: Mapping[str, np.ndarray]
     formats: tuple[str, ...]
     binary: bool
-    header_keywords: Mapping[str, float | int | str] = field(default_factory=dict)
+    header_keywords: Mapping[str, object] = field(default_factory=dict)
     source_file: str = ""
 
     @property
@@ -270,7 +292,7 @@ def build_parameter_table(parameters: Sequence[OutputParameter], *, model_name: 
         units=("", "", "", "", ""),
         formats=("1I", "20A", "1E", "10A", "30A"),
         binary=True,
-        header_keywords={"MODEL": _fixed(model_name, 30)},
+        header_keywords={"MODEL": (_fixed(model_name, 30), "model name for this run")},
         source_file="xstar/xstarlib/src/fparmlist.f90",
         values={
             "index": np.arange(1, n + 1, dtype=np.int16),
@@ -318,7 +340,7 @@ def build_detail_level_table(
         units=("", "", "eV", "", "", "", "", "", ""),
         formats=("1J", "1I", "1E", "8A", "1I", "20A", "1E", "1E", "1I"),
         binary=True,
-        header_keywords=header.real4_keywords(),
+        header_keywords=header.fits_keywords(),
         source_file="xstar/xstarlib/src/fstepr.f90",
         values=values,
     )
@@ -375,7 +397,7 @@ def build_detail_line_table(
         units=("", "A", "", "", "", "erg/cm^3/s", "erg/cm^3/s", "/cm", "", ""),
         formats=("1J", "1E", "8A", "20A", "20A", "1E", "1E", "1E", "1E", "1E"),
         binary=True,
-        header_keywords=header.real4_keywords(),
+        header_keywords=header.fits_keywords(),
         source_file="xstar/xstarlib/src/fstepr2.f90",
         values=values,
     )
@@ -426,7 +448,7 @@ def build_detail_rrc_table(
         units=("", "", "eV", "", "", "", "erg/cm^3/s", "erg/cm^3/s", "erg/cm^3/s", "/cm", "", ""),
         formats=("1J", "1J", "1E", "8A", "20A", "20A", "1E", "1E", "1E", "1E", "1E", "1E"),
         binary=True,
-        header_keywords=header.real4_keywords(),
+        header_keywords=header.fits_keywords(),
         source_file="xstar/xstarlib/src/fstepr3.f90",
         values=values,
     )
@@ -469,7 +491,7 @@ def build_detail_continuum_table(
         units=("", "eV", "erg/s", "erg/s", "erg/s", "erg/s", "erg/s", "/cm", "erg/cm**3/s", "erg/cm**3/s", "", ""),
         formats=("1J",) + ("1E",) * 11,
         binary=True,
-        header_keywords=header.real4_keywords(),
+        header_keywords=header.fits_keywords(),
         source_file="xstar/xstarlib/src/fstepr4.f90",
         values=values,
     )
@@ -1629,9 +1651,11 @@ def _table_hdu(table: OutputTable) -> fits.hdu.base.ExtensionHDU:
 
 def _primary_hdu(*, model_name: str, atomic_data_date: str) -> fits.PrimaryHDU:
     hdu = fits.PrimaryHDU()
-    hdu.header["CREATOR"] = "XSTAR version 2.59g"
-    hdu.header["MODEL"] = _fixed(model_name, 30).rstrip()
-    hdu.header["ATDATA"] = str(atomic_data_date)[:63]
+    apply_python_primary_fits_header(
+        hdu.header,
+        model_name=_fixed(model_name, 30).rstrip(),
+        atomic_data_date=str(atomic_data_date)[:63],
+    )
     return hdu
 
 
@@ -1867,17 +1891,24 @@ def _rewrite_fits_ascii_table_intercolumn_gaps(path: str | Path) -> None:
         file_path.write_bytes(bytes(out))
 
 
-def _write_hdul_with_xstar_string_padding(hdul: fits.HDUList, path: str | Path, *, overwrite: bool) -> None:
-    """Write a FITS file, then blank-pad binary A columns without Astropy re-encoding.
+def _refresh_fits_checksums(path: str | Path) -> None:
+    """Recompute CHECKSUM/DATASUM after all byte-level FITS edits."""
+    with fits.open(path, mode="update", checksum=False, memmap=False) as hdul:
+        for hdu in hdul:
+            if "CHECKSUM" in hdu.header:
+                del hdu.header["CHECKSUM"]
+            if "DATASUM" in hdu.header:
+                del hdu.header["DATASUM"]
+            hdu.add_checksum()
+        hdul.flush()
 
-    Astropy serializes some fixed-width byte/unicode arrays with NUL-filled
-    storage.  Mutating the already-written table bytes avoids the write-time
-    Unicode failure seen in v0.5.34 and keeps numeric binary-table zero bytes
-    intact.
-    """
+
+def _write_hdul_with_xstar_string_padding(hdul: fits.HDUList, path: str | Path, *, overwrite: bool) -> None:
+    """Write FITS, apply source-like padding, then checksum the final bytes."""
     hdul.writeto(path, overwrite=overwrite, checksum=False)
     _rewrite_fits_ascii_null_padding(path)
     _rewrite_fits_ascii_table_intercolumn_gaps(path)
+    _refresh_fits_checksums(path)
 
 
 def _record_fits_timing(
@@ -2026,6 +2057,7 @@ def _shell_header_from_state(state: XSTARPythonState) -> ShellOutputHeader:
         electron_fraction=float(state.plasma.xee),
         density_cm3=float(state.plasma.xpx),
         logxi=float(state.control.get("zeta", 0.0)),
+        state_source="live Python savd-equivalent radial state before geometry update",
     )
 
 
@@ -2819,10 +2851,20 @@ def run_output_writer_validation(
             for record in store.records
         )
     )
+    def _numeric_header_value(value: object) -> float | None:
+        raw = value[0] if isinstance(value, tuple) and value else value
+        if isinstance(raw, (int, float, np.integer, np.floating)):
+            return float(raw)
+        return None
+
     header_real4_ready = bool(
         detail_store_ready
         and all(
-            all(value == float(np.float32(value)) for value in table.header_keywords.values())
+            all(
+                numeric == float(np.float32(numeric))
+                for value in table.header_keywords.values()
+                if (numeric := _numeric_header_value(value)) is not None
+            )
             for record in store.records
             for table in (record.levels, record.lines, record.rrcs, record.continuum)
         )
