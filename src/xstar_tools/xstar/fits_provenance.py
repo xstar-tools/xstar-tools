@@ -70,7 +70,7 @@ def apply_python_primary_fits_header(
     provenance = python_fits_provenance()
     for text in FITS_STANDARD_COMMENTS:
         header.add_comment(text)
-    header["CREATOR"] = (provenance.creator, "python run")
+    header["CREATOR"] = provenance.creator
     header["MODEL"] = (str(model_name)[:30].rstrip(), "source model name")
     header["ORIGIN"] = provenance.origin
     header["ATDATA"] = (str(atomic_data_date)[:63], "supplied atomic database metadata")
@@ -79,7 +79,7 @@ def apply_python_primary_fits_header(
         "NATIVE_OPACITY_TRAPEZOID",
         "output-grid depths from native opacity",
     )
-    header["RUNID"] = (provenance.run_id, "python writer run identity")
+    header["RUNID"] = provenance.run_id
     header["DATE"] = (
         datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"),
         "file creation date (YYYY-MM-DDThh:mm:ss UT)",

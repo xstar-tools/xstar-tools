@@ -10268,37 +10268,12 @@ void write_spectrum_detail(const std::filesystem::path& path,
             const auto& zone = state.radial_zones[src];
             const auto& e = zone.accepted_controller.evaluation;
             const auto& ws = e.source_workspace;
-            // v82 patch 5.20.16.3: the source trajectory carries two leading
-            // zero-depth savd boundaries.  The first native retained opacity
-            // surface is a pre-repeat line-opacity workspace and is not the
-            // stable fstepr4 opacity owner (49 dominant product failures),
-            // while the immediately following zero-depth workspace reproduces
-            // the literal significant opacity surface.  Select that second
-            // retained zero-depth opakc for opacity publication only.  Do not
-            // move zrems/rccemis/dpthc or any transported state.
-            const bool use_second_zero_depth_opacity_owner =
-                oz == 0u && state.radial_zones.size() > 1u &&
-                std::fabs(state.radial_zones[0].delta_radius_cm) <= 1.0e-6 &&
-                std::fabs(state.radial_zones[1].delta_radius_cm) <= 1.0e-6 &&
-                state.radial_zones[1].accepted_controller.evaluation.source_workspace.opakc.size() == n;
-            const auto& detail_opacity_ws = use_second_zero_depth_opacity_owner
-                ? state.radial_zones[1].accepted_controller.evaluation.source_workspace
-                : ws;
-            // v82 patch 5.20.17.3: the same first zero-depth call-58
-            // workspace is also pre-stable for the inward rccemis plane.
-            // Literal fstepr4 publishes the stable repeated zero-depth state;
-            // retain plane 1/outward on the current workspace, but source
-            // plane 2/inward from call-59 for HDU1 only.
-            const bool use_second_zero_depth_inward_rccemis_owner =
-                oz == 0u && state.radial_zones.size() > 1u &&
-                std::fabs(state.radial_zones[0].delta_radius_cm) <= 1.0e-6 &&
-                std::fabs(state.radial_zones[1].delta_radius_cm) <= 1.0e-6 &&
-                state.radial_zones[1].accepted_controller.evaluation.source_workspace.rccemis.size() == 2u * n;
-            const auto& detail_inward_rccemis_ws = use_second_zero_depth_inward_rccemis_owner
-                ? state.radial_zones[1].accepted_controller.evaluation.source_workspace
-                : ws;
+            // v82 patch 5.20.17.3.7: each public radial extension publishes
+            // the exact source workspace retained for that boundary.  The
+            // former call-2 opacity/inward-rccemis substitutions hid producer
+            // lifetime bugs and duplicated HDU4 state into HDU3.
             if (e.radiation_energy_ev.size() != n || e.radiation_flux.size() != n ||
-                (detail_opacity_ws.opakc.size() != n && ws.opakc.size() != n && e.opacity.size() != n)) {
+                (ws.opakc.size() != n && e.opacity.size() != n)) {
                 throw std::runtime_error("native xo01_detal4 radial continuum shape mismatch");
             }
             // fstepr4/heatt consume the complete opakc workspace.  The reduced
@@ -10318,9 +10293,9 @@ void write_spectrum_detail(const std::filesystem::path& path,
                 // directional planes according to cfrac at writer time.
                 const double plane0 = i < ws.rccemis.size() && std::isfinite(ws.rccemis[i])
                     ? ws.rccemis[i] : 0.0;
-                const double plane1 = n + i < detail_inward_rccemis_ws.rccemis.size() &&
-                    std::isfinite(detail_inward_rccemis_ws.rccemis[n + i])
-                    ? detail_inward_rccemis_ws.rccemis[n + i] : 0.0;
+                const double plane1 = n + i < ws.rccemis.size() &&
+                    std::isfinite(ws.rccemis[n + i])
+                    ? ws.rccemis[n + i] : 0.0;
                 return {plane0, plane1};
             };
             const bool have_retained_accumulated_zrems =
@@ -10408,13 +10383,11 @@ void write_spectrum_detail(const std::filesystem::path& path,
                 const double out_z3 = exact_fstepr4 ? ws.zrems[2u * n + i] : z3[i];
                 const double out_z4 = exact_fstepr4 ? ws.zrems[3u * n + i] : 0.0;
                 const double out_z5 = exact_fstepr4 ? ws.zrems[4u * n + i] : z5[i];
-                const double out_opacity = detail_opacity_ws.opakc.size() == n
-                    ? detail_opacity_ws.opakc[i]
-                    : (exact_fstepr4 ? ws.opakc[i] : continuum_opacity(i));
+                const double out_opacity = exact_fstepr4
+                    ? ws.opakc[i] : continuum_opacity(i);
                 const double out_emis = exact_fstepr4 ? ws.rccemis[i] : rcc_out;
-                const double in_emis = use_second_zero_depth_inward_rccemis_owner
-                    ? detail_inward_rccemis_ws.rccemis[n + i]
-                    : (exact_fstepr4 ? ws.rccemis[n + i] : rcc_in);
+                const double in_emis = exact_fstepr4
+                    ? ws.rccemis[n + i] : rcc_in;
                 const double out_fwd_depth = exact_fstepr4 ? ws.dpthc[i] : forward_depth[i];
                 const double out_back_depth = exact_fstepr4 ? ws.dpthc[n + i] : 0.0;
                 write_real4(fptr, 3, row, out_z1);

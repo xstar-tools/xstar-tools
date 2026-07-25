@@ -11463,11 +11463,31 @@ int run_impl(
             std::vector<double> output_opacity_before_v82_patch5201732;
             if (attribution_commit_v82_patch5201732)
                 output_opacity_before_v82_patch5201732.assign(output.opacity, output.opacity + continuum_capacity);
+            // v82 patch 5.20.17.3.7: calc_emis_all owns a real rccemis
+            // reset between the broad calc_emisab ranking pass and the
+            // selected full-grid RRC replay.  The former C++ path retained
+            // broad calc_emisab rccemis values (plus the early Type-76 side
+            // effect) and merely added the selected replay, leaving stale
+            // first-bin inward emission in every detailed-continuum zone.
+            // Rebuild the live workspace exactly from the selected rate-7/88
+            // continuum plus the calc_emis_all-wide Type-76 accumulator.  The
+            // early Type-76 merge above is intentionally retained for the
+            // DEFER_PRODUCT_PROJECTION controller path; this assignment is
+            // only the non-deferred calc_emis_all publication boundary.
+            const bool type76_shape_ok_v82_patch5201737 =
+                native_type76_continuum_emission.size() == rccemis.size();
+            if (!type76_shape_ok_v82_patch5201737) {
+                throw std::runtime_error(
+                    "v82 patch5.20.17.3.7 Type76 rccemis shape mismatch");
+            }
             for (std::size_t k = 0; k < continuum_capacity; ++k) {
                 output.opacity[k] += heatt_bound_free_opacity_v82_patch5206[k];
                 opakcont[k] += heatt_bound_free_opacity_v82_patch5206[k];
-                rccemis[k] += heatt_rrc_continuum_emission_v82_patch520[k];
-                rccemis[continuum_capacity + k] += heatt_rrc_continuum_emission_v82_patch520[continuum_capacity + k];
+                rccemis[k] = heatt_rrc_continuum_emission_v82_patch520[k] +
+                    native_type76_continuum_emission[k];
+                rccemis[continuum_capacity + k] =
+                    heatt_rrc_continuum_emission_v82_patch520[continuum_capacity + k] +
+                    native_type76_continuum_emission[continuum_capacity + k];
             }
             const char* line_attr_commit_dir_v82_patch5201734 =
                 std::getenv("XSTAR_V82_PATCH5201734_CPP_ATTRIBUTION_DIR");

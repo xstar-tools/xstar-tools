@@ -6192,27 +6192,12 @@ void create_native_retained_productwrite_schema(xstar_run_state::ProductWritingS
         const auto& eval = product.radial_zones[zi].accepted_controller.evaluation;
         const auto& ws = eval.source_workspace;
         const std::size_t n = eval.radiation_energy_ev.size();
-        // v82 patch 5.20.16.3: mirror the detailed-continuum writer's
-        // significant-opacity owner in the retained bridge.  The two leading
-        // source boundaries are both zero-depth; only the second one owns the
-        // stable public opakc surface.  This is an opacity-publication owner
-        // correction only and must not alter any other radial workspace.
-        const bool use_second_zero_depth_opacity_owner =
-            zi == 0u && product.radial_zones.size() > 1u &&
-            std::fabs(product.radial_zones[0].delta_radius_cm) <= 1.0e-6 &&
-            std::fabs(product.radial_zones[1].delta_radius_cm) <= 1.0e-6 &&
-            product.radial_zones[1].accepted_controller.evaluation.source_workspace.opakc.size() == n;
-        const auto& detail_opacity_ws = use_second_zero_depth_opacity_owner
-            ? product.radial_zones[1].accepted_controller.evaluation.source_workspace
-            : ws;
-        const bool use_second_zero_depth_inward_rccemis_owner =
-            zi == 0u && product.radial_zones.size() > 1u &&
-            std::fabs(product.radial_zones[0].delta_radius_cm) <= 1.0e-6 &&
-            std::fabs(product.radial_zones[1].delta_radius_cm) <= 1.0e-6 &&
-            product.radial_zones[1].accepted_controller.evaluation.source_workspace.rccemis.size() == 2u * n;
-        const auto& detail_inward_rccemis_ws = use_second_zero_depth_inward_rccemis_owner
-            ? product.radial_zones[1].accepted_controller.evaluation.source_workspace
-            : ws;
+        // v82 patch 5.20.17.3.7: every XSTAR_RADIAL HDU owns its own
+        // accepted source workspace.  Earlier opacity/inward-emission
+        // workarounds copied call-2 (the second zero-depth boundary) into the
+        // first zero-depth HDU.  Now that call-1 executes its source-order
+        // GSSMOOTH and calc_emis_all rebuilds rccemis correctly, publish the
+        // actual call-1 opakc/rccemis state instead of duplicating call-2.
         append_native_array(inventory, product, hdu, "product_write_detail_level_index", level_indices);
         append_native_array(inventory, product, hdu, "product_write_detail_level_population", resize_or_zero(eval.populations, level_indices.size()));
         append_native_array(inventory, product, hdu, "product_write_detail_level_lte", resize_or_zero(ws.lte_populations, level_indices.size()));
@@ -6220,15 +6205,10 @@ void create_native_retained_productwrite_schema(xstar_run_state::ProductWritingS
         append_native_array(inventory, product, hdu, "detail_energy_ev", eval.radiation_energy_ev);
         append_native_array(inventory, product, hdu, "product_write_detail_energy_ev", eval.radiation_energy_ev);
         append_native_array(inventory, product, hdu, "opakc", resize_or_zero(
-            detail_opacity_ws.opakc.empty() ? eval.opacity : detail_opacity_ws.opakc, n));
+            ws.opakc.empty() ? eval.opacity : ws.opakc, n));
         append_native_array(inventory, product, hdu, "product_write_opakc", resize_or_zero(
-            detail_opacity_ws.opakc.empty() ? eval.opacity : detail_opacity_ws.opakc, n));
+            ws.opakc.empty() ? eval.opacity : ws.opakc, n));
         std::vector<double> retained_rccemis = ws.rccemis;
-        if (use_second_zero_depth_inward_rccemis_owner && retained_rccemis.size() == 2u * n) {
-            std::copy(detail_inward_rccemis_ws.rccemis.begin() + static_cast<std::ptrdiff_t>(n),
-                      detail_inward_rccemis_ws.rccemis.end(),
-                      retained_rccemis.begin() + static_cast<std::ptrdiff_t>(n));
-        }
         if (!vector_has_nonzero(retained_rccemis)) retained_rccemis = ws.elumab;
         if (!vector_has_nonzero(retained_rccemis)) {
             retained_rccemis.assign(2 * n, 0.0);
@@ -11942,29 +11922,6 @@ struct SourceStepResultV82Patch520111 {
     double remaining_column_limit_cm = 0.0;
 };
 
-std::vector<double> source_step_smoothed_opakc_v82_patch520111(
-    const StandaloneControllerDataV67& data,
-    const FixedDsecSnapshot& boundary) {
-    auto opakc = boundary.opakc;
-    if (!data.parameters || opakc.size() != data.energy.size()) {
-        throw std::runtime_error("v82 patch5.20.11.1 STEP opakc workspace shape mismatch");
-    }
-    const double source_gsmooth_threshold = static_cast<double>(static_cast<float>(1.0e-34));
-    if (data.parameters->turbulent_velocity_km_s <= source_gsmooth_threshold) return opakc;
-
-    // Literal gsmooth.f90 construction used before STEP consumes the previous
-    // zone's post-gsmooth opakc.  Call 1 has zero thickness in this benchmark,
-    // so advance_consecutive_transport does not execute there; smooth a local
-    // copy solely for STEP without mutating the accepted call-1 boundary.
-    const double one_e5 = static_cast<double>(static_cast<float>(1.0e5));
-    const double one_29e6 = static_cast<double>(static_cast<float>(1.29e6));
-    const double vt = data.parameters->turbulent_velocity_km_s * one_e5;
-    const double thermal = one_29e6 / std::sqrt(1.0 / boundary.temperature_t4);
-    const double vtherm = std::sqrt(vt * vt + thermal * thermal);
-    gsmooth2_source_v82_patch54(vtherm, data.energy, opakc);
-    return opakc;
-}
-
 SourceStepResultV82Patch520111 source_step_v82_patch520111(
     const StandaloneControllerDataV67& data,
     const std::vector<double>& post_gsmooth_opakc,
@@ -12034,7 +11991,12 @@ void advance_source_continuum_radiation_v82_patch52(
     FixedDsecSnapshot& boundary,
     double delta_radius_cm,
     double radius_cm) {
-    if (!(delta_radius_cm > 0.0) || !std::isfinite(delta_radius_cm)) return;
+    // v82 patch 5.20.17.3.7: source GSSMOOTH is a local post-xstarcalc
+    // mutation and is not conditional on shell thickness.  The first public
+    // boundary has zero retained transport depth, but Python/FORTRAN still
+    // smooth its opakc/rccemis before savd.  Permit zero here so that local
+    // smoothing is retained; negative/non-finite widths remain invalid.
+    if (!(delta_radius_cm >= 0.0) || !std::isfinite(delta_radius_cm)) return;
     if (!data.thermal_context) {
         throw std::runtime_error("v82 patch5.2 continuum transport requires thermal context");
     }
@@ -12135,6 +12097,11 @@ void advance_source_continuum_radiation_v82_patch52(
     write_continuum_transfer_stage_v82_patch52(data, "09h_thomson_opakc_post_gsmooth", thomson_opakc_post);
     write_continuum_transfer_stage_v82_patch52(data, "10_flinel", boundary.flinel);
     write_continuum_transfer_stage_v82_patch52(data, "11_zremso_plane1", std::vector<double>(zremso_before.begin(), zremso_before.begin() + static_cast<std::ptrdiff_t>(n)));
+
+    // Zero-width boundaries still execute source-order GSSMOOTH, but there is
+    // no transport interval to accumulate in HEATT/STPCUT/TRNFRC.  Return only
+    // after publishing the smoothed local opakc/rccemis state.
+    if (delta_radius_cm == 0.0) return;
 
     // Patch 5.3: expose every scalar/vector operand entering the source-like
     // continuum part of heatt.  These are diagnostic reconstructions only;
@@ -14706,13 +14673,17 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             // commit STPCUT depths.  The continuum helper also prepares the
             // next-zone radiation projection; that does not alter the retained
             // pprint boundary arrays.
+            // v82 patch 5.20.17.3.7: GSSMOOTH must run even for the first
+            // zero-depth public boundary.  The continuum helper now performs
+            // only that local smoothing when segment==0 and returns before
+            // HEATT transport accumulation.
+            advance_source_continuum_radiation_v82_patch52(
+                data, boundary, segment, boundary_radius_cm);
             if (segment > 0.0) {
                 const std::size_t transport_index = call >= 2u ? call - 2u : 0u;
                 if (transport_index < source_transport_segment_cm.size()) {
                     source_transport_segment_cm[transport_index] = segment;
                 }
-                advance_source_continuum_radiation_v82_patch52(
-                    data, boundary, segment, boundary_radius_cm);
                 advance_atomic_luminosities_v82_patch520145(
                     data, boundary, segment, boundary_radius_cm);
             }
@@ -14729,16 +14700,14 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             // Source xstar.f90 calls STEP at the beginning of the *next* zone,
             // after the current zone's heatt/stpcut/trnfrn and radius/column
             // commit.  Computing it here is state-equivalent and keeps the
-            // selected shell ready for the next controller call.  The call-1
-            // zero-thickness path never entered advance_consecutive_transport,
-            // so only that boundary needs a local gsmooth copy for STEP.
+            // selected shell ready for the next controller call.  Patch
+            // 5.20.17.3.7 now runs the same source-order GSSMOOTH on every
+            // retained boundary, including call 1, so STEP must consume that
+            // already-smoothed opakc directly.  Reapplying the historical
+            // call-1 helper here would double-smooth the first boundary and
+            // change the accepted trajectory.
             if (call < source_calls) {
-                std::vector<double> step_opakc;
-                if (segment > 0.0) {
-                    step_opakc = boundary.opakc; // advance retained post-gsmooth opakc
-                } else {
-                    step_opakc = source_step_smoothed_opakc_v82_patch520111(data, boundary);
-                }
+                const std::vector<double>& step_opakc = boundary.opakc;
                 const double step_radius_cm = params.initial_radius_cm + data.cumulative_depth_cm;
                 const double current_column_cm2 = params.density_cm3 * data.cumulative_depth_cm;
                 const auto step_result = source_step_v82_patch520111(

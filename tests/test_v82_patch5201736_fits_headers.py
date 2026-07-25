@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+import warnings
 
 from astropy.io import fits
+from astropy.io.fits.verify import VerifyWarning
 
 from xstar_tools import __version__
 from xstar_tools.xstar.fits_provenance import python_fits_provenance
@@ -48,7 +50,8 @@ def test_patch5201736_primary_header_and_checksums(tmp_path: Path, monkeypatch):
     _set_backend(monkeypatch, "python")
     primary = _primary_hdu(model_name="model", atomic_data_date="2025-03-19T16:30:54")
     assert primary.header["CREATOR"] == f"xstar_tools pure-python {__version__}"
-    assert primary.header.comments["CREATOR"] == "python run"
+    assert primary.header.comments["CREATOR"] == ""
+    assert primary.header.comments["RUNID"] == ""
     assert primary.header["MODEL"] == "model"
     assert primary.header.comments["MODEL"] == "source model name"
     assert primary.header["ORIGIN"] == "xstar_tools pure-Python"
@@ -73,6 +76,17 @@ def test_patch5201736_primary_header_and_checksums(tmp_path: Path, monkeypatch):
     with fits.open(path, checksum=True) as hdul:
         assert all("CHECKSUM" in h.header and "DATASUM" in h.header for h in hdul)
 
+
+
+def test_patch5201736_cpp_backend_long_provenance_cards_do_not_warn(monkeypatch):
+    _set_backend(monkeypatch, "cpp")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", VerifyWarning)
+        primary = _primary_hdu(model_name="model", atomic_data_date="2025-03-19T16:30:54")
+    assert primary.header["CREATOR"] == f"xstar_tools python with cpp backend {__version__}"
+    assert primary.header.comments["CREATOR"] == ""
+    assert primary.header["RUNID"] == f"python-cpp-backend-{__version__}"
+    assert primary.header.comments["RUNID"] == ""
 
 def test_patch5201736_radial_keyword_comments_and_state_source():
     header = ShellOutputHeader(
