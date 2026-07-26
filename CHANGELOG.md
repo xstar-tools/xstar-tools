@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.48.8.1 - 2026-07-26
+
+- Correct literal `voigte.f90` control flow for Type-50 line profiles: the `a+v>3.2` asymptotic test is now reachable only when `a>0.2`, as in the source labels.
+- Apply the same source nesting to pure-Python scalar/vector profiles, qualification profile code, accelerated C++ kernels, and standalone-C++ opacity.
+- Add a strict Type-50 edge closure analyzer and one-time pure-Python / accelerated-Python / standalone-C++ qualification runner.
+- Preserve the 0.6.48.8 production/controller, source-real energy-grid, Type99 source-zero, writer, and standalone-progress contracts.
+
 # 0.6.48.8 - 2026-07-26
 
 - Promote the accepted v82 patch5.20.17 production path to the 0.6.48.8 baseline.

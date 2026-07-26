@@ -41,7 +41,8 @@ static inline double voigte_cpp(double vs, double a) {
     if (aa <= 0.2 && v >= 5.0) {
         return aa * (15.0 + 6.0 * v2 + 4.0 * v2 * v2) / (4.0 * v2 * v2 * v2 * sqp);
     }
-    if (aa > 1.4 || u > 3.2) {
+    // voigte.f90 label 120 is reachable only for a>0.2.
+    if (aa > 0.2 && (aa > 1.4 || u > 3.2)) {
         const double a2 = aa * aa;
         const double uu = sq2 * (a2 + v2);
         const double u2 = 1.0 / (uu * uu);

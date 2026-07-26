@@ -59,7 +59,9 @@ static double voigte(double vs, double a) {
                      source_real_literal(4.0) * v2 * v2) /
                (source_real_literal(4.0) * v2 * v2 * v2 * sqp);
     }
-    if (aa > source_real_literal(1.4) || u > source_real_literal(3.2)) {
+    // voigte.f90 label 120 is entered only after the a>0.2 test.  Do not
+    // apply the u>3.2 asymptotic branch to small-a line cores.
+    if (aa > source_real_literal(0.2) && (aa > source_real_literal(1.4) || u > source_real_literal(3.2))) {
         const double a2 = aa * aa;
         const double uu = sq2 * (a2 + v2);
         const double u2 = un / (uu * uu);

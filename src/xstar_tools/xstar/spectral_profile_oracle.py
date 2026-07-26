@@ -55,7 +55,9 @@ def _voigte(vs: float, a: float) -> float:
         return 0.0 if v2 >= 100.0 else float(np.exp(-v2))
     if aa <= 0.2 and v >= 5.0:
         return aa * (15.0 + 6.0 * v2 + 4.0 * v2 * v2) / (4.0 * (v2 ** 3) * sqp)
-    if aa > 1.4 or u > 3.2:
+    # voigte.f90 label 120 is reachable only when a>0.2.  Keep the
+    # u>3.2 asymptotic test nested inside that source branch.
+    if aa > 0.2 and (aa > 1.4 or u > 3.2):
         a2 = aa * aa
         uu = sq2 * (a2 + v2)
         u2 = 1.0 / (uu * uu)

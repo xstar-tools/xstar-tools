@@ -553,7 +553,11 @@ def voigte(vs: float, a: float) -> float:
         return 0.0 if v2 >= sr(100.0) else float(np.exp(-v2))
     if aa <= sr(0.2) and v >= sr(5.0):
         return aa * (sr(15.0) + sr(6.0) * v2 + sr(4.0) * v2 * v2) / (sr(4.0) * v2 * v2 * v2 * sqp)
-    if aa > sr(1.4) or u > sr(3.2):
+    # voigte.f90: label 120 is reached only after the a>0.2 branch.
+    # Therefore u=a+v>3.2 must not select the asymptotic expansion for
+    # small-a profiles; those remain on the polynomial/Gaussian path until
+    # the explicit v>=5 wing test above.
+    if aa > sr(0.2) and (aa > sr(1.4) or u > sr(3.2)):
         a2 = aa * aa; uu = sq2 * (a2 + v2); u2 = un / (uu * uu)
         return sq2 / sqp * aa / uu * (
             un + u2 * (sr(3.0) * v2 - a2) +
@@ -599,7 +603,9 @@ def _voigte_array(vs: np.ndarray, a: float) -> np.ndarray:
             vv = v2[m]
             out[m] = aa * (sr(15.0) + sr(6.0) * vv + sr(4.0) * vv * vv) / (sr(4.0) * vv**3 * sqp)
             remaining[m] = False
-    m = remaining & ((aa > sr(1.4)) | ((aa + v) > sr(3.2)))
+    # Same nested source control flow as scalar voigte(): label 120 is
+    # unreachable for a<=0.2.
+    m = remaining & (aa > sr(0.2)) & ((aa > sr(1.4)) | ((aa + v) > sr(3.2)))
     if np.any(m):
         vv = v2[m]
         a2 = aa * aa
