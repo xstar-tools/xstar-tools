@@ -55,7 +55,7 @@
 - Removed the source-nonexistent C++ Type-99 synthetic direct inward-RRC publication while preserving scalar rate/thermal evaluation.
 - Requires a newly regenerated canonical pure-Python reference archive.
 
-# 0.6.48.7.46.25.5.17.25.82 patch 5.20.17.1 — live product-workspace retention hotfix
+## 0.6.48.7.46.25.5.17.25.82 patch 5.20.17.1 — live product-workspace retention hotfix
 
 - Preserve the accepted 5.20.17 sequence-23 native committed-state and 58-evaluation production trajectory.
 - Fix the latent standalone product-state completeness rejection by retaining caller-owned `zrems` and `zremsz` on every accepted radial boundary together with `dpthc`/`dpthcont`.
