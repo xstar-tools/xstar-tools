@@ -2,6 +2,7 @@
 #include "xstar_python_bridge.h"
 #include "xstar_fixed_state_engine.h"
 #include "xstar_thermal_engine.h"
+#include "source_real_energy_grid.hpp"
 #include "xstar_science_fits.hpp"
 #include "xstar_run_state.hpp"
 #include "xstar_step_log.hpp"
@@ -5025,17 +5026,7 @@ RadiationField read_standalone_radiation_field(const Options& options) {
 
 
 std::vector<double> source_energy_grid_v67(std::size_t n) {
-    if (n < 4) throw std::runtime_error("standalone source energy grid requires at least four bins");
-    const std::size_t n2 = std::max<std::size_t>(2, n / 50);
-    const std::size_t n3 = n - n2;
-    if (n3 < 2) throw std::runtime_error("standalone source energy grid first segment is too small");
-    std::vector<double> out(n, 0.0);
-    out[0] = 0.1;
-    const double ratio1 = std::pow(4.0e5 / 0.1, 1.0 / static_cast<double>(n3 - 1));
-    for (std::size_t i = 1; i < n3; ++i) out[i] = out[i - 1] * ratio1;
-    const double ratio2 = std::pow(1.0e6 / 4.0e5, 1.0 / static_cast<double>(n2 - 1));
-    for (std::size_t i = n3; i < n; ++i) out[i] = out[i - 1] * ratio2;
-    return out;
+    return xstar_source_real_energy_grid::build(n);
 }
 
 std::size_t source_nbinc_v67(double energy, const std::vector<double>& grid) {
@@ -6881,16 +6872,7 @@ double zero_aware_relative_error_v1711(double actual, double expected) {
 
 
 std::vector<double> source_energy_grid_v1711(std::size_t n) {
-    if (n < 4) throw std::runtime_error("sequence-1 source energy grid requires at least four bins");
-    const std::size_t n2 = std::max<std::size_t>(2, n / 50);
-    const std::size_t n3 = n - n2;
-    std::vector<double> out(n, 0.0);
-    out[0] = 0.1;
-    const double ratio = std::pow(4.0e5 / 0.1, 1.0 / static_cast<double>(n3 - 1));
-    for (std::size_t i = 1; i < n3; ++i) out[i] = out[i - 1] * ratio;
-    const double ratio2 = std::pow(1.0e6 / 4.0e5, 1.0 / static_cast<double>(n2 - 1));
-    for (std::size_t i = n3; i < n; ++i) out[i] = out[i - 1] * ratio2;
-    return out;
+    return xstar_source_real_energy_grid::build(n);
 }
 
 std::size_t source_huntf_v1711(const std::vector<double>& grid, double x, std::size_t n) {

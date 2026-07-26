@@ -27,6 +27,7 @@ from types import SimpleNamespace
 from typing import Any, Callable, Mapping, Sequence
 
 import numpy as np
+from .source_real_energy_grid import source_ener_grid
 
 from .. import __version__ as XSTAR_ATOMIC_VERSION
 from ..data import resolve_atdb_path
@@ -614,21 +615,11 @@ def normalize_xstar_parameters(
 
 
 def ener_grid(ncn2: int) -> np.ndarray:
-    """Literal numerical translation of ``ener.f90``."""
-    n = int(ncn2)
-    if n < 4:
-        raise XSTARPythonRunnerError("ener requires at least four bins")
-    n2 = max(2, n // 50)
-    n3 = n - n2
-    out = np.zeros(n, dtype=float)
-    out[0] = 0.1
-    ratio = (4.0e5 / 0.1) ** (1.0 / float(n3 - 1))
-    for i in range(1, n3):
-        out[i] = out[i - 1] * ratio
-    ratio2 = (1.0e6 / 4.0e5) ** (1.0 / float(n2 - 1))
-    for i in range(n3, n):
-        out[i] = out[i - 1] * ratio2
-    return out
+    """Literal arithmetic-kind translation of ``ener.f90``."""
+    try:
+        return source_ener_grid(int(ncn2))
+    except ValueError as exc:
+        raise XSTARPythonRunnerError(str(exc)) from exc
 
 
 def powerlaw_spectrum(*, index: float, luminosity_1e38: float, epi_eV: Sequence[float]) -> np.ndarray:

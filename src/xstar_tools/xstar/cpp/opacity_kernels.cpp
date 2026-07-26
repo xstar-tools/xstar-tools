@@ -3,16 +3,10 @@
 #include "xstar_constants.h"
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <chrono>
 #include <cstddef>
 #include <cstring>
-#include <cstdlib>
-#include <filesystem>
-#include <fstream>
-#include <iomanip>
-#include <limits>
 #include <sstream>
 #include <vector>
 
@@ -262,27 +256,6 @@ int xstar_opacity_apply_line_profile_v1(
         write_message(errbuf, errbuf_size, "native opacity profile no-op");
         return 0;
     }
-    // patch5.20.17.3.10 diagnostic-only watch state for the three
-    // remaining Type50 opacity edge bins.  The watched output values and the
-    // temporary-grid crossing that publishes each bin are serialized only
-    // when the host diagnostic environment variable is enabled.
-    const char* diag_dir_v82_patch52017310 = std::getenv("XSTAR_V82_PATCH52017310_ATTRIBUTION_DIR");
-    const bool diag_v82_patch52017310 = diag_dir_v82_patch52017310 && *diag_dir_v82_patch52017310 &&
-        line_energy_ev >= 9.8 && line_energy_ev <= 13.6;
-    const std::array<double,3> diag_targets_v82_patch52017310{{10.1647406,12.7091360,13.2733641}};
-    std::array<int,3> diag_bins_v82_patch52017310{{0,0,0}};
-    std::array<double,3> diag_before_v82_patch52017310{{0.0,0.0,0.0}};
-    std::array<double,3> diag_trigger_etpp_v82_patch52017310{{0.0,0.0,0.0}};
-    std::array<double,3> diag_trigger_optp2_v82_patch52017310{{0.0,0.0,0.0}};
-    std::array<int,3> diag_trigger_mlm_v82_patch52017310{{0,0,0}};
-    if (diag_v82_patch52017310) {
-        for (std::size_t t=0;t<diag_targets_v82_patch52017310.size();++t) {
-            int best=0; double bd=std::numeric_limits<double>::infinity();
-            for (int i=0;i<n;++i) { const double d=std::abs(epi[i]-diag_targets_v82_patch52017310[t]); if(d<bd){bd=d;best=i;} }
-            diag_bins_v82_patch52017310[t]=best;
-            diag_before_v82_patch52017310[t]=opakc[best];
-        }
-    }
     const int nbtpp = 20000;
     const double dpcrit = xstar_constants::kLegacyLinopacDpcrit;
     int ml1 = nbinc(line_energy_ev, epi, n);
@@ -383,15 +356,6 @@ int xstar_opacity_apply_line_profile_v1(
                     const double raw_optp2 = source_div(opsum, sume);
                     const double optp2 = std::isfinite(raw_optp2) && raw_optp2 > 0.0 ? raw_optp2 : 0.0;
                     while (etpp[mlm - 1] > epi[ml1m - 1] && ml1m < n) {
-                        if (diag_v82_patch52017310) {
-                            for (std::size_t t=0;t<diag_bins_v82_patch52017310.size();++t) {
-                                if (diag_bins_v82_patch52017310[t] == ml1m - 1 && diag_trigger_mlm_v82_patch52017310[t] == 0) {
-                                    diag_trigger_mlm_v82_patch52017310[t]=mlm;
-                                    diag_trigger_etpp_v82_patch52017310[t]=etpp[mlm-1];
-                                    diag_trigger_optp2_v82_patch52017310[t]=optp2;
-                                }
-                            }
-                        }
                         const double current = std::isfinite(opakc[ml1m - 1]) && opakc[ml1m - 1] > 0.0
                             ? opakc[ml1m - 1] : 0.0;
                         opakc[ml1m - 1] = source_add(current, optp2);
@@ -403,25 +367,6 @@ int xstar_opacity_apply_line_profile_v1(
                 }
                 opsum = 0.0;
                 sume = 0.0;
-            }
-        }
-    }
-    if (diag_v82_patch52017310) {
-        const std::filesystem::path dir(diag_dir_v82_patch52017310);
-        std::filesystem::create_directories(dir);
-        const auto path=dir/"cpp_type50_linopac_rebin.csv";
-        const bool fresh=!std::filesystem::exists(path)||std::filesystem::file_size(path)==0u;
-        std::ofstream out(path,std::ios::app);
-        if (out) {
-            if (fresh) out << "line_energy_ev,optpp_cm1,vturb_km_s,temperature_1e4k,atomic_mass_amu,natural_width_ev,ml1_one_based,e00_ev,deleepi_ev,ncut,deleused_ev,vth_km_s,deleth_ev,deleturb_ev,dele_ev,aasmall,use_voigt,mlmin,mlmax,ml1min,ml1max,watch_id,bin_one_based,energy_ev,before_cm1,after_cm1,delta_cm1,trigger_mlm,trigger_etpp_ev,trigger_optp2_cm1\n";
-            out << std::setprecision(17);
-            for (std::size_t t=0;t<diag_bins_v82_patch52017310.size();++t) {
-                const int k=diag_bins_v82_patch52017310[t];
-                out << line_energy_ev << ',' << optpp << ',' << vturb_km_s << ',' << temperature_1e4k << ',' << atomic_mass_amu << ',' << natural_width_ev << ','
-                    << ml1 << ',' << e00 << ',' << deleepi << ',' << ncut << ',' << deleused << ',' << vth << ',' << deleth << ',' << deleturb << ',' << dele << ',' << aasmall << ',' << (use_voigt?1:0) << ','
-                    << mlmin << ',' << mlmax << ',' << ml1min << ',' << ml1max << ',' << (t+1u) << ',' << (k+1) << ',' << epi[k] << ','
-                    << diag_before_v82_patch52017310[t] << ',' << opakc[k] << ',' << (opakc[k]-diag_before_v82_patch52017310[t]) << ','
-                    << diag_trigger_mlm_v82_patch52017310[t] << ',' << diag_trigger_etpp_v82_patch52017310[t] << ',' << diag_trigger_optp2_v82_patch52017310[t] << '\n';
             }
         }
     }
