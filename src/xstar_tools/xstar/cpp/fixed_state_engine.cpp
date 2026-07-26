@@ -130,6 +130,110 @@ void write_patch5201738_fixed_rccemis_edge(
 // records the exact bin-1 delta before/after each selected record and enough
 // source metadata to audit the record's support/escape inputs.  Enabled only
 // by the host diagnostic environment variable.
+
+// v82 patch 5.20.17.3.10: diagnostic-only residual-origin ledgers.
+// These helpers only serialize live accumulators while the dedicated host
+// environment variable is present.  They never feed data back into science.
+std::vector<std::size_t> patch52017310_indices_in_energy_window(
+    const double* energy_ev, std::size_t count, double lo_ev, double hi_ev) {
+    std::vector<std::size_t> out;
+    if (!energy_ev) return out;
+    for (std::size_t i = 0; i < count; ++i) {
+        if (std::isfinite(energy_ev[i]) && energy_ev[i] >= lo_ev && energy_ev[i] <= hi_ev)
+            out.push_back(i);
+    }
+    return out;
+}
+
+std::array<std::size_t,3> patch52017310_type50_watch_indices(
+    const double* energy_ev, std::size_t count) {
+    const std::array<double,3> targets{{10.1647406, 12.7091360, 13.2733641}};
+    std::array<std::size_t,3> out{{0u,0u,0u}};
+    if (!energy_ev || count == 0u) return out;
+    for (std::size_t t = 0; t < targets.size(); ++t) {
+        std::size_t best = 0u;
+        double bd = std::numeric_limits<double>::infinity();
+        for (std::size_t i = 0; i < count; ++i) {
+            const double d = std::abs(energy_ev[i] - targets[t]);
+            if (d < bd) { bd = d; best = i; }
+        }
+        out[t] = best;
+    }
+    return out;
+}
+
+void write_patch52017310_type50_record_watch(
+    std::size_t source_sequence, std::uint64_t source_position, std::int64_t record,
+    int element_z, int ion_stage, int line_index_one_based,
+    double line_energy_ev, double optpp, double atomic_mass_amu,
+    double natural_width_ev, const double* energy_ev, std::size_t energy_count,
+    const std::vector<double>& contribution) {
+    const char* raw = std::getenv("XSTAR_V82_PATCH52017310_ATTRIBUTION_DIR");
+    if (!raw || !*raw || !energy_ev || contribution.size() < energy_count) return;
+    const auto watch = patch52017310_type50_watch_indices(energy_ev, energy_count);
+    bool any = false;
+    for (auto k : watch) if (k < contribution.size() && contribution[k] != 0.0) any = true;
+    // Keep nearby H/He/Mg line identities even when their exact watched-bin
+    // delta is zero, so the analyzer can prove exclusions rather than infer them.
+    const bool nearby = line_energy_ev >= 9.8 && line_energy_ev <= 13.6;
+    if (!any && !nearby) return;
+    const std::filesystem::path dir(raw); std::filesystem::create_directories(dir);
+    const auto path = dir / "cpp_type50_residual_records.csv";
+    const bool fresh = !std::filesystem::exists(path) || std::filesystem::file_size(path) == 0u;
+    std::ofstream out(path, std::ios::app);
+    if (!out) throw std::runtime_error("cannot write patch5.20.17.3.10 Type50 residual ledger");
+    if (fresh) out << "source_sequence,source_position,record,element_z,ion_stage,line_index_one_based,line_energy_ev,optpp_cm1,atomic_mass_amu,natural_width_ev,watch_id,bin_one_based,energy_ev,contribution_cm1\n";
+    out << std::setprecision(17);
+    for (std::size_t t=0; t<watch.size(); ++t) {
+        const auto k=watch[t];
+        out << source_sequence << ',' << source_position << ',' << record << ',' << element_z << ',' << ion_stage << ','
+            << line_index_one_based << ',' << line_energy_ev << ',' << optpp << ',' << atomic_mass_amu << ',' << natural_width_ev << ','
+            << (t+1u) << ',' << (k+1u) << ',' << energy_ev[k] << ',' << contribution[k] << '\n';
+    }
+}
+
+void write_patch52017310_rrc_window_record(
+    const char* family, std::size_t source_sequence, std::size_t selected_order,
+    std::uint64_t source_position, std::int64_t record, int data_type, int rate_type,
+    int element_z, int ion_stage, double threshold_ev, int nb1_one_based,
+    int klmax_one_based, int effective_pair_count, bool phextrap_applied,
+    int terminal_jk_one_based, int terminal_ntmp, int terminal_nphint,
+    double table_last_energy_ev, double terminal_grid_energy_ev,
+    const double* energy_ev, std::size_t energy_count,
+    const std::vector<std::size_t>& watch,
+    const std::vector<double>& before, const std::vector<double>& after) {
+    const char* raw = std::getenv("XSTAR_V82_PATCH52017310_ATTRIBUTION_DIR");
+    if (!raw || !*raw || !family || !energy_ev || watch.empty() || before.size()!=2u*watch.size() || after.size()!=2u*watch.size()) return;
+    bool any = false;
+    for (std::size_t j=0;j<watch.size();++j)
+        if (after[j]!=before[j] || after[watch.size()+j]!=before[watch.size()+j]) { any=true; break; }
+    // Also retain records whose mapped support terminates inside/adjacent to
+    // the watched 3.08-keV window, because a zero delta can itself expose an
+    // off-by-one klmax decision.
+    bool support_near = false;
+    if (klmax_one_based > 0 && static_cast<std::size_t>(klmax_one_based) <= energy_count) {
+        const double e = energy_ev[static_cast<std::size_t>(klmax_one_based-1)];
+        support_near = e >= 3050.0 && e <= 3120.0;
+    }
+    if (!any && !support_near) return;
+    const std::filesystem::path dir(raw); std::filesystem::create_directories(dir);
+    const auto path = dir / "cpp_continuum_3kev_records.csv";
+    const bool fresh = !std::filesystem::exists(path) || std::filesystem::file_size(path)==0u;
+    std::ofstream out(path,std::ios::app);
+    if (!out) throw std::runtime_error("cannot write patch5.20.17.3.10 3keV continuum ledger");
+    if (fresh) out << "family,source_sequence,selected_order,source_position,record,data_type,rate_type,element_z,ion_stage,threshold_ev,nb1_one_based,klmax_one_based,effective_pair_count,phextrap_applied,terminal_jk_one_based,terminal_ntmp,terminal_nphint,table_last_energy_ev,terminal_grid_energy_ev,bin_one_based,energy_ev,before_out,after_out,delta_out,before_in,after_in,delta_in\n";
+    out << std::setprecision(17);
+    for (std::size_t j=0;j<watch.size();++j) {
+        const auto k=watch[j];
+        out << family << ',' << source_sequence << ',' << selected_order << ',' << source_position << ',' << record << ','
+            << data_type << ',' << rate_type << ',' << element_z << ',' << ion_stage << ',' << threshold_ev << ','
+            << nb1_one_based << ',' << klmax_one_based << ',' << effective_pair_count << ',' << (phextrap_applied?1:0) << ','
+            << terminal_jk_one_based << ',' << terminal_ntmp << ',' << terminal_nphint << ',' << table_last_energy_ev << ',' << terminal_grid_energy_ev << ','
+            << (k+1u) << ',' << energy_ev[k] << ',' << before[j] << ',' << after[j] << ',' << (after[j]-before[j]) << ','
+            << before[watch.size()+j] << ',' << after[watch.size()+j] << ',' << (after[watch.size()+j]-before[watch.size()+j]) << '\n';
+    }
+}
+
 void write_patch52017381_selected_rrc_bin1_record(
     std::size_t source_sequence,
     std::size_t selected_order,
@@ -7535,6 +7639,14 @@ struct Phint53GridMapV82Patch57 {
     int effective_pair_count = 0;
     bool phextrap_applied = false;
     bool valid = false;
+    // patch5.20.17.3.10 diagnostic-only terminal state; these fields do not
+    // participate in the grid-map calculation.
+    int terminal_jk_zero_based = -1;
+    int terminal_ntmp = 0;
+    int terminal_nphint = 0;
+    int terminal_iterations = 0;
+    double table_last_energy_ev = 0.0;
+    double terminal_grid_energy_ev = 0.0;
 };
 
 int phint53_nbinc_one_based_v82_patch57(double energy_ev, const double* epi, int ncn2) {
@@ -7608,8 +7720,11 @@ Phint53GridMapV82Patch57 phint53_grid_map_v82_patch57(
     const int ntmp = static_cast<int>(std::min(energy_ryd.size(), sigma_cm2.size()));
     if (ntmp < 2) return out;
     out.effective_pair_count = ntmp;
+    out.terminal_ntmp = ntmp;
+    out.table_last_energy_ev = curve.threshold_ev + energy_ryd[static_cast<std::size_t>(ntmp - 1)] * kType53RydEv;
     const int numcon2 = std::max(2, ncn2 / 50);
     const int nphint = ncn2 - numcon2;
+    out.terminal_nphint = nphint;
     if (nphint < 2) return out;
 
     std::vector<double> xs(static_cast<std::size_t>(ntmp), 0.0);
@@ -7693,6 +7808,9 @@ Phint53GridMapV82Patch57 phint53_grid_map_v82_patch57(
         if (kl > nphint - 1 || jk >= ntmp - 2) done = true;
     }
     if (iterations >= max_iterations) return out;
+    out.terminal_jk_zero_based = jk;
+    out.terminal_iterations = iterations;
+    out.terminal_grid_energy_ev = (kl > 0 && kl <= ncn2) ? epi[kl - 1] : 0.0;
     out.nb1_zero_based = nb;
     out.klmax_zero_based = kl - 1;
     out.valid = out.klmax_zero_based > out.nb1_zero_based;
@@ -9556,6 +9674,14 @@ int run_impl(
                     emax, input.radiation_energy_ev, input.radiation_bin_count);
                 const std::size_t nbmx = static_cast<std::size_t>(
                     std::max(1, std::min(static_cast<int>(input.radiation_bin_count), nbmx_one_based)));
+                const auto watch3kev_type76_v82_patch52017310 = patch52017310_indices_in_energy_window(
+                    input.radiation_energy_ev, input.radiation_bin_count, 3065.0, 3100.0);
+                std::vector<double> before3kev_type76_v82_patch52017310(2u*watch3kev_type76_v82_patch52017310.size(),0.0);
+                for (std::size_t jj=0;jj<watch3kev_type76_v82_patch52017310.size();++jj) {
+                    const auto kk=watch3kev_type76_v82_patch52017310[jj];
+                    before3kev_type76_v82_patch52017310[jj]=native_type76_continuum_emission[kk];
+                    before3kev_type76_v82_patch52017310[watch3kev_type76_v82_patch52017310.size()+jj]=native_type76_continuum_emission[input.radiation_bin_count+kk];
+                }
                 double rcemsum = 0.0;
                 double ansar2 = 0.0;
                 if (nbmx >= 2u) {
@@ -9592,6 +9718,18 @@ int run_impl(
                         }
                     }
                 }
+                std::vector<double> after3kev_type76_v82_patch52017310(2u*watch3kev_type76_v82_patch52017310.size(),0.0);
+                for (std::size_t jj=0;jj<watch3kev_type76_v82_patch52017310.size();++jj) {
+                    const auto kk=watch3kev_type76_v82_patch52017310[jj];
+                    after3kev_type76_v82_patch52017310[jj]=native_type76_continuum_emission[kk];
+                    after3kev_type76_v82_patch52017310[watch3kev_type76_v82_patch52017310.size()+jj]=native_type76_continuum_emission[input.radiation_bin_count+kk];
+                }
+                write_patch52017310_rrc_window_record(
+                    "TYPE76", source_sequence_v82_patch511, k+1u, source_record.source_position, source_record.record,
+                    source_record.data_type, source_record.rate_type, element.element_z, source_record.ion_stage, evaluated[k].line_energy_ev,
+                    2, static_cast<int>(nbmx), 0, false, 0, 0, 0, evaluated[k].line_energy_ev,
+                    input.radiation_energy_ev[nbmx-1u], input.radiation_energy_ev, input.radiation_bin_count,
+                    watch3kev_type76_v82_patch52017310, before3kev_type76_v82_patch52017310, after3kev_type76_v82_patch52017310);
             }
             if (defer_product_projection) continue;
             if (source_record.opcode == XSTAR_FIXED_OPCODE_TYPE88_SUPERLEVEL_BOUND_FREE &&
@@ -10953,6 +11091,39 @@ int run_impl(
             fline.swap(selected_fline);
             flinel.swap(selected_flinel);
 
+            // v82 patch 5.20.17.3.10: replay only low-energy candidate
+            // Type50 lines into a private plane and record their contributions
+            // at the three shared Python/C++->Fortran residual bins.
+            const char* residual_attr_dir_v82_patch52017310 = std::getenv("XSTAR_V82_PATCH52017310_ATTRIBUTION_DIR");
+            if (residual_attr_dir_v82_patch52017310 && *residual_attr_dir_v82_patch52017310 &&
+                source_sequence_v82_patch511 >= 58 && source_sequence_v82_patch511 <= 62) {
+                std::unordered_map<std::int64_t,const ProgramRecord*> rec_by_pos_v82_patch52017310;
+                for (const auto& record : ctx.program.records) rec_by_pos_v82_patch52017310[static_cast<std::int64_t>(record.source_position)] = &record;
+                std::unordered_map<int,int> z_by_index_v82_patch52017310;
+                for (const auto& el : ctx.program.elements) z_by_index_v82_patch52017310[el.element_index]=el.element_z;
+                std::vector<double> tmp_op_v82_patch52017310(continuum_capacity,0.0);
+                std::vector<double> tmp_rcc_v82_patch52017310(2u*continuum_capacity,0.0);
+                for (std::size_t j=0;j<selected_lines_v82_patch5206.size();++j) {
+                    const auto& c=selected_lines_v82_patch5206[j];
+                    if (!(c.line_energy_eV >= 9.8 && c.line_energy_eV <= 13.6)) continue;
+                    std::fill(tmp_op_v82_patch52017310.begin(),tmp_op_v82_patch52017310.end(),0.0);
+                    std::fill(tmp_rcc_v82_patch52017310.begin(),tmp_rcc_v82_patch52017310.end(),0.0);
+                    long long updated_v82_patch52017310=0; double sec_v82_patch52017310=0.0; std::array<char,512> err_v82_patch52017310{};
+                    const double optpp_v82_patch52017310=c.opakab*c.abundance_lower*c.hydrogen_density;
+                    const int rc_v82_patch52017310=xstar_opacity_apply_line_profile_v1(
+                        optpp_v82_patch52017310,c.line_energy_eV,c.turbulent_velocity_km_s,c.temperature_1e4K,c.atomic_mass_amu,c.natural_width_eV,
+                        selected_seeds.data()+j*seed_stride,10,input.radiation_energy_ev,static_cast<int>(continuum_capacity),
+                        tmp_op_v82_patch52017310.data(),tmp_rcc_v82_patch52017310.data(),&updated_v82_patch52017310,&sec_v82_patch52017310,
+                        err_v82_patch52017310.data(),err_v82_patch52017310.size());
+                    if (rc_v82_patch52017310!=0) throw std::runtime_error(std::string("patch5.20.17.3.10 Type50 replay failed: ")+err_v82_patch52017310.data());
+                    const auto it=rec_by_pos_v82_patch52017310.find(static_cast<std::int64_t>(c.source_position));
+                    const ProgramRecord* pr=it==rec_by_pos_v82_patch52017310.end()?nullptr:it->second;
+                    int z=0,stage=0; if(pr){ auto zit=z_by_index_v82_patch52017310.find(pr->element_index); if(zit!=z_by_index_v82_patch52017310.end())z=zit->second; stage=pr->ion_stage; }
+                    write_patch52017310_type50_record_watch(source_sequence_v82_patch511,c.source_position,c.record,z,stage,c.output_index,
+                        c.line_energy_eV,optpp_v82_patch52017310,c.atomic_mass_amu,c.natural_width_eV,input.radiation_energy_ev,continuum_capacity,tmp_op_v82_patch52017310);
+                }
+            }
+
             // v82 patch 5.20.17.3.4: diagnostic-only selected-line producer
             // attribution.  Replay each already-selected line into a private
             // zero opacity plane with the same linopac kernel/seeds used above.
@@ -11247,6 +11418,14 @@ int run_impl(
                 const double bin1_before_in_v82_patch52017381 =
                     heatt_rrc_continuum_emission_v82_patch520.size() <= continuum_capacity
                         ? 0.0 : heatt_rrc_continuum_emission_v82_patch520[continuum_capacity];
+                const auto watch3kev_v82_patch52017310 = patch52017310_indices_in_energy_window(
+                    input.radiation_energy_ev, continuum_capacity, 3065.0, 3100.0);
+                std::vector<double> before3kev_v82_patch52017310(2u * watch3kev_v82_patch52017310.size(), 0.0);
+                for (std::size_t jj=0; jj<watch3kev_v82_patch52017310.size(); ++jj) {
+                    const auto kk=watch3kev_v82_patch52017310[jj];
+                    before3kev_v82_patch52017310[jj]=heatt_rrc_continuum_emission_v82_patch520[kk];
+                    before3kev_v82_patch52017310[watch3kev_v82_patch52017310.size()+jj]=heatt_rrc_continuum_emission_v82_patch520[continuum_capacity+kk];
+                }
                 // v82 patch 5.20.17.3.9: ucalc.f90 label 99 executes
                 // calt99 -> phint53hunt for scalar rate/thermal answers, but
                 // unlike Type49/53 phint53 it does not write rccemis.  The
@@ -11326,6 +11505,24 @@ int run_impl(
                                 covering_v82_patch52017381;
                     }
                 }
+                std::vector<double> after3kev_v82_patch52017310(2u * watch3kev_v82_patch52017310.size(), 0.0);
+                for (std::size_t jj=0; jj<watch3kev_v82_patch52017310.size(); ++jj) {
+                    const auto kk=watch3kev_v82_patch52017310[jj];
+                    after3kev_v82_patch52017310[jj]=heatt_rrc_continuum_emission_v82_patch520[kk];
+                    after3kev_v82_patch52017310[watch3kev_v82_patch52017310.size()+jj]=heatt_rrc_continuum_emission_v82_patch520[continuum_capacity+kk];
+                }
+                write_patch52017310_rrc_window_record(
+                    deferred.source_rate42_type88 ? "TYPE88_RATE42" :
+                        (rit->second->data_type==49 ? "TYPE49" : (rit->second->data_type==53 ? "TYPE53" : (rit->second->data_type==99 ? "TYPE99" : "RRC"))),
+                    source_sequence_v82_patch511, selected_order_v82_patch52017381, deferred.source_position, deferred.record,
+                    rit->second->data_type, rit->second->rate_type, element_z_for_index_v82_patch5201732(rit->second->element_index),
+                    rit->second->ion_stage, deferred.emission_curve.threshold_ev, emission_nb1_v82_patch52017381,
+                    emission_klmax_v82_patch52017381, emission_map_v82_patch52017381.effective_pair_count,
+                    emission_map_v82_patch52017381.phextrap_applied, emission_map_v82_patch52017381.terminal_jk_zero_based + 1,
+                    emission_map_v82_patch52017381.terminal_ntmp, emission_map_v82_patch52017381.terminal_nphint,
+                    emission_map_v82_patch52017381.table_last_energy_ev, emission_map_v82_patch52017381.terminal_grid_energy_ev,
+                    input.radiation_energy_ev, continuum_capacity, watch3kev_v82_patch52017310, before3kev_v82_patch52017310, after3kev_v82_patch52017310);
+
                 write_patch52017381_selected_rrc_bin1_record(
                     source_sequence_v82_patch511, selected_order_v82_patch52017381,
                     deferred.source_position, deferred.record, rit->second->data_type,
