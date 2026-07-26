@@ -32,6 +32,46 @@ bool true_production_mode_v65() {
     return value && std::string(value) == "1";
 }
 
+// v82 patch 5.20.17.3.8.1: diagnostic-only audit of the exact
+// xo01_detal4 inward-emission writer path.  The public column is 1E/float32,
+// so the correct writer comparison is retained binary64 -> static_cast<float>
+// -> FITS, not binary64 direct equality.
+void write_patch52017381_detal4_writer_projection(
+    std::size_t output_zone_index,
+    std::size_t source_zone_index_value,
+    std::size_t hdu_number,
+    std::size_t source_sequence,
+    std::size_t call_index,
+    std::size_t row_one_based,
+    double energy_ev,
+    bool exact_fstepr4,
+    std::size_t continuum_count,
+    std::size_t rccemis_size,
+    double raw_ws_rccemis_in,
+    double directional_in,
+    double selected_in) {
+    const char* raw = std::getenv("XSTAR_V82_PATCH52017381_RCCEMIS_ATTRIBUTION_DIR");
+    if (!raw || !*raw || row_one_based > 32u) return;
+    const std::filesystem::path dir(raw);
+    std::filesystem::create_directories(dir);
+    const auto path = dir / "cpp_detal4_writer_projection.csv";
+    const bool fresh = !std::filesystem::exists(path) || std::filesystem::file_size(path) == 0u;
+    std::ofstream out(path, std::ios::app);
+    if (!out) throw std::runtime_error("cannot write patch5.20.17.3.8.1 detal4 writer projection audit");
+    if (fresh) {
+        out << "output_zone_index,source_zone_index,hdu_number,source_sequence,call_index,row_one_based,"
+               "energy_ev,exact_fstepr4,continuum_count,rccemis_size,raw_ws_rccemis_in,directional_in,"
+               "selected_in,float32_projected_in\n";
+    }
+    const float projected = static_cast<float>(selected_in);
+    out << std::setprecision(17)
+        << output_zone_index << ',' << source_zone_index_value << ',' << hdu_number << ','
+        << source_sequence << ',' << call_index << ',' << row_one_based << ',' << energy_ev << ','
+        << (exact_fstepr4 ? 1 : 0) << ',' << continuum_count << ',' << rccemis_size << ','
+        << raw_ws_rccemis_in << ',' << directional_in << ',' << selected_in << ','
+        << static_cast<double>(projected) << '\n';
+}
+
 
 constexpr double kErgPerEv = 1.602176634e-12;
 constexpr double kFourPi = 12.56637061435917295385;
@@ -10397,6 +10437,11 @@ void write_spectrum_detail(const std::filesystem::path& path,
                 write_real4(fptr, 7, row, out_z5);
                 write_real4(fptr, 8, row, out_opacity);
                 write_real4(fptr, 9, row, out_emis);
+                write_patch52017381_detal4_writer_projection(
+                    oz + 1u, src + 1u, oz + 3u, e.sequence, e.call_index, i + 1u,
+                    e.radiation_energy_ev[i], exact_fstepr4, n, ws.rccemis.size(),
+                    (n + i < ws.rccemis.size() ? ws.rccemis[n + i] : 0.0),
+                    rcc_in, in_emis);
                 write_real4(fptr, 10, row, in_emis);
                 write_real4(fptr, 11, row, out_fwd_depth);
                 write_real4(fptr, 12, row, out_back_depth);
