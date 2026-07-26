@@ -43,6 +43,61 @@ extern "C" int xstar_emissivity_build_binemis_profile(
 
 namespace {
 
+// v82 patch 5.20.17.3.8 diagnostic sidecars.  These are strictly opt-in and
+// never feed controller or product state.
+void write_patch5201738_gsmooth_rccemis_edge(
+    std::size_t source_sequence,
+    std::size_t call_index,
+    std::size_t evaluation_index,
+    const char* stage,
+    double delta_radius_cm,
+    const std::vector<double>& energy_ev,
+    const std::vector<double>& rccemis) {
+    const char* raw = std::getenv("XSTAR_V82_PATCH5201738_RCCEMIS_ATTRIBUTION_DIR");
+    if (!raw || !*raw || !stage || energy_ev.empty() || rccemis.size() < 2u * energy_ev.size()) return;
+    const std::filesystem::path dir(raw);
+    std::filesystem::create_directories(dir);
+    const auto path = dir / "cpp_gsmooth_rccemis_edge.csv";
+    const bool fresh = !std::filesystem::exists(path) || std::filesystem::file_size(path) == 0u;
+    std::ofstream out(path, std::ios::app);
+    if (!out) throw std::runtime_error("cannot write patch5.20.17.3.8 GSSMOOTH rccemis attribution");
+    if (fresh) out << "source_sequence,call_index,evaluation_index,stage,delta_radius_cm,bin_one_based,energy_ev,rccemis_out,rccemis_in\n";
+    const std::size_t n = energy_ev.size();
+    const std::size_t edge_count = std::min<std::size_t>(32u, n);
+    out << std::setprecision(17);
+    for (std::size_t k = 0; k < edge_count; ++k) {
+        out << source_sequence << ',' << call_index << ',' << evaluation_index << ',' << stage
+            << ',' << delta_radius_cm << ',' << (k + 1u) << ',' << energy_ev[k]
+            << ',' << rccemis[k] << ',' << rccemis[n + k] << '\n';
+    }
+}
+
+void write_patch5201738_radial_zone_rccemis_edge(
+    const xstar_run_state::WholeRunAccumulatedState& whole) {
+    const char* raw = std::getenv("XSTAR_V82_PATCH5201738_RCCEMIS_ATTRIBUTION_DIR");
+    if (!raw || !*raw) return;
+    const std::filesystem::path dir(raw);
+    std::filesystem::create_directories(dir);
+    const auto path = dir / "cpp_radial_zone_rccemis_edge.csv";
+    std::ofstream out(path);
+    if (!out) throw std::runtime_error("cannot write patch5.20.17.3.8 radial-zone rccemis attribution");
+    out << "zone_index,source_sequence,call_index,boundary_provenance,bin_one_based,energy_ev,rccemis_out,rccemis_in\n";
+    out << std::setprecision(17);
+    for (const auto& zone : whole.radial_zones) {
+        const auto& eval = zone.accepted_controller.evaluation;
+        const auto& ws = eval.source_workspace;
+        const auto& energy = eval.radiation_energy_ev;
+        const std::size_t n = energy.size();
+        if (n == 0u || ws.rccemis.size() < 2u * n) continue;
+        const std::size_t edge_count = std::min<std::size_t>(32u, n);
+        for (std::size_t k = 0; k < edge_count; ++k) {
+            out << zone.zone_index << ',' << eval.sequence << ',' << eval.call_index << ','
+                << '"' << zone.boundary_provenance << '"' << ',' << (k + 1u) << ',' << energy[k]
+                << ',' << ws.rccemis[k] << ',' << ws.rccemis[n + k] << '\n';
+        }
+    }
+}
+
 struct Options {
     std::string command = "help";
     std::string backend = "cpp";
@@ -12032,6 +12087,9 @@ void advance_source_continuum_radiation_v82_patch52(
     const auto pre_gsmooth_brcems = brcems;
     const auto pre_gsmooth_opakc = smoothed_opakc;
     const auto pre_gsmooth_rccemis = smoothed_rccemis;
+    write_patch5201738_gsmooth_rccemis_edge(
+        boundary.sequence, boundary.call_index, boundary.evaluation_index,
+        "pre_gsmooth", delta_radius_cm, data.energy, pre_gsmooth_rccemis);
 
     // v82 patch 5.10: decompose the already-accepted total opakc surface into
     // source-owned additive families without changing the production array.
@@ -12081,6 +12139,9 @@ void advance_source_continuum_radiation_v82_patch52(
     // state on the accepted boundary as well as passing it to the kernel.
     boundary.opakc = smoothed_opakc;
     boundary.rccemis = smoothed_rccemis;
+    write_patch5201738_gsmooth_rccemis_edge(
+        boundary.sequence, boundary.call_index, boundary.evaluation_index,
+        "post_gsmooth", delta_radius_cm, data.energy, boundary.rccemis);
 
     write_continuum_transfer_stage_v82_patch52(data, "05_post_gsmooth_brcems", brcems);
     write_continuum_transfer_stage_v82_patch52(data, "06_post_gsmooth_opakc", boundary.opakc);
@@ -15031,6 +15092,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                   << patch520171_complete_workspace_zones << "\n"
                   << "V048746255172582_PATCH520171_EXACT_SOURCE_WORKSPACES="
                   << (whole.exact_source_workspaces_retained ? "ACCEPT" : "REJECT") << "\n";
+        write_patch5201738_radial_zone_rccemis_edge(whole);
         whole.exact_legacy_pprint_state_retained = false;
         whole.diagnostic_preview_partial = false;
         whole.physical_radial_boundaries_expected = 4u;

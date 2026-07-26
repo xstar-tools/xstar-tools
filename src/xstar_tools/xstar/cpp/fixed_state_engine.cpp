@@ -90,8 +90,38 @@ void copy_text(char* target, std::size_t cap, const std::string& value) {
     target[n] = '\0';
 }
 
+
+
 double elapsed(const clock_type::time_point& start) {
     return std::chrono::duration<double>(clock_type::now() - start).count();
+}
+
+// v82 patch 5.20.17.3.8: diagnostic-only attribution for the five residual
+// xo01_detal4 inward-emission cells.  This sidecar is enabled only when the
+// host runner supplies XSTAR_V82_PATCH5201738_RCCEMIS_ATTRIBUTION_DIR.  It
+// never feeds a production array.
+void write_patch5201738_fixed_rccemis_edge(
+    std::size_t source_sequence,
+    const char* stage,
+    const double* energy_ev,
+    std::size_t energy_count,
+    const std::vector<double>& values) {
+    const char* raw = std::getenv("XSTAR_V82_PATCH5201738_RCCEMIS_ATTRIBUTION_DIR");
+    if (!raw || !*raw || !stage || !energy_ev || energy_count == 0u ||
+        values.size() < 2u * energy_count) return;
+    const std::filesystem::path dir(raw);
+    std::filesystem::create_directories(dir);
+    const auto path = dir / "cpp_fixed_rccemis_edge.csv";
+    const bool fresh = !std::filesystem::exists(path) || std::filesystem::file_size(path) == 0u;
+    std::ofstream out(path, std::ios::app);
+    if (!out) throw std::runtime_error("cannot write patch5.20.17.3.8 fixed rccemis attribution");
+    if (fresh) out << "source_sequence,stage,bin_one_based,energy_ev,rccemis_out,rccemis_in\n";
+    const std::size_t edge_count = std::min<std::size_t>(32u, energy_count);
+    out << std::setprecision(17);
+    for (std::size_t k = 0; k < edge_count; ++k) {
+        out << source_sequence << ',' << stage << ',' << (k + 1u) << ',' << energy_ev[k]
+            << ',' << values[k] << ',' << values[energy_count + k] << '\n';
+    }
 }
 
 std::uint64_t binary64_sequence_fnv1a(const double* values, std::size_t count) {
@@ -11480,6 +11510,15 @@ int run_impl(
                 throw std::runtime_error(
                     "v82 patch5.20.17.3.7 Type76 rccemis shape mismatch");
             }
+            write_patch5201738_fixed_rccemis_edge(
+                source_sequence_v82_patch511, "broad_before_selected_rebuild",
+                input.radiation_energy_ev, continuum_capacity, rccemis);
+            write_patch5201738_fixed_rccemis_edge(
+                source_sequence_v82_patch511, "selected_rrc_component",
+                input.radiation_energy_ev, continuum_capacity, heatt_rrc_continuum_emission_v82_patch520);
+            write_patch5201738_fixed_rccemis_edge(
+                source_sequence_v82_patch511, "type76_component",
+                input.radiation_energy_ev, continuum_capacity, native_type76_continuum_emission);
             for (std::size_t k = 0; k < continuum_capacity; ++k) {
                 output.opacity[k] += heatt_bound_free_opacity_v82_patch5206[k];
                 opakcont[k] += heatt_bound_free_opacity_v82_patch5206[k];
@@ -11489,6 +11528,9 @@ int run_impl(
                     heatt_rrc_continuum_emission_v82_patch520[continuum_capacity + k] +
                     native_type76_continuum_emission[continuum_capacity + k];
             }
+            write_patch5201738_fixed_rccemis_edge(
+                source_sequence_v82_patch511, "rebuilt_pre_gsmooth",
+                input.radiation_energy_ev, continuum_capacity, rccemis);
             const char* line_attr_commit_dir_v82_patch5201734 =
                 std::getenv("XSTAR_V82_PATCH5201734_CPP_ATTRIBUTION_DIR");
             if (source_sequence_v82_patch511 == 59 && line_attr_commit_dir_v82_patch5201734 && *line_attr_commit_dir_v82_patch5201734) {
