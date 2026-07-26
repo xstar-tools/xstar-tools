@@ -93,7 +93,7 @@ Python **product** reference regeneration is required because writer-time `binem
 - Added strict option-17 and detailed-continuum host gates.
 - Python/reference physics unchanged; patch5.20.14.3 cache/reference remain reusable.
 
-# 0.6.48.7.46.25.5.17.25.82 patch 5.20.14.4 — all-shell `calc_emis`, radial detail lifetime, final writer state
+## 0.6.48.7.46.25.5.17.25.82 patch 5.20.14.4 — all-shell `calc_emis`, radial detail lifetime, final writer state
 
 - Apply the selected full 9999-bin Type49/53 `calc_emis` scalar-opacity revisit on every accepted shell instead of only call 2; keep Type53 matrix/rate physics on the accepted reduced 999-bin caller grid.
 - Retain four radial detail snapshots before STPCUT/transport and a fifth genuine terminal post-transport transfer workspace, eliminating the option-17 one-row forward-depth shift.
@@ -103,7 +103,7 @@ Python **product** reference regeneration is required because writer-time `binem
 - Keep patch 5.20.14.3 Python physics and the 58-state cache frozen; no Python reference/cache regeneration is required.
 - Add explicit `xout_step.log` option-17/24 and three-way product gates for RRC depth and detailed-continuum qualification.
 
-# 0.6.48.7.46.25.5.17.25.82 patch 5.20.14.3 — literal Type49/Type88 `phextrap` source semantics
+## 0.6.48.7.46.25.5.17.25.82 patch 5.20.14.3 — literal Type49/Type88 `phextrap` source semantics
 
 - Correct Python `phextrap` to literal `phextrap.f90` semantics: seed from one-based `ntmp-1`, discard/replace the original final tabulated pair, use `nadd+ntmp<ncn2`, and retain the source final logical length `nadd+ntmp-1` even when no extrapolation point is added.
 - Apply the same semantics to active C++ Type49 and Type88 paths; retain Type53 matrix/RRC-emission code unchanged.
@@ -112,7 +112,7 @@ Python **product** reference regeneration is required because writer-time `binem
 - Require regeneration of the pure-Python products/reference and sparse 58-state solve-stage cache before further C++/Python scientific comparison.
 - Keep literal FORTRAN canonical if the regenerated Python reference still differs.
 
-# 0.6.48.7.46.25.5.17.25.82 patch 5.20.14 — RRC depth and detailed-continuum source ownership
+## 0.6.48.7.46.25.5.17.25.82 patch 5.20.14 — RRC depth and detailed-continuum source ownership
 
 - Separate Type49/53 caller lifetimes into reduced 999-bin matrix evaluation, reduced 999-bin `calc_emisab` seed, and full 9999-bin selected `calc_emis` revisit.
 - Reproduce literal `ucalc.f90` scalar lifetime: `opakab=0` at call entry, so a selected revisit that does not publish threshold opacity leaves zero rather than retaining a reduced-grid seed.
@@ -123,7 +123,7 @@ Python **product** reference regeneration is required because writer-time `binem
 - Retain the corrected sparse 58-state trajectory (54 DSEC + 4 final) and provide independent Python-product, solve-stage-cache, C++-product, comparison, and end-to-end workflow commands.
 - Make no Python physics change and inject no FORTRAN/Python product values.
 
-# v82 patch 5.20.12.1 — source caller-owned 999-bin bound-free matrix rates
+## v82 patch 5.20.12.1 — source caller-owned 999-bin bound-free matrix rates
 
 - Correct Python `calc_hmc_all`/`calc_ion_rates`/`calc_hmc_ion` UCalc contexts to explicitly own the reduced `epim/ncn2m/bremsam` continuum grid.
 - Correct C++ Mg matrix bridge Type49/53 accumulation to use the same reduced 999-bin grid rather than full `epi/bremsa`.
@@ -132,7 +132,7 @@ Python **product** reference regeneration is required because writer-time `binem
 - Do not inject FORTRAN/Python populations or product values.
 - Regenerate the all-61 Python solve-stage cache and reusable Python product reference only after host RRC qualification confirms the corrected source behavior.
 
-# 0.6.48.7.46.25.5.17.25.82 patch 5.20.11.2 — source-REAL Voigt cleanup and one-percent continuum closure
+## 0.6.48.7.46.25.5.17.25.82 patch 5.20.11.2 — source-REAL Voigt cleanup and one-percent continuum closure
 
 - Complete the 5.20.11 physics/state closeout without advancing to product-writer repairs.
 - Correct the active standalone `voigte.f90` translation so DATA/PARAMETER/branch literals are rounded as FORTRAN default REAL before promotion to REAL(8)/binary64.
@@ -143,7 +143,7 @@ Python **product** reference regeneration is required because writer-time `binem
 - Continue to require exact support (no source-only/native-only tau cells), source-equal pre-`heatt` bremsa, zero Mg Type53 record-kernel mismatches, Type88 22-record/eight-slot non-regression, live STEP provenance, and retained `dpthc`/`dpthcont`.
 - Make no Python physics or FITS-writer change.
 
-# 0.6.48.7.46.25.5.17.25.82 patch 5.20.11.1 — literal Type50 linopac arithmetic and live STEP shell selection
+## 0.6.48.7.46.25.5.17.25.82 patch 5.20.11.1 — literal Type50 linopac arithmetic and live STEP shell selection
 
 - Continue the rejected 5.20.11 continuum-state closure without advancing to product-only qualification.
 - Reproduce `linopac.f90` default-REAL literals for the Type50 thermal width, wavelength-to-energy conversion, damping denominator, profile normalization, and Voigt thresholds.
@@ -155,7 +155,7 @@ Python **product** reference regeneration is required because writer-time `binem
 - Preserve 5.20.10 Type88 22-record/eight-slot closure; make no Type53 cross-section, Python-physics, or FITS-writer change.
 - Keep the strict 5.20.11 target: post-`heatt`, post-`trnfrc`/call-3 `bremsa`, and call-3 continuum `tau_in` scientific mismatch counts must all reach zero.
 
-# 0.6.48.7.46.25.5.17.25.82 patch 5.20.11 — continuum heatt -> trnfrc state closure
+## 0.6.48.7.46.25.5.17.25.82 patch 5.20.11 — continuum heatt -> trnfrc state closure
 
 - Preserves the accepted 5.20.10 Type88 rate42 22-record inventory and eight retained-kkkl scalar publications.
 - Corrects the heatt-facing Type49/53/88 recombination reconstruction to use the literal `expo.f90` +/-60 clamp instead of the generic +/-700 exponential.
@@ -250,7 +250,6 @@ Python **product** reference regeneration is required because writer-time `binem
 - Public line luminosity/depth arrays are gathered by physical line index from retained elum/tau0 workspaces.
 - Keeps fail-closed publication until the complete 61-event scientific trajectory accepts.
 - Complete 61-event trajectory publication gate now uses a 1e-40 zero floor, 5e-7 relative tolerance, and 1e-12 absolute fallback for temperature/hmctot/elcter while retaining electron fraction at strict canonical .7e; exact .7e mismatches remain diagnostic and maximum absolute/relative deltas are reported.
-
 
 ## 0.6.48.7.46.25.5.17.25.82 - 2026-07-19
 
