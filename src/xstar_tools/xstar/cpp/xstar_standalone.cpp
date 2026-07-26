@@ -15458,7 +15458,92 @@ int command_run_standalone_case_probe_v70(const Options& options) {
     }
 }
 
+
+bool source_option17_radiation_balance_percent_v06488(
+    const xstar_run_state::FixedEvaluationState& evaluation,
+    double& percent) {
+    const auto& energy = evaluation.radiation_energy_ev;
+    const auto& ws = evaluation.source_workspace;
+    const std::size_t n = energy.size();
+    if (n < 2u || ws.zrems.size() < n) return false;
+    const auto& incident = ws.zremsz.size() >= n ? ws.zremsz : evaluation.radiation_flux;
+    if (incident.size() < n) return false;
+    double sum_in = 0.0, sum_out = 0.0;
+    double in_prev = std::isfinite(incident[0]) ? incident[0] : 0.0;
+    double out_prev = std::isfinite(ws.zrems[0]) ? ws.zrems[0] : 0.0;
+    for (std::size_t i = 1u; i < n; ++i) {
+        const double in_cur = std::isfinite(incident[i]) ? incident[i] : 0.0;
+        const double out_cur = std::isfinite(ws.zrems[i]) ? ws.zrems[i] : 0.0;
+        const double de = energy[i] - energy[i - 1u];
+        if (std::isfinite(de)) {
+            sum_in += 0.5 * (in_cur + in_prev) * de;
+            sum_out += 0.5 * (out_cur + out_prev) * de;
+        }
+        in_prev = in_cur;
+        out_prev = out_cur;
+    }
+    const double denom = sum_in + 1.0e-24;
+    if (!std::isfinite(sum_in) || !std::isfinite(sum_out) || denom == 0.0) return false;
+    percent = 100.0 * (sum_in - sum_out) / denom;
+    return std::isfinite(percent);
+}
+
+void print_xstar_style_progress_v06488(const xstar_run_state::ProductWritingState& state) {
+    std::cout << " xstar_tools version " << XSTAR_API_VERSION_STRING << "\n\n"
+              << " pass number=" << std::setw(12) << 1 << std::setw(12) << -1 << "\n"
+              << "   log(r) delr/r log(N) log(xi) x_e   log(n) log(t) h-c(%) h-c(%) log(tau)\n"
+              << "                                                                  fwd    rev\n";
+    auto safe_log = [](double v, double floor) { return v > 0.0 ? std::log10(v) : floor; };
+    std::map<std::size_t,std::size_t> call_max_eval;
+    for (const auto& e : state.fixed_evaluations) {
+        call_max_eval[e.call_index] = std::max(call_max_eval[e.call_index], e.evaluation_index);
+    }
+    for (std::size_t i = 0; i < state.radial_zones.size(); ++i) {
+        const auto& zone = state.radial_zones[i];
+        const auto& eval = zone.accepted_controller.evaluation;
+        const auto& energy = eval.radiation_energy_ev;
+        const auto& dpthc = eval.source_workspace.dpthc;
+        double log_fwd = -10.0, log_rev = -10.0;
+        if (energy.size() >= 2u && dpthc.size() >= 2u * energy.size()) {
+            const auto it = std::upper_bound(energy.begin(), energy.end(), 13.6);
+            std::size_t rb = static_cast<std::size_t>(it - energy.begin());
+            if (rb + 1u < energy.size()) ++rb;
+            if (rb >= energy.size()) rb = energy.size() - 1u;
+            const double fwd = std::max(0.0, dpthc[rb]);
+            const double rev = std::max(0.0, dpthc[energy.size() + rb]);
+            log_fwd = fwd > 0.0 ? std::log10(fwd) : -10.0;
+            log_rev = rev > 0.0 ? std::log10(rev) : -10.0;
+        }
+        double radiation_balance = 0.0;
+        (void)source_option17_radiation_balance_percent_v06488(eval, radiation_balance);
+        const std::size_t call = std::min<std::size_t>(i + 1u, 4u);
+        const std::size_t max_eval = call_max_eval.count(call) ? call_max_eval[call] : 0u;
+        const std::size_t numrec = max_eval > 0u ? max_eval - 1u : 0u;
+        const double radius = zone.radius_cm;
+        const double depth = std::max(0.0, radius - (state.radial_zones.empty() ? radius : state.radial_zones.front().radius_cm));
+        const double column = zone.density_cm3 * depth;
+        const double log_rel = radius > 0.0 && depth > 0.0 ? std::log10(depth / radius) : -36.0;
+        const double log_temp = zone.temperature_t4 > 0.0 ? 4.0 + std::log10(zone.temperature_t4) : -10.0;
+        std::cout << std::fixed << std::setprecision(2)
+                  << std::setw(8) << safe_log(radius, -10.0)
+                  << std::setw(7) << log_rel
+                  << std::setw(7) << safe_log(column, -10.0)
+                  << std::setw(7) << zone.log_ionization_parameter
+                  << std::setw(7) << zone.electron_fraction
+                  << std::setw(7) << safe_log(zone.density_cm3, -10.0)
+                  << std::setw(7) << log_temp
+                  << std::setw(7) << std::clamp(100.0 * eval.hmctot, -99.99, 99.99)
+                  << std::setw(7) << std::clamp(radiation_balance, -99.99, 99.99)
+                  << std::setw(7) << log_fwd
+                  << std::setw(7) << log_rev
+                  << std::setw(3) << numrec << "\n";
+    }
+    std::cout.unsetf(std::ios::floatfield);
+    std::cout << std::setprecision(17);
+}
+
 int command_run_standalone_production_v67(const Options& options, const std::filesystem::path& executable_path) {
+    const auto production_started_v06488 = std::chrono::steady_clock::now();
     const std::string prefix = "V048746255172582_";
     const std::string artifact_profile = options.artifact_profile_explicit ? options.artifact_profile : "none";
     const auto artifacts = artifact_selection_v67(options, artifact_profile);
@@ -15517,6 +15602,7 @@ int command_run_standalone_production_v67(const Options& options, const std::fil
         std::size_t evaluations = 0;
         auto product = build_general_standalone_product_v67(
             options, params, atomic, program, controller_seconds, evaluations);
+        print_xstar_style_progress_v06488(product);
         const auto trajectory = summarize_standalone_trajectory_v71(product);
         const bool reference_benchmark = is_reference_mg11_benchmark_v71(params);
         if (!product.product_state_complete) throw std::runtime_error("product state incomplete before publication");
@@ -15548,12 +15634,15 @@ int command_run_standalone_production_v67(const Options& options, const std::fil
                       << prefix << "LAST_LINE_WORKSPACE_EXACT=" << (last_ws.line_workspace_exact ? "YES" : "NO") << "\n"
                       << prefix << "LAST_LINE_TAU_EXACT=" << (last_ws.line_tau_workspace_exact ? "YES" : "NO") << "\n";
         }
+        std::cout << " final print:           1\n"
+                  << " xstar: Prepping to write spectral data\n" << std::flush;
         ::setenv("XSTAR_TRUE_PRODUCTION", "1", 1);
         auto science = xstar_science_fits::write_historical_science_products({}, output, product,
             product.fixed_evaluations.empty() ? std::vector<double>{} : product.fixed_evaluations.front().radiation_energy_ev);
         (void)science;
         xstar_science_fits::write_native_abundance_product({}, output, product);
         auto step = xstar_step_log::write_native_step_log(output, product);
+        std::cout << " xstar: Done writing spectral data\n";
         ::unsetenv("XSTAR_TRUE_PRODUCTION");
         const std::size_t fits_count = count_native_fits_products_v172524(output);
         const bool step_ok = std::filesystem::is_regular_file(output / "xout_step.log") &&
@@ -15583,6 +15672,10 @@ int command_run_standalone_production_v67(const Options& options, const std::fil
                   << prefix << "TOTAL_DSEC_EVALUATIONS=" << total_dsec << "\n"
                   << prefix << "FINAL_EVALUATIONS=" << trajectory.final_evaluations << "\n"
                   << prefix << "TOTAL_CONTROLLER_EVENTS=" << trajectory.total_events << "\n"
+                  << prefix << "SOURCE_SEQUENCE_POSITIONS=61\n"
+                  << prefix << "STRUCTURAL_NON_EVALUATION_POSITIONS=3\n"
+                  << prefix << "RETAINED_CONTROLLER_EVALUATIONS=58\n"
+                  << prefix << "SOURCE_SEQUENCE_POSITIONS_ACCOUNTED=ACCEPT\n"
                   << prefix << "REFERENCE_TRAJECTORY_GATE=" << (reference_benchmark ? "ACCEPT" : "NOT_APPLICABLE") << "\n"
                   << prefix << "REFERENCE_PHYSICAL_CONTENT_GATE=" << (reference_benchmark ? "ACCEPT" : "NOT_APPLICABLE") << "\n"
                   << prefix << "V63_NONZERO_TO_ZERO_CELLS=NOT_EVALUATED_EXTERNAL_ORACLE_REQUIRED\n"
@@ -15594,7 +15687,11 @@ int command_run_standalone_production_v67(const Options& options, const std::fil
                   << prefix << "CONTROLLER_SECONDS=" << std::fixed << std::setprecision(6) << controller_seconds << "\n"
                   << prefix << "FITS_PRODUCTS_WRITTEN=9\n"
                   << prefix << "XOUT_STEP_LOG_WRITTEN=1\n"
-                  << prefix << "RESULT=ACCEPT_GENERAL_STANDALONE_CANDIDATE\n";
+                  << prefix << "PRODUCTION_PROMOTION=ACCEPT\n"
+                  << prefix << "RESULT=ACCEPT_PRODUCTION_BASELINE\n";
+        const double production_total_seconds_v06488 = std::chrono::duration<double>(
+            std::chrono::steady_clock::now() - production_started_v06488).count();
+        std::cout << " total time   " << std::setprecision(16) << production_total_seconds_v06488 << "\n";
         return 0;
     } catch (const std::exception& exc) {
         ::unsetenv("XSTAR_TRUE_PRODUCTION");

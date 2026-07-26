@@ -1,5 +1,71 @@
 # CHANGELOG
 
+# 0.6.48.8 - 2026-07-26
+
+- Promote the accepted v82 patch5.20.17 production path to the 0.6.48.8 baseline.
+- Retain source-REAL `ener.f90` grid semantics in pure Python, accelerated Python, and standalone C++.
+- Close the shared ~3.08 keV continuum residual family: `emis in`, `zrems(3)`, and `zrems(5)` are zero above 1% versus FORTRAN in the qualification case.
+- Treat historical Type99 record-67 selection as diagnostic-only after the source-grid change; production closure requires every selected Type99/rate7 direct `rccemis` delta to remain zero.
+- Add FORTRAN/Python-style standalone C++ terminal progress rows, writer progress messages, and total runtime reporting.
+- Clarify trajectory accounting: 61 source sequence positions, 3 structural non-evaluation positions (21,40,57), and 58 retained controller evaluations (54 DSEC + 4 finals).
+- Keep diagnostic/attribution sidecars disabled by default in production and product publication gated on the complete accepted trajectory.
+- Establish standalone C++ as the routine benchmark/development target; accepted accelerated-Python products are the reusable reference until Python behavior changes.
+
+## v82 patch 5.20.17.3.11 — source-REAL `ener.f90` grid correction
+
+- Apply the 5.20.17.3.10 residual attribution without special-casing any watched atomic record or FITS energy.
+- Reproduce `ener.f90` arithmetic kinds exactly: default-REAL literals (`0.1`, `4.e+5`, `1.`, `1.e+6`) and `1./float(...)` are evaluated in binary32 before promotion to the REAL(8) grid.
+- Use the same source-REAL grid contract in Python, standalone C++, and both C++ 999-bin reduced source workspaces.
+- Preserve the accepted 5.20.17.3.9 Type99 selected-RRC source-zero correction and the 5.20.17.3.7 zero-width GSSMOOTH/opacity ownership correction.
+- Regenerate Python products because the shared source grid changes; the fast Python+C++ backend is the first qualification surface, followed by pure-Python canonical regeneration if accepted.
+- Require all six watched residual energies to match the FORTRAN float32 grid exactly, C++/Python grid identity, C++/Python `xo01_detal4` parity, and no worsening of the 5.20.17.3.9 residual counts.
+
+## v82 patch 5.20.17.3.9 — Type99 selected-RRC source-zero closure
+
+- Close the five remaining C++-only `xo01_detal4.emis in` first-bin cells attributed by 5.20.17.3.8.1 to source position 128 / record 67 / Type99 rate7 / H I.
+- Preserve Type99 rate-7 ranking and scalar `calt99 -> phint53hunt` rate/thermal evaluation, but suppress the source-nonexistent selected Type99 direct `rccemis` profile.
+- Remove the legacy synthetic Type99 inward continuum generator from the selected-RRC helper so Type99 remains source-zero even if the helper is called from another path.
+- Retain the accepted 5.20.17.3.7 zero-width GSSMOOTH/opacity correction, all Type49/53/88/76 physics, transport, and FITS writer projection unchanged.
+- Reuse the accepted 5.20.17.3.6.1 Python+CPP products; no Python rerun is required.
+
+## v82 patch 5.20.17.3.6 — Python FITS header/provenance parity
+
+- Synchronize Python runtime `__version__` with package/C++ release `0.6.48.7.46.25.5.17.25.82`.
+- Add backend-aware primary FITS provenance for pure Python and Python with C++ kernels.
+- Mirror C++ primary metadata/comments (`MODEL`, `ATDATA`, `TAUMODE`, `DATE`, standard FITS comments) while using Python-specific `CREATOR`, `ORIGIN`, `DATAMODE`, and `RUNID`.
+- Add source comments and `STATESRC` to Python radial extensions.
+- Recompute `CHECKSUM`/`DATASUM` after all byte-level FITS padding edits, including `xout_abund1.fits`.
+- Scientific arrays, C++ physics, bound-free ownership, transport, and Type50 profile physics remain frozen.
+
+## v82 patch 5.20.17.3.4
+
+- Add diagnostic-only Python/C++ selected-line profile producer attribution at Python `calc_emis_all` call 2 and C++ source sequence 59.
+- Replay selected-line producers onto private zero opacity planes and compare producer identity/scalars, profile support/shape hashes, aggregate selected-line opacity, continuum-before-line opacity, and combined opacity.
+- Keep the rejected 5.20.17.3.3 production physics unchanged and require its exact 13714/8220 Python and 33/9/15 C++ `detal4` baseline during host attribution.
+- Do not promote a new canonical pure-Python reference; the pure-Python run is diagnostic producer capture only.
+
+## v82 patch 5.20.17.3.3
+
+- Split Python selected line-profile opacity from the shared continuum `opakc` accumulator during `calc_emis_all`.
+- Route ordinary, C++-accelerated Type-50, and native spectral selected-line paths into the retained line-profile plane.
+- Merge the complete line-profile plane into `opakc` exactly once after `freef`/`bremem`, matching the accepted C++ ownership/lifetime model.
+- Keep C++, bound-free Type49/53/88 physics, `stpcut`/radial transport, and FITS writer code frozen by readiness hashes.
+- Require a fresh canonical pure-Python reference for host qualification.
+
+## v82 patch 5.20.17.3.2.1
+
+- Fix diagnostic-only Python bound-free attribution gate: top-level `calc_emis_all` call 2 corresponds to stable source sequence 59; patch 5.20.17.3.2 incorrectly used call 23.
+- Keep C++ attribution gated on source sequence 59.
+- No production physics, transport, STPCUT, or FITS-writer changes.
+
+## v82 patch 5.20.17.3 — cross-backend detal4 parity closure
+
+- Python Type-50 `linopac` now preserves FORTRAN default-REAL literal/conversion semantics using shared historical constants and binary32 promotion.
+- Python `voigte` now preserves source default-REAL DATA/PARAMETER/branch literals.
+- C++ HDU1 inward `rccemis(2,:)` now uses the stable second zero-depth owner.
+- Removed the source-nonexistent C++ Type-99 synthetic direct inward-RRC publication while preserving scalar rate/thermal evaluation.
+- Requires a newly regenerated canonical pure-Python reference archive.
+
 ## 0.6.48.7.46.25.5.17.25.82 patch 5.20.17.3.11 — source-REAL `ener.f90` grid correction
 
 - Apply the 5.20.17.3.10 residual attribution without special-casing any watched atomic record or FITS energy.

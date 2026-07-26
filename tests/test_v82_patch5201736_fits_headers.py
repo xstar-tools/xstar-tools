@@ -29,7 +29,7 @@ def _set_backend(monkeypatch, name: str) -> None:
 
 
 def test_patch5201736_package_version_matches_cpp_release():
-    assert __version__ == "0.6.48.7.46.25.5.17.25.82"
+    assert __version__ == "0.6.48.8"
 
 
 def test_patch5201736_backend_aware_primary_metadata(monkeypatch):
