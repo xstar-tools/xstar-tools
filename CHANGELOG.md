@@ -1,5 +1,257 @@
 # CHANGELOG
 
+## 0.6.48.7.46.25.5.17.25.82 patch 5.20.17.3.11 — source-REAL `ener.f90` grid correction
+
+- Apply the 5.20.17.3.10 residual attribution without special-casing any watched atomic record or FITS energy.
+- Reproduce `ener.f90` arithmetic kinds exactly: default-REAL literals (`0.1`, `4.e+5`, `1.`, `1.e+6`) and `1./float(...)` are evaluated in binary32 before promotion to the REAL(8) grid.
+- Use the same source-REAL grid contract in Python, standalone C++, and both C++ 999-bin reduced source workspaces.
+- Preserve the accepted 5.20.17.3.9 Type99 selected-RRC source-zero correction and the 5.20.17.3.7 zero-width GSSMOOTH/opacity ownership correction.
+- Regenerate Python products because the shared source grid changes; the fast Python+C++ backend is the first qualification surface, followed by pure-Python canonical regeneration if accepted.
+- Require all six watched residual energies to match the FORTRAN float32 grid exactly, C++/Python grid identity, C++/Python `xo01_detal4` parity, and no worsening of the 5.20.17.3.9 residual counts.
+
+## 0.6.48.7.46.25.5.17.25.82 patch 5.20.17.3.9 — Type99 selected-RRC source-zero closure
+
+- Close the five remaining C++-only `xo01_detal4.emis in` first-bin cells attributed by 5.20.17.3.8.1 to source position 128 / record 67 / Type99 rate7 / H I.
+- Preserve Type99 rate-7 ranking and scalar `calt99 -> phint53hunt` rate/thermal evaluation, but suppress the source-nonexistent selected Type99 direct `rccemis` profile.
+- Remove the legacy synthetic Type99 inward continuum generator from the selected-RRC helper so Type99 remains source-zero even if the helper is called from another path.
+- Retain the accepted 5.20.17.3.7 zero-width GSSMOOTH/opacity correction, all Type49/53/88/76 physics, transport, and FITS writer projection unchanged.
+- Reuse the accepted 5.20.17.3.6.1 Python+CPP products; no Python rerun is required.
+
+## 0.6.48.7.46.25.5.17.25.82 patch 5.20.17.3.6 — Python FITS header/provenance parity
+
+- Synchronize Python runtime `__version__` with package/C++ release `0.6.48.7.46.25.5.17.25.82`.
+- Add backend-aware primary FITS provenance for pure Python and Python with C++ kernels.
+- Mirror C++ primary metadata/comments (`MODEL`, `ATDATA`, `TAUMODE`, `DATE`, standard FITS comments) while using Python-specific `CREATOR`, `ORIGIN`, `DATAMODE`, and `RUNID`.
+- Add source comments and `STATESRC` to Python radial extensions.
+- Recompute `CHECKSUM`/`DATASUM` after all byte-level FITS padding edits, including `xout_abund1.fits`.
+- Scientific arrays, C++ physics, bound-free ownership, transport, and Type50 profile physics remain frozen.
+
+## 0.6.48.7.46.25.5.17.25.82 patch 5.20.17.3.4
+
+- Add diagnostic-only Python/C++ selected-line profile producer attribution at Python `calc_emis_all` call 2 and C++ source sequence 59.
+- Replay selected-line producers onto private zero opacity planes and compare producer identity/scalars, profile support/shape hashes, aggregate selected-line opacity, continuum-before-line opacity, and combined opacity.
+- Keep the rejected 5.20.17.3.3 production physics unchanged and require its exact 13714/8220 Python and 33/9/15 C++ `detal4` baseline during host attribution.
+- Do not promote a new canonical pure-Python reference; the pure-Python run is diagnostic producer capture only.
+
+## 0.6.48.7.46.25.5.17.25.82 patch 5.20.17.3.3
+
+- Split Python selected line-profile opacity from the shared continuum `opakc` accumulator during `calc_emis_all`.
+- Route ordinary, C++-accelerated Type-50, and native spectral selected-line paths into the retained line-profile plane.
+- Merge the complete line-profile plane into `opakc` exactly once after `freef`/`bremem`, matching the accepted C++ ownership/lifetime model.
+- Keep C++, bound-free Type49/53/88 physics, `stpcut`/radial transport, and FITS writer code frozen by readiness hashes.
+- Require a fresh canonical pure-Python reference for host qualification.
+
+## 0.6.48.7.46.25.5.17.25.82 patch 5.20.17.3.2.1
+
+- Fix diagnostic-only Python bound-free attribution gate: top-level `calc_emis_all` call 2 corresponds to stable source sequence 59; patch 5.20.17.3.2 incorrectly used call 23.
+- Keep C++ attribution gated on source sequence 59.
+- No production physics, transport, STPCUT, or FITS-writer changes.
+
+## 0.6.48.7.46.25.5.17.25.82 patch 5.20.17.3 — cross-backend detal4 parity closure
+
+- Python Type-50 `linopac` now preserves FORTRAN default-REAL literal/conversion semantics using shared historical constants and binary32 promotion.
+- Python `voigte` now preserves source default-REAL DATA/PARAMETER/branch literals.
+- C++ HDU1 inward `rccemis(2,:)` now uses the stable second zero-depth owner.
+- Removed the source-nonexistent C++ Type-99 synthetic direct inward-RRC publication while preserving scalar rate/thermal evaluation.
+- Requires a newly regenerated canonical pure-Python reference archive.
+
+# 0.6.48.7.46.25.5.17.25.82 patch 5.20.17.1 — live product-workspace retention hotfix
+
+- Preserve the accepted 5.20.17 sequence-23 native committed-state and 58-evaluation production trajectory.
+- Fix the latent standalone product-state completeness rejection by retaining caller-owned `zrems` and `zremsz` on every accepted radial boundary together with `dpthc`/`dpthcont`.
+- Keep `ExactSourceWorkspaceState::complete()` and the product publication fail-closed gate unchanged; this hotfix restores the missing live state instead of relaxing completeness.
+- Fail closed if the retained `zrems`/`zremsz` shapes disagree with the live continuum grid.
+- Add explicit five-zone source-workspace completeness diagnostics and a host gate that requires all ten public products before running the inherited broad/frozen product qualification.
+
+## 0.6.48.7.46.25.5.17.25.82 patch 5.20.15.2.1 — clean 5.20.15.1 restart; C++ publication closure only
+
+- Reverts/discards every Python-physics change from the rejected 5.20.15.2 experiment. Python scientific modules are byte-identical to 5.20.15.1.
+- Retains the accepted 5.20.15.1 Type49 metadata-cache/tauc correction and sparse 20/1/17/16, 58-state cache contract.
+- C++ native xo01_detail LTE publication bypasses the Python compatibility bridge and reads the retained native/source LTE state.
+- C++ xo01_detal3 RRC emission no longer indexes compact cemab with sparse source-continuum indices.
+- Public line optical depths use terminal cumulative tau0 while luminosities retain the final physical-shell elum owner.
+- Python reference/cache regeneration is NOT required; 5.20.15.1 reference artifacts are the canonical inputs for this C++-publication-only patch.
+
+## 0.6.48.7.46.25.5.17.25.82 patch 5.20.14.6 — retained writer schema and literal binemis scratch ownership
+
+- construct the retained native ProductWritingState schema for diagnostic full-trajectory products, so `xout_spect1` actually consumes writer-time `binemis` and terminal full `dpthc`;
+- give diagnostic publication a private writable native-product bridge instead of silently falling back to terminal-zone arrays;
+- make the public-spectrum fallback source-faithful: `writespectra` uses `dpthc(1)` and `zrems(2:3)`, while `writespectra3` uses `dpthcont(1)` and `zrems(4:5)`;
+- restore the literal 20000-point `binemis` temporary-profile scratch capacity in the Python output writer and retain the same capacity in C++;
+- reproduce default-REAL `1.e-15` and `1.e-6` binemis gate literals in C++;
+- preserve the accepted all-shell full-grid `calc_emis`, RRC depth, HEATT/pprint/STPCUT ordering, Type50/lines, populations, and sparse 58-state trajectory.
+
+Python **product** reference regeneration is required because writer-time `binemis` changes; the solve-stage cache is unchanged.
+
+## 0.6.48.7.46.25.5.17.25.82 patch 5.20.14.5 — HEATT/pprint/STPCUT and writer lifetime
+
+- Retained the successful all-shell full-grid bound-free revisit from 5.20.14.4.
+- Split current-shell HEATT luminosity/continuum work from post-pprint STPCUT depth accumulation.
+- Retained detail/option-17 boundaries after HEATT but before current-shell depth accumulation.
+- Seeded final zero-thickness writer HEATT from the terminal transported zrems state.
+- Restored source HEATT radial line-luminosity ownership for public lines and writer-time binemis.
+- Added strict option-17 and detailed-continuum host gates.
+- Python/reference physics unchanged; patch5.20.14.3 cache/reference remain reusable.
+
+# 0.6.48.7.46.25.5.17.25.82 patch 5.20.14.4 — all-shell `calc_emis`, radial detail lifetime, final writer state
+
+- Apply the selected full 9999-bin Type49/53 `calc_emis` scalar-opacity revisit on every accepted shell instead of only call 2; keep Type53 matrix/rate physics on the accepted reduced 999-bin caller grid.
+- Retain four radial detail snapshots before STPCUT/transport and a fifth genuine terminal post-transport transfer workspace, eliminating the option-17 one-row forward-depth shift.
+- Remove the obsolete terminal detail HDU swap now that retained transfer rows are already in source order.
+- Preserve source terminal reset-row semantics for `xout_abund1` while allowing transfer/detail writers to consume the real terminal workspace.
+- Retain a separate final zero-thickness `xstarcalc+HEATT` writer evaluation with cumulative terminal `elum/tauc/dpthc/dpthcont`, and feed writer-time `binemis` from that state.
+- Keep patch 5.20.14.3 Python physics and the 58-state cache frozen; no Python reference/cache regeneration is required.
+- Add explicit `xout_step.log` option-17/24 and three-way product gates for RRC depth and detailed-continuum qualification.
+
+# 0.6.48.7.46.25.5.17.25.82 patch 5.20.14.3 — literal Type49/Type88 `phextrap` source semantics
+
+- Correct Python `phextrap` to literal `phextrap.f90` semantics: seed from one-based `ntmp-1`, discard/replace the original final tabulated pair, use `nadd+ntmp<ncn2`, and retain the source final logical length `nadd+ntmp-1` even when no extrapolation point is added.
+- Apply the same semantics to active C++ Type49 and Type88 paths; retain Type53 matrix/RRC-emission code unchanged.
+- Correct the Type49 diagnostic/reference extrapolator so attribution uses the same source semantics.
+- Retain patch 5.20.14.2 true 9999-bin selected `calc_emis` ownership and final writer-time `binemis` from cumulative `elum`.
+- Require regeneration of the pure-Python products/reference and sparse 58-state solve-stage cache before further C++/Python scientific comparison.
+- Keep literal FORTRAN canonical if the regenerated Python reference still differs.
+
+# 0.6.48.7.46.25.5.17.25.82 patch 5.20.14 — RRC depth and detailed-continuum source ownership
+
+- Separate Type49/53 caller lifetimes into reduced 999-bin matrix evaluation, reduced 999-bin `calc_emisab` seed, and full 9999-bin selected `calc_emis` revisit.
+- Reproduce literal `ucalc.f90` scalar lifetime: `opakab=0` at call entry, so a selected revisit that does not publish threshold opacity leaves zero rather than retaining a reduced-grid seed.
+- Extend the call-2 `opakab` audit to emit native-only/source-zero rows explicitly.
+- Preserve the corrected high-ion RRC emissivity and Type53 999-bin matrix behavior from 5.20.12.1 while correcting RRC depth ownership.
+- Publish `xo01_detal4` from retained literal `fstepr4` planes (`zrems`, `opakc`, `rccemis`, `dpthc`) when available.
+- Reproduce `writespectra3` continuum plane ownership and `writespectra`/`binemis` spectrum plane ownership from retained source workspaces.
+- Retain the corrected sparse 58-state trajectory (54 DSEC + 4 final) and provide independent Python-product, solve-stage-cache, C++-product, comparison, and end-to-end workflow commands.
+- Make no Python physics change and inject no FORTRAN/Python product values.
+
+# v82 patch 5.20.12.1 — source caller-owned 999-bin bound-free matrix rates
+
+- Correct Python `calc_hmc_all`/`calc_ion_rates`/`calc_hmc_ion` UCalc contexts to explicitly own the reduced `epim/ncn2m/bremsam` continuum grid.
+- Correct C++ Mg matrix bridge Type49/53 accumulation to use the same reduced 999-bin grid rather than full `epi/bremsa`.
+- Correct standalone C++ calc_hmc Type49/53/88/99 bound-free rate evaluation to consume the reduced source workspace while preserving full 9999-bin `calc_emis_all` spectral/RRC evaluation.
+- Retain the 5.20.12 literal `npilev(idest1,jkk)` RRC global-level identity correction.
+- Do not inject FORTRAN/Python populations or product values.
+- Regenerate the all-61 Python solve-stage cache and reusable Python product reference only after host RRC qualification confirms the corrected source behavior.
+
+# 0.6.48.7.46.25.5.17.25.82 patch 5.20.11.2 — source-REAL Voigt cleanup and one-percent continuum closure
+
+- Complete the 5.20.11 physics/state closeout without advancing to product-writer repairs.
+- Correct the active standalone `voigte.f90` translation so DATA/PARAMETER/branch literals are rounded as FORTRAN default REAL before promotion to REAL(8)/binary64.
+- Retain the accepted 5.20.11.1 literal Type50 `linopac` and live `step.f90` shell selection unchanged.
+- Retire strict `5e-7` mismatch counts as acceptance gates for C++ vs the refreshed pure-Python cache; preserve them as diagnostics.
+- Qualify observable post-`heatt`, post-`trnfrc`/call-3 `bremsa`, and call-3 `tau_in` with a 1% symmetric relative tolerance plus `1e-30` absolute floor.
+- Exclude only the final post-`heatt` continuum endpoint from inverse-`trnfrc` qualification because literal `trnfrc` does not project that bin into next-call `bremsa`.
+- Continue to require exact support (no source-only/native-only tau cells), source-equal pre-`heatt` bremsa, zero Mg Type53 record-kernel mismatches, Type88 22-record/eight-slot non-regression, live STEP provenance, and retained `dpthc`/`dpthcont`.
+- Make no Python physics or FITS-writer change.
+
+# 0.6.48.7.46.25.5.17.25.82 patch 5.20.11.1 — literal Type50 linopac arithmetic and live STEP shell selection
+
+- Continue the rejected 5.20.11 continuum-state closure without advancing to product-only qualification.
+- Reproduce `linopac.f90` default-REAL literals for the Type50 thermal width, wavelength-to-energy conversion, damping denominator, profile normalization, and Voigt thresholds.
+- Reproduce the source `float(ncut)` and `float(ldir*mlc)` conversions in the temporary profile grid.
+- Preserve stored Type50 wavelength through the literal default-REAL `12398.4016` conversion before the full-profile kernel.
+- Remove the rounded `0.402446 * total_depth` shell-width owner from the active controller.
+- Reproduce `step.f90` from the preceding post-`gsmooth` `opakc`, retained `zrems`, `dpthc`, radius, column, `emult`, `taumax`, and `nsteps`.
+- Keep call 1 zero-thickness and select calls 2–4 shell widths in literal source order after the preceding transport commit.
+- Preserve 5.20.10 Type88 22-record/eight-slot closure; make no Type53 cross-section, Python-physics, or FITS-writer change.
+- Keep the strict 5.20.11 target: post-`heatt`, post-`trnfrc`/call-3 `bremsa`, and call-3 continuum `tau_in` scientific mismatch counts must all reach zero.
+
+# 0.6.48.7.46.25.5.17.25.82 patch 5.20.11 — continuum heatt -> trnfrc state closure
+
+- Preserves the accepted 5.20.10 Type88 rate42 22-record inventory and eight retained-kkkl scalar publications.
+- Corrects the heatt-facing Type49/53/88 recombination reconstruction to use the literal `expo.f90` +/-60 clamp instead of the generic +/-700 exponential.
+- Reproduces `trnfrc.f90` default-REAL `12.56` and `1.e+19` normalization with named historical constants.
+- Advances `dpthc` from `opakc` and `dpthcont` from `opakcont` separately in literal `stpcut.f90` ownership, retaining both consecutive-boundary workspaces.
+- Uses the source-default-REAL heatt geometry factor for line/RRC luminosity accumulation.
+- Adds strict continuum-state qualification: `CALL2_POST_HEATT_ZREMS1`, `CALL3_BREMSA`, post-`trnfrc` bremsa, and `CALL3_CONTINUUM_TAU_IN` must all reach zero scientific mismatches on the refreshed pure-Python all61 cache.
+- Makes no FITS-writer repair and no Python physics change.
+
+## 0.6.48.7.46.25.5.17.25.82 patch 5.20.10 — Type88 rate42 stale-state / cumulative-tau closure
+
+- Preserve the accepted 22-record Type88/rate42 inventory and the accepted 5.19.5 Mg Type88 threshold ownership unchanged.
+- Reproduce literal `calc_emis_ion` rate-42 lifetime: Type88 reuses the last rate-7 `kkkl` pointer for its ion and writes scalar `opakab` through that retained `npconi2` slot.
+- Preserve stale `errc(kkkl)` and `tauc(:,kkkl)` as source-lifetime reads only; they do not replace UCalc Type88's physical threshold or alter the rate-42 `ptmp1+ptmp2=1` continuum kernel.
+- Retain the raw caller `idest2` used to form rate-42 `abund2` before UCalc label 88 resets its local endpoint to `nlevp`.
+- Keep the existing ungated 22-record Type88 full-grid `opakc/rccemis` replay unchanged apart from the source-caller abundance endpoint.
+- Close the source-proved eight Mg retained-slot scalar-opacity omissions currently labelled by their Type99 rate-7 slot owners; do not reinterpret the remaining 164 Type53-owned omissions as Type88.
+- Retire the historical `Type88 172 -> 0` counter as an acceptance target: 5.20.10 qualifies the eight source-proved stale slots, while overall continuum/tau residuals remain visible for later physics closure.
+- Use the refreshed pure-Python 61-evaluation solve-stage cache as the current reference baseline; Python product physics is unchanged and the frozen 5.20.9.4 pure-Python products remain reusable with `RERUN_PYTHON=0`.
+
+## 0.6.48.7.46.25.5.17.25.82 patch 5.20.9.4 — live RRC publication and Python bound-free caller-grid closure
+
+- Replace the C++ frozen 994-row `xout_rrc1.fits` selection with literal `writespectra4` live `elumab > 1e-36` publication from native one-based `npconi2` identities; no 1052-row count is hard-coded.
+- Reproduce literal `heatt` RRC accumulation by traversing rate-type-7 continuum slots only and requiring record-local `cemab > 1e-49` before updating both `elumab` planes.
+- Restore literal `calc_emisab_all` ownership for Type49 broad `cemab/opakab`: reduced `epim/bremsam` state feeds RRC ranking/luminosity, while selected full-grid replay remains spectral-only.
+- Apply the literal active-ion-stage gate before spectral/publication construction so inactive Mg II rate-7 records cannot leak into option 19/24 or public RRC products.
+- Correct C++ RRC output metadata to the `pprint/writespectra4` base edge energy and packed destination endpoint instead of the UCalc physical/rank coordinate.
+- Correct C++ `xo01_detail.fits` He II population publication: the explicit He I continuum boundary does not shift every subsequent He II global population index.
+- Keep the synthetic fifth `xout_abund1.fits` HEATING/COOLING row source-zero instead of copying the terminal physical state.
+- Split Python bound-free UCalc radiation ownership by caller: `calc_emisab_all` uses reduced `epim/bremsam`, `calc_emis_all` uses full `epi/bremsa`; Type49 `phextrap` now receives the same caller-owned grid length.
+- Preserve the corrected Type53 next-ion Type13 excited-parent context from 5.20.9.2/5.20.9.3.
+- Add a fresh patched-Python provenance runner and a three-way FORTRAN/Python/C++ FITS + `xout_step.log` host analyzer.
+
+## 0.6.48.7.46.25.5.17.25.82 patch 5.20.9.2 — Type53 excited-parent Python-reference correction
+
+- Prioritize the apparent 10–96% Type53 bound-free discrepancy from 5.20.9.1 and trace it to the old Python calc_emis/calc_emisab UCalc context, not the C++ Type53 opacity mapper.
+- Supply literal next-ion Type13 parent excitation/statistical-weight maps to Python UCalc for excited-parent Type53 thresholds.
+- Reproduce record 43025: literal FORTRAN/C++ threshold 283.44849824905396 eV versus stale Python fallback 531.5908989906311 eV.
+- Add a literal-reference Type53 analyzer using the retained source population scale and the 889-record literal consumer set. On the uploaded 5.20.9.1 result it closes all 2019 compared Type53 bins below 1%, with maximum percent delta about 3.09e-08%.
+- Keep `fixed_state_engine.cpp` byte-identical to 5.20.9.1; do not corrupt source-faithful C++ physics to match the stale Python threshold.
+- Preserve Type49 for later work and keep Type88 closed under the 1% bound-free criterion.
+
+## 0.6.48.7.46.25.5.17.25.82 patch 5.20.7.3 — public line luminosity units, option-5 all-line sum, option-24 H/He filter
+
+- Fix public `xout_lines1`/`xout_step` line luminosity publication to consume retained cumulative `elum` directly in its native `erg s^-1 / 10^38` units; do not multiply `elum` by a radial luminosity scale a second time.
+- Prefer retained native `elum` over stale historical exact-product bridge line luminosity projections when public line values are written.
+- Reproduce FORTRAN `pprint(5)` line-energy semantics by summing both terminal `elum` planes across the full native line inventory with the source wavelength window `1 < lambda < 1e8`, rather than summing only the public top-line FITS subset.
+- Restrict `print option:24` text output to hydrogen and helium ions as requested; FITS physics/state is unchanged.
+- Preserve patch 5.20.7.2 option-17 `h-c(%)` and three-interval radial transport behavior unchanged.
+
+## 0.6.48.7.46.25.5.17.25.82 patch 5.20.7.1
+
+- Output/state-lifetime correction only; no Type50, bound-free, Mg, controller, or ABI physics change.
+- Restore public line luminosity when retained cumulative `elum` is missing/zero by replaying the literal source `heatt -> trnfrn` recurrence from exact per-boundary `rcem`: `elum(ll,j)=max(0,elumo(ll,j)+rcem(ll,j)*delrl*fpr2)` with the source line `optp2=0`, then carry `elumo=elum`.
+- Use the previous accepted boundary's local `rcem`, radius, and the exact consecutive radial-depth increment; never copy line luminosities from an oracle.
+- Publish pprint option-17 first `h-c(%)` from retained controller `hmctot = 2*(httot-cltot)/(httot+cltot)`, not `(H-C)/abs(H)`.
+- Publish pprint option-17 second `h-c(%)` directly from retained `zremsz` and `zrems(1)` trapezoidal integrals rather than rereading projected FITS surfaces.
+- Preserve the terminal convenience row as a repeat of the terminal physical boundary for both option-17 balance columns.
+
+## 0.6.48.7.46.25.5.17.25.82 patch 5.20.7
+
+- Restore literal Type-50 natural damping ownership before `linopac`: search same-ion rate-type 41 records by source upper local level (`deleafnd`) and convert the matched damping rate with the source `4.136e-15` eV s factor.
+- Fall back to the Type-50 radiative `Aij * 4.136e-15` width when no Type-41 owner is found, exactly as `ucalc.f90` does.
+- Retain the patch-5.20.6 Type-50 stored-wavelength profile coordinate and independent endpoint-difference rate energy; the `nplini -> nplin` source mapping is an inverse round-trip to the same Type-50 record, not a second wavelength owner.
+- Do not force the historical 915-slot RRC capture into production.  Patch 5.20.5.1.1 proved that table used stale Type-49 rank-oracle geometry; retain the literal `xstarsetup errc` runtime ranking and the 1450-vs-1456 six-slot attribution as diagnostics.
+- Reuse the accepted 5.20.6.3 literal standalone workspace preflight and preserve Mg, Type-99 source-zero, Type-88 rate-42, ABI 60487, and 61-event controller gates.
+
+## 0.6.48.7.46.25.5.17.25.82 patch 5.20.6.3
+
+- Host-interface hotfix only; `fixed_state_engine.cpp` remains byte-identical to patch 5.20.6.
+- Replace the rejected synthetic 61x9 workspace contract from 5.20.6.2 with the literal current standalone consumer graph: seven binary64 payloads for source sequences 1-23, 58, and 59 (25 evaluations / 175 payloads).
+- Permit zero-length `global_xilevg/global_bilevg/global_rnisg` source payloads when all three byte sizes match, exactly as `read_binary_double_vector` and `read_runtime_state_workspace_values` do.
+- Do not require line-tau payloads for this general standalone path; those files belong to the separate generic runtime-workspace / Type-50 escape-state consumers.
+- Preserve the full validated `all61_input_workspaces` tree when sanitizing host inputs, so no additional historical side payload is discarded.
+- Retain the call-3 `radiation_energy.bin` sentinel that exposed the 5.20.6.1 partial-projection bug.
+
+## 0.6.48.7.46.25.5.17.25.82 patch 5.20.5.1.1
+
+- Hotfix only: no production-physics or source-capture rerun.
+- Correct the literal Type-49 source-oracle verifier from stale `797/105` expectations to the directly captured `809 total Type-49 / 1957 owners / 0 ownerless` shape.
+- Add exact `797 common + 12 source-only Type-49` accounting and preserve the proved `1450 vs 1456` six-slot residual attribution.
+
+
+- v82 patch 5.20.5 separates the source `xstarsetup` RRC ranking coordinate (`errc`) from the later spectral/threshold energy used by the emissivity/opacity kernels.
+- Type-49 rank energy follows the literal source special case `rdat1(np1r) * 13.598`; ordinary rate-7 Type-53 and Type-99 ranking use the source Type-13 ionization-potential minus excitation-energy owner with the 0.1 eV floor.
+- Type-99 lowerers retain the independent source `errc` scalar in internal payload state; no public fixed-state ABI structure changes and ABI 60487 is retained.
+- The call-2 `calc_emis_all` rank audit and selected RRC revisit now use the retained source `errc` coordinate rather than `line_energy_eV`; Type-50 line-profile support, bound-free opacity kernels, Type-99 direct-opakab source-zero semantics, and the accepted patch-5.19.5 Mg population correction remain unchanged.
+- Patch 5.20.4 remains an offline replay/reduction milestone: it proved 775 common-candidate energy-bin mismatches and showed that source-bin ownership, not candidate inventory or value magnitude, dominates the 915-vs-1178 selected-slot divergence.
+- Sequence-16 Mg gate now blocks only on row-count/identity/order, charge ledger, hmctot/elcter .7e, and aggregate Mg thermal scientific tolerance; exact binary64 ledgers remain diagnostic.
+- Values with absolute magnitude <= 1e-40 are treated as zero-equivalent in diagnostic mismatch accounting.
+- Public 600-line product inventory is projected by the actual public line-index list instead of the first 600 native line identities.
+- Public line luminosity/depth arrays are gathered by physical line index from retained elum/tau0 workspaces.
+- Keeps fail-closed publication until the complete 61-event scientific trajectory accepts.
+- Complete 61-event trajectory publication gate now uses a 1e-40 zero floor, 5e-7 relative tolerance, and 1e-12 absolute fallback for temperature/hmctot/elcter while retaining electron fraction at strict canonical .7e; exact .7e mismatches remain diagnostic and maximum absolute/relative deltas are reported.
+
+
 ## 0.6.48.7.46.25.5.17.25.82 - 2026-07-19
 
 - Sequence-16 Mg gate now blocks only on row-count/identity/order, charge ledger, hmctot/elcter .7e, and aggregate Mg thermal scientific tolerance; exact binary64 ledgers remain diagnostic.
