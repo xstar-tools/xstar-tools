@@ -94,6 +94,88 @@ static inline int nbinc_cpp(double e, const double* epi, int ncn2) {
     return huntf_cpp(epi, e, numcon3);
 }
 
+
+// binemis.f90 uses nbtpp=ncn, where the source ncn parameter is 999999.
+// The temporary profile therefore reaches q=-499997..+499999 relative to
+// ml2=int(nbtpp/2).  We reproduce the source rebin boundary crossings without
+// materializing or traversing the million-point array.  Outside |v|>=50 the
+// profile is already in the smooth asymptotic wing; for a<=0.2 the literal
+// voigte label-121 expression has a closed-form integral.  For larger damping
+// use fixed Gauss-Legendre quadrature of the same source profile formula.
+constexpr long long kSourceBinemisNegativeHalfSteps = 499997LL;
+constexpr long long kSourceBinemisPositiveHalfSteps = 499999LL;
+constexpr double kSourceBinemisFarV = 50.0;
+
+static inline double binemis_profile_cpp(double energy, double etmp, double dele, double aasmall) {
+    const double delet = (energy - etmp) / dele;
+    double h = aasmall > source_real_literal(1.0e-9)
+        ? voigte_cpp(std::fabs(delet), aasmall)
+        : std::exp(-delet * delet);
+    return h / source_real_literal(1.772) / dele / source_real_literal(1.602197e-12);
+}
+
+static inline double binemis_far_segment_average_cpp(
+    double e1, double e2, double etmp, double dele, double aasmall) {
+    if (!(e2 > e1) || !(dele > 0.0)) return 0.0;
+    const double v1 = (e1 - etmp) / dele;
+    const double v2 = (e2 - etmp) / dele;
+    if (!(v1 * v2 > 0.0) || std::min(std::fabs(v1), std::fabs(v2)) < kSourceBinemisFarV) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    if (aasmall <= 0.0) return 0.0;
+    if (aasmall <= source_real_literal(0.2)) {
+        const auto primitive = [](double v) {
+            const double v2l = v * v;
+            return -1.0 / v - 0.5 / (v * v2l) - 0.75 / (v * v2l * v2l);
+        };
+        // voigte label 121:
+        // H = a/sqrt(pi) * (v^-2 + 1.5 v^-4 + 3.75 v^-6).
+        // binemis divides by source-REAL 1.772, dele and erg/eV; dE=dele dv.
+        const double coeff = aasmall /
+            (source_real_literal(1.772453851) * source_real_literal(1.772) * source_real_literal(1.602197e-12));
+        const double integral = coeff * (primitive(v2) - primitive(v1));
+        return integral / (e2 - e1);
+    }
+    // Smooth large-a far wing: 8-point Gauss-Legendre integration.
+    static constexpr double x[4] = {
+        0.1834346424956498, 0.5255324099163290,
+        0.7966664774136267, 0.9602898564975363
+    };
+    static constexpr double w[4] = {
+        0.3626837833783620, 0.3137066458778873,
+        0.2223810344533745, 0.1012285362903763
+    };
+    const double mid = 0.5 * (e1 + e2);
+    const double half = 0.5 * (e2 - e1);
+    double sum = 0.0;
+    for (int i = 0; i < 4; ++i) {
+        const double dx = half * x[i];
+        sum += w[i] * (binemis_profile_cpp(mid - dx, etmp, dele, aasmall) +
+                       binemis_profile_cpp(mid + dx, etmp, dele, aasmall));
+    }
+    return 0.5 * sum; // integral/(e2-e1) = half*sum/(2*half)
+}
+
+static inline long long binemis_source_qmin(double e00, double h) {
+    long long q = std::max(-kSourceBinemisNegativeHalfSteps,
+        static_cast<long long>(std::floor(-e00 / h)) + 1LL);
+    while (q <= kSourceBinemisPositiveHalfSteps && e00 + static_cast<double>(q) * h <= 0.0) ++q;
+    return q;
+}
+
+static inline long long binemis_source_qmax(double e00, double h, double emax) {
+    long long q = std::min(kSourceBinemisPositiveHalfSteps,
+        static_cast<long long>(std::ceil((emax - e00) / h)) - 1LL);
+    while (q >= -kSourceBinemisNegativeHalfSteps && e00 + static_cast<double>(q) * h >= emax) --q;
+    return q;
+}
+
+static inline long long binemis_first_q_above(double boundary, double e00, double h) {
+    long long q = static_cast<long long>(std::floor((boundary - e00) / h)) + 1LL;
+    while (e00 + static_cast<double>(q) * h <= boundary) ++q;
+    return q;
+}
+
 } // namespace
 
 extern "C" {
@@ -177,6 +259,8 @@ int xstar_emissivity_build_binemis_profile(
             write_message(errbuf, errbuf_size, "binemis temporary grid capacity is too short");
             return 5;
         }
+        std::fill(temp_binned0, temp_binned0 + n, 0.0);
+        std::fill(temp_binned1, temp_binned1 + n, 0.0);
         const double mass = std::max(line_atomic_mass[j], std::numeric_limits<double>::min());
         const double vth = 12.0 * std::sqrt(temperature_1e4k / mass);
         const double vturb = std::max(turbulent_velocity_km_s, vth);
@@ -268,47 +352,67 @@ int xstar_emissivity_build_binemis_profile(
             }
         }
         for (int q = mlmin - 1; q < mlmax; ++q) { temp_prof0[q] = 0.0; temp_prof1[q] = 0.0; }
-        const int lo = std::max(1, ml1min);
-        const int hi = std::min(n, ml1max);
-        if (lo <= hi) {
-            for (int k = lo; k <= hi; ++k) {
-                out_flat[3 * ncols + (k - 1)] += temp_binned1[k - 1];
-                out_flat[2 * ncols + (k - 1)] += temp_binned0[k - 1];
-                temp_binned0[k - 1] = 0.0;
-                temp_binned1[k - 1] = 0.0;
+        const int core_lo = std::max(1, ml1min);
+        const int core_hi = std::min(n, ml1max);
+
+        // Source-capacity continuation with literal binemis boundary-crossing
+        // ownership.  The old continuation required an entire public bin to
+        // lie inside the +/-499999-step reach and endpoint-averaged that bin.
+        // Source binemis instead accumulates fine-grid intervals until the
+        // first temporary point strictly exceeds an epi boundary.  If the last
+        // valid temporary point is itself that crossing point, the literal
+        // mlm==mlmax branch decrements ml1m and overwrites the preceding bin.
+        // Reproduce those event boundaries exactly; an endpoint that does not
+        // cross a public boundary publishes no terminal partial segment.
+        const long long qmin = binemis_source_qmin(e00, deleused);
+        const long long qmax = binemis_source_qmax(e00, deleused, epi_ev[n - 1]);
+        int full_lo = core_lo;
+        int full_hi = core_hi;
+        if (qmin < qmax) {
+            const double source_energy_min = e00 + static_cast<double>(qmin) * deleused;
+            const double source_energy_max = e00 + static_cast<double>(qmax) * deleused;
+            full_lo = std::max(1, nbinc_cpp(source_energy_min, epi_ev, n));
+            full_hi = std::min(n, nbinc_cpp(source_energy_max, epi_ev, n));
+            long long qprev = qmin;
+            int k = full_lo;
+            while (k < n) {
+                const int k0 = k;
+                long long qevent = binemis_first_q_above(epi_ev[k0 - 1], e00, deleused);
+                qevent = std::max(qevent, qmin + 1LL);
+                if (qevent > qmax) break;
+                const double e1 = e00 + static_cast<double>(qprev) * deleused;
+                const double e2 = e00 + static_cast<double>(qevent) * deleused;
+                const double avg_profile = binemis_far_segment_average_cpp(e1, e2, etmp, dele, aasmall);
+                int kwrite = (qevent == qmax) ? std::max(1, k0 - 1) : k0;
+                int next_k = kwrite;
+                while (next_k < n && e2 > epi_ev[next_k - 1]) {
+                    if (std::isfinite(avg_profile)) {
+                        temp_binned0[next_k - 1] = lum0 * avg_profile;
+                        temp_binned1[next_k - 1] = lum1 * avg_profile;
+                        ++far_wing_bins;
+                    }
+                    ++next_k;
+                }
+                // Normally kwrite==k0.  At the literal terminal mlmax event
+                // binemis decrements ml1m once, overwriting the preceding bin;
+                // nevertheless the next unprocessed boundary is next_k.
+                k = std::max(k0 + 1, next_k);
+                qprev = qevent;
+                if (qevent == qmax) break;
             }
         }
 
-        // binemis.f90 declares enough source workspace for 499999 profile
-        // substeps on either side of line center.  Materializing that array is
-        // unnecessary: outside the compact core the Voigt wing is smooth on
-        // the XSTAR continuum grid, so continue the source reach directly by
-        // trapezoid-averaging the same profile formula over each output bin.
-        constexpr long long kSourceProfileHalfSteps = 499999LL;
-        const double source_energy_min = std::max(0.0,
-            e00 - static_cast<double>(kSourceProfileHalfSteps) * deleused);
-        const double source_energy_max = std::min(epi_ev[n - 1],
-            e00 + static_cast<double>(kSourceProfileHalfSteps) * deleused);
-        if (source_energy_min < core_energy_min || source_energy_max > core_energy_max) {
-            const auto profile_at = [&](double energy) {
-                const double dv = (energy - etmp) / dele;
-                double h = aasmall > source_real_literal(1.0e-9)
-                    ? voigte_cpp(std::fabs(dv), aasmall)
-                    : std::exp(-dv * dv);
-                return h / source_real_literal(1.772) / dele / source_real_literal(1.602197e-12);
-            };
-            for (int k = 0; k + 1 < n; ++k) {
-                const double left = epi_ev[k];
-                const double right = epi_ev[k + 1];
-                const bool outside_core = right < core_energy_min || left > core_energy_max;
-                const bool within_source = left >= source_energy_min && right <= source_energy_max;
-                if (!outside_core || !within_source) continue;
-                const double avg_profile = 0.5 * (profile_at(left) + profile_at(right));
-                out_flat[2 * ncols + k] += lum0 * avg_profile;
-                out_flat[3 * ncols + k] += lum1 * avg_profile;
-                ++far_wing_bins;
+        // The compact core is literal for near-center segments.  Far source
+        // event averages above overwrite any artificial compact-edge values.
+        const int add_lo = std::max(1, std::min(core_lo, full_lo));
+        const int add_hi = std::min(n, std::max(core_hi, full_hi));
+        if (add_lo <= add_hi) {
+            for (int k = add_lo; k <= add_hi; ++k) {
+                out_flat[3 * ncols + (k - 1)] += temp_binned1[k - 1];
+                out_flat[2 * ncols + (k - 1)] += temp_binned0[k - 1];
             }
         }
+        for (int q = mlmin - 1; q < mlmax; ++q) { temp_prof0[q] = 0.0; temp_prof1[q] = 0.0; }
     }
     for (int kl = 0; kl < n; ++kl) {
         out_flat[2 * ncols + kl] += original_flat[1 * ncols + kl];

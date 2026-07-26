@@ -6198,6 +6198,10 @@ bool build_writer_time_binemis_v82_patch520142(
         << "V048746255172582_PATCH520142_WRITER_BINEMIS_SOURCE=FINAL_CUMULATIVE_ELUM\n"
         << "V048746255172582_PATCH520142_WRITER_BINEMIS_XLUM=" << std::setprecision(17) << xlum << "\n"
         << "V048746255172582_PATCH520147_WRITER_BINEMIS_NBTPP=" << kSourceBinemisScratchPoints << "\n"
+        << "V064882_WRITER_BINEMIS_COMPACT_SCRATCH_POINTS=" << kSourceBinemisScratchPoints << "\n"
+        << "V064882_WRITER_BINEMIS_SOURCE_DECLARED_POINTS=999999\n"
+        << "V064882_WRITER_BINEMIS_SOURCE_REBIN_OWNER=BOUNDARY_EVENT_WITH_TERMINAL_OVERWRITE\n"
+        << "V064882_WRITER_BINEMIS_FAR_EVENT_WRITES=" << stats[3] << "\n"
         << "V048746255172582_PATCH520142_WRITER_BINEMIS_RANKED_SLOTS=" << slots.size() << "\n"
         << "V048746255172582_PATCH520142_WRITER_BINEMIS_ATTEMPTED=" << stats[0] << "\n"
         << "V048746255172582_PATCH520142_WRITER_BINEMIS_APPLIED=" << stats[1] << "\n";
@@ -15128,10 +15132,47 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             final_pprint_data.reference_trajectory_mode = false;
             final_pprint_data.writing_final_snapshot = true;
             prepare_call_start_workspace_v71(final_pprint_data, 4u);
+            std::filesystem::path final_thermal_diagnostic_path;
+            bool final_thermal_diagnostic_requested = false;
+            // v0.6.48.8.2 diagnostic only.  Normal production remains
+            // sidecar-free.  When explicitly requested, capture the fixed-state
+            // final zero-thickness thermal ledger so Python/C++ continuum and
+            // element components plus workspace fingerprints can be compared
+            // without changing any runtime owner.
+            if (const char* thermal_diag = std::getenv("XSTAR_V064882_FINAL_THERMAL_DIAGNOSTICS")) {
+                if (*thermal_diag && std::string(thermal_diag) != "0") {
+                    const std::string requested(thermal_diag);
+                    if (requested == "1" || requested == "true" || requested == "yes" || requested == "on") {
+                        final_thermal_diagnostic_path = std::filesystem::path(options.output_dir) /
+                            "v064882_final_thermal_budget_cpp.csv";
+                    } else {
+                        final_thermal_diagnostic_path = requested;
+                    }
+                    final_thermal_diagnostic_requested = true;
+                }
+            }
             auto final_pprint = evaluate_full_boundary_v67(
                 final_pprint_data, state,
                 static_cast<double>(static_cast<float>(1.0e-15)),
                 params.initial_radius_cm + total_depth_cm, 0u);
+            if (final_thermal_diagnostic_requested) {
+                const auto parent = final_thermal_diagnostic_path.parent_path();
+                if (!parent.empty()) std::filesystem::create_directories(parent);
+                std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> diagnostic_message{};
+                const std::string diagnostic_path_text = final_thermal_diagnostic_path.string();
+                const int diagnostic_rc = xstar_fixed_state_write_last_thermal_budget_v1(
+                    final_pprint_data.fixed_context, diagnostic_path_text.c_str(),
+                    static_cast<std::uint64_t>(final_pprint.sequence),
+                    static_cast<std::uint64_t>(final_pprint.call_index),
+                    static_cast<std::uint64_t>(final_pprint.evaluation_index),
+                    "final", diagnostic_message.data(), diagnostic_message.size());
+                if (diagnostic_rc != 0) {
+                    throw std::runtime_error(std::string("v0.6.48.8.2 final thermal diagnostic failed: ") +
+                        diagnostic_message.data());
+                }
+                std::cout << "V064882_CPP_FINAL_THERMAL_DIAGNOSTIC="
+                          << diagnostic_path_text << "\n";
+            }
             // Literal post-loop writer lifetime is not just the extra
             // xstarcalc thermal solve above: xstar.f90 immediately executes
             // HEATT and STPCUT at the source REAL 1.e-15 shell width before

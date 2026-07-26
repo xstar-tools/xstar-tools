@@ -657,6 +657,152 @@ def _source_real(value: float) -> float:
     """Return a source default-real literal promoted to Python float."""
     return float(np.float32(value))
 
+_SOURCE_BINEMIS_NEGATIVE_HALF_STEPS = 499997
+_SOURCE_BINEMIS_POSITIVE_HALF_STEPS = 499999
+_SOURCE_BINEMIS_FAR_V = 50.0
+
+
+def _source_binemis_far_rebin(
+    *,
+    epi: np.ndarray,
+    n: int,
+    e00: float,
+    etmp: float,
+    dele: float,
+    deleused: float,
+    aasmall: float,
+    lum0: float,
+    lum1: float,
+    temporary_binned: np.ndarray,
+) -> int:
+    """Overwrite smooth-wing bins with literal ``binemis`` event ownership.
+
+    ``binemis.f90`` declares ``nbtpp=ncn`` with source ``ncn=999999`` and
+    accumulates fine-grid trapezoids until the first temporary point strictly
+    exceeds an ``epi`` boundary.  The previous compact continuation required a
+    whole public bin to lie inside the source reach, dropping the terminal
+    partial segment.  This routine reproduces the source crossing indices and
+    conditional terminal ``ml1m=ml1m-1`` behavior without allocating a million-point array.
+
+    For |v|>=50 the source profile is in a smooth asymptotic branch.  The
+    small-a label-121 expression is integrated analytically; larger-a wings use
+    vectorized 8-point Gauss-Legendre quadrature.  These averages are only used
+    for far segments; the literal compact temporary-grid rebin remains owner of
+    the line core.
+    """
+    from .radiation import nbinc
+
+    if not (deleused > 0.0 and dele > 0.0 and n >= 2):
+        return 0
+    qmin = max(
+        -_SOURCE_BINEMIS_NEGATIVE_HALF_STEPS,
+        int(np.floor(-float(e00) / float(deleused))) + 1,
+    )
+    while qmin <= _SOURCE_BINEMIS_POSITIVE_HALF_STEPS and e00 + float(qmin) * deleused <= 0.0:
+        qmin += 1
+    qmax = min(
+        _SOURCE_BINEMIS_POSITIVE_HALF_STEPS,
+        int(np.ceil((float(epi[n - 1]) - float(e00)) / float(deleused))) - 1,
+    )
+    while qmax >= -_SOURCE_BINEMIS_NEGATIVE_HALF_STEPS and e00 + float(qmax) * deleused >= float(epi[n - 1]):
+        qmax -= 1
+    if qmin >= qmax:
+        return 0
+
+    source_min = e00 + float(qmin) * deleused
+    source_max = e00 + float(qmax) * deleused
+    full_lo = max(1, int(nbinc(source_min, epi, n)))
+    # Source writes only while ml1m<ncn2, so the highest writable 0-based
+    # output index is n-2.  Build the boundary sequence from full_lo onward.
+    k_one = np.arange(full_lo, n, dtype=np.int64)
+    if k_one.size == 0:
+        return 0
+    boundaries = np.asarray(epi[k_one - 1], dtype=float)
+    qevent = np.floor((boundaries - float(e00)) / float(deleused)).astype(np.int64) + 1
+    qevent = np.maximum(qevent, np.int64(qmin + 1))
+    eevent = float(e00) + qevent.astype(float) * float(deleused)
+    # Correct the rare boundary-rounding case while preserving strict source >.
+    adjust = eevent <= boundaries
+    if np.any(adjust):
+        qevent[adjust] += 1
+        eevent[adjust] = float(e00) + qevent[adjust].astype(float) * float(deleused)
+    valid = qevent <= np.int64(qmax)
+    if not np.any(valid):
+        return 0
+    last = int(np.flatnonzero(valid)[-1]) + 1
+    k_one = k_one[:last]
+    qevent = qevent[:last]
+    eevent = eevent[:last]
+
+    # Consecutive public boundaries can be crossed by the same fine-grid point.
+    # Source publishes one segment average to all such bins, then resets sums.
+    starts = np.r_[0, np.flatnonzero(qevent[1:] != qevent[:-1]) + 1]
+    ends = np.r_[starts[1:], qevent.size]
+    events = qevent[starts]
+    qprev = np.r_[np.int64(qmin), events[:-1]]
+    e1 = float(e00) + qprev.astype(float) * float(deleused)
+    e2 = float(e00) + events.astype(float) * float(deleused)
+    v1 = (e1 - float(etmp)) / float(dele)
+    v2 = (e2 - float(etmp)) / float(dele)
+    far = (v1 * v2 > 0.0) & (np.minimum(np.abs(v1), np.abs(v2)) >= _SOURCE_BINEMIS_FAR_V)
+    if not np.any(far):
+        return 0
+
+    avg = np.full(events.shape, np.nan, dtype=float)
+    aa = float(aasmall)
+    if aa <= 0.0:
+        avg[far] = 0.0
+    elif aa <= _source_real_literal(0.2):
+        vf1 = v1[far]
+        vf2 = v2[far]
+        def primitive(v: np.ndarray) -> np.ndarray:
+            v2x = v * v
+            return -1.0 / v - 0.5 / (v * v2x) - 0.75 / (v * v2x * v2x)
+        coeff = aa / (
+            _source_real_literal(1.772453851)
+            * _source_real(1.772)
+            * _source_real(1.602197e-12)
+        )
+        avg[far] = coeff * (primitive(vf2) - primitive(vf1)) / (e2[far] - e1[far])
+    else:
+        # 8-point Gauss-Legendre average, vectorized over far segments.
+        gx = np.asarray([0.1834346424956498, 0.5255324099163290,
+                         0.7966664774136267, 0.9602898564975363], dtype=float)
+        gw = np.asarray([0.3626837833783620, 0.3137066458778873,
+                         0.2223810344533745, 0.1012285362903763], dtype=float)
+        ef1 = e1[far]; ef2 = e2[far]
+        mid = 0.5 * (ef1 + ef2)
+        half = 0.5 * (ef2 - ef1)
+        accum = np.zeros(mid.shape, dtype=float)
+        for xx, ww in zip(gx, gw):
+            dx = half * xx
+            vl = (mid - dx - float(etmp)) / float(dele)
+            vr = (mid + dx - float(etmp)) / float(dele)
+            accum += ww * (_voigte_array(vl, aa) + _voigte_array(vr, aa))
+        avg[far] = 0.5 * accum / _source_real(1.772) / float(dele) / _source_real(1.602197e-12)
+
+    far_groups = np.flatnonzero(far)
+    writes = 0
+    for gi in far_groups.tolist():
+        start = int(starts[gi])
+        end = int(ends[gi])
+        targets = k_one[start:end] - 1
+        value = float(avg[gi])
+        temporary_binned[0, targets] = float(lum0) * value
+        temporary_binned[1, targets] = float(lum1) * value
+        writes += int(targets.size)
+        # Literal terminal event: if mlm==mlmax, decrement ml1m before the
+        # publishing while-loop.  This overwrites the preceding public bin.
+        if int(events[gi]) == int(qmax):
+            previous = int(k_one[start]) - 2
+            if 0 <= previous < n - 1 and source_max > float(epi[previous]):
+                temporary_binned[0, previous] = float(lum0) * value
+                temporary_binned[1, previous] = float(lum1) * value
+                writes += 1
+    return writes
+
+
+
 
 def _rank_binemis_lines(
     *,
@@ -769,7 +915,6 @@ def build_binemis_spectrum(
     # actual ncn2 output grid.  For this benchmark every eligible line has raw
     # ncut <= 4, so the source ncut capacity is never active.
     nbtpp = 20000
-    source_profile_half_steps = 499999
     out = np.asarray(original, dtype=float).copy()
     saved = np.asarray(original, dtype=float).copy()
     out[:, :n] = 0.0
@@ -946,6 +1091,7 @@ def build_binemis_spectrum(
                     "binemis strong-line profile requires the source temporary grid capacity (ncn >= 20)"
                 )
 
+            temporary_binned[:, :n] = 0.0
             mass = max(float(row.atomic_mass), np.finfo(float).tiny)
             vth = _source_real(12.0) * np.sqrt(float(temperature_1e4K) / mass)
             vturb = max(float(turbulent_velocity_km_s), float(vth))
@@ -1079,13 +1225,34 @@ def build_binemis_spectrum(
                     sume = 0.0
 
             temporary_profile[:, mlmin - 1 : mlmax] = 0.0
-            lo = max(1, ml1min)
-            hi = min(n, ml1max)
-            if lo <= hi:
+
+            _far_writes = _source_binemis_far_rebin(
+                epi=epi,
+                n=n,
+                e00=e00,
+                etmp=etmp,
+                dele=dele,
+                deleused=deleused,
+                aasmall=aasmall,
+                lum0=float(lum[0, j]),
+                lum1=float(lum[1, j]),
+                temporary_binned=temporary_binned,
+            )
+            if timing is not None and _far_writes:
+                timing["final_product_build.spectrum.binemis_far_wing_bins"] = (
+                    float(timing.get("final_product_build.spectrum.binemis_far_wing_bins", 0.0))
+                    + float(_far_writes)
+                )
+
+            _nz = np.flatnonzero((temporary_binned[0, :n] != 0.0) | (temporary_binned[1, :n] != 0.0))
+            if _nz.size:
+                lo = int(_nz[0]) + 1
+                hi = int(_nz[-1]) + 1
                 if _slot_probe_enabled and _slot_probe_bin_set:
                     _probe_bins_here = [
                         int(_b) for _b in sorted(_slot_probe_bin_set)
-                        if (lo - 1) <= int(_b) < hi and (temporary_binned[0, int(_b)] != 0.0 or temporary_binned[1, int(_b)] != 0.0)
+                        if 0 <= int(_b) < n and
+                        (temporary_binned[0, int(_b)] != 0.0 or temporary_binned[1, int(_b)] != 0.0)
                     ]
                     if _probe_bins_here:
                         _rec = _slot_probe_records.setdefault(int(_slot_ord), {
@@ -1108,37 +1275,8 @@ def build_binemis_spectrum(
                         for _b in _probe_bins_here:
                             _rec["python_emit_outward_by_bin"][str(_b)] = float(temporary_binned[1, _b])
                             _rec["python_emit_inward_by_bin"][str(_b)] = float(temporary_binned[0, _b])
-                out[3, lo - 1 : hi] += temporary_binned[1, lo - 1 : hi]
-                out[2, lo - 1 : hi] += temporary_binned[0, lo - 1 : hi]
-                temporary_binned[:, lo - 1 : hi] = 0.0
-
-            # Source-capacity far-wing continuation.  The literal FORTRAN
-            # declares enough temporary-grid room for 499999 substeps on each
-            # side of line center.  The old Python/C++ translation stopped at
-            # the 20000-point core workspace, truncating smooth high-energy
-            # Voigt wings.  Reproduce only that missing reach directly on the
-            # 9999-bin output grid; no million-point allocation or loop is used.
-            source_energy_min = max(0.0, e00 - float(source_profile_half_steps) * deleused)
-            source_energy_max = min(float(epi[n - 1]), e00 + float(source_profile_half_steps) * deleused)
-            if source_energy_min < core_energy_min or source_energy_max > core_energy_max:
-                left = epi[: n - 1]
-                right = epi[1:n]
-                outside_core = (right < core_energy_min) | (left > core_energy_max)
-                within_source = (left >= source_energy_min) & (right <= source_energy_max)
-                far_mask = outside_core & within_source
-                if np.any(far_mask):
-                    far_idx = np.flatnonzero(far_mask)
-                    v_left = (left[far_idx] - etmp) / dele
-                    v_right = (right[far_idx] - etmp) / dele
-                    avg_profile = 0.5 * (_voigte_array(v_left, aasmall) + _voigte_array(v_right, aasmall))
-                    avg_profile = avg_profile / _source_real(1.772) / dele / _source_real(1.602197e-12)
-                    out[2, far_idx] += lum[0, j] * avg_profile
-                    out[3, far_idx] += lum[1, j] * avg_profile
-                    if timing is not None:
-                        timing["final_product_build.spectrum.binemis_far_wing_bins"] = (
-                            float(timing.get("final_product_build.spectrum.binemis_far_wing_bins", 0.0))
-                            + float(far_idx.size)
-                        )
+                out[3, :n] += temporary_binned[1, :n]
+                out[2, :n] += temporary_binned[0, :n]
 
     if timing is not None:
         timing["final_product_build.spectrum.binemis_profile_seconds"] = float(time.perf_counter() - _profile_t0)
@@ -2124,6 +2262,18 @@ def _array_sha256(array: np.ndarray) -> str:
     return hashlib.sha256(arr.tobytes()).hexdigest()
 
 
+def _binary64_fnv1a_hex(values: Sequence[float] | np.ndarray) -> str:
+    """Match the standalone C++ binary64_sequence_fnv1a diagnostic hash."""
+    arr = np.ascontiguousarray(np.asarray(values, dtype="<f8").reshape(-1))
+    value = 1469598103934665603
+    prime = 1099511628211
+    mask = (1 << 64) - 1
+    for byte in memoryview(arr).cast("B"):
+        value ^= int(byte)
+        value = (value * prime) & mask
+    return f"{value:016x}"
+
+
 def _write_f8(path: Path, values: np.ndarray) -> dict[str, Any]:
     arr = np.ascontiguousarray(np.asarray(values, dtype='<f8'))
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -2441,6 +2591,82 @@ def run_output_writer_sequence(
             "cltot": float(state.thermal.cooling),
             "hmctot": float(state.thermal.residual),
         }
+
+        # v0.6.48.8.2 diagnostic only: expose the exact final zero-thickness
+        # calc_hmc_all leaves and BREMSMAP/global-workspace fingerprints.  The
+        # public writer does not consume this payload.  It exists solely to
+        # distinguish cancellation amplification in hmctot from a genuine
+        # C++ final-workspace ownership error.
+        final_diag_target = os.environ.get("XSTAR_V064882_FINAL_THERMAL_DIAGNOSTICS", "").strip()
+        fixed = state.local_zone.calc_hmc_all
+        if final_diag_target and fixed is not None:
+            continuum = fixed.continuum
+            bremsmap_result = state.local_zone.source_arrays.get("bremsmap")
+            mapped = np.asarray(
+                getattr(bremsmap_result, "mapped_high_resolution_indices_one_based", ()),
+                dtype=float,
+            )
+            nred = int(state.control.get("ncn2m", 0))
+            epim = np.asarray(state.radiation.epim, dtype=float).reshape(-1)[:nred]
+            bremsam = np.asarray(state.radiation.bremsam, dtype=float).reshape(-1)[:nred]
+            epi_full = np.asarray(state.radiation.epi, dtype=float).reshape(-1)
+            bremsa_full = np.asarray(state.radiation.bremsa, dtype=float).reshape(-1)
+            tau_in_full = np.asarray(state.transfer.tau_in if state.transfer.tau_in is not None else (), dtype=float).reshape(-1)
+            tau_out_full = np.asarray(state.transfer.tau_out if state.transfer.tau_out is not None else (), dtype=float).reshape(-1)
+            def _element(mapping: Mapping[int, float], z: int) -> float:
+                return float(mapping.get(z, 0.0))
+            diagnostic = {
+                "schema": "xstar-tools-v064882-final-zero-thickness-thermal-v1",
+                "implementation": "python",
+                "temperature_k": float(fixed.temperature_k),
+                "electron_fraction_input": float(fixed.electron_fraction_xee),
+                "computed_electron_fraction": float(fixed.electron_contribution),
+                "charge_residual": float(fixed.elcter),
+                "electron_density_cm3": float(fixed.electron_density_cm3),
+                "hydrogen_density_cm3": float(fixed.hydrogen_density_cm3),
+                "httot_pre_continuum": float(fixed.httot_pre_continuum),
+                "cltot_pre_continuum": float(fixed.cltot_pre_continuum),
+                "total_heating": float(fixed.httot),
+                "total_cooling": float(fixed.cltot),
+                "hmctot": float(fixed.hmctot),
+                "h_heating": _element(fixed.htt, 1),
+                "h_cooling": _element(fixed.cll, 1),
+                "he_heating": _element(fixed.htt, 2),
+                "he_cooling": _element(fixed.cll, 2),
+                "mg_heating": _element(fixed.htt, 12),
+                "mg_cooling": _element(fixed.cll, 12),
+                "continuum_heating": float(continuum.heating),
+                "continuum_cooling": float(continuum.cooling),
+                "htcomp": float(continuum.htcomp),
+                "clcomp": float(continuum.clcomp),
+                "htfreef": float(continuum.htfreef),
+                "clbrems": float(continuum.clbrems),
+                "input_radiation_count": int(epi_full.size),
+                "input_radiation_fingerprint": _binary64_fnv1a_hex(epi_full),
+                "input_dsec_radiation_count": int(epi_full.size),
+                "input_dsec_radiation_fingerprint": _binary64_fnv1a_hex(epi_full),
+                "input_bremsa_count": int(bremsa_full.size),
+                "input_bremsa_fingerprint": _binary64_fnv1a_hex(bremsa_full),
+                "input_tau_count": int(tau_in_full.size),
+                "input_tau_in_fingerprint": _binary64_fnv1a_hex(tau_in_full),
+                "input_tau_out_fingerprint": _binary64_fnv1a_hex(tau_out_full),
+                "continuum_epim_count": int(epim.size),
+                "continuum_epim_fingerprint": _binary64_fnv1a_hex(epim),
+                "continuum_bremsam_count": int(bremsam.size),
+                "continuum_bremsam_fingerprint": _binary64_fnv1a_hex(bremsam),
+                "continuum_bremsmap_count": int(mapped.size),
+                "continuum_bremsmap_fingerprint": _binary64_fnv1a_hex(mapped),
+                "global_level_count": int(np.asarray(fixed.global_xilevg_by_index).size),
+                "xilevg_fingerprint": _binary64_fnv1a_hex(fixed.global_xilevg_by_index),
+                "bilevg_fingerprint": _binary64_fnv1a_hex(fixed.global_bilevg_by_index),
+                "rnisg_fingerprint": _binary64_fnv1a_hex(fixed.global_rnisg_by_index),
+            }
+            target = Path(final_diag_target)
+            if final_diag_target.lower() in {"1", "true", "yes", "on"}:
+                target = Path(out_dir or ".") / "v064882_final_thermal_budget_python.json"
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(json.dumps(diagnostic, indent=2, sort_keys=True) + "\n")
+            state.outputs["v064882_final_thermal_diagnostics"] = diagnostic
 
     pprint_paths: dict[str, str] = {}
     pprint_products_written = False
