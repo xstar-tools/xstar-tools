@@ -14593,6 +14593,12 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         finals.reserve(source_calls);
         std::optional<FixedDsecSnapshot> terminal_transport_boundary_v82_patch520144;
         std::optional<FixedDsecSnapshot> call2_pretransport_v82_patch513;
+        // v0.6.48.8.3: xstar.f90 does not execute another TRNFRC between
+        // the terminal shell transport and the extra zero-thickness final
+        // xstarcalc used by pprint/writespectra.  Preserve the radiation
+        // workspace that entered the terminal shell before the transport
+        // helper projects zrems(1,:) to a convenience next-radius bremsa.
+        std::vector<double> terminal_shell_entry_bremsa_v064883;
 
         for (std::size_t call = 1; call <= source_calls; ++call) {
             data.call_index = call;
@@ -14724,6 +14730,11 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             // zero-depth public boundary.  The continuum helper now performs
             // only that local smoothing when segment==0 and returns before
             // HEATT transport accumulation.
+            if (call == source_calls) {
+                terminal_shell_entry_bremsa_v064883 = data.dsec_bremsa;
+                std::cout << "V064883_TERMINAL_SHELL_ENTRY_BREMSA_HASH="
+                          << binary64_vector_hash_v82_patch4(terminal_shell_entry_bremsa_v064883) << "\n";
+            }
             advance_source_continuum_radiation_v82_patch52(
                 data, boundary, segment, boundary_radius_cm);
             if (segment > 0.0) {
@@ -15132,19 +15143,29 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             final_pprint_data.reference_trajectory_mode = false;
             final_pprint_data.writing_final_snapshot = true;
             prepare_call_start_workspace_v71(final_pprint_data, 4u);
+            if (terminal_shell_entry_bremsa_v064883.size() != final_pprint_data.energy.size()) {
+                throw std::runtime_error("v0.6.48.8.3 terminal shell-entry bremsa was not retained");
+            }
+            // Source lifetime: sequence 62 reuses the bremsa that entered the
+            // terminal shell.  The post-transport next-radius projection is a
+            // convenience for a next zone that never exists in this run.
+            final_pprint_data.dsec_bremsa = terminal_shell_entry_bremsa_v064883;
+            final_pprint_data.call_start_workspaces[3].bremsa = terminal_shell_entry_bremsa_v064883;
+            std::cout << "V064883_FINAL_PPRINT_BREMSA_OWNER=TERMINAL_SHELL_ENTRY_PRE_FINAL_TRNFRC\n"
+                      << "V064883_FINAL_PPRINT_BREMSA_RETAINED=ACCEPT\n";
             std::filesystem::path final_thermal_diagnostic_path;
             bool final_thermal_diagnostic_requested = false;
-            // v0.6.48.8.2 diagnostic only.  Normal production remains
+            // v0.6.48.8.3 diagnostic only.  Normal production remains
             // sidecar-free.  When explicitly requested, capture the fixed-state
             // final zero-thickness thermal ledger so Python/C++ continuum and
             // element components plus workspace fingerprints can be compared
             // without changing any runtime owner.
-            if (const char* thermal_diag = std::getenv("XSTAR_V064882_FINAL_THERMAL_DIAGNOSTICS")) {
+            if (const char* thermal_diag = std::getenv("XSTAR_V064883_FINAL_THERMAL_DIAGNOSTICS")) {
                 if (*thermal_diag && std::string(thermal_diag) != "0") {
                     const std::string requested(thermal_diag);
                     if (requested == "1" || requested == "true" || requested == "yes" || requested == "on") {
                         final_thermal_diagnostic_path = std::filesystem::path(options.output_dir) /
-                            "v064882_final_thermal_budget_cpp.csv";
+                            "v064883_final_thermal_budget_cpp.csv";
                     } else {
                         final_thermal_diagnostic_path = requested;
                     }
@@ -15167,10 +15188,10 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                     static_cast<std::uint64_t>(final_pprint.evaluation_index),
                     "final", diagnostic_message.data(), diagnostic_message.size());
                 if (diagnostic_rc != 0) {
-                    throw std::runtime_error(std::string("v0.6.48.8.2 final thermal diagnostic failed: ") +
+                    throw std::runtime_error(std::string("v0.6.48.8.3 final thermal diagnostic failed: ") +
                         diagnostic_message.data());
                 }
-                std::cout << "V064882_CPP_FINAL_THERMAL_DIAGNOSTIC="
+                std::cout << "V064883_CPP_FINAL_THERMAL_DIAGNOSTIC="
                           << diagnostic_path_text << "\n";
             }
             // Literal post-loop writer lifetime is not just the extra
