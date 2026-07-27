@@ -13115,7 +13115,25 @@ int standalone_iteration_evaluator_v67(
             (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_DSEC_COVERING_FRACTION) != 0u
                 ? input.dsec_covering_fraction : input.covering_fraction;
         fill_continuum_shape_v67(snapshot, input, data->energy);
-        input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_DEFER_PRODUCT_PROJECTION;
+        // v0.6.48.9.4.1: the accepted-boundary workspace cannot be rebuilt
+        // from an ordinary deferred DSEC snapshot because calc_emis_all's
+        // selected bound-free/RRC replay and writer-facing line-emission
+        // profile are intentionally skipped in DEFER_PRODUCT_PROJECTION mode.
+        // The canonical source trajectory already fixes the terminal DSEC
+        // evaluation count for each of its four calls (20/1/17/16).  Execute
+        // the normal non-deferred projection only on those four terminal DSEC
+        // evaluations, after all thermal/rate consumers have completed, then
+        // reuse that exact completed workspace at the accepted boundary.
+        // Earlier DSEC evaluations remain deferred.  Generic/non-reference
+        // cases keep the deferred path and therefore fall back to the legacy
+        // boundary recomputation below.
+        static constexpr std::array<std::size_t,4> v0648941_terminal_dsec_counts{{20u,1u,17u,16u}};
+        const bool v0648941_terminal_reference_dsec =
+            data->reference_trajectory_mode && snapshot.call_index >= 1u && snapshot.call_index <= 4u &&
+            snapshot.evaluation_index == v0648941_terminal_dsec_counts[snapshot.call_index - 1u];
+        if (!v0648941_terminal_reference_dsec) {
+            input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_DEFER_PRODUCT_PROJECTION;
+        }
         snapshot.lte_populations.assign(
             static_cast<std::size_t>(data->program_info.population_rows), 0.0);
         xstar_fixed_state_output_v1 output{};
@@ -13710,7 +13728,7 @@ FixedDsecSnapshot prepare_last_dsec_boundary_v064894(
     const xstar_thermal_state_v1& accepted_state) {
     if (data.last_iteration.kind != "dsec" ||
         data.last_iteration.call_index != data.call_index) {
-        throw std::runtime_error("v0.6.48.9.4 accepted boundary has no matching final DSEC snapshot");
+        throw std::runtime_error("v0.6.48.9.4.1 accepted boundary has no matching final DSEC snapshot");
     }
     // The DSEC callback deliberately returns the trial charge coordinate, so
     // the accepted controller state should be exactly the trial that produced
@@ -13718,7 +13736,7 @@ FixedDsecSnapshot prepare_last_dsec_boundary_v064894(
     // state if a future controller changes this contract.
     if (!binary64_equal_v064894(data.last_iteration.temperature_t4, accepted_state.temperature_t4) ||
         !binary64_equal_v064894(data.last_iteration.electron_fraction_input, accepted_state.electron_fraction_xee)) {
-        throw std::runtime_error("v0.6.48.9.4 accepted controller state differs from final DSEC trial");
+        throw std::runtime_error("v0.6.48.9.4.1 accepted controller state differs from final DSEC trial");
     }
 
     FixedDsecSnapshot snapshot = data.last_iteration;
@@ -13765,7 +13783,7 @@ FixedDsecSnapshot prepare_last_dsec_boundary_v064894(
     const int rc = xstar_fixed_state_copy_last_source_workspaces_v064894(
         data.fixed_context, &source, message.data(), message.size());
     if (rc != 0) {
-        throw std::runtime_error(std::string("v0.6.48.9.4 retained source-workspace copy failed: ") +
+        throw std::runtime_error(std::string("v0.6.48.9.4.1 retained source-workspace copy failed: ") +
             message.data());
     }
     snapshot.lte_populations.resize(source.lte_populations_count);
@@ -13786,23 +13804,29 @@ FixedDsecSnapshot prepare_last_dsec_boundary_v064894(
     snapshot.exact_source_workspace_flags = source.exact_source_workspace_flags;
 
     const std::size_t bins = data.energy.size();
+    const std::uint64_t required_projection_flags =
+        XSTAR_FIXED_EXACT_WORKSPACE_CONTINUUM | XSTAR_FIXED_EXACT_WORKSPACE_LINE_PROFILE;
+    if ((snapshot.exact_source_workspace_flags & required_projection_flags) != required_projection_flags) {
+        throw std::runtime_error(
+            "v0.6.48.9.4.1 retained DSEC workspace was deferred; legacy boundary recompute required");
+    }
     if (snapshot.opakc.size() != bins || snapshot.spectrum.size() != bins ||
+        snapshot.opacity.size() != bins || snapshot.opakcont.size() != bins ||
         snapshot.rccemis.size() < 2u * bins ||
         snapshot.line_profile_workspace.size() < 4u * bins ||
         snapshot.cemab.size() < 2u * bins) {
-        throw std::runtime_error("v0.6.48.9.4 retained source-workspace shape is incomplete");
+        throw std::runtime_error("v0.6.48.9.4.1 retained final-DSEC source-workspace shape is incomplete");
     }
-    // Reproduce the non-deferred public projection exactly, using the same
-    // source indexing and arithmetic order as fixed_state_engine.cpp.  The
-    // DSEC snapshot already contains the continuum-only spectrum.
-    snapshot.opacity.assign(snapshot.opakc.begin(), snapshot.opakc.end());
-    for (std::size_t k = 0; k < bins; ++k) {
-        const double spectrum_add = snapshot.cemab[k] + snapshot.cemab[bins + k]
-            + snapshot.rccemis[k] + snapshot.rccemis[bins + k]
-            + snapshot.line_profile_workspace[2u * bins + k]
-            + snapshot.line_profile_workspace[3u * bins + k];
-        if (std::isfinite(spectrum_add)) snapshot.spectrum[k] += spectrum_add;
-        if (!std::isfinite(snapshot.spectrum[k])) snapshot.spectrum[k] = 0.0;
+    // The terminal DSEC ran the same non-deferred public projection as the
+    // historical accepted-boundary solve.  Do not add the spectral planes a
+    // second time here; the snapshot's public spectrum/opacity are already the
+    // exact completed values.  Require the separately retained opakc surface
+    // to match the public opacity bytes before promotion.
+    if (snapshot.opakc.size() != snapshot.opacity.size() ||
+        !std::equal(snapshot.opakc.begin(), snapshot.opakc.end(), snapshot.opacity.begin(),
+            [](double a, double b) { return binary64_equal_v064894(a, b); })) {
+        throw std::runtime_error(
+            "v0.6.48.9.4.1 retained opakc differs from terminal DSEC public opacity");
     }
     attach_native_product_diagnostics_v70(data.fixed_context, snapshot);
 
@@ -15101,7 +15125,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             v064894_force_legacy && std::string(v064894_force_legacy) == "1";
         std::cout << "V064894_ACCEPTED_BOUNDARY_POLICY="
                   << (v064894_legacy_forced
-                          ? "FORCED_LEGACY_RECOMPUTE" : "REUSE_FINAL_DSEC_EXACT_WORKSPACE") << "\n"
+                          ? "FORCED_LEGACY_RECOMPUTE" : "REUSE_TERMINAL_DSEC_FULL_PROJECTION") << "\n"
                   << "V064894_ACCEPTED_BOUNDARY_REUSE_COUNT="
                   << data.accepted_boundary_reuse_count_v064894 << "\n"
                   << "V064894_ACCEPTED_BOUNDARY_LEGACY_COUNT="

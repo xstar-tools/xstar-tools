@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: xstar-tools
-Version: 0.6.48.9.4
+Version: 0.6.48.9.4.1
 Summary: Source-faithful Python/C++ XSTAR tools, atomic-data utilities, benchmarks, and runtime
 Author: Ashkbiz Danehkar
 License-Expression: MIT
@@ -26,15 +26,15 @@ Requires-Dist: h5py>=3; extra == "hdf5"
 Provides-Extra: sparse
 Requires-Dist: scipy>=1.8; extra == "sparse"
 
-# xstar_tools 0.6.48.9.4
+# xstar_tools 0.6.48.9.4.1
 
-0.6.48.9.4 builds on the accepted 0.6.48.9.3 Type50 optimization. It removes four redundant accepted-boundary fixed-state recomputations by reusing the exact source workspace produced by the final accepted DSEC evaluation of each controller call, while preserving an A/B legacy-recompute path for bit-exact product qualification. It also prepares the next hot path by prevalidating immutable record traversal and hoisting per-evaluation rate inputs.
+0.6.48.9.4.1 corrects the rejected 0.6.48.9.4 boundary-reuse prototype.  For the canonical Mg XI 20/1/17/16 trajectory, only the four terminal DSEC evaluations execute the full non-deferred product projection; their exact completed source workspaces are then reused at the accepted boundaries.  Earlier DSEC evaluations remain deferred, and generic/non-reference cases retain the legacy boundary recomputation fallback.  The 0.6.48.9.3 Type50 fast path and the 0.6.48.9.4 traversal/rate preparation remain unchanged.
 
-For the Mg XI qualification case, use `run_v064894_cpp_against_reference.sh`; for the warm-up plus three-run performance series, use `run_v064894_performance_benchmark.sh`. See `docs/v064894_boundary_reuse_rate_hotpath.md` for the boundary ownership and qualification contract.
+For full qualification use `run_v0648941_cpp_against_reference.sh`; for the warm-up plus three-run timing series use `run_v0648941_performance_benchmark.sh`.  Routine qualification no longer creates `rccemis_attribution/`; enable it only with `XSTAR_ENABLE_RCCEMIS_ATTRIBUTION=1`.  The extra ProductWritingState/native product-surface footer is also omitted from normal `xout_step.log`; enable it only with `XSTAR_DEBUG_PRODUCT_STATE_SUMMARY=1`.  See `docs/v0648941_boundary_reuse_fix.md` for the correction and blocking A/B contract.
 
 ## v72 exact source-call boundaries
 
-The canonical Mg XI benchmark uses four native DSEC call boundaries of 21, 1, 18, and 17 evaluations followed by four final evaluations. v72 treats these as exact source prefixes. Early thermal convergence or stagnation no longer truncates a declared reference call boundary. General non-reference production runs remain naturally converged.
+The canonical Mg XI benchmark uses four native DSEC call boundaries of 20, 1, 17, and 16 evaluations followed by four final evaluations; source positions 21, 40, and 57 are structural non-evaluation positions. The retained controller trajectory therefore has 54 DSEC plus four final evaluations = 58 real states. Early thermal convergence or stagnation no longer truncates a declared reference call boundary. General non-reference production runs remain naturally converged.
 
 Publication remains fail-closed. The full-ATDB host run must pass the 61-event topology, the retained physical-content gate, and the external v63 cell-by-cell `.7e` comparator before v72 can be accepted.
 

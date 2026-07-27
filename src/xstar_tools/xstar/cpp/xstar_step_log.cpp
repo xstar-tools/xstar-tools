@@ -1188,11 +1188,13 @@ Result write_native_step_log(
     append_native_input_parameters(out, state);
     append_native_radial_summary(out, output_dir, state);
     append_native_product_sections(out, output_dir, state);
-    if (state.legacy_pprint.buffered_lines.empty()) {
-        out << " native-only print sections that require unretained source accumulators are marked unavailable above.\n";
-    }
-    for (const auto& line : state.legacy_pprint.buffered_lines) {
-        out << line << '\n';
+    const char* debug_product_summary = std::getenv("XSTAR_DEBUG_PRODUCT_STATE_SUMMARY");
+    const bool emit_product_state_summary =
+        debug_product_summary && std::string(debug_product_summary) == "1";
+    if (emit_product_state_summary) {
+        for (const auto& line : state.legacy_pprint.buffered_lines) {
+            out << line << '\n';
+        }
     }
     const double formatter_seconds = std::chrono::duration<double>(
         std::chrono::steady_clock::now() - started).count();

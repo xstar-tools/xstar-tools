@@ -12136,8 +12136,10 @@ int run_impl(
         ctx.last_source_workspace_flags_v064894 =
             XSTAR_FIXED_EXACT_WORKSPACE_LINE |
             XSTAR_FIXED_EXACT_WORKSPACE_RRC |
-            XSTAR_FIXED_EXACT_WORKSPACE_CONTINUUM |
-            XSTAR_FIXED_EXACT_WORKSPACE_LINE_PROFILE |
+            (defer_product_projection
+                ? XSTAR_FIXED_EXACT_WORKSPACE_NONE
+                : (XSTAR_FIXED_EXACT_WORKSPACE_CONTINUUM |
+                   XSTAR_FIXED_EXACT_WORKSPACE_LINE_PROFILE)) |
             (ctx.last_source_lte_populations_v064894.empty()
                 ? XSTAR_FIXED_EXACT_WORKSPACE_NONE
                 : XSTAR_FIXED_EXACT_WORKSPACE_LTE_POPULATIONS);

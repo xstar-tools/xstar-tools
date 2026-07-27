@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.9.4.1 - 2026-07-27
+
+- Correct the rejected 0.6.48.9.4 accepted-boundary reuse path.  The 9.4 prototype reused an ordinary deferred DSEC workspace, so `calc_emis_all` selected bound-free/RRC publication and writer-facing line-emission projection were absent; `opakcont` therefore collapsed to zero and option-17 `log(tau)`/thermal rows changed.
+- Preserve the boundary-speedup design without reconstructing deferred products: for the canonical 20/1/17/16 trajectory, run the normal non-deferred product projection on only the four terminal DSEC evaluations, then reuse those exact completed workspaces at the accepted boundaries.  Earlier DSEC evaluations remain deferred and generic trajectories fall back to the legacy boundary recomputation.
+- Require blocking A/B equality against forced legacy boundary recomputation for all nine FITS data payloads and non-timing `xout_step.log` science content, which includes the source-style option-17 radial rows.
+- Retain the 0.6.48.9.4 traversal-order prevalidation and rate evaluation-context hoist; do not change rate formulas, Type50 arithmetic, thermal kernels, or FITS writer science.
+- Disable the extra ProductWritingState/native product-surface diagnostic footer in `xout_step.log` by default.  Re-enable it only for debugging with `XSTAR_DEBUG_PRODUCT_STATE_SUMMARY=1`.
+- Disable `rccemis_attribution/` in routine qualification.  Re-enable the historical Type99/RRC record attribution only with `XSTAR_ENABLE_RCCEMIS_ATTRIBUTION=1`; the default Type99 gate is product-only and still requires C++/FORTRAN and C++/Python inward-emission closure plus zero first bins.
+
 ## 0.6.48.9.4 - 2026-07-27
 
 - Reuse the exact final accepted DSEC source workspace at each of the four controller-call product boundaries instead of rerunning the complete fixed-state engine solely to reconstruct the same local science state.
