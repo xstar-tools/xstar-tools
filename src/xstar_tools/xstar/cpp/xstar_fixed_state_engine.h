@@ -271,6 +271,43 @@ typedef struct xstar_fixed_state_stats_v1 {
     char message[XSTAR_FIXED_STATE_MESSAGE_SIZE];
 } xstar_fixed_state_stats_v1;
 
+/* 0.6.48.9.1 measurement-only spectral decomposition.  This is a separate
+ * diagnostic ABI so the frozen xstar_fixed_state_stats_v1 layout remains
+ * byte-for-byte unchanged.  Counters are process-thread cumulative and are
+ * read only by the standalone performance harness. */
+typedef struct xstar_fixed_spectral_perf_v064891 {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    uint64_t spectral_calls;
+    uint64_t deferred_calls;
+    uint64_t projected_calls;
+    uint64_t broad_contributions;
+    uint64_t broad_line_profiles;
+    uint64_t selected_line_contributions;
+    uint64_t selected_line_profiles;
+    uint64_t selected_rrc_records;
+    double workspace_setup_seconds;
+    double seed_prepare_seconds;
+    double broad_apply_seconds;
+    double broad_apply_construction_seconds;
+    double broad_apply_opacity_seconds;
+    double broad_apply_nonopacity_seconds;
+    double selection_rank_seconds;
+    double selected_line_replay_seconds;
+    double selected_line_apply_seconds;
+    double selected_line_opacity_seconds;
+    double binemis_profile_seconds;
+    double selected_rrc_replay_seconds;
+    double publication_combine_seconds;
+    double workspace_retention_seconds;
+    double final_grid_combine_seconds;
+    double measured_seconds;
+    double other_seconds;
+} xstar_fixed_spectral_perf_v064891;
+
+void xstar_fixed_spectral_perf_reset_v064891(void);
+void xstar_fixed_spectral_perf_get_v064891(xstar_fixed_spectral_perf_v064891* perf);
+
 
 /* In-memory raw-program bundle.  This is the file-silent counterpart of the
  * historical manifest/elements/rows/records/reals/ints directory format.  All

@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.48.9.1 - 2026-07-27
+
+- Measurement-only fixed-state spectral decomposition; no intended science change.
+- Keeps `xstar_fixed_state_stats_v1` unchanged and adds a separate diagnostic-only spectral timing ABI.
+- Splits repeated spectral work into setup, seed generation, broad contribution application/opacity, rank-selection, selected line replay, fixed-state binemis, selected RRC replay, publication/combine, source-workspace retention, final combine, and residual teardown.
+- Freezes 0.6.48.9.0 as the performance baseline and continues to reuse the frozen 0.6.48.8.2 accelerated-Python reference and canonical FORTRAN oracle.
+
 ## 0.6.48.9.0 - 2026-07-26
 
 - Start the 0.6.48.9 performance branch from the closed 0.6.48.8.3.1 science baseline.
