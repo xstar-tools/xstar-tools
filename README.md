@@ -1,8 +1,15 @@
-# xstar_tools 0.6.48.9.4.2
+# xstar_tools 0.6.48.9.5.1
 
-0.6.48.9.4.2 is a correctness-only rollback: production uses the accepted exact boundary recomputation from 0.6.48.9.3, while the rejected 0.6.48.9.4/9.4.1 boundary-reuse implementation is retained only behind an explicit experimental environment switch. The 0.6.48.9.3 Type50 optimization and 0.6.48.9.4 traversal/rate preparation remain frozen.
+0.6.48.9.5.1 is a no-science-change element-generality/package cleanup built on the accepted 0.6.48.9.5 prepared Type49/53 engine. The accepted Mg XI host result is ~23.57 s controller time (~24.94 s instrumented total), with the Type49/53 optimized and forced-legacy products bit-exact in all nine FITS data payloads and scientific `xout_step.log`.
 
-For full qualification use `run_v0648942_cpp_against_reference.sh`; for the warm-up plus three-run timing series use `run_v0648942_performance_benchmark.sh`.  Routine qualification no longer creates `rccemis_attribution/`; enable it only with `XSTAR_ENABLE_RCCEMIS_ATTRIBUTION=1`.  The extra ProductWritingState/native product-surface footer is also omitted from normal `xout_step.log`; enable it only with `XSTAR_DEBUG_PRODUCT_STATE_SUMMARY=1`.  See `docs/v0648942_boundary_correctness_rollback.md` for the correction and blocking A/B contract.
+This release removes retired/version-stamped/Mg-specific Python audit code from the production `src/xstar_tools/xstar/` namespace. The Mg XI case remains under `src/xstar_tools/benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8/` as the frozen benchmark. Current Mg-specific runtime conditions are **inventoried but not changed** in `docs/v0648951_element_z12_inventory.md`; testing/generalization for other elements is deferred until after the 9.6/9.7 speed work.
+
+For cleanup/readiness checks use `tools/qualification/v0648951/check_readiness.py`. For a full host science requalification use `run_v0648951_cpp_against_reference.sh`; it reuses the accepted 9.5 Type49/53 A/B science gates.
+
+Performance roadmap after this cleanup:
+
+- **0.6.48.9.6** — Type50 hot-loop cleanup: remove no-op writes, preserve direct source-order `opakc` updates, and optimize the profile/rebin loop while requiring exact science equivalence. Target ~21.5–23 s.
+- **0.6.48.9.7** — compact record state plus PGO/native tuning. Target ~20–22 s.
 
 ## v72 exact source-call boundaries
 

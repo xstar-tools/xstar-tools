@@ -1,0 +1,139 @@
+language,path,line,scope,category,expr
+C++,src/xstar_tools/xstar/cpp/canonical_thermal_term.hpp,143,fingerprint,runtime-source-parity/thermal,const bool defer_primary = element_z == 12 && term.cj > 0.0 &&
+C++,src/xstar_tools/xstar/cpp/fixed_state_engine.cpp,1574,append_matrix_committed,runtime-source-parity/thermal,if (type99_state_.enabled && element_.element_z == 12 && term.data_type == 99) {
+C++,src/xstar_tools/xstar/cpp/fixed_state_engine.cpp,1577,append_matrix_committed,runtime-source-parity/thermal,if (primary_order_state_.enabled && element_.element_z == 12 && term.cj > 0.0) {
+C++,src/xstar_tools/xstar/cpp/fixed_state_engine.cpp,1583,append_matrix_committed,optional-acceleration/dataflow,if (native_sequence1_source_order && element_.element_z == 12 && term.cj > 0.0) {
+C++,src/xstar_tools/xstar/cpp/fixed_state_engine.cpp,1639,append_matrix_committed,runtime-source-parity/thermal,if (type99_state_.enabled && element_.element_z == 12 &&
+C++,src/xstar_tools/xstar/cpp/fixed_state_engine.cpp,1644,append_matrix_committed,runtime-source-parity/thermal,if (primary_order_state_.enabled && element_.element_z == 12 &&
+C++,src/xstar_tools/xstar/cpp/fixed_state_engine.cpp,1690,identity_of,runtime-source-parity/thermal,if (type99_state_.enabled && element_.element_z == 12 && contribution.data_type == 99) {
+C++,src/xstar_tools/xstar/cpp/fixed_state_engine.cpp,1705,identity_of,runtime-source-parity/thermal,if (primary_order_state_.enabled && element_.element_z == 12 && cj > 0.0) {
+C++,src/xstar_tools/xstar/cpp/fixed_state_engine.cpp,2271,load_matrix_closure_contribution_corrections,runtime-source-parity/thermal,element_z == 12 && contribution.data_type == 50 &&
+C++,src/xstar_tools/xstar/cpp/fixed_state_engine.cpp,5322,sequence1_type88_photo_rate,runtime-source-parity/thermal,element.element_z == 12 &&
+C++,src/xstar_tools/xstar/cpp/fixed_state_engine.cpp,5325,sequence1_type88_photo_rate,runtime-source-parity/thermal,element.element_z == 12 &&
+C++,src/xstar_tools/xstar/cpp/fixed_state_engine.cpp,5912,sequence1_type88_photo_rate,runtime-source-parity/thermal,const bool magnesium_finite_state = element.element_z == 12 &&
+C++,src/xstar_tools/xstar/cpp/fixed_state_engine.cpp,5914,sequence1_type88_photo_rate,runtime-source-parity/thermal,const bool magnesium_source_faithful = element.element_z == 12 &&
+C++,src/xstar_tools/xstar/cpp/fixed_state_engine.cpp,6030,sequence1_type88_photo_rate,runtime-source-parity/thermal,if (element.element_z == 12 && record.real_count >= 6 &&
+C++,src/xstar_tools/xstar/cpp/fixed_state_engine.cpp,6057,sequence1_type88_photo_rate,runtime-source-parity/thermal,magnesium_escape_state_applied = element.element_z == 12;
+C++,src/xstar_tools/xstar/cpp/fixed_state_engine.cpp,6075,sequence1_type88_photo_rate,optional-acceleration/dataflow,if (!native_runtime_escape && magnesium_escape.enabled && element.element_z == 12 &&
+C++,src/xstar_tools/xstar/cpp/fixed_state_engine.cpp,6283,sequence1_type88_photo_rate,runtime-source-parity/thermal,(element.element_z == 12 &&
+C++,src/xstar_tools/xstar/cpp/fixed_state_engine.cpp,6891,ground_row_for_stage,runtime-source-parity/thermal,if (element.element_z != 12 ||
+C++,src/xstar_tools/xstar/cpp/fixed_state_engine.cpp,6941,ground_row_for_stage,runtime-source-parity/thermal,if (element.element_z != 12 ||
+C++,src/xstar_tools/xstar/cpp/fixed_state_engine.cpp,7044,ground_row_for_stage,runtime-source-parity/thermal,if (element.element_z != 12 ||
+C++,src/xstar_tools/xstar/cpp/fixed_state_engine.cpp,7390,make_full_element_view,runtime-source-parity/thermal,if (e.element_z == 12 && compact_row == e.normalization_row) {
+C++,src/xstar_tools/xstar/cpp/fixed_state_engine.cpp,7439,make_buffers,runtime-source-parity/thermal,if (e.element_z == 12) source_faithful_magnesium_runtime_seed = true;
+C++,src/xstar_tools/xstar/cpp/fixed_state_engine.cpp,7722,bind_output,diagnostic/profiling,if (source_sequence_patch56 == 58 && element.element_z == 12 && audit_path_patch56 && *audit_path_patch56) {
+C++,src/xstar_tools/xstar/cpp/fixed_state_engine.cpp,7778,bind_output,runtime-source-parity/thermal,if (source_sequence == 58 && element.element_z == 12) {
+C++,src/xstar_tools/xstar/cpp/fixed_state_engine.cpp,9219,if,runtime-source-parity/thermal,element.element_z == 12) {
+C++,src/xstar_tools/xstar/cpp/fixed_state_engine.cpp,9258,if,runtime-source-parity/thermal,if (element.element_z == 12 && !type95_self_loop_candidates.empty()) {
+C++,src/xstar_tools/xstar/cpp/fixed_state_engine.cpp,9525,if,optional-acceleration/dataflow,if (native_production_mode() && element.element_z == 12 &&
+C++,src/xstar_tools/xstar/cpp/fixed_state_engine.cpp,9656,if,runtime-source-parity/thermal,if (element.element_z == 12 &&
+C++,src/xstar_tools/xstar/cpp/fixed_state_engine.cpp,9674,if,runtime-source-parity/thermal,else if (element.element_z == 12) committed_element = thermal_component_closure_data->mg;
+C++,src/xstar_tools/xstar/cpp/fixed_state_engine.cpp,10011,if,diagnostic/profiling,if (mg_type53_kernel_audit_v82_patch512 && element.element_z == 12 &&
+C++,src/xstar_tools/xstar/cpp/xstar_atdb_runtime.cpp,697,if,ATDB-lowering/source-parity,"if (b.element_z==12 && b.ion_stage<=4) { e1=row_energy(l,r1); e2=row_energy(l,r2); }"
+C++,src/xstar_tools/xstar/cpp/xstar_atdb_runtime.cpp,720,if,ATDB-lowering/source-parity,"int candidate_mask=0;if(b.element_z==12){for(int candidate_stage=1;candidate_stage<=12;++candidate_stage){auto bi=std::find_if(l.blocks.begin(),l.blocks.end(),[&](const Block& x){return x.ion_stage==candidate_stage;});const LevelValue* cv=bi==l.blocks.end()?nullptr:find_level(l,bi->ion_index,id2);out.reals.push_back(cv?cv->energy:0.0);if(cv)candidate_mask|=1<<(candidate_stage-1);}}"
+C++,src/xstar_tools/xstar/cpp/xstar_atdb_runtime.cpp,721,if,ATDB-lowering/source-parity,"int ci=d.npconi2[rec];need(ci>0,""has no canonical continuum index"");out.ints={ci};if(dt==49)out.ints.push_back(kType49PhextrapMaxPoints);if(b.element_z==12){out.ints.push_back(id2);out.ints.push_back(candidate_mask);out.ints.push_back(dt==49?kType49LayoutMagic:kType53LayoutMagic);}energy=corrected;"
+C++,src/xstar_tools/xstar/cpp/xstar_atdb_runtime.cpp,748,if,ATDB-lowering/source-parity,"if(b.element_z==12){auto incoming=[&](int col){const auto* v=find_snapshot(l,ion,col);return std::pair<double,double>{v?v->energy:0.0,v?v->weight:0.0};};auto ib=incoming(id1),ip=incoming(b.nlev),id=incoming(id2);out.reals.insert(out.reals.end(),{ib.first,ib.second,ip.first,ip.second,id.first,id.second,ex_e,ex_w});std::array<int,3> cols{{id1,b.nlev,id2}};std::array<int,3> masks{{0,0,0}};for(int ci=0;ci<3;++ci){std::vector<double> energies,weights;for(int st=1;st<=12;++st){auto bi=std::find_if(l.blocks.begin(),l.blocks.end(),[&](const Block& x){return x.ion_stage==st;});const auto* v=bi==l.blocks.end()?nullptr:find_level(l,bi->ion_index,cols[ci]);energies.push_back(v?v->energy:0.0);weights.push_back(v?v->weight:0.0);if(v)masks[ci]|=1<<(st-1);}out.reals.insert(out.reals.end(),energies.begin(),energies.end());out.reals.insert(out.reals.end(),weights.begin(),weights.end());}out.ints.insert(out.ints.end(),{id1,b.nlev,id2,masks[0],masks[1],masks[2],ex_mode,kType99LayoutMagic});}"
+C++,src/xstar_tools/xstar/cpp/xstar_atdb_runtime.cpp,839,lower_atdb_in_memory,ATDB-lowering/source-parity,"for(int ion=1;ion<=d.n_ions;++ion){int z=d.ion_element_z[ion];if(!active_set.count(z))continue;int parent=d.ion_records[ion];for(int rt=1;rt<=d.max_rate;++rt){int rec=d.npfi[rt][ion],guard=0;while(rec>0&&rec<static_cast<int>(d.npar.size())&&d.npar[rec]==parent){int dt=db.header(rec).data_type;if(kActiveTypes.count(dt))records_by_z[z].push_back(rec);else if(rt!=11&&rt!=12&&rt!=13)unsupported.insert(dt);int next=d.npnxt[rec];if(next==rec)throw std::runtime_error(""ATDB record self-cycle"");rec=next;if(++guard>static_cast<int>(db.record_count()))throw std::runtime_error(""ATDB record cycle"");}}}"
+C++,src/xstar_tools/xstar/cpp/xstar_engine.cpp,90,zero_counters,other-current-source,"if (element_z == 12 && is_supported_mg_record(rt, dt)) {"
+C++,src/xstar_tools/xstar/cpp/xstar_science_fits.cpp,246,read_elements,product/default-policy,"e.abundance = number_or(fields, columns, ""abundance"", e.element_z == 1 ? 1.0 : e.element_z == 2 ? 0.1 : e.element_z == 12 ? 3.5e-5 : 0.0);"
+C++,src/xstar_tools/xstar/cpp/xstar_science_fits.cpp,519,active_product_element_stage,product/default-policy,if (element_z == 12) return ion_stage >= 3;
+C++,src/xstar_tools/xstar/cpp/xstar_standalone.cpp,7182,canonical_zero_aware_e7_value_v1715,qualification/benchmark-compatibility,if (element_z == 12) {
+C++,src/xstar_tools/xstar/cpp/xstar_standalone.cpp,7233,canonical_zero_aware_e7_value_v1715,qualification/benchmark-compatibility,if (element_z == 12) {
+C++,src/xstar_tools/xstar/cpp/xstar_standalone.cpp,7293,canonical_zero_aware_e7_value_v1715,qualification/benchmark-compatibility,if (element_z == 12) {
+C++,src/xstar_tools/xstar/cpp/xstar_standalone.cpp,7353,canonical_zero_aware_e7_value_v1715,qualification/benchmark-compatibility,if (element_z == 12) {
+C++,src/xstar_tools/xstar/cpp/xstar_standalone.cpp,7552,read_case_abundances_v1712,runtime-case-metadata,"fields.at(columns.at(""element_z"")) == ""12"" &&"
+C++,src/xstar_tools/xstar/cpp/xstar_standalone.cpp,7621,read_case_abundances_v1712,runtime-case-metadata,element_z == 12 && cj_value > 0.0 && primary_index > 0 &&
+C++,src/xstar_tools/xstar/cpp/xstar_standalone.cpp,7627,read_case_abundances_v1712,qualification/benchmark-compatibility,magnesium_type99_metadata_ok = magnesium_type99_metadata_ok && element_z == 12 && data_type == 99 &&
+C++,src/xstar_tools/xstar/cpp/xstar_standalone.cpp,7745,binary64_hex_v79,qualification/benchmark-compatibility,"if (std::stoi(row.at(""sequence"")) != 16 || std::stoi(row.at(""element_z"")) != 12) continue;"
+C++,src/xstar_tools/xstar/cpp/xstar_standalone.cpp,7772,binary64_hex_v79,qualification/benchmark-compatibility,"if (std::stoi(row.at(""element_z"")) != 12) continue;"
+C++,src/xstar_tools/xstar/cpp/xstar_standalone.cpp,7879,channel_index_v80,qualification/benchmark-compatibility,"if (std::stoi(row.at(""element_z"")) != 12) continue;"
+C++,src/xstar_tools/xstar/cpp/xstar_standalone.cpp,10858,promote_true_production_surface_v65,qualification/benchmark-compatibility,"if (std::stoi(row.at(""data_type"")) != 53 || std::stoi(row.at(""element_z"")) != 12) continue;"
+C++,src/xstar_tools/xstar/cpp/xstar_standalone.cpp,10915,promote_true_production_surface_v65,qualification/benchmark-compatibility,"std::stoi(row.at(""producer_element_z"")) != 12) continue;"
+C++,src/xstar_tools/xstar/cpp/xstar_standalone.cpp,17003,command_run_native_sequence12345678_v1723,qualification/benchmark-compatibility,"if (std::stoi(row.at(""element_z"")) != 12) continue;"
+C++,src/xstar_tools/xstar/cpp/xstar_standalone.cpp,17080,command_run_native_sequence12345678_v1723,qualification/benchmark-compatibility,"if (std::stoi(row.at(""element_z"")) != 12) continue;"
+C++,src/xstar_tools/xstar/cpp/xstar_standalone.cpp,17158,command_run_native_sequence12345678_v1723,qualification/benchmark-compatibility,"if (std::stoi(row.at(""element_z"")) != 12) continue;"
+C++,src/xstar_tools/xstar/cpp/xstar_standalone.cpp,17235,command_run_native_sequence12345678_v1723,qualification/benchmark-compatibility,"if (std::stoi(row.at(""element_z"")) != 12) continue;"
+C++,src/xstar_tools/xstar/cpp/xstar_standalone.cpp,17312,command_run_native_sequence12345678_v1723,qualification/benchmark-compatibility,"if (std::stoi(row.at(""element_z"")) != 12) continue;"
+C++,src/xstar_tools/xstar/cpp/xstar_standalone.cpp,17389,command_run_native_sequence12345678_v1723,qualification/benchmark-compatibility,"if (std::stoi(row.at(""element_z"")) != 12) continue;"
+C++,src/xstar_tools/xstar/cpp/xstar_step_log.cpp,710,source_ion_label,output-label-only,"else if (element_z == 12) symbol = ""mg"";"
+Python,src/xstar_tools/xstar/element_equilibrium.py,2001,_matrix_dataflow_enabled,optional-acceleration/dataflow,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,2216,_rate_payload_dataflow_enabled,optional-acceleration/dataflow,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,2382,_rate_payload_batched_shadow_enabled,diagnostic/profiling,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,2965,_rate_payload_four_family_seed_elision_differential_requested,diagnostic/profiling,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,2980,_rate_payload_four_family_full_reverse_verification_requested,diagnostic/profiling,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,2994,_rate_payload_four_family_product_candidate_enabled,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,3004,_rate_payload_four_family_product_promoted_enabled,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,3827,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,3828,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,3829,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,3830,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,3869,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,3873,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,3886,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,3897,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,4191,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,4209,_applied_speed_summary,diagnostic/profiling,int(element_z) != 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,4292,_matrix_hidden_timing_add,diagnostic/profiling,int(element_z) != 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,4556,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,4569,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,4596,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,4600,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,4606,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,5186,_flush_pending_mg_rates_matrix,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,5261,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,5270,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,5296,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,5496,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,5532,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,5543,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,5566,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,5595,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,5625,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,5645,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,5652,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,5671,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,5702,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,5766,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,5785,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,5815,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,5829,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,5836,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,5855,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,6037,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,6045,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,6227,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,6326,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,6334,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,6342,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,6844,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,7064,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,7254,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,7268,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,7672,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,7783,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,7837,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,7864,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,7926,_assemble_element_matrix_impl,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,8104,msolvelucy,runtime-Mg-specialization,"int(getattr(basis, ""element_z"", 0) or 0) == 12"
+Python,src/xstar_tools/xstar/element_equilibrium.py,8619,solve_element_statistical_equilibrium,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,8745,solve_element_statistical_equilibrium,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/element_equilibrium.py,8762,solve_element_statistical_equilibrium,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/emergent_emissivity.py,1177,calc_emis_ion,runtime-Mg-specialization,"int(getattr(ion, ""element_z"", 0)) == 12"
+Python,src/xstar_tools/xstar/emergent_emissivity.py,1182,calc_emis_ion,runtime-Mg-specialization,"int(getattr(ion, ""element_z"", 0)) == 12"
+Python,src/xstar_tools/xstar/emergent_emissivity.py,1188,calc_emis_ion,runtime-Mg-specialization,"int(getattr(ion, ""element_z"", 0)) == 12"
+Python,src/xstar_tools/xstar/emergent_emissivity.py,1298,calc_emis_ion,runtime-Mg-specialization,"int(getattr(ion, ""element_z"", 0)) == 12"
+Python,src/xstar_tools/xstar/emergent_emissivity.py,1345,calc_emis_ion,runtime-Mg-specialization,"int(getattr(ion, ""element_z"", 0)) == 12"
+Python,src/xstar_tools/xstar/emergent_emissivity.py,1346,calc_emis_ion,runtime-Mg-specialization,"int(getattr(ion, ""element_z"", 0)) == 12"
+Python,src/xstar_tools/xstar/emergent_emissivity.py,1638,_maybe_probe_upstream_type4_shadow,diagnostic/profiling,"int(getattr(ion, ""element_z"", 0)) != 12"
+Python,src/xstar_tools/xstar/ion_balance.py,447,calc_ion_rates,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/ion_balance.py,456,calc_ion_rates,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/ion_balance.py,469,calc_ion_rates,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/ion_balance.py,613,calc_ion_rates,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/ion_balance.py,790,calc_ion_rates,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/ion_balance.py,1001,calc_element_pre_matrix_balance,runtime-Mg-specialization,int(element_z) == 12
+Python,src/xstar_tools/xstar/native_fixed_program.py,814,_lower_record,ATDB-lowering/source-parity,int(block.element_z) == 12
+Python,src/xstar_tools/xstar/native_fixed_program.py,1085,_lower_record,ATDB-lowering/source-parity,int(block.element_z) == 12
+Python,src/xstar_tools/xstar/native_fixed_program.py,1136,_lower_record,ATDB-lowering/source-parity,int(block.element_z) == 12
+Python,src/xstar_tools/xstar/native_fixed_program.py,1227,_lower_record,ATDB-lowering/source-parity,"int(getattr(block, ""element_z"", 0) or 0) == 12"
+Python,src/xstar_tools/xstar/native_fixed_program.py,1332,_lower_record,ATDB-lowering/source-parity,int(block.element_z) == 12
+Python,src/xstar_tools/xstar/thermal_compact_population_closure.py,191,prepare,other-current-source,"int(r[""element_z""]) == 12"

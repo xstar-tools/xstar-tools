@@ -757,4 +757,9 @@ The Python reader can be considered fully developed when it can:
 6. Reproduce known X-ray wavelengths, thresholds, and rates.
 7. Match selected native XSTAR outputs within numerical tolerance.
 8. Provide a documented public Python API and CLI.
+## Post-0.6.48.9.5.1 performance/generalization order
+
+1. 0.6.48.9.6 — Type50 hot-loop cleanup (`rccemis += 0.0` removal, direct source-order `opakc`, deeper exact profile/rebin optimization), target ~21.5–23 s.
+2. 0.6.48.9.7 — compact record state plus PGO/native build tuning, target ~20–22 s.
+3. Only after 9.6/9.7: multi-element qualification and systematic replacement of runtime `element_z == 12` specializations with record/ATDB-driven semantics where source behavior permits.
 

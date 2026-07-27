@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 0.6.48.9.5.1 — element-generality/package cleanup - 2026-07-27
+
+- Freeze 0.6.48.9.5 as the accepted prepared Type49/53 production/science baseline.
+- Retire 112 historical/version-stamped/Mg-specific audit and capture modules from `src/xstar_tools/xstar/`; none are reachable from the production `driver`/`physical_runner`/`standalone` roots.
+- Retire 68 tests tied exclusively to those modules and remove 13 obsolete historical console entry points.
+- Remove checked-in generated `src/xstar_tools.egg-info/` metadata.
+- Keep the Mg XI `v0648_compiled_case_helike_type69_mg11_ne1e8` case as a benchmark/qualification fixture, not runtime architecture.
+- Inventory every current Python/C++ equality/inequality comparison against `element_z == 12`/`!= 12` without changing those runtime branches; multi-element generalization/testing is deferred until after speed work.
+- Freeze the accepted 9.5 Type49/53 prepared engine, 9.4.2 exact-boundary ownership, and 9.3 Type50 fast path by source hash.
+- No intended physics, numerical algorithm, controller topology, FITS science, or standalone-C++ performance change.
+- Next planned work remains 9.6 Type50 hot-loop cleanup, followed by 9.7 compact record state / PGO/native tuning.
+
 ## 0.6.48.9.5 — prepared Type49/53 bound-free engine - 2026-07-27
 
 - Freeze the accepted 0.6.48.9.4.2 exact-boundary production contract.
