@@ -1,8 +1,8 @@
-# xstar_tools 0.6.48.9.4.1
+# xstar_tools 0.6.48.9.4.2
 
-0.6.48.9.4.1 corrects the rejected 0.6.48.9.4 boundary-reuse prototype.  For the canonical Mg XI 20/1/17/16 trajectory, only the four terminal DSEC evaluations execute the full non-deferred product projection; their exact completed source workspaces are then reused at the accepted boundaries.  Earlier DSEC evaluations remain deferred, and generic/non-reference cases retain the legacy boundary recomputation fallback.  The 0.6.48.9.3 Type50 fast path and the 0.6.48.9.4 traversal/rate preparation remain unchanged.
+0.6.48.9.4.2 is a correctness-only rollback: production uses the accepted exact boundary recomputation from 0.6.48.9.3, while the rejected 0.6.48.9.4/9.4.1 boundary-reuse implementation is retained only behind an explicit experimental environment switch. The 0.6.48.9.3 Type50 optimization and 0.6.48.9.4 traversal/rate preparation remain frozen.
 
-For full qualification use `run_v0648941_cpp_against_reference.sh`; for the warm-up plus three-run timing series use `run_v0648941_performance_benchmark.sh`.  Routine qualification no longer creates `rccemis_attribution/`; enable it only with `XSTAR_ENABLE_RCCEMIS_ATTRIBUTION=1`.  The extra ProductWritingState/native product-surface footer is also omitted from normal `xout_step.log`; enable it only with `XSTAR_DEBUG_PRODUCT_STATE_SUMMARY=1`.  See `docs/v0648941_boundary_reuse_fix.md` for the correction and blocking A/B contract.
+For full qualification use `run_v0648942_cpp_against_reference.sh`; for the warm-up plus three-run timing series use `run_v0648942_performance_benchmark.sh`.  Routine qualification no longer creates `rccemis_attribution/`; enable it only with `XSTAR_ENABLE_RCCEMIS_ATTRIBUTION=1`.  The extra ProductWritingState/native product-surface footer is also omitted from normal `xout_step.log`; enable it only with `XSTAR_DEBUG_PRODUCT_STATE_SUMMARY=1`.  See `docs/v0648942_boundary_correctness_rollback.md` for the correction and blocking A/B contract.
 
 ## v72 exact source-call boundaries
 

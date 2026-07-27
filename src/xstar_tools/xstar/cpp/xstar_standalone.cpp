@@ -13128,8 +13128,16 @@ int standalone_iteration_evaluator_v67(
         // cases keep the deferred path and therefore fall back to the legacy
         // boundary recomputation below.
         static constexpr std::array<std::size_t,4> v0648941_terminal_dsec_counts{{20u,1u,17u,16u}};
+        const char* v0648942_experimental_reuse_env =
+            std::getenv("XSTAR_V0648942_EXPERIMENTAL_BOUNDARY_REUSE");
+        const char* v0648942_force_legacy_env =
+            std::getenv("XSTAR_V064894_FORCE_LEGACY_BOUNDARY_RECOMPUTE");
+        const bool v0648942_experimental_reuse =
+            v0648942_experimental_reuse_env && std::string(v0648942_experimental_reuse_env) == "1" &&
+            !(v0648942_force_legacy_env && std::string(v0648942_force_legacy_env) == "1");
         const bool v0648941_terminal_reference_dsec =
-            data->reference_trajectory_mode && snapshot.call_index >= 1u && snapshot.call_index <= 4u &&
+            v0648942_experimental_reuse && data->reference_trajectory_mode &&
+            snapshot.call_index >= 1u && snapshot.call_index <= 4u &&
             snapshot.evaluation_index == v0648941_terminal_dsec_counts[snapshot.call_index - 1u];
         if (!v0648941_terminal_reference_dsec) {
             input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_DEFER_PRODUCT_PROJECTION;
@@ -13860,7 +13868,15 @@ FixedDsecSnapshot evaluate_accepted_boundary_v064894(
     double radius_cm,
     std::size_t transport_plane) {
     const char* force_legacy = std::getenv("XSTAR_V064894_FORCE_LEGACY_BOUNDARY_RECOMPUTE");
-    if (force_legacy && std::string(force_legacy) == "1") {
+    const char* experimental_reuse = std::getenv("XSTAR_V0648942_EXPERIMENTAL_BOUNDARY_REUSE");
+    const bool force_legacy_enabled = force_legacy && std::string(force_legacy) == "1";
+    const bool experimental_reuse_enabled =
+        experimental_reuse && std::string(experimental_reuse) == "1";
+    // v0.6.48.9.4.2 correctness rollback: exact accepted-boundary
+    // recomputation is restored as the production policy.  Reuse remains
+    // available only for explicit diagnostics until a projection-only design
+    // is proven byte-exact against this path.
+    if (force_legacy_enabled || !experimental_reuse_enabled) {
         ++data.accepted_boundary_legacy_count_v064894;
         return evaluate_full_boundary_v67(
             data, accepted_state, delta_radius_cm, radius_cm, transport_plane);
@@ -15121,11 +15137,20 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         }
 
         const char* v064894_force_legacy = std::getenv("XSTAR_V064894_FORCE_LEGACY_BOUNDARY_RECOMPUTE");
+        const char* v0648942_experimental_reuse = std::getenv("XSTAR_V0648942_EXPERIMENTAL_BOUNDARY_REUSE");
         const bool v064894_legacy_forced =
             v064894_force_legacy && std::string(v064894_force_legacy) == "1";
+        const bool v0648942_experimental_reuse_enabled =
+            v0648942_experimental_reuse && std::string(v0648942_experimental_reuse) == "1";
         std::cout << "V064894_ACCEPTED_BOUNDARY_POLICY="
                   << (v064894_legacy_forced
-                          ? "FORCED_LEGACY_RECOMPUTE" : "REUSE_TERMINAL_DSEC_FULL_PROJECTION") << "\n"
+                          ? "FORCED_LEGACY_RECOMPUTE"
+                          : (v0648942_experimental_reuse_enabled
+                              ? "EXPERIMENTAL_REUSE_TERMINAL_DSEC_FULL_PROJECTION"
+                              : "LEGACY_EXACT_RECOMPUTE_PRODUCTION")) << "\n"
+                  << "V0648942_BOUNDARY_REUSE_PRODUCTION="
+                  << (v0648942_experimental_reuse_enabled && !v064894_legacy_forced
+                          ? "EXPERIMENTAL_ENABLED" : "DISABLED_CORRECTNESS_ROLLBACK") << "\n"
                   << "V064894_ACCEPTED_BOUNDARY_REUSE_COUNT="
                   << data.accepted_boundary_reuse_count_v064894 << "\n"
                   << "V064894_ACCEPTED_BOUNDARY_LEGACY_COUNT="

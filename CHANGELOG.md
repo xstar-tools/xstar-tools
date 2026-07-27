@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.48.9.4.2 - 2026-07-27
+
+- Correctness-only rollback after 0.6.48.9.4 and 0.6.48.9.4.1 boundary-reuse experiments failed byte-exact product equivalence.
+- Restores the accepted 0.6.48.9.3 exact accepted-boundary recomputation as the production/default path.
+- Restores projection-deferred behavior for all 54 DSEC evaluations in production; terminal-DSEC full projection is no longer implicit.
+- Keeps boundary reuse available only with `XSTAR_V0648942_EXPERIMENTAL_BOUNDARY_REUSE=1` for focused diagnostics.
+- Retains the accepted 0.6.48.9.3 Type50 fast path and the 0.6.48.9.4 traversal/rate hot-path preparation unchanged.
+- Qualification compares the default production boundary path with explicitly forced legacy recomputation and requires all nine FITS data payloads plus scientific `xout_step.log` content to match.
+- `rccemis_attribution/` remains disabled by default; the native product-state footer remains debug-only.
+
 ## 0.6.48.9.4.1 - 2026-07-27
 
 - Correct the rejected 0.6.48.9.4 accepted-boundary reuse path.  The 9.4 prototype reused an ordinary deferred DSEC workspace, so `calc_emis_all` selected bound-free/RRC publication and writer-facing line-emission projection were absent; `opakcont` therefore collapsed to zero and option-17 `log(tau)`/thermal rows changed.

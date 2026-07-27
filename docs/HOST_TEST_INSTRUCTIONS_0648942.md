@@ -1,0 +1,46 @@
+# Host qualification instructions — 0.6.48.9.4.2
+
+```bash
+PACKAGE=$(realpath ../xstar_tools-0.6.48.9.4.2)
+DATA=/media/linux/mhd/xstar/xstar/data
+CACHE=v82_patch520154_all61_solve_stage_cache.tar.gz
+FORTRAN=mg11_ne1e8.tar.gz
+PYACCEL=v064882_full_test.python_accel_reference.tar.gz
+
+"$PACKAGE/run_v0648942_cpp_against_reference.sh" \
+  "$PACKAGE" "$DATA" "$CACHE" "$FORTRAN" "$PYACCEL" \
+  v0648942_cpp_test \
+  2>&1 | tee v0648942_cpp_test.host.log
+```
+
+Blocking expected markers include:
+
+```text
+V0648942_BOUNDARY_XO01_DETAIL_FITS_DATA_BIT_EXACT=ACCEPT
+V0648942_BOUNDARY_XO01_DETAL2_FITS_DATA_BIT_EXACT=ACCEPT
+V0648942_BOUNDARY_XO01_DETAL3_FITS_DATA_BIT_EXACT=ACCEPT
+V0648942_BOUNDARY_XO01_DETAL4_FITS_DATA_BIT_EXACT=ACCEPT
+V0648942_BOUNDARY_XOUT_ABUND1_FITS_DATA_BIT_EXACT=ACCEPT
+V0648942_BOUNDARY_XOUT_CONT1_FITS_DATA_BIT_EXACT=ACCEPT
+V0648942_BOUNDARY_XOUT_LINES1_FITS_DATA_BIT_EXACT=ACCEPT
+V0648942_BOUNDARY_XOUT_RRC1_FITS_DATA_BIT_EXACT=ACCEPT
+V0648942_BOUNDARY_XOUT_SPECT1_FITS_DATA_BIT_EXACT=ACCEPT
+V0648942_BOUNDARY_FITS_DATA_BIT_EXACT=ACCEPT
+V0648942_BOUNDARY_STEP_SCIENCE_LOG_IDENTICAL=ACCEPT
+V0648942_BOUNDARY_REUSE_EQUIVALENCE=ACCEPT
+V0648942_BOUNDARY_REUSE_PRODUCTION=DISABLED_CORRECTNESS_ROLLBACK
+V0648942_RESULT=ACCEPT_BOUNDARY_CORRECTNESS_ROLLBACK
+V0648942_FINAL_RETURN_CODE=0
+```
+
+The qualifier also emits the corresponding `V0648941_BOUNDARY_*` compatibility aliases as `ACCEPT`, directly closing the previously rejected gate names.
+
+After science qualification, timing can be measured with:
+
+```bash
+"$PACKAGE/run_v0648942_performance_benchmark.sh" \
+  "$PACKAGE" "$DATA" "$CACHE" v0648942_performance 3 \
+  2>&1 | tee v0648942_performance.host.log
+```
+
+This release is correctness-first. Do not enable `XSTAR_V0648942_EXPERIMENTAL_BOUNDARY_REUSE=1` for production qualification or routine benchmarks.
