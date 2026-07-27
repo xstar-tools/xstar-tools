@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.48.9.5 — prepared Type49/53 bound-free engine - 2026-07-27
+
+- Freeze the accepted 0.6.48.9.4.2 exact-boundary production contract.
+- Prepare immutable Type49/53 `phint53` grid geometry (`sgbar`, threshold mapping, Type49 phextrap metadata) once per record/grid and retain it in the fixed-state context.
+- Reuse the first reduced 999-bin Type49/53 integral for the source-identical `calc_emisab` caller instead of integrating the same workspace twice.
+- Defer the 9999-bin `calc_emis` Type49/53 integral until the existing source `rlbin`/`ncbin` selection proves that the record is actually consumed.
+- Add `XSTAR_V064895_FORCE_LEGACY_BOUND_FREE=1` for same-executable eager-vs-prepared A/B qualification.
+- Add measurement-only prepared-bound-free workload counters and 9.5 qualification/performance runners.
+- No Type50, boundary, thermal, matrix, FITS writer, or Python-science changes.
+
 ## 0.6.48.9.4.2 - 2026-07-27
 
 - Correctness-only rollback after 0.6.48.9.4 and 0.6.48.9.4.1 boundary-reuse experiments failed byte-exact product equivalence.

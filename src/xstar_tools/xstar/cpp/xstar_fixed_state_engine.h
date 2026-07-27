@@ -271,6 +271,24 @@ typedef struct xstar_fixed_state_stats_v1 {
     char message[XSTAR_FIXED_STATE_MESSAGE_SIZE];
 } xstar_fixed_state_stats_v1;
 
+/* v0.6.48.9.5 measurement-only prepared Type49/53 bound-free counters. */
+#define XSTAR_BOUND_FREE_PERF_V064895_ABI_VERSION 604895u
+typedef struct xstar_bound_free_perf_v064895 {
+    uint32_t struct_size;
+    uint32_t abi_version;
+    uint64_t reduced_geometry_builds;
+    uint64_t reduced_geometry_reuses;
+    uint64_t full_geometry_builds;
+    uint64_t full_geometry_reuses;
+    uint64_t reduced_dynamic_integrals;
+    uint64_t reduced_duplicate_reuses;
+    uint64_t legacy_reduced_duplicate_integrals;
+    uint64_t full_dynamic_integrals;
+    uint64_t full_selected_type49_integrals;
+    uint64_t full_selected_type53_integrals;
+    uint64_t legacy_full_eager_integrals;
+} xstar_bound_free_perf_v064895;
+
 
 /* In-memory raw-program bundle.  This is the file-silent counterpart of the
  * historical manifest/elements/rows/records/reals/ints directory format.  All
@@ -520,6 +538,11 @@ XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_output_init_v1(xstar_fixed_state_
 XSTAR_FIXED_STATE_EXPORT int xstar_fixed_source_workspace_output_init_v1(
     xstar_fixed_source_workspace_output_v1* output);
 XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_stats_init_v1(xstar_fixed_state_stats_v1* stats);
+XSTAR_FIXED_STATE_EXPORT int xstar_bound_free_perf_init_v064895(
+    xstar_bound_free_perf_v064895* perf);
+XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_get_bound_free_perf_v064895(
+    const xstar_fixed_state_context* context,
+    xstar_bound_free_perf_v064895* perf);
 XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_program_info_init_v1(xstar_fixed_state_program_info_v1* info);
 XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_context_create_v1(
     const char* program_directory,

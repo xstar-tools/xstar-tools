@@ -50,3 +50,8 @@ The generic resumable trajectory now classifies and accepts sequences 1–16. Se
 # xstar_tools 0.6.48.7.46.25.5.17.25.4
 
 See `V04874625517254_SEQUENCE16_CONTRACT.md` and `v25517254_sequence16_contract_report.md`.
+
+### 0.6.48.9.5 performance candidate
+
+The standalone C++ engine includes a prepared Type49/53 bound-free path. It caches immutable source-grid geometry, reuses the source-identical reduced-grid integral, and computes full-grid revisits only for source-selected records. The accepted 0.6.48.9.4.2 exact-boundary ownership remains frozen. Set `XSTAR_V064895_FORCE_LEGACY_BOUND_FREE=1` only for A/B qualification/debugging.
+

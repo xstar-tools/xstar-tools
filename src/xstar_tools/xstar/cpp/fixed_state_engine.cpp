@@ -1165,6 +1165,51 @@ struct Type53RecordContext {
     int phextrap_max_points = 0;
 };
 
+// v0.6.48.9.5: immutable Type49/53 phint53 geometry prepared once per
+// atomic record and radiation-energy grid.  The radiation amplitudes,
+// temperature, populations, escape factors, and all source-order dynamic
+// arithmetic remain live on every evaluation; only phextrap/bin mapping and
+// sgbar construction are cached.
+struct BoundFreePreparedGeometryV064895 {
+    bool valid = false;
+    std::size_t source_bin_count = 0;
+    std::uint64_t source_energy_hash = 0;
+    double threshold_ev = 0.0;
+    bool type49_semantics = false;
+    bool phextrap_pairs = false;
+    int phextrap_max_points = 0;
+    int pair_count = 0;
+    int nb1 = 0;
+    int klmax = 0;
+    std::uint64_t phextrap_input_energy_hash = 0;
+    std::uint64_t phextrap_input_sigma_hash = 0;
+    std::uint64_t phextrap_output_energy_hash = 0;
+    std::uint64_t phextrap_output_sigma_hash = 0;
+    std::vector<double> sgbar;
+    bool exact_threshold_publication_reached = false;
+    int exact_publish_kl = -1;
+    double exact_publish_sgtp = 0.0;
+};
+
+struct BoundFreePreparedRecordCacheV064895 {
+    BoundFreePreparedGeometryV064895 reduced;
+    BoundFreePreparedGeometryV064895 full;
+};
+
+struct BoundFreePerfCountersV064895 {
+    std::uint64_t reduced_geometry_builds = 0;
+    std::uint64_t reduced_geometry_reuses = 0;
+    std::uint64_t full_geometry_builds = 0;
+    std::uint64_t full_geometry_reuses = 0;
+    std::uint64_t reduced_dynamic_integrals = 0;
+    std::uint64_t reduced_duplicate_reuses = 0;
+    std::uint64_t legacy_reduced_duplicate_integrals = 0;
+    std::uint64_t full_dynamic_integrals = 0;
+    std::uint64_t full_selected_type49_integrals = 0;
+    std::uint64_t full_selected_type53_integrals = 0;
+    std::uint64_t legacy_full_eager_integrals = 0;
+};
+
 struct Type53SourceShadow {
     bool valid = false;
     std::array<double,6> ans{};
@@ -1415,6 +1460,13 @@ struct EvaluatedRecord {
     Type53SourceShadow type49_calc_emisab_shadow{};
     Type53SourceShadow type49_calc_emis_shadow{};
     Type53SourceShadow type49_shadow{};
+    // v0.6.48.9.5: retain the immutable decoded bound-free context plus the
+    // live escape sum needed to execute a selected full-grid revisit lazily.
+    Type53RecordContext bound_free_record_context_v064895{};
+    double bound_free_ptmp_sum_v064895 = 1.0;
+    double bound_free_threshold_ev_v064895 = 0.0;
+    bool bound_free_type49_v064895 = false;
+    bool bound_free_row46_contract_v064895 = false;
     Type51SourceShadow type51_shadow{};
     Type50SourceShadow type50_shadow{};
     Type99SourceShadow type99_shadow{};
@@ -2722,6 +2774,13 @@ struct xstar_fixed_state_context_impl {
     // source order is unchanged; repeated DSEC evaluations no longer rebuild
     // a whole-program visited bitmap or chase/validate the same links.
     std::vector<std::vector<int>> traversal_record_indices_v064894;
+    // v0.6.48.9.5: prepared Type49/53 bound-free geometry, indexed by the
+    // immutable program-record index.  Reduced/full grids have separate
+    // caches because Type49 phextrap owns different caller capacities.
+    std::vector<BoundFreePreparedRecordCacheV064895> bound_free_prepared_v064895;
+    BoundFreePerfCountersV064895 bound_free_perf_v064895{};
+    std::map<std::pair<std::uint64_t,std::uint64_t>,std::size_t>
+        record_index_by_identity_v064895;
     xstar_element_engine_context* element_context = nullptr;
     xstar_spectral_context* spectral_context = nullptr;
     std::uint64_t state_generation = 0;
@@ -4383,38 +4442,27 @@ double sequence1_type88_photo_rate(const double* raw,int raw_count,double thresh
 }
 
 
-bool evaluate_type53_source_integral(
+BoundFreePreparedGeometryV064895 prepare_bound_free_geometry_v064895(
     const double* payload,
     std::size_t real_count,
-    const ElementRow& lower,
-    const ElementRow& upper,
-    const xstar_fixed_state_input_v1& input,
+    const double* source_energy_ev,
+    std::size_t source_bin_count,
     double threshold_ev,
-    double ptmp_sum,
-    const xstar_type53_row46_dsec_runtime_oracle_v048716::Entry* row46_contract,
-    const Type53RecordContext* record_context,
-    int record_number,
     bool type49_semantics,
     bool phextrap_pairs,
-    xstar_element_contribution_v1& contribution,
-    Type53SourceShadow* shadow
+    const Type53RecordContext* record_context
 ) {
-    if (!payload || real_count < 4 || real_count % 2 != 0) return false;
-    const bool has_dsec_radiation = input.dsec_radiation_energy_ev && input.dsec_bremsa && input.dsec_radiation_bin_count >= 3;
-    const double* source_energy_ev = has_dsec_radiation ? input.dsec_radiation_energy_ev : input.radiation_energy_ev;
-    const double* source_bremsa = has_dsec_radiation ? input.dsec_bremsa : input.radiation_flux;
-    const std::size_t source_bin_count = has_dsec_radiation ? input.dsec_radiation_bin_count : input.radiation_bin_count;
-    if (!source_energy_ev || !source_bremsa || source_bin_count < 3) return false;
-    if (!(input.temperature_k > 0.0) || !(input.electron_density_cm3 >= 0.0)) return false;
-
+    BoundFreePreparedGeometryV064895 out;
+    if (!payload || real_count < 4 || real_count % 2 != 0 || !source_energy_ev || source_bin_count < 3)
+        return out;
     const int n_grid = static_cast<int>(source_bin_count);
     const std::size_t pair_real_count = record_context && record_context->valid
         ? record_context->pair_real_count : real_count;
-    if (pair_real_count < 4 || pair_real_count % 2 != 0 || pair_real_count > real_count) return false;
+    if (pair_real_count < 4 || pair_real_count % 2 != 0 || pair_real_count > real_count) return out;
     int pair_count = static_cast<int>(pair_real_count / 2);
     const int numcon2 = std::max(2, n_grid / 50);
     const int usable_grid = n_grid - numcon2;
-    if (pair_count < 2 || usable_grid < 2) return false;
+    if (pair_count < 2 || usable_grid < 2) return out;
 
     std::vector<double> pair_energy_ryd(static_cast<std::size_t>(pair_count), 0.0);
     std::vector<double> pair_sigma_cm2(static_cast<std::size_t>(pair_count), 0.0);
@@ -4422,21 +4470,16 @@ bool evaluate_type53_source_integral(
         pair_energy_ryd[static_cast<std::size_t>(j)] = payload[2 * j];
         pair_sigma_cm2[static_cast<std::size_t>(j)] = std::max(0.0, payload[2 * j + 1]);
     }
-    const std::uint64_t phextrap_input_energy_hash = binary64_sequence_fnv1a(pair_energy_ryd);
-    const std::uint64_t phextrap_input_sigma_hash = binary64_sequence_fnv1a(pair_sigma_cm2);
+    out.phextrap_input_energy_hash = binary64_sequence_fnv1a(pair_energy_ryd);
+    out.phextrap_input_sigma_hash = binary64_sequence_fnv1a(pair_sigma_cm2);
     int phextrap_max_points = n_grid;
-    if (phextrap_pairs && record_context && record_context->phextrap_max_points > 0) {
+    if (phextrap_pairs && record_context && record_context->phextrap_max_points > 0)
         phextrap_max_points = record_context->phextrap_max_points;
-    }
     if (phextrap_pairs) {
         const int ntmp_initial = pair_count;
         const int base = std::max(ntmp_initial - 2, 0);
         double e1 = pair_energy_ryd[static_cast<std::size_t>(base)] * 13.6 + threshold_ev;
         double s1 = pair_sigma_cm2[static_cast<std::size_t>(base)];
-        // Literal phextrap.f90: the source seeds from ntmp-1, then writes
-        // stmp(nadd+ntmp-1).  Thus the original final tabulated pair is
-        // discarded/replaced and the loop limit is nadd+ntmp<ncn2 rather
-        // than a vector-size append test.
         if (ntmp_initial >= 2) {
             pair_energy_ryd.resize(static_cast<std::size_t>(ntmp_initial - 1));
             pair_sigma_cm2.resize(static_cast<std::size_t>(ntmp_initial - 1));
@@ -4453,8 +4496,8 @@ bool evaluate_type53_source_integral(
         }
         pair_count = static_cast<int>(pair_energy_ryd.size());
     }
-    const std::uint64_t phextrap_output_energy_hash = binary64_sequence_fnv1a(pair_energy_ryd);
-    const std::uint64_t phextrap_output_sigma_hash = binary64_sequence_fnv1a(pair_sigma_cm2);
+    out.phextrap_output_energy_hash = binary64_sequence_fnv1a(pair_energy_ryd);
+    out.phextrap_output_sigma_hash = binary64_sequence_fnv1a(pair_sigma_cm2);
 
     std::vector<double> xs(static_cast<std::size_t>(pair_count), 0.0);
     std::vector<double> ys(static_cast<std::size_t>(pair_count), 0.0);
@@ -4462,7 +4505,6 @@ bool evaluate_type53_source_integral(
         xs[static_cast<std::size_t>(j)] = threshold_ev + pair_energy_ryd[static_cast<std::size_t>(j)] * kType53RydEv;
         ys[static_cast<std::size_t>(j)] = pair_sigma_cm2[static_cast<std::size_t>(j)];
     }
-
     const auto lower_bracket = [&](double energy) -> int {
         if (energy <= source_energy_ev[0]) return 0;
         int lo = 0;
@@ -4474,27 +4516,19 @@ bool evaluate_type53_source_integral(
         }
         return source_energy_ev[hi] <= energy ? hi : lo;
     };
-
     const int nb1 = lower_bracket(xs[0]);
-    if (nb1 + 1 >= usable_grid) return false;
-    std::vector<double> sgbar(static_cast<std::size_t>(n_grid), 0.0);
-    sgbar[static_cast<std::size_t>(std::max(0, nb1 - 1))] = 0.0;
-    sgbar[static_cast<std::size_t>(nb1)] = 0.0;
+    if (nb1 + 1 >= usable_grid) return out;
+    out.sgbar.assign(static_cast<std::size_t>(n_grid), 0.0);
+    out.sgbar[static_cast<std::size_t>(std::max(0, nb1 - 1))] = 0.0;
+    out.sgbar[static_cast<std::size_t>(nb1)] = 0.0;
 
     int k = nb1;
     int j = 0;
     double egrid = source_energy_ev[k];
     double e2 = xs[0];
     double s2 = ys[0];
-    if (egrid < e2 && k + 1 < n_grid) {
-        ++k;
-        egrid = source_energy_ev[k];
-    }
-    double e1o = e2;
-    double e2o = e2;
-    double s2o = s2;
-    double s2t = s2;
-    double e2t = egrid;
+    if (egrid < e2 && k + 1 < n_grid) { ++k; egrid = source_energy_ev[k]; }
+    double e1o = e2, e2o = e2, s2o = s2, s2t = s2, e2t = egrid;
     double integral = 0.0;
     bool done = false;
     int iterations = 0;
@@ -4504,17 +4538,13 @@ bool evaluate_type53_source_integral(
         bool advanced = false;
         while (e2 < egrid && j < pair_count - 2) {
             ++j;
-            e2o = e2;
-            s2o = s2;
+            e2o = e2; s2o = s2;
             e2 = xs[static_cast<std::size_t>(j)];
             s2 = ys[static_cast<std::size_t>(j)];
             integral += (s2 + s2o) * (e2 - e2o) / 2.0;
             advanced = true;
         }
-        if (!advanced && iterations == 1) {
-            e2o = e2;
-            s2o = s2;
-        }
+        if (!advanced && iterations == 1) { e2o = e2; s2o = s2; }
         integral -= (s2 + s2o) * (e2 - e2o) / 2.0;
         e2t = egrid;
         s2t = (e2 - e2o > 1.0e-8)
@@ -4522,7 +4552,7 @@ bool evaluate_type53_source_integral(
             : s2o;
         integral += (s2t + s2o) * (e2t - e2o) / 2.0;
         const double denom = egrid - e1o;
-        sgbar[static_cast<std::size_t>(k)] = std::abs(denom) > 1.0e-36 ? integral / denom : 0.0;
+        out.sgbar[static_cast<std::size_t>(k)] = std::abs(denom) > 1.0e-36 ? integral / denom : 0.0;
         e1o = egrid;
         ++k;
         if (k >= n_grid) break;
@@ -4534,7 +4564,8 @@ bool evaluate_type53_source_integral(
                 : s2o;
             integral = s2t * (egrid - e1o);
             const double local_denom = egrid - e1o;
-            sgbar[static_cast<std::size_t>(k)] = std::abs(local_denom) > 1.0e-36 ? integral / local_denom : 0.0;
+            out.sgbar[static_cast<std::size_t>(k)] =
+                std::abs(local_denom) > 1.0e-36 ? integral / local_denom : 0.0;
             e1o = egrid;
             ++k;
             if (k >= n_grid) break;
@@ -4543,9 +4574,147 @@ bool evaluate_type53_source_integral(
         integral = (s2 + s2t) * (e2 - e2t) / 2.0;
         if (k >= usable_grid - 1 || j >= pair_count - 2) done = true;
     }
-
     const int klmax = std::max(nb1, k - 1);
-    if (iterations >= max_iterations || nb1 >= klmax || nb1 >= n_grid) return false;
+    if (iterations >= max_iterations || nb1 >= klmax || nb1 >= n_grid) return BoundFreePreparedGeometryV064895{};
+
+    // Preserve the independent literal nbinc-owned threshold publication map
+    // used by patch 5.18.  This geometry is also temperature-independent;
+    // only the stimulated coefficient is evaluated dynamically.
+    int exact_nb1_one_based = type99_nbinc_fortran_value(xs[0], source_energy_ev, source_bin_count);
+    while (exact_nb1_one_based < usable_grid && source_energy_ev[exact_nb1_one_based - 1] < xs[0])
+        ++exact_nb1_one_based;
+    exact_nb1_one_based = std::max(1, exact_nb1_one_based - 1);
+    const int exact_nb1 = exact_nb1_one_based - 1;
+    if (exact_nb1 + 3 < n_grid) {
+        std::vector<double> exact_sgbar(static_cast<std::size_t>(n_grid), 0.0);
+        exact_sgbar[static_cast<std::size_t>(std::max(0, exact_nb1 - 1))] = 0.0;
+        exact_sgbar[static_cast<std::size_t>(exact_nb1)] = 0.0;
+        int ek = exact_nb1, ej = 0;
+        double ee1 = source_energy_ev[ek], ee2 = xs[0], ss2 = ys[0];
+        if (ee1 < ee2 && ek + 1 < n_grid) { ++ek; ee1 = source_energy_ev[ek]; }
+        double ee1o = ee2, ee2o = ee2, ss2o = ss2, ss2t = ss2, ee2t = ee1;
+        double esum = 0.0;
+        bool edone = false;
+        int guard = 0;
+        const int guard_max = std::max(8, 4 * (n_grid + pair_count));
+        while (!edone && guard++ < guard_max && ek < n_grid) {
+            while (ee2 < ee1 && ej < pair_count - 2) {
+                ++ej; ee2o = ee2; ss2o = ss2; ee2 = xs[static_cast<std::size_t>(ej)];
+                ss2 = ys[static_cast<std::size_t>(ej)];
+                esum += (ss2 + ss2o) * (ee2 - ee2o) / 2.0;
+            }
+            esum -= (ss2 + ss2o) * (ee2 - ee2o) / 2.0;
+            ee2t = ee1;
+            ss2t = (ee2 - ee2o > 1.0e-8)
+                ? ss2o + (ss2 - ss2o) * (ee2t - ee2o) / (ee2 - ee2o + 1.0e-24)
+                : ss2o;
+            esum += (ss2t + ss2o) * (ee2t - ee2o) / 2.0;
+            const double eden = ee1 - ee1o;
+            exact_sgbar[static_cast<std::size_t>(ek)] = std::abs(eden) > 1.0e-36 ? esum / eden : 0.0;
+            ee1o = ee1; ++ek; if (ek >= n_grid) break; ee1 = source_energy_ev[ek];
+            while (ee1 < ee2 && ek < n_grid - 1) {
+                ee2t = ee1;
+                ss2t = (ee2 - ee2o > 1.0e-8)
+                    ? ss2o + (ss2 - ss2o) * (ee2t - ee2o) / (ee2 - ee2o)
+                    : ss2o;
+                esum = ss2t * (ee1 - ee1o);
+                const double local_den = ee1 - ee1o;
+                exact_sgbar[static_cast<std::size_t>(ek)] =
+                    std::abs(local_den) > 1.0e-36 ? esum / local_den : 0.0;
+                ee1o = ee1; ++ek; if (ek >= n_grid) break; ee1 = source_energy_ev[ek];
+            }
+            esum = (ss2 + ss2t) * (ee2 - ee2t) / 2.0;
+            if (ek >= usable_grid - 1 || ej >= pair_count - 2) edone = true;
+        }
+        const int exact_klmax = std::max(exact_nb1, ek - 1);
+        const int publish_kl = exact_nb1 + 2;
+        if (publish_kl < exact_klmax && publish_kl + 1 < n_grid) {
+            out.exact_threshold_publication_reached = true;
+            out.exact_publish_kl = publish_kl;
+            out.exact_publish_sgtp = std::max(0.0, exact_sgbar[static_cast<std::size_t>(publish_kl)]);
+        }
+    }
+
+    out.valid = true;
+    out.source_bin_count = source_bin_count;
+    out.source_energy_hash = binary64_sequence_fnv1a(source_energy_ev, source_bin_count);
+    out.threshold_ev = threshold_ev;
+    out.type49_semantics = type49_semantics;
+    out.phextrap_pairs = phextrap_pairs;
+    out.phextrap_max_points = phextrap_max_points;
+    out.pair_count = pair_count;
+    out.nb1 = nb1;
+    out.klmax = klmax;
+    return out;
+}
+
+bool evaluate_type53_source_integral(
+    const double* payload,
+    std::size_t real_count,
+    const ElementRow& lower,
+    const ElementRow& upper,
+    const xstar_fixed_state_input_v1& input,
+    double threshold_ev,
+    double ptmp_sum,
+    const xstar_type53_row46_dsec_runtime_oracle_v048716::Entry* row46_contract,
+    const Type53RecordContext* record_context,
+    int record_number,
+    bool type49_semantics,
+    bool phextrap_pairs,
+    xstar_element_contribution_v1& contribution,
+    Type53SourceShadow* shadow,
+    const BoundFreePreparedGeometryV064895* prepared_geometry = nullptr
+) {
+    if (!payload || real_count < 4 || real_count % 2 != 0) return false;
+    const bool has_dsec_radiation = input.dsec_radiation_energy_ev && input.dsec_bremsa && input.dsec_radiation_bin_count >= 3;
+    const double* source_energy_ev = has_dsec_radiation ? input.dsec_radiation_energy_ev : input.radiation_energy_ev;
+    const double* source_bremsa = has_dsec_radiation ? input.dsec_bremsa : input.radiation_flux;
+    const std::size_t source_bin_count = has_dsec_radiation ? input.dsec_radiation_bin_count : input.radiation_bin_count;
+    if (!source_energy_ev || !source_bremsa || source_bin_count < 3) return false;
+    if (!(input.temperature_k > 0.0) || !(input.electron_density_cm3 >= 0.0)) return false;
+
+    const int n_grid = static_cast<int>(source_bin_count);
+    const std::size_t pair_real_count = record_context && record_context->valid
+        ? record_context->pair_real_count : real_count;
+    if (pair_real_count < 4 || pair_real_count % 2 != 0 || pair_real_count > real_count) return false;
+    const int numcon2 = std::max(2, n_grid / 50);
+    const int usable_grid = n_grid - numcon2;
+    if (usable_grid < 2) return false;
+
+    BoundFreePreparedGeometryV064895 local_geometry;
+    const BoundFreePreparedGeometryV064895* geometry = prepared_geometry;
+    std::vector<double> legacy_xs;
+    if (geometry) {
+        // The context-level prepared-geometry lookup validates the immutable
+        // energy-grid hash once per fixed-state evaluation.  Do not re-hash
+        // 999/9999 bins for every Type49/53 record here.
+        if (!geometry->valid || geometry->source_bin_count != source_bin_count ||
+            geometry->threshold_ev != threshold_ev ||
+            geometry->type49_semantics != type49_semantics || geometry->phextrap_pairs != phextrap_pairs) {
+            return false;
+        }
+    } else {
+        local_geometry = prepare_bound_free_geometry_v064895(
+            payload, real_count, source_energy_ev, source_bin_count, threshold_ev,
+            type49_semantics, phextrap_pairs, record_context);
+        if (!local_geometry.valid) return false;
+        geometry = &local_geometry;
+        // The legacy-only exact-publication block below requires xs[0].
+        // Reconstruct only that coordinate here; optimized prepared calls use
+        // the cached publication slot and never enter the legacy block.
+        legacy_xs.push_back(threshold_ev + payload[0] * kType53RydEv);
+    }
+    const int pair_count = geometry->pair_count;
+    const int phextrap_max_points = geometry->phextrap_max_points;
+    const std::uint64_t phextrap_input_energy_hash = geometry->phextrap_input_energy_hash;
+    const std::uint64_t phextrap_input_sigma_hash = geometry->phextrap_input_sigma_hash;
+    const std::uint64_t phextrap_output_energy_hash = geometry->phextrap_output_energy_hash;
+    const std::uint64_t phextrap_output_sigma_hash = geometry->phextrap_output_sigma_hash;
+    const int nb1 = geometry->nb1;
+    const int klmax = geometry->klmax;
+    const std::vector<double>& sgbar = geometry->sgbar;
+    if (pair_count < 2 || nb1 < 0 || klmax <= nb1 || klmax >= n_grid ||
+        sgbar.size() != source_bin_count) return false;
 
     constexpr double kBoltzmannErgK = xstar_constants::kBoltzmannErgPerK;
     constexpr double kKtEvPerT4 = xstar_constants::kLegacyBoltzmannEvPerT4;
@@ -4639,81 +4808,23 @@ bool evaluate_type53_source_integral(
         ++kl;
     }
 
-    // v82 patch 5.18: recompute only the phint53 threshold publication
-    // sample with the literal source nbinc() owner.  Do not perturb the
-    // accepted integral/rate accumulation above.  This isolates the
-    // cancellation-sensitive opakab sample from the broad continuum grid.
-    {
-        int exact_nb1_one_based = type99_nbinc_fortran_value(xs[0], source_energy_ev, source_bin_count);
-        while (exact_nb1_one_based < usable_grid &&
-               source_energy_ev[exact_nb1_one_based - 1] < xs[0]) {
-            ++exact_nb1_one_based;
+    // v0.6.48.9.5: the exact nbinc-owned threshold sample is part of
+    // immutable grid geometry.  Reuse the cached source sigma while retaining
+    // the literal dynamic temperature/escape arithmetic for the stimulated
+    // subtraction.
+    if (geometry->exact_threshold_publication_reached && geometry->exact_publish_kl >= 0 &&
+        geometry->exact_publish_kl + 1 < n_grid) {
+        const int publish_kl = geometry->exact_publish_kl;
+        const double source_sgtp = geometry->exact_publish_sgtp;
+        const double previous_expt = (source_energy_ev[publish_kl] - threshold_ev) / bktm;
+        double source_exptmpp = 0.0;
+        if (previous_expt < 200.0) {
+            const double next_expt = (source_energy_ev[publish_kl + 1] - threshold_ev) / bktm;
+            source_exptmpp = type53_expo(-next_expt);
         }
-        exact_nb1_one_based = std::max(1, exact_nb1_one_based - 1);
-        const int exact_nb1 = exact_nb1_one_based - 1;
-        if (exact_nb1 + 3 < n_grid) {
-            std::vector<double> exact_sgbar(static_cast<std::size_t>(n_grid), 0.0);
-            exact_sgbar[static_cast<std::size_t>(std::max(0, exact_nb1 - 1))] = 0.0;
-            exact_sgbar[static_cast<std::size_t>(exact_nb1)] = 0.0;
-            int ek = exact_nb1;
-            int ej = 0;
-            double ee1 = source_energy_ev[ek];
-            double ee2 = xs[0];
-            double ss2 = ys[0];
-            if (ee1 < ee2 && ek + 1 < n_grid) { ++ek; ee1 = source_energy_ev[ek]; }
-            double ee1o = ee2, ee2o = ee2, ss2o = ss2, ss2t = ss2, ee2t = ee1;
-            double esum = 0.0;
-            bool edone = false;
-            int guard = 0;
-            const int guard_max = std::max(8, 4 * (n_grid + pair_count));
-            while (!edone && guard++ < guard_max && ek < n_grid) {
-                while (ee2 < ee1 && ej < pair_count - 2) {
-                    ++ej; ee2o = ee2; ss2o = ss2; ee2 = xs[static_cast<std::size_t>(ej)];
-                    ss2 = ys[static_cast<std::size_t>(ej)];
-                    esum += (ss2 + ss2o) * (ee2 - ee2o) / 2.0;
-                }
-                esum -= (ss2 + ss2o) * (ee2 - ee2o) / 2.0;
-                ee2t = ee1;
-                ss2t = (ee2 - ee2o > 1.0e-8)
-                    ? ss2o + (ss2 - ss2o) * (ee2t - ee2o) / (ee2 - ee2o + 1.0e-24)
-                    : ss2o;
-                esum += (ss2t + ss2o) * (ee2t - ee2o) / 2.0;
-                const double eden = ee1 - ee1o;
-                exact_sgbar[static_cast<std::size_t>(ek)] =
-                    std::abs(eden) > 1.0e-36 ? esum / eden : 0.0;
-                ee1o = ee1; ++ek; if (ek >= n_grid) break; ee1 = source_energy_ev[ek];
-                while (ee1 < ee2 && ek < n_grid - 1) {
-                    ee2t = ee1;
-                    ss2t = (ee2 - ee2o > 1.0e-8)
-                        ? ss2o + (ss2 - ss2o) * (ee2t - ee2o) / (ee2 - ee2o)
-                        : ss2o;
-                    esum = ss2t * (ee1 - ee1o);
-                    const double local_den = ee1 - ee1o;
-                    exact_sgbar[static_cast<std::size_t>(ek)] =
-                        std::abs(local_den) > 1.0e-36 ? esum / local_den : 0.0;
-                    ee1o = ee1; ++ek; if (ek >= n_grid) break; ee1 = source_energy_ev[ek];
-                }
-                esum = (ss2 + ss2t) * (ee2 - ee2t) / 2.0;
-                if (ek >= usable_grid - 1 || ej >= pair_count - 2) edone = true;
-            }
-            const int exact_klmax = std::max(exact_nb1, ek - 1);
-            const int publish_kl = exact_nb1 + 2;
-            if (publish_kl < exact_klmax && publish_kl + 1 < n_grid) {
-                const double source_sgtp = std::max(0.0, exact_sgbar[static_cast<std::size_t>(publish_kl)]);
-                const double previous_expt =
-                    (source_energy_ev[publish_kl] - threshold_ev) / bktm;
-                double source_exptmpp = 0.0;
-                if (previous_expt < 200.0) {
-                    const double next_expt =
-                        (source_energy_ev[publish_kl + 1] - threshold_ev) / bktm;
-                    source_exptmpp = type53_expo(-next_expt);
-                }
-                threshold_abs_sigma_cm2 = source_sgtp;
-                threshold_stimulated_sigma_cm2 =
-                    rnist * source_exptmpp * source_sgtp * ptmp_sum;
-                threshold_publication_reached = true;
-            }
-        }
+        threshold_abs_sigma_cm2 = source_sgtp;
+        threshold_stimulated_sigma_cm2 = rnist * source_exptmpp * source_sgtp * ptmp_sum;
+        threshold_publication_reached = true;
     }
 
     // The immutable v0.6.47.2 source evaluation of the near-threshold
@@ -4868,6 +4979,12 @@ struct RateEvaluationContextV064894 {
     double kt_ev = 0.0;
     xstar_fixed_state_input_v1 calc_hmc_input{};
     const SourceContinuumWorkspace* calc_emisab_workspace = nullptr;
+    // v0.6.48.9.5 prepared bound-free engine.
+    std::vector<BoundFreePreparedRecordCacheV064895>* bound_free_cache = nullptr;
+    BoundFreePerfCountersV064895* bound_free_perf = nullptr;
+    bool force_legacy_bound_free = false;
+    std::uint64_t reduced_energy_hash = 0;
+    std::uint64_t full_energy_hash = 0;
 };
 
 RateEvaluationContextV064894 make_rate_evaluation_context_v064894(
@@ -4891,8 +5008,65 @@ RateEvaluationContextV064894 make_rate_evaluation_context_v064894(
         context.calc_hmc_input.dsec_radiation_energy_ev = calc_emisab_workspace->epim.data();
         context.calc_hmc_input.dsec_bremsa = calc_emisab_workspace->bremsam.data();
         context.calc_hmc_input.dsec_radiation_bin_count = calc_emisab_workspace->epim.size();
+        context.reduced_energy_hash = binary64_sequence_fnv1a(
+            calc_emisab_workspace->epim.data(), calc_emisab_workspace->epim.size());
+    } else if (input.dsec_radiation_energy_ev && input.dsec_radiation_bin_count >= 3) {
+        context.reduced_energy_hash = binary64_sequence_fnv1a(
+            input.dsec_radiation_energy_ev, input.dsec_radiation_bin_count);
     }
+    if (input.radiation_energy_ev && input.radiation_bin_count >= 3) {
+        context.full_energy_hash = binary64_sequence_fnv1a(
+            input.radiation_energy_ev, input.radiation_bin_count);
+    }
+    context.force_legacy_bound_free = environment_flag(
+        "XSTAR_V064895_FORCE_LEGACY_BOUND_FREE");
     return context;
+}
+
+const BoundFreePreparedGeometryV064895* prepared_bound_free_geometry_v064895(
+    const Program& program,
+    const ProgramRecord& record,
+    const xstar_fixed_state_input_v1& eval_input,
+    double threshold_ev,
+    bool type49_semantics,
+    bool phextrap_pairs,
+    const Type53RecordContext* record_context,
+    bool full_grid,
+    const RateEvaluationContextV064894& rate_context) {
+    if (rate_context.force_legacy_bound_free || !rate_context.bound_free_cache ||
+        !rate_context.bound_free_perf) return nullptr;
+    const std::ptrdiff_t record_index = &record - program.records.data();
+    if (record_index < 0 || static_cast<std::size_t>(record_index) >= program.records.size() ||
+        static_cast<std::size_t>(record_index) >= rate_context.bound_free_cache->size()) return nullptr;
+    const bool has_dsec = eval_input.dsec_radiation_energy_ev && eval_input.dsec_bremsa &&
+        eval_input.dsec_radiation_bin_count >= 3;
+    const double* energy = has_dsec ? eval_input.dsec_radiation_energy_ev : eval_input.radiation_energy_ev;
+    const std::size_t count = has_dsec ? eval_input.dsec_radiation_bin_count : eval_input.radiation_bin_count;
+    if (!energy || count < 3) return nullptr;
+    const std::uint64_t expected_hash = full_grid
+        ? rate_context.full_energy_hash : rate_context.reduced_energy_hash;
+    auto& slot = (*rate_context.bound_free_cache)[static_cast<std::size_t>(record_index)];
+    auto& geometry = full_grid ? slot.full : slot.reduced;
+    const int expected_phextrap_max = phextrap_pairs && record_context &&
+        record_context->phextrap_max_points > 0 ? record_context->phextrap_max_points
+        : static_cast<int>(count);
+    const bool reusable = geometry.valid && geometry.source_bin_count == count &&
+        geometry.source_energy_hash == expected_hash && geometry.threshold_ev == threshold_ev &&
+        geometry.type49_semantics == type49_semantics && geometry.phextrap_pairs == phextrap_pairs &&
+        geometry.phextrap_max_points == expected_phextrap_max;
+    if (!reusable) {
+        geometry = prepare_bound_free_geometry_v064895(
+            program.reals.data() + record.real_offset,
+            record_context && record_context->valid ? record_context->pair_real_count : record.real_count,
+            energy, count, threshold_ev, type49_semantics, phextrap_pairs, record_context);
+        if (!geometry.valid) return nullptr;
+        if (full_grid) ++rate_context.bound_free_perf->full_geometry_builds;
+        else ++rate_context.bound_free_perf->reduced_geometry_builds;
+    } else {
+        if (full_grid) ++rate_context.bound_free_perf->full_geometry_reuses;
+        else ++rate_context.bound_free_perf->reduced_geometry_reuses;
+    }
+    return &geometry;
 }
 
 EvaluatedRecord evaluate_record(
@@ -5287,12 +5461,23 @@ EvaluatedRecord evaluate_record(
                 }
             }
             const double source_threshold = row46_contract ? row46_contract->threshold_ev : threshold;
+            out.bound_free_record_context_v064895 = record_context;
+            out.bound_free_ptmp_sum_v064895 = contract_ptmp1 + contract_ptmp2;
+            out.bound_free_threshold_ev_v064895 = source_threshold;
+            out.bound_free_type49_v064895 = false;
+            out.bound_free_row46_contract_v064895 = row46_contract != nullptr;
+            const BoundFreePreparedGeometryV064895* prepared_reduced_v064895 =
+                prepared_bound_free_geometry_v064895(
+                    program, record, calc_hmc_input, source_threshold, false, false,
+                    record_context.valid ? &record_context : nullptr, false, rate_context);
             xstar_element_contribution_v1 source_shadow{};
             const bool source_exact = evaluate_type53_source_integral(
                 r, pair_real_count, lower, upper, calc_hmc_input, source_threshold,
                 contract_ptmp1 + contract_ptmp2, row46_contract,
                 record_context.valid ? &record_context : nullptr, record.record, false, false,
-                source_shadow, &out.type53_shadow);
+                source_shadow, &out.type53_shadow, prepared_reduced_v064895);
+            if (!rate_context.force_legacy_bound_free && rate_context.bound_free_perf)
+                ++rate_context.bound_free_perf->reduced_dynamic_integrals;
 
             // v82 patch 5.18.1: source calc_emisab_all consumes the reduced
             // 999-bin epim/bremsam workspace.  Its opakab publication is the
@@ -5302,41 +5487,54 @@ EvaluatedRecord evaluate_record(
             // revisit that does not reach the threshold publication clears it.
             if (calc_emisab_workspace && calc_emisab_workspace->epim.size() >= 3 &&
                 calc_emisab_workspace->bremsam.size() == calc_emisab_workspace->epim.size()) {
-                xstar_fixed_state_input_v1 calc_emisab_input = input;
-                calc_emisab_input.dsec_radiation_energy_ev = calc_emisab_workspace->epim.data();
-                calc_emisab_input.dsec_bremsa = calc_emisab_workspace->bremsam.data();
-                calc_emisab_input.dsec_radiation_bin_count = calc_emisab_workspace->epim.size();
-                xstar_element_contribution_v1 calc_emisab_contribution{};
-                const bool calc_emisab_exact = evaluate_type53_source_integral(
-                    r, pair_real_count, lower, upper, calc_emisab_input, source_threshold,
-                    contract_ptmp1 + contract_ptmp2, row46_contract,
-                    record_context.valid ? &record_context : nullptr, record.record, false, false,
-                    calc_emisab_contribution, &out.type53_calc_emisab_shadow);
-                if (!calc_emisab_exact) out.type53_calc_emisab_shadow = Type53SourceShadow{};
+                if (!rate_context.force_legacy_bound_free && source_exact) {
+                    // The calc_hmc source call above already consumed the exact
+                    // same epim/bremsam workspace and all dynamic inputs.
+                    out.type53_calc_emisab_shadow = out.type53_shadow;
+                    if (rate_context.bound_free_perf)
+                        ++rate_context.bound_free_perf->reduced_duplicate_reuses;
+                } else {
+                    xstar_fixed_state_input_v1 calc_emisab_input = input;
+                    calc_emisab_input.dsec_radiation_energy_ev = calc_emisab_workspace->epim.data();
+                    calc_emisab_input.dsec_bremsa = calc_emisab_workspace->bremsam.data();
+                    calc_emisab_input.dsec_radiation_bin_count = calc_emisab_workspace->epim.size();
+                    xstar_element_contribution_v1 calc_emisab_contribution{};
+                    const bool calc_emisab_exact = evaluate_type53_source_integral(
+                        r, pair_real_count, lower, upper, calc_emisab_input, source_threshold,
+                        contract_ptmp1 + contract_ptmp2, row46_contract,
+                        record_context.valid ? &record_context : nullptr, record.record, false, false,
+                        calc_emisab_contribution, &out.type53_calc_emisab_shadow);
+                    if (rate_context.bound_free_perf)
+                        ++rate_context.bound_free_perf->legacy_reduced_duplicate_integrals;
+                    if (!calc_emisab_exact) out.type53_calc_emisab_shadow = Type53SourceShadow{};
+                }
             }
             // v82 patch 5.20.14: selected calc_emis_ion is a second UCalc
             // call on the full epi/ncn2/bremsa workspace.  Keep it distinct
             // from the reduced calc_hmc and calc_emisab caller lifetimes.
             {
-                // v82 patch 5.20.14.2: calc_emis_all is the literal full-grid
-                // caller.  The parent input also carries the reduced DSEC
-                // epim/bremsam workspace for calc_hmc; evaluate_type53_source_integral
-                // intentionally prefers that workspace when it is present.
-                // Therefore a mere copy of `input` silently re-ran this supposed
-                // full-grid revisit on 999 bins.  Explicitly clear only the DSEC
-                // radiation aliases so this UCalc call consumes epi/bremsa (9999),
-                // while retaining the same live continuum-tau and covering state.
-                xstar_fixed_state_input_v1 calc_emis_input = input;
-                calc_emis_input.dsec_radiation_energy_ev = nullptr;
-                calc_emis_input.dsec_bremsa = nullptr;
-                calc_emis_input.dsec_radiation_bin_count = 0;
-                xstar_element_contribution_v1 calc_emis_contribution{};
-                const bool calc_emis_exact = evaluate_type53_source_integral(
-                    r, pair_real_count, lower, upper, calc_emis_input, source_threshold,
-                    contract_ptmp1 + contract_ptmp2, row46_contract,
-                    record_context.valid ? &record_context : nullptr, record.record, false, false,
-                    calc_emis_contribution, &out.type53_calc_emis_shadow);
-                if (!calc_emis_exact) out.type53_calc_emis_shadow = Type53SourceShadow{};
+                if (rate_context.force_legacy_bound_free) {
+                    // A/B mode: preserve the pre-9.5 eager full-grid revisit.
+                    xstar_fixed_state_input_v1 calc_emis_input = input;
+                    calc_emis_input.dsec_radiation_energy_ev = nullptr;
+                    calc_emis_input.dsec_bremsa = nullptr;
+                    calc_emis_input.dsec_radiation_bin_count = 0;
+                    xstar_element_contribution_v1 calc_emis_contribution{};
+                    const bool calc_emis_exact = evaluate_type53_source_integral(
+                        r, pair_real_count, lower, upper, calc_emis_input, source_threshold,
+                        contract_ptmp1 + contract_ptmp2, row46_contract,
+                        record_context.valid ? &record_context : nullptr, record.record, false, false,
+                        calc_emis_contribution, &out.type53_calc_emis_shadow);
+                    if (rate_context.bound_free_perf)
+                        ++rate_context.bound_free_perf->legacy_full_eager_integrals;
+                    if (!calc_emis_exact) out.type53_calc_emis_shadow = Type53SourceShadow{};
+                } else {
+                    // The full-grid Type53 curve geometry is identical to the
+                    // reduced curve.  Retain metadata for broad product replay;
+                    // the dynamic 9999-bin integral is executed only after the
+                    // source rlbin/ncbin selection proves this record is consumed.
+                    out.type53_calc_emis_shadow = out.type53_shadow;
+                }
             }
             out.type53_shadow.helium_live_escape_state_applied = helium_live_escape_applied;
             if (row46_contract) {
@@ -5634,10 +5832,21 @@ EvaluatedRecord evaluate_record(
                 out.type49_shadow.hydrogen_density_cm3 = input.hydrogen_density_cm3;
                 out.type49_shadow.matrix_density_scale = static_cast<double>(input.hydrogen_density_cm3);
             } else {
+                out.bound_free_record_context_v064895 = record_context;
+                out.bound_free_ptmp_sum_v064895 = ptmp1 + ptmp2;
+                out.bound_free_threshold_ev_v064895 = source_threshold;
+                out.bound_free_type49_v064895 = true;
+                out.bound_free_row46_contract_v064895 = false;
+                const BoundFreePreparedGeometryV064895* prepared_reduced_v064895 =
+                    prepared_bound_free_geometry_v064895(
+                        program, record, calc_hmc_input, source_threshold, true, true,
+                        record_context.valid ? &record_context : nullptr, false, rate_context);
                 source_exact = evaluate_type53_source_integral(
                     r, pair_real_count, lower, upper, calc_hmc_input, source_threshold, ptmp1 + ptmp2,
                     nullptr, record_context.valid ? &record_context : nullptr, record.record,
-                    true, true, source_shadow, &out.type49_shadow);
+                    true, true, source_shadow, &out.type49_shadow, prepared_reduced_v064895);
+                if (!rate_context.force_legacy_bound_free && rate_context.bound_free_perf)
+                    ++rate_context.bound_free_perf->reduced_dynamic_integrals;
             }
             // v82 patch 5.20.8: literal calc_emisab_all is called with
             // epim/ncn2m/bremsam before calc_emis_all revisits rate-7 on the
@@ -5648,44 +5857,57 @@ EvaluatedRecord evaluate_record(
                 out.type49_calc_emisab_shadow = out.type49_shadow;
             } else if (calc_emisab_workspace && calc_emisab_workspace->epim.size() >= 3 &&
                        calc_emisab_workspace->bremsam.size() == calc_emisab_workspace->epim.size()) {
-                xstar_fixed_state_input_v1 calc_emisab_input = input;
-                calc_emisab_input.dsec_radiation_energy_ev = calc_emisab_workspace->epim.data();
-                calc_emisab_input.dsec_bremsa = calc_emisab_workspace->bremsam.data();
-                calc_emisab_input.dsec_radiation_bin_count = calc_emisab_workspace->epim.size();
-                xstar_element_contribution_v1 calc_emisab_contribution{};
-                const bool calc_emisab_exact = evaluate_type53_source_integral(
-                    r, pair_real_count, lower, upper, calc_emisab_input, source_threshold,
-                    ptmp1 + ptmp2, nullptr, record_context.valid ? &record_context : nullptr,
-                    record.record, true, true, calc_emisab_contribution,
-                    &out.type49_calc_emisab_shadow);
-                if (!calc_emisab_exact) out.type49_calc_emisab_shadow = Type53SourceShadow{};
+                if (!rate_context.force_legacy_bound_free && source_exact) {
+                    out.type49_calc_emisab_shadow = out.type49_shadow;
+                    if (rate_context.bound_free_perf)
+                        ++rate_context.bound_free_perf->reduced_duplicate_reuses;
+                } else {
+                    xstar_fixed_state_input_v1 calc_emisab_input = input;
+                    calc_emisab_input.dsec_radiation_energy_ev = calc_emisab_workspace->epim.data();
+                    calc_emisab_input.dsec_bremsa = calc_emisab_workspace->bremsam.data();
+                    calc_emisab_input.dsec_radiation_bin_count = calc_emisab_workspace->epim.size();
+                    xstar_element_contribution_v1 calc_emisab_contribution{};
+                    const bool calc_emisab_exact = evaluate_type53_source_integral(
+                        r, pair_real_count, lower, upper, calc_emisab_input, source_threshold,
+                        ptmp1 + ptmp2, nullptr, record_context.valid ? &record_context : nullptr,
+                        record.record, true, true, calc_emisab_contribution,
+                        &out.type49_calc_emisab_shadow);
+                    if (rate_context.bound_free_perf)
+                        ++rate_context.bound_free_perf->legacy_reduced_duplicate_integrals;
+                    if (!calc_emisab_exact) out.type49_calc_emisab_shadow = Type53SourceShadow{};
+                }
             }
             // v82 patch 5.20.14: preserve the later full-grid calc_emis_ion
             // UCalc result independently from the reduced matrix/seed stages.
             if (source_zero_gate) {
                 out.type49_calc_emis_shadow = out.type49_shadow;
             } else {
-                xstar_element_contribution_v1 calc_emis_contribution{};
                 Type53RecordContext calc_emis_record_context = record_context;
-                // ucalc.f90 Type49 passes the current caller ncn2 directly
-                // to phextrap.  The full calc_emis caller therefore owns the
-                // 9999-bin capacity, while matrix/calc_emisab remain 999.
                 const std::size_t full_calc_emis_bins = input.radiation_bin_count;
                 calc_emis_record_context.phextrap_max_points = static_cast<int>(full_calc_emis_bins);
-                // v82 patch 5.20.14.2: same caller-lifetime correction as Type53.
-                // `input` retains the 999-bin DSEC workspace for the matrix stage,
-                // and evaluate_type53_source_integral prefers it whenever non-null.
-                // Clear those aliases for the later calc_emis UCalc revisit so the
-                // Type49 phextrap/phint53 path actually sees full epi/ncn2/bremsa.
-                xstar_fixed_state_input_v1 calc_emis_input = input;
-                calc_emis_input.dsec_radiation_energy_ev = nullptr;
-                calc_emis_input.dsec_bremsa = nullptr;
-                calc_emis_input.dsec_radiation_bin_count = 0;
-                const bool calc_emis_exact = evaluate_type53_source_integral(
-                    r, pair_real_count, lower, upper, calc_emis_input, source_threshold, ptmp1 + ptmp2,
-                    nullptr, calc_emis_record_context.valid ? &calc_emis_record_context : nullptr, record.record,
-                    true, true, calc_emis_contribution, &out.type49_calc_emis_shadow);
-                if (!calc_emis_exact) out.type49_calc_emis_shadow = Type53SourceShadow{};
+                if (rate_context.force_legacy_bound_free) {
+                    xstar_element_contribution_v1 calc_emis_contribution{};
+                    xstar_fixed_state_input_v1 calc_emis_input = input;
+                    calc_emis_input.dsec_radiation_energy_ev = nullptr;
+                    calc_emis_input.dsec_bremsa = nullptr;
+                    calc_emis_input.dsec_radiation_bin_count = 0;
+                    const bool calc_emis_exact = evaluate_type53_source_integral(
+                        r, pair_real_count, lower, upper, calc_emis_input, source_threshold, ptmp1 + ptmp2,
+                        nullptr, calc_emis_record_context.valid ? &calc_emis_record_context : nullptr, record.record,
+                        true, true, calc_emis_contribution, &out.type49_calc_emis_shadow);
+                    if (rate_context.bound_free_perf)
+                        ++rate_context.bound_free_perf->legacy_full_eager_integrals;
+                    if (!calc_emis_exact) out.type49_calc_emis_shadow = Type53SourceShadow{};
+                } else {
+                    // Broad calc_emis opacity replay needs the full-grid Type49
+                    // phextrap caller capacity, but not the dynamic phint53
+                    // integral.  Retain exact curve metadata and defer the
+                    // expensive 9999-bin integral until source selection.
+                    out.type49_calc_emis_shadow = out.type49_shadow;
+                    out.type49_calc_emis_shadow.phextrap_max_points =
+                        static_cast<int>(full_calc_emis_bins);
+                    out.type49_calc_emis_shadow.phextrap_applied = true;
+                }
             }
             const bool magnesium_finite_state = element.element_z == 12 &&
                 environment_flag("XSTAR_QUALIFICATION_MG_BOUND_FREE_FINITE_STATE");
@@ -6542,6 +6764,62 @@ EvaluatedRecord evaluate_record(
 }
 
 
+Type53SourceShadow evaluate_selected_fullgrid_bound_free_v064895(
+    const Program& program,
+    const ElementProgram& element,
+    const ProgramRecord& record,
+    const xstar_fixed_state_input_v1& input,
+    const EvaluatedRecord& evaluated,
+    const RateEvaluationContextV064894& rate_context) {
+    if (rate_context.force_legacy_bound_free) {
+        return record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE
+            ? evaluated.type49_calc_emis_shadow : evaluated.type53_calc_emis_shadow;
+    }
+    Type53SourceShadow shadow{};
+    if (record.opcode != XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE &&
+        record.opcode != XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE) return shadow;
+    if (record.real_offset + record.real_count > program.reals.size()) return shadow;
+    const double* r = program.reals.data() + record.real_offset;
+    const ElementRow scalar_dummy{};
+    const ElementRow& lower = record.matrix_enabled ? row_at(element, record.lower_row) : scalar_dummy;
+    const ElementRow& upper = record.matrix_enabled ? row_at(element, record.upper_row) : scalar_dummy;
+    Type53RecordContext record_context = evaluated.bound_free_record_context_v064895;
+    const bool type49 = record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE;
+    if (type49) record_context.phextrap_max_points = static_cast<int>(input.radiation_bin_count);
+    const std::size_t pair_real_count = record_context.valid
+        ? record_context.pair_real_count : record.real_count;
+    if (pair_real_count < 4 || pair_real_count % 2 != 0) return shadow;
+    if (type49 && evaluated.bound_free_threshold_ev_v064895 <= 0.0) {
+        return evaluated.type49_shadow;
+    }
+    const xstar_type53_row46_dsec_runtime_oracle_v048716::Entry* row46_contract = nullptr;
+    if (!type49 && evaluated.bound_free_row46_contract_v064895) {
+        row46_contract = find_type53_row46_dsec_runtime_oracle_entry(
+            record.source_position, record.record);
+    }
+    xstar_fixed_state_input_v1 full_input = input;
+    full_input.dsec_radiation_energy_ev = nullptr;
+    full_input.dsec_bremsa = nullptr;
+    full_input.dsec_radiation_bin_count = 0;
+    const BoundFreePreparedGeometryV064895* prepared = prepared_bound_free_geometry_v064895(
+        program, record, full_input, evaluated.bound_free_threshold_ev_v064895,
+        type49, type49, record_context.valid ? &record_context : nullptr,
+        true, rate_context);
+    xstar_element_contribution_v1 contribution{};
+    const bool ok = evaluate_type53_source_integral(
+        r, pair_real_count, lower, upper, full_input,
+        evaluated.bound_free_threshold_ev_v064895,
+        evaluated.bound_free_ptmp_sum_v064895,
+        row46_contract, record_context.valid ? &record_context : nullptr,
+        record.record, type49, type49, contribution, &shadow, prepared);
+    if (!ok) return Type53SourceShadow{};
+    if (rate_context.bound_free_perf) {
+        ++rate_context.bound_free_perf->full_dynamic_integrals;
+        if (type49) ++rate_context.bound_free_perf->full_selected_type49_integrals;
+        else ++rate_context.bound_free_perf->full_selected_type53_integrals;
+    }
+    return shadow;
+}
 
 int ground_row_for_stage(const ElementProgram& element, int stage) {
     const int charge = stage - 1;
@@ -8764,11 +9042,13 @@ int run_impl(
                 full_epi, full_bremsa, full_count);
         }
     }
-    const RateEvaluationContextV064894 rate_context_v064894 =
+    RateEvaluationContextV064894 rate_context_v064894 =
         make_rate_evaluation_context_v064894(
             input,
             type53_calc_emisab_workspace_v82_patch5181
                 ? &*type53_calc_emisab_workspace_v82_patch5181 : nullptr);
+    rate_context_v064894.bound_free_cache = &ctx.bound_free_prepared_v064895;
+    rate_context_v064894.bound_free_perf = &ctx.bound_free_perf_v064895;
 
     const auto traversal_start = clock_type::now();
     for (std::size_t element_slot_v064894 = 0;
@@ -10530,7 +10810,30 @@ int run_impl(
                 const auto& item = eit->second;
                 const Type53SourceShadow& seed_shadow = item.type53_calc_emisab_shadow.valid
                     ? item.type53_calc_emisab_shadow : item.type53_shadow;
-                const Type53SourceShadow& revisit_shadow = item.type53_calc_emis_shadow;
+                Type53SourceShadow lazy_revisit_shadow_v064895{};
+                const Type53SourceShadow* revisit_shadow_ptr_v064895 =
+                    &item.type53_calc_emis_shadow;
+                if (selected && !rate_context_v064894.force_legacy_bound_free) {
+                    const auto record_it_v064895 = ctx.record_index_by_identity_v064895.find({
+                        static_cast<std::uint64_t>(c.source_position),
+                        static_cast<std::uint64_t>(c.record)});
+                    if (record_it_v064895 == ctx.record_index_by_identity_v064895.end())
+                        throw std::runtime_error("9.5 selected Type53 record identity missing");
+                    const auto& selected_record_v064895 =
+                        ctx.program.records[record_it_v064895->second];
+                    const auto element_it_v064895 = std::find_if(
+                        ctx.program.elements.begin(), ctx.program.elements.end(),
+                        [&](const ElementProgram& e) {
+                            return e.element_index == selected_record_v064895.element_index;
+                        });
+                    if (element_it_v064895 == ctx.program.elements.end())
+                        throw std::runtime_error("9.5 selected Type53 element missing");
+                    lazy_revisit_shadow_v064895 = evaluate_selected_fullgrid_bound_free_v064895(
+                        ctx.program, *element_it_v064895, selected_record_v064895, input,
+                        item, rate_context_v064894);
+                    revisit_shadow_ptr_v064895 = &lazy_revisit_shadow_v064895;
+                }
+                const Type53SourceShadow& revisit_shadow = *revisit_shadow_ptr_v064895;
                 const xstar_spectral_contribution_v1* spectral_item = nullptr;
                 for (const auto& candidate : spectral) {
                     if (candidate.kind == XSTAR_SPECTRAL_KIND_EMISAB_BOUND_FREE &&
@@ -10648,7 +10951,6 @@ int run_impl(
                     static_cast<std::uint64_t>(c.source_position), static_cast<std::uint64_t>(c.record)));
                 if (eit_v82_patch52082 == type49_revisit_evaluated_v82_patch52082.end()) continue;
                 const auto& item_v82_patch52082 = eit_v82_patch52082->second;
-                const Type53SourceShadow& full_shadow_v82_patch52082 = item_v82_patch52082.type49_calc_emis_shadow;
                 const Type53SourceShadow& reduced_shadow_v82_patch52082 =
                     item_v82_patch52082.type49_calc_emisab_shadow;
 
@@ -10673,6 +10975,31 @@ int run_impl(
                     input.radiation_energy_ev, continuum_capacity);
                 const bool selected_v82_patch52082 = consumer_v82_patch52082.actual_consumer;
                 if (selected_v82_patch52082) ++type49_selected_v82_patch52082;
+                Type53SourceShadow lazy_full_shadow_v064895{};
+                const Type53SourceShadow* full_shadow_ptr_v064895 =
+                    &item_v82_patch52082.type49_calc_emis_shadow;
+                if (selected_v82_patch52082 && !rate_context_v064894.force_legacy_bound_free) {
+                    const auto record_it_v064895 = ctx.record_index_by_identity_v064895.find({
+                        static_cast<std::uint64_t>(c.source_position),
+                        static_cast<std::uint64_t>(c.record)});
+                    if (record_it_v064895 == ctx.record_index_by_identity_v064895.end())
+                        throw std::runtime_error("9.5 selected Type49 record identity missing");
+                    const auto& selected_record_v064895 =
+                        ctx.program.records[record_it_v064895->second];
+                    const auto element_it_v064895 = std::find_if(
+                        ctx.program.elements.begin(), ctx.program.elements.end(),
+                        [&](const ElementProgram& e) {
+                            return e.element_index == selected_record_v064895.element_index;
+                        });
+                    if (element_it_v064895 == ctx.program.elements.end())
+                        throw std::runtime_error("9.5 selected Type49 element missing");
+                    lazy_full_shadow_v064895 = evaluate_selected_fullgrid_bound_free_v064895(
+                        ctx.program, *element_it_v064895, selected_record_v064895, input,
+                        item_v82_patch52082, rate_context_v064894);
+                    full_shadow_ptr_v064895 = &lazy_full_shadow_v064895;
+                }
+                const Type53SourceShadow& full_shadow_v82_patch52082 =
+                    *full_shadow_ptr_v064895;
 
                 const std::size_t slot_v82_patch52082 = static_cast<std::size_t>(c.slot_one_based);
                 const double full_seed_opakab_v82_patch52082 =
@@ -12270,6 +12597,13 @@ static std::unique_ptr<xstar_fixed_state_context> create_context_from_program(Pr
     auto ptr = std::make_unique<xstar_fixed_state_context>();
     ptr->program = std::move(program);
     ptr->traversal_record_indices_v064894.reserve(ptr->program.elements.size());
+    ptr->bound_free_prepared_v064895.resize(ptr->program.records.size());
+    for (std::size_t i = 0; i < ptr->program.records.size(); ++i) {
+        const auto& record = ptr->program.records[i];
+        ptr->record_index_by_identity_v064895[{
+            static_cast<std::uint64_t>(record.source_position),
+            static_cast<std::uint64_t>(record.record)}] = i;
+    }
     for (const auto& element : ptr->program.elements) {
         std::vector<int> order;
         order.reserve(static_cast<std::size_t>(std::max(element.record_count, 0)));
@@ -12360,6 +12694,35 @@ int xstar_fixed_state_stats_init_v1(xstar_fixed_state_stats_v1* stats) {
     std::memset(stats, 0, sizeof(*stats));
     stats->struct_size = sizeof(*stats);
     stats->abi_version = XSTAR_FIXED_STATE_ENGINE_ABI_VERSION;
+    return 0;
+}
+
+int xstar_bound_free_perf_init_v064895(xstar_bound_free_perf_v064895* perf) {
+    if (!perf) return 1;
+    std::memset(perf, 0, sizeof(*perf));
+    perf->struct_size = sizeof(*perf);
+    perf->abi_version = XSTAR_BOUND_FREE_PERF_V064895_ABI_VERSION;
+    return 0;
+}
+
+int xstar_fixed_state_get_bound_free_perf_v064895(
+    const xstar_fixed_state_context* context,
+    xstar_bound_free_perf_v064895* perf) {
+    if (!context || !perf) return 1;
+    if (perf->struct_size != sizeof(*perf) ||
+        perf->abi_version != XSTAR_BOUND_FREE_PERF_V064895_ABI_VERSION) return 2;
+    const auto& src = context->bound_free_perf_v064895;
+    perf->reduced_geometry_builds = src.reduced_geometry_builds;
+    perf->reduced_geometry_reuses = src.reduced_geometry_reuses;
+    perf->full_geometry_builds = src.full_geometry_builds;
+    perf->full_geometry_reuses = src.full_geometry_reuses;
+    perf->reduced_dynamic_integrals = src.reduced_dynamic_integrals;
+    perf->reduced_duplicate_reuses = src.reduced_duplicate_reuses;
+    perf->legacy_reduced_duplicate_integrals = src.legacy_reduced_duplicate_integrals;
+    perf->full_dynamic_integrals = src.full_dynamic_integrals;
+    perf->full_selected_type49_integrals = src.full_selected_type49_integrals;
+    perf->full_selected_type53_integrals = src.full_selected_type53_integrals;
+    perf->legacy_full_eager_integrals = src.legacy_full_eager_integrals;
     return 0;
 }
 

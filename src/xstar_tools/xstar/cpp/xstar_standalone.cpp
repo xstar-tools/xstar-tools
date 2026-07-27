@@ -52,6 +52,13 @@ struct PerformanceInstrumentationV064892 {
 
 thread_local PerformanceInstrumentationV064892* g_performance_v064892 = nullptr;
 
+// 0.6.48.9.5: a production run owns a single fixed-state context. Snapshot
+// the prepared Type49/53 workload immediately before that context is
+// destroyed so command_run_standalone_production_v67 can publish the
+// measurement-only counters after the product has been built.
+xstar_bound_free_perf_v064895 g_bound_free_perf_v064895_last{};
+bool g_bound_free_perf_v064895_valid = false;
+
 xstar_spectral_perf_v064892 diff_spectral_perf_v064892(
     const xstar_spectral_perf_v064892& after,
     const xstar_spectral_perf_v064892& before) {
@@ -15702,6 +15709,14 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         }
         elapsed_seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
         product.measured_run_seconds = elapsed_seconds;
+        xstar_bound_free_perf_v064895 perf_v064895{};
+        if (xstar_bound_free_perf_init_v064895(&perf_v064895) == 0 &&
+            xstar_fixed_state_get_bound_free_perf_v064895(fixed, &perf_v064895) == 0) {
+            g_bound_free_perf_v064895_last = perf_v064895;
+            g_bound_free_perf_v064895_valid = true;
+        } else {
+            g_bound_free_perf_v064895_valid = false;
+        }
         xstar_thermal_context_destroy(thermal);
         xstar_fixed_state_context_destroy(fixed);
         return product;
@@ -16340,6 +16355,23 @@ int command_run_standalone_production_v67(const Options& options, const std::fil
             controller_seconds, production_total_seconds_v06488);
         emit_performance_instrumentation_v064892(
             output, artifacts.timing_summary, performance_v064890, performance_v064892);
+        if (g_bound_free_perf_v064895_valid) {
+            const auto& bf = g_bound_free_perf_v064895_last;
+            const char* force_legacy_v064895 = std::getenv("XSTAR_V064895_FORCE_LEGACY_BOUND_FREE");
+            const bool legacy_v064895 = force_legacy_v064895 && std::string(force_legacy_v064895) == "1";
+            std::cout << "V064895_BOUND_FREE_MODE=" << (legacy_v064895 ? "LEGACY_EAGER" : "PREPARED_LAZY") << "\n"
+                      << "V064895_REDUCED_GEOMETRY_BUILDS=" << bf.reduced_geometry_builds << "\n"
+                      << "V064895_REDUCED_GEOMETRY_REUSES=" << bf.reduced_geometry_reuses << "\n"
+                      << "V064895_FULL_GEOMETRY_BUILDS=" << bf.full_geometry_builds << "\n"
+                      << "V064895_FULL_GEOMETRY_REUSES=" << bf.full_geometry_reuses << "\n"
+                      << "V064895_REDUCED_DYNAMIC_INTEGRALS=" << bf.reduced_dynamic_integrals << "\n"
+                      << "V064895_REDUCED_DUPLICATE_REUSES=" << bf.reduced_duplicate_reuses << "\n"
+                      << "V064895_LEGACY_REDUCED_DUPLICATE_INTEGRALS=" << bf.legacy_reduced_duplicate_integrals << "\n"
+                      << "V064895_FULL_DYNAMIC_INTEGRALS=" << bf.full_dynamic_integrals << "\n"
+                      << "V064895_FULL_SELECTED_TYPE49_INTEGRALS=" << bf.full_selected_type49_integrals << "\n"
+                      << "V064895_FULL_SELECTED_TYPE53_INTEGRALS=" << bf.full_selected_type53_integrals << "\n"
+                      << "V064895_LEGACY_FULL_EAGER_INTEGRALS=" << bf.legacy_full_eager_integrals << "\n";
+        }
         std::cout << " total time   " << std::setprecision(16) << production_total_seconds_v06488 << "\n";
         g_performance_v064890 = nullptr;
         g_performance_v064892 = nullptr;
