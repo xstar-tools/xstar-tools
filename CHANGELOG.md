@@ -1,5 +1,33 @@
 # CHANGELOG
 
+## 0.6.48.9.0 - 2026-07-26
+
+- Start the 0.6.48.9 performance branch from the closed 0.6.48.8.3.1 science baseline.
+- Add measurement-only standalone-C++ timing for ATDB lowering, controller calls, fixed-state traversal/rates/continuum/spectral phases, boundary projection, final zero-thickness recomputation, product-state construction, writer-time `binemis`, FITS publication, and total coverage.
+- Establish a stable ~84.8 s three-run measurement baseline on the qualification host.
+- Disprove the initial writer-time `binemis` regression hypothesis: `binemis` is only about 0.32 s, while fixed-state spectral work is roughly 57.7 s and dominates runtime.
+- Preserve all 0.6.48.8.3.1 science gates and frozen Python/FORTRAN references.
+
+## 0.6.48.8.3.1 - 2026-07-26
+
+- Qualification-only hotfix for the final standalone thermal-state closure; runtime/science implementation is identical to 0.6.48.8.3.
+- Make final-workspace hashes diagnostic-only and qualify final T4/HTTOT/CLTOT/HMCTOT by source-parity thresholds.
+- Retain C++/FORTRAN HMCTOT error near 0.00617%, well below the 0.05% acceptance threshold and far below the previous ~0.358% discrepancy.
+- Freeze this release as the closed 0.6.48.8 science baseline for subsequent performance development.
+
+## 0.6.48.8.3 - 2026-07-26
+
+- Correct standalone final zero-thickness `bremsa` lifetime to match literal XSTAR: preserve the terminal shell-entry DSEC radiation workspace rather than reusing an extra projected next-radius workspace before the final `xstarcalc`.
+- Apply the retained shell-entry `bremsa` to both final pprint DSEC state and final call-start workspace.
+- Reduce standalone C++ final HMCTOT error versus FORTRAN from roughly 0.358% to about 0.00617% without changing Python science or the 58-evaluation trajectory.
+
+## 0.6.48.8.2 - 2026-07-26
+
+- Correct writer-time Type50 `binemis.f90` terminal boundary/rebin semantics using compact boundary-event reconstruction while preserving the source-declared far-wing reach and terminal overwrite behavior.
+- Close the remaining 18 shared Python/C++ versus FORTRAN `xout_spect1.emit_outward` cells above 1%.
+- Preserve the fully closed `xo01_detal4` Type50 opacity/depth result and the existing Type99/RRC source-zero closure.
+- Retain approximately 11.48 million source-faithful far boundary-event writes; later performance measurement showed these writes are not the dominant runtime cost.
+
 ## 0.6.48.8.1 - 2026-07-26
 
 - Correct literal `voigte.f90` control flow for Type-50 line profiles: the `a+v>3.2` asymptotic test is now reachable only when `a>0.2`, as in the source labels.
