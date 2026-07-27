@@ -97,19 +97,6 @@ double elapsed(const clock_type::time_point& start) {
     return std::chrono::duration<double>(clock_type::now() - start).count();
 }
 
-thread_local xstar_fixed_spectral_perf_v064891 g_spectral_perf_v064891{};
-
-void init_spectral_perf_v064891(xstar_fixed_spectral_perf_v064891& perf) {
-    std::memset(&perf, 0, sizeof(perf));
-    perf.struct_size = sizeof(perf);
-    perf.abi_version = 1u;
-}
-
-struct SpectralPerfInitV064891 {
-    SpectralPerfInitV064891() { init_spectral_perf_v064891(g_spectral_perf_v064891); }
-};
-thread_local SpectralPerfInitV064891 g_spectral_perf_init_v064891;
-
 // v82 patch 5.20.17.3.8: diagnostic-only attribution for the five residual
 // xo01_detal4 inward-emission cells.  This sidecar is enabled only when the
 // host runner supplies XSTAR_V82_PATCH5201738_RCCEMIS_ATTRIBUTION_DIR.  It
@@ -10058,12 +10045,7 @@ int run_impl(
     stats.continuum_seconds += elapsed(continuum_start);
 
     const auto spectral_start = clock_type::now();
-    double spectral_measured_v064891 = 0.0;
     if (!spectral.empty() && input.radiation_bin_count > 0) {
-        ++g_spectral_perf_v064891.spectral_calls;
-        if (defer_product_projection) ++g_spectral_perf_v064891.deferred_calls;
-        else ++g_spectral_perf_v064891.projected_calls;
-        const auto workspace_setup_start_v064891 = clock_type::now();
         // Line records and continuum bins are different index spaces.  The
         // contribution engine owns per-line luminosity/opacity records; the
         // exact native Gaussian/Voigt path then projects those luminosities to
@@ -10113,7 +10095,6 @@ int run_impl(
         sw.flinel = flinel.data(); sw.flinel_count = flinel.size();
         sw.epi_eV = input.radiation_energy_ev; sw.energy_count = continuum_capacity;
         constexpr std::size_t seed_stride=21;
-        const auto seed_prepare_start_v064891 = clock_type::now();
         std::vector<double> seeds(spectral.size()*seed_stride,0.0);
         for (std::size_t i=0;i<spectral.size();++i) {
             seeds[i*seed_stride]=1.0/1.772;
@@ -10123,28 +10104,10 @@ int run_impl(
                 seeds[i*seed_stride+2*d]=value;
             }
         }
-        const double seed_prepare_seconds_v064891 = elapsed(seed_prepare_start_v064891);
-        g_spectral_perf_v064891.seed_prepare_seconds += seed_prepare_seconds_v064891;
-        spectral_measured_v064891 += seed_prepare_seconds_v064891;
-        const double workspace_setup_seconds_v064891 =
-            std::max(0.0, elapsed(workspace_setup_start_v064891) - seed_prepare_seconds_v064891);
-        g_spectral_perf_v064891.workspace_setup_seconds += workspace_setup_seconds_v064891;
-        spectral_measured_v064891 += workspace_setup_seconds_v064891;
         xstar_spectral_stats_v1 ss{};
         xstar_spectral_stats_init_v1(&ss);
         std::array<char, XSTAR_FIXED_STATE_MESSAGE_SIZE> error{};
-        const auto broad_apply_start_v064891 = clock_type::now();
         const int rc = xstar_spectral_apply_contributions_v1(ctx.spectral_context, spectral.data(), spectral.size(), seeds.data(), seed_stride, &sw, &ss, error.data(), error.size());
-        const double broad_apply_seconds_v064891 = elapsed(broad_apply_start_v064891);
-        g_spectral_perf_v064891.broad_apply_seconds += broad_apply_seconds_v064891;
-        g_spectral_perf_v064891.broad_apply_construction_seconds += ss.construction_seconds;
-        g_spectral_perf_v064891.broad_apply_opacity_seconds += ss.opacity_seconds;
-        g_spectral_perf_v064891.broad_apply_nonopacity_seconds +=
-            std::max(0.0, broad_apply_seconds_v064891 - ss.opacity_seconds);
-        g_spectral_perf_v064891.broad_contributions += ss.contributions_committed;
-        g_spectral_perf_v064891.broad_line_profiles += ss.line_profiles;
-        spectral_measured_v064891 += broad_apply_seconds_v064891;
-        const auto selection_rank_start_v064891 = clock_type::now();
         if (rc != 0) throw std::runtime_error(std::string("native spectral commit failed: ") + error.data());
 
         // v82 patch 5.20.10: literal calc_emis_ion does not assign kkkl in
@@ -10886,15 +10849,10 @@ int run_impl(
             }
         }
 
-        const double selection_rank_seconds_v064891 = elapsed(selection_rank_start_v064891);
-        g_spectral_perf_v064891.selection_rank_seconds += selection_rank_seconds_v064891;
-        spectral_measured_v064891 += selection_rank_seconds_v064891;
-
         // v82 patch 5.20.6: calc_emis_all resets opakc before its line
         // revisit.  Preserve broad rcem/oplin as calc_emisab rank inputs, but
         // replace public fline/flinel and line-profile opacity with an nlbin-
         // selected replay in source order.
-        const auto selected_line_replay_start_v064891 = clock_type::now();
         std::vector<xstar_spectral_contribution_v1> selected_lines_v82_patch5206;
         if (!defer_product_projection && source_calc_emis_selection_ready_v82_patch5206) {
             selected_lines_v82_patch5206.reserve(source_calc_emis_selected_line_slots_v82_patch5206.size());
@@ -10960,16 +10918,10 @@ int run_impl(
             xstar_spectral_stats_v1 selected_stats{};
             xstar_spectral_stats_init_v1(&selected_stats);
             std::array<char, XSTAR_FIXED_STATE_MESSAGE_SIZE> selected_error{};
-            const auto selected_line_apply_start_v064891 = clock_type::now();
             const int selected_rc = xstar_spectral_apply_contributions_v1(
                 ctx.spectral_context, selected_lines_v82_patch5206.data(), selected_lines_v82_patch5206.size(),
                 selected_seeds.data(), seed_stride, &selected_sw, &selected_stats,
                 selected_error.data(), selected_error.size());
-            const double selected_line_apply_seconds_v064891 = elapsed(selected_line_apply_start_v064891);
-            g_spectral_perf_v064891.selected_line_apply_seconds += selected_line_apply_seconds_v064891;
-            g_spectral_perf_v064891.selected_line_opacity_seconds += selected_stats.opacity_seconds;
-            g_spectral_perf_v064891.selected_line_contributions += selected_stats.contributions_committed;
-            g_spectral_perf_v064891.selected_line_profiles += selected_stats.line_profiles;
             if (selected_rc != 0)
                 throw std::runtime_error(std::string("v82 patch 5.20.6 selected line replay failed: ") + selected_error.data());
             line_profile_opacity.swap(selected_line_profile);
@@ -11085,11 +11037,6 @@ int run_impl(
             }
         }
 
-        const double selected_line_replay_seconds_v064891 = elapsed(selected_line_replay_start_v064891);
-        g_spectral_perf_v064891.selected_line_replay_seconds += selected_line_replay_seconds_v064891;
-        spectral_measured_v064891 += selected_line_replay_seconds_v064891;
-
-        const auto binemis_setup_start_v064891 = clock_type::now();
         const std::size_t nlines=spectral.size();
         std::vector<double> dpthc(continuum_capacity,0.0), original(5*continuum_capacity,0.0), profiled(5*continuum_capacity,0.0);
         std::vector<double> elum(2*nlines,0.0), wavelength(nlines,0.0), mass(nlines,1.0), natural_rate(nlines,0.0), auger_width(nlines,0.0), auger_rate(nlines,0.0);
@@ -11120,11 +11067,6 @@ int run_impl(
                 profile_error.data(),profile_error.size());
             if (prc!=0) throw std::runtime_error(std::string("native line emissivity profile failed: ")+profile_error.data());
         }
-
-        const double binemis_profile_seconds_v064891 = elapsed(binemis_setup_start_v064891);
-        g_spectral_perf_v064891.binemis_profile_seconds += binemis_profile_seconds_v064891;
-        spectral_measured_v064891 += binemis_profile_seconds_v064891;
-        const auto selected_rrc_replay_start_v064891 = clock_type::now();
 
         // v82 patch 5.20.6: literal calc_emis_all resets both public opakc
         // and rccemis after calc_emisab_all.  It revisits rate-7 bound-free
@@ -11640,12 +11582,6 @@ int run_impl(
                 << "V048746255172582_PATCH5209_BOUND_FREE_OWNERSHIP_LEDGER=WRITTEN\n";
         }
 
-        const double selected_rrc_replay_seconds_v064891 = elapsed(selected_rrc_replay_start_v064891);
-        g_spectral_perf_v064891.selected_rrc_replay_seconds += selected_rrc_replay_seconds_v064891;
-        g_spectral_perf_v064891.selected_rrc_records += selected_rrc_records_v82_patch520;
-        spectral_measured_v064891 += selected_rrc_replay_seconds_v064891;
-        const auto publication_combine_start_v064891 = clock_type::now();
-
         if (!defer_product_projection) {
             const char* attribution_dir_commit_v82_patch5201732 =
                 std::getenv("XSTAR_V82_PATCH5201732_CPP_ATTRIBUTION_DIR");
@@ -12022,11 +11958,6 @@ int run_impl(
             }
         }
 
-        const double publication_combine_seconds_v064891 = elapsed(publication_combine_start_v064891);
-        g_spectral_perf_v064891.publication_combine_seconds += publication_combine_seconds_v064891;
-        spectral_measured_v064891 += publication_combine_seconds_v064891;
-        const auto workspace_retention_start_v064891 = clock_type::now();
-
         // Capture the exact source workspaces before the public-product
         // reduction mutates or combines any of them.  The optional sidecar
         // preserves the original xstar_fixed_state_output_v1 ABI layout.
@@ -12096,11 +12027,6 @@ int run_impl(
                           : "exact committed source workspaces retained");
         }
 
-        const double workspace_retention_seconds_v064891 = elapsed(workspace_retention_start_v064891);
-        g_spectral_perf_v064891.workspace_retention_seconds += workspace_retention_seconds_v064891;
-        spectral_measured_v064891 += workspace_retention_seconds_v064891;
-        const auto final_grid_combine_start_v064891 = clock_type::now();
-
         if (!defer_product_projection) {
             for (std::size_t k = 0; k < continuum_capacity; ++k) {
                 const double spectrum_add = cemab[k] + cemab[continuum_capacity + k]
@@ -12114,15 +12040,9 @@ int run_impl(
                 output.opacity[k] = std::isfinite(combined) && combined > 0.0 ? combined : 0.0;
             }
         }
-        const double final_grid_combine_seconds_v064891 = elapsed(final_grid_combine_start_v064891);
-        g_spectral_perf_v064891.final_grid_combine_seconds += final_grid_combine_seconds_v064891;
-        spectral_measured_v064891 += final_grid_combine_seconds_v064891;
         stats.spectral_contributions += ss.contributions_committed;
     }
-    const double spectral_total_seconds_v064891 = elapsed(spectral_start);
-    g_spectral_perf_v064891.measured_seconds += spectral_measured_v064891;
-    g_spectral_perf_v064891.other_seconds += std::max(0.0, spectral_total_seconds_v064891 - spectral_measured_v064891);
-    stats.spectral_seconds += spectral_total_seconds_v064891;
+    stats.spectral_seconds += elapsed(spectral_start);
 
     if ((input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE) != 0u &&
         !thermal_component_closure_data.has_value()) {
@@ -12452,15 +12372,6 @@ int xstar_fixed_state_context_reset_v1(xstar_fixed_state_context* context, char*
     context->last_element_diagnostics.clear();
     copy_text(message, message_size, "native fixed-state context reset");
     return 0;
-}
-
-void xstar_fixed_spectral_perf_reset_v064891(void) {
-    init_spectral_perf_v064891(g_spectral_perf_v064891);
-}
-
-void xstar_fixed_spectral_perf_get_v064891(xstar_fixed_spectral_perf_v064891* perf) {
-    if (!perf) return;
-    *perf = g_spectral_perf_v064891;
 }
 
 int xstar_fixed_state_run_v1(xstar_fixed_state_context* context, const xstar_fixed_state_input_v1* input, xstar_fixed_state_output_v1* output, xstar_fixed_state_stats_v1* stats, char* message, size_t message_size) {

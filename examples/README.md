@@ -1130,7 +1130,7 @@ Inventory the original XSTAR Fortran source tree or tarball, write file/routine/
 ```bash
 PYTHONPATH=src python examples/99_inventory_xstar_source_port.py \
   --source-tar xstar_source.tar.gz \
-  --out-dir xstar_python_source_port_inventory_v0400 \
+  --out-dir xstar_python_source_port_inventory \
   --print-summary
 ```
 

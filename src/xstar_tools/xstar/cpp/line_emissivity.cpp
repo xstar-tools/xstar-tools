@@ -477,6 +477,46 @@ struct xstar_spectral_context {
 
 namespace {
 
+thread_local xstar_spectral_perf_v064892 g_spectral_perf_v064892{};
+
+std::size_t spectral_family_slot_v064892(int data_type) {
+    switch (data_type) {
+        case 49: return 0u;
+        case 50: return 1u;
+        case 53: return 2u;
+        case 76: return 3u;
+        case 86: return 4u;
+        case 88: return 5u;
+        case 99: return 6u;
+        default: return 7u;
+    }
+}
+
+void add_perf_v064892(xstar_spectral_perf_v064892& dst, const xstar_spectral_perf_v064892& src) {
+    dst.apply_calls += src.apply_calls;
+    dst.contributions += src.contributions;
+    dst.line_profiles += src.line_profiles;
+    dst.exact_grid_profiles += src.exact_grid_profiles;
+    dst.native_profile_profiles += src.native_profile_profiles;
+    dst.updated_continuum_bins += src.updated_continuum_bins;
+    dst.exact_grid_valid_points += src.exact_grid_valid_points;
+    dst.kind_bound_free += src.kind_bound_free;
+    dst.kind_emisab_line += src.kind_emisab_line;
+    dst.kind_opacity_only += src.kind_opacity_only;
+    dst.kind_emis_line += src.kind_emis_line;
+    dst.kind_full_line += src.kind_full_line;
+    for (std::size_t i = 0; i < XSTAR_SPECTRAL_PERF_V064892_FAMILY_COUNT; ++i) {
+        dst.family_contributions[i] += src.family_contributions[i];
+        dst.family_line_profiles[i] += src.family_line_profiles[i];
+        dst.family_updated_bins[i] += src.family_updated_bins[i];
+        dst.family_profile_seconds[i] += src.family_profile_seconds[i];
+    }
+    dst.apply_seconds += src.apply_seconds;
+    dst.profile_kernel_seconds += src.profile_kernel_seconds;
+    dst.exact_grid_profile_seconds += src.exact_grid_profile_seconds;
+    dst.native_profile_seconds += src.native_profile_seconds;
+}
+
 bool valid_workspace(const xstar_spectral_workspace_v1* w, char* error, std::size_t error_size) {
     if (!w || w->struct_size < sizeof(xstar_spectral_workspace_v1) ||
         w->abi_version != XSTAR_SPECTRAL_ENGINE_ABI_VERSION) {
@@ -546,6 +586,27 @@ void xstar_spectral_stats_init_v1(xstar_spectral_stats_v1* stats) {
     stats->abi_version = XSTAR_SPECTRAL_ENGINE_ABI_VERSION;
 }
 
+void xstar_spectral_perf_init_v064892(xstar_spectral_perf_v064892* perf) {
+    if (!perf) return;
+    std::memset(perf, 0, sizeof(*perf));
+    perf->struct_size = sizeof(*perf);
+    perf->abi_version = XSTAR_SPECTRAL_PERF_V064892_ABI_VERSION;
+}
+
+void xstar_spectral_perf_reset_v064892(void) {
+    xstar_spectral_perf_init_v064892(&g_spectral_perf_v064892);
+}
+
+int xstar_spectral_perf_snapshot_v064892(xstar_spectral_perf_v064892* perf) {
+    if (!perf) return 2;
+    *perf = g_spectral_perf_v064892;
+    if (perf->struct_size == 0u) {
+        perf->struct_size = sizeof(*perf);
+        perf->abi_version = XSTAR_SPECTRAL_PERF_V064892_ABI_VERSION;
+    }
+    return 0;
+}
+
 int xstar_spectral_context_create_v1(
     xstar_spectral_context** context,
     char* error,
@@ -605,6 +666,9 @@ int xstar_spectral_apply_contributions_v1(
     stats->calls = 1;
     stats->status_flags = xstar_spectral_engine_feature_flags();
     const auto call_started = std::chrono::steady_clock::now();
+    xstar_spectral_perf_v064892 perf_v064892{};
+    xstar_spectral_perf_init_v064892(&perf_v064892);
+    perf_v064892.apply_calls = 1u;
     uint64_t previous_position = 0;
     const size_t line_capacity = workspace->oplin_count;
     const size_t continuum_capacity = workspace->opakab_count;
@@ -614,6 +678,17 @@ int xstar_spectral_apply_contributions_v1(
     for (size_t i = 0; i < contribution_count; ++i) {
         const xstar_spectral_contribution_v1& c = contributions[i];
         ++stats->contributions_attempted;
+        ++perf_v064892.contributions;
+        const std::size_t family_slot_v064892 = spectral_family_slot_v064892(c.data_type);
+        ++perf_v064892.family_contributions[family_slot_v064892];
+        switch (c.kind) {
+            case XSTAR_SPECTRAL_KIND_EMISAB_BOUND_FREE: ++perf_v064892.kind_bound_free; break;
+            case XSTAR_SPECTRAL_KIND_EMISAB_LINE: ++perf_v064892.kind_emisab_line; break;
+            case XSTAR_SPECTRAL_KIND_EMIS_OPACITY_ONLY: ++perf_v064892.kind_opacity_only; break;
+            case XSTAR_SPECTRAL_KIND_EMIS_LINE: ++perf_v064892.kind_emis_line; break;
+            case XSTAR_SPECTRAL_KIND_FULL_LINE: ++perf_v064892.kind_full_line; break;
+            default: break;
+        }
         if (c.source_position == 0 || (previous_position != 0 && c.source_position <= previous_position)) {
             ++stats->source_order_violations;
             write_message(error, error_size, "spectral contribution source order violation");
@@ -722,6 +797,21 @@ int xstar_spectral_apply_contributions_v1(
                         return 10;
                     }
                     ++stats->line_profiles;
+                    ++perf_v064892.line_profiles;
+                    ++perf_v064892.family_line_profiles[family_slot_v064892];
+                    perf_v064892.updated_continuum_bins += static_cast<uint64_t>(std::max<long long>(0, updated));
+                    perf_v064892.family_updated_bins[family_slot_v064892] += static_cast<uint64_t>(std::max<long long>(0, updated));
+                    perf_v064892.profile_kernel_seconds += opacity_elapsed;
+                    perf_v064892.family_profile_seconds[family_slot_v064892] += opacity_elapsed;
+                    if (exact_grid_oracle) {
+                        ++perf_v064892.exact_grid_profiles;
+                        perf_v064892.exact_grid_profile_seconds += opacity_elapsed;
+                        if (seed && seed[0] == XSTAR_SPECTRAL_EXACT_GRID_MAGIC && seed[5] > 0.0)
+                            perf_v064892.exact_grid_valid_points += static_cast<uint64_t>(std::llround(seed[5]));
+                    } else {
+                        ++perf_v064892.native_profile_profiles;
+                        perf_v064892.native_profile_seconds += opacity_elapsed;
+                    }
                 }
             }
         } else if (c.kind == XSTAR_SPECTRAL_KIND_EMIS_OPACITY_ONLY) {
@@ -788,6 +878,21 @@ int xstar_spectral_apply_contributions_v1(
                 return 10;
             }
             ++stats->line_profiles;
+            ++perf_v064892.line_profiles;
+            ++perf_v064892.family_line_profiles[family_slot_v064892];
+            perf_v064892.updated_continuum_bins += static_cast<uint64_t>(std::max<long long>(0, updated));
+            perf_v064892.family_updated_bins[family_slot_v064892] += static_cast<uint64_t>(std::max<long long>(0, updated));
+            perf_v064892.profile_kernel_seconds += opacity_elapsed;
+            perf_v064892.family_profile_seconds[family_slot_v064892] += opacity_elapsed;
+            if (exact_grid_oracle) {
+                ++perf_v064892.exact_grid_profiles;
+                perf_v064892.exact_grid_profile_seconds += opacity_elapsed;
+                if (seed && seed[0] == XSTAR_SPECTRAL_EXACT_GRID_MAGIC && seed[5] > 0.0)
+                    perf_v064892.exact_grid_valid_points += static_cast<uint64_t>(std::llround(seed[5]));
+            } else {
+                ++perf_v064892.native_profile_profiles;
+                perf_v064892.native_profile_seconds += opacity_elapsed;
+            }
         } else {
             write_message(error, error_size, "unsupported native spectral contribution kind");
             return 11;
@@ -798,6 +903,8 @@ int xstar_spectral_apply_contributions_v1(
     }
     const auto call_ended = std::chrono::steady_clock::now();
     stats->commit_seconds = std::chrono::duration<double>(call_ended - call_started).count();
+    perf_v064892.apply_seconds = stats->commit_seconds;
+    add_perf_v064892(g_spectral_perf_v064892, perf_v064892);
     add_stats(context->cumulative, *stats);
     write_message(error, error_size, "native spectral contributions applied");
     return 0;

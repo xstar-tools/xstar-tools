@@ -1,6 +1,7 @@
 #include "xstar_api.h"
 #include "xstar_python_bridge.h"
 #include "xstar_fixed_state_engine.h"
+#include "xstar_spectral_engine.h"
 #include "xstar_thermal_engine.h"
 #include "source_real_energy_grid.hpp"
 #include "xstar_science_fits.hpp"
@@ -44,6 +45,45 @@ extern "C" int xstar_emissivity_build_binemis_profile(
 
 namespace {
 
+struct PerformanceInstrumentationV064892 {
+    std::array<xstar_spectral_perf_v064892,4> controller_calls{};
+    xstar_spectral_perf_v064892 total{};
+};
+
+thread_local PerformanceInstrumentationV064892* g_performance_v064892 = nullptr;
+
+xstar_spectral_perf_v064892 diff_spectral_perf_v064892(
+    const xstar_spectral_perf_v064892& after,
+    const xstar_spectral_perf_v064892& before) {
+    xstar_spectral_perf_v064892 out{};
+    xstar_spectral_perf_init_v064892(&out);
+#define XSTAR_DIFF_FIELD_V064892(name) out.name = after.name - before.name
+    XSTAR_DIFF_FIELD_V064892(apply_calls);
+    XSTAR_DIFF_FIELD_V064892(contributions);
+    XSTAR_DIFF_FIELD_V064892(line_profiles);
+    XSTAR_DIFF_FIELD_V064892(exact_grid_profiles);
+    XSTAR_DIFF_FIELD_V064892(native_profile_profiles);
+    XSTAR_DIFF_FIELD_V064892(updated_continuum_bins);
+    XSTAR_DIFF_FIELD_V064892(exact_grid_valid_points);
+    XSTAR_DIFF_FIELD_V064892(kind_bound_free);
+    XSTAR_DIFF_FIELD_V064892(kind_emisab_line);
+    XSTAR_DIFF_FIELD_V064892(kind_opacity_only);
+    XSTAR_DIFF_FIELD_V064892(kind_emis_line);
+    XSTAR_DIFF_FIELD_V064892(kind_full_line);
+    for (std::size_t i = 0; i < XSTAR_SPECTRAL_PERF_V064892_FAMILY_COUNT; ++i) {
+        out.family_contributions[i] = after.family_contributions[i] - before.family_contributions[i];
+        out.family_line_profiles[i] = after.family_line_profiles[i] - before.family_line_profiles[i];
+        out.family_updated_bins[i] = after.family_updated_bins[i] - before.family_updated_bins[i];
+        out.family_profile_seconds[i] = after.family_profile_seconds[i] - before.family_profile_seconds[i];
+    }
+    out.apply_seconds = after.apply_seconds - before.apply_seconds;
+    out.profile_kernel_seconds = after.profile_kernel_seconds - before.profile_kernel_seconds;
+    out.exact_grid_profile_seconds = after.exact_grid_profile_seconds - before.exact_grid_profile_seconds;
+    out.native_profile_seconds = after.native_profile_seconds - before.native_profile_seconds;
+#undef XSTAR_DIFF_FIELD_V064892
+    return out;
+}
+
 struct PerformanceInstrumentationV064890 {
     std::array<double,4> controller_call_seconds{{0.0,0.0,0.0,0.0}};
     std::array<std::uint64_t,4> controller_call_evaluations{{0u,0u,0u,0u}};
@@ -53,7 +93,6 @@ struct PerformanceInstrumentationV064890 {
     std::array<double,4> fixed_continuum_seconds{{0.0,0.0,0.0,0.0}};
     std::array<double,4> fixed_spectral_seconds{{0.0,0.0,0.0,0.0}};
     std::array<double,4> fixed_total_seconds{{0.0,0.0,0.0,0.0}};
-    std::array<xstar_fixed_spectral_perf_v064891,4> spectral_detail{};
     std::array<double,4> boundary_projection_seconds{{0.0,0.0,0.0,0.0}};
     double continuum_transport_seconds = 0.0;
     double atomic_luminosity_seconds = 0.0;
@@ -79,44 +118,6 @@ thread_local PerformanceInstrumentationV064890* g_performance_v064890 = nullptr;
 
 inline double elapsed_seconds_v064890(const std::chrono::steady_clock::time_point& started) {
     return std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
-}
-
-xstar_fixed_spectral_perf_v064891 subtract_spectral_perf_v064891(
-    const xstar_fixed_spectral_perf_v064891& after,
-    const xstar_fixed_spectral_perf_v064891& before) {
-    xstar_fixed_spectral_perf_v064891 out{};
-    out.struct_size = sizeof(out);
-    out.abi_version = 1u;
-#define XSTAR_V064891_SUB_U64(field) out.field = after.field - before.field
-#define XSTAR_V064891_SUB_DBL(field) out.field = after.field - before.field
-    XSTAR_V064891_SUB_U64(spectral_calls);
-    XSTAR_V064891_SUB_U64(deferred_calls);
-    XSTAR_V064891_SUB_U64(projected_calls);
-    XSTAR_V064891_SUB_U64(broad_contributions);
-    XSTAR_V064891_SUB_U64(broad_line_profiles);
-    XSTAR_V064891_SUB_U64(selected_line_contributions);
-    XSTAR_V064891_SUB_U64(selected_line_profiles);
-    XSTAR_V064891_SUB_U64(selected_rrc_records);
-    XSTAR_V064891_SUB_DBL(workspace_setup_seconds);
-    XSTAR_V064891_SUB_DBL(seed_prepare_seconds);
-    XSTAR_V064891_SUB_DBL(broad_apply_seconds);
-    XSTAR_V064891_SUB_DBL(broad_apply_construction_seconds);
-    XSTAR_V064891_SUB_DBL(broad_apply_opacity_seconds);
-    XSTAR_V064891_SUB_DBL(broad_apply_nonopacity_seconds);
-    XSTAR_V064891_SUB_DBL(selection_rank_seconds);
-    XSTAR_V064891_SUB_DBL(selected_line_replay_seconds);
-    XSTAR_V064891_SUB_DBL(selected_line_apply_seconds);
-    XSTAR_V064891_SUB_DBL(selected_line_opacity_seconds);
-    XSTAR_V064891_SUB_DBL(binemis_profile_seconds);
-    XSTAR_V064891_SUB_DBL(selected_rrc_replay_seconds);
-    XSTAR_V064891_SUB_DBL(publication_combine_seconds);
-    XSTAR_V064891_SUB_DBL(workspace_retention_seconds);
-    XSTAR_V064891_SUB_DBL(final_grid_combine_seconds);
-    XSTAR_V064891_SUB_DBL(measured_seconds);
-    XSTAR_V064891_SUB_DBL(other_seconds);
-#undef XSTAR_V064891_SUB_U64
-#undef XSTAR_V064891_SUB_DBL
-    return out;
 }
 
 
@@ -14732,13 +14733,21 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             std::size_t trace_count = 0;
             const std::size_t before = data.evaluations;
             const xstar_fixed_state_stats_v1 fixed_stats_before_v064890 = data.cumulative_stats;
-            xstar_fixed_spectral_perf_v064891 spectral_perf_before_v064891{};
-            xstar_fixed_spectral_perf_get_v064891(&spectral_perf_before_v064891);
+            xstar_spectral_perf_v064892 spectral_perf_before_v064892{};
+            xstar_spectral_perf_init_v064892(&spectral_perf_before_v064892);
+            (void)xstar_spectral_perf_snapshot_v064892(&spectral_perf_before_v064892);
             const auto controller_call_started_v064890 = std::chrono::steady_clock::now();
             rc = xstar_thermal_run_evaluation_loop_v1(
                 thermal, &config, &state, standalone_iteration_evaluator_v67, &data,
                 trace.data(), trace.size(), &trace_count, &stats,
                 message.data(), message.size());
+            xstar_spectral_perf_v064892 spectral_perf_after_v064892{};
+            xstar_spectral_perf_init_v064892(&spectral_perf_after_v064892);
+            (void)xstar_spectral_perf_snapshot_v064892(&spectral_perf_after_v064892);
+            if (g_performance_v064892 && call >= 1u && call <= 4u) {
+                g_performance_v064892->controller_calls[call - 1u] =
+                    diff_spectral_perf_v064892(spectral_perf_after_v064892, spectral_perf_before_v064892);
+            }
             if (g_performance_v064890 && call >= 1u && call <= 4u) {
                 const std::size_t slot = call - 1u;
                 g_performance_v064890->controller_call_seconds[slot] += elapsed_seconds_v064890(controller_call_started_v064890);
@@ -14748,10 +14757,6 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                 g_performance_v064890->fixed_continuum_seconds[slot] += data.cumulative_stats.continuum_seconds - fixed_stats_before_v064890.continuum_seconds;
                 g_performance_v064890->fixed_spectral_seconds[slot] += data.cumulative_stats.spectral_seconds - fixed_stats_before_v064890.spectral_seconds;
                 g_performance_v064890->fixed_total_seconds[slot] += data.cumulative_stats.total_seconds - fixed_stats_before_v064890.total_seconds;
-                xstar_fixed_spectral_perf_v064891 spectral_perf_after_v064891{};
-                xstar_fixed_spectral_perf_get_v064891(&spectral_perf_after_v064891);
-                g_performance_v064890->spectral_detail[slot] =
-                    subtract_spectral_perf_v064891(spectral_perf_after_v064891, spectral_perf_before_v064891);
             }
             if (rc != 0) {
                 throw std::runtime_error(std::string("qualification-free controller call ") +
@@ -15767,13 +15772,10 @@ void emit_performance_instrumentation_v064890(
     const double top_unattributed = std::max(0.0, total_seconds - top_accounted);
     const double coverage_percent = total_seconds > 0.0 ? 100.0 * top_accounted / total_seconds : 0.0;
     const std::array<int,6> family_types{{49,50,53,86,88,99}};
-    xstar_fixed_spectral_perf_v064891 total_spectral_detail_v064891{};
-    xstar_fixed_spectral_perf_get_v064891(&total_spectral_detail_v064891);
 
     auto write = [&](std::ostream& out) {
         out << std::fixed << std::setprecision(6)
             << "V064890_PERF_POLICY=MEASUREMENT_ONLY_NO_SCIENCE_CHANGE\n"
-            << "V064891_PERF_POLICY=MEASUREMENT_ONLY_FIXED_STATE_SPECTRAL_DECOMPOSITION\n"
             << "V064890_PERF_ATDB_LOWERING_SECONDS=" << lowering_seconds << "\n"
             << "V064890_PERF_CONTROLLER_SECONDS=" << controller_seconds << "\n";
         for (std::size_t i = 0; i < 4u; ++i) {
@@ -15786,58 +15788,7 @@ void emit_performance_instrumentation_v064890(
                 << "V064890_PERF_CALL" << (i + 1u) << "_FIXED_CONTINUUM_SECONDS=" << perf.fixed_continuum_seconds[i] << "\n"
                 << "V064890_PERF_CALL" << (i + 1u) << "_FIXED_SPECTRAL_SECONDS=" << perf.fixed_spectral_seconds[i] << "\n"
                 << "V064890_PERF_CALL" << (i + 1u) << "_FIXED_TOTAL_SECONDS=" << perf.fixed_total_seconds[i] << "\n";
-            const auto& detail = perf.spectral_detail[i];
-            out << "V064891_PERF_CALL" << (i + 1u) << "_SPECTRAL_CALLS=" << detail.spectral_calls << "\n"
-                << "V064891_PERF_CALL" << (i + 1u) << "_DEFERRED_CALLS=" << detail.deferred_calls << "\n"
-                << "V064891_PERF_CALL" << (i + 1u) << "_PROJECTED_CALLS=" << detail.projected_calls << "\n"
-                << "V064891_PERF_CALL" << (i + 1u) << "_WORKSPACE_SETUP_SECONDS=" << detail.workspace_setup_seconds << "\n"
-                << "V064891_PERF_CALL" << (i + 1u) << "_SEED_PREPARE_SECONDS=" << detail.seed_prepare_seconds << "\n"
-                << "V064891_PERF_CALL" << (i + 1u) << "_BROAD_APPLY_SECONDS=" << detail.broad_apply_seconds << "\n"
-                << "V064891_PERF_CALL" << (i + 1u) << "_BROAD_APPLY_CONSTRUCTION_SECONDS=" << detail.broad_apply_construction_seconds << "\n"
-                << "V064891_PERF_CALL" << (i + 1u) << "_BROAD_APPLY_OPACITY_SECONDS=" << detail.broad_apply_opacity_seconds << "\n"
-                << "V064891_PERF_CALL" << (i + 1u) << "_BROAD_APPLY_NONOPACITY_SECONDS=" << detail.broad_apply_nonopacity_seconds << "\n"
-                << "V064891_PERF_CALL" << (i + 1u) << "_BROAD_CONTRIBUTIONS=" << detail.broad_contributions << "\n"
-                << "V064891_PERF_CALL" << (i + 1u) << "_BROAD_LINE_PROFILES=" << detail.broad_line_profiles << "\n"
-                << "V064891_PERF_CALL" << (i + 1u) << "_SELECTION_RANK_SECONDS=" << detail.selection_rank_seconds << "\n"
-                << "V064891_PERF_CALL" << (i + 1u) << "_SELECTED_LINE_REPLAY_SECONDS=" << detail.selected_line_replay_seconds << "\n"
-                << "V064891_PERF_CALL" << (i + 1u) << "_SELECTED_LINE_APPLY_SECONDS=" << detail.selected_line_apply_seconds << "\n"
-                << "V064891_PERF_CALL" << (i + 1u) << "_SELECTED_LINE_OPACITY_SECONDS=" << detail.selected_line_opacity_seconds << "\n"
-                << "V064891_PERF_CALL" << (i + 1u) << "_SELECTED_LINE_CONTRIBUTIONS=" << detail.selected_line_contributions << "\n"
-                << "V064891_PERF_CALL" << (i + 1u) << "_SELECTED_LINE_PROFILES=" << detail.selected_line_profiles << "\n"
-                << "V064891_PERF_CALL" << (i + 1u) << "_BINEMIS_PROFILE_SECONDS=" << detail.binemis_profile_seconds << "\n"
-                << "V064891_PERF_CALL" << (i + 1u) << "_SELECTED_RRC_REPLAY_SECONDS=" << detail.selected_rrc_replay_seconds << "\n"
-                << "V064891_PERF_CALL" << (i + 1u) << "_SELECTED_RRC_RECORDS=" << detail.selected_rrc_records << "\n"
-                << "V064891_PERF_CALL" << (i + 1u) << "_PUBLICATION_COMBINE_SECONDS=" << detail.publication_combine_seconds << "\n"
-                << "V064891_PERF_CALL" << (i + 1u) << "_WORKSPACE_RETENTION_SECONDS=" << detail.workspace_retention_seconds << "\n"
-                << "V064891_PERF_CALL" << (i + 1u) << "_FINAL_GRID_COMBINE_SECONDS=" << detail.final_grid_combine_seconds << "\n"
-                << "V064891_PERF_CALL" << (i + 1u) << "_MEASURED_SECONDS=" << detail.measured_seconds << "\n"
-                << "V064891_PERF_CALL" << (i + 1u) << "_OTHER_SECONDS=" << detail.other_seconds << "\n";
         }
-        out << "V064891_PERF_TOTAL_SPECTRAL_CALLS=" << total_spectral_detail_v064891.spectral_calls << "\n"
-            << "V064891_PERF_TOTAL_DEFERRED_CALLS=" << total_spectral_detail_v064891.deferred_calls << "\n"
-            << "V064891_PERF_TOTAL_PROJECTED_CALLS=" << total_spectral_detail_v064891.projected_calls << "\n"
-            << "V064891_PERF_TOTAL_WORKSPACE_SETUP_SECONDS=" << total_spectral_detail_v064891.workspace_setup_seconds << "\n"
-            << "V064891_PERF_TOTAL_SEED_PREPARE_SECONDS=" << total_spectral_detail_v064891.seed_prepare_seconds << "\n"
-            << "V064891_PERF_TOTAL_BROAD_APPLY_SECONDS=" << total_spectral_detail_v064891.broad_apply_seconds << "\n"
-            << "V064891_PERF_TOTAL_BROAD_APPLY_CONSTRUCTION_SECONDS=" << total_spectral_detail_v064891.broad_apply_construction_seconds << "\n"
-            << "V064891_PERF_TOTAL_BROAD_APPLY_OPACITY_SECONDS=" << total_spectral_detail_v064891.broad_apply_opacity_seconds << "\n"
-            << "V064891_PERF_TOTAL_BROAD_APPLY_NONOPACITY_SECONDS=" << total_spectral_detail_v064891.broad_apply_nonopacity_seconds << "\n"
-            << "V064891_PERF_TOTAL_BROAD_CONTRIBUTIONS=" << total_spectral_detail_v064891.broad_contributions << "\n"
-            << "V064891_PERF_TOTAL_BROAD_LINE_PROFILES=" << total_spectral_detail_v064891.broad_line_profiles << "\n"
-            << "V064891_PERF_TOTAL_SELECTION_RANK_SECONDS=" << total_spectral_detail_v064891.selection_rank_seconds << "\n"
-            << "V064891_PERF_TOTAL_SELECTED_LINE_REPLAY_SECONDS=" << total_spectral_detail_v064891.selected_line_replay_seconds << "\n"
-            << "V064891_PERF_TOTAL_SELECTED_LINE_APPLY_SECONDS=" << total_spectral_detail_v064891.selected_line_apply_seconds << "\n"
-            << "V064891_PERF_TOTAL_SELECTED_LINE_OPACITY_SECONDS=" << total_spectral_detail_v064891.selected_line_opacity_seconds << "\n"
-            << "V064891_PERF_TOTAL_SELECTED_LINE_CONTRIBUTIONS=" << total_spectral_detail_v064891.selected_line_contributions << "\n"
-            << "V064891_PERF_TOTAL_SELECTED_LINE_PROFILES=" << total_spectral_detail_v064891.selected_line_profiles << "\n"
-            << "V064891_PERF_TOTAL_BINEMIS_PROFILE_SECONDS=" << total_spectral_detail_v064891.binemis_profile_seconds << "\n"
-            << "V064891_PERF_TOTAL_SELECTED_RRC_REPLAY_SECONDS=" << total_spectral_detail_v064891.selected_rrc_replay_seconds << "\n"
-            << "V064891_PERF_TOTAL_SELECTED_RRC_RECORDS=" << total_spectral_detail_v064891.selected_rrc_records << "\n"
-            << "V064891_PERF_TOTAL_PUBLICATION_COMBINE_SECONDS=" << total_spectral_detail_v064891.publication_combine_seconds << "\n"
-            << "V064891_PERF_TOTAL_WORKSPACE_RETENTION_SECONDS=" << total_spectral_detail_v064891.workspace_retention_seconds << "\n"
-            << "V064891_PERF_TOTAL_FINAL_GRID_COMBINE_SECONDS=" << total_spectral_detail_v064891.final_grid_combine_seconds << "\n"
-            << "V064891_PERF_TOTAL_MEASURED_SECONDS=" << total_spectral_detail_v064891.measured_seconds << "\n"
-            << "V064891_PERF_TOTAL_OTHER_SECONDS=" << total_spectral_detail_v064891.other_seconds << "\n";
         out << "V064890_PERF_CONTINUUM_TRANSPORT_SECONDS=" << perf.continuum_transport_seconds << "\n"
             << "V064890_PERF_ATOMIC_LUMINOSITY_SECONDS=" << perf.atomic_luminosity_seconds << "\n"
             << "V064890_PERF_STPCUT_SECONDS=" << perf.stpcut_seconds << "\n"
@@ -15874,13 +15825,111 @@ void emit_performance_instrumentation_v064890(
     }
 }
 
+void emit_performance_instrumentation_v064892(
+    const std::filesystem::path& output,
+    bool write_file,
+    const PerformanceInstrumentationV064890& legacy,
+    const PerformanceInstrumentationV064892& perf) {
+    static constexpr std::array<const char*,8> labels{{"TYPE49","TYPE50","TYPE53","TYPE76","TYPE86","TYPE88","TYPE99","OTHER"}};
+    xstar_spectral_perf_v064892 controller{};
+    xstar_spectral_perf_init_v064892(&controller);
+    auto add = [](xstar_spectral_perf_v064892& dst, const xstar_spectral_perf_v064892& src) {
+        dst.apply_calls += src.apply_calls;
+        dst.contributions += src.contributions;
+        dst.line_profiles += src.line_profiles;
+        dst.exact_grid_profiles += src.exact_grid_profiles;
+        dst.native_profile_profiles += src.native_profile_profiles;
+        dst.updated_continuum_bins += src.updated_continuum_bins;
+        dst.exact_grid_valid_points += src.exact_grid_valid_points;
+        dst.kind_bound_free += src.kind_bound_free;
+        dst.kind_emisab_line += src.kind_emisab_line;
+        dst.kind_opacity_only += src.kind_opacity_only;
+        dst.kind_emis_line += src.kind_emis_line;
+        dst.kind_full_line += src.kind_full_line;
+        for (std::size_t i=0;i<XSTAR_SPECTRAL_PERF_V064892_FAMILY_COUNT;++i) {
+            dst.family_contributions[i] += src.family_contributions[i];
+            dst.family_line_profiles[i] += src.family_line_profiles[i];
+            dst.family_updated_bins[i] += src.family_updated_bins[i];
+            dst.family_profile_seconds[i] += src.family_profile_seconds[i];
+        }
+        dst.apply_seconds += src.apply_seconds;
+        dst.profile_kernel_seconds += src.profile_kernel_seconds;
+        dst.exact_grid_profile_seconds += src.exact_grid_profile_seconds;
+        dst.native_profile_seconds += src.native_profile_seconds;
+    };
+    for (const auto& call : perf.controller_calls) add(controller, call);
+    const double legacy_spectral = std::accumulate(legacy.fixed_spectral_seconds.begin(), legacy.fixed_spectral_seconds.end(), 0.0);
+    const double broad_percent = legacy_spectral > 0.0 ? 100.0 * controller.apply_seconds / legacy_spectral : 0.0;
+    const double profile_percent = controller.apply_seconds > 0.0 ? 100.0 * controller.profile_kernel_seconds / controller.apply_seconds : 0.0;
+    const double scalar_seconds = std::max(0.0, controller.apply_seconds - controller.profile_kernel_seconds);
+    const double kernel_split = controller.profile_kernel_seconds > 0.0
+        ? 100.0 * (controller.exact_grid_profile_seconds + controller.native_profile_seconds) / controller.profile_kernel_seconds : 100.0;
+    double family_profile_sum = 0.0;
+    for (double v : controller.family_profile_seconds) family_profile_sum += v;
+    const double family_split = controller.profile_kernel_seconds > 0.0
+        ? 100.0 * family_profile_sum / controller.profile_kernel_seconds : 100.0;
+    auto write = [&](std::ostream& out) {
+        out << std::fixed << std::setprecision(6)
+            << "V064892_PERF_POLICY=MEASUREMENT_ONLY_BROAD_SPECTRAL_CONSTRUCTION_DECOMPOSITION\n"
+            << "V064892_PERF_NO_NEW_PER_RECORD_CLOCKS=YES\n";
+        for (std::size_t c=0;c<4u;++c) {
+            const auto& d=perf.controller_calls[c];
+            const double rem=std::max(0.0,d.apply_seconds-d.profile_kernel_seconds);
+            out << "V064892_PERF_CALL"<<(c+1u)<<"_BROAD_APPLY_SECONDS="<<d.apply_seconds<<"\n"
+                << "V064892_PERF_CALL"<<(c+1u)<<"_PROFILE_KERNEL_SECONDS="<<d.profile_kernel_seconds<<"\n"
+                << "V064892_PERF_CALL"<<(c+1u)<<"_SCALAR_REMAINDER_SECONDS="<<rem<<"\n"
+                << "V064892_PERF_CALL"<<(c+1u)<<"_LINE_PROFILES="<<d.line_profiles<<"\n"
+                << "V064892_PERF_CALL"<<(c+1u)<<"_UPDATED_BINS="<<d.updated_continuum_bins<<"\n";
+        }
+        out << "V064892_CONTROLLER_BROAD_APPLY_SECONDS="<<controller.apply_seconds<<"\n"
+            << "V064892_CONTROLLER_LEGACY_FIXED_SPECTRAL_SECONDS="<<legacy_spectral<<"\n"
+            << "V064892_CONTROLLER_BROAD_APPLY_PERCENT_OF_FIXED_SPECTRAL="<<broad_percent<<"\n"
+            << "V064892_CONTROLLER_PROFILE_KERNEL_SECONDS="<<controller.profile_kernel_seconds<<"\n"
+            << "V064892_CONTROLLER_PROFILE_KERNEL_PERCENT_OF_BROAD_APPLY="<<profile_percent<<"\n"
+            << "V064892_CONTROLLER_SCALAR_REMAINDER_SECONDS="<<scalar_seconds<<"\n"
+            << "V064892_CONTROLLER_EXACT_GRID_PROFILE_SECONDS="<<controller.exact_grid_profile_seconds<<"\n"
+            << "V064892_CONTROLLER_NATIVE_PROFILE_SECONDS="<<controller.native_profile_seconds<<"\n"
+            << "V064892_CONTROLLER_PROFILE_KERNEL_SPLIT_PERCENT="<<kernel_split<<"\n"
+            << "V064892_CONTROLLER_FAMILY_PROFILE_SPLIT_PERCENT="<<family_split<<"\n"
+            << "V064892_CONTROLLER_APPLY_CALLS="<<controller.apply_calls<<"\n"
+            << "V064892_CONTROLLER_CONTRIBUTIONS="<<controller.contributions<<"\n"
+            << "V064892_CONTROLLER_LINE_PROFILES="<<controller.line_profiles<<"\n"
+            << "V064892_CONTROLLER_EXACT_GRID_PROFILES="<<controller.exact_grid_profiles<<"\n"
+            << "V064892_CONTROLLER_NATIVE_PROFILES="<<controller.native_profile_profiles<<"\n"
+            << "V064892_CONTROLLER_UPDATED_BINS="<<controller.updated_continuum_bins<<"\n"
+            << "V064892_CONTROLLER_EXACT_GRID_VALID_POINTS="<<controller.exact_grid_valid_points<<"\n"
+            << "V064892_CONTROLLER_KIND_BOUND_FREE="<<controller.kind_bound_free<<"\n"
+            << "V064892_CONTROLLER_KIND_EMISAB_LINE="<<controller.kind_emisab_line<<"\n"
+            << "V064892_CONTROLLER_KIND_OPACITY_ONLY="<<controller.kind_opacity_only<<"\n"
+            << "V064892_CONTROLLER_KIND_EMIS_LINE="<<controller.kind_emis_line<<"\n"
+            << "V064892_CONTROLLER_KIND_FULL_LINE="<<controller.kind_full_line<<"\n";
+        for (std::size_t i=0;i<labels.size();++i) {
+            out << "V064892_CONTROLLER_"<<labels[i]<<"_CONTRIBUTIONS="<<controller.family_contributions[i]<<"\n"
+                << "V064892_CONTROLLER_"<<labels[i]<<"_LINE_PROFILES="<<controller.family_line_profiles[i]<<"\n"
+                << "V064892_CONTROLLER_"<<labels[i]<<"_UPDATED_BINS="<<controller.family_updated_bins[i]<<"\n"
+                << "V064892_CONTROLLER_"<<labels[i]<<"_PROFILE_SECONDS="<<controller.family_profile_seconds[i]<<"\n";
+        }
+        out << "V064892_TOTAL_BROAD_APPLY_SECONDS="<<perf.total.apply_seconds<<"\n"
+            << "V064892_TOTAL_PROFILE_KERNEL_SECONDS="<<perf.total.profile_kernel_seconds<<"\n"
+            << "V064892_TOTAL_APPLY_CALLS="<<perf.total.apply_calls<<"\n"
+            << "V064892_TOTAL_LINE_PROFILES="<<perf.total.line_profiles<<"\n";
+    };
+    write(std::cout);
+    if (write_file) {
+        const auto dir=output/"standalone_diagnostics"/"timing";
+        std::filesystem::create_directories(dir);
+        std::ofstream file(dir/"performance_v064892.txt");
+        write(file);
+    }
+}
+
 int command_run_standalone_production_v67(const Options& options, const std::filesystem::path& executable_path) {
     const auto production_started_v06488 = std::chrono::steady_clock::now();
     const std::string prefix = "V048746255172582_";
     const std::string artifact_profile = options.artifact_profile_explicit ? options.artifact_profile : "none";
     const auto artifacts = artifact_selection_v67(options, artifact_profile);
     PerformanceInstrumentationV064890 performance_v064890;
-    xstar_fixed_spectral_perf_reset_v064891();
+    PerformanceInstrumentationV064892 performance_v064892;
     if (options.parameters_path.empty() || options.output_dir.empty()) {
         std::cerr << "run-production requires --parameters and --output-dir\n";
         std::cout << prefix << "RESULT=REJECT_INVALID_ARGUMENTS\n";
@@ -15903,6 +15952,8 @@ int command_run_standalone_production_v67(const Options& options, const std::fil
     const bool output_existed = std::filesystem::exists(output);
     try {
         g_performance_v064890 = &performance_v064890;
+        g_performance_v064892 = &performance_v064892;
+        xstar_spectral_perf_reset_v064892();
         auto params = xstar_atdb_runtime::read_production_parameters(options.parameters_path);
         auto atomic = xstar_atdb_runtime::resolve_atomic_data(options.parameters_path, params.raw_json, executable_path);
         std::cout << prefix << "COMMAND=RUN_PRODUCTION_STANDALONE\n"
@@ -16045,14 +16096,20 @@ int command_run_standalone_production_v67(const Options& options, const std::fil
                   << prefix << "RESULT=ACCEPT_PRODUCTION_BASELINE\n";
         const double production_total_seconds_v06488 = std::chrono::duration<double>(
             std::chrono::steady_clock::now() - production_started_v06488).count();
+        xstar_spectral_perf_init_v064892(&performance_v064892.total);
+        (void)xstar_spectral_perf_snapshot_v064892(&performance_v064892.total);
         emit_performance_instrumentation_v064890(
             output, artifacts.timing_summary, performance_v064890, lowering_seconds,
             controller_seconds, production_total_seconds_v06488);
+        emit_performance_instrumentation_v064892(
+            output, artifacts.timing_summary, performance_v064890, performance_v064892);
         std::cout << " total time   " << std::setprecision(16) << production_total_seconds_v06488 << "\n";
         g_performance_v064890 = nullptr;
+        g_performance_v064892 = nullptr;
         return 0;
     } catch (const std::exception& exc) {
         g_performance_v064890 = nullptr;
+        g_performance_v064892 = nullptr;
         ::unsetenv("XSTAR_TRUE_PRODUCTION");
         ::unsetenv("XSTAR_NATIVE_SOURCE_SEQUENCE");
         ::unsetenv("XSTAR_NATIVE_PRODUCTION");

@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.9.2.1 - 2026-07-27
+
+- Packaging/cleanup hotfix based on the accepted 0.6.48.9.2 measurement baseline; no physics or numerical algorithm changes.
+- Remove historical root material already retired by the 9.2 cleanup and prune benchmark fixtures that were used only by obsolete internal tests/regression snapshots.
+- Keep benchmark/oracle directories that still back active source-port regression gates, public audit commands, current C++ self-tests, or diagnostic/reference fallbacks.
+- Remove orphaned tests/modules tied exclusively to the deleted benchmark snapshots and rewrite `pyproject.toml` benchmark package-data to match the retained runtime surface.
+- Preserve the 0.6.48.9.2 qualification/performance runner set and the accepted Type50 hotspot attribution.
+- Reserve 0.6.48.9.3 for the first Type50 profile-kernel optimization.
+
 ## 0.6.48.9.1 - 2026-07-27
 
 - Measurement-only fixed-state spectral decomposition; no intended science change.
