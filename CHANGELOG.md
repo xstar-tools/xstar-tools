@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## 0.6.48.9.6 — standalone Type50 hot-loop optimization - 2026-07-27
+
+- Build directly on the accepted 0.6.48.9.5.1 package; freeze the 9.5 prepared Type49/53 bound-free engine and 9.4.2 exact accepted-boundary recomputation by source hash.
+- Optimize only the standalone-native full-profile Type50 opacity path. Python source-port execution, including modular C++ backends, retains the 0.6.48.9.5.1 Type50 implementation.
+- Remove the full-profile `rccemis += 0.0` provenance-era stores; literal `linopac.f90` does not modify `rccemis` when `lfast <= 2`.
+- Replace the defensive positive/finite `opakc` reload with the literal source-order `opakc += optp2` update on the validated production continuum workspace.
+- Fuse source-identical temporary-grid profile evaluation with the later monotonic rebin consumer instead of materializing/re-reading two 20,000-point temporary planes. The historically inert `ldon` early-stop semantics remain inert.
+- Replace `float(integer)->double` conversions for Type50 temporary-grid indices and `ncut` with direct integer-to-double conversions only where the integer magnitude is <=20,000 and therefore exactly representable in binary32 and binary64.
+- Specialize the common `0 < a <= 0.2` Voigt branch while preserving the exact arithmetic association of `voigte.f90`.
+- Add `XSTAR_V064896_FORCE_LEGACY_TYPE50=1` for same-executable blocking A/B qualification against the frozen 9.5.1 Type50 implementation.
+- Add 9.6 readiness, randomized bit-exact kernel qualification, nine-FITS payload comparator, four-reference hash verification, full science runner, and performance runner.
+- Local randomized qualification: 800 profiles bit-exact, full-profile `rccemis` unchanged, Python/non-standalone mode identical to 9.5.1, representative micro-kernel speedup ~1.44x. Host Mg XI qualification remains required before promotion.
+
 ## 0.6.48.9.5.1 — element-generality/package cleanup - 2026-07-27
 
 - Freeze 0.6.48.9.5 as the accepted prepared Type49/53 production/science baseline.

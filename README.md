@@ -1,6 +1,6 @@
-# xstar_tools 0.6.48.9.5.1
+# xstar_tools 0.6.48.9.6
 
-0.6.48.9.5.1 is a no-science-change element-generality/package cleanup built on the accepted 0.6.48.9.5 prepared Type49/53 engine. The accepted Mg XI host result is ~23.57 s controller time (~24.94 s instrumented total), with the Type49/53 optimized and forced-legacy products bit-exact in all nine FITS data payloads and scientific `xout_step.log`.
+0.6.48.9.6 is the standalone-native Type50 hot-loop optimization built on the accepted 0.6.48.9.5.1 package. The 9.5 prepared Type49/53 engine and 9.4.2 exact accepted-boundary ownership are frozen. The Type50 optimization is enabled only under the native standalone controller; Python source-port execution retains the 0.6.48.9.5.1 Type50 path. A same-executable `XSTAR_V064896_FORCE_LEGACY_TYPE50=1` mode is provided for blocking A/B qualification.
 
 This release removes retired/version-stamped/Mg-specific Python audit code from the production `src/xstar_tools/xstar/` namespace. The Mg XI case remains under `src/xstar_tools/benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8/` as the frozen benchmark. Current Mg-specific runtime conditions are **inventoried but not changed** in `docs/v0648951_element_z12_inventory.md`; testing/generalization for other elements is deferred until after the 9.6/9.7 speed work.
 

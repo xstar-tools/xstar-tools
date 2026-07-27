@@ -7,6 +7,8 @@
 #include <chrono>
 #include <cfloat>
 #include <cstddef>
+#include <cstdlib>
+#include <cstdio>
 #include <cstring>
 #include <memory>
 #include <sstream>
@@ -109,6 +111,44 @@ static double voigte(double vs, double a) {
         source_real_literal(3.0) + pqs * h3p;
     const double psi = ak[15] + aa * (ak[16] + aa * (ak[17] + aa * ak[18]));
     return psi * (ex + aa * (h1p + aa * (h2p + aa * (h3p + aa * h4p))));
+}
+
+// v0.6.48.9.6 specialization for the overwhelmingly common Type-50
+// damping regime 0 < a <= 0.2.  It is the identical branch of voigte.f90
+// with the invariant a-tests removed; arithmetic association is deliberately
+// unchanged so each returned binary64 value is bit-identical to voigte().
+static inline double voigte_small_a_positive_v064896(double v, double aa) {
+    static const double ak[15] = {
+        source_real_literal(-1.12470432), source_real_literal(-0.15516677),
+        source_real_literal(3.28867591), source_real_literal(-2.34357915),
+        source_real_literal(0.42139162), source_real_literal(-4.48480194),
+        source_real_literal(9.39456063), source_real_literal(-6.61487486),
+        source_real_literal(1.98919585), source_real_literal(-0.22041650),
+        source_real_literal(0.554153432), source_real_literal(0.278711796),
+        source_real_literal(-0.188325687), source_real_literal(0.042991293),
+        source_real_literal(-0.003278278)
+    };
+    const double un = source_real_literal(1.0);
+    const double two = source_real_literal(2.0);
+    const double sqp = source_real_literal(1.772453851);
+    const double v2 = v * v;
+    if (v >= source_real_literal(5.0)) {
+        return aa * (source_real_literal(15.0) + source_real_literal(6.0) * v2 +
+                     source_real_literal(4.0) * v2 * v2) /
+               (source_real_literal(4.0) * v2 * v2 * v2 * sqp);
+    }
+    const double ex = v2 >= source_real_literal(100.0) ? 0.0 : std::exp(-v2);
+    double quo = un;
+    int start = 0;
+    if (v >= source_real_literal(2.4)) {
+        quo = un / (v2 - source_real_literal(1.5));
+        start = 10;
+    } else if (v >= source_real_literal(1.3)) {
+        start = 5;
+    }
+    const double h1 = quo * (ak[start] + v * (ak[start + 1] +
+        v * (ak[start + 2] + v * (ak[start + 3] + v * ak[start + 4]))));
+    return h1 * aa + ex * (un + aa * aa * (un - two * v2));
 }
 
 static int huntf(const double* xx, int n, double x) {
@@ -238,7 +278,7 @@ int xstar_opacity_apply_exact_grid_v1(
     return 0;
 }
 
-int xstar_opacity_apply_line_profile_v1(
+static int xstar_opacity_apply_line_profile_legacy_v0648951(
     double optpp,
     double line_energy_ev,
     double vturb_km_s,
@@ -403,6 +443,228 @@ int xstar_opacity_apply_line_profile_v1(
     *opacity_seconds = std::chrono::duration<double>(ended - started).count();
     write_message(errbuf, errbuf_size, use_voigt ? "native opacity voigt profile applied" : "native opacity gaussian profile applied");
     return 0;
+}
+
+
+// v0.6.48.9.6: exact Type-50 hot path.  The 9.5.1 implementation first
+// materialized the complete 20,000-point temporary energy/profile planes and
+// then traversed them again to rebin.  In literal linopac.f90, ml1min/ml1max
+// are not updated until after that temporary-grid loop, so the ldon early-stop
+// predicate cannot fire during full-profile construction.  The only values
+// that can affect public opakc are therefore the monotonically ordered points
+// consumed by the later rebin loop.  Compute those source-identical points at
+// the moment they are consumed, preserving each default-REAL conversion,
+// Voigt/Gaussian decision, trapezoid operation order, and public-bin update
+// order.  This removes the dead temporary-plane traffic without changing the
+// source arithmetic that reaches output.
+static int xstar_opacity_apply_line_profile_optimized_v064896(
+    double optpp,
+    double line_energy_ev,
+    double vturb_km_s,
+    double temperature_1e4k,
+    double atomic_mass_amu,
+    double natural_width_ev,
+    const double* seed_profiles,
+    int seed_radius,
+    const double* epi,
+    int ncn2,
+    double* opakc,
+    double* rccemis,
+    long long* updated_bins,
+    double* opacity_seconds,
+    char* errbuf,
+    std::size_t errbuf_size
+) {
+    const auto started = std::chrono::steady_clock::now();
+    if (!seed_profiles || !epi || !opakc || !rccemis || !updated_bins || !opacity_seconds) {
+        write_message(errbuf, errbuf_size, "null pointer passed to xstar_opacity_apply_line_profile_v1");
+        return 3;
+    }
+    const int n = ncn2;
+    if (n < 3 || seed_radius < 0 || !std::isfinite(optpp) || !std::isfinite(line_energy_ev) ||
+        !std::isfinite(vturb_km_s) || !std::isfinite(temperature_1e4k) ||
+        !std::isfinite(atomic_mass_amu) || !std::isfinite(natural_width_ev)) {
+        write_message(errbuf, errbuf_size, "invalid input to xstar_opacity_apply_line_profile_v1");
+        return 4;
+    }
+    *updated_bins = 0;
+    *opacity_seconds = 0.0;
+    if (optpp <= 0.0 || line_energy_ev <= epi[0] || line_energy_ev >= epi[n - 1]) {
+        write_message(errbuf, errbuf_size, "native opacity profile no-op");
+        return 0;
+    }
+
+    constexpr int nbtpp = 20000;
+    constexpr int ml2 = nbtpp / 2;
+    const double mass = std::max(atomic_mass_amu, 1.0e-30);
+    const double vth = source_mul(xstar_constants::kLegacyLinopacThermalSpeedCoefficient,
+        std::sqrt(source_div(temperature_1e4k, mass)));
+    const double deleturb = source_div(source_mul(line_energy_ev, vturb_km_s), 3.0e5);
+    const double deleth = source_div(source_mul(line_energy_ev, vth), 3.0e5);
+    const double dele = std::sqrt(source_add(source_mul(deleth, deleth), source_mul(deleturb, deleturb)));
+    if (dele <= 0.0) {
+        write_message(errbuf, errbuf_size, "native opacity profile zero-width no-op");
+        return 0;
+    }
+    const double aasmall = source_div(
+        source_div(natural_width_ev, source_add(xstar_constants::kLegacyLinopacWidthFloorEv, dele)),
+        xstar_constants::kLegacyLinopacDampingGeometryFactor);
+    const bool use_voigt = aasmall > xstar_constants::kLegacyLinopacWingVoigtThreshold;
+    const bool use_small_a_voigt = use_voigt && aasmall <= source_real_literal(0.2);
+
+    int ml1 = nbinc(line_energy_ev, epi, n);
+    ml1 = std::max(2, std::min(n - 1, ml1));
+    const double e00 = epi[ml1 - 1];
+    const double deleepi = source_sub(epi[ml1], epi[ml1 - 1]);
+    int ncut = static_cast<int>(deleepi / dele);
+    ncut = std::max(1, std::min(nbtpp / 10, ncut));
+    const double deleused = source_div(deleepi, static_cast<double>(ncut));
+
+    auto temporary_energy = [e00, deleused](int mlm_one_based) {
+        const int offset = mlm_one_based - ml2;
+        return source_add(e00,
+            source_mul(static_cast<double>(offset), deleused));
+    };
+    const double energy_ceiling = epi[n - 1];
+    auto valid_temporary_energy = [energy_ceiling](double energy) {
+        return energy > 0.0 && energy < energy_ceiling;
+    };
+
+    // Literal outward construction can address temporary indices 1..20000,
+    // but index 1 is later discarded when mlmin is clamped to 2 and the
+    // rebin loop begins at mlmin+1.  Find the same raw bounds from the outside
+    // inward using the exact source energy expression; no profile value is
+    // needed to determine these bounds because ldon is invariantly false.
+    int raw_mlmin = 1;
+    while (raw_mlmin < ml2 && !valid_temporary_energy(temporary_energy(raw_mlmin))) ++raw_mlmin;
+    int raw_mlmax = nbtpp;
+    while (raw_mlmax > ml2 && !valid_temporary_energy(temporary_energy(raw_mlmax))) --raw_mlmax;
+    // If one side has no valid outward temporary point, literal linopac leaves
+    // that raw extremum at its sentinel rather than promoting the center.
+    // This is outside the benchmark hot shape; fall back to the frozen 9.5.1
+    // implementation so edge-grid semantics remain exact.
+    if (raw_mlmin >= ml2 || raw_mlmax <= ml2) {
+        return xstar_opacity_apply_line_profile_legacy_v0648951(
+            optpp, line_energy_ev, vturb_km_s, temperature_1e4k, atomic_mass_amu,
+            natural_width_ev, seed_profiles, seed_radius, epi, ncn2, opakc,
+            rccemis, updated_bins, opacity_seconds, errbuf, errbuf_size);
+    }
+
+    const int ml1min = nbinc(temporary_energy(raw_mlmin), epi, n);
+    int ml1m = ml1min;
+    const int mlmin = std::max(2, raw_mlmin);
+    const int mlmax = std::min(nbtpp, raw_mlmax);
+    double sume = 0.0;
+    double opsum = 0.0;
+    double tmpop = 0.0;
+    double previous_energy = temporary_energy(mlmin);
+
+    for (int mlm = mlmin + 1; mlm <= mlmax; ++mlm) {
+        const double current_energy = temporary_energy(mlm);
+        const double delet = source_div(source_sub(current_energy, line_energy_ev), dele);
+        double profile;
+        if (mlm == ml2) {
+            if (aasmall > xstar_constants::kLegacyLinopacCenterVoigtThreshold) {
+                const double av = std::abs(delet);
+                const double raw = use_small_a_voigt
+                    ? voigte_small_a_positive_v064896(av, aasmall)
+                    : voigte(av, aasmall);
+                profile = source_div(raw, xstar_constants::kLegacyLinopacProfileNormalization);
+            } else {
+                profile = source_div(std::exp(-delet * delet), xstar_constants::kLegacyLinopacProfileNormalization);
+            }
+        } else if (use_voigt) {
+            const double av = std::abs(delet);
+            const double raw = use_small_a_voigt
+                ? voigte_small_a_positive_v064896(av, aasmall)
+                : voigte(av, aasmall);
+            profile = source_div(raw, xstar_constants::kLegacyLinopacProfileNormalization);
+        } else {
+            profile = source_div(std::exp(-delet * delet), xstar_constants::kLegacyLinopacProfileNormalization);
+        }
+        const double tmpopo = tmpop;
+        tmpop = optpp * profile;
+        const double tmpe = std::abs(source_sub(current_energy, previous_energy));
+        previous_energy = current_energy;
+        sume = source_add(sume, tmpe);
+        const double pair = source_add(tmpop, tmpopo);
+        const double weighted = source_mul(pair, tmpe);
+        const double interval = source_div(weighted, 2.0);
+        opsum = source_add(opsum, interval);
+        if (current_energy > epi[ml1m - 1]) {
+            if (sume > 1.0e-34) {
+                // Literal linopac stores optp2=opsum/sume and then performs a
+                // direct source-order opakc += optp2.  Production opakc is a
+                // finite, nonnegative continuum workspace; the 9.5.1
+                // isfinite/positive normalization was defensive hot-loop work
+                // not present in the source.
+                const double optp2 = source_div(opsum, sume);
+                while (current_energy > epi[ml1m - 1] && ml1m < n) {
+                    opakc[ml1m - 1] = source_add(opakc[ml1m - 1], optp2);
+                    // Full-profile linopac does not modify rccemis.  The
+                    // previous +=0.0 stores were provenance-era no-ops.
+                    ++(*updated_bins);
+                    ++ml1m;
+                }
+            }
+            opsum = 0.0;
+            sume = 0.0;
+        }
+    }
+    const auto ended = std::chrono::steady_clock::now();
+    *opacity_seconds = std::chrono::duration<double>(ended - started).count();
+    write_message(errbuf, errbuf_size, use_voigt ? "native opacity voigt profile applied" : "native opacity gaussian profile applied");
+    return 0;
+}
+
+int xstar_opacity_apply_line_profile_v1(
+    double optpp,
+    double line_energy_ev,
+    double vturb_km_s,
+    double temperature_1e4k,
+    double atomic_mass_amu,
+    double natural_width_ev,
+    const double* seed_profiles,
+    int seed_radius,
+    const double* epi,
+    int ncn2,
+    double* opakc,
+    double* rccemis,
+    long long* updated_bins,
+    double* opacity_seconds,
+    char* errbuf,
+    std::size_t errbuf_size
+) {
+    // Same executable, same ABI: set once before process start to force the
+    // exact 0.6.48.9.5.1 Type-50 implementation for blocking A/B runs.
+    static const bool use_optimized_standalone_v064896 = [] {
+        const char* native_sequence = std::getenv("XSTAR_NATIVE_SOURCE_SEQUENCE");
+        const bool standalone_native = native_sequence && *native_sequence;
+        const char* forced = std::getenv("XSTAR_V064896_FORCE_LEGACY_TYPE50");
+        const bool force_legacy = forced && *forced && std::strcmp(forced, "0") != 0 &&
+            std::strcmp(forced, "false") != 0 && std::strcmp(forced, "FALSE") != 0;
+        if (standalone_native) {
+            std::fputs(force_legacy
+                ? "V064896_TYPE50_MODE=LEGACY_0951_FORCED\n"
+                : "V064896_TYPE50_MODE=OPTIMIZED_STANDALONE\n", stdout);
+            std::fflush(stdout);
+        }
+        if (force_legacy) return false;
+        // XSTAR_NATIVE_SOURCE_SEQUENCE is owned by the standalone native
+        // controller.  Python source-port/C++-backend calls do not set it, so
+        // 9.6 changes only the requested standalone-C++ Type-50 path.
+        return standalone_native;
+    }();
+    if (!use_optimized_standalone_v064896) {
+        return xstar_opacity_apply_line_profile_legacy_v0648951(
+            optpp, line_energy_ev, vturb_km_s, temperature_1e4k, atomic_mass_amu,
+            natural_width_ev, seed_profiles, seed_radius, epi, ncn2, opakc,
+            rccemis, updated_bins, opacity_seconds, errbuf, errbuf_size);
+    }
+    return xstar_opacity_apply_line_profile_optimized_v064896(
+        optpp, line_energy_ev, vturb_km_s, temperature_1e4k, atomic_mass_amu,
+        natural_width_ev, seed_profiles, seed_radius, epi, ncn2, opakc,
+        rccemis, updated_bins, opacity_seconds, errbuf, errbuf_size);
 }
 
 } // extern "C"
