@@ -851,7 +851,7 @@ Python **product** reference regeneration is required because writer-time `binem
 - Remove equal-shell radial and opacity-trapezoid product-state fabrication from the public writer path.
 - Retain the source-faithful LTE population vector in the exact-workspace sidecar and block CFITSIO and legacy log writing until radial accumulation, accepted boundaries, and legacy `pprint` state are exact.
 
-# v0.6.48.7.46.25.5.2 - 2026-06-24
+## v0.6.48.7.46.25.5.2 - 2026-06-24
 
 - Correct metadata export to read `PprintElementMetadata.element_label` while preserving the `symbol` CSV column.
 - Correct turbulent-velocity metadata to use normalized `vturbi`, not nonexistent `rlv`.
@@ -864,7 +864,7 @@ Python **product** reference regeneration is required because writer-time `binem
 - Remove equal-shell radial and opacity-trapezoid product-state fabrication from the public writer path.
 - Retain the source-faithful LTE population vector in the exact-workspace sidecar and block CFITSIO and legacy log writing until radial accumulation, accepted boundaries, and legacy `pprint` state are exact.
 
-# v0.6.48.7.46.25.5.1 - 2026-06-24
+## v0.6.48.7.46.25.5.1 - 2026-06-24
 
 - Correct metadata export to read `PprintElementMetadata.element_label` while preserving the `symbol` CSV column.
 - Add a focused host-path regression test and static readiness gate preventing `.symbol` access.
@@ -875,7 +875,7 @@ Python **product** reference regeneration is required because writer-time `binem
 - Remove equal-shell radial and opacity-trapezoid product-state fabrication from the public writer path.
 - Retain the source-faithful LTE population vector in the exact-workspace sidecar and block CFITSIO and legacy log writing until radial accumulation, accepted boundaries, and legacy `pprint` state are exact.
 
-# v0.6.48.7.46.25.4 - 2026-06-24
+## v0.6.48.7.46.25.4 - 2026-06-24
 
 - Corrected the v25.3 five-zone `ProductWritingState` rejection.
 - Separated the 301,301-value source continuum workspace from the 9,999-bin public-product depth arrays.
@@ -889,7 +889,7 @@ Python **product** reference regeneration is required because writer-time `binem
 - Retained ABI 60487 and direct emissivity build/link inputs.
 - Numerical/byte parity and production promotion remain unqualified.
 
-# v0.6.48.7.46.25.3 - 2026-06-24
+## v0.6.48.7.46.25.3 - 2026-06-24
 
 - Restored all nine FITS products and `xout_step.log` as native `xstar_cpp` outputs.
 - Removed all runtime use of benchmark FITS bytes, header templates, radial payloads, and stored log content.
@@ -900,7 +900,7 @@ Python **product** reference regeneration is required because writer-time `binem
 - Builds the required `libxstar_backend_cpp.so` whenever the `xstar_cpp` target is requested.
 - Scientific byte/numerical parity and production promotion remain unqualified.
 
-# v0.6.48.7.46.25.2 - 2026-06-24
+## v0.6.48.7.46.25.2 - 2026-06-24
 
 - Invalidated the v25/v25.1 claim that public products were generated genuinely
   from native state.
@@ -917,7 +917,7 @@ Python **product** reference regeneration is required because writer-time `binem
   `libxstar_emissivity.so`.
 - ABI remains 60487.
 
-# v0.6.48.7.46.25.1 - 2026-06-24
+## v0.6.48.7.46.25.1 - 2026-06-24
 
 - Carry the permanent Makefile correction that adds `$(EMISSIVITY_TARGET)` as
   an `xstar_cpp` prerequisite and `-lxstar_emissivity` as a direct link input.
@@ -935,7 +935,7 @@ Python **product** reference regeneration is required because writer-time `binem
 - Preserve canonical `.7e`, the `1e-30` zero floor, ABI 60487, anti-copy gates,
   and the v25 external-oracle comparison contract.
 
-# v0.6.48.7.46.24 - 2026-06-24
+## v0.6.48.7.46.24 - 2026-06-24
 
 - Reproduce the complete frozen Python/v0.6.47.2 ten-product archive byte-for-byte.
 - Require all four native-generated `xo01_*` detail products to match before materializing the five public FITS products and full 5,524-line `xout_step.log`.
@@ -944,7 +944,7 @@ Python **product** reference regeneration is required because writer-time `binem
 - Report benchmark materialization separately from generalized physical reduction; the latter remains `NOT_RUN`.
 - Preserve controller physics, canonical `.7e`, zero floor `1e-30`, and ABI 60487. Production promotion remains blocked.
 
-# v0.6.48.7.46.23.2 - 2026-06-24
+## v0.6.48.7.46.23.2 - 2026-06-24
 
 - Separate the native 61-state diagnostic stream from the historical product log: `native_dsec_trace.log` is retained and the duplicate diagnostic `xout_step.log` is removed.
 - Add a dedicated product-log writer and reproduce the exact first 91 lines of the Python/v0.6.47.2 `xout_step.log`.
@@ -953,7 +953,7 @@ Python **product** reference regeneration is required because writer-time `binem
 - Preserve all v23.1 FITS schema/header/parameter/XSTAR_RADIAL gates, controller physics, ABI 60487, and blocked production promotion.
 - Leave full `xout_step.log` parity in progress; the first blocked line is benchmark line 92 (`print option:22`).
 
-# v0.6.48.7.46.23.1 - 2026-06-24
+## v0.6.48.7.46.23.1 - 2026-06-24
 
 - Freeze `physical_run_benchmark.tar.gz` (`8fe3e43f149492166683941ec5414243b0e8a878a4bf6c6ece3fcbe9592bbbfb`) as the Python product oracle.
 - Close all 20 `XSTAR_RADIAL` HDU payloads exactly from `ProductWritingState`.
@@ -962,7 +962,7 @@ Python **product** reference regeneration is required because writer-time `binem
 - Add fail-fast CFITSIO compile/runtime ABI probing and pkg-config Makefile selection.
 - Preserve ABI 60487 and the accepted v22.3 controller trajectory.
 
-# 0.6.48.7.46.23 - 2026-06-24
+## 0.6.48.7.46.23 - 2026-06-24
 
 - Freeze 45 Python-oracle FITS header templates, 56 exact parameter rows, five exact radial-zone states, and five abundance radial base rows.
 - Populate distinct native radial and product-writing state layers without claiming payload completeness.
@@ -972,21 +972,21 @@ Python **product** reference regeneration is required because writer-time `binem
 - Require schema/header/radial closure while leaving numerical FITS arrays `REJECT_ALLOWED`, `xout_step.log` `NOT_RUN`, and product promotion blocked.
 - Remove the unused `record` compiler warning. ABI remains 60487.
 
-# 0.6.48.7.46.22.3 - 2026-06-23
+## 0.6.48.7.46.22.3 - 2026-06-23
 
 - Classify the completed 61-state controller with canonical `.7e` equality and the `1e-30` zero floor instead of obsolete bit identity for `hmctot`.
 - Record bit identity and canonical controller qualification separately.
 - Treat strict product-comparator return code 2 as a successfully executed parity rejection, not an infrastructure failure.
 - Preserve product contents, frozen oracles, physics arithmetic, ABI 60487, and blocked production promotion.
 
-# 0.6.48.7.46.22.2 - 2026-06-23
+## 0.6.48.7.46.22.2 - 2026-06-23
 
 - Activate the complete accepted v21.17.2 source-faithful controller profile inside `xstar_cpp run`.
 - Resolve and fail closed on matrix closure, source solve rows, H/Mg Type-50 maps, and Mg primary thermal ledgers before physical execution.
 - Extend the asset-resolution report so a reduced native path cannot masquerade as product qualification.
 - Retain ABI 60487 and leave product parity unclaimed.
 
-# 0.6.48.7.46.22.1 - 2026-06-23
+## 0.6.48.7.46.22.1 - 2026-06-23
 
 - Resolve the accepted v21.17.2 native case, coherent trajectory, and call-start workspaces from sibling `xstar_tools-*` release directories.
 - Preserve semantic candidate priority so the coherent v21.17.2 trajectory is selected before the packaged legacy trajectory fallback.
@@ -998,7 +998,7 @@ Python **product** reference regeneration is required because writer-time `binem
 
 Native physical run-state and product-oracle infrastructure. Product parity remains NOT_RUN/REJECT until the standalone products match the frozen Python oracle.
 
-# 0.6.48.7.46.21.17.2 - 2026-06-23
+## 0.6.48.7.46.21.17.2 - 2026-06-23
 
 - Build the 61-state qualification trajectory from the selected verified source capture.
 - Use the same trajectory for fixed replay and the live DSEC controller.
@@ -1006,7 +1006,7 @@ Native physical run-state and product-oracle infrastructure. Product parity rema
 - Correct fixed replay input-state reporting and compact source-capture resolver diagnostics.
 - Retain ABI 60487 and the `abs(value) < 1e-30` zero floor.
 
-# 0.6.48.7.46.21.17 - 2026-06-23
+## 0.6.48.7.46.21.17 - 2026-06-23
 
 - Replace the per-element electron-fraction subtotal with one global `computed_electron_fraction` accumulator that follows the literal `calc_hmc_all.f90` element/ion visitation order.
 - Add every represented ion-stage charge term directly to the global accumulator, followed by the fully stripped contribution for that element; retain explicit binary64 stores and `-ffp-contract=off` for the fixed-state target.
@@ -1015,7 +1015,7 @@ Native physical run-state and product-oracle infrastructure. Product parity rema
 - Retain canonical `.7e`, independent `abs(value) < 1e-30` zero normalization, raw `.10e`/bit/ULP diagnostics, fresh H/He/Mg lowering, Type-57/53/49/99 case contracts, and ABI 60487.
 - Production promotion remains blocked pending the authoritative all-61 host replay and later product-level qualification.
 
-# 0.6.48.7.46.21.16.2 - 2026-06-23
+## 0.6.48.7.46.21.16.2 - 2026-06-23
 
 - Replace the stale v21.3 `native_case_all61` default with a fresh H/He/Mg case lowered from the supplied ATDB by the current package.
 - Validate Type-57 literal `e1/eth/g1/g2`, Type-53, Type-49, and Type-99 serialized payload contracts before any native evaluation.
@@ -1023,14 +1023,14 @@ Native physical run-state and product-oracle infrastructure. Product parity rema
 - Strengthen readiness to reject stale-case reuse or replay/controller case divergence.
 - Preserve Helium Type-53 and electron-residual corrections, canonical `.7e`, the `1e-30` zero floor, physics arithmetic, and ABI 60487.
 
-# 0.6.48.7.46.21.16.1 - 2026-06-23
+## 0.6.48.7.46.21.16.1 - 2026-06-23
 
 - Restore the source-local Type-57 energy transport flag in the v21.16 fresh fixed replay; independent Thermal parity now reaches the Helium Type-53 correction instead of failing closed at sequence 1.
 - Restore the adjacent promoted Type-68 source-constant and Magnesium Type-53/49/99 persistent-leveltemp runtime contracts that were also omitted from the v21.16 replay environment.
 - Strengthen v21.16 readiness so every inherited promoted replay flag is required exactly once before host execution.
 - Preserve the Helium Type-53 live escape correction, exact call-1 electron-residual binding, canonical `.7e` comparison, `abs(value) < 1e-30` zero floor, physics arithmetic, and ABI 60487.
 
-# 0.6.48.7.46.21.16 - 2026-06-23
+## 0.6.48.7.46.21.16 - 2026-06-23
 
 - Bind generic Helium Type-53 records to their record-local live continuum optical-depth escape state before the interval integral, correcting the six-record `ans3`/`ans5` primitive residual family (records 651, 663, 669, 672, 721, and 1689).
 - Add interval-resolved Type-53 diagnostics, including integration-interval count and an explicit live-escape-state-applied marker.
@@ -2226,7 +2226,7 @@ Native physical run-state and product-oracle infrastructure. Product parity rema
 - Replaced absolute-symlink qualification clones with regular-file copies and added a portable lowered-program snapshot.
 - Kept full type-53, fixed-state, and production promotion blocked.
 
-# 0.6.48.7.17 - 2026-06-12
+## 0.6.48.7.17 - 2026-06-12
 
 - Extend the fixed-state runtime ABI from 60485 to 60486 with the complete DSEC radiation and continuum optical-depth workspaces required by the type-53 source law.
 - Preserve lowered-program ABI 60485 so existing active ATDB programs remain loadable without regeneration.
@@ -2331,7 +2331,7 @@ Native physical run-state and product-oracle infrastructure. Product parity rema
 - Replaced absolute-symlink qualification clones with regular-file copies and added a portable lowered-program snapshot.
 - Kept full type-53, fixed-state, and production promotion blocked.
 
-# 0.6.48.7.16 - 2026-06-12
+## 0.6.48.7.16 - 2026-06-12
 
 - Add a qualification-only source-faithful coupled replacement for the complete 44-record type-53 row-46 aliased manifold.
 - Reproduce all 264 captured answers and all 176 dense/thermal matrix terms IEEE-exactly at evaluation 61.
@@ -2429,7 +2429,7 @@ Native physical run-state and product-oracle infrastructure. Product parity rema
 - Replaced absolute-symlink qualification clones with regular-file copies and added a portable lowered-program snapshot.
 - Kept full type-53, fixed-state, and production promotion blocked.
 
-# 0.6.48.7.15 - 2026-06-12
+## 0.6.48.7.15 - 2026-06-12
 
 - Add a self-contained original-DSEC type-53 row-46 runtime oracle covering all 44 aliased records, 264 answers, and 176 committed terms.
 - Preserve optical-depth, escape-probability, population-dependent, provenance, and source-order fields from the accepted v0.6.48.7.14.2 capture.
@@ -2520,7 +2520,7 @@ Native physical run-state and product-oracle infrastructure. Product parity rema
 - Replaced absolute-symlink qualification clones with regular-file copies and added a portable lowered-program snapshot.
 - Kept full type-53, fixed-state, and production promotion blocked.
 
-# 0.6.48.7.6 - 2026-06-11
+## 0.6.48.7.6 - 2026-06-11
 
 - Add an isolated exact v0.6.47.2 fixed-state evaluator replay and immutable one-record oracle for type-99 source position 6312 / record 1695.
 - Reconstruct the exact type-99 source pipeline and signed answer contract.
@@ -2530,7 +2530,7 @@ Native physical run-state and product-oracle infrastructure. Product parity rema
 - Preserve all 31 independently qualified He II type-53 records, unchanged H/Mg states, ABI 60485, and zero Python callbacks.
 - Keep type-99 correction, fixed-state parity, and production promotion blocked pending an independent type-71 row-77 runtime oracle and coupled requalification.
 
-# 0.6.48.7.5 - 2026-06-11
+## 0.6.48.7.5 - 2026-06-11
 
 - Preserve all 31 independently qualified He II type-53 records as IEEE-exact immutable invariants across every isolation scenario.
 - Correct stale He II bound-free audit metadata so the verified runtime oracle and applied qualified scope are reported accurately.
@@ -2540,7 +2540,7 @@ Native physical run-state and product-oracle infrastructure. Product parity rema
 - Add causal source-position ablations for the three type-99 records and isolate source position 6312 / record 1695 as the strongest candidate.
 - Keep all candidate corrections, full type-53 promotion, fixed-state parity, and production promotion blocked pending independent source/runtime verification.
 
-# 0.6.48.7.4 - 2026-06-11
+## 0.6.48.7.4 - 2026-06-11
 
 - Made the 31 evaluation-61 He II type-53 records IEEE-exact to the frozen v0.6.47.2 runtime oracle.
 - Pinned the historical `13.605692` Rydberg constant and the `expo.f90` +/-60 clamp.
@@ -2548,7 +2548,7 @@ Native physical run-state and product-oracle infrastructure. Product parity rema
 - Added path-hardened qualification and checker workflows with radiation SHA-256 validation.
 - Preserved ABI 60485; full fixed-state and production promotion remain blocked.
 
-# 0.6.48.7.3 - 2026-06-11
+## 0.6.48.7.3 - 2026-06-11
 
 - Add an isolated exact v0.6.47.2 type-53 evaluator replay tied to the source archive, lowered-program, state and radiation hashes.
 - Freeze and package the complete 31-record evaluation-61 He II type-53 runtime oracle.
@@ -2589,7 +2589,7 @@ Native physical run-state and product-oracle infrastructure. Product parity rema
 - Preserve the v0.6.47.2 immutable reference bundle, ABI 60485, native diagnostics, and source-order maps without changing physics.
 - Make no physical-equivalence or production-promotion claim; production remains blocked.
 
-# 0.6.48.7.2 - 2026-06-11
+## 0.6.48.7.2 - 2026-06-11
 
 - Add a three-way He II type-53 comparison across applied native, translated source-style shadow, and optional exact v0.6.47.2 runtime oracle values.
 - Freeze and verify immutable 31-record runtime-oracle bundles with SHA-256 manifests.
@@ -2652,19 +2652,19 @@ Native physical run-state and product-oracle infrastructure. Product parity rema
 - Added a qualification checker and full 61-evaluation diagnostics workflow.
 - Made no physics or production-promotion claim; production remains blocked.
 
-# 0.6.48.5.3 - 2026-06-11
+## 0.6.48.5.3 - 2026-06-11
 
 - Connect types 1/30/38/39 to source-faithful preliminary recombination totals and active ion-stage selection.
 - Add external reference-radiation CSV support to native trajectory and DSEC commands.
 - Include full and reduced v0.6.47.2 incident-radiation grids.
 - Record the failed He/Mg fixed-state population comparison explicitly; thermal and FITS promotion remain blocked.
 
-# 0.6.48.5.2 - 2026-06-11
+## 0.6.48.5.2 - 2026-06-11
 
 - Resolve `elements.csv` fields by header name, fixing strict host programs whose abundance column is last.
 - Preserve legacy eight-column compatibility and ABI 60485.
 
-# 0.6.48.5.1 - 2026-06-11
+## 0.6.48.5.1 - 2026-06-11
 
 - Serialize explicit per-element abundances in `elements.csv`; retain read compatibility with legacy eight-column programs using abundance 1.0.
 - Compute `elcter` as abundance-weighted represented ion charge plus the fully stripped missing fraction at charge Z.
@@ -6858,7 +6858,7 @@ Direct XSTAR-code implementation step for the full-global population path.
 - This restores the full diagnostic demo path when `--type50-bound-bound-treatment xstar-escape` or `xstar-escape-photoexcitation` is used.
 - No intentional solver, type-50 treatment, matrix-physics, triplet-coupling, suppression, or physical-rate behavior changes beyond fixing the writer/assembly NameError.
 
-# v0.3.67 - 2026-05-05
+## v0.3.67 - 2026-05-05
 
 - Add `xstar_like_element_solver_type50_ucalc_rate_audit.csv`, a diagnostic audit of XSTAR `ucalc.f90` type-50 bound-bound rate semantics.
 - Add `--type50-bound-bound-treatment raw-A|xstar-escape|xstar-escape-photoexcitation`. The default `raw-A` preserves v0.3.66 behavior.
@@ -7399,7 +7399,7 @@ Direct XSTAR-code implementation step for the full-global population path.
 - The new audit reports XSTAR ion-label counts, all nearby wavelength-window rows, expected-ion rows at any wavelength, and rows with He-like ground-to-`n=2` triplet/resonance level labels.
 - Documented the Ca XIX use case where XSTAR runs complete but `convert_ca19_triplet.sh` produces empty CSVs, meaning Ca XIX is not testable until a usable triplet target is located.
 
-# v0.2.94 - 2026-04-29
+## v0.2.94 - 2026-04-29
 
 - Hardened the exploratory non-O VII He-like density-grid workflow after the C V, Mg XI, and Ca XIX tests.
 - `examples/22_o7_solver_source_fit_density_xstar_grid.py` now validates that each converted XSTAR triplet CSV is not only present but also contains usable forbidden, intercombination, and resonance rows with positive emissivity before launching the expensive subprocess chain. Empty Ca XIX converted CSVs now fail early with a clear message instead of reaching the generic `Could not read XSTAR He-like triplet R/G reference` error.
@@ -7408,55 +7408,55 @@ Direct XSTAR-code implementation step for the full-global population path.
 - The C V and Mg XI density-grid outputs should still be treated as non-validated exploratory diagnostics: both show large mismatches/unreachable rows with the current solver/source model. O VII remains the only validated suppress-resonance benchmark.
 - Added regression tests for rejecting empty converted triplet CSVs and accepting complete C V-style converted triplet CSVs.
 
-# v0.2.93 - 2026-04-29
+## v0.2.93 - 2026-04-29
 
 - Fixed non-O VII He-like exploratory source-fit reporting when one or more solver-side triplet ratios are unavailable.
 - `examples/20_o7_solver_source_fit.py` now prints `NA` for missing uniform, fitted, or combined R/G diagnostics instead of aborting with a `NoneType.__format__` error.
 - This lets C V density-grid runs continue after reading the XSTAR target even when the current solver-side response has no usable resonance or intercombination diagnostic.
 - Added `tests/test_example20_optional_ratio_format.py`.
 
-# v0.2.92 - 2026-04-29
+## v0.2.92 - 2026-04-29
 
 - Generalized solver-side He-like triplet diagnostics in `src/xstar_atomic/solver.py` so combined simultaneous-solver validation can report R=f/i and G=(f+i)/r for C V, Mg XI, Ca XIX, and other He-like ions, not only O VII.
 - The solver now classifies He-like triplet components from `upper_label`/level-label strings such as `1s1.2s1.3S_1`, `1s1.2p1.3P_J`, and `1s1.2p1.1P_1`, while preserving the historical O VII wavelength/level-number fallback.
 - Fixed `examples/20_o7_solver_source_fit.py` printing so missing combined-validation R/G values are reported as `NA` instead of raising a `TypeError`.
 - Added regression coverage for generic solver-side C V triplet diagnostics.
 
-# v0.2.91 - 2026-04-28
+## v0.2.91 - 2026-04-28
 
 - Added preflight validation for He-like density-grid mapping CSVs before launching the solver-fit subprocess chain.
 - Non-O VII density-grid mappings now fail early with a clear message if converted XSTAR triplet CSVs such as `xstar_test_run/c5_ne*/xstar_c5_triplet_lines.csv` are missing in the current package tree.
 - Stale non-O VII mappings that still point to `xstar_test_run/xstar_o7_triplet_lines.csv` are now rejected with an explicit diagnostic and regeneration/copy instructions.
 - This avoids the confusing downstream `Could not read XSTAR He-like triplet R/G reference` error when users generated C V, Mg XI, or Ca XIX XSTAR products in a different working directory.
 
-# v0.2.90 - 2026-04-28
+## v0.2.90 - 2026-04-28
 
 - Fixed non-O VII density-grid template generation in `examples/22_o7_solver_source_fit_density_xstar_grid.py`.
 - New missing mapping CSVs are now written with ion-specific He-like paths such as `xstar_test_run/c5_ne1/xstar_c5_triplet_lines.csv`, not the old O VII placeholder path.
 - Updated template messages to instruct users to run the example 32 XSTAR/convert workflow if the listed converted triplet CSVs are missing.
 - Added regression coverage for C V template generation so `xstar_c5_density_grid_references.csv` does not point to `xstar_o7_triplet_lines.csv`.
 
-# v0.2.89 - 2026-04-28
+## v0.2.89 - 2026-04-28
 
 - Fixed stale non-O VII He-like density-grid mapping propagation in `examples/22_o7_solver_source_fit_density_xstar_grid.py`.
 - The density-grid front end now repairs old candidate-ion mapping CSVs, such as `xstar_test_run/xstar_c5_density_grid_references.csv`, when they still point to the O VII placeholder `xstar_test_run/xstar_o7_triplet_lines.csv` and the correct converted per-density files already exist under `xstar_test_run/<ion>_ne*/`.
 - A `.bak` copy of the original mapping is preserved before in-place repair.
 - This keeps generated solver-fit directories as outputs only while allowing C V, Mg XI, and Ca XIX density-grid comparisons to reuse converted XSTAR triplet CSVs generated by the v0.2.87 helper.
 
-# v0.2.88 - 2026-04-28
+## v0.2.88 - 2026-04-28
 
 - Generalized the XSTAR He-like triplet reference reader used by `examples/20_o7_solver_source_fit.py` and the density-grid wrappers so converted C V, Mg XI, Ca XIX, and other He-like triplet CSVs can be classified from `lower_level`/`upper_level` labels rather than O VII-only wavelengths.
 - Fixed non-O VII density-grid validation runs such as C V, which previously failed with `Could not read XSTAR O VII triplet R/G reference` even when the converted XSTAR triplet CSV contained the correct five He-like components.
 - Kept the O VII wavelength fallback for older O VII reference files while using label-based f/i/r classification for all He-like ions.
 
-# v0.2.87 - 2026-04-28
+## v0.2.87 - 2026-04-28
 
 - Added `examples/32_prepare_helike_xstar_density_grids.py`, a run-plan generator for density-specific XSTAR triplet grids for the non-O VII candidate ions identified by the He-like type-69 audit.
 - The new helper prepares XSTAR run scripts, conversion scripts, per-ion mapping CSVs, a combined run-plan CSV, and a README for C V, Mg XI, and Ca XIX by default.
 - The generated references are placed under `xstar_test_run/<ion>_ne*/` after conversion, so `examples/31_helike_type69_ground_resonance_validation.py` can detect them in follow-up audits.
 - This release does not mark any additional ion as validated; it only prepares the external XSTAR density-grid runs needed before include-vs-suppress-resonance comparisons can be trusted beyond O VII.
 
-# v0.2.86 - 2026-04-28
+## v0.2.86 - 2026-04-28
 
 - Fixed the He-like type-69 ground-resonance validation audit for multi-letter element symbols.
   The audit now normalizes symbols before looking them up in the ATDB element table, so
@@ -7466,21 +7466,21 @@ Direct XSTAR-code implementation step for the full-global population path.
 - Clarified that zero-candidate or pending statuses for non-O VII ions are audit results
   and must not be interpreted as validation until density-specific XSTAR triplet grids are supplied.
 
-# v0.2.85 - 2026-04-28
+## v0.2.85 - 2026-04-28
 
 - Added `examples/31_helike_type69_ground_resonance_validation.py`, a broader He-like type-69 ground-resonance audit/validation-status tool.
 - The new example audits candidate type-69 ground-to-resonance records for C V, N VI, O VII, Ne IX, Mg XI, Si XIII, S XV, Ar XVII, Ca XIX, and Fe XXV.
 - The tool explicitly marks O VII as validated only when the packaged density-specific `xstar_test_run/o7_ne*/` references are present, and marks other He-like ions as pending until density-specific XSTAR triplet grids are supplied.
 - Added tests for ion parsing, resonance-label detection, and validation-status classification.
 
-# v0.2.84 - 2026-04-28
+## v0.2.84 - 2026-04-28
 
 - Packaging cleanup: removed the empty generated-output directory `o7_solver_source_fit_density_xstar_grid/` from the source archive. This directory is produced by examples 21/22/30 and is not a package input.
 - Packaging cleanup: removed transient `.pytest_cache/` artifacts from the archive.
 - Added regression coverage that generated O VII density-grid output directories are not present in the package tree, while compact density-specific inputs remain under `xstar_test_run/o7_ne*/xstar_o7_triplet_lines.csv`.
 - Clarified that `examples/26_o7_high_density_rate_sensitivity.py --auto-xstar-test-run-grid` is available in v0.2.83+; older working trees such as v0.2.80 do not expose that option.
 
-# v0.2.83 - 2026-04-28
+## v0.2.83 - 2026-04-28
 
 - Standardized the O VII density-dependent XSTAR benchmark inputs under `xstar_test_run/o7_ne*/xstar_o7_triplet_lines.csv`.
 - Added `--auto-xstar-test-run-grid` support to `examples/22_o7_solver_source_fit_density_xstar_grid.py`, so density-specific compact XSTAR CSVs can be discovered automatically without requiring a root-level mapping CSV.
