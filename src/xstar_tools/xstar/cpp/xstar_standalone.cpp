@@ -44,6 +44,44 @@ extern "C" int xstar_emissivity_build_binemis_profile(
 
 namespace {
 
+struct PerformanceInstrumentationV064890 {
+    std::array<double,4> controller_call_seconds{{0.0,0.0,0.0,0.0}};
+    std::array<std::uint64_t,4> controller_call_evaluations{{0u,0u,0u,0u}};
+    std::array<double,4> fixed_traversal_seconds{{0.0,0.0,0.0,0.0}};
+    std::array<double,4> fixed_rate_seconds{{0.0,0.0,0.0,0.0}};
+    std::array<double,4> fixed_element_seconds{{0.0,0.0,0.0,0.0}};
+    std::array<double,4> fixed_continuum_seconds{{0.0,0.0,0.0,0.0}};
+    std::array<double,4> fixed_spectral_seconds{{0.0,0.0,0.0,0.0}};
+    std::array<double,4> fixed_total_seconds{{0.0,0.0,0.0,0.0}};
+    std::array<double,4> boundary_projection_seconds{{0.0,0.0,0.0,0.0}};
+    double continuum_transport_seconds = 0.0;
+    double atomic_luminosity_seconds = 0.0;
+    double stpcut_seconds = 0.0;
+    double step_seconds = 0.0;
+    double final_zero_thickness_seconds = 0.0;
+    double product_state_build_seconds = 0.0;
+    double retained_schema_seconds = 0.0;
+    double writer_binemis_seconds = 0.0;
+    std::uint64_t writer_binemis_far_event_writes = 0u;
+    std::uint64_t writer_binemis_ranked_slots = 0u;
+    double science_fits_seconds = 0.0;
+    double abundance_fits_seconds = 0.0;
+    double step_log_seconds = 0.0;
+    double publication_seconds = 0.0;
+    std::uint64_t retained_array_count = 0u;
+    std::uint64_t retained_array_values = 0u;
+    std::uint64_t retained_array_bytes = 0u;
+    std::array<std::uint64_t,6> record_family_counts{{0u,0u,0u,0u,0u,0u}};
+};
+
+thread_local PerformanceInstrumentationV064890* g_performance_v064890 = nullptr;
+
+inline double elapsed_seconds_v064890(const std::chrono::steady_clock::time_point& started) {
+    return std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+}
+
+
+
 // v82 patch 5.20.17.3.8 diagnostic sidecars.  These are strictly opt-in and
 // never feed controller or product state.
 void write_patch5201738_gsmooth_rccemis_edge(
@@ -6128,6 +6166,7 @@ bool build_writer_time_binemis_v82_patch520142(
     const xstar_run_state::ProductWritingState& product,
     const xstar_run_state::FixedEvaluationState& final_eval,
     std::vector<double>& spectrum_rows) {
+    const auto perf_started_v064890 = std::chrono::steady_clock::now();
     const auto& ws = final_eval.source_workspace;
     const std::size_t n = final_eval.radiation_energy_ev.size();
     const std::size_t line_count = product.line_identities.size();
@@ -6191,6 +6230,11 @@ bool build_writer_time_binemis_v82_patch520142(
         std::cerr << "V048746255172582_PATCH520142_WRITER_BINEMIS_ERROR=" << error.data() << "\n";
         spectrum_rows.clear();
         return false;
+    }
+    if (g_performance_v064890) {
+        g_performance_v064890->writer_binemis_seconds += elapsed_seconds_v064890(perf_started_v064890);
+        g_performance_v064890->writer_binemis_far_event_writes += static_cast<std::uint64_t>(stats[3]);
+        g_performance_v064890->writer_binemis_ranked_slots += static_cast<std::uint64_t>(slots.size());
     }
     std::cout
         << "V048746255172582_PATCH520145_WRITER_BINEMIS_ELUM_SOURCE="
@@ -10230,7 +10274,6 @@ ProductPublicationResultV172524 publish_true_production_products_v65(
     }
     return result;
 }
-
 
 
 
@@ -14649,16 +14692,31 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             std::vector<xstar_thermal_trace_event_v1> trace(4096);
             std::size_t trace_count = 0;
             const std::size_t before = data.evaluations;
+            const xstar_fixed_state_stats_v1 fixed_stats_before_v064890 = data.cumulative_stats;
+            const auto controller_call_started_v064890 = std::chrono::steady_clock::now();
             rc = xstar_thermal_run_evaluation_loop_v1(
                 thermal, &config, &state, standalone_iteration_evaluator_v67, &data,
                 trace.data(), trace.size(), &trace_count, &stats,
                 message.data(), message.size());
+            if (g_performance_v064890 && call >= 1u && call <= 4u) {
+                const std::size_t slot = call - 1u;
+                g_performance_v064890->controller_call_seconds[slot] += elapsed_seconds_v064890(controller_call_started_v064890);
+                g_performance_v064890->fixed_traversal_seconds[slot] += data.cumulative_stats.traversal_seconds - fixed_stats_before_v064890.traversal_seconds;
+                g_performance_v064890->fixed_rate_seconds[slot] += data.cumulative_stats.rate_seconds - fixed_stats_before_v064890.rate_seconds;
+                g_performance_v064890->fixed_element_seconds[slot] += data.cumulative_stats.element_seconds - fixed_stats_before_v064890.element_seconds;
+                g_performance_v064890->fixed_continuum_seconds[slot] += data.cumulative_stats.continuum_seconds - fixed_stats_before_v064890.continuum_seconds;
+                g_performance_v064890->fixed_spectral_seconds[slot] += data.cumulative_stats.spectral_seconds - fixed_stats_before_v064890.spectral_seconds;
+                g_performance_v064890->fixed_total_seconds[slot] += data.cumulative_stats.total_seconds - fixed_stats_before_v064890.total_seconds;
+            }
             if (rc != 0) {
                 throw std::runtime_error(std::string("qualification-free controller call ") +
                     std::to_string(call) + " failed: " + message.data());
             }
             const std::size_t dsec_count = data.evaluations - before;
             actual_dsec_counts[call - 1u] = dsec_count;
+            if (g_performance_v064890 && call >= 1u && call <= 4u) {
+                g_performance_v064890->controller_call_evaluations[call - 1u] += static_cast<std::uint64_t>(dsec_count);
+            }
             if (data.reference_trajectory_mode) {
                 if (stats.lnerr != 0) {
                     throw std::runtime_error("5.20.17 controller scientific status lnerr is nonzero at call=" + std::to_string(call));
@@ -14689,8 +14747,12 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             // Retain the local source workspace first.  Radial transport is
             // committed only across the shell selected by the previous
             // source STEP evaluation (call 1 itself has zero thickness).
+            const auto boundary_started_v064890 = std::chrono::steady_clock::now();
             auto boundary = evaluate_full_boundary_v67(
                 data, state, 0.0, boundary_radius_cm, 0u);
+            if (g_performance_v064890 && call >= 1u && call <= 4u) {
+                g_performance_v064890->boundary_projection_seconds[call - 1u] += elapsed_seconds_v064890(boundary_started_v064890);
+            }
             std::string completeness_reason;
             if (!snapshot_complete_v67(boundary, info, data.energy.size(), completeness_reason)) {
                 throw std::runtime_error("accepted product boundary incomplete: " + completeness_reason);
@@ -14735,21 +14797,33 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                 std::cout << "V064883_TERMINAL_SHELL_ENTRY_BREMSA_HASH="
                           << binary64_vector_hash_v82_patch4(terminal_shell_entry_bremsa_v064883) << "\n";
             }
+            const auto continuum_transport_started_v064890 = std::chrono::steady_clock::now();
             advance_source_continuum_radiation_v82_patch52(
                 data, boundary, segment, boundary_radius_cm);
+            if (g_performance_v064890) {
+                g_performance_v064890->continuum_transport_seconds += elapsed_seconds_v064890(continuum_transport_started_v064890);
+            }
             if (segment > 0.0) {
                 const std::size_t transport_index = call >= 2u ? call - 2u : 0u;
                 if (transport_index < source_transport_segment_cm.size()) {
                     source_transport_segment_cm[transport_index] = segment;
                 }
+                const auto atomic_luminosity_started_v064890 = std::chrono::steady_clock::now();
                 advance_atomic_luminosities_v82_patch520145(
                     data, boundary, segment, boundary_radius_cm);
+                if (g_performance_v064890) {
+                    g_performance_v064890->atomic_luminosity_seconds += elapsed_seconds_v064890(atomic_luminosity_started_v064890);
+                }
             }
             retain_pre_stpcut_cumulative_state_v82_patch520145(data, boundary);
             FixedDsecSnapshot pretransport_boundary_v82_patch520145 = boundary;
 
             if (segment > 0.0) {
+                const auto stpcut_started_v064890 = std::chrono::steady_clock::now();
                 advance_stpcut_depths_v82_patch520145(data, boundary, segment);
+                if (g_performance_v064890) {
+                    g_performance_v064890->stpcut_seconds += elapsed_seconds_v064890(stpcut_started_v064890);
+                }
             }
             if (call == source_calls) {
                 terminal_transport_boundary_v82_patch520144 = boundary;
@@ -14768,8 +14842,12 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                 const std::vector<double>& step_opakc = boundary.opakc;
                 const double step_radius_cm = params.initial_radius_cm + data.cumulative_depth_cm;
                 const double current_column_cm2 = params.density_cm3 * data.cumulative_depth_cm;
+                const auto step_started_v064890 = std::chrono::steady_clock::now();
                 const auto step_result = source_step_v82_patch520111(
                     data, step_opakc, step_radius_cm, current_column_cm2);
+                if (g_performance_v064890) {
+                    g_performance_v064890->step_seconds += elapsed_seconds_v064890(step_started_v064890);
+                }
                 pending_transport_segment_cm = step_result.delta_radius_cm;
                 std::cout << std::setprecision(17)
                           << "V048746255172582_PATCH520111_STEP_AFTER_CALL=" << call << "\n"
@@ -15115,6 +15193,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         whole.legacy_pprint.option_sequence_exact = false;
         whole.legacy_pprint.finalized_from_native_controller = true;
         {
+            const auto final_zero_thickness_started_v064890 = std::chrono::steady_clock::now();
             // xstar.f90 performs one extra local evaluation after the radial
             // loop with delr=1.e-15 and nlimd=0, then writes t/httot/cltot/
             // hmctot immediately before pprint(22).  This evaluation is not a
@@ -15245,6 +15324,9 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             whole.legacy_pprint.final_total_heating = final_pprint.total_heating;
             whole.legacy_pprint.final_total_cooling = final_pprint.total_cooling;
             whole.legacy_pprint.final_hmctot = final_pprint.hmctot;
+            if (g_performance_v064890) {
+                g_performance_v064890->final_zero_thickness_seconds += elapsed_seconds_v064890(final_zero_thickness_started_v064890);
+            }
             std::cout << "V048746255172582_PATCH52093_FINAL_ZERO_THICKNESS_EVALUATION=ACCEPT\n"
                       << "V048746255172582_PATCH520144_FINAL_WRITER_LOCAL_RECOMPUTE=XSTARCALC_HEATT_SOURCE_REAL_1E15\n"
                       << "V048746255172582_PATCH520144_FINAL_WRITER_CUMULATIVE_OWNER=TERMINAL_POSTTRANSPORT\n"
@@ -15278,7 +15360,11 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                 std::string("v82 patch5.16 diagnostic full-trajectory continuation completed after latched scientific failure: ") +
                 data.diagnostic_first_failure_reason);
         }
+        const auto product_state_build_started_v064890 = std::chrono::steady_clock::now();
         auto product = xstar_run_state::build_product_writing_state(whole);
+        if (g_performance_v064890) {
+            g_performance_v064890->product_state_build_seconds += elapsed_seconds_v064890(product_state_build_started_v064890);
+        }
         product.backend = "cpp-general-standalone";
 
         // v82 patch 5.20.17.2: project the full writer-owned surface into
@@ -15287,7 +15373,18 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         // writer-time binemis spectrum, continuum planes, and detailed arrays.
         // No exact-product bridge directory is created because the production
         // ProductWritingState has no product_metadata_path.
+        const auto retained_schema_started_v064890 = std::chrono::steady_clock::now();
         create_native_retained_productwrite_schema(product);
+        if (g_performance_v064890) {
+            g_performance_v064890->retained_schema_seconds += elapsed_seconds_v064890(retained_schema_started_v064890);
+            g_performance_v064890->retained_array_count = static_cast<std::uint64_t>(product.retained_product_arrays.size());
+            std::uint64_t values_v064890 = 0u;
+            for (const auto& item_v064890 : product.retained_product_arrays) {
+                values_v064890 += static_cast<std::uint64_t>(item_v064890.second.size());
+            }
+            g_performance_v064890->retained_array_values = values_v064890;
+            g_performance_v064890->retained_array_bytes = values_v064890 * sizeof(double);
+        }
         if (product.retained_product_arrays.count(
                 retained_product_array_memory_key(3u, "product_write_public_line_index")) == 0u ||
             product.retained_product_arrays.at(
@@ -15604,11 +15701,86 @@ void print_xstar_style_progress_v06488(const xstar_run_state::ProductWritingStat
     std::cout << std::setprecision(17);
 }
 
+
+void emit_performance_instrumentation_v064890(
+    const std::filesystem::path& output,
+    bool write_file,
+    const PerformanceInstrumentationV064890& perf,
+    double lowering_seconds,
+    double controller_seconds,
+    double total_seconds) {
+    const double dsec_calls = std::accumulate(
+        perf.controller_call_seconds.begin(), perf.controller_call_seconds.end(), 0.0);
+    const double boundaries = std::accumulate(
+        perf.boundary_projection_seconds.begin(), perf.boundary_projection_seconds.end(), 0.0);
+    const double controller_accounted = dsec_calls + boundaries +
+        perf.continuum_transport_seconds + perf.atomic_luminosity_seconds +
+        perf.stpcut_seconds + perf.step_seconds + perf.final_zero_thickness_seconds +
+        perf.product_state_build_seconds + perf.retained_schema_seconds;
+    const double controller_unattributed = std::max(0.0, controller_seconds - controller_accounted);
+    const double top_accounted = lowering_seconds + controller_seconds + perf.publication_seconds;
+    const double top_unattributed = std::max(0.0, total_seconds - top_accounted);
+    const double coverage_percent = total_seconds > 0.0 ? 100.0 * top_accounted / total_seconds : 0.0;
+    const std::array<int,6> family_types{{49,50,53,86,88,99}};
+
+    auto write = [&](std::ostream& out) {
+        out << std::fixed << std::setprecision(6)
+            << "V064890_PERF_POLICY=MEASUREMENT_ONLY_NO_SCIENCE_CHANGE\n"
+            << "V064890_PERF_ATDB_LOWERING_SECONDS=" << lowering_seconds << "\n"
+            << "V064890_PERF_CONTROLLER_SECONDS=" << controller_seconds << "\n";
+        for (std::size_t i = 0; i < 4u; ++i) {
+            out << "V064890_PERF_CALL" << (i + 1u) << "_DSEC_SECONDS=" << perf.controller_call_seconds[i] << "\n"
+                << "V064890_PERF_CALL" << (i + 1u) << "_DSEC_EVALUATIONS=" << perf.controller_call_evaluations[i] << "\n"
+                << "V064890_PERF_CALL" << (i + 1u) << "_BOUNDARY_SECONDS=" << perf.boundary_projection_seconds[i] << "\n"
+                << "V064890_PERF_CALL" << (i + 1u) << "_FIXED_TRAVERSAL_SECONDS=" << perf.fixed_traversal_seconds[i] << "\n"
+                << "V064890_PERF_CALL" << (i + 1u) << "_FIXED_RATE_SECONDS=" << perf.fixed_rate_seconds[i] << "\n"
+                << "V064890_PERF_CALL" << (i + 1u) << "_FIXED_ELEMENT_SECONDS=" << perf.fixed_element_seconds[i] << "\n"
+                << "V064890_PERF_CALL" << (i + 1u) << "_FIXED_CONTINUUM_SECONDS=" << perf.fixed_continuum_seconds[i] << "\n"
+                << "V064890_PERF_CALL" << (i + 1u) << "_FIXED_SPECTRAL_SECONDS=" << perf.fixed_spectral_seconds[i] << "\n"
+                << "V064890_PERF_CALL" << (i + 1u) << "_FIXED_TOTAL_SECONDS=" << perf.fixed_total_seconds[i] << "\n";
+        }
+        out << "V064890_PERF_CONTINUUM_TRANSPORT_SECONDS=" << perf.continuum_transport_seconds << "\n"
+            << "V064890_PERF_ATOMIC_LUMINOSITY_SECONDS=" << perf.atomic_luminosity_seconds << "\n"
+            << "V064890_PERF_STPCUT_SECONDS=" << perf.stpcut_seconds << "\n"
+            << "V064890_PERF_STEP_SECONDS=" << perf.step_seconds << "\n"
+            << "V064890_PERF_FINAL_ZERO_THICKNESS_SECONDS=" << perf.final_zero_thickness_seconds << "\n"
+            << "V064890_PERF_PRODUCT_STATE_BUILD_SECONDS=" << perf.product_state_build_seconds << "\n"
+            << "V064890_PERF_RETAINED_SCHEMA_SECONDS=" << perf.retained_schema_seconds << "\n"
+            << "V064890_PERF_WRITER_BINEMIS_SECONDS=" << perf.writer_binemis_seconds << "\n"
+            << "V064890_PERF_WRITER_BINEMIS_FAR_EVENT_WRITES=" << perf.writer_binemis_far_event_writes << "\n"
+            << "V064890_PERF_WRITER_BINEMIS_RANKED_SLOTS=" << perf.writer_binemis_ranked_slots << "\n"
+            << "V064890_PERF_SCIENCE_FITS_SECONDS=" << perf.science_fits_seconds << "\n"
+            << "V064890_PERF_ABUNDANCE_FITS_SECONDS=" << perf.abundance_fits_seconds << "\n"
+            << "V064890_PERF_STEP_LOG_SECONDS=" << perf.step_log_seconds << "\n"
+            << "V064890_PERF_PUBLICATION_SECONDS=" << perf.publication_seconds << "\n"
+            << "V064890_PERF_RETAINED_ARRAY_COUNT=" << perf.retained_array_count << "\n"
+            << "V064890_PERF_RETAINED_ARRAY_VALUES=" << perf.retained_array_values << "\n"
+            << "V064890_PERF_RETAINED_ARRAY_BYTES=" << perf.retained_array_bytes << "\n";
+        for (std::size_t i = 0; i < family_types.size(); ++i) {
+            out << "V064890_PERF_RECORD_TYPE" << family_types[i] << "_COUNT=" << perf.record_family_counts[i] << "\n";
+        }
+        out << "V064890_PERF_CONTROLLER_ACCOUNTED_SECONDS=" << controller_accounted << "\n"
+            << "V064890_PERF_CONTROLLER_UNATTRIBUTED_SECONDS=" << controller_unattributed << "\n"
+            << "V064890_PERF_TOP_LEVEL_ACCOUNTED_SECONDS=" << top_accounted << "\n"
+            << "V064890_PERF_TOP_LEVEL_UNATTRIBUTED_SECONDS=" << top_unattributed << "\n"
+            << "V064890_PERF_TOP_LEVEL_COVERAGE_PERCENT=" << coverage_percent << "\n"
+            << "V064890_PERF_TOTAL_SECONDS=" << total_seconds << "\n";
+    };
+    write(std::cout);
+    if (write_file) {
+        const auto dir = output / "standalone_diagnostics" / "timing";
+        std::filesystem::create_directories(dir);
+        std::ofstream file(dir / "performance_v064890.txt");
+        write(file);
+    }
+}
+
 int command_run_standalone_production_v67(const Options& options, const std::filesystem::path& executable_path) {
     const auto production_started_v06488 = std::chrono::steady_clock::now();
     const std::string prefix = "V048746255172582_";
     const std::string artifact_profile = options.artifact_profile_explicit ? options.artifact_profile : "none";
     const auto artifacts = artifact_selection_v67(options, artifact_profile);
+    PerformanceInstrumentationV064890 performance_v064890;
     if (options.parameters_path.empty() || options.output_dir.empty()) {
         std::cerr << "run-production requires --parameters and --output-dir\n";
         std::cout << prefix << "RESULT=REJECT_INVALID_ARGUMENTS\n";
@@ -15630,6 +15802,7 @@ int command_run_standalone_production_v67(const Options& options, const std::fil
     const auto output = std::filesystem::path(options.output_dir);
     const bool output_existed = std::filesystem::exists(output);
     try {
+        g_performance_v064890 = &performance_v064890;
         auto params = xstar_atdb_runtime::read_production_parameters(options.parameters_path);
         auto atomic = xstar_atdb_runtime::resolve_atomic_data(options.parameters_path, params.raw_json, executable_path);
         std::cout << prefix << "COMMAND=RUN_PRODUCTION_STANDALONE\n"
@@ -15655,6 +15828,17 @@ int command_run_standalone_production_v67(const Options& options, const std::fil
                   << prefix << "LOWERED_ACTIVE_ELEMENTS=" << program.elements.size() << "\n"
                   << prefix << "LOWERED_ROWS=" << program.rows.size() << "\n"
                   << prefix << "LOWERED_RECORDS=" << program.records.size() << "\n";
+        for (const auto& record_v064890 : program.records) {
+            switch (record_v064890.data_type) {
+                case 49: ++performance_v064890.record_family_counts[0]; break;
+                case 50: ++performance_v064890.record_family_counts[1]; break;
+                case 53: ++performance_v064890.record_family_counts[2]; break;
+                case 86: ++performance_v064890.record_family_counts[3]; break;
+                case 88: ++performance_v064890.record_family_counts[4]; break;
+                case 99: ++performance_v064890.record_family_counts[5]; break;
+                default: break;
+            }
+        }
         if (program.unsupported_record_count != 0 || program.records.empty() || program.rows.empty()) {
             throw std::runtime_error("ATDB lowering produced an incomplete program");
         }
@@ -15699,11 +15883,19 @@ int command_run_standalone_production_v67(const Options& options, const std::fil
         std::cout << " final print:           1\n"
                   << " xstar: Prepping to write spectral data\n" << std::flush;
         ::setenv("XSTAR_TRUE_PRODUCTION", "1", 1);
+        const auto publication_started_v064890 = std::chrono::steady_clock::now();
+        const auto science_fits_started_v064890 = std::chrono::steady_clock::now();
         auto science = xstar_science_fits::write_historical_science_products({}, output, product,
             product.fixed_evaluations.empty() ? std::vector<double>{} : product.fixed_evaluations.front().radiation_energy_ev);
+        performance_v064890.science_fits_seconds += elapsed_seconds_v064890(science_fits_started_v064890);
         (void)science;
+        const auto abundance_fits_started_v064890 = std::chrono::steady_clock::now();
         xstar_science_fits::write_native_abundance_product({}, output, product);
+        performance_v064890.abundance_fits_seconds += elapsed_seconds_v064890(abundance_fits_started_v064890);
+        const auto step_log_started_v064890 = std::chrono::steady_clock::now();
         auto step = xstar_step_log::write_native_step_log(output, product);
+        performance_v064890.step_log_seconds += elapsed_seconds_v064890(step_log_started_v064890);
+        performance_v064890.publication_seconds += elapsed_seconds_v064890(publication_started_v064890);
         std::cout << " xstar: Done writing spectral data\n";
         ::unsetenv("XSTAR_TRUE_PRODUCTION");
         const std::size_t fits_count = count_native_fits_products_v172524(output);
@@ -15753,9 +15945,14 @@ int command_run_standalone_production_v67(const Options& options, const std::fil
                   << prefix << "RESULT=ACCEPT_PRODUCTION_BASELINE\n";
         const double production_total_seconds_v06488 = std::chrono::duration<double>(
             std::chrono::steady_clock::now() - production_started_v06488).count();
+        emit_performance_instrumentation_v064890(
+            output, artifacts.timing_summary, performance_v064890, lowering_seconds,
+            controller_seconds, production_total_seconds_v06488);
         std::cout << " total time   " << std::setprecision(16) << production_total_seconds_v06488 << "\n";
+        g_performance_v064890 = nullptr;
         return 0;
     } catch (const std::exception& exc) {
+        g_performance_v064890 = nullptr;
         ::unsetenv("XSTAR_TRUE_PRODUCTION");
         ::unsetenv("XSTAR_NATIVE_SOURCE_SEQUENCE");
         ::unsetenv("XSTAR_NATIVE_PRODUCTION");
