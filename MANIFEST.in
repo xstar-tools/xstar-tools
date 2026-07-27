@@ -4,11 +4,11 @@ include XSTAR_PYTHON_PORT.md
 include pyproject.toml
 include setup.py
 include setup.cfg
-include V064892_README.txt
-include run_v064892_cpp_against_reference.sh
-include run_v064892_cpp_products.sh
-include run_v064892_performance_benchmark.sh
+include run_v064893_cpp_against_reference.sh
+include run_v064893_cpp_products.sh
+include run_v064893_performance_benchmark.sh
 recursive-include tools/qualification/v064892 *.py *.sh *.sha256
+recursive-include tools/qualification/v064893 *.py *.sh *.sha256
 recursive-include docs *
 recursive-include examples *
 recursive-include tests *.py

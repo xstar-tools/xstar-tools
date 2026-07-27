@@ -1,3 +1,9 @@
+# xstar_tools 0.6.48.9.3
+
+0.6.48.9.3 is the first performance optimization on the closed 0.6.48.8 science line. It targets the measured Type50 native line-profile kernel while preserving the accepted 0.6.48.9.2 qualification surface. The optimization removes redundant floating-point barrier traffic only on `FLT_EVAL_METHOD==0` platforms, preserves a legacy-barrier fallback for excess-precision targets, and reuses Type50 temporary-grid scratch storage.
+
+For the Mg XI qualification case, use `run_v064893_cpp_against_reference.sh`; for the warm-up plus three-run performance series, use `run_v064893_performance_benchmark.sh`.
+
 ## v72 exact source-call boundaries
 
 The canonical Mg XI benchmark uses four native DSEC call boundaries of 21, 1, 18, and 17 evaluations followed by four final evaluations. v72 treats these as exact source prefixes. Early thermal convergence or stagnation no longer truncates a declared reference call boundary. General non-reference production runs remain naturally converged.

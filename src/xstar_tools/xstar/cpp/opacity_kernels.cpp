@@ -5,21 +5,37 @@
 #include <algorithm>
 #include <cmath>
 #include <chrono>
+#include <cfloat>
 #include <cstddef>
 #include <cstring>
+#include <memory>
 #include <sstream>
 #include <vector>
 
 namespace {
 
-// Preserve Python/Fortran source-order binary64 rounding even when GCC is
-// allowed to contract floating-point expressions at -O3.  Each helper forces
-// a store/load boundary and therefore prevents FMA contraction or reassociation
-// across translated source operations.
+#if defined(__FAST_MATH__)
+#error "opacity_kernels.cpp requires strict IEEE arithmetic; do not compile with -ffast-math"
+#endif
+
+// v0.6.48.9.3 Type-50 performance fast path.  This translation unit is
+// compiled with -ffp-contract=off and without fast-math.  On platforms where
+// FLT_EVAL_METHOD==0, each scalar binary64 operation already rounds to double
+// at the source statement, so the former volatile store/load barriers were
+// redundant and accounted for a large fraction of the 749-million-bin profile
+// workload.  Preserve the historical barriers automatically on targets that
+// evaluate expressions with excess precision.
+#if FLT_EVAL_METHOD == 0 && !defined(XSTAR_V064893_LEGACY_FP_BARRIERS)
+static inline double source_add(double a, double b) { return a + b; }
+static inline double source_sub(double a, double b) { return a - b; }
+static inline double source_mul(double a, double b) { return a * b; }
+static inline double source_div(double a, double b) { return a / b; }
+#else
 static inline double source_add(double a, double b) { volatile double x = a; volatile double y = b; volatile double z = x + y; return z; }
 static inline double source_sub(double a, double b) { volatile double x = a; volatile double y = b; volatile double z = x - y; return z; }
 static inline double source_mul(double a, double b) { volatile double x = a; volatile double y = b; volatile double z = x * y; return z; }
 static inline double source_div(double a, double b) { volatile double x = a; volatile double y = b; volatile double z = x / y; return z; }
+#endif
 static inline double source_real_literal(double value) { return static_cast<double>(static_cast<float>(value)); }
 
 static void write_message(char* message, std::size_t message_size, const char* text) {
@@ -284,8 +300,19 @@ int xstar_opacity_apply_line_profile_v1(
     int mlc = 0, ldir = 1, ldon0 = 0, ldon1 = 0;
     int mlmin = nbtpp, mlmax = 1, ml1min = n + 1, ml1max = 0;
     const int ml2 = nbtpp / 2;
-    std::vector<double> etpp(static_cast<std::size_t>(nbtpp), 0.0);
-    std::vector<double> optpp2(static_cast<std::size_t>(nbtpp), 0.0);
+    // v0.6.48.9.3: Type-50 profiles previously allocated and zero-filled
+    // two 20,000-double temporary planes for every line.  The source scan
+    // overwrites every slot in the contiguous [mlmin, mlmax] interval before
+    // the rebin pass reads it, so clearing those planes is unnecessary.
+    // Reuse thread-local scratch storage while preserving the exact source
+    // temporary-grid values, profile evaluations, and accumulation order.
+    struct ProfileScratchV064893 {
+        std::unique_ptr<double[]> etpp{new double[20000]};
+        std::unique_ptr<double[]> optpp2{new double[20000]};
+    };
+    static thread_local ProfileScratchV064893 scratch_v064893;
+    double* const etpp = scratch_v064893.etpp.get();
+    double* const optpp2 = scratch_v064893.optpp2.get();
     double delet = source_div(source_sub(e00, line_energy_ev), dele);
     // Source linopac evaluates the center temporary-grid point at its
     // actual fractional Doppler displacement.  seed_profiles[0] is the

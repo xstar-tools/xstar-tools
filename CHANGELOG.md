@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.48.9.3 - 2026-07-27
+
+- First standalone-C++ Type50 profile-kernel optimization after the accepted 0.6.48.9.2 measurement series.
+- Preserve strict source-real/source-order numerical semantics while removing redundant volatile store/load barriers on `FLT_EVAL_METHOD==0` targets; retain the historical barrier implementation automatically on excess-precision targets.
+- Keep `-ffp-contract=off` for the opacity translation and fail compilation under `-ffast-math`.
+- Reuse per-thread 20,000-point Type50 temporary-grid scratch storage instead of allocating and zero-filling two large vectors for every line profile.
+- Add a compile-time legacy-barrier A/B equivalence check that builds both paths and requires bit-exact profile outputs before host qualification.
+- Freeze all non-opacity science files to the accepted 0.6.48.9.2.1 hashes and retain the complete FORTRAN / accelerated-Python product gates.
+- Compare performance against the accepted 0.6.48.9.2 three-run medians: 82.976367 s total and 56.417535 s Type50 profile-kernel time.
+
 ## 0.6.48.9.2.1 - 2026-07-27
 
 - Packaging/cleanup hotfix based on the accepted 0.6.48.9.2 measurement baseline; no physics or numerical algorithm changes.
