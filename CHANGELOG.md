@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.48.9.4 - 2026-07-27
+
+- Reuse the exact final accepted DSEC source workspace at each of the four controller-call product boundaries instead of rerunning the complete fixed-state engine solely to reconstruct the same local science state.
+- Retain the exact sparse line/RRC/continuum/line-profile workspaces in the fixed-state context and promote them into the accepted boundary only after the controller accepts the final DSEC state.
+- Preserve caller-owned cumulative radial state (`tau0`, `tauc`, continuum depth, line/RRC luminosity, `zrems`, and global population state) in the same post-DSEC boundary finalization order.
+- Keep an environment-controlled legacy boundary-recompute path and add a blocking A/B qualifier requiring all nine FITS data payloads and the non-timing `xout_step.log` science content to be bit-identical between reuse and legacy paths.
+- Keep the terminal zero-thickness final evaluation as a real fixed-state evaluation; only the four accepted call boundaries are reused.
+- Prepare the traversal/rate hot path by prevalidating immutable linked-record order once per fixed-state context and hoisting temperature/electron-density/reduced-continuum rate inputs once per fixed-state evaluation rather than rebuilding them per atomic record.
+- Retain the accepted 0.6.48.9.3 Type50 fast path unchanged.  The accepted 9.3 three-run baselines are 32.724905 s total, 31.498506 s controller, 4.209864 s accepted-boundary projection, 10.628351 s fixed traversal, and 9.553384 s nested rate evaluation.
+
 ## 0.6.48.9.3 - 2026-07-27
 
 - First standalone-C++ Type50 profile-kernel optimization after the accepted 0.6.48.9.2 measurement series.

@@ -565,6 +565,22 @@ XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_run_with_source_workspaces_v1(
     char* message,
     size_t message_size
 );
+/*
+ * v0.6.48.9.4 accepted-boundary reuse support.
+ *
+ * The engine retains the exact sparse source workspaces produced by its most
+ * recent evaluation before optional public-product projection.  This copies
+ * those already-computed workspaces into caller-owned buffers and performs no
+ * physics evaluation.  It is used to promote the accepted final DSEC state to
+ * the public product boundary without rerunning the complete fixed-state
+ * engine.
+ */
+XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_copy_last_source_workspaces_v064894(
+    xstar_fixed_state_context* context,
+    xstar_fixed_source_workspace_output_v1* source_workspaces,
+    char* message,
+    size_t message_size
+);
 XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_get_last_thermal_components_v1(
     const xstar_fixed_state_context* context,
     xstar_fixed_state_thermal_components_v1* components,

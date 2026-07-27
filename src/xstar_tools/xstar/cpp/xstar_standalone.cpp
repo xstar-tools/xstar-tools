@@ -10379,6 +10379,11 @@ struct StandaloneControllerDataV67 {
     std::size_t call_index = 1;
     std::size_t evaluation_index = 0;
     bool writing_final_snapshot = false;
+    // v0.6.48.9.4 accepted-boundary reuse accounting.  These counters are
+    // production diagnostics only and do not participate in controller state.
+    std::size_t accepted_boundary_reuse_count_v064894 = 0u;
+    std::size_t accepted_boundary_legacy_count_v064894 = 0u;
+    std::size_t accepted_boundary_reuse_fallback_count_v064894 = 0u;
     // Full artifact runs retain the first source evaluations so their compact
     // populations can be inspected without changing the accepted product
     // boundaries. Default/summary publication remains lightweight.
@@ -13470,6 +13475,113 @@ int standalone_iteration_evaluator_v67(
     }
 }
 
+FixedDsecSnapshot finalize_accepted_boundary_snapshot_v064894(
+    StandaloneControllerDataV67& data,
+    FixedDsecSnapshot snapshot) {
+    // v82 patch 5.10: the call-3 population boundary is produced by the
+    // accepted call-2 final solve (source sequence 59).  Capture that native
+    // solve trace and compare only against the v0.6.47.2 diagnostic cache; no
+    // source value is assigned to runtime state.
+    if (data.reference_diagnostics_enabled && data.call_index == 2u && data.sequence23_boundary_gate_configured) {
+        const auto population_root = data.sequence23_diagnostic_dir / "population_owner";
+        std::filesystem::create_directories(population_root);
+        std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> diagnostic_message{};
+        const int diagnostic_rc = xstar_fixed_state_write_last_diagnostics_v1(
+            data.fixed_context, population_root.string().c_str(), snapshot.sequence,
+            diagnostic_message.data(), diagnostic_message.size());
+        if (diagnostic_rc != 0) {
+            throw std::runtime_error(std::string("patch5.10 sequence-59 population diagnostic capture failed: ") +
+                diagnostic_message.data());
+        }
+        write_sequence23_population_owner_audit_v82_patch510(data, snapshot, population_root);
+        const auto sequence58_population_root = data.sequence23_diagnostic_dir / "sequence58_population_owner";
+        write_sequence58_final_population_boundary_audit_v82_patch511(
+            data, sequence58_population_root, population_root);
+    }
+
+    const std::size_t line_stride = snapshot.oplin.size();
+    if (data.product_line_tau_in.size() != line_stride) {
+        data.product_line_tau_in.assign(line_stride, 0.0);
+        data.product_line_tau_out.assign(line_stride, 0.0);
+    }
+    if (data.line_luminosity.size() != 2u * line_stride) {
+        data.line_luminosity.assign(2u * line_stride, 0.0);
+    }
+    snapshot.tau0.clear();
+    snapshot.tau0.reserve(2u * line_stride);
+    snapshot.tau0.insert(snapshot.tau0.end(), data.product_line_tau_in.begin(), data.product_line_tau_in.end());
+    snapshot.tau0.insert(snapshot.tau0.end(), data.product_line_tau_out.begin(), data.product_line_tau_out.end());
+    snapshot.elum = data.line_luminosity;
+
+    const std::size_t continuum_stride = snapshot.opakab.size();
+    const std::size_t runtime_continuum_stride = continuum_stride > 0u ? continuum_stride - 1u : 0u;
+    if (data.source_tau_in.size() < runtime_continuum_stride ||
+        data.source_tau_out.size() < runtime_continuum_stride) {
+        std::ostringstream error;
+        error << "runtime continuum tau workspace is shorter than zero-based ATDB continuum pointer domain"
+              << " tau_in=" << data.source_tau_in.size()
+              << " tau_out=" << data.source_tau_out.size()
+              << " product_opakab=" << continuum_stride
+              << " required_runtime=" << runtime_continuum_stride
+              << " declared_native_continua=" << data.program_info.native_continuum_count;
+        throw std::runtime_error(error.str());
+    }
+    if (data.product_rrc_tau_in.size() != continuum_stride) {
+        data.product_rrc_tau_in.assign(continuum_stride, 0.0);
+        data.product_rrc_tau_out.assign(continuum_stride, 0.0);
+    }
+    if (data.rrc_luminosity.size() != 2u * continuum_stride) {
+        data.rrc_luminosity.assign(2u * continuum_stride, 0.0);
+    }
+    snapshot.tauc.clear();
+    snapshot.tauc.reserve(2u * continuum_stride);
+    snapshot.tauc.insert(snapshot.tauc.end(), data.product_rrc_tau_in.begin(), data.product_rrc_tau_in.end());
+    snapshot.tauc.insert(snapshot.tauc.end(), data.product_rrc_tau_out.begin(), data.product_rrc_tau_out.end());
+    snapshot.elumab = data.rrc_luminosity;
+    snapshot.source_continuum_tau_workspace_count = data.source_tau_in.size();
+
+    if (data.grid_tau_in.size() != snapshot.opacity.size()) {
+        data.grid_tau_in.assign(snapshot.opacity.size(), 0.0);
+        data.grid_tau_out.assign(snapshot.opacity.size(), 0.0);
+    }
+    snapshot.continuum_tau_in = data.grid_tau_in;
+    snapshot.continuum_tau_out = data.grid_tau_out;
+    update_global_populations_v67(data, snapshot.populations, &snapshot.lte_populations);
+    // v82 patch 5.20.16.2.1: final-boundary product snapshots must retain
+    // the global LTE/rnisg projection produced above.  The ordinary DSEC
+    // evaluation path already copies data.global_rnisg into its snapshot,
+    // but evaluate_full_boundary_v67 historically omitted that copy.  As a
+    // result, public continuum pseudo-level rows reached the 5.20.16.2 LTE
+    // writer with an empty source_global_rnisg vector and fell through to the
+    // old structural-zero bridge.  This is retention/publication only: no
+    // solver/global LTE arithmetic or state is changed here.
+    snapshot.source_global_rnisg = data.global_rnisg;
+    if (data.reference_diagnostics_enabled && snapshot.sequence == 58u) {
+        data.sequence58_native_projected_global_xilevg = data.global_xilevg;
+        data.sequence58_population_boundary_captured = true;
+        const auto sequence58_population_root = data.sequence23_diagnostic_dir / "sequence58_population_owner";
+        std::filesystem::create_directories(sequence58_population_root);
+        std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> diagnostic_message{};
+        const int diagnostic_rc = xstar_fixed_state_write_last_diagnostics_v1(
+            data.fixed_context, sequence58_population_root.string().c_str(), snapshot.sequence,
+            diagnostic_message.data(), diagnostic_message.size());
+        if (diagnostic_rc != 0) {
+            throw std::runtime_error(std::string("patch5.11 sequence-58 population diagnostic capture failed: ") +
+                diagnostic_message.data());
+        }
+        std::cout << "V048746255172582_SEQUENCE58_FINAL_POPULATION_NATIVE_BOUNDARY_CAPTURE=ACCEPT\n";
+    }
+    audit_sequence58_lte_v82_patch53(data, snapshot);
+    std::string native_gate_reason_v82_patch52017;
+    if (!native_snapshot_scientific_valid_v82_patch52017(snapshot, native_gate_reason_v82_patch52017)) {
+        throw std::runtime_error(std::string("5.20.17 final-boundary native scientific gate rejected: ") +
+            native_gate_reason_v82_patch52017);
+    }
+    ++data.native_scientific_gate_count;
+    data.last_iteration = snapshot;
+    return snapshot;
+}
+
 FixedDsecSnapshot evaluate_full_boundary_v67(
     StandaloneControllerDataV67& data,
     const xstar_thermal_state_v1& accepted_state,
@@ -13581,108 +13693,169 @@ FixedDsecSnapshot evaluate_full_boundary_v67(
     attach_native_thermal_components_v70(data.fixed_context, snapshot);
     attach_native_product_diagnostics_v70(data.fixed_context, snapshot);
 
-    // v82 patch 5.10: the call-3 population boundary is produced by the
-    // accepted call-2 final solve (source sequence 59).  Capture that native
-    // solve trace and compare only against the v0.6.47.2 diagnostic cache; no
-    // source value is assigned to runtime state.
-    if (data.reference_diagnostics_enabled && data.call_index == 2u && data.sequence23_boundary_gate_configured) {
-        const auto population_root = data.sequence23_diagnostic_dir / "population_owner";
-        std::filesystem::create_directories(population_root);
-        std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> diagnostic_message{};
-        const int diagnostic_rc = xstar_fixed_state_write_last_diagnostics_v1(
-            data.fixed_context, population_root.string().c_str(), snapshot.sequence,
-            diagnostic_message.data(), diagnostic_message.size());
-        if (diagnostic_rc != 0) {
-            throw std::runtime_error(std::string("patch5.10 sequence-59 population diagnostic capture failed: ") +
-                diagnostic_message.data());
-        }
-        write_sequence23_population_owner_audit_v82_patch510(data, snapshot, population_root);
-        const auto sequence58_population_root = data.sequence23_diagnostic_dir / "sequence58_population_owner";
-        write_sequence58_final_population_boundary_audit_v82_patch511(
-            data, sequence58_population_root, population_root);
+    return finalize_accepted_boundary_snapshot_v064894(data, std::move(snapshot));
+}
+
+bool binary64_equal_v064894(double lhs, double rhs) {
+    std::uint64_t a = 0u;
+    std::uint64_t b = 0u;
+    static_assert(sizeof(a) == sizeof(lhs), "binary64 size mismatch");
+    std::memcpy(&a, &lhs, sizeof(a));
+    std::memcpy(&b, &rhs, sizeof(b));
+    return a == b;
+}
+
+FixedDsecSnapshot prepare_last_dsec_boundary_v064894(
+    StandaloneControllerDataV67& data,
+    const xstar_thermal_state_v1& accepted_state) {
+    if (data.last_iteration.kind != "dsec" ||
+        data.last_iteration.call_index != data.call_index) {
+        throw std::runtime_error("v0.6.48.9.4 accepted boundary has no matching final DSEC snapshot");
+    }
+    // The DSEC callback deliberately returns the trial charge coordinate, so
+    // the accepted controller state should be exactly the trial that produced
+    // last_iteration.  Fail closed rather than silently promoting a different
+    // state if a future controller changes this contract.
+    if (!binary64_equal_v064894(data.last_iteration.temperature_t4, accepted_state.temperature_t4) ||
+        !binary64_equal_v064894(data.last_iteration.electron_fraction_input, accepted_state.electron_fraction_xee)) {
+        throw std::runtime_error("v0.6.48.9.4 accepted controller state differs from final DSEC trial");
     }
 
-    const std::size_t line_stride = snapshot.oplin.size();
-    if (data.product_line_tau_in.size() != line_stride) {
-        data.product_line_tau_in.assign(line_stride, 0.0);
-        data.product_line_tau_out.assign(line_stride, 0.0);
-    }
-    if (data.line_luminosity.size() != 2u * line_stride) {
-        data.line_luminosity.assign(2u * line_stride, 0.0);
-    }
-    snapshot.tau0.clear();
-    snapshot.tau0.reserve(2u * line_stride);
-    snapshot.tau0.insert(snapshot.tau0.end(), data.product_line_tau_in.begin(), data.product_line_tau_in.end());
-    snapshot.tau0.insert(snapshot.tau0.end(), data.product_line_tau_out.begin(), data.product_line_tau_out.end());
-    snapshot.elum = data.line_luminosity;
+    FixedDsecSnapshot snapshot = data.last_iteration;
+    const std::size_t line_capacity = std::max<std::size_t>({
+        data.line_tau_in.size(),
+        static_cast<std::size_t>(data.program_info.native_line_count) + 1u,
+        static_cast<std::size_t>(data.program_info.record_count) + 1u});
+    const std::size_t continuum_slot_capacity = std::max<std::size_t>({
+        data.source_tau_in.size(),
+        static_cast<std::size_t>(data.program_info.native_continuum_count) + 1u,
+        data.energy.size()});
+    snapshot.lte_populations.assign(static_cast<std::size_t>(data.program_info.population_rows), 0.0);
+    snapshot.rcem.assign(2u * line_capacity, 0.0);
+    snapshot.oplin.assign(line_capacity, 0.0);
+    snapshot.elum.assign(2u * line_capacity, 0.0);
+    snapshot.cemab.assign(2u * continuum_slot_capacity, 0.0);
+    snapshot.cabab.assign(continuum_slot_capacity, 0.0);
+    snapshot.opakab.assign(continuum_slot_capacity, 0.0);
+    snapshot.rccemis.assign(2u * data.energy.size(), 0.0);
+    snapshot.opakc.assign(data.energy.size(), 0.0);
+    snapshot.opakcont.assign(data.energy.size(), 0.0);
+    snapshot.fline.assign(2u * line_capacity, 0.0);
+    snapshot.flinel.assign(data.energy.size(), 0.0);
+    snapshot.line_profile_workspace.assign(5u * data.energy.size(), 0.0);
 
-    const std::size_t continuum_stride = snapshot.opakab.size();
-    const std::size_t runtime_continuum_stride = continuum_stride > 0u ? continuum_stride - 1u : 0u;
-    if (data.source_tau_in.size() < runtime_continuum_stride ||
-        data.source_tau_out.size() < runtime_continuum_stride) {
-        std::ostringstream error;
-        error << "runtime continuum tau workspace is shorter than zero-based ATDB continuum pointer domain"
-              << " tau_in=" << data.source_tau_in.size()
-              << " tau_out=" << data.source_tau_out.size()
-              << " product_opakab=" << continuum_stride
-              << " required_runtime=" << runtime_continuum_stride
-              << " declared_native_continua=" << data.program_info.native_continuum_count;
-        throw std::runtime_error(error.str());
+    xstar_fixed_source_workspace_output_v1 source{};
+    xstar_fixed_source_workspace_output_init_v1(&source);
+    source.lte_populations = snapshot.lte_populations.data();
+    source.lte_populations_capacity = snapshot.lte_populations.size();
+    source.rcem = snapshot.rcem.data(); source.rcem_capacity = snapshot.rcem.size();
+    source.oplin = snapshot.oplin.data(); source.oplin_capacity = snapshot.oplin.size();
+    source.elum = snapshot.elum.data(); source.elum_capacity = snapshot.elum.size();
+    source.cemab = snapshot.cemab.data(); source.cemab_capacity = snapshot.cemab.size();
+    source.cabab = snapshot.cabab.data(); source.cabab_capacity = snapshot.cabab.size();
+    source.opakab = snapshot.opakab.data(); source.opakab_capacity = snapshot.opakab.size();
+    source.rccemis = snapshot.rccemis.data(); source.rccemis_capacity = snapshot.rccemis.size();
+    source.opakc = snapshot.opakc.data(); source.opakc_capacity = snapshot.opakc.size();
+    source.opakcont = snapshot.opakcont.data(); source.opakcont_capacity = snapshot.opakcont.size();
+    source.fline = snapshot.fline.data(); source.fline_capacity = snapshot.fline.size();
+    source.flinel = snapshot.flinel.data(); source.flinel_capacity = snapshot.flinel.size();
+    source.line_profile_workspace = snapshot.line_profile_workspace.data();
+    source.line_profile_workspace_capacity = snapshot.line_profile_workspace.size();
+    std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> message{};
+    const int rc = xstar_fixed_state_copy_last_source_workspaces_v064894(
+        data.fixed_context, &source, message.data(), message.size());
+    if (rc != 0) {
+        throw std::runtime_error(std::string("v0.6.48.9.4 retained source-workspace copy failed: ") +
+            message.data());
     }
-    if (data.product_rrc_tau_in.size() != continuum_stride) {
-        data.product_rrc_tau_in.assign(continuum_stride, 0.0);
-        data.product_rrc_tau_out.assign(continuum_stride, 0.0);
-    }
-    if (data.rrc_luminosity.size() != 2u * continuum_stride) {
-        data.rrc_luminosity.assign(2u * continuum_stride, 0.0);
-    }
-    snapshot.tauc.clear();
-    snapshot.tauc.reserve(2u * continuum_stride);
-    snapshot.tauc.insert(snapshot.tauc.end(), data.product_rrc_tau_in.begin(), data.product_rrc_tau_in.end());
-    snapshot.tauc.insert(snapshot.tauc.end(), data.product_rrc_tau_out.begin(), data.product_rrc_tau_out.end());
-    snapshot.elumab = data.rrc_luminosity;
-    snapshot.source_continuum_tau_workspace_count = data.source_tau_in.size();
+    snapshot.lte_populations.resize(source.lte_populations_count);
+    snapshot.rcem.resize(source.rcem_count);
+    snapshot.oplin.resize(source.oplin_count);
+    snapshot.elum.resize(source.elum_count);
+    snapshot.cemab.resize(source.cemab_count);
+    snapshot.cabab.resize(source.cabab_count);
+    snapshot.opakab.resize(source.opakab_count);
+    snapshot.rccemis.resize(source.rccemis_count);
+    snapshot.opakc.resize(source.opakc_count);
+    snapshot.opakcont.resize(source.opakcont_count);
+    snapshot.fline.resize(source.fline_count);
+    snapshot.flinel.resize(source.flinel_count);
+    snapshot.line_profile_workspace.resize(source.line_profile_workspace_count);
+    snapshot.native_line_count = source.native_line_count;
+    snapshot.native_continuum_count = source.native_continuum_count;
+    snapshot.exact_source_workspace_flags = source.exact_source_workspace_flags;
 
-    if (data.grid_tau_in.size() != snapshot.opacity.size()) {
-        data.grid_tau_in.assign(snapshot.opacity.size(), 0.0);
-        data.grid_tau_out.assign(snapshot.opacity.size(), 0.0);
+    const std::size_t bins = data.energy.size();
+    if (snapshot.opakc.size() != bins || snapshot.spectrum.size() != bins ||
+        snapshot.rccemis.size() < 2u * bins ||
+        snapshot.line_profile_workspace.size() < 4u * bins ||
+        snapshot.cemab.size() < 2u * bins) {
+        throw std::runtime_error("v0.6.48.9.4 retained source-workspace shape is incomplete");
     }
-    snapshot.continuum_tau_in = data.grid_tau_in;
-    snapshot.continuum_tau_out = data.grid_tau_out;
-    update_global_populations_v67(data, snapshot.populations, &snapshot.lte_populations);
-    // v82 patch 5.20.16.2.1: final-boundary product snapshots must retain
-    // the global LTE/rnisg projection produced above.  The ordinary DSEC
-    // evaluation path already copies data.global_rnisg into its snapshot,
-    // but evaluate_full_boundary_v67 historically omitted that copy.  As a
-    // result, public continuum pseudo-level rows reached the 5.20.16.2 LTE
-    // writer with an empty source_global_rnisg vector and fell through to the
-    // old structural-zero bridge.  This is retention/publication only: no
-    // solver/global LTE arithmetic or state is changed here.
-    snapshot.source_global_rnisg = data.global_rnisg;
-    if (data.reference_diagnostics_enabled && snapshot.sequence == 58u) {
-        data.sequence58_native_projected_global_xilevg = data.global_xilevg;
-        data.sequence58_population_boundary_captured = true;
-        const auto sequence58_population_root = data.sequence23_diagnostic_dir / "sequence58_population_owner";
-        std::filesystem::create_directories(sequence58_population_root);
-        std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> diagnostic_message{};
-        const int diagnostic_rc = xstar_fixed_state_write_last_diagnostics_v1(
-            data.fixed_context, sequence58_population_root.string().c_str(), snapshot.sequence,
-            diagnostic_message.data(), diagnostic_message.size());
-        if (diagnostic_rc != 0) {
-            throw std::runtime_error(std::string("patch5.11 sequence-58 population diagnostic capture failed: ") +
-                diagnostic_message.data());
-        }
-        std::cout << "V048746255172582_SEQUENCE58_FINAL_POPULATION_NATIVE_BOUNDARY_CAPTURE=ACCEPT\n";
+    // Reproduce the non-deferred public projection exactly, using the same
+    // source indexing and arithmetic order as fixed_state_engine.cpp.  The
+    // DSEC snapshot already contains the continuum-only spectrum.
+    snapshot.opacity.assign(snapshot.opakc.begin(), snapshot.opakc.end());
+    for (std::size_t k = 0; k < bins; ++k) {
+        const double spectrum_add = snapshot.cemab[k] + snapshot.cemab[bins + k]
+            + snapshot.rccemis[k] + snapshot.rccemis[bins + k]
+            + snapshot.line_profile_workspace[2u * bins + k]
+            + snapshot.line_profile_workspace[3u * bins + k];
+        if (std::isfinite(spectrum_add)) snapshot.spectrum[k] += spectrum_add;
+        if (!std::isfinite(snapshot.spectrum[k])) snapshot.spectrum[k] = 0.0;
     }
-    audit_sequence58_lte_v82_patch53(data, snapshot);
-    std::string native_gate_reason_v82_patch52017;
-    if (!native_snapshot_scientific_valid_v82_patch52017(snapshot, native_gate_reason_v82_patch52017)) {
-        throw std::runtime_error(std::string("5.20.17 final-boundary native scientific gate rejected: ") +
-            native_gate_reason_v82_patch52017);
-    }
-    ++data.native_scientific_gate_count;
-    data.last_iteration = snapshot;
+    attach_native_product_diagnostics_v70(data.fixed_context, snapshot);
+
+    // Prepare the historical final-source identity without mutating controller
+    // bookkeeping.  The caller commits it only after every retained-workspace
+    // check above has succeeded, allowing a clean legacy fallback for generic
+    // cases that do not expose retained spectral workspaces.
+    snapshot.kind = "final";
+    snapshot.evaluation_index = data.evaluation_index + 1u;
+    snapshot.sequence = data.reference_trajectory_mode
+        ? 57u + data.call_index
+        : data.next_sequence;
     return snapshot;
+}
+
+FixedDsecSnapshot commit_prepared_boundary_v064894(
+    StandaloneControllerDataV67& data,
+    FixedDsecSnapshot snapshot) {
+    if (!data.reference_trajectory_mode) ++data.next_sequence;
+    data.current_sequence = snapshot.sequence;
+    ++data.evaluations;
+    const std::string sequence = std::to_string(snapshot.sequence);
+    ::setenv("XSTAR_NATIVE_SOURCE_SEQUENCE", sequence.c_str(), 1);
+    return finalize_accepted_boundary_snapshot_v064894(data, std::move(snapshot));
+}
+
+FixedDsecSnapshot evaluate_accepted_boundary_v064894(
+    StandaloneControllerDataV67& data,
+    const xstar_thermal_state_v1& accepted_state,
+    double delta_radius_cm,
+    double radius_cm,
+    std::size_t transport_plane) {
+    const char* force_legacy = std::getenv("XSTAR_V064894_FORCE_LEGACY_BOUNDARY_RECOMPUTE");
+    if (force_legacy && std::string(force_legacy) == "1") {
+        ++data.accepted_boundary_legacy_count_v064894;
+        return evaluate_full_boundary_v67(
+            data, accepted_state, delta_radius_cm, radius_cm, transport_plane);
+    }
+    std::optional<FixedDsecSnapshot> prepared;
+    try {
+        prepared = prepare_last_dsec_boundary_v064894(data, accepted_state);
+    } catch (const std::exception& exc) {
+        // Fallback is permitted only before any controller bookkeeping is
+        // mutated.  Once commit_prepared_boundary_v064894 begins, failures
+        // must propagate rather than double-counting a boundary evaluation.
+        ++data.accepted_boundary_reuse_fallback_count_v064894;
+        ++data.accepted_boundary_legacy_count_v064894;
+        std::cerr << "V064894_BOUNDARY_REUSE_FALLBACK=" << exc.what() << '\n';
+        return evaluate_full_boundary_v67(
+            data, accepted_state, delta_radius_cm, radius_cm, transport_plane);
+    }
+    ++data.accepted_boundary_reuse_count_v064894;
+    return commit_prepared_boundary_v064894(data, std::move(*prepared));
 }
 
 bool snapshot_complete_v67(
@@ -14798,7 +14971,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             // committed only across the shell selected by the previous
             // source STEP evaluation (call 1 itself has zero thickness).
             const auto boundary_started_v064890 = std::chrono::steady_clock::now();
-            auto boundary = evaluate_full_boundary_v67(
+            auto boundary = evaluate_accepted_boundary_v064894(
                 data, state, 0.0, boundary_radius_cm, 0u);
             if (g_performance_v064890 && call >= 1u && call <= 4u) {
                 g_performance_v064890->boundary_projection_seconds[call - 1u] += elapsed_seconds_v064890(boundary_started_v064890);
@@ -14922,6 +15095,21 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                       << " HMCTOT=" << std::setprecision(9) << stats.final_hmctot
                       << " ELCTER=" << stats.final_elcter << "\n";
         }
+
+        const char* v064894_force_legacy = std::getenv("XSTAR_V064894_FORCE_LEGACY_BOUNDARY_RECOMPUTE");
+        const bool v064894_legacy_forced =
+            v064894_force_legacy && std::string(v064894_force_legacy) == "1";
+        std::cout << "V064894_ACCEPTED_BOUNDARY_POLICY="
+                  << (v064894_legacy_forced
+                          ? "FORCED_LEGACY_RECOMPUTE" : "REUSE_FINAL_DSEC_EXACT_WORKSPACE") << "\n"
+                  << "V064894_ACCEPTED_BOUNDARY_REUSE_COUNT="
+                  << data.accepted_boundary_reuse_count_v064894 << "\n"
+                  << "V064894_ACCEPTED_BOUNDARY_LEGACY_COUNT="
+                  << data.accepted_boundary_legacy_count_v064894 << "\n"
+                  << "V064894_ACCEPTED_BOUNDARY_REUSE_FALLBACK_COUNT="
+                  << data.accepted_boundary_reuse_fallback_count_v064894 << "\n"
+                  << "V064894_TRAVERSAL_PREVALIDATED_RECORD_ORDER=ENABLED\n"
+                  << "V064894_RATE_EVALUATION_CONTEXT_HOIST=ENABLED\n";
 
         std::cout << std::setprecision(17)
                   << "V048746255172582_PATCH520111_RADIAL_CALL_BOUNDARY_DEPTHS_CM="

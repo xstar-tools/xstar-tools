@@ -2717,6 +2717,11 @@ SourceContinuumThermalResult source_continuum_thermal(
 
 struct xstar_fixed_state_context_impl {
     Program program;
+    // v0.6.48.9.4: immutable linked-record traversal is validated once when
+    // the context is created and stored as contiguous record indices.  The
+    // source order is unchanged; repeated DSEC evaluations no longer rebuild
+    // a whole-program visited bitmap or chase/validate the same links.
+    std::vector<std::vector<int>> traversal_record_indices_v064894;
     xstar_element_engine_context* element_context = nullptr;
     xstar_spectral_context* spectral_context = nullptr;
     std::uint64_t state_generation = 0;
@@ -2823,6 +2828,31 @@ struct xstar_fixed_state_context_impl {
     std::size_t last_thermal_diagonal_rows_included = 0;
     std::size_t last_thermal_diagonal_normalization_terms_included = 0;
     std::vector<ThermalDiagonalDiagnostic> last_thermal_diagonal_diagnostics;
+
+    // v0.6.48.9.4: retain the exact sparse source workspaces from the most
+    // recent fixed-state evaluation.  The controller already paid to build
+    // these arrays during every DSEC evaluation; retaining their final buffers
+    // lets the accepted boundary copy them out without executing another full
+    // fixed-state pass.  Only immutable/exact source workspaces live here;
+    // cumulative radial tau/luminosity ownership remains in the standalone
+    // controller and is overlaid when the boundary is promoted.
+    bool last_source_workspaces_valid_v064894 = false;
+    std::uint32_t last_source_workspace_flags_v064894 = 0u;
+    std::size_t last_source_native_line_count_v064894 = 0u;
+    std::size_t last_source_native_continuum_count_v064894 = 0u;
+    std::vector<double> last_source_lte_populations_v064894;
+    std::vector<double> last_source_rcem_v064894;
+    std::vector<double> last_source_oplin_v064894;
+    std::vector<double> last_source_cemab_v064894;
+    std::vector<double> last_source_cabab_v064894;
+    std::vector<double> last_source_opakab_v064894;
+    std::vector<double> last_source_rccemis_v064894;
+    std::vector<double> last_source_opakc_v064894;
+    std::vector<double> last_source_opakcont_v064894;
+    std::vector<double> last_source_fline_v064894;
+    std::vector<double> last_source_flinel_v064894;
+    std::vector<double> last_source_elum_v064894;
+    std::vector<double> last_source_line_profile_workspace_v064894;
 };
 
 std::string join_path(const std::string& base, const std::string& name) {
@@ -4831,12 +4861,46 @@ bool evaluate_type53_source_integral(
     return valid;
 }
 
+struct RateEvaluationContextV064894 {
+    double ne = 0.0;
+    double t4 = 0.0;
+    double sqrt_t4 = 0.0;
+    double kt_ev = 0.0;
+    xstar_fixed_state_input_v1 calc_hmc_input{};
+    const SourceContinuumWorkspace* calc_emisab_workspace = nullptr;
+};
+
+RateEvaluationContextV064894 make_rate_evaluation_context_v064894(
+    const xstar_fixed_state_input_v1& input,
+    const SourceContinuumWorkspace* calc_emisab_workspace) {
+    RateEvaluationContextV064894 context;
+    context.ne = input.electron_density_cm3;
+    context.t4 = input.temperature_k / 1.0e4;
+    context.sqrt_t4 = std::sqrt(std::max(context.t4, 1.0e-300));
+    context.kt_ev = kBoltzmannEvK * input.temperature_k;
+    context.calc_emisab_workspace = calc_emisab_workspace;
+    // The calc_hmc input differs from the controller input only by the
+    // reduced epim/bremsam pointers.  Construct it once per fixed-state
+    // evaluation instead of copying the complete ABI structure for every
+    // atomic record.
+    context.calc_hmc_input = input;
+    const bool has_calc_hmc_reduced_grid = calc_emisab_workspace &&
+        calc_emisab_workspace->epim.size() >= 3 &&
+        calc_emisab_workspace->bremsam.size() == calc_emisab_workspace->epim.size();
+    if (has_calc_hmc_reduced_grid) {
+        context.calc_hmc_input.dsec_radiation_energy_ev = calc_emisab_workspace->epim.data();
+        context.calc_hmc_input.dsec_bremsa = calc_emisab_workspace->bremsam.data();
+        context.calc_hmc_input.dsec_radiation_bin_count = calc_emisab_workspace->epim.size();
+    }
+    return context;
+}
+
 EvaluatedRecord evaluate_record(
     const Program& program,
     const ElementProgram& element,
     const ProgramRecord& record,
     const xstar_fixed_state_input_v1& input,
-    const SourceContinuumWorkspace* calc_emisab_workspace
+    const RateEvaluationContextV064894& rate_context
 ) {
     const double* r = record.real_count ? program.reals.data() + record.real_offset : nullptr;
     const auto* ints = record.int_count ? program.ints.data() + record.int_offset : nullptr;
@@ -4844,24 +4908,17 @@ EvaluatedRecord evaluate_record(
     const ElementRow& lower = record.matrix_enabled ? row_at(element, record.lower_row) : scalar_dummy;
     const ElementRow& upper = record.matrix_enabled ? row_at(element, record.upper_row) : scalar_dummy;
     const double delta_ev = record.line_energy_ev > 0.0 ? record.line_energy_ev : (record.matrix_enabled ? std::abs(upper.energy_ev - lower.energy_ev) : 0.0);
-    const double ne = input.electron_density_cm3;
-    const double t4 = input.temperature_k / 1.0e4;
-    const double sqrt_t4 = std::sqrt(std::max(t4, 1.0e-300));
-    const double kt_ev = kBoltzmannEvK * input.temperature_k;
+    const double ne = rate_context.ne;
+    const double t4 = rate_context.t4;
+    const double sqrt_t4 = rate_context.sqrt_t4;
+    const double kt_ev = rate_context.kt_ev;
+    const SourceContinuumWorkspace* calc_emisab_workspace = rate_context.calc_emisab_workspace;
     // v82 patch 5.20.12.1: evaluate_record is the calc_hmc scalar/matrix
     // UCalc stage.  Literal xstarcalc passes epim/ncn2m/bremsam here, while
     // the later calc_emis_all spectral pass owns full epi/ncn2/bremsa.
     // Reuse the already-built reduced calc_emisab workspace as the exact
     // source caller grid for bound-free matrix rates.
-    xstar_fixed_state_input_v1 calc_hmc_input = input;
-    const bool has_calc_hmc_reduced_grid = calc_emisab_workspace &&
-        calc_emisab_workspace->epim.size() >= 3 &&
-        calc_emisab_workspace->bremsam.size() == calc_emisab_workspace->epim.size();
-    if (has_calc_hmc_reduced_grid) {
-        calc_hmc_input.dsec_radiation_energy_ev = calc_emisab_workspace->epim.data();
-        calc_hmc_input.dsec_bremsa = calc_emisab_workspace->bremsam.data();
-        calc_hmc_input.dsec_radiation_bin_count = calc_emisab_workspace->epim.size();
-    }
+    const xstar_fixed_state_input_v1& calc_hmc_input = rate_context.calc_hmc_input;
 
     EvaluatedRecord out;
     auto& c = out.contribution;
@@ -8563,6 +8620,11 @@ int run_impl(
     ctx.last_call1_thermal_oracle = (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE) != 0u;
     const bool defer_product_projection =
         (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_DEFER_PRODUCT_PROJECTION) != 0u;
+    // Fail closed against a stale accepted-boundary snapshot if this
+    // evaluation exits before the exact source workspaces are committed.
+    ctx.last_source_workspaces_valid_v064894 = false;
+    ctx.last_source_workspace_flags_v064894 = 0u;
+    if (!source_workspaces) ctx.last_source_lte_populations_v064894.clear();
     output.electron_fraction_xee = 0.0;
     output.elcter = 0.0;
     ctx.last_preclosure_electron_fraction = 0.0;
@@ -8702,23 +8764,27 @@ int run_impl(
                 full_epi, full_bremsa, full_count);
         }
     }
+    const RateEvaluationContextV064894 rate_context_v064894 =
+        make_rate_evaluation_context_v064894(
+            input,
+            type53_calc_emisab_workspace_v82_patch5181
+                ? &*type53_calc_emisab_workspace_v82_patch5181 : nullptr);
 
     const auto traversal_start = clock_type::now();
-    for (const auto& element : ctx.program.elements) {
+    for (std::size_t element_slot_v064894 = 0;
+         element_slot_v064894 < ctx.program.elements.size();
+         ++element_slot_v064894) {
+        const auto& element = ctx.program.elements[element_slot_v064894];
+        const auto& traversal_order_v064894 =
+            ctx.traversal_record_indices_v064894[element_slot_v064894];
         ++stats.elements_attempted;
         std::vector<EvaluatedRecord> evaluated;
         std::vector<const ProgramRecord*> evaluated_records;
         evaluated.reserve(static_cast<std::size_t>(element.record_count));
         evaluated_records.reserve(static_cast<std::size_t>(element.record_count));
-        std::vector<unsigned char> visited(ctx.program.records.size(), 0);
-        int index = element.record_head;
         int hops = 0;
-        while (index >= 0) {
-            if (index >= static_cast<int>(ctx.program.records.size())) throw std::runtime_error("linked traversal index out of range");
-            if (visited[static_cast<std::size_t>(index)]) throw std::runtime_error("linked record cycle detected");
-            visited[static_cast<std::size_t>(index)] = 1;
+        for (const int index : traversal_order_v064894) {
             const auto& record = ctx.program.records[static_cast<std::size_t>(index)];
-            if (record.element_index != element.element_index) throw std::runtime_error("linked traversal crossed element boundary");
             ++stats.records_seen;
             ++stats.linked_hops;
             ++ctx.visited_data_types[record.data_type];
@@ -8727,9 +8793,7 @@ int run_impl(
             const auto rate_start = clock_type::now();
             try {
                 EvaluatedRecord evaluated_item = evaluate_record(
-                    ctx.program, element, record, input,
-                    type53_calc_emisab_workspace_v82_patch5181
-                        ? &*type53_calc_emisab_workspace_v82_patch5181 : nullptr);
+                    ctx.program, element, record, input, rate_context_v064894);
                 if (record.data_type == 53 && record.rate_type == 7) {
                     type53_revisit_evaluated_v82_patch5181[std::make_pair(
                         static_cast<std::uint64_t>(record.source_position),
@@ -8747,11 +8811,11 @@ int run_impl(
                 throw;
             }
             stats.rate_seconds += elapsed(rate_start);
-            index = record.next_index;
             ++hops;
-            if (hops > element.record_count + 1) throw std::runtime_error("linked traversal exceeds declared record count");
         }
-        if (hops != element.record_count) throw std::runtime_error("linked traversal count differs from declared record_count");
+        if (hops != element.record_count) {
+            throw std::runtime_error("prepared traversal count differs from declared record_count");
+        }
 
         const PreliminaryIonBalance preliminary = build_preliminary_ion_balance(
             element, evaluated, helium_preliminary_ablation_type);
@@ -9938,6 +10002,10 @@ int run_impl(
         }
         const auto lte_populations = compute_exact_lte_populations(
             ctx.program, input, ctx.retained_active_stage_windows);
+        // Small (~population-row sized) state; retain it on every controller
+        // evaluation so the final accepted DSEC snapshot can be promoted
+        // without recomputing LTE solely for product publication.
+        ctx.last_source_lte_populations_v064894 = lte_populations;
         source_workspaces->lte_populations_count = lte_populations.size();
         if (source_workspaces->lte_populations) {
             if (source_workspaces->lte_populations_capacity < lte_populations.size()) {
@@ -11958,6 +12026,20 @@ int run_impl(
             }
         }
 
+        // Capture the exact combined continuum+line opacity before the
+        // public-product reduction.  v0.6.48.9.4 retains this even when the
+        // DSEC caller has deferred public projection, because the exact source
+        // ingredients have already been computed at this point.
+        std::vector<double> opakc_exact(continuum_capacity, 0.0);
+        for (std::size_t k = 0; k < continuum_capacity; ++k) {
+            const double continuum_value = std::isfinite(output.opacity[k]) && output.opacity[k] > 0.0
+                ? output.opacity[k] : 0.0;
+            const double line_value = std::isfinite(line_profile_opacity[k]) && line_profile_opacity[k] > 0.0
+                ? line_profile_opacity[k] : 0.0;
+            const double combined = continuum_value + line_value;
+            opakc_exact[k] = std::isfinite(combined) && combined > 0.0 ? combined : 0.0;
+        }
+
         // Capture the exact source workspaces before the public-product
         // reduction mutates or combines any of them.  The optional sidecar
         // preserves the original xstar_fixed_state_output_v1 ABI layout.
@@ -11965,15 +12047,6 @@ int run_impl(
             if (source_workspaces->struct_size < sizeof(*source_workspaces) ||
                 source_workspaces->abi_version != XSTAR_FIXED_STATE_ENGINE_ABI_VERSION) {
                 throw std::runtime_error("fixed-state source-workspace ABI mismatch");
-            }
-            std::vector<double> opakc_exact(continuum_capacity, 0.0);
-            for (std::size_t k = 0; k < continuum_capacity; ++k) {
-                const double continuum_value = std::isfinite(output.opacity[k]) && output.opacity[k] > 0.0
-                    ? output.opacity[k] : 0.0;
-                const double line_value = std::isfinite(line_profile_opacity[k]) && line_profile_opacity[k] > 0.0
-                    ? line_profile_opacity[k] : 0.0;
-                const double combined = continuum_value + line_value;
-                opakc_exact[k] = std::isfinite(combined) && combined > 0.0 ? combined : 0.0;
             }
             auto copy_workspace = [](const std::vector<double>& source, double* destination,
                                      std::size_t capacity, std::size_t& count,
@@ -12040,6 +12113,35 @@ int run_impl(
                 output.opacity[k] = std::isfinite(combined) && combined > 0.0 ? combined : 0.0;
             }
         }
+
+        // v0.6.48.9.4 accepted-boundary snapshot reuse.  Transfer ownership
+        // of the already-computed sparse workspaces into the persistent
+        // context only after all evaluation consumers above have finished.
+        // Moving these local vectors is O(1); it does not add another
+        // record/rate/spectral pass and preserves their exact binary64 bytes.
+        ctx.last_source_rcem_v064894 = std::move(rcem);
+        ctx.last_source_oplin_v064894 = std::move(oplin);
+        ctx.last_source_cemab_v064894 = std::move(cemab);
+        ctx.last_source_cabab_v064894 = std::move(cabab);
+        ctx.last_source_opakab_v064894 = std::move(opakab);
+        ctx.last_source_rccemis_v064894 = std::move(rccemis);
+        ctx.last_source_opakc_v064894 = std::move(opakc_exact);
+        ctx.last_source_opakcont_v064894 = std::move(opakcont);
+        ctx.last_source_fline_v064894 = std::move(fline);
+        ctx.last_source_flinel_v064894 = std::move(flinel);
+        ctx.last_source_elum_v064894 = std::move(elum);
+        ctx.last_source_line_profile_workspace_v064894 = std::move(profiled);
+        ctx.last_source_native_line_count_v064894 = ctx.program.native_line_count;
+        ctx.last_source_native_continuum_count_v064894 = ctx.program.native_continuum_count;
+        ctx.last_source_workspace_flags_v064894 =
+            XSTAR_FIXED_EXACT_WORKSPACE_LINE |
+            XSTAR_FIXED_EXACT_WORKSPACE_RRC |
+            XSTAR_FIXED_EXACT_WORKSPACE_CONTINUUM |
+            XSTAR_FIXED_EXACT_WORKSPACE_LINE_PROFILE |
+            (ctx.last_source_lte_populations_v064894.empty()
+                ? XSTAR_FIXED_EXACT_WORKSPACE_NONE
+                : XSTAR_FIXED_EXACT_WORKSPACE_LTE_POPULATIONS);
+        ctx.last_source_workspaces_valid_v064894 = true;
         stats.spectral_contributions += ss.contributions_committed;
     }
     stats.spectral_seconds += elapsed(spectral_start);
@@ -12165,6 +12267,37 @@ struct xstar_fixed_state_context : xstar_fixed_state_context_impl {};
 static std::unique_ptr<xstar_fixed_state_context> create_context_from_program(Program program) {
     auto ptr = std::make_unique<xstar_fixed_state_context>();
     ptr->program = std::move(program);
+    ptr->traversal_record_indices_v064894.reserve(ptr->program.elements.size());
+    for (const auto& element : ptr->program.elements) {
+        std::vector<int> order;
+        order.reserve(static_cast<std::size_t>(std::max(element.record_count, 0)));
+        std::vector<unsigned char> visited(ptr->program.records.size(), 0u);
+        int index = element.record_head;
+        int hops = 0;
+        while (index >= 0) {
+            if (index >= static_cast<int>(ptr->program.records.size())) {
+                throw std::runtime_error("linked traversal index out of range during context preparation");
+            }
+            if (visited[static_cast<std::size_t>(index)]) {
+                throw std::runtime_error("linked record cycle detected during context preparation");
+            }
+            visited[static_cast<std::size_t>(index)] = 1u;
+            const auto& record = ptr->program.records[static_cast<std::size_t>(index)];
+            if (record.element_index != element.element_index) {
+                throw std::runtime_error("linked traversal crossed element boundary during context preparation");
+            }
+            order.push_back(index);
+            index = record.next_index;
+            ++hops;
+            if (hops > element.record_count + 1) {
+                throw std::runtime_error("linked traversal exceeds declared record count during context preparation");
+            }
+        }
+        if (hops != element.record_count) {
+            throw std::runtime_error("linked traversal count differs from declared record_count during context preparation");
+        }
+        ptr->traversal_record_indices_v064894.push_back(std::move(order));
+    }
     std::array<char, XSTAR_FIXED_STATE_MESSAGE_SIZE> error{};
     int rc = xstar_element_engine_context_create_v1(&ptr->element_context, error.data(), error.size());
     if (rc != 0) throw std::runtime_error(std::string("cannot create element context: ") + error.data());
@@ -12370,6 +12503,23 @@ int xstar_fixed_state_context_reset_v1(xstar_fixed_state_context* context, char*
     context->visited_data_types.clear();
     context->last_record_diagnostics.clear();
     context->last_element_diagnostics.clear();
+    context->last_source_workspaces_valid_v064894 = false;
+    context->last_source_workspace_flags_v064894 = 0u;
+    context->last_source_native_line_count_v064894 = 0u;
+    context->last_source_native_continuum_count_v064894 = 0u;
+    context->last_source_lte_populations_v064894.clear();
+    context->last_source_rcem_v064894.clear();
+    context->last_source_oplin_v064894.clear();
+    context->last_source_cemab_v064894.clear();
+    context->last_source_cabab_v064894.clear();
+    context->last_source_opakab_v064894.clear();
+    context->last_source_rccemis_v064894.clear();
+    context->last_source_opakc_v064894.clear();
+    context->last_source_opakcont_v064894.clear();
+    context->last_source_fline_v064894.clear();
+    context->last_source_flinel_v064894.clear();
+    context->last_source_elum_v064894.clear();
+    context->last_source_line_profile_workspace_v064894.clear();
     copy_text(message, message_size, "native fixed-state context reset");
     return 0;
 }
@@ -12414,6 +12564,90 @@ int xstar_fixed_state_run_with_source_workspaces_v1(
         copy_text(output->message, sizeof(output->message), exc.what());
         copy_text(source_workspaces->message, sizeof(source_workspaces->message), exc.what());
         copy_text(stats->message, sizeof(stats->message), exc.what());
+        copy_text(message, message_size, exc.what());
+        return 7;
+    }
+}
+
+int xstar_fixed_state_copy_last_source_workspaces_v064894(
+    xstar_fixed_state_context* context,
+    xstar_fixed_source_workspace_output_v1* source_workspaces,
+    char* message,
+    size_t message_size) {
+    if (!context || !source_workspaces) {
+        copy_text(message, message_size, "context and source-workspace output are required");
+        return 1;
+    }
+    try {
+        if (source_workspaces->struct_size < sizeof(*source_workspaces) ||
+            source_workspaces->abi_version != XSTAR_FIXED_STATE_ENGINE_ABI_VERSION) {
+            throw std::runtime_error("fixed-state source-workspace ABI mismatch");
+        }
+        if (!context->last_source_workspaces_valid_v064894) {
+            throw std::runtime_error("no retained fixed-state source workspace is available");
+        }
+        auto copy_workspace = [](const std::vector<double>& source, double* destination,
+                                 std::size_t capacity, std::size_t& count,
+                                 const char* label) {
+            count = source.size();
+            if (!destination) return;
+            if (capacity < source.size()) {
+                throw std::runtime_error(std::string(label) + " retained-workspace capacity too small");
+            }
+            std::copy(source.begin(), source.end(), destination);
+        };
+        source_workspaces->exact_source_workspace_flags =
+            context->last_source_workspace_flags_v064894;
+        copy_workspace(context->last_source_lte_populations_v064894,
+                       source_workspaces->lte_populations,
+                       source_workspaces->lte_populations_capacity,
+                       source_workspaces->lte_populations_count, "LTE population");
+        copy_workspace(context->last_source_rcem_v064894,
+                       source_workspaces->rcem, source_workspaces->rcem_capacity,
+                       source_workspaces->rcem_count, "rcem");
+        copy_workspace(context->last_source_oplin_v064894,
+                       source_workspaces->oplin, source_workspaces->oplin_capacity,
+                       source_workspaces->oplin_count, "oplin");
+        copy_workspace(context->last_source_cemab_v064894,
+                       source_workspaces->cemab, source_workspaces->cemab_capacity,
+                       source_workspaces->cemab_count, "cemab");
+        copy_workspace(context->last_source_cabab_v064894,
+                       source_workspaces->cabab, source_workspaces->cabab_capacity,
+                       source_workspaces->cabab_count, "cabab");
+        copy_workspace(context->last_source_opakab_v064894,
+                       source_workspaces->opakab, source_workspaces->opakab_capacity,
+                       source_workspaces->opakab_count, "opakab");
+        copy_workspace(context->last_source_rccemis_v064894,
+                       source_workspaces->rccemis, source_workspaces->rccemis_capacity,
+                       source_workspaces->rccemis_count, "rccemis");
+        copy_workspace(context->last_source_opakc_v064894,
+                       source_workspaces->opakc, source_workspaces->opakc_capacity,
+                       source_workspaces->opakc_count, "opakc");
+        copy_workspace(context->last_source_opakcont_v064894,
+                       source_workspaces->opakcont, source_workspaces->opakcont_capacity,
+                       source_workspaces->opakcont_count, "opakcont");
+        copy_workspace(context->last_source_fline_v064894,
+                       source_workspaces->fline, source_workspaces->fline_capacity,
+                       source_workspaces->fline_count, "fline");
+        copy_workspace(context->last_source_flinel_v064894,
+                       source_workspaces->flinel, source_workspaces->flinel_capacity,
+                       source_workspaces->flinel_count, "flinel");
+        copy_workspace(context->last_source_elum_v064894,
+                       source_workspaces->elum, source_workspaces->elum_capacity,
+                       source_workspaces->elum_count, "elum");
+        copy_workspace(context->last_source_line_profile_workspace_v064894,
+                       source_workspaces->line_profile_workspace,
+                       source_workspaces->line_profile_workspace_capacity,
+                       source_workspaces->line_profile_workspace_count,
+                       "line profile workspace");
+        source_workspaces->native_line_count = context->last_source_native_line_count_v064894;
+        source_workspaces->native_continuum_count = context->last_source_native_continuum_count_v064894;
+        copy_text(source_workspaces->message, sizeof(source_workspaces->message),
+                  "v0.6.48.9.4 retained source workspaces copied without reevaluation");
+        copy_text(message, message_size, source_workspaces->message);
+        return 0;
+    } catch (const std::exception& exc) {
+        copy_text(source_workspaces->message, sizeof(source_workspaces->message), exc.what());
         copy_text(message, message_size, exc.what());
         return 7;
     }
