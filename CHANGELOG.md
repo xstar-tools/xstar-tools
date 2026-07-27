@@ -7,7 +7,7 @@
 - Add a strict Type-50 edge closure analyzer and one-time pure-Python / accelerated-Python / standalone-C++ qualification runner.
 - Preserve the 0.6.48.8 production/controller, source-real energy-grid, Type99 source-zero, writer, and standalone-progress contracts.
 
-# 0.6.48.8 - 2026-07-26
+## 0.6.48.8 - 2026-07-26
 
 - Promote the accepted v82 patch5.20.17 production path to the 0.6.48.8 baseline.
 - Retain source-REAL `ener.f90` grid semantics in pure Python, accelerated Python, and standalone C++.
