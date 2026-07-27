@@ -25,3 +25,8 @@ _build/
 docs/_build/
 docs/sphinx/_build/
 # docs/generated/
+
+# Benchmark tools and folders
+src/xstar_tools/benchmarks/
+benchmarks/
+scripts/
