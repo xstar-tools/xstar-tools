@@ -258,13 +258,13 @@ void append_native_radial_summary(std::ofstream& out,
             rows.push_back({r.radius_cm,r.delta_radius_cm,r.log_ionization_parameter,r.electron_fraction,r.density_cm3,r.temperature_t4,r.fractional_heat_error});
         }
     }
-    // xout_abund stores the fourth delta_r as the cumulative terminal depth.
-    // pprint option 17 reports the three incremental physical shells. Rebuild
-    // those rows without inventing a new geometry: shell 1 is the retained
-    // first increment, shell 2 repeats the adaptive step, and shell 3 is the
-    // retained total minus the first two increments.
-    if (!state.diagnostic_preview_partial &&
-        rows.size() >= 4 && rows[2].dr > 0.0 && rows[3].dr > rows[2].dr) {
+    // Historical Mg XI bridge products retained four abundance rows while
+    // option 17 had five controller rows.  Preserve that exact reconstruction
+    // only for the accepted four-zone anchor shape.  Generic native runs use
+    // their retained RadialZoneState geometry directly whenever the product
+    // row inventory differs from the controller trajectory.
+    if (!state.diagnostic_preview_partial && state.radial_zones.size() == 5u &&
+        rows.size() == 4u && rows[2].dr > 0.0 && rows[3].dr > rows[2].dr) {
         const Row entry0 = rows[0];
         const Row entry1 = rows[1];
         Row shell1 = rows[2];
@@ -275,6 +275,15 @@ void append_native_radial_summary(std::ofstream& out,
         Row shell2 = rows[3]; shell2.dr = 2.0 * rows[2].dr;
         Row shell3 = rows[3];
         rows = {entry0, entry1, shell1, shell2, shell3};
+    } else if (!state.radial_zones.empty() && rows.size() != state.radial_zones.size()) {
+        rows.clear();
+        rows.reserve(state.radial_zones.size());
+        for (const auto& zone : state.radial_zones) {
+            rows.push_back({zone.radius_cm, zone.delta_radius_cm,
+                zone.log_ionization_parameter, zone.electron_fraction,
+                zone.density_cm3, zone.temperature_t4,
+                zone.accepted_controller.evaluation.hmctot});
+        }
     }
     // pprint option 17 prints the controller-owned hmctot directly.  Keep the
     // FITS abundance table only as the geometry source; thermal balance comes
@@ -441,6 +450,7 @@ void append_native_radial_summary(std::ofstream& out,
         m.first=std::max(m.first,100.0*std::abs(e.computed_electron_fraction-e.electron_fraction_input));
         m.second=std::max(m.second,e.evaluation_index);
     }
+    const std::size_t last_call = call_metrics.empty() ? 0u : call_metrics.rbegin()->first;
     out << "\n running ...\n\n pass number= 1 -1\n";
     if (state.diagnostic_preview_partial) {
         out << " diagnostic partial radial trajectory: physical boundaries retained="
@@ -458,7 +468,7 @@ void append_native_radial_summary(std::ofstream& out,
     for(std::size_t i=0;i<output_rows && !rows.empty();++i){
         const Row& r=rows[std::min(i,rows.size()-1)];
         const auto depths=i<depth_logs.size()?depth_logs[i]:std::pair<double,double>{-10.0,-10.0};
-        const std::size_t call=std::min<std::size_t>(i+1,4);
+        const std::size_t call=last_call>0u?std::min<std::size_t>(i+1,last_call):i+1;
         const auto cm=call_metrics.count(call)?call_metrics[call]:std::pair<double,std::size_t>{0.0,0};
         out<<std::fixed<<std::setprecision(2)
            <<std::setw(8)<<safe_log(r.radius,-10.0)

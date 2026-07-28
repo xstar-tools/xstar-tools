@@ -3750,6 +3750,118 @@ double type68_upsilon(const double* r, std::size_t nr, int z, double temperature
     return std::max(0.0,r[0]+r[1]*tt+r[2]*tt*tt);
 }
 
+double type66_upsilon(const double* r, std::size_t nr, double temperature_k) {
+    if (!r || nr < 6 || !(temperature_k > 0.0)) throw std::runtime_error("invalid type66 payload");
+    double total = 0.0;
+    const std::size_t groups = std::min<std::size_t>(3u, nr / 6u);
+    for (std::size_t g = 0; g < groups; ++g) {
+        const double* p = r + 6u * g;
+        const double de = p[0];
+        if (!(de > 0.0)) continue;
+        double y = de / temperature_k * 1.160443e4;
+        y = std::min(y, 77.0);
+        if (!(y > 1.0e-20)) continue;
+        const double em1 = expint_scaled(y);
+        const double a = p[1], b = p[2], c = p[3], d = p[4], e = p[5];
+        total += y * ((a / y + c) + d * 0.5 * (1.0 - y)) +
+            em1 * (b - c * y + d * y * y * 0.5 + e / y);
+    }
+    return total;
+}
+
+double type59_sigma_cm2(const double* r, std::size_t original_real_count,
+                        int l2, double energy_ev) {
+    if (!r || original_real_count < 6 || !(energy_ev > 0.0)) return 0.0;
+    double e0 = 0.0, s0 = 0.0, ya = 0.0, pp = 0.0, yw = 0.0, y0 = 0.0, y1 = 0.0;
+    if (original_real_count == 9) {
+        e0 = r[2]; s0 = r[3]; ya = r[4]; pp = r[5]; yw = r[6]; y0 = r[7]; y1 = r[8];
+        l2 = 0;
+    } else {
+        e0 = r[1]; s0 = r[2]; ya = r[3]; pp = r[4]; yw = r[5];
+    }
+    if (!(e0 > 0.0) || !(ya > 0.0)) return 0.0;
+    const double xx = energy_ev / e0 - y0;
+    const double yy = original_real_count == 9 ? std::sqrt(xx * xx + y1 * y1) : xx;
+    const double qq = 5.5 + static_cast<double>(l2) - pp / 2.0;
+    const double yyqq = std::exp(-std::clamp(qq * std::log(std::max(1.0e-48, yy)), -60.0, 60.0));
+    const double term1 = (xx - 1.0) * (xx - 1.0) + yw * yw;
+    const double term3 = std::pow(1.0 + std::sqrt(std::max(yy / ya, 0.0)), -pp);
+    const double sigma = s0 * term1 * yyqq * term3 * 1.0e-18;
+    return std::isfinite(sigma) ? std::max(0.0, sigma) : 0.0;
+}
+
+int type99_nbinc_fortran_value(double energy, const double* epi, std::size_t count);
+
+struct Type59PhintResultV0648111 {
+    std::array<double, 6> ans{};
+    double threshold_sigma_cm2 = 0.0;
+    int nb1_one_based = 0;
+    int nphint_one_based = 0;
+};
+
+Type59PhintResultV0648111 type59_phintfo_source(
+    const double* r, std::size_t original_real_count, int l2,
+    double threshold_ev, double swrat, bool zero_reverse,
+    const xstar_fixed_state_input_v1& source_input) {
+    Type59PhintResultV0648111 out;
+    const bool use_dsec = source_input.dsec_radiation_energy_ev && source_input.dsec_bremsa &&
+        source_input.dsec_radiation_bin_count >= 3u;
+    const double* epi = use_dsec ? source_input.dsec_radiation_energy_ev : source_input.radiation_energy_ev;
+    const double* bremsa = use_dsec ? source_input.dsec_bremsa : source_input.radiation_flux;
+    const std::size_t n = use_dsec ? source_input.dsec_radiation_bin_count : source_input.radiation_bin_count;
+    if (!epi || !bremsa || n < 3u || !(threshold_ev > 0.0)) return out;
+    const int nb1 = type99_nbinc_fortran_value(threshold_ev, epi, n);
+    const int numcon2 = std::max(2, static_cast<int>(n / 50u));
+    int nphint = std::max(static_cast<int>(n) - numcon2, nb1 + 1);
+    nphint = std::min(nphint, static_cast<int>(n) - numcon2);
+    out.nb1_one_based = nb1;
+    out.nphint_one_based = nphint;
+    if (nb1 <= 0 || nb1 >= nphint - 1 || nb1 > static_cast<int>(n)) return out;
+    const double t4 = std::max(source_input.temperature_k / 1.0e4, 1.0e-48);
+    const double tsq = std::sqrt(t4);
+    const double bktm = xstar_constants::kLegacyBoltzmannEvPerT4 * t4;
+    const double rnist = 5.216e-21 * swrat / (t4 * tsq);
+    const double ne = std::max(0.0, source_input.electron_density_cm3);
+    double sumr=0.0,sumh=0.0,sumh2=0.0,sumi=0.0,sumc=0.0,sumc2=0.0;
+    double tempr=0.0,tempro=0.0,tempi=0.0,tempio=0.0,atmp2=0.0,atmp22=0.0;
+    double ener = epi[static_cast<std::size_t>(nb1 - 1)];
+    for (int kl = nb1; kl <= nphint; ++kl) {
+        const std::size_t k = static_cast<std::size_t>(kl - 1);
+        const double enero = ener;
+        ener = epi[k];
+        const double sigma = type59_sigma_cm2(r, original_real_count, l2, ener);
+        if (kl == nb1) out.threshold_sigma_cm2 = sigma;
+        const double bremtmp = bremsa[k] / 25.3;
+        tempro = tempr;
+        tempr = 25.3 * sigma * bremtmp / std::max(ener, 1.0e-48);
+        const double deld = ener - enero;
+        sumr += (tempr + tempro) * deld / 2.0;
+        constexpr double kSourceErgPerEv = 1.602197e-12;
+        sumh += (tempr * ener + tempro * enero) * deld * kSourceErgPerEv / 2.0;
+        sumh2 += (tempr * (ener - threshold_ev) + tempro * (enero - threshold_ev)) * deld * kSourceErgPerEv / 2.0;
+        const double exptst = std::max(1.0e-36, (ener - threshold_ev) / std::max(bktm, 1.0e-48));
+        const double exptmp = limited_exp(-exptst);
+        const double bbnurj = std::pow(std::min(ener, 2.0e4), 3.0) * 1.571e22;
+        const double tempi1 = rnist * bbnurj * exptmp * sigma / std::max(ener, 1.0e-48);
+        const double tempi2 = rnist * bremtmp * exptmp * sigma / std::max(ener, 1.0e-48);
+        tempi = tempi1 + tempi2;
+        const double atmp2o = atmp2;
+        atmp2 = tempi1 * ener;
+        const double atmp22o = atmp22;
+        atmp22 = tempi1 * (ener - threshold_ev);
+        sumi += (tempi + tempio) * deld / 2.0;
+        sumc += (atmp2 + atmp2o) * deld * kSourceErgPerEv / 2.0;
+        sumc2 += (atmp22 + atmp22o) * deld * kSourceErgPerEv / 2.0;
+        tempio = tempi;
+    }
+    double a1=sumr,a2=ne*sumi,a3=sumh,a4=ne*sumc,a5=sumh2,a6=ne*sumc2;
+    if (zero_reverse) { a2=0.0; a4=0.0; a6=0.0; }
+    const double old5=a5; a5=-a6; a6=-old5;
+    const double old3=a3; a3=-a4; a4=-old3;
+    out.ans={{a1,a2,a3,a4,a5,a6}};
+    return out;
+}
+
 double type73_rate(const double* r, std::size_t nr, int z, double temperature_k) {
     if (!r||nr<7||z<=0||!(temperature_k>0.0)) throw std::runtime_error("invalid type73 payload");
     const double wav=std::abs(r[0]);
@@ -5158,11 +5270,26 @@ EvaluatedRecord evaluate_record(
             }
             break;
         }
+        case XSTAR_FIXED_OPCODE_TYPE7_DIELECTRONIC_RECOMB: {
+            if (!r || record.real_count < 4) throw std::runtime_error("type7 payload too short");
+            const double rate = r[0] * 1.0e-6 * limited_exp(-r[2] / t4) *
+                (1.0 + r[1] * limited_exp(-r[3] / t4)) / (t4 * sqrt_t4);
+            c.ans1 = rate * ne;
+            break;
+        }
         case XSTAR_FIXED_OPCODE_TYPE9_CHARGE_TRANSFER: {
             if (!r||record.real_count<4||!ints||record.int_count<1) throw std::runtime_error("type9 payload too short");
             const double rate=r[0]*std::pow(std::min(t4,1000.0),r[1])*(1.0+r[2]*limited_exp(r[3]*t4))*1.0e-9;
             c.ans2=rate*input.neutral_h_density_cm3*0.1;
             if (ints[0]!=0) c.ans2/=6.0;
+            break;
+        }
+        case XSTAR_FIXED_OPCODE_TYPE10_CHARGE_TRANSFER: {
+            if (!r || record.real_count < 4) throw std::runtime_error("type10 payload too short");
+            const double eex = record.real_count >= 7 ? r[6] : 0.0;
+            const double rate = r[0] * std::pow(t4, r[1]) *
+                (1.0 + r[2] * limited_exp(r[3] * t4)) * limited_exp(-eex / t4) * 1.0e-9;
+            c.ans1 = rate * input.ionized_h_density_cm3;
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE30_THREE_BODY_RECOMB: {
@@ -6379,6 +6506,33 @@ EvaluatedRecord evaluate_record(
             c.ans6=-c.ans1*eth*energy_conversion;
             break;
         }
+        case XSTAR_FIXED_OPCODE_TYPE59_VERNER_BOUND_FREE: {
+            if (!r || !ints || record.real_count < 8 || record.int_count < 7)
+                throw std::runtime_error("type59 payload too short");
+            const std::size_t original_real_count = static_cast<std::size_t>(std::max<std::int64_t>(0, ints[0]));
+            if (original_real_count < 6 || original_real_count + 2u > record.real_count)
+                throw std::runtime_error("type59 lowered payload layout invalid");
+            const int l2 = static_cast<int>(ints[1]);
+            const bool source_zero = ints[2] != 0;
+            const int id1 = static_cast<int>(ints[3]);
+            if (source_zero) break;
+            const double threshold = r[0];
+            const double gglo = r[original_real_count];
+            const double ggup = r[original_real_count + 1u];
+            if (!(threshold > 0.0) || !(ggup > 1.0e-24)) break;
+            const double swrat = gglo / ggup;
+            const bool zero_reverse = record.rate_type == 1 || id1 > 1;
+            const auto ph = type59_phintfo_source(
+                r, original_real_count, l2, threshold, swrat, zero_reverse, calc_hmc_input);
+            c.ans1=ph.ans[0]; c.ans2=ph.ans[1]; c.ans3=ph.ans[2];
+            c.ans4=ph.ans[3]; c.ans5=ph.ans[4]; c.ans6=ph.ans[5];
+            out.spectral = record.continuum_index_one_based > 0;
+            out.bound_free_spectral = out.spectral;
+            out.continuum_index_one_based = record.continuum_index_one_based;
+            out.line_energy_ev = threshold;
+            out.opakab = ph.threshold_sigma_cm2;
+            break;
+        }
         case XSTAR_FIXED_OPCODE_TYPE56_TABULATED_COLLISION: {
             const double ups = type56_upsilon(r, record.real_count, input.temperature_k);
             if (!(ups >= 0.0)) throw std::runtime_error("invalid type56 payload");
@@ -6529,6 +6683,23 @@ EvaluatedRecord evaluate_record(
             // retaining the legacy Boltzmann and collision-rate coefficients.
             c.ans5=c.ans2*delta_ev*xstar_constants::kModernErgPerEv;
             c.ans6=c.ans1*delta_ev*xstar_constants::kModernErgPerEv;
+            break;
+        }
+        case XSTAR_FIXED_OPCODE_TYPE66_COLLISION: {
+            if (!r || record.real_count < 6) throw std::runtime_error("type66 payload too short");
+            const double de = r[0] > 0.0 ? r[0] : delta_ev;
+            if (!(de > 0.0)) break;
+            const double wavelength = 12398.4016 / de;
+            const double effective_temperature = std::max(input.temperature_k, 2.8777e6 / wavelength);
+            const double upsilon = std::max(0.0, type66_upsilon(r, record.real_count, effective_temperature));
+            const double gu = std::max(upper.statistical_weight, 1.0e-48);
+            const double gl = std::max(lower.statistical_weight, 1.0e-48);
+            const double qd = 8.626e-8 * upsilon / sqrt_t4 / gu;
+            const double qe = qd * gu * limited_exp(-de / std::max(xstar_constants::kLegacyBoltzmannEvPerT4 * t4,1.0e-48)) / gl;
+            c.ans1 = qe * ne;
+            c.ans2 = qd * ne;
+            c.ans5 = c.ans2 * de * xstar_constants::kLegacyCollisionErgPerEv;
+            c.ans6 = c.ans1 * de * xstar_constants::kLegacyCollisionErgPerEv;
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE68_HELIKE_COLLISION: {
@@ -7836,7 +8007,29 @@ struct NativeBoundFreeCurve {
     bool type49_semantics = false;
     bool apply_source_phextrap = false;
     int phextrap_max_points = 0;
+    bool type59_analytic = false;
+    double type59_e0 = 0.0;
+    double type59_s0 = 0.0;
+    double type59_ya = 0.0;
+    double type59_pp = 0.0;
+    double type59_yw = 0.0;
+    double type59_y0 = 0.0;
+    double type59_y1 = 0.0;
+    int type59_l2 = 0;
 };
+
+double type59_curve_sigma_cm2(const NativeBoundFreeCurve& curve, double energy_ev) {
+    if (!curve.type59_analytic || !(curve.type59_e0 > 0.0) || !(curve.type59_ya > 0.0) ||
+        !(energy_ev > 0.0)) return 0.0;
+    const double xx = energy_ev / curve.type59_e0 - curve.type59_y0;
+    const double yy = std::sqrt(xx * xx + curve.type59_y1 * curve.type59_y1);
+    const double qq = 5.5 + static_cast<double>(curve.type59_l2) - curve.type59_pp / 2.0;
+    const double yyqq = std::exp(-std::clamp(qq * std::log(std::max(1.0e-48, yy)), -60.0, 60.0));
+    const double term1 = (xx - 1.0) * (xx - 1.0) + curve.type59_yw * curve.type59_yw;
+    const double term3 = std::pow(1.0 + std::sqrt(std::max(yy / curve.type59_ya, 0.0)), -curve.type59_pp);
+    const double sigma = curve.type59_s0 * term1 * yyqq * term3 * 1.0e-18;
+    return std::isfinite(sigma) ? std::max(0.0, sigma) : 0.0;
+}
 
 struct Phint53GridMapV82Patch57 {
     std::vector<double> sgbar;
@@ -8017,6 +8210,24 @@ bool native_bound_free_curve(const Program& program,
     curve = {};
     if (!evaluated.bound_free_spectral || record.real_offset + record.real_count > program.reals.size()) return false;
     const double* r = program.reals.data() + record.real_offset;
+    if (record.opcode == XSTAR_FIXED_OPCODE_TYPE59_VERNER_BOUND_FREE) {
+        if (record.int_offset + record.int_count > program.ints.size() || record.int_count < 7u) return false;
+        const auto* ints = program.ints.data() + record.int_offset;
+        const std::size_t original_real_count = static_cast<std::size_t>(std::max<std::int64_t>(0, ints[0]));
+        if (original_real_count < 6u || original_real_count + 2u > record.real_count) return false;
+        curve.threshold_ev = r[0];
+        curve.type59_analytic = true;
+        curve.type59_l2 = static_cast<int>(ints[1]);
+        if (original_real_count == 9u) {
+            curve.type59_e0=r[2]; curve.type59_s0=r[3]; curve.type59_ya=r[4];
+            curve.type59_pp=r[5]; curve.type59_yw=r[6]; curve.type59_y0=r[7]; curve.type59_y1=r[8];
+            curve.type59_l2=0;
+        } else {
+            curve.type59_e0=r[1]; curve.type59_s0=r[2]; curve.type59_ya=r[3];
+            curve.type59_pp=r[4]; curve.type59_yw=r[5]; curve.type59_y0=0.0; curve.type59_y1=0.0;
+        }
+        return curve.threshold_ev > 0.0 && curve.type59_e0 > 0.0 && curve.type59_ya > 0.0;
+    }
     if (record.opcode == XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE ||
         record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE) {
         // This curve is consumed by the full-grid calc_emis/HEATT spectral
@@ -8244,6 +8455,7 @@ void accumulate_native_bound_free_rrc_from_abundances_v82_patch520(
         }
         return;
     }
+
     // v82 patch 5.20.17.3.9: Type99/calt99 -> phint53hunt has no
     // source rccemis side effect.  Older native code synthesized an
     // inward-only continuum from -ans3; that profile is not present in
@@ -8311,6 +8523,7 @@ void accumulate_native_bound_free_surface(const NativeBoundFreeCurve& curve,
     const double density = std::max(0.0, input.hydrogen_density_cm3);
     const bool type49_or_53 = record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE ||
         record.opcode == XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE;
+    const bool type59 = record.opcode == XSTAR_FIXED_OPCODE_TYPE59_VERNER_BOUND_FREE;
     const bool type99 = record.opcode == XSTAR_FIXED_OPCODE_TYPE99_SUPERLEVEL_BOUND_FREE;
     const Type53SourceShadow* shadow = nullptr;
     if (record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE) shadow = &evaluated.type49_shadow;
@@ -8353,6 +8566,24 @@ void accumulate_native_bound_free_surface(const NativeBoundFreeCurve& curve,
                 rccemis[n + static_cast<std::size_t>(kl)] += common * ptmp2;
             }
         }
+        return;
+    }
+
+    if (type59) {
+        const int nb1 = type99_nbinc_fortran_value(curve.threshold_ev, input.radiation_energy_ev, n);
+        const int numcon2 = std::max(2, static_cast<int>(n / 50u));
+        const int nphint = std::max(static_cast<int>(n) - numcon2, nb1 + 1);
+        for (int kl = nb1; kl <= nphint && kl <= static_cast<int>(n); ++kl) {
+            const std::size_t k = static_cast<std::size_t>(kl - 1);
+            const double sigma = type59_curve_sigma_cm2(curve, input.radiation_energy_ev[k]);
+            if (sigma > 0.0 && lower_abundance > 0.0 && density > 0.0) {
+                opacity_cm1[k] += lower_abundance * density * sigma;
+                if (phint53_bins_accumulated) ++*phint53_bins_accumulated;
+            }
+        }
+        if (phint53_records_mapped) ++*phint53_records_mapped;
+        // phintfo.f90 has the RRC-emission updates commented out.  Type 59
+        // contributes direct continuum opacity but no rccemis profile.
         return;
     }
 

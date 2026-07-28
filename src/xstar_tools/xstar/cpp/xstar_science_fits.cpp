@@ -509,15 +509,34 @@ const ElementMeta* element_ptr_for(const std::vector<ElementMeta>& elements, int
     return nullptr;
 }
 
-bool active_product_element_stage(int element_z, int ion_stage, double abundance) {
+bool active_product_element_stage(const xstar_run_state::ProductWritingState& state,
+                                  const std::vector<ElementMeta>& elements,
+                                  const std::vector<RowMeta>& rows,
+                                  int element_z, int ion_stage, double abundance) {
     if (!(abundance > 0.0)) return false;
-    if (element_z == 1 || element_z == 2) return true;
-    // In bridge/oracle mode the Mg XI benchmark used the historical Mg III+
-    // surface inventory.  In native standalone mode the caller may use C, O,
-    // Mg, Ca, etc.; generic active ions must be emitted rather than hard-gated
-    // to Mg-only.
-    if (element_z == 12) return ion_stage >= 3;
-    return ion_stage >= 1;
+    if (ion_stage <= 0) return false;
+    const ElementMeta* element = nullptr;
+    for (const auto& e : elements) if (e.element_z == element_z) { element = &e; break; }
+    if (!element) return false;
+    const xstar_run_state::FixedEvaluationState* terminal = nullptr;
+    if (state.final_writer_evaluation.has_value()) terminal = &*state.final_writer_evaluation;
+    else if (!state.radial_zones.empty()) terminal = &state.radial_zones.back().accepted_controller.evaluation;
+    else if (!state.fixed_evaluations.empty()) terminal = &state.fixed_evaluations.back();
+    if (!terminal || terminal->populations.empty()) return true;
+    bool stage_known = false;
+    for (const auto& row : rows) {
+        if (row.element_index != element->element_index || row.ion_charge + 1 != ion_stage) continue;
+        stage_known = true;
+        if (row.row <= 0) continue;
+        const std::size_t index = static_cast<std::size_t>(element->row_offset + row.row - 1);
+        if (index >= terminal->populations.size()) continue;
+        const double population = terminal->populations[index];
+        if (std::isfinite(population) && population != 0.0) return true;
+    }
+    // If the lowered metadata has no rows for a source ion stage, there is no
+    // publishable stage inventory.  Otherwise a fully zero terminal stage is
+    // source-inactive and must not leak into detail/line/RRC products.
+    return !stage_known;
 }
 
 int roman_stage_from_ion_label(const std::string& label) {
@@ -538,15 +557,6 @@ int element_z_from_ion_label(const std::string& label) {
     }
     return 0;
 }
-
-bool active_product_ion_label(const std::string& label, const std::vector<ElementMeta>& elements) {
-    const int z = element_z_from_ion_label(label);
-    const int stage = roman_stage_from_ion_label(label);
-    double abundance = 0.0;
-    for (const auto& e : elements) if (e.element_z == z) { abundance = e.abundance; break; }
-    return active_product_element_stage(z, stage, abundance);
-}
-
 
 const RowMeta* row_for(const std::vector<RowMeta>& rows, int element_index, int local_row) {
     for (const auto& row : rows) if (row.element_index == element_index && row.row == local_row) return &row;
@@ -1068,7 +1078,7 @@ std::vector<LineRow> build_line_rows(const xstar_run_state::ProductWritingState&
     for (const auto& r : records) {
         if (!r.spectral || !r.type50_valid || r.data_type != 50 || r.type50_line_index_one_based <= 0) continue;
         const auto* element = element_ptr_for(elements, r.element_index);
-        if (!element || !active_product_element_stage(r.element_z, r.ion_stage, element->abundance)) continue;
+        if (!element || !active_product_element_stage(state, elements, rows, r.element_z, r.ion_stage, element->abundance)) continue;
         const double lower = population_for(evaluation, elements, r.element_index, r.lower_row);
         const double upper = population_for(evaluation, elements, r.element_index, r.upper_row);
         const double abundance_scale = zone.density_cm3 * element->abundance;
@@ -1098,6 +1108,7 @@ std::vector<LineRow> build_line_rows(const xstar_run_state::ProductWritingState&
 
 std::vector<RrcRow> build_rrc_rows(const xstar_run_state::ProductWritingState& state,
                                    const std::vector<ElementMeta>& elements,
+                                   const std::vector<RowMeta>& rows,
                                    std::size_t zone_index) {
     const auto& zone = state.radial_zones.at(zone_index);
     const auto& evaluation = zone.accepted_controller.evaluation;
@@ -1105,9 +1116,9 @@ std::vector<RrcRow> build_rrc_rows(const xstar_run_state::ProductWritingState& s
     std::vector<RrcRow> out;
     for (const auto& r : records) {
         if (r.continuum_index_one_based <= 0) continue;
-        if (!(r.type49_valid || r.type53_valid || r.type99_valid || r.data_type == 49 || r.data_type == 53 || r.data_type == 99)) continue;
+        if (!(r.type49_valid || r.type53_valid || r.type99_valid || r.data_type == 49 || r.data_type == 53 || r.data_type == 59 || r.data_type == 99)) continue;
         const auto* element = element_ptr_for(elements, r.element_index);
-        if (!element || !active_product_element_stage(r.element_z, r.ion_stage, element->abundance)) continue;
+        if (!element || !active_product_element_stage(state, elements, rows, r.element_z, r.ion_stage, element->abundance)) continue;
         double threshold = r.type49_valid ? r.type49_threshold_ev : r.type53_valid ? r.type53_threshold_ev : r.type99_threshold_ev;
         if (!(threshold > 0.0)) threshold = r.line_energy_ev;
         if (!(threshold > 0.0) || r.lower_row <= 0 || r.upper_row <= 0) continue;
@@ -1134,9 +1145,13 @@ std::vector<RrcRow> build_rrc_rows(const xstar_run_state::ProductWritingState& s
         // Type 99 contributes the same threshold absorption/stimulated
         // difference to opakab as Types 49/53.  v52 forced these rows to zero,
         // leaving the Mg Type-99 support missing.
-        row.opacity = std::max(0.0,
-            lower * abundance_scale * std::max(0.0, r.threshold_abs_sigma_cm2) -
-            parent * abundance_scale * std::max(0.0, r.threshold_stimulated_sigma_cm2));
+        if (r.data_type == 59) {
+            row.opacity = lower * abundance_scale * std::max(0.0, r.opakab);
+        } else {
+            row.opacity = std::max(0.0,
+                lower * abundance_scale * std::max(0.0, r.threshold_abs_sigma_cm2) -
+                parent * abundance_scale * std::max(0.0, r.threshold_stimulated_sigma_cm2));
+        }
         if (r.type53_valid) { row.tau_in = r.type53_tau_in; row.tau_out = r.type53_tau_out; }
         else { row.tau_in = 0.0; row.tau_out = 0.0; }
         const double signal = std::abs(row.emis_in) + std::abs(row.emis_out) + std::abs(row.absorption) + std::abs(row.opacity) + std::abs(row.tau_in) + std::abs(row.tau_out);
@@ -9111,6 +9126,7 @@ std::map<long long,LineRow> diagnostic_line_rows_by_index(
     const xstar_run_state::ProductWritingState& state,
     const xstar_run_state::FixedEvaluationState& evaluation,
     const std::vector<ElementMeta>& elements,
+    const std::vector<RowMeta>& rows,
     std::size_t sequence) {
     std::map<long long,LineRow> out;
     std::vector<RecordDiag> records;
@@ -9165,7 +9181,7 @@ std::map<long long,LineRow> diagnostic_line_rows_by_index(
         const long long public_line_index = resolve_detail_line_index(r);
         if (public_line_index <= 0 || !oracle_detail_line_inventory(public_line_index)) continue;
         const auto* element = element_ptr_for(elements, r.element_index);
-        if (!element || !active_product_element_stage(r.element_z, r.ion_stage, element->abundance)) continue;
+        if (!element || !active_product_element_stage(state, elements, rows, r.element_z, r.ion_stage, element->abundance)) continue;
         const double lower = population_for(evaluation, elements, r.element_index, r.lower_row);
         const double upper = population_for(evaluation, elements, r.element_index, r.upper_row);
         const double density = r.density_scale > 0.0 ? r.density_scale : 1.0;
@@ -9322,9 +9338,9 @@ std::map<long long,RrcRow> diagnostic_rrc_rows_by_index(
     };
 
     for (const auto& r : records) {
-        if (!(r.type49_valid || r.type53_valid || r.type99_valid || r.data_type == 49 || r.data_type == 53 || r.data_type == 99)) continue;
+        if (!(r.type49_valid || r.type53_valid || r.type99_valid || r.data_type == 49 || r.data_type == 53 || r.data_type == 59 || r.data_type == 99)) continue;
         const auto* element = element_ptr_for(elements, r.element_index);
-        if (!element || !active_product_element_stage(r.element_z, r.ion_stage, element->abundance)) continue;
+        if (!element || !active_product_element_stage(state, elements, rows, r.element_z, r.ion_stage, element->abundance)) continue;
         const auto* lower_meta = row_for(rows, r.element_index, r.lower_row);
         const int global_level = lower_meta ? lower_meta->global_level_index :
             (element ? element->row_offset + r.lower_row : r.lower_row);
@@ -9358,7 +9374,9 @@ std::map<long long,RrcRow> diagnostic_rrc_rows_by_index(
         row.emis_in = 0.0;
         row.emis_out = total_emis;
         row.absorption = std::abs(r.ans[3]) * lower * abundance_scale;
-        if ((r.type99_valid || r.data_type == 99) && r.element_z <= 2) {
+        if (r.data_type == 59) {
+            row.opacity = lower * abundance_scale * std::max(0.0, r.opakab);
+        } else if ((r.type99_valid || r.data_type == 99) && r.element_z <= 2) {
             row.opacity = 0.0;
         } else {
             row.opacity = std::max(0.0,
@@ -9487,7 +9505,7 @@ void write_line_detail(const std::filesystem::path& path,
                 if (key > 0 && !pw_line_by_index.count(key)) pw_line_by_index[key] = pi;
             }
         }
-        const auto diagnostic_lines = diagnostic_line_rows_by_index(state, evaluation, elements, zone.accepted_controller.accepted_sequence);
+        const auto diagnostic_lines = diagnostic_line_rows_by_index(state, evaluation, elements, rows, zone.accepted_controller.accepted_sequence);
         auto lines = source_line_rows_from_identities(state, evaluation, physical_density_cm3_for_output_zone(state, z), physical_luminosity_scale_1e38_for_output_zone(state, z), true, hdu_number);
         std::map<long long,LineRow> native_lines_by_record;
         for (const auto& line : lines) native_lines_by_record[line.record] = line;
@@ -9759,7 +9777,6 @@ void write_rrc_detail(const std::filesystem::path& path,
                       const xstar_run_state::ProductWritingState& state,
                       const std::vector<ElementMeta>& elements,
                       const std::vector<RowMeta>& rows) {
-    (void)rows;
     fitsfile* fptr = create_fits(path, state);
     write_parameters(fptr, state.parameter_rows);
     struct Detal3AuditRow {
@@ -11084,7 +11101,7 @@ void write_public_lines(const std::filesystem::path& path,
     diagnostics_by_zone.reserve(state.radial_zones.size());
     for (const auto& zone : state.radial_zones) {
         diagnostics_by_zone.push_back(diagnostic_line_rows_by_index(
-            state, zone.accepted_controller.evaluation, elements,
+            state, zone.accepted_controller.evaluation, elements, rows,
             zone.accepted_controller.accepted_sequence));
     }
     auto diagnostic_for_label = [&](const std::map<long long,LineRow>& diagnostics,

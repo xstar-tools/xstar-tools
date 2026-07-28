@@ -27,7 +27,7 @@ constexpr int kType99LayoutMagic = 223;
 constexpr double kEvAngstrom = 12398.419843320026;
 
 const std::set<int> kActiveTypes = {
-    1,2,9,30,38,39,49,50,51,53,54,56,57,60,62,63,68,69,71,72,73,74,76,77,86,88,95,99
+    1,2,7,9,10,30,38,39,49,50,51,53,54,56,57,59,60,62,63,66,68,69,71,72,73,74,76,77,86,88,95,99
 };
 
 const std::array<double,31> kAtomicMass = {{
@@ -688,7 +688,9 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
     auto need=[&](bool ok,const std::string& why){ if(!ok) throw std::runtime_error("Type-"+std::to_string(dt)+" record "+std::to_string(rec)+" "+why); };
     if (dt==1) { need(rr.size()>=2,"short payload"); out.reals.assign(rr.begin(),rr.begin()+2); out.ints.clear(); matrix=false; }
     else if (dt==2) { need(rr.size()>=4,"short payload"); lower=row_for_local(l,ion,1); upper=row_for_local(l,ion,b.nlev); out.reals.assign(rr.begin(),rr.begin()+4); out.ints.clear(); energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
+    else if (dt==7) { need(rr.size()>=4,"short payload"); out.reals.assign(rr.begin(),rr.begin()+4); out.ints.clear(); matrix=false; }
     else if (dt==9) { need(rr.size()>=4,"short payload"); if(ii.size()>1){ int id1=ii[0],id2=b.nlev+static_cast<int>(ii[1])-1; lower=row_for_local(l,ion,id1); upper=row_for_idest(l,b,id2); out.ints={1}; } else { lower=row_for_local(l,ion,1); upper=row_for_local(l,ion,b.nlev); out.ints={0}; } out.reals.assign(rr.begin(),rr.begin()+4); energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
+    else if (dt==10) { need(rr.size()>=4 && !ii.empty(),"short payload"); int id1=ii[0]; lower=row_for_local(l,ion,id1); upper=row_for_local(l,ion,b.nlev); out.reals=rr; out.ints={id1}; energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
     else if (dt==30) { need(!ii.empty(),"missing nmax"); out.reals.clear(); out.ints={ii[0]}; matrix=false; }
     else if (dt==38 || dt==39) { need((dt==38&&rr.size()>=4)||(dt==39&&rr.size()>=2),"short payload"); out.ints.clear(); matrix=false; }
     else if (dt==50) {
@@ -707,7 +709,31 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
     else if (dt==51 || dt==56 || dt==69) { need(ii.size()>=2,"short integer payload"); int a=0,c=0; if(dt==51){need(ii.size()>=3,"short integer payload");a=ii[2];c=ii[1];out.ints={ii[0]};}else{a=ii[0];c=ii[1];out.ints.clear();} auto q=local_pair(l,ion,a,c);lower=q.first;upper=q.second;energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
     else if (dt==54) { need(ii.size()>=4,"short integer payload"); int a=ii[ii.size()-4],c=ii[ii.size()-3],iq=ii[ii.size()-2];auto q=local_pair(l,ion,a,c);lower=q.first;upper=q.second;int ni=row_n(l,upper),nf=row_n(l,lower),li=row_l(l,upper),lf=row_l(l,lower);need(ni>0&&nf>0&&li>=0&&lf>=0&&iq>0,"missing quantum numbers");if(ni<nf)std::swap(ni,nf);out.reals.clear();out.ints={ni,nf,li,lf,iq};energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
     else if (dt==57) { need(ii.size()>=2,"short integer payload"); int i57=ii[0],local=ii[ii.size()-2],parent_local=b.nlev;lower=row_for_local(l,ion,local);upper=row_for_local(l,ion,parent_local);const auto* lv=find_level(l,ion,local);const auto* pv=find_level(l,ion,parent_local);need(lv&&pv,"lacks literal Type-13 levels");int pn=lv->principal_n?lv->principal_n:(row_n(l,lower)?row_n(l,lower):i57);double eth=std::max(pv->energy-lv->energy,0.0);out.reals={lv->energy,eth,lv->weight,pv->weight};out.ints={i57,pn,local};energy=eth; }
+    else if (dt==59) {
+        need(ii.size()>=4 && rr.size()>=6,"short payload");
+        const int id3=ii[ii.size()-1];
+        const int id4=ii[ii.size()-3];
+        const int id1=ii[ii.size()-2];
+        const int off=ii[ii.size()-4];
+        const bool source_zero=id4>id3+1;
+        const int id2=std::max(b.nlev+off-1,1);
+        const int l2=rr.size()==9?0:(ii.size()>2?ii[2]:0);
+        if (!source_zero) {
+            need(id1>0 && id1<=b.nlev,"invalid idest1");
+            lower=row_for_local(l,ion,id1);
+            upper=row_for_idest(l,b,id2);
+            energy=rr[0];
+        }
+        const double gglo=row_weight(l,row_for_local(l,ion,1));
+        const double ggup=source_zero?1.0:row_weight(l,upper);
+        out.reals=rr;
+        out.reals.push_back(gglo);
+        out.reals.push_back(ggup);
+        out.ints={static_cast<std::int64_t>(rr.size()),l2,source_zero?1:0,id1,id2,id3,id4};
+        matrix=!source_zero;
+    }
     else if (dt==60 || dt==62) { need(ii.size()>=2 && rr.size()>=(dt==60?3u:6u),"short payload");auto q=local_pair(l,ion,ii[0],ii[1]);lower=q.first;upper=q.second;out.ints.clear();energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
+    else if (dt==66) { need(ii.size()>=2 && rr.size()>=6,"short payload"); auto q=local_pair(l,ion,ii[0],ii[1]); lower=q.first; upper=q.second; out.reals=rr; out.ints={ii[0],ii[1]}; energy=rr[0]>0.0?rr[0]:std::abs(row_energy(l,upper)-row_energy(l,lower)); }
     else if (dt==68) { need(ii.size()>=3&&rr.size()>=3,"short payload");auto q=local_pair(l,ion,ii[0],ii[1]);lower=q.first;upper=q.second;out.reals.assign(rr.begin(),rr.begin()+3);out.ints={ii[2]};energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
     else if (dt==63) { need(ii.size()>=4,"short integer payload");int a=ii[ii.size()-4],c=ii[ii.size()-3],iq=ii[ii.size()-2];int initial=row_for_local(l,ion,a),final=row_for_local(l,ion,c);double ei=row_energy(l,initial),ef=row_energy(l,final);lower=initial;upper=final;if((ei/(1.0e-24+ef)-1.0)>=1.0e-8)std::swap(lower,upper);int ni=row_n(l,initial),li=row_l(l,initial),nf=row_n(l,final),lf=row_l(l,final);need(ni>0&&nf>0&&li>=0&&lf>=0&&iq>0,"missing quantum numbers");out.reals.clear();out.ints={ni,li,nf,lf,iq,initial,final};energy=std::abs(ei-ef); }
     else if (dt==49 || dt==53) {

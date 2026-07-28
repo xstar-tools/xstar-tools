@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.48.11.1 — Type7/10/59/66 native coverage and generic publication closure - 2026-07-28
+
+- Continue the 0.6.48.11.0 variable-zone multi-model qualification branch without changing the accepted Mg XI reference-mode trajectory or the public `python|cpp-all|cpp-zone` mode contract.
+- Add source-backed native lowering/evaluation for the record families exposed by the first 11-model standalone smoke run: Type 7 dielectronic recombination, Type 10 charge transfer, Type 59 Verner bound-free photoionization/recombination, and Type 66 collision strengths.
+- Implement Type 59 from the literal XSTAR analytic Verner cross section and `phintfo` scalar/photoheating/Milne integration semantics, including compact-vs-nine-real parameter layouts, source zero-return guards, parent statistical-weight ratio, source reverse-zero semantics, and direct full-grid bound-free opacity. Do not synthesize Type 59 RRC emissivity because the source `phintfo.f90` RRC-emission updates are commented out.
+- Generalize public active-stage filtering from the Mg-specific stage floor to the terminal native population inventory for every active element, so source-inactive ion stages do not leak into detail, line, or RRC products.
+- Generalize `xout_step.log` option-17 publication to retained `RadialZoneState` geometry for arbitrary radial-zone counts. Preserve the historical four-zone Mg XI 5-row compatibility reconstruction only for that exact accepted anchor shape.
+- Make the multi-model FORTRAN comparator block on declared science HDUs only; PARAMETERS/provenance tables are no longer counted as physical identity mismatches.
+- Preserve the staged qualification policy: standalone smoke first, then all 62 standalone C++ models, then all 62 Python-hosted `cpp-all`/`cpp-zone`, and only then the selective expensive Python-zone/pure-Python set.
+- No C/O/Ca science acceptance is preclaimed. The next blocking gate is the real-host 11-model `standalone-smoke` run using the supplied benchmark definitions and FORTRAN products.
+
 ## 0.6.48.11.0 — generic variable-zone multi-model benchmark qualification - 2026-07-28
 
 - Freeze the fully accepted 0.6.48.10.2.1.1.2 Mg XI science baseline while generalizing the native radial controller from a fixed four-call loop to the literal source first-pass termination predicate.
