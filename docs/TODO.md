@@ -763,3 +763,11 @@ The Python reader can be considered fully developed when it can:
 2. 0.6.48.9.7 — compact record state plus PGO/native build tuning, target ~20–22 s.
 3. Only after 9.6/9.7: multi-element qualification and systematic replacement of runtime `element_z == 12` specializations with record/ATDB-driven semantics where source behavior permits.
 
+
+
+## Post-0.6.48.9.7 Python+C++ product optimization
+
+1. **0.6.48.10.0** — automatically promote the accepted native C++ final `binemis` product kernel for accelerated Python; target ~254.8 s -> ~1 s while freezing zone/controller science.
+2. **0.6.48.10.1** — expose the accepted native final zero-thickness recomputation to accelerated Python; current Python reference cost ~71.75 s.
+3. **0.6.48.10.2** — profile any remaining Python-side product/state construction only after 10.0/10.1 are accepted.
+4. Multi-element qualification/generalization remains separate from these performance-only writer changes.

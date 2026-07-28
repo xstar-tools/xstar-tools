@@ -959,9 +959,40 @@ def build_binemis_spectrum(
     # without allowing the C++ result to alter products.
     _cpp_shadow_out = None
     _cpp_shadow_stats = None
-    _cpp_enabled = os.environ.get("XSTAR_ATOMIC_EMISSIVITY_BINEMIS_CPP", "0") not in {"0", "false", "no", "off"}
-    _cpp_product = os.environ.get("XSTAR_ATOMIC_EMISSIVITY_BINEMIS_PRODUCT_CPP", "0") not in {"0", "false", "no", "off"}
-    _cpp_shadow = os.environ.get("XSTAR_ATOMIC_EMISSIVITY_BINEMIS_SHADOW_CPP", "0") not in {"0", "false", "no", "off"}
+
+    # v0.6.48.10.0: promote the already-qualified native binemis product
+    # implementation automatically when the Python source-port run explicitly
+    # selects the C++ backend.  Pure-Python runs remain on the historical
+    # Python writer.  The force-Python switch is intentionally local to the
+    # final binemis product so the same accelerated executable/process can be
+    # used for exact A/B qualification without changing zone computation.
+    def _env_true(name: str, default: str = "0") -> bool:
+        return str(os.environ.get(name, default)).strip().lower() in {"1", "true", "yes", "on"}
+
+    _force_python_binemis = _env_true("XSTAR_V064810_FORCE_PYTHON_BINEMIS")
+    _allow_python_fallback = _env_true("XSTAR_V064810_ALLOW_PYTHON_BINEMIS_FALLBACK")
+    _global_backend = str(os.environ.get("XSTAR_ATOMIC_BACKEND", "")).strip().lower()
+    _emissivity_backend = str(os.environ.get("XSTAR_ATOMIC_EMISSIVITY_BACKEND", "")).strip().lower()
+    _accelerated_cpp_selected = _global_backend == "cpp" or _emissivity_backend == "cpp"
+    _explicit_cpp_enabled = _env_true("XSTAR_ATOMIC_EMISSIVITY_BINEMIS_CPP")
+    _explicit_cpp_product = _env_true("XSTAR_ATOMIC_EMISSIVITY_BINEMIS_PRODUCT_CPP")
+    _explicit_cpp_shadow = _env_true("XSTAR_ATOMIC_EMISSIVITY_BINEMIS_SHADOW_CPP")
+
+    _cpp_product = (not _force_python_binemis) and (
+        _explicit_cpp_product or _accelerated_cpp_selected
+    )
+    _cpp_shadow = (not _force_python_binemis) and _explicit_cpp_shadow
+    _cpp_enabled = (not _force_python_binemis) and (
+        _explicit_cpp_enabled or _cpp_product or _cpp_shadow
+    )
+    _cpp_product_required = _cpp_product and not _allow_python_fallback
+
+    if timing is not None:
+        timing["final_product_build.spectrum.binemis_v064810_accelerated_cpp_selected"] = 1.0 if _accelerated_cpp_selected else 0.0
+        timing["final_product_build.spectrum.binemis_v064810_auto_product_promotion"] = 1.0 if (_accelerated_cpp_selected and not _explicit_cpp_product and not _force_python_binemis) else 0.0
+        timing["final_product_build.spectrum.binemis_v064810_force_python"] = 1.0 if _force_python_binemis else 0.0
+        timing["final_product_build.spectrum.binemis_v064810_product_required"] = 1.0 if _cpp_product_required else 0.0
+        timing["final_product_build.spectrum.binemis_v064810_python_fallback_allowed"] = 1.0 if _allow_python_fallback else 0.0
     line_wavelength = None
     line_data_type = None
     line_atomic_mass = None
@@ -1033,6 +1064,14 @@ def build_binemis_spectrum(
                 timing["final_product_build.spectrum.binemis_cpp_error_type"] = type(exc).__name__
                 timing["final_product_build.spectrum.binemis_cpp_error_message"] = _err[:2048]
                 timing["final_product_build.spectrum.binemis_cpp_error_repr"] = _repr[:2048]
+            if _cpp_product_required:
+                raise OutputWriterPortError(
+                    "v0.6.48.10.0 accelerated Python selected the C++ binemis "
+                    "product backend but it failed; set "
+                    "XSTAR_V064810_FORCE_PYTHON_BINEMIS=1 for the validated "
+                    "Python writer or XSTAR_V064810_ALLOW_PYTHON_BINEMIS_FALLBACK=1 "
+                    "to permit an explicit slow fallback"
+                ) from exc
 
     # v0.6.11 emit_outward slot-contribution probe.  This remains
     # diagnostic-only and is only active when C++ shadow mode is active.

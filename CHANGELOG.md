@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.48.10.0 — accelerated-Python final binemis C++ product promotion - 2026-07-27
+
+- Start from the accepted 0.6.48.9.7 source and freeze all zone/controller science plus the native standalone `binemis` implementation by SHA-256.
+- When the Python source-port explicitly selects `--backend cpp` or `--emissivity-backend cpp`, automatically promote the existing native C++ final `binemis` product implementation instead of executing the ~255 s Python profile/rebin loop.
+- Pure-Python runs remain on the validated Python `binemis` implementation. `XSTAR_V064810_FORCE_PYTHON_BINEMIS=1` provides a same-package fallback/A-B switch.
+- Accelerated C++ product selection fails closed if the native writer library is unavailable. `XSTAR_V064810_ALLOW_PYTHON_BINEMIS_FALLBACK=1` permits an explicit slow fallback when desired.
+- Do not change the accepted C++ `line_emissivity.cpp` kernel or its Python ctypes bridge; both are source-hash identical to 0.6.48.9.7. This release changes product-backend policy only.
+- Qualification requires all eight unaffected FITS products and the scientific `xout_step.log` to remain exact against the accepted accelerated-Python 0.6.48.9.5.1 reference; `xout_spect1` must retain zero >1% residuals against FORTRAN, pure Python, accelerated Python, and accepted standalone C++.
+- The accepted accelerated-Python reference spends 254.812423 s in `final_product_build.spectrum.binemis_profile_seconds`; 10.0 targets <=5 s integration time for the promoted bridge, with ~1 s as the expected host result.
+
 ## 0.6.48.9.7 — quiet production path, compact DSEC provenance, PGO/native evaluation - 2026-07-27
 
 - Freeze the accepted 0.6.48.9.6 Type50 implementation and all 9.5 Type49/53, 9.4.2 boundary, thermal, and writer science-critical sources by SHA-256.

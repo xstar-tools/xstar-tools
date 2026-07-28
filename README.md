@@ -1,6 +1,15 @@
-# xstar_tools 0.6.48.9.6
+# xstar_tools 0.6.48.10.0
 
-0.6.48.9.6 is the standalone-native Type50 hot-loop optimization built on the accepted 0.6.48.9.5.1 package. The 9.5 prepared Type49/53 engine and 9.4.2 exact accepted-boundary ownership are frozen. The Type50 optimization is enabled only under the native standalone controller; Python source-port execution retains the 0.6.48.9.5.1 Type50 path. A same-executable `XSTAR_V064896_FORCE_LEGACY_TYPE50=1` mode is provided for blocking A/B qualification.
+0.6.48.10.0 begins accelerated-Python final-product optimization after the standalone C++ 0.6.48.9.7 baseline reached FORTRAN-class runtime. Zone/controller science remains frozen. For Python runs explicitly selecting the C++ backend, the final `binemis` spectrum construction now automatically uses the existing native C++ writer kernel instead of the ~255 s Python profile/rebin loop. Pure Python is unchanged.
+
+Use `XSTAR_V064810_FORCE_PYTHON_BINEMIS=1` to restore the validated Python final-`binemis` path for A/B testing. The promoted native path fails closed by default if its library is unavailable; `XSTAR_V064810_ALLOW_PYTHON_BINEMIS_FALLBACK=1` explicitly permits the slow Python fallback.
+
+Blocking host qualification is provided by `run_v064810_python_accel_binemis.sh`. It compares the promoted run with canonical FORTRAN plus the frozen 0.6.48.9.5.1 pure-Python, accelerated-Python, and standalone-C++ references.
+
+
+## Historical standalone performance baseline
+
+0.6.48.9.6 introduced the standalone-native Type50 hot-loop optimization built on the accepted 0.6.48.9.5.1 package; 0.6.48.9.7 then became the accepted standalone C++ performance baseline. The 9.5 prepared Type49/53 engine and 9.4.2 exact accepted-boundary ownership remain frozen.
 
 This release removes retired/version-stamped/Mg-specific Python audit code from the production `src/xstar_tools/xstar/` namespace. The Mg XI case remains under `src/xstar_tools/benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8/` as the frozen benchmark. Current Mg-specific runtime conditions are **inventoried but not changed** in `docs/v0648951_element_z12_inventory.md`; testing/generalization for other elements is deferred until after the 9.6/9.7 speed work.
 
