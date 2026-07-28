@@ -1,6 +1,6 @@
-# xstar_tools 0.6.48.10.1
+# xstar_tools 0.6.48.10.1.1
 
-0.6.48.10.1 continues accelerated-Python final-product optimization after accepted 0.6.48.10.0 reduced the final `binemis` writer from 254.812 s to 0.817 s and the full accelerated run from about 814 s to 562 s. The zone/controller computation and accepted 10.0 C++ `binemis` product implementation are frozen.
+0.6.48.10.1.1 corrects the narrow RRC science rejection in the 10.1 native final-zero-thickness bridge. The 10.1 bridge reduced the accelerated-Python terminal recompute from about 70.96 s to 9.87 s and the whole run from 562.07 s to 503.47 s, but its fresh native context leaked two source-inactive Mg II RRC slots into the final 1052-row inventory. 10.1.1 restores the retained source `mml/mmu` active-stage ownership before HEATT without changing any accepted native numerical kernel or the 10.0 C++ `binemis` promotion.
 
 For Python runs explicitly selecting the C++ backend, the final zero-thickness source replay now uses `libxstar_final_recompute.so`, a thin bridge around the already-qualified native fixed-state engine. It replaces only `bremsmap -> calc_hmc_all -> calc_emisab_all -> calc_emis_all`; the existing HEATT/STPCUT handlers, final product writers, and 10.0 C++ `binemis` promotion remain in their accepted order. Pure Python is unchanged.
 

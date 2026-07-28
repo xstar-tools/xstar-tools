@@ -2635,6 +2635,18 @@ def run_output_writer_sequence(
                     _native_final = apply_native_final_recompute(state)
                     timing_breakdown["final_local_recompute.v0648101_cpp_fixed_state_seconds"] = float(_native_final.cpp_seconds)
                     timing_breakdown["final_local_recompute.v0648101_cpp_bridge_seconds"] = float(_native_final.bridge_seconds)
+                    timing_breakdown["final_local_recompute.v06481011_rrc_stage_masked_slots"] = float(_native_final.rrc_stage_masked_slots)
+                    timing_breakdown["final_local_recompute.v06481011_rrc_stage_masked_nonzero_slots"] = float(_native_final.rrc_stage_masked_nonzero_slots)
+                    timing_breakdown["final_local_recompute.v06481011_line_stage_masked_slots"] = float(_native_final.line_stage_masked_slots)
+                    timing_breakdown["final_local_recompute.v06481011_line_stage_masked_nonzero_slots"] = float(_native_final.line_stage_masked_nonzero_slots)
+                    state.outputs["v06481011_rrc_terminal_ownership"] = {
+                        "owner": "SOURCE_RETAINED_MML_MMU",
+                        "masked_slots": int(_native_final.rrc_stage_masked_slots),
+                        "masked_nonzero_slots": int(_native_final.rrc_stage_masked_nonzero_slots),
+                        "line_masked_slots": int(_native_final.line_stage_masked_slots),
+                        "line_masked_nonzero_slots": int(_native_final.line_stage_masked_nonzero_slots),
+                        "stage_limits": dict(_native_final.rrc_stage_limits),
+                    }
                     # Preserve the literal source-order provenance that the
                     # coarse native call replaces.  HEATT/STPCUT still execute
                     # through the ordinary registered source handlers below.
@@ -2645,7 +2657,7 @@ def run_output_writer_sequence(
                         XSTARSourceRoutine.CALC_EMIS_ALL.value,
                     )
                     state.provenance.setdefault("completed_source_routines", []).extend(_native_source_calls)
-                    append_phase_snapshot(state, "final xstarcalc", note="native C++ fixed-state bridge v0.6.48.10.1")
+                    append_phase_snapshot(state, "final xstarcalc", note="native C++ fixed-state bridge v0.6.48.10.1.1 with source mml/mmu RRC ownership")
                     runner.run_source_routines(
                         (XSTARSourceRoutine.HEATT, XSTARSourceRoutine.STPCUT), state
                     )

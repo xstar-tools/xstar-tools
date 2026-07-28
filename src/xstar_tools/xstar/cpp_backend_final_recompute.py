@@ -1,6 +1,6 @@
 """Native final zero-thickness fixed-state bridge for accelerated Python.
 
-v0.6.48.10.1 keeps the radial/zone controller in Python and replaces only the
+v0.6.48.10.1.1 keeps the radial/zone controller in Python and replaces only the
 post-loop ``bremsmap -> calc_hmc_all -> calc_emisab_all -> calc_emis_all``
 recompute with the accepted native fixed-state engine.  HEATT/STPCUT remain in
 the normal Python driver order (and can themselves use their existing C++
@@ -123,6 +123,118 @@ class NativeFinalRecomputeResult:
     message: str
     thermal_components: dict[str, float]
     native_counts: dict[str, int]
+    rrc_stage_masked_slots: int
+    rrc_stage_masked_nonzero_slots: int
+    line_stage_masked_slots: int
+    line_stage_masked_nonzero_slots: int
+    rrc_stage_limits: dict[int, tuple[int, int]]
+
+
+def _restore_source_active_stage_ownership(
+    state: Any,
+    cemab: np.ndarray,
+    cabab: np.ndarray,
+    opakab: np.ndarray,
+    rcem: np.ndarray | None = None,
+    oplin: np.ndarray | None = None,
+) -> tuple[int, int, int, int, dict[int, tuple[int, int]]]:
+    """Mask calc_emisab slots outside the caller's retained mml/mmu window.
+
+    The native final bridge creates a fresh fixed-state context.  Source XSTAR,
+    however, carries the active ion-stage window selected by the preceding
+    Python ``calc_hmc_all`` into terminal ``calc_emisab``.  Re-project that
+    ownership boundary before HEATT consumes ``cemab``.  This is intentionally
+    generic: slot -> record -> parent ion is decoded from the live derived
+    pointer tables, and the live source ``mml/mmu`` limits decide ownership.
+    """
+    fixed = getattr(getattr(state, "local_zone", None), "calc_hmc_all", None)
+    ctx = state.control.get("calc_emis_context")
+    derived = getattr(ctx, "derived", None)
+    if fixed is None or ctx is None or derived is None:
+        return 0, 0, 0, 0, {}
+
+    raw_mml = dict(getattr(fixed, "mml", {}) or {})
+    raw_mmu = dict(getattr(fixed, "mmu", {}) or {})
+    stage_limits: dict[int, tuple[int, int]] = {}
+    for z in set(raw_mml) | set(raw_mmu):
+        zi = int(z)
+        lo = int(raw_mml.get(z, ctx.min_stage(zi)))
+        hi = int(raw_mmu.get(z, ctx.max_stage(zi)))
+        if lo > 0 and hi >= lo:
+            stage_limits[zi] = (lo, hi)
+    if not stage_limits:
+        return 0, 0, 0, 0, {}
+
+    npcon = np.asarray(getattr(derived, "npcon", ()), dtype=np.int64).reshape(-1)
+    npar = np.asarray(getattr(derived, "npar", ()), dtype=np.int64).reshape(-1)
+    ion_records = np.asarray(getattr(derived, "ion_records", ()), dtype=np.int64).reshape(-1)
+    ion_z = np.asarray(getattr(derived, "ion_element_z", ()), dtype=np.int64).reshape(-1)
+    ion_stage = np.asarray(getattr(derived, "ion_stage", ()), dtype=np.int64).reshape(-1)
+    ion_record_to_index = {
+        int(ion_records[i]): i
+        for i in range(1, min(ion_records.size, ion_z.size, ion_stage.size))
+        if int(ion_records[i]) > 0
+    }
+
+    cem = np.asarray(cemab, dtype=np.float64).reshape(2, -1)
+    cab = np.asarray(cabab, dtype=np.float64).reshape(-1)
+    opa = np.asarray(opakab, dtype=np.float64).reshape(-1)
+    limit = min(npcon.size, cem.shape[1], cab.size, opa.size)
+    masked = 0
+    masked_nonzero = 0
+    for ci in range(1, limit):
+        rec = int(npcon[ci])
+        if rec <= 0 or rec >= npar.size:
+            continue
+        ion_rec = int(npar[rec])
+        ii = ion_record_to_index.get(ion_rec)
+        if ii is None:
+            continue
+        z = int(ion_z[ii])
+        limits = stage_limits.get(z)
+        if limits is None:
+            continue
+        stage = int(ion_stage[ii])
+        if limits[0] <= stage <= limits[1]:
+            continue
+        if np.any(cem[:, ci] != 0.0) or cab[ci] != 0.0 or opa[ci] != 0.0:
+            masked_nonzero += 1
+        cem[:, ci] = 0.0
+        cab[ci] = 0.0
+        opa[ci] = 0.0
+        masked += 1
+
+    # The same source active-stage window owns calc_emis line slots.  Masking
+    # these source-indexed workspaces prevents a fresh native context from
+    # publishing tiny inactive-ion terminal line contributions into HEATT/logs.
+    line_masked = 0
+    line_masked_nonzero = 0
+    if rcem is not None and oplin is not None:
+        nplin = np.asarray(getattr(derived, "nplin", ()), dtype=np.int64).reshape(-1)
+        rce = np.asarray(rcem, dtype=np.float64).reshape(2, -1)
+        opl = np.asarray(oplin, dtype=np.float64).reshape(-1)
+        line_limit = min(nplin.size, rce.shape[1], opl.size)
+        for li in range(1, line_limit):
+            rec = int(nplin[li])
+            if rec <= 0 or rec >= npar.size:
+                continue
+            ion_rec = int(npar[rec])
+            ii = ion_record_to_index.get(ion_rec)
+            if ii is None:
+                continue
+            z = int(ion_z[ii])
+            limits = stage_limits.get(z)
+            if limits is None:
+                continue
+            stage = int(ion_stage[ii])
+            if limits[0] <= stage <= limits[1]:
+                continue
+            if np.any(rce[:, li] != 0.0) or opl[li] != 0.0:
+                line_masked_nonzero += 1
+            rce[:, li] = 0.0
+            opl[li] = 0.0
+            line_masked += 1
+    return masked, masked_nonzero, line_masked, line_masked_nonzero, stage_limits
 
 
 def apply_native_final_recompute(state: Any) -> NativeFinalRecomputeResult:
@@ -222,6 +334,20 @@ def apply_native_final_recompute(state: Any) -> NativeFinalRecomputeResult:
     if rc != 0:
         raise RuntimeError(f"native final recompute failed: {text or bytes(out.message).split(bytes([0]),1)[0].decode(errors='replace')}")
 
+    # v0.6.48.10.1.1: restore the source-retained active ion-stage ownership
+    # before HEATT consumes the native calc_emisab workspace.  The bridge's
+    # fixed-state context is intentionally fresh, while Python/source owns the
+    # terminal mml/mmu window selected by the preceding retained solve.
+    (
+        rrc_stage_masked_slots,
+        rrc_stage_masked_nonzero_slots,
+        line_stage_masked_slots,
+        line_stage_masked_nonzero_slots,
+        rrc_stage_limits,
+    ) = _restore_source_active_stage_ownership(
+        state, cemab, cabab, opakab, rcem=rcem, oplin=oplin
+    )
+
     # Project exact native source workspaces into the already-owned Python arrays.
     workspace.emissivity.base.rcem[:, :] = rcem.reshape(2, nlines_guard)
     workspace.emissivity.base.oplin[:] = oplin
@@ -273,6 +399,11 @@ def apply_native_final_recompute(state: Any) -> NativeFinalRecomputeResult:
         computed_electron_fraction=float(out.computed_electron_fraction), charge_residual=float(out.charge_residual),
         cpp_seconds=float(out.total_seconds), bridge_seconds=bridge_seconds, message=text,
         thermal_components=components, native_counts=counts,
+        rrc_stage_masked_slots=rrc_stage_masked_slots,
+        rrc_stage_masked_nonzero_slots=rrc_stage_masked_nonzero_slots,
+        line_stage_masked_slots=line_stage_masked_slots,
+        line_stage_masked_nonzero_slots=line_stage_masked_nonzero_slots,
+        rrc_stage_limits=dict(rrc_stage_limits),
     )
     state.local_zone.source_arrays["v0648101_native_final_recompute"] = result
     state.outputs["v0648101_native_final_recompute"] = {
@@ -281,5 +412,11 @@ def apply_native_final_recompute(state: Any) -> NativeFinalRecomputeResult:
         "computed_electron_fraction": result.computed_electron_fraction,
         "charge_residual": result.charge_residual, "counts": dict(counts),
         "thermal_components": dict(components),
+        "rrc_stage_masked_slots": result.rrc_stage_masked_slots,
+        "rrc_stage_masked_nonzero_slots": result.rrc_stage_masked_nonzero_slots,
+        "line_stage_masked_slots": result.line_stage_masked_slots,
+        "line_stage_masked_nonzero_slots": result.line_stage_masked_nonzero_slots,
+        "rrc_stage_limits": dict(result.rrc_stage_limits),
+        "rrc_terminal_ownership": "SOURCE_RETAINED_MML_MMU",
     }
     return result

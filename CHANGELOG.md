@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.10.1.1 — terminal active-stage/RRC ownership correction - 2026-07-28
+
+- Start from the 0.6.48.10.1 native final-recompute candidate, retaining its measured 70.962107 s -> 9.871208 s terminal speedup and the accepted 0.6.48.10.0 C++ `binemis` promotion.
+- Correct the 10.1 science rejection in `xout_rrc1.fits`: the fresh native final-recompute context widened the terminal spectral ion-stage window and leaked two source-inactive Mg II RRC slots into the final writer, yielding 1054 rows instead of the accepted 1052.
+- Restore source ownership generically from the live retained Python `calc_hmc_all.mml/mmu` stage limits. Decode continuum and line slots through the immutable derived pointer tables; clear only `calc_emisab` (`cemab/cabab/opakab`) and `calc_emis` (`rcem/oplin`) slots whose parent ion is outside the retained source stage window before HEATT consumes the native workspaces.
+- Do not hard-code continuum indices 7062/7064 or Mg specifically. Benchmark attribution verifies those rejected slots are Mg II stage 2 while the retained Mg window is stages 3-12 and neighboring accepted Mg III slots remain active.
+- Freeze the 10.1 native fixed-state engine, final-recompute C++ bridge, Type49/53/50 kernels, thermal kernels, and accepted 10.0 `binemis` implementation by SHA-256. No native numerical kernel changes in this correction.
+- Qualification requires the forced-10.0 fallback to remain all-nine-FITS data-bit-exact, the corrected accelerated candidate to reproduce all nine accepted 10.0 FITS data payloads exactly (including 1052-row `xout_rrc1`), the long-lived public structural gate to pass, and final recompute runtime to remain <=10 s.
+
 ## 0.6.48.10.1 — accelerated-Python native final zero-thickness recompute bridge - 2026-07-27
 
 - Promote the accepted 0.6.48.10.0 accelerated-Python result (562.066443 s total; final C++ `binemis` 0.817192 s, all qualification gates ACCEPT) and freeze its zone/controller computation plus the promoted C++ `binemis` implementation by SHA-256.
