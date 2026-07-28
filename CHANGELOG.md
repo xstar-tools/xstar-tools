@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.10.2.1.1.2 — Python writer-timing step-log normalization closure - 2026-07-28
+
+- Qualifier-only hotfix; no controller, backend, numerical kernel, FITS writer, or zone-execution science changes.
+- Closes the final Mg XI qualification false rejection by treating only the observed accelerated-Python wall-time records (`after writespectra`, top-level FITS/final recompute/product timers, `pprint_legacy`, and the legacy bare `total`) as measurement-only in normalized `xout_step.log` comparisons.
+- Preserves non-timing writer ownership/count/status records and all physical science rows.
+- Keeps `--zone-backend python|cpp-all|cpp-zone` unchanged.
+- `mg11_ne1e8` is considered closed only after the authoritative Python fallback reproduces all nine 10.1.1 FITS payloads bit-exactly and the corrected normalized science log is identical.
+
 ## 0.6.48.10.2.1.1.1 — qualifier-only step-log normalization hotfix - 2026-07-28
 
 - No science, controller, backend, FITS writer, or zone-execution changes.

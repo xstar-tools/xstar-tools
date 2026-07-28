@@ -1,3 +1,7 @@
+## xstar_tools 0.6.48.10.2.1.1.2 qualifier-only closure
+
+This release changes qualification only. It extends step-log normalization to the measurement-only accelerated-Python writer/finalization wall timers observed in the accepted 10.1.1 versus 10.2.1.1.1 fallback run. Runtime science and all three zone modes are unchanged.
+
 ## 0.6.48.10.2.1.1.1 qualifier-only hotfix
 
 This release is qualification-only: the `python`, `cpp-all`, and `cpp-zone` runtime/science implementations are unchanged from 0.6.48.10.2.1.1. It corrects step-log science normalization so legacy measurement-only footer timers do not cause false rejection.
