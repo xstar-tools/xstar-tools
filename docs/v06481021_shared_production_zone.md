@@ -6,7 +6,7 @@ The rejected 10.2.0 and 10.2.0.1 prototypes constructed a second controller arou
 
 `libxstar_production_zone.so` is compiled from the same `xstar_standalone.cpp` translation unit used by the standalone executable. Its C ABI calls `command_run_standalone_production_v67`. Therefore the C++ zone mode and standalone production share DSEC convergence, call-start state, active-stage/H lifetime, accepted-boundary recomputation, STEP/TRNFRC, source-workspace retention, final state, and ProductWritingState.
 
-In this first safe shared-engine release, `--zone-backend cpp` gives C++ ownership of the complete radial trajectory rather than returning partially projected zone workspaces to Python. Python supplies normalized parameters and changes only FITS provenance headers after native publication. `--zone-backend python` remains the unmodified 10.1.1 controller path.
+In this first safe shared-engine release, `--zone-backend cpp-all` gives C++ ownership of the complete radial trajectory rather than returning partially projected zone workspaces to Python. Python supplies normalized parameters and changes only FITS provenance headers after native publication. `--zone-backend python` remains the unmodified 10.1.1 controller path.
 
 ## Acceptance
 

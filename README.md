@@ -1,6 +1,10 @@
+## 0.6.48.10.2.1.1 zone backend modes
+
+`--zone-backend` now accepts exactly `python`, `cpp-all`, and `cpp-zone`. `cpp-all` keeps the accepted one-call standalone-production trajectory. `cpp-zone` uses four sequential calls into a persistent native context running the same production controller, so no Python state reconstruction occurs between zones. `python` retains the 0.6.48.10.1.1 accelerated-Python trajectory.
+
 # xstar_tools 0.6.48.10.2.1
 
-This release redesigns `--zone-backend cpp` around the accepted standalone-production controller rather than a second reconstructed DSEC controller. The native zone library is compiled from `xstar_standalone.cpp` itself and calls the same `command_run_standalone_production_v67` used by `xstar_cpp run-production`. `--zone-backend python` remains the scientifically accepted 0.6.48.10.1.1 Python controller with modular C++ kernels.
+This release redesigns `--zone-backend cpp-all` around the accepted standalone-production controller rather than a second reconstructed DSEC controller. The native zone library is compiled from `xstar_standalone.cpp` itself and calls the same `command_run_standalone_production_v67` used by `xstar_cpp run-production`. `--zone-backend python` remains the scientifically accepted 0.6.48.10.1.1 Python controller with modular C++ kernels.
 
 For safety, the first shared-engine release gives C++ ownership of the complete radial trajectory (DSEC + accepted boundaries + STEP/TRNFRC + retained radial state) and native ProductWritingState. Python does not re-project native zone workspaces; it only provides parameters and updates FITS provenance headers.
 

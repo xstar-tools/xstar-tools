@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.48.10.2.1.1 — persistent shared-production zone-by-zone backend - 2026-07-28
+
+- Keeps the accepted 0.6.48.10.1.1 accelerated-Python controller as `--zone-backend python`.
+- Keeps the 0.6.48.10.2.1 one-shot native trajectory as `--zone-backend cpp-all`.
+- Adds `--zone-backend cpp-zone`: four sequential Python→C++ calls into one persistent native context.
+- `cpp-zone` runs the same `command_run_standalone_production_v67` implementation as `cpp-all`; the controller stack, fixed-state context, transport/lifetime state, and product state remain native between zone calls.
+- Adds a read-only per-zone result ABI (DSEC count, source sequence, temperature, electron fraction, hmctot/h-c, wall time).
+- Fixes the 10.2.1 FITS bit-comparison qualifier by making float-column views contiguous before byte comparison.
+- ABI: 604810211.
+
 ## 0.6.48.10.2.1 — shared standalone-production native zone engine - 2026-07-28
 
 - Restarted from scientifically accepted 0.6.48.10.1.1; rejected 10.2.0/10.2.0.1 zone-controller reconstructions are not ancestry.

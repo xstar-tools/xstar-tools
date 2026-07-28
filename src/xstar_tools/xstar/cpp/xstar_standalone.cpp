@@ -9,11 +9,13 @@
 #include "xstar_step_log.hpp"
 #include "xstar_atdb_runtime.hpp"
 #include "xstar_standalone_internal.hpp"
+#include "xstar_production_zone_bridge.h"
 
 #include "xstar_constants.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -24,12 +26,14 @@
 #include <iostream>
 #include <limits>
 #include <map>
+#include <mutex>
 #include <numeric>
 #include <optional>
 #include <regex>
 #include <set>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 extern "C" int xstar_emissivity_build_binemis_profile(
@@ -83,6 +87,52 @@ struct PerformanceInstrumentationV064892 {
 thread_local PerformanceInstrumentationV064892* g_performance_v064892 = nullptr;
 thread_local std::array<double,4> g_shared_zone_seconds_v06481021{{0.0,0.0,0.0,0.0}};
 thread_local std::array<std::size_t,4> g_shared_zone_dsec_v06481021{{0u,0u,0u,0u}};
+
+
+struct FixedDsecSnapshot;
+
+struct ProductionZoneResultV064810211 {
+    std::size_t zone_index = 0u;
+    std::size_t dsec_evaluations = 0u;
+    double seconds = 0.0;
+    double temperature_t4 = 0.0;
+    double electron_fraction = 0.0;
+    double hmctot = 0.0;
+    double heating_minus_cooling_percent = 0.0;
+    std::size_t source_sequence = 0u;
+};
+
+struct ProductionZoneSessionV064810211 {
+    std::mutex mutex;
+    std::condition_variable cv;
+    std::size_t allowed_zone = 0u;
+    std::size_t completed_zone = 0u;
+    bool cancel = false;
+    bool finished = false;
+    int rc = 0;
+    std::string error;
+    std::array<ProductionZoneResultV064810211,4> results{};
+    std::string parameters_path;
+    std::string output_dir;
+    std::string executable_path;
+    std::thread worker;
+};
+
+thread_local ProductionZoneSessionV064810211* g_production_zone_session_v064810211 = nullptr;
+
+void production_zone_wait_before_call_v064810211(std::size_t call) {
+    auto* session = g_production_zone_session_v064810211;
+    if (!session) return;
+    std::unique_lock<std::mutex> lock(session->mutex);
+    session->cv.wait(lock, [&] { return session->cancel || session->allowed_zone >= call; });
+    if (session->cancel) throw std::runtime_error("cpp-zone session cancelled");
+}
+
+void production_zone_mark_complete_v064810211(
+    std::size_t call,
+    const FixedDsecSnapshot& snapshot,
+    std::size_t dsec_evaluations,
+    double seconds);
 
 // 0.6.48.9.5: a production run owns a single fixed-state context. Snapshot
 // the prepared Type49/53 workload immediately before that context is
@@ -2383,6 +2433,31 @@ struct FixedDsecSnapshot {
     std::vector<xstar_run_state::ContinuumProductDiagnosticState> continuum_product_diagnostics;
     std::vector<xstar_run_state::ElementThermalProductState> element_thermal_products;
 };
+
+void production_zone_mark_complete_v064810211(
+    std::size_t call,
+    const FixedDsecSnapshot& snapshot,
+    std::size_t dsec_evaluations,
+    double seconds) {
+    auto* session = g_production_zone_session_v064810211;
+    if (!session || call < 1u || call > 4u) return;
+    ProductionZoneResultV064810211 result;
+    result.zone_index = call;
+    result.dsec_evaluations = dsec_evaluations;
+    result.seconds = seconds;
+    result.temperature_t4 = snapshot.temperature_t4;
+    result.electron_fraction = snapshot.computed_electron_fraction;
+    result.hmctot = snapshot.hmctot;
+    result.heating_minus_cooling_percent = 100.0 * snapshot.hmctot;
+    result.source_sequence = snapshot.sequence;
+    {
+        std::lock_guard<std::mutex> lock(session->mutex);
+        session->results[call - 1u] = result;
+        session->completed_zone = std::max(session->completed_zone, call);
+    }
+    session->cv.notify_all();
+}
+
 
 void attach_native_thermal_components_v70(
     xstar_fixed_state_context* context,
@@ -14939,6 +15014,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         g_shared_zone_dsec_v06481021 = {{0u,0u,0u,0u}};
 
         for (std::size_t call = 1; call <= source_calls; ++call) {
+            production_zone_wait_before_call_v064810211(call);
             const auto shared_zone_started_v06481021 = std::chrono::steady_clock::now();
             data.call_index = call;
             prepare_call_start_workspace_v71(data, call);
@@ -15173,6 +15249,8 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                 std::chrono::steady_clock::now() - shared_zone_started_v06481021).count();
             g_shared_zone_seconds_v06481021[call - 1u] = shared_zone_seconds_v06481021[call - 1u];
             g_shared_zone_dsec_v06481021[call - 1u] = dsec_count;
+            production_zone_mark_complete_v064810211(
+                call, finals.back(), dsec_count, shared_zone_seconds_v06481021[call - 1u]);
 
             std::cout << "V048746255172582_CONTROLLER_CALL=" << call
                       << " DSEC_EVALUATIONS=" << dsec_count
@@ -18411,15 +18489,15 @@ int command_python_bridge_test(const Options& options) {
 
 } // namespace
 
-extern "C" int32_t xstar_production_zone_abi_version_v06481021(void) {
-    return 60481021;
+extern "C" int32_t xstar_production_zone_abi_version_v064810211(void) {
+    return 604810211;
 }
 
-extern "C" const char* xstar_production_zone_backend_name_v06481021(void) {
-    return "xstar_shared_standalone_production_zone_v06481021";
+extern "C" const char* xstar_production_zone_backend_name_v064810211(void) {
+    return "xstar_shared_standalone_production_zone_v064810211";
 }
 
-extern "C" int32_t xstar_production_zone_run_v06481021(
+extern "C" int32_t xstar_production_zone_run_all_v064810211(
     const char* parameters_path,
     const char* output_dir,
     const char* executable_path,
@@ -18443,9 +18521,7 @@ extern "C" int32_t xstar_production_zone_run_v06481021(
         options.artifact_profile = "none";
         options.artifact_profile_explicit = true;
         const std::filesystem::path executable =
-            (executable_path && *executable_path)
-                ? std::filesystem::path(executable_path)
-                : std::filesystem::path();
+            (executable_path && *executable_path) ? std::filesystem::path(executable_path) : std::filesystem::path();
         ::setenv("XSTAR_V06481021_SHARED_ZONE_MODE", "1", 1);
         const int rc = command_run_standalone_production_v67(options, executable);
         ::unsetenv("XSTAR_V06481021_SHARED_ZONE_MODE");
@@ -18460,6 +18536,162 @@ extern "C" int32_t xstar_production_zone_run_v06481021(
         set_message("unknown shared production-zone exception");
         return 20;
     }
+}
+
+extern "C" int32_t xstar_production_zone_context_create_v064810211(
+    const char* parameters_path,
+    const char* output_dir,
+    const char* executable_path,
+    void** out_context,
+    char* message,
+    std::size_t message_size) {
+    auto set_message = [&](const std::string& text) {
+        if (!message || message_size == 0) return;
+        const std::size_t n = std::min<std::size_t>(message_size - 1u, text.size());
+        std::memcpy(message, text.data(), n);
+        message[n] = '\0';
+    };
+    if (!out_context) { set_message("out_context is required"); return 64; }
+    *out_context = nullptr;
+    if (!parameters_path || !*parameters_path || !output_dir || !*output_dir) {
+        set_message("parameters_path and output_dir are required");
+        return 64;
+    }
+    try {
+        auto* session = new ProductionZoneSessionV064810211();
+        session->parameters_path = parameters_path;
+        session->output_dir = output_dir;
+        session->executable_path = executable_path ? executable_path : "";
+        session->worker = std::thread([session] {
+            g_production_zone_session_v064810211 = session;
+            try {
+                Options options;
+                options.command = "run-production";
+                options.parameters_path = session->parameters_path;
+                options.output_dir = session->output_dir;
+                options.artifact_profile = "none";
+                options.artifact_profile_explicit = true;
+                const std::filesystem::path executable = session->executable_path.empty()
+                    ? std::filesystem::path() : std::filesystem::path(session->executable_path);
+                ::setenv("XSTAR_V06481021_SHARED_ZONE_MODE", "1", 1);
+                const int rc = command_run_standalone_production_v67(options, executable);
+                ::unsetenv("XSTAR_V06481021_SHARED_ZONE_MODE");
+                {
+                    std::lock_guard<std::mutex> lock(session->mutex);
+                    session->rc = rc;
+                    session->finished = true;
+                    if (rc != 0) session->error = "standalone production returned " + std::to_string(rc);
+                }
+            } catch (const std::exception& exc) {
+                ::unsetenv("XSTAR_V06481021_SHARED_ZONE_MODE");
+                std::lock_guard<std::mutex> lock(session->mutex);
+                session->rc = 20;
+                session->error = exc.what();
+                session->finished = true;
+            } catch (...) {
+                ::unsetenv("XSTAR_V06481021_SHARED_ZONE_MODE");
+                std::lock_guard<std::mutex> lock(session->mutex);
+                session->rc = 20;
+                session->error = "unknown cpp-zone worker exception";
+                session->finished = true;
+            }
+            g_production_zone_session_v064810211 = nullptr;
+            session->cv.notify_all();
+        });
+        *out_context = session;
+        set_message("ACCEPT");
+        return 0;
+    } catch (const std::exception& exc) {
+        set_message(exc.what());
+        return 20;
+    }
+}
+
+extern "C" int32_t xstar_production_zone_context_run_zone_v064810211(
+    void* context,
+    int32_t zone_index,
+    xstar_production_zone_result_v064810211* out_result,
+    char* message,
+    std::size_t message_size) {
+    auto set_message = [&](const std::string& text) {
+        if (!message || message_size == 0) return;
+        const std::size_t n = std::min<std::size_t>(message_size - 1u, text.size());
+        std::memcpy(message, text.data(), n);
+        message[n] = '\0';
+    };
+    auto* session = static_cast<ProductionZoneSessionV064810211*>(context);
+    if (!session || !out_result || zone_index < 1 || zone_index > 4) {
+        set_message("valid context, result, and zone_index 1..4 are required"); return 64;
+    }
+    std::unique_lock<std::mutex> lock(session->mutex);
+    const std::size_t expected = session->completed_zone + 1u;
+    if (static_cast<std::size_t>(zone_index) != expected) {
+        set_message("cpp-zone calls must be sequential; expected zone " + std::to_string(expected));
+        return 65;
+    }
+    session->allowed_zone = static_cast<std::size_t>(zone_index);
+    session->cv.notify_all();
+    session->cv.wait(lock, [&] {
+        return session->completed_zone >= static_cast<std::size_t>(zone_index) || session->finished;
+    });
+    if (session->completed_zone < static_cast<std::size_t>(zone_index)) {
+        set_message(session->error.empty() ? "cpp-zone worker stopped before requested zone" : session->error);
+        return session->rc ? session->rc : 20;
+    }
+    const auto& r = session->results[static_cast<std::size_t>(zone_index - 1)];
+    out_result->zone_index = static_cast<int32_t>(r.zone_index);
+    out_result->dsec_evaluations = static_cast<int32_t>(r.dsec_evaluations);
+    out_result->source_sequence = static_cast<int32_t>(r.source_sequence);
+    out_result->seconds = r.seconds;
+    out_result->temperature_t4 = r.temperature_t4;
+    out_result->electron_fraction = r.electron_fraction;
+    out_result->hmctot = r.hmctot;
+    out_result->heating_minus_cooling_percent = r.heating_minus_cooling_percent;
+    set_message("ACCEPT");
+    return 0;
+}
+
+extern "C" int32_t xstar_production_zone_context_finalize_v064810211(
+    void* context,
+    char* message,
+    std::size_t message_size) {
+    auto set_message = [&](const std::string& text) {
+        if (!message || message_size == 0) return;
+        const std::size_t n = std::min<std::size_t>(message_size - 1u, text.size());
+        std::memcpy(message, text.data(), n);
+        message[n] = '\0';
+    };
+    auto* session = static_cast<ProductionZoneSessionV064810211*>(context);
+    if (!session) { set_message("context is required"); return 64; }
+    {
+        std::unique_lock<std::mutex> lock(session->mutex);
+        if (session->completed_zone != 4u) {
+            set_message("all four zones must be completed before finalize"); return 65;
+        }
+        session->allowed_zone = 4u;
+        session->cv.notify_all();
+        session->cv.wait(lock, [&] { return session->finished; });
+        if (session->rc != 0) {
+            set_message(session->error.empty() ? "cpp-zone worker failed" : session->error);
+            return session->rc;
+        }
+    }
+    if (session->worker.joinable()) session->worker.join();
+    set_message("ACCEPT");
+    return 0;
+}
+
+extern "C" void xstar_production_zone_context_destroy_v064810211(void* context) {
+    auto* session = static_cast<ProductionZoneSessionV064810211*>(context);
+    if (!session) return;
+    {
+        std::lock_guard<std::mutex> lock(session->mutex);
+        session->cancel = true;
+        session->allowed_zone = 4u;
+    }
+    session->cv.notify_all();
+    if (session->worker.joinable()) session->worker.join();
+    delete session;
 }
 
 int main(int argc, char** argv) {

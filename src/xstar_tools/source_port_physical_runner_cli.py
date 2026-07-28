@@ -126,12 +126,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--zone-backend",
-        choices=("python", "cpp"),
+        choices=("python", "cpp-all", "cpp-zone"),
         default="python",
         help=(
             "radial-zone controller ownership. python preserves the accepted 10.1.1 "
-            "Python controller with modular C++ kernels; cpp delegates the complete "
-            "radial trajectory to the shared standalone-production C++ controller."
+            "Python controller; cpp-all delegates the complete trajectory in one C++ call; "
+            "cpp-zone uses four sequential calls into one persistent shared-production C++ context."
         ),
     )
     parser.add_argument(
@@ -396,7 +396,7 @@ def main(argv: list[str] | None = None) -> int:
         os.environ["XSTAR_ATOMIC_MATRIX_BACKEND"] = str(args.matrix_backend)
     if args.emissivity_backend is not None:
         os.environ["XSTAR_ATOMIC_EMISSIVITY_BACKEND"] = str(args.emissivity_backend)
-    if args.zone_backend == "cpp":
+    if args.zone_backend in {"cpp-all", "cpp-zone"}:
         requested_components = {
             "global": args.backend,
             "solver": args.solver_backend,
@@ -406,13 +406,13 @@ def main(argv: list[str] | None = None) -> int:
         }
         non_cpp = {k: v for k, v in requested_components.items() if v != "cpp"}
         if non_cpp:
-            print(f"xstar-atomic Python runner: --zone-backend cpp requires an all-C++ backend selection; observed {non_cpp}", file=sys.stderr)
+            print(f"xstar-atomic Python runner: --zone-backend {args.zone_backend} requires an all-C++ backend selection; observed {non_cpp}", file=sys.stderr)
             return 2
         if args.run_script is None:
-            print("xstar-atomic Python runner: --zone-backend cpp currently requires --run-script", file=sys.stderr)
+            print(f"xstar-atomic Python runner: --zone-backend {args.zone_backend} requires --run-script", file=sys.stderr)
             return 2
         if args.original_run_dir is not None:
-            print("xstar-atomic Python runner: --zone-backend cpp uses external qualification rather than --original-run-dir in 10.2.1", file=sys.stderr)
+            print(f"xstar-atomic Python runner: --zone-backend {args.zone_backend} uses external qualification rather than --original-run-dir", file=sys.stderr)
             return 2
         try:
             from .xstar.cpp_backend_production_zone import (
@@ -420,6 +420,7 @@ def main(argv: list[str] | None = None) -> int:
                 run_shared_production_zone_backend,
             )
             summary = run_shared_production_zone_backend(
+                mode=args.zone_backend,
                 run_script=args.run_script,
                 atdb_path=args.atdb,
                 coheat_path=args.coheat_data,
