@@ -1,3 +1,9 @@
+# 0.6.48.11.0 variable-zone multi-model qualification
+
+The accepted Mg XI 10.2 baseline is now the regression anchor for a 62-model FORTRAN-authority qualification suite.  Native standalone production and `--zone-backend cpp-zone` no longer assume four radial shells: `cpp-zone` advances a persistent shared-production context with `run_next_zone()` until `done()`.
+
+Qualification is intentionally staged by cost. Run standalone C++ on the 11-model cross-element/zone-count smoke matrix first, then all 62 standalone models. Only after all 62 standalone models pass should the all-62 Python-hosted `cpp-all`/`cpp-zone` stage run. Pure Python and accelerated Python with `--zone-backend python` are last and selective (five representative models by default). See `docs/v0648110_variable_zone_multimodel.md`.
+
 ## xstar_tools 0.6.48.10.2.1.1.2 qualifier-only closure
 
 This release changes qualification only. It extends step-log normalization to the measurement-only accelerated-Python writer/finalization wall timers observed in the accepted 10.1.1 versus 10.2.1.1.1 fallback run. Runtime science and all three zone modes are unchanged.

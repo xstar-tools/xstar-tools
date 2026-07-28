@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.11.0 — generic variable-zone multi-model benchmark qualification - 2026-07-28
+
+- Freeze the fully accepted 0.6.48.10.2.1.1.2 Mg XI science baseline while generalizing the native radial controller from a fixed four-call loop to the literal source first-pass termination predicate.
+- Keep `--zone-backend python|cpp-all|cpp-zone`; bump the shared production-zone ABI to 6048110 and add persistent `run_next_zone()` / `done()` so `cpp-zone` naturally supports 2, 3, 4, 5, 6, 9, or other source-selected radial-zone counts without Python state reconstruction.
+- Retain the exact Mg XI `20/1/17/16` prefix only inside the explicit accepted reference-trajectory mode; ordinary production models converge DSEC and terminate radial traversal from live state.
+- Add a 62-model FORTRAN-authority manifest and generic product/radial/triplet comparators for the supplied `original_xstar_benchmark_run.tar.gz` and `original_xstar.tar.gz` suites.
+- Enforce staged qualification: 11-model standalone-C++ smoke matrix first; all 62 standalone C++ second; only after all standalone models pass, all 62 Python-hosted `cpp-all` and `cpp-zone`; finally only five representative models through pure Python and accelerated Python with `--zone-backend python`.
+- No multi-model science result is preclaimed by the package: the real host ATDB/coheat run is the blocking qualification authority.
+
 ## 0.6.48.10.2.1.1.2 — Python writer-timing step-log normalization closure - 2026-07-28
 
 - Qualifier-only hotfix; no controller, backend, numerical kernel, FITS writer, or zone-execution science changes.

@@ -85,13 +85,13 @@ struct PerformanceInstrumentationV064892 {
 };
 
 thread_local PerformanceInstrumentationV064892* g_performance_v064892 = nullptr;
-thread_local std::array<double,4> g_shared_zone_seconds_v06481021{{0.0,0.0,0.0,0.0}};
-thread_local std::array<std::size_t,4> g_shared_zone_dsec_v06481021{{0u,0u,0u,0u}};
+thread_local std::vector<double> g_shared_zone_seconds_v0648110;
+thread_local std::vector<std::size_t> g_shared_zone_dsec_v0648110;
 
 
 struct FixedDsecSnapshot;
 
-struct ProductionZoneResultV064810211 {
+struct ProductionZoneResultV0648110 {
     std::size_t zone_index = 0u;
     std::size_t dsec_evaluations = 0u;
     double seconds = 0.0;
@@ -100,39 +100,42 @@ struct ProductionZoneResultV064810211 {
     double hmctot = 0.0;
     double heating_minus_cooling_percent = 0.0;
     std::size_t source_sequence = 0u;
+    bool done_after_zone = false;
 };
 
-struct ProductionZoneSessionV064810211 {
+struct ProductionZoneSessionV0648110 {
     std::mutex mutex;
     std::condition_variable cv;
     std::size_t allowed_zone = 0u;
     std::size_t completed_zone = 0u;
+    bool zone_loop_done = false;
     bool cancel = false;
     bool finished = false;
     int rc = 0;
     std::string error;
-    std::array<ProductionZoneResultV064810211,4> results{};
+    std::vector<ProductionZoneResultV0648110> results;
     std::string parameters_path;
     std::string output_dir;
     std::string executable_path;
     std::thread worker;
 };
 
-thread_local ProductionZoneSessionV064810211* g_production_zone_session_v064810211 = nullptr;
+thread_local ProductionZoneSessionV0648110* g_production_zone_session_v0648110 = nullptr;
 
-void production_zone_wait_before_call_v064810211(std::size_t call) {
-    auto* session = g_production_zone_session_v064810211;
+void production_zone_wait_before_call_v0648110(std::size_t call) {
+    auto* session = g_production_zone_session_v0648110;
     if (!session) return;
     std::unique_lock<std::mutex> lock(session->mutex);
     session->cv.wait(lock, [&] { return session->cancel || session->allowed_zone >= call; });
     if (session->cancel) throw std::runtime_error("cpp-zone session cancelled");
 }
 
-void production_zone_mark_complete_v064810211(
+void production_zone_mark_complete_v0648110(
     std::size_t call,
     const FixedDsecSnapshot& snapshot,
     std::size_t dsec_evaluations,
-    double seconds);
+    double seconds,
+    bool done_after_zone);
 
 // 0.6.48.9.5: a production run owns a single fixed-state context. Snapshot
 // the prepared Type49/53 workload immediately before that context is
@@ -2434,14 +2437,15 @@ struct FixedDsecSnapshot {
     std::vector<xstar_run_state::ElementThermalProductState> element_thermal_products;
 };
 
-void production_zone_mark_complete_v064810211(
+void production_zone_mark_complete_v0648110(
     std::size_t call,
     const FixedDsecSnapshot& snapshot,
     std::size_t dsec_evaluations,
-    double seconds) {
-    auto* session = g_production_zone_session_v064810211;
-    if (!session || call < 1u || call > 4u) return;
-    ProductionZoneResultV064810211 result;
+    double seconds,
+    bool done_after_zone) {
+    auto* session = g_production_zone_session_v0648110;
+    if (!session || call < 1u) return;
+    ProductionZoneResultV0648110 result;
     result.zone_index = call;
     result.dsec_evaluations = dsec_evaluations;
     result.seconds = seconds;
@@ -2450,10 +2454,13 @@ void production_zone_mark_complete_v064810211(
     result.hmctot = snapshot.hmctot;
     result.heating_minus_cooling_percent = 100.0 * snapshot.hmctot;
     result.source_sequence = snapshot.sequence;
+    result.done_after_zone = done_after_zone;
     {
         std::lock_guard<std::mutex> lock(session->mutex);
+        if (session->results.size() < call) session->results.resize(call);
         session->results[call - 1u] = result;
         session->completed_zone = std::max(session->completed_zone, call);
+        if (done_after_zone) session->zone_loop_done = true;
     }
     session->cv.notify_all();
 }
@@ -9918,8 +9925,8 @@ bool retained_native_product_surface_complete_v172530(const xstar_run_state::Pro
         !product.exact_accepted_radial_boundaries_retained ||
         !product.embedded_public_fits_payloads_absent || !product.embedded_full_xout_step_payload_absent) return false;
     if (product.parameter_rows.size() < 56u || product.level_identities.empty() ||
-        product.line_identities.size() < 2644u || product.rrc_identities.size() < 1849u ||
-        product.radial_zones.size() != 5) return false;
+        product.line_identities.empty() || product.rrc_identities.empty() ||
+        product.radial_zones.size() < 2u) return false;
     bool has_continuum = false;
     bool has_depth = false;
     for (const auto& zone : product.radial_zones) {
@@ -10465,7 +10472,7 @@ struct StandaloneControllerDataV67 {
     double cumulative_depth_cm = 0.0;
     // v82 patch 5.15/5.16 diagnostic radial semantics.
     std::size_t physical_transport_intervals_completed = 0u;
-    std::array<CallStartWorkspace,4> call_start_workspaces;
+    std::vector<CallStartWorkspace> call_start_workspaces;
     std::vector<double> global_xilevg;
     std::vector<double> global_bilevg;
     std::vector<double> global_rnisg;
@@ -11443,8 +11450,11 @@ void fill_standalone_input_v67(
 void prepare_call_start_workspace_v71(
     StandaloneControllerDataV67& data,
     std::size_t call_index) {
-    if (call_index < 1u || call_index > data.call_start_workspaces.size()) {
-        throw std::runtime_error("v71 call-start workspace index outside 1..4");
+    if (call_index < 1u) {
+        throw std::runtime_error("v71 call-start workspace index must be positive");
+    }
+    if (data.call_start_workspaces.size() < call_index) {
+        data.call_start_workspaces.resize(call_index);
     }
     auto& workspace = data.call_start_workspaces[call_index - 1u];
     if (call_index == 2u && data.global_workspace_initialized && !data.call2_entry_global_rnisg_retained) {
@@ -14369,7 +14379,7 @@ bool validate_reference_physical_state_v71(
 }
 
 struct StandaloneTrajectorySummaryV71 {
-    std::array<std::size_t,4> dsec_evaluations{{0u,0u,0u,0u}};
+    std::vector<std::size_t> dsec_evaluations;
     std::size_t final_evaluations = 0;
     std::size_t total_events = 0;
 };
@@ -14381,7 +14391,10 @@ StandaloneTrajectorySummaryV71 summarize_standalone_trajectory_v71(
     for (const auto& evaluation : product.fixed_evaluations) {
         if (evaluation.kind == "final") {
             ++summary.final_evaluations;
-        } else if (evaluation.call_index >= 1u && evaluation.call_index <= 4u) {
+        } else if (evaluation.call_index >= 1u) {
+            if (summary.dsec_evaluations.size() < evaluation.call_index) {
+                summary.dsec_evaluations.resize(evaluation.call_index, 0u);
+            }
             ++summary.dsec_evaluations[evaluation.call_index - 1u];
         }
     }
@@ -14977,30 +14990,20 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         state.temperature_t4 = params.temperature_k / 1.0e4;
         state.electron_fraction_xee = params.initial_electron_fraction > 0.0 ? params.initial_electron_fraction : 1.0;
         state.hydrogen_density_cm3 = params.density_cm3;
-        // Native XSTAR owns four thermal-controller calls for this product
-        // trajectory.  nsteps controls the output depth discretization; it is
-        // not a request to launch an independent DSEC root solve for every
-        // output row.  v68 incorrectly ran ten independent controllers and
-        // truncated each one at niter callbacks.
-        constexpr std::size_t source_calls = 4u;
-        constexpr std::size_t radial_event_count = 5u;  // four call finals + terminal reset
-        const double total_depth_cm = params.column_cm2 / std::max(params.density_cm3, 1.0);
-        // Literal radial ordering for this four-call trajectory is
-        //   pprint(call1) at 0, STEP, pprint(call2) at 0,
-        //   transport, STEP, pprint(call3), transport, STEP, pprint(call4),
-        //   final transport, post-loop pprint.
-        // v82 patch 5.20.11.1 removes the historical rounded 0.402446 depth
-        // owner.  Each non-zero shell now comes from literal step.f90 applied
-        // to the preceding zone's post-gsmooth opakc, retained zrems/dpthc,
-        // current radius, and remaining column.
-        std::array<double,4> source_boundary_depth_cm{{0.0, 0.0, 0.0, 0.0}};
-        std::array<double,3> source_transport_segment_cm{{0.0, 0.0, 0.0}};
+        // 0.6.48.11.0: the first radial pass is naturally terminated by the
+        // literal source predicate xcol<xpxcol && xee>xeemin &&
+        // t>tinf*0.99 && numrec>0.  nsteps controls STEP geometry; it is not
+        // a fixed number of thermal-controller calls.  The canonical Mg XI
+        // benchmark retains its accepted four-call prefix only when
+        // reference_trajectory_mode is active.
+        std::vector<double> source_boundary_depth_cm;
+        std::vector<double> source_transport_segment_cm;
         double pending_transport_segment_cm = 0.0;
 
         static constexpr std::array<std::size_t,4> expected_dsec_counts{{20u,1u,17u,16u}};
-        std::array<std::size_t,4> actual_dsec_counts{{0u,0u,0u,0u}};
+        std::vector<std::size_t> actual_dsec_counts;
         std::vector<FixedDsecSnapshot> finals;
-        finals.reserve(source_calls);
+        finals.reserve(static_cast<std::size_t>(std::max(params.nsteps, 4)));
         std::optional<FixedDsecSnapshot> terminal_transport_boundary_v82_patch520144;
         std::optional<FixedDsecSnapshot> call2_pretransport_v82_patch513;
         // v0.6.48.8.3: xstar.f90 does not execute another TRNFRC between
@@ -15009,13 +15012,14 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         // workspace that entered the terminal shell before the transport
         // helper projects zrems(1,:) to a convenience next-radius bremsa.
         std::vector<double> terminal_shell_entry_bremsa_v064883;
-        std::array<double,4> shared_zone_seconds_v06481021{{0.0,0.0,0.0,0.0}};
-        g_shared_zone_seconds_v06481021 = {{0.0,0.0,0.0,0.0}};
-        g_shared_zone_dsec_v06481021 = {{0u,0u,0u,0u}};
+        std::vector<double> shared_zone_seconds_v0648110;
+        g_shared_zone_seconds_v0648110.clear();
+        g_shared_zone_dsec_v0648110.clear();
 
-        for (std::size_t call = 1; call <= source_calls; ++call) {
-            production_zone_wait_before_call_v064810211(call);
-            const auto shared_zone_started_v06481021 = std::chrono::steady_clock::now();
+        for (std::size_t call = 1; ; ++call) {
+            if (call > 3999u) throw std::runtime_error("too many native radial zones: buffer filled");
+            production_zone_wait_before_call_v0648110(call);
+            const auto shared_zone_started_v0648110 = std::chrono::steady_clock::now();
             data.call_index = call;
             prepare_call_start_workspace_v71(data, call);
             if (call == 3u && data.reference_trajectory_mode) {
@@ -15049,7 +15053,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             // generic callback limit and are applied only to the canonical
             // Mg XI benchmark.  General standalone cases remain naturally
             // converged with no evaluation prefix.
-            config.maximum_evaluations = data.reference_trajectory_mode
+            config.maximum_evaluations = data.reference_trajectory_mode && call <= expected_dsec_counts.size()
                 ? static_cast<int32_t>(expected_dsec_counts[call - 1u])
                 : 0;
             if (params.controller_charge_tolerance > 0.0) {
@@ -15095,7 +15099,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                     std::to_string(call) + " failed: " + message.data());
             }
             const std::size_t dsec_count = data.evaluations - before;
-            actual_dsec_counts[call - 1u] = dsec_count;
+            actual_dsec_counts.push_back(dsec_count);
             if (g_performance_v064890 && call >= 1u && call <= 4u) {
                 g_performance_v064890->controller_call_evaluations[call - 1u] += static_cast<std::uint64_t>(dsec_count);
             }
@@ -15103,7 +15107,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                 if (stats.lnerr != 0) {
                     throw std::runtime_error("5.20.17 controller scientific status lnerr is nonzero at call=" + std::to_string(call));
                 }
-                if (dsec_count != expected_dsec_counts[call - 1u] || !stats.prefix_terminated) {
+                if (call > expected_dsec_counts.size() || dsec_count != expected_dsec_counts[call - 1u] || !stats.prefix_terminated) {
                     std::ostringstream detail;
                     detail << "controller source call boundary mismatch at call=" << call
                            << " expected_dsec_evaluations=" << expected_dsec_counts[call - 1u]
@@ -15124,7 +15128,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             }
 
             data.writing_final_snapshot = true;
-            source_boundary_depth_cm[call - 1u] = data.cumulative_depth_cm;
+            source_boundary_depth_cm.push_back(data.cumulative_depth_cm);
             const double boundary_radius_cm = params.initial_radius_cm + data.cumulative_depth_cm;
             // Retain the local source workspace first.  Radial transport is
             // committed only across the shell selected by the previous
@@ -15174,11 +15178,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             // zero-depth public boundary.  The continuum helper now performs
             // only that local smoothing when segment==0 and returns before
             // HEATT transport accumulation.
-            if (call == source_calls) {
-                terminal_shell_entry_bremsa_v064883 = data.dsec_bremsa;
-                std::cout << "V064883_TERMINAL_SHELL_ENTRY_BREMSA_HASH="
-                          << binary64_vector_hash_v82_patch4(terminal_shell_entry_bremsa_v064883) << "\n";
-            }
+            const std::vector<double> current_shell_entry_bremsa_v0648110 = data.dsec_bremsa;
             const auto continuum_transport_started_v064890 = std::chrono::steady_clock::now();
             advance_source_continuum_radiation_v82_patch52(
                 data, boundary, segment, boundary_radius_cm);
@@ -15186,10 +15186,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                 g_performance_v064890->continuum_transport_seconds += elapsed_seconds_v064890(continuum_transport_started_v064890);
             }
             if (segment > 0.0) {
-                const std::size_t transport_index = call >= 2u ? call - 2u : 0u;
-                if (transport_index < source_transport_segment_cm.size()) {
-                    source_transport_segment_cm[transport_index] = segment;
-                }
+                source_transport_segment_cm.push_back(segment);
                 const auto atomic_luminosity_started_v064890 = std::chrono::steady_clock::now();
                 advance_atomic_luminosities_v82_patch520145(
                     data, boundary, segment, boundary_radius_cm);
@@ -15207,8 +15204,25 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                     g_performance_v064890->stpcut_seconds += elapsed_seconds_v064890(stpcut_started_v064890);
                 }
             }
-            if (call == source_calls) {
+            // Decide whether the literal first-pass source predicate permits
+            // another physical shell.  The Mg XI reference trajectory keeps
+            // its accepted four-call boundary exactly; every other model is
+            // naturally terminated from live production state.
+            const double current_column_cm2_v0648110 = params.density_cm3 * data.cumulative_depth_cm;
+            const bool source_predicate_v0648110 =
+                params.nsteps > 0 &&
+                current_column_cm2_v0648110 < params.column_cm2 &&
+                state.electron_fraction_xee > params.minimum_electron_fraction &&
+                state.temperature_t4 > 0.099 * 0.99;
+            const bool continue_after_zone_v0648110 = data.reference_trajectory_mode
+                ? (call < expected_dsec_counts.size())
+                : source_predicate_v0648110;
+            const bool done_after_zone_v0648110 = !continue_after_zone_v0648110;
+            if (done_after_zone_v0648110) {
+                terminal_shell_entry_bremsa_v064883 = current_shell_entry_bremsa_v0648110;
                 terminal_transport_boundary_v82_patch520144 = boundary;
+                std::cout << "V064883_TERMINAL_SHELL_ENTRY_BREMSA_HASH="
+                          << binary64_vector_hash_v82_patch4(terminal_shell_entry_bremsa_v064883) << "\n";
             }
 
             // Source xstar.f90 calls STEP at the beginning of the *next* zone,
@@ -15220,7 +15234,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             // already-smoothed opakc directly.  Reapplying the historical
             // call-1 helper here would double-smooth the first boundary and
             // change the accepted trajectory.
-            if (call < source_calls) {
+            if (continue_after_zone_v0648110) {
                 const std::vector<double>& step_opakc = boundary.opakc;
                 const double step_radius_cm = params.initial_radius_cm + data.cumulative_depth_cm;
                 const double current_column_cm2 = params.density_cm3 * data.cumulative_depth_cm;
@@ -15245,12 +15259,13 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             }
             data.snapshots.push_back(pretransport_boundary_v82_patch520145);
             finals.push_back(std::move(pretransport_boundary_v82_patch520145));
-            shared_zone_seconds_v06481021[call - 1u] = std::chrono::duration<double>(
-                std::chrono::steady_clock::now() - shared_zone_started_v06481021).count();
-            g_shared_zone_seconds_v06481021[call - 1u] = shared_zone_seconds_v06481021[call - 1u];
-            g_shared_zone_dsec_v06481021[call - 1u] = dsec_count;
-            production_zone_mark_complete_v064810211(
-                call, finals.back(), dsec_count, shared_zone_seconds_v06481021[call - 1u]);
+            const double zone_seconds_v0648110 = std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - shared_zone_started_v0648110).count();
+            shared_zone_seconds_v0648110.push_back(zone_seconds_v0648110);
+            g_shared_zone_seconds_v0648110.push_back(zone_seconds_v0648110);
+            g_shared_zone_dsec_v0648110.push_back(dsec_count);
+            production_zone_mark_complete_v0648110(
+                call, finals.back(), dsec_count, zone_seconds_v0648110, done_after_zone_v0648110);
 
             std::cout << "V048746255172582_CONTROLLER_CALL=" << call
                       << " DSEC_EVALUATIONS=" << dsec_count
@@ -15259,6 +15274,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                       << " LNERR=" << stats.lnerr
                       << " HMCTOT=" << std::setprecision(9) << stats.final_hmctot
                       << " ELCTER=" << stats.final_elcter << "\n";
+            if (done_after_zone_v0648110) break;
         }
 
         const char* v064894_force_legacy = std::getenv("XSTAR_V064894_FORCE_LEGACY_BOUNDARY_RECOMPUTE");
@@ -15285,36 +15301,51 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                   << "V064894_TRAVERSAL_PREVALIDATED_RECORD_ORDER=ENABLED\n"
                   << "V064894_RATE_EVALUATION_CONTEXT_HOIST=ENABLED\n";
 
-        std::cout << std::setprecision(17)
-                  << "V048746255172582_PATCH520111_RADIAL_CALL_BOUNDARY_DEPTHS_CM="
-                  << source_boundary_depth_cm[0] << ";" << source_boundary_depth_cm[1] << ";"
-                  << source_boundary_depth_cm[2] << ";" << source_boundary_depth_cm[3] << "\n"
-                  << "V048746255172582_PATCH520111_TRANSPORT_SEGMENTS_CM="
-                  << source_transport_segment_cm[0] << ";" << source_transport_segment_cm[1] << ";"
-                  << source_transport_segment_cm[2] << "\n"
-                  << "V048746255172582_PATCH520111_TERMINAL_DEPTH_CM=" << data.cumulative_depth_cm << "\n"
-                  << "V048746255172582_PATCH52072_RADIAL_CALL_BOUNDARY_DEPTHS_CM="
-                  << source_boundary_depth_cm[0] << ";" << source_boundary_depth_cm[1] << ";"
-                  << source_boundary_depth_cm[2] << ";" << source_boundary_depth_cm[3] << "\n"
-                  << "V048746255172582_PATCH52072_FINAL_TRANSPORT_DEPTH_CM="
-                  << source_transport_segment_cm[2] << "\n"
-                  << "V048746255172582_PATCH52072_RADIAL_ORDER=CALL1_0_CALL2_0_CALL3_STEP1_CALL4_STEP1_PLUS_STEP2_TERMINAL_TOTAL\n"
-                  << "V048746255172582_PATCH52014_CONTROLLER_DSEC_COUNTS="
-                  << actual_dsec_counts[0] << ";" << actual_dsec_counts[1] << ";"
-                  << actual_dsec_counts[2] << ";" << actual_dsec_counts[3] << "\n";
-
+        const auto join_doubles_v0648110 = [](const std::vector<double>& values) {
+            std::ostringstream out;
+            out << std::setprecision(17);
+            for (std::size_t i = 0; i < values.size(); ++i) {
+                if (i) out << ";";
+                out << values[i];
+            }
+            return out.str();
+        };
+        const auto join_sizes_v0648110 = [](const std::vector<std::size_t>& values) {
+            std::ostringstream out;
+            for (std::size_t i = 0; i < values.size(); ++i) {
+                if (i) out << ";";
+                out << values[i];
+            }
+            return out.str();
+        };
         const std::size_t total_dsec_evaluations = std::accumulate(
             actual_dsec_counts.begin(), actual_dsec_counts.end(), std::size_t{0});
+        std::cout << std::setprecision(17)
+                  << "V0648110_RADIAL_ZONE_COUNT=" << finals.size() << "\n"
+                  << "V0648110_RADIAL_CALL_BOUNDARY_DEPTHS_CM=" << join_doubles_v0648110(source_boundary_depth_cm) << "\n"
+                  << "V0648110_TRANSPORT_SEGMENTS_CM=" << join_doubles_v0648110(source_transport_segment_cm) << "\n"
+                  << "V0648110_CONTROLLER_DSEC_COUNTS=" << join_sizes_v0648110(actual_dsec_counts) << "\n"
+                  << "V0648110_CONTROLLER_DSEC_TOTAL=" << total_dsec_evaluations << "\n"
+                  << "V0648110_TERMINAL_DEPTH_CM=" << data.cumulative_depth_cm << "\n"
+                  << "V0648110_FIRST_PASS_TERMINATION=NATURAL_SOURCE_PREDICATE\n";
         if (data.reference_trajectory_mode) {
-            std::cout << "V048746255172582_PATCH52014_CONTROLLER_DSEC_TOTAL=" << total_dsec_evaluations << "\n"
+            const bool reference_counts_ok = actual_dsec_counts.size() == expected_dsec_counts.size() &&
+                std::equal(actual_dsec_counts.begin(), actual_dsec_counts.end(), expected_dsec_counts.begin());
+            std::cout << "V048746255172582_PATCH520111_RADIAL_CALL_BOUNDARY_DEPTHS_CM="
+                      << join_doubles_v0648110(source_boundary_depth_cm) << "\n"
+                      << "V048746255172582_PATCH520111_TRANSPORT_SEGMENTS_CM="
+                      << join_doubles_v0648110(source_transport_segment_cm) << "\n"
+                      << "V048746255172582_PATCH520111_TERMINAL_DEPTH_CM=" << data.cumulative_depth_cm << "\n"
+                      << "V048746255172582_PATCH52014_CONTROLLER_DSEC_COUNTS="
+                      << join_sizes_v0648110(actual_dsec_counts) << "\n"
+                      << "V048746255172582_PATCH52014_CONTROLLER_DSEC_TOTAL=" << total_dsec_evaluations << "\n"
                       << "V048746255172582_PATCH52014_CONTROLLER_RETAINED_STATES=" << data.evaluations << "\n"
                       << "V048746255172582_PATCH52014_CONTROLLER_FINAL_SEQUENCES=58;59;60;61\n"
                       << "V048746255172582_PATCH52014_CONTROLLER_SPARSE_SEQUENCE_INVENTORY=ACCEPT\n";
-        }
-        if (data.reference_trajectory_mode &&
-            (actual_dsec_counts != expected_dsec_counts || total_dsec_evaluations != 54u ||
-             finals.size() != 4u || data.evaluations != 58u || data.snapshots.size() != 58u)) {
-            throw std::runtime_error("standalone controller did not retain the corrected 20/1/17/16 plus four-final source trajectory");
+            if (!reference_counts_ok || total_dsec_evaluations != 54u ||
+                finals.size() != 4u || data.evaluations != 58u || data.snapshots.size() != 58u) {
+                throw std::runtime_error("standalone controller did not retain the corrected 20/1/17/16 plus four-final source trajectory");
+            }
         }
         if (data.reference_trajectory_mode) {
             std::set<std::size_t> actual_sequences;
@@ -15487,6 +15518,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         for (const auto& snapshot : data.snapshots) {
             whole.fixed_evaluations.push_back(copy_real_native_snapshot(snapshot, 0.0));
         }
+        const std::size_t radial_event_count = finals.size() + 1u;
         auto append_zone = [&](const FixedDsecSnapshot& snapshot, const std::string& reason,
                                double source_depth) {
             xstar_run_state::AcceptedControllerState accepted;
@@ -15511,7 +15543,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             zone.electron_fraction = accepted.evaluation.computed_electron_fraction;
             zone.provisional_from_controller = false;
             zone.accepted_boundary_exact = true;
-            zone.boundary_provenance = "standalone C++ four-call controller boundary";
+            zone.boundary_provenance = "standalone C++ naturally terminated controller boundary";
             zone.accepted_controller = accepted;
             whole.radial_zones.push_back(zone);
             xstar_run_state::AbundanceRadialRowState abundance;
@@ -15557,8 +15589,8 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         evaluation_count = data.evaluations;
         whole.embedded_public_fits_payloads_absent = true;
         whole.embedded_full_xout_step_payload_absent = true;
-        whole.controller_trajectory_qualified = finals.size() == source_calls &&
-            (!data.reference_trajectory_mode || (data.evaluations == 58u &&
+        whole.controller_trajectory_qualified = !finals.empty() &&
+            (!data.reference_trajectory_mode || (finals.size() == 4u && data.evaluations == 58u &&
              data.native_scientific_gate_count == 58u && data.sequence23_native_committed_state_passed));
         whole.product_schema_complete = true;
         whole.radial_state_complete = whole.radial_zones.size() == radial_event_count;
@@ -15582,7 +15614,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         write_patch5201738_radial_zone_rccemis_edge(whole);
         whole.exact_legacy_pprint_state_retained = false;
         whole.diagnostic_preview_partial = false;
-        whole.physical_radial_boundaries_expected = 4u;
+        whole.physical_radial_boundaries_expected = finals.size();
         whole.physical_radial_boundaries_retained = finals.size();
         whole.physical_transport_intervals_completed = data.physical_transport_intervals_completed;
         std::cout << std::setprecision(17)
@@ -15633,7 +15665,8 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             }
             final_pprint_data.reference_trajectory_mode = false;
             final_pprint_data.writing_final_snapshot = true;
-            prepare_call_start_workspace_v71(final_pprint_data, 4u);
+            const std::size_t terminal_call_index_v0648110 = finals.size();
+            prepare_call_start_workspace_v71(final_pprint_data, terminal_call_index_v0648110);
             if (terminal_shell_entry_bremsa_v064883.size() != final_pprint_data.energy.size()) {
                 throw std::runtime_error("v0.6.48.8.3 terminal shell-entry bremsa was not retained");
             }
@@ -15641,7 +15674,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             // terminal shell.  The post-transport next-radius projection is a
             // convenience for a next zone that never exists in this run.
             final_pprint_data.dsec_bremsa = terminal_shell_entry_bremsa_v064883;
-            final_pprint_data.call_start_workspaces[3].bremsa = terminal_shell_entry_bremsa_v064883;
+            final_pprint_data.call_start_workspaces[terminal_call_index_v0648110 - 1u].bremsa = terminal_shell_entry_bremsa_v064883;
             std::cout << "V064883_FINAL_PPRINT_BREMSA_OWNER=TERMINAL_SHELL_ENTRY_PRE_FINAL_TRNFRC\n"
                       << "V064883_FINAL_PPRINT_BREMSA_RETAINED=ACCEPT\n";
             std::filesystem::path final_thermal_diagnostic_path;
@@ -15666,7 +15699,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             auto final_pprint = evaluate_full_boundary_v67(
                 final_pprint_data, state,
                 static_cast<double>(static_cast<float>(1.0e-15)),
-                params.initial_radius_cm + total_depth_cm, 0u);
+                params.initial_radius_cm + data.cumulative_depth_cm, 0u);
             if (final_thermal_diagnostic_requested) {
                 const auto parent = final_thermal_diagnostic_path.parent_path();
                 if (!parent.empty()) std::filesystem::create_directories(parent);
@@ -15713,7 +15746,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             }
             advance_source_continuum_radiation_v82_patch52(
                 final_pprint_data, final_pprint, final_writer_delr,
-                params.initial_radius_cm + total_depth_cm);
+                params.initial_radius_cm + data.cumulative_depth_cm);
             final_pprint.tau0 = terminal_writer_state.tau0;
             final_pprint.elum = terminal_writer_state.elum;
             final_pprint.tauc = terminal_writer_state.tauc;
@@ -15854,7 +15887,7 @@ int command_standalone_capabilities_v67() {
               << "V048746255172582_ATDB_PACKED_COLUMN_LAYOUTS=FIXED_AND_VARIABLE_LENGTH\n"
               << "V048746255172582_ATDB_PAYLOAD_CACHE=ONE_TIME_FULL_COLUMN\n"
               << "V048746255172582_INITIAL_XEE_SEMANTICS=EXPLICIT_XEE_ELSE_ONE\n"
-              << "V048746255172582_CONTROLLER_TOPOLOGY=FOUR_CALLS_PLUS_TERMINAL_RESET\n"
+              << "V048746255172582_CONTROLLER_TOPOLOGY=NATURAL_FIRST_PASS_PLUS_TERMINAL_RESET\n"
               << "V048746255172582_REFERENCE_CALL_BOUNDARIES=21_1_18_17_EXACT_SOURCE_PREFIX\n"
               << "V048746255172582_NITER_SEMANTICS=NESTED_LIMIT_WITH_REFERENCE_CALL_BOUNDARIES\n"
               << "V048746255172582_CRITF_SEMANTICS=ACTIVE_ION_THRESHOLD_NOT_DSEC_TOLERANCE\n"
@@ -16373,21 +16406,23 @@ int command_run_standalone_production_v67(const Options& options, const std::fil
             return build_general_standalone_product_v67(
                 options, params, atomic, program, controller_seconds, evaluations);
         }();
-        if (const char* shared_mode = std::getenv("XSTAR_V06481021_SHARED_ZONE_MODE");
+        if (const char* shared_mode = std::getenv("XSTAR_V0648110_SHARED_ZONE_MODE");
             shared_mode && std::string(shared_mode) == "1") {
             const double shared_total = std::accumulate(
-                g_shared_zone_seconds_v06481021.begin(), g_shared_zone_seconds_v06481021.end(), 0.0);
+                g_shared_zone_seconds_v0648110.begin(), g_shared_zone_seconds_v0648110.end(), 0.0);
             std::cout << std::fixed << std::setprecision(9);
-            for (std::size_t i = 0; i < 4u; ++i) {
-                std::cout << "V06481021_SHARED_ZONE" << (i + 1u) << "_SECONDS="
-                          << g_shared_zone_seconds_v06481021[i] << "\n"
-                          << "V06481021_SHARED_ZONE" << (i + 1u) << "_DSEC_EVALUATIONS="
-                          << g_shared_zone_dsec_v06481021[i] << "\n";
+            std::ostringstream counts;
+            for (std::size_t i = 0; i < g_shared_zone_seconds_v0648110.size(); ++i) {
+                std::cout << "V0648110_SHARED_ZONE" << (i + 1u) << "_SECONDS="
+                          << g_shared_zone_seconds_v0648110[i] << "\n"
+                          << "V0648110_SHARED_ZONE" << (i + 1u) << "_DSEC_EVALUATIONS="
+                          << g_shared_zone_dsec_v0648110[i] << "\n";
+                if (i) counts << ";";
+                counts << g_shared_zone_dsec_v0648110[i];
             }
-            std::cout << "V06481021_SHARED_ZONE_TOTAL_SECONDS=" << shared_total << "\n"
-                      << "V06481021_SHARED_ZONE_DSEC_COUNTS="
-                      << g_shared_zone_dsec_v06481021[0] << ";" << g_shared_zone_dsec_v06481021[1] << ";"
-                      << g_shared_zone_dsec_v06481021[2] << ";" << g_shared_zone_dsec_v06481021[3] << "\n";
+            std::cout << "V0648110_SHARED_ZONE_COUNT=" << g_shared_zone_seconds_v0648110.size() << "\n"
+                      << "V0648110_SHARED_ZONE_TOTAL_SECONDS=" << shared_total << "\n"
+                      << "V0648110_SHARED_ZONE_DSEC_COUNTS=" << counts.str() << "\n";
         }
         const char* force_096_provenance_v064897 =
             std::getenv("XSTAR_V064897_FORCE_096_RECORD_PROVENANCE");
@@ -16471,16 +16506,19 @@ int command_run_standalone_production_v67(const Options& options, const std::fil
         ::unsetenv("XSTAR_NATIVE_PRODUCTION");
         const std::size_t total_dsec = std::accumulate(
             trajectory.dsec_evaluations.begin(), trajectory.dsec_evaluations.end(), std::size_t{0});
-        std::cout << prefix << "CALL1_DSEC_EVALUATIONS=" << trajectory.dsec_evaluations[0] << "\n"
-                  << prefix << "CALL2_DSEC_EVALUATIONS=" << trajectory.dsec_evaluations[1] << "\n"
-                  << prefix << "CALL3_DSEC_EVALUATIONS=" << trajectory.dsec_evaluations[2] << "\n"
-                  << prefix << "CALL4_DSEC_EVALUATIONS=" << trajectory.dsec_evaluations[3] << "\n"
+        for (std::size_t i = 0; i < trajectory.dsec_evaluations.size(); ++i) {
+            std::cout << prefix << "CALL" << (i + 1u) << "_DSEC_EVALUATIONS="
+                      << trajectory.dsec_evaluations[i] << "\n";
+        }
+        std::cout << prefix << "RADIAL_ZONE_COUNT=" << trajectory.dsec_evaluations.size() << "\n"
                   << prefix << "TOTAL_DSEC_EVALUATIONS=" << total_dsec << "\n"
                   << prefix << "FINAL_EVALUATIONS=" << trajectory.final_evaluations << "\n"
                   << prefix << "TOTAL_CONTROLLER_EVENTS=" << trajectory.total_events << "\n"
-                  << prefix << "SOURCE_SEQUENCE_POSITIONS=61\n"
-                  << prefix << "STRUCTURAL_NON_EVALUATION_POSITIONS=3\n"
-                  << prefix << "RETAINED_CONTROLLER_EVALUATIONS=58\n"
+                  << prefix << "SOURCE_SEQUENCE_POSITIONS="
+                  << (reference_benchmark ? 61u : trajectory.total_events) << "\n"
+                  << prefix << "STRUCTURAL_NON_EVALUATION_POSITIONS="
+                  << (reference_benchmark ? 3u : 0u) << "\n"
+                  << prefix << "RETAINED_CONTROLLER_EVALUATIONS=" << trajectory.total_events << "\n"
                   << prefix << "SOURCE_SEQUENCE_POSITIONS_ACCOUNTED=ACCEPT\n"
                   << prefix << "REFERENCE_TRAJECTORY_GATE=" << (reference_benchmark ? "ACCEPT" : "NOT_APPLICABLE") << "\n"
                   << prefix << "REFERENCE_PHYSICAL_CONTENT_GATE=" << (reference_benchmark ? "ACCEPT" : "NOT_APPLICABLE") << "\n"
@@ -18489,15 +18527,15 @@ int command_python_bridge_test(const Options& options) {
 
 } // namespace
 
-extern "C" int32_t xstar_production_zone_abi_version_v064810211(void) {
-    return 604810211;
+extern "C" int32_t xstar_production_zone_abi_version_v0648110(void) {
+    return XSTAR_PRODUCTION_ZONE_ABI_V0648110;
 }
 
-extern "C" const char* xstar_production_zone_backend_name_v064810211(void) {
-    return "xstar_shared_standalone_production_zone_v064810211";
+extern "C" const char* xstar_production_zone_backend_name_v0648110(void) {
+    return "xstar_shared_standalone_production_zone_v0648110";
 }
 
-extern "C" int32_t xstar_production_zone_run_all_v064810211(
+extern "C" int32_t xstar_production_zone_run_all_v0648110(
     const char* parameters_path,
     const char* output_dir,
     const char* executable_path,
@@ -18522,23 +18560,23 @@ extern "C" int32_t xstar_production_zone_run_all_v064810211(
         options.artifact_profile_explicit = true;
         const std::filesystem::path executable =
             (executable_path && *executable_path) ? std::filesystem::path(executable_path) : std::filesystem::path();
-        ::setenv("XSTAR_V06481021_SHARED_ZONE_MODE", "1", 1);
+        ::setenv("XSTAR_V0648110_SHARED_ZONE_MODE", "1", 1);
         const int rc = command_run_standalone_production_v67(options, executable);
-        ::unsetenv("XSTAR_V06481021_SHARED_ZONE_MODE");
+        ::unsetenv("XSTAR_V0648110_SHARED_ZONE_MODE");
         set_message(rc == 0 ? "ACCEPT" : ("standalone production returned " + std::to_string(rc)));
         return rc;
     } catch (const std::exception& exc) {
-        ::unsetenv("XSTAR_V06481021_SHARED_ZONE_MODE");
+        ::unsetenv("XSTAR_V0648110_SHARED_ZONE_MODE");
         set_message(exc.what());
         return 20;
     } catch (...) {
-        ::unsetenv("XSTAR_V06481021_SHARED_ZONE_MODE");
+        ::unsetenv("XSTAR_V0648110_SHARED_ZONE_MODE");
         set_message("unknown shared production-zone exception");
         return 20;
     }
 }
 
-extern "C" int32_t xstar_production_zone_context_create_v064810211(
+extern "C" int32_t xstar_production_zone_context_create_v0648110(
     const char* parameters_path,
     const char* output_dir,
     const char* executable_path,
@@ -18558,12 +18596,12 @@ extern "C" int32_t xstar_production_zone_context_create_v064810211(
         return 64;
     }
     try {
-        auto* session = new ProductionZoneSessionV064810211();
+        auto* session = new ProductionZoneSessionV0648110();
         session->parameters_path = parameters_path;
         session->output_dir = output_dir;
         session->executable_path = executable_path ? executable_path : "";
         session->worker = std::thread([session] {
-            g_production_zone_session_v064810211 = session;
+            g_production_zone_session_v0648110 = session;
             try {
                 Options options;
                 options.command = "run-production";
@@ -18573,9 +18611,9 @@ extern "C" int32_t xstar_production_zone_context_create_v064810211(
                 options.artifact_profile_explicit = true;
                 const std::filesystem::path executable = session->executable_path.empty()
                     ? std::filesystem::path() : std::filesystem::path(session->executable_path);
-                ::setenv("XSTAR_V06481021_SHARED_ZONE_MODE", "1", 1);
+                ::setenv("XSTAR_V0648110_SHARED_ZONE_MODE", "1", 1);
                 const int rc = command_run_standalone_production_v67(options, executable);
-                ::unsetenv("XSTAR_V06481021_SHARED_ZONE_MODE");
+                ::unsetenv("XSTAR_V0648110_SHARED_ZONE_MODE");
                 {
                     std::lock_guard<std::mutex> lock(session->mutex);
                     session->rc = rc;
@@ -18583,19 +18621,19 @@ extern "C" int32_t xstar_production_zone_context_create_v064810211(
                     if (rc != 0) session->error = "standalone production returned " + std::to_string(rc);
                 }
             } catch (const std::exception& exc) {
-                ::unsetenv("XSTAR_V06481021_SHARED_ZONE_MODE");
+                ::unsetenv("XSTAR_V0648110_SHARED_ZONE_MODE");
                 std::lock_guard<std::mutex> lock(session->mutex);
                 session->rc = 20;
                 session->error = exc.what();
                 session->finished = true;
             } catch (...) {
-                ::unsetenv("XSTAR_V06481021_SHARED_ZONE_MODE");
+                ::unsetenv("XSTAR_V0648110_SHARED_ZONE_MODE");
                 std::lock_guard<std::mutex> lock(session->mutex);
                 session->rc = 20;
                 session->error = "unknown cpp-zone worker exception";
                 session->finished = true;
             }
-            g_production_zone_session_v064810211 = nullptr;
+            g_production_zone_session_v0648110 = nullptr;
             session->cv.notify_all();
         });
         *out_context = session;
@@ -18607,10 +18645,9 @@ extern "C" int32_t xstar_production_zone_context_create_v064810211(
     }
 }
 
-extern "C" int32_t xstar_production_zone_context_run_zone_v064810211(
+extern "C" int32_t xstar_production_zone_context_run_next_zone_v0648110(
     void* context,
-    int32_t zone_index,
-    xstar_production_zone_result_v064810211* out_result,
+    xstar_production_zone_result_v0648110* out_result,
     char* message,
     std::size_t message_size) {
     auto set_message = [&](const std::string& text) {
@@ -18619,29 +18656,28 @@ extern "C" int32_t xstar_production_zone_context_run_zone_v064810211(
         std::memcpy(message, text.data(), n);
         message[n] = '\0';
     };
-    auto* session = static_cast<ProductionZoneSessionV064810211*>(context);
-    if (!session || !out_result || zone_index < 1 || zone_index > 4) {
-        set_message("valid context, result, and zone_index 1..4 are required"); return 64;
-    }
+    auto* session = static_cast<ProductionZoneSessionV0648110*>(context);
+    if (!session || !out_result) { set_message("valid context and result are required"); return 64; }
     std::unique_lock<std::mutex> lock(session->mutex);
-    const std::size_t expected = session->completed_zone + 1u;
-    if (static_cast<std::size_t>(zone_index) != expected) {
-        set_message("cpp-zone calls must be sequential; expected zone " + std::to_string(expected));
-        return 65;
+    if (session->zone_loop_done) {
+        set_message("radial zone loop is already complete");
+        return 66;
     }
-    session->allowed_zone = static_cast<std::size_t>(zone_index);
+    const std::size_t requested = session->completed_zone + 1u;
+    session->allowed_zone = requested;
     session->cv.notify_all();
     session->cv.wait(lock, [&] {
-        return session->completed_zone >= static_cast<std::size_t>(zone_index) || session->finished;
+        return session->completed_zone >= requested || session->finished;
     });
-    if (session->completed_zone < static_cast<std::size_t>(zone_index)) {
-        set_message(session->error.empty() ? "cpp-zone worker stopped before requested zone" : session->error);
+    if (session->completed_zone < requested) {
+        set_message(session->error.empty() ? "cpp-zone worker stopped before next zone" : session->error);
         return session->rc ? session->rc : 20;
     }
-    const auto& r = session->results[static_cast<std::size_t>(zone_index - 1)];
+    const auto& r = session->results[requested - 1u];
     out_result->zone_index = static_cast<int32_t>(r.zone_index);
     out_result->dsec_evaluations = static_cast<int32_t>(r.dsec_evaluations);
     out_result->source_sequence = static_cast<int32_t>(r.source_sequence);
+    out_result->done_after_zone = r.done_after_zone ? 1 : 0;
     out_result->seconds = r.seconds;
     out_result->temperature_t4 = r.temperature_t4;
     out_result->electron_fraction = r.electron_fraction;
@@ -18651,7 +18687,34 @@ extern "C" int32_t xstar_production_zone_context_run_zone_v064810211(
     return 0;
 }
 
-extern "C" int32_t xstar_production_zone_context_finalize_v064810211(
+extern "C" int32_t xstar_production_zone_context_done_v0648110(
+    void* context,
+    int32_t* out_done,
+    int32_t* out_completed_zones,
+    char* message,
+    std::size_t message_size) {
+    auto set_message = [&](const std::string& text) {
+        if (!message || message_size == 0) return;
+        const std::size_t n = std::min<std::size_t>(message_size - 1u, text.size());
+        std::memcpy(message, text.data(), n);
+        message[n] = '\0';
+    };
+    auto* session = static_cast<ProductionZoneSessionV0648110*>(context);
+    if (!session || !out_done || !out_completed_zones) {
+        set_message("context and done outputs are required"); return 64;
+    }
+    std::lock_guard<std::mutex> lock(session->mutex);
+    *out_done = session->zone_loop_done ? 1 : 0;
+    *out_completed_zones = static_cast<int32_t>(session->completed_zone);
+    if (session->finished && session->rc != 0) {
+        set_message(session->error.empty() ? "cpp-zone worker failed" : session->error);
+        return session->rc;
+    }
+    set_message("ACCEPT");
+    return 0;
+}
+
+extern "C" int32_t xstar_production_zone_context_finalize_v0648110(
     void* context,
     char* message,
     std::size_t message_size) {
@@ -18661,14 +18724,14 @@ extern "C" int32_t xstar_production_zone_context_finalize_v064810211(
         std::memcpy(message, text.data(), n);
         message[n] = '\0';
     };
-    auto* session = static_cast<ProductionZoneSessionV064810211*>(context);
+    auto* session = static_cast<ProductionZoneSessionV0648110*>(context);
     if (!session) { set_message("context is required"); return 64; }
     {
         std::unique_lock<std::mutex> lock(session->mutex);
-        if (session->completed_zone != 4u) {
-            set_message("all four zones must be completed before finalize"); return 65;
+        if (!session->zone_loop_done) {
+            set_message("radial zone loop must be complete before finalize"); return 65;
         }
-        session->allowed_zone = 4u;
+        session->allowed_zone = session->completed_zone;
         session->cv.notify_all();
         session->cv.wait(lock, [&] { return session->finished; });
         if (session->rc != 0) {
@@ -18681,13 +18744,13 @@ extern "C" int32_t xstar_production_zone_context_finalize_v064810211(
     return 0;
 }
 
-extern "C" void xstar_production_zone_context_destroy_v064810211(void* context) {
-    auto* session = static_cast<ProductionZoneSessionV064810211*>(context);
+extern "C" void xstar_production_zone_context_destroy_v0648110(void* context) {
+    auto* session = static_cast<ProductionZoneSessionV0648110*>(context);
     if (!session) return;
     {
         std::lock_guard<std::mutex> lock(session->mutex);
         session->cancel = true;
-        session->allowed_zone = 4u;
+        session->allowed_zone = 4000u;
     }
     session->cv.notify_all();
     if (session->worker.joinable()) session->worker.join();

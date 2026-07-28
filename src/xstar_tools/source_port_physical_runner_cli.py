@@ -131,7 +131,7 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "radial-zone controller ownership. python preserves the accepted 10.1.1 "
             "Python controller; cpp-all delegates the complete trajectory in one C++ call; "
-            "cpp-zone uses four sequential calls into one persistent shared-production C++ context."
+            "cpp-zone repeatedly calls run_next_zone() on one persistent shared-production C++ context until its natural source predicate reports done."
         ),
     )
     parser.add_argument(
