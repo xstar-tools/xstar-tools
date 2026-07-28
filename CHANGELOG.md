@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.48.9.7 — quiet production path, compact DSEC provenance, PGO/native evaluation - 2026-07-27
+
+- Freeze the accepted 0.6.48.9.6 Type50 implementation and all 9.5 Type49/53, 9.4.2 boundary, thermal, and writer science-critical sources by SHA-256.
+- Add a production-quiet standalone controller stream: historical controller attribution/status chatter is suppressed by default but restored exactly with `XSTAR_V064897_VERBOSE_CONTROLLER_DIAGNOSTICS=1` for qualification. Product and science state never consume stdout.
+- Split hot runtime evaluation from cold retained record provenance on ordinary deferred DSEC evaluations. The 54 projection-deferred DSEC calls no longer copy the full `EvaluatedRecord` shadow payload into `last_record_diagnostics`; exact boundary/final evaluations retain the complete product-diagnostic state unchanged.
+- Add `XSTAR_V064897_FORCE_096_RECORD_PROVENANCE=1` as a same-executable fallback that restores the 0.6.48.9.6 all-evaluation provenance retention for blocking A/B qualification. General fixed-state-library behavior outside native standalone production is unchanged.
+- Add opt-in PGO build controls (`V064897_PGO_MODE=generate|use`, `V064897_PROFILE_DIR=...`) and optional `V064897_NATIVE=1` (`-march=native`) evaluation. `-ffast-math` is rejected and source-critical `-ffp-contract=off` flags remain in force.
+- PGO/native compiler variants are evaluation-only until their host runs are byte-exact against the accepted 0.6.48.9.6 nine-FITS payloads and scientific `xout_step.log`; the faster exact variant may then be promoted.
+- Add 9.7 readiness, quiet/compact-vs-9.6 qualification, three-run performance, and PGO/native evaluation runners.
+
 ## 0.6.48.9.6 — standalone Type50 hot-loop optimization - 2026-07-27
 
 - Build directly on the accepted 0.6.48.9.5.1 package; freeze the 9.5 prepared Type49/53 bound-free engine and 9.4.2 exact accepted-boundary recomputation by source hash.

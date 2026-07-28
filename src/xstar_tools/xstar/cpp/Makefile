@@ -6,6 +6,28 @@ SO_LDFLAGS ?= -shared
 OPACITY_STRICT_FP_FLAGS ?= -ffp-contract=off
 THERMAL_STRICT_FP_FLAGS ?= -ffp-contract=off
 ELEMENT_STRICT_FP_FLAGS ?= -ffp-contract=off
+
+# v0.6.48.9.7 compiler-evaluation controls.  These are intentionally opt-in
+# until the exact-product host qualifier accepts a build.  PGO and native ISA
+# selection do not relax IEEE semantics: -ffast-math remains forbidden and
+# the source-critical opacity/thermal/element translation units retain their
+# explicit -ffp-contract=off flags below.
+V064897_PGO_MODE ?= off
+V064897_PROFILE_DIR ?= $(CURDIR)/.v064897_pgo
+V064897_NATIVE ?= 0
+ifeq ($(V064897_PGO_MODE),generate)
+  override CXXFLAGS += -fprofile-generate=$(V064897_PROFILE_DIR)
+endif
+ifeq ($(V064897_PGO_MODE),use)
+  override CXXFLAGS += -fprofile-use=$(V064897_PROFILE_DIR) -fprofile-correction
+endif
+ifeq ($(V064897_NATIVE),1)
+  override CXXFLAGS += -march=native
+endif
+ifneq ($(findstring -ffast-math,$(CXXFLAGS)),)
+  $(error v0.6.48.9.7 rejects -ffast-math)
+endif
+
 COMMON_LIBS ?= -ldl -pthread
 CFITSIO_CFLAGS ?= $(shell pkg-config --cflags cfitsio 2>/dev/null)
 CFITSIO_LIBDIR ?= $(shell pkg-config --variable=libdir cfitsio 2>/dev/null)
@@ -125,6 +147,9 @@ print-config:
 	@echo OPACITY_STRICT_FP_FLAGS=$(OPACITY_STRICT_FP_FLAGS)
 	@echo THERMAL_STRICT_FP_FLAGS=$(THERMAL_STRICT_FP_FLAGS)
 	@echo ELEMENT_STRICT_FP_FLAGS=$(ELEMENT_STRICT_FP_FLAGS)
+	@echo V064897_PGO_MODE=$(V064897_PGO_MODE)
+	@echo V064897_PROFILE_DIR=$(V064897_PROFILE_DIR)
+	@echo V064897_NATIVE=$(V064897_NATIVE)
 	@echo FILESYSTEM_LINK_MODE=$(FILESYSTEM_LINK_MODE)
 	@echo FILESYSTEM_LIBS=$(FILESYSTEM_LIBS)
 

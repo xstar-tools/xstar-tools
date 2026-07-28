@@ -8898,6 +8898,18 @@ int run_impl(
     ctx.last_call1_thermal_oracle = (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE) != 0u;
     const bool defer_product_projection =
         (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_DEFER_PRODUCT_PROJECTION) != 0u;
+    // v0.6.48.9.7: the ordinary DSEC hot path never exposes record-product
+    // provenance to the standalone writer; exact product diagnostics are
+    // consumed only from the non-deferred accepted-boundary/final evaluations.
+    // Avoid copying the full EvaluatedRecord shadow payload into the retained
+    // diagnostic sidecar on those 54 deferred evaluations.  Keep general
+    // library behavior unchanged and provide a same-source 9.6 fallback.
+    const bool native_production_v064897 = environment_flag("XSTAR_NATIVE_PRODUCTION");
+    const bool force_096_record_provenance_v064897 =
+        environment_flag("XSTAR_V064897_FORCE_096_RECORD_PROVENANCE");
+    const bool retain_record_provenance_v064897 =
+        !defer_product_projection || !native_production_v064897 ||
+        force_096_record_provenance_v064897;
     // Fail closed against a stale accepted-boundary snapshot if this
     // evaluation exits before the exact source workspaces are committed.
     ctx.last_source_workspaces_valid_v064894 = false;
@@ -9233,13 +9245,15 @@ int run_impl(
                     Type95StreamIdentity{original.record, original.data_type,
                         original.rate_type, original.ion_stage}, true});
             }
-            NativeRecordDiagnostic diagnostic;
-            diagnostic.element_index = element.element_index;
-            diagnostic.element_z = element.element_z;
-            diagnostic.evaluated = item;
-            diagnostic.active_stage = active_stage;
-            diagnostic.matrix_committed = matrix_committed;
-            ctx.last_record_diagnostics.push_back(std::move(diagnostic));
+            if (retain_record_provenance_v064897) {
+                NativeRecordDiagnostic diagnostic;
+                diagnostic.element_index = element.element_index;
+                diagnostic.element_z = element.element_z;
+                diagnostic.evaluated = item;
+                diagnostic.active_stage = active_stage;
+                diagnostic.matrix_committed = matrix_committed;
+                ctx.last_record_diagnostics.push_back(std::move(diagnostic));
+            }
         }
 
         const std::vector<xstar_element_contribution_v1> preclosure_contributions = contributions;

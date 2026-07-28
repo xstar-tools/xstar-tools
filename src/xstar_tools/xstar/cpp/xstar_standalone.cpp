@@ -45,6 +45,36 @@ extern "C" int xstar_emissivity_build_binemis_profile(
 
 namespace {
 
+// v0.6.48.9.7: production-quiet controller stream.  Historical V0487...
+// attribution/status lines remain available for qualification by setting
+// XSTAR_V064897_VERBOSE_CONTROLLER_DIAGNOSTICS=1.  The product/science path
+// does not consume stdout, so suppressing this stream cannot affect state.
+class NullStreamBufferV064897 final : public std::streambuf {
+protected:
+    int overflow(int c) override { return traits_type::not_eof(c); }
+};
+
+class ScopedCoutSilenceV064897 final {
+public:
+    explicit ScopedCoutSilenceV064897(bool enabled) : enabled_(enabled) {
+        if (enabled_) old_ = std::cout.rdbuf(&null_);
+    }
+    ~ScopedCoutSilenceV064897() {
+        if (enabled_) std::cout.rdbuf(old_);
+    }
+    ScopedCoutSilenceV064897(const ScopedCoutSilenceV064897&) = delete;
+    ScopedCoutSilenceV064897& operator=(const ScopedCoutSilenceV064897&) = delete;
+private:
+    bool enabled_ = false;
+    NullStreamBufferV064897 null_{};
+    std::streambuf* old_ = nullptr;
+};
+
+bool verbose_controller_diagnostics_v064897() {
+    const char* value = std::getenv("XSTAR_V064897_VERBOSE_CONTROLLER_DIAGNOSTICS");
+    return value && std::string(value) == "1";
+}
+
 struct PerformanceInstrumentationV064892 {
     std::array<xstar_spectral_perf_v064892,4> controller_calls{};
     xstar_spectral_perf_v064892 total{};
@@ -16249,8 +16279,23 @@ int command_run_standalone_production_v67(const Options& options, const std::fil
         std::cout << prefix << "CONTROLLER_BEGIN=YES\n" << std::flush;
         double controller_seconds = 0.0;
         std::size_t evaluations = 0;
-        auto product = build_general_standalone_product_v67(
-            options, params, atomic, program, controller_seconds, evaluations);
+        const bool quiet_controller_v064897 = !verbose_controller_diagnostics_v064897();
+        auto product = [&]() {
+            ScopedCoutSilenceV064897 silence(quiet_controller_v064897);
+            return build_general_standalone_product_v67(
+                options, params, atomic, program, controller_seconds, evaluations);
+        }();
+        const char* force_096_provenance_v064897 =
+            std::getenv("XSTAR_V064897_FORCE_096_RECORD_PROVENANCE");
+        const bool forced_096_provenance_v064897 = force_096_provenance_v064897 &&
+            std::string(force_096_provenance_v064897) == "1";
+        std::cout << "V064897_PRODUCTION_QUIET_CONTROLLER="
+                  << (quiet_controller_v064897 ? "ENABLED" : "DISABLED_QUALIFICATION_VERBOSE") << "\n"
+                  << "V064897_TYPE50_IMPLEMENTATION=FROZEN_096_OPTIMIZED_STANDALONE\n"
+                  << "V064897_RECORD_PROVENANCE_MODE="
+                  << (forced_096_provenance_v064897 ? "LEGACY_096_RETAIN_ALL" : "COMPACT_DEFERRED_DSEC_ELISION") << "\n"
+                  << "V064897_BOUND_FREE_095=FROZEN_PREPARED_LAZY\n"
+                  << "V064897_BOUNDARY_CORRECTNESS_0942=FROZEN_EXACT_RECOMPUTE\n";
         print_xstar_style_progress_v06488(product);
         const auto trajectory = summarize_standalone_trajectory_v71(product);
         const bool reference_benchmark = is_reference_mg11_benchmark_v71(params);
