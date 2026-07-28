@@ -61,6 +61,7 @@ EMISSIVITY_TARGET := libxstar_emissivity.so
 OPACITY_TARGET := libxstar_opacity.so
 THERMAL_TARGET := libxstar_thermal.so
 FIXED_STATE_TARGET := libxstar_fixed_state.so
+FINAL_RECOMPUTE_TARGET := libxstar_final_recompute.so
 ENGINE_TARGET := libxstar_engine.so
 API_TARGET := libxstar_api.so
 CPP_BACKEND_TARGET := libxstar_backend_cpp.so
@@ -69,7 +70,7 @@ EXECUTABLE_TARGET := xstar_cpp
 EXECUTABLE_OBJECTS := xstar_standalone.o xstar_science_fits.o xstar_run_state.o xstar_step_log.o xstar_atdb_runtime.o
 
 PHYSICS_TARGETS := $(SOLVER_TARGET) $(RATES_TARGET) $(MATRIX_TARGET) \
-	$(EMISSIVITY_TARGET) $(OPACITY_TARGET) $(THERMAL_TARGET) $(ENGINE_TARGET) $(FIXED_STATE_TARGET)
+	$(EMISSIVITY_TARGET) $(OPACITY_TARGET) $(THERMAL_TARGET) $(ENGINE_TARGET) $(FIXED_STATE_TARGET) $(FINAL_RECOMPUTE_TARGET)
 STANDALONE_TARGETS := $(API_TARGET) $(CPP_BACKEND_TARGET) $(PYTHON_BACKEND_TARGET) $(EXECUTABLE_TARGET)
 TARGETS := $(PHYSICS_TARGETS) $(STANDALONE_TARGETS)
 
@@ -105,6 +106,9 @@ $(ENGINE_TARGET): xstar_engine.cpp element_engine.cpp source_order_thermal_reduc
 
 $(FIXED_STATE_TARGET): fixed_state_engine.cpp source_real_energy_grid.hpp source_order_thermal_reducer.hpp canonical_thermal_term.hpp xstar_fixed_state_engine.h xstar_element_engine.h xstar_spectral_engine.h $(ENGINE_TARGET) $(EMISSIVITY_TARGET)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(THERMAL_STRICT_FP_FLAGS) $(SO_LDFLAGS) -o $@ fixed_state_engine.cpp -L. -lxstar_engine -lxstar_emissivity $(RPATH_ORIGIN)
+
+$(FINAL_RECOMPUTE_TARGET): final_recompute_bridge.cpp xstar_final_recompute_bridge.h xstar_atdb_runtime.cpp xstar_atdb_runtime.hpp xstar_fixed_state_engine.h $(FIXED_STATE_TARGET)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(THERMAL_STRICT_FP_FLAGS) $(SO_LDFLAGS) -o $@ final_recompute_bridge.cpp xstar_atdb_runtime.cpp -L. -lxstar_fixed_state $(CFITSIO_LIBS) $(CFITSIO_RPATH) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
 
 $(API_TARGET): xstar_api.cpp compiled_case.cpp xstar_api.h xstar_backend_plugin.h xstar_standalone_internal.hpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -DXSTAR_API_BUILD $(SO_LDFLAGS) \

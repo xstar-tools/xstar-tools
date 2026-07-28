@@ -1,11 +1,12 @@
-# xstar_tools 0.6.48.10.0
+# xstar_tools 0.6.48.10.1
 
-0.6.48.10.0 begins accelerated-Python final-product optimization after the standalone C++ 0.6.48.9.7 baseline reached FORTRAN-class runtime. Zone/controller science remains frozen. For Python runs explicitly selecting the C++ backend, the final `binemis` spectrum construction now automatically uses the existing native C++ writer kernel instead of the ~255 s Python profile/rebin loop. Pure Python is unchanged.
+0.6.48.10.1 continues accelerated-Python final-product optimization after accepted 0.6.48.10.0 reduced the final `binemis` writer from 254.812 s to 0.817 s and the full accelerated run from about 814 s to 562 s. The zone/controller computation and accepted 10.0 C++ `binemis` product implementation are frozen.
 
-Use `XSTAR_V064810_FORCE_PYTHON_BINEMIS=1` to restore the validated Python final-`binemis` path for A/B testing. The promoted native path fails closed by default if its library is unavailable; `XSTAR_V064810_ALLOW_PYTHON_BINEMIS_FALLBACK=1` explicitly permits the slow Python fallback.
+For Python runs explicitly selecting the C++ backend, the final zero-thickness source replay now uses `libxstar_final_recompute.so`, a thin bridge around the already-qualified native fixed-state engine. It replaces only `bremsmap -> calc_hmc_all -> calc_emisab_all -> calc_emis_all`; the existing HEATT/STPCUT handlers, final product writers, and 10.0 C++ `binemis` promotion remain in their accepted order. Pure Python is unchanged.
 
-Blocking host qualification is provided by `run_v064810_python_accel_binemis.sh`. It compares the promoted run with canonical FORTRAN plus the frozen 0.6.48.9.5.1 pure-Python, accelerated-Python, and standalone-C++ references.
+Use `XSTAR_V0648101_FORCE_PYTHON_FINAL_RECOMPUTE=1` to restore the accepted 10.0 Python terminal recompute for A/B qualification. The accelerated native bridge fails closed by default; `XSTAR_V0648101_ALLOW_PYTHON_FINAL_RECOMPUTE_FALLBACK=1` explicitly permits the slow fallback. Final thermal diagnostic sidecars retain the Python path.
 
+Blocking host qualification is provided by `run_v0648101_python_accel_final_recompute.sh`. It runs both the native candidate and the forced-10.0 path from the same package, requires exact fallback reproduction of the accepted 10.0 products, checks bridge product/science closure, and reports the terminal recompute speedup.
 
 ## Historical standalone performance baseline
 

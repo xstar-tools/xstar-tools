@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.48.10.1 — accelerated-Python native final zero-thickness recompute bridge - 2026-07-27
+
+- Promote the accepted 0.6.48.10.0 accelerated-Python result (562.066443 s total; final C++ `binemis` 0.817192 s, all qualification gates ACCEPT) and freeze its zone/controller computation plus the promoted C++ `binemis` implementation by SHA-256.
+- Replace only the final source-order zero-thickness `bremsmap -> calc_hmc_all -> calc_emisab_all -> calc_emis_all` replay in accelerated C++-backend Python with a native fixed-state bridge. The bridge reuses the already-qualified C++ fixed-state engine; it does not introduce a second physics implementation.
+- Transfer the live terminal Python state needed by the source calculation: high-resolution radiation, live `bremsa`, source RRC optical-depth workspace (`tauc`), runtime line optical depths, trial temperature/electron fraction/density, abundances, turbulence, covering fractions, and retained global level workspaces.
+- Project the native source workspaces (`rcem`, `oplin`, `cemab`, `cabab`, `opakab`, `rccemis`, `opakc`, `opakcont`, `fline`, `flinel`, `brcems`) back into the existing Python `RadialTransferWorkspace`, then run the already-active HEATT and STPCUT source handlers in their original order.
+- Pure Python remains unchanged. `XSTAR_V0648101_FORCE_PYTHON_FINAL_RECOMPUTE=1` restores the accepted 10.0 Python terminal recompute; native bridge failure is fail-closed unless `XSTAR_V0648101_ALLOW_PYTHON_FINAL_RECOMPUTE_FALLBACK=1` is explicitly set. Final-thermal sidecar diagnostics intentionally retain the Python path.
+- Add blocking host qualification that requires the forced-10.0 fallback to reproduce all nine accepted 10.0 FITS payloads exactly, pre-terminal detail products to remain bit-exact under the bridge, final public products to stay within 1% of accepted 10.0, external spectrum closure against FORTRAN/pure-Python/C++ references, and final recompute time <=10 s (<=5 s reported as the intended few-second target).
+- Target: reduce accepted 10.0 `final_local_recompute` from 70.962107 s to a few seconds without changing the accepted 10.0 zone trajectory or final `binemis` promotion.
+
 ## 0.6.48.10.0 — accelerated-Python final binemis C++ product promotion - 2026-07-27
 
 - Start from the accepted 0.6.48.9.7 source and freeze all zone/controller science plus the native standalone `binemis` implementation by SHA-256.

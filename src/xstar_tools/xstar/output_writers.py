@@ -2602,12 +2602,68 @@ def run_output_writer_sequence(
         state.control["nlimdt"] = 0
         previous_phase_context = state.control.get("continuum_phase_context")
         state.control["continuum_phase_context"] = "final"
-        try:
+        # v0.6.48.10.1: accelerated Python already owns the accepted C++
+        # fixed-state engine.  Reuse it for the source post-loop zero-thickness
+        # xstarcalc instead of replaying the expensive Python orchestration.
+        # Pure Python and explicit diagnostics retain the historical path.
+        def _v0648101_env_true(name: str) -> bool:
+            return str(os.environ.get(name, "0")).strip().lower() in {"1", "true", "yes", "on"}
+
+        _v0648101_global_backend = str(os.environ.get("XSTAR_ATOMIC_BACKEND", "")).strip().lower()
+        _v0648101_engine_backend = str(os.environ.get("XSTAR_ATOMIC_ENGINE_BACKEND", "")).strip().lower()
+        _v0648101_accelerated_cpp = _v0648101_global_backend == "cpp" or _v0648101_engine_backend == "cpp"
+        _v0648101_force_python = _v0648101_env_true("XSTAR_V0648101_FORCE_PYTHON_FINAL_RECOMPUTE")
+        _v0648101_allow_fallback = _v0648101_env_true("XSTAR_V0648101_ALLOW_PYTHON_FINAL_RECOMPUTE_FALLBACK")
+        _v0648101_diagnostic_requested = bool(os.environ.get("XSTAR_V064882_FINAL_THERMAL_DIAGNOSTICS", "").strip())
+        _v0648101_use_cpp = _v0648101_accelerated_cpp and not _v0648101_force_python and not _v0648101_diagnostic_requested
+        timing_breakdown["final_local_recompute.v0648101_accelerated_cpp_selected"] = 1.0 if _v0648101_accelerated_cpp else 0.0
+        timing_breakdown["final_local_recompute.v0648101_cpp_bridge_selected"] = 1.0 if _v0648101_use_cpp else 0.0
+        timing_breakdown["final_local_recompute.v0648101_force_python"] = 1.0 if _v0648101_force_python else 0.0
+        timing_breakdown["final_local_recompute.v0648101_python_fallback_allowed"] = 1.0 if _v0648101_allow_fallback else 0.0
+
+        def _run_python_final_xstarcalc() -> None:
             runner.run_xstarcalc(state, fixed_state=False)
             append_phase_snapshot(state, "final xstarcalc")
             runner.run_source_routines(
                 (XSTARSourceRoutine.HEATT, XSTARSourceRoutine.STPCUT), state
             )
+
+        try:
+            if _v0648101_use_cpp:
+                try:
+                    from .cpp_backend_final_recompute import apply_native_final_recompute
+                    _native_final = apply_native_final_recompute(state)
+                    timing_breakdown["final_local_recompute.v0648101_cpp_fixed_state_seconds"] = float(_native_final.cpp_seconds)
+                    timing_breakdown["final_local_recompute.v0648101_cpp_bridge_seconds"] = float(_native_final.bridge_seconds)
+                    # Preserve the literal source-order provenance that the
+                    # coarse native call replaces.  HEATT/STPCUT still execute
+                    # through the ordinary registered source handlers below.
+                    _native_source_calls = (
+                        XSTARSourceRoutine.BREMSMAP.value,
+                        XSTARSourceRoutine.CALC_HMC_ALL.value,
+                        XSTARSourceRoutine.CALC_EMISAB_ALL.value,
+                        XSTARSourceRoutine.CALC_EMIS_ALL.value,
+                    )
+                    state.provenance.setdefault("completed_source_routines", []).extend(_native_source_calls)
+                    append_phase_snapshot(state, "final xstarcalc", note="native C++ fixed-state bridge v0.6.48.10.1")
+                    runner.run_source_routines(
+                        (XSTARSourceRoutine.HEATT, XSTARSourceRoutine.STPCUT), state
+                    )
+                    timing_breakdown["final_local_recompute.v0648101_cpp_bridge_accepted"] = 1.0
+                except Exception as _native_exc:
+                    timing_breakdown["final_local_recompute.v0648101_cpp_bridge_failed"] = 1.0
+                    timing_breakdown["final_local_recompute.v0648101_cpp_bridge_error"] = str(_native_exc)[:2048]
+                    if not _v0648101_allow_fallback:
+                        raise OutputWriterPortError(
+                            "v0.6.48.10.1 accelerated Python selected the native final zero-thickness "
+                            "recompute bridge but it failed; set XSTAR_V0648101_FORCE_PYTHON_FINAL_RECOMPUTE=1 "
+                            "for the accepted 10.0 Python path or XSTAR_V0648101_ALLOW_PYTHON_FINAL_RECOMPUTE_FALLBACK=1 "
+                            "to permit an explicit slow fallback"
+                        ) from _native_exc
+                    _run_python_final_xstarcalc()
+                    timing_breakdown["final_local_recompute.v0648101_python_fallback_used"] = 1.0
+            else:
+                _run_python_final_xstarcalc()
         finally:
             if previous_phase_context is None:
                 state.control.pop("continuum_phase_context", None)
