@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.48.10.2.0.1 - 2026-07-28
+
+- Correct the rejected 10.2.0 native-zone entry lifetime: seed the exact source/Python pre-matrix `mml/mmu` active-stage windows into the persistent C++ fixed-state context before DSEC evaluation 1.
+- Preserve a legitimate zero neutral-H entry state; repeated native evaluations derive H I/H II from the preceding native H-ground population.
+- Keep all accepted numerical kernels frozen; `fixed_state_engine.cpp` changes only by adding the active-stage state setter.
+- Add candidate-first host preflight so a bad C++ zone candidate aborts before the expensive Python-zone fallback run.
+
 ## 0.6.48.10.2.0 — persistent native C++ single-zone DSEC backend - 2026-07-28
 
 - Promote 0.6.48.10.1.1 as the scientific baseline: all nine FITS data payloads reproduce accepted 10.0 exactly, the 1052-row RRC inventory is restored, and public science closure is ACCEPT. Its 10.340630 s terminal recompute missed the historical <=10 s performance target by 0.340630 s only; that timing threshold is non-scientific and is not carried forward as a baseline rejection.

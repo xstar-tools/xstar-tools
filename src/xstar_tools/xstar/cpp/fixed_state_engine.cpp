@@ -12867,6 +12867,38 @@ int xstar_fixed_state_context_set_runtime_line_tau_v1(
     }
 }
 
+int xstar_fixed_state_context_set_active_stage_window_v064810201(
+    xstar_fixed_state_context* context,
+    int32_t element_z,
+    int32_t min_stage,
+    int32_t max_stage,
+    char* message,
+    size_t message_size
+) {
+    if (!context || element_z <= 0 || min_stage <= 0 || max_stage < min_stage) {
+        copy_text(message, message_size, "invalid active-stage window arguments");
+        return 1;
+    }
+    try {
+        const auto found = std::find_if(
+            context->program.elements.begin(), context->program.elements.end(),
+            [&](const auto& element) { return element.element_z == element_z; });
+        if (found == context->program.elements.end()) {
+            throw std::runtime_error("active-stage element is absent from native program");
+        }
+        if (max_stage > found->n_ions) {
+            throw std::runtime_error("active-stage window exceeds native element ion count");
+        }
+        context->retained_active_stage_windows[element_z] =
+            std::make_pair(static_cast<int>(min_stage), static_cast<int>(max_stage));
+        copy_text(message, message_size, "native active-stage window seeded");
+        return 0;
+    } catch (const std::exception& exc) {
+        copy_text(message, message_size, exc.what());
+        return 7;
+    }
+}
+
 int xstar_fixed_state_context_reset_v1(xstar_fixed_state_context* context, char* message, size_t message_size) {
     if (!context) return 1;
     std::array<char, XSTAR_FIXED_STATE_MESSAGE_SIZE> error{};

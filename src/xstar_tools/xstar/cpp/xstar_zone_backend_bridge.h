@@ -8,7 +8,7 @@
 extern "C" {
 #endif
 
-#define XSTAR_ZONE_BACKEND_ABI_VERSION 60481020u
+#define XSTAR_ZONE_BACKEND_ABI_VERSION 604810201u
 #define XSTAR_ZONE_BACKEND_MESSAGE_SIZE 512u
 
 typedef struct xstar_zone_backend_context xstar_zone_backend_context;
@@ -49,6 +49,13 @@ typedef struct {
     const double* global_bilevg;
     const double* global_rnisg;
     size_t global_level_count;
+    /* v0.6.48.10.2.0.1 source-lifetime seed.  These windows are selected
+     * by the accepted Python/source pre-matrix pass at the exact zone entry
+     * state, then installed before native DSEC evaluation 1. */
+    const int32_t* active_stage_element_z;
+    const int32_t* active_stage_min;
+    const int32_t* active_stage_max;
+    size_t active_stage_window_count;
 } xstar_zone_backend_input_v1;
 
 typedef struct {
@@ -78,6 +85,11 @@ typedef struct {
     double fixed_state_seconds;
     double dsec_orchestration_seconds;
     double total_seconds;
+    uint32_t seeded_active_stage_window_count;
+    int32_t seeded_mg_min_stage;
+    int32_t seeded_mg_max_stage;
+    double entry_neutral_h_density_cm3;
+    double entry_ionized_h_density_cm3;
     char message[XSTAR_ZONE_BACKEND_MESSAGE_SIZE];
 } xstar_zone_backend_output_v1;
 

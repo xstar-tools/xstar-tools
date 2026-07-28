@@ -1783,7 +1783,7 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
         zone_backend = str(runtime_state.control.get("zone_backend", "python")).strip().lower()
         evaluator: CalcHMCAllDsecEvaluator | None
         if zone_backend == "cpp":
-            # v0.6.48.10.2.0: one Python->C++ call owns the complete source
+            # v0.6.48.10.2.0.1: one Python->C++ call owns the complete source
             # DSEC convergence loop for this shell.  Python deliberately keeps
             # the accepted post-DSEC boundary calc_hmc_all, transport and
             # writer ownership in this first milestone.
@@ -2347,7 +2347,7 @@ def run_xstar_from_parameters(
     if zone_backend == "cpp":
         if not active_subset:
             raise XSTARPythonRunnerError(
-                "zone_backend=cpp requires the active ATDB subset in 0.6.48.10.2.0"
+                "zone_backend=cpp requires the active ATDB subset in 0.6.48.10.2.0.1"
             )
         selected = backend_selection.as_dict()
         non_cpp = [name for name, value in selected.items() if value != "cpp"]

@@ -57,6 +57,7 @@ struct xstar_zone_backend_context {
     double emission_covering_fraction = 0.5;
     double dsec_covering_fraction = 1.0;
     double turbulent_velocity_km_s = 0.0;
+    double hydrogen_abundance = 1.0;
     std::vector<std::uint8_t> global_terminal_role;
     std::size_t hydrogen_ground_population_index = 0u;
     std::vector<double> last_populations;
@@ -127,12 +128,12 @@ int evaluator(void* opaque, const xstar_thermal_state_v1* trial,
         double neutral_fraction = 0.0;
         if (!d->ctx->last_populations.empty() && d->ctx->hydrogen_ground_population_index < d->ctx->last_populations.size()) {
             neutral_fraction = std::clamp(d->ctx->last_populations[d->ctx->hydrogen_ground_population_index], 0.0, 1.0);
-            input.neutral_h_density_cm3 = input.hydrogen_density_cm3 * neutral_fraction;
+            input.neutral_h_density_cm3 = input.hydrogen_density_cm3 * neutral_fraction * d->ctx->hydrogen_abundance;
+            input.ionized_h_density_cm3 = input.hydrogen_density_cm3 * (1.0 - neutral_fraction) * d->ctx->hydrogen_abundance;
         } else {
-            input.neutral_h_density_cm3 = d->in->neutral_h_density_cm3 > 0.0
-                ? d->in->neutral_h_density_cm3 : std::min(1.0e4, input.hydrogen_density_cm3);
+            input.neutral_h_density_cm3 = d->in->neutral_h_density_cm3;
+            input.ionized_h_density_cm3 = d->in->ionized_h_density_cm3;
         }
-        input.ionized_h_density_cm3 = std::max(0.0, input.hydrogen_density_cm3 - input.neutral_h_density_cm3);
         input.covering_fraction = d->ctx->emission_covering_fraction;
         input.turbulent_velocity_km_s = d->ctx->turbulent_velocity_km_s;
         input.radiation_energy_ev = d->in->radiation_energy_ev;
@@ -153,7 +154,14 @@ int evaluator(void* opaque, const xstar_thermal_state_v1* trial,
                                     XSTAR_FIXED_RUNTIME_STATE_DSEC_COVERING_FRACTION |
                                     XSTAR_FIXED_RUNTIME_STATE_DEFER_PRODUCT_PROJECTION;
         if (sequence >= 2u) input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_REPEATED_HYDROGEN_SOURCE_STATE;
-        if (sequence >= 2u && sequence <= 4u) input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_RETAIN_ACTIVE_STAGE_WINDOW;
+        if (d->in->active_stage_window_count > 0u &&
+            (eval_index == 1u || (d->zone_index == 1 && sequence <= 4u))) {
+            // 10.2.0.1 imports the exact Python/source pre-matrix mml/mmu
+            // decision at every shell entry.  Zone-1 evaluations 2..4 keep
+            // the historical source retention before the first temperature
+            // secant point; later evaluations resume ordinary recomputation.
+            input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_RETAIN_ACTIVE_STAGE_WINDOW;
+        }
         if (d->zone_index >= 3) input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_LINE_TAU_ACTIVE;
 
         std::vector<double> populations(d->ctx->program.rows.size(), 0.0);
@@ -195,7 +203,7 @@ int evaluator(void* opaque, const xstar_thermal_state_v1* trial,
 }
 
 extern "C" uint32_t xstar_zone_backend_bridge_abi_version(void) { return XSTAR_ZONE_BACKEND_ABI_VERSION; }
-extern "C" const char* xstar_zone_backend_bridge_backend_name(void) { return "xstar_native_single_zone_dsec_v06481020"; }
+extern "C" const char* xstar_zone_backend_bridge_backend_name(void) { return "xstar_native_single_zone_dsec_v064810201"; }
 extern "C" int xstar_zone_backend_context_config_init_v1(xstar_zone_backend_context_config_v1* c) {
     if (!c) return 1;
     std::memset(c, 0, sizeof(*c));
@@ -245,6 +253,9 @@ extern "C" int xstar_zone_backend_context_create_v1(
         ctx->emission_covering_fraction = cfg->emission_covering_fraction;
         ctx->dsec_covering_fraction = cfg->dsec_covering_fraction;
         ctx->turbulent_velocity_km_s = cfg->turbulent_velocity_km_s;
+        if (cfg->abundances_by_z && cfg->abundance_count >= 1u && std::isfinite(cfg->abundances_by_z[0]) && cfg->abundances_by_z[0] >= 0.0) {
+            ctx->hydrogen_abundance = cfg->abundances_by_z[0];
+        }
         for (std::size_t i = 0; i < ctx->program.row_metadata.size(); ++i) {
             const auto& meta = ctx->program.row_metadata[i];
             int z = 0;
@@ -270,9 +281,29 @@ extern "C" int xstar_zone_backend_run_v1(
         require(in->global_xilevg && in->global_bilevg && in->global_rnisg && in->global_level_count > 0u, "native zone global workspaces missing");
         require(out->global_xilevg && out->global_bilevg && out->global_rnisg, "native zone global outputs missing");
         require(out->global_xilevg_capacity >= in->global_level_count && out->global_bilevg_capacity >= in->global_level_count && out->global_rnisg_capacity >= in->global_level_count, "native zone global output capacity too small");
+        require(std::isfinite(in->neutral_h_density_cm3) && in->neutral_h_density_cm3 >= 0.0, "native zone neutral-H entry state invalid");
+        require(std::isfinite(in->ionized_h_density_cm3) && in->ionized_h_density_cm3 >= 0.0, "native zone ionized-H entry state invalid");
+        if (in->active_stage_window_count > 0u) {
+            require(in->active_stage_element_z && in->active_stage_min && in->active_stage_max, "native zone active-stage seed arrays missing");
+        }
 
         const auto started = std::chrono::steady_clock::now();
         std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> fixed_message{};
+        out->seeded_active_stage_window_count = 0u;
+        out->seeded_mg_min_stage = 0;
+        out->seeded_mg_max_stage = 0;
+        out->entry_neutral_h_density_cm3 = in->neutral_h_density_cm3;
+        out->entry_ionized_h_density_cm3 = in->ionized_h_density_cm3;
+        for (std::size_t i = 0; i < in->active_stage_window_count; ++i) {
+            const int z = in->active_stage_element_z[i];
+            const int lo = in->active_stage_min[i];
+            const int hi = in->active_stage_max[i];
+            const int arc = xstar_fixed_state_context_set_active_stage_window_v064810201(
+                ctx->fixed, z, lo, hi, fixed_message.data(), fixed_message.size());
+            if (arc != 0) throw std::runtime_error(std::string("native zone active-stage seed failed: ") + fixed_message.data());
+            ++out->seeded_active_stage_window_count;
+            if (z == 12) { out->seeded_mg_min_stage = lo; out->seeded_mg_max_stage = hi; }
+        }
         if (in->line_tau_in && in->line_tau_out && in->line_tau_count > 0u) {
             const int lrc = xstar_fixed_state_context_set_runtime_line_tau_v1(ctx->fixed, in->line_tau_in, in->line_tau_out, in->line_tau_count, fixed_message.data(), fixed_message.size());
             if (lrc != 0) throw std::runtime_error(std::string("native zone line tau binding failed: ") + fixed_message.data());
@@ -328,12 +359,12 @@ extern "C" int xstar_zone_backend_run_v1(
             double neutral_fraction = 0.0;
             if (!ctx->last_populations.empty() && ctx->hydrogen_ground_population_index < ctx->last_populations.size()) {
                 neutral_fraction = std::clamp(ctx->last_populations[ctx->hydrogen_ground_population_index], 0.0, 1.0);
-                boundary_in.neutral_h_density_cm3 = boundary_in.hydrogen_density_cm3 * neutral_fraction;
+                boundary_in.neutral_h_density_cm3 = boundary_in.hydrogen_density_cm3 * neutral_fraction * ctx->hydrogen_abundance;
+                boundary_in.ionized_h_density_cm3 = boundary_in.hydrogen_density_cm3 * (1.0 - neutral_fraction) * ctx->hydrogen_abundance;
             } else {
-                boundary_in.neutral_h_density_cm3 = in->neutral_h_density_cm3 > 0.0
-                    ? in->neutral_h_density_cm3 : std::min(1.0e4, boundary_in.hydrogen_density_cm3);
+                boundary_in.neutral_h_density_cm3 = in->neutral_h_density_cm3;
+                boundary_in.ionized_h_density_cm3 = in->ionized_h_density_cm3;
             }
-            boundary_in.ionized_h_density_cm3 = std::max(0.0, boundary_in.hydrogen_density_cm3 - boundary_in.neutral_h_density_cm3);
             boundary_in.covering_fraction = ctx->emission_covering_fraction;
             boundary_in.turbulent_velocity_km_s = ctx->turbulent_velocity_km_s;
             boundary_in.radiation_energy_ev = in->radiation_energy_ev;

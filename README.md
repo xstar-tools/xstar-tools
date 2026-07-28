@@ -88,4 +88,7 @@ See `V04874625517254_SEQUENCE16_CONTRACT.md` and `v25517254_sequence16_contract_
 ### 0.6.48.9.5 performance candidate
 
 The standalone C++ engine includes a prepared Type49/53 bound-free path. It caches immutable source-grid geometry, reuses the source-identical reduced-grid integral, and computes full-grid revisits only for source-selected records. The accepted 0.6.48.9.4.2 exact-boundary ownership remains frozen. Set `XSTAR_V064895_FORCE_LEGACY_BOUND_FREE=1` only for A/B qualification/debugging.
+## v0.6.48.10.2.0.1 native-zone lifetime closure
+
+The experimental `--zone-backend cpp` path now seeds the source-faithful active ion-stage window and exact hydrogen lifetime state before the first native DSEC evaluation of each shell. `--zone-backend python` remains the accepted orchestration fallback. The host qualifier runs the C++ candidate first and only launches the slower Python-zone control after the candidate closes the 10.2.0 stage-2/H-lifetime regression and product-science preflight.
 

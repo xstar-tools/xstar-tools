@@ -1,6 +1,6 @@
 """Persistent native single-zone DSEC backend for accelerated Python.
 
-v0.6.48.10.2.0 moves one complete DSEC convergence call (20/1/17/16
+v0.6.48.10.2.0.1 corrects the zone-entry source lifetime and moves one complete DSEC convergence call (20/1/17/16
 fixed-state evaluations for the qualified Mg XI trajectory) behind one C ABI
 call while Python retains radial transport, the accepted post-DSEC boundary
 calculation, and all product writers.
@@ -13,9 +13,10 @@ from typing import Any
 
 import numpy as np
 
-ABI = 60481020
+ABI = 604810201
 _MSG = 512
 _DBLP = ctypes.POINTER(ctypes.c_double)
+_I32P = ctypes.POINTER(ctypes.c_int32)
 _LIB: ctypes.CDLL | None = None
 
 
@@ -47,6 +48,8 @@ class _Input(ctypes.Structure):
         ("line_tau_count", ctypes.c_size_t),
         ("global_xilevg", _DBLP), ("global_bilevg", _DBLP),
         ("global_rnisg", _DBLP), ("global_level_count", ctypes.c_size_t),
+        ("active_stage_element_z", _I32P), ("active_stage_min", _I32P),
+        ("active_stage_max", _I32P), ("active_stage_window_count", ctypes.c_size_t),
     ]
 
 
@@ -71,6 +74,11 @@ class _Output(ctypes.Structure):
         ("fixed_state_seconds", ctypes.c_double),
         ("dsec_orchestration_seconds", ctypes.c_double),
         ("total_seconds", ctypes.c_double),
+        ("seeded_active_stage_window_count", ctypes.c_uint32),
+        ("seeded_mg_min_stage", ctypes.c_int32),
+        ("seeded_mg_max_stage", ctypes.c_int32),
+        ("entry_neutral_h_density_cm3", ctypes.c_double),
+        ("entry_ionized_h_density_cm3", ctypes.c_double),
         ("message", ctypes.c_char * _MSG),
     ]
 
@@ -86,6 +94,66 @@ def _arr(value: Any, *, n: int | None = None) -> np.ndarray:
             raise RuntimeError(f"native zone input shorter than required: {a.size} < {n}")
         a = np.ascontiguousarray(a[:n])
     return a
+
+
+def _pi32(a: np.ndarray) -> _I32P:
+    return a.ctypes.data_as(_I32P)
+
+
+def _source_entry_active_stage_windows(state: Any, runtime: Any) -> tuple[dict[int, tuple[int, int]], float]:
+    """Evaluate only the accepted source pre-matrix ion-window selector.
+
+    The 10.2.0 native context independently widened Mg at zone entry.  The
+    Python/source path decides mml/mmu before the expensive matrix/level solve,
+    so 10.2.0.1 reuses that exact small pre-matrix phase to seed the persistent
+    native fixed-state lifetime before DSEC evaluation 1.
+    """
+    import time
+    from .ion_balance import CalcIonRatesContext, calc_element_pre_matrix_balance
+    from .ucalc import default_source_faithful_ucalc
+
+    started = time.perf_counter()
+    requests = tuple(getattr(runtime, "element_requests", ()) or ())
+    if not requests:
+        raise RuntimeError("native zone active-stage selector has no element requests")
+    raw_dense_x = getattr(runtime, "global_xilevg_by_index", None)
+    dense_x = (
+        np.zeros(0, dtype=np.float64)
+        if raw_dense_x is None
+        else np.asarray(raw_dense_x, dtype=np.float64).reshape(-1)
+    )
+    hydrogen_ground = float(dense_x[0]) if dense_x.size else 0.0
+    if not np.isfinite(hydrogen_ground) or hydrogen_ground < 0.0 or hydrogen_ground > 1.0:
+        raise RuntimeError("native zone entry H I ground population is invalid")
+    h_abundance = next((float(r.abundance) for r in requests if int(r.element_z) == 1), 0.0)
+    xpx = float(runtime.hydrogen_density_cm3)
+    live_xh0 = xpx * hydrogen_ground * h_abundance
+    live_xh1 = xpx * (1.0 - hydrogen_ground) * h_abundance
+    dispatcher = default_source_faithful_ucalc()
+    windows: dict[int, tuple[int, int]] = {}
+    master = state.atomic.master
+    derived = state.atomic.derived
+    for request in requests:
+        z = int(request.element_z)
+        context = CalcIonRatesContext(
+            temperature_k=float(runtime.temperature_k),
+            hydrogen_density_cm3=xpx,
+            electron_fraction_xee=float(runtime.electron_fraction_xee),
+            radiation=request.radiation,
+            covering_fraction=float(request.covering_fraction),
+            turbulent_velocity_km_s=float(request.turbulent_velocity_km_s),
+            neutral_h_density_cm3=live_xh0,
+            ionized_h_density_cm3=live_xh1,
+            lfast=int(request.lfast),
+            strict_context=bool(request.strict_context),
+            retain_contributions=False,
+        )
+        _, _, limits = calc_element_pre_matrix_balance(
+            master, derived, element_z=z, context=context,
+            critf=float(request.critf), dispatcher=dispatcher,
+        )
+        windows[z] = (int(limits.mml), int(limits.mmu))
+    return windows, float(time.perf_counter() - started)
 
 
 def _load() -> ctypes.CDLL:
@@ -216,7 +284,7 @@ def run_native_zone_dsec(state: Any, runtime: Any, *, nlim: int, tinf_t4: float)
 
     zone = int(state.transfer.zone_index)
     if zone < 1 or zone > 4:
-        raise RuntimeError(f"v0.6.48.10.2.0 native zone backend currently qualifies zones 1..4, got {zone}")
+        raise RuntimeError(f"v0.6.48.10.2.0.1 native zone backend currently qualifies zones 1..4, got {zone}")
     workspace = state.control.get("radial_transfer_workspace")
     if not isinstance(workspace, RadialTransferWorkspace):
         raise RuntimeError("native zone backend requires RadialTransferWorkspace")
@@ -234,13 +302,19 @@ def run_native_zone_dsec(state: Any, runtime: Any, *, nlim: int, tinf_t4: float)
     gx, gb, gr, mapping = _global_workspaces(state, runtime)
     out_x = np.zeros_like(gx); out_b = np.zeros_like(gb); out_r = np.zeros_like(gr)
 
-    previous_fixed = getattr(getattr(state, "local_zone", None), "calc_hmc_all", None)
-    neutral_h = float(getattr(previous_fixed, "neutral_h_density_cm3", 0.0) or 0.0)
-    ionized_h = float(getattr(previous_fixed, "ionized_h_density_cm3", 0.0) or 0.0)
-    if neutral_h <= 0.0:
-        neutral_h = min(1.0e4, float(runtime.hydrogen_density_cm3))
-    if ionized_h <= 0.0:
-        ionized_h = max(0.0, float(runtime.hydrogen_density_cm3) - neutral_h)
+    # Literal calc_hmc_all entry lifetime: xh0/xh1 come from the incoming
+    # global H I ground population.  A legitimate xh0=0 must remain zero.
+    h_abundance = next((float(r.abundance) for r in runtime.element_requests if int(r.element_z) == 1), 0.0)
+    h_ground = float(gx[0]) if gx.size else 0.0
+    if not np.isfinite(h_ground) or h_ground < 0.0 or h_ground > 1.0:
+        raise RuntimeError("native zone entry H I ground population is invalid")
+    neutral_h = float(runtime.hydrogen_density_cm3) * h_ground * h_abundance
+    ionized_h = float(runtime.hydrogen_density_cm3) * (1.0 - h_ground) * h_abundance
+
+    active_windows, selector_seconds = _source_entry_active_stage_windows(state, runtime)
+    active_z = np.ascontiguousarray(sorted(active_windows), dtype=np.int32)
+    active_min = np.ascontiguousarray([active_windows[int(z)][0] for z in active_z], dtype=np.int32)
+    active_max = np.ascontiguousarray([active_windows[int(z)][1] for z in active_z], dtype=np.int32)
 
     inp = _Input(); out = _Output(); ctx = _get_context(state); lib = ctx._lib
     if lib.xstar_zone_backend_input_init_v1(ctypes.byref(inp)) != 0:
@@ -259,6 +333,7 @@ def run_native_zone_dsec(state: Any, runtime: Any, *, nlim: int, tinf_t4: float)
     inp.continuum_tau_in = _p(cont_in); inp.continuum_tau_out = _p(cont_out); inp.continuum_tau_count = cont_in.size
     inp.line_tau_in = _p(line_in); inp.line_tau_out = _p(line_out); inp.line_tau_count = line_in.size
     inp.global_xilevg = _p(gx); inp.global_bilevg = _p(gb); inp.global_rnisg = _p(gr); inp.global_level_count = gx.size
+    inp.active_stage_element_z = _pi32(active_z); inp.active_stage_min = _pi32(active_min); inp.active_stage_max = _pi32(active_max); inp.active_stage_window_count = active_z.size
     out.global_xilevg = _p(out_x); out.global_xilevg_capacity = out_x.size
     out.global_bilevg = _p(out_b); out.global_bilevg_capacity = out_b.size
     out.global_rnisg = _p(out_r); out.global_rnisg_capacity = out_r.size
@@ -271,6 +346,16 @@ def run_native_zone_dsec(state: Any, runtime: Any, *, nlim: int, tinf_t4: float)
     nx, nb, nr = int(out.global_xilevg_count), int(out.global_bilevg_count), int(out.global_rnisg_count)
     if not (nx == nb == nr == gx.size):
         raise RuntimeError(f"native zone global workspace size mismatch: {nx}/{nb}/{nr} vs {gx.size}")
+    if int(out.seeded_active_stage_window_count) != int(active_z.size):
+        raise RuntimeError("native zone did not install every source active-stage seed")
+    if 12 in active_windows:
+        expected_mg = active_windows[12]
+        if (int(out.seeded_mg_min_stage), int(out.seeded_mg_max_stage)) != expected_mg:
+            raise RuntimeError(
+                "native zone Mg active-stage seed mismatch: "
+                f"native={int(out.seeded_mg_min_stage)}..{int(out.seeded_mg_max_stage)} "
+                f"source={expected_mg[0]}..{expected_mg[1]}"
+            )
 
     runtime.temperature_t4 = float(out.final_temperature_t4)
     runtime.electron_fraction_xee = float(out.final_electron_fraction_xee)
@@ -286,6 +371,29 @@ def run_native_zone_dsec(state: Any, runtime: Any, *, nlim: int, tinf_t4: float)
     runtime.last_hmctot = float(out.final_hmctot)
     runtime.last_elcter = float(out.final_elcter)
     runtime.calc_hmc_all_call_count += int(out.ntotit)
+    # Compact qualification markers: four lines per run, no per-evaluation I/O.
+    mg_window = active_windows.get(12, (0, 0))
+    print(
+        f"V064810201_ZONE{zone}_ENTRY_SOURCE_MG_STAGE_WINDOW="
+        f"{int(mg_window[0])}..{int(mg_window[1])}"
+    )
+    print(
+        f"V064810201_ZONE{zone}_ENTRY_H_DENSITIES="
+        f"{float(out.entry_neutral_h_density_cm3):.17g};"
+        f"{float(out.entry_ionized_h_density_cm3):.17g}"
+    )
+    print(
+        f"V064810201_ZONE{zone}_NATIVE_DSEC_TERMINAL="
+        f"T4={float(out.final_temperature_t4):.17g};"
+        f"XEE={float(out.final_electron_fraction_xee):.17g};"
+        f"HMCTOT={float(out.final_hmctot):.17g};"
+        f"ELCTER={float(out.final_elcter):.17g};"
+        f"NTOTIT={int(out.ntotit)}"
+    )
+    print(
+        f"V064810201_ZONE{zone}_NATIVE_DSEC_SECONDS="
+        f"{float(out.total_seconds):.9f};SELECTOR={float(selector_seconds):.9f}"
+    )
     runtime.provenance.update({
         "dsec_native_orchestration": True,
         "dsec_native_single_zone_backend": True,
@@ -294,6 +402,12 @@ def run_native_zone_dsec(state: Any, runtime: Any, *, nlim: int, tinf_t4: float)
         "dsec_orchestration_seconds": float(out.dsec_orchestration_seconds),
         "dsec_fixed_state_seconds": float(out.fixed_state_seconds),
         "dsec_zone_backend_total_seconds": float(out.total_seconds),
+        "dsec_entry_active_stage_selector_seconds": float(selector_seconds),
+        "dsec_entry_active_stage_windows": {int(z): [int(v[0]), int(v[1])] for z, v in active_windows.items()},
+        "dsec_entry_mg_min_stage": int(active_windows.get(12, (0, 0))[0]),
+        "dsec_entry_mg_max_stage": int(active_windows.get(12, (0, 0))[1]),
+        "dsec_entry_neutral_h_density_cm3": float(out.entry_neutral_h_density_cm3),
+        "dsec_entry_ionized_h_density_cm3": float(out.entry_ionized_h_density_cm3),
         "dsec_callback_seconds": 0.0,
         "dsec_callback_state_propagation": False,
         "dsec_trace_count": 0,

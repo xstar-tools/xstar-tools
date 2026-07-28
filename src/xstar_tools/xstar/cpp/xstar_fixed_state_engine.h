@@ -566,6 +566,18 @@ XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_context_set_runtime_line_tau_v1(
     size_t message_size
 );
 
+/* v0.6.48.10.2.0.1: seed the source-retained compact ion-stage window
+ * before an autonomous native zone controller enters its first fixed-state
+ * evaluation.  This is a state-lifetime setter, not a new numerical kernel. */
+XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_context_set_active_stage_window_v064810201(
+    xstar_fixed_state_context* context,
+    int32_t element_z,
+    int32_t min_stage,
+    int32_t max_stage,
+    char* message,
+    size_t message_size
+);
+
 XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_context_reset_v1(
     xstar_fixed_state_context* context,
     char* message,
