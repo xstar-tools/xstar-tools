@@ -1,4 +1,6 @@
-## 0.6.48.10.2.1.1 zone backend modes
+## 0.6.48.10.2.1.1.1 qualifier-only hotfix
+
+This release is qualification-only: the `python`, `cpp-all`, and `cpp-zone` runtime/science implementations are unchanged from 0.6.48.10.2.1.1. It corrects step-log science normalization so legacy measurement-only footer timers do not cause false rejection.
 
 `--zone-backend` now accepts exactly `python`, `cpp-all`, and `cpp-zone`. `cpp-all` keeps the accepted one-call standalone-production trajectory. `cpp-zone` uses four sequential calls into a persistent native context running the same production controller, so no Python state reconstruction occurs between zones. `python` retains the 0.6.48.10.1.1 accelerated-Python trajectory.
 

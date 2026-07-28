@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.48.10.2.1.1.1 — qualifier-only step-log normalization hotfix - 2026-07-28
+
+- No science, controller, backend, FITS writer, or zone-execution changes.
+- Fixes the 0.6.48.10.2.1.1 qualifier false rejection by treating the legacy
+  `native_step_log_formatter` and `native_controller_and_fits` footer values as
+  measurement-only timing fields when comparing step-log science content.
+- Retains strict sensitivity to non-timing science-row changes.
+- Keeps all three zone modes unchanged: `python`, `cpp-all`, and `cpp-zone`.
+- The legacy `run_v064810211_python_zone_modes.sh` entry point redirects to the
+  corrected 0.6.48.10.2.1.1.1 qualifier runner.
+
 ## 0.6.48.10.2.1.1 — persistent shared-production zone-by-zone backend - 2026-07-28
 
 - Keeps the accepted 0.6.48.10.1.1 accelerated-Python controller as `--zone-backend python`.
