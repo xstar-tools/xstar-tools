@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 0.6.48.11.2 — full variable-call controller and multi-model source/publication closure - 2026-07-28
+
+- Continue the 0.6.48.11.1 standalone-first multi-model branch while preserving the fully accepted 0.6.48.10.2.1.1.2 `mg11_ne1e8` result as a separate hard bit-exact regression gate.
+- Remove the remaining active 1..4 source-call ceilings from autonomous production DSEC/snapshot construction. The four-call source-sequence arrays remain isolated to explicit frozen Mg XI reference-trajectory qualification only; the smoke runner now requires calls 5-6 for the six-zone C V case and calls 5-9 for the nine-zone Ca XIX case.
+- Correct native Type 59 `phintfo` thermodynamic constants to the source-port/XSTAR Boltzmann erg/K and modern erg/eV conversion instead of the legacy 0.861707 eV/T4 constant used by 11.1. Keep the analytic Verner cross section, scalar photoionization/heating, Milne recombination, and direct bound-free opacity ownership unchanged.
+- Extend five-point Type 51 Burgess-Tully evaluation through transition types 5 and 6 in the native fixed-state/matrix paths and Python reference helper; make any remaining invalid Type51 record failure report record number, REAL/INT counts, BT type, energy and scaling constant.
+- Generalize Type 10 endpoint lowering so source `idest`-style endpoints that are not literal local Type-13 rows can be projected into the compact ion basis.
+- Replace the unconditional 616-row Mg detail template outside the accepted Mg anchor with live source-order terminal-active level identities. Generalize detail-line, public-line and RRC inventories similarly; generic public lines are capped at 600 only when more than 600 live ranked lines exist, allowing the 578-row Ca XIX source surface.
+- Keep `python`, `cpp-all`, and `cpp-zone` unchanged and retain production-zone ABI 6048110 because the C ABI shape is unchanged.
+- Qualification remains strictly staged: rerun only the 11-model standalone smoke first; `standalone-all` is blocked until all 11 models ACCEPT, then Python-hosted native modes, then selective expensive Python.
+- No C/O/Ca scientific acceptance is preclaimed by this package. The host smoke run is authoritative for the Type59 DSEC 39->24 target, Type51/Type10 closure, 243/168 detail-row targets, 578 Ca line rows, and RRC inventory closure.
+
 ## 0.6.48.11.1 — Type7/10/59/66 native coverage and generic publication closure - 2026-07-28
 
 - Continue the 0.6.48.11.0 variable-zone multi-model qualification branch without changing the accepted Mg XI reference-mode trajectory or the public `python|cpp-all|cpp-zone` mode contract.

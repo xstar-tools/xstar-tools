@@ -591,7 +591,7 @@ bool xstar_matrix_type51_upsilon5(long long bt_type, double eij_ryd, double c_bt
         const double denom = std::log(e + c_bt);
         if (denom == 0.0 || !std::isfinite(denom)) return false;
         x = std::log((e + c_bt) / c_bt) / denom;
-    } else if (bt_type == 2 || bt_type == 3) {
+    } else if (bt_type == 2 || bt_type == 3 || bt_type == 5 || bt_type == 6) {
         x = e / (e + c_bt);
     } else {
         return false;
@@ -600,6 +600,8 @@ bool xstar_matrix_type51_upsilon5(long long bt_type, double eij_ryd, double c_bt
     if (bt_type == 1) val *= std::log(e + 2.71828);
     else if (bt_type == 3) val /= (e + 1.0);
     else if (bt_type == 4) val *= std::log(e + c_bt);
+    else if (bt_type == 5) val = (e != 0.0 ? val / e : std::numeric_limits<double>::quiet_NaN());
+    else if (bt_type == 6) val = std::pow(10.0, val);
     if (!std::isfinite(val)) return false;
     *out = val;
     return true;

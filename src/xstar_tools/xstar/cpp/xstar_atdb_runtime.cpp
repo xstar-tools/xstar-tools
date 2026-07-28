@@ -570,6 +570,17 @@ int row_for_local(const Layout& l,int ion,int local) {
 int row_for_idest(const Layout& l,const Block& b,int idest) {
     int row=b.compact_start+idest-1; if (row<1 || row>l.n_rows) throw std::runtime_error("destination outside compact element basis"); return row;
 }
+int row_for_source_endpoint(const Layout& l,const Block& b,int local_or_idest) {
+    // v0.6.48.11.2: several source branches (notably O VII Type-10)
+    // carry an idest-style endpoint that can extend beyond the literal Type-13
+    // local-level table.  Prefer the literal local role when it exists;
+    // otherwise project the source idest into the compact element basis, just
+    // as the population matrix does for parent/continuum destinations.
+    auto it=l.role_to_row.find({b.ion_index,local_or_idest});
+    if (it!=l.role_to_row.end()) return it->second;
+    if (local_or_idest>0) return row_for_idest(l,b,local_or_idest);
+    throw std::runtime_error("ATDB source endpoint is non-positive");
+}
 const Block& block_for(const Layout& l,int ion) {
     for (const auto& b:l.blocks) if (b.ion_index==ion) return b; throw std::runtime_error("missing layout ion block");
 }
@@ -690,7 +701,7 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
     else if (dt==2) { need(rr.size()>=4,"short payload"); lower=row_for_local(l,ion,1); upper=row_for_local(l,ion,b.nlev); out.reals.assign(rr.begin(),rr.begin()+4); out.ints.clear(); energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
     else if (dt==7) { need(rr.size()>=4,"short payload"); out.reals.assign(rr.begin(),rr.begin()+4); out.ints.clear(); matrix=false; }
     else if (dt==9) { need(rr.size()>=4,"short payload"); if(ii.size()>1){ int id1=ii[0],id2=b.nlev+static_cast<int>(ii[1])-1; lower=row_for_local(l,ion,id1); upper=row_for_idest(l,b,id2); out.ints={1}; } else { lower=row_for_local(l,ion,1); upper=row_for_local(l,ion,b.nlev); out.ints={0}; } out.reals.assign(rr.begin(),rr.begin()+4); energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
-    else if (dt==10) { need(rr.size()>=4 && !ii.empty(),"short payload"); int id1=ii[0]; lower=row_for_local(l,ion,id1); upper=row_for_local(l,ion,b.nlev); out.reals=rr; out.ints={id1}; energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
+    else if (dt==10) { need(rr.size()>=4 && !ii.empty(),"short payload"); int id1=ii[0]; lower=row_for_source_endpoint(l,b,id1); upper=row_for_local(l,ion,b.nlev); out.reals=rr; out.ints={id1}; energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
     else if (dt==30) { need(!ii.empty(),"missing nmax"); out.reals.clear(); out.ints={ii[0]}; matrix=false; }
     else if (dt==38 || dt==39) { need((dt==38&&rr.size()>=4)||(dt==39&&rr.size()>=2),"short payload"); out.ints.clear(); matrix=false; }
     else if (dt==50) {

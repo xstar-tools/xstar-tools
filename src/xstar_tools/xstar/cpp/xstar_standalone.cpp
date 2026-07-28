@@ -3114,11 +3114,18 @@ int fixed_dsec_evaluator(
     }
     FixedDsecSnapshot snapshot;
     snapshot.call_index = data->call_index;
-    if (snapshot.call_index < 1 || snapshot.call_index > 4) {
-        set_callback_error(error, error_size, "fixed-state DSEC evaluator call index is outside 1..4");
+    if (snapshot.call_index < 1) {
+        set_callback_error(error, error_size, "fixed-state DSEC evaluator call index is below 1");
         return 1;
     }
+    // v0.6.48.11.2: the four-slot source-trajectory arrays are a frozen
+    // qualification surface only.  Autonomous production calls 5..nsteps
+    // must not be rejected simply because the Mg XI reference has four calls.
     const std::size_t call_slot = snapshot.call_index - 1;
+    if (data->per_evaluation_gate_enabled && call_slot >= data->dsec_source_sequences.size()) {
+        set_callback_error(error, error_size, "source-trajectory DSEC evaluator call index exceeds frozen reference inventory");
+        return 1;
+    }
     if (data->autonomous_controller) {
         snapshot.kind = data->writing_final_snapshot ? "final" : "dsec";
         if (data->writing_final_snapshot) {
@@ -12954,10 +12961,13 @@ FixedDsecSnapshot make_iteration_snapshot_v67(
     snapshot.evaluation_index = data.writing_final_snapshot
         ? data.evaluation_index + 1u
         : ++data.evaluation_index;
-    if (snapshot.call_index < 1u || snapshot.call_index > 4u) {
-        throw std::runtime_error("standalone source call index outside 1..4");
+    if (snapshot.call_index < 1u) {
+        throw std::runtime_error("standalone source call index below 1");
     }
     if (data.reference_trajectory_mode) {
+        if (snapshot.call_index > 4u) {
+            throw std::runtime_error("frozen Mg XI source-trajectory call index outside 1..4");
+        }
         static constexpr std::array<std::size_t,4> dsec_source_offsets{{0u,21u,22u,40u}};
         snapshot.sequence = data.writing_final_snapshot
             ? 57u + snapshot.call_index

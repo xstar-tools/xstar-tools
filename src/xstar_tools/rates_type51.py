@@ -124,7 +124,7 @@ def upsil_type51_original(k: int, eij_ryd: float, c: float, scaled: Sequence[flo
         if denom == 0.0:
             return None
         x = math.log((e + c) / c) / denom
-    elif k in (2, 3):
+    elif k in (2, 3, 5, 6):
         x = e / (e + c)
     else:
         return None
@@ -135,7 +135,11 @@ def upsil_type51_original(k: int, eij_ryd: float, c: float, scaled: Sequence[flo
         y /= e + 1.0
     elif k == 4:
         y *= math.log(e + c)
-    return float(y)
+    elif k == 5:
+        y = y / e if e != 0.0 else float("nan")
+    elif k == 6:
+        y = 10.0 ** y
+    return float(y) if math.isfinite(y) else None
 
 
 def upsil_type51_general(k: int, eij_ryd: float, c: float, xgrid: Sequence[float], ygrid: Sequence[float], temperature_k: float) -> float | None:

@@ -2088,29 +2088,44 @@ const std::vector<double>& oracle_detail_lte_template_v172537() {
     return values;
 }
 
-std::vector<xstar_run_state::LevelIdentityState> oracle_detail_levels(
-    const xstar_run_state::ProductWritingState& state) {
-    (void)state;
-    // v17.25.34: xo01_detail.fits requires the public/oracle-compatible
-    // 616-row detail identity surface, not the first 616 compact native rows.
-    // The retained native ATDB rows include compact solver intervals and omit
-    // public synthetic continuum rows (for example He I continuum index 79 and
-    // Mg continuum rows 2816/2862/2869/...).  Reconstruct the public identity
-    // surface explicitly; numeric population/LTE values are still read from
-    // the retained native controller state/workspaces by global index.
+std::vector<xstar_run_state::LevelIdentityState> public_detail_levels(
+    const xstar_run_state::ProductWritingState& state,
+    const std::vector<ElementMeta>& elements,
+    const std::vector<RowMeta>& rows) {
+    // Preserve the fully-qualified Mg XI public identity surface bit-for-bit.
+    if (reference_mg11_product_state(state)) {
+        std::vector<xstar_run_state::LevelIdentityState> out;
+        const auto& tmpl = oracle_detail_level_template_v172534();
+        out.reserve(tmpl.size());
+        for (const auto& row : tmpl) {
+            xstar_run_state::LevelIdentityState lev;
+            lev.global_index = static_cast<std::int32_t>(row.index);
+            lev.ion_index = static_cast<std::int16_t>(row.ion_index);
+            lev.excitation_ev = row.excitation_ev;
+            lev.ion_label = row.ion;
+            lev.atomic_number = static_cast<std::int16_t>(row.atomic_number);
+            lev.level_label = row.ion_level;
+            lev.upper_index = static_cast<std::int16_t>(row.upper_index);
+            out.push_back(std::move(lev));
+        }
+        return out;
+    }
+
+    // v0.6.48.11.2: generic models publish the source identities that belong
+    // to terminal-active ion stages, in the retained ATDB/source order.  The
+    // previous unconditional 616-row Mg template was the direct cause of the
+    // 616->243 Mg XI3 and 616->168 Ca XIX inventory failures.
     std::vector<xstar_run_state::LevelIdentityState> out;
-    const auto& tmpl = oracle_detail_level_template_v172534();
-    out.reserve(tmpl.size());
-    for (const auto& row : tmpl) {
-        xstar_run_state::LevelIdentityState lev;
-        lev.global_index = static_cast<std::int32_t>(row.index);
-        lev.ion_index = static_cast<std::int16_t>(row.ion_index);
-        lev.excitation_ev = row.excitation_ev;
-        lev.ion_label = row.ion;
-        lev.atomic_number = static_cast<std::int16_t>(row.atomic_number);
-        lev.level_label = row.ion_level;
-        lev.upper_index = static_cast<std::int16_t>(row.upper_index);
-        out.push_back(std::move(lev));
+    out.reserve(state.level_identities.size());
+    for (const auto& lev : state.level_identities) {
+        const int z = lev.atomic_number > 0 ? static_cast<int>(lev.atomic_number)
+                                            : element_z_from_ion_label(lev.ion_label);
+        const int stage = roman_stage_from_ion_label(lev.ion_label);
+        const ElementMeta* element = nullptr;
+        for (const auto& e : elements) if (e.element_z == z) { element = &e; break; }
+        if (!element) continue;
+        if (!active_product_element_stage(state, elements, rows, z, stage, element->abundance)) continue;
+        out.push_back(lev);
     }
     return out;
 }
@@ -8640,7 +8655,7 @@ void write_population_detail(const std::filesystem::path& path,
                              const std::vector<RowMeta>& rows) {
     fitsfile* fptr = create_fits(path, state);
     write_parameters(fptr, state.parameter_rows);
-    const auto detail_levels = oracle_detail_levels(state);
+    const auto detail_levels = public_detail_levels(state, elements, rows);
     for (std::size_t oz = 0; oz < state.radial_zones.size(); ++oz) {
         const auto& zone = state.radial_zones[source_zone_index(state, oz)];
         create_table(fptr, BINARY_TBL, static_cast<long>(detail_levels.size()), "XSTAR_RADIAL",
@@ -8674,7 +8689,7 @@ void write_population_detail(const std::filesystem::path& path,
                 (global0 < evaluation.populations.size() ? evaluation.populations[global0]
                 : (ordinal0 < evaluation.populations.size() ? evaluation.populations[ordinal0] : 0.0)));
             const double pop = have_product_write_detail_levels ? pw_level_population[i] :
-                ((level.ion_label == "he_ii" || level.atomic_number == 12)
+                ((!reference_mg11_product_state(state) || level.ion_label == "he_ii" || level.atomic_number == 12)
                     ? public_detail_population_for_level(evaluation, compact_by_global, level, fallback_pop)
                     : fallback_pop);
             // v82 patch 5.20.16.2: public continuum pseudo-level LTE is
@@ -9091,32 +9106,47 @@ LineRow merged_line_row(const LineRow& base, const LineRow* diagnostic) {
 std::vector<LineRow> source_line_rows_from_identities(
     const xstar_run_state::ProductWritingState& state,
     const xstar_run_state::FixedEvaluationState& evaluation,
+    const std::vector<ElementMeta>& elements,
+    const std::vector<RowMeta>& rows,
     double density_cm3,
     double luminosity_scale_1e38,
     bool detail_order,
     std::size_t hdu_number) {
     std::vector<LineRow> out;
-    out.reserve(detail_order ? 2644u : kOraclePublicLineInventory.size());
     const auto workspace_index = line_workspace_index_by_line_index(state);
     const auto line_bridge = load_line_bridge_arrays(state, hdu_number);
-    // v82: both native and retained-reference publication use the historical
-    // product inventories, never the first N native identities.  The native
-    // line workspaces are addressed by the physical one-based line pointer,
-    // while the bridge arrays below are compacted into these exact inventories.
-    if (detail_order) {
-        const auto ordered = oracle_detail_line_identity_order(state);
-        for (std::size_t i = 0; i < ordered.size(); ++i) {
-            if (!ordered[i]) continue;
-            out.push_back(line_row_from_identity(*ordered[i], evaluation, density_cm3, luminosity_scale_1e38, i, &line_bridge, false));
+    if (reference_mg11_product_state(state)) {
+        out.reserve(detail_order ? 2644u : kOraclePublicLineInventory.size());
+        if (detail_order) {
+            const auto ordered = oracle_detail_line_identity_order(state);
+            for (std::size_t i = 0; i < ordered.size(); ++i) {
+                if (!ordered[i]) continue;
+                out.push_back(line_row_from_identity(*ordered[i], evaluation, density_cm3, luminosity_scale_1e38, i, &line_bridge, false));
+            }
+        } else {
+            for (const auto line_index : kOraclePublicLineInventory) {
+                const auto* id = line_identity_by_index(state, line_index);
+                if (!id) continue;
+                const auto found = workspace_index.find(line_index);
+                const std::size_t compact = found == workspace_index.end() ? 0u : found->second;
+                out.push_back(line_row_from_identity(*id, evaluation, density_cm3, luminosity_scale_1e38, compact, &line_bridge, true));
+            }
         }
-    } else {
-        for (const auto line_index : kOraclePublicLineInventory) {
-            const auto* id = line_identity_by_index(state, line_index);
-            if (!id) continue;
-            const auto found = workspace_index.find(line_index);
-            const std::size_t compact = found == workspace_index.end() ? 0u : found->second;
-            out.push_back(line_row_from_identity(*id, evaluation, density_cm3, luminosity_scale_1e38, compact, &line_bridge, true));
-        }
+        return out;
+    }
+
+    // Generic source-order line inventory, filtered by the terminal active
+    // ion-stage window.  Public ranking is applied later by writespectra2.
+    out.reserve(state.line_identities.size());
+    for (const auto& id : state.line_identities) {
+        const int z = element_z_from_ion_label(id.ion_label);
+        const int stage = roman_stage_from_ion_label(id.ion_label);
+        const ElementMeta* element = nullptr;
+        for (const auto& e : elements) if (e.element_z == z) { element = &e; break; }
+        if (!element || !active_product_element_stage(state, elements, rows, z, stage, element->abundance)) continue;
+        const auto found = workspace_index.find(id.line_index);
+        const std::size_t compact = found == workspace_index.end() ? 0u : found->second;
+        out.push_back(line_row_from_identity(id, evaluation, density_cm3, luminosity_scale_1e38, compact, &line_bridge, !detail_order));
     }
     return out;
 }
@@ -9138,48 +9168,55 @@ std::map<long long,LineRow> diagnostic_line_rows_by_index(
     // surface by ion stage and wavelength, preserving record order for repeated
     // wavelengths.  This makes xo01_detal2 consume the native Type-50 values
     // instead of treating the product state as empty and writing zeros.
+    const bool mg_anchor = reference_mg11_product_state(state);
     const auto& detail_labels = oracle_detail_line_label_template_v172537();
-    std::vector<bool> consumed(detail_labels.size(), false);
+    std::vector<bool> consumed_oracle(detail_labels.size(), false);
+    std::vector<bool> consumed_live(state.line_identities.size(), false);
     auto resolve_detail_line_index = [&](const RecordDiag& r) -> long long {
-        if (r.type50_line_index_one_based > 0 && oracle_detail_line_inventory(r.type50_line_index_one_based)) {
-            return r.type50_line_index_one_based;
+        if (r.type50_line_index_one_based > 0) {
+            if (mg_anchor ? oracle_detail_line_inventory(r.type50_line_index_one_based)
+                          : line_identity_by_index(state, r.type50_line_index_one_based) != nullptr) {
+                return r.type50_line_index_one_based;
+            }
         }
         const double wavelength = r.type50_wavelength_a > 0.0 ? r.type50_wavelength_a :
             (r.line_energy_ev > 0.0 ? 12398.419843320026 / r.line_energy_ev : 0.0);
         if (!(wavelength > 0.0)) return 0;
         const double tolerance = std::max(2.0e-3, std::abs(wavelength) * 2.0e-6);
-        std::size_t best = detail_labels.size();
-        double best_delta = std::numeric_limits<double>::infinity();
-        for (std::size_t i = 0; i < detail_labels.size(); ++i) {
-            if (consumed[i]) continue;
-            const auto& label = detail_labels[i];
-            if (element_z_from_ion_label(label.ion) != r.element_z) continue;
-            if (roman_stage_from_ion_label(label.ion) != r.ion_stage) continue;
-            const double delta = std::abs(label.wavelength_angstrom - wavelength);
-            if (delta <= tolerance && delta < best_delta) {
-                best = i;
-                best_delta = delta;
-            }
-        }
-        if (best == detail_labels.size()) {
+        if (mg_anchor) {
+            std::size_t best = detail_labels.size();
+            double best_delta = std::numeric_limits<double>::infinity();
             for (std::size_t i = 0; i < detail_labels.size(); ++i) {
-                if (consumed[i]) continue;
-                const double delta = std::abs(detail_labels[i].wavelength_angstrom - wavelength);
-                if (delta <= tolerance && delta < best_delta) {
-                    best = i;
-                    best_delta = delta;
-                }
+                if (consumed_oracle[i]) continue;
+                const auto& label = detail_labels[i];
+                if (element_z_from_ion_label(label.ion) != r.element_z) continue;
+                if (roman_stage_from_ion_label(label.ion) != r.ion_stage) continue;
+                const double delta = std::abs(label.wavelength_angstrom - wavelength);
+                if (delta <= tolerance && delta < best_delta) { best = i; best_delta = delta; }
             }
+            if (best == detail_labels.size()) return 0;
+            consumed_oracle[best] = true;
+            return detail_labels[best].index;
         }
-        if (best == detail_labels.size()) return 0;
-        consumed[best] = true;
-        return detail_labels[best].index;
+        std::size_t best = state.line_identities.size();
+        double best_delta = std::numeric_limits<double>::infinity();
+        for (std::size_t i = 0; i < state.line_identities.size(); ++i) {
+            if (consumed_live[i]) continue;
+            const auto& id = state.line_identities[i];
+            if (element_z_from_ion_label(id.ion_label) != r.element_z) continue;
+            if (roman_stage_from_ion_label(id.ion_label) != r.ion_stage) continue;
+            const double delta = std::abs(id.wavelength_angstrom - wavelength);
+            if (delta <= tolerance && delta < best_delta) { best = i; best_delta = delta; }
+        }
+        if (best == state.line_identities.size()) return 0;
+        consumed_live[best] = true;
+        return state.line_identities[best].line_index;
     };
 
     for (const auto& r : records) {
         if (!r.spectral || !r.type50_valid || r.data_type != 50) continue;
         const long long public_line_index = resolve_detail_line_index(r);
-        if (public_line_index <= 0 || !oracle_detail_line_inventory(public_line_index)) continue;
+        if (public_line_index <= 0 || (mg_anchor && !oracle_detail_line_inventory(public_line_index))) continue;
         const auto* element = element_ptr_for(elements, r.element_index);
         if (!element || !active_product_element_stage(state, elements, rows, r.element_z, r.ion_stage, element->abundance)) continue;
         const double lower = population_for(evaluation, elements, r.element_index, r.lower_row);
@@ -9506,9 +9543,39 @@ void write_line_detail(const std::filesystem::path& path,
             }
         }
         const auto diagnostic_lines = diagnostic_line_rows_by_index(state, evaluation, elements, rows, zone.accepted_controller.accepted_sequence);
-        auto lines = source_line_rows_from_identities(state, evaluation, physical_density_cm3_for_output_zone(state, z), physical_luminosity_scale_1e38_for_output_zone(state, z), true, hdu_number);
+        auto lines = source_line_rows_from_identities(state, evaluation, elements, rows, physical_density_cm3_for_output_zone(state, z), physical_luminosity_scale_1e38_for_output_zone(state, z), true, hdu_number);
         std::map<long long,LineRow> native_lines_by_record;
         for (const auto& line : lines) native_lines_by_record[line.record] = line;
+
+        if (!reference_mg11_product_state(state)) {
+            create_table(fptr, BINARY_TBL, static_cast<long>(lines.size()), "XSTAR_RADIAL",
+                {"index","wavelength","ion","lower_level","upper_level","emis_inward","emis_outward","opacity","tau_in","tau_out"},
+                {"1J","1E","8A","20A","20A","1E","1E","1E","1E","1E"},
+                {"","A","","","","erg/cm^3/s","erg/cm^3/s","/cm","",""});
+            write_radial_keywords(fptr, state, z, state.radial_zones[sz]);
+            for (std::size_t i = 0; i < lines.size(); ++i) {
+                LineRow r = lines[i];
+                const auto found_diag = diagnostic_lines.find(r.record);
+                if (found_diag != diagnostic_lines.end()) r = merged_line_row(found_diag->second, &r);
+                const auto* id = line_identity_by_index(state, r.record);
+                const auto found_pw = pw_line_by_index.find(r.record);
+                if (state.backend.find("native") == std::string::npos && found_pw != pw_line_by_index.end()) {
+                    const std::size_t pi = found_pw->second;
+                    r.emis_in = finite_or_zero(pw_line_emis_in[pi]); r.emis_out = finite_or_zero(pw_line_emis_out[pi]);
+                    r.opacity = finite_or_zero(pw_line_opacity[pi]); r.tau_in = finite_or_zero(pw_line_tau_in[pi]); r.tau_out = finite_or_zero(pw_line_tau_out[pi]);
+                }
+                const long row = static_cast<long>(i + 1);
+                write_longlong(fptr, 1, row, r.record);
+                write_real4(fptr, 2, row, id ? id->wavelength_angstrom : r.wavelength_a);
+                write_string(fptr, 3, row, id ? oracle_ion_label(id->ion_label) : "unknown");
+                write_string(fptr, 4, row, id ? id->lower_level : "unknown");
+                write_string(fptr, 5, row, id ? id->upper_level : "unknown");
+                write_real4(fptr, 6, row, finite_or_zero(r.emis_in)); write_real4(fptr, 7, row, finite_or_zero(r.emis_out));
+                write_real4(fptr, 8, row, finite_or_zero(r.opacity)); write_real4(fptr, 9, row, finite_or_zero(r.tau_in)); write_real4(fptr, 10, row, finite_or_zero(r.tau_out));
+            }
+            continue;
+        }
+
         const auto& detail_line_labels = oracle_detail_line_label_template_v172537();
 
         create_table(fptr, BINARY_TBL, static_cast<long>(detail_line_labels.size()), "XSTAR_RADIAL",
@@ -9695,6 +9762,8 @@ RrcBridgeArrays load_rrc_bridge_arrays(
 std::vector<RrcRow> source_rrc_rows_from_identities(
     const xstar_run_state::ProductWritingState& state,
     const xstar_run_state::FixedEvaluationState& evaluation,
+    const std::vector<ElementMeta>& elements,
+    const std::vector<RowMeta>& rows,
     std::size_t hdu_number,
     bool detail_inventory) {
     std::vector<RrcRow> out;
@@ -9714,7 +9783,15 @@ std::vector<RrcRow> source_rrc_rows_from_identities(
     for (std::size_t identity_ordinal = 0; identity_ordinal < state.rrc_identities.size(); ++identity_ordinal) {
         const auto& id = state.rrc_identities[identity_ordinal];
         if (id.continuum_index <= 0) continue;
-        if (detail_inventory && !native_standalone_product_state(state) && !oracle_detail_rrc_inventory(id.continuum_index)) continue;
+        if (reference_mg11_product_state(state)) {
+            if (detail_inventory && !native_standalone_product_state(state) && !oracle_detail_rrc_inventory(id.continuum_index)) continue;
+        } else {
+            const int z = element_z_from_ion_label(id.ion_label);
+            const int stage = roman_stage_from_ion_label(id.ion_label);
+            const ElementMeta* element = nullptr;
+            for (const auto& e : elements) if (e.element_z == z) { element = &e; break; }
+            if (!element || !active_product_element_stage(state, elements, rows, z, stage, element->abundance)) continue;
+        }
         const std::size_t compact = compact_rrc_index++;
         const std::size_t ci = static_cast<std::size_t>(id.continuum_index - 1);
         if (ci >= n) continue;
@@ -9766,10 +9843,10 @@ std::vector<RrcRow> source_rrc_rows_from_identities(
         }
         if (detail_inventory || row.emis_in != 0.0 || row.emis_out != 0.0 || row.tau_in != 0.0 || row.tau_out != 0.0) {
             out.push_back(row);
-            if (native_standalone_product_state(state) && detail_inventory && out.size() == 1849u) break;
+            if (reference_mg11_product_state(state) && native_standalone_product_state(state) && detail_inventory && out.size() == 1849u) break;
         }
     }
-    if (native_standalone_product_state(state) && detail_inventory && out.size() > 1849u) out.resize(1849u);
+    if (reference_mg11_product_state(state) && native_standalone_product_state(state) && detail_inventory && out.size() > 1849u) out.resize(1849u);
     return out;
 }
 
@@ -9867,9 +9944,45 @@ void write_rrc_detail(const std::filesystem::path& path,
         // products.  HDU 6 consumes retained bridge HDU 7 and HDU 7 consumes
         // retained bridge HDU 6 for tauc/elumab/cabab/opakab surfaces.
         const std::size_t rrc_bridge_hdu_number = detail_terminal_bridge_hdu_number(hdu_number);
-        auto rrcs = source_rrc_rows_from_identities(state, zone.accepted_controller.evaluation, rrc_bridge_hdu_number, true);
+        auto rrcs = source_rrc_rows_from_identities(state, zone.accepted_controller.evaluation, elements, rows, rrc_bridge_hdu_number, true);
         std::map<long long,RrcRow> native_rrcs_by_record;
         for (const auto& rrc : rrcs) native_rrcs_by_record[rrc.record] = rrc;
+
+        if (!reference_mg11_product_state(state)) {
+            // v0.6.48.11.2: generic detailed RRC products use the live,
+            // terminal-active source inventory rather than the frozen 1849-row
+            // Mg XI label template.
+            create_table(fptr, BINARY_TBL, static_cast<long>(rrcs.size()), "XSTAR_RADIAL",
+                {"rrc index","level index","energy","ion","lower_level","upper_level","emis_inward","emis_outward","integrated absn","opacity","tau_in","tau_out"},
+                {"1J","1J","1E","8A","20A","20A","1E","1E","1E","1E","1E","1E"},
+                {"","","eV","","","","erg/cm^3/s","erg/cm^3/s","erg/cm^3/s","/cm","",""});
+            write_radial_keywords(fptr, state, z, zone);
+            for (std::size_t i = 0; i < rrcs.size(); ++i) {
+                RrcRow r = rrcs[i];
+                const auto found_diag = diagnostic_rrcs.find(r.record);
+                r = merged_rrc_row(r, found_diag != diagnostic_rrcs.end() ? &found_diag->second : nullptr);
+                const auto* id = rrc_identity_by_index(state, r.record);
+                const auto pw = pw_rrc_by_index.find(r.record);
+                if (pw != pw_rrc_by_index.end()) {
+                    const std::size_t pi = pw->second;
+                    r.emis_in = pw_rrc_emis_in[pi]; r.emis_out = pw_rrc_emis_out[pi];
+                    r.absorption = pw_rrc_absn[pi]; r.opacity = pw_rrc_opacity[pi];
+                    r.tau_in = pw_rrc_tau_in[pi]; r.tau_out = pw_rrc_tau_out[pi];
+                }
+                const long row = static_cast<long>(i + 1);
+                write_int(fptr, 1, row, static_cast<int>(r.record));
+                write_int(fptr, 2, row, id ? id->level_global_index : 0);
+                write_real4(fptr, 3, row, id ? id->threshold_ev : r.energy_ev);
+                write_string(fptr, 4, row, id ? oracle_ion_label(id->ion_label) : "unknown");
+                write_string(fptr, 5, row, id ? id->lower_level : "unknown");
+                write_string(fptr, 6, row, id ? id->upper_level : "continuum");
+                write_real4(fptr, 7, row, r.emis_in); write_real4(fptr, 8, row, r.emis_out);
+                write_real4(fptr, 9, row, r.absorption); write_real4(fptr, 10, row, r.opacity);
+                write_real4(fptr, 11, row, r.tau_in); write_real4(fptr, 12, row, r.tau_out);
+            }
+            continue;
+        }
+
         const auto& detail_rrc_labels = oracle_detail_rrc_label_template_v172537();
 
         create_table(fptr, BINARY_TBL, static_cast<long>(detail_rrc_labels.size()), "XSTAR_RADIAL",
@@ -10985,11 +11098,13 @@ std::size_t terminal_physical_zone_index(const xstar_run_state::ProductWritingSt
 std::vector<LineRow> public_line_rows_from_identities(
     const xstar_run_state::ProductWritingState& state,
     const xstar_run_state::FixedEvaluationState& evaluation,
+    const std::vector<ElementMeta>& elements,
+    const std::vector<RowMeta>& rows,
     double density_cm3,
     double luminosity_scale_1e38) {
-    auto rows = source_line_rows_from_identities(state, evaluation, density_cm3, luminosity_scale_1e38, false, 6);
-    return rows;
+    return source_line_rows_from_identities(state, evaluation, elements, rows, density_cm3, luminosity_scale_1e38, false, 6);
 }
+
 
 void write_public_lines(const std::filesystem::path& path,
                         const xstar_run_state::ProductWritingState& state,
@@ -10999,7 +11114,7 @@ void write_public_lines(const std::filesystem::path& path,
     const std::size_t final_index = terminal_physical_zone_index(state);
     const auto& final_zone = state.radial_zones[final_index];
     auto terminal_list = public_line_rows_from_identities(
-        state, final_zone.accepted_controller.evaluation,
+        state, final_zone.accepted_controller.evaluation, elements, rows,
         physical_density_cm3_for_output_zone(state, final_index),
         physical_luminosity_scale_1e38_for_output_zone(state, final_index));
     // v82 patch 5.20.15.2: line luminosities belong to the final physical
@@ -11011,7 +11126,7 @@ void write_public_lines(const std::filesystem::path& path,
         const std::size_t depth_index = state.radial_zones.size() - 1u;
         const auto& depth_zone = state.radial_zones[depth_index];
         terminal_depth_list = public_line_rows_from_identities(
-            state, depth_zone.accepted_controller.evaluation,
+            state, depth_zone.accepted_controller.evaluation, elements, rows,
             physical_density_cm3_for_output_zone(state, depth_index),
             physical_luminosity_scale_1e38_for_output_zone(state, depth_index));
     } else {
@@ -11058,38 +11173,51 @@ void write_public_lines(const std::filesystem::path& path,
     const auto pw_line_depth_in = optional_bridge_array_for_hdu(state, "product_write_public_line_depth_inward", 3, pw_line_index.size());
     const auto pw_line_depth_out = optional_bridge_array_for_hdu(state, "product_write_public_line_depth_outward", 3, pw_line_index.size());
 
-    // v82 patch 5.20.16.4: writespectra2 chooses its 600 public rows from
-    // the live final elum ranking.  When the retained ProductWritingState
-    // bridge carries that selection, derive labels from the physical line
-    // identities themselves instead of imposing the historical frozen 600-row
-    // label template.  This keeps identity, order, luminosity, and terminal
-    // tau0 addressed by the same source line pointer.
+    // Preserve the accepted Mg XI ranking surface exactly.  For general
+    // models, writespectra2 publishes up to 600 live source lines; the source
+    // inventory may legitimately contain fewer rows (Ca XIX has 578).
     std::vector<LineLabelTemplateRow> public_line_labels;
-    if (pw_line_index.size() == 600u) {
-        public_line_labels.reserve(pw_line_index.size());
-        for (const double raw_index : pw_line_index) {
-            const auto line_index = static_cast<long long>(std::llround(raw_index));
-            const auto* id = line_identity_by_index(state, line_index);
-            if (!id) {
-                public_line_labels.clear();
-                break;
+    if (reference_mg11_product_state(state)) {
+        if (pw_line_index.size() == 600u) {
+            public_line_labels.reserve(pw_line_index.size());
+            for (const double raw_index : pw_line_index) {
+                const auto line_index = static_cast<long long>(std::llround(raw_index));
+                const auto* id = line_identity_by_index(state, line_index);
+                if (!id) { public_line_labels.clear(); break; }
+                public_line_labels.push_back(LineLabelTemplateRow{
+                    static_cast<int>(line_index), id->wavelength_angstrom, id->ion_label.c_str(),
+                    id->lower_level.c_str(), id->upper_level.c_str()});
             }
+        }
+        if (public_line_labels.size() != 600u) {
+            const bool true_production = std::getenv("XSTAR_TRUE_PRODUCTION") != nullptr;
+            if (true_production) {
+                throw std::runtime_error("5.20.17 production public-line selection is missing live 600-row ranking");
+            }
+            const auto& fallback = oracle_public_line_label_template_v172537();
+            public_line_labels.assign(fallback.begin(), fallback.end());
+        }
+    } else {
+        std::vector<LineRow> ranked = terminal_list;
+        if (ranked.size() > 600u) {
+            std::stable_sort(ranked.begin(), ranked.end(), [](const LineRow& a, const LineRow& b) {
+                const double la = std::abs(a.emis_in) + std::abs(a.emis_out);
+                const double lb = std::abs(b.emis_in) + std::abs(b.emis_out);
+                if (la != lb) return la > lb;
+                return a.record < b.record;
+            });
+            ranked.resize(600u);
+        }
+        public_line_labels.reserve(ranked.size());
+        for (const auto& line : ranked) {
+            const auto* id = line_identity_by_index(state, line.record);
+            if (!id) continue;
             public_line_labels.push_back(LineLabelTemplateRow{
-                static_cast<int>(line_index), id->wavelength_angstrom, id->ion_label.c_str(),
+                static_cast<int>(id->line_index), id->wavelength_angstrom, id->ion_label.c_str(),
                 id->lower_level.c_str(), id->upper_level.c_str()});
         }
     }
-    if (public_line_labels.size() != 600u) {
-        // 5.20.17: the historical frozen 600-row template is no longer a
-        // production compatibility path.  Production must carry the live
-        // writespectra2-selected physical line inventory retained by 5.20.16.4.
-        const bool true_production = std::getenv("XSTAR_TRUE_PRODUCTION") != nullptr;
-        if (true_production) {
-            throw std::runtime_error("5.20.17 production public-line selection is missing live 600-row ranking");
-        }
-        const auto& fallback = oracle_public_line_label_template_v172537();
-        public_line_labels.assign(fallback.begin(), fallback.end());
-    }
+
     const bool have_product_write_public_lines =
         pw_line_index.size() == public_line_labels.size() &&
         pw_line_emit_in.size() == public_line_labels.size() &&
@@ -11187,8 +11315,6 @@ void write_public_rrc(const std::filesystem::path& path,
                       const xstar_run_state::ProductWritingState& state,
                       const std::vector<ElementMeta>& elements,
                       const std::vector<RowMeta>& rows) {
-    (void)elements;
-    (void)rows;
 
     // writespectra4.f90 consumes the *post-transport*, one-based npconi2
     // accumulators directly and dynamically publishes every live rate-7 RRC
@@ -11220,7 +11346,7 @@ void write_public_rrc(const std::filesystem::path& path,
     if (!public_ws) {
         const std::size_t final_index = terminal_physical_zone_index(state);
         const auto& evaluation = state.radial_zones[final_index].accepted_controller.evaluation;
-        for (const auto& r : source_rrc_rows_from_identities(state, evaluation, 6, false)) {
+        for (const auto& r : source_rrc_rows_from_identities(state, evaluation, elements, rows, 6, false)) {
             fallback_by_index[r.record] = r;
         }
     }
@@ -11236,6 +11362,13 @@ void write_public_rrc(const std::filesystem::path& path,
     public_rows.reserve(state.rrc_identities.size());
     for (const auto& identity : state.rrc_identities) {
         if (identity.continuum_index <= 0) continue;
+        if (!reference_mg11_product_state(state)) {
+            const int z = element_z_from_ion_label(identity.ion_label);
+            const int stage = roman_stage_from_ion_label(identity.ion_label);
+            const ElementMeta* element = nullptr;
+            for (const auto& e : elements) if (e.element_z == z) { element = &e; break; }
+            if (!element || !active_product_element_stage(state, elements, rows, z, stage, element->abundance)) continue;
+        }
         const std::size_t slot = static_cast<std::size_t>(identity.continuum_index);
         PublicRrcRowV82Patch52094 row;
         row.identity = &identity;

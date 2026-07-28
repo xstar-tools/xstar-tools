@@ -3491,7 +3491,12 @@ Type51UpsilonEvaluation type51_upsilon(
             const double denom = std::log(u + result.scaling_c);
             if (denom == 0.0 || !std::isfinite(denom)) return result;
             x = std::log((u + result.scaling_c) / result.scaling_c) / denom;
-        } else if (result.bt_type == 2 || result.bt_type == 3) {
+        } else if (result.bt_type == 2 || result.bt_type == 3 ||
+                   result.bt_type == 5 || result.bt_type == 6) {
+            // Some legacy Ca records retain the original five-point BT table
+            // while using the later type-5/type-6 transforms.  The source
+            // interpolation remains splinem5; only the temperature transform
+            // and final inverse scaling follow the general BT definitions.
             x = u / (u + result.scaling_c);
         } else {
             return result;
@@ -3819,7 +3824,12 @@ Type59PhintResultV0648111 type59_phintfo_source(
     if (nb1 <= 0 || nb1 >= nphint - 1 || nb1 > static_cast<int>(n)) return out;
     const double t4 = std::max(source_input.temperature_k / 1.0e4, 1.0e-48);
     const double tsq = std::sqrt(t4);
-    const double bktm = xstar_constants::kLegacyBoltzmannEvPerT4 * t4;
+    // v0.6.48.11.2: phintfo.f90/source-port ownership uses the modern
+    // Boltzmann erg/K and erg/eV conversion here.  Type-59 was introduced in
+    // 11.1 with the legacy 0.861707 eV/T4 constant, which materially shifted
+    // the C V heating balance and DSEC convergence.
+    const double bktm = (xstar_constants::kBoltzmannErgPerK * 1.0e4 /
+                         xstar_constants::kModernErgPerEv) * t4;
     const double rnist = 5.216e-21 * swrat / (t4 * tsq);
     const double ne = std::max(0.0, source_input.electron_density_cm3);
     double sumr=0.0,sumh=0.0,sumh2=0.0,sumi=0.0,sumc=0.0,sumc2=0.0;
@@ -3836,7 +3846,7 @@ Type59PhintResultV0648111 type59_phintfo_source(
         tempr = 25.3 * sigma * bremtmp / std::max(ener, 1.0e-48);
         const double deld = ener - enero;
         sumr += (tempr + tempro) * deld / 2.0;
-        constexpr double kSourceErgPerEv = 1.602197e-12;
+        constexpr double kSourceErgPerEv = xstar_constants::kModernErgPerEv;
         sumh += (tempr * ener + tempro * enero) * deld * kSourceErgPerEv / 2.0;
         sumh2 += (tempr * (ener - threshold_ev) + tempro * (enero - threshold_ev)) * deld * kSourceErgPerEv / 2.0;
         const double exptst = std::max(1.0e-36, (ener - threshold_ev) / std::max(bktm, 1.0e-48));
@@ -6374,7 +6384,17 @@ EvaluatedRecord evaluate_record(
             const auto bt = type51_upsilon(
                 r, record.real_count, ints, record.int_count, input.temperature_k
             );
-            if (!bt.valid) throw std::runtime_error("invalid source-faithful type51 payload");
+            if (!bt.valid) {
+                std::ostringstream msg;
+                msg << "invalid source-faithful type51 payload"
+                    << " record=" << record.record
+                    << " real_count=" << record.real_count
+                    << " int_count=" << record.int_count
+                    << " bt_type=" << (record.int_count ? ints[0] : 0)
+                    << " eij_ryd=" << (record.real_count ? r[0] : 0.0)
+                    << " c=" << (record.real_count > 1 ? r[1] : 0.0);
+                throw std::runtime_error(msg.str());
+            }
             const double t_xstar = input.temperature_k / 1.0e4;
             const double tsq = std::sqrt(t_xstar);
             const double ekt_ev = xstar_constants::kLegacyBoltzmannEvPerT4 * t_xstar;
