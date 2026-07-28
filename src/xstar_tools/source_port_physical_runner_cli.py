@@ -129,10 +129,9 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("python", "cpp"),
         default="python",
         help=(
-            "radial-zone DSEC orchestration backend. python keeps the accepted "
-            "per-evaluation Python controller; cpp runs one complete DSEC call "
-            "inside a persistent native C++ context while Python retains the "
-            "post-DSEC boundary, transport, and writers."
+            "radial-zone controller ownership. python preserves the accepted 10.1.1 "
+            "Python controller with modular C++ kernels; cpp delegates the complete "
+            "radial trajectory to the shared standalone-production C++ controller."
         ),
     )
     parser.add_argument(
@@ -376,6 +375,8 @@ def _print_run(summary: dict[str, object]) -> None:
     print("diagnostics=" + str(summary.get("provenance", {}).get("diagnostics_mode", "unknown")))
     print("solver_backend=" + str(summary.get("provenance", {}).get("solver_backend", "unknown")))
     print("backend_selection=" + repr(summary.get("provenance", {}).get("backend_selection", {})))
+    if "zone_backend" in summary.get("provenance", {}):
+        print("zone_backend=" + repr(summary.get("provenance", {}).get("zone_backend")))
     compact = summary.get("provenance", {}).get("compact_active_atdb_export")
     if compact:
         print("compact_active_atdb_export=" + repr(compact))
@@ -395,6 +396,47 @@ def main(argv: list[str] | None = None) -> int:
         os.environ["XSTAR_ATOMIC_MATRIX_BACKEND"] = str(args.matrix_backend)
     if args.emissivity_backend is not None:
         os.environ["XSTAR_ATOMIC_EMISSIVITY_BACKEND"] = str(args.emissivity_backend)
+    if args.zone_backend == "cpp":
+        requested_components = {
+            "global": args.backend,
+            "solver": args.solver_backend,
+            "rates": args.rates_backend or args.backend,
+            "matrix": args.matrix_backend or args.backend,
+            "emissivity": args.emissivity_backend or args.backend,
+        }
+        non_cpp = {k: v for k, v in requested_components.items() if v != "cpp"}
+        if non_cpp:
+            print(f"xstar-atomic Python runner: --zone-backend cpp requires an all-C++ backend selection; observed {non_cpp}", file=sys.stderr)
+            return 2
+        if args.run_script is None:
+            print("xstar-atomic Python runner: --zone-backend cpp currently requires --run-script", file=sys.stderr)
+            return 2
+        if args.original_run_dir is not None:
+            print("xstar-atomic Python runner: --zone-backend cpp uses external qualification rather than --original-run-dir in 10.2.1", file=sys.stderr)
+            return 2
+        try:
+            from .xstar.cpp_backend_production_zone import (
+                SharedProductionZoneError,
+                run_shared_production_zone_backend,
+            )
+            summary = run_shared_production_zone_backend(
+                run_script=args.run_script,
+                atdb_path=args.atdb,
+                coheat_path=args.coheat_data,
+                output_dir=args.output_dir,
+                overwrite=not args.no_overwrite,
+                version=_source_package_version(),
+            )
+        except SharedProductionZoneError as exc:
+            print(f"xstar-atomic Python runner: {exc}", file=sys.stderr)
+            return 2
+        if args.print_summary:
+            _print_run(summary)
+        if args.summary_json:
+            path = Path(args.summary_json)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return 0 if bool(summary.get("ready")) else 2
     # Import NumPy-heavy runner modules only after thread caps/backend selection are set.
     from .xstar.physical_output_diagnostics import diagnose_physical_output_mismatch
     from .xstar.physical_runner import (
@@ -440,7 +482,6 @@ def main(argv: list[str] | None = None) -> int:
                 progress_debug=args.progress_debug,
                 mg_line_kernel=args.mg_line_kernel,
                 backend=args.backend,
-                zone_backend=args.zone_backend,
                 rates_backend=args.rates_backend,
                 matrix_backend=args.matrix_backend,
                 emissivity_backend=args.emissivity_backend,
@@ -474,9 +515,6 @@ def main(argv: list[str] | None = None) -> int:
                 provenance = dict(result.python_run.provenance or {})
                 selection = dict(provenance.get("backend_selection", {}))
                 print(f"global_backend_requested={selection.get('global_backend', args.backend)}")
-                print(f"zone_backend_requested={args.zone_backend}")
-                print(f"zone_backend_active={provenance.get('zone_backend', args.zone_backend)}")
-                print(f"zone_backend_implementation={provenance.get('zone_backend_name', 'python_reference')}")
                 for backend_name, requested_value in (
                     ("solver_backend", args.solver_backend),
                     ("rates_backend", args.rates_backend or args.backend),
@@ -517,7 +555,6 @@ def main(argv: list[str] | None = None) -> int:
                 progress_debug=args.progress_debug,
                 mg_line_kernel=args.mg_line_kernel,
                 backend=args.backend,
-                zone_backend=args.zone_backend,
                 rates_backend=args.rates_backend,
                 matrix_backend=args.matrix_backend,
                 emissivity_backend=args.emissivity_backend,
@@ -547,7 +584,6 @@ def main(argv: list[str] | None = None) -> int:
                 progress_debug=args.progress_debug,
                 mg_line_kernel=args.mg_line_kernel,
                 backend=args.backend,
-                zone_backend=args.zone_backend,
                 rates_backend=args.rates_backend,
                 matrix_backend=args.matrix_backend,
                 emissivity_backend=args.emissivity_backend,

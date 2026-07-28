@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.10.2.1 — shared standalone-production native zone engine - 2026-07-28
+
+- Restarted from scientifically accepted 0.6.48.10.1.1; rejected 10.2.0/10.2.0.1 zone-controller reconstructions are not ancestry.
+- Adds `--zone-backend python|cpp`; `python` is the untouched 10.1.1 radial controller fallback.
+- `cpp` is deliberately implemented by a shared library built from the same `xstar_standalone.cpp` translation unit as the accepted standalone executable. It calls `command_run_standalone_production_v67` directly, so DSEC, active-stage/hydrogen lifetime, accepted-boundary recompute, STEP/TRNFRC, retained workspaces, terminal state, and native ProductWritingState have one implementation.
+- The Python C++-zone path does not reconstruct native per-zone arrays. Python supplies normalized parameters and performs FITS header-only provenance projection after native publication. FITS data payloads remain native production payloads.
+- Adds per-zone wall timing markers and ABI 60481021.
+- Candidate-first host qualification requires all nine candidate FITS data payloads bit-exact to the accepted standalone C++ reference before running the expensive authoritative Python-zone fallback.
+
 ## 0.6.48.10.2.0.1 - 2026-07-28
 
 - Correct the rejected 10.2.0 native-zone entry lifetime: seed the exact source/Python pre-matrix `mml/mmu` active-stage windows into the persistent C++ fixed-state context before DSEC evaluation 1.

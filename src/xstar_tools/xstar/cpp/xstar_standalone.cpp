@@ -81,6 +81,8 @@ struct PerformanceInstrumentationV064892 {
 };
 
 thread_local PerformanceInstrumentationV064892* g_performance_v064892 = nullptr;
+thread_local std::array<double,4> g_shared_zone_seconds_v06481021{{0.0,0.0,0.0,0.0}};
+thread_local std::array<std::size_t,4> g_shared_zone_dsec_v06481021{{0u,0u,0u,0u}};
 
 // 0.6.48.9.5: a production run owns a single fixed-state context. Snapshot
 // the prepared Type49/53 workload immediately before that context is
@@ -14932,8 +14934,12 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         // workspace that entered the terminal shell before the transport
         // helper projects zrems(1,:) to a convenience next-radius bremsa.
         std::vector<double> terminal_shell_entry_bremsa_v064883;
+        std::array<double,4> shared_zone_seconds_v06481021{{0.0,0.0,0.0,0.0}};
+        g_shared_zone_seconds_v06481021 = {{0.0,0.0,0.0,0.0}};
+        g_shared_zone_dsec_v06481021 = {{0u,0u,0u,0u}};
 
         for (std::size_t call = 1; call <= source_calls; ++call) {
+            const auto shared_zone_started_v06481021 = std::chrono::steady_clock::now();
             data.call_index = call;
             prepare_call_start_workspace_v71(data, call);
             if (call == 3u && data.reference_trajectory_mode) {
@@ -15163,6 +15169,10 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             }
             data.snapshots.push_back(pretransport_boundary_v82_patch520145);
             finals.push_back(std::move(pretransport_boundary_v82_patch520145));
+            shared_zone_seconds_v06481021[call - 1u] = std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - shared_zone_started_v06481021).count();
+            g_shared_zone_seconds_v06481021[call - 1u] = shared_zone_seconds_v06481021[call - 1u];
+            g_shared_zone_dsec_v06481021[call - 1u] = dsec_count;
 
             std::cout << "V048746255172582_CONTROLLER_CALL=" << call
                       << " DSEC_EVALUATIONS=" << dsec_count
@@ -16285,6 +16295,22 @@ int command_run_standalone_production_v67(const Options& options, const std::fil
             return build_general_standalone_product_v67(
                 options, params, atomic, program, controller_seconds, evaluations);
         }();
+        if (const char* shared_mode = std::getenv("XSTAR_V06481021_SHARED_ZONE_MODE");
+            shared_mode && std::string(shared_mode) == "1") {
+            const double shared_total = std::accumulate(
+                g_shared_zone_seconds_v06481021.begin(), g_shared_zone_seconds_v06481021.end(), 0.0);
+            std::cout << std::fixed << std::setprecision(9);
+            for (std::size_t i = 0; i < 4u; ++i) {
+                std::cout << "V06481021_SHARED_ZONE" << (i + 1u) << "_SECONDS="
+                          << g_shared_zone_seconds_v06481021[i] << "\n"
+                          << "V06481021_SHARED_ZONE" << (i + 1u) << "_DSEC_EVALUATIONS="
+                          << g_shared_zone_dsec_v06481021[i] << "\n";
+            }
+            std::cout << "V06481021_SHARED_ZONE_TOTAL_SECONDS=" << shared_total << "\n"
+                      << "V06481021_SHARED_ZONE_DSEC_COUNTS="
+                      << g_shared_zone_dsec_v06481021[0] << ";" << g_shared_zone_dsec_v06481021[1] << ";"
+                      << g_shared_zone_dsec_v06481021[2] << ";" << g_shared_zone_dsec_v06481021[3] << "\n";
+        }
         const char* force_096_provenance_v064897 =
             std::getenv("XSTAR_V064897_FORCE_096_RECORD_PROVENANCE");
         const bool forced_096_provenance_v064897 = force_096_provenance_v064897 &&
@@ -18384,6 +18410,57 @@ int command_python_bridge_test(const Options& options) {
 }
 
 } // namespace
+
+extern "C" int32_t xstar_production_zone_abi_version_v06481021(void) {
+    return 60481021;
+}
+
+extern "C" const char* xstar_production_zone_backend_name_v06481021(void) {
+    return "xstar_shared_standalone_production_zone_v06481021";
+}
+
+extern "C" int32_t xstar_production_zone_run_v06481021(
+    const char* parameters_path,
+    const char* output_dir,
+    const char* executable_path,
+    char* message,
+    std::size_t message_size) {
+    auto set_message = [&](const std::string& text) {
+        if (!message || message_size == 0) return;
+        const std::size_t n = std::min<std::size_t>(message_size - 1u, text.size());
+        std::memcpy(message, text.data(), n);
+        message[n] = '\0';
+    };
+    try {
+        if (!parameters_path || !*parameters_path || !output_dir || !*output_dir) {
+            set_message("parameters_path and output_dir are required");
+            return 64;
+        }
+        Options options;
+        options.command = "run-production";
+        options.parameters_path = parameters_path;
+        options.output_dir = output_dir;
+        options.artifact_profile = "none";
+        options.artifact_profile_explicit = true;
+        const std::filesystem::path executable =
+            (executable_path && *executable_path)
+                ? std::filesystem::path(executable_path)
+                : std::filesystem::path();
+        ::setenv("XSTAR_V06481021_SHARED_ZONE_MODE", "1", 1);
+        const int rc = command_run_standalone_production_v67(options, executable);
+        ::unsetenv("XSTAR_V06481021_SHARED_ZONE_MODE");
+        set_message(rc == 0 ? "ACCEPT" : ("standalone production returned " + std::to_string(rc)));
+        return rc;
+    } catch (const std::exception& exc) {
+        ::unsetenv("XSTAR_V06481021_SHARED_ZONE_MODE");
+        set_message(exc.what());
+        return 20;
+    } catch (...) {
+        ::unsetenv("XSTAR_V06481021_SHARED_ZONE_MODE");
+        set_message("unknown shared production-zone exception");
+        return 20;
+    }
+}
 
 int main(int argc, char** argv) {
     Options options;
