@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.48.10.2.0 — persistent native C++ single-zone DSEC backend - 2026-07-28
+
+- Promote 0.6.48.10.1.1 as the scientific baseline: all nine FITS data payloads reproduce accepted 10.0 exactly, the 1052-row RRC inventory is restored, and public science closure is ACCEPT. Its 10.340630 s terminal recompute missed the historical <=10 s performance target by 0.340630 s only; that timing threshold is non-scientific and is not carried forward as a baseline rejection.
+- Add `--zone-backend {python,cpp}`. `python` retains the accepted 10.1.1 Python-orchestrated DSEC path. `cpp` moves one complete DSEC convergence call for each physical radial shell behind one persistent native C++ context while Python keeps the accepted post-DSEC boundary calculation, transport/STEP/TRNFRC, final recompute, and writers.
+- Reuse the qualified native fixed-state and thermal DSEC engines rather than introducing new numerical kernels. The qualified Mg XI source inventory remains 20/1/17/16 DSEC evaluations with structural source positions 21/40/57 omitted.
+- Keep native global `xilevg`, `bilevg`, and `rnisg` state inside each zone call and persist hidden source-lifetime state across zones. Mirror source boundary identities 58-61 internally after each DSEC solve solely to synchronize native repeated-H/active-stage lifetime before the next zone; Python still owns/publishes the boundary evaluation.
+- In this first milestone, `--zone-backend cpp` is fail-closed unless the active ATDB subset and the complete modular C++ backend set are selected. Mixed Python/C++ boundary configurations are intentionally unqualified.
+- Add exact per-zone wall timing so qualification reports measured zone 1-4 times rather than estimating them from DSEC counts.
+- Freeze 10.1.1 final-recompute/RRC ownership, 10.0 C++ `binemis`, Type49/53/50, thermal, matrix/rate, and writer science sources by SHA-256.
+- Qualification requires `--zone-backend python` to reproduce the 10.1.1 reference exactly, the native-zone path to retain 20/1/17/16 DSEC topology and all public products within the existing <=1% science gate, and the existing structural/detal4/spectrum analyzers to pass. A <=120 s four-zone total is reported as a performance target but is not allowed to override scientific correctness.
+
 ## 0.6.48.10.1.1 — terminal active-stage/RRC ownership correction - 2026-07-28
 
 - Start from the 0.6.48.10.1 native final-recompute candidate, retaining its measured 70.962107 s -> 9.871208 s terminal speedup and the accepted 0.6.48.10.0 C++ `binemis` promotion.

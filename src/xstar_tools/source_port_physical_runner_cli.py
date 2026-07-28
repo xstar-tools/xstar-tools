@@ -125,6 +125,17 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--zone-backend",
+        choices=("python", "cpp"),
+        default="python",
+        help=(
+            "radial-zone DSEC orchestration backend. python keeps the accepted "
+            "per-evaluation Python controller; cpp runs one complete DSEC call "
+            "inside a persistent native C++ context while Python retains the "
+            "post-DSEC boundary, transport, and writers."
+        ),
+    )
+    parser.add_argument(
         "--rates-backend",
         choices=("python", "cpp", "auto"),
         default=None,
@@ -429,6 +440,7 @@ def main(argv: list[str] | None = None) -> int:
                 progress_debug=args.progress_debug,
                 mg_line_kernel=args.mg_line_kernel,
                 backend=args.backend,
+                zone_backend=args.zone_backend,
                 rates_backend=args.rates_backend,
                 matrix_backend=args.matrix_backend,
                 emissivity_backend=args.emissivity_backend,
@@ -462,6 +474,9 @@ def main(argv: list[str] | None = None) -> int:
                 provenance = dict(result.python_run.provenance or {})
                 selection = dict(provenance.get("backend_selection", {}))
                 print(f"global_backend_requested={selection.get('global_backend', args.backend)}")
+                print(f"zone_backend_requested={args.zone_backend}")
+                print(f"zone_backend_active={provenance.get('zone_backend', args.zone_backend)}")
+                print(f"zone_backend_implementation={provenance.get('zone_backend_name', 'python_reference')}")
                 for backend_name, requested_value in (
                     ("solver_backend", args.solver_backend),
                     ("rates_backend", args.rates_backend or args.backend),
@@ -502,6 +517,7 @@ def main(argv: list[str] | None = None) -> int:
                 progress_debug=args.progress_debug,
                 mg_line_kernel=args.mg_line_kernel,
                 backend=args.backend,
+                zone_backend=args.zone_backend,
                 rates_backend=args.rates_backend,
                 matrix_backend=args.matrix_backend,
                 emissivity_backend=args.emissivity_backend,
@@ -531,6 +547,7 @@ def main(argv: list[str] | None = None) -> int:
                 progress_debug=args.progress_debug,
                 mg_line_kernel=args.mg_line_kernel,
                 backend=args.backend,
+                zone_backend=args.zone_backend,
                 rates_backend=args.rates_backend,
                 matrix_backend=args.matrix_backend,
                 emissivity_backend=args.emissivity_backend,

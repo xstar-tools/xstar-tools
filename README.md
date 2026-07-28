@@ -1,12 +1,29 @@
-# xstar_tools 0.6.48.10.1.1
+# xstar_tools 0.6.48.10.2.0
 
-0.6.48.10.1.1 corrects the narrow RRC science rejection in the 10.1 native final-zero-thickness bridge. The 10.1 bridge reduced the accelerated-Python terminal recompute from about 70.96 s to 9.87 s and the whole run from 562.07 s to 503.47 s, but its fresh native context leaked two source-inactive Mg II RRC slots into the final 1052-row inventory. 10.1.1 restores the retained source `mml/mmu` active-stage ownership before HEATT without changing any accepted native numerical kernel or the 10.0 C++ `binemis` promotion.
+0.6.48.10.2.0 adds the first persistent **native C++ single-zone backend** for accelerated Python. The new `--zone-backend cpp` option moves the complete DSEC convergence solve for each physical radial shell into one native call; `--zone-backend python` preserves the accepted 10.1.1 orchestration exactly. Python still owns the post-DSEC boundary calculation, radial transport/STEP/TRNFRC, terminal recompute, and all product writers in this first milestone.
 
-For Python runs explicitly selecting the C++ backend, the final zero-thickness source replay now uses `libxstar_final_recompute.so`, a thin bridge around the already-qualified native fixed-state engine. It replaces only `bremsmap -> calc_hmc_all -> calc_emisab_all -> calc_emis_all`; the existing HEATT/STPCUT handlers, final product writers, and 10.0 C++ `binemis` promotion remain in their accepted order. Pure Python is unchanged.
+The 10.1.1 host result is the science baseline even though its historical <=10 s terminal-performance threshold reported REJECT: all nine FITS data payloads are exact to accepted 10.0, `xout_rrc1` is restored to 1052 rows, and public science closure is ACCEPT. Its terminal recompute measured 10.340630 s and the complete accelerated run 502.504641 s. The 0.340630 s miss is a performance-only observation, not a physical-product failure.
 
-Use `XSTAR_V0648101_FORCE_PYTHON_FINAL_RECOMPUTE=1` to restore the accepted 10.0 Python terminal recompute for A/B qualification. The accelerated native bridge fails closed by default; `XSTAR_V0648101_ALLOW_PYTHON_FINAL_RECOMPUTE_FALLBACK=1` explicitly permits the slow fallback. Final thermal diagnostic sidecars retain the Python path.
+Build the native libraries and run accelerated Python with:
 
-Blocking host qualification is provided by `run_v0648101_python_accel_final_recompute.sh`. It runs both the native candidate and the forced-10.0 path from the same package, requires exact fallback reproduction of the accepted 10.0 products, checks bridge product/science closure, and reports the terminal recompute speedup.
+```bash
+make -C src/xstar_tools/xstar/cpp -j1 all
+python -m xstar_tools.source_port_physical_runner_cli \
+  --run-script mg11_ne1e8/run_xstar.sh \
+  --atdb /path/to/atdb.fits \
+  --coheat-data /path/to/coheat.dat \
+  --output-dir python_cpp_zone \
+  --backend cpp \
+  --solver-backend cpp \
+  --rates-backend cpp \
+  --matrix-backend cpp \
+  --emissivity-backend cpp \
+  --zone-backend cpp
+```
+
+`--zone-backend cpp` is deliberately narrow in 10.2.0: it requires the active ATDB subset and the complete modular C++ backend set. The persistent native context owns the 20/1/17/16 DSEC evaluations and global level workspaces for each zone. Python then performs the already-qualified boundary/transport path. The runner records exact `zone_wall_timing` entries for all four shells.
+
+The blocking Mg XI qualification is `run_v06481020_python_accel_zone_backend.sh`. It runs both `--zone-backend cpp` and the `--zone-backend python` fallback from the same package, requires the fallback to reproduce 10.1.1 exactly, checks the candidate against the 10.1.1 products and existing FORTRAN/public structural gates, and prints measured per-zone wall times and the total zone-backend speedup.
 
 ## Historical standalone performance baseline
 

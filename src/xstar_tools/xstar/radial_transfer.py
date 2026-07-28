@@ -22,6 +22,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 import math
+import time
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Sequence
 
@@ -1387,6 +1388,7 @@ def run_bounded_radial_shell(
         register_bounded_radial_source_routines(runner)
     completed_before = len(state.provenance.get("completed_source_routines", []))
     skipped_before = len(state.provenance.get("skipped_source_routines", []))
+    zone_wall_started = time.perf_counter()
     runner.run_radial_shell(
         state,
         zone_index=int(zone_index),
@@ -1394,6 +1396,16 @@ def run_bounded_radial_shell(
         direction=int(direction),
         fixed_state=bool(fixed_state),
     )
+    zone_wall_seconds = float(time.perf_counter() - zone_wall_started)
+    zone_rows = state.control.setdefault("zone_wall_timing", [])
+    zone_rows.append({
+        "pass_index": int(pass_index),
+        "zone_index": int(zone_index),
+        "direction": int(direction),
+        "seconds": zone_wall_seconds,
+        "dsec_evaluations": int(state.control.get("ntotit", 0)),
+        "zone_backend": str(state.control.get("zone_backend", "python")),
+    })
     if bool(state.control.get("radial_spectrum_parity_diagnostic_enabled", False)):
         from .radial_spectrum_parity import append_python_radial_shell_diagnostic
 
@@ -1435,6 +1447,9 @@ def run_bounded_radial_shell(
         temperature_K=float(state.plasma.temperature),
         electron_fraction=float(state.plasma.xee),
         column_cm2=float(state.transfer.column),
+        wall_seconds=zone_wall_seconds,
+        dsec_evaluations=int(state.control.get("ntotit", 0)),
+        zone_backend=str(state.control.get("zone_backend", "python")),
     )
     return result
 

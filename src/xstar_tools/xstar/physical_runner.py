@@ -1780,33 +1780,50 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
                 carbon_cooling=carbon_cooling,
             )
 
-        retain_dsec_results = str(
-            runtime_state.control.get("diagnostics_mode", "full")
-        ).lower() != "none"
-        evaluator = CalcHMCAllDsecEvaluator(
-            master=master,
-            derived=derived,
-            calc_kwargs_factory=calc_kwargs_factory,
-            progress_callback=dsec_progress,
-            retain_fixed_state_results=retain_dsec_results,
-            capture_all_input_snapshots=bool(
-                runtime_state.control.get("zone1_dsec_capture_all_inputs", False)
-            ),
-            capture_lucy_trace_element_z=(
-                (1, 6)
-                if bool(runtime_state.control.get("zone1_dsec_capture_hydrogen_history", False))
-                else ()
-            ),
-            evaluation_gate_callback=runtime_state.control.get(
-                "zone1_dsec_evaluation_gate_callback"
-            ),
-        )
-        result = dsec(
-            runtime,
-            evaluator=evaluator,
-            nlim=int(runtime_state.control.get("nlimdt", parameters.get("niter"))),
-            tinf_t4=float(runtime_state.control.get("tinf", 0.099)),
-        )
+        zone_backend = str(runtime_state.control.get("zone_backend", "python")).strip().lower()
+        evaluator: CalcHMCAllDsecEvaluator | None
+        if zone_backend == "cpp":
+            # v0.6.48.10.2.0: one Python->C++ call owns the complete source
+            # DSEC convergence loop for this shell.  Python deliberately keeps
+            # the accepted post-DSEC boundary calc_hmc_all, transport and
+            # writer ownership in this first milestone.
+            from .cpp_backend_zone import run_native_zone_dsec
+
+            evaluator = None
+            result = run_native_zone_dsec(
+                runtime_state,
+                runtime,
+                nlim=int(runtime_state.control.get("nlimdt", parameters.get("niter"))),
+                tinf_t4=float(runtime_state.control.get("tinf", 0.099)),
+            )
+        else:
+            retain_dsec_results = str(
+                runtime_state.control.get("diagnostics_mode", "full")
+            ).lower() != "none"
+            evaluator = CalcHMCAllDsecEvaluator(
+                master=master,
+                derived=derived,
+                calc_kwargs_factory=calc_kwargs_factory,
+                progress_callback=dsec_progress,
+                retain_fixed_state_results=retain_dsec_results,
+                capture_all_input_snapshots=bool(
+                    runtime_state.control.get("zone1_dsec_capture_all_inputs", False)
+                ),
+                capture_lucy_trace_element_z=(
+                    (1, 6)
+                    if bool(runtime_state.control.get("zone1_dsec_capture_hydrogen_history", False))
+                    else ()
+                ),
+                evaluation_gate_callback=runtime_state.control.get(
+                    "zone1_dsec_evaluation_gate_callback"
+                ),
+            )
+            result = dsec(
+                runtime,
+                evaluator=evaluator,
+                nlim=int(runtime_state.control.get("nlimdt", parameters.get("niter"))),
+                tinf_t4=float(runtime_state.control.get("tinf", 0.099)),
+            )
         if bool(result.state.provenance.get("dsec_native_orchestration", False)):
             summary = runtime_state.control.setdefault("native_thermal_engine_summary", {
                 "schema_version": "0.6.48.3", "heatt_calls": 0, "continuum_bins": 0,
@@ -1841,7 +1858,11 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
                 "final_elcter": float(result.final_elcter),
                 "final_event": str(result.trajectory[-1].event if result.trajectory else ""),
             })
-        if bool(runtime_state.control.get("zone1_dsec_capture_all_inputs", False)) and evaluator.input_snapshots:
+        if (
+            isinstance(evaluator, CalcHMCAllDsecEvaluator)
+            and bool(runtime_state.control.get("zone1_dsec_capture_all_inputs", False))
+            and evaluator.input_snapshots
+        ):
             target_temperature_k = float(
                 runtime_state.control.get("zone1_dsec_target_temperature_k", 73198.4)
             )
@@ -1915,7 +1936,10 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
                     runtime_state.control.get("zone1_dsec_xstar_target_state_used", False)
                 ),
             }
-        if str(runtime_state.control.get("diagnostics_mode", "full")).lower() != "none":
+        if (
+            isinstance(evaluator, CalcHMCAllDsecEvaluator)
+            and str(runtime_state.control.get("diagnostics_mode", "full")).lower() != "none"
+        ):
             _compact_dsec_diagnostics(runtime_state, evaluator, result)
         runtime_state.control["physical_dsec_runtime"] = result.state
         runtime_state.control["physical_calc_evaluator"] = evaluator
@@ -2296,6 +2320,7 @@ def run_xstar_from_parameters(
     progress_debug: bool = False,
     mg_line_kernel: str = "python",
     backend: str = "python",
+    zone_backend: str = "python",
     rates_backend: str | None = None,
     matrix_backend: str | None = None,
     emissivity_backend: str | None = None,
@@ -2314,6 +2339,23 @@ def run_xstar_from_parameters(
         emissivity_backend=emissivity_backend,
     )
     install_backend_environment(backend_selection)
+    zone_backend = str(zone_backend).strip().lower()
+    if zone_backend not in {"python", "cpp"}:
+        raise XSTARPythonRunnerError(
+            f"zone_backend must be 'python' or 'cpp'; received {zone_backend!r}"
+        )
+    if zone_backend == "cpp":
+        if not active_subset:
+            raise XSTARPythonRunnerError(
+                "zone_backend=cpp requires the active ATDB subset in 0.6.48.10.2.0"
+            )
+        selected = backend_selection.as_dict()
+        non_cpp = [name for name, value in selected.items() if value != "cpp"]
+        if non_cpp:
+            raise XSTARPythonRunnerError(
+                "zone_backend=cpp is qualified only with the complete modular C++ backend set; "
+                f"non-C++ selections: {', '.join(non_cpp)}"
+            )
     del input_dir  # Reserved for spectrum/density-file source branches.
     resolved_atdb = _resolve_runner_atdb_path(atdb_path)
     normalized = normalize_xstar_parameters(
@@ -2360,6 +2402,8 @@ def run_xstar_from_parameters(
     state.control["runtime_phase_wall_timing"] = runtime_phase_wall_timing
     state.control["backend_selection"] = backend_selection.as_dict()
     state.provenance["backend_selection"] = backend_selection.as_dict()
+    state.control["zone_backend"] = zone_backend
+    state.provenance["zone_backend"] = zone_backend
     compact_export_summary = None
     if compact_atdb_export is not None:
         active_subset_obj = state.control.get("active_atdb_subset")
@@ -2553,6 +2597,10 @@ def run_xstar_from_parameters(
                 "profile_terminal_enabled": bool(profile_terminal),
                 "progress_debug_enabled": bool(progress_debug),
                 "mg_line_kernel": str(mg_line_kernel).strip().lower(),
+                "zone_backend": zone_backend,
+                "zone_backend_name": str(state.control.get("native_zone_backend_name", "python_reference" if zone_backend == "python" else "unavailable")),
+                "zone_backend_abi": int(state.control.get("native_zone_backend_abi", 0)),
+                "zone_wall_timing": list(state.control.get("zone_wall_timing", [])),
                 "backend_selection": backend_selection.as_dict(),
                 "rates_backend": rates_backend_status(backend_selection.rates_backend).as_dict(),
                 "matrix_backend": {**matrix_backend_status(backend_selection.matrix_backend).as_dict(), "status": "compact_record_contributions_with_native_element_construction_solve_commit_v06451"},
@@ -2656,6 +2704,7 @@ def run_xstar_python(
     progress_debug: bool = False,
     mg_line_kernel: str = "python",
     backend: str = "python",
+    zone_backend: str = "python",
     rates_backend: str | None = None,
     matrix_backend: str | None = None,
     emissivity_backend: str | None = None,
@@ -2699,6 +2748,7 @@ def run_xstar_python(
         progress_debug=progress_debug,
         mg_line_kernel=mg_line_kernel,
         backend=backend,
+        zone_backend=zone_backend,
         rates_backend=rates_backend,
         matrix_backend=matrix_backend,
         emissivity_backend=emissivity_backend,
@@ -2735,6 +2785,7 @@ def run_xstar_python_command(
     progress_debug: bool = False,
     mg_line_kernel: str = "python",
     backend: str = "python",
+    zone_backend: str = "python",
     rates_backend: str | None = None,
     matrix_backend: str | None = None,
     emissivity_backend: str | None = None,
@@ -2762,6 +2813,7 @@ def run_xstar_python_command(
         progress_debug=progress_debug,
         mg_line_kernel=mg_line_kernel,
         backend=backend,
+        zone_backend=zone_backend,
         rates_backend=rates_backend,
         matrix_backend=matrix_backend,
         emissivity_backend=emissivity_backend,
@@ -2790,6 +2842,7 @@ def run_xstar_python_script(
     progress_debug: bool = False,
     mg_line_kernel: str = "python",
     backend: str = "python",
+    zone_backend: str = "python",
     rates_backend: str | None = None,
     matrix_backend: str | None = None,
     emissivity_backend: str | None = None,
@@ -2819,6 +2872,7 @@ def run_xstar_python_script(
         progress_debug=progress_debug,
         mg_line_kernel=mg_line_kernel,
         backend=backend,
+        zone_backend=zone_backend,
         rates_backend=rates_backend,
         matrix_backend=matrix_backend,
         emissivity_backend=emissivity_backend,
@@ -3010,6 +3064,7 @@ def run_c5_ne1_acceptance(
     progress_debug: bool = False,
     mg_line_kernel: str = "python",
     backend: str = "python",
+    zone_backend: str = "python",
     rates_backend: str | None = None,
     matrix_backend: str | None = None,
     emissivity_backend: str | None = None,
@@ -3035,6 +3090,7 @@ def run_c5_ne1_acceptance(
         progress_debug=progress_debug,
         mg_line_kernel=mg_line_kernel,
         backend=backend,
+        zone_backend=zone_backend,
         rates_backend=rates_backend,
         matrix_backend=matrix_backend,
         emissivity_backend=emissivity_backend,
