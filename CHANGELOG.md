@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.48.11.7 - 2026-07-29
+
+- Correct the generic preliminary ion-balance Type7 source eligibility used to build `pirti`: a rate-type-7 record now contributes only when the literal source endpoints satisfy `idest1 == 1` and `idest2 <= nlev + 2`, matching `calc_ion_rates.f90`.
+- Add C call-1 preliminary ion-balance attribution sidecars with per-record `ans1`, eligibility, `pirti`/`rrrti` contributions and running totals, plus per-stage `pirti`, `rrrti`, `q=rrrti/pirti`, `xitp`, `critf`, and resulting `mml/mmu`.
+- Keep the 11.6 carbon seed correction, Type50 record-5740 provenance, STEP, GSSMOOTH, Lucy solve, O/Ca behavior, and frozen Mg XI path unchanged apart from diagnostic namespace promotion.
+- Do not force any carbon ion stage into the active basis: any active-window change must arise from the corrected source-rate totals and literal `mml/mmu` search.
+
 # 0.6.48.11.6 - 2026-07-29
 
 - Correct the C runtime population seed provenance that 0.6.48.11.5 attributed to the first radial STEP blocker: Type50 source position 8740 / record 5740 / C III rows 29 -> 33 at about 12.709136 eV.

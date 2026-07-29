@@ -27,3 +27,7 @@ rm -rf "$OUT"
 ```
 
 Do not run `standalone-all` unless the smoke is 11/11 ACCEPT.
+
+### 0.6.48.11.7 carbon preliminary ion-balance qualification
+
+The 11.7 standalone smoke adds source-faithful call-1 carbon audits for the preliminary ionization equilibrium. Rate-type-7 contributions to `pirti` obey the literal XSTAR `calc_ion_rates.f90` endpoint rule `idest1 == 1 && idest2 <= nlev + 2`. Diagnostic CSVs expose record ownership and the stagewise `pirti/rrrti -> xitp -> mml/mmu` chain. No stage is manually widened and no Type50 opacity is rescaled.

@@ -1480,10 +1480,30 @@ struct NativeRecordDiagnostic {
     bool matrix_committed = false;
 };
 
+struct PreliminaryRateAuditRowV0648117 {
+    std::int64_t source_position = 0;
+    std::int64_t record = 0;
+    int data_type = 0;
+    int rate_type = 0;
+    int ion_stage = 0;
+    int nlev = 0;
+    int source_idest1 = 0;
+    int source_idest2 = 0;
+    bool old_native_ionization_eligible = false;
+    bool source_ionization_eligible = false;
+    bool source_recombination_eligible = false;
+    double ans1 = 0.0;
+    double ionization_contribution = 0.0;
+    double recombination_contribution = 0.0;
+    double running_ionization = 0.0;
+    double running_recombination = 0.0;
+};
+
 struct PreliminaryIonBalance {
     std::vector<double> ionization;
     std::vector<double> recombination;
     std::vector<double> fractions;  // stages 1..Z+1 stored at indices 0..Z
+    std::vector<PreliminaryRateAuditRowV0648117> audit_rows_v0648117;
     int min_stage = 1;
     int max_stage = 1;
 };
@@ -7414,9 +7434,49 @@ void apply_magnesium_type99_persistent_leveltemp_v048746223(
     }
 }
 
+int source_nlev_for_stage_v0648117(
+    const Program& program,
+    const ElementProgram& element,
+    int stage) {
+    for (const auto& topo : program.lte_ion_topology) {
+        if (topo.element_index == element.element_index && topo.ion_stage == stage && topo.nlev > 0) {
+            return topo.nlev;
+        }
+    }
+    const int ground = ground_row_for_stage(element, stage);
+    if (ground <= 0) return 0;
+    if (stage < element.element_z) {
+        const int next_ground = ground_row_for_stage(element, stage + 1);
+        if (next_ground > ground) return next_ground - ground + 1;
+    }
+    return element.normalization_row >= ground ? element.normalization_row - ground + 1 : 0;
+}
+
+int source_idest_for_full_row_v0648117(
+    const Program& program,
+    const ElementProgram& element,
+    int stage,
+    int full_row) {
+    if (full_row <= 0) return 0;
+    const int ground = ground_row_for_stage(element, stage);
+    const int nlev = source_nlev_for_stage_v0648117(program, element, stage);
+    if (ground <= 0 || nlev <= 0) return 0;
+    if (stage < element.element_z) {
+        const int next_ground = ground_row_for_stage(element, stage + 1);
+        if (next_ground > 0 && full_row >= next_ground) {
+            // Source idest2 addresses parent-ion excited rows as
+            // nlev + parent_local - 1.  The next-stage ground is parent_local=1.
+            return nlev + (full_row - next_ground + 1) - 1;
+        }
+    }
+    return full_row >= ground ? full_row - ground + 1 : 0;
+}
+
 PreliminaryIonBalance build_preliminary_ion_balance(
+    const Program& program,
     const ElementProgram& element,
     const std::vector<EvaluatedRecord>& evaluated,
+    const std::vector<const ProgramRecord*>& evaluated_records,
     double critical_ion_fraction,
     int ablated_data_type = 0) {
     PreliminaryIonBalance result;
@@ -7427,17 +7487,55 @@ PreliminaryIonBalance build_preliminary_ion_balance(
     std::vector<int> ground(static_cast<std::size_t>(z + 1), 0);
     for (int stage = 1; stage <= z; ++stage) ground[static_cast<std::size_t>(stage)] = ground_row_for_stage(element, stage);
 
-    for (const auto& item : evaluated) {
+    const std::size_t count = std::min(evaluated.size(), evaluated_records.size());
+    result.audit_rows_v0648117.reserve(count);
+    for (std::size_t k = 0; k < count; ++k) {
+        const auto& item = evaluated[k];
         const auto& c = item.contribution;
+        const ProgramRecord* pr = evaluated_records[k];
+        if (!pr) continue;
         if (element.element_z == 2 && ablated_data_type != 0 && c.data_type == ablated_data_type) continue;
         const int stage = c.ion_stage;
         if (stage < 1 || stage > z) continue;
         const double rate = std::max(0.0, c.ans1);
-        bool add_ionization = false;
-        if (c.rate_type == 1 || c.rate_type == 15) add_ionization = true;
-        if (c.rate_type == 7 && c.lower_row == ground[static_cast<std::size_t>(stage)]) add_ionization = true;
-        if (add_ionization) result.ionization[static_cast<std::size_t>(stage - 1)] += rate;
-        if (c.rate_type == 8 || c.rate_type == 6) result.recombination[static_cast<std::size_t>(stage - 1)] += rate;
+        const int nlev = source_nlev_for_stage_v0648117(program, element, stage);
+        const int idest1 = source_idest_for_full_row_v0648117(program, element, stage, pr->lower_row);
+        const int idest2 = source_idest_for_full_row_v0648117(program, element, stage, pr->upper_row);
+
+        // Pre-11.7 native predicate retained only for attribution.
+        const bool old_native_ionization =
+            c.rate_type == 1 || c.rate_type == 15 ||
+            (c.rate_type == 7 && c.lower_row == ground[static_cast<std::size_t>(stage)]);
+
+        // Literal calc_ion_rates.f90 first-pass total-rate semantics:
+        //   pirti += ans1 for rate 1/15, or rate 7 only when
+        //   idest1 == 1 and idest2 <= nlev+2.
+        const bool source_ionization =
+            c.rate_type == 1 || c.rate_type == 15 ||
+            (c.rate_type == 7 && idest1 == 1 && idest2 > 0 && idest2 <= nlev + 2);
+        const bool source_recombination = c.rate_type == 8 || c.rate_type == 6;
+
+        if (source_ionization) result.ionization[static_cast<std::size_t>(stage - 1)] += rate;
+        if (source_recombination) result.recombination[static_cast<std::size_t>(stage - 1)] += rate;
+
+        PreliminaryRateAuditRowV0648117 audit;
+        audit.source_position = pr->source_position;
+        audit.record = pr->record;
+        audit.data_type = pr->data_type;
+        audit.rate_type = c.rate_type;
+        audit.ion_stage = stage;
+        audit.nlev = nlev;
+        audit.source_idest1 = idest1;
+        audit.source_idest2 = idest2;
+        audit.old_native_ionization_eligible = old_native_ionization;
+        audit.source_ionization_eligible = source_ionization;
+        audit.source_recombination_eligible = source_recombination;
+        audit.ans1 = c.ans1;
+        audit.ionization_contribution = source_ionization ? rate : 0.0;
+        audit.recombination_contribution = source_recombination ? rate : 0.0;
+        audit.running_ionization = result.ionization[static_cast<std::size_t>(stage - 1)];
+        audit.running_recombination = result.recombination[static_cast<std::size_t>(stage - 1)];
+        result.audit_rows_v0648117.push_back(audit);
     }
 
     constexpr double delta = 1.0e-28;
@@ -7494,9 +7592,6 @@ PreliminaryIonBalance build_preliminary_ion_balance(
     for (double value : result.fractions) sum += value;
     if (sum > 0.0) for (double& value : result.fractions) value /= sum;
 
-    // Literal calc_hmc_element.f90 mml/mmu search.  critf is a runtime
-    // model parameter (the benchmark suite supplies 1.e-6), not the legacy
-    // package-wide 1.e-7 constant previously used here.
     const double critf = (std::isfinite(critical_ion_fraction) && critical_ion_fraction >= 0.0)
         ? critical_ion_fraction : 1.0e-6;
     int lfu = 0;
@@ -7527,12 +7622,54 @@ PreliminaryIonBalance build_preliminary_ion_balance(
         mml = 1;
         mmu = z;
     }
-    if (mml > mmu) {
-        throw std::runtime_error("source ion-stage selection produced invalid mml/mmu");
-    }
+    if (mml > mmu) throw std::runtime_error("source ion-stage selection produced invalid mml/mmu");
     result.min_stage = mml;
     result.max_stage = mmu;
     return result;
+}
+
+void write_preliminary_ion_balance_audit_v0648117(
+    const ElementProgram& element,
+    const PreliminaryIonBalance& balance,
+    double critical_ion_fraction) {
+    if (element.element_z != 6 || environment_data_type("XSTAR_NATIVE_CALL_INDEX") != 1) return;
+    const char* record_path = std::getenv("XSTAR_V0648117_PRELIM_ION_BALANCE_RECORDS_PATH");
+    const char* stage_path = std::getenv("XSTAR_V0648117_PRELIM_ION_BALANCE_STAGES_PATH");
+    if (record_path && *record_path) {
+        const std::filesystem::path path(record_path);
+        if (!path.parent_path().empty()) std::filesystem::create_directories(path.parent_path());
+        std::ofstream csv(path);
+        if (!csv) throw std::runtime_error("cannot write v0648117 preliminary ion-balance record audit");
+        csv << "call_index,source_position,record,data_type,rate_type,ion_stage,nlev,idest1,idest2,old_native_ionization_eligible,source_ionization_eligible,source_recombination_eligible,ans1,ionization_contribution,recombination_contribution,running_pirti,running_rrrti\n";
+        csv << std::setprecision(17);
+        for (const auto& row : balance.audit_rows_v0648117) {
+            csv << 1 << ',' << row.source_position << ',' << row.record << ',' << row.data_type << ','
+                << row.rate_type << ',' << row.ion_stage << ',' << row.nlev << ',' << row.source_idest1 << ','
+                << row.source_idest2 << ',' << (row.old_native_ionization_eligible ? 1 : 0) << ','
+                << (row.source_ionization_eligible ? 1 : 0) << ',' << (row.source_recombination_eligible ? 1 : 0) << ','
+                << row.ans1 << ',' << row.ionization_contribution << ',' << row.recombination_contribution << ','
+                << row.running_ionization << ',' << row.running_recombination << '\n';
+        }
+    }
+    if (stage_path && *stage_path) {
+        const std::filesystem::path path(stage_path);
+        if (!path.parent_path().empty()) std::filesystem::create_directories(path.parent_path());
+        std::ofstream csv(path);
+        if (!csv) throw std::runtime_error("cannot write v0648117 preliminary ion-balance stage audit");
+        csv << "call_index,element_z,stage,pirti,rrrti,q_rr_over_pi,xitp,critf,active_min_stage,active_max_stage\n";
+        csv << std::setprecision(17);
+        for (int stage = 1; stage <= element.element_z; ++stage) {
+            const double pi = balance.ionization[static_cast<std::size_t>(stage - 1)];
+            const double rr = balance.recombination[static_cast<std::size_t>(stage - 1)];
+            const double q = rr / (pi + 1.0e-28);
+            csv << 1 << ',' << element.element_z << ',' << stage << ',' << pi << ',' << rr << ',' << q << ','
+                << balance.fractions[static_cast<std::size_t>(stage - 1)] << ',' << critical_ion_fraction << ','
+                << balance.min_stage << ',' << balance.max_stage << '\n';
+        }
+        csv << 1 << ',' << element.element_z << ',' << (element.element_z + 1) << ",0,0,0,"
+            << balance.fractions[static_cast<std::size_t>(element.element_z)] << ',' << critical_ion_fraction << ','
+            << balance.min_stage << ',' << balance.max_stage << '\n';
+    }
 }
 
 ActiveElementView make_full_element_view(const ElementProgram& full) {
@@ -9374,7 +9511,7 @@ int run_impl(
     const int native_call_v0648115 = native_call_env_v0648115 && *native_call_env_v0648115
         ? std::atoi(native_call_env_v0648115) : 0;
     const char* first_step_opacity_producer_path_v0648115 =
-        std::getenv("XSTAR_V0648116_FIRST_STEP_PRODUCER_AUDIT_PATH");
+        std::getenv("XSTAR_V0648117_FIRST_STEP_PRODUCER_AUDIT_PATH");
     const bool first_step_opacity_producer_audit_v0648115 = !defer_product_projection &&
         native_call_v0648115 == 1 && first_step_opacity_producer_path_v0648115 &&
         *first_step_opacity_producer_path_v0648115;
@@ -9509,7 +9646,10 @@ int run_impl(
         }
 
         const PreliminaryIonBalance preliminary = build_preliminary_ion_balance(
-            element, evaluated, ctx.critical_ion_fraction, helium_preliminary_ablation_type);
+            ctx.program, element, evaluated, evaluated_records, ctx.critical_ion_fraction,
+            helium_preliminary_ablation_type);
+        write_preliminary_ion_balance_audit_v0648117(
+            element, preliminary, ctx.critical_ion_fraction);
         PreliminaryIonBalance active_balance = preliminary;
         const bool retain_active_stage_window =
             (input.runtime_state_flags &
@@ -10657,7 +10797,7 @@ int run_impl(
                 rec.record == 5740 && rec.data_type == 50 &&
                 environment_data_type("XSTAR_NATIVE_CALL_INDEX") == 1) {
                 const char* provenance_path = std::getenv(
-                    "XSTAR_V0648116_TYPE50_RECORD5740_PROVENANCE_PATH");
+                    "XSTAR_V0648117_TYPE50_RECORD5740_PROVENANCE_PATH");
                 if (provenance_path && *provenance_path) {
                     const std::filesystem::path path(provenance_path);
                     if (!path.parent_path().empty()) std::filesystem::create_directories(path.parent_path());
