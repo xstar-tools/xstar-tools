@@ -1,5 +1,14 @@
 # CHANGELOG
 
+# 0.6.48.11.9 — C Type53 source-faithful Milne promotion / high-ion solve closure - 2026-07-29
+
+- Promotes the already-computed source-faithful `phint53`/Milne shadow for carbon Type53 records into the committed native rate answers.
+- Removes the generic carbon use of the legacy `exp(+threshold/kT)` reverse-rate approximation that 11.8 attributed to catastrophic C V↔C VI and C VI↔terminal matrix coefficients.
+- Requires the carbon source-faithful evaluator to succeed and rejects any committed carbon Type53 rate that is non-finite or has `max_abs > 1e40`.
+- Adds a call-1 audit for carbon Type53 records 6276 and 7013 recording legacy, source, and committed six-answer vectors.
+- Retains the 11.8 compact-solve attribution, 11.7.1 frozen-Mg Type7 compatibility boundary, ABI 6048110, and all existing Mg bit-exact gates.
+- Does not modify STEP, Type50, GSSMOOTH, active-window selection, Lucy normalization, matrix assembly semantics, or any empirical record-specific scale.
+
 # 0.6.48.11.8 — C call-1 compact matrix / high-ion / terminal-row solve attribution - 2026-07-29
 
 - Build on the accepted 0.6.48.11.7.1 frozen-Mg regression boundary. The host smoke restored all nine frozen Mg FITS bit-exact and showed 252 Mg Type7 old-vs-source preliminary-eligibility differences isolated behind the reference-only compatibility path.

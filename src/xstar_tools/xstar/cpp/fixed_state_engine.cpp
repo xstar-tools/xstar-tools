@@ -275,6 +275,59 @@ bool environment_flag(const char* name) {
     throw std::runtime_error(std::string("invalid environment flag: ") + name);
 }
 
+// v0.6.48.11.9: diagnostic-only audit of the carbon Type-53 Milne promotion.
+// This records the legacy approximation, the already-computed source-faithful
+// phint53 shadow, and the actually committed answers for the two call-1
+// high-ion records that dominated the 11.8 matrix attribution.  It never
+// feeds a production array.
+void write_c_type53_promotion_audit_v0648119(
+    std::uint64_t source_position,
+    std::int64_t record_number,
+    int data_type,
+    int rate_type,
+    int ion_stage,
+    int lower_row,
+    int upper_row,
+    const std::array<double,6>& legacy,
+    const xstar_element_contribution_v1& source,
+    const xstar_element_contribution_v1& committed,
+    bool source_exact,
+    bool promotion_applied) {
+    if (environment_data_type("XSTAR_NATIVE_CALL_INDEX") != 1) return;
+    if (record_number != 6276 && record_number != 7013) return;
+    const char* raw = std::getenv("XSTAR_V0648119_C_TYPE53_PROMOTION_AUDIT_PATH");
+    if (!raw || !*raw) return;
+    const std::filesystem::path path(raw);
+    if (!path.parent_path().empty()) std::filesystem::create_directories(path.parent_path());
+    const bool fresh = !std::filesystem::exists(path) || std::filesystem::file_size(path) == 0u;
+    std::ofstream out(path, std::ios::app);
+    if (!out) throw std::runtime_error("cannot write v0648119 carbon Type53 promotion audit");
+    if (fresh) {
+        out << "call_index,source_sequence,source_position,record,data_type,rate_type,ion_stage,lower_row,upper_row,"
+               "source_exact,promotion_applied,"
+               "legacy_ans1,legacy_ans2,legacy_ans3,legacy_ans4,legacy_ans5,legacy_ans6,"
+               "source_ans1,source_ans2,source_ans3,source_ans4,source_ans5,source_ans6,"
+               "committed_ans1,committed_ans2,committed_ans3,committed_ans4,committed_ans5,committed_ans6,"
+               "legacy_max_abs,source_max_abs,committed_max_abs\n";
+    }
+    const std::array<double,6> source_values{{source.ans1,source.ans2,source.ans3,source.ans4,source.ans5,source.ans6}};
+    const std::array<double,6> committed_values{{committed.ans1,committed.ans2,committed.ans3,committed.ans4,committed.ans5,committed.ans6}};
+    auto max_abs = [](const std::array<double,6>& values) {
+        double value = 0.0;
+        for (double x : values) if (std::isfinite(x)) value = std::max(value, std::abs(x));
+        return value;
+    };
+    out << std::setprecision(17)
+        << 1 << ',' << environment_data_type("XSTAR_QUALIFICATION_SOURCE_SEQUENCE") << ','
+        << source_position << ',' << record_number << ',' << data_type << ',' << rate_type << ','
+        << ion_stage << ',' << lower_row << ',' << upper_row << ','
+        << (source_exact ? 1 : 0) << ',' << (promotion_applied ? 1 : 0);
+    for (double x : legacy) out << ',' << x;
+    for (double x : source_values) out << ',' << x;
+    for (double x : committed_values) out << ',' << x;
+    out << ',' << max_abs(legacy) << ',' << max_abs(source_values) << ',' << max_abs(committed_values) << '\n';
+}
+
 const xstar_type50_manifold_oracle_v048710::Entry* find_type50_manifold_oracle_entry(
     std::uint64_t source_position,
     std::uint64_t record
@@ -5838,6 +5891,13 @@ EvaluatedRecord evaluate_record(
                  environment_flag("XSTAR_QUALIFICATION_TYPE49_EXTRAPOLATED_GRID_PARITY"));
             const bool magnesium_replacement =
                 magnesium_finite_state || magnesium_source_faithful;
+            // v0.6.48.11.9: carbon Type-53 now uses the same source-faithful
+            // phint53/Milne integral that was already computed as a shadow.
+            // 11.8 showed the legacy +threshold/kT approximation generating
+            // 1e74--1e97 reverse rates for records 6276/7013 and collapsing
+            // the C VI/terminal populations.  No line, STEP, solver, or
+            // matrix-specific scale factor is introduced here.
+            const bool carbon_source_faithful = element.element_z == 6;
             const auto pescv_source = [](double tau) {
                 return std::max(std::exp(-tau), 1.0e-12) / 2.0;
             };
@@ -6109,7 +6169,10 @@ EvaluatedRecord evaluate_record(
                 if (magnesium_replacement && !source_exact) {
                     throw std::runtime_error("Mg Type-53 finite-state shadow did not produce a result");
                 }
-                if (source_exact && (hydrogen_source_faithful || helium_source_faithful || magnesium_replacement)) {
+                if (carbon_source_faithful && !source_exact) {
+                    throw std::runtime_error("carbon Type-53 source-faithful Milne evaluator did not produce a result");
+                }
+                if (source_exact && (hydrogen_source_faithful || helium_source_faithful || magnesium_replacement || carbon_source_faithful)) {
                     c.ans1 = source_shadow.ans1;
                     c.ans2 = source_shadow.ans2;
                     c.ans3 = source_shadow.ans3;
@@ -6132,11 +6195,21 @@ EvaluatedRecord evaluate_record(
                 constexpr double kImplausibleBoundFreeRate = 1.0e40;
                 out.type53_shadow.legacy_implausible = out.type53_shadow.legacy_max_abs > kImplausibleBoundFreeRate;
                 out.type53_shadow.committed_implausible = out.type53_shadow.committed_max_abs > kImplausibleBoundFreeRate;
-                out.type53_shadow.source_faithful_mode = magnesium_source_faithful;
-                out.type53_shadow.replacement_applied = magnesium_replacement && source_exact;
+                out.type53_shadow.source_faithful_mode = magnesium_source_faithful || carbon_source_faithful;
+                out.type53_shadow.replacement_applied = (magnesium_replacement || carbon_source_faithful) && source_exact;
                 if (magnesium_replacement &&
                     (out.type53_shadow.committed_nonfinite || out.type53_shadow.committed_implausible)) {
                     throw std::runtime_error("Mg Type-53 finite-state replacement remained nonfinite or implausibly large");
+                }
+                if (carbon_source_faithful &&
+                    (out.type53_shadow.committed_nonfinite || out.type53_shadow.committed_implausible)) {
+                    throw std::runtime_error("carbon Type-53 source-faithful Milne rate remained nonfinite or implausibly large");
+                }
+                if (carbon_source_faithful) {
+                    write_c_type53_promotion_audit_v0648119(
+                        record.source_position, record.record, record.data_type, record.rate_type,
+                        record.ion_stage, record.lower_row, record.upper_row,
+                        legacy_type53_ans, source_shadow, c, source_exact, source_exact);
                 }
             }
             // Native product-state retention: Type-53 bound-free records are
