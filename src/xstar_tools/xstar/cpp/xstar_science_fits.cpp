@@ -536,7 +536,10 @@ bool active_product_element_stage(const xstar_run_state::ProductWritingState& st
     // If the lowered metadata has no rows for a source ion stage, there is no
     // publishable stage inventory.  Otherwise a fully zero terminal stage is
     // source-inactive and must not leak into detail/line/RRC products.
-    return !stage_known;
+    // v0.6.48.11.2 accidentally returned !stage_known here, retaining exactly
+    // the unknown stages that the comment intended to suppress.
+    (void)stage_known;
+    return false;
 }
 
 int roman_stage_from_ion_label(const std::string& label) {

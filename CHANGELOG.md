@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 0.6.48.11.3 — focused source-faithfulness corrections after the 11.2 smoke - 2026-07-28
+
+- Keep the 0.6.48.11.2 variable-call controller, persistent `cpp-zone` architecture, execution-mode contract, and production-zone ABI 6048110 unchanged. The accepted `mg11_ne1e8` 10.2.1.1.2 products remain the mandatory all-nine-FITS bit-exact regression authority.
+- Correct the Ca XIX Type 51 five-point Burgess-Tully validity rule exposed by record 160243 (`bt_type=2`, `eij=0.6475 Ryd`, `c=14.1`): source `upsil.f90` returns the finite spline result without a non-negativity rejection, so the native source-faithful path now accepts any finite signed upsilon. Existing BT5/BT6 handling is retained.
+- Correct public line publication to treat 600 as the source `writespectra2` maximum rather than a mandatory row count. Both the source-ranked selection gate and retained in-memory handoff accept any internally consistent inventory up to 600 rows, allowing source surfaces such as the 578-row Ca XIX reference.
+- Correct generic active-stage publication: a stage absent from lowered level metadata is not publishable, and a known stage whose terminal retained populations are all zero is inactive. This closes the 11.2 `return !stage_known` logic inversion without changing frozen Mg templates.
+- Make Type 59 `phintfo` use the source `expo()` clamp semantics for the thermal exponential and add the source `ucalc.f90` `bremsint(nb1) < 1e-20` pre-integration skip before Type59 spectral/opacity ownership is activated. Retain the 11.2 modern Boltzmann/eV conversion and analytic Verner/Milne implementation.
+- Make Type 10 charge-transfer exponentials use the same source `expo()` clamp semantics while preserving the 11.2 source-endpoint lowering correction.
+- Add 11.3 smoke diagnostics for the exact Ca Type51 record-160243 no-abort gate, sub-600 Ca public-line no-abort gate, O VII Type10 execution, and candidate/reference science-HDU row counts. Existing C call-5/6, Ca call-5/9, DSEC, identity/order, >1% numeric, and Mg frozen gates remain blocking.
+- Qualification remains standalone-first. Run only the 11-model `standalone-smoke`; do not run the other 51 standalone models or any Python science stage until all 11 smoke models ACCEPT.
+- Local verification covers readiness, O0 standalone/persistent-zone build/link, ABI load, and cleanup. C/O/Ca scientific closure is not preclaimed because the development container does not contain the host XSTAR atomic database installation.
+
 ## 0.6.48.11.2 — full variable-call controller and multi-model source/publication closure - 2026-07-28
 
 - Continue the 0.6.48.11.1 standalone-first multi-model branch while preserving the fully accepted 0.6.48.10.2.1.1.2 `mg11_ne1e8` result as a separate hard bit-exact regression gate.

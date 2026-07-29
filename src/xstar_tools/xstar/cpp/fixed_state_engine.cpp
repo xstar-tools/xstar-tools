@@ -3530,7 +3530,12 @@ Type51UpsilonEvaluation type51_upsilon(
         case 6: result.upsilon = std::pow(10.0, result.scaled_upsilon); break;
         default: return Type51UpsilonEvaluation{};
     }
-    result.valid = std::isfinite(result.scaled_upsilon) && std::isfinite(result.upsilon) && result.upsilon >= 0.0;
+    // v0.6.48.11.3: literal upsil.f90/upsiln.f90 return the spline value
+    // without a positivity gate.  Five-point BT splines can overshoot below
+    // zero (the Ca XIX smoke record 160243, BT type 2, does so); rejecting
+    // that finite signed value is a C++-only semantic that aborts the source
+    // calculation.  Preserve the signed finite FORTRAN result.
+    result.valid = std::isfinite(result.scaled_upsilon) && std::isfinite(result.upsilon);
     return result;
 }
 
@@ -3802,12 +3807,46 @@ struct Type59PhintResultV0648111 {
     double threshold_sigma_cm2 = 0.0;
     int nb1_one_based = 0;
     int nphint_one_based = 0;
+    bool source_bremsint_skip = false;
+    double source_bremsint_at_threshold = std::numeric_limits<double>::infinity();
 };
+
+// Reconstruct the source trnfrc/bremsmap cumulative bremsint value at the
+// integer slot used by ucalc Type 59.  trnfrc sets the final two bremsa rows
+// to zero and integrates downward on the full EPI/BREMSA grid; bremsmap then
+// overwrites the reduced prefix using the same full-grid slots and the
+// retained tail.  Direct full-grid downward integration is therefore the
+// same cumulative value for the reduced integer index.
+double type59_source_bremsint_at_one_based(
+    const double* epi, const double* bremsa, std::size_t n, int one_based) {
+    if (!epi || !bremsa || n < 3u || one_based < 1 ||
+        static_cast<std::size_t>(one_based) >= n) {
+        return std::numeric_limits<double>::infinity();
+    }
+    const std::size_t target = static_cast<std::size_t>(one_based - 1);
+    double cumulative = 0.0;
+    const double ergsev = static_cast<double>(static_cast<float>(
+        xstar_constants::kLegacyCollisionErgPerEv));
+    for (std::size_t j = n - 2u;; --j) {
+        // Literal trnfrc ownership: BREMSA(ncn2)=BREMSA(ncn2-1)=0.
+        const double bj = j >= n - 2u ? 0.0 : bremsa[j];
+        const double bj1 = (j + 1u) >= n - 2u ? 0.0 : bremsa[j + 1u];
+        const double de = epi[j + 1u] - epi[j];
+        if (std::isfinite(bj) && std::isfinite(bj1) && std::isfinite(de)) {
+            cumulative += (bj + bj1) * de * 0.5 * ergsev;
+        }
+        if (j == target || j == 0u) break;
+    }
+    return cumulative;
+}
 
 Type59PhintResultV0648111 type59_phintfo_source(
     const double* r, std::size_t original_real_count, int l2,
     double threshold_ev, double swrat, bool zero_reverse,
-    const xstar_fixed_state_input_v1& source_input) {
+    const xstar_fixed_state_input_v1& source_input,
+    const double* full_source_energy_ev,
+    const double* full_source_bremsa,
+    std::size_t full_source_count) {
     Type59PhintResultV0648111 out;
     const bool use_dsec = source_input.dsec_radiation_energy_ev && source_input.dsec_bremsa &&
         source_input.dsec_radiation_bin_count >= 3u;
@@ -3822,6 +3861,16 @@ Type59PhintResultV0648111 type59_phintfo_source(
     out.nb1_one_based = nb1;
     out.nphint_one_based = nphint;
     if (nb1 <= 0 || nb1 >= nphint - 1 || nb1 > static_cast<int>(n)) return out;
+    // ucalc.f90 Type 59 skips the complete record before constructing sigma
+    // when bremsint(nb1) < 1.d-20.  Preserve that source ownership rather
+    // than letting an effectively dark high-threshold record contribute.
+    out.source_bremsint_at_threshold = type59_source_bremsint_at_one_based(
+        full_source_energy_ev, full_source_bremsa, full_source_count, nb1);
+    if (std::isfinite(out.source_bremsint_at_threshold) &&
+        out.source_bremsint_at_threshold < 1.0e-20) {
+        out.source_bremsint_skip = true;
+        return out;
+    }
     const double t4 = std::max(source_input.temperature_k / 1.0e4, 1.0e-48);
     const double tsq = std::sqrt(t4);
     // v0.6.48.11.2: phintfo.f90/source-port ownership uses the modern
@@ -3850,7 +3899,8 @@ Type59PhintResultV0648111 type59_phintfo_source(
         sumh += (tempr * ener + tempro * enero) * deld * kSourceErgPerEv / 2.0;
         sumh2 += (tempr * (ener - threshold_ev) + tempro * (enero - threshold_ev)) * deld * kSourceErgPerEv / 2.0;
         const double exptst = std::max(1.0e-36, (ener - threshold_ev) / std::max(bktm, 1.0e-48));
-        const double exptmp = limited_exp(-exptst);
+        // phintfo.f90 uses the source expo() helper, not an unrestricted exp.
+        const double exptmp = type53_expo(-exptst);
         const double bbnurj = std::pow(std::min(ener, 2.0e4), 3.0) * 1.571e22;
         const double tempi1 = rnist * bbnurj * exptmp * sigma / std::max(ener, 1.0e-48);
         const double tempi2 = rnist * bremtmp * exptmp * sigma / std::max(ener, 1.0e-48);
@@ -5107,6 +5157,12 @@ struct RateEvaluationContextV064894 {
     bool force_legacy_bound_free = false;
     std::uint64_t reduced_energy_hash = 0;
     std::uint64_t full_energy_hash = 0;
+    // Literal xstarcalc/bremsmap ownership for the Type59 bremsint(nb1)
+    // gate: nb1 is selected on reduced epim, but bremsmap rebuilds the
+    // bremsint prefix from the current full EPI/BREMSA integer slots.
+    const double* type59_full_source_energy_ev = nullptr;
+    const double* type59_full_source_bremsa = nullptr;
+    std::size_t type59_full_source_count = 0;
 };
 
 RateEvaluationContextV064894 make_rate_evaluation_context_v064894(
@@ -5123,6 +5179,20 @@ RateEvaluationContextV064894 make_rate_evaluation_context_v064894(
     // evaluation instead of copying the complete ABI structure for every
     // atomic record.
     context.calc_hmc_input = input;
+    // Before replacing the DSEC pointers with reduced epim/bremsam, retain
+    // the live full source EPI/BREMSA pair.  In autonomous production these
+    // are the trnfrc/call-start arrays, whereas input.radiation_flux is the
+    // incident controller spectrum and must not be used for bremsint(nb1).
+    if (input.dsec_radiation_energy_ev && input.dsec_bremsa &&
+        input.dsec_radiation_bin_count >= 3) {
+        context.type59_full_source_energy_ev = input.dsec_radiation_energy_ev;
+        context.type59_full_source_bremsa = input.dsec_bremsa;
+        context.type59_full_source_count = input.dsec_radiation_bin_count;
+    } else {
+        context.type59_full_source_energy_ev = input.radiation_energy_ev;
+        context.type59_full_source_bremsa = input.radiation_flux;
+        context.type59_full_source_count = input.radiation_bin_count;
+    }
     const bool has_calc_hmc_reduced_grid = calc_emisab_workspace &&
         calc_emisab_workspace->epim.size() >= 3 &&
         calc_emisab_workspace->bremsam.size() == calc_emisab_workspace->epim.size();
@@ -5297,8 +5367,10 @@ EvaluatedRecord evaluate_record(
         case XSTAR_FIXED_OPCODE_TYPE10_CHARGE_TRANSFER: {
             if (!r || record.real_count < 4) throw std::runtime_error("type10 payload too short");
             const double eex = record.real_count >= 7 ? r[6] : 0.0;
+            // v0.6.48.11.3: ucalc.f90 Type 10 calls expo() for both
+            // exponentials.  expo.f90 clamps its argument to [-60,60].
             const double rate = r[0] * std::pow(t4, r[1]) *
-                (1.0 + r[2] * limited_exp(r[3] * t4)) * limited_exp(-eex / t4) * 1.0e-9;
+                (1.0 + r[2] * type53_expo(r[3] * t4)) * type53_expo(-eex / t4) * 1.0e-9;
             c.ans1 = rate * input.ionized_h_density_cm3;
             break;
         }
@@ -6543,7 +6615,11 @@ EvaluatedRecord evaluate_record(
             const double swrat = gglo / ggup;
             const bool zero_reverse = record.rate_type == 1 || id1 > 1;
             const auto ph = type59_phintfo_source(
-                r, original_real_count, l2, threshold, swrat, zero_reverse, calc_hmc_input);
+                r, original_real_count, l2, threshold, swrat, zero_reverse, calc_hmc_input,
+                rate_context.type59_full_source_energy_ev,
+                rate_context.type59_full_source_bremsa,
+                rate_context.type59_full_source_count);
+            if (ph.source_bremsint_skip) break;
             c.ans1=ph.ans[0]; c.ans2=ph.ans[1]; c.ans3=ph.ans[2];
             c.ans4=ph.ans[3]; c.ans5=ph.ans[4]; c.ans6=ph.ans[5];
             out.spectral = record.continuum_index_one_based > 0;

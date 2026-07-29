@@ -6563,10 +6563,10 @@ void create_native_retained_productwrite_schema(xstar_run_state::ProductWritingS
     const std::size_t public_native_line_stride = native_line_plane_stride_v82(ws);
     std::vector<double> public_line_emit_in = public_selection.emit_inward;
     std::vector<double> public_line_emit_out = public_selection.emit_outward;
-    if (public_line_index.size() != 600u ||
+    if (public_line_index.size() > 600u ||
         public_line_emit_in.size() != public_line_index.size() ||
         public_line_emit_out.size() != public_line_index.size()) {
-        throw std::runtime_error("patch5.20.16.4 writespectra2 public-line ranking did not produce 600 rows");
+        throw std::runtime_error("writespectra2 public-line ranking exceeded the 600-row source maximum or has mismatched planes");
     }
     std::cout << "V048746255172582_PATCH520164_PUBLIC_LINE_SELECTION=SOURCE_WRITESPECTRA2_DYNAMIC_RANKING\n";
     std::cout << "V048746255172582_PATCH520164_PUBLIC_LINE_COUNT=" << public_line_index.size() << "\n";
@@ -15840,15 +15840,16 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             g_performance_v064890->retained_array_values = values_v064890;
             g_performance_v064890->retained_array_bytes = values_v064890 * sizeof(double);
         }
-        if (product.retained_product_arrays.count(
-                retained_product_array_memory_key(3u, "product_write_public_line_index")) == 0u ||
-            product.retained_product_arrays.at(
-                retained_product_array_memory_key(3u, "product_write_public_line_index")).size() != 600u) {
+        const auto public_line_key = retained_product_array_memory_key(
+            3u, "product_write_public_line_index");
+        if (product.retained_product_arrays.count(public_line_key) == 0u ||
+            product.retained_product_arrays.at(public_line_key).size() > 600u) {
             throw std::runtime_error(
-                "5.20.17.2 production public-line in-memory handoff is incomplete");
+                "production public-line in-memory handoff exceeds the writespectra2 600-row maximum");
         }
         std::cout << "V048746255172582_PATCH520172_PUBLIC_LINE_HANDOFF=IN_MEMORY\n"
-                  << "V048746255172582_PATCH520172_PUBLIC_LINE_COUNT=600\n";
+                  << "V048746255172582_PATCH520172_PUBLIC_LINE_COUNT="
+                  << product.retained_product_arrays.at(public_line_key).size() << "\n";
 
         product.product_state_complete = whole.product_schema_complete && whole.radial_state_complete &&
             whole.native_product_inputs_complete && whole.exact_source_metadata_retained &&
