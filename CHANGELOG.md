@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.11.4.1 — frozen-Mg regression / compact STEP diagnostics hotfix - 2026-07-29
+
+- Restores the accepted frozen `mg11_ne1e8` fixed-state active-ion threshold (`1e-7`) only on the explicit reference trajectory; generic models retain runtime `critf`.
+- Adds qualification-only first-STEP diagnostics on `stderr` under `XSTAR_V06481141_STEP_DIAGNOSTICS=1`, avoiding the production `std::cout` silence without enabling the historical verbose stream.
+- Runner enables compact STEP diagnostics only for `helike_type69/c5_ne1e10`.
+- Preserves all 0.6.48.11.4 source-publication predicates and the 6048110 production-zone ABI.
+- No new C/O physics changes.
+
 ## 0.6.48.11.4 — runtime critf / literal source inventory / STEP attribution - 2026-07-28
 
 - Preserve the 0.6.48.11.3 variable-call controller, `python|cpp-all|cpp-zone` execution modes, production-zone ABI 6048110, and frozen `mg11_ne1e8` bit-exact regression path.

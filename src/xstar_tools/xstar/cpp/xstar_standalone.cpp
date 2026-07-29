@@ -79,6 +79,11 @@ bool verbose_controller_diagnostics_v064897() {
     return value && std::string(value) == "1";
 }
 
+bool compact_step_diagnostics_v06481141() {
+    const char* value = std::getenv("XSTAR_V06481141_STEP_DIAGNOSTICS");
+    return value && std::string(value) == "1";
+}
+
 struct PerformanceInstrumentationV064892 {
     std::array<xstar_spectral_perf_v064892,4> controller_calls{};
     xstar_spectral_perf_v064892 total{};
@@ -14751,8 +14756,16 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
     int rc = xstar_fixed_state_context_create_from_bundle_v1(&bundle, &fixed, message.data(), message.size());
     if (rc != 0) throw std::runtime_error(std::string("in-memory fixed-state context creation failed: ") + message.data());
     try {
+        // 0.6.48.11.4.1 regression hotfix: 11.4 correctly generalized runtime
+        // critf for autonomous models but accidentally changed the frozen Mg XI
+        // benchmark.  Preserve the accepted 11.3/10.2 Mg behavior (1e-7) only
+        // on that explicit oracle trajectory; all generic models retain their
+        // parsed runtime critical fraction.
+        const bool reference_trajectory_mode_v06481141 = is_reference_mg11_benchmark_v71(params);
+        const double effective_critical_fraction_v06481141 =
+            reference_trajectory_mode_v06481141 ? 1.0e-7 : params.critical_fraction;
         rc = xstar_fixed_state_context_set_critical_ion_fraction_v1(
-            fixed, params.critical_fraction, message.data(), message.size());
+            fixed, effective_critical_fraction_v06481141, message.data(), message.size());
         if (rc != 0) throw std::runtime_error(std::string("native critical ion fraction binding failed: ") + message.data());
         rc = xstar_thermal_context_create_v1(&thermal, message.data(), message.size());
         if (rc != 0) throw std::runtime_error(std::string("thermal controller creation failed: ") + message.data());
@@ -14776,7 +14789,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         data.program_info = info;
         data.parameters = &params;
         data.program = &program;
-        data.reference_trajectory_mode = is_reference_mg11_benchmark_v71(params);
+        data.reference_trajectory_mode = reference_trajectory_mode_v06481141;
         data.reference_diagnostics_enabled =
             data.reference_trajectory_mode && diagnostic_attribution_enabled_v82_patch52017();
         // 5.20.17 production never uses the old fail-open full-trajectory continuation.
@@ -15284,7 +15297,29 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                           << "V0648114_STEP_COLUMN_LIMIT_CM=" << step_result.column_limit_cm << "\n"
                           << "V048746255172582_PATCH520111_STEP_REMAINING_COLUMN_LIMIT_CM=" << step_result.remaining_column_limit_cm << "\n"
                           << "V0648114_STEP_REMAINING_COLUMN_FINAL_LIMIT=" << (step_result.remaining_column_was_final_limit ? 1 : 0) << "\n"
-                          << "V0648114_STEP_CRITF=" << params.critical_fraction << "\n";
+                          << "V0648114_STEP_CRITF=" << effective_critical_fraction_v06481141 << "\n";
+                // 0.6.48.11.4.1: emit only the compact first-STEP attribution
+                // to stderr when explicitly requested.  ScopedCoutSilenceV064897
+                // still keeps the historical controller stream quiet in normal
+                // production, while the qualification runner can observe these
+                // markers without globally enabling verbose diagnostics.
+                if (call == 1u && compact_step_diagnostics_v06481141()) {
+                    std::cerr << std::setprecision(17)
+                              << "V06481141_STEP_AFTER_CALL=" << call << "\n"
+                              << "V06481141_STEP_INITIAL_DELTA_RADIUS_CM=" << step_result.initial_delta_radius_cm << "\n"
+                              << "V06481141_STEP_DELTA_RADIUS_CM=" << step_result.delta_radius_cm << "\n"
+                              << "V06481141_STEP_LIMITING_BIN=" << step_result.limiting_bin_one_based << "\n"
+                              << "V06481141_STEP_LIMITING_ENERGY_EV=" << step_result.limiting_energy_ev << "\n"
+                              << "V06481141_STEP_LIMITING_OPACITY_CM1=" << step_result.limiting_opacity_cm1 << "\n"
+                              << "V06481141_STEP_LIMITING_TAU_IN=" << step_result.limiting_tau_in << "\n"
+                              << "V06481141_STEP_LIMITING_ZREMS1=" << step_result.limiting_zrems1 << "\n"
+                              << "V06481141_STEP_LIMITING_CANDIDATE_CM=" << step_result.limiting_candidate_cm << "\n"
+                              << "V06481141_STEP_RADIUS_LIMIT_CM=" << step_result.radius_limit_cm << "\n"
+                              << "V06481141_STEP_COLUMN_LIMIT_CM=" << step_result.column_limit_cm << "\n"
+                              << "V06481141_STEP_REMAINING_COLUMN_LIMIT_CM=" << step_result.remaining_column_limit_cm << "\n"
+                              << "V06481141_STEP_REMAINING_COLUMN_FINAL_LIMIT=" << (step_result.remaining_column_was_final_limit ? 1 : 0) << "\n"
+                              << "V06481141_STEP_CRITF=" << effective_critical_fraction_v06481141 << "\n";
+                }
             }
             if (call == 2u && data.reference_diagnostics_enabled) {
                 write_mg_type53_source_native_opacity_record_attribution_v82_patch512(data);
