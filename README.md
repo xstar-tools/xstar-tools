@@ -1,59 +1,51 @@
-# xstar_tools 0.6.48.11.7.1
+# xstar_tools 0.6.48.11.8
 
-0.6.48.11.7.1 is a regression-only hotfix on 0.6.48.11.7. The 11.7 generic preliminary Type7 endpoint correction caused sub-ppm drift in two products of the frozen `mg11_ne1e8` authority while leaving its DSEC trajectory exact.
+0.6.48.11.8 is a diagnostic-only follow-up to the accepted 0.6.48.11.7.1 frozen-Mg hotfix. The 11.7.1 host smoke restored all nine frozen `mg11_ne1e8` FITS products bit-exact while leaving the carbon trajectory unchanged. The remaining C V problem is therefore attributed downstream of preliminary active-window selection: the call-1 compact carbon solve converges to a C III lower-level population near 0.782, which drives Type50 record 5740 and the 12.709136 eV first-STEP opacity.
 
-The hotfix keeps the 11.7 literal source rule for generic models but restores the accepted pre-11.7 Type7 accumulation only on the explicit frozen Mg reference trajectory. A call-1 Mg audit exposes old/source/effective Type7 eligibility and the all-nine-FITS bit-exact comparator remains mandatory. No carbon solve physics is changed. Production-zone ABI remains 6048110.
+This release does **not** change the carbon matrix, Lucy-style normalization, Type50, GSSMOOTH, STEP, or generic Type7 physics. It adds a call-1 carbon solve attribution surface after the solve has completed.
 
-Run only the 11-model standalone smoke first:
+## Standalone smoke
 
 ```bash
-PACKAGE=$(realpath ../xstar_tools-0.6.48.11.7.1)
+PACKAGE=$(realpath ../xstar_tools-0.6.48.11.8)
 DATA=/media/linux/mhd/xstar/xstar/data
 RUNS=$(realpath original_xstar_benchmark_run.tar.gz)
 FORTRAN=$(realpath original_xstar.tar.gz)
 MGREF=$(realpath v0648102112_reanalysis.tar.gz)
-OUT=$(pwd)/v06481171_multimodel
+OUT=$(pwd)/v0648118_multimodel
+
 rm -rf "$OUT"
 
-"$PACKAGE/run_v06481171_multimodel.sh" \
-  "$PACKAGE" "$DATA" "$RUNS" "$FORTRAN" "$MGREF" "$OUT" standalone-smoke \
-  2>&1 | tee v06481171_standalone_smoke.host.log
+"$PACKAGE/run_v0648118_multimodel.sh" \
+  "$PACKAGE" \
+  "$DATA" \
+  "$RUNS" \
+  "$FORTRAN" \
+  "$MGREF" \
+  "$OUT" \
+  standalone-smoke \
+  2>&1 | tee v0648118_standalone_smoke.host.log
 ```
 
-Do not run `standalone-all` unless the smoke is 11/11 ACCEPT.
+Do not run `standalone-all` until the smoke reaches 11/11 ACCEPT.
 
----
+## C call-1 compact solve attribution
 
-# xstar_tools 0.6.48.11.6
+For `helike_type69/c5_ne1e10`, the runner sets `XSTAR_V0648118_C_SOLVE_ATTRIBUTION_DIR` and the fixed-state engine writes the final call-1 carbon diagnostic state into six CSV files:
 
-0.6.48.11.6 is a focused C Type50 scalar-provenance correction built on 0.6.48.11.5.
+- `manifest.csv`: active rows/superlevels/ions, normalization row, solve method/status, residuals, fixed-point iteration counts, and contribution inventory.
+- `rows.csv`: compact/full/global identity, source ion stage, superlevel, stage-ground and normalization flags, and populations at each solve phase.
+- `stage_totals.csv`: preliminary `xitp` versus final solved population by carbon ion stage, including the fully stripped state.
+- `matrix_terms.csv`: exact native committed matrix terms with source position, record, rate/data type, row/stage/superlevel endpoints, coefficients, fixed-point branch, and high-ion/terminal ownership flags.
+- `fixed_point_rows.csv`: reconstructed `riu/rui/ril/rli` budgets, raw and normalized fixed-point candidates, and final row deltas.
+- `condensed_matrix.csv`: final condensed superlevel matrix after normalization-row replacement, including stage/terminal ownership of each superlevel.
 
-The 11.5 first-STEP audit identified the C V `c5_ne1e10` radial blocker as Type50 source position 8740 / record 5740 (C III, rows 29 -> 33) near 12.709136 eV. Direct product comparison showed the native line opacity was about 3.53e5 too large. The corresponding C III lower-level population was also about 3.53e5 too large (`~0.782` native versus `~2.2144e-6` FORTRAN), while the Type50 atomic/profile scalar was not implicated.
+The writer runs only after the carbon element solve has completed and never mutates production arrays.
 
-The source-faithful correction is therefore population ownership, not a line-specific rescale. For carbon runtime seeds, 11.6 copies selected `xilevg` values into the compact solve basis without normalizing the selected slice and forces the terminal normalization-row seed to zero, matching `calc_hmc_element.f90`; the existing solve remains responsible for conservation. O/Ca generic seed behavior is intentionally unchanged in this release.
+## Frozen contracts
 
-A diagnostic-only record-5740 provenance sidecar records `lower_population -> abund1 -> sigvtherm -> opakb1` and verifies that the carbon runtime seed was loaded without renormalization. The 11.5 first-STEP opacity-family and top-producer diagnostics are retained. No STEP, GSSMOOTH, bound-free, Type50 kernel, or ABI formula is otherwise changed.
-
-Frozen contracts remain: canonical `mg11_ne1e8` all-nine-FITS bit exact, production-zone ABI 6048110, runtime `critf=1e-6` for generic models, and the frozen Mg compatibility threshold.
-
-Run only the 11-model standalone smoke first:
-
-```bash
-PACKAGE=$(realpath ../xstar_tools-0.6.48.11.6)
-DATA=/media/linux/mhd/xstar/xstar/data
-RUNS=$(realpath original_xstar_benchmark_run.tar.gz)
-FORTRAN=$(realpath original_xstar.tar.gz)
-MGREF=$(realpath v0648102112_reanalysis.tar.gz)
-OUT=$(pwd)/v0648116_multimodel
-rm -rf "$OUT"
-
-"$PACKAGE/run_v0648116_multimodel.sh" \
-  "$PACKAGE" "$DATA" "$RUNS" "$FORTRAN" "$MGREF" "$OUT" standalone-smoke \
-  2>&1 | tee v0648116_standalone_smoke.host.log
-```
-
-Do not run `standalone-all` unless the smoke is 11/11 ACCEPT.
-
-### 0.6.48.11.7 carbon preliminary ion-balance qualification
-
-The 11.7 standalone smoke adds source-faithful call-1 carbon audits for the preliminary ionization equilibrium. Rate-type-7 contributions to `pirti` obey the literal XSTAR `calc_ion_rates.f90` endpoint rule `idest1 == 1 && idest2 <= nlev + 2`. Diagnostic CSVs expose record ownership and the stagewise `pirti/rrrti -> xitp -> mml/mmu` chain. No stage is manually widened and no Type50 opacity is rescaled.
+- Frozen `mg11_ne1e8` retains the 11.7.1 reference-only preliminary-Type7 compatibility path.
+- Generic models retain the literal Type7 source endpoint predicate from 11.7.
+- The frozen Mg all-nine-FITS bit-exact comparator remains blocking.
+- Production-zone ABI remains 6048110.
+- The runtime STEP diagnostic marker prefix remains `V0648117_STEP_*`; 11.8 qualification parses that intentionally frozen prefix.

@@ -2483,6 +2483,272 @@ struct NativeElementDiagnostic {
     int fixed_point_iterations = 0;
 };
 
+
+// v0.6.48.11.8: diagnostic-only call-1 carbon compact-solve attribution.
+// This is intentionally downstream of the element solve and never mutates
+// populations, matrices, rates, active windows, opacity, or controller state.
+void write_c_call1_compact_solve_attribution_v0648118(
+    const Program& program,
+    const NativeElementDiagnostic& diagnostic) {
+    if (environment_data_type("XSTAR_NATIVE_CALL_INDEX") != 1 || diagnostic.element_z != 6) return;
+    const char* root_value = std::getenv("XSTAR_V0648118_C_SOLVE_ATTRIBUTION_DIR");
+    if (!root_value || !*root_value) return;
+    if (!diagnostic.solve_response_captured || !diagnostic.solve_stage_trace_captured) {
+        throw std::runtime_error("v0648118 carbon solve attribution requested without solve-stage trace");
+    }
+    const std::filesystem::path root(root_value);
+    std::filesystem::create_directories(root);
+    const int source_sequence = environment_data_type("XSTAR_QUALIFICATION_SOURCE_SEQUENCE");
+    const auto& source = program.elements.at(static_cast<std::size_t>(diagnostic.element_index));
+    const int n = diagnostic.active.element.n_rows;
+    const int nsp = diagnostic.active.element.n_superlevels;
+    if (n <= 0 || nsp <= 0 || diagnostic.active.element.normalization_row < 1 ||
+        diagnostic.active.element.normalization_row > n) {
+        throw std::runtime_error("v0648118 carbon solve attribution invalid compact topology");
+    }
+    const auto require_size = [&](const std::vector<double>& values, std::size_t expected, const char* label) {
+        if (values.size() != expected) {
+            throw std::runtime_error(std::string("v0648118 carbon solve attribution dimension mismatch: ") + label);
+        }
+    };
+    require_size(diagnostic.active_initial_populations, static_cast<std::size_t>(n), "initial");
+    require_size(diagnostic.active_final_outer_start_populations, static_cast<std::size_t>(n), "outer");
+    require_size(diagnostic.final_population_after_condensed, static_cast<std::size_t>(n), "after_condensed");
+    require_size(diagnostic.final_fixed_point_population_before, static_cast<std::size_t>(n), "fixed_before");
+    require_size(diagnostic.final_fixed_point_population_after, static_cast<std::size_t>(n), "fixed_after");
+    require_size(diagnostic.active_final_populations, static_cast<std::size_t>(n), "final");
+    require_size(diagnostic.rhs, static_cast<std::size_t>(n), "rhs");
+    require_size(diagnostic.row_residual, static_cast<std::size_t>(n), "row_residual");
+    require_size(diagnostic.row_scale, static_cast<std::size_t>(n), "row_scale");
+    require_size(diagnostic.relative_row_residual, static_cast<std::size_t>(n), "relative_row_residual");
+    require_size(diagnostic.final_condensed_matrix, static_cast<std::size_t>(nsp) * static_cast<std::size_t>(nsp), "condensed_matrix");
+
+    const auto full_row_for_compact = [&](int compact_row) {
+        return diagnostic.active.full_row_start + compact_row - 1;
+    };
+    const auto source_row_for_compact = [&](int compact_row) -> const ElementRow& {
+        const int full_row = full_row_for_compact(compact_row);
+        return source.rows.at(static_cast<std::size_t>(full_row - 1));
+    };
+    const auto effective_stage_for_compact = [&](int compact_row) {
+        if (compact_row == diagnostic.active.element.normalization_row) return diagnostic.element_z + 1;
+        return source_row_for_compact(compact_row).ion;
+    };
+    const auto is_stage_ground = [&](int compact_row) {
+        if (compact_row == diagnostic.active.element.normalization_row) return false;
+        const auto& row = source_row_for_compact(compact_row);
+        int ground = 0;
+        for (const auto& candidate : source.rows) {
+            if (candidate.ion == row.ion) { ground = candidate.row; break; }
+        }
+        return ground > 0 && ground == full_row_for_compact(compact_row);
+    };
+
+    {
+        std::ofstream csv(root / "manifest.csv");
+        if (!csv) throw std::runtime_error("cannot write v0648118 carbon solve manifest");
+        csv << "call_index,source_sequence,element_z,active_min_stage,active_max_stage,n_rows,n_superlevels,n_ions,normalization_row,final_outer_iteration,final_fixed_iterations,total_fixed_point_iterations,solver_method,solver_status_flags,normalization,normalization_error,max_relative_row_residual,committed_contribution_count\n";
+        csv << std::setprecision(17) << 1 << ',' << source_sequence << ',' << diagnostic.element_z << ','
+            << diagnostic.active.min_stage << ',' << diagnostic.active.max_stage << ',' << n << ',' << nsp << ','
+            << diagnostic.active.element.n_ions << ',' << diagnostic.active.element.normalization_row << ','
+            << diagnostic.final_outer_iteration << ',' << diagnostic.final_fixed_iterations << ','
+            << diagnostic.fixed_point_iterations << ',' << diagnostic.solver_method << ',' << diagnostic.solver_status_flags << ','
+            << diagnostic.normalization << ',' << diagnostic.normalization_error << ',' << diagnostic.max_relative_row_residual << ','
+            << diagnostic.committed_contributions.size() << '\n';
+    }
+
+    {
+        std::ofstream csv(root / "rows.csv");
+        if (!csv) throw std::runtime_error("cannot write v0648118 carbon solve rows");
+        csv << "call_index,source_sequence,compact_row,full_row,global_level_index,superlevel,compact_ion,source_ion_stage,ion_charge,is_stage_ground,is_normalization_row,initial_population,final_outer_start_population,population_after_condensed,final_fixed_point_population_before,final_fixed_point_population_after,final_population,rhs,row_residual,row_scale,relative_row_residual\n";
+        csv << std::setprecision(17);
+        for (int compact_row = 1; compact_row <= n; ++compact_row) {
+            const std::size_t i = static_cast<std::size_t>(compact_row - 1);
+            const auto& active_row = diagnostic.active.element.rows.at(i);
+            const auto& source_row = source_row_for_compact(compact_row);
+            csv << 1 << ',' << source_sequence << ',' << compact_row << ',' << full_row_for_compact(compact_row) << ','
+                << source_row.global_level_index << ',' << active_row.superlevel << ',' << active_row.ion << ','
+                << effective_stage_for_compact(compact_row) << ',' << source_row.ion_charge << ','
+                << (is_stage_ground(compact_row) ? 1 : 0) << ','
+                << (compact_row == diagnostic.active.element.normalization_row ? 1 : 0) << ','
+                << diagnostic.active_initial_populations.at(i) << ','
+                << diagnostic.active_final_outer_start_populations.at(i) << ','
+                << diagnostic.final_population_after_condensed.at(i) << ','
+                << diagnostic.final_fixed_point_population_before.at(i) << ','
+                << diagnostic.final_fixed_point_population_after.at(i) << ','
+                << diagnostic.active_final_populations.at(i) << ',' << diagnostic.rhs.at(i) << ','
+                << diagnostic.row_residual.at(i) << ',' << diagnostic.row_scale.at(i) << ','
+                << diagnostic.relative_row_residual.at(i) << '\n';
+        }
+    }
+
+    {
+        std::ofstream csv(root / "stage_totals.csv");
+        if (!csv) throw std::runtime_error("cannot write v0648118 carbon stage totals");
+        csv << "call_index,source_sequence,stage,is_fully_stripped,preliminary_xitp,final_stage_fraction,active_min_stage,active_max_stage\n";
+        csv << std::setprecision(17);
+        for (int stage = 1; stage <= diagnostic.element_z + 1; ++stage) {
+            const double prelim = stage <= static_cast<int>(diagnostic.preliminary.fractions.size())
+                ? diagnostic.preliminary.fractions.at(static_cast<std::size_t>(stage - 1)) : 0.0;
+            const double final_fraction = stage <= static_cast<int>(diagnostic.final_stage_fractions.size())
+                ? diagnostic.final_stage_fractions.at(static_cast<std::size_t>(stage - 1)) : 0.0;
+            csv << 1 << ',' << source_sequence << ',' << stage << ',' << (stage == diagnostic.element_z + 1 ? 1 : 0) << ','
+                << prelim << ',' << final_fraction << ',' << diagnostic.active.min_stage << ',' << diagnostic.active.max_stage << '\n';
+        }
+    }
+
+    struct TermAuditV0648118 {
+        std::int64_t source_position = 0;
+        std::int64_t term_source_position = 0;
+        std::int64_t record = 0;
+        int data_type = 0;
+        int rate_type = 0;
+        int ion_stage = 0;
+        int role_index = 0;
+        const char* role = "";
+        int row = 0;
+        int column = 0;
+        double aj1 = 0.0;
+        double aj2 = 0.0;
+        double cj = 0.0;
+        double cj2 = 0.0;
+    };
+    std::vector<TermAuditV0648118> terms;
+    terms.reserve(diagnostic.committed_contributions.size() * 4u);
+    for (const auto& c : diagnostic.committed_contributions) {
+        const double xpx = c.density_scale;
+        const int rows[4] = {c.upper_row, c.lower_row, c.lower_row, c.upper_row};
+        const int cols[4] = {c.lower_row, c.upper_row, c.lower_row, c.upper_row};
+        const double aj1[4] = {c.ans1, c.ans2, -c.ans1, -c.ans2};
+        const double aj2[4] = {c.ans2, c.ans1, -c.ans1, -c.ans2};
+        const double cj[4] = {0.0, 0.0, c.ans4 * xpx, -c.ans3 * xpx};
+        const double cj2[4] = {0.0, 0.0, c.ans6 * xpx, -c.ans5 * xpx};
+        const char* roles[4] = {"upper_from_lower", "lower_from_upper", "lower_diagonal", "upper_diagonal"};
+        for (int offset = 0; offset < 4; ++offset) {
+            TermAuditV0648118 t;
+            t.source_position = c.source_position;
+            t.term_source_position = c.source_position + offset;
+            t.record = c.record;
+            t.data_type = c.data_type;
+            t.rate_type = c.rate_type;
+            t.ion_stage = c.ion_stage;
+            t.role_index = offset;
+            t.role = roles[offset];
+            t.row = rows[offset];
+            t.column = cols[offset];
+            t.aj1 = aj1[offset];
+            t.aj2 = aj2[offset];
+            t.cj = cj[offset];
+            t.cj2 = cj2[offset];
+            terms.push_back(t);
+        }
+    }
+
+    std::vector<double> riu(static_cast<std::size_t>(n), 0.0);
+    std::vector<double> rui(static_cast<std::size_t>(n), 0.0);
+    std::vector<double> ril(static_cast<std::size_t>(n), 0.0);
+    std::vector<double> rli(static_cast<std::size_t>(n), 0.0);
+    const auto& final_population = diagnostic.active_final_populations;
+    {
+        std::ofstream csv(root / "matrix_terms.csv");
+        if (!csv) throw std::runtime_error("cannot write v0648118 carbon matrix terms");
+        csv << "call_index,source_sequence,term_order,source_position,term_source_position,record,data_type,rate_type,record_ion_stage,role_index,role,target_compact_row,target_full_row,target_effective_stage,target_superlevel,target_is_normalization,neighbor_compact_row,neighbor_full_row,neighbor_effective_stage,neighbor_superlevel,neighbor_is_normalization,aj1,aj2,cj,cj2,neighbor_final_population,fixed_point_branch,fixed_point_outflow_rate,fixed_point_inflow_weighted,touches_stage5,touches_stage6,touches_terminal\n";
+        csv << std::setprecision(17);
+        std::size_t order = 0;
+        for (const auto& t : terms) {
+            ++order;
+            const bool valid_row = t.row >= 1 && t.row <= n;
+            const bool valid_col = t.column >= 1 && t.column <= n;
+            if (!valid_row || !valid_col) throw std::runtime_error("v0648118 matrix term outside compact carbon basis");
+            const int target_stage = effective_stage_for_compact(t.row);
+            const int neighbor_stage = effective_stage_for_compact(t.column);
+            const bool target_terminal = t.row == diagnostic.active.element.normalization_row;
+            const bool neighbor_terminal = t.column == diagnostic.active.element.normalization_row;
+            double outflow = 0.0;
+            double inflow = 0.0;
+            const char* branch = "diagonal";
+            if (t.column > t.row) {
+                branch = "upper_neighbor";
+                outflow = std::abs(t.aj2);
+                inflow = std::abs(t.aj1) * final_population.at(static_cast<std::size_t>(t.column - 1));
+                riu.at(static_cast<std::size_t>(t.row - 1)) += outflow;
+                rui.at(static_cast<std::size_t>(t.row - 1)) += inflow;
+            } else if (t.column < t.row) {
+                branch = "lower_neighbor";
+                outflow = std::abs(t.aj2);
+                inflow = std::abs(t.aj1) * final_population.at(static_cast<std::size_t>(t.column - 1));
+                ril.at(static_cast<std::size_t>(t.row - 1)) += outflow;
+                rli.at(static_cast<std::size_t>(t.row - 1)) += inflow;
+            }
+            const bool touches5 = target_stage == 5 || neighbor_stage == 5;
+            const bool touches6 = target_stage == 6 || neighbor_stage == 6;
+            const bool touches_terminal = target_terminal || neighbor_terminal;
+            csv << 1 << ',' << source_sequence << ',' << order << ',' << t.source_position << ',' << t.term_source_position << ','
+                << t.record << ',' << t.data_type << ',' << t.rate_type << ',' << t.ion_stage << ',' << t.role_index << ',' << t.role << ','
+                << t.row << ',' << full_row_for_compact(t.row) << ',' << target_stage << ','
+                << diagnostic.active.element.rows.at(static_cast<std::size_t>(t.row - 1)).superlevel << ',' << (target_terminal ? 1 : 0) << ','
+                << t.column << ',' << full_row_for_compact(t.column) << ',' << neighbor_stage << ','
+                << diagnostic.active.element.rows.at(static_cast<std::size_t>(t.column - 1)).superlevel << ',' << (neighbor_terminal ? 1 : 0) << ','
+                << t.aj1 << ',' << t.aj2 << ',' << t.cj << ',' << t.cj2 << ','
+                << final_population.at(static_cast<std::size_t>(t.column - 1)) << ',' << branch << ',' << outflow << ',' << inflow << ','
+                << (touches5 ? 1 : 0) << ',' << (touches6 ? 1 : 0) << ',' << (touches_terminal ? 1 : 0) << '\n';
+        }
+    }
+
+    std::vector<double> raw(static_cast<std::size_t>(n), 0.0);
+    double raw_sum = 0.0;
+    for (int row = 1; row <= n; ++row) {
+        const std::size_t i = static_cast<std::size_t>(row - 1);
+        raw[i] = (rli[i] + rui[i]) / (ril[i] + riu[i] + 1.0e-24);
+        raw_sum += raw[i];
+    }
+    {
+        std::ofstream csv(root / "fixed_point_rows.csv");
+        if (!csv) throw std::runtime_error("cannot write v0648118 carbon fixed-point rows");
+        csv << "call_index,source_sequence,compact_row,full_row,effective_stage,is_stage_ground,is_normalization_row,riu,rui,ril,rli,total_outflow_rate,total_inflow_weighted,raw_fixed_point_population,normalized_fixed_point_population,final_population,normalized_minus_final\n";
+        csv << std::setprecision(17);
+        for (int row = 1; row <= n; ++row) {
+            const std::size_t i = static_cast<std::size_t>(row - 1);
+            const double normalized = raw[i] / (raw_sum + 1.0e-24);
+            csv << 1 << ',' << source_sequence << ',' << row << ',' << full_row_for_compact(row) << ','
+                << effective_stage_for_compact(row) << ',' << (is_stage_ground(row) ? 1 : 0) << ','
+                << (row == diagnostic.active.element.normalization_row ? 1 : 0) << ','
+                << riu[i] << ',' << rui[i] << ',' << ril[i] << ',' << rli[i] << ','
+                << (riu[i] + ril[i]) << ',' << (rui[i] + rli[i]) << ',' << raw[i] << ',' << normalized << ','
+                << final_population[i] << ',' << (normalized - final_population[i]) << '\n';
+        }
+    }
+
+    std::vector<int> sp_min_stage(static_cast<std::size_t>(nsp), diagnostic.element_z + 1);
+    std::vector<int> sp_max_stage(static_cast<std::size_t>(nsp), 0);
+    std::vector<int> sp_terminal(static_cast<std::size_t>(nsp), 0);
+    for (int row = 1; row <= n; ++row) {
+        const int sp = diagnostic.active.element.rows.at(static_cast<std::size_t>(row - 1)).superlevel;
+        const int stage = effective_stage_for_compact(row);
+        auto& lo = sp_min_stage.at(static_cast<std::size_t>(sp - 1));
+        auto& hi = sp_max_stage.at(static_cast<std::size_t>(sp - 1));
+        lo = std::min(lo, stage);
+        hi = std::max(hi, stage);
+        if (row == diagnostic.active.element.normalization_row) sp_terminal.at(static_cast<std::size_t>(sp - 1)) = 1;
+    }
+    {
+        std::ofstream csv(root / "condensed_matrix.csv");
+        if (!csv) throw std::runtime_error("cannot write v0648118 carbon condensed matrix");
+        csv << "call_index,source_sequence,final_outer_iteration,row_superlevel,row_min_stage,row_max_stage,row_contains_terminal,column_superlevel,column_min_stage,column_max_stage,column_contains_terminal,normalized_matrix_value\n";
+        csv << std::setprecision(17);
+        for (int rsp = 1; rsp <= nsp; ++rsp) {
+            for (int csp = 1; csp <= nsp; ++csp) {
+                csv << 1 << ',' << source_sequence << ',' << diagnostic.final_outer_iteration << ',' << rsp << ','
+                    << sp_min_stage.at(static_cast<std::size_t>(rsp - 1)) << ',' << sp_max_stage.at(static_cast<std::size_t>(rsp - 1)) << ','
+                    << sp_terminal.at(static_cast<std::size_t>(rsp - 1)) << ',' << csp << ','
+                    << sp_min_stage.at(static_cast<std::size_t>(csp - 1)) << ',' << sp_max_stage.at(static_cast<std::size_t>(csp - 1)) << ','
+                    << sp_terminal.at(static_cast<std::size_t>(csp - 1)) << ','
+                    << diagnostic.final_condensed_matrix.at(static_cast<std::size_t>(rsp - 1) * static_cast<std::size_t>(nsp) + static_cast<std::size_t>(csp - 1)) << '\n';
+            }
+        }
+    }
+}
+
 struct ElementBuffers {
     // v0.6.48.11.6: source-seed provenance retained for the C Type50
     // record-5740 scalar audit.  These fields are diagnostic-only.
@@ -10421,6 +10687,7 @@ int run_impl(
             element_diagnostic.outer_iterations = eout.outer_iterations;
             element_diagnostic.fixed_point_iterations = eout.fixed_point_iterations;
         }
+        write_c_call1_compact_solve_attribution_v0648118(ctx.program, element_diagnostic);
         ctx.last_element_diagnostics.push_back(std::move(element_diagnostic));
 
         // Reconstruct the complete native bound-free continuum surface from

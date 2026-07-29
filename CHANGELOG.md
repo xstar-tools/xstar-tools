@@ -1,5 +1,15 @@
 # CHANGELOG
 
+# 0.6.48.11.8 — C call-1 compact matrix / high-ion / terminal-row solve attribution - 2026-07-29
+
+- Build on the accepted 0.6.48.11.7.1 frozen-Mg regression boundary. The host smoke restored all nine frozen Mg FITS bit-exact and showed 252 Mg Type7 old-vs-source preliminary-eligibility differences isolated behind the reference-only compatibility path.
+- Keep production science unchanged for this release. The 11.7 literal generic Type7 endpoint rule, the 11.7.1 frozen-Mg compatibility path, the 11.6 carbon seed provenance correction, STEP, Type50, GSSMOOTH, and the Lucy-style solve are not reassigned.
+- Add diagnostic-only call-1 carbon compact-solve attribution after the native carbon element solve has completed. The writer is enabled only by `XSTAR_V0648118_C_SOLVE_ATTRIBUTION_DIR` and cannot feed its reconstructed values back into the solve.
+- Emit `manifest.csv`, `rows.csv`, `stage_totals.csv`, `matrix_terms.csv`, `fixed_point_rows.csv`, and `condensed_matrix.csv` for the final/converged call-1 C solve. These expose compact/full row identity, ion/superlevel ownership, before/after condensed and fixed-point populations, exact committed contribution identities, fixed-point inflow/outflow budgets, high-ion/terminal couplings, and the normalized condensed matrix row.
+- Extend the standalone-smoke runner to block the targeted C diagnostic surface on attribution presence/finiteness, active stage 6, C III/stage-6/terminal row discovery, and correct condensed normalization-row structure. Zero stage6-terminal coupling is reported rather than pre-rejected because it may itself be the scientific finding.
+- Repair qualification-only STEP diagnostic parsing: the runtime stream remains intentionally frozen under `V0648117_STEP_*`, so 11.8 parses that retained prefix instead of falsely expecting a new runtime marker namespace.
+- Keep the all-nine-FITS frozen Mg comparator blocking and preserve production-zone ABI 6048110. Qualification remains standalone-smoke first.
+
 # 0.6.48.11.7.1 — frozen-Mg Type7 compatibility/regression hotfix - 2026-07-29
 
 - Repair the 0.6.48.11.7 frozen `mg11_ne1e8` bit-exact regression in `xo01_detal2.fits` and `xo01_detal4.fits` without reverting the generic source-backed Type7 endpoint rule.
