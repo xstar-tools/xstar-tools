@@ -9340,8 +9340,22 @@ int run_impl(
     const int source_sequence_v82_patch511 = source_sequence_env_v82_patch511 && *source_sequence_env_v82_patch511
         ? std::atoi(source_sequence_env_v82_patch511) : 0;
     const char* opacity_producer_path_v82_patch511 = std::getenv("XSTAR_V82_PATCH511_OPAKC_PRODUCER_AUDIT_PATH");
+    // 0.6.48.11.5: reuse the exact existing producer replay for a targeted
+    // call-1 attribution sidecar.  This is diagnostic-only and is deliberately
+    // independent of the historical sequence-59 Mg audit.
+    const char* native_call_env_v0648115 = std::getenv("XSTAR_NATIVE_CALL_INDEX");
+    const int native_call_v0648115 = native_call_env_v0648115 && *native_call_env_v0648115
+        ? std::atoi(native_call_env_v0648115) : 0;
+    const char* first_step_opacity_producer_path_v0648115 =
+        std::getenv("XSTAR_V0648115_FIRST_STEP_PRODUCER_AUDIT_PATH");
+    const bool first_step_opacity_producer_audit_v0648115 = !defer_product_projection &&
+        native_call_v0648115 == 1 && first_step_opacity_producer_path_v0648115 &&
+        *first_step_opacity_producer_path_v0648115;
+    const char* effective_opacity_producer_path_v0648115 = first_step_opacity_producer_audit_v0648115
+        ? first_step_opacity_producer_path_v0648115 : opacity_producer_path_v82_patch511;
     const bool opacity_producer_audit_v82_patch511 = !defer_product_projection &&
-        source_sequence_v82_patch511 == 59 && opacity_producer_path_v82_patch511 && *opacity_producer_path_v82_patch511;
+        ((source_sequence_v82_patch511 == 59 && opacity_producer_path_v82_patch511 && *opacity_producer_path_v82_patch511) ||
+         first_step_opacity_producer_audit_v0648115);
     // v82 patch 5.20.3: diagnostic-only exact opacity contribution ledger for
     // the bins already proven to alter the source heatt absorption operand.
     // This never feeds production arrays: it reuses the existing comparison
@@ -12595,16 +12609,20 @@ int run_impl(
         const char* source_sequence_env_v82_patch57 = std::getenv("XSTAR_NATIVE_SOURCE_SEQUENCE");
         const int source_sequence_v82_patch57 = source_sequence_env_v82_patch57 && *source_sequence_env_v82_patch57
             ? std::atoi(source_sequence_env_v82_patch57) : 0;
-        if (!defer_product_projection && source_sequence_v82_patch57 == 59) {
-            std::size_t bound_free_nonzero = 0;
-            for (double v : native_bound_free_opacity) if (std::isfinite(v) && v != 0.0) ++bound_free_nonzero;
-            std::cout << "V048746255172582_CALL2_PHINT53_GRID_MAPPED_RECORDS="
-                      << phint53_records_mapped_v82_patch57 << "\n"
-                      << "V048746255172582_CALL2_PHINT53_GRID_ACCUMULATED_RECORD_BIN_EVENTS="
-                      << phint53_bins_accumulated_v82_patch57 << "\n"
-                      << "V048746255172582_CALL2_PHINT53_BOUND_FREE_NONZERO_BINS="
-                      << bound_free_nonzero << "\n"
-                      << "V048746255172582_CALL2_PHINT53_CONTINUUM_BIN_MAPPING=ACCEPT_SOURCE_BIN_AVERAGED\n";
+        const bool opacity_sequence59_projection_v82_patch57 =
+            !defer_product_projection && source_sequence_v82_patch57 == 59;
+        if (opacity_sequence59_projection_v82_patch57 || first_step_opacity_producer_audit_v0648115) {
+            if (opacity_sequence59_projection_v82_patch57) {
+                std::size_t bound_free_nonzero = 0;
+                for (double v : native_bound_free_opacity) if (std::isfinite(v) && v != 0.0) ++bound_free_nonzero;
+                std::cout << "V048746255172582_CALL2_PHINT53_GRID_MAPPED_RECORDS="
+                          << phint53_records_mapped_v82_patch57 << "\n"
+                          << "V048746255172582_CALL2_PHINT53_GRID_ACCUMULATED_RECORD_BIN_EVENTS="
+                          << phint53_bins_accumulated_v82_patch57 << "\n"
+                          << "V048746255172582_CALL2_PHINT53_BOUND_FREE_NONZERO_BINS="
+                          << bound_free_nonzero << "\n"
+                          << "V048746255172582_CALL2_PHINT53_CONTINUUM_BIN_MAPPING=ACCEPT_SOURCE_BIN_AVERAGED\n";
+            }
 
             if (opacity_producer_audit_v82_patch511 || exact_absorption_audit_v82_patch5203) {
                 // Re-evaluate every line contribution into a comparison-only profile
@@ -12665,7 +12683,7 @@ int run_impl(
                 if (!opacity_producer_audit_v82_patch511) {
                     // Exact-ledger-only mode does not require the legacy top-producer inventory.
                 } else {
-                const std::filesystem::path producer_path(opacity_producer_path_v82_patch511);
+                const std::filesystem::path producer_path(effective_opacity_producer_path_v0648115);
                 if (!producer_path.parent_path().empty()) std::filesystem::create_directories(producer_path.parent_path());
                 std::ofstream producer_csv(producer_path);
                 if (!producer_csv) throw std::runtime_error("cannot create patch5.11 opacity producer inventory");

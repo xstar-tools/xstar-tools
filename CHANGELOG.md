@@ -1,5 +1,288 @@
 # CHANGELOG
 
+# 0.6.48.11.5 - 2026-07-29
+
+- Added diagnostic-only first-STEP opacity-family attribution for the C V `c5_ne1e10` limiting bin.
+- Retains the existing bound-free/free-free/line/Thomson decomposition before and after source-order GSSMOOTH without changing production `opakc`.
+- Reuses the native bound-free and line-profile kernels to emit a targeted call-1 producer inventory and report the largest pre-GSSMOOTH record owners at the actual STEP-limiting bin.
+- Added blocking qualification gates for component presence, additive closure, producer inventory/top identities, and preservation of the known bin-3124 attribution boundary.
+- Preserves 0.6.48.11.4.1 science behavior, frozen Mg XI bit-exact contract, and production-zone ABI 6048110.
+
+## 0.6.48.11.4.1 — frozen-Mg regression / compact STEP diagnostics hotfix
+
+- Restores the accepted frozen `mg11_ne1e8` fixed-state active-ion threshold (`1e-7`) only on the explicit reference trajectory; generic models retain runtime `critf`.
+- Adds qualification-only first-STEP diagnostics on `stderr` under `XSTAR_V06481141_STEP_DIAGNOSTICS=1`, avoiding the production `std::cout` silence without enabling the historical verbose stream.
+- Runner enables compact STEP diagnostics only for `helike_type69/c5_ne1e10`.
+- Preserves all 0.6.48.11.4 source-publication predicates and the 6048110 production-zone ABI.
+- No new C/O physics changes.
+
+## 0.6.48.11.4 — runtime critf / literal source inventory / STEP attribution
+
+- Preserve the 0.6.48.11.3 variable-call controller, `python|cpp-all|cpp-zone` execution modes, production-zone ABI 6048110, and frozen `mg11_ne1e8` bit-exact regression path.
+- Propagate the model runtime `critf` into the native fixed-state engine instead of using a hard-coded `1.e-7` preliminary ion-window threshold. The benchmark inputs supply `critf=1.e-6`.
+- Replace the simplified first/last-fraction active-window selection with the literal `calc_hmc_element.f90` `mml/mmu` search, including lower/upper crossing detection, one-stage expansion, and the `critf<=1.e-34` full-window case.
+- Extend STEP attribution without changing its physical algorithm: report the initial radius/column limit, limiting continuum bin/energy/opacity, its `tau_in` and `zrems(1)`, the candidate `emult/opakc`, the remaining-column limit, and the effective runtime `critf`.
+- Make generic `xo01_detail` publication follow literal `fstepr.f90`: publish each level only when its live `xilev` exceeds `1.d-34`; keep the frozen Mg identity surface unchanged.
+- Make generic detailed-line publication follow literal `fstepr2.f90`: require per-line `rcem/oplin > 1.d-64`, exclude rate types 14 and 9, and apply the source wavelength window.
+- Make generic detailed-RRC publication follow literal `fstepr3.f90`: require per-slot `cemab(1/2)`, `cabab`, or `opakab > 1.e-36`.
+- Make generic public-line selection follow `writespectra2.f90` eligibility before ranking: exclude rate types 14/9, enforce the source wavelength range and mean line luminosity floor, then rank by source mean luminosity and cap at 600.
+- Qualification remains standalone-first. Run only the 11-model smoke; the other 51 standalone models and all Python science stages remain blocked until smoke closure.
+
+## 0.6.48.11.3 — focused source-faithfulness corrections after the 11.2 smoke
+
+- Keep the 0.6.48.11.2 variable-call controller, persistent `cpp-zone` architecture, execution-mode contract, and production-zone ABI 6048110 unchanged. The accepted `mg11_ne1e8` 10.2.1.1.2 products remain the mandatory all-nine-FITS bit-exact regression authority.
+- Correct the Ca XIX Type 51 five-point Burgess-Tully validity rule exposed by record 160243 (`bt_type=2`, `eij=0.6475 Ryd`, `c=14.1`): source `upsil.f90` returns the finite spline result without a non-negativity rejection, so the native source-faithful path now accepts any finite signed upsilon. Existing BT5/BT6 handling is retained.
+- Correct public line publication to treat 600 as the source `writespectra2` maximum rather than a mandatory row count. Both the source-ranked selection gate and retained in-memory handoff accept any internally consistent inventory up to 600 rows, allowing source surfaces such as the 578-row Ca XIX reference.
+- Correct generic active-stage publication: a stage absent from lowered level metadata is not publishable, and a known stage whose terminal retained populations are all zero is inactive. This closes the 11.2 `return !stage_known` logic inversion without changing frozen Mg templates.
+- Make Type 59 `phintfo` use the source `expo()` clamp semantics for the thermal exponential and add the source `ucalc.f90` `bremsint(nb1) < 1e-20` pre-integration skip before Type59 spectral/opacity ownership is activated. Retain the 11.2 modern Boltzmann/eV conversion and analytic Verner/Milne implementation.
+- Make Type 10 charge-transfer exponentials use the same source `expo()` clamp semantics while preserving the 11.2 source-endpoint lowering correction.
+- Add 11.3 smoke diagnostics for the exact Ca Type51 record-160243 no-abort gate, sub-600 Ca public-line no-abort gate, O VII Type10 execution, and candidate/reference science-HDU row counts. Existing C call-5/6, Ca call-5/9, DSEC, identity/order, >1% numeric, and Mg frozen gates remain blocking.
+- Qualification remains standalone-first. Run only the 11-model `standalone-smoke`; do not run the other 51 standalone models or any Python science stage until all 11 smoke models ACCEPT.
+- Local verification covers readiness, O0 standalone/persistent-zone build/link, ABI load, and cleanup. C/O/Ca scientific closure is not preclaimed because the development container does not contain the host XSTAR atomic database installation.
+
+## 0.6.48.11.2 — full variable-call controller and multi-model source/publication closure
+
+- Continue the 0.6.48.11.1 standalone-first multi-model branch while preserving the fully accepted 0.6.48.10.2.1.1.2 `mg11_ne1e8` result as a separate hard bit-exact regression gate.
+- Remove the remaining active 1..4 source-call ceilings from autonomous production DSEC/snapshot construction. The four-call source-sequence arrays remain isolated to explicit frozen Mg XI reference-trajectory qualification only; the smoke runner now requires calls 5-6 for the six-zone C V case and calls 5-9 for the nine-zone Ca XIX case.
+- Correct native Type 59 `phintfo` thermodynamic constants to the source-port/XSTAR Boltzmann erg/K and modern erg/eV conversion instead of the legacy 0.861707 eV/T4 constant used by 11.1. Keep the analytic Verner cross section, scalar photoionization/heating, Milne recombination, and direct bound-free opacity ownership unchanged.
+- Extend five-point Type 51 Burgess-Tully evaluation through transition types 5 and 6 in the native fixed-state/matrix paths and Python reference helper; make any remaining invalid Type51 record failure report record number, REAL/INT counts, BT type, energy and scaling constant.
+- Generalize Type 10 endpoint lowering so source `idest`-style endpoints that are not literal local Type-13 rows can be projected into the compact ion basis.
+- Replace the unconditional 616-row Mg detail template outside the accepted Mg anchor with live source-order terminal-active level identities. Generalize detail-line, public-line and RRC inventories similarly; generic public lines are capped at 600 only when more than 600 live ranked lines exist, allowing the 578-row Ca XIX source surface.
+- Keep `python`, `cpp-all`, and `cpp-zone` unchanged and retain production-zone ABI 6048110 because the C ABI shape is unchanged.
+- Qualification remains strictly staged: rerun only the 11-model standalone smoke first; `standalone-all` is blocked until all 11 models ACCEPT, then Python-hosted native modes, then selective expensive Python.
+- No C/O/Ca scientific acceptance is preclaimed by this package. The host smoke run is authoritative for the Type59 DSEC 39->24 target, Type51/Type10 closure, 243/168 detail-row targets, 578 Ca line rows, and RRC inventory closure.
+
+## 0.6.48.11.1 — Type7/10/59/66 native coverage and generic publication closure
+
+- Continue the 0.6.48.11.0 variable-zone multi-model qualification branch without changing the accepted Mg XI reference-mode trajectory or the public `python|cpp-all|cpp-zone` mode contract.
+- Add source-backed native lowering/evaluation for the record families exposed by the first 11-model standalone smoke run: Type 7 dielectronic recombination, Type 10 charge transfer, Type 59 Verner bound-free photoionization/recombination, and Type 66 collision strengths.
+- Implement Type 59 from the literal XSTAR analytic Verner cross section and `phintfo` scalar/photoheating/Milne integration semantics, including compact-vs-nine-real parameter layouts, source zero-return guards, parent statistical-weight ratio, source reverse-zero semantics, and direct full-grid bound-free opacity. Do not synthesize Type 59 RRC emissivity because the source `phintfo.f90` RRC-emission updates are commented out.
+- Generalize public active-stage filtering from the Mg-specific stage floor to the terminal native population inventory for every active element, so source-inactive ion stages do not leak into detail, line, or RRC products.
+- Generalize `xout_step.log` option-17 publication to retained `RadialZoneState` geometry for arbitrary radial-zone counts. Preserve the historical four-zone Mg XI 5-row compatibility reconstruction only for that exact accepted anchor shape.
+- Make the multi-model FORTRAN comparator block on declared science HDUs only; PARAMETERS/provenance tables are no longer counted as physical identity mismatches.
+- Preserve the staged qualification policy: standalone smoke first, then all 62 standalone C++ models, then all 62 Python-hosted `cpp-all`/`cpp-zone`, and only then the selective expensive Python-zone/pure-Python set.
+- No C/O/Ca science acceptance is preclaimed. The next blocking gate is the real-host 11-model `standalone-smoke` run using the supplied benchmark definitions and FORTRAN products.
+
+## 0.6.48.11.0 — generic variable-zone multi-model benchmark qualification
+
+- Freeze the fully accepted 0.6.48.10.2.1.1.2 Mg XI science baseline while generalizing the native radial controller from a fixed four-call loop to the literal source first-pass termination predicate.
+- Keep `--zone-backend python|cpp-all|cpp-zone`; bump the shared production-zone ABI to 6048110 and add persistent `run_next_zone()` / `done()` so `cpp-zone` naturally supports 2, 3, 4, 5, 6, 9, or other source-selected radial-zone counts without Python state reconstruction.
+- Retain the exact Mg XI `20/1/17/16` prefix only inside the explicit accepted reference-trajectory mode; ordinary production models converge DSEC and terminate radial traversal from live state.
+- Add a 62-model FORTRAN-authority manifest and generic product/radial/triplet comparators for the supplied `original_xstar_benchmark_run.tar.gz` and `original_xstar.tar.gz` suites.
+- Enforce staged qualification: 11-model standalone-C++ smoke matrix first; all 62 standalone C++ second; only after all standalone models pass, all 62 Python-hosted `cpp-all` and `cpp-zone`; finally only five representative models through pure Python and accelerated Python with `--zone-backend python`.
+- No multi-model science result is preclaimed by the package: the real host ATDB/coheat run is the blocking qualification authority.
+
+## 0.6.48.10.2.1.1.2 — Python writer-timing step-log normalization closure
+
+- Qualifier-only hotfix; no controller, backend, numerical kernel, FITS writer, or zone-execution science changes.
+- Closes the final Mg XI qualification false rejection by treating only the observed accelerated-Python wall-time records (`after writespectra`, top-level FITS/final recompute/product timers, `pprint_legacy`, and the legacy bare `total`) as measurement-only in normalized `xout_step.log` comparisons.
+- Preserves non-timing writer ownership/count/status records and all physical science rows.
+- Keeps `--zone-backend python|cpp-all|cpp-zone` unchanged.
+- `mg11_ne1e8` is considered closed only after the authoritative Python fallback reproduces all nine 10.1.1 FITS payloads bit-exactly and the corrected normalized science log is identical.
+
+## 0.6.48.10.2.1.1.1 — qualifier-only step-log normalization hotfix
+
+- No science, controller, backend, FITS writer, or zone-execution changes.
+- Fixes the 0.6.48.10.2.1.1 qualifier false rejection by treating the legacy
+  `native_step_log_formatter` and `native_controller_and_fits` footer values as
+  measurement-only timing fields when comparing step-log science content.
+- Retains strict sensitivity to non-timing science-row changes.
+- Keeps all three zone modes unchanged: `python`, `cpp-all`, and `cpp-zone`.
+- The legacy `run_v064810211_python_zone_modes.sh` entry point redirects to the
+  corrected 0.6.48.10.2.1.1.1 qualifier runner.
+
+## 0.6.48.10.2.1.1 — persistent shared-production zone-by-zone backend
+
+- Keeps the accepted 0.6.48.10.1.1 accelerated-Python controller as `--zone-backend python`.
+- Keeps the 0.6.48.10.2.1 one-shot native trajectory as `--zone-backend cpp-all`.
+- Adds `--zone-backend cpp-zone`: four sequential Python→C++ calls into one persistent native context.
+- `cpp-zone` runs the same `command_run_standalone_production_v67` implementation as `cpp-all`; the controller stack, fixed-state context, transport/lifetime state, and product state remain native between zone calls.
+- Adds a read-only per-zone result ABI (DSEC count, source sequence, temperature, electron fraction, hmctot/h-c, wall time).
+- Fixes the 10.2.1 FITS bit-comparison qualifier by making float-column views contiguous before byte comparison.
+- ABI: 604810211.
+## 0.6.48.10.2.1 — shared standalone-production native zone engine
+
+- Restarted from scientifically accepted 0.6.48.10.1.1; rejected 10.2.0/10.2.0.1 zone-controller reconstructions are not ancestry.
+- Adds `--zone-backend python|cpp`; `python` is the untouched 10.1.1 radial controller fallback.
+- `cpp` is deliberately implemented by a shared library built from the same `xstar_standalone.cpp` translation unit as the accepted standalone executable. It calls `command_run_standalone_production_v67` directly, so DSEC, active-stage/hydrogen lifetime, accepted-boundary recompute, STEP/TRNFRC, retained workspaces, terminal state, and native ProductWritingState have one implementation.
+- The Python C++-zone path does not reconstruct native per-zone arrays. Python supplies normalized parameters and performs FITS header-only provenance projection after native publication. FITS data payloads remain native production payloads.
+- Adds per-zone wall timing markers and ABI 60481021.
+- Candidate-first host qualification requires all nine candidate FITS data payloads bit-exact to the accepted standalone C++ reference before running the expensive authoritative Python-zone fallback.
+
+## 0.6.48.10.1.1 — terminal active-stage/RRC ownership correction
+
+- Start from the 0.6.48.10.1 native final-recompute candidate, retaining its measured 70.962107 s -> 9.871208 s terminal speedup and the accepted 0.6.48.10.0 C++ `binemis` promotion.
+- Correct the 10.1 science rejection in `xout_rrc1.fits`: the fresh native final-recompute context widened the terminal spectral ion-stage window and leaked two source-inactive Mg II RRC slots into the final writer, yielding 1054 rows instead of the accepted 1052.
+- Restore source ownership generically from the live retained Python `calc_hmc_all.mml/mmu` stage limits. Decode continuum and line slots through the immutable derived pointer tables; clear only `calc_emisab` (`cemab/cabab/opakab`) and `calc_emis` (`rcem/oplin`) slots whose parent ion is outside the retained source stage window before HEATT consumes the native workspaces.
+- Do not hard-code continuum indices 7062/7064 or Mg specifically. Benchmark attribution verifies those rejected slots are Mg II stage 2 while the retained Mg window is stages 3-12 and neighboring accepted Mg III slots remain active.
+- Freeze the 10.1 native fixed-state engine, final-recompute C++ bridge, Type49/53/50 kernels, thermal kernels, and accepted 10.0 `binemis` implementation by SHA-256. No native numerical kernel changes in this correction.
+- Qualification requires the forced-10.0 fallback to remain all-nine-FITS data-bit-exact, the corrected accelerated candidate to reproduce all nine accepted 10.0 FITS data payloads exactly (including 1052-row `xout_rrc1`), the long-lived public structural gate to pass, and final recompute runtime to remain <=10 s.
+
+## 0.6.48.10.1 — accelerated-Python native final zero-thickness recompute bridge
+
+- Promote the accepted 0.6.48.10.0 accelerated-Python result (562.066443 s total; final C++ `binemis` 0.817192 s, all qualification gates ACCEPT) and freeze its zone/controller computation plus the promoted C++ `binemis` implementation by SHA-256.
+- Replace only the final source-order zero-thickness `bremsmap -> calc_hmc_all -> calc_emisab_all -> calc_emis_all` replay in accelerated C++-backend Python with a native fixed-state bridge. The bridge reuses the already-qualified C++ fixed-state engine; it does not introduce a second physics implementation.
+- Transfer the live terminal Python state needed by the source calculation: high-resolution radiation, live `bremsa`, source RRC optical-depth workspace (`tauc`), runtime line optical depths, trial temperature/electron fraction/density, abundances, turbulence, covering fractions, and retained global level workspaces.
+- Project the native source workspaces (`rcem`, `oplin`, `cemab`, `cabab`, `opakab`, `rccemis`, `opakc`, `opakcont`, `fline`, `flinel`, `brcems`) back into the existing Python `RadialTransferWorkspace`, then run the already-active HEATT and STPCUT source handlers in their original order.
+- Pure Python remains unchanged. `XSTAR_V0648101_FORCE_PYTHON_FINAL_RECOMPUTE=1` restores the accepted 10.0 Python terminal recompute; native bridge failure is fail-closed unless `XSTAR_V0648101_ALLOW_PYTHON_FINAL_RECOMPUTE_FALLBACK=1` is explicitly set. Final-thermal sidecar diagnostics intentionally retain the Python path.
+- Add blocking host qualification that requires the forced-10.0 fallback to reproduce all nine accepted 10.0 FITS payloads exactly, pre-terminal detail products to remain bit-exact under the bridge, final public products to stay within 1% of accepted 10.0, external spectrum closure against FORTRAN/pure-Python/C++ references, and final recompute time <=10 s (<=5 s reported as the intended few-second target).
+- Target: reduce accepted 10.0 `final_local_recompute` from 70.962107 s to a few seconds without changing the accepted 10.0 zone trajectory or final `binemis` promotion.
+
+## 0.6.48.10.0 — accelerated-Python final binemis C++ product promotion
+
+- Start from the accepted 0.6.48.9.7 source and freeze all zone/controller science plus the native standalone `binemis` implementation by SHA-256.
+- When the Python source-port explicitly selects `--backend cpp` or `--emissivity-backend cpp`, automatically promote the existing native C++ final `binemis` product implementation instead of executing the ~255 s Python profile/rebin loop.
+- Pure-Python runs remain on the validated Python `binemis` implementation. `XSTAR_V064810_FORCE_PYTHON_BINEMIS=1` provides a same-package fallback/A-B switch.
+- Accelerated C++ product selection fails closed if the native writer library is unavailable. `XSTAR_V064810_ALLOW_PYTHON_BINEMIS_FALLBACK=1` permits an explicit slow fallback when desired.
+- Do not change the accepted C++ `line_emissivity.cpp` kernel or its Python ctypes bridge; both are source-hash identical to 0.6.48.9.7. This release changes product-backend policy only.
+- Qualification requires all eight unaffected FITS products and the scientific `xout_step.log` to remain exact against the accepted accelerated-Python 0.6.48.9.5.1 reference; `xout_spect1` must retain zero >1% residuals against FORTRAN, pure Python, accelerated Python, and accepted standalone C++.
+- The accepted accelerated-Python reference spends 254.812423 s in `final_product_build.spectrum.binemis_profile_seconds`; 10.0 targets <=5 s integration time for the promoted bridge, with ~1 s as the expected host result.
+
+## 0.6.48.9.7 — quiet production path, compact DSEC provenance, PGO/native evaluation
+
+- Freeze the accepted 0.6.48.9.6 Type50 implementation and all 9.5 Type49/53, 9.4.2 boundary, thermal, and writer science-critical sources by SHA-256.
+- Add a production-quiet standalone controller stream: historical controller attribution/status chatter is suppressed by default but restored exactly with `XSTAR_V064897_VERBOSE_CONTROLLER_DIAGNOSTICS=1` for qualification. Product and science state never consume stdout.
+- Split hot runtime evaluation from cold retained record provenance on ordinary deferred DSEC evaluations. The 54 projection-deferred DSEC calls no longer copy the full `EvaluatedRecord` shadow payload into `last_record_diagnostics`; exact boundary/final evaluations retain the complete product-diagnostic state unchanged.
+- Add `XSTAR_V064897_FORCE_096_RECORD_PROVENANCE=1` as a same-executable fallback that restores the 0.6.48.9.6 all-evaluation provenance retention for blocking A/B qualification. General fixed-state-library behavior outside native standalone production is unchanged.
+- Add opt-in PGO build controls (`V064897_PGO_MODE=generate|use`, `V064897_PROFILE_DIR=...`) and optional `V064897_NATIVE=1` (`-march=native`) evaluation. `-ffast-math` is rejected and source-critical `-ffp-contract=off` flags remain in force.
+- PGO/native compiler variants are evaluation-only until their host runs are byte-exact against the accepted 0.6.48.9.6 nine-FITS payloads and scientific `xout_step.log`; the faster exact variant may then be promoted.
+- Add 9.7 readiness, quiet/compact-vs-9.6 qualification, three-run performance, and PGO/native evaluation runners.
+
+## 0.6.48.9.6 — standalone Type50 hot-loop optimization
+
+- Build directly on the accepted 0.6.48.9.5.1 package; freeze the 9.5 prepared Type49/53 bound-free engine and 9.4.2 exact accepted-boundary recomputation by source hash.
+- Optimize only the standalone-native full-profile Type50 opacity path. Python source-port execution, including modular C++ backends, retains the 0.6.48.9.5.1 Type50 implementation.
+- Remove the full-profile `rccemis += 0.0` provenance-era stores; literal `linopac.f90` does not modify `rccemis` when `lfast <= 2`.
+- Replace the defensive positive/finite `opakc` reload with the literal source-order `opakc += optp2` update on the validated production continuum workspace.
+- Fuse source-identical temporary-grid profile evaluation with the later monotonic rebin consumer instead of materializing/re-reading two 20,000-point temporary planes. The historically inert `ldon` early-stop semantics remain inert.
+- Replace `float(integer)->double` conversions for Type50 temporary-grid indices and `ncut` with direct integer-to-double conversions only where the integer magnitude is <=20,000 and therefore exactly representable in binary32 and binary64.
+- Specialize the common `0 < a <= 0.2` Voigt branch while preserving the exact arithmetic association of `voigte.f90`.
+- Add `XSTAR_V064896_FORCE_LEGACY_TYPE50=1` for same-executable blocking A/B qualification against the frozen 9.5.1 Type50 implementation.
+- Add 9.6 readiness, randomized bit-exact kernel qualification, nine-FITS payload comparator, four-reference hash verification, full science runner, and performance runner.
+- Local randomized qualification: 800 profiles bit-exact, full-profile `rccemis` unchanged, Python/non-standalone mode identical to 9.5.1, representative micro-kernel speedup ~1.44x. Host Mg XI qualification remains required before promotion.
+
+## 0.6.48.9.5.1 — element-generality/package cleanup
+
+- Freeze 0.6.48.9.5 as the accepted prepared Type49/53 production/science baseline.
+- Retire 112 historical/version-stamped/Mg-specific audit and capture modules from `src/xstar_tools/xstar/`; none are reachable from the production `driver`/`physical_runner`/`standalone` roots.
+- Retire 68 tests tied exclusively to those modules and remove 13 obsolete historical console entry points.
+- Remove checked-in generated `src/xstar_tools.egg-info/` metadata.
+- Keep the Mg XI `v0648_compiled_case_helike_type69_mg11_ne1e8` case as a benchmark/qualification fixture, not runtime architecture.
+- Inventory every current Python/C++ equality/inequality comparison against `element_z == 12`/`!= 12` without changing those runtime branches; multi-element generalization/testing is deferred until after speed work.
+- Freeze the accepted 9.5 Type49/53 prepared engine, 9.4.2 exact-boundary ownership, and 9.3 Type50 fast path by source hash.
+- No intended physics, numerical algorithm, controller topology, FITS science, or standalone-C++ performance change.
+- Next planned work remains 9.6 Type50 hot-loop cleanup, followed by 9.7 compact record state / PGO/native tuning.
+
+## 0.6.48.9.5 — prepared Type49/53 bound-free engine
+
+- Freeze the accepted 0.6.48.9.4.2 exact-boundary production contract.
+- Prepare immutable Type49/53 `phint53` grid geometry (`sgbar`, threshold mapping, Type49 phextrap metadata) once per record/grid and retain it in the fixed-state context.
+- Reuse the first reduced 999-bin Type49/53 integral for the source-identical `calc_emisab` caller instead of integrating the same workspace twice.
+- Defer the 9999-bin `calc_emis` Type49/53 integral until the existing source `rlbin`/`ncbin` selection proves that the record is actually consumed.
+- Add `XSTAR_V064895_FORCE_LEGACY_BOUND_FREE=1` for same-executable eager-vs-prepared A/B qualification.
+- Add measurement-only prepared-bound-free workload counters and 9.5 qualification/performance runners.
+- No Type50, boundary, thermal, matrix, FITS writer, or Python-science changes.
+
+## 0.6.48.9.4.2
+
+- Correctness-only rollback after 0.6.48.9.4 and 0.6.48.9.4.1 boundary-reuse experiments failed byte-exact product equivalence.
+- Restores the accepted 0.6.48.9.3 exact accepted-boundary recomputation as the production/default path.
+- Restores projection-deferred behavior for all 54 DSEC evaluations in production; terminal-DSEC full projection is no longer implicit.
+- Keeps boundary reuse available only with `XSTAR_V0648942_EXPERIMENTAL_BOUNDARY_REUSE=1` for focused diagnostics.
+- Retains the accepted 0.6.48.9.3 Type50 fast path and the 0.6.48.9.4 traversal/rate hot-path preparation unchanged.
+- Qualification compares the default production boundary path with explicitly forced legacy recomputation and requires all nine FITS data payloads plus scientific `xout_step.log` content to match.
+- `rccemis_attribution/` remains disabled by default; the native product-state footer remains debug-only.
+
+## 0.6.48.9.4.1
+
+- Correct the rejected 0.6.48.9.4 accepted-boundary reuse path.  The 9.4 prototype reused an ordinary deferred DSEC workspace, so `calc_emis_all` selected bound-free/RRC publication and writer-facing line-emission projection were absent; `opakcont` therefore collapsed to zero and option-17 `log(tau)`/thermal rows changed.
+- Preserve the boundary-speedup design without reconstructing deferred products: for the canonical 20/1/17/16 trajectory, run the normal non-deferred product projection on only the four terminal DSEC evaluations, then reuse those exact completed workspaces at the accepted boundaries.  Earlier DSEC evaluations remain deferred and generic trajectories fall back to the legacy boundary recomputation.
+- Require blocking A/B equality against forced legacy boundary recomputation for all nine FITS data payloads and non-timing `xout_step.log` science content, which includes the source-style option-17 radial rows.
+- Retain the 0.6.48.9.4 traversal-order prevalidation and rate evaluation-context hoist; do not change rate formulas, Type50 arithmetic, thermal kernels, or FITS writer science.
+- Disable the extra ProductWritingState/native product-surface diagnostic footer in `xout_step.log` by default.  Re-enable it only for debugging with `XSTAR_DEBUG_PRODUCT_STATE_SUMMARY=1`.
+- Disable `rccemis_attribution/` in routine qualification.  Re-enable the historical Type99/RRC record attribution only with `XSTAR_ENABLE_RCCEMIS_ATTRIBUTION=1`; the default Type99 gate is product-only and still requires C++/FORTRAN and C++/Python inward-emission closure plus zero first bins.
+
+## 0.6.48.9.4 — rejected boundary-reuse prototype
+
+- **Rejected for science:** the retained deferred DSEC workspace omitted the final-boundary `calc_emis_all` product projection, causing zero `dpthcont`, changed radial STEP geometry, altered option-17 rows, and A/B rejection of all nine FITS products.
+- Reuse the exact final accepted DSEC source workspace at each of the four controller-call product boundaries instead of rerunning the complete fixed-state engine solely to reconstruct the same local science state.
+- Retain the exact sparse line/RRC/continuum/line-profile workspaces in the fixed-state context and promote them into the accepted boundary only after the controller accepts the final DSEC state.
+- Preserve caller-owned cumulative radial state (`tau0`, `tauc`, continuum depth, line/RRC luminosity, `zrems`, and global population state) in the same post-DSEC boundary finalization order.
+- Keep an environment-controlled legacy boundary-recompute path and add a blocking A/B qualifier requiring all nine FITS data payloads and the non-timing `xout_step.log` science content to be bit-identical between reuse and legacy paths.
+- Keep the terminal zero-thickness final evaluation as a real fixed-state evaluation; only the four accepted call boundaries are reused.
+- Prepare the traversal/rate hot path by prevalidating immutable linked-record order once per fixed-state context and hoisting temperature/electron-density/reduced-continuum rate inputs once per fixed-state evaluation rather than rebuilding them per atomic record.
+- Retain the accepted 0.6.48.9.3 Type50 fast path unchanged.  The accepted 9.3 three-run baselines are 32.724905 s total, 31.498506 s controller, 4.209864 s accepted-boundary projection, 10.628351 s fixed traversal, and 9.553384 s nested rate evaluation.
+
+## 0.6.48.9.3
+
+- First standalone-C++ Type50 profile-kernel optimization after the accepted 0.6.48.9.2 measurement series.
+- Preserve strict source-real/source-order numerical semantics while removing redundant volatile store/load barriers on `FLT_EVAL_METHOD==0` targets; retain the historical barrier implementation automatically on excess-precision targets.
+- Keep `-ffp-contract=off` for the opacity translation and fail compilation under `-ffast-math`.
+- Reuse per-thread 20,000-point Type50 temporary-grid scratch storage instead of allocating and zero-filling two large vectors for every line profile.
+- Add a compile-time legacy-barrier A/B equivalence check that builds both paths and requires bit-exact profile outputs before host qualification.
+- Freeze all non-opacity science files to the accepted 0.6.48.9.2.1 hashes and retain the complete FORTRAN / accelerated-Python product gates.
+- Compare performance against the accepted 0.6.48.9.2 three-run medians: 82.976367 s total and 56.417535 s Type50 profile-kernel time.
+
+## 0.6.48.9.2.1
+
+- Packaging/cleanup hotfix based on the accepted 0.6.48.9.2 measurement baseline; no physics or numerical algorithm changes.
+- Remove historical root material already retired by the 9.2 cleanup and prune benchmark fixtures that were used only by obsolete internal tests/regression snapshots.
+- Keep benchmark/oracle directories that still back active source-port regression gates, public audit commands, current C++ self-tests, or diagnostic/reference fallbacks.
+- Remove orphaned tests/modules tied exclusively to the deleted benchmark snapshots and rewrite `pyproject.toml` benchmark package-data to match the retained runtime surface.
+- Preserve the 0.6.48.9.2 qualification/performance runner set and the accepted Type50 hotspot attribution.
+- Reserve 0.6.48.9.3 for the first Type50 profile-kernel optimization.
+
+## 0.6.48.9.2
+
+- Add measurement-only decomposition inside broad spectral construction without changing source physics or controller topology.
+- Attribute essentially all controller broad spectral time to the existing line-profile kernel: three-run median Type50/profile-kernel time is about 56.418 s of an 82.976 s total run.
+- Confirm Type50 accounts for 100% of measured profile-family time, with 152,782 controller Type50 profiles and roughly 749.2 million updated bins.
+- Keep exact-grid profile work at zero for this scenario and isolate the non-profile scalar remainder at only about 0.03 s.
+- Simplify routine 9.x qualification inputs: 8.3.1 and pure-Python archives remain provenance anchors rather than mandatory per-run inputs.
+- Preserve all public science closures, the 20/1/17/16 DSEC topology, 58 retained evaluations, and final HMCTOT parity.
+
+## 0.6.48.9.1
+
+- Add measurement-only fixed-state spectral subphase decomposition while keeping the existing `xstar_fixed_state_stats_v1` ABI unchanged.
+- Introduce a separate diagnostic spectral-performance ABI and reconcile the new subphase sum against the legacy fixed-spectral timer.
+- Localize about 99.7% of controller fixed-spectral time to `xstar_spectral_apply_contributions_v1` broad construction.
+- Rule out workspace setup, seed preparation, ranking, writer-time `binemis`, selected RRC replay, and FITS publication as primary causes of the runtime gap.
+
+## 0.6.48.9.0
+
+- Start the 0.6.48.9 performance branch from the closed 0.6.48.8.3.1 science baseline.
+- Add measurement-only standalone-C++ timing for ATDB lowering, controller calls, fixed-state traversal/rates/continuum/spectral phases, boundary projection, final zero-thickness recomputation, product-state construction, writer-time `binemis`, FITS publication, and total coverage.
+- Establish a stable ~84.8 s three-run measurement baseline on the qualification host.
+- Disprove the initial writer-time `binemis` regression hypothesis: `binemis` is only about 0.32 s, while fixed-state spectral work is roughly 57.7 s and dominates runtime.
+- Preserve all 0.6.48.8.3.1 science gates and frozen Python/FORTRAN references.
+
+## 0.6.48.8.3.1
+
+- Qualification-only hotfix for the final standalone thermal-state closure; runtime/science implementation is identical to 0.6.48.8.3.
+- Make final-workspace hashes diagnostic-only and qualify final T4/HTTOT/CLTOT/HMCTOT by source-parity thresholds.
+- Retain C++/FORTRAN HMCTOT error near 0.00617%, well below the 0.05% acceptance threshold and far below the previous ~0.358% discrepancy.
+- Freeze this release as the closed 0.6.48.8 science baseline for subsequent performance development.
+
+## 0.6.48.8.3
+
+- Correct standalone final zero-thickness `bremsa` lifetime to match literal XSTAR: preserve the terminal shell-entry DSEC radiation workspace rather than reusing an extra projected next-radius workspace before the final `xstarcalc`.
+- Apply the retained shell-entry `bremsa` to both final pprint DSEC state and final call-start workspace.
+- Reduce standalone C++ final HMCTOT error versus FORTRAN from roughly 0.358% to about 0.00617% without changing Python science or the 58-evaluation trajectory.
+
+## 0.6.48.8.2
+
+- Correct writer-time Type50 `binemis.f90` terminal boundary/rebin semantics using compact boundary-event reconstruction while preserving the source-declared far-wing reach and terminal overwrite behavior.
+- Close the remaining 18 shared Python/C++ versus FORTRAN `xout_spect1.emit_outward` cells above 1%.
+- Preserve the fully closed `xo01_detal4` Type50 opacity/depth result and the existing Type99/RRC source-zero closure.
+- Retain approximately 11.48 million source-faithful far boundary-event writes; later performance measurement showed these writes are not the dominant runtime cost.
+
+## 0.6.48.8.1
+
+- Correct literal `voigte.f90` control flow for Type-50 line profiles: the `a+v>3.2` asymptotic test is now reachable only when `a>0.2`, as in the source labels.
+- Apply the same source nesting to pure-Python scalar/vector profiles, qualification profile code, accelerated C++ kernels, and standalone-C++ opacity.
+- Add a strict Type-50 edge closure analyzer and one-time pure-Python / accelerated-Python / standalone-C++ qualification runner.
+- Preserve the 0.6.48.8 production/controller, source-real energy-grid, Type99 source-zero, writer, and standalone-progress contracts.
+
 ## 0.6.48.11.4.1 — frozen-Mg regression / compact STEP diagnostics hotfix - 2026-07-29
 
 - Restores the accepted frozen `mg11_ne1e8` fixed-state active-ion threshold (`1e-7`) only on the explicit reference trajectory; generic models retain runtime `critf`.
