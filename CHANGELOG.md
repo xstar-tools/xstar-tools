@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 0.6.48.11.4 — runtime critf / literal source inventory / STEP attribution - 2026-07-28
+
+- Preserve the 0.6.48.11.3 variable-call controller, `python|cpp-all|cpp-zone` execution modes, production-zone ABI 6048110, and frozen `mg11_ne1e8` bit-exact regression path.
+- Propagate the model runtime `critf` into the native fixed-state engine instead of using a hard-coded `1.e-7` preliminary ion-window threshold. The benchmark inputs supply `critf=1.e-6`.
+- Replace the simplified first/last-fraction active-window selection with the literal `calc_hmc_element.f90` `mml/mmu` search, including lower/upper crossing detection, one-stage expansion, and the `critf<=1.e-34` full-window case.
+- Extend STEP attribution without changing its physical algorithm: report the initial radius/column limit, limiting continuum bin/energy/opacity, its `tau_in` and `zrems(1)`, the candidate `emult/opakc`, the remaining-column limit, and the effective runtime `critf`.
+- Make generic `xo01_detail` publication follow literal `fstepr.f90`: publish each level only when its live `xilev` exceeds `1.d-34`; keep the frozen Mg identity surface unchanged.
+- Make generic detailed-line publication follow literal `fstepr2.f90`: require per-line `rcem/oplin > 1.d-64`, exclude rate types 14 and 9, and apply the source wavelength window.
+- Make generic detailed-RRC publication follow literal `fstepr3.f90`: require per-slot `cemab(1/2)`, `cabab`, or `opakab > 1.e-36`.
+- Make generic public-line selection follow `writespectra2.f90` eligibility before ranking: exclude rate types 14/9, enforce the source wavelength range and mean line luminosity floor, then rank by source mean luminosity and cap at 600.
+- Qualification remains standalone-first. Run only the 11-model smoke; the other 51 standalone models and all Python science stages remain blocked until smoke closure.
+
 ## 0.6.48.11.3 — focused source-faithfulness corrections after the 11.2 smoke - 2026-07-28
 
 - Keep the 0.6.48.11.2 variable-call controller, persistent `cpp-zone` architecture, execution-mode contract, and production-zone ABI 6048110 unchanged. The accepted `mg11_ne1e8` 10.2.1.1.2 products remain the mandatory all-nine-FITS bit-exact regression authority.

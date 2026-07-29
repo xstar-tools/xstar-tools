@@ -8658,14 +8658,31 @@ void write_population_detail(const std::filesystem::path& path,
                              const std::vector<RowMeta>& rows) {
     fitsfile* fptr = create_fits(path, state);
     write_parameters(fptr, state.parameter_rows);
-    const auto detail_levels = public_detail_levels(state, elements, rows);
+    const auto detail_level_inventory = public_detail_levels(state, elements, rows);
+    const auto compact_by_global = compact_population_index_by_global(elements, rows);
     for (std::size_t oz = 0; oz < state.radial_zones.size(); ++oz) {
         const auto& zone = state.radial_zones[source_zone_index(state, oz)];
+        const auto& evaluation = zone.accepted_controller.evaluation;
+        std::vector<xstar_run_state::LevelIdentityState> detail_levels = detail_level_inventory;
+        if (!reference_mg11_product_state(state)) {
+            // Literal fstepr.f90: each level is published only when its live
+            // xilev population exceeds 1.d-34.  Stage-wide activity alone is
+            // insufficient and was the source of the 321->243/264->168 leaks.
+            detail_levels.erase(std::remove_if(detail_levels.begin(), detail_levels.end(),
+                [&](const xstar_run_state::LevelIdentityState& level) {
+                    const std::size_t global0 = level.global_index > 0
+                        ? static_cast<std::size_t>(level.global_index - 1) : 0u;
+                    const double fallback = global0 < evaluation.populations.size()
+                        ? evaluation.populations[global0] : 0.0;
+                    const double population = public_detail_population_for_level(
+                        evaluation, compact_by_global, level, fallback);
+                    return !(std::isfinite(population) && population > 1.0e-34);
+                }), detail_levels.end());
+        }
         create_table(fptr, BINARY_TBL, static_cast<long>(detail_levels.size()), "XSTAR_RADIAL",
             {"index","ion_index","e_excitation","ion","atomic_number","ion_level","population","lte","upper index"},
             {"1J","1I","1E","8A","1I","20A","1E","1E","1I"}, {"","","eV","","","","","",""});
         write_radial_keywords(fptr, state, oz, zone);
-        const auto& evaluation = zone.accepted_controller.evaluation;
         const auto pw_level_population = optional_bridge_array_for_hdu(state, "product_write_detail_level_population", static_cast<int>(oz + 3), detail_levels.size());
         const auto pw_level_lte = optional_bridge_array_for_hdu(state, "product_write_detail_level_lte", static_cast<int>(oz + 3), detail_levels.size());
         const bool have_product_write_detail_levels = !native_standalone_product_state(state) && pw_level_population.size() == detail_levels.size();
@@ -8682,7 +8699,6 @@ void write_population_detail(const std::filesystem::path& path,
             if (found != solve_rows.end()) return &found->second;
             return nullptr;
         };
-        const auto compact_by_global = compact_population_index_by_global(elements, rows);
         for (std::size_t i = 0; i < detail_levels.size(); ++i) {
             const auto& level = detail_levels[i];
             const std::size_t global0 = level.global_index > 0 ? static_cast<std::size_t>(level.global_index - 1) : i;
@@ -9149,7 +9165,24 @@ std::vector<LineRow> source_line_rows_from_identities(
         if (!element || !active_product_element_stage(state, elements, rows, z, stage, element->abundance)) continue;
         const auto found = workspace_index.find(id.line_index);
         const std::size_t compact = found == workspace_index.end() ? 0u : found->second;
-        out.push_back(line_row_from_identity(id, evaluation, density_cm3, luminosity_scale_1e38, compact, &line_bridge, !detail_order));
+        LineRow line = line_row_from_identity(
+            id, evaluation, density_cm3, luminosity_scale_1e38, compact, &line_bridge, !detail_order);
+        const double wavelength = std::abs(id.wavelength_angstrom);
+        if (detail_order) {
+            // Literal fstepr2.f90: live rcem/oplin signal plus source line-type
+            // and wavelength eligibility.
+            const bool signal = line.emis_in > 1.0e-64 || line.emis_out > 1.0e-64 || line.opacity > 1.0e-64;
+            if (!signal || id.rate_type == 14 || id.rate_type == 9 ||
+                !(wavelength > 0.1) || !(wavelength < 9.0e9)) continue;
+        } else {
+            // Literal writespectra2.f90 pre-ranking eligibility.  The parent
+            // ion identity is already required by the live lowered identity.
+            const double mean_luminosity = 0.5 * (line.emis_in + line.emis_out);
+            if (id.rate_type == 14 || id.rate_type == 9 ||
+                !(wavelength >= 0.1) || !(wavelength <= 1.0e10) ||
+                !(wavelength <= 8.9e6) || !(mean_luminosity > 1.0e-36)) continue;
+        }
+        out.push_back(std::move(line));
     }
     return out;
 }
@@ -9844,7 +9877,32 @@ std::vector<RrcRow> source_rrc_rows_from_identities(
                 row.opacity = rrc_bridge.opakab[bi];
             }
         }
-        if (detail_inventory || row.emis_in != 0.0 || row.emis_out != 0.0 || row.tau_in != 0.0 || row.tau_out != 0.0) {
+        bool keep_row = detail_inventory || row.emis_in != 0.0 || row.emis_out != 0.0 || row.tau_in != 0.0 || row.tau_out != 0.0;
+        if (detail_inventory && !reference_mg11_product_state(state)) {
+            // Literal fstepr3.f90: cemab(1/2), cabab or opakab must exceed
+            // 1.e-36 for the individual RRC slot.
+            double signal_emis_in = 0.0;
+            double signal_emis_out = 0.0;
+            const auto found_rrc = rrc_bridge.index_map.find(id.continuum_index);
+            if (found_rrc != rrc_bridge.index_map.end() &&
+                rrc_bridge.cemab.size() == 2u * rrc_bridge.count) {
+                const std::size_t bi = found_rrc->second;
+                signal_emis_in = rrc_bridge.cemab[bi];
+                signal_emis_out = rrc_bridge.cemab[rrc_bridge.count + bi];
+            } else if (ws.cemab.size() >= 2u && ws.cemab.size() % 2u == 0u) {
+                const std::size_t stride = ws.cemab.size() / 2u;
+                const std::size_t slot = static_cast<std::size_t>(id.continuum_index);
+                if (slot < stride) {
+                    signal_emis_in = ws.cemab[slot];
+                    signal_emis_out = ws.cemab[stride + slot];
+                }
+            }
+            keep_row = (std::isfinite(signal_emis_in) && signal_emis_in > 1.0e-36) ||
+                       (std::isfinite(signal_emis_out) && signal_emis_out > 1.0e-36) ||
+                       (std::isfinite(row.absorption) && row.absorption > 1.0e-36) ||
+                       (std::isfinite(row.opacity) && row.opacity > 1.0e-36);
+        }
+        if (keep_row) {
             out.push_back(row);
             if (reference_mg11_product_state(state) && native_standalone_product_state(state) && detail_inventory && out.size() == 1849u) break;
         }
@@ -11204,8 +11262,8 @@ void write_public_lines(const std::filesystem::path& path,
         std::vector<LineRow> ranked = terminal_list;
         if (ranked.size() > 600u) {
             std::stable_sort(ranked.begin(), ranked.end(), [](const LineRow& a, const LineRow& b) {
-                const double la = std::abs(a.emis_in) + std::abs(a.emis_out);
-                const double lb = std::abs(b.emis_in) + std::abs(b.emis_out);
+                const double la = 0.5 * (a.emis_in + a.emis_out);
+                const double lb = 0.5 * (b.emis_in + b.emis_out);
                 if (la != lb) return la > lb;
                 return a.record < b.record;
             });

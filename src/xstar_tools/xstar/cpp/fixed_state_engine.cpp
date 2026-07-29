@@ -2788,6 +2788,10 @@ struct xstar_fixed_state_context_impl {
     // Autonomous repeated-evaluation source state: the accepted compact
     // ion-stage window is retained per element between fixed-state calls.
     std::map<int, std::pair<int,int>> retained_active_stage_windows;
+    // v0.6.48.11.4: model runtime calc_hmc_element critf.  Keep this on
+    // the context so the historical xstar_fixed_state_input_v1 ABI remains
+    // byte-for-byte unchanged.
+    double critical_ion_fraction = 1.0e-6;
     std::vector<NativeRecordDiagnostic> last_record_diagnostics;
     std::vector<NativeElementDiagnostic> last_element_diagnostics;
     double last_temperature_k = 0.0;
@@ -7407,6 +7411,7 @@ void apply_magnesium_type99_persistent_leveltemp_v048746223(
 PreliminaryIonBalance build_preliminary_ion_balance(
     const ElementProgram& element,
     const std::vector<EvaluatedRecord>& evaluated,
+    double critical_ion_fraction,
     int ablated_data_type = 0) {
     PreliminaryIonBalance result;
     const int z = element.element_z;
@@ -7483,18 +7488,44 @@ PreliminaryIonBalance build_preliminary_ion_balance(
     for (double value : result.fractions) sum += value;
     if (sum > 0.0) for (double& value : result.fractions) value /= sum;
 
-    constexpr double critf = 1.0e-7;
-    int lower = 0, upper = 0;
-    for (int stage = 1; stage <= z + 1; ++stage) {
-        if (result.fractions[static_cast<std::size_t>(stage - 1)] >= critf) {
-            if (lower == 0) lower = stage;
-            upper = stage;
-        }
+    // Literal calc_hmc_element.f90 mml/mmu search.  critf is a runtime
+    // model parameter (the benchmark suite supplies 1.e-6), not the legacy
+    // package-wide 1.e-7 constant previously used here.
+    const double critf = (std::isfinite(critical_ion_fraction) && critical_ion_fraction >= 0.0)
+        ? critical_ion_fraction : 1.0e-6;
+    int lfu = 0;
+    int lfl = 0;
+    int mmu = z + 2;
+    int mml = 0;
+    int mm = 0;
+    double xitpul = 0.0;
+    double xitpll = 0.0;
+    while (mm <= z && (lfu == 0 || lfl == 0)) {
+        ++mm;
+        --mmu;
+        ++mml;
+        const double upper_fraction = result.fractions[static_cast<std::size_t>(mmu - 1)];
+        const double lower_fraction = result.fractions[static_cast<std::size_t>(mml - 1)];
+        if (xitpul < critf && upper_fraction >= critf && lfu == 0) lfu = mmu;
+        if (xitpll < critf && lower_fraction >= critf && lfl == 0) lfl = mml;
+        xitpll = lower_fraction;
+        xitpul = upper_fraction;
     }
-    if (lower == 0) { lower = 1; upper = z + 1; }
-    result.min_stage = std::max(1, lower - 1);
-    result.max_stage = std::min(z, upper + 1);
-    if (result.min_stage > result.max_stage) { result.min_stage = 1; result.max_stage = z; }
+    mmu = lfu;
+    mml = lfl;
+    if (lfu == 0) mmu = z + 1;
+    if (lfl == 0) mml = 1;
+    mml = std::max(1, mml - 1);
+    mmu = std::min(z, mmu + 1);
+    if (critf <= 1.0e-34) {
+        mml = 1;
+        mmu = z;
+    }
+    if (mml > mmu) {
+        throw std::runtime_error("source ion-stage selection produced invalid mml/mmu");
+    }
+    result.min_stage = mml;
+    result.max_stage = mmu;
     return result;
 }
 
@@ -9437,7 +9468,7 @@ int run_impl(
         }
 
         const PreliminaryIonBalance preliminary = build_preliminary_ion_balance(
-            element, evaluated, helium_preliminary_ablation_type);
+            element, evaluated, ctx.critical_ion_fraction, helium_preliminary_ablation_type);
         PreliminaryIonBalance active_balance = preliminary;
         const bool retain_active_stage_window =
             (input.runtime_state_flags &
@@ -13192,6 +13223,25 @@ int xstar_fixed_state_context_set_runtime_line_tau_v1(
         copy_text(message, message_size, exc.what());
         return 7;
     }
+}
+
+int xstar_fixed_state_context_set_critical_ion_fraction_v1(
+    xstar_fixed_state_context* context,
+    double critical_ion_fraction,
+    char* message,
+    size_t message_size
+) {
+    if (!context) {
+        copy_text(message, message_size, "fixed-state context is required");
+        return 1;
+    }
+    if (!std::isfinite(critical_ion_fraction) || critical_ion_fraction < 0.0) {
+        copy_text(message, message_size, "critical ion fraction must be finite and nonnegative");
+        return 2;
+    }
+    context->critical_ion_fraction = critical_ion_fraction;
+    copy_text(message, message_size, "native critical ion fraction retained");
+    return 0;
 }
 
 int xstar_fixed_state_context_reset_v1(xstar_fixed_state_context* context, char* message, size_t message_size) {

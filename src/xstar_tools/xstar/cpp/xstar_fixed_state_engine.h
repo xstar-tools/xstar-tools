@@ -569,6 +569,12 @@ XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_context_set_runtime_line_tau_v1(
     char* message,
     size_t message_size
 );
+XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_context_set_critical_ion_fraction_v1(
+    xstar_fixed_state_context* context,
+    double critical_ion_fraction,
+    char* message,
+    size_t message_size
+);
 
 XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_context_reset_v1(
     xstar_fixed_state_context* context,

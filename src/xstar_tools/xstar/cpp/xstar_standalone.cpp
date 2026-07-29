@@ -12174,12 +12174,17 @@ void gsmooth_source_v82_patch54(
 
 struct SourceStepResultV82Patch520111 {
     double delta_radius_cm = 0.0;
+    double initial_delta_radius_cm = 0.0;
     std::size_t limiting_bin_one_based = 0u;
     double limiting_energy_ev = 0.0;
     double limiting_opacity_cm1 = 0.0;
+    double limiting_tau_in = 0.0;
+    double limiting_zrems1 = 0.0;
+    double limiting_candidate_cm = 0.0;
     double radius_limit_cm = 0.0;
     double column_limit_cm = 0.0;
     double remaining_column_limit_cm = 0.0;
+    bool remaining_column_was_final_limit = false;
 };
 
 SourceStepResultV82Patch520111 source_step_v82_patch520111(
@@ -12215,6 +12220,7 @@ SourceStepResultV82Patch520111 source_step_v82_patch520111(
     out.remaining_column_limit_cm = std::max(0.0,
         (params.column_cm2 - cumulative_column_cm2) / params.density_cm3);
     out.delta_radius_cm = std::min(out.column_limit_cm, out.radius_limit_cm);
+    out.initial_delta_radius_cm = out.delta_radius_cm;
 
     constexpr double opacity_floor = 1.0e-49; // source is DOUBLE PRECISION 1.d-49
     constexpr double energy_cutoff_ev = 1.0;  // xstar.f90 sets ectt=1.d0
@@ -12237,9 +12243,15 @@ SourceStepResultV82Patch520111 source_step_v82_patch520111(
             out.limiting_bin_one_based = k + 1u;
             out.limiting_energy_ev = data.energy[k];
             out.limiting_opacity_cm1 = opacity;
+            out.limiting_tau_in = tau;
+            out.limiting_zrems1 = zrems1;
+            out.limiting_candidate_cm = candidate;
         }
     }
-    out.delta_radius_cm = std::min(out.delta_radius_cm, out.remaining_column_limit_cm);
+    if (out.remaining_column_limit_cm < out.delta_radius_cm) {
+        out.delta_radius_cm = out.remaining_column_limit_cm;
+        out.remaining_column_was_final_limit = true;
+    }
     if (!(out.delta_radius_cm >= 0.0) || !std::isfinite(out.delta_radius_cm)) {
         throw std::runtime_error("v82 patch5.20.11.1 STEP produced invalid shell width");
     }
@@ -14739,6 +14751,9 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
     int rc = xstar_fixed_state_context_create_from_bundle_v1(&bundle, &fixed, message.data(), message.size());
     if (rc != 0) throw std::runtime_error(std::string("in-memory fixed-state context creation failed: ") + message.data());
     try {
+        rc = xstar_fixed_state_context_set_critical_ion_fraction_v1(
+            fixed, params.critical_fraction, message.data(), message.size());
+        if (rc != 0) throw std::runtime_error(std::string("native critical ion fraction binding failed: ") + message.data());
         rc = xstar_thermal_context_create_v1(&thermal, message.data(), message.size());
         if (rc != 0) throw std::runtime_error(std::string("thermal controller creation failed: ") + message.data());
         xstar_fixed_state_program_info_v1 info{};
@@ -15261,8 +15276,15 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                           << "V048746255172582_PATCH520111_STEP_LIMITING_BIN=" << step_result.limiting_bin_one_based << "\n"
                           << "V048746255172582_PATCH520111_STEP_LIMITING_ENERGY_EV=" << step_result.limiting_energy_ev << "\n"
                           << "V048746255172582_PATCH520111_STEP_LIMITING_OPACITY_CM1=" << step_result.limiting_opacity_cm1 << "\n"
+                          << "V0648114_STEP_INITIAL_DELTA_RADIUS_CM=" << step_result.initial_delta_radius_cm << "\n"
+                          << "V0648114_STEP_LIMITING_TAU_IN=" << step_result.limiting_tau_in << "\n"
+                          << "V0648114_STEP_LIMITING_ZREMS1=" << step_result.limiting_zrems1 << "\n"
+                          << "V0648114_STEP_LIMITING_CANDIDATE_CM=" << step_result.limiting_candidate_cm << "\n"
                           << "V048746255172582_PATCH520111_STEP_RADIUS_LIMIT_CM=" << step_result.radius_limit_cm << "\n"
-                          << "V048746255172582_PATCH520111_STEP_REMAINING_COLUMN_LIMIT_CM=" << step_result.remaining_column_limit_cm << "\n";
+                          << "V0648114_STEP_COLUMN_LIMIT_CM=" << step_result.column_limit_cm << "\n"
+                          << "V048746255172582_PATCH520111_STEP_REMAINING_COLUMN_LIMIT_CM=" << step_result.remaining_column_limit_cm << "\n"
+                          << "V0648114_STEP_REMAINING_COLUMN_FINAL_LIMIT=" << (step_result.remaining_column_was_final_limit ? 1 : 0) << "\n"
+                          << "V0648114_STEP_CRITF=" << params.critical_fraction << "\n";
             }
             if (call == 2u && data.reference_diagnostics_enabled) {
                 write_mg_type53_source_native_opacity_record_attribution_v82_patch512(data);
