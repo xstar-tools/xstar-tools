@@ -2463,6 +2463,12 @@ struct NativeElementDiagnostic {
 };
 
 struct ElementBuffers {
+    // v0.6.48.11.6: source-seed provenance retained for the C Type50
+    // record-5740 scalar audit.  These fields are diagnostic-only.
+    bool runtime_seed_loaded = false;
+    bool runtime_seed_renormalized = false;
+    double runtime_seed_sum_before_policy = 0.0;
+    double runtime_seed_sum_after_policy = 0.0;
     std::vector<int32_t> superlevels;
     std::vector<int32_t> ions;
     std::vector<double> initial;
@@ -7692,6 +7698,18 @@ RuntimeInitialSeed source_faithful_runtime_initial_seed(
         return seed;
     }
 
+    // v0.6.48.11.6: the same terminal-zero write is source-generic.  Promote
+    // it first for carbon, the element whose C III ground seed was inflated
+    // by active-slice renormalization and then dominated Type50 record 5740.
+    // Keep O/Ca unchanged until their generic seed paths are independently
+    // qualified against the multi-model suite.
+    if (e.element_z == 6 && compact_row == e.normalization_row) {
+        seed.global_level_index = row.global_level_index;
+        seed.value = 0.0;
+        seed.loaded = true;
+        return seed;
+    }
+
     const int global_level_index = row.global_level_index;
     if (global_level_index <= 0 ||
         static_cast<std::size_t>(global_level_index) > runtime_input->global_level_count) return seed;
@@ -7720,6 +7738,7 @@ ElementBuffers make_buffers(const ElementProgram& e, const xstar_fixed_state_inp
     bool source_faithful_helium_runtime_seed = false;
     bool source_faithful_hydrogen_runtime_seed = false;
     bool source_faithful_magnesium_runtime_seed = false;
+    bool source_faithful_carbon_runtime_seed = false;
     for (std::size_t k = 0; k < n; ++k) {
         b.superlevels[k] = e.rows[k].superlevel;
         b.ions[k] = e.rows[k].ion;
@@ -7734,7 +7753,9 @@ ElementBuffers make_buffers(const ElementProgram& e, const xstar_fixed_state_inp
             const RuntimeInitialSeed seed = source_faithful_runtime_initial_seed(e, k, runtime_input);
             if (seed.loaded) {
                 b.initial[k] = seed.value;
+                b.runtime_seed_loaded = true;
                 if (e.element_z == 12) source_faithful_magnesium_runtime_seed = true;
+                if (e.element_z == 6) source_faithful_carbon_runtime_seed = true;
                 if (e.element_z == 2) source_faithful_helium_runtime_seed = true;
                 if (e.element_z == 1 && runtime_input &&
                     (runtime_input->runtime_state_flags &
@@ -7745,20 +7766,26 @@ ElementBuffers make_buffers(const ElementProgram& e, const xstar_fixed_state_inp
         }
     }
 
-    // Source-mapped H/He/Mg compact vectors are not renormalized here.
     // calc_hmc_element writes the selected xilevg values directly into x,
-    // overwrites shared continuum rows through ipmat+=nlev-1, writes the final
-    // normalization row to zero, and lets msolvelucy impose number
-    // conservation.  v80 incorrectly made this exemption blanket for every
-    // runtime-mapped element.  v81 reverts that blanket behavior while
-    // retaining the exact source rule only for the three source-mapped active
-    // elements already qualified here.
-    if (!preserve_initial_seed && !source_faithful_magnesium_runtime_seed &&
-        !source_faithful_helium_runtime_seed && !source_faithful_hydrogen_runtime_seed) {
-        double initial_total = 0.0;
-        for (double value : b.initial) initial_total += value;
-        if (initial_total > 0.0) for (double& value : b.initial) value /= initial_total;
+    // advances the overlapping compact basis with ipmat+=nlev-1, writes the
+    // terminal normalization row to zero, and lets msolvelucy impose number
+    // conservation.  Do not normalize that selected source slice in advance.
+    // H/He/Mg were previously qualified with this rule.  v0.6.48.11.6 promotes
+    // the literal rule for carbon because the generic normalization inflated
+    // the C III ground seed by ~3.53e5 and therefore inflated Type50 record
+    // 5740 line-center opacity by the same factor.
+    for (double value : b.initial) b.runtime_seed_sum_before_policy += value;
+    const bool preserve_source_runtime_seed =
+        source_faithful_magnesium_runtime_seed || source_faithful_carbon_runtime_seed ||
+        source_faithful_helium_runtime_seed || source_faithful_hydrogen_runtime_seed;
+    if (!preserve_initial_seed && !preserve_source_runtime_seed) {
+        const double initial_total = b.runtime_seed_sum_before_policy;
+        if (initial_total > 0.0) {
+            for (double& value : b.initial) value /= initial_total;
+            b.runtime_seed_renormalized = true;
+        }
     }
+    for (double value : b.initial) b.runtime_seed_sum_after_policy += value;
     return b;
 }
 
@@ -9340,14 +9367,14 @@ int run_impl(
     const int source_sequence_v82_patch511 = source_sequence_env_v82_patch511 && *source_sequence_env_v82_patch511
         ? std::atoi(source_sequence_env_v82_patch511) : 0;
     const char* opacity_producer_path_v82_patch511 = std::getenv("XSTAR_V82_PATCH511_OPAKC_PRODUCER_AUDIT_PATH");
-    // 0.6.48.11.5: reuse the exact existing producer replay for a targeted
+    // 0.6.48.11.6: reuse the exact existing producer replay for a targeted
     // call-1 attribution sidecar.  This is diagnostic-only and is deliberately
     // independent of the historical sequence-59 Mg audit.
     const char* native_call_env_v0648115 = std::getenv("XSTAR_NATIVE_CALL_INDEX");
     const int native_call_v0648115 = native_call_env_v0648115 && *native_call_env_v0648115
         ? std::atoi(native_call_env_v0648115) : 0;
     const char* first_step_opacity_producer_path_v0648115 =
-        std::getenv("XSTAR_V0648115_FIRST_STEP_PRODUCER_AUDIT_PATH");
+        std::getenv("XSTAR_V0648116_FIRST_STEP_PRODUCER_AUDIT_PATH");
     const bool first_step_opacity_producer_audit_v0648115 = !defer_product_projection &&
         native_call_v0648115 == 1 && first_step_opacity_producer_path_v0648115 &&
         *first_step_opacity_producer_path_v0648115;
@@ -10619,6 +10646,56 @@ int run_impl(
             sc.natural_width_eV = evaluated[k].natural_width_ev;
             sc.turbulent_velocity_km_s = input.turbulent_velocity_km_s;
             sc.temperature_1e4K = input.temperature_k / 1.0e4;
+
+            // v0.6.48.11.6 diagnostic-only scalar provenance for the first C
+            // Type50 radial blocker identified by 11.5.  The source chain is
+            //   xileve(lower) * xeltp * xpx -> abund1
+            //   sigvtherm * abund1          -> opakb1
+            // and linopac consumes opakb1.  Never feed this sidecar back into
+            // sc, the line profile, the continuum, or the controller.
+            if (!evaluated[k].bound_free_spectral && rec.source_position == 8740 &&
+                rec.record == 5740 && rec.data_type == 50 &&
+                environment_data_type("XSTAR_NATIVE_CALL_INDEX") == 1) {
+                const char* provenance_path = std::getenv(
+                    "XSTAR_V0648116_TYPE50_RECORD5740_PROVENANCE_PATH");
+                if (provenance_path && *provenance_path) {
+                    const std::filesystem::path path(provenance_path);
+                    if (!path.parent_path().empty()) std::filesystem::create_directories(path.parent_path());
+                    const bool write_header = !std::filesystem::exists(path) || std::filesystem::file_size(path) == 0u;
+                    std::ofstream csv(path, std::ios::app);
+                    if (!csv) throw std::runtime_error("cannot write v0648116 Type50 record5740 provenance");
+                    if (write_header) {
+                        csv << "call_index,source_position,record,element_z,ion_stage,lower_row,upper_row,"
+                               "temperature_k,vturb_km_s,wavelength_a,atomic_mass_amu,sigvtherm_cm2,"
+                               "lower_population,upper_population,element_abundance,hydrogen_density_cm3,"
+                               "abund1_cm3,abund2_cm3,opakb1_cm1,runtime_seed_loaded,"
+                               "runtime_seed_renormalized,runtime_seed_sum_before_policy,runtime_seed_sum_after_policy\n";
+                    }
+                    const int call_index = environment_data_type("XSTAR_NATIVE_CALL_INDEX");
+                    const double lower_population = active_population_for_full_row(
+                        active, buffers.populations, rec.lower_row);
+                    const double upper_population = active_population_for_full_row(
+                        active, buffers.populations, rec.upper_row);
+                    const double abund1 = lower_population * element.abundance * input.hydrogen_density_cm3;
+                    const double abund2 = upper_population * element.abundance * input.hydrogen_density_cm3;
+                    const double opakb1 = sc.opakab * abund1;
+                    double wavelength_a = 0.0;
+                    if (evaluated[k].type50_shadow.valid)
+                        wavelength_a = evaluated[k].type50_shadow.stored_wavelength_a;
+                    csv << std::setprecision(17)
+                        << call_index << ',' << rec.source_position << ',' << rec.record << ','
+                        << element.element_z << ',' << rec.ion_stage << ',' << rec.lower_row << ','
+                        << rec.upper_row << ',' << input.temperature_k << ','
+                        << input.turbulent_velocity_km_s << ',' << wavelength_a << ','
+                        << sc.atomic_mass_amu << ',' << sc.opakab << ','
+                        << lower_population << ',' << upper_population << ',' << element.abundance << ','
+                        << input.hydrogen_density_cm3 << ',' << abund1 << ',' << abund2 << ',' << opakb1 << ','
+                        << (buffers.runtime_seed_loaded ? 1 : 0) << ','
+                        << (buffers.runtime_seed_renormalized ? 1 : 0) << ','
+                        << buffers.runtime_seed_sum_before_policy << ','
+                        << buffers.runtime_seed_sum_after_policy << '\n';
+                }
+            }
             // Rate-7 errc ownership was captured above from every evaluated
             // record before this calc_emisab abundance gate.  Do not rewrite it
             // here from only the subset that survives spectral publication.

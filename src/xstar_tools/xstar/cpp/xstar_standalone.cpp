@@ -80,7 +80,7 @@ bool verbose_controller_diagnostics_v064897() {
 }
 
 bool compact_step_diagnostics_v0648115() {
-    const char* value = std::getenv("XSTAR_V0648115_STEP_DIAGNOSTICS");
+    const char* value = std::getenv("XSTAR_V0648116_STEP_DIAGNOSTICS");
     return value && std::string(value) == "1";
 }
 
@@ -2427,7 +2427,7 @@ struct FixedDsecSnapshot {
     std::vector<double> rccemis;
     std::vector<double> opakc;
     std::vector<double> opakcont;
-    // 0.6.48.11.5: diagnostic-only additive opacity families at the same
+    // 0.6.48.11.6: diagnostic-only additive opacity families at the same
     // accepted boundary consumed by STEP.  These arrays are never read by
     // production transport or the solver; they retain the already-computed
     // patch5.10 decomposition before/after source-order GSSMOOTH.
@@ -12369,7 +12369,7 @@ void advance_source_continuum_radiation_v82_patch52(
         gsmooth2_source_v82_patch54(vtherm, data.energy, line_opakc_post);
         gsmooth2_source_v82_patch54(vtherm, data.energy, thomson_opakc_post);
     }
-    // 0.6.48.11.5 attribution-only retention.  Preserve the exact additive
+    // 0.6.48.11.6 attribution-only retention.  Preserve the exact additive
     // family decomposition already computed above at the accepted boundary so
     // the later STEP diagnostic can inspect the bin that actually limits delr.
     // No production calculation consumes these sidecar vectors.
@@ -13335,7 +13335,7 @@ int standalone_iteration_evaluator_v67(
         std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> message{};
         const std::string sequence = std::to_string(snapshot.sequence);
         ::setenv("XSTAR_NATIVE_SOURCE_SEQUENCE", sequence.c_str(), 1);
-        // 0.6.48.11.5 diagnostic-only call identity lets fixed_state_engine
+        // 0.6.48.11.6 diagnostic-only call identity lets fixed_state_engine
         // emit a producer inventory for the first accepted C V zone without
         // changing the historical source-sequence semantics.
         const std::string native_call_v0648115 = std::to_string(data->call_index);
@@ -15335,20 +15335,20 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                 // markers without globally enabling verbose diagnostics.
                 if (call == 1u && compact_step_diagnostics_v0648115()) {
                     std::cerr << std::setprecision(17)
-                              << "V0648115_STEP_AFTER_CALL=" << call << "\n"
-                              << "V0648115_STEP_INITIAL_DELTA_RADIUS_CM=" << step_result.initial_delta_radius_cm << "\n"
-                              << "V0648115_STEP_DELTA_RADIUS_CM=" << step_result.delta_radius_cm << "\n"
-                              << "V0648115_STEP_LIMITING_BIN=" << step_result.limiting_bin_one_based << "\n"
-                              << "V0648115_STEP_LIMITING_ENERGY_EV=" << step_result.limiting_energy_ev << "\n"
-                              << "V0648115_STEP_LIMITING_OPACITY_CM1=" << step_result.limiting_opacity_cm1 << "\n"
-                              << "V0648115_STEP_LIMITING_TAU_IN=" << step_result.limiting_tau_in << "\n"
-                              << "V0648115_STEP_LIMITING_ZREMS1=" << step_result.limiting_zrems1 << "\n"
-                              << "V0648115_STEP_LIMITING_CANDIDATE_CM=" << step_result.limiting_candidate_cm << "\n"
-                              << "V0648115_STEP_RADIUS_LIMIT_CM=" << step_result.radius_limit_cm << "\n"
-                              << "V0648115_STEP_COLUMN_LIMIT_CM=" << step_result.column_limit_cm << "\n"
-                              << "V0648115_STEP_REMAINING_COLUMN_LIMIT_CM=" << step_result.remaining_column_limit_cm << "\n"
-                              << "V0648115_STEP_REMAINING_COLUMN_FINAL_LIMIT=" << (step_result.remaining_column_was_final_limit ? 1 : 0) << "\n"
-                              << "V0648115_STEP_CRITF=" << effective_critical_fraction_v0648115 << "\n";
+                              << "V0648116_STEP_AFTER_CALL=" << call << "\n"
+                              << "V0648116_STEP_INITIAL_DELTA_RADIUS_CM=" << step_result.initial_delta_radius_cm << "\n"
+                              << "V0648116_STEP_DELTA_RADIUS_CM=" << step_result.delta_radius_cm << "\n"
+                              << "V0648116_STEP_LIMITING_BIN=" << step_result.limiting_bin_one_based << "\n"
+                              << "V0648116_STEP_LIMITING_ENERGY_EV=" << step_result.limiting_energy_ev << "\n"
+                              << "V0648116_STEP_LIMITING_OPACITY_CM1=" << step_result.limiting_opacity_cm1 << "\n"
+                              << "V0648116_STEP_LIMITING_TAU_IN=" << step_result.limiting_tau_in << "\n"
+                              << "V0648116_STEP_LIMITING_ZREMS1=" << step_result.limiting_zrems1 << "\n"
+                              << "V0648116_STEP_LIMITING_CANDIDATE_CM=" << step_result.limiting_candidate_cm << "\n"
+                              << "V0648116_STEP_RADIUS_LIMIT_CM=" << step_result.radius_limit_cm << "\n"
+                              << "V0648116_STEP_COLUMN_LIMIT_CM=" << step_result.column_limit_cm << "\n"
+                              << "V0648116_STEP_REMAINING_COLUMN_LIMIT_CM=" << step_result.remaining_column_limit_cm << "\n"
+                              << "V0648116_STEP_REMAINING_COLUMN_FINAL_LIMIT=" << (step_result.remaining_column_was_final_limit ? 1 : 0) << "\n"
+                              << "V0648116_STEP_CRITF=" << effective_critical_fraction_v0648115 << "\n";
                     const std::size_t limiting_zero_based_v0648115 =
                         step_result.limiting_bin_one_based > 0 ? step_result.limiting_bin_one_based - 1u : 0u;
                     const auto component_at_v0648115 = [&](const std::vector<double>& values) {
@@ -15374,31 +15374,31 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                     for (const auto& entry_v0648115 : components_v0648115)
                         if (std::abs(entry_v0648115.second) > std::abs(dominant_v0648115.second)) dominant_v0648115 = entry_v0648115;
                     std::cerr << std::setprecision(17)
-                              << "V0648115_STEP_TEMPERATURE_T4=" << boundary.temperature_t4 << "\n"
-                              << "V0648115_STEP_ELECTRON_FRACTION=" << boundary.electron_fraction_input << "\n"
-                              << "V0648115_STEP_OPAKCONT_CM1=" << component_at_v0648115(boundary.opakcont) << "\n"
-                              << "V0648115_STEP_BOUND_FREE_PRE_GSMOOTH_CM1=" << bf_pre_v0648115 << "\n"
-                              << "V0648115_STEP_FREE_FREE_PRE_GSMOOTH_CM1=" << ff_pre_v0648115 << "\n"
-                              << "V0648115_STEP_LINE_PRE_GSMOOTH_CM1=" << line_pre_v0648115 << "\n"
-                              << "V0648115_STEP_THOMSON_PRE_GSMOOTH_CM1=" << th_pre_v0648115 << "\n"
-                              << "V0648115_STEP_COMPONENT_SUM_PRE_GSMOOTH_CM1=" << sum_pre_v0648115 << "\n"
-                              << "V0648115_STEP_BOUND_FREE_POST_GSMOOTH_CM1=" << bf_post_v0648115 << "\n"
-                              << "V0648115_STEP_FREE_FREE_POST_GSMOOTH_CM1=" << ff_post_v0648115 << "\n"
-                              << "V0648115_STEP_LINE_POST_GSMOOTH_CM1=" << line_post_v0648115 << "\n"
-                              << "V0648115_STEP_THOMSON_POST_GSMOOTH_CM1=" << th_post_v0648115 << "\n"
-                              << "V0648115_STEP_COMPONENT_SUM_POST_GSMOOTH_CM1=" << sum_post_v0648115 << "\n"
-                              << "V0648115_STEP_COMPONENT_SUM_MINUS_TOTAL_CM1=" << (sum_post_v0648115-total_v0648115) << "\n"
-                              << "V0648115_STEP_BOUND_FREE_POST_FRACTION=" << fraction_v0648115(bf_post_v0648115) << "\n"
-                              << "V0648115_STEP_FREE_FREE_POST_FRACTION=" << fraction_v0648115(ff_post_v0648115) << "\n"
-                              << "V0648115_STEP_LINE_POST_FRACTION=" << fraction_v0648115(line_post_v0648115) << "\n"
-                              << "V0648115_STEP_THOMSON_POST_FRACTION=" << fraction_v0648115(th_post_v0648115) << "\n"
-                              << "V0648115_STEP_DOMINANT_COMPONENT=" << dominant_v0648115.first << "\n"
-                              << "V0648115_STEP_DOMINANT_COMPONENT_FRACTION=" << fraction_v0648115(dominant_v0648115.second) << "\n";
+                              << "V0648116_STEP_TEMPERATURE_T4=" << boundary.temperature_t4 << "\n"
+                              << "V0648116_STEP_ELECTRON_FRACTION=" << boundary.electron_fraction_input << "\n"
+                              << "V0648116_STEP_OPAKCONT_CM1=" << component_at_v0648115(boundary.opakcont) << "\n"
+                              << "V0648116_STEP_BOUND_FREE_PRE_GSMOOTH_CM1=" << bf_pre_v0648115 << "\n"
+                              << "V0648116_STEP_FREE_FREE_PRE_GSMOOTH_CM1=" << ff_pre_v0648115 << "\n"
+                              << "V0648116_STEP_LINE_PRE_GSMOOTH_CM1=" << line_pre_v0648115 << "\n"
+                              << "V0648116_STEP_THOMSON_PRE_GSMOOTH_CM1=" << th_pre_v0648115 << "\n"
+                              << "V0648116_STEP_COMPONENT_SUM_PRE_GSMOOTH_CM1=" << sum_pre_v0648115 << "\n"
+                              << "V0648116_STEP_BOUND_FREE_POST_GSMOOTH_CM1=" << bf_post_v0648115 << "\n"
+                              << "V0648116_STEP_FREE_FREE_POST_GSMOOTH_CM1=" << ff_post_v0648115 << "\n"
+                              << "V0648116_STEP_LINE_POST_GSMOOTH_CM1=" << line_post_v0648115 << "\n"
+                              << "V0648116_STEP_THOMSON_POST_GSMOOTH_CM1=" << th_post_v0648115 << "\n"
+                              << "V0648116_STEP_COMPONENT_SUM_POST_GSMOOTH_CM1=" << sum_post_v0648115 << "\n"
+                              << "V0648116_STEP_COMPONENT_SUM_MINUS_TOTAL_CM1=" << (sum_post_v0648115-total_v0648115) << "\n"
+                              << "V0648116_STEP_BOUND_FREE_POST_FRACTION=" << fraction_v0648115(bf_post_v0648115) << "\n"
+                              << "V0648116_STEP_FREE_FREE_POST_FRACTION=" << fraction_v0648115(ff_post_v0648115) << "\n"
+                              << "V0648116_STEP_LINE_POST_FRACTION=" << fraction_v0648115(line_post_v0648115) << "\n"
+                              << "V0648116_STEP_THOMSON_POST_FRACTION=" << fraction_v0648115(th_post_v0648115) << "\n"
+                              << "V0648116_STEP_DOMINANT_COMPONENT=" << dominant_v0648115.first << "\n"
+                              << "V0648116_STEP_DOMINANT_COMPONENT_FRACTION=" << fraction_v0648115(dominant_v0648115.second) << "\n";
 
                     // Record identities are explicitly pre-GSSMOOTH owners:
                     // source GSSMOOTH redistributes family opacity between bins,
                     // so a single post-smoothed record contribution is not well-defined.
-                    const char* producer_path_v0648115 = std::getenv("XSTAR_V0648115_FIRST_STEP_PRODUCER_AUDIT_PATH");
+                    const char* producer_path_v0648115 = std::getenv("XSTAR_V0648116_FIRST_STEP_PRODUCER_AUDIT_PATH");
                     if (producer_path_v0648115 && *producer_path_v0648115) {
                         std::ifstream producer_in_v0648115(producer_path_v0648115);
                         std::string producer_line_v0648115;
@@ -15412,24 +15412,24 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                             try { runtime_slot_v0648115 = static_cast<std::size_t>(std::stoull(cells_v0648115[0])); } catch (...) { continue; }
                             if (runtime_slot_v0648115 != limiting_zero_based_v0648115) continue;
                             std::cerr
-                                << "V0648115_STEP_BOUND_FREE_PRE_GSMOOTH_TOP_CONTRIBUTION_CM1=" << cells_v0648115[3] << "\n"
-                                << "V0648115_STEP_BOUND_FREE_PRE_GSMOOTH_TOP_FRACTION=" << cells_v0648115[4] << "\n"
-                                << "V0648115_STEP_BOUND_FREE_PRE_GSMOOTH_TOP_SOURCE_POSITION=" << cells_v0648115[5] << "\n"
-                                << "V0648115_STEP_BOUND_FREE_PRE_GSMOOTH_TOP_RECORD=" << cells_v0648115[6] << "\n"
-                                << "V0648115_STEP_BOUND_FREE_PRE_GSMOOTH_TOP_DATA_TYPE=" << cells_v0648115[7] << "\n"
-                                << "V0648115_STEP_BOUND_FREE_PRE_GSMOOTH_TOP_ELEMENT_Z=" << cells_v0648115[8] << "\n"
-                                << "V0648115_STEP_BOUND_FREE_PRE_GSMOOTH_TOP_ION_STAGE=" << cells_v0648115[9] << "\n"
-                                << "V0648115_STEP_BOUND_FREE_PRE_GSMOOTH_TOP_LOWER_ROW=" << cells_v0648115[10] << "\n"
-                                << "V0648115_STEP_BOUND_FREE_PRE_GSMOOTH_TOP_UPPER_ROW=" << cells_v0648115[11] << "\n"
-                                << "V0648115_STEP_LINE_PRE_GSMOOTH_TOP_CONTRIBUTION_CM1=" << cells_v0648115[13] << "\n"
-                                << "V0648115_STEP_LINE_PRE_GSMOOTH_TOP_FRACTION=" << cells_v0648115[14] << "\n"
-                                << "V0648115_STEP_LINE_PRE_GSMOOTH_TOP_SOURCE_POSITION=" << cells_v0648115[15] << "\n"
-                                << "V0648115_STEP_LINE_PRE_GSMOOTH_TOP_RECORD=" << cells_v0648115[16] << "\n"
-                                << "V0648115_STEP_LINE_PRE_GSMOOTH_TOP_DATA_TYPE=" << cells_v0648115[17] << "\n"
-                                << "V0648115_STEP_LINE_PRE_GSMOOTH_TOP_ELEMENT_Z=" << cells_v0648115[18] << "\n"
-                                << "V0648115_STEP_LINE_PRE_GSMOOTH_TOP_ION_STAGE=" << cells_v0648115[19] << "\n"
-                                << "V0648115_STEP_LINE_PRE_GSMOOTH_TOP_LOWER_ROW=" << cells_v0648115[20] << "\n"
-                                << "V0648115_STEP_LINE_PRE_GSMOOTH_TOP_UPPER_ROW=" << cells_v0648115[21] << "\n";
+                                << "V0648116_STEP_BOUND_FREE_PRE_GSMOOTH_TOP_CONTRIBUTION_CM1=" << cells_v0648115[3] << "\n"
+                                << "V0648116_STEP_BOUND_FREE_PRE_GSMOOTH_TOP_FRACTION=" << cells_v0648115[4] << "\n"
+                                << "V0648116_STEP_BOUND_FREE_PRE_GSMOOTH_TOP_SOURCE_POSITION=" << cells_v0648115[5] << "\n"
+                                << "V0648116_STEP_BOUND_FREE_PRE_GSMOOTH_TOP_RECORD=" << cells_v0648115[6] << "\n"
+                                << "V0648116_STEP_BOUND_FREE_PRE_GSMOOTH_TOP_DATA_TYPE=" << cells_v0648115[7] << "\n"
+                                << "V0648116_STEP_BOUND_FREE_PRE_GSMOOTH_TOP_ELEMENT_Z=" << cells_v0648115[8] << "\n"
+                                << "V0648116_STEP_BOUND_FREE_PRE_GSMOOTH_TOP_ION_STAGE=" << cells_v0648115[9] << "\n"
+                                << "V0648116_STEP_BOUND_FREE_PRE_GSMOOTH_TOP_LOWER_ROW=" << cells_v0648115[10] << "\n"
+                                << "V0648116_STEP_BOUND_FREE_PRE_GSMOOTH_TOP_UPPER_ROW=" << cells_v0648115[11] << "\n"
+                                << "V0648116_STEP_LINE_PRE_GSMOOTH_TOP_CONTRIBUTION_CM1=" << cells_v0648115[13] << "\n"
+                                << "V0648116_STEP_LINE_PRE_GSMOOTH_TOP_FRACTION=" << cells_v0648115[14] << "\n"
+                                << "V0648116_STEP_LINE_PRE_GSMOOTH_TOP_SOURCE_POSITION=" << cells_v0648115[15] << "\n"
+                                << "V0648116_STEP_LINE_PRE_GSMOOTH_TOP_RECORD=" << cells_v0648115[16] << "\n"
+                                << "V0648116_STEP_LINE_PRE_GSMOOTH_TOP_DATA_TYPE=" << cells_v0648115[17] << "\n"
+                                << "V0648116_STEP_LINE_PRE_GSMOOTH_TOP_ELEMENT_Z=" << cells_v0648115[18] << "\n"
+                                << "V0648116_STEP_LINE_PRE_GSMOOTH_TOP_ION_STAGE=" << cells_v0648115[19] << "\n"
+                                << "V0648116_STEP_LINE_PRE_GSMOOTH_TOP_LOWER_ROW=" << cells_v0648115[20] << "\n"
+                                << "V0648116_STEP_LINE_PRE_GSMOOTH_TOP_UPPER_ROW=" << cells_v0648115[21] << "\n";
                             break;
                         }
                     }
