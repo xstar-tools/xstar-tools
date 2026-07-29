@@ -1,3 +1,29 @@
+# xstar_tools 0.6.48.11.7.1
+
+0.6.48.11.7.1 is a regression-only hotfix on 0.6.48.11.7. The 11.7 generic preliminary Type7 endpoint correction caused sub-ppm drift in two products of the frozen `mg11_ne1e8` authority while leaving its DSEC trajectory exact.
+
+The hotfix keeps the 11.7 literal source rule for generic models but restores the accepted pre-11.7 Type7 accumulation only on the explicit frozen Mg reference trajectory. A call-1 Mg audit exposes old/source/effective Type7 eligibility and the all-nine-FITS bit-exact comparator remains mandatory. No carbon solve physics is changed. Production-zone ABI remains 6048110.
+
+Run only the 11-model standalone smoke first:
+
+```bash
+PACKAGE=$(realpath ../xstar_tools-0.6.48.11.7.1)
+DATA=/media/linux/mhd/xstar/xstar/data
+RUNS=$(realpath original_xstar_benchmark_run.tar.gz)
+FORTRAN=$(realpath original_xstar.tar.gz)
+MGREF=$(realpath v0648102112_reanalysis.tar.gz)
+OUT=$(pwd)/v06481171_multimodel
+rm -rf "$OUT"
+
+"$PACKAGE/run_v06481171_multimodel.sh" \
+  "$PACKAGE" "$DATA" "$RUNS" "$FORTRAN" "$MGREF" "$OUT" standalone-smoke \
+  2>&1 | tee v06481171_standalone_smoke.host.log
+```
+
+Do not run `standalone-all` unless the smoke is 11/11 ACCEPT.
+
+---
+
 # xstar_tools 0.6.48.11.6
 
 0.6.48.11.6 is a focused C Type50 scalar-provenance correction built on 0.6.48.11.5.

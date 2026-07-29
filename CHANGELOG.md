@@ -1,5 +1,13 @@
 # CHANGELOG
 
+# 0.6.48.11.7.1 — frozen-Mg Type7 compatibility/regression hotfix - 2026-07-29
+
+- Repair the 0.6.48.11.7 frozen `mg11_ne1e8` bit-exact regression in `xo01_detal2.fits` and `xo01_detal4.fits` without reverting the generic source-backed Type7 endpoint rule.
+- Add an ABI-preserving fixed-state context switch, enabled only by the explicit frozen Mg reference trajectory, that uses the accepted pre-11.7 preliminary Type7 eligibility when accumulating `pirti`. Generic models continue to use `idest1 == 1 && idest2 <= nlev + 2`.
+- Add a call-1 Mg preliminary Type7 audit that records old-native, literal-source, and effective eligibility. The smoke runner requires the effective predicate to match the legacy predicate on the frozen reference path and reports the old-vs-source difference count.
+- Preserve all 0.6.48.11.7 carbon diagnostics and source-rule attribution. No C/O/Ca science behavior, STEP arithmetic, Type50 profile, GSSMOOTH, Lucy solve, or production-zone ABI is otherwise changed.
+- Keep the all-nine-FITS frozen Mg bit-exact comparator blocking. Qualification remains standalone-smoke first.
+
 ## 0.6.48.11.7 - 2026-07-29
 
 - Correct the generic preliminary ion-balance Type7 source eligibility used to build `pirti`: a rate-type-7 record now contributes only when the literal source endpoints satisfy `idest1 == 1` and `idest2 <= nlev + 2`, matching `calc_ion_rates.f90`.

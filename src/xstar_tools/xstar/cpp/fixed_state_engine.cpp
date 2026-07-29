@@ -1491,6 +1491,7 @@ struct PreliminaryRateAuditRowV0648117 {
     int source_idest2 = 0;
     bool old_native_ionization_eligible = false;
     bool source_ionization_eligible = false;
+    bool effective_ionization_eligible_v06481171 = false;
     bool source_recombination_eligible = false;
     double ans1 = 0.0;
     double ionization_contribution = 0.0;
@@ -2818,6 +2819,10 @@ struct xstar_fixed_state_context_impl {
     // the context so the historical xstar_fixed_state_input_v1 ABI remains
     // byte-for-byte unchanged.
     double critical_ion_fraction = 1.0e-6;
+    // v0.6.48.11.7.1: the accepted frozen Mg XI reference must retain
+    // the pre-11.7 preliminary Type7 eligibility exactly.  Generic models
+    // continue to use the literal source endpoint rule introduced in 11.7.
+    bool preliminary_type7_legacy_compat_v06481171 = false;
     std::vector<NativeRecordDiagnostic> last_record_diagnostics;
     std::vector<NativeElementDiagnostic> last_element_diagnostics;
     double last_temperature_k = 0.0;
@@ -7478,6 +7483,7 @@ PreliminaryIonBalance build_preliminary_ion_balance(
     const std::vector<EvaluatedRecord>& evaluated,
     const std::vector<const ProgramRecord*>& evaluated_records,
     double critical_ion_fraction,
+    bool preliminary_type7_legacy_compat_v06481171,
     int ablated_data_type = 0) {
     PreliminaryIonBalance result;
     const int z = element.element_z;
@@ -7514,8 +7520,13 @@ PreliminaryIonBalance build_preliminary_ion_balance(
             c.rate_type == 1 || c.rate_type == 15 ||
             (c.rate_type == 7 && idest1 == 1 && idest2 > 0 && idest2 <= nlev + 2);
         const bool source_recombination = c.rate_type == 8 || c.rate_type == 6;
+        // 11.7.1 regression hotfix: the explicit frozen Mg XI oracle path
+        // keeps the accepted pre-11.7 preliminary Type7 accumulation, while
+        // all generic models retain the literal source endpoint predicate.
+        const bool effective_ionization = preliminary_type7_legacy_compat_v06481171
+            ? old_native_ionization : source_ionization;
 
-        if (source_ionization) result.ionization[static_cast<std::size_t>(stage - 1)] += rate;
+        if (effective_ionization) result.ionization[static_cast<std::size_t>(stage - 1)] += rate;
         if (source_recombination) result.recombination[static_cast<std::size_t>(stage - 1)] += rate;
 
         PreliminaryRateAuditRowV0648117 audit;
@@ -7529,9 +7540,10 @@ PreliminaryIonBalance build_preliminary_ion_balance(
         audit.source_idest2 = idest2;
         audit.old_native_ionization_eligible = old_native_ionization;
         audit.source_ionization_eligible = source_ionization;
+        audit.effective_ionization_eligible_v06481171 = effective_ionization;
         audit.source_recombination_eligible = source_recombination;
         audit.ans1 = c.ans1;
-        audit.ionization_contribution = source_ionization ? rate : 0.0;
+        audit.ionization_contribution = effective_ionization ? rate : 0.0;
         audit.recombination_contribution = source_recombination ? rate : 0.0;
         audit.running_ionization = result.ionization[static_cast<std::size_t>(stage - 1)];
         audit.running_recombination = result.recombination[static_cast<std::size_t>(stage - 1)];
@@ -7632,7 +7644,12 @@ void write_preliminary_ion_balance_audit_v0648117(
     const ElementProgram& element,
     const PreliminaryIonBalance& balance,
     double critical_ion_fraction) {
-    if (element.element_z != 6 || environment_data_type("XSTAR_NATIVE_CALL_INDEX") != 1) return;
+    if (environment_data_type("XSTAR_NATIVE_CALL_INDEX") != 1) return;
+    int audit_element_z_v06481171 = 6;
+    if (const char* env_z = std::getenv("XSTAR_V06481171_PRELIM_AUDIT_ELEMENT_Z")) {
+        try { audit_element_z_v06481171 = std::stoi(env_z); } catch (...) {}
+    }
+    if (element.element_z != audit_element_z_v06481171) return;
     const char* record_path = std::getenv("XSTAR_V0648117_PRELIM_ION_BALANCE_RECORDS_PATH");
     const char* stage_path = std::getenv("XSTAR_V0648117_PRELIM_ION_BALANCE_STAGES_PATH");
     if (record_path && *record_path) {
@@ -7640,14 +7657,15 @@ void write_preliminary_ion_balance_audit_v0648117(
         if (!path.parent_path().empty()) std::filesystem::create_directories(path.parent_path());
         std::ofstream csv(path);
         if (!csv) throw std::runtime_error("cannot write v0648117 preliminary ion-balance record audit");
-        csv << "call_index,source_position,record,data_type,rate_type,ion_stage,nlev,idest1,idest2,old_native_ionization_eligible,source_ionization_eligible,source_recombination_eligible,ans1,ionization_contribution,recombination_contribution,running_pirti,running_rrrti\n";
+        csv << "call_index,source_position,record,data_type,rate_type,ion_stage,nlev,idest1,idest2,old_native_ionization_eligible,source_ionization_eligible,effective_ionization_eligible,source_recombination_eligible,ans1,ionization_contribution,recombination_contribution,running_pirti,running_rrrti\n";
         csv << std::setprecision(17);
         for (const auto& row : balance.audit_rows_v0648117) {
             csv << 1 << ',' << row.source_position << ',' << row.record << ',' << row.data_type << ','
                 << row.rate_type << ',' << row.ion_stage << ',' << row.nlev << ',' << row.source_idest1 << ','
                 << row.source_idest2 << ',' << (row.old_native_ionization_eligible ? 1 : 0) << ','
-                << (row.source_ionization_eligible ? 1 : 0) << ',' << (row.source_recombination_eligible ? 1 : 0) << ','
-                << row.ans1 << ',' << row.ionization_contribution << ',' << row.recombination_contribution << ','
+                << (row.source_ionization_eligible ? 1 : 0) << ','
+                << (row.effective_ionization_eligible_v06481171 ? 1 : 0) << ','
+                << (row.source_recombination_eligible ? 1 : 0) << ',' << row.ans1 << ',' << row.ionization_contribution << ',' << row.recombination_contribution << ','
                 << row.running_ionization << ',' << row.running_recombination << '\n';
         }
     }
@@ -9647,7 +9665,7 @@ int run_impl(
 
         const PreliminaryIonBalance preliminary = build_preliminary_ion_balance(
             ctx.program, element, evaluated, evaluated_records, ctx.critical_ion_fraction,
-            helium_preliminary_ablation_type);
+            ctx.preliminary_type7_legacy_compat_v06481171, helium_preliminary_ablation_type);
         write_preliminary_ion_balance_audit_v0648117(
             element, preliminary, ctx.critical_ion_fraction);
         PreliminaryIonBalance active_balance = preliminary;
@@ -13476,6 +13494,23 @@ int xstar_fixed_state_context_set_critical_ion_fraction_v1(
     }
     context->critical_ion_fraction = critical_ion_fraction;
     copy_text(message, message_size, "native critical ion fraction retained");
+    return 0;
+}
+
+int xstar_fixed_state_context_set_preliminary_type7_legacy_compat_v06481171(
+    xstar_fixed_state_context* context,
+    int enabled,
+    char* message,
+    size_t message_size
+) {
+    if (!context) {
+        copy_text(message, message_size, "fixed-state context is required");
+        return 1;
+    }
+    context->preliminary_type7_legacy_compat_v06481171 = enabled != 0;
+    copy_text(message, message_size, context->preliminary_type7_legacy_compat_v06481171
+        ? "preliminary Type7 frozen-Mg compatibility enabled"
+        : "preliminary Type7 frozen-Mg compatibility disabled");
     return 0;
 }
 

@@ -576,6 +576,16 @@ XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_context_set_critical_ion_fraction
     size_t message_size
 );
 
+/* v0.6.48.11.7.1: explicit frozen-Mg compatibility switch for the
+ * preliminary Type7 eligibility regression.  This is context state rather
+ * than xstar_fixed_state_input_v1 so ABI 60487 remains byte-for-byte frozen. */
+XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_context_set_preliminary_type7_legacy_compat_v06481171(
+    xstar_fixed_state_context* context,
+    int enabled,
+    char* message,
+    size_t message_size
+);
+
 XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_context_reset_v1(
     xstar_fixed_state_context* context,
     char* message,

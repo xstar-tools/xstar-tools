@@ -14797,6 +14797,12 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         rc = xstar_fixed_state_context_set_critical_ion_fraction_v1(
             fixed, effective_critical_fraction_v0648115, message.data(), message.size());
         if (rc != 0) throw std::runtime_error(std::string("native critical ion fraction binding failed: ") + message.data());
+        // 0.6.48.11.7.1: 11.7's generic literal Type7 endpoint rule caused
+        // sub-ppm drift in two frozen Mg products.  Retain the accepted 11.6
+        // preliminary Type7 eligibility only for this explicit oracle path.
+        rc = xstar_fixed_state_context_set_preliminary_type7_legacy_compat_v06481171(
+            fixed, reference_trajectory_mode_v0648115 ? 1 : 0, message.data(), message.size());
+        if (rc != 0) throw std::runtime_error(std::string("native preliminary Type7 compatibility binding failed: ") + message.data());
         rc = xstar_thermal_context_create_v1(&thermal, message.data(), message.size());
         if (rc != 0) throw std::runtime_error(std::string("thermal controller creation failed: ") + message.data());
         xstar_fixed_state_program_info_v1 info{};
