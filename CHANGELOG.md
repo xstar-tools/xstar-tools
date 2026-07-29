@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.11.9.1 — pure-Python multi-model smoke qualification - 2026-07-29
+
+- Adds an independent `python-smoke` stage over the existing 11-model smoke set.
+- Runs the source-faithful Python controller with Python global, solver, rates, matrix, and emissivity backends; no C++ build is performed for this stage.
+- Removes leaked `XSTAR_ATOMIC_*` native/C++ candidate, product, promoted, and shadow selections from the smoke subprocess environment and forces `PYTHONHASHSEED=0`.
+- Uses `--diagnostics none --blas-threads 1` to suppress optional high-volume diagnostics and bound memory without changing the ten ordinary XSTAR science products.
+- Compares every successful Python model directly with its canonical FORTRAN products.
+- This release intentionally makes no Python physics correction before the first all-Python smoke evidence is available.
+
 # 0.6.48.11.9 — C Type53 source-faithful Milne promotion / high-ion solve closure - 2026-07-29
 
 - Promotes the already-computed source-faithful `phint53`/Milne shadow for carbon Type53 records into the committed native rate answers.

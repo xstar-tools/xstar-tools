@@ -1,5 +1,10 @@
 # xstar_tools 0.6.48.11.8
 
+### 0.6.48.11.9.1 pure-Python smoke
+
+Use `run_v06481191_multimodel.sh ... python-smoke` to run the canonical 11-model smoke set using only the Python source-port backends. This stage is intentionally independent of standalone-C++ qualification and compares each Python result directly with the FORTRAN authority.
+
+
 0.6.48.11.8 is a diagnostic-only follow-up to the accepted 0.6.48.11.7.1 frozen-Mg hotfix. The 11.7.1 host smoke restored all nine frozen `mg11_ne1e8` FITS products bit-exact while leaving the carbon trajectory unchanged. The remaining C V problem is therefore attributed downstream of preliminary active-window selection: the call-1 compact carbon solve converges to a C III lower-level population near 0.782, which drives Type50 record 5740 and the 12.709136 eV first-STEP opacity.
 
 This release does **not** change the carbon matrix, Lucy-style normalization, Type50, GSSMOOTH, STEP, or generic Type7 physics. It adds a call-1 carbon solve attribution surface after the solve has completed.
