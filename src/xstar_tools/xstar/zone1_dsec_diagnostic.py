@@ -502,6 +502,34 @@ def result_fingerprints(
     return values
 
 
+def extract_python_all_element_fixed_state(
+    result: FixedStateCalcHMCAllResult, *, evaluation_index: int
+) -> list[dict[str, Any]]:
+    """Return source-order per-element fixed-state thermal/charge rows.
+
+    This is diagnostic-only.  Values come directly from ``calc_hmc_all``
+    element results after the same abundance weighting used by the source
+    heating/cooling and ENELEC accumulators.
+    """
+    rows: list[dict[str, Any]] = []
+    for item in result.element_results:
+        z = int(item.request.element_z)
+        rows.append(
+            {
+                "evaluation_index": int(evaluation_index),
+                "temperature_k": float(result.temperature_k),
+                "electron_fraction_input": float(result.electron_fraction_xee),
+                "element_z": z,
+                "heating": float(item.heating),
+                "cooling": float(item.cooling),
+                "heating2": float(item.heating2),
+                "cooling2": float(item.cooling2),
+                "electron_contribution": float(item.electron_contribution),
+            }
+        )
+    return rows
+
+
 def replay_same_entry_state(
     master: Any,
     derived: Any,
@@ -1619,6 +1647,18 @@ def write_zone1_python_diagnostic_products(
             )
     electron_path = out / "python_zone1_electron_fraction_path.csv"
     _write_rows(electron_path, electron_rows)
+
+    all_element_fixed_state_rows: list[dict[str, Any]] = []
+    for evaluation_index, evaluation in enumerate(evaluations, start=1):
+        result = evaluation.fixed_state_result
+        if result is not None:
+            all_element_fixed_state_rows.extend(
+                extract_python_all_element_fixed_state(
+                    result, evaluation_index=evaluation_index
+                )
+            )
+    all_element_fixed_state_path = out / "python_all_element_fixed_state.csv"
+    _write_rows(all_element_fixed_state_path, all_element_fixed_state_rows)
     carbon_correlation_path = out / "python_zone1_carbon_stage_correlation.csv"
     _write_rows(carbon_correlation_path, carbon_correlation_rows)
 
@@ -1686,6 +1726,7 @@ def write_zone1_python_diagnostic_products(
         "n_carbon_alias_rows": len(alias_rows),
         "n_hydrogen_state_rows": len(hydrogen_rows),
         "n_electron_fraction_path_rows": len(electron_rows),
+        "n_all_element_fixed_state_rows": len(all_element_fixed_state_rows),
         "n_carbon_stage_correlation_rows": len(carbon_correlation_rows),
         "source_order_state_path_probe_added": True,
         "production_physics_modified_in_this_release": False,
@@ -1726,6 +1767,7 @@ def write_zone1_python_diagnostic_products(
         "carbon_alias_boundaries_csv": alias_path,
         "hydrogen_state_path_csv": hydrogen_path,
         "electron_fraction_path_csv": electron_path,
+        "all_element_fixed_state_csv": all_element_fixed_state_path,
         "carbon_stage_correlation_csv": carbon_correlation_path,
         "normalization_row_csv": normalization_path,
         "cv_level_populations_csv": level_population_path,
@@ -1743,6 +1785,7 @@ __all__ = [
     "NumericFingerprint",
     "ReplayParityRow",
     "SameEntryReplayResult",
+    "extract_python_all_element_fixed_state",
     "CarbonRateRow",
     "MatrixAuditRow",
     "CoolingComparisonRow",

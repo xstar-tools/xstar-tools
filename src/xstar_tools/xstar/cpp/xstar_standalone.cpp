@@ -3643,6 +3643,34 @@ int fixed_dsec_evaluator(
     snapshot.element_cooling = output.element_cooling;
     snapshot.continuum_heating = output.continuum_heating;
     snapshot.continuum_cooling = output.continuum_cooling;
+    // v0.6.48.12.1 phase-A diagnostic: write one source-ordered row per
+    // active element after every fixed-state evaluation.  The export reads
+    // already-computed context state and is never consumed by production.
+    if (const char* parity_dir = std::getenv("XSTAR_ALL_ELEMENT_FIXED_PARITY_DIR")) {
+        if (*parity_dir) {
+            try {
+                const std::filesystem::path parity_root(parity_dir);
+                std::filesystem::create_directories(parity_root);
+                const auto parity_csv = parity_root / "cpp_all_element_fixed_state.csv";
+                std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> parity_message{};
+                const int parity_rc = xstar_fixed_state_write_last_element_fixed_state_v0648121(
+                    data->fixed_context, parity_csv.string().c_str(), snapshot.sequence,
+                    snapshot.call_index, snapshot.evaluation_index, snapshot.kind.c_str(),
+                    parity_message.data(), parity_message.size());
+                if (parity_rc != 0) {
+                    throw std::runtime_error(std::string("all-element fixed-state diagnostic capture failed: ") + parity_message.data());
+                }
+                if (snapshot.kind == "dsec" && snapshot.call_index == 1u && snapshot.evaluation_index == 1u) {
+                    std::cerr << "V0648121_CPP_FIXED_STATE_ELEMENT_LEDGER=" << parity_csv.string() << "\n";
+                }
+            } catch (const std::exception& exc) {
+                set_callback_error(error, error_size,
+                    std::string("cannot retain all-element fixed-state diagnostics: ") + exc.what());
+                return 1;
+            }
+        }
+    }
+
     if (snapshot.kind == "final") {
         try {
             attach_native_thermal_components_v70(data->fixed_context, snapshot);

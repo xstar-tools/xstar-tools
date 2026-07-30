@@ -1520,6 +1520,10 @@ struct EvaluatedRecord {
     double bound_free_threshold_ev_v064895 = 0.0;
     bool bound_free_type49_v064895 = false;
     bool bound_free_row46_contract_v064895 = false;
+    // v0.6.48.12.1: dynamic source-generic bound-free profile retained by
+    // Type70/calt70 after its density/temperature-dependent Milne rescaling.
+    std::vector<double> generic_bound_free_offset_ryd_v0648120;
+    std::vector<double> generic_bound_free_sigma_cm2_v0648120;
     Type51SourceShadow type51_shadow{};
     Type50SourceShadow type50_shadow{};
     Type99SourceShadow type99_shadow{};
@@ -3225,6 +3229,9 @@ struct xstar_fixed_state_context_impl {
     bool last_helium_source_insertion_order = false;
     std::map<int, std::array<double,4>> last_element_thermal_budget;
     std::map<int, std::array<double,4>> last_computed_element_thermal_budget;
+    // v0.6.48.12.1 diagnostic-only source-order electron contribution by element.
+    // This mirrors heatf ENELEC terms without regrouping the production accumulator.
+    std::map<int, double> last_element_electron_contribution;
     std::array<double,4> last_committed_element_thermal_budget{{0.0,0.0,0.0,0.0}};
     std::array<double,4> last_committed_continuum_thermal_budget{{0.0,0.0,0.0,0.0}};
     std::array<double,4> last_helium_type53_budget{{0.0,0.0,0.0,0.0}};
@@ -4274,6 +4281,211 @@ Type59PhintResultV0648111 type59_phintfo_source(
     const double old3=a3; a3=-a4; a4=-old3;
     out.ans={{a1,a2,a3,a4,a5,a6}};
     return out;
+}
+
+
+// ---------------------------------------------------------------------------
+// v0.6.48.12.1 all-element source-generic UCalc helpers.
+// These are direct translations of the pure-Python source-faithful leaves and
+// are used only by opcode 200.  The original H/He/Mg opcodes remain untouched.
+// ---------------------------------------------------------------------------
+
+double source_ee1expo_generic(double x) {
+    if (!(x > 0.0)) return 0.0;
+    if (x >= 1.0) {
+        return (1.0/x)*(0.250621+x*(2.334733+x))/(1.68153+x*(3.330657+x));
+    }
+    return (-std::log(x)-0.57721566+x*(0.99999193+x*(-0.24991055+x*(0.05519968+x*(-0.00976004+x*0.0010707857)))))*limited_exp(x);
+}
+
+double source_ff2_generic(double x) {
+    static const double q[15] = {1.0,2.1958e2,2.0984e4,1.1517e6,4.0349e7,9.49e8,1.5345e10,1.7182e11,1.3249e12,6.9071e12,2.3531e13,4.9432e13,5.7760e13,3.0225e13,3.3641e12};
+    static const double pp[15] = {1.0,2.1658e2,2.0336e4,1.0911e6,3.7114e7,8.3963e8,1.2889e10,1.3449e11,9.4002e11,4.2571e12,1.1743e13,1.7549e13,1.0806e13,4.9776e11,0.0};
+    if (!(x > 0.0)) return 0.0;
+    double num=pp[14], den=q[14];
+    for (int i=13;i>=0;--i) { num=pp[i]+x*num; den=q[i]+x*den; }
+    return den != 0.0 ? num/den : 0.0;
+}
+
+std::size_t source_linear_hunt_generic(const double* x, std::size_t n, double v) {
+    if (!x || n < 2) return 0;
+    if (v <= x[0]) return 0;
+    if (v >= x[n-1]) return n-2;
+    const double* it=std::upper_bound(x,x+n,v);
+    std::size_t j=static_cast<std::size_t>(it-x);
+    return j==0?0:std::min(j-1,n-2);
+}
+
+std::vector<double> source_natural_spline_y2_generic(const std::vector<double>& x,const std::vector<double>& y) {
+    const std::size_t n=std::min(x.size(),y.size());
+    std::vector<double> y2(n,0.0),u(n>1?n-1:0,0.0);
+    if(n<3) return y2;
+    for(std::size_t i=1;i+1<n;++i){
+        const double den=x[i+1]-x[i-1]; if(!(den>0.0)) return std::vector<double>(n,0.0);
+        const double sig=(x[i]-x[i-1])/den; const double p=sig*y2[i-1]+2.0;
+        y2[i]=(sig-1.0)/p;
+        const double d1=(y[i+1]-y[i])/std::max(x[i+1]-x[i],1e-300);
+        const double d0=(y[i]-y[i-1])/std::max(x[i]-x[i-1],1e-300);
+        u[i]=(6.0*(d1-d0)/den-sig*u[i-1])/p;
+    }
+    for(std::size_t k=n-1;k-->0;) y2[k]=y2[k]*y2[k+1]+u[k];
+    return y2;
+}
+
+double source_natural_spline_eval_generic(const std::vector<double>& x,const std::vector<double>& y,const std::vector<double>& y2,double v) {
+    const std::size_t n=std::min({x.size(),y.size(),y2.size()}); if(!n) return 0.0; if(n==1) return y[0];
+    if (v <= x[0]) return y[0];
+    if (v >= x[n-1]) return y[n-1];
+    std::size_t lo=0,hi=n-1; while(hi-lo>1){std::size_t m=(lo+hi)/2; if(x[m]>v)hi=m;else lo=m;}
+    const double h=x[hi]-x[lo]; if(!(h>0.0)) return y[lo];
+    const double a=(x[hi]-v)/h,b=(v-x[lo])/h;
+    return a*y[lo]+b*y[hi]+((a*a*a-a)*y2[lo]+(b*b*b-b)*y2[hi])*h*h/6.0;
+}
+
+double source_bt_general_upsilon_generic(int k,double eij_ryd,double c,const double* xg,const double* yg,std::size_t n,double temperature_k) {
+    if(!xg||!yg||n<2||!(eij_ryd>0.0)||!(temperature_k>0.0)) return 0.0;
+    const double kte=temperature_k/eij_ryd/1.57888e5;
+    double xt=0.0;
+    if(k==1||k==4){const double den=std::log(kte+c);if(den==0.0||!(c>0.0))return 0.0;xt=1.0-std::log(c)/den;}
+    else if(k==2||k==3||k==5||k==6) xt=kte/(kte+c); else return 0.0;
+    std::vector<double>x(xg,xg+n),y(yg,yg+n); auto y2=source_natural_spline_y2_generic(x,y); double sups=source_natural_spline_eval_generic(x,y,y2,xt);
+    if(k==1)sups*=std::log(kte+std::exp(1.0)); else if(k==3)sups/=kte+1.0; else if(k==4)sups*=std::log(kte+c); else if(k==5)sups=kte!=0.0?sups/kte:0.0; else if(k==6)sups=std::pow(10.0,sups);
+    return std::max(0.0,sups);
+}
+
+struct SourceLineEscapeGeneric { double ptmp1=0.5; double ptmp2=0.5; };
+SourceLineEscapeGeneric source_line_escape_generic(const Program& program,const ProgramRecord& record,const xstar_fixed_state_input_v1& input){
+    SourceLineEscapeGeneric out;
+    const bool has=(input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_DSEC_COVERING_FRACTION)!=0u;
+    const double cf=std::clamp(has?input.dsec_covering_fraction:input.covering_fraction,0.0,1.0);
+    out.ptmp1=0.5*(1.0-cf);out.ptmp2=0.5*(1.0-cf)+cf;
+    if((input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_LINE_TAU_ACTIVE)!=0u && record.line_index_one_based>0 &&
+       program.runtime_line_tau_in.size()==program.runtime_line_tau_out.size() && static_cast<std::size_t>(record.line_index_one_based)<=program.runtime_line_tau_in.size()){
+        const std::size_t k=static_cast<std::size_t>(record.line_index_one_based-1); const double ti=program.runtime_line_tau_in[k],to=program.runtime_line_tau_out[k];
+        out.ptmp1=pescl_v0472_binary64(ti)*(1.0-cf);
+        out.ptmp2=pescl_v0472_binary64(to)*(1.0-cf)+2.0*pescl_v0472_binary64(ti+to)*cf;
+    }
+    return out;
+}
+
+Type59PhintResultV0648111 source_phintfo_sigma_generic(
+    const std::vector<double>& sigma,double threshold_ev,double swrat,bool zero_reverse,
+    const xstar_fixed_state_input_v1& source_input){
+    Type59PhintResultV0648111 out;
+    const bool use=source_input.dsec_radiation_energy_ev&&source_input.dsec_bremsa&&source_input.dsec_radiation_bin_count>=3;
+    const double* epi=use?source_input.dsec_radiation_energy_ev:source_input.radiation_energy_ev;
+    const double* bremsa=use?source_input.dsec_bremsa:source_input.radiation_flux;
+    const std::size_t n=use?source_input.dsec_radiation_bin_count:source_input.radiation_bin_count;
+    if(!epi||!bremsa||n<3||sigma.size()<n||!(threshold_ev>0.0))return out;
+    const int nb1=type99_nbinc_fortran_value(threshold_ev,epi,n); const int numcon2=std::max(2,static_cast<int>(n/50u));
+    int nphint=std::min(std::max(static_cast<int>(n)-numcon2,nb1+1),static_cast<int>(n)-numcon2);out.nb1_one_based=nb1;out.nphint_one_based=nphint;
+    if(nb1<=0||nb1>=nphint-1||nb1>static_cast<int>(n))return out;
+    const double t4=std::max(source_input.temperature_k/1e4,1e-48),tsq=std::sqrt(t4),bktm=(xstar_constants::kBoltzmannErgPerK*1e4/xstar_constants::kModernErgPerEv)*t4;
+    const double rnist=5.216e-21*swrat/(t4*tsq),ne=std::max(0.0,source_input.electron_density_cm3);
+    double sumr=0,sumh=0,sumh2=0,sumi=0,sumc=0,sumc2=0,tempr=0,tempro=0,tempi=0,tempio=0,atmp2=0,atmp22=0; double ener=epi[nb1-1];
+    for(int kl=nb1;kl<=nphint;++kl){std::size_t k=static_cast<std::size_t>(kl-1);double enero=ener;ener=epi[k];double sg=std::max(0.0,sigma[k]);if(kl==nb1)out.threshold_sigma_cm2=sg;double bt=bremsa[k]/25.3;tempro=tempr;tempr=25.3*sg*bt/std::max(ener,1e-48);double de=ener-enero;sumr+=(tempr+tempro)*de/2;sumh+=(tempr*ener+tempro*enero)*de*xstar_constants::kModernErgPerEv/2;sumh2+=(tempr*(ener-threshold_ev)+tempro*(enero-threshold_ev))*de*xstar_constants::kModernErgPerEv/2;double exptst=std::max(1e-36,(ener-threshold_ev)/std::max(bktm,1e-48));double ex=type53_expo(-exptst),bb=std::pow(std::min(ener,2e4),3.0)*1.571e22;double tempi1=rnist*bb*ex*sg/std::max(ener,1e-48),tempi2=rnist*bt*ex*sg/std::max(ener,1e-48);tempi=tempi1+tempi2;double a2o=atmp2;atmp2=tempi1*ener;double a22o=atmp22;atmp22=tempi1*(ener-threshold_ev);sumi+=(tempi+tempio)*de/2;sumc+=(atmp2+a2o)*de*xstar_constants::kModernErgPerEv/2;sumc2+=(atmp22+a22o)*de*xstar_constants::kModernErgPerEv/2;tempio=tempi;}
+    double a1=sumr,a2=ne*sumi,a3=sumh,a4=ne*sumc,a5=sumh2,a6=ne*sumc2;if(zero_reverse){a2=a4=a6=0.0;}double old5=a5;a5=-a6;a6=-old5;double old3=a3;a3=-a4;a4=-old3;out.ans={{a1,a2,a3,a4,a5,a6}};return out;
+}
+
+std::vector<double> source_gull1_generic(int n,double rs,bool upper){
+    std::vector<double> gu(100,0.0),gl(100,0.0); if(n<1||n>99)return upper?gu:gl; const double dn=n,r=rs,pi=std::acos(-1.0); double f1=std::lgamma(2*n);double g0=.5*std::log(pi/2)+std::log(8*dn)+dn*std::log(4*dn)-f1;
+    if(r==0)gu[n-1]=g0-2*dn;else{double ss=std::sqrt(r);gu[n-1]=g0-2*std::atan(dn*ss)/ss-.5*std::log(std::max(1-std::exp(-2*pi/ss),1e-300));}gu[n-1]=std::exp(gu[n-1]);double fn=1e-300/std::max(gu[n-1],1e-300);gu[n-1]*=fn;
+    if(n==1){gl[0]=0;gu[0]=2*std::log(std::max(gu[0],1e-300))-std::log(4.0)-5*std::log(1+r)-2*std::log(fn);return upper?gu:gl;}
+    gu[n-2]=(2*dn-1)*(1+dn*dn*r)*dn*gu[n-1];gl[n-1]=(1+dn*dn*r)*gu[n-1]/(2*dn);gl[n-2]=(2*dn-1)*(4+(dn-1)*(1+dn*dn*r))*gl[n-1];
+    for(int l=n-1;l>2;--l){double dl=l;gu[l-2]=(4*dn*dn-4*dl*dl+dl*(2*dl-1)*(1+dn*dn*r))*gu[l-1]-4*dn*dn*(dn-dl)*(dn+dl)*(1+(dl+1)*(dl+1)*r)*gu[l];gl[l-2]=(4*dn*dn-4*(dl-1)*(dl-1)+(dl-1)*(2*dl-1)*(1+dn*dn*r))*gl[l-1]-4*dn*dn*(dn-dl)*(dn+dl)*(1+(dl-1)*(dl-1)*r)*gl[l];}
+    gl[0]=0;if(n>=3)gu[0]=(4*dn*dn-16+6*(1+dn*dn*r))*gu[1]-4*dn*dn*(dn-2)*(dn+2)*(1+9*r)*gu[2];double cn=std::log(dn)-dn*std::log(4*dn*dn)-(2*dn+4)*std::log(1+dn*dn*r);gu[0]=cn+std::log(1+r)+2*std::log(std::max(std::abs(gu[0]),1e-300))-2*std::log(fn);double clu=cn+std::log(1+r),cll=cn;for(int l=1;l<n;++l){double dl=l;clu+=std::log(std::max(4*dn*dn*(dn-dl)*(dn+dl)*(1+(dl+1)*(dl+1)*r),1e-300));cll+=std::log(std::max(4*dn*dn*(dn-dl)*(dn+dl)*(1+(dl-1)*(dl-1)*r),1e-300));gu[l]=clu+2*std::log(std::max(std::abs(gu[l]),1e-300))-2*std::log(fn);gl[l]=cll+2*std::log(std::max(std::abs(gl[l]),1e-300))-2*std::log(fn);}return upper?gu:gl;
+}
+
+double source_hphotx_mb_generic(double en,int charge,int nq,int l){
+    en=std::max(en,0.0);charge=std::max(charge,1);nq=std::max(nq,1);l=std::clamp(l,0,nq-1);double rk=std::sqrt(en)/(charge*charge),rs=rk*rk;auto gu=source_gull1_generic(nq,rs,true);auto gl=source_gull1_generic(nq,rs,false);double cons=.54492*std::acos(0.0);double theta1=(1+nq*nq*rs)*std::exp(std::min(700.0,gu[l]));double theta2=l>0?(1+nq*nq*rs)*std::exp(std::min(700.0,gl[l])):0.0;return cons*((l+1)*theta1+l*theta2)/(2*l+1)*nq*nq/(charge*charge);
+}
+
+double source_pexs_sigma_mb_generic(int nmin,double zc,double eion,double far,double gam,double scal,double energy_ryd){
+    constexpr int nmax=30;if(nmin>=nmax||nmin<1)return 0.0;int nres=nmax;std::array<double,31>x{},area{};for(int n=nmin;n<=nmax;++n){x[n]=-(zc/n)*(zc/n);area[n]=8.06725*far*std::pow(static_cast<double>(nmin),3)/std::pow(static_cast<double>(n),3);if(n>nmin&&x[n]-x[n-1]>gam/2)nres=n;}double shifted=energy_ryd-eion,xmin=x[nmin]-30*gam,xres=x[nres];if(shifted<xmin||shifted>=0)return 0.0;double out=0.0;if(shifted<=xres){for(int n=nmin;n<=nmax;++n){out+=area[n]/std::acos(-1.0)*gam/2/(std::pow(shifted-x[n],2)+std::pow(gam/2,2));out+=area[n]/std::acos(-1.0)*gam/2/(std::pow(std::abs(shifted)-x[n],2)+std::pow(gam/2,2));}}else{double sj=xres;for(int n=nmin;n<=nmax;++n){out+=area[n]/std::acos(-1.0)*gam/2/(std::pow(sj-x[n],2)+std::pow(gam/2,2));out+=area[n]/std::acos(-1.0)*gam/2/(std::pow(std::abs(sj)-x[n],2)+std::pow(gam/2,2));}}return std::max(0.0,scal*out);
+}
+
+
+double type99_milne_alpha(const std::vector<double>& energy_ryd,const std::vector<double>& sigma_mb,double threshold_ryd,double temperature_k);
+
+double source_exintn_generic(double x, int n, double e1_in = -1.0) {
+    if (!(x > 0.0) || n < 1 || n > 6) return 0.0;
+    double e1 = e1_in;
+    if (n == 1 || e1 < 0.0) {
+        if (x <= 1.0) {
+            static const double a[10] = {7.122452e-07,1.766345e-06,2.928433e-05,.0002335379,.001664156,.01041576,.05555682,.2500001,.9999999,.57721566490153};
+            e1 = ((((((((a[0]*x-a[1])*x+a[2])*x-a[3])*x+a[4])*x-a[5])*x+a[6])*x-a[7])*x+a[8])*x-std::log(x)-a[9];
+        } else {
+            static const double b[8] = {8.5733287401,18.059016973,8.6347608925,.2677737343,9.5733223454,25.6329561486,21.0996530827,3.9584969228};
+            const double x2=x*x,x3=x2*x,x4=x2*x2;
+            e1=(x4+b[0]*x3+b[1]*x2+b[2]*x+b[3])/(x4+b[4]*x3+b[5]*x2+b[6]*x+b[7])/(x*limited_exp(x));
+        }
+    }
+    if (n==1) return e1;
+    if (n==2) return limited_exp(-x)-x*e1;
+    if (n==3) return (x*x*e1+limited_exp(-x)*(1.0-x))/2.0;
+    if (n==4) return (limited_exp(-x)*(2.0-x+x*x)-x*x*x*e1)/6.0;
+    if (n==5) return (limited_exp(-x)*(6.0-2*x+x*x-x*x*x)+x*x*x*x*e1)/24.0;
+    return (limited_exp(-x)*(24.0-6*x+2*x*x-x*x*x+x*x*x*x)-x*x*x*x*x*e1)/120.0;
+}
+
+double source_interp_hunt_generic(int n,const double* x,const double* y,double value) {
+    if(!x||!y||n<=0) return 0.0;
+    if(n==1||value<=x[0]) return y[0];
+    if(value>=x[n-1]) return y[n-1];
+    const double* it=std::upper_bound(x,x+n,value);int j=std::max(0,std::min(n-2,static_cast<int>(it-x)-1));
+    return y[j]+(y[j+1]-y[j])*(value-x[j])/std::max(x[j+1]-x[j],1e-300);
+}
+
+double source_sampson_p_generic(const double* om,int z,double temp_k) {
+    const double dE=om[0],a=om[1],z2s=om[2],c0=om[3],cr=om[4],cr1=om[5],rr=om[6],s=om[7];
+    const double y=dE/(xstar_constants::kLegacyBoltzmannKevPerK*temp_k),a1=a+1.0,e1=source_exintn_generic(y,1),er=source_exintn_generic(a1*y,static_cast<int>(rr)),er1=source_exintn_generic(a1*y,static_cast<int>(rr+1.0));
+    const double term=cr*er/std::pow(a1,rr-1.0)+cr1*er1/std::pow(a1,rr);const double z2gamma=c0+1.333*z2s*e1*limited_exp(y)+(term>0.0?y*limited_exp(a1*y)*term:0.0);
+    return z2gamma/std::max(std::pow(static_cast<double>(z)-s,2.0),1e-300);
+}
+
+double source_sampson_h_generic(const double* om,int z,double temp_k) {
+    const double dE=om[0],z2s=om[1],a=om[2],c0=om[3],c1=om[4],c2=om[5],csw=om[6];const double y=dE/(xstar_constants::kLegacyBoltzmannKevPerK*temp_k),a1=a+1.0,e1=source_exintn_generic(y,1),er=source_exintn_generic(a1*y,1),er1=source_exintn_generic(a1*y,2,er),term=c1*er+c2*er1/a1;
+    const double val=c0+1.333*z2s*e1*limited_exp(y)+(term>0.0?y*limited_exp(a1*y)*term:0.0);return val*2.0*csw/std::max(static_cast<double>(z*z),1e-300);
+}
+
+double source_sampson_s_generic(const double* om,int z,double temp_k) {
+    const double dE=om[0],a1g=om[1],a1eg=om[2],z2sh=om[3],a2=om[4],c0=om[5],c1=om[6],c2=om[7],a2e=om[8],cere=om[9],cere1=om[10],re=om[11],s=om[12],se=om[13];const double y=dE/(xstar_constants::kLegacyBoltzmannKevPerK*temp_k);
+    double aa=a2+1.0,e1=source_exintn_generic(y,1),er=source_exintn_generic(aa*y,1),er1=source_exintn_generic(aa*y,2,er),term=c1*er+c2*er1/aa;const double z2g=c0+1.333*z2sh*e1*limited_exp(y)+(a1g!=0.0&&term>0.0?y*limited_exp(aa*y)*term:0.0);
+    aa=a2e+1.0;er=source_exintn_generic(aa*y,static_cast<int>(re));er1=source_exintn_generic(aa*y,static_cast<int>(re)+1);term=cere*er/std::pow(aa,re-1.0)+cere1*er1/std::pow(aa,re);const double z2ge=(a1eg!=0.0&&term>0.0)?y*limited_exp(aa*y)*term:0.0;
+    return a1g*z2g/std::max(std::pow(static_cast<double>(z)-s,2.0),1e-300)+a1eg*z2ge/std::max(std::pow(static_cast<double>(z)-se,2.0),1e-300);
+}
+
+double source_kato_generic(int kind,const double* p,int z,double temp_k) {
+    (void)z;const double dE=p[0],A=p[1],B=p[2],C=p[3],D=p[4],E=p[5],P=p[6],Q=p[7],X1=p[8],y=dE/(xstar_constants::kLegacyBoltzmannKevPerK*temp_k);
+    if(kind==1){const double e1=source_exintn_generic(y,1),term1=A/y+C+D/2.0*(1.0-y),term2=B-C*y+D/2.0*y*y+E/y;return y*(term1+limited_exp(y)*e1*term2);}
+    const double e1=source_exintn_generic(X1*y,1),term3=limited_exp(y*(1.0-X1)),term1=A/y+C/X1+D/2.0*(1.0/(X1*X1)-y/X1)+(E/y)*std::log(X1),term2=limited_exp(y*X1)*e1*(B-C*y+D*y*y/2.0+E/y);
+    return y*term3*(term1+term2)+P*((1.0+1.0/y)-term3*(X1+1.0/y))+Q*(1.0-term3);
+}
+
+struct SourceMaxwellGeneric { double exc=0.0,dex=0.0,ups=0.0; };
+SourceMaxwellGeneric source_calc_maxwell_generic(int ct,double min_t,double max_t,const double* tarr,const double* om,double de_kev,double temp_k,int z,double degl,double degu) {
+    SourceMaxwellGeneric out;if(!(de_kev>0.0)||!(temp_k>0.0)||temp_k<min_t||temp_k>max_t||!tarr||!om)return out;
+    const double chi=de_kev/(xstar_constants::kLegacyBoltzmannKevPerK*temp_k),chi_inv=1.0/std::max(chi,1e-300);double ups=0.0,rate=0.0;enum Kind{NONE,EUPS,PUPS,ERATE,PRATE}kind=NONE;
+    if(ct==1){double e2=source_exintn_generic(chi,2);ups=om[0]+om[1]*chi*e2+om[2]*chi*(1-chi*e2)+om[3]*(chi/2)*(1-chi*(1-chi*e2))+om[4]*e2;kind=EUPS;}
+    else if(ct>=11&&ct<=16){std::vector<double>x{0,.25,.5,.75,1},y(om,om+5);double cc=std::max(y[0],1e-300),st=(ct==11||ct==14)?1-std::log(cc)/std::log(chi_inv+cc):chi_inv/(chi_inv+cc);auto y2=source_natural_spline_y2_generic(x,y);ups=source_natural_spline_eval_generic(x,y,y2,st);if(ct==11)ups*=std::log(chi_inv+std::exp(1.0));else if(ct==13)ups/=chi_inv+1;else if(ct==14)ups*=std::log(chi_inv+cc);else if(ct==15)ups/=chi_inv;else if(ct==16)ups=std::pow(10.0,ups);kind=ct==16?PUPS:EUPS;}
+    else if(ct>=21&&ct<=26){int ns=std::max(0,static_cast<int>(om[0]));double cc=std::max(om[1],1e-300);std::vector<double>x=ns==5?std::vector<double>{0,.25,.5,.75,1}:std::vector<double>{0,.125,.25,.375,.5,.675,.8,.925,1};ns=std::min<int>(ns,static_cast<int>(x.size()));std::vector<double>y(om+2,om+2+ns);x.resize(ns);double st=(ct==21||ct==24)?1-std::log(cc)/std::log(chi_inv+cc):chi_inv/(chi_inv+cc);auto y2=source_natural_spline_y2_generic(x,y);ups=source_natural_spline_eval_generic(x,y,y2,st);if(ct==21)ups*=std::log(chi_inv+std::exp(1.0));else if(ct==23)ups/=chi_inv+1;else if(ct==24)ups*=std::log(chi_inv+cc);else if(ct==25)ups/=chi_inv;else if(ct==26)ups=std::pow(10.0,ups);kind=ct==26?PUPS:EUPS;}
+    else if(ct==31){ups=source_sampson_s_generic(om,z,temp_k);kind=EUPS;}else if(ct==32){ups=source_sampson_p_generic(om,z,temp_k);kind=EUPS;}else if(ct==33){ups=source_sampson_h_generic(om,z,temp_k);kind=EUPS;}else if(ct==41){ups=source_kato_generic(1,om,z,temp_k);kind=EUPS;}else if(ct==42){ups=source_kato_generic(2,om,z,temp_k);kind=EUPS;}
+    else if(ct==1001){double logt=std::log10(temp_k);rate=(om[2]<logt&&logt<om[3])?.8*std::pow(10.0,om[0]+om[1]*logt+om[2]*logt*logt):0.0;kind=PRATE;}
+    else {struct R{int base;Kind kind;int bounds;};static const R rr[]={{100,EUPS,0},{150,EUPS,1},{500,EUPS,2},{550,EUPS,3},{200,PUPS,0},{250,PUPS,1},{600,PUPS,2},{650,PUPS,3},{300,ERATE,0},{350,ERATE,1},{700,ERATE,2},{750,ERATE,3},{400,PRATE,0},{450,PRATE,1},{800,PRATE,2},{850,PRATE,3}};bool hit=false;for(const auto&q:rr)if(ct>=q.base&&ct<=q.base+20){int n=ct-q.base;bool allowed=q.bounds==0||(q.bounds==1&&min_t<temp_k&&temp_k<max_t)||(q.bounds==2&&temp_k<max_t)||(q.bounds==3&&temp_k>min_t);double v=allowed?source_interp_hunt_generic(n,tarr,om,temp_k):0.0;if(q.kind==EUPS||q.kind==PUPS)ups=v;else rate=v;kind=q.kind;hit=true;break;}if(!hit)return out;}
+    ups=std::max(0.0,ups);rate=std::max(0.0,rate);out.ups=ups;if(kind==EUPS){if(chi>=200.0)return out;out.exc=8.629e-6*ups*std::exp(-chi)/(std::sqrt(temp_k)*std::max(degl,1e-300));out.dex=8.629e-6*ups/(std::sqrt(temp_k)*std::max(degu,1e-300));}else if(kind==PUPS){out.exc=out.dex=0.0;}else{out.exc=rate;out.dex=rate*limited_exp(chi)*degl/std::max(degu,1e-300);}return out;
+}
+
+double source_quadratic_three_point_generic(double x0,double y0,double x1,double y1,double x2,double y2,double x) {
+    const double d0=(x0-x1)*(x0-x2),d1=(x1-x0)*(x1-x2),d2=(x2-x0)*(x2-x1);if(std::abs(d0)<1e-300||std::abs(d1)<1e-300||std::abs(d2)<1e-300)return y1;
+    return y0*(x-x1)*(x-x2)/d0+y1*(x-x0)*(x-x2)/d1+y2*(x-x0)*(x-x1)/d2;
+}
+
+struct SourceCalt70Generic { bool valid=false; double rec=0.0; std::vector<double> e_ryd; std::vector<double> xs_mb; };
+SourceCalt70Generic source_calt70_generic(const double* r,std::size_t nr,const std::int64_t* ints,std::size_t ni,double temp_k,double density,double threshold_ryd) {
+    SourceCalt70Generic out;if(!r||!ints||ni<3)return out;int nd=static_cast<int>(ints[0]),nt=static_cast<int>(ints[1]),nx=static_cast<int>(ints[2]);if(nd<1||nt<2||nx<1)return out;std::size_t need=static_cast<std::size_t>(nd+nt+nd*nt+2*nx);if(nr<need)return out;
+    const double* dg=r;const double* tg=r+nd;const double* tab=tg+nt;double rne=std::clamp(std::log10(std::max(density,1e-300)),dg[0],dg[nd-1]),rte=std::clamp(std::log10(std::max(temp_k,1e-300)),tg[0],tg[nt-1]);std::vector<double> vals(nd,0.0);for(int i=0;i<nd;++i)vals[i]=source_interp_hunt_generic(nt,tg,tab+i*nt,rte);double logrec=0.0;
+    if(nd>2&&dg[1]<rne&&rne<dg[nd-2]){const double* it=std::upper_bound(dg,dg+nd,rne);int mid=std::max(1,std::min(nd-2,static_cast<int>(it-dg)-1));logrec=source_quadratic_three_point_generic(dg[mid-1],vals[mid-1],dg[mid],vals[mid],dg[mid+1],vals[mid+1],rne);}else logrec=source_interp_hunt_generic(nd,dg,vals.data(),rne);out.rec=std::pow(10.0,logrec);
+    const double* xs0=tab+nd*nt;std::vector<double> e(nx),mb(nx);for(int i=0;i<nx;++i){e[i]=xs0[2*i];mb[i]=xs0[2*i+1];}double alpha=type99_milne_alpha(e,mb,threshold_ryd,temp_k),scale=out.rec/(1e-24+alpha);for(double&v:mb)v=std::clamp(v*scale,0.0,1e6);int end=1;for(int i=0;i<nx;++i)if(mb[i]>mb[0]*1e-6)end=i+1;out.e_ryd.assign(e.begin(),e.begin()+end);out.xs_mb.assign(mb.begin(),mb.begin()+end);out.valid=!out.e_ryd.empty();return out;
 }
 
 double type73_rate(const double* r, std::size_t nr, int z, double temperature_k) {
@@ -7357,6 +7569,117 @@ EvaluatedRecord evaluate_record(
             c.ans6=c.ans1*ee*xstar_constants::kLegacyCollisionErgPerEv;
             break;
         }
+        case XSTAR_FIXED_OPCODE_SOURCE_UCALC_GENERIC: {
+            const int dt=record.data_type;
+            const auto escape=source_line_escape_generic(program,record,input);
+            const double ptmp_sum=escape.ptmp1+escape.ptmp2;
+            auto ion_first_row=[&]()->const ElementRow&{for(const auto& rw:element.rows)if(rw.ion==record.ion_index)return rw;return row_at(element,1);};
+            auto ion_terminal_row=[&]()->const ElementRow&{const ElementRow* found=nullptr;for(const auto& rw:element.rows)if(rw.ion==record.ion_index)found=&rw;return found?*found:row_at(element,element.n_rows);};
+            const ElementRow& first=ion_first_row(); const ElementRow& terminal=ion_terminal_row();
+            const double cf_ne=std::max(0.0,ne);
+            auto collision_commit=[&](double ups,double de,const ElementRow& lo,const ElementRow& up){
+                ups=std::max(0.0,ups);const double ex=limited_exp(-de/std::max(kt_ev,1e-48));const double qd=8.626e-8*ups/std::max(sqrt_t4*up.statistical_weight,1e-48);const double qe=qd*up.statistical_weight*ex/std::max(lo.statistical_weight,1e-48);c.ans1=qe*cf_ne;c.ans2=qd*cf_ne;c.ans5=c.ans2*de*kErgPerEv;c.ans6=c.ans1*de*kErgPerEv;
+            };
+            auto source_grid=[&](){const bool d=calc_hmc_input.dsec_radiation_energy_ev&&calc_hmc_input.dsec_bremsa&&calc_hmc_input.dsec_radiation_bin_count>=3;return std::tuple<const double*,const double*,std::size_t>{d?calc_hmc_input.dsec_radiation_energy_ev:calc_hmc_input.radiation_energy_ev,d?calc_hmc_input.dsec_bremsa:calc_hmc_input.radiation_flux,d?calc_hmc_input.dsec_radiation_bin_count:calc_hmc_input.radiation_bin_count};};
+            auto commit_phint=[&](const std::vector<double>& sigma,double threshold,double sw,bool zero_reverse){auto ph=source_phintfo_sigma_generic(sigma,threshold,sw,zero_reverse,calc_hmc_input);c.ans1=ph.ans[0];c.ans2=ph.ans[1];c.ans3=ph.ans[2];c.ans4=ph.ans[3];c.ans5=ph.ans[4];c.ans6=ph.ans[5];out.opakab=ph.threshold_sigma_cm2;out.spectral=record.continuum_index_one_based>0;out.bound_free_spectral=out.spectral;out.continuum_index_one_based=record.continuum_index_one_based;out.line_energy_ev=threshold;};
+            switch(dt){
+                case 3:{if(!r||record.real_count<2)throw std::runtime_error("type3 payload");c.ans1=r[0]*limited_exp(-r[1]/std::max(0.861707*t4,1e-48))/sqrt_t4*cf_ne;break;}
+                case 4:{if(!r||record.real_count<5)throw std::runtime_error("type4 payload");double wav=std::abs(r[0]),f=r[1],mass=r[4],gu=lower.statistical_weight,gl=upper.statistical_weight;if(wav>0&&gu>0&&gl>0){double aij=6.67e7*gl*f/gu/std::pow(wav*1e-4,2);if(f<=1.01e-12||wav>=1e9)aij=1e5;c.ans1=aij*ptmp_sum;double v=std::sqrt(std::pow(input.turbulent_velocity_km_s*1e5,2)+std::pow(1.29e6/std::sqrt(std::max(mass/t4,1e-48)),2));out.opakab=.02655*f*wav*1e-8/std::max(v,1e-48);if(wav>.99e9)out.opakab=0;c.ans4=c.ans1*(12398.4016/wav)*kErgPerEv;out.spectral=record.line_index_one_based>0;out.line_energy_ev=12398.4016/wav;}break;}
+                case 5:{if(!r||record.real_count<6)throw std::runtime_error("type5 payload");double de=std::abs(upper.energy_ev-lower.energy_ev),base=8.629e-8*r[4]*std::pow(t4,r[5]);c.ans2=base/std::max(lower.statistical_weight,1e-48);c.ans1=base*limited_exp(-de/std::max(0.861707*t4,1e-48))/std::max(upper.statistical_weight,1e-48);break;}
+                case 6:case 26:case 32: break;
+                case 8:{if(!r||record.real_count<8)throw std::runtime_error("type8 payload");double rate=0;for(int k=0;k<4;++k)rate+=r[k]*limited_exp(-r[k+4]/std::max(0.861707*t4,1e-48));c.ans1=rate*1e-6*std::pow(t4,-1.5)*cf_ne;break;}
+                case 11:{if(!r||record.real_count<4)throw std::runtime_error("type11 payload");double de=std::abs(upper.energy_ev-lower.energy_ev);c.ans1=6.669e15*r[1]*r[2]/std::max(r[3]*r[0]*r[0],1e-300);c.ans4=c.ans1*de*kErgPerEv;break;}
+                case 16:{if(!r||record.real_count%5)throw std::runtime_error("type16 payload");double ekt=0.861707*t4,cs=0,cs2=0;for(std::size_t k=0;k<record.real_count;k+=5){double x=r[k]/std::max(ekt,1e-48);if(!(x>0))continue;double em1=source_ee1expo_generic(x),f1=em1/x,f2=source_ff2_generic(x);double fi=std::max(0.0,r[k+1]*(1-x*f1)+r[k+2]*(1+x-x*(2+x)*f1)+r[k+3]*f1+r[k+4]*x*f2);cs+=fi*limited_exp(-x)/x;cs2+=fi/x;}c.ans1=cs*6.69e-7/std::pow(std::max(ekt,1e-48),1.5)*cf_ne;double rinf=2.08e-22*first.statistical_weight/std::max(terminal.statistical_weight,1e-48)/std::max(t4*sqrt_t4,1e-48);c.ans2=cs2*6.69e-7/std::pow(std::max(ekt,1e-48),1.5)*cf_ne*rinf*cf_ne;break;}
+                case 17:{if(!r||record.real_count<2)throw std::runtime_error("type17 payload");double de=std::abs(upper.energy_ev-lower.energy_ev);c.ans2=8.629e-8*r[0]*std::pow(t4,r[1])/std::max(upper.statistical_weight,1e-48);c.ans1=(0.861707*t4>de/20.0)?c.ans2*upper.statistical_weight/std::max(lower.statistical_weight,1e-48):0.0;break;}
+                case 18:{if(!r||record.real_count<4)throw std::runtime_error("type18 payload");double alg=std::clamp(std::log10(t4/std::max(r[3],1e-48))+4.0,3.5,7.5);c.ans1=std::pow(10.0,r[0]+r[1]*std::pow(alg-r[2],2))/t4/1e4*cf_ne;break;}
+                case 20:{if(!r||record.real_count<5)throw std::runtime_error("type20 payload");double rate=r[0]*std::pow(t4,r[1])*(1+r[2]*limited_exp(r[3]*t4))*limited_exp(-r[4]/std::max(t4,1e-48))*1e-9;c.ans1=rate*input.ionized_h_density_cm3;break;}
+                case 21:{if(!r||record.real_count<3)throw std::runtime_error("type21 payload");double alpha=t4<1?r[1]:r[2];c.ans1=r[0]*std::pow(t4,alpha)*input.ionized_h_density_cm3;break;}
+                case 22:{if(!r||record.real_count<5)throw std::runtime_error("type22 payload");if(t4<=6){double rate=1e-12*(r[0]/t4+r[1]+t4*(r[2]+t4*r[3]))*std::pow(t4,-1.5)*limited_exp(-r[4]/t4);c.ans1=std::max(0.0,rate)*cf_ne;}break;}
+                case 25:{if(!r||record.real_count<5)throw std::runtime_error("type25 payload");double e=r[0],chir=input.temperature_k/(11590.0*std::max(e,1e-48));if(chir>.0115){double chi=std::max(chir,.1),ch2=chi*chi,ch3=ch2*chi;double alpha=(.001193+.9764*chi+.6604*ch2+.02590*ch3)/(1+1.488*chi+.2972*ch2+.004925*ch3);double beta=(-.0005725+.01345*chi+.8691*ch2+.03404*ch3)/(1+2.197*chi+.2457*ch2+.002503*ch3);double ch=1/chi,fchi=.3*ch*(r[1]+r[2]*(1+ch)+(r[3]-(r[1]+r[2]*(2+ch))*ch)*alpha+r[4]*beta*ch);double cion=2.2e-6*std::sqrt(chir)*fchi/(e*std::sqrt(e));double raw=cion*cf_ne,rinf=2.08e-22*lower.statistical_weight/std::max(terminal.statistical_weight,1e-48)/std::max(t4*sqrt_t4,1e-48);c.ans2=raw*rinf*cf_ne;c.ans1=raw*limited_exp(-1/chir);c.ans5=c.ans2*e*kErgPerEv;c.ans6=c.ans1*e*kErgPerEv;}break;}
+                case 28:{if(!r||record.real_count<5)throw std::runtime_error("type28 payload");std::size_t idx=4;if(record.real_count>=12){std::size_t j=source_linear_hunt_generic(r+record.real_count-4,4,t4);idx=record.real_count-8+j-1;idx=std::min(idx,record.real_count-1);}double ups=r[idx],wav=std::abs(r[0]);if(wav>1e-24){double ex=limited_exp(-(12398.4016/wav)/std::max(0.861707*t4,1e-48));double cji=8.626e-8*ups/sqrt_t4/std::max(upper.statistical_weight,1e-48);double cij=cji*upper.statistical_weight*ex/sqrt_t4/std::max(lower.statistical_weight,1e-48);c.ans1=cij*cf_ne;c.ans2=cji*cf_ne;}break;}
+                case 31:{if(!r||record.real_count<2)throw std::runtime_error("type31 payload");double wav=std::abs(r[0]),f=r[1];if(wav>0){double aij=.02655*f*8*std::acos(-1.0)/std::pow(wav*1e-8,2)*lower.statistical_weight/std::max(upper.statistical_weight,1e-24);double decay=aij*ptmp_sum,v=std::sqrt(std::pow(input.turbulent_velocity_km_s*1e5,2)+std::pow(1.29e6/std::sqrt(std::max(record.atomic_mass_amu/t4,1e-48)),2));double sig=.02655*f*wav*1e-8/std::max(v,1e-48),energy=12398.4016/wav;auto [epi,brem,n]=source_grid();double pump=0;if(epi&&brem&&n){int nb=type99_nbinc_fortran_value(energy,epi,n);if(nb>0&&nb<=static_cast<int>(n))pump=sig*brem[nb-1]*v/3e10;}if(wav>.99e9){pump=0;sig=0;}decay+=pump*lower.statistical_weight/std::max(upper.statistical_weight,1e-48);c.ans1=decay;c.ans2=0;c.ans3=pump*energy*kErgPerEv;c.ans4=decay*energy*kErgPerEv;out.opakab=sig;out.spectral=record.line_index_one_based>0;out.line_energy_ev=energy;}break;}
+                case 33:{if(!r||record.real_count<4)throw std::runtime_error("type33 payload");double wav=std::abs(r[0]);if(wav>1e-24)collision_commit(r[3],12398.4016/wav,lower,upper);break;}
+                case 34:{if(!r||record.real_count<5)throw std::runtime_error("type34 payload");double wav=std::abs(r[0]),aij=r[1],mass=r[4],gu=lower.statistical_weight,gl=upper.statistical_weight;if(wav>0&&gu>0&&gl>0){double f=aij*std::pow(wav*1e-8,2)*gu/(.667274*gl);c.ans1=aij*ptmp_sum;double v=std::sqrt(std::pow(input.turbulent_velocity_km_s*1e5,2)+std::pow(1.29e6/std::sqrt(std::max(mass/t4,1e-48)),2));out.opakab=.02655*f*wav*1e-8/std::max(v,1e-48);if(wav>.99e9)out.opakab=0;c.ans4=c.ans1*(12398.4016/wav)*kErgPerEv;out.spectral=record.line_index_one_based>0;out.line_energy_ev=12398.4016/wav;}break;}
+                case 37:{if(!r)throw std::runtime_error("type37 payload");int nn=ints&&record.int_count?static_cast<int>(ints[0]):std::min<int>(4,record.real_count/2);double rate=0;for(int k=0;k<std::min({nn,4,static_cast<int>(record.real_count)-4});++k)rate+=r[k]*limited_exp(-r[k+4]/std::max(0.861707*t4,1e-48));c.ans1=rate*1e-6*std::pow(t4,-1.5)*cf_ne;break;}
+                case 65:{if(!r||!ints||record.int_count<1)throw std::runtime_error("type65 payload");double eth=std::abs(terminal.energy_ev-lower.energy_ev);int ion_nlev=0;for(const auto& rw:element.rows)if(rw.ion==record.ion_index)++ion_nlev;double ci=type57_szirc(static_cast<int>(ints[0]),input.temperature_k,r[0],static_cast<double>(ion_nlev+1));c.ans1=ci*cf_ne;double rinf=2.08e-22*first.statistical_weight/std::max(terminal.statistical_weight,1e-48)/std::max(t4*sqrt_t4,1e-48);c.ans2=c.ans1*rinf*limited_exp(eth/std::max(0.861707*t4,1e-48));c.ans5=c.ans2*eth*kErgPerEv;c.ans6=c.ans1*eth*kErgPerEv;break;}
+                case 67:{if(!r||record.real_count<3)throw std::runtime_error("type67 payload");double wav=delta_ev>0?12398.4016/delta_ev:0,tused=wav>0?std::max(input.temperature_k,2.8777e6/wav):input.temperature_k,tp=std::log10(std::max(tused,1e-300)),ups=std::max(0.0,r[0]+r[1]*tp+r[2]*tp*tp);collision_commit(ups,delta_ev,lower,upper);break;}
+                case 75:{if(!r||record.real_count<2)throw std::runtime_error("type75 payload");double rate=3.3e-11*std::pow(13.6/std::max(0.861707*t4,1e-48),1.5)*limited_exp(-r[1]/std::max(0.861707*t4,1e-48))*(r[0]/1e13)*(record.real_count>=3?r[2]:1.0);c.ans2=rate*cf_ne;break;}
+                case 79:{if(!r||record.real_count<5)throw std::runtime_error("type79 payload");double wav=std::abs(r[0]),f=r[1],mass=r[4],gu=lower.statistical_weight,gl=upper.statistical_weight;if(wav>0){double aij=6.67e7*gl*f/std::max(gu,1e-48)/std::pow(wav*1e-4,2);if(f<=1.01e-12||wav>=1e9)aij=1e5;double v=std::sqrt(std::pow(input.turbulent_velocity_km_s*1e5,2)+std::pow(1.29e6/std::sqrt(std::max(mass/t4,1e-48)),2));out.opakab=.02655*f*wav*1e-8/std::max(v,1e-48);c.ans1=aij*ptmp_sum;c.ans4=c.ans1*12398.4016/wav*kErgPerEv;out.spectral=record.line_index_one_based>0;out.line_energy_ev=12398.4016/wav;}break;}
+                case 81:{if(!r||record.real_count<1)throw std::runtime_error("type81 payload");collision_commit(r[0],delta_ev,lower,upper);break;}
+                case 82:{if(!r||record.real_count<4)throw std::runtime_error("type82 payload");double wav=std::abs(r[0]),f=r[2],aij=r[3],v=std::sqrt(std::pow(input.turbulent_velocity_km_s*1e5,2)+std::pow(1.29e6/std::sqrt(std::max(record.atomic_mass_amu/t4,1e-48)),2));double sig=.02655*f*wav*1e-8/std::max(v,1e-48),energy=12398.4016/std::max(wav,1e-48);auto [epi,brem,n]=source_grid();double pump=0;if(epi&&brem&&n){int nb=type99_nbinc_fortran_value(energy,epi,n);if(nb>0&&nb<=static_cast<int>(n))pump=sig*brem[nb-1]*v/3e10;}double decay=aij*ptmp_sum;c.ans1=pump;c.ans2=decay;c.ans3=pump*energy*kErgPerEv;out.opakab=sig;out.spectral=record.line_index_one_based>0;out.line_energy_ev=energy;break;}
+                case 89:{if(!r||record.real_count<3)throw std::runtime_error("type89 payload");double wav=std::abs(r[0]),aij=r[2],gu=lower.statistical_weight,gl=upper.statistical_weight,f=1e-16*aij*gu*wav*wav/(.667274*std::max(gl,1e-48)),v=std::sqrt(std::pow(input.turbulent_velocity_km_s*1e5,2)+std::pow(1.29e6/std::sqrt(std::max(record.atomic_mass_amu/t4,1e-48)),2));out.opakab=.02655*f*wav*1e-8/std::max(v,1e-48);if(wav>.99e9)out.opakab=0;double energy=12398.4016/std::max(wav,1e-48);c.ans1=aij*ptmp_sum;c.ans4=c.ans1*energy*kErgPerEv;out.spectral=record.line_index_one_based>0;out.line_energy_ev=energy;break;}
+                case 96:{if(!r||record.real_count<3)throw std::runtime_error("type96 payload");double rate=2.069e-3/std::pow(input.temperature_k,1.5)*limited_exp(-r[2]/std::max(0.861707*t4,1e-48))*r[1];c.ans2=rate*cf_ne;break;}
+                case 97:{if(!r||record.real_count<4)throw std::runtime_error("type97 payload");std::size_t ns=record.real_count/2;if(ns<2)break;double ekt=.861707*t4;std::size_t j=source_linear_hunt_generic(r,ns,ekt);double ups=r[ns+j]+(r[ns+j+1]-r[ns+j])*(ekt-r[j])/std::max(r[j+1]-r[j],1e-24);double th=delta_ev,gl=lower.statistical_weight,gu=upper.statistical_weight,cji=8.626e-8*ups/sqrt_t4/std::max(gu,1e-48),ex=limited_exp(-th/std::max(ekt,1e-48)),cij=cji*gu*ex/std::max(gl,1e-48);c.ans1=cij*cf_ne;double rinf=2.08e-22*gl/std::max(gu,1e-48)/std::max(t4*sqrt_t4,1e-48);c.ans2=c.ans1*rinf*cf_ne/std::max(ex,1e-300);c.ans5=c.ans2*th*kErgPerEv;c.ans6=c.ans1*th*kErgPerEv;break;}
+                case 98:{if(!r||!ints||record.real_count<5||record.int_count<2)throw std::runtime_error("type98 payload");std::size_t n=(record.real_count-3)/2;int k=static_cast<int>(ints[record.int_count-2]);double ups=source_bt_general_upsilon_generic(k,r[0],r[2],r+3,r+3+n,n,input.temperature_k);collision_commit(ups,delta_ev,lower,upper);break;}
+                case 101:{if(!r||record.real_count<2)throw std::runtime_error("type101 payload");std::size_t nt=record.real_count/2;double ups=0;if(nt==1)ups=r[1];else{double lt=std::log10(input.temperature_k);std::size_t j=source_linear_hunt_generic(r,nt,lt);ups=r[nt+j]+(r[nt+j+1]-r[nt+j])*(lt-r[j])/std::max(r[j+1]-r[j],1e-24);}collision_commit(std::max(0.0,ups),delta_ev,lower,upper);break;}
+                case 102:{if(!r||!ints||record.real_count<7||record.int_count<4)throw std::runtime_error("type102 payload");int itype=static_cast<int>(ints[0]);if(itype<1||itype>8)break;static const int ind[8][9]={{1,2,3,4,0,0,0,5,0},{1,2,3,4,0,0,0,0,0},{0,0,1,2,3,0,0,0,4},{1,2,3,4,0,0,0,5,6},{1,2,3,4,0,0,0,0,5},{0,0,1,2,3,4,0,0,5},{0,0,0,1,2,3,4,0,5},{6,0,1,2,3,4,0,0,5}};double par[9]={};for(int j=0;j<9;++j)if(ind[itype-1][j])par[j]=r[ind[itype-1][j]];double eij=1000*r[0],x=eij/std::max(.861707*t4,1e-48),xr=x*(1+par[8]),en[6];en[0]=source_ee1expo_generic(xr);for(int n=1;n<6;++n)en[n]=(1-xr*en[n-1])/n;double omc=par[0]+xr*(par[1]*en[0]+par[2]*en[1]+2*par[3]*en[2]+6*par[4]*en[3]+24*par[5]*en[4]+120*par[6]*en[5])+par[7]*en[0];int nr=std::min(std::max(static_cast<int>(ints[1]),0),4);double omr=0;std::size_t start=11;for(int q=0;q<nr&&start+nr+q<record.real_count;++q)omr+=r[start+nr+q]*(r[start+q]*x)*limited_exp(-r[start+q]*x);collision_commit(omc+omr,eij,lower,upper);break;}
+
+                // Source phintfo families.  The sigma is built on the exact
+                // calc_hmc epim grid, then the common source integration is
+                // applied with the Python/FORTRAN statistical-weight rule.
+                case 12: case 36: case 55: case 19: case 23: case 27: case 35: case 15: case 64: case 85: {
+                    auto [epi,brem,n]=source_grid();(void)brem;if(!epi||n<3)throw std::runtime_error("generic bound-free requires live source grid");std::vector<double> sigma(n,0.0);double threshold=delta_ev,sw=1.0;bool zero_reverse=false;
+                    if(dt==19){threshold=r[4];sw=lower.statistical_weight/std::max(upper.statistical_weight,1e-48);for(std::size_t k=0;k<n;++k)if(epi[k]>=threshold){double z=std::log(epi[k]/std::max(threshold,1e-48));double alp=r[0]+z*(r[1]+z*(z*r[2]+z*r[3]));sigma[k]=1e-18*limited_exp(alp)*13.606/std::max(threshold,1e-48);}}
+                    else if(dt==23){threshold=std::max(lower.energy_ev,0.0);double z=std::max(static_cast<double>(element.element_z),1.0),nn=ints&&record.int_count?std::max<double>(ints[0],1.0):1.0,sg0=6.3e-18*nn/(z*z);sw=lower.statistical_weight/std::max(upper.statistical_weight,1e-48);for(std::size_t k=0;k<n;++k)if(epi[k]>=threshold&&threshold>0)sigma[k]=sg0*std::pow(epi[k]/threshold,-3);}
+                    else if(dt==27){threshold=std::abs(terminal.energy_ev-first.energy_ev);double z=std::max(r[0],1e-48);sw=first.statistical_weight;zero_reverse=record.rate_type==1;for(std::size_t k=0;k<n;++k)if(epi[k]>=threshold&&threshold>0){double zap=epi[k]/threshold-1,y=epi[k]/threshold,yy=std::max(std::sqrt(std::max(zap,0.0)),1e-4);sigma[k]=6.3e-18/(z*z)*std::pow(y,-4)*limited_exp(4-4*std::atan(yy)/yy)/(1-limited_exp(-6.2832/yy));}}
+                    else if(dt==35){threshold=r[0];std::size_t np=(record.real_count-1)/2;std::vector<double>xs(np),ys(np);for(std::size_t q=0;q<np;++q){ys[q]=r[1+2*q];xs[q]=r[2+2*q];}sw=first.statistical_weight/std::max(terminal.statistical_weight,1e-48);for(std::size_t k=0;k<n;++k)if(epi[k]>=threshold&&np){double ef=(epi[k]-threshold)/13.605692;if(ef<=xs.front())sigma[k]=ys.front();else if(ef>=xs.back())sigma[k]=ys.back();else{auto it=std::upper_bound(xs.begin(),xs.end(),ef);std::size_t j=static_cast<std::size_t>(it-xs.begin()-1);sigma[k]=ys[j]+(ys[j+1]-ys[j])*(ef-xs[j])/(xs[j+1]-xs[j]);}}}
+                    else if(dt==36||dt==12||dt==55){threshold=std::abs(upper.energy_ev-lower.energy_ev);double z=(dt==55)?static_cast<double>(element.element_z-record.ion_stage):static_cast<double>(element.element_z-record.ion_stage+1);z=std::max(z,1.0);double nq=(dt==55)?1.0:std::min<double>(10.0,ints&&record.int_count?ints[0]:1.0),sg0=6.3e-18*nq*nq/(z*z);sw=lower.statistical_weight/std::max(upper.statistical_weight,1e-48);for(std::size_t k=0;k<n;++k)if(epi[k]>=threshold&&threshold>0)sigma[k]=sg0*std::pow(epi[k]/threshold,-3);}
+                    else if(dt==15){int na=ints&&record.int_count>=5?std::max<int>(1,ints[record.int_count-5]):1;std::vector<double>bs;std::vector<std::array<double,11>>co;double d=0;threshold=0;for(int sh=0;sh<na;++sh){std::size_t off=15u*sh;if(off+13>=record.real_count)break;threshold=r[off];d=r[off+1];bs.push_back(r[off+2]);std::array<double,11>a{};for(int q=0;q<11;++q)a[q]=r[off+3+q];co.push_back(a);}sw=first.statistical_weight/std::max(terminal.statistical_weight,1e-48);for(std::size_t k=0;k<n;++k)if(epi[k]>=threshold&&!bs.empty()){double xx=epi[k]*1e-3-d;if(xx>0){std::size_t j=0;while(j+1<bs.size()&&xx>=bs[j])++j;double yy=std::log10(std::max(xx,1e-300)),tmp=0;for(int q=10;q>=0;--q)tmp=co[j][q]+yy*tmp;tmp=std::clamp(tmp,-50.0,24.0);sigma[k]=std::pow(10.0,tmp-24.0);}}}
+                    else if(dt==64){threshold=std::abs(upper.energy_ev-lower.energy_ev);int nq=ints&&record.int_count?std::max<int>(ints[0],1):1,l=ints&&record.int_count>1?std::max<int>(ints[1],0):0,charge=ints&&record.int_count>2?std::max<int>(ints[2],1):1;std::vector<double>er(n),smb(n);for(std::size_t k=0;k<n;++k){er[k]=std::max((epi[k]-threshold)/13.605692,0.0);smb[k]=source_hphotx_mb_generic(er[k],charge,nq,l);sigma[k]=smb[k]*1e-18;}sw=lower.statistical_weight;commit_phint(sigma,threshold,sw,false);c.ans2=type99_milne_alpha(er,smb,threshold/13.6,input.temperature_k)*sw;break;}
+                    else if(dt==85){int nmin=ints&&record.int_count?static_cast<int>(ints[0]):1,id3=ints&&record.int_count?static_cast<int>(ints[record.int_count-1]):114;double zc=id3-114,eion=r[1],far=r[2],gam=r[3],scal=r[4];threshold=eion*13.605692*.8;sw=1;for(std::size_t k=0;k<n;++k)sigma[k]=source_pexs_sigma_mb_generic(nmin,zc,eion,far,gam,scal,epi[k]/13.605692)*1e-18;auto ph=source_phintfo_sigma_generic(sigma,threshold,sw,false,calc_hmc_input);c.ans1=ph.ans[0];c.ans4=-ph.ans[2];c.ans6=-ph.ans[4];out.opakab=0;out.spectral=record.continuum_index_one_based>0;out.bound_free_spectral=out.spectral;out.continuum_index_one_based=record.continuum_index_one_based;out.line_energy_ev=threshold;break;}
+                    if (dt != 64 && dt != 85) {
+                        commit_phint(sigma, threshold, sw, zero_reverse);
+                    }
+                    break;
+                }
+                case 70:{
+                    if(!r||!ints||record.int_count<5)throw std::runtime_error("type70 payload");
+                    double threshold=delta_ev;double density=input.hydrogen_density_cm3;if(record.ion_index==1)density=std::min(density,1e8);
+                    auto cal=source_calt70_generic(r,record.real_count,ints,record.int_count,input.temperature_k,density,threshold/13.6);if(!cal.valid)break;
+                    std::vector<double> payload;payload.reserve(2*cal.e_ryd.size());for(std::size_t q=0;q<cal.e_ryd.size();++q){payload.push_back(cal.e_ryd[q]);payload.push_back(cal.xs_mb[q]*1e-18);}
+                    xstar_element_contribution_v1 ph{};Type53SourceShadow sh{};bool ok=evaluate_type53_source_integral(payload.data(),payload.size(),lower,upper,calc_hmc_input,threshold,1.0,nullptr,nullptr,static_cast<int>(record.record),false,false,ph,&sh,nullptr);
+                    if (!ok || !(ph.ans2 > 1e-48)) break;
+                    const double scale = cal.rec * cf_ne / ph.ans2;
+                    c.ans1 = ph.ans1 * scale;
+                    c.ans2 = cal.rec * cf_ne;
+                    c.ans3 = ph.ans3;
+                    c.ans4 = ph.ans4 * scale;
+                    c.ans5 = ph.ans5;
+                    c.ans6 = ph.ans6 * scale;
+                    out.type53_shadow = sh;
+                    out.generic_bound_free_offset_ryd_v0648120 = cal.e_ryd;
+                    out.generic_bound_free_sigma_cm2_v0648120.resize(cal.xs_mb.size());
+                    for (std::size_t q = 0; q < cal.xs_mb.size(); ++q) {
+                        out.generic_bound_free_sigma_cm2_v0648120[q] = cal.xs_mb[q] * 1e-18;
+                    }
+                    out.spectral = record.continuum_index_one_based > 0;
+                    out.bound_free_spectral = out.spectral;
+                    out.continuum_index_one_based = record.continuum_index_one_based;
+                    out.line_energy_ev = threshold;
+                    break;
+                }
+                case 92:{
+                    if (!r || !ints || record.real_count < 42 || record.int_count < 3) {
+                        throw std::runtime_error("type92 payload");
+                    }
+                    const int ct = static_cast<int>(ints[2]);
+                    const double de = std::abs(upper.energy_ev - lower.energy_ev);
+                    const auto mx = source_calc_maxwell_generic(
+                        ct, r[0], r[1], r + 2, r + 22, de / 1000.0,
+                        input.temperature_k, element.element_z,
+                        lower.statistical_weight, upper.statistical_weight);
+                    c.ans1 = mx.exc * cf_ne;
+                    c.ans2 = mx.dex * cf_ne;
+                    c.ans5 = c.ans2 * de * kErgPerEv;
+                    c.ans6 = c.ans1 * de * kErgPerEv;
+                    out.type56_upsilon = mx.ups;
+                    break;
+                }
+                default: throw std::runtime_error("v0.6.48.12.1 missing generic evaluator for data type "+std::to_string(dt));
+            }
+            out.matrix_enabled=record.matrix_enabled;
+            break;
+        }
         case XSTAR_FIXED_OPCODE_TYPE74_DELTA_RESONANCE: {
             if (!r || record.real_count < 3 || (record.real_count - 1) % 2 != 0) throw std::runtime_error("invalid type74 payload");
             const bool has_dsec_radiation = input.dsec_radiation_energy_ev && input.dsec_bremsa && input.dsec_radiation_bin_count >= 3;
@@ -8664,6 +8987,12 @@ struct NativeBoundFreeCurve {
     double type59_y0 = 0.0;
     double type59_y1 = 0.0;
     int type59_l2 = 0;
+    // v0.6.48.12.1 source-generic phintfo/calt70 families.
+    int generic_data_type = 0;
+    int generic_element_z = 0;
+    int generic_ion_stage = 0;
+    std::vector<double> generic_reals;
+    std::vector<std::int64_t> generic_ints;
 };
 
 double type59_curve_sigma_cm2(const NativeBoundFreeCurve& curve, double energy_ev) {
@@ -8922,6 +9251,25 @@ bool native_bound_free_curve(const Program& program,
         }
         return curve.threshold_ev > 0.0 && scale > 0.0;
     }
+    if (record.opcode == XSTAR_FIXED_OPCODE_SOURCE_UCALC_GENERIC && evaluated.bound_free_spectral) {
+        curve.threshold_ev = evaluated.line_energy_ev;
+        curve.generic_data_type = record.data_type;
+        if (record.element_index >= 0 && static_cast<std::size_t>(record.element_index) < program.elements.size())
+            curve.generic_element_z = program.elements[static_cast<std::size_t>(record.element_index)].element_z;
+        curve.generic_ion_stage = record.ion_stage;
+        curve.generic_reals.assign(r, r + record.real_count);
+        if (record.int_offset + record.int_count <= program.ints.size()) {
+            const auto* ii = program.ints.data() + record.int_offset;
+            curve.generic_ints.assign(ii, ii + record.int_count);
+        }
+        if (record.data_type == 70 &&
+            evaluated.generic_bound_free_offset_ryd_v0648120.size() >= 2u &&
+            evaluated.generic_bound_free_offset_ryd_v0648120.size() == evaluated.generic_bound_free_sigma_cm2_v0648120.size()) {
+            curve.offset_ryd = evaluated.generic_bound_free_offset_ryd_v0648120;
+            curve.sigma_cm2 = evaluated.generic_bound_free_sigma_cm2_v0648120;
+        }
+        return curve.threshold_ev > 0.0;
+    }
     return false;
 }
 
@@ -9151,6 +9499,21 @@ double effective_spectral_covering_fraction_v82_patch58(
         0.0, 1.0);
 }
 
+
+double source_generic_bound_free_sigma_cm2_v0648120(const NativeBoundFreeCurve& curve,double energy_ev) {
+    const int dt=curve.generic_data_type;const auto& r=curve.generic_reals;const auto& ii=curve.generic_ints;const double th=curve.threshold_ev;
+    if(!(energy_ev>=th)||!(th>0.0))return 0.0;
+    if(dt==19&&r.size()>=5){double z=std::log(energy_ev/std::max(th,1e-48));double alp=r[0]+z*(r[1]+z*(z*r[2]+z*r[3]));return std::max(0.0,1e-18*limited_exp(alp)*13.606/std::max(th,1e-48));}
+    if(dt==23){double nn=!ii.empty()?std::max<double>(ii[0],1.0):1.0,z=std::max<double>(curve.generic_element_z,1.0);return 6.3e-18*nn/(z*z)*std::pow(energy_ev/th,-3.0);}
+    if(dt==27&&!r.empty()){double z=std::max(r[0],1e-48),zap=energy_ev/th-1.0,y=energy_ev/th,yy=std::max(std::sqrt(std::max(zap,0.0)),1e-4);return std::max(0.0,6.3e-18/(z*z)*std::pow(y,-4.0)*limited_exp(4.0-4.0*std::atan(yy)/yy)/(1.0-limited_exp(-6.2832/yy)));}
+    if(dt==35&&r.size()>=5){std::size_t np=(r.size()-1)/2;if(!np)return 0.0;double ef=(energy_ev-th)/13.605692;const double* ys=r.data()+1;std::vector<double> xs(np),sig(np);for(std::size_t q=0;q<np;++q){sig[q]=ys[2*q];xs[q]=ys[2*q+1];}if(ef<=xs.front())return std::max(0.0,sig.front());if(ef>=xs.back())return std::max(0.0,sig.back());auto it=std::upper_bound(xs.begin(),xs.end(),ef);std::size_t j=static_cast<std::size_t>(it-xs.begin()-1);return std::max(0.0,sig[j]+(sig[j+1]-sig[j])*(ef-xs[j])/(xs[j+1]-xs[j]));}
+    if(dt==12||dt==36||dt==55){double z=dt==55?static_cast<double>(curve.generic_element_z-curve.generic_ion_stage):static_cast<double>(curve.generic_element_z-curve.generic_ion_stage+1);z=std::max(z,1.0);double nq=dt==55?1.0:std::min<double>(10.0,!ii.empty()?ii[0]:1.0);return 6.3e-18*nq*nq/(z*z)*std::pow(energy_ev/th,-3.0);}
+    if(dt==15&&r.size()>=14&&ii.size()>=5){int na=std::max<int>(1,static_cast<int>(ii[ii.size()-5]));std::vector<double>b;std::vector<std::array<double,11>>co;double d=0.0,ett=0.0;for(int sh=0;sh<na;++sh){std::size_t off=15u*static_cast<std::size_t>(sh);if(off+13u>=r.size())break;ett=r[off];d=r[off+1];b.push_back(r[off+2]);std::array<double,11>a{};for(int q=0;q<11;++q)a[q]=r[off+3+q];co.push_back(a);}if(b.empty()||energy_ev<ett)return 0.0;double xx=energy_ev*1e-3-d;if(!(xx>0.0))return 0.0;std::size_t j=0;while(j+1<b.size()&&xx>=b[j])++j;double yy=std::log10(std::max(xx,1e-300)),tmp=0.0;for(int q=10;q>=0;--q)tmp=co[j][q]+yy*tmp;return std::pow(10.0,std::clamp(tmp,-50.0,24.0)-24.0);}
+    if(dt==64&&ii.size()>=3){int nq=std::max<int>(static_cast<int>(ii[0]),1),l=std::max<int>(static_cast<int>(ii[1]),0),charge=std::max<int>(static_cast<int>(ii[2]),1);double er=std::max((energy_ev-th)/13.605692,0.0);return source_hphotx_mb_generic(er,charge,nq,l)*1e-18;}
+    if(dt==85&&r.size()>=5&&!ii.empty()){int nmin=static_cast<int>(ii[0]),id3=ii.empty()?114:static_cast<int>(ii.back());double zc=id3-114;return source_pexs_sigma_mb_generic(nmin,zc,r[1],r[2],r[3],r[4],energy_ev/13.605692)*1e-18;}
+    return 0.0;
+}
+
 void accumulate_native_bound_free_surface(const NativeBoundFreeCurve& curve,
                                           const EvaluatedRecord& evaluated,
                                           const ProgramRecord& record,
@@ -9173,6 +9536,7 @@ void accumulate_native_bound_free_surface(const NativeBoundFreeCurve& curve,
         record.opcode == XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE;
     const bool type59 = record.opcode == XSTAR_FIXED_OPCODE_TYPE59_VERNER_BOUND_FREE;
     const bool type99 = record.opcode == XSTAR_FIXED_OPCODE_TYPE99_SUPERLEVEL_BOUND_FREE;
+    const bool source_generic = record.opcode == XSTAR_FIXED_OPCODE_SOURCE_UCALC_GENERIC && curve.generic_data_type != 0;
     const Type53SourceShadow* shadow = nullptr;
     if (record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE) shadow = &evaluated.type49_shadow;
     else if (record.opcode == XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE) shadow = &evaluated.type53_shadow;
@@ -9214,6 +9578,21 @@ void accumulate_native_bound_free_surface(const NativeBoundFreeCurve& curve,
                 rccemis[n + static_cast<std::size_t>(kl)] += common * ptmp2;
             }
         }
+        return;
+    }
+
+    if (source_generic && curve.generic_data_type == 70 && curve.offset_ryd.size() >= 2u) {
+        const auto mapped = phint53_grid_map_v82_patch57(curve,input.radiation_energy_ev,static_cast<int>(n));if(!mapped.valid)return;if(phint53_records_mapped)++*phint53_records_mapped;
+        for(int kl=mapped.nb1_zero_based;kl<mapped.klmax_zero_based&&kl<static_cast<int>(n);++kl){double sg=std::max(0.0,mapped.sgbar[static_cast<std::size_t>(kl)]);if(sg>0.0&&lower_abundance>0.0&&density>0.0){opacity_cm1[static_cast<std::size_t>(kl)]+=lower_abundance*density*sg;if(phint53_bins_accumulated)++*phint53_bins_accumulated;}}
+        // Type70 uses phint53 for scalar detailed balance.  Its source caller
+        // does not share the Type49/53 public RRC owner path here; retain the
+        // exact opacity surface and leave rccemis ownership to source writers.
+        return;
+    }
+    if (source_generic) {
+        const int nb1=type99_nbinc_fortran_value(curve.threshold_ev,input.radiation_energy_ev,n);const int numcon2=std::max(2,static_cast<int>(n/50u));const int nphint=std::max(static_cast<int>(n)-numcon2,nb1+1);
+        for(int kl=nb1;kl<=nphint&&kl<=static_cast<int>(n);++kl){std::size_t k=static_cast<std::size_t>(kl-1);double sigma=source_generic_bound_free_sigma_cm2_v0648120(curve,input.radiation_energy_ev[k]);if(sigma>0.0&&lower_abundance>0.0&&density>0.0){opacity_cm1[k]+=lower_abundance*density*sigma;if(phint53_bins_accumulated)++*phint53_bins_accumulated;}}
+        if (phint53_records_mapped) ++*phint53_records_mapped;
         return;
     }
 
@@ -9491,6 +9870,7 @@ int run_impl(
     ctx.last_element_diagnostics.clear();
     ctx.last_element_thermal_budget.clear();
     ctx.last_computed_element_thermal_budget.clear();
+    ctx.last_element_electron_contribution.clear();
     ctx.last_helium_type53_budget = {{0.0,0.0,0.0,0.0}};
     ctx.last_computed_helium_type53_budget = {{0.0,0.0,0.0,0.0}};
     ctx.last_helium_non_type53_budget = {{0.0,0.0,0.0,0.0}};
@@ -10629,6 +11009,7 @@ int run_impl(
         // Keep this computed electron fraction distinct from elcter, which is
         // the DSEC charge residual trial_xee - computed_xee.
         double explicit_stage_sum = 0.0;
+        double element_electron_contribution_v0648121 = 0.0;
         for (int ion_slot = 0; ion_slot < active.element.n_ions; ++ion_slot) {
             const double fraction =
                 buffers.ion_population_final[static_cast<std::size_t>(ion_slot)];
@@ -10642,6 +11023,9 @@ int run_impl(
             volatile double source_charge = static_cast<double>(stage - 1);
             volatile double weighted_fraction = fraction * source_charge;
             volatile double source_term = weighted_fraction * element.abundance;
+            // Diagnostic accumulator is deliberately separate from the production
+            // ENELEC source-order accumulator so it cannot perturb controller bits.
+            element_electron_contribution_v0648121 += static_cast<double>(source_term);
             volatile double next_electron_fraction =
                 computed_electron_fraction + source_term;
             computed_electron_fraction = next_electron_fraction;
@@ -10654,9 +11038,12 @@ int run_impl(
             fully_stripped_fraction * fully_stripped_charge;
         volatile double fully_stripped_source_term =
             fully_stripped_weighted_fraction * element.abundance;
+        element_electron_contribution_v0648121 += static_cast<double>(fully_stripped_source_term);
         volatile double next_electron_fraction =
             computed_electron_fraction + fully_stripped_source_term;
         computed_electron_fraction = next_electron_fraction;
+        ctx.last_element_electron_contribution[element.element_z] =
+            element_electron_contribution_v0648121;
 
         NativeElementDiagnostic element_diagnostic;
         element_diagnostic.committed_contributions = contributions;
@@ -14257,6 +14644,49 @@ int xstar_fixed_state_get_last_element_product_diagnostics_v1(
     }
     copy_text(message, message_size, "native element product diagnostics returned");
     return 0;
+}
+
+int xstar_fixed_state_write_last_element_fixed_state_v0648121(
+    const xstar_fixed_state_context* context,
+    const char* output_csv,
+    uint64_t sequence,
+    uint64_t call_index,
+    uint64_t evaluation_index,
+    const char* kind,
+    char* message,
+    size_t message_size
+) {
+    if (!context || !output_csv || !*output_csv || sequence == 0 || call_index == 0 || evaluation_index == 0) {
+        copy_text(message, message_size, "context, output_csv, and positive indices are required");
+        return 1;
+    }
+    try {
+        const std::filesystem::path path(output_csv);
+        if (path.has_parent_path()) std::filesystem::create_directories(path.parent_path());
+        const bool write_header = !std::filesystem::exists(path) || std::filesystem::file_size(path) == 0;
+        std::ofstream out(path, std::ios::app);
+        if (!out) throw std::runtime_error("cannot create all-element fixed-state ledger");
+        if (write_header) {
+            out << "sequence,kind,call_index,evaluation_index,temperature_k,electron_fraction_input,element_z,heating,cooling,heating2,cooling2,electron_contribution\n";
+        }
+        for (const auto& item : context->last_element_thermal_budget) {
+            const int z = item.first;
+            const auto& thermal = item.second;
+            const auto charge_it = context->last_element_electron_contribution.find(z);
+            const double electron = charge_it == context->last_element_electron_contribution.end() ? 0.0 : charge_it->second;
+            out << std::setprecision(17)
+                << sequence << ',' << (kind && *kind ? kind : "dsec") << ','
+                << call_index << ',' << evaluation_index << ','
+                << context->last_temperature_k << ',' << context->last_electron_fraction_input << ','
+                << z << ',' << thermal[0] << ',' << thermal[1] << ',' << thermal[2] << ',' << thermal[3] << ','
+                << electron << '\n';
+        }
+        copy_text(message, message_size, "all-element fixed-state ledger written");
+        return 0;
+    } catch (const std::exception& exc) {
+        copy_text(message, message_size, exc.what());
+        return 8;
+    }
 }
 
 int xstar_fixed_state_write_last_thermal_budget_v1(

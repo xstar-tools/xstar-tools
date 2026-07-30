@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 0.6.48.12.1 — all-element C++ coverage completion and fixed-state parity instrumentation - 2026-07-30
+
+- Phase 12.0-A is released as 0.6.48.12.1; planned phases B/C are 0.6.48.12.2 and 0.6.48.12.3.
+- Extend the existing production native ATDB lowerer from 32 qualified physical UCalc data types to all 78 physical source types without redirecting the existing H/He/Mg-qualified opcode paths.
+- Reuse the proven Type59 and Type50 implementations for source aliases Type52 and Type91; route the other 44 formerly unsupported physical labels through additive source-generic opcode 200.
+- Add generic evaluation for the missing analytic, bound-free, bound-bound, ionization/recombination, charge-transfer and collision families, including Type70 rescaled bound-free state and the Type92 collision dispatcher.
+- Reconstruct full-grid bound-free spectral opacity for newly admitted continuum-producing records so all-element support is not matrix-only.
+- Add a machine-verifiable 102-label coverage audit and installed-ATDB Z=1..30 inventory; unsupported active physical records are a phase-A failure.
+- Add diagnostic-only source-order per-element fixed-state ledgers in pure Python and the production C++ fixed-state context, plus a call-1/eval-1 comparator. Numerical mismatches are diagnostic in 12.1 and become strict in 12.2.
+- Keep production-zone ABI 6048110 and fixed-state engine ABI 60488; advance the lowered fixed-state program ABI to 60486. Keep accepted 11.9.3 Python publication writer bit-exact.
+- Do not enter `cpp-all` in this phase.
+
 ## 0.6.48.11.9.7 — cpp-zone source-entry, radial-xi, and option-17 correction - 2026-07-30
 
 - Correct the generic persistent `cpp-zone` `calc_hmc_all` hydrogen entry state to the literal FORTRAN/Python contract `xh0=xpx*xilevg(1)*abel(1)`, `xh1=xpx*(1-xilevg(1))*abel(1)`. The initial dense `xilevg` state is zero; the rejected 11.9.6 native fallback instead seeded a fully neutral gas and selected the wrong high-temperature thermal root.

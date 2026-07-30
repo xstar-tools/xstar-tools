@@ -14,8 +14,8 @@
 extern "C" {
 #endif
 
-#define XSTAR_FIXED_STATE_ENGINE_ABI_VERSION 60487u
-#define XSTAR_FIXED_STATE_PROGRAM_ABI_VERSION 60485u
+#define XSTAR_FIXED_STATE_ENGINE_ABI_VERSION 60488u
+#define XSTAR_FIXED_STATE_PROGRAM_ABI_VERSION 60486u
 #define XSTAR_FIXED_STATE_MESSAGE_SIZE 1024u
 #define XSTAR_FIXED_STATE_ID_SIZE 128u
 
@@ -52,7 +52,11 @@ typedef enum xstar_fixed_opcode_v1 {
     XSTAR_FIXED_OPCODE_TYPE86_AUGER = 86,
     XSTAR_FIXED_OPCODE_TYPE88_SUPERLEVEL_BOUND_FREE = 88,
     XSTAR_FIXED_OPCODE_TYPE95_SPLINE_IONIZATION = 95,
-    XSTAR_FIXED_OPCODE_TYPE99_SUPERLEVEL_BOUND_FREE = 99
+    XSTAR_FIXED_OPCODE_TYPE99_SUPERLEVEL_BOUND_FREE = 99,
+    /* v0.6.48.12.1: source-faithful generic dispatcher for physical UCalc
+     * labels that were not part of the original H/He/Mg native opcode set.
+     * Existing opcodes 1..99 retain their qualified semantics unchanged. */
+    XSTAR_FIXED_OPCODE_SOURCE_UCALC_GENERIC = 200
 } xstar_fixed_opcode_v1;
 
 typedef enum xstar_fixed_state_status_flags_v1 {
@@ -660,6 +664,19 @@ XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_get_last_element_product_diagnost
     size_t* count,
     char* message,
     size_t message_size);
+
+/* v0.6.48.12.1 diagnostic-only per-element fixed-state ledger.  This is an
+ * additive export and does not change the frozen production-zone ABI. */
+XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_write_last_element_fixed_state_v0648121(
+    const xstar_fixed_state_context* context,
+    const char* output_csv,
+    uint64_t sequence,
+    uint64_t call_index,
+    uint64_t evaluation_index,
+    const char* kind,
+    char* message,
+    size_t message_size
+);
 
 XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_write_last_thermal_budget_v1(
     const xstar_fixed_state_context* context,

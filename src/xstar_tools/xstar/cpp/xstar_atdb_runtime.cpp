@@ -19,15 +19,24 @@
 namespace xstar_atdb_runtime {
 namespace {
 
-constexpr int kProgramAbi = 60485;
+constexpr int kProgramAbi = 60486;
 constexpr int kType49PhextrapMaxPoints = 999;
 constexpr int kType53LayoutMagic = 221;
 constexpr int kType49LayoutMagic = 222;
 constexpr int kType99LayoutMagic = 223;
 constexpr double kEvAngstrom = 12398.419843320026;
 
-const std::set<int> kActiveTypes = {
+const std::set<int> kLegacyActiveTypes = {
     1,2,7,9,10,30,38,39,49,50,51,53,54,56,57,59,60,62,63,66,68,69,71,72,73,74,76,77,86,88,95,99
+};
+
+/* All physical labels executed by SourceFaithfulUCalc.  The 24 omitted labels
+ * are literal source metadata/no-op branches and must not become native rate
+ * records.  This set is intentionally element-independent. */
+const std::set<int> kActiveTypes = {
+    1,2,3,4,5,6,7,8,9,10,11,12,15,16,17,18,19,20,21,22,23,25,26,27,28,30,31,32,33,34,35,36,37,38,39,
+    49,50,51,52,53,54,55,56,57,59,60,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,79,81,82,85,86,
+    88,89,91,92,95,96,97,98,99,101,102
 };
 
 const std::array<double,31> kAtomicMass = {{
@@ -704,7 +713,7 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
     else if (dt==10) { need(rr.size()>=4 && !ii.empty(),"short payload"); int id1=ii[0]; lower=row_for_source_endpoint(l,b,id1); upper=row_for_local(l,ion,b.nlev); out.reals=rr; out.ints={id1}; energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
     else if (dt==30) { need(!ii.empty(),"missing nmax"); out.reals.clear(); out.ints={ii[0]}; matrix=false; }
     else if (dt==38 || dt==39) { need((dt==38&&rr.size()>=4)||(dt==39&&rr.size()>=2),"short payload"); out.ints.clear(); matrix=false; }
-    else if (dt==50) {
+    else if (dt==50 || dt==91) {
         need(ii.size()>=2 && rr.size()>=3,"short payload"); int id1=ii[0],id2=ii[1]; int r1=row_for_local(l,ion,id1),r2=row_for_local(l,ion,id2);
         const auto* s1=find_snapshot(l,ion,id1); const auto* s2=find_snapshot(l,ion,id2); double e1=s1?s1->energy:row_energy(l,r1),e2=s2?s2->energy:row_energy(l,r2);
         if (b.element_z==12 && b.ion_stage<=4) { e1=row_energy(l,r1); e2=row_energy(l,r2); }
@@ -720,7 +729,7 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
     else if (dt==51 || dt==56 || dt==69) { need(ii.size()>=2,"short integer payload"); int a=0,c=0; if(dt==51){need(ii.size()>=3,"short integer payload");a=ii[2];c=ii[1];out.ints={ii[0]};}else{a=ii[0];c=ii[1];out.ints.clear();} auto q=local_pair(l,ion,a,c);lower=q.first;upper=q.second;energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
     else if (dt==54) { need(ii.size()>=4,"short integer payload"); int a=ii[ii.size()-4],c=ii[ii.size()-3],iq=ii[ii.size()-2];auto q=local_pair(l,ion,a,c);lower=q.first;upper=q.second;int ni=row_n(l,upper),nf=row_n(l,lower),li=row_l(l,upper),lf=row_l(l,lower);need(ni>0&&nf>0&&li>=0&&lf>=0&&iq>0,"missing quantum numbers");if(ni<nf)std::swap(ni,nf);out.reals.clear();out.ints={ni,nf,li,lf,iq};energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
     else if (dt==57) { need(ii.size()>=2,"short integer payload"); int i57=ii[0],local=ii[ii.size()-2],parent_local=b.nlev;lower=row_for_local(l,ion,local);upper=row_for_local(l,ion,parent_local);const auto* lv=find_level(l,ion,local);const auto* pv=find_level(l,ion,parent_local);need(lv&&pv,"lacks literal Type-13 levels");int pn=lv->principal_n?lv->principal_n:(row_n(l,lower)?row_n(l,lower):i57);double eth=std::max(pv->energy-lv->energy,0.0);out.reals={lv->energy,eth,lv->weight,pv->weight};out.ints={i57,pn,local};energy=eth; }
-    else if (dt==59) {
+    else if (dt==59 || dt==52) {
         need(ii.size()>=4 && rr.size()>=6,"short payload");
         const int id3=ii[ii.size()-1];
         const int id4=ii[ii.size()-3];
@@ -757,6 +766,72 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
         int candidate_mask=0;if(b.element_z==12){for(int candidate_stage=1;candidate_stage<=12;++candidate_stage){auto bi=std::find_if(l.blocks.begin(),l.blocks.end(),[&](const Block& x){return x.ion_stage==candidate_stage;});const LevelValue* cv=bi==l.blocks.end()?nullptr:find_level(l,bi->ion_index,id2);out.reals.push_back(cv?cv->energy:0.0);if(cv)candidate_mask|=1<<(candidate_stage-1);}}
         int ci=d.npconi2[rec];need(ci>0,"has no canonical continuum index");out.ints={ci};if(dt==49)out.ints.push_back(kType49PhextrapMaxPoints);if(b.element_z==12){out.ints.push_back(id2);out.ints.push_back(candidate_mask);out.ints.push_back(dt==49?kType49LayoutMagic:kType53LayoutMagic);}energy=corrected;
     }
+    else if (!kLegacyActiveTypes.count(dt) && dt != 52 && dt != 91) {
+        // v0.6.48.12.1: source-generic lowering for physical UCalc labels that
+        // were unreachable in the original H/He/Mg native program.  Preserve
+        // source idest1/idest2 direction here; the element engine inserts
+        // ans1/ans2 using these exact compact endpoints.
+        auto set_pair = [&](int id1, int id2, bool enabled=true) {
+            if (!enabled || id1 <= 0 || id2 <= 0) { lower=upper=0; matrix=false; return; }
+            lower=row_for_idest(l,b,id1); upper=row_for_idest(l,b,id2);
+            energy=std::abs(row_energy(l,upper)-row_energy(l,lower));
+        };
+        auto energy_order_pair = [&](int a, int c) {
+            int ra=row_for_idest(l,b,a), rc=row_for_idest(l,b,c);
+            if (row_energy(l,ra) <= row_energy(l,rc)) set_pair(a,c); else set_pair(c,a);
+        };
+        auto upper_lower_pair = [&](int a, int c) {
+            int ra=row_for_idest(l,b,a), rc=row_for_idest(l,b,c);
+            if (row_energy(l,ra) >= row_energy(l,rc)) set_pair(a,c); else set_pair(c,a);
+        };
+        switch (dt) {
+            case 3: set_pair(1,1); break;
+            case 4: need(ii.size()>=2&&rr.size()>=5,"short payload"); upper_lower_pair(ii[0],ii[1]); break;
+            case 5: need(ii.size()>=2&&rr.size()>=6,"short payload"); set_pair(ii[1],ii[0]); break;
+            case 6: need(ii.size()>=2,"short integer payload"); set_pair(ii[ii.size()-2],0,false); break;
+            case 8: need(rr.size()>=8,"short payload"); set_pair(1,0,false); break;
+            case 11: need(ii.size()>=2&&rr.size()>=4,"short payload"); set_pair(ii[1],ii[0]); break;
+            case 12: // exact source alias to Type 36
+            case 36: { need(ii.size()>=2,"short integer payload"); set_pair(ii[ii.size()-2],b.nlev); break; }
+            case 15: { need(ii.size()>=5&&rr.size()>=14,"short payload"); set_pair(ii[ii.size()-2],ii[ii.size()-3]-ii[ii.size()-1]); break; }
+            case 16: set_pair(1,rt==5?b.nlev:1); break;
+            case 17: need(ii.size()>=2&&rr.size()>=2,"short payload"); energy_order_pair(ii[0],ii[1]); break;
+            case 18: need(!ii.empty()&&rr.size()>=4,"short payload"); set_pair(ii[0],0,false); break;
+            case 19: need(!ii.empty()&&rr.size()>=5,"short payload"); set_pair(ii[0],b.nlev); energy=rr[4]; break;
+            case 20: need(rr.size()>=5,"short payload"); set_pair(1,b.nlev); break;
+            case 21: need(rr.size()>=3,"short payload"); set_pair(1,0,false); break;
+            case 22: need(rr.size()>=5,"short payload"); set_pair(1,0,false); break;
+            case 23: { need(!ii.empty(),"missing level index"); int id1=ii.size()>=2?ii[ii.size()-2]:ii[0]; set_pair(id1,b.nlev); break; }
+            case 25: { need(rr.size()>=5,"short payload"); int id1=(rt==5&&ii.size()>=2)?ii[ii.size()-2]:1; set_pair(id1,rt==5?b.nlev:1); energy=rr[0]; break; }
+            case 26: lower=upper=0; matrix=false; break;
+            case 27: set_pair(1,rt==1?0:b.nlev,rt!=1); if(rt==1){lower=upper=0;matrix=false;} break;
+            case 28: need(ii.size()>=2&&rr.size()>=5,"short payload"); energy_order_pair(ii[0],ii[1]); break;
+            case 31: need(ii.size()>=2&&rr.size()>=2,"short payload"); set_pair(ii[1],ii[0]); break;
+            case 32: need(!ii.empty(),"missing level index"); set_pair(ii[0],0,false); break;
+            case 33: need(ii.size()>=2&&rr.size()>=4,"short payload"); set_pair(ii[0],ii[1]); break;
+            case 34: need(ii.size()>=2&&rr.size()>=5,"short payload"); upper_lower_pair(ii[0],ii[1]); break;
+            case 35: { need(ii.size()>=3&&rr.size()>=5,"short payload"); int id1=ii.size()>5?ii[5]:ii[ii.size()-2]; int id2=(ii.size()>4?ii[4]:b.nlev)-(ii.size()>6?ii[6]:0); set_pair(id1,id2); energy=rr[0]; break; }
+            case 37: set_pair(1,0,false); break;
+            case 55: { need(ii.size()>=2,"short integer payload"); set_pair(ii[ii.size()-2],b.nlev); break; }
+            case 64: { need(ii.size()>=3,"short integer payload"); set_pair(ii[ii.size()-2],b.nlev); break; }
+            case 65: { need(ii.size()>=2&&!rr.empty(),"short payload"); set_pair(ii[ii.size()-2],b.nlev); break; }
+            case 67: need(ii.size()>=2&&rr.size()>=3,"short payload"); energy_order_pair(ii[0],ii[1]); break;
+            case 70: { need(ii.size()>=5,"short integer payload"); int id1=std::min<int>(ii[ii.size()-2],std::max(b.nlev-1,1)); int id2=std::max<int>(b.nlev+ii[ii.size()-3]-1,b.nlev); set_pair(id1,id2); break; }
+            case 75: { need(ii.size()>=3&&rr.size()>=2,"short payload"); int id1=std::max<int>(ii[ii.size()-3],1); int id2=std::max<int>(ii[ii.size()-2]+b.nlev-1,1); set_pair(id1,id2); break; }
+            case 79: need(ii.size()>=2&&rr.size()>=5,"short payload"); upper_lower_pair(ii[0],ii[1]); break;
+            case 81: need(ii.size()>=2&&!rr.empty(),"short payload"); energy_order_pair(ii[0],ii[1]); break;
+            case 82: need(ii.size()>=2&&rr.size()>=4,"short payload"); upper_lower_pair(ii[0],ii[1]); break;
+            case 85: { need(ii.size()>=3&&rr.size()>=5,"short payload"); set_pair(ii[ii.size()-2],1); break; }
+            case 89: need(ii.size()>=2&&rr.size()>=3,"short payload"); upper_lower_pair(ii[0],ii[1]); break;
+            case 92: need(ii.size()>=3&&rr.size()>=42,"short payload"); set_pair(ii[0],ii[1]); break;
+            case 96: { need(ii.size()>=3&&rr.size()>=3,"short payload"); int id1=std::max<int>(ii[ii.size()-3],1); int id2=std::max<int>(ii[ii.size()-2]+b.nlev-1,1); set_pair(id1,id2); energy=rr[2]; break; }
+            case 97: { need(rr.size()>=4,"short payload"); int id1=1,id2=1; if(rt==5){id1=!ii.empty()?ii[0]:1; id2=b.nlev-1+(ii.size()>=3?ii[1]:1);} set_pair(id1,id2); break; }
+            case 98: need(ii.size()>=2&&rr.size()>=5,"short payload"); energy_order_pair(ii[0],ii[1]); break;
+            case 101: need(ii.size()>=2&&rr.size()>=2,"short payload"); energy_order_pair(ii[0],ii[1]); break;
+            case 102: need(ii.size()>=4&&rr.size()>=7,"short payload"); energy_order_pair(ii[2],ii[3]); energy=1000.0*rr[0]; break;
+            default: throw std::runtime_error("missing all-element lowerer for active data type "+std::to_string(dt));
+        }
+    }
     else if (dt==76) { need(ii.size()>=2&&!rr.empty(),"short payload");auto q=local_pair(l,ion,ii[0],ii[1]);lower=q.first;upper=q.second;out.reals={std::max(rr[0],0.0)};out.ints.clear();energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
     else if (dt==71 || dt==77) { need(ii.size()>=4,"short integer payload");lower=row_for_local(l,ion,ii[ii.size()-4]);upper=row_for_local(l,ion,ii[ii.size()-3]);energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
     else if (dt==72) { need(ii.size()>=4&&rr.size()>=2,"short payload");auto q=local_pair(l,ion,ii[ii.size()-4],ii[ii.size()-3]);lower=q.first;upper=q.second;out.ints={row_for_local(l,ion,1),row_for_local(l,ion,b.nlev)};energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
@@ -790,7 +865,7 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
         energy=threshold;
     }
     out.record.source_position=0; out.record.record=rec; out.record.next_index=-1; out.record.element_index=element_index;
-    out.record.opcode=dt; out.record.data_type=dt; out.record.rate_type=rt; out.record.ion_index=b.ion_counter; out.record.ion_stage=stage;
+    out.record.opcode=(dt==91?XSTAR_FIXED_OPCODE_TYPE50_RADIATIVE_LINE:(dt==52?XSTAR_FIXED_OPCODE_TYPE59_VERNER_BOUND_FREE:(kLegacyActiveTypes.count(dt)?dt:XSTAR_FIXED_OPCODE_SOURCE_UCALC_GENERIC))); out.record.data_type=dt; out.record.rate_type=rt; out.record.ion_index=b.ion_counter; out.record.ion_stage=stage;
     out.record.lower_row=lower; out.record.upper_row=upper; out.record.density_scale=1.0; out.record.line_energy_ev=energy;
     out.record.atomic_mass_amu=mass_for_z(b.element_z); out.record.natural_width_ev=width;
     out.record.line_index_one_based=d.nplini[rec]; out.record.continuum_index_one_based=d.npconi2[rec]; out.record.matrix_enabled=matrix?1u:0u;
