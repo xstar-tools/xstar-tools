@@ -9570,6 +9570,12 @@ void retain_controller_owned_product_workspaces_v63(
     const double pressure = json_number_value(json, "pressure", 0.0);
     const double column = json_number_value(json, "column", 0.0);
     const double rlogxi = json_number_value(json, "rlogxi", 0.0);
+    const bool generic_all_element_publication_v0648123 = std::any_of(
+        whole.element_metadata.begin(), whole.element_metadata.end(),
+        [](const xstar_run_state::ElementMetadataState& e) {
+            return e.abundance > 0.0 && e.atomic_number != 1 && e.atomic_number != 2 &&
+                   e.atomic_number != 6 && e.atomic_number != 12;
+        });
     const double radius0 = json_number_value(json, "initial_radius_cm",
         json_number_value(json, "radius", 1.778279410038923e17));
     const double total_depth = density > 0.0 && column > 0.0 ? column / density : 0.0;
@@ -9654,8 +9660,28 @@ void retain_controller_owned_product_workspaces_v63(
         zone.delta_radius_cm = source_rdel[i];
         zone.density_cm3 = density;
         zone.pressure_dyn_cm2 = pressure;
-        zone.log_ionization_parameter = rlogxi;
-        zone.ionization_parameter = rlogxi;
+        // v0.6.48.12.3: retain_controller_owned_product_workspaces_v63 used
+        // to overwrite the live radial xi with the input rlogxi.  That made
+        // xout_abund1 and pprint option 17 publish 2.00 even at the outer
+        // 1.1e21-cm boundary where source XSTAR/Python recompute ~1.92.
+        // Recompute from the retained live radius using the source default-REAL
+        // 1.e-19 constant, exactly as the production append-zone path does.
+        if (generic_all_element_publication_v0648123) {
+            const double r19_v0648123 = zone.radius_cm *
+                static_cast<double>(static_cast<float>(1.0e-19));
+            const double live_xi_v0648123 = (r19_v0648123 > 0.0 && zone.density_cm3 > 0.0)
+                ? json_number_value(json, "rlrad38", 0.0) /
+                  (r19_v0648123 * r19_v0648123 * zone.density_cm3)
+                : 0.0;
+            zone.ionization_parameter = live_xi_v0648123;
+            zone.log_ionization_parameter = live_xi_v0648123 > 0.0
+                ? std::log10(live_xi_v0648123)
+                : -std::numeric_limits<double>::infinity();
+        } else {
+            // Frozen H/He/C/Mg-only compatibility surface.
+            zone.log_ionization_parameter = rlogxi;
+            zone.ionization_parameter = rlogxi;
+        }
         zone.column_density_cm2 = density * std::max(source_rdel[i], 0.0);
         zone.temperature_t4 = zone.accepted_controller.evaluation.temperature_t4;
         zone.electron_fraction = zone.accepted_controller.evaluation.computed_electron_fraction;
@@ -9737,7 +9763,8 @@ void retain_controller_owned_product_workspaces_v63(
         row.row_index = i + 1u;
         row.radius_cm = zone.radius_cm;
         row.delta_radius_cm = source_rdel[i];
-        row.log_ionization_parameter = rlogxi;
+        row.log_ionization_parameter = generic_all_element_publication_v0648123
+            ? zone.log_ionization_parameter : rlogxi;
         row.electron_fraction = zone.electron_fraction;
         row.density_cm3 = density;
         row.pressure_dyn_cm2 = pressure;

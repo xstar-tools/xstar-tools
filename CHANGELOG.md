@@ -1,5 +1,15 @@
 # CHANGELOG
 
+# 0.6.48.12.3 — generic bound-free source promotion and Ca zone/product qualification - 2026-07-30
+
+- Promote the already-computed source-faithful Type49/Type53 `phint53`/Milne results for all non-frozen generic elements while preserving the qualified H/He/C/Mg compatibility paths exactly.
+- Require lowered continuum context and live optical-depth workspaces for generic Type53 instead of silently retaining the old approximate bound-free rates.
+- The 12.2.1.1 Ca attribution proved the causal failure: C++ selected preliminary Ca stages 19–20 while Python selected 9–20; replaying the same C++ records with the existing Type49/53 source shadows selected 9–20. Type53 committed photoionization rates were in some cases 1e4–3e5 above their source-faithful shadows.
+- Correct the retained product/radial publication layer so it no longer overwrites live radial ionization parameter with input `rlogxi`; recompute `xi=L/(n r^2)` using source default-REAL `1.e-19` semantics and publish the live `log(xi)` into abundance rows. This targets the known outer-row `2.00 -> 1.92` option-17 error without changing the controller.
+- Add a blocking Ca 12.3 qualification runner. It requires call-1/eval-1 Ca fixed-state parity first, then exact zone/DSEC topology, exact option-17 display, and all nine detailed/public FITS against the accepted 11.9.5 C++-science/Python-zone reference.
+- Keep broader smoke gated behind a successful Ca marker. Do not enter `cpp-all` in 12.3 until Ca cpp-zone science and products pass.
+- Preserve production-zone ABI 6048110 and the accepted 11.9.3 Python output writer bit-exactly. No empirical scaling and no Ca-specific physics branch are introduced.
+
 # 0.6.48.12.2.1.1 - 2026-07-30
 
 - Diagnostic-runner hotfix for the Ca call-1/eval-1 attribution workflow.

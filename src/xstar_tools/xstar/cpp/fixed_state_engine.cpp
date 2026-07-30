@@ -6110,6 +6110,17 @@ EvaluatedRecord evaluate_record(
             // the C VI/terminal populations.  No line, STEP, solver, or
             // matrix-specific scale factor is introduced here.
             const bool carbon_source_faithful = element.element_z == 6;
+            // v0.6.48.12.3: H/He/C/Mg retain their already-qualified
+            // compatibility paths.  Every other element is the generic
+            // all-element path and must commit the source-faithful phint53/
+            // Milne result that was previously computed only as a shadow.
+            // This is an element-general source-semantic promotion, not a
+            // Ca-specific correction and introduces no empirical scaling.
+            const bool generic_source_faithful_bound_free =
+                element.element_z != 1 &&
+                element.element_z != 2 &&
+                element.element_z != 6 &&
+                element.element_z != 12;
             const auto pescv_source = [](double tau) {
                 return std::max(std::exp(-tau), 1.0e-12) / 2.0;
             };
@@ -6125,6 +6136,29 @@ EvaluatedRecord evaluate_record(
                 if (!has_continuum_workspace) {
                     throw std::runtime_error(
                         "hydrogen type53 live-radiation transport requires canonical continuum index and tau workspaces");
+                }
+                contract_tau_in = input.continuum_tau_in[continuum_index - 1];
+                contract_tau_out = input.continuum_tau_out[continuum_index - 1];
+                const bool has_dsec_covering =
+                    (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_DSEC_COVERING_FRACTION) != 0u;
+                contract_covering = std::clamp(
+                    has_dsec_covering ? input.dsec_covering_fraction : input.covering_fraction,
+                    0.0, 1.0);
+                contract_ptmp1 = pescv_source(contract_tau_in) * (1.0 - contract_covering);
+                contract_ptmp2 = pescv_source(contract_tau_out) * (1.0 - contract_covering) +
+                    2.0 * pescv_source(contract_tau_in + contract_tau_out) * contract_covering;
+            }
+            if (generic_source_faithful_bound_free) {
+                if (!record_context.valid || record_context.continuum_index_one_based <= 0) {
+                    throw std::runtime_error(
+                        "generic Type-53 source-faithful evaluation requires lowered continuum-index context");
+                }
+                const int continuum_index = record_context.continuum_index_one_based;
+                const bool has_continuum_workspace = input.continuum_tau_in && input.continuum_tau_out &&
+                    static_cast<std::size_t>(continuum_index) <= input.continuum_tau_count;
+                if (!has_continuum_workspace) {
+                    throw std::runtime_error(
+                        "generic Type-53 source-faithful evaluation requires canonical live continuum optical depths");
                 }
                 contract_tau_in = input.continuum_tau_in[continuum_index - 1];
                 contract_tau_out = input.continuum_tau_out[continuum_index - 1];
@@ -6384,7 +6418,13 @@ EvaluatedRecord evaluate_record(
                 if (carbon_source_faithful && !source_exact) {
                     throw std::runtime_error("carbon Type-53 source-faithful Milne evaluator did not produce a result");
                 }
-                if (source_exact && (hydrogen_source_faithful || helium_source_faithful || magnesium_replacement || carbon_source_faithful)) {
+                if (generic_source_faithful_bound_free && !source_exact) {
+                    throw std::runtime_error("generic Type-53 source-faithful Milne evaluator did not produce a result");
+                }
+                const bool commit_source_faithful_type53 =
+                    hydrogen_source_faithful || helium_source_faithful || magnesium_replacement ||
+                    carbon_source_faithful || generic_source_faithful_bound_free;
+                if (source_exact && commit_source_faithful_type53) {
                     c.ans1 = source_shadow.ans1;
                     c.ans2 = source_shadow.ans2;
                     c.ans3 = source_shadow.ans3;
@@ -6407,8 +6447,10 @@ EvaluatedRecord evaluate_record(
                 constexpr double kImplausibleBoundFreeRate = 1.0e40;
                 out.type53_shadow.legacy_implausible = out.type53_shadow.legacy_max_abs > kImplausibleBoundFreeRate;
                 out.type53_shadow.committed_implausible = out.type53_shadow.committed_max_abs > kImplausibleBoundFreeRate;
-                out.type53_shadow.source_faithful_mode = magnesium_source_faithful || carbon_source_faithful;
-                out.type53_shadow.replacement_applied = (magnesium_replacement || carbon_source_faithful) && source_exact;
+                out.type53_shadow.source_faithful_mode =
+                    magnesium_source_faithful || carbon_source_faithful || generic_source_faithful_bound_free;
+                out.type53_shadow.replacement_applied =
+                    (magnesium_replacement || carbon_source_faithful || generic_source_faithful_bound_free) && source_exact;
                 if (magnesium_replacement &&
                     (out.type53_shadow.committed_nonfinite || out.type53_shadow.committed_implausible)) {
                     throw std::runtime_error("Mg Type-53 finite-state replacement remained nonfinite or implausibly large");
@@ -6711,6 +6753,14 @@ EvaluatedRecord evaluate_record(
                  environment_flag("XSTAR_QUALIFICATION_MG_MILNE_EXCITED_THRESHOLD") ||
                  environment_flag("XSTAR_QUALIFICATION_TYPE49_EXTRAPOLATED_GRID_PARITY"));
             const bool magnesium_replacement = magnesium_finite_state || magnesium_source_faithful;
+            // v0.6.48.12.3: generic elements commit the source-faithful
+            // Type-49 phint53/Milne shadow.  H/He/C/Mg keep their frozen
+            // compatibility behavior; there is no Ca-specific branch.
+            const bool generic_source_faithful_bound_free =
+                element.element_z != 1 &&
+                element.element_z != 2 &&
+                element.element_z != 6 &&
+                element.element_z != 12;
             if (magnesium_replacement && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
                 throw std::runtime_error(
                     "Mg Type-49 finite-state replacement requires XSTAR_QUALIFICATION_REPLACEMENT=1");
@@ -6724,7 +6774,10 @@ EvaluatedRecord evaluate_record(
             if (magnesium_replacement && !source_exact) {
                 throw std::runtime_error("Mg Type-49 finite-state shadow did not produce a result");
             }
-            if (magnesium_replacement && source_exact) {
+            if (generic_source_faithful_bound_free && !source_exact) {
+                throw std::runtime_error("generic Type-49 source-faithful Milne evaluator did not produce a result");
+            }
+            if ((magnesium_replacement || generic_source_faithful_bound_free) && source_exact) {
                 c.ans1 = source_shadow.ans1;
                 c.ans2 = source_shadow.ans2;
                 c.ans3 = source_shadow.ans3;
@@ -6747,8 +6800,10 @@ EvaluatedRecord evaluate_record(
             constexpr double kImplausibleBoundFreeRate = 1.0e40;
             out.type49_shadow.legacy_implausible = out.type49_shadow.legacy_max_abs > kImplausibleBoundFreeRate;
             out.type49_shadow.committed_implausible = out.type49_shadow.committed_max_abs > kImplausibleBoundFreeRate;
-            out.type49_shadow.source_faithful_mode = magnesium_source_faithful;
-            out.type49_shadow.replacement_applied = magnesium_replacement && source_exact;
+            out.type49_shadow.source_faithful_mode =
+                magnesium_source_faithful || generic_source_faithful_bound_free;
+            out.type49_shadow.replacement_applied =
+                (magnesium_replacement || generic_source_faithful_bound_free) && source_exact;
             out.type49_shadow.tau_in = tau_in;
             out.type49_shadow.tau_out = tau_out;
             out.type49_shadow.ptmp1 = ptmp1;
