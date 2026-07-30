@@ -1,5 +1,12 @@
 # CHANGELOG
 
+# 0.6.48.12.2.1.1 - 2026-07-30
+
+- Diagnostic-runner hotfix for the Ca call-1/eval-1 attribution workflow.
+- The production DSEC hot path intentionally elides per-record provenance; `write_last_diagnostics_v1()` therefore had no completed record diagnostic sidecar at eval 1.
+- `run_v06481221_ca_attribution.sh` now sets `XSTAR_V064897_FORCE_096_RECORD_PROVENANCE=1` only for the attribution run, restoring the existing diagnostic record sidecar without changing fixed-state science, controller logic, or product writers.
+- Source-tree `PYTHONPATH`, all-element solve-response capture, and the 12.2.1 Python/C++ attribution tooling are otherwise unchanged.
+
 # 0.6.48.12.2.1 - 2026-07-30
 
 - Add diagnostic-only Ca call-1/eval-1 fixed-state attribution for Python vs C++.
