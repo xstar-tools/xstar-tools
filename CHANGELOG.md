@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.48.11.9.7 — cpp-zone source-entry, radial-xi, and option-17 correction - 2026-07-30
+
+- Correct the generic persistent `cpp-zone` `calc_hmc_all` hydrogen entry state to the literal FORTRAN/Python contract `xh0=xpx*xilevg(1)*abel(1)`, `xh1=xpx*(1-xilevg(1))*abel(1)`. The initial dense `xilevg` state is zero; the rejected 11.9.6 native fallback instead seeded a fully neutral gas and selected the wrong high-temperature thermal root.
+- Use the live dense global `xilevg(1)` state on later native evaluations and include the physical H abundance exactly as the source does. No empirical clamp or model-specific scale is introduced.
+- Recompute radial `xi=L/(n r^2)`/`log(xi)` from the live radius using the source default-REAL `1.e-19` conversion, instead of publishing the input `rlogxi` unchanged at later radial rows.
+- Make C++ option-17 optical-depth sampling use literal `nbinc(13.6)+1`/`huntf` semantics rather than `upper_bound` on the full continuum grid.
+- Add a blocking `xout_step.log` option-17 display comparator for `python-cpp-zone-one`, against the accepted 11.9.5 C++-science/Python-zone reference.
+- Add compact call-1/eval-1 native markers for H entry state and `(hmctot,elcter)` so the next host run can verify the first thermal branch immediately.
+- Python science and the accepted 11.9.3 Type50 publication writer are unchanged. Whole-zone `cpp-all` remains out of scope.
+
 ## 0.6.48.11.9.6 — one-model persistent cpp-zone qualification - 2026-07-30
 
 - Accept the 0.6.48.11.9.5 Ca XIX xi=2 C++-science/Python-zone result for backend progression: eight FITS products are science-table identical to pure Python; the only difference is the 198-cell high-energy `xout_spect1` tail, where C++ agrees better with FORTRAN.

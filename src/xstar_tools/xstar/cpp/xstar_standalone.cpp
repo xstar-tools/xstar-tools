@@ -11404,18 +11404,37 @@ void fill_standalone_input_v67(
     input.hydrogen_density_cm3 = params.density_cm3;
     input.electron_fraction_xee = std::max(0.0, trial.electron_fraction_xee);
     input.electron_density_cm3 = input.hydrogen_density_cm3 * input.electron_fraction_xee;
+    // Literal calc_hmc_all.f90 entry semantics, matched to the accepted
+    // Python source port (local_zone.py):
+    //
+    //   xh0 = xpx*xilevg(1)*abel(1)
+    //   xh1 = xpx*(1.-xilevg(1))*abel(1)
+    //
+    // On the first calc_hmc_all call XSTAR's dense xilevg workspace is zero,
+    // so the source entry state is xh0=0 rather than the historical native
+    // fallback that made the gas fully neutral.  On later evaluations use
+    // the live dense global source workspace, not a compact-row surrogate.
+    const auto hydrogen_abundance_it = params.abundances_by_z.find(1);
+    const double hydrogen_abundance = hydrogen_abundance_it != params.abundances_by_z.end()
+        ? hydrogen_abundance_it->second : 0.0;
     double hydrogen_ground = 0.0;
-    if (data.global_workspace_initialized &&
-        data.hydrogen_ground_population_index < data.last_iteration.populations.size()) {
-        hydrogen_ground = data.last_iteration.populations[data.hydrogen_ground_population_index];
-        hydrogen_ground = std::max(0.0, std::min(1.0, hydrogen_ground));
-        input.neutral_h_density_cm3 = input.hydrogen_density_cm3 * hydrogen_ground;
-    } else {
-        input.neutral_h_density_cm3 = std::min(1.0e4, input.hydrogen_density_cm3);
-        hydrogen_ground = input.hydrogen_density_cm3 > 0.0
-            ? input.neutral_h_density_cm3 / input.hydrogen_density_cm3 : 0.0;
+    if (data.global_workspace_initialized && !data.global_xilevg.empty()) {
+        hydrogen_ground = data.global_xilevg.front();
     }
-    input.ionized_h_density_cm3 = std::max(0.0, input.hydrogen_density_cm3 - input.neutral_h_density_cm3);
+    if (!std::isfinite(hydrogen_ground)) {
+        throw std::runtime_error("incoming global H I ground population is non-finite");
+    }
+    input.neutral_h_density_cm3 =
+        input.hydrogen_density_cm3 * hydrogen_ground * hydrogen_abundance;
+    input.ionized_h_density_cm3 =
+        input.hydrogen_density_cm3 * (1.0 - hydrogen_ground) * hydrogen_abundance;
+    if (data.call_index == 1u && data.evaluation_index == 1u) {
+        std::cerr << std::setprecision(17)
+                  << "V0648117_CPP_ZONE_CALL1_EVAL1_H_ABUNDANCE=" << hydrogen_abundance << "\n"
+                  << "V0648117_CPP_ZONE_CALL1_EVAL1_H_GROUND=" << hydrogen_ground << "\n"
+                  << "V0648117_CPP_ZONE_CALL1_EVAL1_XH0=" << input.neutral_h_density_cm3 << "\n"
+                  << "V0648117_CPP_ZONE_CALL1_EVAL1_XH1=" << input.ionized_h_density_cm3 << "\n";
+    }
     // Source calc_hmc_all uses emult for the local emissivity/escape covering
     // factor.  cfrac is transported separately to DSEC line/RRC escape.
     input.covering_fraction = params.emission_multiplier;
@@ -13375,6 +13394,14 @@ int standalone_iteration_evaluator_v67(
         snapshot.element_cooling = output.element_cooling;
         snapshot.continuum_heating = output.continuum_heating;
         snapshot.continuum_cooling = output.continuum_cooling;
+        if (snapshot.call_index == 1u && snapshot.evaluation_index == 1u) {
+            std::cerr << std::setprecision(17)
+                      << "V0648117_CPP_ZONE_CALL1_EVAL1_T4=" << snapshot.temperature_t4 << "\n"
+                      << "V0648117_CPP_ZONE_CALL1_EVAL1_XEE_IN=" << snapshot.electron_fraction_input << "\n"
+                      << "V0648117_CPP_ZONE_CALL1_EVAL1_XEE_OUT=" << snapshot.computed_electron_fraction << "\n"
+                      << "V0648117_CPP_ZONE_CALL1_EVAL1_HMCTOT=" << snapshot.hmctot << "\n"
+                      << "V0648117_CPP_ZONE_CALL1_EVAL1_ELCTER=" << snapshot.charge_residual << "\n";
+        }
         attach_native_thermal_components_v70(data->fixed_context, snapshot);
         std::string native_gate_reason_v82_patch52017;
         if (!native_snapshot_scientific_valid_v82_patch52017(snapshot, native_gate_reason_v82_patch52017)) {
@@ -14529,8 +14556,13 @@ void write_sequence23_diagnostic_preview_v82_patch513(
         zone.delta_radius_cm = depth_cm;
         zone.density_cm3 = params.density_cm3;
         zone.pressure_dyn_cm2 = params.pressure_dyn_cm2;
-        zone.ionization_parameter = std::pow(10.0, params.log_xi);
-        zone.log_ionization_parameter = params.log_xi;
+        const double r19 = zone.radius_cm *
+            static_cast<double>(static_cast<float>(1.0e-19));
+        const double live_xi = (r19 > 0.0 && zone.density_cm3 > 0.0)
+            ? params.luminosity_1e38 / (r19 * r19 * zone.density_cm3) : 0.0;
+        zone.ionization_parameter = live_xi;
+        zone.log_ionization_parameter = live_xi > 0.0
+            ? std::log10(live_xi) : -std::numeric_limits<double>::infinity();
         zone.column_density_cm2 = params.density_cm3 * std::max(depth_cm, 0.0);
         zone.temperature_t4 = accepted.evaluation.temperature_t4;
         zone.electron_fraction = accepted.evaluation.computed_electron_fraction;
@@ -14544,7 +14576,7 @@ void write_sequence23_diagnostic_preview_v82_patch513(
         abundance.row_index = zone_index;
         abundance.radius_cm = zone.radius_cm;
         abundance.delta_radius_cm = depth_cm;
-        abundance.log_ionization_parameter = params.log_xi;
+        abundance.log_ionization_parameter = zone.log_ionization_parameter;
         abundance.electron_fraction = zone.electron_fraction;
         abundance.density_cm3 = params.density_cm3;
         abundance.pressure_dyn_cm2 = params.pressure_dyn_cm2;
@@ -15723,8 +15755,16 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             zone.outer_radius_cm = zone.radius_cm;
             zone.density_cm3 = params.density_cm3;
             zone.pressure_dyn_cm2 = params.pressure_dyn_cm2;
-            zone.ionization_parameter = std::pow(10.0, params.log_xi);
-            zone.log_ionization_parameter = params.log_xi;
+            // Match xstar.f90 / Python radial update exactly: r19 uses the
+            // source default-REAL 1.e-19 constant before promotion and xi is
+            // recomputed from the live radius and density for every row.
+            const double r19 = zone.radius_cm *
+                static_cast<double>(static_cast<float>(1.0e-19));
+            const double live_xi = (r19 > 0.0 && zone.density_cm3 > 0.0)
+                ? params.luminosity_1e38 / (r19 * r19 * zone.density_cm3) : 0.0;
+            zone.ionization_parameter = live_xi;
+            zone.log_ionization_parameter = live_xi > 0.0
+                ? std::log10(live_xi) : -std::numeric_limits<double>::infinity();
             zone.column_density_cm2 = params.density_cm3 * std::max(source_depth, 0.0);
             zone.temperature_t4 = accepted.evaluation.temperature_t4;
             zone.electron_fraction = accepted.evaluation.computed_electron_fraction;
@@ -15737,7 +15777,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             abundance.row_index = ordinal;
             abundance.radius_cm = zone.radius_cm;
             abundance.delta_radius_cm = source_depth;
-            abundance.log_ionization_parameter = params.log_xi;
+            abundance.log_ionization_parameter = zone.log_ionization_parameter;
             abundance.electron_fraction = zone.electron_fraction;
             abundance.density_cm3 = params.density_cm3;
             abundance.pressure_dyn_cm2 = params.pressure_dyn_cm2;
@@ -16259,6 +16299,38 @@ int command_run_standalone_case_probe_v70(const Options& options) {
 }
 
 
+std::size_t source_option17_reference_bin_zero_based_v0648117(
+    const std::vector<double>& energy) {
+    const std::size_t n = energy.size();
+    if (n == 0u) return 0u;
+    const std::size_t numcon2 = std::max<std::size_t>(2u, n / 50u);
+    const std::size_t nn = n > numcon2 ? n - numcon2 : 1u;
+    if (nn < 2u) return 0u;
+    constexpr double floor = 1.0e-36;
+    const double x = 13.6;
+    const double xx1 = energy[0], xx2 = energy[1], xxn = energy[nn - 1u];
+    std::size_t jlo_one_based = 1u;
+    if (x >= floor && xx1 > floor && xxn > floor) {
+        const double xtmp = std::max(x, xx2);
+        const double denom = std::log(xxn / xx1);
+        if (std::isfinite(denom) && denom != 0.0) {
+            const double raw = static_cast<double>(nn - 1u) * std::log(xtmp / xx1) / denom;
+            if (std::isfinite(raw)) {
+                const long long base = static_cast<long long>(raw);
+                jlo_one_based = static_cast<std::size_t>(std::max<long long>(1ll, base + 1ll));
+            }
+        }
+        if (jlo_one_based < nn) {
+            const std::size_t a = jlo_one_based - 1u, b = jlo_one_based;
+            const double tst = std::abs(std::log(x / (floor + energy[a])));
+            const double tst2 = std::abs(std::log(x / (floor + energy[b])));
+            if (tst2 < tst) ++jlo_one_based;
+        }
+    }
+    jlo_one_based = std::max<std::size_t>(1u, std::min(nn, jlo_one_based));
+    return std::min(n - 1u, jlo_one_based);
+}
+
 bool source_option17_radiation_balance_percent_v06488(
     const xstar_run_state::FixedEvaluationState& evaluation,
     double& percent) {
@@ -16305,10 +16377,7 @@ void print_xstar_style_progress_v06488(const xstar_run_state::ProductWritingStat
         const auto& dpthc = eval.source_workspace.dpthc;
         double log_fwd = -10.0, log_rev = -10.0;
         if (energy.size() >= 2u && dpthc.size() >= 2u * energy.size()) {
-            const auto it = std::upper_bound(energy.begin(), energy.end(), 13.6);
-            std::size_t rb = static_cast<std::size_t>(it - energy.begin());
-            if (rb + 1u < energy.size()) ++rb;
-            if (rb >= energy.size()) rb = energy.size() - 1u;
+            const std::size_t rb = source_option17_reference_bin_zero_based_v0648117(energy);
             const double fwd = std::max(0.0, dpthc[rb]);
             const double rev = std::max(0.0, dpthc[energy.size() + rb]);
             log_fwd = fwd > 0.0 ? std::log10(fwd) : -10.0;

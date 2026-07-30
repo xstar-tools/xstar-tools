@@ -195,6 +195,45 @@ bool finite_nonzero_vector(const std::vector<double>& values) {
 }
 
 
+std::size_t source_option17_reference_bin_zero_based(
+    const std::vector<double>& energy) {
+    // Literal nbinc.f90 -> huntf.f90 semantics used by pprint option 9/17:
+    // nry=nbinc(13.6,epi,ncn2)+1, then Fortran indexes dpthc(:,nry).
+    const std::size_t n = energy.size();
+    if (n == 0u) return 0u;
+    const std::size_t numcon2 = std::max<std::size_t>(2u, n / 50u);
+    const std::size_t nn = n > numcon2 ? n - numcon2 : 1u;
+    if (nn < 2u) return 0u;
+    constexpr double floor = 1.0e-36;
+    const double x = 13.6;
+    const double xx1 = energy[0];
+    const double xx2 = energy[1];
+    const double xxn = energy[nn - 1u];
+    std::size_t jlo_one_based = 1u;
+    if (x >= floor && xx1 > floor && xxn > floor) {
+        const double xtmp = std::max(x, xx2);
+        const double denom = std::log(xxn / xx1);
+        if (std::isfinite(denom) && denom != 0.0) {
+            const double raw = static_cast<double>(nn - 1u) *
+                std::log(xtmp / xx1) / denom;
+            if (std::isfinite(raw)) {
+                const long long base = static_cast<long long>(raw);
+                jlo_one_based = static_cast<std::size_t>(std::max<long long>(1ll, base + 1ll));
+            }
+        }
+        if (jlo_one_based < nn) {
+            const std::size_t a = jlo_one_based - 1u;
+            const std::size_t b = jlo_one_based;
+            const double tst = std::abs(std::log(x / (floor + energy[a])));
+            const double tst2 = std::abs(std::log(x / (floor + energy[b])));
+            if (tst2 < tst) ++jlo_one_based;
+        }
+    }
+    jlo_one_based = std::max<std::size_t>(1u, std::min(nn, jlo_one_based));
+    // nry=nbinc+1 is one-based; converting nry to zero-based gives nbinc.
+    return std::min(n - 1u, jlo_one_based);
+}
+
 bool source_option17_radiation_balance_percent(
     const xstar_run_state::FixedEvaluationState& evaluation,
     double& percent) {
@@ -404,10 +443,7 @@ void append_native_radial_summary(std::ofstream& out,
             retained_depth_complete = false;
             break;
         }
-        const auto it = std::upper_bound(energy.begin(), energy.end(), 13.6);
-        std::size_t reference_bin = static_cast<std::size_t>(it - energy.begin());
-        if (reference_bin + 1u < n) ++reference_bin;
-        if (reference_bin >= n) reference_bin = n - 1u;
+        const std::size_t reference_bin = source_option17_reference_bin_zero_based(energy);
         const double fwd = std::max(0.0, dpthc[reference_bin]);
         const double rev = std::max(0.0, dpthc[n + reference_bin]);
         retained_depth_logs.push_back({fwd > 0.0 ? std::log10(fwd) : -10.0,
