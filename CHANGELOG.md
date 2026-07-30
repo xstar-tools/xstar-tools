@@ -1,5 +1,54 @@
 # CHANGELOG
 
+# 0.6.48.12.2.1 - 2026-07-30
+
+- Add diagnostic-only Ca call-1/eval-1 fixed-state attribution for Python vs C++.
+- Capture pure-Python evaluation 1 only, aborting before the remaining DSEC trajectory.
+- Export Ca stage fractions, compact populations, electron contribution by stage, thermal contribution by data type, and largest individual thermal records.
+- Capture the corresponding native C++ `xstar_fixed_state_write_last_diagnostics_v1` state directly from the active production cpp-zone evaluator.
+- Add source-tree `PYTHONPATH` handling to the attribution runner; package installation is not required.
+- Preserve 0.6.48.12.2 science kernels, ATDB lowerer, element solver, and accepted 11.9.3 output writer bit-exactly. No controller or publication behavior is changed.
+
+## 0.6.48.12.1 — all-element C++ coverage completion and fixed-state parity instrumentation
+
+- Phase 12.0-A is released as 0.6.48.12.1; planned phases B/C are 0.6.48.12.2 and 0.6.48.12.3.
+- Extend the existing production native ATDB lowerer from 32 qualified physical UCalc data types to all 78 physical source types without redirecting the existing H/He/Mg-qualified opcode paths.
+- Reuse the proven Type59 and Type50 implementations for source aliases Type52 and Type91; route the other 44 formerly unsupported physical labels through additive source-generic opcode 200.
+- Add generic evaluation for the missing analytic, bound-free, bound-bound, ionization/recombination, charge-transfer and collision families, including Type70 rescaled bound-free state and the Type92 collision dispatcher.
+- Reconstruct full-grid bound-free spectral opacity for newly admitted continuum-producing records so all-element support is not matrix-only.
+- Add a machine-verifiable 102-label coverage audit and installed-ATDB Z=1..30 inventory; unsupported active physical records are a phase-A failure.
+- Add diagnostic-only source-order per-element fixed-state ledgers in pure Python and the production C++ fixed-state context, plus a call-1/eval-1 comparator. Numerical mismatches are diagnostic in 12.1 and become strict in 12.2.
+- Keep production-zone ABI 6048110 and fixed-state engine ABI 60488; advance the lowered fixed-state program ABI to 60486. Keep accepted 11.9.3 Python publication writer bit-exact.
+- Do not enter `cpp-all` in this phase.
+
+## 0.6.48.11.9.7 — cpp-zone source-entry, radial-xi, and option-17 correction
+
+- Correct the generic persistent `cpp-zone` `calc_hmc_all` hydrogen entry state to the literal FORTRAN/Python contract `xh0=xpx*xilevg(1)*abel(1)`, `xh1=xpx*(1-xilevg(1))*abel(1)`. The initial dense `xilevg` state is zero; the rejected 11.9.6 native fallback instead seeded a fully neutral gas and selected the wrong high-temperature thermal root.
+- Use the live dense global `xilevg(1)` state on later native evaluations and include the physical H abundance exactly as the source does. No empirical clamp or model-specific scale is introduced.
+- Recompute radial `xi=L/(n r^2)`/`log(xi)` from the live radius using the source default-REAL `1.e-19` conversion, instead of publishing the input `rlogxi` unchanged at later radial rows.
+- Make C++ option-17 optical-depth sampling use literal `nbinc(13.6)+1`/`huntf` semantics rather than `upper_bound` on the full continuum grid.
+- Add a blocking `xout_step.log` option-17 display comparator for `python-cpp-zone-one`, against the accepted 11.9.5 C++-science/Python-zone reference.
+- Add compact call-1/eval-1 native markers for H entry state and `(hmctot,elcter)` so the next host run can verify the first thermal branch immediately.
+- Python science and the accepted 11.9.3 Type50 publication writer are unchanged. Whole-zone `cpp-all` remains out of scope.
+## 0.6.48.11.9.6 — one-model persistent cpp-zone qualification
+
+- Accept the 0.6.48.11.9.5 Ca XIX xi=2 C++-science/Python-zone result for backend progression: eight FITS products are science-table identical to pure Python; the only difference is the 198-cell high-energy `xout_spect1` tail, where C++ agrees better with FORTRAN.
+- Add `python-cpp-zone-one MODEL_ID` for the next layer only: all C++ science plus persistent zone-by-zone C++ ownership (`--zone-backend cpp-zone`).
+- The stage deliberately does not enter `cpp-all` and does not build `xstar_cpp`; it builds `libxstar_production_zone.so` and dependencies only.
+- Require `XSTAR_CPP_SCIENCE_REFERENCE_DIR` pointing to the accepted 11.9.5 `python-cpp-science` products. Comparison against that reference is blocking; FORTRAN comparison remains diagnostic.
+- No scientific runtime source changes beyond package/API version metadata. The accepted 11.9.3 `output_writers.py` remains bit-identical.
+
+## 0.6.48.11.9.5 — Python-zone / C++-science one-model qualification
+
+The accepted pure-Python Ca XIX xi=2 boundary is frozen from 11.9.4.2 / accepted 11.9.3 publication semantics.  No scientific runtime implementation changes in this release.
+
+- Add `python-cpp-one MODEL_ID` for one-model qualification with C++ global/solver/rates/matrix/emissivity/opacity/thermal/engine backends while the zone controller remains Python.
+- Build only the modular C++ scientific libraries needed by that mode; do not build or enter `libxstar_production_zone.so`.
+- Require `XSTAR_PYTHON_REFERENCE_DIR` pointing to accepted pure-Python products.
+- Compare the candidate to FORTRAN diagnostically and to accepted pure Python as the blocking backend-parity gate.
+- Retain the accepted 11.9.3 `output_writers.py` bit-for-bit, including the known one-row 88440 `xo01_detal2` publication omission in the final two radial HDUs.
+- Record direct `xout_step.log` comparison showing exact radial/DSEC topology and only low-weight publication/log tails.
+
 ## 0.6.48.12.2 - 2026-07-30
 
 - Begin phase 12.0-B fixed-state qualification.

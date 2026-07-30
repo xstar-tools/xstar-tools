@@ -13461,6 +13461,33 @@ int standalone_iteration_evaluator_v67(
                 }
             }
         }
+        // v0.6.48.12.2.1: capture the complete native fixed-state attribution
+        // exactly at call-1/eval-1, before any controller evolution.  The
+        // writer is observational only and never consumed by production.
+        if (snapshot.kind == "dsec" && snapshot.call_index == 1u && snapshot.evaluation_index == 1u) {
+            if (const char* attribution_dir_v06481221 = std::getenv("XSTAR_V06481221_CA_ATTRIBUTION_DIR")) {
+                if (*attribution_dir_v06481221) {
+                    try {
+                        const std::filesystem::path attribution_root_v06481221(attribution_dir_v06481221);
+                        std::filesystem::create_directories(attribution_root_v06481221);
+                        std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> attribution_message_v06481221{};
+                        const int attribution_rc_v06481221 = xstar_fixed_state_write_last_diagnostics_v1(
+                            data->fixed_context, attribution_root_v06481221.string().c_str(), snapshot.sequence,
+                            attribution_message_v06481221.data(), attribution_message_v06481221.size());
+                        if (attribution_rc_v06481221 != 0) {
+                            throw std::runtime_error(std::string("v06481221 call1/eval1 attribution capture failed: ") +
+                                attribution_message_v06481221.data());
+                        }
+                        std::cerr << "V06481221_CPP_CALL1_EVAL1_ATTRIBUTION_DIR="
+                                  << attribution_root_v06481221.string() << "\n";
+                    } catch (const std::exception& exc_v06481221) {
+                        set_callback_error(error, error_size,
+                            std::string("cannot retain v06481221 call1/eval1 attribution: ") + exc_v06481221.what());
+                        return 1;
+                    }
+                }
+            }
+        }
         attach_native_thermal_components_v70(data->fixed_context, snapshot);
         std::string native_gate_reason_v82_patch52017;
         if (!native_snapshot_scientific_valid_v82_patch52017(snapshot, native_gate_reason_v82_patch52017)) {
