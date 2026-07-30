@@ -1,3 +1,7 @@
+## 0.6.48.11.9.3 detail-line inventory / comparator closure
+
+Pure-Python detail-line output now carries a source-only Type50/rate-4 publication activity shadow so FORTRAN-compatible zero/negligible rows can be retained in exact ATDB/source order without contaminating physical opacity. Qualification compares repeated `XSTAR_RADIAL` extensions by occurrence. Continue using `python-one <model-id>` and qualify the Ca XIX xi=2, xi=3.5, and xi=4 models individually before rerunning the full smoke.
+
 # xstar_tools 0.6.48.11.8
 
 ### 0.6.48.11.9.2 pure-Python smoke

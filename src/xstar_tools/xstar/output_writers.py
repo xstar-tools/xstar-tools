@@ -63,6 +63,7 @@ class OutputWriterPortError(RuntimeError):
 
 R4 = np.float32
 LEVEL_POPULATION_FLOOR = 1.0e-34
+SOURCE_DETAIL_ENDPOINT_ABUNDANCE_FLOOR = float(np.float32(1.0e-34))
 DETAIL_LINE_ACTIVITY_FLOOR = 1.0e-64
 DETAIL_RRC_ACTIVITY_FLOOR = 1.0e-36
 FINAL_LINE_ACTIVITY_FLOOR = 1.0e-36
@@ -353,21 +354,33 @@ def build_detail_line_table(
     oplin: Sequence[float],
     tau0: np.ndarray,
     header: ShellOutputHeader,
+    source_activity_shadow: Sequence[bool] | None = None,
 ) -> OutputTable:
     emiss = np.asarray(rcem, dtype=float)
     opacity = np.asarray(oplin, dtype=float).reshape(-1)
     depth = np.asarray(tau0, dtype=float)
     if emiss.ndim != 2 or emiss.shape[0] != 2 or depth.ndim != 2 or depth.shape[0] != 2:
         raise OutputWriterPortError("detail line arrays require direction-first shape (2,n)")
+    shadow = None if source_activity_shadow is None else np.asarray(source_activity_shadow, dtype=bool).reshape(-1)
     rows: list[LineOutputMetadata] = []
     for item in metadata.lines:
         i = item.line_index - 1
         if i < 0 or i >= emiss.shape[1] or i >= opacity.size or i >= depth.shape[1]:
             continue
+        # v0.6.48.11.9.3: fstepr2 source-publication activity is not
+        # identical to the deterministic physical rcem/oplin arrays.  In
+        # calc_emisab_ion.f90, Type50/rate-4 records are eligible for ucalc
+        # when either endpoint abundance exceeds the source 1.e-34 floor.
+        # FORTRAN can subsequently retain an otherwise zero detail row via
+        # caller-owned/stale opakb1 state.  Preserve the source row identity
+        # with a separate publication shadow; never inject that artifact into
+        # physical oplin or continuum opacity.
+        shadow_active = bool(shadow is not None and i < shadow.size and shadow[i])
         active = (
             emiss[0, i] > DETAIL_LINE_ACTIVITY_FLOOR
             or emiss[1, i] > DETAIL_LINE_ACTIVITY_FLOOR
             or opacity[i] > DETAIL_LINE_ACTIVITY_FLOOR
+            or shadow_active
         )
         if not active:
             continue
@@ -516,10 +529,14 @@ def build_detail_shell_output(
     rccemis: np.ndarray,
     dpthc: np.ndarray,
     ncn2: int,
+    source_detail_line_activity_shadow: Sequence[bool] | None = None,
 ) -> DetailShellOutput:
     return DetailShellOutput(
         levels=build_detail_level_table(metadata=metadata, populations=populations, lte_populations=lte_populations, header=header),
-        lines=build_detail_line_table(metadata=metadata, rcem=rcem, oplin=oplin, tau0=tau0, header=header),
+        lines=build_detail_line_table(
+            metadata=metadata, rcem=rcem, oplin=oplin, tau0=tau0, header=header,
+            source_activity_shadow=source_detail_line_activity_shadow,
+        ),
         rrcs=build_detail_rrc_table(metadata=metadata, cemab=cemab, cabab=cabab, opakab=opakab, tauc=tauc, header=header),
         continuum=build_detail_continuum_table(epi_eV=epi_eV, zrems=zrems, opakc=opakc, rccemis=rccemis, dpthc=dpthc, ncn2=ncn2, header=header),
     )
@@ -2445,6 +2462,94 @@ def _maybe_export_detail_continuum_product_write_state(
         except Exception:
             pass
 
+def _source_detail_line_activity_shadow(
+    state: XSTARPythonState,
+    metadata: SourceOutputMetadata,
+    populations_zero_based: Sequence[float],
+    physical_oplin: Sequence[float],
+) -> np.ndarray:
+    """Build a deterministic fstepr2 publication-identity shadow.
+
+    This mirrors the literal ``calc_emisab_ion.f90`` Type50/rate-4 endpoint
+    abundance gate without reproducing its uninitialized/stale ``opakb1``
+    side effect.  The shadow is output-only: it can retain a zero/negligible
+    line row in source order, but it never changes rcem, oplin, tau0, the
+    continuum opacity, equilibrium, or transport.
+    """
+    n_lines = max((int(row.line_index) for row in metadata.lines), default=0)
+    shadow = np.zeros(n_lines, dtype=bool)
+    if n_lines <= 0:
+        return shadow
+
+    pop = np.asarray(populations_zero_based, dtype=float).reshape(-1)
+    oplin = np.asarray(physical_oplin, dtype=float).reshape(-1)
+    abundances = state.plasma.abundances
+    if abundances is None:
+        return shadow
+    ab = np.asarray(abundances, dtype=float).reshape(-1)
+    xpx = float(state.plasma.xpx)
+
+    # LevelOutputMetadata.upper_index is the source local level index.
+    # Ion labels are unique ATDB ion identities, so this is a stable bridge
+    # from line endpoints to the global xilevg population vector.
+    level_by_ion_local: dict[tuple[str, int], LevelOutputMetadata] = {
+        (str(row.ion_label), int(row.upper_index)): row for row in metadata.levels
+    }
+    # ``opakb1`` in the source line branch is caller-local and is only
+    # assigned by ucalc when the endpoint-abundance gate passes.  The source
+    # nevertheless executes ``oplin(jkkl)=opakb1*abund1`` after a skipped
+    # call, so a stale scalar can make a numerically zero line visible to
+    # fstepr2.  Reproduce only that *row-identity* consequence here.  The
+    # carry is reconstructed from deterministic physical oplin for eligible
+    # Type50 rows and is never written back to physical opacity.
+    stale_opakb1 = 0.0
+    for line in sorted(metadata.lines, key=lambda row: int(row.line_index)):
+        if int(line.rate_type) != 4 or int(line.data_type) != 50:
+            continue
+        i = int(line.line_index) - 1
+        if i < 0 or i >= shadow.size:
+            continue
+        lo = level_by_ion_local.get((str(line.ion_label), int(line.lower_local_index)))
+        up = level_by_ion_local.get((str(line.ion_label), int(line.upper_local_index)))
+        if lo is None or up is None:
+            continue
+        z = int(lo.atomic_number)
+        if z <= 0 or z > ab.size or int(up.atomic_number) != z:
+            continue
+        gi_lo = int(lo.global_index) - 1
+        gi_up = int(up.global_index) - 1
+        if gi_lo < 0 or gi_up < 0 or gi_lo >= pop.size or gi_up >= pop.size:
+            continue
+        xeltp = float(ab[z - 1])
+        a_lo = float(pop[gi_lo]) * xpx * xeltp
+        a_up = float(pop[gi_up]) * xpx * xeltp
+        endpoint_active = (
+            a_lo > SOURCE_DETAIL_ENDPOINT_ABUNDANCE_FLOOR
+            or a_up > SOURCE_DETAIL_ENDPOINT_ABUNDANCE_FLOOR
+        )
+
+        # Source ``abund1`` is the lower-energy endpoint, independent of the
+        # integer endpoint order stored in the ATDB record.
+        if float(lo.excitation_eV) <= float(up.excitation_eV):
+            source_abund1 = a_lo
+        else:
+            source_abund1 = a_up
+
+        if endpoint_active:
+            # Python evaluates this record deterministically.  Recover the
+            # scalar source opakb1 from oplin=opakb1*abund1 when possible so
+            # the publication carry follows the same source record sequence.
+            if i < oplin.size and source_abund1 != 0.0:
+                candidate = float(oplin[i]) / source_abund1
+                if np.isfinite(candidate):
+                    stale_opakb1 = candidate
+            shadow[i] = True
+        elif abs(stale_opakb1 * source_abund1) > DETAIL_LINE_ACTIVITY_FLOOR:
+            # Source artifact compatibility: retain the row only.
+            shadow[i] = True
+    return shadow
+
+
 def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int, terminal_record: bool = False) -> DetailShellOutput:
     from .radial_transfer import _workspace_from_state, _level_arrays_from_state
 
@@ -2453,6 +2558,9 @@ def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int, ter
     populations, lte = _level_arrays_from_state(state)
     populations_out = _detail_level_vector(populations, metadata)
     lte_out = _detail_level_vector(lte, metadata)
+    source_detail_line_activity_shadow = _source_detail_line_activity_shadow(
+        state, metadata, populations_out, workspace.oplin_physical
+    )
     ncn2 = int(state.control["ncn2"])
     record = build_detail_shell_output(
         metadata=metadata,
@@ -2472,6 +2580,7 @@ def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int, ter
         rccemis=workspace.rccemis,
         dpthc=workspace.dpthc,
         ncn2=ncn2,
+        source_detail_line_activity_shadow=source_detail_line_activity_shadow,
     )
     _maybe_export_detail_continuum_product_write_state(
         state, hdunum=int(hdunum), terminal_record=bool(terminal_record),

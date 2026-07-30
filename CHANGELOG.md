@@ -1,5 +1,12 @@
 # CHANGELOG
 
+# 0.6.48.11.9.3 - 2026-07-29
+
+- Pure-Python detail-line publication closure: add a generic Type50/rate-4 source activity shadow based on the literal `calc_emisab_ion.f90` endpoint-abundance gate (`1.e-34`).
+- Preserve FORTRAN zero/negligible detail-line identities without writing stale/uninitialized `opakb1` into physical `oplin`, continuum opacity, equilibrium, rates, or transport. A deterministic output-only stale-scalar shadow is reconstructed only for row identity.
+- Fix the multi-model FITS comparator so repeated `XSTAR_RADIAL` HDUs are keyed and reported by occurrence (`XSTAR_RADIAL#1`, `#2`, ...), rather than silently overwriting all but the final shell.
+- Keep the 0.6.48.11.9.2 source-default-REAL column-limit correction and `python-one` workflow. No equilibrium, rate, transport, continuum, RRC, or C++ scientific changes.
+
 # 0.6.48.11.9.2 - 2026-07-29
 
 - Pure-Python Ca XIX xi=2 radial-boundary correction: normalize the user `column` input through source default-REAL (`float32`) semantics before promoting it to the Python REAL(8)-equivalent `xpxcol`. For `column=1e20`, this preserves the FORTRAN value `1.0000000200408773e20` and therefore the final boundary shell instead of terminating at exact binary64 `1e20`.
