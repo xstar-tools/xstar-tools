@@ -1,5 +1,14 @@
 # CHANGELOG
 
+# 0.6.48.11.9.4.1 - 2026-07-29
+
+Pure-Python Type50 detail-publication regression hotfix.
+
+- Restores FORTRAN `calc_emisab_all` abundance ownership in the output-only Type50 shadow: `xeltp=abel(jk)` uses the user abundance multiplier, not `ababs=abel*abcosmic` / `state.plasma.abundances`.
+- Applies the literal caller publication signal `oplin=opakb1*abund1 > 1d-64` after the optional Type50 `ucalc` call instead of auto-publishing every abundance-gated endpoint.
+- Keeps raw Type50 stale-state reconstruction output-only; no changes to physical `rcem`, `oplin`, `opakc`, equilibrium, continuum/RRC, transport, or C++ science.
+- Expected to restore the 11.9.3 zero/negligible `xo01_detal2` rows and make Ca XVIII line 88440 abundance-active on its own (`caabund=1`).
+
 # 0.6.48.11.9.4 - 2026-07-29
 
 - Pure-Python detail-line publication-shadow closure only.

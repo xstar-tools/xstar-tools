@@ -1,6 +1,10 @@
-## 0.6.48.11.9.4 Type50 publication-shadow raw carry closure
+## 0.6.48.11.9.4.1 Type50 publication-shadow `abel` ownership hotfix
 
-This release is a narrow pure-Python output-identity correction.  The detail-line writer reconstructs the source Type50 caller-local `opakb1` carry directly from packed ATDB records and solved endpoint populations.  The carry advances across all eligible Type50 source records even when a record is later excluded from public output, while physical opacity/emissivity/transport arrays remain unchanged.  This targets the single remaining `xo01_detal2` row omission in the corrected Ca XIX xi=2 smoke case.
+11.9.4 regressed the previously-qualified `xo01_detal2` zero/negligible-row inventory because its new raw Type50 shadow used `state.plasma.abundances` (`ababs=abel*abcosmic`) in the source `calc_emisab_ion` abundance gate.  FORTRAN passes `xeltp=abel(jk)`, the user abundance multiplier.  For the Ca xi=2 case that distinction is `1` versus `2.1e-6`, enough to suppress thousands of source rows and to push line 88440 below the default-REAL `1.e-34` call gate.
+
+11.9.4.1 changes only the output-publication shadow: it reads `state.control["abel"]`, preserves raw Type50 caller-local `opakb1` evolution, applies the caller's literal `oplin=opakb1*abund1` signal test, and enforces the source endpoint-validity predicate before stale state can be consumed.  Physical `rcem`, `oplin`, `opakc`, rates, equilibrium, continuum/RRC arrays, radial transport, and C++ science are unchanged.
+
+Run only `helike_type69/ca19_xi2_ne1` with `run_v064811941_multimodel.sh ... python-one`.  Do not rerun the full smoke yet.
 
 ## 0.6.48.11.9.3 detail-line inventory / comparator closure
 

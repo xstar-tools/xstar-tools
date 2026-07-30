@@ -2590,7 +2590,7 @@ def _source_detail_line_activity_shadow(
 ) -> np.ndarray:
     """Build a deterministic fstepr2 publication-identity shadow.
 
-    v0.6.48.11.9.4 advances the caller-local Type50 ``opakb1`` shadow from
+    v0.6.48.11.9.4.1 repairs the caller-local Type50 ``opakb1`` shadow from
     the raw source evaluation of every eligible Type50/rate-4 record, even
     records later excluded from public output (for example the 1e10-A
     sentinel line immediately before Ca XVIII line 88440).  This reproduces
@@ -2603,10 +2603,19 @@ def _source_detail_line_activity_shadow(
         return shadow
 
     pop = np.asarray(populations_zero_based, dtype=float).reshape(-1)
-    abundances = state.plasma.abundances
-    if abundances is None:
+
+    # v0.6.48.11.9.4.1: calc_emisab_all passes xeltp=abel(jk), where
+    # ``abel`` is the user abundance *multiplier* read by rread1.  The
+    # separate xstarsetup array ``ababs=abel*abcosmic`` is the physical
+    # abundance and is what state.plasma.abundances stores.  Using ababs
+    # here incorrectly applies the cosmic abundance a second time to the
+    # source publication gate (for Ca, 1 -> 2.1e-6), suppressing thousands
+    # of source-zero detail rows and making line 88440 miss the 1.e-34
+    # calc_emisab_ion call gate.
+    source_abel = state.control.get("abel")
+    if source_abel is None:
         return shadow
-    ab = np.asarray(abundances, dtype=float).reshape(-1)
+    ab = np.asarray(source_abel, dtype=float).reshape(-1)
     xpx = float(state.plasma.xpx)
 
     # LevelOutputMetadata.upper_index is the source local level index.
@@ -2633,6 +2642,26 @@ def _source_detail_line_activity_shadow(
         z = int(lo.atomic_number)
         if z <= 0 or z > ab.size or int(up.atomic_number) != z:
             continue
+
+        # calc_emisab_ion tests source endpoint validity before it forms
+        # abund1/abund2, calls ucalc, or assigns oplin.  A failed endpoint
+        # test therefore cannot consume caller-local stale opakb1 at all.
+        derived = state.atomic.derived
+        if derived is None:
+            continue
+        ion_index = int(lo.ion_index)
+        nlevs = np.asarray(derived.nlevs, dtype=np.int64)
+        if (
+            int(up.ion_index) != ion_index
+            or ion_index <= 0
+            or ion_index >= nlevs.size
+            or int(line.lower_local_index) <= 0
+            or int(line.upper_local_index) <= 0
+            or int(line.lower_local_index) >= int(nlevs[ion_index])
+            or int(line.upper_local_index) >= int(nlevs[ion_index])
+        ):
+            continue
+
         gi_lo = int(lo.global_index) - 1
         gi_up = int(up.global_index) - 1
         if gi_lo < 0 or gi_up < 0 or gi_lo >= pop.size or gi_up >= pop.size:
@@ -2654,11 +2683,15 @@ def _source_detail_line_activity_shadow(
             )
             if assigned is not None:
                 stale_opakb1 = float(assigned)
-            # Keep the already-qualified 11.9.3 source endpoint-activity
-            # inventory rule.  The raw carry only changes the stale-state
-            # continuation used by later abundance-skipped rows.
-            shadow[i] = True
-        elif abs(stale_opakb1 * source_abund1) > DETAIL_LINE_ACTIVITY_FLOOR:
+
+        # Literal calc_emisab_ion -> fstepr2 ownership: after the optional
+        # ucalc call the caller always assigns oplin(jkkl)=opakb1*abund1.
+        # Therefore an abundance-active record is not automatically a FITS
+        # row: the reconstructed opacity must cross fstepr2's 1.d-64 signal
+        # floor (or the physical rcem/oplin arrays, tested by the writer, must
+        # do so).  If ucalc was skipped or exited before assigning opakb1, the
+        # previous caller-local scalar remains in force.
+        if stale_opakb1 * source_abund1 > DETAIL_LINE_ACTIVITY_FLOOR:
             shadow[i] = True
     return shadow
 
