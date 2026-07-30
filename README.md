@@ -1,3 +1,5 @@
+> **0.6.48.11.9.6 qualification note:** `python-cpp-zone-one MODEL_ID` advances only zone ownership to the persistent `cpp-zone` context. It requires `XSTAR_CPP_SCIENCE_REFERENCE_DIR` pointing to the accepted C++-science/Python-zone products, and it never enters whole-zone `cpp-all`.
+
 > **0.6.48.11.9.5 qualification note:** `python-cpp-one MODEL_ID` runs C++ scientific backends with `--zone-backend python` and compares against an accepted pure-Python product directory supplied by `XSTAR_PYTHON_REFERENCE_DIR`. No C++ production-zone backend is built or entered by this stage.
 
 ## 0.6.48.11.9.5 — restore accepted 11.9.3 Type50 detail-publication shadow

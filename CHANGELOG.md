@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.11.9.6 — one-model persistent cpp-zone qualification - 2026-07-30
+
+- Accept the 0.6.48.11.9.5 Ca XIX xi=2 C++-science/Python-zone result for backend progression: eight FITS products are science-table identical to pure Python; the only difference is the 198-cell high-energy `xout_spect1` tail, where C++ agrees better with FORTRAN.
+- Add `python-cpp-zone-one MODEL_ID` for the next layer only: all C++ science plus persistent zone-by-zone C++ ownership (`--zone-backend cpp-zone`).
+- The stage deliberately does not enter `cpp-all` and does not build `xstar_cpp`; it builds `libxstar_production_zone.so` and dependencies only.
+- Require `XSTAR_CPP_SCIENCE_REFERENCE_DIR` pointing to the accepted 11.9.5 `python-cpp-science` products. Comparison against that reference is blocking; FORTRAN comparison remains diagnostic.
+- No scientific runtime source changes beyond package/API version metadata. The accepted 11.9.3 `output_writers.py` remains bit-identical.
+
 ## 0.6.48.11.9.5 — Python-zone / C++-science one-model qualification - 2026-07-30
 
 The accepted pure-Python Ca XIX xi=2 boundary is frozen from 11.9.4.2 / accepted 11.9.3 publication semantics.  No scientific runtime implementation changes in this release.
