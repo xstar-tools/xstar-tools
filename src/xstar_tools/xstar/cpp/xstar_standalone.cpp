@@ -13430,6 +13430,37 @@ int standalone_iteration_evaluator_v67(
                       << "V0648117_CPP_ZONE_CALL1_EVAL1_HMCTOT=" << snapshot.hmctot << "\n"
                       << "V0648117_CPP_ZONE_CALL1_EVAL1_ELCTER=" << snapshot.charge_residual << "\n";
         }
+        // v0.6.48.12.2 fixed-state qualification: the production cpp-zone
+        // controller uses StandaloneControllerDataV67 rather than the historical
+        // FixedDsecEvaluatorData path.  Export the source-ordered per-element
+        // ledger here, directly after the actual production fixed-state solve.
+        // This is diagnostic-only and is never consumed by controller physics.
+        if (const char* parity_dir_v0648122 = std::getenv("XSTAR_ALL_ELEMENT_FIXED_PARITY_DIR")) {
+            if (*parity_dir_v0648122) {
+                try {
+                    const std::filesystem::path parity_root_v0648122(parity_dir_v0648122);
+                    std::filesystem::create_directories(parity_root_v0648122);
+                    const auto parity_csv_v0648122 = parity_root_v0648122 / "cpp_all_element_fixed_state.csv";
+                    std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> parity_message_v0648122{};
+                    const int parity_rc_v0648122 = xstar_fixed_state_write_last_element_fixed_state_v0648121(
+                        data->fixed_context, parity_csv_v0648122.string().c_str(), snapshot.sequence,
+                        snapshot.call_index, snapshot.evaluation_index, snapshot.kind.c_str(),
+                        parity_message_v0648122.data(), parity_message_v0648122.size());
+                    if (parity_rc_v0648122 != 0) {
+                        throw std::runtime_error(std::string("production all-element fixed-state diagnostic capture failed: ") +
+                            parity_message_v0648122.data());
+                    }
+                    if (snapshot.kind == "dsec" && snapshot.call_index == 1u && snapshot.evaluation_index == 1u) {
+                        std::cerr << "V0648122_CPP_FIXED_STATE_ELEMENT_LEDGER="
+                                  << parity_csv_v0648122.string() << "\n";
+                    }
+                } catch (const std::exception& exc_v0648122) {
+                    set_callback_error(error, error_size,
+                        std::string("cannot retain production all-element fixed-state diagnostics: ") + exc_v0648122.what());
+                    return 1;
+                }
+            }
+        }
         attach_native_thermal_components_v70(data->fixed_context, snapshot);
         std::string native_gate_reason_v82_patch52017;
         if (!native_snapshot_scientific_valid_v82_patch52017(snapshot, native_gate_reason_v82_patch52017)) {

@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.12.2 - 2026-07-30
+
+- Begin phase 12.0-B fixed-state qualification.
+- Move the all-element per-evaluation ledger export onto the actual production cpp-zone evaluator (`build_general_standalone_product_v67`).
+- Reuse the 12.1 pure-Python fixed-state ledger instead of rerunning the full Python zone-1 solve.
+- Add a strict identical-state Ca XIX xi=2 call-1/eval-1 comparator for H/He/Ca heating, cooling, secondary thermal terms, and electron contribution.
+- Keep DSEC/controller, option-17, publication and cpp-all work out of scope until fixed-state parity closes.
+
 ## 0.6.48.12.1 — all-element C++ coverage completion and fixed-state parity instrumentation - 2026-07-30
 
 - Phase 12.0-A is released as 0.6.48.12.1; planned phases B/C are 0.6.48.12.2 and 0.6.48.12.3.
