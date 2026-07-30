@@ -2462,140 +2462,19 @@ def _maybe_export_detail_continuum_product_write_state(
         except Exception:
             pass
 
-def _source_type50_raw_opakb1_for_publication_shadow(
-    state: XSTARPythonState,
-    line: LineOutputMetadata,
-    lo: LevelOutputMetadata,
-    up: LevelOutputMetadata,
-    source_abund1: float,
-) -> float | None:
-    """Return source ``ucalc`` Type50 caller-local ``opakb1`` when assigned.
-
-    This is an output-only reconstruction used to advance the stale scalar
-    seen by ``calc_emisab_ion -> fstepr2``.  ``None`` means the literal
-    Type50 branch exits before assigning ``opakb1`` and the caller's prior
-    value must therefore be retained.  The returned value is never written
-    into physical ``oplin``/``opakc``.
-    """
-    master = state.atomic.master
-    derived = state.atomic.derived
-    if master is None or derived is None:
-        return None
-    rec = int(line.source_record)
-    if rec <= 0:
-        return None
-    try:
-        header = master.header(rec)
-        if int(header.data_type) != 50 or int(header.rate_type) != 4:
-            return None
-        reals = master.record_reals(rec, dtype=np.float64)
-        if reals.size < 3:
-            return None
-        elin = abs(float(reals[0]))
-        if elin <= 1.0e-34:
-            return None
-        aij = float(reals[2])
-
-        # ucalc orders the two endpoints by level energy before reading the
-        # statistical weights.  calc_emisab_ion has already formed abund1
-        # from the lower-energy endpoint, which is passed unchanged.
-        # idest1 is the first stored endpoint (``lo`` here despite the field
-        # name); ucalc swaps only when its energy is strictly below idest2.
-        if float(lo.excitation_eV) < float(up.excitation_eV):
-            source_upper, source_lower = up, lo
-        else:
-            source_upper, source_lower = lo, up
-
-        ion_index = int(lo.ion_index)
-        nlevs = np.asarray(derived.nlevs, dtype=np.int64)
-        if (
-            int(up.ion_index) != ion_index
-            or ion_index <= 0
-            or ion_index >= nlevs.size
-            or int(line.lower_local_index) <= 0
-            or int(line.upper_local_index) <= 0
-            or int(line.lower_local_index) >= int(nlevs[ion_index])
-            or int(line.upper_local_index) >= int(nlevs[ion_index])
-        ):
-            return None
-
-        def _source_weight(level: LevelOutputMetadata) -> float | None:
-            gi = int(level.global_index)
-            records = np.asarray(derived.level_record_by_global_index, dtype=np.int64)
-            if gi <= 0 or gi >= records.size:
-                return None
-            lrec = int(records[gi])
-            if lrec <= 0:
-                return None
-            lr = master.record_reals(lrec, dtype=np.float64)
-            if lr.size < 2:
-                return None
-            return float(lr[1])
-
-        ggup = _source_weight(source_upper)
-        gglo = _source_weight(source_lower)
-        if ggup is None or gglo is None or ggup <= 0.0 or gglo <= 0.0:
-            return None
-
-        # Literal parent chain from ucalc label 50:
-        # line -> ion -> element, then element rdat(2) is atomic mass.
-        npar = np.asarray(derived.npar, dtype=np.int64)
-        if rec >= npar.size:
-            return None
-        ion_rec = int(npar[rec])
-        if ion_rec <= 0 or ion_rec >= npar.size:
-            return None
-        element_rec = int(npar[ion_rec])
-        if element_rec <= 0:
-            return None
-        er = master.record_reals(element_rec, dtype=np.float64)
-        if er.size < 2:
-            return None
-        atomic_mass = float(er[1])
-        t4 = float(state.plasma.temperature) / 1.0e4
-        if atomic_mass <= 0.0 or t4 <= 0.0:
-            return None
-
-        # Preserve default-REAL literal provenance used by ucalc.f90.
-        flin = (
-            1.0e-16 * aij * ggup * elin * elin
-            / (_source_real(0.667274) * gglo)
-        )
-        vturb_km_s = float(state.control.get("vturbi", 0.0))
-        vtherm = (
-            (vturb_km_s * _source_real(1.0e5)) ** 2
-            + (_source_real(1.29e6) / np.sqrt(atomic_mass / t4)) ** 2
-        ) ** 0.5
-        if not np.isfinite(vtherm) or vtherm <= 0.0:
-            return None
-        sigvtherm = (
-            _source_real(0.02655) * flin * elin * 1.0e-8 / vtherm
-        )
-        # Literal high-wavelength sentinel is applied before opakb1 is
-        # assigned, so an executed artificial Type50 record advances the
-        # stale scalar to zero rather than leaving its previous value.
-        if elin > _source_real(0.99e9):
-            sigvtherm = 0.0
-        raw_opakb1 = float(sigvtherm) * float(source_abund1)
-        return raw_opakb1 if np.isfinite(raw_opakb1) else None
-    except Exception:
-        # Publication-shadow reconstruction must never perturb the run.
-        return None
-
-
 def _source_detail_line_activity_shadow(
     state: XSTARPythonState,
     metadata: SourceOutputMetadata,
     populations_zero_based: Sequence[float],
+    physical_oplin: Sequence[float],
 ) -> np.ndarray:
     """Build a deterministic fstepr2 publication-identity shadow.
 
-    v0.6.48.11.9.4.1 repairs the caller-local Type50 ``opakb1`` shadow from
-    the raw source evaluation of every eligible Type50/rate-4 record, even
-    records later excluded from public output (for example the 1e10-A
-    sentinel line immediately before Ca XVIII line 88440).  This reproduces
-    source publication identity only: the reconstructed stale scalar is never
-    injected into physical rcem/oplin/opakc, equilibrium, or transport.
+    This mirrors the literal ``calc_emisab_ion.f90`` Type50/rate-4 endpoint
+    abundance gate without reproducing its uninitialized/stale ``opakb1``
+    side effect.  The shadow is output-only: it can retain a zero/negligible
+    line row in source order, but it never changes rcem, oplin, tau0, the
+    continuum opacity, equilibrium, or transport.
     """
     n_lines = max((int(row.line_index) for row in metadata.lines), default=0)
     shadow = np.zeros(n_lines, dtype=bool)
@@ -2603,31 +2482,26 @@ def _source_detail_line_activity_shadow(
         return shadow
 
     pop = np.asarray(populations_zero_based, dtype=float).reshape(-1)
-
-    # v0.6.48.11.9.4.1: calc_emisab_all passes xeltp=abel(jk), where
-    # ``abel`` is the user abundance *multiplier* read by rread1.  The
-    # separate xstarsetup array ``ababs=abel*abcosmic`` is the physical
-    # abundance and is what state.plasma.abundances stores.  Using ababs
-    # here incorrectly applies the cosmic abundance a second time to the
-    # source publication gate (for Ca, 1 -> 2.1e-6), suppressing thousands
-    # of source-zero detail rows and making line 88440 miss the 1.e-34
-    # calc_emisab_ion call gate.
-    source_abel = state.control.get("abel")
-    if source_abel is None:
+    oplin = np.asarray(physical_oplin, dtype=float).reshape(-1)
+    abundances = state.plasma.abundances
+    if abundances is None:
         return shadow
-    ab = np.asarray(source_abel, dtype=float).reshape(-1)
+    ab = np.asarray(abundances, dtype=float).reshape(-1)
     xpx = float(state.plasma.xpx)
 
     # LevelOutputMetadata.upper_index is the source local level index.
+    # Ion labels are unique ATDB ion identities, so this is a stable bridge
+    # from line endpoints to the global xilevg population vector.
     level_by_ion_local: dict[tuple[str, int], LevelOutputMetadata] = {
         (str(row.ion_label), int(row.upper_index)): row for row in metadata.levels
     }
-
-    # ``opakb1`` is caller-local in calc_emisab_ion.  If the abundance gate
-    # skips ucalc, the prior scalar survives and is multiplied by the current
-    # lower-level abundance when oplin(jkkl) is assigned.  If ucalc executes
-    # and reaches the Type50 assignment, advance the scalar from the raw
-    # source formula whether or not that line is later publishable.
+    # ``opakb1`` in the source line branch is caller-local and is only
+    # assigned by ucalc when the endpoint-abundance gate passes.  The source
+    # nevertheless executes ``oplin(jkkl)=opakb1*abund1`` after a skipped
+    # call, so a stale scalar can make a numerically zero line visible to
+    # fstepr2.  Reproduce only that *row-identity* consequence here.  The
+    # carry is reconstructed from deterministic physical oplin for eligible
+    # Type50 rows and is never written back to physical opacity.
     stale_opakb1 = 0.0
     for line in sorted(metadata.lines, key=lambda row: int(row.line_index)):
         if int(line.rate_type) != 4 or int(line.data_type) != 50:
@@ -2642,26 +2516,6 @@ def _source_detail_line_activity_shadow(
         z = int(lo.atomic_number)
         if z <= 0 or z > ab.size or int(up.atomic_number) != z:
             continue
-
-        # calc_emisab_ion tests source endpoint validity before it forms
-        # abund1/abund2, calls ucalc, or assigns oplin.  A failed endpoint
-        # test therefore cannot consume caller-local stale opakb1 at all.
-        derived = state.atomic.derived
-        if derived is None:
-            continue
-        ion_index = int(lo.ion_index)
-        nlevs = np.asarray(derived.nlevs, dtype=np.int64)
-        if (
-            int(up.ion_index) != ion_index
-            or ion_index <= 0
-            or ion_index >= nlevs.size
-            or int(line.lower_local_index) <= 0
-            or int(line.upper_local_index) <= 0
-            or int(line.lower_local_index) >= int(nlevs[ion_index])
-            or int(line.upper_local_index) >= int(nlevs[ion_index])
-        ):
-            continue
-
         gi_lo = int(lo.global_index) - 1
         gi_up = int(up.global_index) - 1
         if gi_lo < 0 or gi_up < 0 or gi_lo >= pop.size or gi_up >= pop.size:
@@ -2674,24 +2528,24 @@ def _source_detail_line_activity_shadow(
             or a_up > SOURCE_DETAIL_ENDPOINT_ABUNDANCE_FLOOR
         )
 
-        # Source abund1 is the lower-energy endpoint.
-        source_abund1 = a_lo if float(lo.excitation_eV) < float(up.excitation_eV) else a_up
+        # Source ``abund1`` is the lower-energy endpoint, independent of the
+        # integer endpoint order stored in the ATDB record.
+        if float(lo.excitation_eV) <= float(up.excitation_eV):
+            source_abund1 = a_lo
+        else:
+            source_abund1 = a_up
 
         if endpoint_active:
-            assigned = _source_type50_raw_opakb1_for_publication_shadow(
-                state, line, lo, up, source_abund1
-            )
-            if assigned is not None:
-                stale_opakb1 = float(assigned)
-
-        # Literal calc_emisab_ion -> fstepr2 ownership: after the optional
-        # ucalc call the caller always assigns oplin(jkkl)=opakb1*abund1.
-        # Therefore an abundance-active record is not automatically a FITS
-        # row: the reconstructed opacity must cross fstepr2's 1.d-64 signal
-        # floor (or the physical rcem/oplin arrays, tested by the writer, must
-        # do so).  If ucalc was skipped or exited before assigning opakb1, the
-        # previous caller-local scalar remains in force.
-        if stale_opakb1 * source_abund1 > DETAIL_LINE_ACTIVITY_FLOOR:
+            # Python evaluates this record deterministically.  Recover the
+            # scalar source opakb1 from oplin=opakb1*abund1 when possible so
+            # the publication carry follows the same source record sequence.
+            if i < oplin.size and source_abund1 != 0.0:
+                candidate = float(oplin[i]) / source_abund1
+                if np.isfinite(candidate):
+                    stale_opakb1 = candidate
+            shadow[i] = True
+        elif abs(stale_opakb1 * source_abund1) > DETAIL_LINE_ACTIVITY_FLOOR:
+            # Source artifact compatibility: retain the row only.
             shadow[i] = True
     return shadow
 
@@ -2705,7 +2559,7 @@ def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int, ter
     populations_out = _detail_level_vector(populations, metadata)
     lte_out = _detail_level_vector(lte, metadata)
     source_detail_line_activity_shadow = _source_detail_line_activity_shadow(
-        state, metadata, populations_out
+        state, metadata, populations_out, workspace.oplin_physical
     )
     ncn2 = int(state.control["ncn2"])
     record = build_detail_shell_output(

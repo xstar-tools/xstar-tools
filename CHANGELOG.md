@@ -1,5 +1,23 @@
 # CHANGELOG
 
+## 0.6.48.11.9.4.2 — restore accepted 11.9.3 Type50 detail-publication shadow - 2026-07-30
+
+11.9.4 and 11.9.4.1 are rejected publication-shadow experiments.  Both regressed the previously accepted Ca XIX xi=2 `xo01_detal2` inventory from the 11.9.3 state (`12131/12131`, `12131/12131`, `15746/15747`, `15746/15747`) back toward the pre-shadow physical-only inventory.  The 11.9.4 raw-Type50 reconstruction changed the accepted endpoint-active publication semantics, and 11.9.4.1 additionally used the wrong interpretation of the downstream FORTRAN dummy argument named `abel`.
+
+0.6.48.11.9.4.2 restores `src/xstar_tools/xstar/output_writers.py` **byte-for-byte from accepted 0.6.48.11.9.3**.  Therefore the production publication path again:
+
+- uses `state.plasma.abundances`, matching the physical `ababs=abel*abcosmic` array passed by `xstar.f90` into `xstarcalc` and onward to `calc_emisab_*`;
+- retains Type50/rate-4 rows when the source endpoint-abundance gate is active, preserving the accepted zero/negligible FORTRAN row inventory;
+- reconstructs only the deterministic output-only stale carry from physical `oplin/source_abund1` for skipped calls;
+- never injects stale/uninitialized source state into physical `rcem`, `oplin`, `tau0`, `opakc`, continuum/RRC, equilibrium, rates, or transport;
+- contains no raw Type50 `opakb1` source reconstruction helper.
+
+The repeated-`XSTAR_RADIAL` comparator, `python-one` workflow, source-default-REAL column boundary fix, production-zone ABI 6048110, and all other runtime files remain unchanged from the accepted 11.9.3 boundary apart from release/API version metadata.
+
+The Ca XVIII line 88440 omission remaining in accepted 11.9.3 is now treated separately from deterministic Type50 physics: source inspection shows it is the first relevant line in a `calc_emisab_ion` invocation whose endpoint abundances are below the `1.e-34` `ucalc` gate, so the FORTRAN row depends on caller-local undefined/uninitialized `opakb1` publication state.  11.9.4.2 deliberately does **not** invent a physical reconstruction for that undefined-local artifact.
+
+Run only `helike_type69/ca19_xi2_ne1` with `run_v064811942_multimodel.sh ... python-one`.  The immediate regression target is recovery of the accepted 11.9.3 inventory before any decision is made about the single 88440 compatibility row.
+
 # 0.6.48.11.9.4.1 - 2026-07-29
 
 Pure-Python Type50 detail-publication regression hotfix.
