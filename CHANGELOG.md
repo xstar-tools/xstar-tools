@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.48.11.9.5 — Python-zone / C++-science one-model qualification - 2026-07-30
+
+The accepted pure-Python Ca XIX xi=2 boundary is frozen from 11.9.4.2 / accepted 11.9.3 publication semantics.  No scientific runtime implementation changes in this release.
+
+- Add `python-cpp-one MODEL_ID` for one-model qualification with C++ global/solver/rates/matrix/emissivity/opacity/thermal/engine backends while the zone controller remains Python.
+- Build only the modular C++ scientific libraries needed by that mode; do not build or enter `libxstar_production_zone.so`.
+- Require `XSTAR_PYTHON_REFERENCE_DIR` pointing to accepted pure-Python products.
+- Compare the candidate to FORTRAN diagnostically and to accepted pure Python as the blocking backend-parity gate.
+- Retain the accepted 11.9.3 `output_writers.py` bit-for-bit, including the known one-row 88440 `xo01_detal2` publication omission in the final two radial HDUs.
+- Record direct `xout_step.log` comparison showing exact radial/DSEC topology and only low-weight publication/log tails.
+
 ## 0.6.48.11.9.4.2 — restore accepted 11.9.3 Type50 detail-publication shadow - 2026-07-30
 
 11.9.4 and 11.9.4.1 are rejected publication-shadow experiments.  Both regressed the previously accepted Ca XIX xi=2 `xo01_detal2` inventory from the 11.9.3 state (`12131/12131`, `12131/12131`, `15746/15747`, `15746/15747`) back toward the pre-shadow physical-only inventory.  The 11.9.4 raw-Type50 reconstruction changed the accepted endpoint-active publication semantics, and 11.9.4.1 additionally used the wrong interpretation of the downstream FORTRAN dummy argument named `abel`.
