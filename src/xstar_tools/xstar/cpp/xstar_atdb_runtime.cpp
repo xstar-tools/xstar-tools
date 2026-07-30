@@ -21,9 +21,11 @@ namespace {
 
 constexpr int kProgramAbi = 60486;
 constexpr int kType49PhextrapMaxPoints = 999;
-constexpr int kType53LayoutMagic = 221;
-constexpr int kType49LayoutMagic = 222;
+constexpr int kType53LayoutMagic = 221; // legacy Mg-only 12-stage payload
+constexpr int kType49LayoutMagic = 222; // legacy Mg-only 12-stage payload
 constexpr int kType99LayoutMagic = 223;
+constexpr int kType53LayoutMagicZ1Z30V06481231 = 224;
+constexpr int kType49LayoutMagicZ1Z30V06481231 = 225;
 constexpr double kEvAngstrom = 12398.419843320026;
 
 const std::set<int> kLegacyActiveTypes = {
@@ -763,8 +765,26 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
         double corrected=base;if(dt==53&&id2>b.nlev)corrected+=excited_e;if(dt==53)corrected=std::max(0.0,corrected);
         out.reals.clear();for(std::size_t k=0;k<rr.size();++k)out.reals.push_back(k%2?rr[k]*1.0e-18:rr[k]);const auto* destsnap=find_snapshot(l,ion,id2);
         out.reals.insert(out.reals.end(),{base,corrected,bound->energy,partition->energy,bound->weight,pweight,destination_weight,destsnap?destsnap->energy:0.0,excited_e,excited_w});
-        int candidate_mask=0;if(b.element_z==12){for(int candidate_stage=1;candidate_stage<=12;++candidate_stage){auto bi=std::find_if(l.blocks.begin(),l.blocks.end(),[&](const Block& x){return x.ion_stage==candidate_stage;});const LevelValue* cv=bi==l.blocks.end()?nullptr:find_level(l,bi->ion_index,id2);out.reals.push_back(cv?cv->energy:0.0);if(cv)candidate_mask|=1<<(candidate_stage-1);}}
-        int ci=d.npconi2[rec];need(ci>0,"has no canonical continuum index");out.ints={ci};if(dt==49)out.ints.push_back(kType49PhextrapMaxPoints);if(b.element_z==12){out.ints.push_back(id2);out.ints.push_back(candidate_mask);out.ints.push_back(dt==49?kType49LayoutMagic:kType53LayoutMagic);}energy=corrected;
+        // v0.6.48.12.3.1: serialize the mutable source leveltemp destination
+        // column ownership for every supported element, not only Mg.  Source
+        // calc_hmc_element leaves higher columns owned by whichever active ion
+        // wrote that local column most recently.  Thirty bits are sufficient
+        // for the supported Z=1..30 ion blocks; the fully stripped terminal
+        // stage has no ATDB level block and therefore no candidate bit.
+        std::uint32_t candidate_mask=0u;
+        for(int candidate_stage=1;candidate_stage<=30;++candidate_stage){
+            auto bi=std::find_if(l.blocks.begin(),l.blocks.end(),[&](const Block& x){return x.ion_stage==candidate_stage;});
+            const LevelValue* cv=bi==l.blocks.end()?nullptr:find_level(l,bi->ion_index,id2);
+            out.reals.push_back(cv?cv->energy:0.0);
+            if(cv)candidate_mask|=(std::uint32_t{1}<<static_cast<unsigned>(candidate_stage-1));
+        }
+        int ci=d.npconi2[rec];need(ci>0,"has no canonical continuum index");
+        out.ints={ci};
+        if(dt==49)out.ints.push_back(kType49PhextrapMaxPoints);
+        out.ints.push_back(id2);
+        out.ints.push_back(static_cast<std::int64_t>(candidate_mask));
+        out.ints.push_back(dt==49?kType49LayoutMagicZ1Z30V06481231:kType53LayoutMagicZ1Z30V06481231);
+        energy=corrected;
     }
     else if (!kLegacyActiveTypes.count(dt) && dt != 52 && dt != 91) {
         // v0.6.48.12.1: source-generic lowering for physical UCalc labels that

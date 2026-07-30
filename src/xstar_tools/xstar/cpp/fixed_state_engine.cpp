@@ -40,6 +40,7 @@ namespace {
 using clock_type = std::chrono::steady_clock;
 constexpr double kBoltzmannEvK = xstar_constants::kModernBoltzmannEvPerK;
 constexpr double kErgPerEv = xstar_constants::kModernErgPerEv;
+constexpr std::size_t kSourceLeveltempNdlV06481231 = 5000u;
 constexpr double kRydEv = 13.60569253;
 // The v0.6.47.2 type-53 evaluator uses the historical rounded Rydberg
 // constant.  Keep it separate from the newer global constant: changing this
@@ -1213,7 +1214,7 @@ struct Type53RecordContext {
     bool persistent_leveltemp_candidates_valid = false;
     int leveltemp_destination_column = 0;
     std::uint32_t leveltemp_candidate_mask = 0;
-    std::array<double,12> leveltemp_candidate_energy_ev{};
+    std::array<double,30> leveltemp_candidate_energy_ev{};
     int continuum_index_one_based = 0;
     int phextrap_max_points = 0;
 };
@@ -1299,7 +1300,7 @@ struct Type53SourceShadow {
     bool persistent_leveltemp_candidates_valid = false;
     int leveltemp_destination_column = 0;
     std::uint32_t leveltemp_candidate_mask = 0;
-    std::array<double,12> leveltemp_candidate_energy_ev{};
+    std::array<double,30> leveltemp_candidate_energy_ev{};
     double bound_statistical_weight = 0.0;
     double continuum_statistical_weight = 0.0;
     double destination_statistical_weight = 0.0;
@@ -3138,6 +3139,12 @@ struct xstar_fixed_state_context_impl {
     // Autonomous repeated-evaluation source state: the accepted compact
     // ion-stage window is retained per element between fixed-state calls.
     std::map<int, std::pair<int,int>> retained_active_stage_windows;
+    // v0.6.48.12.3.1: source leveltemp(2,1:5000) is one mutable workspace
+    // shared across element solves and fixed-state evaluations.  Type49/53
+    // destination-energy ownership therefore cannot be reconstructed from a
+    // per-ion static ATDB snapshot when no active ion writes a destination
+    // column.  Preserve the source workspace explicitly.
+    std::vector<double> source_leveltemp_energy_workspace_v06481231;
     // v0.6.48.11.4: model runtime calc_hmc_element critf.  Keep this on
     // the context so the historical xstar_fixed_state_input_v1 ABI remains
     // byte-for-byte unchanged.
@@ -5975,14 +5982,54 @@ EvaluatedRecord evaluate_record(
         case XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE: {
             if (!r || record.real_count < 4) throw std::runtime_error("bound-free payload requires energy/sigma pairs");
             if (!input.radiation_energy_ev || !input.radiation_flux || input.radiation_bin_count < 2) throw std::runtime_error("bound-free record requires live radiation grid");
+            constexpr std::size_t kType53ContextRealsV4 = 40;
             constexpr std::size_t kType53ContextRealsV3 = 22;
             constexpr std::size_t kType53ContextRealsV2 = 10;
             constexpr std::size_t kType53ContextRealsV1 = 7;
             constexpr std::int64_t kType53LeveltempLayoutMagicV048746221 = 221;
+            constexpr std::int64_t kType53LeveltempLayoutMagicZ1Z30V06481231 = 224;
             Type53RecordContext record_context{};
+            const bool has_v4_magic = ints && record.int_count >= 4 &&
+                ints[3] == kType53LeveltempLayoutMagicZ1Z30V06481231;
             const bool has_v3_magic = ints && record.int_count >= 4 &&
                 ints[3] == kType53LeveltempLayoutMagicV048746221;
-            if (has_v3_magic) {
+            if (has_v4_magic) {
+                if (record.real_count < 4 + kType53ContextRealsV4 ||
+                    (record.real_count - kType53ContextRealsV4) % 2 != 0) {
+                    throw std::runtime_error("Z1-Z30 Type-53 persistent-leveltemp v4 payload is malformed");
+                }
+                if (ints[1] <= 0 || ints[2] < 0 ||
+                    static_cast<std::uint64_t>(ints[2]) > 0x3fffffffu) {
+                    throw std::runtime_error("Z1-Z30 Type-53 persistent-leveltemp v4 metadata is invalid");
+                }
+                const std::size_t base = record.real_count - kType53ContextRealsV4;
+                record_context.valid = true;
+                record_context.layout_version = 4;
+                record_context.pair_real_count = base;
+                record_context.base_threshold_ev = r[base + 0];
+                record_context.threshold_ev = r[base + 1];
+                record_context.bound_energy_ev = r[base + 2];
+                record_context.continuum_energy_ev = r[base + 3];
+                record_context.bound_statistical_weight = r[base + 4];
+                record_context.continuum_statistical_weight = r[base + 5];
+                record_context.destination_statistical_weight = r[base + 6];
+                record_context.leveltemp_destination_energy_ev = r[base + 7];
+                record_context.excited_parent_energy_ev = r[base + 8];
+                record_context.excited_parent_statistical_weight = r[base + 9];
+                record_context.leveltemp_destination_column = static_cast<int>(ints[1]);
+                record_context.leveltemp_candidate_mask = static_cast<std::uint32_t>(ints[2]);
+                for (std::size_t stage = 0; stage < 30; ++stage) {
+                    const double value = r[base + 10 + stage];
+                    if ((record_context.leveltemp_candidate_mask & (std::uint32_t{1} << stage)) != 0u &&
+                        !std::isfinite(value)) {
+                        throw std::runtime_error(
+                            "Z1-Z30 Type-53 persistent-leveltemp candidate energy is non-finite");
+                    }
+                    record_context.leveltemp_candidate_energy_ev[stage] = value;
+                }
+                record_context.persistent_leveltemp_candidates_valid = true;
+                record_context.continuum_index_one_based = static_cast<int>(ints[0]);
+            } else if (has_v3_magic) {
                 if (record.real_count < 4 + kType53ContextRealsV3 ||
                     (record.real_count - kType53ContextRealsV3) % 2 != 0) {
                     throw std::runtime_error("Mg Type-53 persistent-leveltemp v3 payload is malformed");
@@ -6487,14 +6534,50 @@ EvaluatedRecord evaluate_record(
         }
         case XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE: {
             if (!r || record.real_count < 4) throw std::runtime_error("Type-49 bound-free payload requires energy/sigma pairs");
+            constexpr std::size_t kBoundFreeContextRealsV4 = 40;
             constexpr std::size_t kBoundFreeContextRealsV3 = 22;
             constexpr std::size_t kBoundFreeContextRealsV2 = 10;
             constexpr std::size_t kBoundFreeContextRealsV1 = 7;
             constexpr std::int64_t kType49LeveltempLayoutMagicV048746222 = 222;
+            constexpr std::int64_t kType49LeveltempLayoutMagicZ1Z30V06481231 = 225;
             Type53RecordContext record_context{};
+            const bool type49_v4 = ints && record.int_count >= 5 &&
+                ints[4] == kType49LeveltempLayoutMagicZ1Z30V06481231;
             const bool type49_v3 = ints && record.int_count >= 5 &&
                 ints[4] == kType49LeveltempLayoutMagicV048746222;
-            if (type49_v3 && record.real_count >= 4 + kBoundFreeContextRealsV3 &&
+            if (type49_v4 && record.real_count >= 4 + kBoundFreeContextRealsV4 &&
+                (record.real_count - kBoundFreeContextRealsV4) % 2 == 0) {
+                const std::size_t base = record.real_count - kBoundFreeContextRealsV4;
+                record_context.valid = true;
+                record_context.layout_version = 4;
+                record_context.pair_real_count = base;
+                record_context.base_threshold_ev = r[base + 0];
+                record_context.threshold_ev = r[base + 1];
+                record_context.bound_energy_ev = r[base + 2];
+                record_context.continuum_energy_ev = r[base + 3];
+                record_context.bound_statistical_weight = r[base + 4];
+                record_context.continuum_statistical_weight = r[base + 5];
+                record_context.destination_statistical_weight = r[base + 6];
+                record_context.leveltemp_destination_energy_ev = r[base + 7];
+                record_context.excited_parent_energy_ev = r[base + 8];
+                record_context.excited_parent_statistical_weight = r[base + 9];
+                record_context.continuum_index_one_based = static_cast<int>(ints[0]);
+                record_context.phextrap_max_points = static_cast<int>(ints[1]);
+                record_context.leveltemp_destination_column = static_cast<int>(ints[2]);
+                record_context.leveltemp_candidate_mask = static_cast<std::uint32_t>(ints[3]);
+                if (record_context.leveltemp_destination_column <= 0 ||
+                    (record_context.leveltemp_candidate_mask & ~0x3fffffffu) != 0u) {
+                    throw std::runtime_error("Z1-Z30 Type-49 persistent leveltemp metadata invalid");
+                }
+                for (std::size_t stage = 0; stage < 30; ++stage) {
+                    record_context.leveltemp_candidate_energy_ev[stage] = r[base + 10 + stage];
+                    if ((record_context.leveltemp_candidate_mask & (std::uint32_t{1} << stage)) != 0u &&
+                        !std::isfinite(record_context.leveltemp_candidate_energy_ev[stage])) {
+                        throw std::runtime_error("Z1-Z30 Type-49 persistent leveltemp candidate non-finite");
+                    }
+                }
+                record_context.persistent_leveltemp_candidates_valid = true;
+            } else if (type49_v3 && record.real_count >= 4 + kBoundFreeContextRealsV3 &&
                 (record.real_count - kBoundFreeContextRealsV3) % 2 == 0) {
                 const std::size_t base = record.real_count - kBoundFreeContextRealsV3;
                 record_context.valid = true;
@@ -7851,21 +7934,22 @@ int ground_row_for_stage(const ElementProgram& element, int stage) {
     return found;
 }
 
-double source_persistent_leveltemp_destination_energy_v048746222(
+double source_persistent_leveltemp_destination_energy_z1_z30_v06481231(
     const ActiveElementView& active,
     const xstar_element_contribution_v1& contribution,
-    const Type53SourceShadow& shadow) {
+    const Type53SourceShadow& shadow,
+    const std::vector<double>& incoming_leveltemp_energy_workspace) {
     if (!shadow.persistent_leveltemp_candidates_valid ||
         shadow.leveltemp_destination_column <= 0) {
         throw std::runtime_error(
-            "source-faithful Mg bound-free record requires persistent leveltemp candidate payload");
+            "source-faithful Z1-Z30 bound-free record requires persistent leveltemp candidate payload");
     }
-    if ((shadow.leveltemp_candidate_mask & ~0x0fffu) != 0u) {
-        throw std::runtime_error("Mg bound-free persistent leveltemp candidate mask is invalid");
+    if ((shadow.leveltemp_candidate_mask & ~0x3fffffffu) != 0u) {
+        throw std::runtime_error("Z1-Z30 bound-free persistent leveltemp candidate mask is invalid");
     }
 
     const auto candidate_present = [&](int stage) {
-        if (stage < 1 || stage > 12) return false;
+        if (stage < 1 || stage > 30) return false;
         const std::uint32_t bit = 1u << static_cast<unsigned>(stage - 1);
         return (shadow.leveltemp_candidate_mask & bit) != 0u;
     };
@@ -7874,7 +7958,7 @@ double source_persistent_leveltemp_destination_energy_v048746222(
             static_cast<std::size_t>(stage - 1)];
         if (!std::isfinite(value)) {
             throw std::runtime_error(
-                "Mg bound-free persistent leveltemp candidate energy is non-finite");
+                "Z1-Z30 bound-free persistent leveltemp candidate energy is non-finite");
         }
         return value;
     };
@@ -7895,22 +7979,63 @@ double source_persistent_leveltemp_destination_energy_v048746222(
         }
     }
     if (owner_stage == 0) {
-        // No active ion writes this column in either source pass.  Preserve
-        // the incoming persistent leveltemp value already serialized in the
-        // v2/v3 context rather than inventing a zero-energy owner.
-        return std::numeric_limits<double>::quiet_NaN();
+        // No active ion writes this column in either source pass.  Literal
+        // source semantics retain whatever value entered calc_hmc_element in
+        // the shared leveltemp workspace.  At the first element/evaluation
+        // that value is zero; on later elements/evaluations it is the value
+        // left by the preceding source levwkelement sequence.
+        const std::size_t column = static_cast<std::size_t>(shadow.leveltemp_destination_column - 1);
+        if (column >= incoming_leveltemp_energy_workspace.size()) {
+            throw std::runtime_error(
+                "Z1-Z30 bound-free persistent leveltemp destination column exceeds source workspace");
+        }
+        const double incoming = incoming_leveltemp_energy_workspace[column];
+        if (!std::isfinite(incoming)) {
+            throw std::runtime_error(
+                "Z1-Z30 bound-free incoming persistent leveltemp energy is non-finite");
+        }
+        return incoming;
     }
     return candidate_energy(owner_stage);
 }
 
-void apply_magnesium_type53_persistent_leveltemp_v048746221(
+void advance_source_leveltemp_first_pass_z1_z30_v06481231(
+    const Program& program,
     const ElementProgram& element,
     const ActiveElementView& active,
-    std::vector<EvaluatedRecord>& evaluated) {
-    if (element.element_z != 12 ||
-        !environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE53_PERSISTENT_LEVELTEMP")) {
-        return;
+    std::vector<double>& workspace) {
+    if (element.element_z < 1 || element.element_z > 30) return;
+    if (workspace.size() != kSourceLeveltempNdlV06481231) {
+        throw std::runtime_error("source leveltemp persistent workspace has invalid size");
     }
+    // Source calc_hmc_element first pass calls levwkelement for active ions in
+    // increasing ion-stage order.  Each call overwrites only columns 1:nlev;
+    // columns above nlev retain their previous shared-workspace values.
+    for (int stage = active.min_stage; stage <= active.max_stage; ++stage) {
+        for (const auto& level : program.lte_levels) {
+            if (level.element_index != element.element_index ||
+                level.ion_stage != stage || level.local_level <= 0) {
+                continue;
+            }
+            const std::size_t column = static_cast<std::size_t>(level.local_level - 1);
+            if (column >= workspace.size()) {
+                throw std::runtime_error(
+                    "source LTE leveltemp local level exceeds 5000-column workspace");
+            }
+            if (!std::isfinite(level.energy_ev)) {
+                throw std::runtime_error("source LTE leveltemp energy is non-finite");
+            }
+            workspace[column] = level.energy_ev;
+        }
+    }
+}
+
+void apply_type53_persistent_leveltemp_z1_z30_v06481231(
+    const ElementProgram& element,
+    const ActiveElementView& active,
+    const std::vector<double>& incoming_leveltemp_energy_workspace,
+    std::vector<EvaluatedRecord>& evaluated) {
+    if (element.element_z < 1 || element.element_z > 30) return;
     for (auto& item : evaluated) {
         auto& contribution = item.contribution;
         auto& shadow = item.type53_shadow;
@@ -7918,8 +8043,8 @@ void apply_magnesium_type53_persistent_leveltemp_v048746221(
             contribution.ion_stage < active.min_stage || contribution.ion_stage > active.max_stage) {
             continue;
         }
-        const double destination_energy = source_persistent_leveltemp_destination_energy_v048746222(
-            active, contribution, shadow);
+        const double destination_energy = source_persistent_leveltemp_destination_energy_z1_z30_v06481231(
+            active, contribution, shadow, incoming_leveltemp_energy_workspace);
         if (!std::isfinite(destination_energy)) {
             continue;
         }
@@ -7937,7 +8062,7 @@ void apply_magnesium_type53_persistent_leveltemp_v048746221(
         contribution.ans5 = ans5_pre *
             (std::abs(contribution.ans3) - energy_difference * kErgPerEv * contribution.ans2) / den5;
         if (!std::isfinite(contribution.ans5) || !std::isfinite(contribution.ans6)) {
-            throw std::runtime_error("non-finite Mg Type-53 persistent-leveltemp correction");
+            throw std::runtime_error("non-finite Z1-Z30 Type-53 persistent-leveltemp correction");
         }
         shadow.destination_energy_ev = destination_energy;
         shadow.ans[4] = contribution.ans5;
@@ -7953,14 +8078,12 @@ void apply_magnesium_type53_persistent_leveltemp_v048746221(
     }
 }
 
-void apply_magnesium_type49_persistent_leveltemp_v048746222(
+void apply_type49_persistent_leveltemp_z1_z30_v06481231(
     const ElementProgram& element,
     const ActiveElementView& active,
+    const std::vector<double>& incoming_leveltemp_energy_workspace,
     std::vector<EvaluatedRecord>& evaluated) {
-    if (element.element_z != 12 ||
-        !environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE49_PERSISTENT_LEVELTEMP")) {
-        return;
-    }
+    if (element.element_z < 1 || element.element_z > 30) return;
     for (auto& item : evaluated) {
         auto& contribution = item.contribution;
         auto& shadow = item.type49_shadow;
@@ -7968,8 +8091,8 @@ void apply_magnesium_type49_persistent_leveltemp_v048746222(
             contribution.ion_stage < active.min_stage || contribution.ion_stage > active.max_stage) {
             continue;
         }
-        const double destination_energy = source_persistent_leveltemp_destination_energy_v048746222(
-            active, contribution, shadow);
+        const double destination_energy = source_persistent_leveltemp_destination_energy_z1_z30_v06481231(
+            active, contribution, shadow, incoming_leveltemp_energy_workspace);
         if (!std::isfinite(destination_energy)) {
             continue;
         }
@@ -7987,7 +8110,7 @@ void apply_magnesium_type49_persistent_leveltemp_v048746222(
         contribution.ans5 = ans5_pre *
             (std::abs(contribution.ans3) - energy_difference * kErgPerEv * contribution.ans2) / den5;
         if (!std::isfinite(contribution.ans5) || !std::isfinite(contribution.ans6)) {
-            throw std::runtime_error("non-finite Mg Type-49 persistent-leveltemp correction");
+            throw std::runtime_error("non-finite Z1-Z30 Type-49 persistent-leveltemp correction");
         }
         shadow.destination_energy_ev = destination_energy;
         shadow.ans[4] = contribution.ans5;
@@ -10395,6 +10518,8 @@ int run_impl(
          element_slot_v064894 < ctx.program.elements.size();
          ++element_slot_v064894) {
         const auto& element = ctx.program.elements[element_slot_v064894];
+        const std::vector<double> incoming_source_leveltemp_energy_v06481231 =
+            ctx.source_leveltemp_energy_workspace_v06481231;
         const auto& traversal_order_v064894 =
             ctx.traversal_record_indices_v064894[element_slot_v064894];
         ++stats.elements_attempted;
@@ -10467,10 +10592,18 @@ int run_impl(
             std::make_pair(active.min_stage, active.max_stage);
         apply_magnesium_type99_persistent_leveltemp_v048746223(
             ctx.program, element, active, input, evaluated);
-        apply_magnesium_type49_persistent_leveltemp_v048746222(
-            element, active, evaluated);
-        apply_magnesium_type53_persistent_leveltemp_v048746221(
-            element, active, evaluated);
+        // v0.6.48.12.3.1: source leveltemp is shared across elements and
+        // evaluations.  Capture the incoming workspace above, reproduce the
+        // first levwkelement pass now that the active window is known, retain
+        // that final workspace for the next element/evaluation, and evaluate
+        // Type49/53 against the incoming value when no active ion owns the
+        // requested destination column.
+        advance_source_leveltemp_first_pass_z1_z30_v06481231(
+            ctx.program, element, active, ctx.source_leveltemp_energy_workspace_v06481231);
+        apply_type49_persistent_leveltemp_z1_z30_v06481231(
+            element, active, incoming_source_leveltemp_energy_v06481231, evaluated);
+        apply_type53_persistent_leveltemp_z1_z30_v06481231(
+            element, active, incoming_source_leveltemp_energy_v06481231, evaluated);
 
         // v82 patch 5.20.9: reproduce xstarsetup's slot-owned errc lifetime
         // before abundance/product filtering.  xstarsetup traverses every rate-7
@@ -14003,6 +14136,8 @@ struct xstar_fixed_state_context : xstar_fixed_state_context_impl {};
 static std::unique_ptr<xstar_fixed_state_context> create_context_from_program(Program program) {
     auto ptr = std::make_unique<xstar_fixed_state_context>();
     ptr->program = std::move(program);
+    ptr->source_leveltemp_energy_workspace_v06481231.assign(
+        kSourceLeveltempNdlV06481231, 0.0);
     ptr->traversal_record_indices_v064894.reserve(ptr->program.elements.size());
     ptr->bound_free_prepared_v064895.resize(ptr->program.records.size());
     for (std::size_t i = 0; i < ptr->program.records.size(); ++i) {
@@ -14279,6 +14414,37 @@ int xstar_fixed_state_context_set_critical_ion_fraction_v1(
     return 0;
 }
 
+int xstar_fixed_state_context_set_source_leveltemp_energy_v06481231(
+    xstar_fixed_state_context* context,
+    const double* energy_ev,
+    size_t count,
+    char* message,
+    size_t message_size
+) {
+    if (!context || !energy_ev) {
+        copy_text(message, message_size, "fixed-state context and leveltemp energy workspace are required");
+        return 1;
+    }
+    if (count < kSourceLeveltempNdlV06481231) {
+        copy_text(message, message_size, "source leveltemp energy workspace is shorter than 5000 columns");
+        return 2;
+    }
+    if (context->source_leveltemp_energy_workspace_v06481231.size() !=
+        kSourceLeveltempNdlV06481231) {
+        context->source_leveltemp_energy_workspace_v06481231.assign(
+            kSourceLeveltempNdlV06481231, 0.0);
+    }
+    for (std::size_t i = 0; i < kSourceLeveltempNdlV06481231; ++i) {
+        if (!std::isfinite(energy_ev[i])) {
+            copy_text(message, message_size, "source leveltemp energy workspace contains a non-finite value");
+            return 3;
+        }
+        context->source_leveltemp_energy_workspace_v06481231[i] = energy_ev[i];
+    }
+    copy_text(message, message_size, "source leveltemp energy workspace retained");
+    return 0;
+}
+
 int xstar_fixed_state_context_set_preliminary_type7_legacy_compat_v06481171(
     xstar_fixed_state_context* context,
     int enabled,
@@ -14309,6 +14475,10 @@ int xstar_fixed_state_context_reset_v1(xstar_fixed_state_context* context, char*
     }
     context->state_generation = 0;
     context->visited_data_types.clear();
+    std::fill(
+        context->source_leveltemp_energy_workspace_v06481231.begin(),
+        context->source_leveltemp_energy_workspace_v06481231.end(),
+        0.0);
     context->last_record_diagnostics.clear();
     context->last_element_diagnostics.clear();
     context->last_source_workspaces_valid_v064894 = false;

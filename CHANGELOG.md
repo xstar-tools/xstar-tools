@@ -1,5 +1,16 @@
 # CHANGELOG
 
+# 0.6.48.12.3.1 — Z=1–30 persistent leveltemp and Python+CPP terminal bridge - 2026-07-30
+
+- Generalize source-persistent `leveltemp(2,1:5000)` ownership for Type49/Type53 from the historical Mg-only reconstruction to the full supported Z=1–30 C++ path.
+- Carry the 5000-column source energy workspace persistently across elements and fixed-state evaluations. For a Type49/53 destination column not written by any active ion in the current source passes, use the incoming shared workspace value instead of a static ATDB level snapshot.
+- Extend lowered Type49/Type53 context payloads to a 30-stage V4 layout while retaining legacy 12-stage Mg V3 parsing. Type99 remains on its qualified Mg-only 12-stage path.
+- Preserve the 0.6.48.12.3 controller, DSEC/root logic, radial step logger, Python source-faithful solver, element engine, and accepted output writer byte-for-byte. No Ca-specific branch and no empirical scale are introduced.
+- The 12.3 Ca call-1/eval-1 residual was isolated to Type49 `ans6/cj2`: stage fractions, electron contribution, `ans4/cj`, heating, cooling, and cooling2 were already closed. The largest residual records (Ca XVI 160528/160529/160534) require the incoming persistent `leveltemp` value because no active Ca ion owns their high destination columns.
+- Repair the accelerated Python+CPP final-zero-thickness bridge. It now enters the same `XSTAR_NATIVE_PRODUCTION=1` source-faithful physics profile used by standalone cpp-zone and seeds the fresh native fixed-state context with Python's retained terminal 5000-column `leveltemp` workspace.
+- Advance only the final-recompute bridge ABI to `60481231`; production-zone ABI remains `6048110`, fixed-state program ABI remains `60486`, and the public xstar API ABI remains unchanged.
+- Add separate one-model host qualification runners for Python-zone+C++ science and cpp-zone. Python+CPP must close products/option-17 against accepted pure Python and its terminal final-print against FORTRAN; cpp-zone must first close the Ca fixed-state gate and then close products against the fresh same-version Python+CPP reference, option-17/final-print against FORTRAN, while never entering `cpp-all`.
+
 # 0.6.48.12.3 — generic bound-free source promotion and Ca zone/product qualification - 2026-07-30
 
 - Promote the already-computed source-faithful Type49/Type53 `phint53`/Milne results for all non-frozen generic elements while preserving the qualified H/He/C/Mg compatibility paths exactly.

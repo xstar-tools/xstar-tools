@@ -49,7 +49,7 @@ extern "C" uint32_t xstar_final_recompute_bridge_abi_version(void) {
     return XSTAR_FINAL_RECOMPUTE_ABI_VERSION;
 }
 extern "C" const char* xstar_final_recompute_bridge_backend_name(void) {
-    return "xstar_final_zero_thickness_fixed_state_bridge_v0648101";
+    return "xstar_final_zero_thickness_fixed_state_bridge_v06481231";
 }
 extern "C" int xstar_final_recompute_input_init_v1(xstar_final_recompute_input_v1* input) {
     if (!input) return 1;
@@ -81,6 +81,8 @@ extern "C" int xstar_final_recompute_run_v1(
                 "missing radiation arrays");
         require(in->global_xilevg && in->global_bilevg && in->global_rnisg && in->global_level_count > 0u,
                 "missing global level workspaces");
+        require(in->source_leveltemp_energy_ev && in->source_leveltemp_count >= 5000u,
+                "missing source persistent leveltemp energy workspace");
 
         xstar_atdb_runtime::ProductionParameters params;
         params.density_cm3 = in->hydrogen_density_cm3;
@@ -104,6 +106,14 @@ extern "C" int xstar_final_recompute_run_v1(
             rc = xstar_fixed_state_context_set_runtime_line_tau_v1(context.get(), in->line_tau_in, in->line_tau_out,
                                                                    in->line_tau_count, fixed_message.data(), fixed_message.size());
             if (rc != 0) throw std::runtime_error(std::string("line tau binding failed: ") + fixed_message.data());
+        }
+
+        rc = xstar_fixed_state_context_set_source_leveltemp_energy_v06481231(
+            context.get(), in->source_leveltemp_energy_ev, in->source_leveltemp_count,
+            fixed_message.data(), fixed_message.size());
+        if (rc != 0) {
+            throw std::runtime_error(std::string("source leveltemp workspace binding failed: ") +
+                                     fixed_message.data());
         }
 
         xstar_fixed_state_input_v1 input{};
@@ -159,6 +169,15 @@ extern "C" int xstar_final_recompute_run_v1(
 
         xstar_fixed_state_stats_v1 stats{};
         xstar_fixed_state_stats_init_v1(&stats);
+        // v0.6.48.12.3.1: the accelerated-Python terminal bridge previously
+        // entered the fixed-state engine without XSTAR_NATIVE_PRODUCTION.
+        // That silently disabled the promoted source-faithful production
+        // contracts used by standalone cpp-zone (H/He/Mg bound-free, Type51,
+        // Type60/62, continuum workspace ownership, etc.) and explains the
+        // correct radial trajectory but catastrophically wrong terminal HEATT
+        // totals.  The bridge is itself a production fixed-state consumer, so
+        // select the identical native production physics profile here.
+        ScopedEnvironment native_production("XSTAR_NATIVE_PRODUCTION", "1");
         ScopedEnvironment source_sequence("XSTAR_NATIVE_SOURCE_SEQUENCE", "62");
         rc = xstar_fixed_state_run_with_source_workspaces_v1(context.get(), &input, &fixed_out, &source, &stats,
                                                              fixed_message.data(), fixed_message.size());

@@ -8,7 +8,7 @@
 extern "C" {
 #endif
 
-#define XSTAR_FINAL_RECOMPUTE_ABI_VERSION 6048101u
+#define XSTAR_FINAL_RECOMPUTE_ABI_VERSION 60481231u
 #define XSTAR_FINAL_RECOMPUTE_MESSAGE_SIZE 512u
 
 typedef struct xstar_final_recompute_input_v1 {
@@ -40,6 +40,8 @@ typedef struct xstar_final_recompute_input_v1 {
     const double* global_bilevg;
     const double* global_rnisg;
     size_t global_level_count;
+    const double* source_leveltemp_energy_ev;
+    size_t source_leveltemp_count;
 } xstar_final_recompute_input_v1;
 
 typedef struct xstar_final_recompute_output_v1 {

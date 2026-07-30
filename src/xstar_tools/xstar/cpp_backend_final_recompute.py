@@ -15,7 +15,7 @@ from typing import Any
 
 import numpy as np
 
-ABI = 6048101
+ABI = 60481231
 _MSG = 512
 _LIB: ctypes.CDLL | None = None
 
@@ -38,6 +38,7 @@ class _Input(ctypes.Structure):
         ("line_tau_in", _DBLP), ("line_tau_out", _DBLP), ("line_tau_count", ctypes.c_size_t),
         ("global_xilevg", _DBLP), ("global_bilevg", _DBLP), ("global_rnisg", _DBLP),
         ("global_level_count", ctypes.c_size_t),
+        ("source_leveltemp_energy_ev", _DBLP), ("source_leveltemp_count", ctypes.c_size_t),
     ]
 
 
@@ -260,6 +261,23 @@ def apply_native_final_recompute(state: Any) -> NativeFinalRecomputeResult:
     if not (gx.size == gb.size == gr.size and gx.size > 0):
         raise RuntimeError("terminal global level workspaces are incomplete")
 
+    # Source leveltemp is a persistent fixed (10,5000) Fortran work array.
+    # The final zero-thickness calc_hmc_all starts with the workspace left by
+    # the preceding retained Python solve, so seed the fresh native context
+    # with those terminal energy columns instead of silently re-zeroing it.
+    leveltemp_energy = np.zeros(5000, dtype=np.float64)
+    leveltemp_workspace = getattr(fixed, "leveltemp_workspace", None)
+    leveltemp_levels = getattr(leveltemp_workspace, "levels", None)
+    if not isinstance(leveltemp_levels, dict):
+        raise RuntimeError("native final recompute requires terminal source leveltemp workspace")
+    for raw_index, level in leveltemp_levels.items():
+        index = int(raw_index)
+        if 1 <= index <= leveltemp_energy.size:
+            value = float(getattr(level, "energy_ev", 0.0))
+            if not np.isfinite(value):
+                raise RuntimeError("terminal source leveltemp workspace contains a non-finite energy")
+            leveltemp_energy[index - 1] = value
+
     tauc = np.asarray(workspace.tauc, dtype=np.float64)
     tau0 = np.asarray(workspace.tau0, dtype=np.float64)
     cont_tau_in = _arr(tauc[0])
@@ -318,6 +336,7 @@ def apply_native_final_recompute(state: Any) -> NativeFinalRecomputeResult:
     inp.continuum_tau_in = _p(cont_tau_in); inp.continuum_tau_out = _p(cont_tau_out); inp.continuum_tau_count = cont_tau_in.size
     inp.line_tau_in = _p(line_tau_in); inp.line_tau_out = _p(line_tau_out); inp.line_tau_count = line_tau_in.size
     inp.global_xilevg = _p(gx); inp.global_bilevg = _p(gb); inp.global_rnisg = _p(gr); inp.global_level_count = gx.size
+    inp.source_leveltemp_energy_ev = _p(leveltemp_energy); inp.source_leveltemp_count = leveltemp_energy.size
 
     def bind(name: str, array: np.ndarray) -> None:
         setattr(out, name, _p(array)); setattr(out, name + "_capacity", array.size)
@@ -418,5 +437,7 @@ def apply_native_final_recompute(state: Any) -> NativeFinalRecomputeResult:
         "line_stage_masked_nonzero_slots": result.line_stage_masked_nonzero_slots,
         "rrc_stage_limits": dict(result.rrc_stage_limits),
         "rrc_terminal_ownership": "SOURCE_RETAINED_MML_MMU",
+        "source_leveltemp_energy_count": int(leveltemp_energy.size),
+        "source_leveltemp_workspace_seeded": True,
     }
     return result

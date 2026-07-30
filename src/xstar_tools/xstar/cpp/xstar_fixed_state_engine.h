@@ -580,6 +580,17 @@ XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_context_set_critical_ion_fraction
     size_t message_size
 );
 
+/* v0.6.48.12.3.1: seed the shared source leveltemp energy workspace.
+ * This adds a context operation without changing the fixed-state input/output
+ * structs or engine ABI. */
+XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_context_set_source_leveltemp_energy_v06481231(
+    xstar_fixed_state_context* context,
+    const double* energy_ev,
+    size_t count,
+    char* message,
+    size_t message_size
+);
+
 /* v0.6.48.11.7.1: explicit frozen-Mg compatibility switch for the
  * preliminary Type7 eligibility regression.  This is context state rather
  * than xstar_fixed_state_input_v1 so ABI 60487 remains byte-for-byte frozen. */
