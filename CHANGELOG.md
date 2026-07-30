@@ -1,5 +1,14 @@
 # CHANGELOG
 
+# 0.6.48.11.9.4 - 2026-07-29
+
+- Pure-Python detail-line publication-shadow closure only.
+- Advance the caller-local Type50 `opakb1` publication shadow from the raw source Type50 evaluation for every eligible source record, including records later excluded from public output.
+- Preserve the accepted endpoint-abundance `1.e-34` inventory rule from 11.9.3.
+- Keep the stale `opakb1` reconstruction output-only: it never mutates physical `oplin`, `opakc`, emissivity, equilibrium, rates, continuum/RRC state, or transport.
+- Target the remaining Ca XVIII source line 88440 identity omission after the artificial/non-published Type50 source sequence near line 88438.
+- Retain repeated `XSTAR_RADIAL` comparator occurrence semantics and the one-model pure-Python qualification workflow.
+
 # 0.6.48.11.9.3 - 2026-07-29
 
 - Pure-Python detail-line publication closure: add a generic Type50/rate-4 source activity shadow based on the literal `calc_emisab_ion.f90` endpoint-abundance gate (`1.e-34`).

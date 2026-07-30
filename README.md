@@ -1,3 +1,7 @@
+## 0.6.48.11.9.4 Type50 publication-shadow raw carry closure
+
+This release is a narrow pure-Python output-identity correction.  The detail-line writer reconstructs the source Type50 caller-local `opakb1` carry directly from packed ATDB records and solved endpoint populations.  The carry advances across all eligible Type50 source records even when a record is later excluded from public output, while physical opacity/emissivity/transport arrays remain unchanged.  This targets the single remaining `xo01_detal2` row omission in the corrected Ca XIX xi=2 smoke case.
+
 ## 0.6.48.11.9.3 detail-line inventory / comparator closure
 
 Pure-Python detail-line output now carries a source-only Type50/rate-4 publication activity shadow so FORTRAN-compatible zero/negligible rows can be retained in exact ATDB/source order without contaminating physical opacity. Qualification compares repeated `XSTAR_RADIAL` extensions by occurrence. Continue using `python-one <model-id>` and qualify the Ca XIX xi=2, xi=3.5, and xi=4 models individually before rerunning the full smoke.
