@@ -587,7 +587,14 @@ def normalize_xstar_parameters(
     else:
         r19 = math.sqrt(xlum / max(1.0e-49, density * xi))
     radius = r19 * 1.0e19
-    column = float(values["column"])
+    # rread1 receives the user-facing REAL parameter through the legacy
+    # parameter interface before assigning it to the REAL(8) xpxcol caller
+    # variable.  Preserve that default-REAL -> REAL(8) promotion here.
+    # This matters at exact column boundaries: e.g. input 1e20 is
+    # 1.0000000200408773e20 after binary32 rounding, so xcol=1e20 still
+    # enters the final source boundary shell instead of terminating early.
+    column = float(np.float32(float(values["column"])))
+    values["column"] = column
     rmax = column / max(density, 1.0e-49)
 
     multipliers = np.asarray([float(values[name]) for name in ABUNDANCE_PARAMETER_NAMES])

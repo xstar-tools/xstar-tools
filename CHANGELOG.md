@@ -1,5 +1,11 @@
 # CHANGELOG
 
+# 0.6.48.11.9.2 - 2026-07-29
+
+- Pure-Python Ca XIX xi=2 radial-boundary correction: normalize the user `column` input through source default-REAL (`float32`) semantics before promoting it to the Python REAL(8)-equivalent `xpxcol`. For `column=1e20`, this preserves the FORTRAN value `1.0000000200408773e20` and therefore the final boundary shell instead of terminating at exact binary64 `1e20`.
+- Add `python-one MODEL_ID`, a no-C++ single-model qualification stage for iterative pure-Python repair. It reuses the same FORTRAN comparator and supports `XSTAR_QUALIFICATION_CACHE_DIR` so the expensive ATDB pointer/metadata cache can be reused across one-model runs.
+- No C++ scientific implementation changes.
+
 ## 0.6.48.11.9.1 — pure-Python multi-model smoke qualification - 2026-07-29
 
 - Adds an independent `python-smoke` stage over the existing 11-model smoke set.

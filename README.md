@@ -1,6 +1,6 @@
 # xstar_tools 0.6.48.11.8
 
-### 0.6.48.11.9.1 pure-Python smoke
+### 0.6.48.11.9.2 pure-Python smoke
 
 Use `run_v06481191_multimodel.sh ... python-smoke` to run the canonical 11-model smoke set using only the Python source-port backends. This stage is intentionally independent of standalone-C++ qualification and compares each Python result directly with the FORTRAN authority.
 
@@ -54,3 +54,7 @@ The writer runs only after the carbon element solve has completed and never muta
 - The frozen Mg all-nine-FITS bit-exact comparator remains blocking.
 - Production-zone ABI remains 6048110.
 - The runtime STEP diagnostic marker prefix remains `V0648117_STEP_*`; 11.8 qualification parses that intentionally frozen prefix.
+
+## 0.6.48.11.9.2 single-model pure-Python qualification
+
+The Python radial controller now preserves source default-REAL precision for the input column limit.  Iterative multi-element repair should use `run_v06481192_multimodel.sh ... python-one <model-id>` rather than rerunning the full 11-model smoke after each patch.  `XSTAR_QUALIFICATION_CACHE_DIR` may point at an accepted existing `python_cache` directory.
