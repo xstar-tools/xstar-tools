@@ -238,6 +238,10 @@ struct FixedEvaluationState {
     double brems_cooling = 0.0;
     bool thermal_families_native = false;
     bool runtime_state_abi = false;
+    // Dense source xilevg retained at the accepted boundary for publication.
+    // This is a writer/addressing surface only; the compact solver population
+    // vector remains unchanged.
+    std::vector<double> source_global_xilevg;
     std::vector<double> source_global_rnisg;
     std::vector<double> populations;
     std::vector<double> radiation_energy_ev;

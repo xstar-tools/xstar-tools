@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.48.12.3.2 — generic abundance publication and order-aware detailed-FITS ownership - 2026-07-31
+
+- Remove the Mg-benchmark-only hard-coded abundance table from native print option 2. `rel.to cosmic` now comes from the parsed input `<element>abund` multiplier; `rel. to H` comes from the already-lowered per-element abundance after applying the selected `abundtbl`; `H=12` is derived from that live abundance. No fixed Ca/Mg/H/He cosmic abundance constants are used by the writer.
+- Add an identity-key/order-aware comparator for `xo01_detail`, `xo01_detal2`, and `xo01_detal3`. Repeated `XSTAR_RADIAL` HDUs are aligned by stable physical identities using duplicate-safe multisets before numerical comparison. Row displacement is reported as `ORDER_ONLY_ROWS` and is not treated as a science mismatch.
+- Report true `MISSING_FROM_CPP`, `EXTRA_IN_CPP`, duplicate-key ambiguity, aligned metadata mismatches, and matched-row numerical discrepancies separately, with CSV audit files for missing/extra identities and >1% matched numerics.
+- Pre-patch Ca audit shows the previous positional mismatch counts were dominated by row shifts: `xo01_detail` had only 15 missing rows per shell (plus one late extra), `xo01_detal2` had no missing rows and 54/206 extra rows, and `xo01_detal3` was exact early with only 38 late extra rows.
+- Correct publication ownership only after that audit: retain dense accepted-boundary `xilevg` for detail-level/continuum aliases; publish source identity metadata (`ion_index=Z`, `upper index=local level`); use local `rcem/oplin` for detailed-line activity; and use local `cemab/cabab/opakab` for detailed-RRC activity.
+- Keep the qualified fixed-state engine, Type49/53 Z=1–30 persistent-leveltemp science, element engine, Python source-faithful zone/controller, accepted Python writer, and terminal C++ bridge byte-identical to 0.6.48.12.3.1.2. Production-zone ABI remains 6048110 and fixed-state program ABI remains 60486.
+- Add `run_v06481232_cpp_zone.sh`, which blocks in order on fixed-state parity, order-aware detailed/public FITS, generic option-2 abundances, FORTRAN option 17, and FORTRAN final-print parity. Broader smoke remains gated and `cpp-all` is not entered.
+
 ## 0.6.48.12.3.1.2 - 2026-07-30
 
 Qualification-runner hotfix only; no science implementation changes.

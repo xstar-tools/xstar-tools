@@ -1061,7 +1061,11 @@ ProgramStorage lower_atdb_in_memory(const std::filesystem::path& atdb,const Prod
             out.row_global_level_aliases.push_back(std::move(global_aliases));
             out.row_global_level_terminal_roles.push_back(std::move(terminal_aliases));
             xstar_run_state::CompactRowMetadataState rm;rm.element_index=ei;rm.row=row;rm.superlevel=r.superlevel;rm.ion=r.ion_counter;rm.ion_charge=pr.ion_charge;rm.energy_ev=lv.energy;rm.statistical_weight=lv.weight;rm.principal_n=lv.principal_n;rm.orbital_l=lv.orbital_l;rm.global_level_index=global;rm.ion_label=normalized_ion_label(b);rm.level_label=lv.label;out.row_metadata.push_back(rm);
-            xstar_run_state::LevelIdentityState id;id.global_index=global;id.ion_index=b.ion_stage;id.excitation_ev=lv.energy;id.ion_label=rm.ion_label;id.atomic_number=z;id.level_label=lv.label;id.upper_index=b.nlev; if(global>0)out.level_identities.push_back(id);
+            // fstepr public identity columns use the element atomic number in
+            // ion_index and the source-local level ordinal in upper index.
+            // These are publication metadata only; do not reuse the ion stage
+            // or ion nlev as compatibility surrogates.
+            xstar_run_state::LevelIdentityState id;id.global_index=global;id.ion_index=z;id.excitation_ev=lv.energy;id.ion_label=rm.ion_label;id.atomic_number=z;id.level_label=lv.label;id.upper_index=r.local_level; if(global>0)out.level_identities.push_back(id);
         }
         row_offset+=l.n_rows;
         for(std::size_t li=0;li<rit->second.size();++li){int rec=rit->second[li];auto lr=lower_record(db,d,l,rec,ei,ion_record_to_index);lr.record.source_position=4*static_cast<std::int64_t>(global_record+1);lr.record.next_index=(li+1<rit->second.size())?static_cast<int>(global_record+1):-1;lr.record.real_offset=out.reals.size();lr.record.real_count=lr.reals.size();lr.record.int_offset=out.ints.size();lr.record.int_count=lr.ints.size();out.reals.insert(out.reals.end(),lr.reals.begin(),lr.reals.end());out.ints.insert(out.ints.end(),lr.ints.begin(),lr.ints.end());out.records.push_back(lr.record);++global_record;

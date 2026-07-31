@@ -664,18 +664,29 @@ double public_detail_population_for_level(
     const std::map<int,std::size_t>& compact_by_global,
     const xstar_run_state::LevelIdentityState& level,
     double fallback) {
+    // v0.6.48.12.3.2: fstepr publishes xilevg by the dense source global
+    // level identity.  The compact element vector is not a publication
+    // address space: continuum aliases and terminal/ground aliases can map a
+    // single compact row to multiple global xilevg slots.  Prefer the retained
+    // dense accepted-boundary projection whenever available.
+    if (level.global_index > 0) {
+        const std::size_t global0 = static_cast<std::size_t>(level.global_index - 1);
+        if (global0 < evaluation.source_global_xilevg.size()) {
+            const double value = evaluation.source_global_xilevg[global0];
+            return std::isfinite(value) ? value : 0.0;
+        }
+    }
     auto get = [&](int global_index) -> double {
         return compact_population_by_public_global(evaluation, compact_by_global, global_index);
     };
-    double value = std::numeric_limits<double>::quiet_NaN();
-    // Public level identities are keyed by their actual ATDB global index.
-    // A previous compatibility patch shifted every He II row by one after the
-    // explicit He I continuum boundary.  Fresh Python/FORTRAN products show
-    // that this is wrong: the shared boundary makes the He I continuum and
-    // He II ground numerically equal, but He II excited rows retain their own
-    // global identities.  Keep only the Mg inserted-continuum fallback below.
-    value = get(level.global_index);
-    if (!std::isfinite(value) && level.atomic_number == 12 && level.level_label.find("continu") != std::string::npos) value = get(level.global_index + 1);
+    double value = get(level.global_index);
+    // Backward/fallback path for states that predate dense xilevg retention:
+    // inserted continuum pseudo-levels share the following ion-ground owner.
+    if ((!std::isfinite(value) || value == 0.0) &&
+        level.level_label.find("continu") != std::string::npos) {
+        const double adjacent = get(level.global_index + 1);
+        if (std::isfinite(adjacent)) value = adjacent;
+    }
     if (!std::isfinite(value)) return fallback;
     return value;
 }
@@ -9169,9 +9180,23 @@ std::vector<LineRow> source_line_rows_from_identities(
             id, evaluation, density_cm3, luminosity_scale_1e38, compact, &line_bridge, !detail_order);
         const double wavelength = std::abs(id.wavelength_angstrom);
         if (detail_order) {
-            // Literal fstepr2.f90: live rcem/oplin signal plus source line-type
-            // and wavelength eligibility.
-            const bool signal = line.emis_in > 1.0e-64 || line.emis_out > 1.0e-64 || line.opacity > 1.0e-64;
+            // v0.6.48.12.3.2 / literal fstepr2.f90: row eligibility is owned
+            // by the *local* rcem/oplin publication surface.  elum is a
+            // cumulative public-line luminosity workspace and can remain
+            // nonzero after the local fstepr2 row has become inactive; using
+            // it for eligibility created 54/206 spurious Ca detail rows.
+            const auto& source_ws = evaluation.source_workspace;
+            const std::size_t direct = id.line_index > 0
+                ? static_cast<std::size_t>(id.line_index) : compact;
+            const std::size_t rcem_stride = (!source_ws.rcem.empty() && source_ws.rcem.size() % 2u == 0u)
+                ? source_ws.rcem.size() / 2u : 0u;
+            const double local_emis_in = rcem_stride > 0u
+                ? two_plane_direct_then_compact(source_ws.rcem, rcem_stride, 0u, direct, compact) : line.emis_in;
+            const double local_emis_out = rcem_stride > 0u
+                ? two_plane_direct_then_compact(source_ws.rcem, rcem_stride, 1u, direct, compact) : line.emis_out;
+            const double local_opacity = !source_ws.oplin.empty()
+                ? vector_value_direct_then_compact(source_ws.oplin, direct, compact) : line.opacity;
+            const bool signal = local_emis_in > 1.0e-64 || local_emis_out > 1.0e-64 || local_opacity > 1.0e-64;
             if (!signal || id.rate_type == 14 || id.rate_type == 9 ||
                 !(wavelength > 0.1) || !(wavelength < 9.0e9)) continue;
         } else {
@@ -9879,28 +9904,45 @@ std::vector<RrcRow> source_rrc_rows_from_identities(
         }
         bool keep_row = detail_inventory || row.emis_in != 0.0 || row.emis_out != 0.0 || row.tau_in != 0.0 || row.tau_out != 0.0;
         if (detail_inventory && !reference_mg11_product_state(state)) {
-            // Literal fstepr3.f90: cemab(1/2), cabab or opakab must exceed
-            // 1.e-36 for the individual RRC slot.
+            // v0.6.48.12.3.2 / literal fstepr3.f90: inventory activity is
+            // owned by the local cemab/cabab/opakab slot.  The retained
+            // per-HDU/public bridge can include cumulative values and is a
+            // value-refinement surface, not the authority for whether the row
+            // exists.  Prefer direct native source slots whenever available.
             double signal_emis_in = 0.0;
             double signal_emis_out = 0.0;
-            const auto found_rrc = rrc_bridge.index_map.find(id.continuum_index);
-            if (found_rrc != rrc_bridge.index_map.end() &&
-                rrc_bridge.cemab.size() == 2u * rrc_bridge.count) {
-                const std::size_t bi = found_rrc->second;
-                signal_emis_in = rrc_bridge.cemab[bi];
-                signal_emis_out = rrc_bridge.cemab[rrc_bridge.count + bi];
-            } else if (ws.cemab.size() >= 2u && ws.cemab.size() % 2u == 0u) {
+            double signal_absorption = 0.0;
+            double signal_opacity = 0.0;
+            bool have_local_source_slot = false;
+            if (ws.cemab.size() >= 2u && ws.cemab.size() % 2u == 0u) {
                 const std::size_t stride = ws.cemab.size() / 2u;
                 const std::size_t slot = static_cast<std::size_t>(id.continuum_index);
                 if (slot < stride) {
                     signal_emis_in = ws.cemab[slot];
                     signal_emis_out = ws.cemab[stride + slot];
+                    if (slot < ws.cabab.size()) signal_absorption = ws.cabab[slot];
+                    if (slot < ws.opakab.size()) signal_opacity = ws.opakab[slot];
+                    have_local_source_slot = true;
+                }
+            }
+            if (!have_local_source_slot) {
+                const auto found_rrc = rrc_bridge.index_map.find(id.continuum_index);
+                if (found_rrc != rrc_bridge.index_map.end() &&
+                    rrc_bridge.cemab.size() == 2u * rrc_bridge.count) {
+                    const std::size_t bi = found_rrc->second;
+                    signal_emis_in = rrc_bridge.cemab[bi];
+                    signal_emis_out = rrc_bridge.cemab[rrc_bridge.count + bi];
+                    if (bi < rrc_bridge.cabab.size()) signal_absorption = rrc_bridge.cabab[bi];
+                    if (bi < rrc_bridge.opakab.size()) signal_opacity = rrc_bridge.opakab[bi];
+                } else {
+                    signal_absorption = row.absorption;
+                    signal_opacity = row.opacity;
                 }
             }
             keep_row = (std::isfinite(signal_emis_in) && signal_emis_in > 1.0e-36) ||
                        (std::isfinite(signal_emis_out) && signal_emis_out > 1.0e-36) ||
-                       (std::isfinite(row.absorption) && row.absorption > 1.0e-36) ||
-                       (std::isfinite(row.opacity) && row.opacity > 1.0e-36);
+                       (std::isfinite(signal_absorption) && signal_absorption > 1.0e-36) ||
+                       (std::isfinite(signal_opacity) && signal_opacity > 1.0e-36);
         }
         if (keep_row) {
             out.push_back(row);

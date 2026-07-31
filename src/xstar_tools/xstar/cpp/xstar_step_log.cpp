@@ -145,21 +145,32 @@ void append_native_input_parameters(std::ofstream& out,
     out << " abundance table: " << parameter_text(state, "abundtbl", "unavailable") << "\n";
     out << " abundances:\n";
     out << " element,   rel.to cosmic,     rel. to H,     H=12\n";
-    struct AbundancePrintRow { const char* symbol; const char* parameter; double xdef_to_h; };
-    // The native case input explicitly activates H=1, He=0.1 and Mg=3.5e-5.
-    // Multiplication by the retained relative-to-cosmic parameter makes all
-    // disabled elements zero without inventing ATDB counters or run results.
+    struct AbundancePrintRow { const char* symbol; const char* parameter; int atomic_number; };
+    // v0.6.48.12.3.2: never hard-code xdef (or any other abundance-table)
+    // values in the step-log writer.  The input parameter is the source
+    // abundance multiplier relative to the selected cosmic table, while the
+    // already-lowered element metadata carries the resulting abundance
+    // relative to H after applying abundtbl + <element>abund.  This makes
+    // print option 2 follow the actual run input for every supported table.
     const AbundancePrintRow abundance_rows[] = {
-        {"H","habund",1.0},{"He","heabund",0.1},{"Li","liabund",0.0},{"Be","beabund",0.0},{"B","babund",0.0},
-        {"C","cabund",0.0},{"N","nabund",0.0},{"O","oabund",0.0},{"F","fabund",0.0},{"Ne","neabund",0.0},
-        {"Na","naabund",0.0},{"Mg","mgabund",3.5e-5},{"Al","alabund",0.0},{"Si","siabund",0.0},{"P","pabund",0.0},
-        {"S","sabund",0.0},{"Cl","clabund",0.0},{"Ar","arabund",0.0},{"K","kabund",0.0},{"Ca","caabund",0.0},
-        {"Sc","scabund",0.0},{"Ti","tiabund",0.0},{"V","vabund",0.0},{"Cr","crabund",0.0},{"Mn","mnabund",0.0},
-        {"Fe","feabund",0.0},{"Co","coabund",0.0},{"Ni","niabund",0.0},{"Cu","cuabund",0.0},{"Zn","znabund",0.0}
+        {"H","habund",1},{"He","heabund",2},{"Li","liabund",3},{"Be","beabund",4},{"B","babund",5},
+        {"C","cabund",6},{"N","nabund",7},{"O","oabund",8},{"F","fabund",9},{"Ne","neabund",10},
+        {"Na","naabund",11},{"Mg","mgabund",12},{"Al","alabund",13},{"Si","siabund",14},{"P","pabund",15},
+        {"S","sabund",16},{"Cl","clabund",17},{"Ar","arabund",18},{"K","kabund",19},{"Ca","caabund",20},
+        {"Sc","scabund",21},{"Ti","tiabund",22},{"V","vabund",23},{"Cr","crabund",24},{"Mn","mnabund",25},
+        {"Fe","feabund",26},{"Co","coabund",27},{"Ni","niabund",28},{"Cu","cuabund",29},{"Zn","znabund",30}
+    };
+    const auto abundance_to_h = [&](int atomic_number) {
+        for (const auto& element : state.element_metadata) {
+            if (element.atomic_number == atomic_number) {
+                return std::isfinite(element.abundance) ? element.abundance : 0.0;
+            }
+        }
+        return 0.0;
     };
     for (const auto& item : abundance_rows) {
         const double relative_cosmic = parameter_number(state, item.parameter, 0.0);
-        const double relative_h = relative_cosmic * item.xdef_to_h;
+        const double relative_h = abundance_to_h(item.atomic_number);
         const double h12 = relative_h > 0.0 ? 12.0 + std::log10(relative_h) : 0.0;
         out << " " << std::left << std::setw(8) << item.symbol << std::right
             << e3(relative_cosmic) << "  " << e3(relative_h) << "  " << e3(h12) << "\n";

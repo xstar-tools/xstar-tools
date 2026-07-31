@@ -2404,6 +2404,7 @@ struct FixedDsecSnapshot {
     double brems_cooling = 0.0;
     bool thermal_families_native = false;
     bool dsec_runtime_state_abi = false;
+    std::vector<double> source_global_xilevg;
     std::vector<double> source_global_rnisg;
     std::vector<double> populations;
     std::vector<double> lte_populations;
@@ -4420,6 +4421,7 @@ int command_run_fixed_dsec(const Options& options) {
         target.brems_cooling = source.brems_cooling;
         target.thermal_families_native = source.thermal_families_native;
         target.runtime_state_abi = source.dsec_runtime_state_abi;
+        target.source_global_xilevg = source.source_global_xilevg;
         target.source_global_rnisg = source.source_global_rnisg;
         target.populations = source.populations;
         target.radiation_energy_ev = source.radiation_energy_ev;
@@ -5485,6 +5487,7 @@ xstar_run_state::FixedEvaluationState copy_real_native_snapshot(
     target.brems_cooling = source.brems_cooling;
     target.thermal_families_native = source.thermal_families_native;
     target.runtime_state_abi = source.dsec_runtime_state_abi;
+    target.source_global_xilevg = source.source_global_xilevg;
     target.source_global_rnisg = source.source_global_rnisg;
     target.populations = source.populations;
     target.radiation_energy_ev = source.radiation_energy_ev;
@@ -9513,6 +9516,7 @@ xstar_run_state::FixedEvaluationState copy_fixed_evaluation_state_v172524(const 
     target.brems_cooling = source.brems_cooling;
     target.thermal_families_native = source.thermal_families_native;
     target.runtime_state_abi = source.dsec_runtime_state_abi;
+    target.source_global_xilevg = source.source_global_xilevg;
     target.source_global_rnisg = source.source_global_rnisg;
     target.populations = source.populations;
     target.radiation_energy_ev = source.radiation_energy_ev;
@@ -13902,6 +13906,7 @@ FixedDsecSnapshot finalize_accepted_boundary_snapshot_v064894(
     // writer with an empty source_global_rnisg vector and fell through to the
     // old structural-zero bridge.  This is retention/publication only: no
     // solver/global LTE arithmetic or state is changed here.
+    snapshot.source_global_xilevg = data.global_xilevg;
     snapshot.source_global_rnisg = data.global_rnisg;
     if (data.reference_diagnostics_enabled && snapshot.sequence == 58u) {
         data.sequence58_native_projected_global_xilevg = data.global_xilevg;
