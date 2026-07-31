@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.12.3.2.2 - 2026-07-31
+
+- Added a qualification-only 62-model `cpp-zone`/FORTRAN benchmark survey.
+- Records exact physical-zone DSEC sequences and direct print-option-17 parity for every benchmark.
+- Compares final `T4`, `HTTOT`, `CLTOT`, and `HMCTOT`; flags >1% discrepancies in `T4`/`HTTOT`/`CLTOT` as blocking thermal failures while retaining `HMCTOT` as a diagnostic cancellation quantity.
+- Writes durable `zone_dsec_failures.csv`, `option17_failures.csv`, `thermal_failures_gt1pct.csv`, `hmctot_outliers_gt1pct.csv`, `publication_failures.csv`, and a generated `failure_plan.md`.
+- Continuously checkpoints `summary.csv` and supports `--resume` for long all-benchmark runs.
+- No scientific runtime/controller/output-writer changes from 0.6.48.12.3.2.1.
+
 ## 0.6.48.12.3.2.1 - 2026-07-31
 
 - Qualification-only cpp-zone smoke survey over the frozen 11 representative models.

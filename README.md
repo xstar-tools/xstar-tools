@@ -95,3 +95,7 @@ The writer runs only after the carbon element solve has completed and never muta
 ## 0.6.48.11.9.2 single-model pure-Python qualification
 
 The Python radial controller now preserves source default-REAL precision for the input column limit.  Iterative multi-element repair should use `run_v06481192_multimodel.sh ... python-one <model-id>` rather than rerunning the full 11-model smoke after each patch.  `XSTAR_QUALIFICATION_CACHE_DIR` may point at an accepted existing `python_cache` directory.
+
+### Full cpp-zone benchmark survey (0.6.48.12.3.2.2)
+
+`run_v064812322_cpp_zone_all_benchmarks.sh` runs all 62 benchmark models with the production cpp-zone backend and compares zone/DSEC trajectories, print option 17, final thermal totals, and diagnostic products directly against FORTRAN. It emits dedicated CSV records for trajectory and >1% thermal failures and can resume an interrupted run with an optional `--resume` argument.
