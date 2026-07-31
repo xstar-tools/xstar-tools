@@ -1,5 +1,14 @@
 # CHANGELOG
 
+# 0.6.48.12.3.8 — O VII call-1 state-transition attribution - 2026-07-31
+
+- Freeze the real 0.6.48.12.3.7 Type88 caller-capacity correction and all previously accepted science. No DSEC tolerance, controller, rate, population, or thermal science behavior changes in this revision.
+- Respond to the remaining O VII `31;9;15` vs Python/FORTRAN `36;9;16` trajectory by comparing the exact state written by one fixed-state evaluation with the state consumed by the next.
+- Add a pure-Python call-1 diagnostic that stops at evaluation 24 before expensive radial/product work and records O full-element overlapping `xileve/rnise/bileve` workspaces plus compact solver inputs.
+- Add matching C++ diagnostic-only state exports and complete selected solve captures at evaluations 1,2,3,4,5,6,9,15,21,24.
+- Add automatic classification between LTE/writeback divergence, global-to-compact remapping divergence, later same-state fixed-physics divergence, and controller-path divergence.
+- Keep qualification restricted to `helike_type69/o7_ne1e12`; no O-density family run, no 15/62-model run, and no `cpp-all`.
+
 ## 0.6.48.12.3.7 - 2026-07-31
 
 - Fix source-faithful Type88/rate42 `phextrap` caller capacity in standalone `calc_hmc`: the `calc_hmc_input` radiation grid is already the reduced FORTRAN `epim,ncn2m,bremsam` workspace, so Type88 now passes the current caller `source_bins` directly instead of applying a second `/10` reduction.

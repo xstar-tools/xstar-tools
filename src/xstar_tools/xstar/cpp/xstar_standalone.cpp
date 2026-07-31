@@ -11883,6 +11883,76 @@ void print_vector_audit_v82_patch4(const char* name, const VectorAuditV82Patch4&
               << "V048746255172582_CALL3_" << name << "_SCIENTIFIC_STATE=" << (audit.scientific ? "ACCEPT" : "REJECT") << "\n";
 }
 
+
+bool v06481238_selected_eval(std::size_t evaluation_index) {
+    static const std::set<std::size_t> selected{1u,2u,3u,4u,5u,6u,9u,15u,21u,24u};
+    return selected.count(evaluation_index) != 0u;
+}
+
+std::vector<double> v06481238_element_slice(
+    const StandaloneControllerDataV67& data,
+    const std::vector<double>& values,
+    int element_z) {
+    if (!data.program) return {};
+    std::size_t offset = 0u;
+    for (const auto& element : data.program->elements) {
+        const std::size_t count = static_cast<std::size_t>(std::max(element.n_rows, 0));
+        if (element.element_z == element_z) {
+            if (offset + count > values.size()) {
+                throw std::runtime_error("v06481238 element slice exceeds population workspace");
+            }
+            return std::vector<double>(values.begin() + static_cast<std::ptrdiff_t>(offset),
+                                       values.begin() + static_cast<std::ptrdiff_t>(offset + count));
+        }
+        offset += count;
+    }
+    throw std::runtime_error("v06481238 requested element is absent from lowered program");
+}
+
+void v06481238_write_f64(const std::filesystem::path& path, const std::vector<double>& values) {
+    if (!path.parent_path().empty()) std::filesystem::create_directories(path.parent_path());
+    std::ofstream out(path, std::ios::binary);
+    if (!out) throw std::runtime_error("cannot create v06481238 binary state diagnostic");
+    if (!values.empty()) {
+        out.write(reinterpret_cast<const char*>(values.data()),
+                  static_cast<std::streamsize>(values.size() * sizeof(double)));
+    }
+}
+
+void write_v06481238_o7_state_transition(
+    const StandaloneControllerDataV67& data,
+    const FixedDsecSnapshot& snapshot,
+    const std::filesystem::path& root) {
+    const auto full_x = v06481238_element_slice(data, snapshot.populations, 8);
+    const auto full_rn = v06481238_element_slice(data, snapshot.lte_populations, 8);
+    if (full_x.size() != full_rn.size()) {
+        throw std::runtime_error("v06481238 O population/LTE size mismatch");
+    }
+    std::vector<double> full_bile(full_x.size(), 0.0);
+    for (std::size_t i = 0; i < full_x.size(); ++i) {
+        full_bile[i] = full_x[i] / (full_rn[i] + 1.0e-37);
+    }
+    std::filesystem::create_directories(root);
+    const auto csv_path = root / "cpp_call1_state_transitions.csv";
+    const bool header = !std::filesystem::exists(csv_path) || std::filesystem::file_size(csv_path) == 0u;
+    std::ofstream csv(csv_path, std::ios::app);
+    if (!csv) throw std::runtime_error("cannot create v06481238 state-transition CSV");
+    if (header) {
+        csv << "sequence,evaluation_index,temperature_k,electron_fraction_input,computed_electron_fraction,hmctot,elcter,o_full_row_count,o_full_x_hash,o_full_rnisg_hash,o_full_bilevg_hash\n";
+    }
+    csv << snapshot.sequence << ',' << snapshot.evaluation_index << ',' << std::setprecision(17)
+        << snapshot.temperature_t4 * 1.0e4 << ',' << snapshot.electron_fraction_input << ','
+        << snapshot.computed_electron_fraction << ',' << snapshot.hmctot << ',' << snapshot.charge_residual << ','
+        << full_x.size() << ',' << binary64_vector_hash_v82_patch4(full_x) << ','
+        << binary64_vector_hash_v82_patch4(full_rn) << ',' << binary64_vector_hash_v82_patch4(full_bile) << '\n';
+    if (v06481238_selected_eval(snapshot.evaluation_index)) {
+        const auto d = root / ("evaluation_" + [&](){ std::ostringstream o; o << std::setw(4) << std::setfill('0') << snapshot.evaluation_index; return o.str(); }() + "_state");
+        v06481238_write_f64(d / "o_full_x.bin", full_x);
+        v06481238_write_f64(d / "o_full_rnisg.bin", full_rn);
+        v06481238_write_f64(d / "o_full_bilevg.bin", full_bile);
+    }
+}
+
 void audit_sequence58_lte_v82_patch53(
     StandaloneControllerDataV67& data,
     const FixedDsecSnapshot& snapshot) {
@@ -13543,6 +13613,49 @@ int standalone_iteration_evaluator_v67(
             }
         }
 
+        // v0.6.48.12.3.8 diagnostic-only O VII state-transition audit.
+        // Capture input fingerprints at every call-1 DSEC evaluation and full
+        // solve diagnostics at selected evaluations.  These files are never
+        // consumed by production state or controller decisions.
+        if (snapshot.kind == "dsec" && snapshot.call_index == 1u) {
+            if (const char* state_dir_v06481238 = std::getenv("XSTAR_V06481238_O7_STATE_DIR")) {
+                if (*state_dir_v06481238) {
+                    try {
+                        const std::filesystem::path state_root_v06481238(state_dir_v06481238);
+                        std::filesystem::create_directories(state_root_v06481238);
+                        std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> state_message_v06481238{};
+                        const auto budget_path_v06481238 = state_root_v06481238 / "cpp_call1_input_fingerprints.csv";
+                        const int budget_rc_v06481238 = xstar_fixed_state_write_last_thermal_budget_v1(
+                            data->fixed_context, budget_path_v06481238.string().c_str(), snapshot.sequence,
+                            snapshot.call_index, snapshot.evaluation_index, snapshot.kind.c_str(),
+                            state_message_v06481238.data(), state_message_v06481238.size());
+                        if (budget_rc_v06481238 != 0) {
+                            throw std::runtime_error(std::string("v06481238 input fingerprint capture failed: ") +
+                                state_message_v06481238.data());
+                        }
+                        if (v06481238_selected_eval(snapshot.evaluation_index)) {
+                            state_message_v06481238.fill('\0');
+                            std::ostringstream tag_v06481238;
+                            tag_v06481238 << "evaluation_" << std::setw(4) << std::setfill('0')
+                                         << snapshot.evaluation_index << "_full";
+                            const auto full_root_v06481238 = state_root_v06481238 / tag_v06481238.str();
+                            const int full_rc_v06481238 = xstar_fixed_state_write_last_diagnostics_v1(
+                                data->fixed_context, full_root_v06481238.string().c_str(), snapshot.sequence,
+                                state_message_v06481238.data(), state_message_v06481238.size());
+                            if (full_rc_v06481238 != 0) {
+                                throw std::runtime_error(std::string("v06481238 selected solve capture failed: ") +
+                                    state_message_v06481238.data());
+                            }
+                        }
+                    } catch (const std::exception& exc_v06481238) {
+                        set_callback_error(error, error_size,
+                            std::string("cannot retain v06481238 O7 state diagnostics: ") + exc_v06481238.what());
+                        return 1;
+                    }
+                }
+            }
+        }
+
         // v0.6.48.12.2.1: capture the complete native fixed-state attribution
         // exactly at call-1/eval-1, before any controller evolution.  The
         // writer is observational only and never consumed by production.
@@ -13830,6 +13943,20 @@ int standalone_iteration_evaluator_v67(
             }
         }
         update_global_populations_v67(*data, snapshot.populations, &snapshot.lte_populations);
+        if (snapshot.kind == "dsec" && snapshot.call_index == 1u) {
+            if (const char* state_dir_v06481238 = std::getenv("XSTAR_V06481238_O7_STATE_DIR")) {
+                if (*state_dir_v06481238) {
+                    try {
+                        write_v06481238_o7_state_transition(
+                            *data, snapshot, std::filesystem::path(state_dir_v06481238));
+                    } catch (const std::exception& exc_v06481238) {
+                        set_callback_error(error, error_size,
+                            std::string("cannot write v06481238 O7 state transition: ") + exc_v06481238.what());
+                        return 1;
+                    }
+                }
+            }
+        }
         if (!call1_sweep_native_root_v82_patch512.empty()) {
             append_call1_dsec_population_sweep_v82_patch512(*data, snapshot, call1_sweep_native_root_v82_patch512);
         }
