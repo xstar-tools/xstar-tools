@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.48.12.3.2.1 - 2026-07-31
+
+- Qualification-only cpp-zone smoke survey over the frozen 11 representative models.
+- Direct, blocking FORTRAN print-option-17 comparison for every model; all models run even when one rejects.
+- Direct order-aware nine-FITS comparison to FORTRAN retained as diagnostic big-picture reporting.
+- No scientific runtime changes relative to 0.6.48.12.3.2 apart from version metadata; `cpp-all` remains disabled for this stage.
+
 ## 0.6.48.12.3.2 — generic abundance publication and order-aware detailed-FITS ownership - 2026-07-31
 
 - Remove the Mg-benchmark-only hard-coded abundance table from native print option 2. `rel.to cosmic` now comes from the parsed input `<element>abund` multiplier; `rel. to H` comes from the already-lowered per-element abundance after applying the selected `abundtbl`; `H=12` is derived from that live abundance. No fixed Ca/Mg/H/He cosmic abundance constants are used by the writer.
