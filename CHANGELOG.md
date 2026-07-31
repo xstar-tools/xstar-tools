@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.12.3.1.2 - 2026-07-30
+
+Qualification-runner hotfix only; no science implementation changes.
+
+- Runtime readiness now permits expected in-tree build artifacts created by a previous host run while retaining strict source-only packaging readiness by default.
+- Python+CPP final-print qualification blocks on the primary terminal quantities T4, HTTOT, and CLTOT. HMCTOT remains reported at the same 1% relative diagnostic threshold but is non-blocking because it is a cancellation quantity derived from nearly equal HTTOT/CLTOT values.
+- cpp-zone can requalify an existing same-version Python+CPP product directory if the acceptance marker is absent, avoiding an expensive rerun solely to create the marker.
+- Existing Type49/53 Z=1..30 persistent leveltemp science and final-recompute bridge are byte-identical to 0.6.48.12.3.1.1.
+
 # 0.6.48.12.3.1.1 — runner reference-materialization hotfix - 2026-07-30
 
 - Fix `set -u` failure in both 12.3.1 qualification runners by separating `local input`, `local label`, and `local dest` declarations.
