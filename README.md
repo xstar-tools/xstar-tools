@@ -103,3 +103,9 @@ The Python radial controller now preserves source default-REAL precision for the
 ### Full cpp-zone benchmark survey (0.6.48.12.3.2.2)
 
 `run_v064812322_cpp_zone_all_benchmarks.sh` runs all 62 benchmark models with the production cpp-zone backend and compares zone/DSEC trajectories, print option 17, final thermal totals, and diagnostic products directly against FORTRAN. It emits dedicated CSV records for trajectory and >1% thermal failures and can resume an interrupted run with an optional `--resume` argument.
+
+### O VII call-1 DSEC attribution (0.6.48.12.3.5)
+
+`run_v06481235_o7_call1_dsec_attribution.sh` is a single-model diagnostic run for `helike_type69/o7_ne1e12`. It keeps the accepted 12.3.4 xi=2 final-thermal correction frozen and does not rerun xi=2 or the wider benchmark suite.
+
+The runner captures the complete source-faithful pure-Python and cpp-zone call-1 DSEC sequences. For oxygen it compares stage fractions, preliminary ionization/recombination rates, data/rate thermal families, source-semantic record contributions, compact populations, trial `T`/`xee`, `HMCTOT`, and charge residuals. Record alignment uses ion stage rather than implementation-specific ion index.

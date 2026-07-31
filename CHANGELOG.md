@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.48.12.3.5 - 2026-07-31
+
+- Freeze the successful 0.6.48.12.3.4 xi=2 final zero-thickness line-escape science correction; xi=2 is no longer rerun during O VII diagnosis.
+- Remove the false qualification dependency on the `V06481234_FINAL_ZERO_LINE_TAU_ACTIVE` stdout marker. The 12.3.4 Ca/Mg xi=2 thermal closure is retained as accepted science evidence.
+- Correct O VII attribution identity to source-semantic `(element Z, ion stage, record, data type, rate type)` rather than implementation-specific `ion_index`; this removes the false O VIII record-22664 split.
+- Add a compact native per-evaluation O attribution writer for stage fractions, preliminary ionization/recombination, thermal families, source-semantic records, and compact populations.
+- Add a pure-Python call-1 DSEC attribution capture that serializes every source-faithful fixed-state trial without retaining full per-evaluation result objects.
+- Add an O-only trajectory comparator that separates same-input fixed-state divergence from later DSEC/controller-state divergence and identifies the first causal evaluation.
+- The default 12.3.5 runner executes only `helike_type69/o7_ne1e12`; no 15-model or 62-model survey and no `cpp-all` path are entered.
+
 # 0.6.48.12.3.4 — O VII attribution + xi=2 final-zero thermal-state fix - 2026-07-31
 
 - Narrow the active qualification set from the 15 failed zone/thermal targets to exactly three physical cases: `helike_type69/o7_ne1e12`, `helike_type69/ca19_xi2_ne1e8`, and `mg_ca_triplet_targets/mg11_xi2_ne1e8`. No 15-model or 62-model broad run is performed in this revision.

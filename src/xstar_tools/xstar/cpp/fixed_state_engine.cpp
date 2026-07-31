@@ -14914,6 +14914,164 @@ int xstar_fixed_state_write_last_element_fixed_state_v0648121(
     }
 }
 
+int xstar_fixed_state_write_last_element_attribution_v06481235(
+    const xstar_fixed_state_context* context,
+    const char* output_dir,
+    int element_z,
+    uint64_t sequence,
+    uint64_t call_index,
+    uint64_t evaluation_index,
+    const char* kind,
+    char* message,
+    size_t message_size
+) {
+    if (!context || !output_dir || !*output_dir || element_z <= 0 || sequence == 0 ||
+        call_index == 0 || evaluation_index == 0) {
+        copy_text(message, message_size,
+            "context, output_dir, positive element_z, and positive indices are required");
+        return 1;
+    }
+    try {
+        const NativeElementDiagnostic* selected = nullptr;
+        for (const auto& item : context->last_element_diagnostics) {
+            if (item.element_z == element_z) {
+                selected = &item;
+                break;
+            }
+        }
+        if (!selected) throw std::runtime_error("requested element is absent from last fixed-state diagnostics");
+        const std::filesystem::path root(output_dir);
+        std::filesystem::create_directories(root);
+        const std::string kind_text = kind && *kind ? kind : "dsec";
+
+        auto append_header = [](const std::filesystem::path& path, const std::string& header) {
+            const bool fresh = !std::filesystem::exists(path) || std::filesystem::file_size(path) == 0;
+            std::ofstream out(path, std::ios::app);
+            if (!out) throw std::runtime_error("cannot create compact element attribution CSV: " + path.string());
+            if (fresh) out << header << '\n';
+            return out;
+        };
+
+        {
+            auto out = append_header(root / "cpp_stage_fractions.csv",
+                "sequence,kind,call_index,evaluation_index,temperature_k,electron_fraction_input,element_z,active_min_stage,active_max_stage,stage,ion_charge,preliminary_ionization,preliminary_recombination,preliminary_fraction,final_fraction");
+            const int max_stage = element_z + 1;
+            for (int stage = 1; stage <= max_stage; ++stage) {
+                const std::size_t at = static_cast<std::size_t>(stage - 1);
+                const double preliminary_ionization = at < selected->preliminary.ionization.size()
+                    ? selected->preliminary.ionization[at] : 0.0;
+                const double preliminary_recombination = at < selected->preliminary.recombination.size()
+                    ? selected->preliminary.recombination[at] : 0.0;
+                const double preliminary_fraction = at < selected->preliminary.fractions.size()
+                    ? selected->preliminary.fractions[at] : 0.0;
+                const double final_fraction = at < selected->final_stage_fractions.size()
+                    ? selected->final_stage_fractions[at] : 0.0;
+                out << std::setprecision(17)
+                    << sequence << ',' << kind_text << ',' << call_index << ',' << evaluation_index << ','
+                    << context->last_temperature_k << ',' << context->last_electron_fraction_input << ','
+                    << element_z << ',' << selected->active.min_stage << ',' << selected->active.max_stage << ','
+                    << stage << ',' << (stage - 1) << ',' << preliminary_ionization << ','
+                    << preliminary_recombination << ',' << preliminary_fraction << ',' << final_fraction << '\n';
+            }
+        }
+
+        {
+            auto out = append_header(root / "cpp_compact_populations.csv",
+                "sequence,kind,call_index,evaluation_index,temperature_k,electron_fraction_input,element_z,active_min_stage,active_max_stage,compact_row,superlevel,ion_stage,ion_charge,is_normalization_row,thermal_compact_population");
+            const std::size_t n = selected->thermal_compact_populations.size();
+            for (std::size_t i = 0; i < n; ++i) {
+                int superlevel = 0;
+                int ion_stage = 0;
+                int ion_charge = 0;
+                if (i < selected->active.element.rows.size()) {
+                    const auto& row = selected->active.element.rows[i];
+                    superlevel = row.superlevel;
+                    ion_stage = row.ion;
+                    ion_charge = row.ion_charge;
+                }
+                out << std::setprecision(17)
+                    << sequence << ',' << kind_text << ',' << call_index << ',' << evaluation_index << ','
+                    << context->last_temperature_k << ',' << context->last_electron_fraction_input << ','
+                    << element_z << ',' << selected->active.min_stage << ',' << selected->active.max_stage << ','
+                    << (i + 1u) << ',' << superlevel << ',' << ion_stage << ',' << ion_charge << ','
+                    << ((i + 1u) == n ? 1 : 0) << ',' << selected->thermal_compact_populations[i] << '\n';
+            }
+        }
+
+        struct Agg {
+            std::size_t term_count = 0;
+            std::set<long long> records;
+            long long first_source_position = 0;
+            int ion_index_min = std::numeric_limits<int>::max();
+            int ion_index_max = std::numeric_limits<int>::min();
+            double h = 0.0, c = 0.0, h2 = 0.0, c2 = 0.0;
+        };
+        std::map<std::pair<int,int>, Agg> families;
+        std::map<std::tuple<int,long long,int,int>, Agg> records;
+        for (const auto& row : context->last_thermal_diagonal_diagnostics) {
+            if (row.element_z != element_z) continue;
+            auto accumulate = [&](Agg& a) {
+                ++a.term_count;
+                a.records.insert(row.record);
+                if (a.first_source_position == 0 ||
+                    (row.source_position > 0 && row.source_position < a.first_source_position)) {
+                    a.first_source_position = row.source_position;
+                }
+                a.ion_index_min = std::min(a.ion_index_min, row.ion_index);
+                a.ion_index_max = std::max(a.ion_index_max, row.ion_index);
+                a.h += row.heating_contribution;
+                a.c += row.cooling_contribution;
+                a.h2 += row.heating2_contribution;
+                a.c2 += row.cooling2_contribution;
+            };
+            accumulate(families[{row.data_type, row.rate_type}]);
+            // Source-semantic record identity is ion_stage, not the compact/global
+            // implementation-specific ion_index.  This fixes the false 22664 split
+            // exposed by 12.3.4 for O VIII.
+            accumulate(records[{row.ion_stage, row.record, row.data_type, row.rate_type}]);
+        }
+
+        {
+            auto out = append_header(root / "cpp_family_thermal.csv",
+                "sequence,kind,call_index,evaluation_index,temperature_k,electron_fraction_input,element_z,data_type,rate_type,term_count,record_count,heating_contribution,cooling_contribution,heating2_contribution,cooling2_contribution,absolute_thermal_contribution");
+            for (const auto& entry : families) {
+                const auto& key = entry.first;
+                const auto& a = entry.second;
+                out << std::setprecision(17)
+                    << sequence << ',' << kind_text << ',' << call_index << ',' << evaluation_index << ','
+                    << context->last_temperature_k << ',' << context->last_electron_fraction_input << ','
+                    << element_z << ',' << key.first << ',' << key.second << ',' << a.term_count << ','
+                    << a.records.size() << ',' << a.h << ',' << a.c << ',' << a.h2 << ',' << a.c2 << ','
+                    << (a.h + a.c + a.h2 + a.c2) << '\n';
+            }
+        }
+
+        {
+            auto out = append_header(root / "cpp_record_thermal.csv",
+                "sequence,kind,call_index,evaluation_index,temperature_k,electron_fraction_input,element_z,ion_stage,record,data_type,rate_type,term_count,first_source_position,ion_index_min,ion_index_max,heating_contribution,cooling_contribution,heating2_contribution,cooling2_contribution,absolute_thermal_contribution");
+            for (const auto& entry : records) {
+                const auto& key = entry.first;
+                const auto& a = entry.second;
+                out << std::setprecision(17)
+                    << sequence << ',' << kind_text << ',' << call_index << ',' << evaluation_index << ','
+                    << context->last_temperature_k << ',' << context->last_electron_fraction_input << ','
+                    << element_z << ',' << std::get<0>(key) << ',' << std::get<1>(key) << ','
+                    << std::get<2>(key) << ',' << std::get<3>(key) << ',' << a.term_count << ','
+                    << a.first_source_position << ','
+                    << (a.ion_index_min == std::numeric_limits<int>::max() ? 0 : a.ion_index_min) << ','
+                    << (a.ion_index_max == std::numeric_limits<int>::min() ? 0 : a.ion_index_max) << ','
+                    << a.h << ',' << a.c << ',' << a.h2 << ',' << a.c2 << ','
+                    << (a.h + a.c + a.h2 + a.c2) << '\n';
+            }
+        }
+        copy_text(message, message_size, "compact element attribution written");
+        return 0;
+    } catch (const std::exception& exc) {
+        copy_text(message, message_size, exc.what());
+        return 8;
+    }
+}
+
 int xstar_fixed_state_write_last_thermal_budget_v1(
     const xstar_fixed_state_context* context,
     const char* output_csv,

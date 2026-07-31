@@ -13502,6 +13502,47 @@ int standalone_iteration_evaluator_v67(
                 }
             }
         }
+        // v0.6.48.12.3.5 diagnostic-only O VII call-1 trajectory attribution.
+        // Capture compact source-semantic stage/rate/record state at every
+        // call-1 DSEC evaluation.  These sidecars are never read by production.
+        if (snapshot.kind == "dsec" && snapshot.call_index == 1u) {
+            if (const char* trajectory_dir_v06481235 = std::getenv("XSTAR_V06481235_O7_CALL1_ATTRIBUTION_DIR")) {
+                if (*trajectory_dir_v06481235) {
+                    try {
+                        const std::filesystem::path trajectory_root_v06481235(trajectory_dir_v06481235);
+                        std::filesystem::create_directories(trajectory_root_v06481235);
+                        std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> trajectory_message_v06481235{};
+                        const auto thermal_path_v06481235 = trajectory_root_v06481235 / "cpp_call1_thermal_budget.csv";
+                        const int thermal_rc_v06481235 = xstar_fixed_state_write_last_thermal_budget_v1(
+                            data->fixed_context, thermal_path_v06481235.string().c_str(), snapshot.sequence,
+                            snapshot.call_index, snapshot.evaluation_index, snapshot.kind.c_str(),
+                            trajectory_message_v06481235.data(), trajectory_message_v06481235.size());
+                        if (thermal_rc_v06481235 != 0) {
+                            throw std::runtime_error(std::string("v06481235 call1 thermal attribution failed: ") +
+                                trajectory_message_v06481235.data());
+                        }
+                        trajectory_message_v06481235.fill('\0');
+                        const int element_rc_v06481235 = xstar_fixed_state_write_last_element_attribution_v06481235(
+                            data->fixed_context, trajectory_root_v06481235.string().c_str(), 8,
+                            snapshot.sequence, snapshot.call_index, snapshot.evaluation_index, snapshot.kind.c_str(),
+                            trajectory_message_v06481235.data(), trajectory_message_v06481235.size());
+                        if (element_rc_v06481235 != 0) {
+                            throw std::runtime_error(std::string("v06481235 O call1 compact attribution failed: ") +
+                                trajectory_message_v06481235.data());
+                        }
+                        if (snapshot.evaluation_index == 1u) {
+                            std::cerr << "V06481235_CPP_O7_CALL1_ATTRIBUTION_DIR="
+                                      << trajectory_root_v06481235.string() << "\n";
+                        }
+                    } catch (const std::exception& exc_v06481235) {
+                        set_callback_error(error, error_size,
+                            std::string("cannot retain v06481235 O7 call1 attribution: ") + exc_v06481235.what());
+                        return 1;
+                    }
+                }
+            }
+        }
+
         // v0.6.48.12.2.1: capture the complete native fixed-state attribution
         // exactly at call-1/eval-1, before any controller evolution.  The
         // writer is observational only and never consumed by production.

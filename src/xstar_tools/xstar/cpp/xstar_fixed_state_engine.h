@@ -689,6 +689,22 @@ XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_write_last_element_fixed_state_v0
     size_t message_size
 );
 
+/* v0.6.48.12.3.5 diagnostic-only compact per-evaluation element attribution.
+ * Appends source-semantic ion-stage fractions, preliminary rates, thermal
+ * families, thermal records, and compact populations for one requested
+ * element.  Production physics never consumes these files. */
+XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_write_last_element_attribution_v06481235(
+    const xstar_fixed_state_context* context,
+    const char* output_dir,
+    int element_z,
+    uint64_t sequence,
+    uint64_t call_index,
+    uint64_t evaluation_index,
+    const char* kind,
+    char* message,
+    size_t message_size
+);
+
 XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_write_last_thermal_budget_v1(
     const xstar_fixed_state_context* context,
     const char* output_csv,
