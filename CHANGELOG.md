@@ -1,5 +1,13 @@
 # CHANGELOG
 
+# 0.6.48.12.3.9 — generic terminal normalization-seed source parity - 2026-07-31
+
+- Fix the remaining source-faithful global-to-compact population seed gap exposed by the 12.3.8 O VII transition attribution. Python/source semantics execute `x(ipmat2+1)=0.` after every element's overlapping global `xilevg` -> compact mapping and before `msolvelucy`; C++ had promoted this terminal zero only for H/He/Mg/C and left O/Ca seeded from the prior fully-stripped global population.
+- Apply the terminal normalization-row zero generically to every element, while preserving already-qualified H/He/Mg element-specific diagnostic identity branches. No DSEC tolerances, secant/root arithmetic, preliminary rates, matrix terms, Type50, Type88, radial transport, or product writers are changed.
+- Freeze the 12.3.7 Type88 caller-capacity correction.
+- Extend qualification-only selected solve capture to call-1 evaluations 25 and 26, the first late-evaluation region where 12.3.8 reanalysis found a material O population/HMCTOT split.
+- Add a single-model `helike_type69/o7_ne1e12` qualification runner. It performs no pure-Python rerun, verifies the O normalization seed is exactly zero at evaluations 2/25/26, and checks zone/DSEC/option-17/final thermal values against FORTRAN. No O-family, 15-model, 62-model, or `cpp-all` run is performed.
+
 # 0.6.48.12.3.8 — O VII call-1 state-transition attribution - 2026-07-31
 
 - Freeze the real 0.6.48.12.3.7 Type88 caller-capacity correction and all previously accepted science. No DSEC tolerance, controller, rate, population, or thermal science behavior changes in this revision.

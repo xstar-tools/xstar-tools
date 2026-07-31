@@ -8698,12 +8698,16 @@ RuntimeInitialSeed source_faithful_runtime_initial_seed(
         return seed;
     }
 
-    // v0.6.48.11.6: the same terminal-zero write is source-generic.  Promote
-    // it first for carbon, the element whose C III ground seed was inflated
-    // by active-slice renormalization and then dominated Type50 record 5740.
-    // Keep O/Ca unchanged until their generic seed paths are independently
-    // qualified against the multi-model suite.
-    if (e.element_z == 6 && compact_row == e.normalization_row) {
+    // v0.6.48.12.3.9: source calc_hmc_element applies the terminal
+    // x(ipmat2+1)=0 write for every element after the overlapping global
+    // xilevg -> compact x mapping and before msolvelucy.  Python's
+    // source-faithful mapper therefore zeros basis.normalization_row
+    // generically.  Earlier C++ qualification promoted this rule only for
+    // H/He/Mg/C and deliberately left O/Ca on the stale global terminal
+    // population.  Preserve the already-qualified element-specific branches
+    // above (including their diagnostic global identity), then apply the
+    // literal source-generic zero to every remaining element.
+    if (compact_row == e.normalization_row) {
         seed.global_level_index = row.global_level_index;
         seed.value = 0.0;
         seed.loaded = true;

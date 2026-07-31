@@ -11885,7 +11885,7 @@ void print_vector_audit_v82_patch4(const char* name, const VectorAuditV82Patch4&
 
 
 bool v06481238_selected_eval(std::size_t evaluation_index) {
-    static const std::set<std::size_t> selected{1u,2u,3u,4u,5u,6u,9u,15u,21u,24u};
+    static const std::set<std::size_t> selected{1u,2u,3u,4u,5u,6u,9u,15u,21u,24u,25u,26u};
     return selected.count(evaluation_index) != 0u;
 }
 
