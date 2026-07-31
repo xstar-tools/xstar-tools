@@ -1,6 +1,6 @@
 """Capture a compact pure-Python call-1 DSEC attribution trajectory.
 
-Diagnostic-only helper for v0.6.48.12.3.5/12.3.5.1.  It runs one source-faithful
+Diagnostic-only helper for v0.6.48.12.3.5/12.3.5.1/12.3.5.2.  It runs one source-faithful
 radial shell and serializes every DSEC trial before any later radial call.
 """
 from __future__ import annotations

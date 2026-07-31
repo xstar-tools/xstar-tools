@@ -466,7 +466,6 @@ class CalcHMCAllDsecEvaluator:
         capture_snapshot = bool(self.capture_all_input_snapshots or evaluation_index in set(self.capture_input_snapshot_indices))
         snapshot: Optional[DsecCalcHMCAllInputSnapshot] = None
         if capture_snapshot:
-            prior = state.last_calc_hmc_all
             radiation = requests[0].radiation if requests else None
             escape = requests[0].escape if requests else None
             snapshot = DsecCalcHMCAllInputSnapshot(
@@ -485,9 +484,12 @@ class CalcHMCAllDsecEvaluator:
                 global_level_populations=dict(state.global_level_populations or {}),
                 global_bilev_values=dict(state.source_arrays.get("bilevg", {})),
                 global_rnist_values=dict(state.source_arrays.get("rnisg", {})),
-                global_level_index_by_key=(
-                    {} if prior is None else dict(prior.global_level_index_by_key)
-                ),
+                # Snapshot the mapping owned by the mutable DSEC runtime
+                # entering this trial.  In diagnostics=none mode
+                # ``last_calc_hmc_all`` is intentionally reduced to a tiny
+                # scalar summary, while this runtime mapping remains the
+                # authoritative source state committed by the prior trial.
+                global_level_index_by_key=dict(state.global_level_index_by_key),
                 leveltemp_workspace=copy.deepcopy(state.leveltemp_workspace),
                 leveltemp_owner_by_column={
                     int(index): dict(owner)

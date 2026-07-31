@@ -1,5 +1,13 @@
 # CHANGELOG
 
+# 0.6.48.12.3.5.2 — O VII DSEC snapshot ownership hotfix - 2026-07-31
+
+- Fix the second-evaluation crash in the pure-Python call-1 DSEC attribution capture. With `diagnostics_mode=none`, `last_calc_hmc_all` is intentionally reduced to a scalar `SimpleNamespace`; the input-snapshot path incorrectly reached through that reduced object for `global_level_index_by_key`.
+- Snapshot `global_level_index_by_key` from the current mutable `DsecMutableRuntimeState`, which is the source-faithful owner committed by the previous trial and the state actually entering the next trial.
+- Preserve the 12.3.5.1 live-callback `element_results` retention, list-form final-print parser, option-17 `values[-1]` DSEC parser, fail-fast behavior, and completed-C++ `--resume` reuse.
+- Preserve all O VII science kernels and the accepted 12.3.4 xi=2 final-zero live-line-tau correction. No rates, matrices, populations, root/controller logic, radial transport, or product writers are changed.
+- Add `run_v064812352_o7_call1_dsec_attribution.sh`; it keeps the 12.3.5 output layout so the user's completed cpp-zone result can be reused without rebuilding or rerunning C++.
+
 # 0.6.48.12.3.5.1 — O VII attribution runner hotfix - 2026-07-31
 
 - Fix pure-Python call-1 DSEC attribution capture: production-memory mode suppressed `element_results` even though the live evaluation callback requires them. Retain element results only while a live DSEC gate is installed; continue to discard complete per-evaluation fixed-state result history and source-sized diagnostic arrays.
