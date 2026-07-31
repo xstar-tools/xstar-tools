@@ -1381,6 +1381,14 @@ def _calc_kwargs_factory(state: XSTARPythonState, compton_table: Any) -> Callabl
             source="run_xstar_python:heatf",
         )
         production_mode = str(state.control.get("diagnostics_mode", "full")).lower() == "none"
+        # A live DSEC attribution callback consumes the just-computed element
+        # solve before the evaluator commits and discards the large result.
+        # Keep element_results for that callback even in production-memory
+        # mode, while still suppressing source-sized diagnostic arrays and
+        # retaining no FixedStateCalcHMCAllResult history.  This is
+        # observational only and does not alter any rate, population, or
+        # controller state.
+        live_dsec_gate = callable(state.control.get("zone1_dsec_evaluation_gate_callback"))
         payload = {
             "compton_context": comp,
             "free_free_context": free,
@@ -1390,7 +1398,7 @@ def _calc_kwargs_factory(state: XSTARPythonState, compton_table: Any) -> Callabl
             # per-level/per-ion diagnostic spectra inside every repeated dsec
             # evaluation.  Dense native state arrays remain authoritative.
             "retain_diagnostic_arrays": not production_mode,
-            "retain_element_results": not production_mode,
+            "retain_element_results": (not production_mode) or live_dsec_gate,
         }
         active_subset = state.control.get("active_atdb_subset")
         if active_subset is not None:

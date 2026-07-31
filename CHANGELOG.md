@@ -1,5 +1,14 @@
 # CHANGELOG
 
+# 0.6.48.12.3.5.1 — O VII attribution runner hotfix - 2026-07-31
+
+- Fix pure-Python call-1 DSEC attribution capture: production-memory mode suppressed `element_results` even though the live evaluation callback requires them. Retain element results only while a live DSEC gate is installed; continue to discard complete per-evaluation fixed-state result history and source-sized diagnostic arrays.
+- Fix final-print JSON parsing: `compare_final_print.py` stores `[candidate, reference]` arrays, while the 12.3.5 runner expected mapping rows. Accept both forms and compute the relative difference identically.
+- Fix option-17 DSEC extraction: the comparator stores each row as `{text, values}` with DSEC in `values[-1]`; accept that source representation instead of returning empty DSEC histories.
+- Fail fast before a fresh cpp-zone run if the required pure-Python trajectory capture fails; completed C++ diagnostics remain reusable with `--resume`.
+- Preserve the 12.3.4 xi=2 final-zero live-line-tau science fix and all O VII science kernels. This hotfix is diagnostic/qualification only.
+- Add `run_v064812351_o7_call1_dsec_attribution.sh` as a hotfix alias while preserving the 12.3.5 output layout so an existing failed run can be resumed without rerunning the completed cpp-zone model.
+
 ## 0.6.48.12.3.5 - 2026-07-31
 
 - Freeze the successful 0.6.48.12.3.4 xi=2 final zero-thickness line-escape science correction; xi=2 is no longer rerun during O VII diagnosis.

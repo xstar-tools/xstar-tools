@@ -109,3 +109,7 @@ The Python radial controller now preserves source default-REAL precision for the
 `run_v06481235_o7_call1_dsec_attribution.sh` is a single-model diagnostic run for `helike_type69/o7_ne1e12`. It keeps the accepted 12.3.4 xi=2 final-thermal correction frozen and does not rerun xi=2 or the wider benchmark suite.
 
 The runner captures the complete source-faithful pure-Python and cpp-zone call-1 DSEC sequences. For oxygen it compares stage fractions, preliminary ionization/recombination rates, data/rate thermal families, source-semantic record contributions, compact populations, trial `T`/`xee`, `HMCTOT`, and charge residuals. Record alignment uses ion stage rather than implementation-specific ion index.
+
+## 0.6.48.12.3.5.1 O VII attribution hotfix
+
+The 12.3.5 O-only attribution workflow is repaired without changing science. Use `run_v064812351_o7_call1_dsec_attribution.sh`; `--resume` can reuse a completed 12.3.5 cpp-zone output and rerun only the failed Python capture/comparison.
