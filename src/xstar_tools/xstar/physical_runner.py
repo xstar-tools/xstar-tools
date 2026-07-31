@@ -1807,11 +1807,13 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
             capture_all_input_snapshots=bool(
                 runtime_state.control.get("zone1_dsec_capture_all_inputs", False)
             ),
-            capture_lucy_trace_element_z=(
-                (1, 6)
-                if bool(runtime_state.control.get("zone1_dsec_capture_hydrogen_history", False))
-                else ()
-            ),
+            capture_lucy_trace_element_z=tuple(sorted({
+                *({1, 6} if bool(runtime_state.control.get("zone1_dsec_capture_hydrogen_history", False)) else set()),
+                *({int(runtime_state.control.get("zone1_dsec_capture_lucy_trace_element_z"))}
+                  if runtime_state.control.get("zone1_dsec_capture_lucy_trace_element_z") not in (None, "")
+                  and not isinstance(runtime_state.control.get("zone1_dsec_capture_lucy_trace_element_z"), (list, tuple, set))
+                  else {int(z) for z in runtime_state.control.get("zone1_dsec_capture_lucy_trace_element_z", ())}),
+            })),
             evaluation_gate_callback=runtime_state.control.get(
                 "zone1_dsec_evaluation_gate_callback"
             ),

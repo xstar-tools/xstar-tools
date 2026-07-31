@@ -117,3 +117,7 @@ The runner captures the complete source-faithful pure-Python and cpp-zone call-1
 ## 0.6.48.12.3.5.1 O VII attribution hotfix
 
 The 12.3.5 O-only attribution workflow is repaired without changing science. Use `run_v064812351_o7_call1_dsec_attribution.sh`; `--resume` can reuse a completed 12.3.5 cpp-zone output and rerun only the failed Python capture/comparison.
+
+## 0.6.48.12.3.6 O VII eval-1 detailed solve attribution
+
+This release freezes production science and adds a one-model diagnostic that compares the pure-Python and standalone-C++ O VIII/O VII detailed population solve at the identical first DSEC trial state. Use `run_v06481236_o7_eval1_solve_attribution.sh`; the comparison stops at the first material basis/input/matrix/Lucy/fixed-point/final-population locus.

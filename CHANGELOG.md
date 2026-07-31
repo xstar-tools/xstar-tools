@@ -1,5 +1,15 @@
 # CHANGELOG
 
+# 0.6.48.12.3.6 — O VII eval-1 detailed population/Lucy solve attribution - 2026-07-31
+
+- Freeze all 0.6.48.12.3.5.2 science behavior, including the accepted xi=2 final-zero line-tau correction.
+- Add a diagnostic-only Python selector for requesting Lucy traces from an arbitrary element during live DSEC evaluation; production behavior is unchanged when unset.
+- Add `source_port_o7_eval1_solve_attribution_cli`, which captures only O VII call-1/eval-1 and exits before evaluation 2.
+- Export Python compact basis, exact solver input, source-order matrix terms, dense matrices, RHS, final populations, ion reconstruction, every Lucy outer iteration, every condensed matrix, and every fixed-point iteration.
+- Reuse the existing C++ `XSTAR_QUALIFICATION_ITERATION_RESOLVED_TRACE` path for sequence 1 / Z=8; no C++ solver science code changes.
+- Add a source-stage-aware Python/C++ comparator that reports the first material locus from basis/input through final compact populations.
+- Keep runtime qualification restricted to `helike_type69/o7_ne1e12`; no broad benchmark run and no `cpp-all`.
+
 # 0.6.48.12.3.5.2 — O VII DSEC snapshot ownership hotfix - 2026-07-31
 
 - Fix the second-evaluation crash in the pure-Python call-1 DSEC attribution capture. With `diagnostics_mode=none`, `last_calc_hmc_all` is intentionally reduced to a scalar `SimpleNamespace`; the input-snapshot path incorrectly reached through that reduced object for `global_level_index_by_key`.
