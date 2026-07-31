@@ -1,5 +1,11 @@
 # CHANGELOG
 
+# 0.6.48.12.3.1.1 — runner reference-materialization hotfix - 2026-07-30
+
+- Fix `set -u` failure in both 12.3.1 qualification runners by separating `local input`, `local label`, and `local dest` declarations.
+- Require the same-version Python+CPP acceptance marker before cpp-zone uses a directory as its current Python+CPP product reference.
+- No C++ or Python science change from 0.6.48.12.3.1.
+
 # 0.6.48.12.3.1 — Z=1–30 persistent leveltemp and Python+CPP terminal bridge - 2026-07-30
 
 - Generalize source-persistent `leveltemp(2,1:5000)` ownership for Type49/Type53 from the historical Mg-only reconstruction to the full supported Z=1–30 C++ path.
