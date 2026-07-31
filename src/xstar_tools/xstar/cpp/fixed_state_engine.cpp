@@ -7408,10 +7408,15 @@ EvaluatedRecord evaluate_record(
                 c.ans1 = 0.0; c.ans2 = 0.0; c.ans3 = 0.0; c.ans4 = 0.0; c.ans5 = 0.0; c.ans6 = 0.0;
                 break;
             }
-            const int reduced_limit = std::max(3, static_cast<int>(source_bins / 10));
+            // Source-faithful Type-88 caller capacity.  calc_hmc_input already owns
+            // the reduced epim/bremsam caller grid (FORTRAN ncn2m).  ucalc.f90
+            // passes that same ncn2 directly to phextrap; applying another /10 here
+            // truncated the extrapolation capacity to ~99 points for a 999-bin
+            // caller grid and biased O VI record 21279.
+            const int phextrap_limit = std::max(3, static_cast<int>(source_bins));
             c.ans1 = sequence1_type88_photo_rate(
                 r, static_cast<int>(pair_reals), threshold, source_energy_ev, source_bremsa,
-                static_cast<int>(source_bins), reduced_limit);
+                static_cast<int>(source_bins), phextrap_limit);
             c.ans2 = 0.0; c.ans3 = 0.0; c.ans4 = 0.0; c.ans5 = 0.0; c.ans6 = 0.0;
             break;
         }

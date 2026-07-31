@@ -121,3 +121,7 @@ The 12.3.5 O-only attribution workflow is repaired without changing science. Use
 ## 0.6.48.12.3.6 O VII eval-1 detailed solve attribution
 
 This release freezes production science and adds a one-model diagnostic that compares the pure-Python and standalone-C++ O VIII/O VII detailed population solve at the identical first DSEC trial state. Use `run_v06481236_o7_eval1_solve_attribution.sh`; the comparison stops at the first material basis/input/matrix/Lucy/fixed-point/final-population locus.
+
+### 0.6.48.12.3.7 targeted O VII Type88 qualification
+
+Use `run_v06481237_o7_type88_fix.sh` for the one-model `o7_ne1e12` repair gate. This release corrects a second `/10` reduction of the already-reduced Type88 `phextrap` caller capacity and does not run the broader benchmark suites.

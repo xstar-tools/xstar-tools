@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.48.12.3.7 - 2026-07-31
+
+- Fix source-faithful Type88/rate42 `phextrap` caller capacity in standalone `calc_hmc`: the `calc_hmc_input` radiation grid is already the reduced FORTRAN `epim,ncn2m,bremsam` workspace, so Type88 now passes the current caller `source_bins` directly instead of applying a second `/10` reduction.
+- The O VII eval-1 attribution from 0.6.48.12.3.6 localizes the material matrix discrepancy to O VI record 21279 (Type88/rate42); preliminary rates and solver input remain frozen.
+- Repair the eval-1 comparator to ignore implementation-local ion ordinals and compare source-semantic ion stage/charge, and to align matrix terms by semantic identity rather than emission order.
+- Add one-model `o7_ne1e12` Type88 science qualification. No broad O-density or 15/62-target rerun is performed.
+
 # 0.6.48.12.3.6 — O VII eval-1 detailed population/Lucy solve attribution - 2026-07-31
 
 - Freeze all 0.6.48.12.3.5.2 science behavior, including the accepted xi=2 final-zero line-tau correction.
