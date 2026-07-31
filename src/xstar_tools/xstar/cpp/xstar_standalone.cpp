@@ -11538,8 +11538,18 @@ void fill_standalone_input_v67(
     }
     input.dsec_covering_fraction = params.covering_fraction;
     input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_DSEC_COVERING_FRACTION;
-    if (data.call_index >= 3u) {
+    // Source lifetime: the post-radial zero-thickness xstarcalc receives the
+    // live tau0/tauc workspaces regardless of how many physical radial calls
+    // preceded it.  The historical >=3 call guard is correct only for normal
+    // physical DSEC evaluations; it incorrectly disabled line escape in final
+    // recomputes for one- and two-zone models (notably the xi=2 targets).
+    if (data.call_index >= 3u || data.writing_final_snapshot) {
         input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_LINE_TAU_ACTIVE;
+    }
+    if (data.writing_final_snapshot) {
+        std::cout << "V06481234_FINAL_ZERO_LINE_TAU_ACTIVE="
+                  << (((input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_LINE_TAU_ACTIVE) != 0u) ? "YES" : "NO") << "\n"
+                  << "V06481234_FINAL_ZERO_LINE_TAU_OWNER=TERMINAL_POST_STPCUT_TAU0_TAUC\n";
     }
     if (data.global_workspace_initialized && data.current_sequence >= 2u) {
         input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_REPEATED_HYDROGEN_SOURCE_STATE;

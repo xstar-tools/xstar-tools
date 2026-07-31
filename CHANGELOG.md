@@ -1,5 +1,14 @@
 # CHANGELOG
 
+# 0.6.48.12.3.4 — O VII attribution + xi=2 final-zero thermal-state fix - 2026-07-31
+
+- Narrow the active qualification set from the 15 failed zone/thermal targets to exactly three physical cases: `helike_type69/o7_ne1e12`, `helike_type69/ca19_xi2_ne1e8`, and `mg_ca_triplet_targets/mg11_xi2_ne1e8`. No 15-model or 62-model broad run is performed in this revision.
+- Repair a generic post-loop source-lifetime error in standalone cpp-zone final recomputation. FORTRAN passes the live `tau0/tauc` line escape state into the final zero-thickness `xstarcalc` regardless of radial-zone count; C++ previously enabled `XSTAR_FIXED_RUNTIME_STATE_LINE_TAU_ACTIVE` only for `call_index >= 3`, incorrectly disabling live line escape in final recomputes of one- and two-zone models. The final snapshot now enables live line tau explicitly while physical DSEC-call behavior is unchanged.
+- Emit explicit final-recompute ownership markers `V06481234_FINAL_ZERO_LINE_TAU_ACTIVE` and `V06481234_FINAL_ZERO_LINE_TAU_OWNER=TERMINAL_POST_STPCUT_TAU0_TAUC`.
+- Add a one-evaluation pure-Python all-element attribution capture. For O VII the runner captures call-1/eval-1 once and writes H, He, and O stage fractions, compact populations, thermal terms, data/rate-family totals, and record totals.
+- Add an automatic Python-vs-C++ O VII attribution comparator. It verifies identical trial T/xee, aligns thermal ledgers by source record/data type/rate type/ion identity, and reports the first material element plus dominant data/rate family and record/source position.
+- Keep the fixed-state engine, element engine, line emissivity, thermal kernels, output writers, option-17 writer, Python local-zone science, and accelerated final-recompute bridge byte-identical to 0.6.48.12.3.3. Production-zone ABI remains 6048110.
+
 # 0.6.48.12.3.3 — targeted cpp-zone zone/thermal repair qualification - 2026-07-31
 
 - Convert the 0.6.48.12.3.2.2 all-62 survey into a targeted repair stage. The source survey found 9 DSEC/zone failures and 9 blocking thermal failures, with 3 overlapping benchmark IDs; the union is 15 benchmark IDs (13 unique physical parameter cases).
