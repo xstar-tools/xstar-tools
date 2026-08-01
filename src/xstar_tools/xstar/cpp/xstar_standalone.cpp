@@ -10553,6 +10553,11 @@ struct StandaloneControllerDataV67 {
     std::vector<double> accumulated_zremsz;
     std::vector<double> source_incident;
     double cumulative_depth_cm = 0.0;
+    // 0.6.48.12.3.11: retain source xstar.f90 xcol as an independent
+    // mutable REAL(8) scalar.  Do not reconstruct it as density*depth: the
+    // source updates xcol=xcol+xpx*delr and tests that exact retained value
+    // in the strict first-pass xcol<xpxcol loop predicate.
+    double cumulative_column_cm2 = 0.0;
     // v82 patch 5.15/5.16 diagnostic radial semantics.
     std::size_t physical_transport_intervals_completed = 0u;
     std::vector<CallStartWorkspace> call_start_workspaces;
@@ -13061,7 +13066,8 @@ void retain_pre_stpcut_cumulative_state_v82_patch520145(
 void advance_stpcut_depths_v82_patch520145(
     StandaloneControllerDataV67& data,
     FixedDsecSnapshot& local_boundary,
-    double delta_radius_cm) {
+    double delta_radius_cm,
+    double hydrogen_density_cm3) {
     if (!(delta_radius_cm > 0.0) || !std::isfinite(delta_radius_cm)) return;
     const std::size_t line_stride = local_boundary.oplin.size();
     if (data.line_tau_in.size() < line_stride) {
@@ -13130,7 +13136,13 @@ void advance_stpcut_depths_v82_patch520145(
               << "V048746255172582_PATCH52011_DPTHCONT_MAX="
               << (data.grid_cont_tau_in.empty() ? 0.0 : *std::max_element(data.grid_cont_tau_in.begin(), data.grid_cont_tau_in.end())) << "\n";
 
+    // Literal xstar.f90 geometry/column ownership:
+    //   rdel=rdel+delr
+    //   xcol=xcol+xpx*delr
+    // Keep xcol independent of rdel so the strict terminal comparison has
+    // the same binary64 staging as Python/FORTRAN.
     data.cumulative_depth_cm += delta_radius_cm;
+    data.cumulative_column_cm2 += hydrogen_density_cm3 * delta_radius_cm;
     ++data.physical_transport_intervals_completed;
     std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> message{};
     const int rc = xstar_fixed_state_context_set_runtime_line_tau_v1(
@@ -13149,7 +13161,9 @@ void advance_consecutive_transport_v71(
     if (!(delta_radius_cm > 0.0) || !std::isfinite(delta_radius_cm)) return;
     advance_source_continuum_radiation_v82_patch52(data, local_boundary, delta_radius_cm, radius_cm);
     advance_atomic_luminosities_v82_patch520145(data, local_boundary, delta_radius_cm, radius_cm);
-    advance_stpcut_depths_v82_patch520145(data, local_boundary, delta_radius_cm);
+    advance_stpcut_depths_v82_patch520145(
+        data, local_boundary, delta_radius_cm,
+        data.parameters ? data.parameters->density_cm3 : 0.0);
 }
 
 FixedDsecSnapshot make_iteration_snapshot_v67(
@@ -15601,7 +15615,8 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
 
             if (segment > 0.0) {
                 const auto stpcut_started_v064890 = std::chrono::steady_clock::now();
-                advance_stpcut_depths_v82_patch520145(data, boundary, segment);
+                advance_stpcut_depths_v82_patch520145(
+                    data, boundary, segment, state.hydrogen_density_cm3);
                 if (g_performance_v064890) {
                     g_performance_v064890->stpcut_seconds += elapsed_seconds_v064890(stpcut_started_v064890);
                 }
@@ -15610,12 +15625,31 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             // another physical shell.  The Mg XI reference trajectory keeps
             // its accepted four-call boundary exactly; every other model is
             // naturally terminated from live production state.
-            const double current_column_cm2_v0648110 = params.density_cm3 * data.cumulative_depth_cm;
+            const double reconstructed_column_cm2_v064812311 =
+                params.density_cm3 * data.cumulative_depth_cm;
+            const double current_column_cm2_v0648110 = data.cumulative_column_cm2;
+            if (const char* diag_v064812311 = std::getenv("XSTAR_V064812311_XCOL_DIAGNOSTICS");
+                diag_v064812311 && *diag_v064812311) {
+                std::cerr << std::setprecision(17)
+                          << "V064812311_XCOL_CALL=" << call << "\n"
+                          << "V064812311_XCOL_RETAINED_CM2=" << current_column_cm2_v0648110 << "\n"
+                          << "V064812311_XCOL_RECONSTRUCTED_CM2=" << reconstructed_column_cm2_v064812311 << "\n"
+                          << "V064812311_XCOL_LIMIT_CM2=" << params.column_cm2 << "\n"
+                          << "V064812311_XCOL_RETAINED_RESIDUAL_CM2="
+                          << (params.column_cm2 - current_column_cm2_v0648110) << "\n"
+                          << "V064812311_XCOL_RECONSTRUCTED_RESIDUAL_CM2="
+                          << (params.column_cm2 - reconstructed_column_cm2_v064812311) << "\n";
+            }
             const bool source_predicate_v0648110 =
                 params.nsteps > 0 &&
                 current_column_cm2_v0648110 < params.column_cm2 &&
                 state.electron_fraction_xee > params.minimum_electron_fraction &&
                 state.temperature_t4 > 0.099 * 0.99;
+            if (const char* diag_v064812311 = std::getenv("XSTAR_V064812311_XCOL_DIAGNOSTICS");
+                diag_v064812311 && *diag_v064812311) {
+                std::cerr << "V064812311_XCOL_SOURCE_PREDICATE="
+                          << (source_predicate_v0648110 ? "CONTINUE" : "STOP") << "\n";
+            }
             const bool continue_after_zone_v0648110 = data.reference_trajectory_mode
                 ? (call < expected_dsec_counts.size())
                 : source_predicate_v0648110;
@@ -15639,7 +15673,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             if (continue_after_zone_v0648110) {
                 const std::vector<double>& step_opakc = boundary.opakc;
                 const double step_radius_cm = params.initial_radius_cm + data.cumulative_depth_cm;
-                const double current_column_cm2 = params.density_cm3 * data.cumulative_depth_cm;
+                const double current_column_cm2 = data.cumulative_column_cm2;
                 const auto step_started_v064890 = std::chrono::steady_clock::now();
                 const auto step_result = source_step_v82_patch520111(
                     data, step_opakc, step_radius_cm, current_column_cm2);

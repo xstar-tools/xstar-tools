@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.48.12.3.11 - 2026-08-01
+
+- O VII ne1e4 terminal radial fix: retain source `xcol` independently in standalone C++ rather than reconstructing it as `density*cumulative_depth`.
+- Update retained column in literal source order as `xcol += xpx*delr`, and use that retained value for both `STEP` and the strict first-pass `xcol<xpxcol` continuation predicate.
+- Add a one-model `helike_type69/o7_ne1e4` qualification runner with retained-vs-reconstructed xcol diagnostics after every physical zone.
+- Freeze the 12.3.9 generic terminal normalization-seed fix, 12.3.7 Type88 fix, DSEC tolerances, thermal/rate/population science, and FITS publication behavior.
+
 ## 0.6.48.12.3.10 - 2026-08-01
 
 - Freeze the 0.6.48.12.3.9 generic terminal normalization-seed science fix.
