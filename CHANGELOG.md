@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.12.3.13 - 2026-08-01
+
+- Qualification-only all-62 `xout_step.log` science survey after 0.6.48.12.3.12 closed the ionization-parameter state-ownership defect in `c5_ne1` and the remaining eight historical option-17 failures.
+- Replace positional comparison of identity-bearing print sections with source-identity alignment. Options 1/23 align by line index with rank/top-500 membership diagnostic-only; option 15 aligns by line index; options 19/24 align by continuum storage index; option 27 aligns by ion identity.
+- Compare scientific numerics at a 1% relative tolerance. Option 17 retains chronological zone semantics and exact DSEC identity while treating base-10 logarithms as physical quantities and one-last-digit 0.01-dex differences as display-quantization ambiguous. H-C percentage columns use a one-percentage-point absolute tolerance.
+- Treat option 16 as CPU timing/accounting only and exclude it from science acceptance. Separate numeric >1% discrepancies, material inventory mismatches, and rank/order diagnostics into dedicated CSV outputs.
+- Preserve all production science from 0.6.48.12.3.12.1 byte-for-byte apart from version metadata. No pure-Python rerun, `cpp-all`, or nine-FITS audit is part of this stage.
+
 ## 0.6.48.12.3.12.1 - 2026-08-01
 
 - Qualification-only follow-up after `c5_ne1` closed option-17/22 ionization-parameter parity.
