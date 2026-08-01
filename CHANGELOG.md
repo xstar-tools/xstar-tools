@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.48.12.3.15 — source two-pass active-stage traversal candidate - 2026-08-01
+
+- Build on the scientifically accepted targeted 0.6.48.12.3.14 generic Type50 source gates; retain both source-REAL `1.e-34` gates unchanged.
+- Reorder the native element evaluator to mirror `calc_hmc_element.f90`: a restricted `calc_ion_rates`-equivalent first pass establishes `pirti/rrrti` and literal `mml/mmu` before the expensive per-ion body is evaluated.
+- Reuse first-pass `EvaluatedRecord` values when the same record belongs to the active second-pass window, avoiding duplicate rate evaluation.
+- Fully evaluate second-pass records only for active stages, while conservatively retaining all rate-type-7 records as source-global setup/`errc` owners and retaining structural records.
+- Add `XSTAR_V064812315_FORCE_FULL_RECORD_TRAVERSAL=1` for same-executable A/B qualification. The targeted qualifier requires all nine FITS data payloads to be bit-exact between pruned and forced-full modes.
+- Add per-controller-call record-evaluation counters so high-ionization Ca pruning can be measured directly rather than inferred from wall time.
+- No element-specific performance shortcut is introduced; production-zone ABI 6048110, DSEC/thermal/source/ionization fixes, and Python science remain frozen.
+
 ## 0.6.48.12.3.14 - 2026-08-01
 
 - Restore the two literal FORTRAN Type-50 performance gates generically for all elements. The broad `calc_emisab_ion` line stream now requires density-scaled endpoint abundance above default-REAL `1.e-34` for rate families 4/9/14; ordinary Type-50 profile traversal now requires `opakb1 > REAL(1.e-34)` while retaining scalar line publication.

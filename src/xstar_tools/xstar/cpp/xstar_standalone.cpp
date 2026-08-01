@@ -190,6 +190,7 @@ struct PerformanceInstrumentationV064890 {
     std::array<double,4> fixed_continuum_seconds{{0.0,0.0,0.0,0.0}};
     std::array<double,4> fixed_spectral_seconds{{0.0,0.0,0.0,0.0}};
     std::array<double,4> fixed_total_seconds{{0.0,0.0,0.0,0.0}};
+    std::array<std::uint64_t,4> fixed_record_evaluations{{0u,0u,0u,0u}};
     std::array<double,4> boundary_projection_seconds{{0.0,0.0,0.0,0.0}};
     double continuum_transport_seconds = 0.0;
     double atomic_luminosity_seconds = 0.0;
@@ -15178,6 +15179,9 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         std::cout << "V048746255172582_PATCH52017_REFERENCE_ATTRIBUTION="
                   << (data.reference_diagnostics_enabled ? "ENABLED_DIAGNOSTIC" : "DISABLED_PRODUCTION") << "\n"
                   << "V048746255172582_PATCH52017_EXTERNAL_ORACLE_CONTROLLER_DEPENDENCY=NONE_PRODUCTION\n";
+        std::cout << "V064812315_ACTIVE_STAGE_TRAVERSAL_MODE="
+                  << (std::getenv("XSTAR_V064812315_FORCE_FULL_RECORD_TRAVERSAL")
+                      ? "FORCED_FULL_AB" : "SOURCE_MML_MMU_PRUNED") << "\n";
         if (data.reference_diagnostics_enabled) {
             const auto benchmark_case_dir = std::filesystem::path(options.parameters_path).parent_path();
             const auto contract_dir = benchmark_case_dir / "v15926_qualification_contracts";
@@ -15509,6 +15513,8 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                 g_performance_v064890->fixed_continuum_seconds[slot] += data.cumulative_stats.continuum_seconds - fixed_stats_before_v064890.continuum_seconds;
                 g_performance_v064890->fixed_spectral_seconds[slot] += data.cumulative_stats.spectral_seconds - fixed_stats_before_v064890.spectral_seconds;
                 g_performance_v064890->fixed_total_seconds[slot] += data.cumulative_stats.total_seconds - fixed_stats_before_v064890.total_seconds;
+                g_performance_v064890->fixed_record_evaluations[slot] +=
+                    data.cumulative_stats.records_evaluated - fixed_stats_before_v064890.records_evaluated;
             }
             if (rc != 0) {
                 throw std::runtime_error(std::string("qualification-free controller call ") +
@@ -16777,7 +16783,8 @@ void emit_performance_instrumentation_v064890(
                 << "V064890_PERF_CALL" << (i + 1u) << "_FIXED_ELEMENT_SECONDS=" << perf.fixed_element_seconds[i] << "\n"
                 << "V064890_PERF_CALL" << (i + 1u) << "_FIXED_CONTINUUM_SECONDS=" << perf.fixed_continuum_seconds[i] << "\n"
                 << "V064890_PERF_CALL" << (i + 1u) << "_FIXED_SPECTRAL_SECONDS=" << perf.fixed_spectral_seconds[i] << "\n"
-                << "V064890_PERF_CALL" << (i + 1u) << "_FIXED_TOTAL_SECONDS=" << perf.fixed_total_seconds[i] << "\n";
+                << "V064890_PERF_CALL" << (i + 1u) << "_FIXED_TOTAL_SECONDS=" << perf.fixed_total_seconds[i] << "\n"
+                << "V064812315_PERF_CALL" << (i + 1u) << "_RECORD_EVALUATIONS=" << perf.fixed_record_evaluations[i] << "\n";
         }
         out << "V064890_PERF_CONTINUUM_TRANSPORT_SECONDS=" << perf.continuum_transport_seconds << "\n"
             << "V064890_PERF_ATOMIC_LUMINOSITY_SECONDS=" << perf.atomic_luminosity_seconds << "\n"

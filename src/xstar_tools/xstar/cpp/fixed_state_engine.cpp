@@ -8186,19 +8186,18 @@ void apply_magnesium_type99_persistent_leveltemp_v048746223(
     const ElementProgram& element,
     const ActiveElementView& active,
     const xstar_fixed_state_input_v1& input,
-    std::vector<EvaluatedRecord>& evaluated
+    std::vector<EvaluatedRecord>& evaluated,
+    const std::vector<const ProgramRecord*>& evaluated_records
 ) {
     if (element.element_z != 12 ||
         !environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE99_PERSISTENT_LEVELTEMP")) {
         return;
     }
-    int index = element.record_head;
-    std::size_t ordinal = 0;
-    while (index >= 0) {
-        if (ordinal >= evaluated.size()) {
-            throw std::runtime_error("Mg Type-99 record/evaluation traversal mismatch");
-        }
-        const ProgramRecord& record = program.records[static_cast<std::size_t>(index)];
+    const std::size_t count = std::min(evaluated.size(), evaluated_records.size());
+    for (std::size_t ordinal = 0; ordinal < count; ++ordinal) {
+        const ProgramRecord* record_ptr = evaluated_records[ordinal];
+        if (!record_ptr) continue;
+        const ProgramRecord& record = *record_ptr;
         EvaluatedRecord& item = evaluated[ordinal];
         auto& contribution = item.contribution;
         if (record.data_type == 99 &&
@@ -8276,11 +8275,9 @@ void apply_magnesium_type99_persistent_leveltemp_v048746223(
             contribution = corrected;
             item.type99_shadow = corrected_shadow;
         }
-        index = record.next_index;
-        ++ordinal;
     }
-    if (ordinal != evaluated.size()) {
-        throw std::runtime_error("Mg Type-99 linked traversal did not cover evaluated records");
+    if (evaluated.size() != evaluated_records.size()) {
+        throw std::runtime_error("Mg Type-99 sparse record/evaluation alignment mismatch");
     }
 }
 
@@ -8322,10 +8319,28 @@ int source_idest_for_full_row_v0648117(
     return full_row >= ground ? full_row - ground + 1 : 0;
 }
 
+bool source_preliminary_rate_record_v064812315(
+    const Program& program,
+    const ElementProgram& element,
+    const ProgramRecord& record,
+    bool preliminary_type7_legacy_compat_v06481171) {
+    if (record.ion_stage < 1 || record.ion_stage > element.element_z) return false;
+    if (record.rate_type == 1 || record.rate_type == 15 ||
+        record.rate_type == 8 || record.rate_type == 6) return true;
+    if (record.rate_type != 7) return false;
+    const int idest1 = source_idest_for_full_row_v0648117(
+        program, element, record.ion_stage, record.lower_row);
+    if (idest1 == 1) return true;
+    if (preliminary_type7_legacy_compat_v06481171) {
+        return record.lower_row == ground_row_for_stage(element, record.ion_stage);
+    }
+    return false;
+}
+
 PreliminaryIonBalance build_preliminary_ion_balance(
     const Program& program,
     const ElementProgram& element,
-    const std::vector<EvaluatedRecord>& evaluated,
+    const std::vector<const EvaluatedRecord*>& evaluated,
     const std::vector<const ProgramRecord*>& evaluated_records,
     double critical_ion_fraction,
     bool preliminary_type7_legacy_compat_v06481171,
@@ -8341,10 +8356,10 @@ PreliminaryIonBalance build_preliminary_ion_balance(
     const std::size_t count = std::min(evaluated.size(), evaluated_records.size());
     result.audit_rows_v0648117.reserve(count);
     for (std::size_t k = 0; k < count; ++k) {
-        const auto& item = evaluated[k];
-        const auto& c = item.contribution;
+        const EvaluatedRecord* item = evaluated[k];
         const ProgramRecord* pr = evaluated_records[k];
-        if (!pr) continue;
+        if (!item || !pr) continue;
+        const auto& c = item->contribution;
         if (element.element_z == 2 && ablated_data_type != 0 && c.data_type == ablated_data_type) continue;
         const int stage = c.ion_stage;
         if (stage < 1 || stage > z) continue;
@@ -10532,39 +10547,52 @@ int run_impl(
         const auto& traversal_order_v064894 =
             ctx.traversal_record_indices_v064894[element_slot_v064894];
         ++stats.elements_attempted;
-        std::vector<EvaluatedRecord> evaluated;
-        std::vector<const ProgramRecord*> evaluated_records;
-        evaluated.reserve(static_cast<std::size_t>(element.record_count));
-        evaluated_records.reserve(static_cast<std::size_t>(element.record_count));
+        // 0.6.48.12.3.15: reproduce the calc_hmc_element two-pass ownership
+        // without evaluating the complete per-ion body before mml/mmu is known.
+        // Pass 1 visits the full source record metadata but executes only the
+        // calc_ion_rates families needed for pirti/rrrti.  Their EvaluatedRecord
+        // values are cached and reused in pass 2, so an active preliminary record
+        // is never evaluated twice.
+        std::vector<std::optional<EvaluatedRecord>> preliminary_cache_v064812315(
+            traversal_order_v064894.size());
+        std::vector<const EvaluatedRecord*> preliminary_evaluated_v064812315;
+        std::vector<const ProgramRecord*> preliminary_records_v064812315;
+        preliminary_evaluated_v064812315.reserve(traversal_order_v064894.size());
+        preliminary_records_v064812315.reserve(traversal_order_v064894.size());
+
+        const auto evaluate_source_record_v064812315 = [&](const ProgramRecord& record) {
+            const auto rate_start = clock_type::now();
+            try {
+                EvaluatedRecord item = evaluate_record(
+                    ctx.program, element, record, input, rate_context_v064894);
+                ++stats.records_evaluated;
+                if (record.data_type == 56) ++stats.type56_records_evaluated;
+                stats.rate_seconds += elapsed(rate_start);
+                return item;
+            } catch (const std::exception&) {
+                stats.rate_seconds += elapsed(rate_start);
+                ++stats.records_unsupported;
+                throw;
+            }
+        };
+
         int hops = 0;
-        for (const int index : traversal_order_v064894) {
+        for (std::size_t ordinal = 0; ordinal < traversal_order_v064894.size(); ++ordinal) {
+            const int index = traversal_order_v064894[ordinal];
             const auto& record = ctx.program.records[static_cast<std::size_t>(index)];
             ++stats.records_seen;
             ++stats.linked_hops;
             ++ctx.visited_data_types[record.data_type];
             stats.visited_data_types = ctx.visited_data_types.size();
-            if (record.data_type == 56) ++stats.type56_records_evaluated;
-            const auto rate_start = clock_type::now();
-            try {
-                EvaluatedRecord evaluated_item = evaluate_record(
-                    ctx.program, element, record, input, rate_context_v064894);
-                if (record.data_type == 53 && record.rate_type == 7) {
-                    type53_revisit_evaluated_v82_patch5181[std::make_pair(
-                        static_cast<std::uint64_t>(record.source_position),
-                        static_cast<std::uint64_t>(record.record))] = evaluated_item;
-                } else if (record.data_type == 49 && record.rate_type == 7) {
-                    type49_revisit_evaluated_v82_patch52082[std::make_pair(
-                        static_cast<std::uint64_t>(record.source_position),
-                        static_cast<std::uint64_t>(record.record))] = evaluated_item;
-                }
-                evaluated.push_back(std::move(evaluated_item));
-                evaluated_records.push_back(&record);
-                ++stats.records_evaluated;
-            } catch (const std::exception&) {
-                ++stats.records_unsupported;
-                throw;
+            if (source_preliminary_rate_record_v064812315(
+                    ctx.program, element, record,
+                    ctx.preliminary_type7_legacy_compat_v06481171)) {
+                preliminary_cache_v064812315[ordinal].emplace(
+                    evaluate_source_record_v064812315(record));
+                preliminary_evaluated_v064812315.push_back(
+                    &*preliminary_cache_v064812315[ordinal]);
+                preliminary_records_v064812315.push_back(&record);
             }
-            stats.rate_seconds += elapsed(rate_start);
             ++hops;
         }
         if (hops != element.record_count) {
@@ -10572,7 +10600,8 @@ int run_impl(
         }
 
         const PreliminaryIonBalance preliminary = build_preliminary_ion_balance(
-            ctx.program, element, evaluated, evaluated_records, ctx.critical_ion_fraction,
+            ctx.program, element, preliminary_evaluated_v064812315,
+            preliminary_records_v064812315, ctx.critical_ion_fraction,
             ctx.preliminary_type7_legacy_compat_v06481171, helium_preliminary_ablation_type);
         write_preliminary_ion_balance_audit_v0648117(
             element, preliminary, ctx.critical_ion_fraction);
@@ -10599,8 +10628,50 @@ int run_impl(
                 : make_full_element_view(element));
         ctx.retained_active_stage_windows[element.element_z] =
             std::make_pair(active.min_stage, active.max_stage);
+
+        const bool force_full_record_traversal_v064812315 =
+            environment_flag("XSTAR_V064812315_FORCE_FULL_RECORD_TRAVERSAL");
+
+        // Pass 2 is the source calc_hmc_ion body: fully evaluate only records
+        // owned by active ion stages.  Rate-7 records are deliberately retained
+        // even outside the active window because xstarsetup/errc and historical
+        // Type49/53/99 publication ownership are element-global in the current
+        // C++ representation.  This is conservative; a later metadata-only
+        // setup cache may remove those remaining inactive evaluations.
+        std::vector<EvaluatedRecord> evaluated;
+        std::vector<const ProgramRecord*> evaluated_records;
+        evaluated.reserve(static_cast<std::size_t>(element.record_count));
+        evaluated_records.reserve(static_cast<std::size_t>(element.record_count));
+        for (std::size_t ordinal = 0; ordinal < traversal_order_v064894.size(); ++ordinal) {
+            const int index = traversal_order_v064894[ordinal];
+            const auto& record = ctx.program.records[static_cast<std::size_t>(index)];
+            const bool active_stage_owned =
+                record.ion_stage >= active.min_stage && record.ion_stage <= active.max_stage;
+            const bool source_global_setup_owner = record.rate_type == 7;
+            const bool structural_owner = record.ion_stage <= 0;
+            if (!(force_full_record_traversal_v064812315 || active_stage_owned ||
+                  source_global_setup_owner || structural_owner)) continue;
+
+            EvaluatedRecord item;
+            if (preliminary_cache_v064812315[ordinal].has_value()) {
+                item = std::move(*preliminary_cache_v064812315[ordinal]);
+            } else {
+                item = evaluate_source_record_v064812315(record);
+            }
+            if (record.data_type == 53 && record.rate_type == 7) {
+                type53_revisit_evaluated_v82_patch5181[std::make_pair(
+                    static_cast<std::uint64_t>(record.source_position),
+                    static_cast<std::uint64_t>(record.record))] = item;
+            } else if (record.data_type == 49 && record.rate_type == 7) {
+                type49_revisit_evaluated_v82_patch52082[std::make_pair(
+                    static_cast<std::uint64_t>(record.source_position),
+                    static_cast<std::uint64_t>(record.record))] = item;
+            }
+            evaluated.push_back(std::move(item));
+            evaluated_records.push_back(&record);
+        }
         apply_magnesium_type99_persistent_leveltemp_v048746223(
-            ctx.program, element, active, input, evaluated);
+            ctx.program, element, active, input, evaluated, evaluated_records);
         // v0.6.48.12.3.1: source leveltemp is shared across elements and
         // evaluations.  Capture the incoming workspace above, reproduce the
         // first levwkelement pass now that the active window is known, retain
