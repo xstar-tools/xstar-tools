@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 0.6.48.12.3.12.1 - 2026-08-01
+
+- Qualification-only follow-up after `c5_ne1` closed option-17/22 ionization-parameter parity.
+- Add targeted runner for the remaining eight historical option-17 failures.
+- No production science implementation changes from 0.6.48.12.3.12.
+
 ## 0.6.48.12.3.12 - 2026-08-01
 - Repair native `xout_step.log` ionization-parameter state ownership for generic cpp-zone runs.
 - Recompute option-17 `log(xi)` from live radius/density/luminosity instead of projected abundance-table `ion_parameter`.
