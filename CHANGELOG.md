@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 0.6.48.12.3.12 - 2026-08-01
+- Repair native `xout_step.log` ionization-parameter state ownership for generic cpp-zone runs.
+- Recompute option-17 `log(xi)` from live radius/density/luminosity instead of projected abundance-table `ion_parameter`.
+- Make option 22 use terminal retained radius, startup `ispcg2` `enlum`, and final-writer `zremsz`/electron state for `gamma`, `u1`, `ux`, and pressure `Xi`.
+- Add one-model `helike_type69/c5_ne1` qualification; no DSEC/rate/population/thermal science change.
+
 # 0.6.48.12.3.11.1 — all-62 survey runner/readiness hotfix - 2026-08-01
 
 - No science change. Fix the all-62 step-log survey entrypoint after 0.6.48.12.3.11: the reused 12.3.10 readiness checker hard-coded the 12.3.10 version and rejected 12.3.11 before model 1.

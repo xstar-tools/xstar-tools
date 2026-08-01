@@ -206,17 +206,18 @@ bool finite_nonzero_vector(const std::vector<double>& values) {
 }
 
 
-std::size_t source_option17_reference_bin_zero_based(
+std::size_t source_pprint_nry_zero_based(
+    double x,
     const std::vector<double>& energy) {
-    // Literal nbinc.f90 -> huntf.f90 semantics used by pprint option 9/17:
-    // nry=nbinc(13.6,epi,ncn2)+1, then Fortran indexes dpthc(:,nry).
+    // Literal nbinc.f90 -> huntf.f90 semantics used throughout pprint.
+    // When pprint forms nry=nbinc(E,epi,ncn2)+1, converting that Fortran
+    // one-based nry to a C++ zero-based index yields the numeric nbinc value.
     const std::size_t n = energy.size();
     if (n == 0u) return 0u;
     const std::size_t numcon2 = std::max<std::size_t>(2u, n / 50u);
     const std::size_t nn = n > numcon2 ? n - numcon2 : 1u;
     if (nn < 2u) return 0u;
     constexpr double floor = 1.0e-36;
-    const double x = 13.6;
     const double xx1 = energy[0];
     const double xx2 = energy[1];
     const double xxn = energy[nn - 1u];
@@ -241,8 +242,13 @@ std::size_t source_option17_reference_bin_zero_based(
         }
     }
     jlo_one_based = std::max<std::size_t>(1u, std::min(nn, jlo_one_based));
-    // nry=nbinc+1 is one-based; converting nry to zero-based gives nbinc.
     return std::min(n - 1u, jlo_one_based);
+}
+
+std::size_t source_option17_reference_bin_zero_based(
+    const std::vector<double>& energy) {
+    // pprint option 9/17: nry=nbinc(13.6,epi,ncn2)+1.
+    return source_pprint_nry_zero_based(13.6, energy);
 }
 
 bool source_option17_radiation_balance_percent(
@@ -308,20 +314,37 @@ void append_native_radial_summary(std::ofstream& out,
             rows.push_back({r.radius_cm,r.delta_radius_cm,r.log_ionization_parameter,r.electron_fraction,r.density_cm3,r.temperature_t4,r.fractional_heat_error});
         }
     }
-    // Historical Mg XI bridge products retained four abundance rows while
-    // option 17 had five controller rows.  Preserve that exact reconstruction
-    // only for the accepted four-zone anchor shape.  Generic native runs use
-    // their retained RadialZoneState geometry directly whenever the product
-    // row inventory differs from the controller trajectory.
-    if (!state.diagnostic_preview_partial && state.radial_zones.size() == 5u &&
+    // v0.6.48.12.3.12: native pprint must consume the controller-owned radial
+    // state, not the projected xout_abund1 table.  The historical 5-row/4-row
+    // reconstruction below was useful for old bridge products, but on generic
+    // standalone runs it couples a pre-transport radius to a terminal rdel and
+    // preserves the input rlogxi in the FITS row.  FORTRAN/Python pprint(9)
+    // recompute zeta from live r, xpx and xlum for every row.  Recreate that
+    // literal source surface directly from RadialZoneState here.
+    const bool native_general_rows =
+        state.backend == "cpp-general-standalone" && !state.radial_zones.empty();
+    if (native_general_rows) {
+        rows.clear();
+        rows.reserve(state.radial_zones.size());
+        const double xlum = parameter_number(state, "rlrad38", 0.0);
+        const double source_radius_scale = static_cast<double>(static_cast<float>(1.0e-19));
+        for (const auto& zone : state.radial_zones) {
+            double logxi = zone.log_ionization_parameter;
+            const double r19 = zone.radius_cm * source_radius_scale;
+            if (xlum > 0.0 && zone.density_cm3 > 0.0 && r19 > 0.0) {
+                const double skse = xlum / (zone.density_cm3 * r19 * r19);
+                logxi = std::log10(std::max(1.0e-24, skse));
+            }
+            rows.push_back({zone.radius_cm, zone.delta_radius_cm,
+                logxi, zone.electron_fraction,
+                zone.density_cm3, zone.temperature_t4,
+                zone.accepted_controller.evaluation.hmctot});
+        }
+    } else if (!state.diagnostic_preview_partial && state.radial_zones.size() == 5u &&
         rows.size() == 4u && rows[2].dr > 0.0 && rows[3].dr > rows[2].dr) {
         const Row entry0 = rows[0];
         const Row entry1 = rows[1];
         Row shell1 = rows[2];
-        // pprint option 17 prints cumulative distance from the illuminated
-        // face, not the individual shell thickness.  The retained abundance
-        // product has the first and terminal cumulative depths; reconstruct
-        // only the missing middle cumulative boundary.
         Row shell2 = rows[3]; shell2.dr = 2.0 * rows[2].dr;
         Row shell3 = rows[3];
         rows = {entry0, entry1, shell1, shell2, shell3};
@@ -502,6 +525,7 @@ void append_native_radial_summary(std::ofstream& out,
     // xstar.f90 calls ispcg2 immediately after "running ...".  Reconstruct
     // its source-grid photon-band and bolometric diagnostics from the retained
     // incident spectrum.  Endpoint gating intentionally follows ispcg2.f90.
+    double ispcg2_enlum = 0.0;
     double ispcg2_u_1_1p8 = 0.0;
     double ispcg2_u_1p8_4 = 0.0;
     double ispcg2_lbol_sum = 0.0;
@@ -515,6 +539,7 @@ void append_native_radial_summary(std::ofstream& out,
             ispcg2_lbol_sum += 0.5 * (z1 + z0) * de;
             if (e1 >= 13.6 && e0 > 0.0 && e1 > 0.0) {
                 const double term = 0.5 * (z1 / e1 + z0 / e0) * de;
+                ispcg2_enlum += term;
                 if (e1 <= 24.48) ispcg2_u_1_1p8 += term;
             }
             if (e1 >= 24.48 && e1 <= 54.4 && e0 > 0.0 && e1 > 0.0) {
@@ -572,39 +597,60 @@ void append_native_radial_summary(std::ofstream& out,
     }
     if (!rows.empty() && (!state.radial_zones.empty() || !state.fixed_evaluations.empty())) {
         const auto& r=rows.back();
-        const auto& eval=state.radial_zones.empty()?state.fixed_evaluations.back():state.radial_zones.back().accepted_controller.evaluation;
+        const auto& boundary_eval=state.radial_zones.empty()?state.fixed_evaluations.back():state.radial_zones.back().accepted_controller.evaluation;
+        const auto& eval=state.final_writer_evaluation ? *state.final_writer_evaluation : boundary_eval;
         const bool have_final = state.legacy_pprint.final_zero_thickness_evaluation_present;
         const double final_t4 = have_final ? state.legacy_pprint.final_temperature_t4 : r.temperature;
         const double final_heating = have_final ? state.legacy_pprint.final_total_heating : eval.total_heating;
         const double final_cooling = have_final ? state.legacy_pprint.final_total_cooling : eval.total_cooling;
+        const double final_xee = std::isfinite(eval.computed_electron_fraction) && eval.computed_electron_fraction > 0.0
+            ? eval.computed_electron_fraction : r.xee;
         const double tf=reference_depths.empty()?0.0:reference_depths.back().first;
         const double tb=reference_depths.empty()?0.0:reference_depths.back().second;
+        const double source_radius_scale=static_cast<double>(static_cast<float>(1.0e-19));
+        const double r19=r.radius*source_radius_scale;
+        const double xlum=parameter_number(state,"rlrad38",0.0);
+        const double skse=(r.density>0.0&&r19>0.0)?xlum/(r.density*r19*r19):0.0;
+        const double zeta=std::log10(std::max(1.0e-24,skse));
         out<<" print option:22\n";
-        out<<" r=  "<<e3(r.radius)<<" t=  "<<e3(final_t4)<<" log(xi)=  "<<e3(r.logxi)
-           <<" n_e=  "<<e3(r.xee*r.density)<<" n_p=  "<<e3(r.density)<<"\n";
+        out<<" r=  "<<e3(r.radius)<<" t=  "<<e3(final_t4)<<" log(xi)=  "<<e3(zeta)
+           <<" n_e=  "<<e3(final_xee*r.density)<<" n_p=  "<<e3(r.density)<<"\n";
         out<<"httot=  "<<e3(final_heating)<<" cltot=  "<<e3(final_cooling)
            <<" taulc=  "<<e3(tf)<<" taulcb=  "<<e3(tb)<<"\n";
-        const double r19=r.radius*1.0e-19;
-        const double denom=12.56*r.density*r19*r19*3.0e10;
-        auto photon_integral=[&](double lo,double hi){
-            double sum=0.0;
-            for(std::size_t i=1;i<source_energy.size()&&i<source_flux.size();++i){
-                const double e0=source_energy[i-1],e1=source_energy[i];
-                if(e1<lo||e0>hi||e0<=0.0||e1<=0.0) continue;
-                sum+=0.5*(source_flux[i-1]/e0+source_flux[i]/e1)*(e1-e0);
+
+        // pprint(22) uses enlum from the startup ispcg2 call for U1, but the
+        // live final zremsz for UX and gamma.  Keep those two source lifetimes
+        // separate exactly as FORTRAN/Python do.
+        const double geometry=static_cast<double>(static_cast<float>(12.56));
+        const double source_c_u=static_cast<double>(static_cast<float>(3.0e10));
+        const double source_c_gamma=static_cast<double>(static_cast<float>(2.998e10));
+        const double denom_u=geometry*r.density*r19*r19*source_c_u;
+        const double u1=denom_u>0.0?ispcg2_enlum/denom_u:0.0;
+
+        const auto& final_energy = !eval.radiation_energy_ev.empty() ? eval.radiation_energy_ev : source_energy;
+        const auto& final_zremsz = eval.source_workspace.zremsz.size() >= final_energy.size()
+            ? eval.source_workspace.zremsz : source_flux;
+        double enlumx=0.0;
+        if(final_energy.size()>=2u && final_zremsz.size()>=final_energy.size()){
+            const std::size_t nb1=source_pprint_nry_zero_based(100.0,final_energy);
+            const std::size_t nb10=source_pprint_nry_zero_based(10000.0,final_energy);
+            const std::size_t lo=std::max<std::size_t>(2u,std::min(final_energy.size(),nb1));
+            const std::size_t hi=std::max(lo,std::min(final_energy.size(),nb10));
+            for(std::size_t kl=lo;kl<=hi;++kl){
+                const std::size_t i=kl-1u;
+                if(i==0u||i>=final_energy.size()) continue;
+                const double e0=final_energy[i-1u],e1=final_energy[i];
+                if(e0<=0.0||e1<=0.0) continue;
+                enlumx+=(final_zremsz[i]/e1+final_zremsz[i-1u]/e0)*(e1-e0)/2.0;
             }
-            return sum;
-        };
-        const double u1=denom>0.0?photon_integral(13.6,std::numeric_limits<double>::infinity())/denom:0.0;
-        const double ux=denom>0.0?photon_integral(100.0,10000.0)/denom:0.0;
-        const double ekt=r.temperature*xstar_constants::kLegacyBoltzmannEvPerT4*xstar_constants::kModernErgPerEv;
-        const double xi_linear=std::pow(10.0,r.logxi);
-        const double xi_pressure=(ekt>0.0)?xi_linear/12.56/((1.0+r.xee)*ekt*3.0e10):0.0;
+        }
+        const double ux=denom_u>0.0?enlumx/denom_u:0.0;
+        const double ekt=final_t4*xstar_constants::kLegacyBoltzmannEvPerT4*xstar_constants::kModernErgPerEv;
+        const double xi_pressure=(ekt>0.0&&skse>0.0)?skse/geometry/((1.0+final_xee)*ekt*source_c_gamma):0.0;
         double gamma=0.0;
-        if(!source_energy.empty()&&denom>0.0){
-            const auto it=std::lower_bound(source_energy.begin(),source_energy.end(),13.7);
-            const std::size_t gi=it==source_energy.end()?source_energy.size()-1:static_cast<std::size_t>(it-source_energy.begin());
-            gamma=source_flux[gi]/(2.0*12.56*r.density*3.0e10*r19*r19+1.0e-24);
+        if(final_energy.size()>=2u&&final_zremsz.size()>=final_energy.size()&&r.density>0.0&&r19>0.0){
+            const std::size_t gi=source_pprint_nry_zero_based(13.7,final_energy);
+            gamma=final_zremsz[gi]/(2.0*geometry*r.density*source_c_gamma*r19*r19+1.0e-24);
         }
         out<<" log(Xi)=  "<<e3(xi_pressure>0.0?std::log10(xi_pressure):0.0)
            <<" log(u1)= "<<e3(u1>0.0?std::log10(u1):0.0)
