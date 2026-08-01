@@ -843,6 +843,13 @@ int xstar_spectral_apply_contributions_v1(
             workspace->flinel[c.bin_one_based - 1] += flinel_delta;
             ++stats->emissivity_contributions;
             ++stats->opacity_contributions;
+            // v0.6.48.12.3.14: literal ordinary Type-50 UCalc gate. Source
+            // UCalc publishes the scalar line quantities above but calls
+            // linopac only when opakb1 exceeds default-REAL 1.e-34.
+            if (c.data_type == 50 && c.rate_type == 4 &&
+                !(std::isfinite(opakb1) && opakb1 > source_real_literal(1.0e-34))) {
+                continue;
+            }
             const double* seed = nullptr;
             int seed_radius = 0;
             const bool exact_grid_oracle =

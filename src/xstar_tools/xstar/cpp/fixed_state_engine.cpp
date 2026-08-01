@@ -11638,6 +11638,23 @@ int run_impl(
             sc.abundance_upper =
                 active_population_for_full_row(active, buffers.populations, rec.upper_row) *
                 element.abundance;
+            // v0.6.48.12.3.14: literal calc_emisab_ion caller-side line gate.
+            // FORTRAN forms abund1/abund2 as xileve*xpx*xeltp and does not call
+            // UCalc for line rate families 4/9/14 unless at least one endpoint
+            // exceeds default-REAL 1.e-34. The broad C++ spectral stream used
+            // to retain those records regardless, which is especially costly
+            // for large high-Z line inventories. Keep full record evaluation
+            // for rate/matrix ownership; gate only this broad publication path.
+            if (!evaluated[k].bound_free_spectral &&
+                (rec.rate_type == 4 || rec.rate_type == 9 || rec.rate_type == 14)) {
+                const double floor_v064812314 = source_real_literal_v82_patch5208(1.0e-34);
+                const double abund1_cm3_v064812314 = sc.abundance_lower * input.hydrogen_density_cm3;
+                const double abund2_cm3_v064812314 = sc.abundance_upper * input.hydrogen_density_cm3;
+                if (!(abund1_cm3_v064812314 > floor_v064812314 ||
+                      abund2_cm3_v064812314 > floor_v064812314)) {
+                    continue;
+                }
+            }
             // calc_emisab_ion calls ucalc only when either endpoint abundance
             // exceeds 1e-34.  Leaving opakab populated below that gate caused
             // every retained npconi2 slot to appear in option 24 instead of

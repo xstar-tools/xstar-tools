@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.12.3.14 - 2026-08-01
+
+- Restore the two literal FORTRAN Type-50 performance gates generically for all elements. The broad `calc_emisab_ion` line stream now requires density-scaled endpoint abundance above default-REAL `1.e-34` for rate families 4/9/14; ordinary Type-50 profile traversal now requires `opakb1 > REAL(1.e-34)` while retaining scalar line publication.
+- Keep the complete atomic record traversal unchanged in this candidate so rate/matrix ownership remains frozen; the separate FORTRAN-style active-ion two-pass optimization is deliberately deferred until this Type-50 change is host-qualified.
+- Add a four-model targeted performance/science qualifier (`c5_ne1`, `ca19_ne1`, `ca19_ne1e8`, `ca19_ne1e12`) against the frozen 12.3.13 all-62 outputs and canonical FORTRAN logs.
+- Add a qualification-only step-log comparator that separates numeric science, publication inventory/identity, formatting, and ranked-list metadata. Offline reinterpretation of the frozen 12.3.13 logs gives numeric science 62/62 while preserving inventory/ranking/formatting defects as independent report-fidelity gates.
+- No Python science, DSEC/controller, thermal, Type88, retained-xcol, option-17/22 writer science, or production-zone ABI changes. ABI remains 6048110.
+
 ## 0.6.48.12.3.13 - 2026-08-01
 
 - Qualification-only all-62 `xout_step.log` science survey after 0.6.48.12.3.12 closed the ionization-parameter state-ownership defect in `c5_ne1` and the remaining eight historical option-17 failures.
