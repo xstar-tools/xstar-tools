@@ -1,5 +1,11 @@
 # CHANGELOG
 
+# 0.6.48.12.3.11.1 — all-62 survey runner/readiness hotfix - 2026-08-01
+
+- No science change. Fix the all-62 step-log survey entrypoint after 0.6.48.12.3.11: the reused 12.3.10 readiness checker hard-coded the 12.3.10 version and rejected 12.3.11 before model 1.
+- Add a 12.3.11-specific all-62 wrapper and readiness checker that verify the retained-xcol termination fix plus the frozen normalization, Type88, source-spectrum logging, ABI, manifest, and semantic comparator surfaces.
+- Reuse the unchanged 12.3.10 `run_step_suite.py` and comparator for the actual 62-model xout_step.log-only survey.
+
 ## 0.6.48.12.3.11 - 2026-08-01
 
 - O VII ne1e4 terminal radial fix: retain source `xcol` independently in standalone C++ rather than reconstructing it as `density*cumulative_depth`.
