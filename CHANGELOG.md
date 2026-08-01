@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.48.12.3.10 - 2026-08-01
+
+- Freeze the 0.6.48.12.3.9 generic terminal normalization-seed science fix.
+- Restore the source `ispcg2` `U(1-1.8), U(1.8-4), Lbol` block in Python and native C++ `xout_step.log`.
+- Add a 15-model failed-zone/thermal regression runner and a separate 62-model xout_step-only survey.
+- Add semantic step-log comparison for source spectrum, option 17, final thermal values, option 22, and verbose report-section diagnostics.
+
 # 0.6.48.12.3.9 — generic terminal normalization-seed source parity - 2026-07-31
 
 - Fix the remaining source-faithful global-to-compact population seed gap exposed by the 12.3.8 O VII transition attribution. Python/source semantics execute `x(ipmat2+1)=0.` after every element's overlapping global `xilevg` -> compact mapping and before `msolvelucy`; C++ had promoted this terminal zero only for H/He/Mg/C and left O/Ca seeded from the prior fully-stripped global population.

@@ -330,6 +330,16 @@ def initialize_legacy_pprint(state: XSTARPythonState) -> LegacyPprintBuffers:
     _option3_parameter_capture(state, buf)
     _option2_input_lines(state, buf)
     buf.log_lines.append(" running ...")
+    # xstar.f90 calls ispcg2 immediately after ``running ...`` and before the
+    # first pass banner.  These are spectrum diagnostics only; they do not
+    # alter any controller or thermal state.
+    if all(k in state.control for k in ("ispcg2_u_1_1p8", "ispcg2_u_1p8_4", "ispcg2_lbol")):
+        buf.log_lines.append(
+            " U(1-1.8),U(1.8-4):"
+            f"   {float(state.control['ispcg2_u_1_1p8']):.16g}"
+            f"        {float(state.control['ispcg2_u_1p8_4']):.16g}"
+        )
+        buf.log_lines.append(f" Lbol=   {float(state.control['ispcg2_lbol']):.16g}")
     buf.initialized = True
     state.outputs["legacy_pprint_source_order"] = list(buf.source_calls)
     return buf

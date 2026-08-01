@@ -656,17 +656,43 @@ def powerlaw_spectrum(*, index: float, luminosity_1e38: float, epi_eV: Sequence[
     return z
 
 
-def photon_number_luminosity(zremsz: Sequence[float], epi_eV: Sequence[float]) -> float:
-    """Translate the ``sum2`` result of ``ispcg2.f90``."""
+def source_spectrum_ispcg2_diagnostics(
+    zremsz: Sequence[float], epi_eV: Sequence[float]
+) -> tuple[float, float, float, float]:
+    """Translate the source ``ispcg2`` integrals.
+
+    Returns ``(enlum, u_1_1p8, u_1p8_4, lbol)`` where the two ``U`` values
+    are the source's photon-number integrals over 1--1.8 Ry and 1.8--4 Ry,
+    and ``lbol`` is the full energy integral converted with the literal
+    source ``1.602197e-12`` erg/eV factor.  The endpoint tests intentionally
+    follow ``ispcg2.f90`` rather than clipping intervals at the band edges.
+    """
     z = np.asarray(zremsz, dtype=float).reshape(-1)
     epi = np.asarray(epi_eV, dtype=float).reshape(-1)
     if z.size != epi.size:
         raise XSTARPythonRunnerError("ispcg2 arrays differ in length")
-    total = 0.0
+    sum2 = 0.0
+    sum3 = 0.0
+    sum4 = 0.0
+    sum5 = 0.0
     for i in range(1, epi.size):
+        de = epi[i] - epi[i - 1]
+        sum5 += (z[i] + z[i - 1]) * de / 2.0
         if epi[i] >= 13.6:
-            total += (z[i] / epi[i] + z[i - 1] / epi[i - 1]) * (epi[i] - epi[i - 1]) / 2.0
-    return float(total)
+            term = (z[i] / epi[i] + z[i - 1] / epi[i - 1]) * de / 2.0
+            sum2 += term
+            if epi[i] <= 24.48:
+                sum3 += term
+        if 24.48 <= epi[i] <= 54.4:
+            sum4 += (z[i] / epi[i] + z[i - 1] / epi[i - 1]) * de / 2.0
+    # Default REAL source literal promoted into the REAL(8) expression.
+    ergsev_source = float(np.float32(1.602197e-12))
+    return float(sum2), float(sum3), float(sum4), float(sum5 * ergsev_source)
+
+
+def photon_number_luminosity(zremsz: Sequence[float], epi_eV: Sequence[float]) -> float:
+    """Translate the ``sum2`` result of ``ispcg2.f90``."""
+    return source_spectrum_ispcg2_diagnostics(zremsz, epi_eV)[0]
 
 
 OUTPUT_METADATA_CACHE_FORMAT_VERSION = 10
@@ -2123,6 +2149,9 @@ def _build_initial_state(
     state.transfer.radius = parameters.initial_radius_cm
     state.transfer.radial_depth = 0.0
     state.transfer.column = 0.0
+    enlum, ispcg2_u_1_1p8, ispcg2_u_1p8_4, ispcg2_lbol = (
+        source_spectrum_ispcg2_diagnostics(zremsz, epi)
+    )
     state.control.update(
         {
             "radial_transfer_workspace": workspace,
@@ -2172,7 +2201,10 @@ def _build_initial_state(
             "abndtbl": str(parameters.get("abundtbl")),
             "abel": parameters.abundance_multipliers.copy(),
             "ababs": parameters.physical_abundances.copy(),
-            "enlum": photon_number_luminosity(zremsz, epi),
+            "enlum": enlum,
+            "ispcg2_u_1_1p8": ispcg2_u_1_1p8,
+            "ispcg2_u_1p8_4": ispcg2_u_1p8_4,
+            "ispcg2_lbol": ispcg2_lbol,
             "output_writers_enabled": True,
             "pprint_legacy_enabled": True,
             "continuum_phase_snapshot_enabled": True,

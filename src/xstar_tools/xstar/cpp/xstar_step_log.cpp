@@ -498,7 +498,36 @@ void append_native_radial_summary(std::ofstream& out,
         m.second=std::max(m.second,e.evaluation_index);
     }
     const std::size_t last_call = call_metrics.empty() ? 0u : call_metrics.rbegin()->first;
-    out << "\n running ...\n\n pass number= 1 -1\n";
+
+    // xstar.f90 calls ispcg2 immediately after "running ...".  Reconstruct
+    // its source-grid photon-band and bolometric diagnostics from the retained
+    // incident spectrum.  Endpoint gating intentionally follows ispcg2.f90.
+    double ispcg2_u_1_1p8 = 0.0;
+    double ispcg2_u_1p8_4 = 0.0;
+    double ispcg2_lbol_sum = 0.0;
+    if (source_energy.size() == source_flux.size() && source_energy.size() > 1u) {
+        for (std::size_t i = 1u; i < source_energy.size(); ++i) {
+            const double e0 = source_energy[i - 1u];
+            const double e1 = source_energy[i];
+            const double z0 = source_flux[i - 1u];
+            const double z1 = source_flux[i];
+            const double de = e1 - e0;
+            ispcg2_lbol_sum += 0.5 * (z1 + z0) * de;
+            if (e1 >= 13.6 && e0 > 0.0 && e1 > 0.0) {
+                const double term = 0.5 * (z1 / e1 + z0 / e0) * de;
+                if (e1 <= 24.48) ispcg2_u_1_1p8 += term;
+            }
+            if (e1 >= 24.48 && e1 <= 54.4 && e0 > 0.0 && e1 > 0.0) {
+                ispcg2_u_1p8_4 += 0.5 * (z1 / e1 + z0 / e0) * de;
+            }
+        }
+    }
+    const double ispcg2_lbol = ispcg2_lbol_sum * static_cast<double>(static_cast<float>(1.602197e-12));
+
+    out << "\n running ...\n";
+    out << " U(1-1.8),U(1.8-4):   " << std::setprecision(17) << ispcg2_u_1_1p8
+        << "        " << ispcg2_u_1p8_4 << "\n";
+    out << " Lbol=   " << ispcg2_lbol << "\n\n pass number= 1 -1\n";
     if (state.diagnostic_preview_partial) {
         out << " diagnostic partial radial trajectory: physical boundaries retained="
             << state.physical_radial_boundaries_retained
