@@ -2150,23 +2150,14 @@ std::vector<xstar_run_state::LevelIdentityState> public_detail_levels(
         return out;
     }
 
-    // v0.6.48.11.2: generic models publish the source identities that belong
-    // to terminal-active ion stages, in the retained ATDB/source order.  The
-    // previous unconditional 616-row Mg template was the direct cause of the
-    // 616->243 Mg XI3 and 616->168 Ca XIX inventory failures.
-    std::vector<xstar_run_state::LevelIdentityState> out;
-    out.reserve(state.level_identities.size());
-    for (const auto& lev : state.level_identities) {
-        const int z = lev.atomic_number > 0 ? static_cast<int>(lev.atomic_number)
-                                            : element_z_from_ion_label(lev.ion_label);
-        const int stage = roman_stage_from_ion_label(lev.ion_label);
-        const ElementMeta* element = nullptr;
-        for (const auto& e : elements) if (e.element_z == z) { element = &e; break; }
-        if (!element) continue;
-        if (!active_product_element_stage(state, elements, rows, z, stage, element->abundance)) continue;
-        out.push_back(lev);
-    }
-    return out;
+    // v0.6.48.12.3.19 / literal fstepr.f90: identity traversal is not
+    // stage-filtered.  fstepr walks every ion/local-level npilev role and only
+    // then applies xilev > 1.d-34.  The dedicated source-role inventory keeps
+    // both sides of compact continuum/next-ground aliases; using the compact
+    // deduplicated level list drops one continuum identity per ion.
+    const auto& source_levels = !state.detail_level_identities.empty()
+        ? state.detail_level_identities : state.level_identities;
+    return source_levels;
 }
 
 const xstar_run_state::LevelIdentityState* level_by_global(
@@ -9198,7 +9189,9 @@ std::vector<LineRow> source_line_rows_from_identities(
         const int stage = roman_stage_from_ion_label(id.ion_label);
         const ElementMeta* element = nullptr;
         for (const auto& e : elements) if (e.element_z == z) { element = &e; break; }
-        if (!element || !active_product_element_stage(state, elements, rows, z, stage, element->abundance)) continue;
+        if (!element) continue;
+        if (!detail_order &&
+            !active_product_element_stage(state, elements, rows, z, stage, element->abundance)) continue;
         const auto found = workspace_index.find(id.line_index);
         const std::size_t compact = found == workspace_index.end() ? 0u : found->second;
         LineRow line = line_row_from_identity(
@@ -9463,7 +9456,7 @@ std::map<long long,RrcRow> diagnostic_rrc_rows_by_index(
     for (const auto& r : records) {
         if (!(r.type49_valid || r.type53_valid || r.type99_valid || r.data_type == 49 || r.data_type == 53 || r.data_type == 59 || r.data_type == 99)) continue;
         const auto* element = element_ptr_for(elements, r.element_index);
-        if (!element || !active_product_element_stage(state, elements, rows, r.element_z, r.ion_stage, element->abundance)) continue;
+        if (!element) continue;
         const auto* lower_meta = row_for(rows, r.element_index, r.lower_row);
         const int global_level = lower_meta ? lower_meta->global_level_index :
             (element ? element->row_offset + r.lower_row : r.lower_row);
@@ -9876,7 +9869,9 @@ std::vector<RrcRow> source_rrc_rows_from_identities(
             const int stage = roman_stage_from_ion_label(id.ion_label);
             const ElementMeta* element = nullptr;
             for (const auto& e : elements) if (e.element_z == z) { element = &e; break; }
-            if (!element || !active_product_element_stage(state, elements, rows, z, stage, element->abundance)) continue;
+            if (!element) continue;
+            if (!detail_inventory &&
+                !active_product_element_stage(state, elements, rows, z, stage, element->abundance)) continue;
         }
         const std::size_t compact = compact_rrc_index++;
         const std::size_t ci = static_cast<std::size_t>(id.continuum_index - 1);

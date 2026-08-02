@@ -1,3 +1,5 @@
+> **0.6.48.12.3.19 detailed-FITS source inventory repair:** preserves the accepted 12.3.17 Option-19/RRC physics and adds source-role `npilev` identities for `xo01_detail.fits`, literal `fstepr2`/`fstepr3` detail eligibility for `xo01_detal2/3.fits`, and generic live Type53 `ptmp1/ptmp2` direction ownership. Qualification remains single-model `ca19_ne1`; `xout_rrc1`, Option 27, and `xo01_detal4` are frozen.
+
 > **0.6.48.12.3.18 source-detail lifetime repair:** keeps the accepted 12.3.17 post-mapback Option-19/RRC physics, but reconstructs FORTRAN `calc_hmc_all` per-ion global `xilevg` writeback for `fstepr` from a separate compact active-window snapshot. This targets only `ca19_ne1` and requires the Ca XVIII `XSTAR_RADIAL` lifetime 32/32/31/0/0 with <=1% population/LTE parity.
 
 > **0.6.48.12.3.9 O VII generic terminal-seed repair:** promotes the source/Python `x(ipmat2+1)=0.` normalization-row seed to every element before `msolvelucy`; qualification is restricted to `o7_ne1e12` and verifies eval-2/25/26 seed zero plus FORTRAN trajectory/thermal closure.

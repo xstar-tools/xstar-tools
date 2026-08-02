@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.48.12.3.19 — source detailed-FITS identity/inventory and Type53 direction closure - 2026-08-01
+
+- Extend the 12.3.17/12.3.18 population-lifetime work without changing its accepted Option-19/RRC physics. The remaining `xo01_detail.fits` mismatch is an identity/publication problem: FORTRAN `fstepr` walks every source ion/local-level `npilev` role, while the generic C++ metadata had collapsed each shared continuum/next-ion-ground compact row to one identity and then applied a non-source terminal-stage filter.
+- Retain a dedicated `detail_level_identities` inventory from source `npilev` addresses. `xo01_detail.fits` now traverses those source roles without active-stage filtering and applies only the literal `xilev > 1.d-34` publication gate. The 12.3.18 dense source-detail population projection remains the value owner, so inactive upper aliases stay zero while legitimate shared continuum aliases and active Ca XVIII levels remain publishable.
+- Make generic `xo01_detal2.fits` follow literal `fstepr2`: detail-order line identities bypass the terminal-product stage filter and are selected by local `rcem(1/2)`/`oplin > 1.d-64`, rate-type exclusions, and wavelength bounds. Public `xout_lines1.fits` keeps its separate active/ranked selection semantics.
+- Make generic `xo01_detal3.fits` follow literal `fstepr3`: detail inventory bypasses the public-RRC active-stage filter and uses the local `cemab(1/2)`/`cabab`/`opakab > 1.e-36` gate. Public `xout_rrc1.fits` remains on the accepted 12.3.17 post-map-back inventory and is explicitly frozen by qualification.
+- Fix generic Type53 detailed-RRC direction ownership by retaining the live source `ptmp1/ptmp2` escape factors in all Type53 shadow lifetimes (`calc_hmc`, `calc_emisab`, and `calc_emis`). This moves the affected Ca Type53 emissivity from the stale default inward owner to the source outward owner without altering the accepted Type53 Milne/rate calculation.
+- Add a single-model `helike_type69/ca19_ne1` qualifier that blocks on complete `xo01_detail`, `xo01_detal2`, and `xo01_detal3` inventories/identities, Type53 direction, <=1% normalized-L1 numeric parity, frozen `xo01_detal4`, frozen Option-19/`xout_rrc1`/Option-27, and pruned/forced bit-exact equivalence.
+- No Ca-specific production branch, empirical rescaling, solver change, Type50 change, `xo01_detal4` science change, or production-zone ABI change. ABI remains 6048110.
+
 ## 0.6.48.12.3.18 — source `fstepr` detail-population lifetime separation - 2026-08-01
 
 - Keep the accepted 12.3.17 post-mapback population view unchanged for Option-19/Type53/RRC physics. The `ca19_ne1` host run closes Ca XVII Option-19 to <0.1% and removes all non-source Ca XVIII RRC rows, so this stage does not alter that spectral path.

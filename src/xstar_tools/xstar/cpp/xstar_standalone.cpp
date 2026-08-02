@@ -15555,6 +15555,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         whole.atomic_database_path = atomic.atdb;
         whole.native_run_id = std::string("general-standalone-") + XSTAR_API_VERSION_STRING;
         whole.level_identities = program.level_identities;
+        whole.detail_level_identities = program.detail_level_identities;
         whole.line_identities = program.line_identities;
         whole.rrc_identities = program.rrc_identities;
         whole.element_metadata = program.element_metadata;

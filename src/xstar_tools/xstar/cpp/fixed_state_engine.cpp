@@ -6427,6 +6427,26 @@ EvaluatedRecord evaluate_record(
                     out.type53_calc_emis_shadow = out.type53_shadow;
                 }
             }
+            // v0.6.48.12.3.19 / source UCalc escape ownership: every
+            // source-faithful Type-53 call uses the live ptmp1/ptmp2 derived
+            // above.  Historical generic shadows kept their struct defaults
+            // (1,0), moving RRC emissivity from outward to inward in detal3.
+            // Stamp all three Type-53 caller lifetimes; this is metadata/state
+            // retention only and does not alter the already-accepted Milne rate.
+            const auto stamp_type53_escape_state_v064812319 = [&](Type53SourceShadow& shadow) {
+                if (!shadow.valid) return;
+                shadow.tau_in = contract_tau_in;
+                shadow.tau_out = contract_tau_out;
+                shadow.ptmp1 = contract_ptmp1;
+                shadow.ptmp2 = contract_ptmp2;
+                shadow.covering_fraction = contract_covering;
+                shadow.continuum_index_one_based = record_context.continuum_index_one_based;
+                shadow.dsec_radiation_bin_count = calc_hmc_input.dsec_radiation_bin_count;
+                shadow.continuum_tau_count = input.continuum_tau_count;
+            };
+            stamp_type53_escape_state_v064812319(out.type53_shadow);
+            stamp_type53_escape_state_v064812319(out.type53_calc_emisab_shadow);
+            stamp_type53_escape_state_v064812319(out.type53_calc_emis_shadow);
             out.type53_shadow.helium_live_escape_state_applied = helium_live_escape_applied;
             if (row46_contract) {
                 if (!source_exact) throw std::runtime_error("type53 row46 source-faithful evaluator did not produce a result");

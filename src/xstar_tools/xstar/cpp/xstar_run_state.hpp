@@ -347,6 +347,11 @@ struct WholeRunAccumulatedState {
     std::vector<CompactRowMetadataState> row_metadata;
     std::vector<AbundanceRadialRowState> abundance_radial_rows;
     std::vector<LevelIdentityState> level_identities;
+    // v0.6.48.12.3.19: literal fstepr identity inventory.  Adjacent ion
+    // blocks share one compact continuum/next-ground row, but fstepr walks
+    // the source npilev roles separately and therefore publishes both global
+    // identities when the shared population passes the source threshold.
+    std::vector<LevelIdentityState> detail_level_identities;
     std::vector<LineIdentityState> line_identities;
     std::vector<RrcIdentityState> rrc_identities;
     LegacyPprintState legacy_pprint;
@@ -389,6 +394,11 @@ struct ProductWritingState {
     std::vector<CompactRowMetadataState> row_metadata;
     std::vector<AbundanceRadialRowState> abundance_radial_rows;
     std::vector<LevelIdentityState> level_identities;
+    // v0.6.48.12.3.19: literal fstepr identity inventory.  Adjacent ion
+    // blocks share one compact continuum/next-ground row, but fstepr walks
+    // the source npilev roles separately and therefore publishes both global
+    // identities when the shared population passes the source threshold.
+    std::vector<LevelIdentityState> detail_level_identities;
     std::vector<LineIdentityState> line_identities;
     std::vector<RrcIdentityState> rrc_identities;
     LegacyPprintState legacy_pprint;

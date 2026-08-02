@@ -541,6 +541,7 @@ ProductWritingState build_product_writing_state(const WholeRunAccumulatedState& 
     product.row_metadata = state.row_metadata;
     product.abundance_radial_rows = state.abundance_radial_rows;
     product.level_identities = state.level_identities;
+    product.detail_level_identities = state.detail_level_identities;
     product.line_identities = state.line_identities;
     product.rrc_identities = state.rrc_identities;
     product.legacy_pprint = state.legacy_pprint;

@@ -61,6 +61,7 @@ struct ProgramStorage {
     std::vector<double> reals;
     std::vector<std::int64_t> ints;
     std::vector<xstar_run_state::LevelIdentityState> level_identities;
+    std::vector<xstar_run_state::LevelIdentityState> detail_level_identities;
     std::vector<xstar_run_state::LineIdentityState> line_identities;
     std::vector<xstar_run_state::RrcIdentityState> rrc_identities;
     std::vector<xstar_run_state::ElementMetadataState> element_metadata;
