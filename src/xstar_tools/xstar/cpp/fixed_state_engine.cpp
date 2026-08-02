@@ -3662,9 +3662,19 @@ double limited_exp(double x) {
     return std::exp(std::max(-700.0, std::min(700.0, x)));
 }
 
-// Exact XSTAR expo.f90 contract used by the v0.6.47.2 type-53 evaluator.
-double type53_expo(double x) {
+// Exact XSTAR expo.f90 contract.  This is intentionally distinct from
+// limited_exp(): the FORTRAN source clamps the exponent at +/-60 before
+// evaluating exp().  eint.f90 and Type 95 both call expo(), so their
+// source-faithful paths must use this helper rather than the generic
+// numerical overflow guard above.
+double source_expo(double x) {
     return std::exp(std::max(-60.0, std::min(60.0, x)));
+}
+
+// Retained name for existing Type-53/source users; same literal source
+// expo.f90 contract.
+double type53_expo(double x) {
+    return source_expo(x);
 }
 
 /* XSTAR-style scaled x*exp(x)*E1(x), copied from the validated collision translation. */
@@ -3970,9 +3980,14 @@ double type56_upsilon(const double* r, std::size_t n, double temperature_k) {
 void eint_values(double t, double& e1, double& e2, double& e3) {
     if (!(t > 0.0)) { e1 = e2 = e3 = 0.0; return; }
     const double scaled = expint_scaled(t);
-    e1 = scaled / std::max(1.0e-34, t * limited_exp(t));
+    // Literal eint.f90:
+    //   e1=ss/max(1.e-34,t*expo(t))
+    //   e2=exp(-t)-t*e1
+    //   e3=0.5*(expo(-t)-t*e2)
+    // Note the intentional distinction between source expo() and exp().
+    e1 = scaled / std::max(1.0e-34, t * source_expo(t));
     e2 = std::exp(-t) - t * e1;
-    e3 = 0.5 * (limited_exp(-t) - t * e2);
+    e3 = 0.5 * (source_expo(-t) - t * e2);
 }
 
 double type57_szirc(int n, double temperature, double rz, double rno) {
@@ -7755,7 +7770,9 @@ EvaluatedRecord evaluate_record(
             c.ans1=citmp1*ne;
             const auto& parent=row_at(element,static_cast<int>(ints[record.int_count-1]));
             const double rinf=2.08e-22*lower.statistical_weight/std::max(parent.statistical_weight,1.0e-300)/std::max(t4*sqrt_t4,1.0e-300);
-            c.ans2=c.ans1*rinf*ne/std::max(limited_exp(-1.0/tt),1.0e-300);
+            // Literal Type-95 detailed balance uses expo(-1./tt), whose
+            // source clamp is +/-60 (expo.f90), not the generic +/-700 guard.
+            c.ans2=c.ans1*rinf*ne/std::max(source_expo(-1.0/tt),1.0e-300);
             c.ans5=c.ans2*ee*xstar_constants::kLegacyCollisionErgPerEv;
             c.ans6=c.ans1*ee*xstar_constants::kLegacyCollisionErgPerEv;
             break;

@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.12.3.23 - 2026-08-02
+
+- Repair the source `expo.f90` / `eint.f90` contract generically in the C++ fixed-state engine: source `expo()` clamps at +/-60, while the generic numerical overflow helper remains +/-700 for paths that do not call source `expo`.
+- Apply the literal source `expo(t)`/`exp(-t)`/`expo(-t)` distinction inside the shared `eint_values` helper used by source EINT callers.
+- Repair Type-95 detailed balance to divide by source `expo(-1./tt)` rather than the generic +/-700 exponential guard. The change contains no element-Z or Ca-specific condition.
+- Preserve the accepted 12.3.22 all-element Type-50 speed gate, active-stage two-pass traversal, atomic ordering, FITS publication logic, and production-zone ABI 6048110.
+- Add a C/O/Mg/Ca regression runner plus the one-shot Ca fixed-state matrix replay and detailed `ca19_ne1` population/spectrum checks. Independent publication issues (missing detail rows, Ca thermal attribution, abundance radius, H line-depth identity) are reported but not altered by this rate fix.
+
 ## 0.6.48.12.3.22 - 2026-08-02
 
 - Generalize the literal FORTRAN Type-50 inner `linopac` gate to the shared C++ `FULL_LINE` path for every element: scalar line state is retained, but profile/rebin work is skipped unless `opakb1 > REAL(1.e-34)`.
