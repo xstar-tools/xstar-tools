@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 0.6.48.12.3.21 - 2026-08-02
+
+- Diagnostic-only one-model `ca19_ne1` Ca XVIII/Ca XVII matrix-term attribution from the call-1 final recompute that publishes the first `XSTAR_RADIAL` extension, including live line and continuum optical-depth state; production rate/matrix/atomic/FITS science is unchanged.
+- Diagnostic-only Type-50 outer-gate and source-inner `linopac` acceptance/work counters, including source-rejected-but-called profile bins/seconds and derived source-equivalent calls/bins/seconds.
+- Adds a one-shot source-faithful Python fixed-state replay and analyzer that identifies the first differing atomic record/data type/rate type.
+
 ## 0.6.48.12.3.20 — generic npilev source ordinals + Type50 fstepr2 publication shadow - 2026-08-02
 
 - Generalize the existing FORTRAN `setptrs`/`npilev` source-ordinal mapping from Mg-only to every element for both primary global row ownership and row aliases. This is a topology/addressing correction, not an element-specific row shift.

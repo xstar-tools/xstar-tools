@@ -99,6 +99,36 @@ def python_element_attribution_rows(
             }
         )
 
+    all_matrix_terms: list[dict[str, Any]] = []
+    for term in assembly.terms:
+        all_matrix_terms.append(
+            {
+                "source": "python",
+                "element_z": int(element_z),
+                "term_index": int(term.term_index),
+                "record": int(term.record),
+                "data_type": int(term.data_type),
+                "rate_type": int(term.rate_type),
+                "ion_index": int(term.ion_index),
+                "ion_stage": int(term.ion_stage),
+                "role": str(term.role),
+                "row": int(term.row),
+                "column": int(term.column),
+                "aj1": float(term.aj1),
+                "aj2": float(term.aj2),
+                "cj": float(term.cj),
+                "cj2": float(term.cj2),
+                "idest1": int(term.idest1),
+                "idest2": int(term.idest2),
+                "lower_endpoint": int(term.lower_endpoint),
+                "upper_endpoint": int(term.upper_endpoint),
+                "source_row_unclamped": int(term.source_row_unclamped),
+                "source_column_unclamped": int(term.source_column_unclamped),
+                "source_ipmat_clamped": int(bool(term.source_ipmat_clamped)),
+                "ucalc_status": str(term.ucalc_status),
+            }
+        )
+
     term_rows: list[dict[str, Any]] = []
     for term in assembly.terms:
         if int(term.row) != int(term.column):
@@ -193,6 +223,7 @@ def python_element_attribution_rows(
         "stage_fractions": stage_rows,
         "compact_populations": compact_rows,
         "electron_by_stage": electron_rows,
+        "matrix_terms": all_matrix_terms,
         "thermal_terms": term_rows,
         "thermal_records": record_rows,
         "thermal_by_data_type": type_rows,

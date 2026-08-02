@@ -14280,6 +14280,75 @@ FixedDsecSnapshot finalize_accepted_boundary_snapshot_v064894(
     return snapshot;
 }
 
+
+void write_v064812321_fixed_radial_input(
+    const StandaloneControllerDataV67& data,
+    const xstar_fixed_state_input_v1& input,
+    std::uint64_t source_sequence) {
+    const char* root_text = std::getenv("XSTAR_V064812321_DIAGNOSTICS_DIR");
+    // Diagnostic target is the first published radial state: call-1 final
+    // zero-thickness recompute.  Capturing every DSEC evaluation both bloats
+    // the artifact and makes the Python replay ambiguous.
+    if (!root_text || !*root_text || data.call_index != 1u || !data.writing_final_snapshot) return;
+    const std::filesystem::path root(root_text);
+    const std::filesystem::path entry = root / "fixed_radial_call1";
+    std::filesystem::create_directories(entry);
+    auto write_doubles = [](const std::filesystem::path& path, const double* values, std::size_t count) {
+        std::ofstream out(path, std::ios::binary);
+        if (!out) throw std::runtime_error("cannot create v064812321 fixed-input binary: " + path.string());
+        if (values && count) out.write(reinterpret_cast<const char*>(values), static_cast<std::streamsize>(count * sizeof(double)));
+    };
+    write_doubles(entry / "radiation_energy_ev.bin", input.radiation_energy_ev, input.radiation_bin_count);
+    write_doubles(entry / "radiation_flux.bin", input.radiation_flux, input.radiation_bin_count);
+    write_doubles(entry / "dsec_radiation_energy_ev.bin", input.dsec_radiation_energy_ev, input.dsec_radiation_bin_count);
+    write_doubles(entry / "dsec_bremsa.bin", input.dsec_bremsa, input.dsec_radiation_bin_count);
+    write_doubles(entry / "continuum_tau_in.bin", input.continuum_tau_in, input.continuum_tau_count);
+    write_doubles(entry / "continuum_tau_out.bin", input.continuum_tau_out, input.continuum_tau_count);
+    write_doubles(entry / "line_tau_in.bin", data.line_tau_in.data(), data.line_tau_in.size());
+    write_doubles(entry / "line_tau_out.bin", data.line_tau_out.data(), data.line_tau_out.size());
+    write_doubles(entry / "global_xilevg.bin", input.global_xilevg, input.global_level_count);
+    write_doubles(entry / "global_bilevg.bin", input.global_bilevg, input.global_level_count);
+    write_doubles(entry / "global_rnisg.bin", input.global_rnisg, input.global_level_count);
+    std::ofstream manifest(entry / "manifest.csv");
+    if (!manifest) throw std::runtime_error("cannot create v064812321 fixed-input manifest");
+    manifest << "key,value\n" << std::setprecision(17)
+             << "schema,xstar-tools-v064812321-fixed-radial-input-v1\n"
+             << "call_index," << data.call_index << "\n"
+             << "source_sequence," << source_sequence << "\n"
+             << "temperature_k," << input.temperature_k << "\n"
+             << "electron_density_cm3," << input.electron_density_cm3 << "\n"
+             << "hydrogen_density_cm3," << input.hydrogen_density_cm3 << "\n"
+             << "neutral_h_density_cm3," << input.neutral_h_density_cm3 << "\n"
+             << "ionized_h_density_cm3," << input.ionized_h_density_cm3 << "\n"
+             << "electron_fraction_xee," << input.electron_fraction_xee << "\n"
+             << "covering_fraction," << input.covering_fraction << "\n"
+             << "dsec_covering_fraction," << input.dsec_covering_fraction << "\n"
+             << "turbulent_velocity_km_s," << input.turbulent_velocity_km_s << "\n"
+             << "runtime_state_flags," << input.runtime_state_flags << "\n"
+             << "radiation_bin_count," << input.radiation_bin_count << "\n"
+             << "dsec_radiation_bin_count," << input.dsec_radiation_bin_count << "\n"
+             << "continuum_tau_count," << input.continuum_tau_count << "\n"
+             << "line_tau_count," << data.line_tau_in.size() << "\n"
+             << "global_level_count," << input.global_level_count << "\n";
+}
+
+void write_v064812321_cpp_fixed_diagnostics(
+    const StandaloneControllerDataV67& data,
+    std::uint64_t source_sequence) {
+    const char* root_text = std::getenv("XSTAR_V064812321_DIAGNOSTICS_DIR");
+    if (!root_text || !*root_text || data.call_index != 1u || !data.writing_final_snapshot) return;
+    const std::filesystem::path root(root_text);
+    const std::filesystem::path out = root / "cpp_fixed";
+    std::filesystem::create_directories(out);
+    std::array<char, XSTAR_FIXED_STATE_MESSAGE_SIZE> diagnostic_message{};
+    const int rc = xstar_fixed_state_write_last_diagnostics_v1(
+        data.fixed_context, out.string().c_str(), source_sequence,
+        diagnostic_message.data(), diagnostic_message.size());
+    if (rc != 0) {
+        throw std::runtime_error(std::string("v064812321 fixed-state diagnostic write failed: ") + diagnostic_message.data());
+    }
+}
+
 FixedDsecSnapshot evaluate_full_boundary_v67(
     StandaloneControllerDataV67& data,
     const xstar_thermal_state_v1& accepted_state,
@@ -14356,10 +14425,12 @@ FixedDsecSnapshot evaluate_full_boundary_v67(
         ::unsetenv("XSTAR_V82_PATCH511_OPAKC_PRODUCER_AUDIT_PATH");
         ::unsetenv("XSTAR_V82_PATCH512_MG_TYPE53_KERNEL_AUDIT_PATH");
     }
+    write_v064812321_fixed_radial_input(data, input, snapshot.sequence);
     const int rc = xstar_fixed_state_run_with_source_workspaces_v1(
         data.fixed_context, &input, &output, &source, &data.cumulative_stats,
         message.data(), message.size());
     if (rc != 0) throw std::runtime_error(std::string("accepted boundary evaluation failed: ") + message.data());
+    write_v064812321_cpp_fixed_diagnostics(data, snapshot.sequence);
     snapshot.populations.resize(output.populations_count);
     capture_source_ion_stage_fractions_v064812316(
         data.fixed_context, snapshot.source_ion_stage_fractions);

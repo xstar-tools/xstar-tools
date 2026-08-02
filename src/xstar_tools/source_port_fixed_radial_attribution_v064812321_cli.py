@@ -1,0 +1,223 @@
+"""Replay one captured C++ accepted-radial fixed state in the source-faithful Python evaluator.
+
+Diagnostic only.  The captured C++ state is treated as the entry state; no
+radial controller, convergence iteration, publication writer, or product state
+is executed here.
+"""
+from __future__ import annotations
+
+import argparse
+import csv
+import json
+from pathlib import Path
+from types import SimpleNamespace
+
+import numpy as np
+
+from .xstar import physical_runner as pr
+from .xstar.dsec import DsecMutableRuntimeState
+from .xstar.element_equilibrium import EscapeProbabilityContext, FixedStateElementRequest
+from .xstar.fixed_state_attribution import python_element_attribution_rows, _write_rows
+from .xstar.local_zone import calc_hmc_all
+from .xstar.radiation import apply_bremsmap_to_state
+from .xstar.ucalc import default_source_faithful_ucalc
+
+
+def _manifest(path: Path) -> dict[str, str]:
+    with path.open(newline="", encoding="utf-8") as handle:
+        rows = csv.DictReader(handle)
+        return {str(row["key"]): str(row["value"]) for row in rows}
+
+
+def _read(path: Path, count: int) -> np.ndarray:
+    arr = np.fromfile(path, dtype=np.float64)
+    if arr.size != count:
+        raise RuntimeError(f"{path.name}: expected {count} doubles, found {arr.size}")
+    return arr
+
+
+def _tau_physical(values: np.ndarray, expected: int) -> np.ndarray:
+    if values.size == expected + 1:
+        return values[1:].copy()
+    if values.size >= expected:
+        return values[:expected].copy()
+    out = np.zeros(expected, dtype=float)
+    out[: values.size] = values
+    return out
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--run-script", required=True)
+    parser.add_argument("--atdb", required=True)
+    parser.add_argument("--coheat-data", required=True)
+    parser.add_argument("--capture-dir", required=True)
+    parser.add_argument("--output-dir", required=True)
+    parser.add_argument("--cache-dir")
+    parser.add_argument("--element-z", type=int, default=20)
+    args = parser.parse_args(argv)
+
+    capture = Path(args.capture_dir)
+    out = Path(args.output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    meta = _manifest(capture / "manifest.csv")
+    required_schema = "xstar-tools-v064812321-fixed-radial-input-v1"
+    if meta.get("schema") != required_schema:
+        raise RuntimeError(f"unexpected capture schema: {meta.get('schema')!r}")
+
+    resolved_atdb = pr._resolve_runner_atdb_path(args.atdb)
+    normalized = pr.normalize_xstar_parameters(pr.parse_run_xstar_script(args.run_script))
+    pointer_cache, metadata_cache = pr._cache_paths(resolved_atdb, args.cache_dir)
+    state, built = pr._build_initial_state(
+        normalized,
+        atdb_path=resolved_atdb,
+        coheat_path=args.coheat_data,
+        pointer_cache=pointer_cache,
+        metadata_cache=metadata_cache,
+        use_cache=True,
+        rebuild_cache=False,
+        progress_callback=None,
+    )
+    try:
+        nrad = int(meta["radiation_bin_count"])
+        ndsec = int(meta["dsec_radiation_bin_count"])
+        ntau = int(meta["continuum_tau_count"])
+        nline_tau = int(meta.get("line_tau_count", "0"))
+        nglobal = int(meta["global_level_count"])
+        full_energy = _read(capture / "dsec_radiation_energy_ev.bin", ndsec)
+        full_bremsa = _read(capture / "dsec_bremsa.bin", ndsec)
+        if ndsec != int(state.control["ncn2"]):
+            raise RuntimeError(
+                f"captured DSEC grid has {ndsec} bins; Python source state expects {state.control['ncn2']}"
+            )
+        state.radiation.epi = full_energy.copy()
+        state.radiation.bremsa = full_bremsa.copy()
+        state.radiation.bremsint = np.zeros(ndsec, dtype=float)
+        state.radiation.bremsam = np.zeros(ndsec, dtype=float)
+        apply_bremsmap_to_state(state)
+
+        derived = state.atomic.derived
+        n_lines = int(derived.nlsvn)
+        n_cont = int(derived.ncsvn)
+        tau_in_raw = _read(capture / "continuum_tau_in.bin", ntau)
+        tau_out_raw = _read(capture / "continuum_tau_out.bin", ntau)
+        line_tau_in = _read(capture / "line_tau_in.bin", nline_tau) if nline_tau else np.zeros(n_lines, dtype=float)
+        line_tau_out = _read(capture / "line_tau_out.bin", nline_tau) if nline_tau else np.zeros(n_lines, dtype=float)
+        if line_tau_in.size != n_lines or line_tau_out.size != n_lines:
+            raise RuntimeError(
+                f"captured line-tau length {line_tau_in.size}/{line_tau_out.size}; Python source state expects {n_lines}"
+            )
+        escape = EscapeProbabilityContext(
+            line_tau_in=line_tau_in,
+            line_tau_out=line_tau_out,
+            continuum_tau_in=_tau_physical(tau_in_raw, n_cont),
+            continuum_tau_out=_tau_physical(tau_out_raw, n_cont),
+            allow_missing_as_zero=False,
+        )
+        radiation = SimpleNamespace(
+            epi=np.asarray(state.radiation.epi, dtype=float),
+            bremsa=np.asarray(state.radiation.bremsa, dtype=float),
+            epim=np.asarray(state.radiation.epim, dtype=float),
+            epim_eV=np.asarray(state.radiation.epim, dtype=float),
+            bremsam=np.asarray(state.radiation.bremsam, dtype=float),
+            bremsint=np.asarray(state.radiation.bremsint, dtype=float),
+        )
+        requests: list[FixedStateElementRequest] = []
+        required: list[int] = []
+        for z, abundance in enumerate(normalized.physical_abundances, start=1):
+            if float(abundance) <= 1.0e-24:
+                continue
+            required.append(z)
+            requests.append(
+                FixedStateElementRequest(
+                    element_z=z,
+                    min_ion_stage=1,
+                    max_ion_stage=z + 1,
+                    abundance=float(abundance),
+                    radiation=radiation,
+                    escape=escape,
+                    covering_fraction=float(normalized.get("cfrac")),
+                    turbulent_velocity_km_s=float(normalized.get("vturbi")),
+                    lfast=2,
+                    critf=float(normalized.get("critf")),
+                    use_source_ion_limits=True,
+                    initial_global_populations={},
+                    initial_population_source="v064812321_cpp_fixed_radial_capture",
+                    terminal_continuum_seed_mode="source-zero",
+                    strict_context=True,
+                    allow_lstsq_fallback=False,
+                    allow_dense_matrix_rescue=False,
+                )
+            )
+
+        xilevg = _read(capture / "global_xilevg.bin", nglobal) if nglobal else np.zeros(0)
+        bilevg = _read(capture / "global_bilevg.bin", nglobal) if nglobal else np.zeros(0)
+        rnisg = _read(capture / "global_rnisg.bin", nglobal) if nglobal else np.zeros(0)
+        runtime = DsecMutableRuntimeState(
+            temperature_t4=float(meta["temperature_k"]) / 1.0e4,
+            electron_fraction_xee=float(meta["electron_fraction_xee"]),
+            hydrogen_density_cm3=float(meta["hydrogen_density_cm3"]),
+            element_requests=tuple(requests),
+            required_element_z=tuple(required),
+            pressure=float(normalized.pressure_dyn_cm2),
+            lcdd=int(normalized.lcdd),
+            global_level_populations={},
+            global_xilevg_by_index=xilevg.copy() if xilevg.size else None,
+            global_bilevg_by_index=bilevg.copy() if bilevg.size else None,
+            global_rnisg_by_index=rnisg.copy() if rnisg.size else None,
+            source_global_alias_writeback=True,
+            reset_leveltemp_each_calc_hmc_all=True,
+            retain_source_arrays=True,
+        )
+        # The continuum contexts are source-faithful Python translations built
+        # from the captured full radiation field and the source bremsmap.
+        table = pr.load_compton_table(args.coheat_data, atdb_path=resolved_atdb)
+        kwargs = dict(pr._calc_kwargs_factory(state, table)(runtime))
+        result = calc_hmc_all(
+            state.atomic.master,
+            state.atomic.derived,
+            elements=tuple(requests),
+            temperature_k=float(meta["temperature_k"]),
+            hydrogen_density_cm3=float(meta["hydrogen_density_cm3"]),
+            electron_fraction_xee=float(meta["electron_fraction_xee"]),
+            pressure=float(normalized.pressure_dyn_cm2),
+            lcdd=int(normalized.lcdd),
+            required_element_z=tuple(required),
+            dispatcher=default_source_faithful_ucalc(),
+            initial_leveltemp_workspace=None,
+            initial_leveltemp_owner_by_column={},
+            initial_global_xilevg_by_index=xilevg if xilevg.size else None,
+            initial_global_bilevg_by_index=bilevg if bilevg.size else None,
+            initial_global_rnisg_by_index=rnisg if rnisg.size else None,
+            source_global_alias_writeback=True,
+            **kwargs,
+        )
+        rows = python_element_attribution_rows(result, element_z=args.element_z)
+        paths: dict[str, str] = {}
+        for name, payload in rows.items():
+            path = out / f"python_z{args.element_z}_{name}.csv"
+            _write_rows(path, payload)
+            paths[name] = str(path)
+        summary = {
+            "schema": "xstar-tools-v064812321-python-fixed-radial-attribution-v1",
+            "source_sequence": int(meta["source_sequence"]),
+            "element_z": int(args.element_z),
+            "temperature_k": float(result.temperature_k),
+            "electron_fraction_input": float(result.electron_fraction_xee),
+            "hmctot": float(result.hmctot),
+            "elcter": float(result.elcter),
+            "files": paths,
+        }
+        (out / "python_fixed_radial_summary.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        print("V064812321_PYTHON_FIXED_RADIAL_REPLAY=ACCEPT")
+        print(f"V064812321_PYTHON_FIXED_RADIAL_SEQUENCE={meta['source_sequence']}")
+        print(f"V064812321_PYTHON_FIXED_RADIAL_T={result.temperature_k:.17g}")
+        return 0
+    finally:
+        built.atomic_state.close()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

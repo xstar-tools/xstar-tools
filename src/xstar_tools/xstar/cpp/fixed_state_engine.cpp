@@ -10437,6 +10437,12 @@ int run_impl(
     std::vector<double> thermal_population_stream;
     std::size_t fixed_full_population_offset = 0;
     std::vector<xstar_spectral_contribution_v1> spectral;
+    // v0.6.48.12.3.21 diagnostic-only Type-50 source-gate accounting.
+    // These counters observe the literal calc_emisab_ion endpoint gate; they
+    // do not alter record evaluation, line selection, or profile execution.
+    std::uint64_t type50_outer_candidates_v064812321 = 0u;
+    std::uint64_t type50_outer_accepts_v064812321 = 0u;
+    std::uint64_t type50_outer_rejects_v064812321 = 0u;
     // v82 patch 5.20.5 retained xstarsetup's errc coordinate per record.
     // v82 patch 5.20.9 closes the missing ownership rule: errc is actually a
     // continuum-SLOT array.  Every rate-7 record writes errc(npconi2(record))
@@ -11788,9 +11794,18 @@ int run_impl(
                 const double floor_v064812314 = source_real_literal_v82_patch5208(1.0e-34);
                 const double abund1_cm3_v064812314 = sc.abundance_lower * input.hydrogen_density_cm3;
                 const double abund2_cm3_v064812314 = sc.abundance_upper * input.hydrogen_density_cm3;
+                if (rec.data_type == 50 && rec.rate_type == 4) {
+                    ++type50_outer_candidates_v064812321;
+                }
                 if (!(abund1_cm3_v064812314 > floor_v064812314 ||
                       abund2_cm3_v064812314 > floor_v064812314)) {
+                    if (rec.data_type == 50 && rec.rate_type == 4) {
+                        ++type50_outer_rejects_v064812321;
+                    }
                     continue;
+                }
+                if (rec.data_type == 50 && rec.rate_type == 4) {
+                    ++type50_outer_accepts_v064812321;
                 }
             }
             // calc_emisab_ion calls ucalc only when either endpoint abundance
@@ -12164,7 +12179,25 @@ int run_impl(
         xstar_spectral_stats_v1 ss{};
         xstar_spectral_stats_init_v1(&ss);
         std::array<char, XSTAR_FIXED_STATE_MESSAGE_SIZE> error{};
+        if (const char* diag_root_v064812321 = std::getenv("XSTAR_V064812321_DIAGNOSTICS_DIR");
+            diag_root_v064812321 && *diag_root_v064812321) {
+            const std::filesystem::path diag_path_v064812321 =
+                std::filesystem::path(diag_root_v064812321) / "type50_outer_gate_summary.csv";
+            const bool write_header_v064812321 = !std::filesystem::exists(diag_path_v064812321);
+            std::ofstream diag_v064812321(diag_path_v064812321, std::ios::app);
+            if (!diag_v064812321) throw std::runtime_error("cannot create v064812321 Type50 gate summary");
+            if (write_header_v064812321)
+                diag_v064812321 << "source_sequence,phase,candidates,accepts,rejects,source_real_floor\n";
+            const char* seq_v064812321 = std::getenv("XSTAR_NATIVE_SOURCE_SEQUENCE");
+            diag_v064812321 << (seq_v064812321 ? seq_v064812321 : "0")
+                << ",calc_emisab," << type50_outer_candidates_v064812321
+                << ',' << type50_outer_accepts_v064812321
+                << ',' << type50_outer_rejects_v064812321
+                << ',' << std::setprecision(17) << source_real_literal_v82_patch5208(1.0e-34) << '\n';
+            ::setenv("XSTAR_V064812321_TYPE50_PHASE", "calc_emisab", 1);
+        }
         const int rc = xstar_spectral_apply_contributions_v1(ctx.spectral_context, spectral.data(), spectral.size(), seeds.data(), seed_stride, &sw, &ss, error.data(), error.size());
+        ::unsetenv("XSTAR_V064812321_TYPE50_PHASE");
         if (rc != 0) throw std::runtime_error(std::string("native spectral commit failed: ") + error.data());
 
         // v82 patch 5.20.10: literal calc_emis_ion does not assign kkkl in
@@ -13022,10 +13055,15 @@ int run_impl(
             xstar_spectral_stats_v1 selected_stats{};
             xstar_spectral_stats_init_v1(&selected_stats);
             std::array<char, XSTAR_FIXED_STATE_MESSAGE_SIZE> selected_error{};
+            if (const char* diag_root_v064812321 = std::getenv("XSTAR_V064812321_DIAGNOSTICS_DIR");
+                diag_root_v064812321 && *diag_root_v064812321) {
+                ::setenv("XSTAR_V064812321_TYPE50_PHASE", "calc_emis", 1);
+            }
             const int selected_rc = xstar_spectral_apply_contributions_v1(
                 ctx.spectral_context, selected_lines_v82_patch5206.data(), selected_lines_v82_patch5206.size(),
                 selected_seeds.data(), seed_stride, &selected_sw, &selected_stats,
                 selected_error.data(), selected_error.size());
+            ::unsetenv("XSTAR_V064812321_TYPE50_PHASE");
             if (selected_rc != 0)
                 throw std::runtime_error(std::string("v82 patch 5.20.6 selected line replay failed: ") + selected_error.data());
             line_profile_opacity.swap(selected_line_profile);

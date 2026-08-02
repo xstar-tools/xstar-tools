@@ -10,6 +10,11 @@
 #include <cstring>
 #include <algorithm>
 #include <limits>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <iomanip>
+#include <string>
 
 namespace {
 
@@ -669,6 +674,24 @@ int xstar_spectral_apply_contributions_v1(
     xstar_spectral_perf_v064892 perf_v064892{};
     xstar_spectral_perf_init_v064892(&perf_v064892);
     perf_v064892.apply_calls = 1u;
+    const char* type50_diag_root_v064812321 = std::getenv("XSTAR_V064812321_DIAGNOSTICS_DIR");
+    const char* type50_phase_env_v064812321 = std::getenv("XSTAR_V064812321_TYPE50_PHASE");
+    const bool type50_diag_active_v064812321 =
+        type50_diag_root_v064812321 && *type50_diag_root_v064812321 &&
+        type50_phase_env_v064812321 && *type50_phase_env_v064812321;
+    const std::string type50_phase_v064812321 =
+        type50_diag_active_v064812321 ? std::string(type50_phase_env_v064812321) : std::string();
+    const char* type50_seq_env_v064812321 = std::getenv("XSTAR_NATIVE_SOURCE_SEQUENCE");
+    const std::string type50_sequence_v064812321 =
+        (type50_seq_env_v064812321 && *type50_seq_env_v064812321) ? std::string(type50_seq_env_v064812321) : std::string("0");
+    std::uint64_t type50_rows_v064812321 = 0u;
+    std::uint64_t type50_source_inner_accepts_v064812321 = 0u;
+    std::uint64_t type50_actual_profile_calls_v064812321 = 0u;
+    std::uint64_t type50_source_rejected_but_called_v064812321 = 0u;
+    std::uint64_t type50_updated_bins_v064812321 = 0u;
+    std::uint64_t type50_rejected_call_updated_bins_v064812321 = 0u;
+    double type50_profile_seconds_v064812321 = 0.0;
+    double type50_rejected_call_seconds_v064812321 = 0.0;
     uint64_t previous_position = 0;
     const size_t line_capacity = workspace->oplin_count;
     const size_t continuum_capacity = workspace->opakab_count;
@@ -776,6 +799,10 @@ int xstar_spectral_apply_contributions_v1(
                         write_message(error, error_size, "full line contribution lacks valid seed or exact-grid oracle");
                         return 9;
                     }
+                    const double opakb1_v064812321 = c.opakab * c.abundance_lower * c.hydrogen_density;
+                    const double floor_v064812321 = source_real_literal(1.0e-34);
+                    const bool source_inner_accept_v064812321 =
+                        std::isfinite(opakb1_v064812321) && opakb1_v064812321 > floor_v064812321;
                     long long updated = 0;
                     double opacity_elapsed = 0.0;
                     char opacity_error[512] = {0};
@@ -795,6 +822,18 @@ int xstar_spectral_apply_contributions_v1(
                     if (profile_rc != 0) {
                         write_message(error, error_size, opacity_error);
                         return 10;
+                    }
+                    if (type50_diag_active_v064812321 && c.data_type == 50 && c.rate_type == 4) {
+                        ++type50_rows_v064812321;
+                        type50_source_inner_accepts_v064812321 += source_inner_accept_v064812321 ? 1u : 0u;
+                        ++type50_actual_profile_calls_v064812321;
+                        type50_updated_bins_v064812321 += static_cast<std::uint64_t>(std::max<long long>(0, updated));
+                        type50_profile_seconds_v064812321 += opacity_elapsed;
+                        if (!source_inner_accept_v064812321) {
+                            ++type50_source_rejected_but_called_v064812321;
+                            type50_rejected_call_updated_bins_v064812321 += static_cast<std::uint64_t>(std::max<long long>(0, updated));
+                            type50_rejected_call_seconds_v064812321 += opacity_elapsed;
+                        }
                     }
                     ++stats->line_profiles;
                     ++perf_v064892.line_profiles;
@@ -848,6 +887,9 @@ int xstar_spectral_apply_contributions_v1(
             // linopac only when opakb1 exceeds default-REAL 1.e-34.
             if (c.data_type == 50 && c.rate_type == 4 &&
                 !(std::isfinite(opakb1) && opakb1 > source_real_literal(1.0e-34))) {
+                if (type50_diag_active_v064812321) {
+                    ++type50_rows_v064812321;
+                }
                 continue;
             }
             const double* seed = nullptr;
@@ -884,6 +926,13 @@ int xstar_spectral_apply_contributions_v1(
                 write_message(error, error_size, opacity_error[0] ? opacity_error : "native opacity line profile failed");
                 return 10;
             }
+            if (type50_diag_active_v064812321 && c.data_type == 50 && c.rate_type == 4) {
+                ++type50_rows_v064812321;
+                ++type50_source_inner_accepts_v064812321;
+                ++type50_actual_profile_calls_v064812321;
+                type50_updated_bins_v064812321 += static_cast<std::uint64_t>(std::max<long long>(0, updated));
+                type50_profile_seconds_v064812321 += opacity_elapsed;
+            }
             ++stats->line_profiles;
             ++perf_v064892.line_profiles;
             ++perf_v064892.family_line_profiles[family_slot_v064892];
@@ -907,6 +956,26 @@ int xstar_spectral_apply_contributions_v1(
         const auto construct_ended = std::chrono::steady_clock::now();
         stats->construction_seconds += std::chrono::duration<double>(construct_ended - construct_started).count();
         ++stats->contributions_committed;
+    }
+    if (type50_diag_active_v064812321) {
+        const std::filesystem::path path_v064812321 =
+            std::filesystem::path(type50_diag_root_v064812321) / "type50_linopac_apply_summary.csv";
+        const bool header_v064812321 = !std::filesystem::exists(path_v064812321);
+        std::ofstream diag_v064812321(path_v064812321, std::ios::app);
+        if (!diag_v064812321) {
+            write_message(error, error_size, "cannot create v064812321 Type50 apply summary");
+            return 11;
+        }
+        if (header_v064812321) {
+            diag_v064812321 << "source_sequence,phase,type50_rows,source_inner_accepts,actual_profile_calls,source_rejected_but_called,updated_bins,rejected_call_updated_bins,profile_seconds,rejected_call_seconds,source_real_floor\n";
+        }
+        diag_v064812321 << std::setprecision(17)
+            << type50_sequence_v064812321 << ',' << type50_phase_v064812321 << ','
+            << type50_rows_v064812321 << ',' << type50_source_inner_accepts_v064812321 << ','
+            << type50_actual_profile_calls_v064812321 << ',' << type50_source_rejected_but_called_v064812321 << ','
+            << type50_updated_bins_v064812321 << ',' << type50_rejected_call_updated_bins_v064812321 << ','
+            << type50_profile_seconds_v064812321 << ',' << type50_rejected_call_seconds_v064812321 << ','
+            << source_real_literal(1.0e-34) << '\n';
     }
     const auto call_ended = std::chrono::steady_clock::now();
     stats->commit_seconds = std::chrono::duration<double>(call_ended - call_started).count();
