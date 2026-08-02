@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.48.12.3.22 - 2026-08-02
+
+- Generalize the literal FORTRAN Type-50 inner `linopac` gate to the shared C++ `FULL_LINE` path for every element: scalar line state is retained, but profile/rebin work is skipped unless `opakb1 > REAL(1.e-34)`.
+- Treat data type 91 as the same source family because `ucalc.f90` explicitly jumps to label 50; deliberately exclude data type 89 because its FORTRAN branch uses the different `opakb1*delr > 1.d-8` predicate.
+- Preserve the already-generic 12.3.14 endpoint-abundance gate and 12.3.15 active-stage two-pass traversal. No element-Z performance branch is introduced.
+- Add a six-model C/O/Mg/Ca targeted qualifier that runs directly from the unpacked source tree and requires zero source-rejected-but-called Type-50 profiles plus frozen core trajectory/thermal/option-17/22 science.
+
 ## 0.6.48.12.3.21.2 - 2026-08-02
 
 - Fix the one-shot fixed-radial Python replay when the native C++ line-tau workspace is an active-element source-index prefix while Python retains the full ATDB `nlsvn` domain.

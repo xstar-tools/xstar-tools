@@ -22,6 +22,22 @@ inline double source_real_literal(double value) {
     return static_cast<double>(static_cast<float>(value));
 }
 
+// v0.6.48.12.3.22: source-faithful Type-50-family linopac eligibility.
+// This predicate is deliberately element-agnostic.  FORTRAN ucalc label 50
+// applies the default-REAL opakb1 > 1.e-34 gate before linopac for ordinary
+// radiative-line records.  Data type 91 explicitly jumps to label 50 and
+// therefore shares the same rule.  Data type 89 does not: its source branch
+// uses a different optical-depth gate (opakb1*delr > 1.e-8), so it must not be
+// folded into this predicate.
+inline bool source_type50_linopac_family(int data_type, int rate_type) {
+    return rate_type == 4 && (data_type == 50 || data_type == 91);
+}
+
+inline bool source_type50_linopac_accept(double opakb1, int data_type, int rate_type) {
+    if (!source_type50_linopac_family(data_type, rate_type)) return true;
+    return std::isfinite(opakb1) && opakb1 > source_real_literal(1.0e-34);
+}
+
 void write_message(char* errbuf, std::size_t errbuf_size, const char* message) {
     if (!errbuf || errbuf_size == 0) return;
     std::strncpy(errbuf, message ? message : "", errbuf_size - 1);
@@ -684,6 +700,11 @@ int xstar_spectral_apply_contributions_v1(
     const char* type50_seq_env_v064812321 = std::getenv("XSTAR_NATIVE_SOURCE_SEQUENCE");
     const std::string type50_sequence_v064812321 =
         (type50_seq_env_v064812321 && *type50_seq_env_v064812321) ? std::string(type50_seq_env_v064812321) : std::string("0");
+    const char* force_legacy_type50_env_v064812322 =
+        std::getenv("XSTAR_V0648123220_FORCE_PRE_GATE_FULL_LINE_TYPE50");
+    const bool force_legacy_type50_v064812322 =
+        force_legacy_type50_env_v064812322 && *force_legacy_type50_env_v064812322 &&
+        std::strcmp(force_legacy_type50_env_v064812322, "0") != 0;
     std::uint64_t type50_rows_v064812321 = 0u;
     std::uint64_t type50_source_inner_accepts_v064812321 = 0u;
     std::uint64_t type50_actual_profile_calls_v064812321 = 0u;
@@ -800,9 +821,24 @@ int xstar_spectral_apply_contributions_v1(
                         return 9;
                     }
                     const double opakb1_v064812321 = c.opakab * c.abundance_lower * c.hydrogen_density;
-                    const double floor_v064812321 = source_real_literal(1.0e-34);
                     const bool source_inner_accept_v064812321 =
-                        std::isfinite(opakb1_v064812321) && opakb1_v064812321 > floor_v064812321;
+                        source_type50_linopac_accept(opakb1_v064812321, c.data_type, c.rate_type);
+                    const bool source_type50_family_v064812322 =
+                        source_type50_linopac_family(c.data_type, c.rate_type);
+                    if (type50_diag_active_v064812321 && source_type50_family_v064812322) {
+                        ++type50_rows_v064812321;
+                        type50_source_inner_accepts_v064812321 += source_inner_accept_v064812321 ? 1u : 0u;
+                    }
+                    // FORTRAN ucalc computes/publishes the scalar line state above,
+                    // but it does not call linopac when the Type-50 opacity is below
+                    // the default-REAL 1.e-34 threshold.  Apply that exact rule in
+                    // the shared FULL_LINE path for every element.  The environment
+                    // override exists only for same-binary A/B qualification.
+                    if (source_type50_family_v064812322 &&
+                        !source_inner_accept_v064812321 &&
+                        !force_legacy_type50_v064812322) {
+                        continue;
+                    }
                     long long updated = 0;
                     double opacity_elapsed = 0.0;
                     char opacity_error[512] = {0};
@@ -823,9 +859,7 @@ int xstar_spectral_apply_contributions_v1(
                         write_message(error, error_size, opacity_error);
                         return 10;
                     }
-                    if (type50_diag_active_v064812321 && c.data_type == 50 && c.rate_type == 4) {
-                        ++type50_rows_v064812321;
-                        type50_source_inner_accepts_v064812321 += source_inner_accept_v064812321 ? 1u : 0u;
+                    if (type50_diag_active_v064812321 && source_type50_family_v064812322) {
                         ++type50_actual_profile_calls_v064812321;
                         type50_updated_bins_v064812321 += static_cast<std::uint64_t>(std::max<long long>(0, updated));
                         type50_profile_seconds_v064812321 += opacity_elapsed;
@@ -885,8 +919,8 @@ int xstar_spectral_apply_contributions_v1(
             // v0.6.48.12.3.14: literal ordinary Type-50 UCalc gate. Source
             // UCalc publishes the scalar line quantities above but calls
             // linopac only when opakb1 exceeds default-REAL 1.e-34.
-            if (c.data_type == 50 && c.rate_type == 4 &&
-                !(std::isfinite(opakb1) && opakb1 > source_real_literal(1.0e-34))) {
+            if (source_type50_linopac_family(c.data_type, c.rate_type) &&
+                !source_type50_linopac_accept(opakb1, c.data_type, c.rate_type)) {
                 if (type50_diag_active_v064812321) {
                     ++type50_rows_v064812321;
                 }
@@ -926,7 +960,7 @@ int xstar_spectral_apply_contributions_v1(
                 write_message(error, error_size, opacity_error[0] ? opacity_error : "native opacity line profile failed");
                 return 10;
             }
-            if (type50_diag_active_v064812321 && c.data_type == 50 && c.rate_type == 4) {
+            if (type50_diag_active_v064812321 && source_type50_linopac_family(c.data_type, c.rate_type)) {
                 ++type50_rows_v064812321;
                 ++type50_source_inner_accepts_v064812321;
                 ++type50_actual_profile_calls_v064812321;
