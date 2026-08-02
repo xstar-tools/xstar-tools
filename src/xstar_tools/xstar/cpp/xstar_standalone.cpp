@@ -13577,6 +13577,82 @@ void gate_sequence23_native_committed_state_v82_patch52017(StandaloneControllerD
               << "V048746255172582_PATCH52017_SEQUENCE23_SOURCE_ORACLE_DEPENDENCY=NONE_PRODUCTION\n";
 }
 
+
+void write_v064812324_population_state(
+    const StandaloneControllerDataV67& data,
+    const std::string& tag,
+    const std::vector<double>& values,
+    std::size_t sequence,
+    std::size_t evaluation_index,
+    const char* kind) {
+    const char* root_text = std::getenv("XSTAR_V064812324_SCIENCE_DIR");
+    if (!root_text || !*root_text || data.call_index != 1u) return;
+    const std::filesystem::path root = std::filesystem::path(root_text) / "population_states";
+    std::filesystem::create_directories(root);
+    const auto bin = root / (tag + ".bin");
+    std::ofstream out(bin, std::ios::binary);
+    if (!out) throw std::runtime_error("cannot create v064812324 population state: " + bin.string());
+    if (!values.empty()) out.write(reinterpret_cast<const char*>(values.data()),
+        static_cast<std::streamsize>(values.size() * sizeof(double)));
+    std::ofstream meta(root / (tag + ".csv"));
+    if (!meta) throw std::runtime_error("cannot create v064812324 population-state manifest");
+    meta << "key,value\n"
+         << "call_index," << data.call_index << "\n"
+         << "sequence," << sequence << "\n"
+         << "evaluation_index," << evaluation_index << "\n"
+         << "kind," << (kind ? kind : "") << "\n"
+         << "global_level_count," << values.size() << "\n";
+}
+
+void write_v064812324_fixed_input_capture(
+    const StandaloneControllerDataV67& data,
+    const xstar_fixed_state_input_v1& input,
+    std::uint64_t source_sequence,
+    const std::string& tag) {
+    const char* root_text = std::getenv("XSTAR_V064812324_SCIENCE_DIR");
+    if (!root_text || !*root_text || data.call_index != 1u) return;
+    const std::filesystem::path entry = std::filesystem::path(root_text) / tag;
+    std::filesystem::create_directories(entry);
+    auto write_doubles = [](const std::filesystem::path& path, const double* values, std::size_t count) {
+        std::ofstream out(path, std::ios::binary);
+        if (!out) throw std::runtime_error("cannot create v064812324 fixed-input binary: " + path.string());
+        if (values && count) out.write(reinterpret_cast<const char*>(values),
+            static_cast<std::streamsize>(count * sizeof(double)));
+    };
+    write_doubles(entry / "radiation_energy_ev.bin", input.radiation_energy_ev, input.radiation_bin_count);
+    write_doubles(entry / "radiation_flux.bin", input.radiation_flux, input.radiation_bin_count);
+    write_doubles(entry / "dsec_radiation_energy_ev.bin", input.dsec_radiation_energy_ev, input.dsec_radiation_bin_count);
+    write_doubles(entry / "dsec_bremsa.bin", input.dsec_bremsa, input.dsec_radiation_bin_count);
+    write_doubles(entry / "continuum_tau_in.bin", input.continuum_tau_in, input.continuum_tau_count);
+    write_doubles(entry / "continuum_tau_out.bin", input.continuum_tau_out, input.continuum_tau_count);
+    write_doubles(entry / "line_tau_in.bin", data.line_tau_in.data(), data.line_tau_in.size());
+    write_doubles(entry / "line_tau_out.bin", data.line_tau_out.data(), data.line_tau_out.size());
+    write_doubles(entry / "global_xilevg.bin", input.global_xilevg, input.global_level_count);
+    write_doubles(entry / "global_bilevg.bin", input.global_bilevg, input.global_level_count);
+    write_doubles(entry / "global_rnisg.bin", input.global_rnisg, input.global_level_count);
+    std::ofstream manifest(entry / "manifest.csv");
+    if (!manifest) throw std::runtime_error("cannot create v064812324 fixed-input manifest");
+    manifest << "key,value\n" << std::setprecision(17)
+             << "schema,xstar-tools-v064812321-fixed-radial-input-v1\n"
+             << "call_index," << data.call_index << "\n"
+             << "source_sequence," << source_sequence << "\n"
+             << "temperature_k," << input.temperature_k << "\n"
+             << "electron_density_cm3," << input.electron_density_cm3 << "\n"
+             << "hydrogen_density_cm3," << input.hydrogen_density_cm3 << "\n"
+             << "neutral_h_density_cm3," << input.neutral_h_density_cm3 << "\n"
+             << "ionized_h_density_cm3," << input.ionized_h_density_cm3 << "\n"
+             << "electron_fraction_xee," << input.electron_fraction_xee << "\n"
+             << "covering_fraction," << input.covering_fraction << "\n"
+             << "dsec_covering_fraction," << input.dsec_covering_fraction << "\n"
+             << "turbulent_velocity_km_s," << input.turbulent_velocity_km_s << "\n"
+             << "runtime_state_flags," << input.runtime_state_flags << "\n"
+             << "radiation_bin_count," << input.radiation_bin_count << "\n"
+             << "dsec_radiation_bin_count," << input.dsec_radiation_bin_count << "\n"
+             << "continuum_tau_count," << input.continuum_tau_count << "\n"
+             << "line_tau_count," << data.line_tau_in.size() << "\n"
+             << "global_level_count," << input.global_level_count << "\n";
+}
+
 int standalone_iteration_evaluator_v67(
     void* user_data,
     const xstar_thermal_state_v1* trial,
@@ -13636,6 +13712,14 @@ int standalone_iteration_evaluator_v67(
             snapshot.evaluation_index == v0648941_terminal_dsec_counts[snapshot.call_index - 1u];
         if (!v0648941_terminal_reference_dsec) {
             input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_DEFER_PRODUCT_PROJECTION;
+        }
+        if (snapshot.call_index == 1u && snapshot.evaluation_index == 1u) {
+            write_v064812324_fixed_input_capture(*data, input, snapshot.sequence, "fixed_call1_eval1");
+            if (input.global_xilevg && input.global_level_count > 0u) {
+                std::vector<double> eval1_input(input.global_xilevg, input.global_xilevg + input.global_level_count);
+                write_v064812324_population_state(*data, "call1_eval1_input_global_xilevg",
+                    eval1_input, snapshot.sequence, snapshot.evaluation_index, "dsec_input");
+            }
         }
         snapshot.lte_populations.assign(
             static_cast<std::size_t>(data->program_info.population_rows), 0.0);
@@ -14112,6 +14196,11 @@ int standalone_iteration_evaluator_v67(
         }
         update_global_populations_v67(*data, snapshot.populations, &snapshot.lte_populations);
         if (snapshot.kind == "dsec" && snapshot.call_index == 1u) {
+            std::ostringstream state_tag_v064812324;
+            state_tag_v064812324 << "call1_dsec_eval_" << std::setw(4) << std::setfill('0')
+                                  << snapshot.evaluation_index << "_post_global_xilevg";
+            write_v064812324_population_state(*data, state_tag_v064812324.str(), data->global_xilevg,
+                snapshot.sequence, snapshot.evaluation_index, "dsec_post_mapback");
             if (const char* state_dir_v06481238 = std::getenv("XSTAR_V06481238_O7_STATE_DIR")) {
                 if (*state_dir_v06481238) {
                     try {
@@ -14244,6 +14333,10 @@ FixedDsecSnapshot finalize_accepted_boundary_snapshot_v064894(
     snapshot.continuum_tau_in = data.grid_tau_in;
     snapshot.continuum_tau_out = data.grid_tau_out;
     update_global_populations_v67(data, snapshot.populations, &snapshot.lte_populations);
+    if (data.call_index == 1u) {
+        write_v064812324_population_state(data, "call1_accepted_boundary_global_xilevg",
+            data.global_xilevg, snapshot.sequence, 0u, "accepted_boundary_post_mapback");
+    }
     // v82 patch 5.20.16.2.1: final-boundary product snapshots must retain
     // the global LTE/rnisg projection produced above.  The ordinary DSEC
     // evaluation path already copies data.global_rnisg into its snapshot,
@@ -14439,6 +14532,10 @@ FixedDsecSnapshot evaluate_full_boundary_v67(
         snapshot.source_detail_active_windows);
     snapshot.source_detail_global_xilevg = source_detail_global_projection_v064812318(
         data, snapshot.source_detail_pre_mapback_populations, snapshot.source_detail_active_windows);
+    if (data.call_index == 1u) {
+        write_v064812324_population_state(data, "call1_detail_publication_global_xilevg",
+            snapshot.source_detail_global_xilevg, snapshot.sequence, 0u, "accepted_boundary_detail_publication");
+    }
     snapshot.spectrum.resize(output.spectrum_count);
     snapshot.opacity.resize(output.opacity_count);
     snapshot.lte_populations.resize(source.lte_populations_count);
@@ -17097,6 +17194,10 @@ void emit_performance_instrumentation_v064892(
     for (double v : controller.family_profile_seconds) family_profile_sum += v;
     const double family_split = controller.profile_kernel_seconds > 0.0
         ? 100.0 * family_profile_sum / controller.profile_kernel_seconds : 100.0;
+    std::uint64_t type50_vectorized_profiles_v064812324 = 0u;
+    std::uint64_t type50_scalar_profiles_v064812324 = 0u;
+    xstar_spectral_type50_vector_perf_snapshot_v064812324(
+        &type50_vectorized_profiles_v064812324, &type50_scalar_profiles_v064812324);
     auto write = [&](std::ostream& out) {
         out << std::fixed << std::setprecision(6)
             << "V064892_PERF_POLICY=MEASUREMENT_ONLY_BROAD_SPECTRAL_CONSTRUCTION_DECOMPOSITION\n"
@@ -17141,7 +17242,14 @@ void emit_performance_instrumentation_v064892(
         out << "V064892_TOTAL_BROAD_APPLY_SECONDS="<<perf.total.apply_seconds<<"\n"
             << "V064892_TOTAL_PROFILE_KERNEL_SECONDS="<<perf.total.profile_kernel_seconds<<"\n"
             << "V064892_TOTAL_APPLY_CALLS="<<perf.total.apply_calls<<"\n"
-            << "V064892_TOTAL_LINE_PROFILES="<<perf.total.line_profiles<<"\n";
+            << "V064892_TOTAL_LINE_PROFILES="<<perf.total.line_profiles<<"\n"
+            << "V064812324_TOTAL_TYPE50_PROFILE_SECONDS="<<perf.total.family_profile_seconds[1]<<"\n"
+            << "V064812324_TOTAL_TYPE50_PROFILE_COUNT="<<perf.total.family_line_profiles[1]<<"\n"
+            << "V064812324_TOTAL_TYPE50_UPDATED_BINS="<<perf.total.family_updated_bins[1]<<"\n"
+            << "V064812324_TYPE50_VECTORIZED_SMALL_A_PROFILES="<<type50_vectorized_profiles_v064812324<<"\n"
+            << "V064812324_TYPE50_SCALAR_PROFILES="<<type50_scalar_profiles_v064812324<<"\n"
+            << "V064812324_TYPE50_CLASSIFIED_PROFILES="
+            <<(type50_vectorized_profiles_v064812324 + type50_scalar_profiles_v064812324)<<"\n";
     };
     write(std::cout);
     if (write_file) {
@@ -17183,6 +17291,7 @@ int command_run_standalone_production_v67(const Options& options, const std::fil
         g_performance_v064890 = &performance_v064890;
         g_performance_v064892 = &performance_v064892;
         xstar_spectral_perf_reset_v064892();
+        xstar_spectral_type50_vector_perf_reset_v064812324();
         auto params = xstar_atdb_runtime::read_production_parameters(options.parameters_path);
         auto atomic = xstar_atdb_runtime::resolve_atomic_data(options.parameters_path, params.raw_json, executable_path);
         std::cout << prefix << "COMMAND=RUN_PRODUCTION_STANDALONE\n"

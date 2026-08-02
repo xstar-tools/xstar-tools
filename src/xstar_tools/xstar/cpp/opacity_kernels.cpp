@@ -10,9 +10,14 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <cstdint>
 #include <memory>
 #include <sstream>
 #include <vector>
+
+#if (defined(__x86_64__) || defined(__i386__)) && (defined(__GNUC__) || defined(__clang__))
+#include <immintrin.h>
+#endif
 
 namespace {
 
@@ -39,6 +44,53 @@ static inline double source_mul(double a, double b) { volatile double x = a; vol
 static inline double source_div(double a, double b) { volatile double x = a; volatile double y = b; volatile double z = x / y; return z; }
 #endif
 static inline double source_real_literal(double value) { return static_cast<double>(static_cast<float>(value)); }
+
+
+// v0.6.48.12.3.24: generic Type-50 profile diagnostics and AVX2 capability.
+// These counters are observational only; they never enter science state.
+thread_local std::uint64_t g_type50_vectorized_profiles_v064812324 = 0u;
+thread_local std::uint64_t g_type50_scalar_profiles_v064812324 = 0u;
+thread_local std::uint64_t g_type50_vectorized_points_v064812324 = 0u;
+thread_local std::uint64_t g_type50_bound_correction_steps_v064812324 = 0u;
+thread_local int g_last_profile_vectorized_v064812324 = 0;
+
+static bool env_truthy_v064812324(const char* name) {
+    const char* value = std::getenv(name);
+    return value && *value && std::strcmp(value, "0") != 0 &&
+        std::strcmp(value, "false") != 0 && std::strcmp(value, "FALSE") != 0;
+}
+
+static bool cpu_avx2_available_v064812324() {
+#if (defined(__x86_64__) || defined(__i386__)) && (defined(__GNUC__) || defined(__clang__))
+    static const bool available = [] {
+        __builtin_cpu_init();
+        return __builtin_cpu_supports("avx2");
+    }();
+    return available;
+#else
+    return false;
+#endif
+}
+
+#if (defined(__x86_64__) || defined(__i386__)) && (defined(__GNUC__) || defined(__clang__))
+__attribute__((target("avx2")))
+static inline void voigte_small_a_farwing4_v064812324(
+    const double* v, double aa, double* out) {
+    const __m256d vv = _mm256_loadu_pd(v);
+    const __m256d v2 = _mm256_mul_pd(vv, vv);
+    const __m256d v2sq = _mm256_mul_pd(v2, v2);
+    const __m256d term6 = _mm256_mul_pd(_mm256_set1_pd(source_real_literal(6.0)), v2);
+    const __m256d term4 = _mm256_mul_pd(_mm256_set1_pd(source_real_literal(4.0)), v2sq);
+    const __m256d num0 = _mm256_add_pd(_mm256_set1_pd(source_real_literal(15.0)), term6);
+    const __m256d num = _mm256_add_pd(num0, term4);
+    const __m256d den0 = _mm256_mul_pd(_mm256_set1_pd(source_real_literal(4.0)), v2);
+    const __m256d den1 = _mm256_mul_pd(den0, v2);
+    const __m256d den2 = _mm256_mul_pd(den1, v2);
+    const __m256d den = _mm256_mul_pd(den2, _mm256_set1_pd(source_real_literal(1.772453851)));
+    const __m256d scaled = _mm256_mul_pd(_mm256_set1_pd(aa), num);
+    _mm256_storeu_pd(out, _mm256_div_pd(scaled, den));
+}
+#endif
 
 static void write_message(char* message, std::size_t message_size, const char* text) {
     if (!message || message_size == 0) return;
@@ -535,15 +587,43 @@ static int xstar_opacity_apply_line_profile_optimized_v064896(
     // rebin loop begins at mlmin+1.  Find the same raw bounds from the outside
     // inward using the exact source energy expression; no profile value is
     // needed to determine these bounds because ldon is invariantly false.
+    // 12.3.24: localize the same raw bounds algebraically, then correct
+    // locally using the literal source temporary-energy predicate.  The old
+    // implementation linearly scanned thousands of guaranteed-invalid slots
+    // for every accepted Type-50 profile.  Only the final corrected integer
+    // bounds affect linopac arithmetic.
+    const double lower_crossing = static_cast<double>(ml2) - source_div(e00, deleused);
     int raw_mlmin = 1;
-    while (raw_mlmin < ml2 && !valid_temporary_energy(temporary_energy(raw_mlmin))) ++raw_mlmin;
+    if (lower_crossing >= static_cast<double>(ml2)) raw_mlmin = ml2;
+    else if (lower_crossing > 1.0) raw_mlmin = static_cast<int>(std::floor(lower_crossing)) + 1;
+    while (raw_mlmin > 1 && valid_temporary_energy(temporary_energy(raw_mlmin - 1))) {
+        --raw_mlmin;
+        ++g_type50_bound_correction_steps_v064812324;
+    }
+    while (raw_mlmin < ml2 && !valid_temporary_energy(temporary_energy(raw_mlmin))) {
+        ++raw_mlmin;
+        ++g_type50_bound_correction_steps_v064812324;
+    }
+    const double upper_crossing = static_cast<double>(ml2) +
+        source_div(source_sub(energy_ceiling, e00), deleused);
     int raw_mlmax = nbtpp;
-    while (raw_mlmax > ml2 && !valid_temporary_energy(temporary_energy(raw_mlmax))) --raw_mlmax;
+    if (upper_crossing <= static_cast<double>(ml2)) raw_mlmax = ml2;
+    else if (upper_crossing < static_cast<double>(nbtpp))
+        raw_mlmax = static_cast<int>(std::ceil(upper_crossing)) - 1;
+    while (raw_mlmax < nbtpp && valid_temporary_energy(temporary_energy(raw_mlmax + 1))) {
+        ++raw_mlmax;
+        ++g_type50_bound_correction_steps_v064812324;
+    }
+    while (raw_mlmax > ml2 && !valid_temporary_energy(temporary_energy(raw_mlmax))) {
+        --raw_mlmax;
+        ++g_type50_bound_correction_steps_v064812324;
+    }
     // If one side has no valid outward temporary point, literal linopac leaves
     // that raw extremum at its sentinel rather than promoting the center.
     // This is outside the benchmark hot shape; fall back to the frozen 9.5.1
     // implementation so edge-grid semantics remain exact.
     if (raw_mlmin >= ml2 || raw_mlmax <= ml2) {
+        ++g_type50_scalar_profiles_v064812324;
         return xstar_opacity_apply_line_profile_legacy_v0648951(
             optpp, line_energy_ev, vturb_km_s, temperature_1e4k, atomic_mass_amu,
             natural_width_ev, seed_profiles, seed_radius, epi, ncn2, opakc,
@@ -559,7 +639,67 @@ static int xstar_opacity_apply_line_profile_optimized_v064896(
     double tmpop = 0.0;
     double previous_energy = temporary_energy(mlmin);
 
-    for (int mlm = mlmin + 1; mlm <= mlmax; ++mlm) {
+    static const bool force_scalar_v064812324 =
+        env_truthy_v064812324("XSTAR_V064812324_FORCE_SCALAR_TYPE50");
+    const bool avx2_enabled_v064812324 = use_small_a_voigt &&
+        cpu_avx2_available_v064812324() && !force_scalar_v064812324;
+    bool profile_used_avx2_v064812324 = false;
+
+    auto consume_profile_point_v064812324 = [&](int mlm, double current_energy, double profile) {
+        const double tmpopo = tmpop;
+        tmpop = optpp * profile;
+        const double tmpe = std::abs(source_sub(current_energy, previous_energy));
+        previous_energy = current_energy;
+        sume = source_add(sume, tmpe);
+        const double pair = source_add(tmpop, tmpopo);
+        const double weighted = source_mul(pair, tmpe);
+        const double interval = source_div(weighted, 2.0);
+        opsum = source_add(opsum, interval);
+        if (current_energy > epi[ml1m - 1]) {
+            if (sume > 1.0e-34) {
+                const double optp2 = source_div(opsum, sume);
+                while (current_energy > epi[ml1m - 1] && ml1m < n) {
+                    opakc[ml1m - 1] = source_add(opakc[ml1m - 1], optp2);
+                    ++(*updated_bins);
+                    ++ml1m;
+                }
+            }
+            opsum = 0.0;
+            sume = 0.0;
+        }
+        (void)mlm;
+    };
+
+    int mlm = mlmin + 1;
+    while (mlm <= mlmax) {
+#if (defined(__x86_64__) || defined(__i386__)) && (defined(__GNUC__) || defined(__clang__))
+        if (avx2_enabled_v064812324 && mlm + 3 <= mlmax &&
+            !(mlm <= ml2 && ml2 <= mlm + 3)) {
+            double energies[4];
+            double av[4];
+            bool all_far = true;
+            for (int lane = 0; lane < 4; ++lane) {
+                energies[lane] = temporary_energy(mlm + lane);
+                const double delet_lane = source_div(
+                    source_sub(energies[lane], line_energy_ev), dele);
+                av[lane] = std::abs(delet_lane);
+                all_far = all_far && av[lane] >= source_real_literal(5.0);
+            }
+            if (all_far) {
+                double raw[4];
+                voigte_small_a_farwing4_v064812324(av, aasmall, raw);
+                for (int lane = 0; lane < 4; ++lane) {
+                    const double profile = source_div(
+                        raw[lane], xstar_constants::kLegacyLinopacProfileNormalization);
+                    consume_profile_point_v064812324(mlm + lane, energies[lane], profile);
+                }
+                profile_used_avx2_v064812324 = true;
+                g_type50_vectorized_points_v064812324 += 4u;
+                mlm += 4;
+                continue;
+            }
+        }
+#endif
         const double current_energy = temporary_energy(mlm);
         const double delet = source_div(source_sub(current_energy, line_energy_ev), dele);
         double profile;
@@ -582,35 +722,12 @@ static int xstar_opacity_apply_line_profile_optimized_v064896(
         } else {
             profile = source_div(std::exp(-delet * delet), xstar_constants::kLegacyLinopacProfileNormalization);
         }
-        const double tmpopo = tmpop;
-        tmpop = optpp * profile;
-        const double tmpe = std::abs(source_sub(current_energy, previous_energy));
-        previous_energy = current_energy;
-        sume = source_add(sume, tmpe);
-        const double pair = source_add(tmpop, tmpopo);
-        const double weighted = source_mul(pair, tmpe);
-        const double interval = source_div(weighted, 2.0);
-        opsum = source_add(opsum, interval);
-        if (current_energy > epi[ml1m - 1]) {
-            if (sume > 1.0e-34) {
-                // Literal linopac stores optp2=opsum/sume and then performs a
-                // direct source-order opakc += optp2.  Production opakc is a
-                // finite, nonnegative continuum workspace; the 9.5.1
-                // isfinite/positive normalization was defensive hot-loop work
-                // not present in the source.
-                const double optp2 = source_div(opsum, sume);
-                while (current_energy > epi[ml1m - 1] && ml1m < n) {
-                    opakc[ml1m - 1] = source_add(opakc[ml1m - 1], optp2);
-                    // Full-profile linopac does not modify rccemis.  The
-                    // previous +=0.0 stores were provenance-era no-ops.
-                    ++(*updated_bins);
-                    ++ml1m;
-                }
-            }
-            opsum = 0.0;
-            sume = 0.0;
-        }
+        consume_profile_point_v064812324(mlm, current_energy, profile);
+        ++mlm;
     }
+    g_last_profile_vectorized_v064812324 = profile_used_avx2_v064812324 ? 1 : 0;
+    if (profile_used_avx2_v064812324) ++g_type50_vectorized_profiles_v064812324;
+    else ++g_type50_scalar_profiles_v064812324;
     const auto ended = std::chrono::steady_clock::now();
     *opacity_seconds = std::chrono::duration<double>(ended - started).count();
     write_message(errbuf, errbuf_size, use_voigt ? "native opacity voigt profile applied" : "native opacity gaussian profile applied");
@@ -635,6 +752,7 @@ int xstar_opacity_apply_line_profile_v1(
     char* errbuf,
     std::size_t errbuf_size
 ) {
+    g_last_profile_vectorized_v064812324 = 0;
     // Same executable, same ABI: set once before process start to force the
     // exact 0.6.48.9.5.1 Type-50 implementation for blocking A/B runs.
     static const bool use_optimized_standalone_v064896 = [] {
@@ -665,6 +783,30 @@ int xstar_opacity_apply_line_profile_v1(
         optpp, line_energy_ev, vturb_km_s, temperature_1e4k, atomic_mass_amu,
         natural_width_ev, seed_profiles, seed_radius, epi, ncn2, opakc,
         rccemis, updated_bins, opacity_seconds, errbuf, errbuf_size);
+}
+
+
+void xstar_opacity_type50_vector_perf_reset_v064812324(void) {
+    g_type50_vectorized_profiles_v064812324 = 0u;
+    g_type50_scalar_profiles_v064812324 = 0u;
+    g_type50_vectorized_points_v064812324 = 0u;
+    g_type50_bound_correction_steps_v064812324 = 0u;
+    g_last_profile_vectorized_v064812324 = 0;
+}
+
+void xstar_opacity_type50_vector_perf_snapshot_v064812324(
+    std::uint64_t* vectorized_profiles,
+    std::uint64_t* scalar_profiles,
+    std::uint64_t* vectorized_points,
+    std::uint64_t* bound_correction_steps) {
+    if (vectorized_profiles) *vectorized_profiles = g_type50_vectorized_profiles_v064812324;
+    if (scalar_profiles) *scalar_profiles = g_type50_scalar_profiles_v064812324;
+    if (vectorized_points) *vectorized_points = g_type50_vectorized_points_v064812324;
+    if (bound_correction_steps) *bound_correction_steps = g_type50_bound_correction_steps_v064812324;
+}
+
+int xstar_opacity_last_profile_vectorized_v064812324(void) {
+    return g_last_profile_vectorized_v064812324;
 }
 
 } // extern "C"

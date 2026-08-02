@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.12.3.24 - 2026-08-02
+
+- Add a generic Type-50 `linopac` performance path that algebraically localizes the valid 20,000-point temporary-grid interval and then corrects the estimated integer bounds with the literal source energy predicate. No element-Z or model-specific condition is used.
+- Add runtime-dispatched AVX2 evaluation for four independent small-damping (`0<a<=0.2`) far-wing Voigt values at a time. Every trapezoid, rebin decision, and `opakc +=` remains scalar and in the original source order. Non-AVX2 CPUs and `XSTAR_V064812324_FORCE_SCALAR_TYPE50=1` use the scalar path.
+- Preserve the accepted 12.3.22 Type-50 source eligibility gate and the 12.3.23 source `expo/eint` correction. Production-zone ABI remains 6048110.
+- Correct the diagnostic fixed-state Python replay so per-element `initial_global_populations` are populated from the captured dense source `xilevg` rather than an explicit empty mapping. This is diagnostic-only.
+- Add diagnostic-only call-1 population-state captures for eval-1 input, every DSEC post-mapback state, accepted-boundary post-mapback state, and detail-publication global projection.
+- Add a two-model qualifier for `ca19_ne1` and `ca19_ne1e8`. It performs candidate-vs-scalar nine-FITS bit-data equivalence, reports C++/FORTRAN timing and Type-50 profile work/vectorization, and localizes the Ca XVIII population discrepancy across last-DSEC, accepted-boundary, and detail-publication states.
+
 ## 0.6.48.12.3.23 - 2026-08-02
 
 - Repair the source `expo.f90` / `eint.f90` contract generically in the C++ fixed-state engine: source `expo()` clamps at +/-60, while the generic numerical overflow helper remains +/-700 for paths that do not call source `expo`.

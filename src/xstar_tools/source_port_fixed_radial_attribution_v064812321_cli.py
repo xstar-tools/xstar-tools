@@ -173,6 +173,22 @@ def main(argv: list[str] | None = None) -> int:
             bremsam=np.asarray(state.radiation.bremsam, dtype=float),
             bremsint=np.asarray(state.radiation.bremsint, dtype=float),
         )
+        xilevg = _read(capture / "global_xilevg.bin", nglobal) if nglobal else np.zeros(0)
+        bilevg = _read(capture / "global_bilevg.bin", nglobal) if nglobal else np.zeros(0)
+        rnisg = _read(capture / "global_rnisg.bin", nglobal) if nglobal else np.zeros(0)
+        global_level_index_by_key = {
+            (int(k[0]), int(k[1]), int(k[2])): int(v)
+            for k, v in dict(getattr(active_subset, "global_level_index_by_key", {})).items()
+        }
+        captured_global_populations = {
+            key: float(xilevg[index - 1])
+            for key, index in global_level_index_by_key.items()
+            if 1 <= int(index) <= xilevg.size
+        }
+        if xilevg.size and not captured_global_populations:
+            raise RuntimeError(
+                "captured dense global_xilevg is nonempty but no source global-level mapping was resolved"
+            )
         requests: list[FixedStateElementRequest] = []
         required: list[int] = []
         for z, abundance in enumerate(normalized.physical_abundances, start=1):
@@ -192,7 +208,10 @@ def main(argv: list[str] | None = None) -> int:
                     lfast=2,
                     critf=float(normalized.get("critf")),
                     use_source_ion_limits=True,
-                    initial_global_populations={},
+                    initial_global_populations={
+                        key: value for key, value in captured_global_populations.items()
+                        if int(key[0]) == int(z)
+                    },
                     initial_population_source="v064812321_cpp_fixed_radial_capture",
                     terminal_continuum_seed_mode="source-zero",
                     strict_context=True,
@@ -201,9 +220,6 @@ def main(argv: list[str] | None = None) -> int:
                 )
             )
 
-        xilevg = _read(capture / "global_xilevg.bin", nglobal) if nglobal else np.zeros(0)
-        bilevg = _read(capture / "global_bilevg.bin", nglobal) if nglobal else np.zeros(0)
-        rnisg = _read(capture / "global_rnisg.bin", nglobal) if nglobal else np.zeros(0)
         runtime = DsecMutableRuntimeState(
             temperature_t4=float(meta["temperature_k"]) / 1.0e4,
             electron_fraction_xee=float(meta["electron_fraction_xee"]),
@@ -212,7 +228,8 @@ def main(argv: list[str] | None = None) -> int:
             required_element_z=tuple(required),
             pressure=float(normalized.pressure_dyn_cm2),
             lcdd=int(normalized.lcdd),
-            global_level_populations={},
+            global_level_populations=dict(captured_global_populations),
+            global_level_index_by_key=dict(global_level_index_by_key),
             global_xilevg_by_index=xilevg.copy() if xilevg.size else None,
             global_bilevg_by_index=bilevg.copy() if bilevg.size else None,
             global_rnisg_by_index=rnisg.copy() if rnisg.size else None,
@@ -257,6 +274,8 @@ def main(argv: list[str] | None = None) -> int:
             "python_source_line_tau_count": int(n_lines),
             "active_max_line_index": int(active_max_line),
             "line_tau_domain_projection": str(line_tau_mode_in),
+            "captured_global_population_keys": int(len(captured_global_populations)),
+            "captured_global_population_sum": float(sum(captured_global_populations.values())),
             "temperature_k": float(result.temperature_k),
             "electron_fraction_input": float(result.electron_fraction_xee),
             "hmctot": float(result.hmctot),
@@ -269,6 +288,8 @@ def main(argv: list[str] | None = None) -> int:
         print("V064812321_PYTHON_FIXED_RADIAL_REPLAY=ACCEPT")
         print(f"V064812321_PYTHON_FIXED_RADIAL_SEQUENCE={meta['source_sequence']}")
         print(f"V064812321_PYTHON_FIXED_RADIAL_T={result.temperature_k:.17g}")
+        print(f"V064812324_PYTHON_CAPTURED_GLOBAL_POPULATION_KEYS={len(captured_global_populations)}")
+        print(f"V064812324_PYTHON_CAPTURED_GLOBAL_POPULATION_SUM={sum(captured_global_populations.values()):.17g}")
         return 0
     finally:
         built.atomic_state.close()

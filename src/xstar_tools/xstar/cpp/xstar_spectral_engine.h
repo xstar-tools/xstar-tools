@@ -150,6 +150,9 @@ void xstar_spectral_stats_init_v1(xstar_spectral_stats_v1* stats);
 void xstar_spectral_perf_init_v064892(xstar_spectral_perf_v064892* perf);
 void xstar_spectral_perf_reset_v064892(void);
 int xstar_spectral_perf_snapshot_v064892(xstar_spectral_perf_v064892* perf);
+void xstar_spectral_type50_vector_perf_reset_v064812324(void);
+void xstar_spectral_type50_vector_perf_snapshot_v064812324(
+    uint64_t* vectorized_profiles, uint64_t* scalar_profiles);
 int xstar_spectral_context_create_v1(
     xstar_spectral_context** context,
     char* error,

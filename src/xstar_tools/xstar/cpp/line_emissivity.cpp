@@ -492,6 +492,9 @@ extern "C" int xstar_opacity_apply_line_profile_v1(
     std::size_t errbuf_size
 );
 
+extern "C" int xstar_opacity_last_profile_vectorized_v064812324(void);
+
+
 struct xstar_spectral_context {
     xstar_spectral_stats_v1 cumulative{};
 };
@@ -499,6 +502,8 @@ struct xstar_spectral_context {
 namespace {
 
 thread_local xstar_spectral_perf_v064892 g_spectral_perf_v064892{};
+thread_local std::uint64_t g_type50_vectorized_profiles_v064812324 = 0u;
+thread_local std::uint64_t g_type50_scalar_profiles_v064812324 = 0u;
 
 std::size_t spectral_family_slot_v064892(int data_type) {
     switch (data_type) {
@@ -626,6 +631,17 @@ int xstar_spectral_perf_snapshot_v064892(xstar_spectral_perf_v064892* perf) {
         perf->abi_version = XSTAR_SPECTRAL_PERF_V064892_ABI_VERSION;
     }
     return 0;
+}
+
+void xstar_spectral_type50_vector_perf_reset_v064812324(void) {
+    g_type50_vectorized_profiles_v064812324 = 0u;
+    g_type50_scalar_profiles_v064812324 = 0u;
+}
+
+void xstar_spectral_type50_vector_perf_snapshot_v064812324(
+    std::uint64_t* vectorized_profiles, std::uint64_t* scalar_profiles) {
+    if (vectorized_profiles) *vectorized_profiles = g_type50_vectorized_profiles_v064812324;
+    if (scalar_profiles) *scalar_profiles = g_type50_scalar_profiles_v064812324;
 }
 
 int xstar_spectral_context_create_v1(
@@ -859,6 +875,12 @@ int xstar_spectral_apply_contributions_v1(
                         write_message(error, error_size, opacity_error);
                         return 10;
                     }
+                    if (!exact_grid_oracle && c.data_type == 50 && c.rate_type == 4) {
+                        if (xstar_opacity_last_profile_vectorized_v064812324())
+                            ++g_type50_vectorized_profiles_v064812324;
+                        else
+                            ++g_type50_scalar_profiles_v064812324;
+                    }
                     if (type50_diag_active_v064812321 && source_type50_family_v064812322) {
                         ++type50_actual_profile_calls_v064812321;
                         type50_updated_bins_v064812321 += static_cast<std::uint64_t>(std::max<long long>(0, updated));
@@ -959,6 +981,12 @@ int xstar_spectral_apply_contributions_v1(
             if (rc != 0) {
                 write_message(error, error_size, opacity_error[0] ? opacity_error : "native opacity line profile failed");
                 return 10;
+            }
+            if (!exact_grid_oracle && c.data_type == 50 && c.rate_type == 4) {
+                if (xstar_opacity_last_profile_vectorized_v064812324())
+                    ++g_type50_vectorized_profiles_v064812324;
+                else
+                    ++g_type50_scalar_profiles_v064812324;
             }
             if (type50_diag_active_v064812321 && source_type50_linopac_family(c.data_type, c.rate_type)) {
                 ++type50_rows_v064812321;
