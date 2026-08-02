@@ -9149,6 +9149,80 @@ LineRow merged_line_row(const LineRow& base, const LineRow* diagnostic) {
     return out;
 }
 
+std::vector<bool> source_detail_line_activity_shadow_v064812320(
+    const xstar_run_state::ProductWritingState& state,
+    const xstar_run_state::FixedEvaluationState& evaluation,
+    const std::vector<ElementMeta>& elements,
+    double hydrogen_density_cm3) {
+    // Literal Python/source-faithful fstepr2 publication shadow.  This is
+    // identity-only state: it never writes rcem, oplin, tau0, line profiles,
+    // transport, equilibrium, or the public xout_lines1 inventory.
+    long long maximum_line_index = 0;
+    for (const auto& line : state.line_identities) {
+        maximum_line_index = std::max(maximum_line_index, static_cast<long long>(line.line_index));
+    }
+    std::vector<bool> shadow(static_cast<std::size_t>(std::max<long long>(maximum_line_index, 0)) + 1u, false);
+    if (maximum_line_index <= 0) return shadow;
+
+    const auto& populations = !evaluation.source_detail_global_xilevg.empty()
+        ? evaluation.source_detail_global_xilevg : evaluation.source_global_xilevg;
+    if (populations.empty()) return shadow;
+
+    std::map<std::pair<std::string,int>, const xstar_run_state::LevelIdentityState*> level_by_ion_local;
+    const auto& source_levels = !state.detail_level_identities.empty()
+        ? state.detail_level_identities : state.level_identities;
+    for (const auto& level : source_levels) {
+        level_by_ion_local[{level.ion_label, static_cast<int>(level.upper_index)}] = &level;
+    }
+
+    std::map<int,double> abundance_by_z;
+    for (const auto& element : elements) abundance_by_z[element.element_z] = element.abundance;
+
+    // calc_emisab_ion uses a default-REAL 1.e-34 caller gate.  Cast through
+    // float to preserve the literal source comparison boundary.
+    const double endpoint_floor = static_cast<double>(static_cast<float>(1.0e-34));
+    constexpr double detail_activity_floor = 1.0e-64;
+    double stale_opakb1 = 0.0;
+    const auto& oplin = evaluation.source_workspace.oplin;
+
+    for (const auto& line : state.line_identities) {
+        if (line.rate_type != 4 || line.data_type != 50 || line.line_index <= 0) continue;
+        const auto lo_it = level_by_ion_local.find({line.ion_label, line.lower_local_index});
+        const auto up_it = level_by_ion_local.find({line.ion_label, line.upper_local_index});
+        if (lo_it == level_by_ion_local.end() || up_it == level_by_ion_local.end()) continue;
+        const auto& lo = *lo_it->second;
+        const auto& up = *up_it->second;
+        if (lo.atomic_number <= 0 || up.atomic_number != lo.atomic_number) continue;
+        const auto abundance_it = abundance_by_z.find(lo.atomic_number);
+        if (abundance_it == abundance_by_z.end()) continue;
+        if (lo.global_index <= 0 || up.global_index <= 0) continue;
+        const std::size_t gi_lo = static_cast<std::size_t>(lo.global_index - 1);
+        const std::size_t gi_up = static_cast<std::size_t>(up.global_index - 1);
+        if (gi_lo >= populations.size() || gi_up >= populations.size()) continue;
+
+        const double abundance_scale = abundance_it->second * hydrogen_density_cm3;
+        const double a_lo = populations[gi_lo] * abundance_scale;
+        const double a_up = populations[gi_up] * abundance_scale;
+        const bool endpoint_active = a_lo > endpoint_floor || a_up > endpoint_floor;
+        const double source_abund1 = lo.excitation_ev <= up.excitation_ev ? a_lo : a_up;
+        const std::size_t line_index = static_cast<std::size_t>(line.line_index);
+
+        if (endpoint_active) {
+            // Native source workspaces retain the one-based nplini guard, so
+            // line_index directly addresses oplin.  Recover only the caller-
+            // local opakb1 carry from the deterministic physical value.
+            if (line_index < oplin.size() && source_abund1 != 0.0) {
+                const double candidate = oplin[line_index] / source_abund1;
+                if (std::isfinite(candidate)) stale_opakb1 = candidate;
+            }
+            if (line_index < shadow.size()) shadow[line_index] = true;
+        } else if (std::abs(stale_opakb1 * source_abund1) > detail_activity_floor) {
+            if (line_index < shadow.size()) shadow[line_index] = true;
+        }
+    }
+    return shadow;
+}
+
 std::vector<LineRow> source_line_rows_from_identities(
     const xstar_run_state::ProductWritingState& state,
     const xstar_run_state::FixedEvaluationState& evaluation,
@@ -9161,6 +9235,9 @@ std::vector<LineRow> source_line_rows_from_identities(
     std::vector<LineRow> out;
     const auto workspace_index = line_workspace_index_by_line_index(state);
     const auto line_bridge = load_line_bridge_arrays(state, hdu_number);
+    const auto detail_activity_shadow = detail_order
+        ? source_detail_line_activity_shadow_v064812320(state, evaluation, elements, density_cm3)
+        : std::vector<bool>{};
     if (reference_mg11_product_state(state)) {
         out.reserve(detail_order ? 2644u : kOraclePublicLineInventory.size());
         if (detail_order) {
@@ -9214,7 +9291,11 @@ std::vector<LineRow> source_line_rows_from_identities(
                 ? two_plane_direct_then_compact(source_ws.rcem, rcem_stride, 1u, direct, compact) : line.emis_out;
             const double local_opacity = !source_ws.oplin.empty()
                 ? vector_value_direct_then_compact(source_ws.oplin, direct, compact) : line.opacity;
-            const bool signal = local_emis_in > 1.0e-64 || local_emis_out > 1.0e-64 || local_opacity > 1.0e-64;
+            const bool physical_signal = local_emis_in > 1.0e-64 || local_emis_out > 1.0e-64 || local_opacity > 1.0e-64;
+            const bool publication_shadow = id.line_index > 0 &&
+                static_cast<std::size_t>(id.line_index) < detail_activity_shadow.size() &&
+                detail_activity_shadow[static_cast<std::size_t>(id.line_index)];
+            const bool signal = physical_signal || publication_shadow;
             if (!signal || id.rate_type == 14 || id.rate_type == 9 ||
                 !(wavelength > 0.1) || !(wavelength < 9.0e9)) continue;
         } else {

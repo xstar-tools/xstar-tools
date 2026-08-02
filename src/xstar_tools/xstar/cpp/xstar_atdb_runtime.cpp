@@ -1009,16 +1009,14 @@ ProgramStorage lower_atdb_in_memory(const std::filesystem::path& atdb,const Prod
             }
         }
         for(int row=1;row<=l.n_rows;++row){const auto& r=l.rows[row];const auto& lv=row_level(l,row);const auto& b=block_for(l,r.ion_index);xstar_fixed_program_row_v1 pr{};pr.element_index=ei;pr.row=row;pr.superlevel=r.superlevel;pr.ion=r.ion_counter;pr.ion_charge=std::max(0,b.ion_stage-1);pr.initial_population=row==1?1.0:0.0;pr.energy_ev=lv.energy;pr.statistical_weight=lv.weight;pr.principal_n=lv.principal_n;pr.orbital_l=lv.orbital_l;int global=d.level_global_by_record[lv.record];
-            // v0.6.48.7.46.25.5.17.25.81: XSTAR npilev is indexed by the
-            // Type-13 source ordinal within an ion, not by the packed local
-            // level identifier stored in the record.  Mg contains ions whose
-            // local identifiers are not source-record ordered.  The previous
-            // lowering therefore attached the correct compact row to the
-            // wrong global xilevg slot (e.g. sequence-16 Mg compact row 2
-            // resolved to 2860 instead of source ordinal 2818).  Preserve the
-            // literal setptrs npilev ordinal for Mg; this is native topology,
-            // not a qualification-value substitution.
-            if (z == 12 && r.local_level > 0 &&
+            // v0.6.48.12.3.20: XSTAR npilev is indexed by the Type-13
+            // source encounter ordinal within an ion, not by the packed local
+            // level identifier stored in the record.  This was historically
+            // corrected only for Mg, but Ca XVIII demonstrates the same
+            // source topology at its superlevel/K-shell boundary.  Apply the
+            // literal setptrs npilev ordinal generically for every element;
+            // this is native addressing, never an empirical row shift.
+            if (r.local_level > 0 &&
                 static_cast<std::size_t>(r.local_level) < d.npilev.size() &&
                 r.ion_index > 0 &&
                 static_cast<std::size_t>(r.ion_index) < d.npilev[static_cast<std::size_t>(r.local_level)].size()) {
@@ -1036,7 +1034,7 @@ ProgramStorage lower_atdb_in_memory(const std::filesystem::path& atdb,const Prod
                 const auto* role_level = find_level(l, role_ion, role_local);
                 if (!role_level) continue;
                 int role_global = d.level_global_by_record[role_level->record];
-                if (z == 12 && role_local > 0 &&
+                if (role_local > 0 &&
                     static_cast<std::size_t>(role_local) < d.npilev.size() &&
                     role_ion > 0 && static_cast<std::size_t>(role_ion) < d.npilev[static_cast<std::size_t>(role_local)].size()) {
                     const int source_ordinal_global =

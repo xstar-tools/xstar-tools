@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.48.12.3.20 — generic npilev source ordinals + Type50 fstepr2 publication shadow - 2026-08-02
+
+- Generalize the existing FORTRAN `setptrs`/`npilev` source-ordinal mapping from Mg-only to every element for both primary global row ownership and row aliases. This is a topology/addressing correction, not an element-specific row shift.
+- Add the accepted source-faithful Type-50/rate-4 `fstepr2` publication-activity shadow to the generic C++ detail-line writer. It mirrors the default-REAL `1.e-34` endpoint gate, reconstructs caller-local stale `opakb1` from the retained physical `oplin`, and applies only the `1.d-64` detail identity gate.
+- The shadow is output-only and does not modify `rcem`, `oplin`, `tau0`, profiles, transport, equilibrium, or the public `xout_lines1.fits` inventory.
+- Targeted qualification remains `helike_type69/ca19_ne1`, with blocking gates for the Ca XVIII local-level >=25 `index/e_excitation/population` tail and full `xo01_detal2` FORTRAN inventory. `xo01_detal3`, Option 19/`xout_rrc1`, Option 27, and `xo01_detal4` are frozen.
+
 ## 0.6.48.12.3.19 — source detailed-FITS identity/inventory and Type53 direction closure - 2026-08-01
 
 - Extend the 12.3.17/12.3.18 population-lifetime work without changing its accepted Option-19/RRC physics. The remaining `xo01_detail.fits` mismatch is an identity/publication problem: FORTRAN `fstepr` walks every source ion/local-level `npilev` role, while the generic C++ metadata had collapsed each shared continuum/next-ion-ground compact row to one identity and then applied a non-source terminal-stage filter.
