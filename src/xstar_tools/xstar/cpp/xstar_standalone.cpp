@@ -2398,6 +2398,51 @@ void capture_source_ion_stage_fractions_v064812316(
     }
 }
 
+void capture_source_detail_publication_state_v064812318(
+    const xstar_fixed_state_context* context,
+    std::vector<double>& populations,
+    std::map<int, std::array<int,4>>& windows) {
+    populations.clear();
+    windows.clear();
+    if (!context) return;
+    std::array<char, XSTAR_FIXED_STATE_MESSAGE_SIZE> message{};
+    std::size_t count = 0;
+    int rc = xstar_fixed_state_get_last_detail_pre_mapback_populations_v064812318(
+        context, nullptr, 0u, &count, message.data(), message.size());
+    if (rc != 0) {
+        throw std::runtime_error(std::string("cannot query source detail pre-mapback populations: ") + message.data());
+    }
+    populations.resize(count, 0.0);
+    if (count > 0u) {
+        rc = xstar_fixed_state_get_last_detail_pre_mapback_populations_v064812318(
+            context, populations.data(), populations.size(), &count, message.data(), message.size());
+        if (rc != 0) {
+            throw std::runtime_error(std::string("cannot capture source detail pre-mapback populations: ") + message.data());
+        }
+        populations.resize(count);
+    }
+
+    count = 0;
+    rc = xstar_fixed_state_get_last_active_stage_windows_v064812318(
+        context, nullptr, 0u, &count, message.data(), message.size());
+    if (rc != 0) {
+        throw std::runtime_error(std::string("cannot query source detail active windows: ") + message.data());
+    }
+    std::vector<xstar_fixed_active_stage_window_v064812318> rows(count);
+    if (count > 0u) {
+        rc = xstar_fixed_state_get_last_active_stage_windows_v064812318(
+            context, rows.data(), rows.size(), &count, message.data(), message.size());
+        if (rc != 0) {
+            throw std::runtime_error(std::string("cannot capture source detail active windows: ") + message.data());
+        }
+    }
+    for (std::size_t i = 0; i < count; ++i) {
+        const auto& row = rows[i];
+        if (row.element_z < 1) continue;
+        windows[row.element_z] = {{row.min_stage, row.max_stage, row.full_row_start, row.full_row_end}};
+    }
+}
+
 struct FixedDsecSnapshot {
     std::string kind;
     std::size_t sequence = 0;
@@ -2439,6 +2484,9 @@ struct FixedDsecSnapshot {
     std::vector<double> source_global_xilevg;
     std::vector<double> source_global_rnisg;
     std::map<int, std::vector<double>> source_ion_stage_fractions;
+    std::vector<double> source_detail_pre_mapback_populations;
+    std::map<int, std::array<int,4>> source_detail_active_windows;
+    std::vector<double> source_detail_global_xilevg;
     std::vector<double> populations;
     std::vector<double> lte_populations;
     std::vector<double> radiation_energy_ev;
@@ -2565,6 +2613,9 @@ FixedDsecSnapshot lightweight_snapshot_v65(const FixedDsecSnapshot& source) {
     out.thermal_families_native = source.thermal_families_native;
     out.dsec_runtime_state_abi = source.dsec_runtime_state_abi;
     out.source_ion_stage_fractions = source.source_ion_stage_fractions;
+    out.source_detail_pre_mapback_populations = source.source_detail_pre_mapback_populations;
+    out.source_detail_active_windows = source.source_detail_active_windows;
+    out.source_detail_global_xilevg = source.source_detail_global_xilevg;
     out.native_line_count = source.native_line_count;
     out.native_continuum_count = source.native_continuum_count;
     out.exact_source_workspace_flags = source.exact_source_workspace_flags;
@@ -4458,6 +4509,9 @@ int command_run_fixed_dsec(const Options& options) {
         target.source_global_xilevg = source.source_global_xilevg;
         target.source_global_rnisg = source.source_global_rnisg;
         target.source_ion_stage_fractions = source.source_ion_stage_fractions;
+        target.source_detail_pre_mapback_populations = source.source_detail_pre_mapback_populations;
+        target.source_detail_active_windows = source.source_detail_active_windows;
+        target.source_detail_global_xilevg = source.source_detail_global_xilevg;
         target.populations = source.populations;
         target.radiation_energy_ev = source.radiation_energy_ev;
         target.radiation_flux = source.radiation_flux;
@@ -5525,6 +5579,9 @@ xstar_run_state::FixedEvaluationState copy_real_native_snapshot(
     target.source_global_xilevg = source.source_global_xilevg;
     target.source_global_rnisg = source.source_global_rnisg;
     target.source_ion_stage_fractions = source.source_ion_stage_fractions;
+    target.source_detail_pre_mapback_populations = source.source_detail_pre_mapback_populations;
+    target.source_detail_active_windows = source.source_detail_active_windows;
+    target.source_detail_global_xilevg = source.source_detail_global_xilevg;
     target.populations = source.populations;
     target.radiation_energy_ev = source.radiation_energy_ev;
     target.radiation_flux = source.radiation_flux;
@@ -9555,6 +9612,9 @@ xstar_run_state::FixedEvaluationState copy_fixed_evaluation_state_v172524(const 
     target.source_global_xilevg = source.source_global_xilevg;
     target.source_global_rnisg = source.source_global_rnisg;
     target.source_ion_stage_fractions = source.source_ion_stage_fractions;
+    target.source_detail_pre_mapback_populations = source.source_detail_pre_mapback_populations;
+    target.source_detail_active_windows = source.source_detail_active_windows;
+    target.source_detail_global_xilevg = source.source_detail_global_xilevg;
     target.populations = source.populations;
     target.radiation_energy_ev = source.radiation_energy_ev;
     target.radiation_flux = source.radiation_flux;
@@ -11476,6 +11536,56 @@ void update_global_populations_v67(
         workspace.global_bilevg = data.global_bilevg;
         workspace.global_rnisg = data.global_rnisg;
     }
+}
+
+
+std::vector<double> source_detail_global_projection_v064812318(
+    const StandaloneControllerDataV67& data,
+    const std::vector<double>& pre_mapback,
+    const std::map<int, std::array<int,4>>& windows) {
+    std::vector<double> dense(data.global_level_count, 0.0);
+    if (!data.program || pre_mapback.empty() || windows.empty()) return dense;
+
+    const auto write_aliases = [&](std::size_t packed_row, double value) {
+        bool wrote = false;
+        if (packed_row < data.population_global_level_aliases.size()) {
+            const auto& aliases = data.population_global_level_aliases[packed_row];
+            for (const int global : aliases) {
+                if (global <= 0 || static_cast<std::size_t>(global) > dense.size()) continue;
+                dense[static_cast<std::size_t>(global - 1)] = value;
+                wrote = true;
+            }
+        }
+        if (!wrote && packed_row < data.population_global_level_index.size()) {
+            const int global = data.population_global_level_index[packed_row];
+            if (global > 0 && static_cast<std::size_t>(global) <= dense.size()) {
+                dense[static_cast<std::size_t>(global - 1)] = value;
+            }
+        }
+    };
+
+    for (const auto& element : data.program->element_metadata) {
+        const auto found = windows.find(element.atomic_number);
+        if (found == windows.end()) continue;
+        const auto& window = found->second;
+        const int min_stage = window[0];
+        const int max_stage = window[1];
+        const int full_row_start = window[2];
+        const int full_row_end = window[3];
+        (void)min_stage;
+        if (full_row_start < 1 || full_row_end < full_row_start) continue;
+        for (int full_row = full_row_start; full_row <= full_row_end; ++full_row) {
+            // calc_hmc_element visits the next inactive ion after the highest
+            // retained stage and zeros the shared terminal/next-ground row.
+            // fstepr sees that zero, while internal shared boundaries between
+            // active ions retain their common compact value and both aliases.
+            if (max_stage < element.atomic_number && full_row == full_row_end) continue;
+            const std::size_t packed = static_cast<std::size_t>(element.row_offset + full_row - 1);
+            if (packed >= pre_mapback.size()) continue;
+            write_aliases(packed, pre_mapback[packed]);
+        }
+    }
+    return dense;
 }
 
 void commit_call2_to_call3_global_state_v82_patch52(
@@ -13574,6 +13684,11 @@ int standalone_iteration_evaluator_v67(
         snapshot.populations.resize(output.populations_count);
         capture_source_ion_stage_fractions_v064812316(
             data->fixed_context, snapshot.source_ion_stage_fractions);
+        capture_source_detail_publication_state_v064812318(
+            data->fixed_context, snapshot.source_detail_pre_mapback_populations,
+            snapshot.source_detail_active_windows);
+        snapshot.source_detail_global_xilevg = source_detail_global_projection_v064812318(
+            *data, snapshot.source_detail_pre_mapback_populations, snapshot.source_detail_active_windows);
         snapshot.lte_populations.resize(source.lte_populations_count);
         snapshot.spectrum.resize(output.spectrum_count);
         snapshot.opacity.resize(output.opacity_count);
@@ -14248,6 +14363,11 @@ FixedDsecSnapshot evaluate_full_boundary_v67(
     snapshot.populations.resize(output.populations_count);
     capture_source_ion_stage_fractions_v064812316(
         data.fixed_context, snapshot.source_ion_stage_fractions);
+    capture_source_detail_publication_state_v064812318(
+        data.fixed_context, snapshot.source_detail_pre_mapback_populations,
+        snapshot.source_detail_active_windows);
+    snapshot.source_detail_global_xilevg = source_detail_global_projection_v064812318(
+        data, snapshot.source_detail_pre_mapback_populations, snapshot.source_detail_active_windows);
     snapshot.spectrum.resize(output.spectrum_count);
     snapshot.opacity.resize(output.opacity_count);
     snapshot.lte_populations.resize(source.lte_populations_count);

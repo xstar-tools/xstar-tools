@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.12.3.18 — source `fstepr` detail-population lifetime separation - 2026-08-01
+
+- Keep the accepted 12.3.17 post-mapback population view unchanged for Option-19/Type53/RRC physics. The `ca19_ne1` host run closes Ca XVII Option-19 to <0.1% and removes all non-source Ca XVIII RRC rows, so this stage does not alter that spectral path.
+- Repair the 12.3.17 overcorrection in `xo01_detail.fits:XSTAR_RADIAL`. FORTRAN `fstepr` publishes the global `xilevg` produced by `calc_hmc_all`, with the literal `xilev > 1.d-34` gate. `calc_hmc_all` maps the overlapping local element array back ion-by-ion (`1..nlev-1`, then the terminal row), so its public global identities cannot be reconstructed by blindly expanding every compact row after inactive zeros are filled.
+- Retain the solved compact/full-row population snapshot plus the per-element active `mml/mmu` window, then reconstruct the source `calc_hmc_all` global writeback using the actual compact-row alias topology. Internal shared rows between active ions retain both global identities; when the highest active stage is truncated, the upper shared terminal/next-ground row is suppressed because the following inactive ion zeroes that local overlap before the global map-back.
+- Use the dedicated dense detail snapshot only for `xo01_detail.fits` population publication. LTE continues to use the retained source `rnisg` surface; no `lte==0` heuristic is introduced.
+- Add a single-model `ca19_ne1` qualifier requiring the FORTRAN Ca XVIII radial lifetime (32, 32, 31, 0, 0 rows), exact identities, <=1% population/LTE values, no stale outer Ca XVIII row, frozen Option-19/RRC closure, frozen Option-27, and pruned/forced equivalence.
+- No Ca-specific production branch, empirical scaling, solver change, or production-zone ABI change. ABI remains 6048110.
+
 ## 0.6.48.12.3.17 — source post-map-back terminal-alias RRC repair - 2026-08-01
 
 - Fix the remaining low-density Ca Option-19/RRC defect without empirical scaling. FORTRAN `calc_hmc_element` maps the compact highest-active-ion continuum row back to `xileve`, then the next inactive ion zeros that same overlapping row before `calc_emisab_all`/`calc_emis_all`; C++ had exposed the compact normalization value directly to spectral construction and retained it as a physical next-ion ground population.

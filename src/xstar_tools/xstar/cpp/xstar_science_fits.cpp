@@ -664,11 +664,20 @@ double public_detail_population_for_level(
     const std::map<int,std::size_t>& compact_by_global,
     const xstar_run_state::LevelIdentityState& level,
     double fallback) {
-    // v0.6.48.12.3.2: fstepr publishes xilevg by the dense source global
-    // level identity.  The compact element vector is not a publication
-    // address space: continuum aliases and terminal/ground aliases can map a
-    // single compact row to multiple global xilevg slots.  Prefer the retained
-    // dense accepted-boundary projection whenever available.
+    // v0.6.48.12.3.18: fstepr publication has a distinct source lifetime
+    // from the post-mapback xilevg used by calc_emisab_all/calc_emis_all.
+    // The retained dense detail projection expands internal active shared rows
+    // to their source global aliases, but suppresses the upper terminal row
+    // that the following inactive ion zeroes before fstepr.  A zero in this
+    // surface is authoritative.
+    if (level.global_index > 0 && !evaluation.source_detail_global_xilevg.empty()) {
+        const std::size_t global0 = static_cast<std::size_t>(level.global_index - 1);
+        if (global0 < evaluation.source_detail_global_xilevg.size()) {
+            const double value = evaluation.source_detail_global_xilevg[global0];
+            return std::isfinite(value) ? value : 0.0;
+        }
+    }
+    // Backward-compatible states predate the dedicated fstepr surface.
     if (level.global_index > 0) {
         const std::size_t global0 = static_cast<std::size_t>(level.global_index - 1);
         if (global0 < evaluation.source_global_xilevg.size()) {

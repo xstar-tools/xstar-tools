@@ -1,3 +1,5 @@
+> **0.6.48.12.3.18 source-detail lifetime repair:** keeps the accepted 12.3.17 post-mapback Option-19/RRC physics, but reconstructs FORTRAN `calc_hmc_all` per-ion global `xilevg` writeback for `fstepr` from a separate compact active-window snapshot. This targets only `ca19_ne1` and requires the Ca XVIII `XSTAR_RADIAL` lifetime 32/32/31/0/0 with <=1% population/LTE parity.
+
 > **0.6.48.12.3.9 O VII generic terminal-seed repair:** promotes the source/Python `x(ipmat2+1)=0.` normalization-row seed to every element before `msolvelucy`; qualification is restricted to `o7_ne1e12` and verifies eval-2/25/26 seed zero plus FORTRAN trajectory/thermal closure.
 
 > **0.6.48.12.3.8 O VII state-transition attribution:** freezes the 12.3.7 Type88 fix and compares Python/C++ call-1 state writeback through evaluation 24 for `o7_ne1e12`. It captures full O `xileve/rnise/bileve` state and selected detailed solves to distinguish LTE/writeback, remapping, and later same-state physics without changing DSEC tolerances or running broader suites.

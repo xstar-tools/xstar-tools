@@ -3177,6 +3177,12 @@ struct xstar_fixed_state_context_impl {
     bool preliminary_type7_legacy_compat_v06481171 = false;
     std::vector<NativeRecordDiagnostic> last_record_diagnostics;
     std::vector<NativeElementDiagnostic> last_element_diagnostics;
+    // v0.6.48.12.3.18: fstepr publication lifetime is distinct from the
+    // post-mapback population view consumed by calc_emisab_all/calc_emis_all.
+    // Retain the raw solved full-element projection plus the active stage
+    // windows so the detail writer can reproduce source per-level inventory.
+    std::vector<double> last_detail_pre_mapback_populations_v064812318;
+    std::vector<std::array<int,5>> last_active_stage_windows_v064812318;
     double last_temperature_k = 0.0;
     double last_electron_density_cm3 = 0.0;
     double last_hydrogen_density_cm3 = 0.0;
@@ -10092,6 +10098,8 @@ int run_impl(
     validate_io(input, output);
     ctx.last_record_diagnostics.clear();
     ctx.last_element_diagnostics.clear();
+    ctx.last_detail_pre_mapback_populations_v064812318.clear();
+    ctx.last_active_stage_windows_v064812318.clear();
     ctx.last_element_thermal_budget.clear();
     ctx.last_computed_element_thermal_budget.clear();
     ctx.last_element_electron_contribution.clear();
@@ -10650,6 +10658,9 @@ int run_impl(
                 : make_full_element_view(element));
         ctx.retained_active_stage_windows[element.element_z] =
             std::make_pair(active.min_stage, active.max_stage);
+        ctx.last_active_stage_windows_v064812318.push_back({{
+            element.element_z, active.min_stage, active.max_stage,
+            active.full_row_start, active.full_row_end}});
 
         const bool force_full_record_traversal_v064812315 =
             environment_flag("XSTAR_V064812315_FORCE_FULL_RECORD_TRAVERSAL");
@@ -11287,17 +11298,23 @@ int run_impl(
             }
         }
 
-        std::vector<double> full_populations(static_cast<std::size_t>(element.n_rows), 0.0);
+        std::vector<double> full_populations_pre_mapback(static_cast<std::size_t>(element.n_rows), 0.0);
         for (std::size_t row = 0; row < buffers.populations.size(); ++row) {
             const int full_row = active.full_row_start + static_cast<int>(row);
-            // Source calc_hmc_element map-back subsequently visits the next
-            // inactive ion and zeros its ground row, which aliases this compact
-            // terminal normalization row.  Preserve the compact solver value
-            // internally, but publish/retain the post-map-back xileve state.
-            if (active.max_stage < element.element_z && full_row == active.full_row_end) {
-                continue;
-            }
-            full_populations[static_cast<std::size_t>(full_row - 1)] = buffers.populations[row];
+            full_populations_pre_mapback[static_cast<std::size_t>(full_row - 1)] = buffers.populations[row];
+        }
+        ctx.last_detail_pre_mapback_populations_v064812318.insert(
+            ctx.last_detail_pre_mapback_populations_v064812318.end(),
+            full_populations_pre_mapback.begin(), full_populations_pre_mapback.end());
+
+        std::vector<double> full_populations = full_populations_pre_mapback;
+        if (active.max_stage < element.element_z && active.full_row_end >= 1 &&
+            static_cast<std::size_t>(active.full_row_end) <= full_populations.size()) {
+            // Source calc_hmc_element subsequently visits the next inactive ion
+            // and zeros the shared terminal normalization/next-ground row before
+            // calc_emisab_all/calc_emis_all.  Keep that post-mapback physics
+            // surface distinct from the pre-mapback detail publication snapshot.
+            full_populations[static_cast<std::size_t>(active.full_row_end - 1)] = 0.0;
         }
         all_populations.insert(all_populations.end(), full_populations.begin(), full_populations.end());
         fixed_full_population_offset += full_populations.size();
@@ -15041,6 +15058,64 @@ int xstar_fixed_state_get_last_ion_stage_fractions_v064812316(
         }
     }
     copy_text(message, message_size, "native final ion-stage fractions returned");
+    return 0;
+}
+
+int xstar_fixed_state_get_last_detail_pre_mapback_populations_v064812318(
+    const xstar_fixed_state_context* context,
+    double* values,
+    size_t capacity,
+    size_t* count,
+    char* message,
+    size_t message_size) {
+    if (!context || !count) {
+        copy_text(message, message_size, "context and detail population count are required");
+        return 1;
+    }
+    const auto& source = context->last_detail_pre_mapback_populations_v064812318;
+    *count = source.size();
+    if (!values) {
+        copy_text(message, message_size, "native detail pre-mapback population count returned");
+        return 0;
+    }
+    if (capacity < source.size()) {
+        copy_text(message, message_size, "detail pre-mapback population output capacity too small");
+        return 3;
+    }
+    std::copy(source.begin(), source.end(), values);
+    copy_text(message, message_size, "native detail pre-mapback populations returned");
+    return 0;
+}
+
+int xstar_fixed_state_get_last_active_stage_windows_v064812318(
+    const xstar_fixed_state_context* context,
+    xstar_fixed_active_stage_window_v064812318* rows,
+    size_t capacity,
+    size_t* count,
+    char* message,
+    size_t message_size) {
+    if (!context || !count) {
+        copy_text(message, message_size, "context and active-window count are required");
+        return 1;
+    }
+    const auto& source = context->last_active_stage_windows_v064812318;
+    *count = source.size();
+    if (!rows) {
+        copy_text(message, message_size, "native active-stage window count returned");
+        return 0;
+    }
+    if (capacity < source.size()) {
+        copy_text(message, message_size, "active-stage window output capacity too small");
+        return 3;
+    }
+    for (std::size_t i = 0; i < source.size(); ++i) {
+        rows[i].element_z = source[i][0];
+        rows[i].min_stage = source[i][1];
+        rows[i].max_stage = source[i][2];
+        rows[i].full_row_start = source[i][3];
+        rows[i].full_row_end = source[i][4];
+    }
+    copy_text(message, message_size, "native active-stage windows returned");
     return 0;
 }
 

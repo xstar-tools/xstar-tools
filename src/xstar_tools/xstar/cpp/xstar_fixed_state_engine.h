@@ -546,6 +546,19 @@ typedef struct xstar_fixed_ion_stage_fraction_v064812316 {
     double fraction;
 } xstar_fixed_ion_stage_fraction_v064812316;
 
+/* v0.6.48.12.3.18 additive fstepr publication snapshot.  The pre-mapback
+ * population surface preserves the compact solved levels before the shared
+ * terminal normalization row is suppressed for post-HMC spectral physics.
+ * Active windows let the product writer reproduce calc_hmc_element/fstepr
+ * lifetime without changing the production-zone ABI. */
+typedef struct xstar_fixed_active_stage_window_v064812318 {
+    int32_t element_z;
+    int32_t min_stage;
+    int32_t max_stage;
+    int32_t full_row_start;
+    int32_t full_row_end;
+} xstar_fixed_active_stage_window_v064812318;
+
 typedef struct xstar_fixed_state_context xstar_fixed_state_context;
 
 XSTAR_FIXED_STATE_EXPORT uint32_t xstar_fixed_state_engine_abi_version(void);
@@ -688,6 +701,20 @@ XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_get_last_element_product_diagnost
 XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_get_last_ion_stage_fractions_v064812316(
     const xstar_fixed_state_context* context,
     xstar_fixed_ion_stage_fraction_v064812316* rows,
+    size_t capacity,
+    size_t* count,
+    char* message,
+    size_t message_size);
+XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_get_last_detail_pre_mapback_populations_v064812318(
+    const xstar_fixed_state_context* context,
+    double* values,
+    size_t capacity,
+    size_t* count,
+    char* message,
+    size_t message_size);
+XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_get_last_active_stage_windows_v064812318(
+    const xstar_fixed_state_context* context,
+    xstar_fixed_active_stage_window_v064812318* rows,
     size_t capacity,
     size_t* count,
     char* message,

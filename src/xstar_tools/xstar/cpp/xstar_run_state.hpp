@@ -247,6 +247,14 @@ struct FixedEvaluationState {
     // full level populations, this surface excludes the compact normalization
     // row when it aliases the next ion ground at a truncated active window.
     std::map<int, std::vector<double>> source_ion_stage_fractions;
+    // v0.6.48.12.3.18: source fstepr publication lifetime.  Retain the
+    // solved compact/full-row surface so the controller can reconstruct the
+    // literal calc_hmc_all per-ion global map-back independently of the C++
+    // all-row alias expansion.  The tuple is {min_stage,max_stage,full_row_start,full_row_end}.
+    std::vector<double> source_detail_pre_mapback_populations;
+    std::map<int, std::array<int,4>> source_detail_active_windows;
+    // Dense global-level projection used only by fstepr/xo01_detail.
+    std::vector<double> source_detail_global_xilevg;
     std::vector<double> populations;
     std::vector<double> radiation_energy_ev;
     std::vector<double> radiation_flux;
