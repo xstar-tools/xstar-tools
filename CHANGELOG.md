@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 0.6.48.12.3.21.2 - 2026-08-02
+
+- Fix the one-shot fixed-radial Python replay when the native C++ line-tau workspace is an active-element source-index prefix while Python retains the full ATDB `nlsvn` domain.
+- Preserve source index `line_index-1`, require the native prefix to cover every active source line, and zero-extend only the inactive tail.
+- Keep production science unchanged; resume mode reuses the existing C++ diagnostic capture.
+
 ## 0.6.48.12.3.21.1 - 2026-08-02
 
 Diagnostic hotfix only. Fixes the one-shot Python radial replay import so `FixedStateElementRequest` is imported from `xstar.local_zone`, where it is defined. Adds package-local `PYTHONPATH` provenance validation, disables user-site shadowing, and adds a resume wrapper that reuses an already completed 12.3.21 C++ diagnostic capture. No production science or C++ numerical implementation is changed.

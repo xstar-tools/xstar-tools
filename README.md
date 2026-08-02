@@ -1,3 +1,5 @@
+> **0.6.48.12.3.21.2 diagnostic hotfix:** fixes the fixed-radial replay line-tau domain mismatch by preserving the source-aligned active-line prefix, discarding the native spare capacity slot, and zero-extending it to the full Python source `nlsvn` domain. It remains runnable directly from an unpacked source tree and can resume an existing 12.3.21/12.3.21.1 C++ capture without rerunning the model.
+
 > **0.6.48.12.3.21.1 diagnostic hotfix:** fixes the pure-Python fixed-radial replay import and supports running directly from the unpacked source tree via `PYTHONPATH`; no installation is required. Existing 12.3.21 C++ diagnostic captures can be resumed without rerunning the C++ model.
 
 > **0.6.48.12.3.21 diagnostic-only:** this revision does not change production science. It targets only `helike_type69/ca19_ne1` to attribute the remaining Ca XVIII/Ca XVII excited-level matrix discrepancy at the first published radial recompute and measure literal Type-50 `linopac` gate/work counts before any further repair.

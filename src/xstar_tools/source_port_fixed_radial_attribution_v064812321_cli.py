@@ -46,6 +46,35 @@ def _tau_physical(values: np.ndarray, expected: int) -> np.ndarray:
     return out
 
 
+def _line_tau_source_domain(
+    values: np.ndarray, expected: int, active_max_line: int
+) -> tuple[np.ndarray, str]:
+    """Project native runtime line tau onto Python's full source line domain.
+
+    Native C++ uses ``runtime_line_tau[line_index_one_based - 1]`` and allocates
+    ``maximum_active_line_index + 1`` slots.  The final native slot is spare
+    capacity, not source line ``maximum_active_line_index + 1``.  Python keeps
+    the complete source ``1:nlsvn`` domain.  Copy exactly the source-aligned
+    active prefix (lines 1..active_max_line), discard the native spare slot,
+    and zero-extend the inactive ATDB tail.
+    """
+    if expected < 0 or active_max_line < 0 or active_max_line > expected:
+        raise RuntimeError(
+            f"invalid line domain: active_max={active_max_line}, source_count={expected}"
+        )
+    raw = np.asarray(values, dtype=float).reshape(-1)
+    if raw.size < active_max_line:
+        raise RuntimeError(
+            f"native line-tau prefix has {raw.size} slots but source line {active_max_line} is required"
+        )
+    out = np.zeros(expected, dtype=float)
+    if active_max_line:
+        out[:active_max_line] = raw[:active_max_line]
+    if active_max_line == expected:
+        return out, "active_prefix_exact_source_domain"
+    return out, "active_prefix_zero_extend"
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--run-script", required=True)
@@ -101,12 +130,34 @@ def main(argv: list[str] | None = None) -> int:
         n_cont = int(derived.ncsvn)
         tau_in_raw = _read(capture / "continuum_tau_in.bin", ntau)
         tau_out_raw = _read(capture / "continuum_tau_out.bin", ntau)
-        line_tau_in = _read(capture / "line_tau_in.bin", nline_tau) if nline_tau else np.zeros(n_lines, dtype=float)
-        line_tau_out = _read(capture / "line_tau_out.bin", nline_tau) if nline_tau else np.zeros(n_lines, dtype=float)
-        if line_tau_in.size != n_lines or line_tau_out.size != n_lines:
+        line_tau_in_raw = _read(capture / "line_tau_in.bin", nline_tau) if nline_tau else np.zeros(0, dtype=float)
+        line_tau_out_raw = _read(capture / "line_tau_out.bin", nline_tau) if nline_tau else np.zeros(0, dtype=float)
+        active_subset = state.control.get("active_atdb_subset")
+        active_line_indices = np.asarray(
+            getattr(active_subset, "line_indices", ()), dtype=np.int64
+        ).reshape(-1) if active_subset is not None else np.zeros(0, dtype=np.int64)
+        active_max_line = int(active_line_indices.max()) if active_line_indices.size else 0
+        # Native storage is zero based by source line_index-1.  A native prefix
+        # of length N therefore covers source line indices 1..N.
+        if active_max_line > nline_tau:
             raise RuntimeError(
-                f"captured line-tau length {line_tau_in.size}/{line_tau_out.size}; Python source state expects {n_lines}"
+                f"captured line-tau prefix has {nline_tau} slots but active source line index {active_max_line} is required"
             )
+        line_tau_in, line_tau_mode_in = _line_tau_source_domain(
+            line_tau_in_raw, n_lines, active_max_line
+        )
+        line_tau_out, line_tau_mode_out = _line_tau_source_domain(
+            line_tau_out_raw, n_lines, active_max_line
+        )
+        if line_tau_mode_in != line_tau_mode_out:
+            raise RuntimeError(
+                f"line-tau domain projection mismatch: inward={line_tau_mode_in}, outward={line_tau_mode_out}"
+            )
+        print(f"V064812321_CAPTURED_LINE_TAU_COUNT={nline_tau}")
+        print(f"V064812321_PYTHON_SOURCE_LINE_TAU_COUNT={n_lines}")
+        print(f"V064812321_ACTIVE_MAX_LINE_INDEX={active_max_line}")
+        print(f"V064812321_LINE_TAU_DOMAIN_PROJECTION={line_tau_mode_in.upper()}")
+        print("V064812321_LINE_TAU_SOURCE_INDEX_ALIGNMENT=ACCEPT")
         escape = EscapeProbabilityContext(
             line_tau_in=line_tau_in,
             line_tau_out=line_tau_out,
@@ -202,6 +253,10 @@ def main(argv: list[str] | None = None) -> int:
             "schema": "xstar-tools-v064812321-python-fixed-radial-attribution-v1",
             "source_sequence": int(meta["source_sequence"]),
             "element_z": int(args.element_z),
+            "captured_line_tau_count": int(nline_tau),
+            "python_source_line_tau_count": int(n_lines),
+            "active_max_line_index": int(active_max_line),
+            "line_tau_domain_projection": str(line_tau_mode_in),
             "temperature_k": float(result.temperature_k),
             "electron_fraction_input": float(result.electron_fraction_xee),
             "hmctot": float(result.hmctot),
