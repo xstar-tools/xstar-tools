@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.12.3.17 — source post-map-back terminal-alias RRC repair - 2026-08-01
+
+- Fix the remaining low-density Ca Option-19/RRC defect without empirical scaling. FORTRAN `calc_hmc_element` maps the compact highest-active-ion continuum row back to `xileve`, then the next inactive ion zeros that same overlapping row before `calc_emisab_all`/`calc_emis_all`; C++ had exposed the compact normalization value directly to spectral construction and retained it as a physical next-ion ground population.
+- Add a generic post-map-back population view that zeros only the shared upper-boundary row when `active.max_stage < element_z`. Use it for bound-free/RRC and broad spectral abundance consumers while leaving compact solver/thermal arithmetic unchanged.
+- Commit the same post-map-back zero into the full population output/global `xilevg` state, preventing stale upper-boundary normalization aliases from surviving into later evaluations or `xo01_detail.fits`. Qualification-only fixed-state closure applies the same rule.
+- This source lifetime explains both observed `ca19_ne1` symptoms: the 25 extra Ca XVIII Option-19 rows and the stage-wide ~19.9% high Ca XVII integrated RRC luminosities. No `/xee` correction and no Ca-specific branch are introduced.
+- Add a single-model `ca19_ne1` pruned/forced qualifier. Blocking gates require Ca XVII Option-19 values within 1%, zero Ca XVIII Option-19/xout_rrc1 rows, source-matching Ca XVIII detail inventory, and frozen Option-27 parity. All-nine-FITS pruned/forced bit-exact remains reported separately.
+- Preserve the 12.3.16 source-`xii` Option-27 fix, 12.3.15 active-stage two-pass path, 12.3.14 Type50 source gates, and production-zone ABI 6048110.
+
 ## 0.6.48.12.3.16 — source `xii` abundance/Option-27 publication repair - 2026-08-01
 
 - Repair the low-ionization Ca terminal-stage publication defect exposed by `ca19_ne1`: the compact active-element solver uses the next-ion ground row as its normalization row, but the product layer had later reinterpreted that expanded full-row slot as a physical population of the next ion. This produced a false Ca XIX abundance/column and removed part of the true Ca XVIII column.

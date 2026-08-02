@@ -1594,6 +1594,28 @@ double active_population_for_full_row(
     return std::isfinite(value) && value > 0.0 ? value : 0.0;
 }
 
+// v0.6.48.12.3.17: calc_hmc_element solves a compact overlapping basis whose
+// final row is the continuum/normalization row of the highest active ion.  If
+// that ion is not the last physical ion of the element, the same full xileve
+// address is also the ground row of the next (inactive) ion.  During source
+// map-back, calc_hmc_element first writes the active ion including that final
+// compact row, then visits the next inactive ion and explicitly zeros every
+// one of its xileve rows.  calc_emisab_all/calc_emis_all run only after this
+// map-back, so their population view sees the shared upper-boundary row as
+// exact zero.  Keep the compact value for the solver/thermal ledger, but hide
+// it from all post-map-back spectral/product consumers.
+double source_post_mapback_population_for_full_row_v064812317(
+    const ActiveElementView& active,
+    const std::vector<double>& populations,
+    int full_row
+) {
+    if (active.max_stage < active.element.element_z &&
+        full_row == active.full_row_end) {
+        return 0.0;
+    }
+    return active_population_for_full_row(active, populations, full_row);
+}
+
 
 
 struct CanonicalThermalLedgerBuild {
@@ -9730,9 +9752,9 @@ void accumulate_native_bound_free_surface(const NativeBoundFreeCurve& curve,
     if (n < 2 || opacity_cm1.size() != n || rccemis.size() != 2 * n ||
         record.lower_row < 1 || record.upper_row < 1) return;
     const double lower_abundance =
-        active_population_for_full_row(active, populations, record.lower_row) * active.element.abundance;
+        source_post_mapback_population_for_full_row_v064812317(active, populations, record.lower_row) * active.element.abundance;
     const double upper_abundance =
-        active_population_for_full_row(active, populations, record.upper_row) * active.element.abundance;
+        source_post_mapback_population_for_full_row_v064812317(active, populations, record.upper_row) * active.element.abundance;
     const double density = std::max(0.0, input.hydrogen_density_cm3);
     const bool type49_or_53 = record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE ||
         record.opcode == XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE;
@@ -11267,7 +11289,15 @@ int run_impl(
 
         std::vector<double> full_populations(static_cast<std::size_t>(element.n_rows), 0.0);
         for (std::size_t row = 0; row < buffers.populations.size(); ++row) {
-            full_populations[static_cast<std::size_t>(active.full_row_start - 1) + row] = buffers.populations[row];
+            const int full_row = active.full_row_start + static_cast<int>(row);
+            // Source calc_hmc_element map-back subsequently visits the next
+            // inactive ion and zeros its ground row, which aliases this compact
+            // terminal normalization row.  Preserve the compact solver value
+            // internally, but publish/retain the post-map-back xileve state.
+            if (active.max_stage < element.element_z && full_row == active.full_row_end) {
+                continue;
+            }
+            full_populations[static_cast<std::size_t>(full_row - 1)] = buffers.populations[row];
         }
         all_populations.insert(all_populations.end(), full_populations.begin(), full_populations.end());
         fixed_full_population_offset += full_populations.size();
@@ -11452,7 +11482,7 @@ int run_impl(
                         rcemsum += (ansar2 + ansar2o) *
                             (energy - input.radiation_energy_ev[ll - 2u]) / 2.0;
                     }
-                    const double upper_population = active_population_for_full_row(
+                    const double upper_population = source_post_mapback_population_for_full_row_v064812317(
                         active, buffers.populations, source_record.upper_row);
                     const double abund2 = upper_population * element.abundance *
                         input.hydrogen_density_cm3;
@@ -11526,7 +11556,7 @@ int run_impl(
                         deferred.opacity_curve = type88_curve;
                         deferred.emission_curve = std::move(type88_curve);
                         deferred.evaluated = std::move(type88_eval);
-                        deferred.lower_abundance = active_population_for_full_row(
+                        deferred.lower_abundance = source_post_mapback_population_for_full_row_v064812317(
                             active, buffers.populations, source_record.lower_row) * active.element.abundance;
                         // calc_emis_ion computes rate-42 abund2 from the raw
                         // caller idest2 before UCalc label 88 resets idest2 to
@@ -11538,7 +11568,7 @@ int run_impl(
                             calc_emis_upper_row_v82_patch52010 =
                                 source_record.lower_row - static_cast<int>(ii[2]) + static_cast<int>(ii[3]);
                         }
-                        deferred.upper_abundance = active_population_for_full_row(
+                        deferred.upper_abundance = source_post_mapback_population_for_full_row_v064812317(
                             active, buffers.populations, calc_emis_upper_row_v82_patch52010) * active.element.abundance;
                         deferred_rrc_records_v82_patch520.push_back(std::move(deferred));
                     }
@@ -11568,9 +11598,9 @@ int run_impl(
                     emission_curve_v82_patch520149 = curve;
                 deferred.emission_curve = std::move(emission_curve_v82_patch520149);
                 deferred.evaluated = evaluated[k];
-                deferred.lower_abundance = active_population_for_full_row(
+                deferred.lower_abundance = source_post_mapback_population_for_full_row_v064812317(
                     active, buffers.populations, source_record.lower_row) * active.element.abundance;
-                deferred.upper_abundance = active_population_for_full_row(
+                deferred.upper_abundance = source_post_mapback_population_for_full_row_v064812317(
                     active, buffers.populations, source_record.upper_row) * active.element.abundance;
                 deferred_rrc_records_v82_patch520.push_back(std::move(deferred));
             }
@@ -11592,8 +11622,8 @@ int run_impl(
                 if (source_record.upper_row > 0 && static_cast<std::size_t>(source_record.upper_row) <= element.rows.size())
                     row.upper_global_level_index = element.rows[static_cast<std::size_t>(source_record.upper_row - 1)].global_level_index;
                 row.threshold_ev = curve.threshold_ev;
-                row.native_lower_population = active_population_for_full_row(active, buffers.populations, source_record.lower_row);
-                row.native_upper_population = active_population_for_full_row(active, buffers.populations, source_record.upper_row);
+                row.native_lower_population = source_post_mapback_population_for_full_row_v064812317(active, buffers.populations, source_record.lower_row);
+                row.native_upper_population = source_post_mapback_population_for_full_row_v064812317(active, buffers.populations, source_record.upper_row);
                 row.abundance = element.abundance;
                 row.hydrogen_density_cm3 = std::max(0.0, input.hydrogen_density_cm3);
                 const auto mapped = phint53_grid_map_v82_patch57(curve, input.radiation_energy_ev, static_cast<int>(input.radiation_bin_count));
@@ -11704,10 +11734,10 @@ int run_impl(
                     static_cast<std::size_t>(it - input.radiation_energy_ev) + 1));
             }
             sc.abundance_lower =
-                active_population_for_full_row(active, buffers.populations, rec.lower_row) *
+                source_post_mapback_population_for_full_row_v064812317(active, buffers.populations, rec.lower_row) *
                 element.abundance;
             sc.abundance_upper =
-                active_population_for_full_row(active, buffers.populations, rec.upper_row) *
+                source_post_mapback_population_for_full_row_v064812317(active, buffers.populations, rec.upper_row) *
                 element.abundance;
             // v0.6.48.12.3.14: literal calc_emisab_ion caller-side line gate.
             // FORTRAN forms abund1/abund2 as xileve*xpx*xeltp and does not call
@@ -11842,9 +11872,9 @@ int run_impl(
                                "runtime_seed_renormalized,runtime_seed_sum_before_policy,runtime_seed_sum_after_policy\n";
                     }
                     const int call_index = environment_data_type("XSTAR_NATIVE_CALL_INDEX");
-                    const double lower_population = active_population_for_full_row(
+                    const double lower_population = source_post_mapback_population_for_full_row_v064812317(
                         active, buffers.populations, rec.lower_row);
-                    const double upper_population = active_population_for_full_row(
+                    const double upper_population = source_post_mapback_population_for_full_row_v064812317(
                         active, buffers.populations, rec.upper_row);
                     const double abund1 = lower_population * element.abundance * input.hydrogen_density_cm3;
                     const double abund2 = upper_population * element.abundance * input.hydrogen_density_cm3;
@@ -11886,6 +11916,15 @@ int run_impl(
         for (auto& diagnostic : ctx.last_element_diagnostics) {
             const std::size_t count = diagnostic.full_populations.size();
             if (offset + count > all_populations.size()) throw std::runtime_error("fixed-state diagnostic population slice overflow");
+            // Qualification closure files represent source xileve after the same
+            // calc_hmc_element map-back.  Enforce the upper-boundary alias rule
+            // here as well so a diagnostic closure cannot resurrect the compact
+            // normalization row as a physical next-ion ground population.
+            if (diagnostic.active.max_stage < diagnostic.element_z &&
+                diagnostic.active.full_row_end >= 1 &&
+                static_cast<std::size_t>(diagnostic.active.full_row_end) <= count) {
+                all_populations[offset + static_cast<std::size_t>(diagnostic.active.full_row_end - 1)] = 0.0;
+            }
             diagnostic.full_populations.assign(all_populations.begin() + static_cast<std::ptrdiff_t>(offset),
                                                all_populations.begin() + static_cast<std::ptrdiff_t>(offset + count));
             if (diagnostic.active.full_row_start < 1 || diagnostic.active.full_row_end < diagnostic.active.full_row_start ||
