@@ -14968,6 +14968,43 @@ int xstar_fixed_state_get_last_element_product_diagnostics_v1(
     return 0;
 }
 
+int xstar_fixed_state_get_last_ion_stage_fractions_v064812316(
+    const xstar_fixed_state_context* context,
+    xstar_fixed_ion_stage_fraction_v064812316* rows,
+    size_t capacity,
+    size_t* count,
+    char* message,
+    size_t message_size) {
+    if (!context || !count) {
+        copy_text(message, message_size, "context and ion-stage fraction count are required");
+        return 1;
+    }
+    std::size_t required = 0;
+    for (const auto& diagnostic : context->last_element_diagnostics) {
+        required += diagnostic.final_stage_fractions.size();
+    }
+    *count = required;
+    if (!rows) {
+        copy_text(message, message_size, "native final ion-stage fraction count returned");
+        return 0;
+    }
+    if (capacity < required) {
+        copy_text(message, message_size, "ion-stage fraction output capacity too small");
+        return 3;
+    }
+    std::size_t out_index = 0;
+    for (const auto& diagnostic : context->last_element_diagnostics) {
+        for (std::size_t i = 0; i < diagnostic.final_stage_fractions.size(); ++i) {
+            rows[out_index].element_z = diagnostic.element_z;
+            rows[out_index].stage = static_cast<int32_t>(i + 1u);
+            rows[out_index].fraction = diagnostic.final_stage_fractions[i];
+            ++out_index;
+        }
+    }
+    copy_text(message, message_size, "native final ion-stage fractions returned");
+    return 0;
+}
+
 int xstar_fixed_state_write_last_element_fixed_state_v0648121(
     const xstar_fixed_state_context* context,
     const char* output_csv,

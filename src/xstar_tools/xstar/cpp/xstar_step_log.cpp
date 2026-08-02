@@ -1023,7 +1023,11 @@ void append_native_public_rrc_sections(std::ofstream& out,
 void append_native_ion_columns(std::ofstream& out,const std::filesystem::path& output_dir){
     fitsfile*f=nullptr;int status=0;fits_open_file(&f,(output_dir/"xout_abund1.fits").c_str(),READONLY,&status);
     out<<" print option:27\n ion column densities\n index, ion, column density\n";
-    if(status==0){status=0;fits_movnam_hdu(f,ANY_HDU,const_cast<char*>("COLUMNS"),0,&status);int nc=0;if(status==0)fits_get_num_cols(f,&nc,&status);for(int c=9;status==0&&c<=nc;++c){char key[FLEN_KEYWORD]{},name[FLEN_VALUE]{};fits_make_keyn("TTYPE",c,key,&status);int st=0;fits_read_key(f,TSTRING,key,name,nullptr,&st);if(st!=0)continue;double v=0;int any=0;st=0;fits_read_col(f,TDOUBLE,c,1,1,1,nullptr,&v,&any,&st);if(st==0&&std::abs(v)>1e-30)out<<std::setw(5)<<(c-8)<<" "<<std::left<<std::setw(8)<<name<<std::right<<std::uppercase<<std::scientific<<std::setprecision(8)<<v<<"\n";}int cs=0;fits_close_file(f,&cs);}else out<<" native COLUMNS product unavailable.\n";
+    // Source pprint(27) uses `if (xcoltmp(lk).gt.1.e-15)` and format
+    // `(1x,i4,1x,9a1,1pe16.8)`.  Preserve the default-REAL threshold and
+    // guarantee separation between an eight-character ion name and the value.
+    const double source_column_floor_v064812316 = static_cast<double>(1.0e-15f);
+    if(status==0){status=0;fits_movnam_hdu(f,ANY_HDU,const_cast<char*>("COLUMNS"),0,&status);int nc=0;if(status==0)fits_get_num_cols(f,&nc,&status);for(int c=9;status==0&&c<=nc;++c){char key[FLEN_KEYWORD]{},name[FLEN_VALUE]{};fits_make_keyn("TTYPE",c,key,&status);int st=0;fits_read_key(f,TSTRING,key,name,nullptr,&st);if(st!=0)continue;double v=0;int any=0;st=0;fits_read_col(f,TDOUBLE,c,1,1,1,nullptr,&v,&any,&st);if(st==0&&v>source_column_floor_v064812316)out<<std::setw(5)<<(c-8)<<" "<<std::left<<std::setw(9)<<name<<std::right<<std::setw(16)<<std::uppercase<<std::scientific<<std::setprecision(8)<<v<<"\n";}int cs=0;fits_close_file(f,&cs);}else out<<" native COLUMNS product unavailable.\n";
     out<<"\n";out.unsetf(std::ios::floatfield);out<<std::setprecision(17);
 }
 

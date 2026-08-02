@@ -2367,6 +2367,37 @@ int command_run_fixed_evaluation(const Options& options) {
     return 0;
 }
 
+void capture_source_ion_stage_fractions_v064812316(
+    const xstar_fixed_state_context* context,
+    std::map<int, std::vector<double>>& out) {
+    out.clear();
+    if (!context) return;
+    std::array<char, XSTAR_FIXED_STATE_MESSAGE_SIZE> message{};
+    std::size_t count = 0;
+    int rc = xstar_fixed_state_get_last_ion_stage_fractions_v064812316(
+        context, nullptr, 0u, &count, message.data(), message.size());
+    if (rc != 0) {
+        throw std::runtime_error(std::string("cannot query source ion-stage fractions: ") + message.data());
+    }
+    std::vector<xstar_fixed_ion_stage_fraction_v064812316> rows(count);
+    if (count > 0u) {
+        rc = xstar_fixed_state_get_last_ion_stage_fractions_v064812316(
+            context, rows.data(), rows.size(), &count, message.data(), message.size());
+        if (rc != 0) {
+            throw std::runtime_error(std::string("cannot capture source ion-stage fractions: ") + message.data());
+        }
+    }
+    for (std::size_t i = 0; i < count; ++i) {
+        const auto& row = rows[i];
+        if (row.element_z < 1 || row.stage < 1) continue;
+        auto& values = out[row.element_z];
+        if (values.size() < static_cast<std::size_t>(row.stage)) {
+            values.resize(static_cast<std::size_t>(row.stage), 0.0);
+        }
+        values[static_cast<std::size_t>(row.stage - 1)] = row.fraction;
+    }
+}
+
 struct FixedDsecSnapshot {
     std::string kind;
     std::size_t sequence = 0;
@@ -2407,6 +2438,7 @@ struct FixedDsecSnapshot {
     bool dsec_runtime_state_abi = false;
     std::vector<double> source_global_xilevg;
     std::vector<double> source_global_rnisg;
+    std::map<int, std::vector<double>> source_ion_stage_fractions;
     std::vector<double> populations;
     std::vector<double> lte_populations;
     std::vector<double> radiation_energy_ev;
@@ -2532,6 +2564,7 @@ FixedDsecSnapshot lightweight_snapshot_v65(const FixedDsecSnapshot& source) {
     out.brems_cooling = source.brems_cooling;
     out.thermal_families_native = source.thermal_families_native;
     out.dsec_runtime_state_abi = source.dsec_runtime_state_abi;
+    out.source_ion_stage_fractions = source.source_ion_stage_fractions;
     out.native_line_count = source.native_line_count;
     out.native_continuum_count = source.native_continuum_count;
     out.exact_source_workspace_flags = source.exact_source_workspace_flags;
@@ -4424,6 +4457,7 @@ int command_run_fixed_dsec(const Options& options) {
         target.runtime_state_abi = source.dsec_runtime_state_abi;
         target.source_global_xilevg = source.source_global_xilevg;
         target.source_global_rnisg = source.source_global_rnisg;
+        target.source_ion_stage_fractions = source.source_ion_stage_fractions;
         target.populations = source.populations;
         target.radiation_energy_ev = source.radiation_energy_ev;
         target.radiation_flux = source.radiation_flux;
@@ -5490,6 +5524,7 @@ xstar_run_state::FixedEvaluationState copy_real_native_snapshot(
     target.runtime_state_abi = source.dsec_runtime_state_abi;
     target.source_global_xilevg = source.source_global_xilevg;
     target.source_global_rnisg = source.source_global_rnisg;
+    target.source_ion_stage_fractions = source.source_ion_stage_fractions;
     target.populations = source.populations;
     target.radiation_energy_ev = source.radiation_energy_ev;
     target.radiation_flux = source.radiation_flux;
@@ -9519,6 +9554,7 @@ xstar_run_state::FixedEvaluationState copy_fixed_evaluation_state_v172524(const 
     target.runtime_state_abi = source.dsec_runtime_state_abi;
     target.source_global_xilevg = source.source_global_xilevg;
     target.source_global_rnisg = source.source_global_rnisg;
+    target.source_ion_stage_fractions = source.source_ion_stage_fractions;
     target.populations = source.populations;
     target.radiation_energy_ev = source.radiation_energy_ev;
     target.radiation_flux = source.radiation_flux;
@@ -13536,6 +13572,8 @@ int standalone_iteration_evaluator_v67(
             return rc;
         }
         snapshot.populations.resize(output.populations_count);
+        capture_source_ion_stage_fractions_v064812316(
+            data->fixed_context, snapshot.source_ion_stage_fractions);
         snapshot.lte_populations.resize(source.lte_populations_count);
         snapshot.spectrum.resize(output.spectrum_count);
         snapshot.opacity.resize(output.opacity_count);
@@ -14208,6 +14246,8 @@ FixedDsecSnapshot evaluate_full_boundary_v67(
         message.data(), message.size());
     if (rc != 0) throw std::runtime_error(std::string("accepted boundary evaluation failed: ") + message.data());
     snapshot.populations.resize(output.populations_count);
+    capture_source_ion_stage_fractions_v064812316(
+        data.fixed_context, snapshot.source_ion_stage_fractions);
     snapshot.spectrum.resize(output.spectrum_count);
     snapshot.opacity.resize(output.opacity_count);
     snapshot.lte_populations.resize(source.lte_populations_count);

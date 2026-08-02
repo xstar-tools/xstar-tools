@@ -243,6 +243,10 @@ struct FixedEvaluationState {
     // vector remains unchanged.
     std::vector<double> source_global_xilevg;
     std::vector<double> source_global_rnisg;
+    // Source pprint(12) xii values by atomic number and ion stage.  Unlike
+    // full level populations, this surface excludes the compact normalization
+    // row when it aliases the next ion ground at a truncated active window.
+    std::map<int, std::vector<double>> source_ion_stage_fractions;
     std::vector<double> populations;
     std::vector<double> radiation_energy_ev;
     std::vector<double> radiation_flux;

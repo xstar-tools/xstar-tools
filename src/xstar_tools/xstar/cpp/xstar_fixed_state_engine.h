@@ -536,6 +536,16 @@ typedef struct xstar_fixed_element_product_diagnostic_v1 {
     double cooling;
 } xstar_fixed_element_product_diagnostic_v1;
 
+/* v0.6.48.12.3.16 additive source-xii publication surface.  These are the
+ * final per-ion stage fractions returned by the element solve before the
+ * compact normalization/next-ion-ground row is expanded back into the full
+ * level address space. */
+typedef struct xstar_fixed_ion_stage_fraction_v064812316 {
+    int32_t element_z;
+    int32_t stage;
+    double fraction;
+} xstar_fixed_ion_stage_fraction_v064812316;
+
 typedef struct xstar_fixed_state_context xstar_fixed_state_context;
 
 XSTAR_FIXED_STATE_EXPORT uint32_t xstar_fixed_state_engine_abi_version(void);
@@ -671,6 +681,13 @@ XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_get_last_continuum_product_diagno
 XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_get_last_element_product_diagnostics_v1(
     const xstar_fixed_state_context* context,
     xstar_fixed_element_product_diagnostic_v1* rows,
+    size_t capacity,
+    size_t* count,
+    char* message,
+    size_t message_size);
+XSTAR_FIXED_STATE_EXPORT int xstar_fixed_state_get_last_ion_stage_fractions_v064812316(
+    const xstar_fixed_state_context* context,
+    xstar_fixed_ion_stage_fraction_v064812316* rows,
     size_t capacity,
     size_t* count,
     char* message,

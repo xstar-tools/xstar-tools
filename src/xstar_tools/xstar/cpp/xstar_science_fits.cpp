@@ -1179,6 +1179,22 @@ std::map<std::pair<int,int>,double> ion_fractions(
     const xstar_run_state::FixedEvaluationState& evaluation,
     const std::vector<ElementMeta>& elements,
     const std::vector<RowMeta>& rows) {
+    // Source pprint(12) publishes xii, the final per-ion totals returned by
+    // calc_hmc_element.  Do not reconstruct them from the expanded full-level
+    // vector: at a truncated active window the compact normalization row is
+    // physically the next ion ground row in the full address space, but it is
+    // not a separately populated xii stage.
+    if (!evaluation.source_ion_stage_fractions.empty()) {
+        std::map<std::pair<int,int>,double> exact;
+        for (const auto& [element_z, values] : evaluation.source_ion_stage_fractions) {
+            const int source_stage_count = std::max(0, element_z);
+            for (int stage = 1; stage <= source_stage_count; ++stage) {
+                const std::size_t index = static_cast<std::size_t>(stage - 1);
+                exact[{element_z, stage}] = index < values.size() ? std::max(0.0, values[index]) : 0.0;
+            }
+        }
+        return exact;
+    }
     std::map<std::pair<int,int>,std::vector<double>> grouped;
     for (const auto& row : rows) {
         const auto& e = element_for(elements, row.element_index);

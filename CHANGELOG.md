@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.12.3.16 — source `xii` abundance/Option-27 publication repair - 2026-08-01
+
+- Repair the low-ionization Ca terminal-stage publication defect exposed by `ca19_ne1`: the compact active-element solver uses the next-ion ground row as its normalization row, but the product layer had later reinterpreted that expanded full-row slot as a physical population of the next ion. This produced a false Ca XIX abundance/column and removed part of the true Ca XVIII column.
+- Retain the already-computed final per-ion `xii` stage fractions from the fixed-state element diagnostic and carry them through accepted DSEC snapshots into `FixedEvaluationState`. `xout_abund1.fits` now uses this source `pprint(12)` stage-fraction surface instead of reconstructing ion fractions from the expanded full-level vector whenever the retained `xii` surface is available.
+- Keep the historical full-level reconstruction only as a fallback for old/synthetic states; no solver, rate, thermal, Type50, or active-window arithmetic is changed.
+- Fix Option 27 formatting to mirror FORTRAN `(1x,i4,1x,9a1,1pe16.8)`: a 9-character ion field followed by a 16-character scientific value prevents eight-character names such as `ca_xviii` from concatenating with the number. The writer also restores the source default-REAL `xcoltmp > 1.e-15` publication threshold instead of the former `abs(v) > 1e-30` test.
+- Add a targeted three-model qualifier (`c5_ne1`, `mg11_ne1e8`, `ca19_ne1`). The Ca model additionally runs forced-full mode and requires source-`xii` abundance/column publication to be identical between pruned and forced-full execution, Ca XVIII column density within 1% of FORTRAN, and no spurious Ca XIX abundance/column.
+- Keep the known Ca XVII Option-19 RRC normalization discrepancy and the 12.3.15 inactive-RRC A/B issue separate from this publication fix. Production-zone ABI remains 6048110; no Ca-specific physics or performance branch is introduced.
+
 ## 0.6.48.12.3.15 — source two-pass active-stage traversal candidate - 2026-08-01
 
 - Build on the scientifically accepted targeted 0.6.48.12.3.14 generic Type50 source gates; retain both source-REAL `1.e-34` gates unchanged.
