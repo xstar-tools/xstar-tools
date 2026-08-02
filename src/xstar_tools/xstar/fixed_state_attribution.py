@@ -93,7 +93,9 @@ def python_element_attribution_rows(
                 "ion_counter": int(basis_row.ion_counter),
                 "ion_stage": int(ion_stage_map[compact]),
                 "is_normalization_row": int(compact == int(basis.normalization_row)),
-                "initial_population": float(assembly.initial_populations[idx]),
+                # The assembly seed carries a one-based guard at index zero;
+                # the solved output is a zero-based n_rows vector.
+                "initial_population": float(assembly.initial_populations[compact]),
                 "final_population": float(solve.populations[idx]),
                 "roles_json": json.dumps(basis_row.roles, sort_keys=True, separators=(",", ":"), default=str),
             }

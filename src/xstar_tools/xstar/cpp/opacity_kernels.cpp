@@ -46,7 +46,10 @@ static inline double source_div(double a, double b) { volatile double x = a; vol
 static inline double source_real_literal(double value) { return static_cast<double>(static_cast<float>(value)); }
 
 
-// v0.6.48.12.3.24: generic Type-50 profile diagnostics and AVX2 capability.
+// v0.6.48.12.3.25: generic Type-50 profile diagnostics.  Production uses
+// the scalar source-faithful profile path.  AVX2 is opt-in experimental only
+// and is dispatched once per accepted line through a bulk profile generator;
+// rebin and public opacity accumulation remain scalar/source ordered.
 // These counters are observational only; they never enter science state.
 thread_local std::uint64_t g_type50_vectorized_profiles_v064812324 = 0u;
 thread_local std::uint64_t g_type50_scalar_profiles_v064812324 = 0u;
@@ -202,6 +205,62 @@ static inline double voigte_small_a_positive_v064896(double v, double aa) {
         v * (ak[start + 2] + v * (ak[start + 3] + v * ak[start + 4]))));
     return h1 * aa + ex * (un + aa * aa * (un - two * v2));
 }
+
+
+#if (defined(__x86_64__) || defined(__i386__)) && (defined(__GNUC__) || defined(__clang__))
+// Experimental 12.3.25 bulk AVX2 path. This function is entered once per
+// accepted small-a line, not once per four profile points. Independent Voigt
+// values may be generated in parallel, but the caller consumes the resulting
+// profile array sequentially so trapezoid/rebin/opakc arithmetic is unchanged.
+__attribute__((target("avx2")))
+static void fill_small_a_profile_bulk_v064812325(
+    int ml_start, int ml_end, int ml2, double e00, double deleused,
+    double line_energy_ev, double dele, double aasmall, double* profiles,
+    std::uint64_t* vectorized_points) {
+    std::uint64_t points = 0u;
+    int mlm = ml_start;
+    while (mlm <= ml_end) {
+        if (mlm + 3 <= ml_end && !(mlm <= ml2 && ml2 <= mlm + 3)) {
+            double av[4];
+            bool all_far = true;
+            for (int lane = 0; lane < 4; ++lane) {
+                const int one_based = mlm + lane;
+                const int offset = one_based - ml2;
+                const double energy = source_add(e00,
+                    source_mul(static_cast<double>(offset), deleused));
+                const double delet = source_div(source_sub(energy, line_energy_ev), dele);
+                av[lane] = std::abs(delet);
+                all_far = all_far && av[lane] >= source_real_literal(5.0);
+            }
+            if (all_far) {
+                double raw[4];
+                voigte_small_a_farwing4_v064812324(av, aasmall, raw);
+                for (int lane = 0; lane < 4; ++lane) {
+                    profiles[(mlm + lane) - ml_start] = source_div(
+                        raw[lane], xstar_constants::kLegacyLinopacProfileNormalization);
+                }
+                points += 4u;
+                mlm += 4;
+                continue;
+            }
+        }
+        const int offset = mlm - ml2;
+        const double energy = source_add(e00,
+            source_mul(static_cast<double>(offset), deleused));
+        const double delet = source_div(source_sub(energy, line_energy_ev), dele);
+        if (mlm == ml2 && aasmall <= xstar_constants::kLegacyLinopacCenterVoigtThreshold) {
+            profiles[mlm - ml_start] = source_div(
+                std::exp(-delet * delet), xstar_constants::kLegacyLinopacProfileNormalization);
+        } else {
+            const double raw = voigte_small_a_positive_v064896(std::abs(delet), aasmall);
+            profiles[mlm - ml_start] = source_div(
+                raw, xstar_constants::kLegacyLinopacProfileNormalization);
+        }
+        ++mlm;
+    }
+    if (vectorized_points) *vectorized_points = points;
+}
+#endif
 
 static int huntf(const double* xx, int n, double x) {
     if (!xx || n < 2) return 1;
@@ -641,9 +700,24 @@ static int xstar_opacity_apply_line_profile_optimized_v064896(
 
     static const bool force_scalar_v064812324 =
         env_truthy_v064812324("XSTAR_V064812324_FORCE_SCALAR_TYPE50");
-    const bool avx2_enabled_v064812324 = use_small_a_voigt &&
-        cpu_avx2_available_v064812324() && !force_scalar_v064812324;
+    static const bool experimental_bulk_avx2_v064812325 =
+        env_truthy_v064812324("XSTAR_V064812325_ENABLE_EXPERIMENTAL_BULK_AVX2");
+    const bool avx2_enabled_v064812325 = use_small_a_voigt &&
+        experimental_bulk_avx2_v064812325 && cpu_avx2_available_v064812324() &&
+        !force_scalar_v064812324;
     bool profile_used_avx2_v064812324 = false;
+    std::vector<double> bulk_profiles_v064812325;
+    std::uint64_t bulk_vectorized_points_v064812325 = 0u;
+    if (avx2_enabled_v064812325 && mlmin + 1 <= mlmax) {
+#if (defined(__x86_64__) || defined(__i386__)) && (defined(__GNUC__) || defined(__clang__))
+        bulk_profiles_v064812325.resize(static_cast<std::size_t>(mlmax - mlmin));
+        fill_small_a_profile_bulk_v064812325(
+            mlmin + 1, mlmax, ml2, e00, deleused, line_energy_ev, dele, aasmall,
+            bulk_profiles_v064812325.data(), &bulk_vectorized_points_v064812325);
+        profile_used_avx2_v064812324 = bulk_vectorized_points_v064812325 > 0u;
+        g_type50_vectorized_points_v064812324 += bulk_vectorized_points_v064812325;
+#endif
+    }
 
     auto consume_profile_point_v064812324 = [&](int mlm, double current_energy, double profile) {
         const double tmpopo = tmpop;
@@ -672,39 +746,23 @@ static int xstar_opacity_apply_line_profile_optimized_v064896(
 
     int mlm = mlmin + 1;
     while (mlm <= mlmax) {
-#if (defined(__x86_64__) || defined(__i386__)) && (defined(__GNUC__) || defined(__clang__))
-        if (avx2_enabled_v064812324 && mlm + 3 <= mlmax &&
-            !(mlm <= ml2 && ml2 <= mlm + 3)) {
-            double energies[4];
-            double av[4];
-            bool all_far = true;
-            for (int lane = 0; lane < 4; ++lane) {
-                energies[lane] = temporary_energy(mlm + lane);
-                const double delet_lane = source_div(
-                    source_sub(energies[lane], line_energy_ev), dele);
-                av[lane] = std::abs(delet_lane);
-                all_far = all_far && av[lane] >= source_real_literal(5.0);
-            }
-            if (all_far) {
-                double raw[4];
-                voigte_small_a_farwing4_v064812324(av, aasmall, raw);
-                for (int lane = 0; lane < 4; ++lane) {
-                    const double profile = source_div(
-                        raw[lane], xstar_constants::kLegacyLinopacProfileNormalization);
-                    consume_profile_point_v064812324(mlm + lane, energies[lane], profile);
-                }
-                profile_used_avx2_v064812324 = true;
-                g_type50_vectorized_points_v064812324 += 4u;
-                mlm += 4;
-                continue;
-            }
-        }
-#endif
         const double current_energy = temporary_energy(mlm);
-        const double delet = source_div(source_sub(current_energy, line_energy_ev), dele);
         double profile;
-        if (mlm == ml2) {
-            if (aasmall > xstar_constants::kLegacyLinopacCenterVoigtThreshold) {
+        if (!bulk_profiles_v064812325.empty()) {
+            profile = bulk_profiles_v064812325[static_cast<std::size_t>(mlm - (mlmin + 1))];
+        } else {
+            const double delet = source_div(source_sub(current_energy, line_energy_ev), dele);
+            if (mlm == ml2) {
+                if (aasmall > xstar_constants::kLegacyLinopacCenterVoigtThreshold) {
+                    const double av = std::abs(delet);
+                    const double raw = use_small_a_voigt
+                        ? voigte_small_a_positive_v064896(av, aasmall)
+                        : voigte(av, aasmall);
+                    profile = source_div(raw, xstar_constants::kLegacyLinopacProfileNormalization);
+                } else {
+                    profile = source_div(std::exp(-delet * delet), xstar_constants::kLegacyLinopacProfileNormalization);
+                }
+            } else if (use_voigt) {
                 const double av = std::abs(delet);
                 const double raw = use_small_a_voigt
                     ? voigte_small_a_positive_v064896(av, aasmall)
@@ -713,14 +771,6 @@ static int xstar_opacity_apply_line_profile_optimized_v064896(
             } else {
                 profile = source_div(std::exp(-delet * delet), xstar_constants::kLegacyLinopacProfileNormalization);
             }
-        } else if (use_voigt) {
-            const double av = std::abs(delet);
-            const double raw = use_small_a_voigt
-                ? voigte_small_a_positive_v064896(av, aasmall)
-                : voigte(av, aasmall);
-            profile = source_div(raw, xstar_constants::kLegacyLinopacProfileNormalization);
-        } else {
-            profile = source_div(std::exp(-delet * delet), xstar_constants::kLegacyLinopacProfileNormalization);
         }
         consume_profile_point_v064812324(mlm, current_energy, profile);
         ++mlm;

@@ -8819,10 +8819,11 @@ ElementBuffers make_buffers(const ElementProgram& e, const xstar_fixed_state_inp
     b.ion_population.resize(ni); b.ion_population_final.resize(ni); b.ionization.resize(ni); b.recombination.resize(ni);
     b.ionization_components.resize(3 * ni); b.recombination_components.resize(3 * ni);
     b.row_residual.resize(n); b.row_scale.resize(n); b.relative_residual.resize(n);
-    bool source_faithful_helium_runtime_seed = false;
-    bool source_faithful_hydrogen_runtime_seed = false;
-    bool source_faithful_magnesium_runtime_seed = false;
-    bool source_faithful_carbon_runtime_seed = false;
+    // v0.6.48.12.3.25: source calc_hmc_element never renormalizes the
+    // selected global xilevg slice before msolvelucy, regardless of element.
+    // Track whether this compact seed came from the runtime/global source
+    // workspace, rather than enumerating previously-qualified elements.
+    bool source_faithful_runtime_seed_loaded = false;
     for (std::size_t k = 0; k < n; ++k) {
         b.superlevels[k] = e.rows[k].superlevel;
         b.ions[k] = e.rows[k].ion;
@@ -8838,14 +8839,7 @@ ElementBuffers make_buffers(const ElementProgram& e, const xstar_fixed_state_inp
             if (seed.loaded) {
                 b.initial[k] = seed.value;
                 b.runtime_seed_loaded = true;
-                if (e.element_z == 12) source_faithful_magnesium_runtime_seed = true;
-                if (e.element_z == 6) source_faithful_carbon_runtime_seed = true;
-                if (e.element_z == 2) source_faithful_helium_runtime_seed = true;
-                if (e.element_z == 1 && runtime_input &&
-                    (runtime_input->runtime_state_flags &
-                     XSTAR_FIXED_RUNTIME_STATE_REPEATED_HYDROGEN_SOURCE_STATE) != 0u) {
-                    source_faithful_hydrogen_runtime_seed = true;
-                }
+                source_faithful_runtime_seed_loaded = true;
             }
         }
     }
@@ -8853,15 +8847,11 @@ ElementBuffers make_buffers(const ElementProgram& e, const xstar_fixed_state_inp
     // calc_hmc_element writes the selected xilevg values directly into x,
     // advances the overlapping compact basis with ipmat+=nlev-1, writes the
     // terminal normalization row to zero, and lets msolvelucy impose number
-    // conservation.  Do not normalize that selected source slice in advance.
-    // H/He/Mg were previously qualified with this rule.  v0.6.48.11.6 promotes
-    // the literal rule for carbon because the generic normalization inflated
-    // the C III ground seed by ~3.53e5 and therefore inflated Type50 record
-    // 5740 line-center opacity by the same factor.
+    // conservation.  There is no element-dependent pre-normalization in the
+    // source.  Once any row was mapped from runtime/global xilevg, preserve
+    // that entire mapped compact slice exactly for every element.
     for (double value : b.initial) b.runtime_seed_sum_before_policy += value;
-    const bool preserve_source_runtime_seed =
-        source_faithful_magnesium_runtime_seed || source_faithful_carbon_runtime_seed ||
-        source_faithful_helium_runtime_seed || source_faithful_hydrogen_runtime_seed;
+    const bool preserve_source_runtime_seed = source_faithful_runtime_seed_loaded;
     if (!preserve_initial_seed && !preserve_source_runtime_seed) {
         const double initial_total = b.runtime_seed_sum_before_policy;
         if (initial_total > 0.0) {
@@ -10812,9 +10802,15 @@ int run_impl(
         for (const auto& item : evaluated) {
             const auto& original = item.contribution;
             const bool active_stage = original.ion_stage >= active.min_stage && original.ion_stage <= active.max_stage;
+            // v0.6.48.12.3.25: msolvelucy.f90 consumes matrix endpoint
+            // indices through min(ipmat, indb(...)).  A source endpoint above
+            // the active compact dimension is therefore aliased to the final
+            // normalization row, not rejected.  Endpoints below the active
+            // source window remain invalid because subtracting full_row_start
+            // would produce a non-positive compact index.
             const bool endpoints_active = !item.matrix_enabled ||
-                (original.lower_row >= active.full_row_start && original.lower_row <= active.full_row_end &&
-                 original.upper_row >= active.full_row_start && original.upper_row <= active.full_row_end);
+                (original.lower_row >= active.full_row_start &&
+                 original.upper_row >= active.full_row_start);
             const bool matrix_family_ablated = element.element_z == 2 && helium_matrix_ablation_type != 0 &&
                 original.data_type == helium_matrix_ablation_type;
             const bool matrix_source_ablated = element.element_z == 2 && helium_source_position_ablation != 0 &&
@@ -10829,6 +10825,15 @@ int run_impl(
                 original.data_type == 71 && original.upper_row != 77;
             const bool unqualified_type99_ablated = element.element_z == 2 && helium_unqualified_type99_ablation &&
                 original.data_type == 99 && original.source_position != 6312;
+            // Literal calc_hmc_ion.f90 detailed-matrix source gate.  The
+            // second-pass loop does not call ucalc / insert matrix rows for
+            // rate type 8, rate type 15, or the rate1+Type53 ownership case.
+            // These records may still belong to preliminary ion-balance or
+            // thermal ownership elsewhere; this predicate is matrix-only and
+            // is element independent.
+            const bool source_detailed_matrix_record =
+                original.rate_type != 8 && original.rate_type != 15 &&
+                !(original.rate_type == 1 && original.data_type == 53);
             const bool source_absent_type95_self_loop =
                 original.data_type == 95 && original.rate_type == 15 &&
                 original.lower_row == original.upper_row &&
@@ -10837,10 +10842,15 @@ int run_impl(
                 unqualified_type53_ablated || unqualified_type71_ablated || unqualified_type99_ablated;
             bool matrix_committed = false;
             if (item.matrix_enabled && active_stage && endpoints_active && !qualification_ablated &&
-                !source_absent_type95_self_loop) {
+                source_detailed_matrix_record && !source_absent_type95_self_loop) {
                 auto contribution = original;
-                contribution.lower_row -= active.full_row_start - 1;
-                contribution.upper_row -= active.full_row_start - 1;
+                const int raw_lower_row = contribution.lower_row - active.full_row_start + 1;
+                const int raw_upper_row = contribution.upper_row - active.full_row_start + 1;
+                if (raw_lower_row <= 0 || raw_upper_row <= 0) {
+                    throw std::runtime_error("source matrix endpoint mapped below compact basis");
+                }
+                contribution.lower_row = std::min(active.element.n_rows, raw_lower_row);
+                contribution.upper_row = std::min(active.element.n_rows, raw_upper_row);
                 contributions.push_back(contribution);
                 type95_source_stream_order.push_back(Type95StreamEvent{
                     Type95StreamIdentity{original.record, original.data_type,
@@ -10858,8 +10868,13 @@ int run_impl(
                 // and self-loop checks above therefore identify the complete
                 // preliminary-owner candidate domain for this active case.
                 auto contribution = original;
-                contribution.lower_row -= active.full_row_start - 1;
-                contribution.upper_row -= active.full_row_start - 1;
+                const int raw_lower_row = contribution.lower_row - active.full_row_start + 1;
+                const int raw_upper_row = contribution.upper_row - active.full_row_start + 1;
+                if (raw_lower_row <= 0 || raw_upper_row <= 0) {
+                    throw std::runtime_error("source Type-95 endpoint mapped below compact basis");
+                }
+                contribution.lower_row = std::min(active.element.n_rows, raw_lower_row);
+                contribution.upper_row = std::min(active.element.n_rows, raw_upper_row);
                 type95_self_loop_candidates.push_back(contribution);
                 type95_source_stream_order.push_back(Type95StreamEvent{
                     Type95StreamIdentity{original.record, original.data_type,

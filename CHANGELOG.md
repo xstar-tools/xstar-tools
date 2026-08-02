@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.48.12.3.25 - 2026-08-02
+
+- Repair generic detailed-matrix endpoint ownership to match literal `msolvelucy.f90` `min(ipmat,indb(...))`: source endpoints above the selected compact dimension alias to the normalization row instead of being discarded. The production path contains no Ca or record-number special case.
+- Apply the literal `calc_hmc_ion.f90` detailed-matrix source gate generically: rate types 8 and 15, plus the rate1+Type53 ownership case, do not enter the detailed matrix. Preliminary ion-balance/thermal ownership remains separate.
+- Generalize source `calc_hmc_element` runtime-seed policy to every element: a compact seed mapped from global `xilevg` is never pre-normalized before `msolvelucy`. The prior H/He/Mg/C-only preservation booleans are removed.
+- Retain the 12.3.24 exact Type-50 temporary-bound localization but restore the scalar source-faithful profile as production default. The 12.3.24 four-point AVX2 microkernel is not promoted.
+- Add an opt-in, experimental bulk AVX2 profile generator (`XSTAR_V064812325_ENABLE_EXPERIMENTAL_BULK_AVX2=1`) entered once per accepted line; rebin and opacity accumulation remain scalar/source ordered. It is qualification-only and never enabled by default.
+- Fix the diagnostic compact-seed CSV one-based guard indexing.
+- Add a five-model C/O/Mg/Ca qualifier plus exact final C++/Python matrix-term presence, required terminal Type49 commit checks, Ca XVIII/Ca XVII population closure, downstream spectrum reporting, and `ca19_ne1e8` scalar/bulk/FORTRAN performance reports. Production-zone ABI remains 6048110.
+
 ## 0.6.48.12.3.24 - 2026-08-02
 
 - Add a generic Type-50 `linopac` performance path that algebraically localizes the valid 20,000-point temporary-grid interval and then corrects the estimated integer bounds with the literal source energy predicate. No element-Z or model-specific condition is used.
