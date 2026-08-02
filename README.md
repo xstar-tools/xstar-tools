@@ -1,3 +1,5 @@
+> **0.6.48.12.3.21.1 diagnostic hotfix:** fixes the pure-Python fixed-radial replay import and supports running directly from the unpacked source tree via `PYTHONPATH`; no installation is required. Existing 12.3.21 C++ diagnostic captures can be resumed without rerunning the C++ model.
+
 > **0.6.48.12.3.21 diagnostic-only:** this revision does not change production science. It targets only `helike_type69/ca19_ne1` to attribute the remaining Ca XVIII/Ca XVII excited-level matrix discrepancy at the first published radial recompute and measure literal Type-50 `linopac` gate/work counts before any further repair.
 
 > **0.6.48.12.3.20 targeted npilev + fstepr2 repair:** generalizes the FORTRAN `setptrs`/`npilev` source-ordinal row mapping from the historical Mg-only path to every element, fixing the Ca XVIII `xo01_detail.fits` K-shell tail association, and ports the accepted output-only Type-50 `fstepr2` publication shadow into the generic C++ detail writer to recover ultraweak `xo01_detal2.fits` identities without changing physical line workspaces or `xout_lines1.fits`. `xo01_detal3`, Option 19/`xout_rrc1`, Option 27, and `xo01_detal4` remain frozen.

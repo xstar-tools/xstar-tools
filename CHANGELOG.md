@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## 0.6.48.12.3.21.1 - 2026-08-02
+
+Diagnostic hotfix only. Fixes the one-shot Python radial replay import so `FixedStateElementRequest` is imported from `xstar.local_zone`, where it is defined. Adds package-local `PYTHONPATH` provenance validation, disables user-site shadowing, and adds a resume wrapper that reuses an already completed 12.3.21 C++ diagnostic capture. No production science or C++ numerical implementation is changed.
+
 ## 0.6.48.12.3.21 - 2026-08-02
 
 - Diagnostic-only one-model `ca19_ne1` Ca XVIII/Ca XVII matrix-term attribution from the call-1 final recompute that publishes the first `XSTAR_RADIAL` extension, including live line and continuum optical-depth state; production rate/matrix/atomic/FITS science is unchanged.

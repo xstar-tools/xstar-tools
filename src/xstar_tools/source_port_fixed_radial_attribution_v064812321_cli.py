@@ -16,9 +16,9 @@ import numpy as np
 
 from .xstar import physical_runner as pr
 from .xstar.dsec import DsecMutableRuntimeState
-from .xstar.element_equilibrium import EscapeProbabilityContext, FixedStateElementRequest
+from .xstar.element_equilibrium import EscapeProbabilityContext
+from .xstar.local_zone import FixedStateElementRequest, calc_hmc_all
 from .xstar.fixed_state_attribution import python_element_attribution_rows, _write_rows
-from .xstar.local_zone import calc_hmc_all
 from .xstar.radiation import apply_bremsmap_to_state
 from .xstar.ucalc import default_source_faithful_ucalc
 
