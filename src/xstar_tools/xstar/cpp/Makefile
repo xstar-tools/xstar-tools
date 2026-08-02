@@ -96,8 +96,8 @@ $(MATRIX_TARGET): matrix_kernels.cpp
 $(EMISSIVITY_TARGET): line_emissivity.cpp xstar_spectral_engine.h $(OPACITY_TARGET)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(SO_LDFLAGS) -o $@ line_emissivity.cpp -L. -lxstar_opacity $(RPATH_ORIGIN)
 
-$(OPACITY_TARGET): opacity_kernels.cpp xstar_backend_common.hpp compact_arrays.hpp error_codes.hpp
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(OPACITY_STRICT_FP_FLAGS) $(SO_LDFLAGS) -o $@ opacity_kernels.cpp
+$(OPACITY_TARGET): opacity_kernels.cpp opacity_type50_experiments.cpp xstar_backend_common.hpp compact_arrays.hpp error_codes.hpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(OPACITY_STRICT_FP_FLAGS) $(SO_LDFLAGS) -o $@ opacity_kernels.cpp opacity_type50_experiments.cpp
 
 $(THERMAL_TARGET): thermal_kernels.cpp xstar_thermal_engine.h
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(THERMAL_STRICT_FP_FLAGS) $(SO_LDFLAGS) -o $@ thermal_kernels.cpp

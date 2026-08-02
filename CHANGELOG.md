@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.12.3.26 - 2026-08-02
+
+- Freeze the accepted 12.3.25 science and publication implementation. `opacity_kernels.cpp` is byte-for-byte identical to 12.3.25; `fixed_state_engine.cpp`, the matrix/rate/solver engines, and `xstar_science_fits.cpp` are frozen.
+- Focus performance qualification exclusively on `helike_type69/ca19_ne1e8`; no broad C/O/Mg/Ca rerun is required in this measurement candidate.
+- Add a diagnostic-only Type-50 three-pass decomposition in a separate translation unit: source-identical scalar profile values are generated first, source-ordered trapezoid/rebin work builds contiguous opacity-span events second, and the original per-bin `opakc += optp2` additions are replayed third. This permits profile-value, trapezoid/rebin, and range-update timing without per-bin clocks.
+- Add an opt-in experimental contiguous range-update AVX2 path (`XSTAR_V064812326_ENABLE_EXPERIMENTAL_RANGE_AVX2=1`). The production default remains the exact 12.3.25 scalar Type-50 kernel.
+- Add a three-mode host qualifier for `ca19_ne1e8`: frozen baseline, diagnostic phase decomposition, and experimental range AVX2. Both experimental modes must be nine-FITS bit-data equivalent to the baseline.
+- Keep the remaining `xo01_detal2`, `xout_abund1`, and `xout_lines1` publication issues as a separate frozen track in this candidate. Production-zone ABI remains 6048110.
+
 ## 0.6.48.12.3.25 - 2026-08-02
 
 - Repair generic detailed-matrix endpoint ownership to match literal `msolvelucy.f90` `min(ipmat,indb(...))`: source endpoints above the selected compact dimension alias to the normalization row instead of being discarded. The production path contains no Ca or record-number special case.

@@ -492,7 +492,21 @@ extern "C" int xstar_opacity_apply_line_profile_v1(
     std::size_t errbuf_size
 );
 
+extern "C" int xstar_opacity_apply_line_profile_experimental_v064812326(
+    double optpp, double line_energy_ev, double vturb_km_s, double temperature_1e4k,
+    double atomic_mass_amu, double natural_width_ev, const double* seed_profiles,
+    int seed_radius, const double* epi, int ncn2, double* opakc, double* rccemis,
+    long long* updated_bins, double* opacity_seconds, char* errbuf, std::size_t errbuf_size);
+
 extern "C" int xstar_opacity_last_profile_vectorized_v064812324(void);
+extern "C" void xstar_opacity_type50_phase_perf_reset_v064812326(void);
+extern "C" void xstar_opacity_type50_phase_perf_snapshot_v064812326(
+    std::uint64_t* phase_profiles, std::uint64_t* span_events, std::uint64_t* span_bins,
+    std::uint64_t* vectorizable_span_events, std::uint64_t* vectorizable_span_bins,
+    std::uint64_t* max_span, double* profile_value_seconds, double* rebin_seconds,
+    double* range_update_seconds, std::uint64_t* range_avx2_profiles,
+    std::uint64_t* range_avx2_blocks, std::uint64_t* range_avx2_bins,
+    std::uint64_t* range_scalar_bins);
 
 
 struct xstar_spectral_context {
@@ -504,6 +518,30 @@ namespace {
 thread_local xstar_spectral_perf_v064892 g_spectral_perf_v064892{};
 thread_local std::uint64_t g_type50_vectorized_profiles_v064812324 = 0u;
 thread_local std::uint64_t g_type50_scalar_profiles_v064812324 = 0u;
+static bool env_truthy_v064812326(const char* name) {
+    const char* value = std::getenv(name);
+    return value && *value && std::strcmp(value, "0") != 0 &&
+        std::strcmp(value, "false") != 0 && std::strcmp(value, "FALSE") != 0;
+}
+
+static int apply_line_profile_dispatch_v064812326(
+    double optpp, double line_energy_ev, double vturb_km_s, double temperature_1e4k,
+    double atomic_mass_amu, double natural_width_ev, const double* seed_profiles,
+    int seed_radius, const double* epi, int ncn2, double* opakc, double* rccemis,
+    long long* updated_bins, double* opacity_seconds, char* errbuf, std::size_t errbuf_size) {
+    static const bool phase = env_truthy_v064812326("XSTAR_V064812326_TYPE50_PHASE_DECOMPOSITION");
+    static const bool range_avx2 = env_truthy_v064812326("XSTAR_V064812326_ENABLE_EXPERIMENTAL_RANGE_AVX2");
+    if (phase || range_avx2) {
+        return xstar_opacity_apply_line_profile_experimental_v064812326(
+            optpp, line_energy_ev, vturb_km_s, temperature_1e4k, atomic_mass_amu,
+            natural_width_ev, seed_profiles, seed_radius, epi, ncn2, opakc, rccemis,
+            updated_bins, opacity_seconds, errbuf, errbuf_size);
+    }
+    return xstar_opacity_apply_line_profile_v1(
+        optpp, line_energy_ev, vturb_km_s, temperature_1e4k, atomic_mass_amu,
+        natural_width_ev, seed_profiles, seed_radius, epi, ncn2, opakc, rccemis,
+        updated_bins, opacity_seconds, errbuf, errbuf_size);
+}
 
 std::size_t spectral_family_slot_v064892(int data_type) {
     switch (data_type) {
@@ -642,6 +680,24 @@ void xstar_spectral_type50_vector_perf_snapshot_v064812324(
     std::uint64_t* vectorized_profiles, std::uint64_t* scalar_profiles) {
     if (vectorized_profiles) *vectorized_profiles = g_type50_vectorized_profiles_v064812324;
     if (scalar_profiles) *scalar_profiles = g_type50_scalar_profiles_v064812324;
+}
+
+void xstar_spectral_type50_phase_perf_reset_v064812326(void) {
+    xstar_opacity_type50_phase_perf_reset_v064812326();
+}
+
+void xstar_spectral_type50_phase_perf_snapshot_v064812326(
+    std::uint64_t* phase_profiles, std::uint64_t* span_events, std::uint64_t* span_bins,
+    std::uint64_t* vectorizable_span_events, std::uint64_t* vectorizable_span_bins,
+    std::uint64_t* max_span, double* profile_value_seconds, double* rebin_seconds,
+    double* range_update_seconds, std::uint64_t* range_avx2_profiles,
+    std::uint64_t* range_avx2_blocks, std::uint64_t* range_avx2_bins,
+    std::uint64_t* range_scalar_bins) {
+    xstar_opacity_type50_phase_perf_snapshot_v064812326(
+        phase_profiles, span_events, span_bins, vectorizable_span_events,
+        vectorizable_span_bins, max_span, profile_value_seconds, rebin_seconds,
+        range_update_seconds, range_avx2_profiles, range_avx2_blocks,
+        range_avx2_bins, range_scalar_bins);
 }
 
 int xstar_spectral_context_create_v1(
@@ -863,7 +919,7 @@ int xstar_spectral_apply_contributions_v1(
                             seed, workspace->epi_eV, static_cast<int>(workspace->energy_count),
                             workspace->opakc, workspace->rccemis, &updated, &opacity_elapsed,
                             opacity_error, sizeof(opacity_error))
-                        : xstar_opacity_apply_line_profile_v1(
+                        : apply_line_profile_dispatch_v064812326(
                             c.opakab * c.abundance_lower * c.hydrogen_density,
                             c.line_energy_eV, c.turbulent_velocity_km_s,
                             c.temperature_1e4K, c.atomic_mass_amu, c.natural_width_eV,
@@ -971,7 +1027,7 @@ int xstar_spectral_apply_contributions_v1(
                     seed, workspace->epi_eV, static_cast<int>(workspace->energy_count),
                     workspace->opakc, workspace->rccemis, &updated, &opacity_elapsed,
                     opacity_error, sizeof(opacity_error))
-                : xstar_opacity_apply_line_profile_v1(
+                : apply_line_profile_dispatch_v064812326(
                     opakb1, c.line_energy_eV, c.turbulent_velocity_km_s,
                     c.temperature_1e4K, c.atomic_mass_amu, c.natural_width_eV,
                     seed, seed_radius, workspace->epi_eV, static_cast<int>(workspace->energy_count),

@@ -153,6 +153,14 @@ int xstar_spectral_perf_snapshot_v064892(xstar_spectral_perf_v064892* perf);
 void xstar_spectral_type50_vector_perf_reset_v064812324(void);
 void xstar_spectral_type50_vector_perf_snapshot_v064812324(
     uint64_t* vectorized_profiles, uint64_t* scalar_profiles);
+void xstar_spectral_type50_phase_perf_reset_v064812326(void);
+void xstar_spectral_type50_phase_perf_snapshot_v064812326(
+    uint64_t* phase_profiles, uint64_t* span_events, uint64_t* span_bins,
+    uint64_t* vectorizable_span_events, uint64_t* vectorizable_span_bins,
+    uint64_t* max_span, double* profile_value_seconds, double* rebin_seconds,
+    double* range_update_seconds, uint64_t* range_avx2_profiles,
+    uint64_t* range_avx2_blocks, uint64_t* range_avx2_bins,
+    uint64_t* range_scalar_bins);
 int xstar_spectral_context_create_v1(
     xstar_spectral_context** context,
     char* error,

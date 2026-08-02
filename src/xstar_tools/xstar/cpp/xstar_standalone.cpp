@@ -17198,6 +17198,27 @@ void emit_performance_instrumentation_v064892(
     std::uint64_t type50_scalar_profiles_v064812324 = 0u;
     xstar_spectral_type50_vector_perf_snapshot_v064812324(
         &type50_vectorized_profiles_v064812324, &type50_scalar_profiles_v064812324);
+    std::uint64_t type50_phase_profiles_v064812326 = 0u;
+    std::uint64_t type50_span_events_v064812326 = 0u;
+    std::uint64_t type50_span_bins_v064812326 = 0u;
+    std::uint64_t type50_vectorizable_span_events_v064812326 = 0u;
+    std::uint64_t type50_vectorizable_span_bins_v064812326 = 0u;
+    std::uint64_t type50_max_span_v064812326 = 0u;
+    double type50_profile_value_seconds_v064812326 = 0.0;
+    double type50_rebin_seconds_v064812326 = 0.0;
+    double type50_range_update_seconds_v064812326 = 0.0;
+    std::uint64_t type50_range_avx2_profiles_v064812326 = 0u;
+    std::uint64_t type50_range_avx2_blocks_v064812326 = 0u;
+    std::uint64_t type50_range_avx2_bins_v064812326 = 0u;
+    std::uint64_t type50_range_scalar_bins_v064812326 = 0u;
+    xstar_spectral_type50_phase_perf_snapshot_v064812326(
+        &type50_phase_profiles_v064812326, &type50_span_events_v064812326,
+        &type50_span_bins_v064812326, &type50_vectorizable_span_events_v064812326,
+        &type50_vectorizable_span_bins_v064812326, &type50_max_span_v064812326,
+        &type50_profile_value_seconds_v064812326, &type50_rebin_seconds_v064812326,
+        &type50_range_update_seconds_v064812326, &type50_range_avx2_profiles_v064812326,
+        &type50_range_avx2_blocks_v064812326, &type50_range_avx2_bins_v064812326,
+        &type50_range_scalar_bins_v064812326);
     auto write = [&](std::ostream& out) {
         out << std::fixed << std::setprecision(6)
             << "V064892_PERF_POLICY=MEASUREMENT_ONLY_BROAD_SPECTRAL_CONSTRUCTION_DECOMPOSITION\n"
@@ -17249,7 +17270,20 @@ void emit_performance_instrumentation_v064892(
             << "V064812324_TYPE50_VECTORIZED_SMALL_A_PROFILES="<<type50_vectorized_profiles_v064812324<<"\n"
             << "V064812324_TYPE50_SCALAR_PROFILES="<<type50_scalar_profiles_v064812324<<"\n"
             << "V064812324_TYPE50_CLASSIFIED_PROFILES="
-            <<(type50_vectorized_profiles_v064812324 + type50_scalar_profiles_v064812324)<<"\n";
+            <<(type50_vectorized_profiles_v064812324 + type50_scalar_profiles_v064812324)<<"\n"
+            << "V064812326_TYPE50_PHASE_PROFILES="<<type50_phase_profiles_v064812326<<"\n"
+            << "V064812326_TYPE50_PROFILE_VALUE_SECONDS="<<type50_profile_value_seconds_v064812326<<"\n"
+            << "V064812326_TYPE50_TRAPEZOID_REBIN_SECONDS="<<type50_rebin_seconds_v064812326<<"\n"
+            << "V064812326_TYPE50_OPAKC_RANGE_UPDATE_SECONDS="<<type50_range_update_seconds_v064812326<<"\n"
+            << "V064812326_TYPE50_SPAN_EVENTS="<<type50_span_events_v064812326<<"\n"
+            << "V064812326_TYPE50_SPAN_BINS="<<type50_span_bins_v064812326<<"\n"
+            << "V064812326_TYPE50_VECTORABLE_SPAN_EVENTS="<<type50_vectorizable_span_events_v064812326<<"\n"
+            << "V064812326_TYPE50_VECTORABLE_SPAN_BINS="<<type50_vectorizable_span_bins_v064812326<<"\n"
+            << "V064812326_TYPE50_MAX_SPAN="<<type50_max_span_v064812326<<"\n"
+            << "V064812326_TYPE50_RANGE_AVX2_PROFILES="<<type50_range_avx2_profiles_v064812326<<"\n"
+            << "V064812326_TYPE50_RANGE_AVX2_BLOCKS="<<type50_range_avx2_blocks_v064812326<<"\n"
+            << "V064812326_TYPE50_RANGE_AVX2_BINS="<<type50_range_avx2_bins_v064812326<<"\n"
+            << "V064812326_TYPE50_RANGE_SCALAR_BINS="<<type50_range_scalar_bins_v064812326<<"\n";
     };
     write(std::cout);
     if (write_file) {
@@ -17292,6 +17326,7 @@ int command_run_standalone_production_v67(const Options& options, const std::fil
         g_performance_v064892 = &performance_v064892;
         xstar_spectral_perf_reset_v064892();
         xstar_spectral_type50_vector_perf_reset_v064812324();
+        xstar_spectral_type50_phase_perf_reset_v064812326();
         auto params = xstar_atdb_runtime::read_production_parameters(options.parameters_path);
         auto atomic = xstar_atdb_runtime::resolve_atomic_data(options.parameters_path, params.raw_json, executable_path);
         std::cout << prefix << "COMMAND=RUN_PRODUCTION_STANDALONE\n"
