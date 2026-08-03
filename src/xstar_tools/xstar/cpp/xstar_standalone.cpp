@@ -17284,6 +17284,15 @@ void emit_performance_instrumentation_v064892(
         &type50_consumed_points_v064812329, &type50_boundary_true_points_v064812329,
         &type50_boundary_false_points_v064812329, &type50_boundary_events_v064812329,
         &type50_output_bins_advanced_v064812329, &type50_max_bins_per_event_v064812329);
+    std::uint64_t type50_prod_hint_profiles_v064812330 = 0u;
+    std::uint64_t type50_fallback_12328_profiles_v064812330 = 0u;
+    std::uint64_t type50_next_epi_profiles_v064812330 = 0u;
+    std::uint64_t type50_local_bins_profiles_v064812330 = 0u;
+    std::uint64_t type50_cursor_profiles_v064812330 = 0u;
+    xstar_spectral_type50_perf_snapshot_v064812330(
+        &type50_prod_hint_profiles_v064812330, &type50_fallback_12328_profiles_v064812330,
+        &type50_next_epi_profiles_v064812330, &type50_local_bins_profiles_v064812330,
+        &type50_cursor_profiles_v064812330);
     auto write = [&](std::ostream& out) {
         out << std::fixed << std::setprecision(6)
             << "V064892_PERF_POLICY=MEASUREMENT_ONLY_BROAD_SPECTRAL_CONSTRUCTION_DECOMPOSITION\n"
@@ -17401,6 +17410,11 @@ void emit_performance_instrumentation_v064892(
             << "V064812329_TYPE50_BOUNDARY_EVENTS="<<type50_boundary_events_v064812329<<"\n"
             << "V064812329_TYPE50_OUTPUT_BINS_ADVANCED="<<type50_output_bins_advanced_v064812329<<"\n"
             << "V064812329_TYPE50_MAX_BINS_PER_EVENT="<<type50_max_bins_per_event_v064812329<<"\n";
+        out << "V064812330_TYPE50_PRODUCTION_HINT_PROFILES="<<type50_prod_hint_profiles_v064812330<<"\n"
+            << "V064812330_TYPE50_FALLBACK_12328_PROFILES="<<type50_fallback_12328_profiles_v064812330<<"\n"
+            << "V064812330_TYPE50_NEXT_EPI_PROFILES="<<type50_next_epi_profiles_v064812330<<"\n"
+            << "V064812330_TYPE50_LOCAL_BINS_PROFILES="<<type50_local_bins_profiles_v064812330<<"\n"
+            << "V064812330_TYPE50_CURSOR_PROFILES="<<type50_cursor_profiles_v064812330<<"\n";
     };
     write(std::cout);
     if (write_file) {
@@ -17447,6 +17461,7 @@ int command_run_standalone_production_v67(const Options& options, const std::fil
         xstar_spectral_type50_perf_reset_v064812327();
         xstar_spectral_type50_perf_reset_v064812328();
         xstar_spectral_type50_perf_reset_v064812329();
+        xstar_spectral_type50_perf_reset_v064812330();
         auto params = xstar_atdb_runtime::read_production_parameters(options.parameters_path);
         auto atomic = xstar_atdb_runtime::resolve_atomic_data(options.parameters_path, params.raw_json, executable_path);
         std::cout << prefix << "COMMAND=RUN_PRODUCTION_STANDALONE\n"

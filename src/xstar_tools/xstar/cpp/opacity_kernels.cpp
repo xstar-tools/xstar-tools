@@ -94,6 +94,15 @@ thread_local std::uint64_t g_type50_boundary_events_v064812329 = 0u;
 thread_local std::uint64_t g_type50_output_bins_advanced_v064812329 = 0u;
 thread_local std::uint64_t g_type50_max_bins_per_event_v064812329 = 0u;
 
+// v0.6.48.12.3.30: promoted 12.3.29 boundary-hint production path and
+// isolated consume micro-experiments.  These counters are profile-level only
+// so normal benchmark timing is not distorted by per-point instrumentation.
+thread_local std::uint64_t g_type50_prod_hint_profiles_v064812330 = 0u;
+thread_local std::uint64_t g_type50_fallback_12328_profiles_v064812330 = 0u;
+thread_local std::uint64_t g_type50_next_epi_profiles_v064812330 = 0u;
+thread_local std::uint64_t g_type50_local_bins_profiles_v064812330 = 0u;
+thread_local std::uint64_t g_type50_cursor_profiles_v064812330 = 0u;
+
 static bool env_truthy_v064812324(const char* name) {
     const char* value = std::getenv(name);
     return value && *value && std::strcmp(value, "0") != 0 &&
@@ -975,6 +984,185 @@ static int run_inline_farwing_profile_v064812329(
     return 0;
 }
 
+
+template <bool CacheNextEpiV064812330, bool LocalUpdatedBinsV064812330,
+          bool CursorAdvanceV064812330>
+__attribute__((target("avx2")))
+static int run_inline_farwing_profile_v064812330(
+    double optpp, double line_energy_ev, double dele, double aasmall,
+    double e00, double deleused, const double* epi, int n,
+    int mlmin, int mlmax, int ml1min, int first_core, int last_core,
+    double* opakc, long long* updated_bins) {
+    constexpr int ml2 = 10000;
+    auto energy_for = [=](int point) {
+        return source_add(e00, source_mul(static_cast<double>(point - ml2), deleused));
+    };
+
+    Type50ConsumeStateV064812328 state;
+    state.previous_energy = energy_for(mlmin);
+    state.ml1m = ml1min;
+
+    // Independent 12.3.30 micro-state.  Only the selected constexpr path is
+    // active in each host mode; the source arithmetic and update ordering are
+    // unchanged from the promoted boundary-hint implementation.
+    double next_epi = epi[ml1min - 1];
+    const double* epi_cursor = epi + (ml1min - 1);
+    double* opakc_cursor = opakc + (ml1min - 1);
+    long long local_updated_bins = 0;
+
+    auto add_updated_bin = [&]() {
+        if constexpr (LocalUpdatedBinsV064812330) ++local_updated_bins;
+        else ++(*updated_bins);
+    };
+
+    auto consume_point = [&](double current_energy, double profile) {
+        type50_consume_no_boundary_v064812328(optpp, current_energy, profile, state);
+        bool crosses;
+        if constexpr (CursorAdvanceV064812330) crosses = current_energy > *epi_cursor;
+        else if constexpr (CacheNextEpiV064812330) crosses = current_energy > next_epi;
+        else crosses = current_energy > epi[state.ml1m - 1];
+        crosses = __builtin_expect(crosses, 0);
+        if (crosses) {
+            if (state.sume > 1.0e-34) {
+                const double optp2 = source_div(state.opsum, state.sume);
+                if constexpr (CursorAdvanceV064812330) {
+                    while (current_energy > *epi_cursor && state.ml1m < n) {
+                        *opakc_cursor = source_add(*opakc_cursor, optp2);
+                        add_updated_bin();
+                        ++state.ml1m;
+                        ++epi_cursor;
+                        ++opakc_cursor;
+                    }
+                } else if constexpr (CacheNextEpiV064812330) {
+                    while (current_energy > next_epi && state.ml1m < n) {
+                        opakc[state.ml1m - 1] = source_add(opakc[state.ml1m - 1], optp2);
+                        add_updated_bin();
+                        ++state.ml1m;
+                        next_epi = epi[state.ml1m - 1];
+                    }
+                } else {
+                    while (current_energy > epi[state.ml1m - 1] && state.ml1m < n) {
+                        opakc[state.ml1m - 1] = source_add(opakc[state.ml1m - 1], optp2);
+                        add_updated_bin();
+                        ++state.ml1m;
+                    }
+                }
+            }
+            state.opsum = 0.0;
+            state.sume = 0.0;
+        }
+    };
+
+    auto scalar_point = [&](int point) {
+        const double current_energy = energy_for(point);
+        const double delet = source_div(source_sub(current_energy, line_energy_ev), dele);
+        double profile;
+        if (point == ml2 && aasmall <= xstar_constants::kLegacyLinopacCenterVoigtThreshold) {
+            profile = source_div(std::exp(-delet * delet),
+                xstar_constants::kLegacyLinopacProfileNormalization);
+        } else {
+            const double raw = voigte_small_a_positive_v064896(std::abs(delet), aasmall);
+            profile = source_div(raw, xstar_constants::kLegacyLinopacProfileNormalization);
+        }
+        consume_point(current_energy, profile);
+        ++g_type50_prod_scalar_profile_points_v064812328;
+    };
+
+    const __m256d deleused4 = _mm256_set1_pd(deleused);
+    const __m256d e004 = _mm256_set1_pd(e00);
+    const __m256d line4 = _mm256_set1_pd(line_energy_ev);
+    const __m256d dele4 = _mm256_set1_pd(dele);
+    const __m256d aa4 = _mm256_set1_pd(aasmall);
+    const __m256d six4 = _mm256_set1_pd(source_real_literal(6.0));
+    const __m256d four4 = _mm256_set1_pd(source_real_literal(4.0));
+    const __m256d fifteen4 = _mm256_set1_pd(source_real_literal(15.0));
+    const __m256d sqp4 = _mm256_set1_pd(source_real_literal(1.772453851));
+    const __m256d norm4 = _mm256_set1_pd(xstar_constants::kLegacyLinopacProfileNormalization);
+    const __m256d sign = _mm256_set1_pd(-0.0);
+
+#define XSTAR_V064812330_EXTRACT4(VEC, A0, A1, A2, A3) do { \
+        const __m128d lo_v064812330 = _mm256_castpd256_pd128((VEC)); \
+        const __m128d hi_v064812330 = _mm256_extractf128_pd((VEC), 1); \
+        (A0) = _mm_cvtsd_f64(lo_v064812330); \
+        (A1) = _mm_cvtsd_f64(_mm_unpackhi_pd(lo_v064812330, lo_v064812330)); \
+        (A2) = _mm_cvtsd_f64(hi_v064812330); \
+        (A3) = _mm_cvtsd_f64(_mm_unpackhi_pd(hi_v064812330, hi_v064812330)); \
+    } while (0)
+
+#define XSTAR_V064812330_PROCESS_FAR_RANGE(BEGIN_VALUE, END_VALUE) do { \
+        int point_v064812330 = (BEGIN_VALUE); \
+        const int end_v064812330 = (END_VALUE); \
+        while (point_v064812330 + 3 <= end_v064812330) { \
+            const double o0 = static_cast<double>(point_v064812330 - ml2); \
+            const double o1 = static_cast<double>(point_v064812330 + 1 - ml2); \
+            const double o2 = static_cast<double>(point_v064812330 + 2 - ml2); \
+            const double o3 = static_cast<double>(point_v064812330 + 3 - ml2); \
+            const __m256d offsets = _mm256_set_pd(o3, o2, o1, o0); \
+            const __m256d energies = _mm256_add_pd(e004, _mm256_mul_pd(offsets, deleused4)); \
+            const __m256d signed_v = _mm256_div_pd(_mm256_sub_pd(energies, line4), dele4); \
+            const __m256d v = _mm256_andnot_pd(sign, signed_v); \
+            const __m256d v2 = _mm256_mul_pd(v, v); \
+            const __m256d v4 = _mm256_mul_pd(v2, v2); \
+            const __m256d n1 = _mm256_mul_pd(six4, v2); \
+            const __m256d n2 = _mm256_mul_pd(four4, v4); \
+            const __m256d num = _mm256_add_pd(_mm256_add_pd(fifteen4, n1), n2); \
+            const __m256d scaled = _mm256_mul_pd(aa4, num); \
+            const __m256d d0 = _mm256_mul_pd(four4, v2); \
+            const __m256d d1 = _mm256_mul_pd(d0, v2); \
+            const __m256d d2 = _mm256_mul_pd(d1, v2); \
+            const __m256d raw = _mm256_div_pd(scaled, _mm256_mul_pd(d2, sqp4)); \
+            const __m256d profiles = _mm256_div_pd(raw, norm4); \
+            double e0, e1, e2, e3, p0, p1, p2, p3; \
+            XSTAR_V064812330_EXTRACT4(energies, e0, e1, e2, e3); \
+            XSTAR_V064812330_EXTRACT4(profiles, p0, p1, p2, p3); \
+            consume_point(e0, p0); \
+            consume_point(e1, p1); \
+            consume_point(e2, p2); \
+            consume_point(e3, p3); \
+            ++g_type50_prod_avx2_blocks_v064812328; \
+            g_type50_prod_avx2_points_v064812328 += 4u; \
+            point_v064812330 += 4; \
+        } \
+        while (point_v064812330 <= end_v064812330) { \
+            scalar_point(point_v064812330); \
+            ++point_v064812330; \
+        } \
+    } while (0)
+
+    const int first_point = mlmin + 1;
+    const int last_point = mlmax;
+    const int left_begin = first_point;
+    const int left_end = std::min(last_point, first_core - 1);
+    if (left_begin <= left_end) {
+        if (aasmall <= xstar_constants::kLegacyLinopacCenterVoigtThreshold &&
+            left_begin <= ml2 && ml2 <= left_end) {
+            XSTAR_V064812330_PROCESS_FAR_RANGE(left_begin, ml2 - 1);
+            scalar_point(ml2);
+            XSTAR_V064812330_PROCESS_FAR_RANGE(ml2 + 1, left_end);
+        } else {
+            XSTAR_V064812330_PROCESS_FAR_RANGE(left_begin, left_end);
+        }
+    }
+    for (int point = std::max(first_point, first_core);
+         point <= std::min(last_point, last_core); ++point) scalar_point(point);
+    const int right_begin = std::max(first_point, last_core + 1);
+    const int right_end = last_point;
+    if (right_begin <= right_end) {
+        if (aasmall <= xstar_constants::kLegacyLinopacCenterVoigtThreshold &&
+            right_begin <= ml2 && ml2 <= right_end) {
+            XSTAR_V064812330_PROCESS_FAR_RANGE(right_begin, ml2 - 1);
+            scalar_point(ml2);
+            XSTAR_V064812330_PROCESS_FAR_RANGE(ml2 + 1, right_end);
+        } else {
+            XSTAR_V064812330_PROCESS_FAR_RANGE(right_begin, right_end);
+        }
+    }
+#undef XSTAR_V064812330_PROCESS_FAR_RANGE
+#undef XSTAR_V064812330_EXTRACT4
+    if constexpr (LocalUpdatedBinsV064812330) *updated_bins += local_updated_bins;
+    return 0;
+}
+
 #endif
 
 #if (defined(__x86_64__) || defined(__i386__)) && (defined(__GNUC__) || defined(__clang__))
@@ -1179,12 +1367,14 @@ static int xstar_opacity_apply_line_profile_optimized_v064896(
         cpu_avx2_available_v064812324() && !force_scalar_v064812328;
     static const bool decompose_v064812328 =
         env_truthy_v064812324("XSTAR_V064812328_TYPE50_DECOMPOSE");
-    static const bool register_consume_v064812329 =
-        env_truthy_v064812324("XSTAR_V064812329_ENABLE_REGISTER_CONSUME");
-    static const bool boundary_hint_v064812329 =
-        env_truthy_v064812324("XSTAR_V064812329_ENABLE_BOUNDARY_HINT");
-    static const bool consume_counters_v064812329 =
-        env_truthy_v064812324("XSTAR_V064812329_TYPE50_CONSUME_COUNTERS");
+    static const bool force_12328_consume_v064812330 =
+        env_truthy_v064812324("XSTAR_V064812330_FORCE_12328_CONSUME");
+    static const bool next_epi_cache_v064812330 =
+        env_truthy_v064812324("XSTAR_V064812330_ENABLE_NEXT_EPI_CACHE");
+    static const bool local_updated_bins_v064812330 =
+        env_truthy_v064812324("XSTAR_V064812330_ENABLE_LOCAL_UPDATED_BINS");
+    static const bool cursor_advance_v064812330 =
+        env_truthy_v064812324("XSTAR_V064812330_ENABLE_CURSOR_ADVANCE");
 
 #if (defined(__x86_64__) || defined(__i386__)) && (defined(__GNUC__) || defined(__clang__))
     if (production_inline_avx2_v064812328 && decompose_v064812328) {
@@ -1254,35 +1444,29 @@ static int xstar_opacity_apply_line_profile_optimized_v064896(
         const int last_point = mlmax;
         const auto core = small_a_core_bounds_v064812328(
             first_point, last_point, e00, deleused, line_energy_ev, dele);
-        if (register_consume_v064812329) ++g_type50_register_profiles_v064812329;
-        if (boundary_hint_v064812329) ++g_type50_hint_profiles_v064812329;
-        if (!register_consume_v064812329 && !boundary_hint_v064812329 && !consume_counters_v064812329) {
-            // Exact accepted 12.3.28 production function.  12.3.29 experiments
-            // are isolated so the default path cannot inherit template/helper overhead.
+        if (force_12328_consume_v064812330) {
+            ++g_type50_fallback_12328_profiles_v064812330;
             run_inline_farwing_profile_v064812328(
                 optpp, line_energy_ev, dele, aasmall, e00, deleused, epi, n,
                 mlmin, mlmax, ml1min, core.first, core.second, false,
                 opakc, updated_bins);
-        } else if (consume_counters_v064812329) {
-            if (register_consume_v064812329 && boundary_hint_v064812329)
-                run_inline_farwing_profile_v064812329<true,true,true>(
-                    optpp,line_energy_ev,dele,aasmall,e00,deleused,epi,n,mlmin,mlmax,ml1min,core.first,core.second,opakc,updated_bins);
-            else if (register_consume_v064812329)
-                run_inline_farwing_profile_v064812329<true,false,true>(
-                    optpp,line_energy_ev,dele,aasmall,e00,deleused,epi,n,mlmin,mlmax,ml1min,core.first,core.second,opakc,updated_bins);
-            else if (boundary_hint_v064812329)
-                run_inline_farwing_profile_v064812329<false,true,true>(
-                    optpp,line_energy_ev,dele,aasmall,e00,deleused,epi,n,mlmin,mlmax,ml1min,core.first,core.second,opakc,updated_bins);
-            else
-                run_inline_farwing_profile_v064812329<false,false,true>(
-                    optpp,line_energy_ev,dele,aasmall,e00,deleused,epi,n,mlmin,mlmax,ml1min,core.first,core.second,opakc,updated_bins);
-        } else if (register_consume_v064812329 && boundary_hint_v064812329) {
-            run_inline_farwing_profile_v064812329<true,true,false>(
+        } else if (next_epi_cache_v064812330) {
+            ++g_type50_next_epi_profiles_v064812330;
+            run_inline_farwing_profile_v064812330<true,false,false>(
                 optpp,line_energy_ev,dele,aasmall,e00,deleused,epi,n,mlmin,mlmax,ml1min,core.first,core.second,opakc,updated_bins);
-        } else if (register_consume_v064812329) {
-            run_inline_farwing_profile_v064812329<true,false,false>(
+        } else if (local_updated_bins_v064812330) {
+            ++g_type50_local_bins_profiles_v064812330;
+            run_inline_farwing_profile_v064812330<false,true,false>(
+                optpp,line_energy_ev,dele,aasmall,e00,deleused,epi,n,mlmin,mlmax,ml1min,core.first,core.second,opakc,updated_bins);
+        } else if (cursor_advance_v064812330) {
+            ++g_type50_cursor_profiles_v064812330;
+            run_inline_farwing_profile_v064812330<false,false,true>(
                 optpp,line_energy_ev,dele,aasmall,e00,deleused,epi,n,mlmin,mlmax,ml1min,core.first,core.second,opakc,updated_bins);
         } else {
+            // 12.3.30 production: exactly the independently accepted 12.3.29
+            // boundary-hint path.  No register-resident state is folded in.
+            ++g_type50_prod_hint_profiles_v064812330;
+            ++g_type50_hint_profiles_v064812329;
             run_inline_farwing_profile_v064812329<false,true,false>(
                 optpp,line_energy_ev,dele,aasmall,e00,deleused,epi,n,mlmin,mlmax,ml1min,core.first,core.second,opakc,updated_bins);
         }
@@ -1292,9 +1476,11 @@ static int xstar_opacity_apply_line_profile_optimized_v064896(
         const auto ended = std::chrono::steady_clock::now();
         *opacity_seconds = std::chrono::duration<double>(ended - started).count();
         write_message(errbuf, errbuf_size,
-            register_consume_v064812329
-                ? (boundary_hint_v064812329 ? "v064812329 register consume + boundary hint" : "v064812329 register consume")
-                : (boundary_hint_v064812329 ? "v064812329 boundary hint" : "v064812328 production inline-farwing AVX2"));
+            force_12328_consume_v064812330 ? "v064812330 exact 12.3.28 consume fallback" :
+            next_epi_cache_v064812330 ? "v064812330 cached next_epi consume" :
+            local_updated_bins_v064812330 ? "v064812330 local updated_bins consume" :
+            cursor_advance_v064812330 ? "v064812330 cursor-advance consume" :
+            "v064812330 production boundary-hint consume");
         return 0;
     }
 #endif
@@ -1563,6 +1749,25 @@ void xstar_opacity_type50_perf_snapshot_v064812329(
     if (boundary_events) *boundary_events = g_type50_boundary_events_v064812329;
     if (output_bins_advanced) *output_bins_advanced = g_type50_output_bins_advanced_v064812329;
     if (max_bins_per_event) *max_bins_per_event = g_type50_max_bins_per_event_v064812329;
+}
+
+void xstar_opacity_type50_perf_reset_v064812330(void) {
+    g_type50_prod_hint_profiles_v064812330 = 0u;
+    g_type50_fallback_12328_profiles_v064812330 = 0u;
+    g_type50_next_epi_profiles_v064812330 = 0u;
+    g_type50_local_bins_profiles_v064812330 = 0u;
+    g_type50_cursor_profiles_v064812330 = 0u;
+}
+
+void xstar_opacity_type50_perf_snapshot_v064812330(
+    std::uint64_t* prod_hint_profiles, std::uint64_t* fallback_12328_profiles,
+    std::uint64_t* next_epi_profiles, std::uint64_t* local_bins_profiles,
+    std::uint64_t* cursor_profiles) {
+    if (prod_hint_profiles) *prod_hint_profiles = g_type50_prod_hint_profiles_v064812330;
+    if (fallback_12328_profiles) *fallback_12328_profiles = g_type50_fallback_12328_profiles_v064812330;
+    if (next_epi_profiles) *next_epi_profiles = g_type50_next_epi_profiles_v064812330;
+    if (local_bins_profiles) *local_bins_profiles = g_type50_local_bins_profiles_v064812330;
+    if (cursor_profiles) *cursor_profiles = g_type50_cursor_profiles_v064812330;
 }
 
 } // extern "C"

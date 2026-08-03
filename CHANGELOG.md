@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.12.3.30 - 2026-08-03
+
+- Promote the independently accepted 12.3.29 likely-false Type-50 rebin boundary hint into the normal AVX2 production consume path. The branch condition and source-order arithmetic are unchanged; only compiler layout guidance is added. The host `ca19_ne1e8` qualification measured 22.449425 s Type-50 versus 23.766211 s for 12.3.28 production, with nine-FITS bit-data equivalence.
+- Keep an exact 12.3.28 consume fallback behind `XSTAR_V064812330_FORCE_12328_CONSUME=1`; the exact 12.3.25 scalar fallback remains available through `XSTAR_V064812328_FORCE_SCALAR_TYPE50=1`.
+- Retire register+hint, `ncut==4`, schedule-cache, and heavy per-point consume-counter modes from the 12.3.30 host qualifier. Their historical ABI/reporting code remains non-default, but none participates in production selection.
+- Add three independent, opt-in, element-generic micro-experiments layered on the promoted boundary-hint baseline: cached `next_epi` (`XSTAR_V064812330_ENABLE_NEXT_EPI_CACHE=1`), local per-profile `updated_bins` accumulation (`XSTAR_V064812330_ENABLE_LOCAL_UPDATED_BINS=1`), and monotone `epi`/`opakc` cursor advancement (`XSTAR_V064812330_ENABLE_CURSOR_ADVANCE=1`). No experiment combines changes.
+- Add profile-level telemetry only for the new modes, avoiding per-point measurement overhead. Add a `ca19_ne1e8`-only qualifier comparing promoted production, exact 12.3.28 fallback, and the three independent micro-experiments. Every non-production mode must be nine-FITS bit-data equivalent to production.
+- Keep 12.3.25 science/publication behavior and production-zone ABI 6048110 frozen. The remaining `xo01_detal2`, `xout_abund1`, and `xout_lines1` publication work remains a separate track.
+
 ## 0.6.48.12.3.29 - 2026-08-02
 
 - Freeze the accepted 12.3.28 production Type-50 inline far-wing AVX2 function as the default path; 12.3.29 experiments are dispatched only when explicitly enabled, so the normal path does not inherit experiment helper/template overhead. The exact 12.3.25 scalar fallback remains available.

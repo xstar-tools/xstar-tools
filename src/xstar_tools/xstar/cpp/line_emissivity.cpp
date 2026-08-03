@@ -542,6 +542,11 @@ extern "C" void xstar_opacity_type50_perf_snapshot_v064812329(
     std::uint64_t* consumed_points, std::uint64_t* boundary_true_points,
     std::uint64_t* boundary_false_points, std::uint64_t* boundary_events,
     std::uint64_t* output_bins_advanced, std::uint64_t* max_bins_per_event);
+extern "C" void xstar_opacity_type50_perf_reset_v064812330(void);
+extern "C" void xstar_opacity_type50_perf_snapshot_v064812330(
+    std::uint64_t* prod_hint_profiles, std::uint64_t* fallback_12328_profiles,
+    std::uint64_t* next_epi_profiles, std::uint64_t* local_bins_profiles,
+    std::uint64_t* cursor_profiles);
 
 
 struct xstar_spectral_context {
@@ -731,6 +736,19 @@ void xstar_spectral_type50_perf_snapshot_v064812329(
     xstar_opacity_type50_perf_snapshot_v064812329(
         register_profiles, hint_profiles, consumed_points, boundary_true_points,
         boundary_false_points, boundary_events, output_bins_advanced, max_bins_per_event);
+}
+
+void xstar_spectral_type50_perf_reset_v064812330(void) {
+    xstar_opacity_type50_perf_reset_v064812330();
+}
+
+void xstar_spectral_type50_perf_snapshot_v064812330(
+    std::uint64_t* prod_hint_profiles, std::uint64_t* fallback_12328_profiles,
+    std::uint64_t* next_epi_profiles, std::uint64_t* local_bins_profiles,
+    std::uint64_t* cursor_profiles) {
+    xstar_opacity_type50_perf_snapshot_v064812330(
+        prod_hint_profiles, fallback_12328_profiles, next_epi_profiles,
+        local_bins_profiles, cursor_profiles);
 }
 
 void xstar_spectral_type50_perf_snapshot_v064812328(

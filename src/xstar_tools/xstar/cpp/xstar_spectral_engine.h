@@ -187,6 +187,11 @@ void xstar_spectral_type50_perf_snapshot_v064812329(
     uint64_t* consumed_points, uint64_t* boundary_true_points,
     uint64_t* boundary_false_points, uint64_t* boundary_events,
     uint64_t* output_bins_advanced, uint64_t* max_bins_per_event);
+void xstar_spectral_type50_perf_reset_v064812330(void);
+void xstar_spectral_type50_perf_snapshot_v064812330(
+    uint64_t* prod_hint_profiles, uint64_t* fallback_12328_profiles,
+    uint64_t* next_epi_profiles, uint64_t* local_bins_profiles,
+    uint64_t* cursor_profiles);
 int xstar_spectral_context_create_v1(
     xstar_spectral_context** context,
     char* error,
