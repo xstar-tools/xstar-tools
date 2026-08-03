@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.12.3.29 - 2026-08-02
+
+- Freeze the accepted 12.3.28 production Type-50 inline far-wing AVX2 function as the default path; 12.3.29 experiments are dispatched only when explicitly enabled, so the normal path does not inherit experiment helper/template overhead. The exact 12.3.25 scalar fallback remains available.
+- Retire the negative 12.3.28 `ncut==4` consume experiment from the 12.3.29 qualifier.
+- Add opt-in generic register-resident source-order consumption (`XSTAR_V064812329_ENABLE_REGISTER_CONSUME=1`): `sume`, `opsum`, `tmpop`, previous energy, and `ml1m` remain direct locals, while `epi` and `opakc` cursors advance monotonically on source boundary crossings. `updated_bins` is accumulated locally and committed once per profile. Arithmetic and `opakc` update order are unchanged.
+- Add an independent opt-in likely-false boundary-layout hint (`XSTAR_V064812329_ENABLE_BOUNDARY_HINT=1`) using `__builtin_expect` around the unchanged `current_energy > next_epi` decision. It can be measured alone or together with register consumption.
+- Add diagnostic consume counters (`XSTAR_V064812329_TYPE50_CONSUME_COUNTERS=1`) for consumed points, boundary true/false points, boundary events, output bins advanced, and maximum bins per event. Counter mode is excluded from performance acceptance.
+- Add a `ca19_ne1e8`-only host qualifier that compares frozen production, register consume, branch hint, combined register+hint, and diagnostic counters. Every experiment must be nine-FITS bit-data equivalent to production. No experiment is production default in 12.3.29. Production-zone ABI remains 6048110 and 12.3.25 science/publication is frozen.
+
 ## 0.6.48.12.3.28 - 2026-08-02
 
 - Promote the 12.3.27 one-dispatch small-a `|v|>=5` far-wing AVX2 implementation into the normal standalone-C++ Type-50 production kernel on AVX2-capable x86 CPUs. The exact accepted 12.3.25 scalar Type-50 implementation remains the runtime fallback (`XSTAR_V064812328_FORCE_SCALAR_TYPE50=1`) and is also used automatically on unsupported CPUs/non-small-a profiles.
