@@ -14,6 +14,9 @@
 #include <memory>
 #include <sstream>
 #include <vector>
+#include <array>
+#include <unordered_map>
+#include <limits>
 
 #if (defined(__x86_64__) || defined(__i386__)) && (defined(__GNUC__) || defined(__clang__))
 #include <immintrin.h>
@@ -788,3 +791,769 @@ void xstar_opacity_type50_phase_perf_snapshot_v064812326(
 }
 
 }
+
+// -----------------------------------------------------------------------------
+// v0.6.48.12.3.27 experimental Type-50 work
+//
+// 12.3.25 science and the production opacity kernel remain frozen.  These
+// experiments attack the two phases localized by 12.3.26:
+//   (1) repeated source-grid boundary discovery/rebin traversal, and
+//   (2) small-a |v|>=5 profile arithmetic.
+//
+// The rebin cache stores only source-exact geometry.  It never stores a rate,
+// profile value, opacity value, or accumulated science state.  Replaying a
+// cached schedule therefore preserves every trapezoid operation and every
+// opakc addition in the original source order.
+// -----------------------------------------------------------------------------
+
+namespace {
+
+struct Type50ScheduleKeyV064812327 {
+    std::uintptr_t epi_identity = 0u;
+    int n = 0;
+    int ml1 = 0;
+    int ncut = 0;
+    int mlmin = 0;
+    int mlmax = 0;
+    int ml1min = 0;
+    std::uint64_t epi0_bits = 0u;
+    std::uint64_t epilast_bits = 0u;
+    std::uint64_t e00_bits = 0u;
+    std::uint64_t deleepi_bits = 0u;
+    bool operator==(const Type50ScheduleKeyV064812327& other) const noexcept {
+        return epi_identity == other.epi_identity && n == other.n && ml1 == other.ml1 &&
+            ncut == other.ncut && mlmin == other.mlmin && mlmax == other.mlmax &&
+            ml1min == other.ml1min && epi0_bits == other.epi0_bits &&
+            epilast_bits == other.epilast_bits && e00_bits == other.e00_bits &&
+            deleepi_bits == other.deleepi_bits;
+    }
+};
+
+static std::uint64_t double_bits_v064812327(double x) {
+    std::uint64_t bits = 0u;
+    static_assert(sizeof(bits) == sizeof(x), "binary64 size mismatch");
+    std::memcpy(&bits, &x, sizeof(bits));
+    return bits;
+}
+
+struct Type50ScheduleKeyHashV064812327 {
+    std::size_t operator()(const Type50ScheduleKeyV064812327& k) const noexcept {
+        std::size_t h = static_cast<std::size_t>(k.epi_identity);
+        auto mix = [&h](std::uint64_t v) {
+            h ^= static_cast<std::size_t>(v) + static_cast<std::size_t>(0x9e3779b97f4a7c15ULL) +
+                (h << 6u) + (h >> 2u);
+        };
+        mix(static_cast<std::uint64_t>(static_cast<std::uint32_t>(k.n)));
+        mix(static_cast<std::uint64_t>(static_cast<std::uint32_t>(k.ml1)));
+        mix(static_cast<std::uint64_t>(static_cast<std::uint32_t>(k.ncut)));
+        mix(static_cast<std::uint64_t>(static_cast<std::uint32_t>(k.mlmin)));
+        mix(static_cast<std::uint64_t>(static_cast<std::uint32_t>(k.mlmax)));
+        mix(static_cast<std::uint64_t>(static_cast<std::uint32_t>(k.ml1min)));
+        mix(k.epi0_bits); mix(k.epilast_bits); mix(k.e00_bits); mix(k.deleepi_bits);
+        return h;
+    }
+};
+
+// point is a one-based temporary-grid index (<=20000). span is the exact
+// number of consecutive public continuum bins advanced at that source
+// boundary.  uint16_t is sufficient for the fixed temporary grid and for the
+// production continuum dimensions.  If a future grid cannot be represented,
+// the experiment falls back to the frozen production kernel rather than
+// weakening semantics.
+struct Type50ScheduleEventV064812327 {
+    std::uint16_t point = 0u;
+    std::uint16_t span = 0u;
+};
+
+struct Type50ScheduleV064812327 {
+    int mlmin = 0;
+    int mlmax = 0;
+    int ml1min = 0;
+    std::vector<Type50ScheduleEventV064812327> events;
+    std::size_t bytes() const noexcept {
+        return sizeof(Type50ScheduleV064812327) +
+            events.capacity() * sizeof(Type50ScheduleEventV064812327);
+    }
+};
+
+thread_local std::unordered_map<Type50ScheduleKeyV064812327, Type50ScheduleV064812327,
+    Type50ScheduleKeyHashV064812327> g_type50_schedule_cache_v064812327;
+thread_local std::size_t g_type50_schedule_cache_bytes_v064812327 = 0u;
+constexpr std::size_t kType50ScheduleCacheLimitBytesV064812327 = 256u * 1024u * 1024u;
+
+thread_local std::uint64_t g_type50_schedule_profiles_v064812327 = 0u;
+thread_local std::uint64_t g_type50_schedule_hits_v064812327 = 0u;
+thread_local std::uint64_t g_type50_schedule_misses_v064812327 = 0u;
+thread_local std::uint64_t g_type50_schedule_uncached_v064812327 = 0u;
+thread_local std::uint64_t g_type50_schedule_cached_events_v064812327 = 0u;
+thread_local double g_type50_schedule_build_seconds_v064812327 = 0.0;
+thread_local std::array<std::uint64_t, 13> g_type50_ncut_hist_v064812327{};
+thread_local std::uint64_t g_type50_gaussian_points_v064812327 = 0u;
+thread_local std::uint64_t g_type50_small_a_core_points_v064812327 = 0u;
+thread_local std::uint64_t g_type50_small_a_farwing_points_v064812327 = 0u;
+thread_local std::uint64_t g_type50_large_a_points_v064812327 = 0u;
+thread_local std::uint64_t g_type50_inline_avx2_profiles_v064812327 = 0u;
+thread_local std::uint64_t g_type50_inline_avx2_blocks_v064812327 = 0u;
+thread_local std::uint64_t g_type50_inline_avx2_points_v064812327 = 0u;
+thread_local std::uint64_t g_type50_inline_scalar_points_v064812327 = 0u;
+
+static std::size_t ncut_bucket_v064812327(int ncut) noexcept {
+    if (ncut <= 1) return 0u;
+    if (ncut == 2) return 1u;
+    if (ncut == 3) return 2u;
+    if (ncut == 4) return 3u;
+    if (ncut <= 8) return 4u;
+    if (ncut <= 16) return 5u;
+    if (ncut <= 32) return 6u;
+    if (ncut <= 64) return 7u;
+    if (ncut <= 128) return 8u;
+    if (ncut <= 256) return 9u;
+    if (ncut <= 512) return 10u;
+    if (ncut <= 1024) return 11u;
+    return 12u;
+}
+
+static bool build_type50_schedule_v064812327(
+    const double* epi, int n, int mlmin, int mlmax, int ml1min,
+    double e00, double deleused, Type50ScheduleV064812327& out) {
+    constexpr int ml2 = 10000;
+    if (!epi || n < 3 || mlmin < 1 || mlmax > 20000 || mlmin >= mlmax ||
+        ml1min < 1 || ml1min > n || n > static_cast<int>(std::numeric_limits<std::uint16_t>::max())) {
+        return false;
+    }
+    auto temporary_energy = [e00, deleused](int point) {
+        return source_add(e00, source_mul(static_cast<double>(point - ml2), deleused));
+    };
+    out.mlmin = mlmin;
+    out.mlmax = mlmax;
+    out.ml1min = ml1min;
+    out.events.clear();
+    // Reserve an empirical upper bound without forcing capacity to the full
+    // temporary-grid size.  Growth remains exact and occurs only on cache miss.
+    out.events.reserve(static_cast<std::size_t>(std::max(16, (mlmax - mlmin) / 2)));
+    int ml1m = ml1min;
+    double sume = 0.0;
+    double previous_energy = temporary_energy(mlmin);
+    for (int point = mlmin + 1; point <= mlmax; ++point) {
+        const double current_energy = temporary_energy(point);
+        const double tmpe = std::abs(source_sub(current_energy, previous_energy));
+        previous_energy = current_energy;
+        sume = source_add(sume, tmpe);
+        if (current_energy > epi[ml1m - 1]) {
+            std::uint64_t span = 0u;
+            if (sume > 1.0e-34) {
+                const int before = ml1m;
+                while (current_energy > epi[ml1m - 1] && ml1m < n) ++ml1m;
+                span = static_cast<std::uint64_t>(ml1m - before);
+            }
+            if (span > static_cast<std::uint64_t>(std::numeric_limits<std::uint16_t>::max())) {
+                return false;
+            }
+            out.events.push_back({static_cast<std::uint16_t>(point), static_cast<std::uint16_t>(span)});
+            sume = 0.0;
+        }
+    }
+    return true;
+}
+
+static std::pair<int,int> small_a_core_bounds_v064812327(
+    int first_point, int last_point, double e00, double deleused,
+    double line_energy_ev, double dele) {
+    constexpr int ml2 = 10000;
+    if (first_point > last_point) return {last_point + 1, first_point - 1};
+    auto signed_delet = [=](int point) {
+        const double energy = source_add(e00,
+            source_mul(static_cast<double>(point - ml2), deleused));
+        return source_div(source_sub(energy, line_energy_ev), dele);
+    };
+    // First point with signed Doppler displacement > -5.
+    int lo = first_point, hi = last_point + 1;
+    while (lo < hi) {
+        const int mid = lo + (hi - lo) / 2;
+        if (signed_delet(mid) > source_real_literal(-5.0)) hi = mid;
+        else lo = mid + 1;
+    }
+    const int first_core = lo;
+    // First point with signed Doppler displacement >= +5; core ends one before.
+    lo = first_point; hi = last_point + 1;
+    while (lo < hi) {
+        const int mid = lo + (hi - lo) / 2;
+        if (signed_delet(mid) >= source_real_literal(5.0)) hi = mid;
+        else lo = mid + 1;
+    }
+    const int last_core = lo - 1;
+    return {first_core, last_core};
+}
+
+#if (defined(__x86_64__) || defined(__i386__)) && (defined(__GNUC__) || defined(__clang__))
+__attribute__((target("avx2")))
+static inline void small_a_farwing_profile4_inline_v064812327(
+    int first_point, double e00, double deleused, double line_energy_ev,
+    double dele, double aasmall, double* energies_out, double* profiles_out) {
+    constexpr int ml2 = 10000;
+    const double o0 = static_cast<double>(first_point - ml2);
+    const double o1 = static_cast<double>(first_point + 1 - ml2);
+    const double o2 = static_cast<double>(first_point + 2 - ml2);
+    const double o3 = static_cast<double>(first_point + 3 - ml2);
+    const __m256d offsets = _mm256_set_pd(o3, o2, o1, o0);
+    const __m256d energies = _mm256_add_pd(
+        _mm256_set1_pd(e00), _mm256_mul_pd(offsets, _mm256_set1_pd(deleused)));
+    _mm256_storeu_pd(energies_out, energies);
+    const __m256d signed_v = _mm256_div_pd(
+        _mm256_sub_pd(energies, _mm256_set1_pd(line_energy_ev)),
+        _mm256_set1_pd(dele));
+    const __m256d sign = _mm256_set1_pd(-0.0);
+    const __m256d v = _mm256_andnot_pd(sign, signed_v);
+    const __m256d v2 = _mm256_mul_pd(v, v);
+    const __m256d v4 = _mm256_mul_pd(v2, v2);
+    const __m256d n1 = _mm256_mul_pd(_mm256_set1_pd(source_real_literal(6.0)), v2);
+    const __m256d n2 = _mm256_mul_pd(_mm256_set1_pd(source_real_literal(4.0)), v4);
+    const __m256d num0 = _mm256_add_pd(_mm256_set1_pd(source_real_literal(15.0)), n1);
+    const __m256d num = _mm256_add_pd(num0, n2);
+    const __m256d scaled = _mm256_mul_pd(_mm256_set1_pd(aasmall), num);
+    const __m256d d0 = _mm256_mul_pd(_mm256_set1_pd(source_real_literal(4.0)), v2);
+    const __m256d d1 = _mm256_mul_pd(d0, v2);
+    const __m256d d2 = _mm256_mul_pd(d1, v2);
+    const __m256d den = _mm256_mul_pd(d2, _mm256_set1_pd(source_real_literal(1.772453851)));
+    const __m256d raw = _mm256_div_pd(scaled, den);
+    const __m256d profile = _mm256_div_pd(raw,
+        _mm256_set1_pd(xstar_constants::kLegacyLinopacProfileNormalization));
+    _mm256_storeu_pd(profiles_out, profile);
+}
+#endif
+
+#if (defined(__x86_64__) || defined(__i386__)) && (defined(__GNUC__) || defined(__clang__))
+// One AVX2 target transition per accepted line.  The complete far-wing loop
+// lives in the AVX2-targeted function; there is no target-function call inside
+// the four-point hot loop.  Profile values are consumed lane-by-lane in source
+// order by scalar trapezoid/rebin arithmetic.
+__attribute__((target("avx2")))
+static int run_inline_farwing_profile_v064812327(
+    double optpp, double line_energy_ev, double dele, double aasmall,
+    double e00, double deleused, const double* epi, int n,
+    int mlmin, int mlmax, int ml1min, int first_core, int last_core,
+    double* opakc, long long* updated_bins) {
+    constexpr int ml2 = 10000;
+    double sume = 0.0;
+    double opsum = 0.0;
+    double tmpop = 0.0;
+    auto energy_for = [=](int point) {
+        return source_add(e00, source_mul(static_cast<double>(point - ml2), deleused));
+    };
+    double previous_energy = energy_for(mlmin);
+    int ml1m = ml1min;
+    auto consume = [&](double current_energy, double profile) {
+        const double tmpopo = tmpop;
+        tmpop = optpp * profile;
+        const double tmpe = std::abs(source_sub(current_energy, previous_energy));
+        previous_energy = current_energy;
+        sume = source_add(sume, tmpe);
+        const double pair = source_add(tmpop, tmpopo);
+        const double weighted = source_mul(pair, tmpe);
+        const double interval = source_div(weighted, 2.0);
+        opsum = source_add(opsum, interval);
+        if (current_energy > epi[ml1m - 1]) {
+            if (sume > 1.0e-34) {
+                const double optp2 = source_div(opsum, sume);
+                while (current_energy > epi[ml1m - 1] && ml1m < n) {
+                    opakc[ml1m - 1] = source_add(opakc[ml1m - 1], optp2);
+                    ++(*updated_bins);
+                    ++ml1m;
+                }
+            }
+            opsum = 0.0;
+            sume = 0.0;
+        }
+    };
+    auto scalar_point = [&](int point) {
+        const double current_energy = energy_for(point);
+        const double delet = source_div(source_sub(current_energy, line_energy_ev), dele);
+        double profile;
+        if (point == ml2 && aasmall <= xstar_constants::kLegacyLinopacCenterVoigtThreshold) {
+            profile = source_div(std::exp(-delet * delet),
+                xstar_constants::kLegacyLinopacProfileNormalization);
+        } else {
+            const double raw = voigte_small_a_positive_v064896(std::abs(delet), aasmall);
+            profile = source_div(raw, xstar_constants::kLegacyLinopacProfileNormalization);
+        }
+        consume(current_energy, profile);
+        ++g_type50_inline_scalar_points_v064812327;
+    };
+
+    const __m256d deleused4 = _mm256_set1_pd(deleused);
+    const __m256d e004 = _mm256_set1_pd(e00);
+    const __m256d line4 = _mm256_set1_pd(line_energy_ev);
+    const __m256d dele4 = _mm256_set1_pd(dele);
+    const __m256d aa4 = _mm256_set1_pd(aasmall);
+    const __m256d six4 = _mm256_set1_pd(source_real_literal(6.0));
+    const __m256d four4 = _mm256_set1_pd(source_real_literal(4.0));
+    const __m256d fifteen4 = _mm256_set1_pd(source_real_literal(15.0));
+    const __m256d sqp4 = _mm256_set1_pd(source_real_literal(1.772453851));
+    const __m256d norm4 = _mm256_set1_pd(xstar_constants::kLegacyLinopacProfileNormalization);
+    const __m256d sign = _mm256_set1_pd(-0.0);
+
+#define XSTAR_V064812327_PROCESS_FAR_RANGE(BEGIN_VALUE, END_VALUE) do { \
+        int point_v064812327 = (BEGIN_VALUE); \
+        const int end_v064812327 = (END_VALUE); \
+        while (point_v064812327 + 3 <= end_v064812327) { \
+            const double o0 = static_cast<double>(point_v064812327 - ml2); \
+            const double o1 = static_cast<double>(point_v064812327 + 1 - ml2); \
+            const double o2 = static_cast<double>(point_v064812327 + 2 - ml2); \
+            const double o3 = static_cast<double>(point_v064812327 + 3 - ml2); \
+            const __m256d offsets = _mm256_set_pd(o3,o2,o1,o0); \
+            const __m256d energies = _mm256_add_pd(e004, _mm256_mul_pd(offsets, deleused4)); \
+            const __m256d signed_v = _mm256_div_pd(_mm256_sub_pd(energies,line4),dele4); \
+            const __m256d v = _mm256_andnot_pd(sign,signed_v); \
+            const __m256d v2 = _mm256_mul_pd(v,v); \
+            const __m256d v4 = _mm256_mul_pd(v2,v2); \
+            const __m256d n1 = _mm256_mul_pd(six4,v2); \
+            const __m256d n2 = _mm256_mul_pd(four4,v4); \
+            const __m256d num = _mm256_add_pd(_mm256_add_pd(fifteen4,n1),n2); \
+            const __m256d scaled = _mm256_mul_pd(aa4,num); \
+            const __m256d d0 = _mm256_mul_pd(four4,v2); \
+            const __m256d d1 = _mm256_mul_pd(d0,v2); \
+            const __m256d d2 = _mm256_mul_pd(d1,v2); \
+            const __m256d raw = _mm256_div_pd(scaled,_mm256_mul_pd(d2,sqp4)); \
+            const __m256d profiles = _mm256_div_pd(raw,norm4); \
+            double ev[4], pv[4]; \
+            _mm256_storeu_pd(ev,energies); _mm256_storeu_pd(pv,profiles); \
+            consume(ev[0],pv[0]); consume(ev[1],pv[1]); consume(ev[2],pv[2]); consume(ev[3],pv[3]); \
+            ++g_type50_inline_avx2_blocks_v064812327; \
+            g_type50_inline_avx2_points_v064812327 += 4u; \
+            point_v064812327 += 4; \
+        } \
+        while (point_v064812327 <= end_v064812327) { scalar_point(point_v064812327); ++point_v064812327; } \
+    } while (0)
+
+    const int first_point = mlmin + 1;
+    const int last_point = mlmax;
+    const int left_begin = first_point;
+    const int left_end = std::min(last_point, first_core - 1);
+    if (left_begin <= left_end) {
+        if (aasmall <= xstar_constants::kLegacyLinopacCenterVoigtThreshold &&
+            left_begin <= ml2 && ml2 <= left_end) {
+            XSTAR_V064812327_PROCESS_FAR_RANGE(left_begin, ml2 - 1);
+            scalar_point(ml2);
+            XSTAR_V064812327_PROCESS_FAR_RANGE(ml2 + 1, left_end);
+        } else {
+            XSTAR_V064812327_PROCESS_FAR_RANGE(left_begin, left_end);
+        }
+    }
+    for (int point = std::max(first_point, first_core);
+         point <= std::min(last_point, last_core); ++point) scalar_point(point);
+    const int right_begin = std::max(first_point, last_core + 1);
+    const int right_end = last_point;
+    if (right_begin <= right_end) {
+        if (aasmall <= xstar_constants::kLegacyLinopacCenterVoigtThreshold &&
+            right_begin <= ml2 && ml2 <= right_end) {
+            XSTAR_V064812327_PROCESS_FAR_RANGE(right_begin, ml2 - 1);
+            scalar_point(ml2);
+            XSTAR_V064812327_PROCESS_FAR_RANGE(ml2 + 1, right_end);
+        } else {
+            XSTAR_V064812327_PROCESS_FAR_RANGE(right_begin, right_end);
+        }
+    }
+#undef XSTAR_V064812327_PROCESS_FAR_RANGE
+    return 0;
+}
+#endif
+
+} // namespace
+
+extern "C" int xstar_opacity_apply_line_profile_experimental_v064812327(
+    double optpp,
+    double line_energy_ev,
+    double vturb_km_s,
+    double temperature_1e4k,
+    double atomic_mass_amu,
+    double natural_width_ev,
+    const double* seed_profiles,
+    int seed_radius,
+    const double* epi,
+    int ncn2,
+    double* opakc,
+    double* rccemis,
+    long long* updated_bins,
+    double* opacity_seconds,
+    char* errbuf,
+    std::size_t errbuf_size
+) {
+    const auto started = std::chrono::steady_clock::now();
+    if (!seed_profiles || !epi || !opakc || !rccemis || !updated_bins || !opacity_seconds) {
+        write_message(errbuf, errbuf_size, "null pointer passed to v064812327 Type50 experiment");
+        return 3;
+    }
+    const int n = ncn2;
+    if (n < 3 || seed_radius < 0 || !std::isfinite(optpp) || !std::isfinite(line_energy_ev) ||
+        !std::isfinite(vturb_km_s) || !std::isfinite(temperature_1e4k) ||
+        !std::isfinite(atomic_mass_amu) || !std::isfinite(natural_width_ev)) {
+        write_message(errbuf, errbuf_size, "invalid input to v064812327 Type50 experiment");
+        return 4;
+    }
+    *updated_bins = 0;
+    *opacity_seconds = 0.0;
+    if (optpp <= 0.0 || line_energy_ev <= epi[0] || line_energy_ev >= epi[n - 1]) {
+        write_message(errbuf, errbuf_size, "v064812327 native opacity profile no-op");
+        return 0;
+    }
+
+    static const bool schedule_enabled =
+        env_truthy_v064812324("XSTAR_V064812327_ENABLE_REBIN_SCHEDULE_CACHE");
+    static const bool inline_avx2_requested =
+        env_truthy_v064812324("XSTAR_V064812327_ENABLE_INLINE_FARWING_AVX2");
+    if (!schedule_enabled && !inline_avx2_requested) {
+        return xstar_opacity_apply_line_profile_v1(
+            optpp, line_energy_ev, vturb_km_s, temperature_1e4k, atomic_mass_amu,
+            natural_width_ev, seed_profiles, seed_radius, epi, ncn2, opakc,
+            rccemis, updated_bins, opacity_seconds, errbuf, errbuf_size);
+    }
+
+    constexpr int nbtpp = 20000;
+    constexpr int ml2 = nbtpp / 2;
+    const double mass = std::max(atomic_mass_amu, 1.0e-30);
+    const double vth = source_mul(xstar_constants::kLegacyLinopacThermalSpeedCoefficient,
+        std::sqrt(source_div(temperature_1e4k, mass)));
+    const double deleturb = source_div(source_mul(line_energy_ev, vturb_km_s), 3.0e5);
+    const double deleth = source_div(source_mul(line_energy_ev, vth), 3.0e5);
+    const double dele = std::sqrt(source_add(source_mul(deleth, deleth), source_mul(deleturb, deleturb)));
+    if (dele <= 0.0) {
+        write_message(errbuf, errbuf_size, "v064812327 native opacity zero-width no-op");
+        return 0;
+    }
+    const double aasmall = source_div(
+        source_div(natural_width_ev, source_add(xstar_constants::kLegacyLinopacWidthFloorEv, dele)),
+        xstar_constants::kLegacyLinopacDampingGeometryFactor);
+    const bool use_voigt = aasmall > xstar_constants::kLegacyLinopacWingVoigtThreshold;
+    const bool use_small_a_voigt = use_voigt && aasmall <= source_real_literal(0.2);
+
+    int ml1 = nbinc(line_energy_ev, epi, n);
+    ml1 = std::max(2, std::min(n - 1, ml1));
+    const double e00 = epi[ml1 - 1];
+    const double deleepi = source_sub(epi[ml1], epi[ml1 - 1]);
+    int ncut = static_cast<int>(deleepi / dele);
+    ncut = std::max(1, std::min(nbtpp / 10, ncut));
+    const double deleused = source_div(deleepi, static_cast<double>(ncut));
+    ++g_type50_ncut_hist_v064812327[ncut_bucket_v064812327(ncut)];
+
+    auto temporary_energy = [e00, deleused](int point) {
+        return source_add(e00, source_mul(static_cast<double>(point - ml2), deleused));
+    };
+    const double energy_ceiling = epi[n - 1];
+    auto valid_temporary_energy = [energy_ceiling](double energy) {
+        return energy > 0.0 && energy < energy_ceiling;
+    };
+    const double lower_crossing = static_cast<double>(ml2) - source_div(e00, deleused);
+    int raw_mlmin = 1;
+    if (lower_crossing >= static_cast<double>(ml2)) raw_mlmin = ml2;
+    else if (lower_crossing > 1.0) raw_mlmin = static_cast<int>(std::floor(lower_crossing)) + 1;
+    while (raw_mlmin > 1 && valid_temporary_energy(temporary_energy(raw_mlmin - 1))) --raw_mlmin;
+    while (raw_mlmin < ml2 && !valid_temporary_energy(temporary_energy(raw_mlmin))) ++raw_mlmin;
+    const double upper_crossing = static_cast<double>(ml2) +
+        source_div(source_sub(energy_ceiling, e00), deleused);
+    int raw_mlmax = nbtpp;
+    if (upper_crossing <= static_cast<double>(ml2)) raw_mlmax = ml2;
+    else if (upper_crossing < static_cast<double>(nbtpp))
+        raw_mlmax = static_cast<int>(std::ceil(upper_crossing)) - 1;
+    while (raw_mlmax < nbtpp && valid_temporary_energy(temporary_energy(raw_mlmax + 1))) ++raw_mlmax;
+    while (raw_mlmax > ml2 && !valid_temporary_energy(temporary_energy(raw_mlmax))) --raw_mlmax;
+    if (raw_mlmin >= ml2 || raw_mlmax <= ml2) {
+        return xstar_opacity_apply_line_profile_v1(
+            optpp, line_energy_ev, vturb_km_s, temperature_1e4k, atomic_mass_amu,
+            natural_width_ev, seed_profiles, seed_radius, epi, ncn2, opakc,
+            rccemis, updated_bins, opacity_seconds, errbuf, errbuf_size);
+    }
+
+    const int ml1min = nbinc(temporary_energy(raw_mlmin), epi, n);
+    const int mlmin = std::max(2, raw_mlmin);
+    const int mlmax = std::min(nbtpp, raw_mlmax);
+    const int first_point = mlmin + 1;
+    const int last_point = mlmax;
+
+    auto scalar_profile = [&](int point, double current_energy) {
+        const double delet = source_div(source_sub(current_energy, line_energy_ev), dele);
+        if (point == ml2) {
+            if (aasmall > xstar_constants::kLegacyLinopacCenterVoigtThreshold) {
+                const double av = std::abs(delet);
+                const double raw = use_small_a_voigt
+                    ? voigte_small_a_positive_v064896(av, aasmall)
+                    : voigte(av, aasmall);
+                return source_div(raw, xstar_constants::kLegacyLinopacProfileNormalization);
+            }
+            return source_div(std::exp(-delet * delet), xstar_constants::kLegacyLinopacProfileNormalization);
+        }
+        if (use_voigt) {
+            const double av = std::abs(delet);
+            const double raw = use_small_a_voigt
+                ? voigte_small_a_positive_v064896(av, aasmall)
+                : voigte(av, aasmall);
+            return source_div(raw, xstar_constants::kLegacyLinopacProfileNormalization);
+        }
+        return source_div(std::exp(-delet * delet), xstar_constants::kLegacyLinopacProfileNormalization);
+    };
+
+    int first_core = last_point + 1;
+    int last_core = first_point - 1;
+    if (use_small_a_voigt) {
+        const auto core = small_a_core_bounds_v064812327(
+            first_point, last_point, e00, deleused, line_energy_ev, dele);
+        first_core = core.first;
+        last_core = core.second;
+    }
+    const std::uint64_t total_points = static_cast<std::uint64_t>(std::max(0, last_point - first_point + 1));
+    if (!use_voigt) {
+        g_type50_gaussian_points_v064812327 += total_points;
+    } else if (!use_small_a_voigt) {
+        g_type50_large_a_points_v064812327 += total_points;
+    } else {
+        std::uint64_t core_points = first_core <= last_core
+            ? static_cast<std::uint64_t>(last_core - first_core + 1) : 0u;
+        std::uint64_t far_points = total_points - core_points;
+        if (aasmall <= xstar_constants::kLegacyLinopacCenterVoigtThreshold &&
+            ml2 >= first_point && ml2 <= last_point) {
+            ++g_type50_gaussian_points_v064812327;
+            if (ml2 >= first_core && ml2 <= last_core) {
+                if (core_points) --core_points;
+            } else if (far_points) {
+                --far_points;
+            }
+        }
+        g_type50_small_a_core_points_v064812327 += core_points;
+        g_type50_small_a_farwing_points_v064812327 += far_points;
+    }
+
+    const bool inline_avx2_enabled = inline_avx2_requested && use_small_a_voigt &&
+        cpu_avx2_available_v064812324() &&
+        !env_truthy_v064812324("XSTAR_V064812324_FORCE_SCALAR_TYPE50");
+    bool used_inline_avx2 = false;
+
+#if (defined(__x86_64__) || defined(__i386__)) && (defined(__GNUC__) || defined(__clang__))
+    if (inline_avx2_enabled && !schedule_enabled) {
+        run_inline_farwing_profile_v064812327(
+            optpp, line_energy_ev, dele, aasmall, e00, deleused, epi, n,
+            mlmin, mlmax, ml1min, first_core, last_core, opakc, updated_bins);
+        ++g_type50_inline_avx2_profiles_v064812327;
+        const auto ended = std::chrono::steady_clock::now();
+        *opacity_seconds = std::chrono::duration<double>(ended - started).count();
+        write_message(errbuf, errbuf_size, "v064812327 one-dispatch inline-farwing profile applied");
+        return 0;
+    }
+#endif
+
+    Type50ScheduleV064812327 local_schedule;
+    const Type50ScheduleV064812327* schedule = nullptr;
+    if (schedule_enabled) {
+        ++g_type50_schedule_profiles_v064812327;
+        Type50ScheduleKeyV064812327 key;
+        key.epi_identity = reinterpret_cast<std::uintptr_t>(epi);
+        key.n = n; key.ml1 = ml1; key.ncut = ncut; key.mlmin = mlmin;
+        key.mlmax = mlmax; key.ml1min = ml1min;
+        key.epi0_bits = double_bits_v064812327(epi[0]);
+        key.epilast_bits = double_bits_v064812327(epi[n - 1]);
+        key.e00_bits = double_bits_v064812327(e00);
+        key.deleepi_bits = double_bits_v064812327(deleepi);
+        auto it = g_type50_schedule_cache_v064812327.find(key);
+        if (it != g_type50_schedule_cache_v064812327.end()) {
+            ++g_type50_schedule_hits_v064812327;
+            schedule = &it->second;
+        } else {
+            ++g_type50_schedule_misses_v064812327;
+            const auto build_started = std::chrono::steady_clock::now();
+            if (!build_type50_schedule_v064812327(
+                    epi, n, mlmin, mlmax, ml1min, e00, deleused, local_schedule)) {
+                return xstar_opacity_apply_line_profile_v1(
+                    optpp, line_energy_ev, vturb_km_s, temperature_1e4k, atomic_mass_amu,
+                    natural_width_ev, seed_profiles, seed_radius, epi, ncn2, opakc,
+                    rccemis, updated_bins, opacity_seconds, errbuf, errbuf_size);
+            }
+            g_type50_schedule_build_seconds_v064812327 += std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - build_started).count();
+            const std::size_t bytes = local_schedule.bytes();
+            if (g_type50_schedule_cache_bytes_v064812327 + bytes <=
+                    kType50ScheduleCacheLimitBytesV064812327) {
+                const std::uint64_t events = static_cast<std::uint64_t>(local_schedule.events.size());
+                auto inserted = g_type50_schedule_cache_v064812327.emplace(key, std::move(local_schedule));
+                schedule = &inserted.first->second;
+                g_type50_schedule_cache_bytes_v064812327 += schedule->bytes();
+                g_type50_schedule_cached_events_v064812327 += events;
+            } else {
+                ++g_type50_schedule_uncached_v064812327;
+                schedule = &local_schedule;
+            }
+        }
+    }
+
+    double sume = 0.0;
+    double opsum = 0.0;
+    double tmpop = 0.0;
+    double previous_energy = temporary_energy(mlmin);
+    int ml1m = ml1min;
+
+    auto consume_no_boundary = [&](double current_energy, double profile) {
+        const double tmpopo = tmpop;
+        tmpop = optpp * profile;
+        const double tmpe = std::abs(source_sub(current_energy, previous_energy));
+        previous_energy = current_energy;
+        sume = source_add(sume, tmpe);
+        const double pair = source_add(tmpop, tmpopo);
+        const double weighted = source_mul(pair, tmpe);
+        const double interval = source_div(weighted, 2.0);
+        opsum = source_add(opsum, interval);
+    };
+
+    auto source_boundary = [&](double current_energy) {
+        if (current_energy > epi[ml1m - 1]) {
+            if (sume > 1.0e-34) {
+                const double optp2 = source_div(opsum, sume);
+                while (current_energy > epi[ml1m - 1] && ml1m < n) {
+                    opakc[ml1m - 1] = source_add(opakc[ml1m - 1], optp2);
+                    ++(*updated_bins);
+                    ++ml1m;
+                }
+            }
+            opsum = 0.0;
+            sume = 0.0;
+        }
+    };
+
+    auto scheduled_boundary = [&](std::uint16_t span) {
+        if (sume > 1.0e-34) {
+            const double optp2 = source_div(opsum, sume);
+            for (std::uint16_t j = 0u; j < span; ++j) {
+                opakc[ml1m - 1] = source_add(opakc[ml1m - 1], optp2);
+                ++(*updated_bins);
+                ++ml1m;
+            }
+        }
+        opsum = 0.0;
+        sume = 0.0;
+    };
+
+    auto point_is_inline_farwing = [&](int point) {
+        if (!inline_avx2_enabled) return false;
+        if (point >= first_core && point <= last_core) return false;
+        if (aasmall <= xstar_constants::kLegacyLinopacCenterVoigtThreshold && point == ml2)
+            return false;
+        return true;
+    };
+
+    auto process_points = [&](int begin, int end, bool use_source_boundary) {
+        int point = begin;
+        while (point <= end) {
+#if (defined(__x86_64__) || defined(__i386__)) && (defined(__GNUC__) || defined(__clang__))
+            if (point + 3 <= end && point_is_inline_farwing(point) &&
+                point_is_inline_farwing(point + 1) && point_is_inline_farwing(point + 2) &&
+                point_is_inline_farwing(point + 3)) {
+                double energies[4];
+                double profiles[4];
+                small_a_farwing_profile4_inline_v064812327(
+                    point, e00, deleused, line_energy_ev, dele, aasmall, energies, profiles);
+                for (int lane = 0; lane < 4; ++lane) {
+                    consume_no_boundary(energies[lane], profiles[lane]);
+                    if (use_source_boundary) source_boundary(energies[lane]);
+                }
+                ++g_type50_inline_avx2_blocks_v064812327;
+                g_type50_inline_avx2_points_v064812327 += 4u;
+                used_inline_avx2 = true;
+                point += 4;
+                continue;
+            }
+#endif
+            const double current_energy = temporary_energy(point);
+            const double profile = scalar_profile(point, current_energy);
+            consume_no_boundary(current_energy, profile);
+            if (use_source_boundary) source_boundary(current_energy);
+            ++g_type50_inline_scalar_points_v064812327;
+            ++point;
+        }
+    };
+
+    if (schedule) {
+        int point = first_point;
+        for (const auto& event : schedule->events) {
+            const int event_point = static_cast<int>(event.point);
+            if (point <= event_point) process_points(point, event_point, false);
+            scheduled_boundary(event.span);
+            point = event_point + 1;
+        }
+        if (point <= last_point) process_points(point, last_point, false);
+    } else {
+        process_points(first_point, last_point, true);
+    }
+
+    if (used_inline_avx2) ++g_type50_inline_avx2_profiles_v064812327;
+    const auto ended = std::chrono::steady_clock::now();
+    *opacity_seconds = std::chrono::duration<double>(ended - started).count();
+    write_message(errbuf, errbuf_size,
+        schedule_enabled && inline_avx2_requested
+            ? "v064812327 cached-rebin plus inline-farwing profile applied"
+            : (schedule_enabled ? "v064812327 cached-rebin profile applied"
+                                : "v064812327 inline-farwing profile applied"));
+    return 0;
+}
+
+extern "C" {
+
+void xstar_opacity_type50_perf_reset_v064812327(void) {
+    g_type50_schedule_cache_v064812327.clear();
+    g_type50_schedule_cache_v064812327.rehash(0u);
+    g_type50_schedule_cache_bytes_v064812327 = 0u;
+    g_type50_schedule_profiles_v064812327 = 0u;
+    g_type50_schedule_hits_v064812327 = 0u;
+    g_type50_schedule_misses_v064812327 = 0u;
+    g_type50_schedule_uncached_v064812327 = 0u;
+    g_type50_schedule_cached_events_v064812327 = 0u;
+    g_type50_schedule_build_seconds_v064812327 = 0.0;
+    g_type50_ncut_hist_v064812327.fill(0u);
+    g_type50_gaussian_points_v064812327 = 0u;
+    g_type50_small_a_core_points_v064812327 = 0u;
+    g_type50_small_a_farwing_points_v064812327 = 0u;
+    g_type50_large_a_points_v064812327 = 0u;
+    g_type50_inline_avx2_profiles_v064812327 = 0u;
+    g_type50_inline_avx2_blocks_v064812327 = 0u;
+    g_type50_inline_avx2_points_v064812327 = 0u;
+    g_type50_inline_scalar_points_v064812327 = 0u;
+}
+
+void xstar_opacity_type50_perf_snapshot_v064812327(
+    std::uint64_t* schedule_profiles,
+    std::uint64_t* cache_hits,
+    std::uint64_t* cache_misses,
+    std::uint64_t* cache_uncached,
+    std::uint64_t* distinct_cached_keys,
+    std::uint64_t* cache_bytes,
+    std::uint64_t* cached_events,
+    double* schedule_build_seconds,
+    std::uint64_t* ncut_histogram,
+    std::size_t ncut_histogram_len,
+    std::uint64_t* gaussian_points,
+    std::uint64_t* small_a_core_points,
+    std::uint64_t* small_a_farwing_points,
+    std::uint64_t* large_a_points,
+    std::uint64_t* inline_avx2_profiles,
+    std::uint64_t* inline_avx2_blocks,
+    std::uint64_t* inline_avx2_points,
+    std::uint64_t* inline_scalar_points) {
+    if (schedule_profiles) *schedule_profiles = g_type50_schedule_profiles_v064812327;
+    if (cache_hits) *cache_hits = g_type50_schedule_hits_v064812327;
+    if (cache_misses) *cache_misses = g_type50_schedule_misses_v064812327;
+    if (cache_uncached) *cache_uncached = g_type50_schedule_uncached_v064812327;
+    if (distinct_cached_keys) *distinct_cached_keys =
+        static_cast<std::uint64_t>(g_type50_schedule_cache_v064812327.size());
+    if (cache_bytes) *cache_bytes = static_cast<std::uint64_t>(g_type50_schedule_cache_bytes_v064812327);
+    if (cached_events) *cached_events = g_type50_schedule_cached_events_v064812327;
+    if (schedule_build_seconds) *schedule_build_seconds = g_type50_schedule_build_seconds_v064812327;
+    if (ncut_histogram && ncut_histogram_len) {
+        const std::size_t count = std::min(ncut_histogram_len, g_type50_ncut_hist_v064812327.size());
+        for (std::size_t i = 0; i < count; ++i) ncut_histogram[i] = g_type50_ncut_hist_v064812327[i];
+    }
+    if (gaussian_points) *gaussian_points = g_type50_gaussian_points_v064812327;
+    if (small_a_core_points) *small_a_core_points = g_type50_small_a_core_points_v064812327;
+    if (small_a_farwing_points) *small_a_farwing_points = g_type50_small_a_farwing_points_v064812327;
+    if (large_a_points) *large_a_points = g_type50_large_a_points_v064812327;
+    if (inline_avx2_profiles) *inline_avx2_profiles = g_type50_inline_avx2_profiles_v064812327;
+    if (inline_avx2_blocks) *inline_avx2_blocks = g_type50_inline_avx2_blocks_v064812327;
+    if (inline_avx2_points) *inline_avx2_points = g_type50_inline_avx2_points_v064812327;
+    if (inline_scalar_points) *inline_scalar_points = g_type50_inline_scalar_points_v064812327;
+}
+
+} // extern "C"

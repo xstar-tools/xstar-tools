@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.12.3.27 - 2026-08-02
+
+- Freeze the accepted 12.3.25 science, publication writers, and production Type-50 kernel while focusing performance qualification only on `helike_type69/ca19_ne1e8`.
+- Add an opt-in, geometry-only source-exact Type-50 rebin-schedule cache (`XSTAR_V064812327_ENABLE_REBIN_SCHEDULE_CACHE=1`). The cache key describes continuum-grid/rebin geometry; cached events store only temporary-grid boundary point and output span length. Profile/trapezoid arithmetic and every `opakc += optp2` commit remain sequential and source ordered.
+- Add an opt-in one-dispatch inline small-a far-wing AVX2 experiment (`XSTAR_V064812327_ENABLE_INLINE_FARWING_AVX2=1`). It vectorizes only contiguous `|v|>=5`, small-damping profile points, then consumes the four results sequentially through the unchanged trapezoid/rebin/opacity arithmetic. No full-profile buffer, per-four target dispatch, FMA, element-Z condition, or output-order change is introduced.
+- Add Type-50 schedule-cache statistics, `ncut` histogram, profile-point family counts, and inline-AVX2 point/block counters with O(1)-per-profile reporting.
+- Add a `ca19_ne1e8`-only host qualifier with frozen baseline, schedule-cache, and inline-farwing modes. A combined mode runs only when both individual experiments are independently bit-exact and faster in Type-50 profile time on the host.
+- Require all experimental modes to be nine-FITS bit-data equivalent to the frozen baseline. Keep the remaining `xo01_detal2`, `xout_abund1`, and `xout_lines1` publication work separate and frozen in this candidate. Production-zone ABI remains 6048110.
+
 ## 0.6.48.12.3.26 - 2026-08-02
 
 - Freeze the accepted 12.3.25 science and publication implementation. `opacity_kernels.cpp` is byte-for-byte identical to 12.3.25; `fixed_state_engine.cpp`, the matrix/rate/solver engines, and `xstar_science_fits.cpp` are frozen.

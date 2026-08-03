@@ -498,6 +498,12 @@ extern "C" int xstar_opacity_apply_line_profile_experimental_v064812326(
     int seed_radius, const double* epi, int ncn2, double* opakc, double* rccemis,
     long long* updated_bins, double* opacity_seconds, char* errbuf, std::size_t errbuf_size);
 
+extern "C" int xstar_opacity_apply_line_profile_experimental_v064812327(
+    double optpp, double line_energy_ev, double vturb_km_s, double temperature_1e4k,
+    double atomic_mass_amu, double natural_width_ev, const double* seed_profiles,
+    int seed_radius, const double* epi, int ncn2, double* opakc, double* rccemis,
+    long long* updated_bins, double* opacity_seconds, char* errbuf, std::size_t errbuf_size);
+
 extern "C" int xstar_opacity_last_profile_vectorized_v064812324(void);
 extern "C" void xstar_opacity_type50_phase_perf_reset_v064812326(void);
 extern "C" void xstar_opacity_type50_phase_perf_snapshot_v064812326(
@@ -507,6 +513,18 @@ extern "C" void xstar_opacity_type50_phase_perf_snapshot_v064812326(
     double* range_update_seconds, std::uint64_t* range_avx2_profiles,
     std::uint64_t* range_avx2_blocks, std::uint64_t* range_avx2_bins,
     std::uint64_t* range_scalar_bins);
+
+extern "C" void xstar_opacity_type50_perf_reset_v064812327(void);
+extern "C" void xstar_opacity_type50_perf_snapshot_v064812327(
+    std::uint64_t* schedule_profiles, std::uint64_t* cache_hits,
+    std::uint64_t* cache_misses, std::uint64_t* cache_uncached,
+    std::uint64_t* distinct_cached_keys, std::uint64_t* cache_bytes,
+    std::uint64_t* cached_events, double* schedule_build_seconds,
+    std::uint64_t* ncut_histogram, std::size_t ncut_histogram_len,
+    std::uint64_t* gaussian_points, std::uint64_t* small_a_core_points,
+    std::uint64_t* small_a_farwing_points, std::uint64_t* large_a_points,
+    std::uint64_t* inline_avx2_profiles, std::uint64_t* inline_avx2_blocks,
+    std::uint64_t* inline_avx2_points, std::uint64_t* inline_scalar_points);
 
 
 struct xstar_spectral_context {
@@ -529,6 +547,16 @@ static int apply_line_profile_dispatch_v064812326(
     double atomic_mass_amu, double natural_width_ev, const double* seed_profiles,
     int seed_radius, const double* epi, int ncn2, double* opakc, double* rccemis,
     long long* updated_bins, double* opacity_seconds, char* errbuf, std::size_t errbuf_size) {
+    static const bool schedule_v064812327 =
+        env_truthy_v064812326("XSTAR_V064812327_ENABLE_REBIN_SCHEDULE_CACHE");
+    static const bool inline_farwing_v064812327 =
+        env_truthy_v064812326("XSTAR_V064812327_ENABLE_INLINE_FARWING_AVX2");
+    if (schedule_v064812327 || inline_farwing_v064812327) {
+        return xstar_opacity_apply_line_profile_experimental_v064812327(
+            optpp, line_energy_ev, vturb_km_s, temperature_1e4k, atomic_mass_amu,
+            natural_width_ev, seed_profiles, seed_radius, epi, ncn2, opakc, rccemis,
+            updated_bins, opacity_seconds, errbuf, errbuf_size);
+    }
     static const bool phase = env_truthy_v064812326("XSTAR_V064812326_TYPE50_PHASE_DECOMPOSITION");
     static const bool range_avx2 = env_truthy_v064812326("XSTAR_V064812326_ENABLE_EXPERIMENTAL_RANGE_AVX2");
     if (phase || range_avx2) {
@@ -684,6 +712,28 @@ void xstar_spectral_type50_vector_perf_snapshot_v064812324(
 
 void xstar_spectral_type50_phase_perf_reset_v064812326(void) {
     xstar_opacity_type50_phase_perf_reset_v064812326();
+}
+
+void xstar_spectral_type50_perf_reset_v064812327(void) {
+    xstar_opacity_type50_perf_reset_v064812327();
+}
+
+void xstar_spectral_type50_perf_snapshot_v064812327(
+    std::uint64_t* schedule_profiles, std::uint64_t* cache_hits,
+    std::uint64_t* cache_misses, std::uint64_t* cache_uncached,
+    std::uint64_t* distinct_cached_keys, std::uint64_t* cache_bytes,
+    std::uint64_t* cached_events, double* schedule_build_seconds,
+    std::uint64_t* ncut_histogram, std::size_t ncut_histogram_len,
+    std::uint64_t* gaussian_points, std::uint64_t* small_a_core_points,
+    std::uint64_t* small_a_farwing_points, std::uint64_t* large_a_points,
+    std::uint64_t* inline_avx2_profiles, std::uint64_t* inline_avx2_blocks,
+    std::uint64_t* inline_avx2_points, std::uint64_t* inline_scalar_points) {
+    xstar_opacity_type50_perf_snapshot_v064812327(
+        schedule_profiles, cache_hits, cache_misses, cache_uncached,
+        distinct_cached_keys, cache_bytes, cached_events, schedule_build_seconds,
+        ncut_histogram, ncut_histogram_len, gaussian_points, small_a_core_points,
+        small_a_farwing_points, large_a_points, inline_avx2_profiles,
+        inline_avx2_blocks, inline_avx2_points, inline_scalar_points);
 }
 
 void xstar_spectral_type50_phase_perf_snapshot_v064812326(

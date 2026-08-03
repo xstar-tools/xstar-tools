@@ -17219,6 +17219,33 @@ void emit_performance_instrumentation_v064892(
         &type50_range_update_seconds_v064812326, &type50_range_avx2_profiles_v064812326,
         &type50_range_avx2_blocks_v064812326, &type50_range_avx2_bins_v064812326,
         &type50_range_scalar_bins_v064812326);
+    std::uint64_t type50_schedule_profiles_v064812327 = 0u;
+    std::uint64_t type50_schedule_hits_v064812327 = 0u;
+    std::uint64_t type50_schedule_misses_v064812327 = 0u;
+    std::uint64_t type50_schedule_uncached_v064812327 = 0u;
+    std::uint64_t type50_schedule_distinct_keys_v064812327 = 0u;
+    std::uint64_t type50_schedule_cache_bytes_v064812327 = 0u;
+    std::uint64_t type50_schedule_cached_events_v064812327 = 0u;
+    double type50_schedule_build_seconds_v064812327 = 0.0;
+    std::array<std::uint64_t, 13> type50_ncut_hist_v064812327{};
+    std::uint64_t type50_gaussian_points_v064812327 = 0u;
+    std::uint64_t type50_small_a_core_points_v064812327 = 0u;
+    std::uint64_t type50_small_a_farwing_points_v064812327 = 0u;
+    std::uint64_t type50_large_a_points_v064812327 = 0u;
+    std::uint64_t type50_inline_avx2_profiles_v064812327 = 0u;
+    std::uint64_t type50_inline_avx2_blocks_v064812327 = 0u;
+    std::uint64_t type50_inline_avx2_points_v064812327 = 0u;
+    std::uint64_t type50_inline_scalar_points_v064812327 = 0u;
+    xstar_spectral_type50_perf_snapshot_v064812327(
+        &type50_schedule_profiles_v064812327, &type50_schedule_hits_v064812327,
+        &type50_schedule_misses_v064812327, &type50_schedule_uncached_v064812327,
+        &type50_schedule_distinct_keys_v064812327, &type50_schedule_cache_bytes_v064812327,
+        &type50_schedule_cached_events_v064812327, &type50_schedule_build_seconds_v064812327,
+        type50_ncut_hist_v064812327.data(), type50_ncut_hist_v064812327.size(),
+        &type50_gaussian_points_v064812327, &type50_small_a_core_points_v064812327,
+        &type50_small_a_farwing_points_v064812327, &type50_large_a_points_v064812327,
+        &type50_inline_avx2_profiles_v064812327, &type50_inline_avx2_blocks_v064812327,
+        &type50_inline_avx2_points_v064812327, &type50_inline_scalar_points_v064812327);
     auto write = [&](std::ostream& out) {
         out << std::fixed << std::setprecision(6)
             << "V064892_PERF_POLICY=MEASUREMENT_ONLY_BROAD_SPECTRAL_CONSTRUCTION_DECOMPOSITION\n"
@@ -17283,7 +17310,36 @@ void emit_performance_instrumentation_v064892(
             << "V064812326_TYPE50_RANGE_AVX2_PROFILES="<<type50_range_avx2_profiles_v064812326<<"\n"
             << "V064812326_TYPE50_RANGE_AVX2_BLOCKS="<<type50_range_avx2_blocks_v064812326<<"\n"
             << "V064812326_TYPE50_RANGE_AVX2_BINS="<<type50_range_avx2_bins_v064812326<<"\n"
-            << "V064812326_TYPE50_RANGE_SCALAR_BINS="<<type50_range_scalar_bins_v064812326<<"\n";
+            << "V064812326_TYPE50_RANGE_SCALAR_BINS="<<type50_range_scalar_bins_v064812326<<"\n"
+            << "V064812327_TYPE50_SCHEDULE_PROFILES="<<type50_schedule_profiles_v064812327<<"\n"
+            << "V064812327_TYPE50_SCHEDULE_CACHE_HITS="<<type50_schedule_hits_v064812327<<"\n"
+            << "V064812327_TYPE50_SCHEDULE_CACHE_MISSES="<<type50_schedule_misses_v064812327<<"\n"
+            << "V064812327_TYPE50_SCHEDULE_CACHE_UNCACHED="<<type50_schedule_uncached_v064812327<<"\n"
+            << "V064812327_TYPE50_SCHEDULE_DISTINCT_KEYS="<<type50_schedule_distinct_keys_v064812327<<"\n"
+            << "V064812327_TYPE50_SCHEDULE_CACHE_BYTES="<<type50_schedule_cache_bytes_v064812327<<"\n"
+            << "V064812327_TYPE50_SCHEDULE_CACHED_EVENTS="<<type50_schedule_cached_events_v064812327<<"\n"
+            << "V064812327_TYPE50_SCHEDULE_BUILD_SECONDS="<<type50_schedule_build_seconds_v064812327<<"\n"
+            << "V064812327_TYPE50_NCUT_1="<<type50_ncut_hist_v064812327[0]<<"\n"
+            << "V064812327_TYPE50_NCUT_2="<<type50_ncut_hist_v064812327[1]<<"\n"
+            << "V064812327_TYPE50_NCUT_3="<<type50_ncut_hist_v064812327[2]<<"\n"
+            << "V064812327_TYPE50_NCUT_4="<<type50_ncut_hist_v064812327[3]<<"\n"
+            << "V064812327_TYPE50_NCUT_5_8="<<type50_ncut_hist_v064812327[4]<<"\n"
+            << "V064812327_TYPE50_NCUT_9_16="<<type50_ncut_hist_v064812327[5]<<"\n"
+            << "V064812327_TYPE50_NCUT_17_32="<<type50_ncut_hist_v064812327[6]<<"\n"
+            << "V064812327_TYPE50_NCUT_33_64="<<type50_ncut_hist_v064812327[7]<<"\n"
+            << "V064812327_TYPE50_NCUT_65_128="<<type50_ncut_hist_v064812327[8]<<"\n"
+            << "V064812327_TYPE50_NCUT_129_256="<<type50_ncut_hist_v064812327[9]<<"\n"
+            << "V064812327_TYPE50_NCUT_257_512="<<type50_ncut_hist_v064812327[10]<<"\n"
+            << "V064812327_TYPE50_NCUT_513_1024="<<type50_ncut_hist_v064812327[11]<<"\n"
+            << "V064812327_TYPE50_NCUT_1025_2000="<<type50_ncut_hist_v064812327[12]<<"\n"
+            << "V064812327_TYPE50_GAUSSIAN_POINTS="<<type50_gaussian_points_v064812327<<"\n"
+            << "V064812327_TYPE50_SMALL_A_CORE_POINTS="<<type50_small_a_core_points_v064812327<<"\n"
+            << "V064812327_TYPE50_SMALL_A_FARWING_POINTS="<<type50_small_a_farwing_points_v064812327<<"\n"
+            << "V064812327_TYPE50_LARGE_A_POINTS="<<type50_large_a_points_v064812327<<"\n"
+            << "V064812327_TYPE50_INLINE_AVX2_PROFILES="<<type50_inline_avx2_profiles_v064812327<<"\n"
+            << "V064812327_TYPE50_INLINE_AVX2_BLOCKS="<<type50_inline_avx2_blocks_v064812327<<"\n"
+            << "V064812327_TYPE50_INLINE_AVX2_POINTS="<<type50_inline_avx2_points_v064812327<<"\n"
+            << "V064812327_TYPE50_INLINE_SCALAR_POINTS="<<type50_inline_scalar_points_v064812327<<"\n";
     };
     write(std::cout);
     if (write_file) {
@@ -17327,6 +17383,7 @@ int command_run_standalone_production_v67(const Options& options, const std::fil
         xstar_spectral_perf_reset_v064892();
         xstar_spectral_type50_vector_perf_reset_v064812324();
         xstar_spectral_type50_phase_perf_reset_v064812326();
+        xstar_spectral_type50_perf_reset_v064812327();
         auto params = xstar_atdb_runtime::read_production_parameters(options.parameters_path);
         auto atomic = xstar_atdb_runtime::resolve_atomic_data(options.parameters_path, params.raw_json, executable_path);
         std::cout << prefix << "COMMAND=RUN_PRODUCTION_STANDALONE\n"
