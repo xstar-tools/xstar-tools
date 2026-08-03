@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.48.12.3.35.1 - 2026-08-03
+
+- Diagnostic-only `helike_type69/ca19_xi2_ne1` attribution hotfix; no C++ production-physics change and production-zone ABI `6048110` remains frozen.
+- Correct the source-faithful Python Type-39/DR oracle to the literal FORTRAN intrinsic `EXP` used by `ucalc.f90`, eliminating the false 12.3.35 record-163403 attribution caused by the generic clamped `_expo()` helper.
+- Retain full C++ diagnostic owner arrays at every accepted radial `final`, not only call-1/final-18, and add `elum_out/elum_in` ownership columns alongside `rcem`, `cemab`, `cabab`, `opakab`, and line/continuum identities.
+- Rework the fixed-evaluation gate to distinguish raw relative differences from material population differences using absolute floors, so vanishing `~1e-240` compact populations cannot select the causal evaluation.
+- Make the Option-15 attribution order-safe: match by printed line identity, require the 22,919 common identities to preserve exact relative sequence, keep the 83 C++-only identities as inventory diagnostics, and target only material Ca VI signals.
+- Use the same `1e-30` comparison floor as the 12.3.34 STEP comparator when selecting affected Option-15/19 targets; this yields 22 affected common Ca VI Option-19 identities rather than admitting two numerical tails.
+- Compare C++ and Python rate records only in like-for-like execution contexts (preliminary ion balance to preliminary ion balance; second-pass fixed records to second-pass fixed records). Product-owner UCalc rows are never paired with preliminary rows solely by record number.
+- Qualify success by either a real target-linked upstream rate/population mismatch or a conservative downstream attribution frontier. Reproducing the ~0.9114 Ca VI Option-15/19 scale is necessary but is not itself accepted as a physical root cause.
+
 ## 0.6.48.12.3.34 - 2026-08-03
 
 - Qualification-only STEP comparator repair; no model rerun and no C++ production/source/ABI change.

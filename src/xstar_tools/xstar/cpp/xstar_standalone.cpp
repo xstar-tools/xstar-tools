@@ -13711,6 +13711,13 @@ void write_v0648123350_fixed_input_capture(
 }
 
 bool v0648123350_full_target(const FixedDsecSnapshot& snapshot) {
+    // v0.6.48.12.3.35.1 attribution hotfix: retain the complete diagnostic
+    // owner surface at every accepted radial final when requested.  The 12.3.35
+    // single-target mode remains available for historical replay.  This flag
+    // is observational only and never changes the fixed-state calculation.
+    if (const char* all_finals = std::getenv("XSTAR_V0648123351_FULL_ACCEPTED_FINALS")) {
+        if (*all_finals && std::string(all_finals) != "0" && snapshot.kind == "final") return true;
+    }
     const char* c = std::getenv("XSTAR_V0648123350_FULL_CALL");
     const char* e = std::getenv("XSTAR_V0648123350_FULL_EVAL");
     const char* k = std::getenv("XSTAR_V0648123350_FULL_KIND");
@@ -13758,7 +13765,7 @@ void write_v0648123350_postsolve_attribution(
         }
         std::ofstream owner(full / "cpp_ca_owner_array.csv");
         if (!owner) throw std::runtime_error("cannot create v0648123350 owner-array attribution");
-        owner << "sequence,call_index,evaluation_index,source_position,record,data_type,rate_type,ion_stage,lower_row,upper_row,line_index,continuum_index,ans1,ans2,ans3,ans4,ans5,ans6,rcem_out,rcem_in,oplin,cemab_out,cemab_in,cabab,opakab\n" << std::setprecision(17);
+        owner << "sequence,call_index,evaluation_index,source_position,record,data_type,rate_type,ion_stage,lower_row,upper_row,line_index,continuum_index,ans1,ans2,ans3,ans4,ans5,ans6,rcem_out,rcem_in,elum_out,elum_in,oplin,cemab_out,cemab_in,cabab,opakab\n" << std::setprecision(17);
         const std::size_t line_stride = snapshot.oplin.size();
         const std::size_t cont_stride = snapshot.opakab.size();
         for (std::size_t i = 0; i < row_count; ++i) {
@@ -13768,6 +13775,8 @@ void write_v0648123350_postsolve_attribution(
             const std::size_t cs = r.continuum_index_one_based > 0 ? static_cast<std::size_t>(r.continuum_index_one_based) : 0u;
             const double ro = ls && ls < line_stride && ls < snapshot.rcem.size() ? snapshot.rcem[ls] : 0.0;
             const double ri = ls && ls < line_stride && line_stride + ls < snapshot.rcem.size() ? snapshot.rcem[line_stride + ls] : 0.0;
+            const double eo = ls && ls < line_stride && ls < snapshot.elum.size() ? snapshot.elum[ls] : 0.0;
+            const double ei = ls && ls < line_stride && line_stride + ls < snapshot.elum.size() ? snapshot.elum[line_stride + ls] : 0.0;
             const double ol = ls && ls < snapshot.oplin.size() ? snapshot.oplin[ls] : 0.0;
             const double co = cs && cs < cont_stride && cs < snapshot.cemab.size() ? snapshot.cemab[cs] : 0.0;
             const double ci = cs && cs < cont_stride && cont_stride + cs < snapshot.cemab.size() ? snapshot.cemab[cont_stride + cs] : 0.0;
@@ -13778,14 +13787,14 @@ void write_v0648123350_postsolve_attribution(
                   << r.ion_stage << ',' << r.lower_row << ',' << r.upper_row << ',' << r.type50_line_index_one_based << ','
                   << r.continuum_index_one_based;
             for (double x : r.ans) owner << ',' << x;
-            owner << ',' << ro << ',' << ri << ',' << ol << ',' << co << ',' << ci << ',' << ca << ',' << oa << '\n';
+            owner << ',' << ro << ',' << ri << ',' << eo << ',' << ei << ',' << ol << ',' << co << ',' << ci << ',' << ca << ',' << oa << '\n';
         }
         write_binary64_vector_v82_patch52(full / "cpp_rccemis.bin", snapshot.rccemis);
         write_binary64_vector_v82_patch52(full / "cpp_rcem.bin", snapshot.rcem);
         write_binary64_vector_v82_patch52(full / "cpp_cemab.bin", snapshot.cemab);
         std::ofstream owner_manifest(full / "cpp_owner_manifest.csv");
         owner_manifest << "key,value\n"
-                       << "schema,xstar-tools-v0648123350-owner-v1\n"
+                       << "schema,xstar-tools-v0648123351-owner-v2\n"
                        << "sequence," << snapshot.sequence << "\n"
                        << "call_index," << snapshot.call_index << "\n"
                        << "evaluation_index," << snapshot.evaluation_index << "\n"

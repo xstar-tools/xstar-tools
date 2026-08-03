@@ -1645,7 +1645,13 @@ class SourceFaithfulUCalc:
         return self._ctx_result(r,s,ans1=rate*c.electron_density_cm3,idest1=1,context_fields_used=("temperature_k","xpx","xee"))
 
     def _eval_type39(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
-        n=len(r.reals)//2; rate=sum(r.reals[k]*_expo(-(r.reals[k+n]/1e4)/c.t) for k in range(n))*1e-6*c.t**-1.5
+        # v0.6.48.12.3.35.1 diagnostic-oracle hotfix: literal ucalc.f90
+        # Type 39 uses the intrinsic EXP directly, not the source EXPO helper.
+        # Do not clamp the negative Badnell DR exponent at -60: that created
+        # a Python-only ~1e116 enhancement for record 163403 and falsely won
+        # the 12.3.35 first-divergence gate even though C++ matched FORTRAN.
+        n=len(r.reals)//2
+        rate=sum(r.reals[k]*math.exp(-(r.reals[k+n]/1e4)/c.t) for k in range(n))*1e-6*c.t**-1.5
         return self._ctx_result(r,s,ans1=rate*c.electron_density_cm3,idest1=1,context_fields_used=("temperature_k","xpx","xee"))
 
     def _mapped_grid(self, c: UCalcContext) -> np.ndarray:
