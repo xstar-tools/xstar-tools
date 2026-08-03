@@ -13091,6 +13091,133 @@ void advance_source_continuum_radiation_v82_patch52(
 // This observes the exact local owner -> delr/fpr2 -> cumulative workspace
 // transition for a tiny fixed target set.  The CSV is never read back by the
 // production controller and therefore cannot influence science state.
+
+// v0.6.48.12.3.35.3: diagnostic-only STEP limiter attribution.
+// Observe the exact call-boundary Courant inputs without changing any source
+// array.  This separates gate membership from pre/post-GSSMOOTH opacity and
+// records the additive opacity-family decomposition already retained on the
+// accepted boundary by the frozen 11.6 diagnostics.
+void write_v0648123353_step_limiter_probe(
+    const StandaloneControllerDataV67& data,
+    const FixedDsecSnapshot& boundary,
+    const SourceStepResultV82Patch520111& step_result) {
+    const char* root_text = std::getenv("XSTAR_V0648123353_STEP_LIMITER_DIR");
+    if (!root_text || !*root_text || !data.parameters) return;
+    const std::filesystem::path root(root_text);
+    std::filesystem::create_directories(root);
+    const auto summary_path = root / "cpp_step_limiter.csv";
+    const auto candidates_path = root / "cpp_step_candidates.csv";
+    const bool fresh_summary = !std::filesystem::exists(summary_path) || std::filesystem::file_size(summary_path) == 0u;
+    const bool fresh_candidates = !std::filesystem::exists(candidates_path) || std::filesystem::file_size(candidates_path) == 0u;
+    std::ofstream summary(summary_path, std::ios::app);
+    std::ofstream candidates(candidates_path, std::ios::app);
+    if (!summary || !candidates) throw std::runtime_error("cannot create v0648123353 STEP limiter probe");
+    if (fresh_summary) {
+        summary << "sequence,call_index,evaluation_index,initial_delta_radius_cm,final_delta_radius_cm,"
+                   "limiting_bin_one_based,limiting_energy_ev,limiting_total_opacity_cm1,limiting_tau_in,limiting_zrems1,"
+                   "limiting_candidate_cm,radius_limit_cm,column_limit_cm,remaining_column_limit_cm,remaining_column_final_limit,"
+                   "energy_gate,tau_gate,zrems_gate,tau_margin,zrems_over_gate,"
+                   "pre_total_opacity_cm1,post_total_opacity_cm1,pre_candidate_cm,post_candidate_cm,"
+                   "pre_bound_free,pre_free_free,pre_line,pre_thomson,post_bound_free,post_free_free,post_line,post_thomson,"
+                   "dominant_post_family,dominant_post_fraction\n";
+    }
+    if (fresh_candidates) {
+        candidates << "sequence,call_index,evaluation_index,bin_one_based,energy_ev,total_opacity_cm1,tau_in,zrems1,"
+                      "active,energy_gate,tau_gate,zrems_gate,candidate_cm,"
+                      "pre_total_opacity_cm1,post_total_opacity_cm1,pre_candidate_cm,post_candidate_cm,"
+                      "pre_bound_free,pre_free_free,pre_line,pre_thomson,post_bound_free,post_free_free,post_line,post_thomson,"
+                      "dominant_post_family,dominant_post_fraction,is_selected_limiter\n";
+    }
+    const auto& params = *data.parameters;
+    const std::size_t n = boundary.opakc.size();
+    auto get = [](const std::vector<double>& v, std::size_t i) {
+        return i < v.size() && std::isfinite(v[i]) ? v[i] : 0.0;
+    };
+    const double gate_z = xstar_constants::kLegacyStepZremsGate;
+    const double floor_op = 1.0e-49;
+    auto family_name = [](double bf, double ff, double line, double th) {
+        const double a = std::abs(bf), b = std::abs(ff), c = std::abs(line), d = std::abs(th);
+        const double m = std::max(std::max(a,b),std::max(c,d));
+        if (m == c) return std::string("line");
+        if (m == a) return std::string("bound_free");
+        if (m == b) return std::string("free_free");
+        return std::string("thomson");
+    };
+    auto write_candidate = [&](std::size_t k) {
+        const double energy = k < data.energy.size() ? data.energy[k] : 0.0;
+        const double total = std::max(get(boundary.opakc,k), floor_op);
+        const double tau = k < data.grid_tau_in.size() && std::isfinite(data.grid_tau_in[k]) ? data.grid_tau_in[k] : 0.0;
+        const double zr = k < data.accumulated_zrems.size() && std::isfinite(data.accumulated_zrems[k]) ? data.accumulated_zrems[k] : 0.0;
+        const bool eg = energy > 1.0;
+        const bool tg = tau <= params.maximum_optical_depth;
+        const bool zg = zr > gate_z;
+        const bool active = eg && tg && zg;
+        const double pbf = get(boundary.opakc_bound_free_pre_gsmooth_v0648115,k);
+        const double pff = get(boundary.opakc_free_free_pre_gsmooth_v0648115,k);
+        const double pln = get(boundary.opakc_line_pre_gsmooth_v0648115,k);
+        const double pth = get(boundary.opakc_thomson_pre_gsmooth_v0648115,k);
+        const double qbf = get(boundary.opakc_bound_free_post_gsmooth_v0648115,k);
+        const double qff = get(boundary.opakc_free_free_post_gsmooth_v0648115,k);
+        const double qln = get(boundary.opakc_line_post_gsmooth_v0648115,k);
+        const double qth = get(boundary.opakc_thomson_post_gsmooth_v0648115,k);
+        const double pre = pbf+pff+pln+pth;
+        const double post = qbf+qff+qln+qth;
+        const double pre_cand = params.emission_multiplier / std::max(pre,floor_op);
+        const double post_cand = params.emission_multiplier / std::max(post,floor_op);
+        const double denom = std::max(std::abs(post),floor_op);
+        const std::string dom = family_name(qbf,qff,qln,qth);
+        double domv = std::abs(qth);
+        if (dom=="line") domv=std::abs(qln); else if (dom=="bound_free") domv=std::abs(qbf); else if (dom=="free_free") domv=std::abs(qff);
+        candidates << std::setprecision(17)
+                   << boundary.sequence << ',' << data.call_index << ',' << boundary.evaluation_index << ',' << (k+1u) << ','
+                   << energy << ',' << total << ',' << tau << ',' << zr << ','
+                   << (active?1:0) << ',' << (eg?1:0) << ',' << (tg?1:0) << ',' << (zg?1:0) << ','
+                   << (params.emission_multiplier/total) << ',' << pre << ',' << post << ',' << pre_cand << ',' << post_cand << ','
+                   << pbf << ',' << pff << ',' << pln << ',' << pth << ',' << qbf << ',' << qff << ',' << qln << ',' << qth << ','
+                   << dom << ',' << (domv/denom) << ',' << ((k+1u)==step_result.limiting_bin_one_based?1:0) << '\n';
+    };
+    for (std::size_t k=0;k<n;++k) {
+        const double energy = k < data.energy.size() ? data.energy[k] : 0.0;
+        const double tau = k < data.grid_tau_in.size() && std::isfinite(data.grid_tau_in[k]) ? data.grid_tau_in[k] : 0.0;
+        const double zr = k < data.accumulated_zrems.size() && std::isfinite(data.accumulated_zrems[k]) ? data.accumulated_zrems[k] : 0.0;
+        if ((energy > 1.0 && tau <= params.maximum_optical_depth && zr > gate_z) || (k+1u)==step_result.limiting_bin_one_based) {
+            write_candidate(k);
+        }
+    }
+    const std::size_t k = step_result.limiting_bin_one_based > 0u ? step_result.limiting_bin_one_based-1u : 0u;
+    const double pbf = get(boundary.opakc_bound_free_pre_gsmooth_v0648115,k);
+    const double pff = get(boundary.opakc_free_free_pre_gsmooth_v0648115,k);
+    const double pln = get(boundary.opakc_line_pre_gsmooth_v0648115,k);
+    const double pth = get(boundary.opakc_thomson_pre_gsmooth_v0648115,k);
+    const double qbf = get(boundary.opakc_bound_free_post_gsmooth_v0648115,k);
+    const double qff = get(boundary.opakc_free_free_post_gsmooth_v0648115,k);
+    const double qln = get(boundary.opakc_line_post_gsmooth_v0648115,k);
+    const double qth = get(boundary.opakc_thomson_post_gsmooth_v0648115,k);
+    const double pre = pbf+pff+pln+pth;
+    const double post = qbf+qff+qln+qth;
+    const bool eg = step_result.limiting_energy_ev > 1.0;
+    const bool tg = step_result.limiting_tau_in <= params.maximum_optical_depth;
+    const bool zg = step_result.limiting_zrems1 > gate_z;
+    const std::string dom = family_name(qbf,qff,qln,qth);
+    const double denom = std::max(std::abs(post),floor_op);
+    double domv = std::abs(qth);
+    if (dom=="line") domv=std::abs(qln); else if (dom=="bound_free") domv=std::abs(qbf); else if (dom=="free_free") domv=std::abs(qff);
+    summary << std::setprecision(17)
+            << boundary.sequence << ',' << data.call_index << ',' << boundary.evaluation_index << ','
+            << step_result.initial_delta_radius_cm << ',' << step_result.delta_radius_cm << ','
+            << step_result.limiting_bin_one_based << ',' << step_result.limiting_energy_ev << ','
+            << step_result.limiting_opacity_cm1 << ',' << step_result.limiting_tau_in << ',' << step_result.limiting_zrems1 << ','
+            << step_result.limiting_candidate_cm << ',' << step_result.radius_limit_cm << ',' << step_result.column_limit_cm << ','
+            << step_result.remaining_column_limit_cm << ',' << (step_result.remaining_column_was_final_limit?1:0) << ','
+            << (eg?1:0) << ',' << (tg?1:0) << ',' << (zg?1:0) << ','
+            << (params.maximum_optical_depth-step_result.limiting_tau_in) << ','
+            << (gate_z>0.0?step_result.limiting_zrems1/gate_z:0.0) << ','
+            << pre << ',' << post << ',' << (params.emission_multiplier/std::max(pre,floor_op)) << ','
+            << (params.emission_multiplier/std::max(post,floor_op)) << ','
+            << pbf << ',' << pff << ',' << pln << ',' << pth << ',' << qbf << ',' << qff << ',' << qln << ',' << qth << ','
+            << dom << ',' << (domv/denom) << '\n';
+}
+
 void write_v0648123352_transport_commit_probe(
     const StandaloneControllerDataV67& data,
     const FixedDsecSnapshot& local_boundary,
@@ -16287,6 +16414,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                 if (g_performance_v064890) {
                     g_performance_v064890->step_seconds += elapsed_seconds_v064890(step_started_v064890);
                 }
+                write_v0648123353_step_limiter_probe(data, boundary, step_result);
                 pending_transport_segment_cm = step_result.delta_radius_cm;
                 std::cout << std::setprecision(17)
                           << "V048746255172582_PATCH520111_STEP_AFTER_CALL=" << call << "\n"
