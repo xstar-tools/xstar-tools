@@ -586,13 +586,21 @@ def normalize_xstar_parameters(
         r19 = math.sqrt(xlum / max(1.0e-49, pressure * xi))
     else:
         r19 = math.sqrt(xlum / max(1.0e-49, density * xi))
-    radius = r19 * 1.0e19
-    # rread1 receives the user-facing REAL parameter through the legacy
-    # parameter interface before assigning it to the REAL(8) xpxcol caller
-    # variable.  Preserve that default-REAL -> REAL(8) promotion here.
-    # This matters at exact column boundaries: e.g. input 1e20 is
-    # 1.0000000200408773e20 after binary32 rounding, so xcol=1e20 still
-    # enters the final source boundary shell instead of terminating early.
+    # Literal rread1.f90 source semantics.  uclgsr8 promotes the user REAL
+    # parameter values through REAL(4), and rread1 then forms the physical
+    # radius with the *unsuffixed* default-REAL literal 1.e+19:
+    #
+    #     r = r19 * (1.e+19)
+    #
+    # The literal therefore has binary32 value 9.999999980506448e18 before
+    # promotion to REAL(8).  Using Python's binary64 1.0e19 here shifts the
+    # final remaining-column STEP shell.  For ca19_xi2_ne1 the source value
+    # is exactly what produces the FORTRAN 2^41-cm terminal segment.
+    source_radius_scale_cm = float(np.float32(1.0e19))
+    radius = r19 * source_radius_scale_cm
+    # rread1 receives the user-facing REAL parameter through uclgsr8, whose
+    # implementation reads with uclgsr into REAL(4) and promotes to REAL(8).
+    # Preserve that source parameter promotion for the column limit.
     column = float(np.float32(float(values["column"])))
     values["column"] = column
     rmax = column / max(density, 1.0e-49)

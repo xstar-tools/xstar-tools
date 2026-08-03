@@ -68,6 +68,48 @@ double json_number(const std::string& text, const std::string& key, double fallb
     try { return std::stod(match[1].str()); } catch (...) { return fallback; }
 }
 
+// XSTAR uclgsr8.f90 reads a user-facing REAL parameter through a REAL(4)
+// temporary (uclgsr) and only then promotes it to REAL(8).  Keep this helper
+// distinct from true DOUBLE PRECISION source constants.
+double source_uclgsr8_v0648123360(const std::string& text, const std::string& key, double fallback) {
+    return static_cast<double>(static_cast<float>(json_number(text, key, fallback)));
+}
+
+double source_default_real_literal_v0648123360(double value) {
+    return static_cast<double>(static_cast<float>(value));
+}
+
+// Literal rread1.f90 initial-radius construction, independent of the Python
+// normalized initial_radius_cm payload.  This prevents a Python/C++ agreement
+// from masking a shared departure from the canonical FORTRAN source.
+double source_rread1_initial_radius_cm_v0648123360(const std::string& text) {
+    const int lcpres = static_cast<int>(json_number(text, "lcpres", 0.0));
+    const int lcdd = lcpres <= 1 ? 1 - lcpres : lcpres;
+    const double t4 = source_uclgsr8_v0648123360(text, "temperature", 100.0);
+    const double pressure = source_uclgsr8_v0648123360(text, "pressure", 0.03);
+    double density = source_uclgsr8_v0648123360(text, "density", 1.0e4);
+    const double xlum = source_uclgsr8_v0648123360(text, "rlrad38", 1.0e-6);
+    const double zeta = source_uclgsr8_v0648123360(text, "rlogxi", 5.0);
+    const double xi = std::pow(source_default_real_literal_v0648123360(10.0), zeta);
+    double r19 = 0.0;
+    if (lcdd == 0) {
+        density = pressure / 1.38e-12 / std::max(t4, 1.0e-49);
+        const double four_pi = source_default_real_literal_v0648123360(12.56);
+        const double ccc = source_default_real_literal_v0648123360(2.99792458e10);
+        r19 = std::sqrt(xlum / four_pi / ccc / std::max(1.0e-49, pressure * xi));
+    } else if (lcdd == 2) {
+        const double xee = source_default_real_literal_v0648123360(1.2);
+        density = pressure / (xee + source_default_real_literal_v0648123360(1.0e-34));
+        r19 = std::sqrt(xlum / std::max(1.0e-49, pressure * xi));
+    } else if (lcdd == 1) {
+        r19 = std::sqrt(xlum / std::max(1.0e-49, density * xi));
+    } else {
+        throw std::runtime_error("unsupported rread1 lcdd branch");
+    }
+    const double radius_scale = source_default_real_literal_v0648123360(1.0e19);
+    return r19 * radius_scale;
+}
+
 std::vector<double> json_number_array(const std::string& text, const std::string& key) {
     const std::regex pattern("\\\"" + key + "\\\"\\s*:\\s*\\[([^\\]]*)\\]");
     std::smatch match;
@@ -917,8 +959,11 @@ ProductionParameters read_production_parameters(const std::filesystem::path& pat
     ProductionParameters p; p.source_path=path; p.raw_json=read_file(path);
     p.density_cm3=json_number(p.raw_json,"density",p.density_cm3); p.pressure_dyn_cm2=json_number(p.raw_json,"pressure",p.pressure_dyn_cm2);
     p.temperature_k=json_number(p.raw_json,"temperature_k",json_number(p.raw_json,"temperature",100.0)*1.0e4);
-    p.column_cm2=json_number(p.raw_json,"column",p.column_cm2); p.log_xi=json_number(p.raw_json,"rlogxi",p.log_xi);
-    p.initial_radius_cm=json_number(p.raw_json,"initial_radius_cm",p.initial_radius_cm); p.covering_fraction=json_number(p.raw_json,"cfrac",p.covering_fraction);
+    // Source input parameters are read by uclgsr8 through REAL(4) and then
+    // promoted.  Column was already normalized that way by Python, but enforce
+    // it here independently as well.
+    p.column_cm2=source_uclgsr8_v0648123360(p.raw_json,"column",p.column_cm2); p.log_xi=json_number(p.raw_json,"rlogxi",p.log_xi);
+    p.initial_radius_cm=source_rread1_initial_radius_cm_v0648123360(p.raw_json); p.covering_fraction=json_number(p.raw_json,"cfrac",p.covering_fraction);
     p.emission_multiplier=json_number(p.raw_json,"emult",p.emission_multiplier);
     p.maximum_optical_depth=json_number(p.raw_json,"taumax",p.maximum_optical_depth);
     p.turbulent_velocity_km_s=json_number(p.raw_json,"vturbi",p.turbulent_velocity_km_s);
