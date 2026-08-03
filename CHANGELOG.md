@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.12.3.32 - 2026-08-03
+
+- Keep 12.3.31 cursor advancement as the normal AVX2 Type-50 production path and retain the exact 12.3.30 boundary-hint implementation behind `XSTAR_V064812331_FORCE_12330_HINT_CONSUME=1`. No 12.3.25 science, publication, ABI 6048110, profile arithmetic, scalar trapezoid recurrence, or sequential opacity-addition ordering is changed.
+- Add independent opt-in AVX2 `tmpop` preparation (`XSTAR_V064812332_ENABLE_AVX2_TMPOP_PREP=1`): four far-wing profile values are multiplied by `optpp` in one AVX2 multiply, and precomputed `tmpop0..3` values feed the unchanged scalar recurrence in lane order. Scalar/core/tail profile points remain on the frozen path.
+- Add independent opt-in AVX2 adjacent-`tmpe` preparation (`XSTAR_V064812332_ENABLE_AVX2_TMPE_PREP=1`): the existing four-lane energy vector is shifted to `[previous,e0,e1,e2]`, subtracted in AVX2, absolute-valued by sign-bit clearing, and the resulting `tmpe0..3` values feed the unchanged scalar recurrence in lane order.
+- Do not combine the two experiments. If both flags are present, production cursor is used. The 12.3.31 five-phase decomposition is not part of the 12.3.32 host qualifier; scalar profile and `opakc` work are intentionally not optimized here.
+- Add profile/block/point telemetry for each preparation candidate and a 600-case separate-process bit-exact qualifier against the exact 12.3.25 scalar oracle.
+- Add a `ca19_ne1e8`-only repeated interleaved host timing sequence: `production-A -> tmpop-A -> production-B -> tmpop-B -> production-C -> tmpe-A -> production-D -> tmpe-B`, followed by one exact hinted-fallback science check. No candidate is production default in 12.3.32; promotion requires the host interleaved evidence.
+
 ## 0.6.48.12.3.31 - 2026-08-03
 
 - Promote the independently qualified 12.3.30 monotone `epi`/`opakc` cursor-advance consume path into the normal AVX2 Type-50 production path. The `ca19_ne1e8` host run measured `21.909288 s` Type-50 versus `23.558068 s` for the 12.3.30 hinted production path, with nine-FITS bit-data equivalence.

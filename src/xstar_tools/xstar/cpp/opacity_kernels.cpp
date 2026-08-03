@@ -120,6 +120,17 @@ thread_local double g_type50_decomp_trapezoid_seconds_v064812331 = 0.0;
 thread_local double g_type50_decomp_boundary_rebin_seconds_v064812331 = 0.0;
 thread_local double g_type50_decomp_opakc_seconds_v064812331 = 0.0;
 
+// v0.6.48.12.3.32: independent AVX2 preparation experiments layered on
+// the frozen 12.3.31 cursor production path.  Only far-wing four-point
+// vector blocks are affected; scalar profile arithmetic, scalar recurrence,
+// boundary decisions, and sequential opacity additions remain source ordered.
+thread_local std::uint64_t g_type50_tmpop_prep_profiles_v064812332 = 0u;
+thread_local std::uint64_t g_type50_tmpop_prep_blocks_v064812332 = 0u;
+thread_local std::uint64_t g_type50_tmpop_prep_points_v064812332 = 0u;
+thread_local std::uint64_t g_type50_tmpe_prep_profiles_v064812332 = 0u;
+thread_local std::uint64_t g_type50_tmpe_prep_blocks_v064812332 = 0u;
+thread_local std::uint64_t g_type50_tmpe_prep_points_v064812332 = 0u;
+
 static bool env_truthy_v064812324(const char* name) {
     const char* value = std::getenv(name);
     return value && *value && std::strcmp(value, "0") != 0 &&
@@ -1180,6 +1191,236 @@ static int run_inline_farwing_profile_v064812330(
     return 0;
 }
 
+template <bool CacheNextEpiV064812332, bool LocalUpdatedBinsV064812332,
+          bool CursorAdvanceV064812332, bool PrepareTmpopV064812332,
+          bool PrepareTmpeV064812332>
+__attribute__((target("avx2")))
+static int run_inline_farwing_profile_v064812332(
+    double optpp, double line_energy_ev, double dele, double aasmall,
+    double e00, double deleused, const double* epi, int n,
+    int mlmin, int mlmax, int ml1min, int first_core, int last_core,
+    double* opakc, long long* updated_bins) {
+    static_assert(!(PrepareTmpopV064812332 && PrepareTmpeV064812332),
+        "12.3.32 preparation experiments must remain independent");
+    constexpr int ml2 = 10000;
+    auto energy_for = [=](int point) {
+        return source_add(e00, source_mul(static_cast<double>(point - ml2), deleused));
+    };
+
+    Type50ConsumeStateV064812328 state;
+    state.previous_energy = energy_for(mlmin);
+    state.ml1m = ml1min;
+
+    // Independent 12.3.30 micro-state.  Only the selected constexpr path is
+    // active in each host mode; the source arithmetic and update ordering are
+    // unchanged from the promoted boundary-hint implementation.
+    double next_epi = epi[ml1min - 1];
+    const double* epi_cursor = epi + (ml1min - 1);
+    double* opakc_cursor = opakc + (ml1min - 1);
+    long long local_updated_bins = 0;
+
+    auto add_updated_bin = [&]() {
+        if constexpr (LocalUpdatedBinsV064812332) ++local_updated_bins;
+        else ++(*updated_bins);
+    };
+
+    auto apply_boundary = [&](double current_energy) {
+        bool crosses;
+        if constexpr (CursorAdvanceV064812332) crosses = current_energy > *epi_cursor;
+        else if constexpr (CacheNextEpiV064812332) crosses = current_energy > next_epi;
+        else crosses = current_energy > epi[state.ml1m - 1];
+        crosses = __builtin_expect(crosses, 0);
+        if (crosses) {
+            if (state.sume > 1.0e-34) {
+                const double optp2 = source_div(state.opsum, state.sume);
+                if constexpr (CursorAdvanceV064812332) {
+                    while (current_energy > *epi_cursor && state.ml1m < n) {
+                        *opakc_cursor = source_add(*opakc_cursor, optp2);
+                        add_updated_bin();
+                        ++state.ml1m;
+                        ++epi_cursor;
+                        ++opakc_cursor;
+                    }
+                } else if constexpr (CacheNextEpiV064812332) {
+                    while (current_energy > next_epi && state.ml1m < n) {
+                        opakc[state.ml1m - 1] = source_add(opakc[state.ml1m - 1], optp2);
+                        add_updated_bin();
+                        ++state.ml1m;
+                        next_epi = epi[state.ml1m - 1];
+                    }
+                } else {
+                    while (current_energy > epi[state.ml1m - 1] && state.ml1m < n) {
+                        opakc[state.ml1m - 1] = source_add(opakc[state.ml1m - 1], optp2);
+                        add_updated_bin();
+                        ++state.ml1m;
+                    }
+                }
+            }
+            state.opsum = 0.0;
+            state.sume = 0.0;
+        }
+    };
+
+    auto accumulate_prepared = [&](double current_energy, double new_tmpop, double tmpe) {
+        const double tmpopo = state.tmpop;
+        state.tmpop = new_tmpop;
+        state.previous_energy = current_energy;
+        state.sume = source_add(state.sume, tmpe);
+        const double pair = source_add(state.tmpop, tmpopo);
+        const double weighted = source_mul(pair, tmpe);
+        const double interval = source_div(weighted, 2.0);
+        state.opsum = source_add(state.opsum, interval);
+        apply_boundary(current_energy);
+    };
+
+    auto consume_scalar_point = [&](double current_energy, double profile) {
+        const double new_tmpop = optpp * profile;
+        const double tmpe = std::abs(source_sub(current_energy, state.previous_energy));
+        accumulate_prepared(current_energy, new_tmpop, tmpe);
+    };
+
+    auto consume_vector_point = [&](double current_energy, double profile,
+                                    double prepared_tmpop, double prepared_tmpe) {
+        double new_tmpop;
+        if constexpr (PrepareTmpopV064812332) new_tmpop = prepared_tmpop;
+        else new_tmpop = optpp * profile;
+        double tmpe;
+        if constexpr (PrepareTmpeV064812332) tmpe = prepared_tmpe;
+        else tmpe = std::abs(source_sub(current_energy, state.previous_energy));
+        accumulate_prepared(current_energy, new_tmpop, tmpe);
+    };
+
+    auto scalar_point = [&](int point) {
+        const double current_energy = energy_for(point);
+        const double delet = source_div(source_sub(current_energy, line_energy_ev), dele);
+        double profile;
+        if (point == ml2 && aasmall <= xstar_constants::kLegacyLinopacCenterVoigtThreshold) {
+            profile = source_div(std::exp(-delet * delet),
+                xstar_constants::kLegacyLinopacProfileNormalization);
+        } else {
+            const double raw = voigte_small_a_positive_v064896(std::abs(delet), aasmall);
+            profile = source_div(raw, xstar_constants::kLegacyLinopacProfileNormalization);
+        }
+        consume_scalar_point(current_energy, profile);
+        ++g_type50_prod_scalar_profile_points_v064812328;
+    };
+
+    const __m256d deleused4 = _mm256_set1_pd(deleused);
+    const __m256d e004 = _mm256_set1_pd(e00);
+    const __m256d line4 = _mm256_set1_pd(line_energy_ev);
+    const __m256d dele4 = _mm256_set1_pd(dele);
+    const __m256d aa4 = _mm256_set1_pd(aasmall);
+    const __m256d six4 = _mm256_set1_pd(source_real_literal(6.0));
+    const __m256d four4 = _mm256_set1_pd(source_real_literal(4.0));
+    const __m256d fifteen4 = _mm256_set1_pd(source_real_literal(15.0));
+    const __m256d sqp4 = _mm256_set1_pd(source_real_literal(1.772453851));
+    const __m256d norm4 = _mm256_set1_pd(xstar_constants::kLegacyLinopacProfileNormalization);
+    const __m256d sign = _mm256_set1_pd(-0.0);
+    const __m256d optpp4 = _mm256_set1_pd(optpp);
+
+#define XSTAR_V064812332_EXTRACT4(VEC, A0, A1, A2, A3) do { \
+        const __m128d lo_v064812332 = _mm256_castpd256_pd128((VEC)); \
+        const __m128d hi_v064812332 = _mm256_extractf128_pd((VEC), 1); \
+        (A0) = _mm_cvtsd_f64(lo_v064812332); \
+        (A1) = _mm_cvtsd_f64(_mm_unpackhi_pd(lo_v064812332, lo_v064812332)); \
+        (A2) = _mm_cvtsd_f64(hi_v064812332); \
+        (A3) = _mm_cvtsd_f64(_mm_unpackhi_pd(hi_v064812332, hi_v064812332)); \
+    } while (0)
+
+#define XSTAR_V064812332_PROCESS_FAR_RANGE(BEGIN_VALUE, END_VALUE) do { \
+        int point_v064812332 = (BEGIN_VALUE); \
+        const int end_v064812332 = (END_VALUE); \
+        while (point_v064812332 + 3 <= end_v064812332) { \
+            const double o0 = static_cast<double>(point_v064812332 - ml2); \
+            const double o1 = static_cast<double>(point_v064812332 + 1 - ml2); \
+            const double o2 = static_cast<double>(point_v064812332 + 2 - ml2); \
+            const double o3 = static_cast<double>(point_v064812332 + 3 - ml2); \
+            const __m256d offsets = _mm256_set_pd(o3, o2, o1, o0); \
+            const __m256d energies = _mm256_add_pd(e004, _mm256_mul_pd(offsets, deleused4)); \
+            const __m256d signed_v = _mm256_div_pd(_mm256_sub_pd(energies, line4), dele4); \
+            const __m256d v = _mm256_andnot_pd(sign, signed_v); \
+            const __m256d v2 = _mm256_mul_pd(v, v); \
+            const __m256d v4 = _mm256_mul_pd(v2, v2); \
+            const __m256d n1 = _mm256_mul_pd(six4, v2); \
+            const __m256d n2 = _mm256_mul_pd(four4, v4); \
+            const __m256d num = _mm256_add_pd(_mm256_add_pd(fifteen4, n1), n2); \
+            const __m256d scaled = _mm256_mul_pd(aa4, num); \
+            const __m256d d0 = _mm256_mul_pd(four4, v2); \
+            const __m256d d1 = _mm256_mul_pd(d0, v2); \
+            const __m256d d2 = _mm256_mul_pd(d1, v2); \
+            const __m256d raw = _mm256_div_pd(scaled, _mm256_mul_pd(d2, sqp4)); \
+            const __m256d profiles = _mm256_div_pd(raw, norm4); \
+            double e0, e1, e2, e3; \
+            XSTAR_V064812332_EXTRACT4(energies, e0, e1, e2, e3); \
+            if constexpr (PrepareTmpopV064812332) { \
+                const __m256d tmpops = _mm256_mul_pd(optpp4, profiles); \
+                double t0, t1, t2, t3; \
+                XSTAR_V064812332_EXTRACT4(tmpops, t0, t1, t2, t3); \
+                consume_vector_point(e0, 0.0, t0, 0.0); \
+                consume_vector_point(e1, 0.0, t1, 0.0); \
+                consume_vector_point(e2, 0.0, t2, 0.0); \
+                consume_vector_point(e3, 0.0, t3, 0.0); \
+                ++g_type50_tmpop_prep_blocks_v064812332; \
+                g_type50_tmpop_prep_points_v064812332 += 4u; \
+            } else if constexpr (PrepareTmpeV064812332) { \
+                const __m256d prev_shift = _mm256_permute4x64_pd(energies, _MM_SHUFFLE(2, 1, 0, 0)); \
+                const __m256d prev0 = _mm256_set1_pd(state.previous_energy); \
+                const __m256d previous = _mm256_blend_pd(prev_shift, prev0, 0x1); \
+                const __m256d tmpe4 = _mm256_andnot_pd(sign, _mm256_sub_pd(energies, previous)); \
+                double p0, p1, p2, p3, t0, t1, t2, t3; \
+                XSTAR_V064812332_EXTRACT4(profiles, p0, p1, p2, p3); \
+                XSTAR_V064812332_EXTRACT4(tmpe4, t0, t1, t2, t3); \
+                consume_vector_point(e0, p0, 0.0, t0); \
+                consume_vector_point(e1, p1, 0.0, t1); \
+                consume_vector_point(e2, p2, 0.0, t2); \
+                consume_vector_point(e3, p3, 0.0, t3); \
+                ++g_type50_tmpe_prep_blocks_v064812332; \
+                g_type50_tmpe_prep_points_v064812332 += 4u; \
+            } \
+            ++g_type50_prod_avx2_blocks_v064812328; \
+            g_type50_prod_avx2_points_v064812328 += 4u; \
+            point_v064812332 += 4; \
+        } \
+        while (point_v064812332 <= end_v064812332) { \
+            scalar_point(point_v064812332); \
+            ++point_v064812332; \
+        } \
+    } while (0)
+
+    const int first_point = mlmin + 1;
+    const int last_point = mlmax;
+    const int left_begin = first_point;
+    const int left_end = std::min(last_point, first_core - 1);
+    if (left_begin <= left_end) {
+        if (aasmall <= xstar_constants::kLegacyLinopacCenterVoigtThreshold &&
+            left_begin <= ml2 && ml2 <= left_end) {
+            XSTAR_V064812332_PROCESS_FAR_RANGE(left_begin, ml2 - 1);
+            scalar_point(ml2);
+            XSTAR_V064812332_PROCESS_FAR_RANGE(ml2 + 1, left_end);
+        } else {
+            XSTAR_V064812332_PROCESS_FAR_RANGE(left_begin, left_end);
+        }
+    }
+    for (int point = std::max(first_point, first_core);
+         point <= std::min(last_point, last_core); ++point) scalar_point(point);
+    const int right_begin = std::max(first_point, last_core + 1);
+    const int right_end = last_point;
+    if (right_begin <= right_end) {
+        if (aasmall <= xstar_constants::kLegacyLinopacCenterVoigtThreshold &&
+            right_begin <= ml2 && ml2 <= right_end) {
+            XSTAR_V064812332_PROCESS_FAR_RANGE(right_begin, ml2 - 1);
+            scalar_point(ml2);
+            XSTAR_V064812332_PROCESS_FAR_RANGE(ml2 + 1, right_end);
+        } else {
+            XSTAR_V064812332_PROCESS_FAR_RANGE(right_begin, right_end);
+        }
+    }
+#undef XSTAR_V064812332_PROCESS_FAR_RANGE
+#undef XSTAR_V064812332_EXTRACT4
+    if constexpr (LocalUpdatedBinsV064812332) *updated_bins += local_updated_bins;
+    return 0;
+}
+
 #endif
 
 #if (defined(__x86_64__) || defined(__i386__)) && (defined(__GNUC__) || defined(__clang__))
@@ -1527,6 +1768,10 @@ static int xstar_opacity_apply_line_profile_optimized_v064896(
         env_truthy_v064812324("XSTAR_V064812331_FORCE_12330_HINT_CONSUME");
     static const bool decompose_cursor_v064812331 =
         env_truthy_v064812324("XSTAR_V064812331_TYPE50_DECOMPOSE");
+    static const bool enable_tmpop_prep_v064812332 =
+        env_truthy_v064812324("XSTAR_V064812332_ENABLE_AVX2_TMPOP_PREP");
+    static const bool enable_tmpe_prep_v064812332 =
+        env_truthy_v064812324("XSTAR_V064812332_ENABLE_AVX2_TMPE_PREP");
 
 #if (defined(__x86_64__) || defined(__i386__)) && (defined(__GNUC__) || defined(__clang__))
     if (production_inline_avx2_v064812328 && decompose_v064812328) {
@@ -1602,10 +1847,18 @@ static int xstar_opacity_apply_line_profile_optimized_v064896(
             ++g_type50_hint_profiles_v064812329;
             run_inline_farwing_profile_v064812329<false,true,false>(
                 optpp,line_energy_ev,dele,aasmall,e00,deleused,epi,n,mlmin,mlmax,ml1min,core.first,core.second,opakc,updated_bins);
+        } else if (enable_tmpop_prep_v064812332 && !enable_tmpe_prep_v064812332) {
+            ++g_type50_tmpop_prep_profiles_v064812332;
+            run_inline_farwing_profile_v064812332<false,false,true,true,false>(
+                optpp,line_energy_ev,dele,aasmall,e00,deleused,epi,n,mlmin,mlmax,ml1min,core.first,core.second,opakc,updated_bins);
+        } else if (enable_tmpe_prep_v064812332 && !enable_tmpop_prep_v064812332) {
+            ++g_type50_tmpe_prep_profiles_v064812332;
+            run_inline_farwing_profile_v064812332<false,false,true,false,true>(
+                optpp,line_energy_ev,dele,aasmall,e00,deleused,epi,n,mlmin,mlmax,ml1min,core.first,core.second,opakc,updated_bins);
         } else {
-            // 12.3.31 production: promote the independently qualified 12.3.30
-            // cursor-advance micro-path.  The hint remains present and science
-            // safe, but no performance claim is attached to it independently.
+            // 12.3.31 production remains frozen in 12.3.32.  If both experiment
+            // flags are accidentally set, deliberately run production rather
+            // than combining the two candidates.
             if (decompose_cursor_v064812331) {
                 decompose_cursor_profile_v064812331(
                     optpp,line_energy_ev,dele,aasmall,e00,deleused,epi,n,
@@ -1624,6 +1877,10 @@ static int xstar_opacity_apply_line_profile_optimized_v064896(
         write_message(errbuf, errbuf_size,
             force_12330_hint_consume_v064812331 ?
                 "v064812331 exact 12.3.30 hinted consume fallback" :
+            enable_tmpop_prep_v064812332 && !enable_tmpe_prep_v064812332 ?
+                "v064812332 independent AVX2 tmpop preparation experiment" :
+            enable_tmpe_prep_v064812332 && !enable_tmpop_prep_v064812332 ?
+                "v064812332 independent AVX2 tmpe preparation experiment" :
             decompose_cursor_v064812331 ?
                 "v064812331 cursor production with low-overhead decomposition" :
                 "v064812331 production cursor-advance consume");
@@ -1950,6 +2207,27 @@ void xstar_opacity_type50_perf_snapshot_v064812331(
     if (decomp_trapezoid_seconds) *decomp_trapezoid_seconds = g_type50_decomp_trapezoid_seconds_v064812331;
     if (decomp_boundary_rebin_seconds) *decomp_boundary_rebin_seconds = g_type50_decomp_boundary_rebin_seconds_v064812331;
     if (decomp_opakc_seconds) *decomp_opakc_seconds = g_type50_decomp_opakc_seconds_v064812331;
+}
+
+void xstar_opacity_type50_perf_reset_v064812332(void) {
+    g_type50_tmpop_prep_profiles_v064812332 = 0u;
+    g_type50_tmpop_prep_blocks_v064812332 = 0u;
+    g_type50_tmpop_prep_points_v064812332 = 0u;
+    g_type50_tmpe_prep_profiles_v064812332 = 0u;
+    g_type50_tmpe_prep_blocks_v064812332 = 0u;
+    g_type50_tmpe_prep_points_v064812332 = 0u;
+}
+
+void xstar_opacity_type50_perf_snapshot_v064812332(
+    std::uint64_t* tmpop_profiles, std::uint64_t* tmpop_blocks,
+    std::uint64_t* tmpop_points, std::uint64_t* tmpe_profiles,
+    std::uint64_t* tmpe_blocks, std::uint64_t* tmpe_points) {
+    if (tmpop_profiles) *tmpop_profiles = g_type50_tmpop_prep_profiles_v064812332;
+    if (tmpop_blocks) *tmpop_blocks = g_type50_tmpop_prep_blocks_v064812332;
+    if (tmpop_points) *tmpop_points = g_type50_tmpop_prep_points_v064812332;
+    if (tmpe_profiles) *tmpe_profiles = g_type50_tmpe_prep_profiles_v064812332;
+    if (tmpe_blocks) *tmpe_blocks = g_type50_tmpe_prep_blocks_v064812332;
+    if (tmpe_points) *tmpe_points = g_type50_tmpe_prep_points_v064812332;
 }
 
 } // extern "C"

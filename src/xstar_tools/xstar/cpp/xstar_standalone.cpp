@@ -17312,6 +17312,16 @@ void emit_performance_instrumentation_v064892(
         &type50_decomp_opakc_bins_v064812331, &type50_decomp_avx2_seconds_v064812331,
         &type50_decomp_scalar_seconds_v064812331, &type50_decomp_trapezoid_seconds_v064812331,
         &type50_decomp_boundary_rebin_seconds_v064812331, &type50_decomp_opakc_seconds_v064812331);
+    std::uint64_t type50_tmpop_profiles_v064812332 = 0u;
+    std::uint64_t type50_tmpop_blocks_v064812332 = 0u;
+    std::uint64_t type50_tmpop_points_v064812332 = 0u;
+    std::uint64_t type50_tmpe_profiles_v064812332 = 0u;
+    std::uint64_t type50_tmpe_blocks_v064812332 = 0u;
+    std::uint64_t type50_tmpe_points_v064812332 = 0u;
+    xstar_spectral_type50_perf_snapshot_v064812332(
+        &type50_tmpop_profiles_v064812332, &type50_tmpop_blocks_v064812332,
+        &type50_tmpop_points_v064812332, &type50_tmpe_profiles_v064812332,
+        &type50_tmpe_blocks_v064812332, &type50_tmpe_points_v064812332);
     auto write = [&](std::ostream& out) {
         out << std::fixed << std::setprecision(6)
             << "V064892_PERF_POLICY=MEASUREMENT_ONLY_BROAD_SPECTRAL_CONSTRUCTION_DECOMPOSITION\n"
@@ -17446,6 +17456,12 @@ void emit_performance_instrumentation_v064892(
             << "V064812331_TYPE50_DECOMP_TRAPEZOID_SECONDS="<<type50_decomp_trapezoid_seconds_v064812331<<"\n"
             << "V064812331_TYPE50_DECOMP_BOUNDARY_REBIN_SECONDS="<<type50_decomp_boundary_rebin_seconds_v064812331<<"\n"
             << "V064812331_TYPE50_DECOMP_OPAKC_SECONDS="<<type50_decomp_opakc_seconds_v064812331<<"\n";
+        out << "V064812332_TYPE50_TMPOP_PREP_PROFILES="<<type50_tmpop_profiles_v064812332<<"\n"
+            << "V064812332_TYPE50_TMPOP_PREP_BLOCKS="<<type50_tmpop_blocks_v064812332<<"\n"
+            << "V064812332_TYPE50_TMPOP_PREP_POINTS="<<type50_tmpop_points_v064812332<<"\n"
+            << "V064812332_TYPE50_TMPE_PREP_PROFILES="<<type50_tmpe_profiles_v064812332<<"\n"
+            << "V064812332_TYPE50_TMPE_PREP_BLOCKS="<<type50_tmpe_blocks_v064812332<<"\n"
+            << "V064812332_TYPE50_TMPE_PREP_POINTS="<<type50_tmpe_points_v064812332<<"\n";
     };
     write(std::cout);
     if (write_file) {
@@ -17494,6 +17510,7 @@ int command_run_standalone_production_v67(const Options& options, const std::fil
         xstar_spectral_type50_perf_reset_v064812329();
         xstar_spectral_type50_perf_reset_v064812330();
         xstar_spectral_type50_perf_reset_v064812331();
+        xstar_spectral_type50_perf_reset_v064812332();
         auto params = xstar_atdb_runtime::read_production_parameters(options.parameters_path);
         auto atomic = xstar_atdb_runtime::resolve_atomic_data(options.parameters_path, params.raw_json, executable_path);
         std::cout << prefix << "COMMAND=RUN_PRODUCTION_STANDALONE\n"

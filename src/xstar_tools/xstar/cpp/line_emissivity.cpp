@@ -555,6 +555,11 @@ extern "C" void xstar_opacity_type50_perf_snapshot_v064812331(
     std::uint64_t* decomp_opakc_bins, double* decomp_avx2_seconds,
     double* decomp_scalar_seconds, double* decomp_trapezoid_seconds,
     double* decomp_boundary_rebin_seconds, double* decomp_opakc_seconds);
+extern "C" void xstar_opacity_type50_perf_reset_v064812332(void);
+extern "C" void xstar_opacity_type50_perf_snapshot_v064812332(
+    std::uint64_t* tmpop_profiles, std::uint64_t* tmpop_blocks,
+    std::uint64_t* tmpop_points, std::uint64_t* tmpe_profiles,
+    std::uint64_t* tmpe_blocks, std::uint64_t* tmpe_points);
 
 
 struct xstar_spectral_context {
@@ -776,6 +781,19 @@ void xstar_spectral_type50_perf_snapshot_v064812331(
         decomp_opakc_bins, decomp_avx2_seconds, decomp_scalar_seconds,
         decomp_trapezoid_seconds, decomp_boundary_rebin_seconds,
         decomp_opakc_seconds);
+}
+
+void xstar_spectral_type50_perf_reset_v064812332(void) {
+    xstar_opacity_type50_perf_reset_v064812332();
+}
+
+void xstar_spectral_type50_perf_snapshot_v064812332(
+    std::uint64_t* tmpop_profiles, std::uint64_t* tmpop_blocks,
+    std::uint64_t* tmpop_points, std::uint64_t* tmpe_profiles,
+    std::uint64_t* tmpe_blocks, std::uint64_t* tmpe_points) {
+    xstar_opacity_type50_perf_snapshot_v064812332(
+        tmpop_profiles, tmpop_blocks, tmpop_points,
+        tmpe_profiles, tmpe_blocks, tmpe_points);
 }
 
 void xstar_spectral_type50_perf_snapshot_v064812328(
