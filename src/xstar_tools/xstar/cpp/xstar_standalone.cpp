@@ -13653,6 +13653,149 @@ void write_v064812324_fixed_input_capture(
              << "global_level_count," << input.global_level_count << "\n";
 }
 
+
+// v0.6.48.12.3.35: diagnostic-only Ca physical-attribution capture.
+// This is observational: the captured input and post-solve diagnostic files
+// are never read by the controller or fixed-state physics.
+void write_v0648123350_fixed_input_capture(
+    const StandaloneControllerDataV67& data,
+    const xstar_fixed_state_input_v1& input,
+    const FixedDsecSnapshot& snapshot) {
+    const char* root_text = std::getenv("XSTAR_V0648123350_ATTRIBUTION_DIR");
+    if (!root_text || !*root_text) return;
+    std::ostringstream name;
+    name << "inputs/call_" << std::setw(2) << std::setfill('0') << snapshot.call_index
+         << "_eval_" << std::setw(4) << snapshot.evaluation_index << "_" << snapshot.kind;
+    const std::filesystem::path entry = std::filesystem::path(root_text) / name.str();
+    std::filesystem::create_directories(entry);
+    auto write_doubles = [](const std::filesystem::path& path, const double* values, std::size_t count) {
+        std::ofstream out(path, std::ios::binary);
+        if (!out) throw std::runtime_error("cannot create v0648123350 fixed-input binary: " + path.string());
+        if (values && count) out.write(reinterpret_cast<const char*>(values),
+            static_cast<std::streamsize>(count * sizeof(double)));
+    };
+    write_doubles(entry / "radiation_energy_ev.bin", input.radiation_energy_ev, input.radiation_bin_count);
+    write_doubles(entry / "radiation_flux.bin", input.radiation_flux, input.radiation_bin_count);
+    write_doubles(entry / "dsec_radiation_energy_ev.bin", input.dsec_radiation_energy_ev, input.dsec_radiation_bin_count);
+    write_doubles(entry / "dsec_bremsa.bin", input.dsec_bremsa, input.dsec_radiation_bin_count);
+    write_doubles(entry / "continuum_tau_in.bin", input.continuum_tau_in, input.continuum_tau_count);
+    write_doubles(entry / "continuum_tau_out.bin", input.continuum_tau_out, input.continuum_tau_count);
+    write_doubles(entry / "line_tau_in.bin", data.line_tau_in.data(), data.line_tau_in.size());
+    write_doubles(entry / "line_tau_out.bin", data.line_tau_out.data(), data.line_tau_out.size());
+    write_doubles(entry / "global_xilevg.bin", input.global_xilevg, input.global_level_count);
+    write_doubles(entry / "global_bilevg.bin", input.global_bilevg, input.global_level_count);
+    write_doubles(entry / "global_rnisg.bin", input.global_rnisg, input.global_level_count);
+    std::ofstream manifest(entry / "manifest.csv");
+    if (!manifest) throw std::runtime_error("cannot create v0648123350 fixed-input manifest");
+    manifest << "key,value\n" << std::setprecision(17)
+             << "schema,xstar-tools-v064812321-fixed-radial-input-v1\n"
+             << "call_index," << snapshot.call_index << "\n"
+             << "evaluation_index," << snapshot.evaluation_index << "\n"
+             << "kind," << snapshot.kind << "\n"
+             << "source_sequence," << snapshot.sequence << "\n"
+             << "temperature_k," << input.temperature_k << "\n"
+             << "electron_density_cm3," << input.electron_density_cm3 << "\n"
+             << "hydrogen_density_cm3," << input.hydrogen_density_cm3 << "\n"
+             << "neutral_h_density_cm3," << input.neutral_h_density_cm3 << "\n"
+             << "ionized_h_density_cm3," << input.ionized_h_density_cm3 << "\n"
+             << "electron_fraction_xee," << input.electron_fraction_xee << "\n"
+             << "covering_fraction," << input.covering_fraction << "\n"
+             << "dsec_covering_fraction," << input.dsec_covering_fraction << "\n"
+             << "turbulent_velocity_km_s," << input.turbulent_velocity_km_s << "\n"
+             << "runtime_state_flags," << input.runtime_state_flags << "\n"
+             << "radiation_bin_count," << input.radiation_bin_count << "\n"
+             << "dsec_radiation_bin_count," << input.dsec_radiation_bin_count << "\n"
+             << "continuum_tau_count," << input.continuum_tau_count << "\n"
+             << "line_tau_count," << data.line_tau_in.size() << "\n"
+             << "global_level_count," << input.global_level_count << "\n";
+}
+
+bool v0648123350_full_target(const FixedDsecSnapshot& snapshot) {
+    const char* c = std::getenv("XSTAR_V0648123350_FULL_CALL");
+    const char* e = std::getenv("XSTAR_V0648123350_FULL_EVAL");
+    const char* k = std::getenv("XSTAR_V0648123350_FULL_KIND");
+    if (!c || !e || !k) return false;
+    return snapshot.call_index == static_cast<std::size_t>(std::strtoull(c,nullptr,10)) &&
+           snapshot.evaluation_index == static_cast<std::size_t>(std::strtoull(e,nullptr,10)) &&
+           snapshot.kind == k;
+}
+
+void write_v0648123350_postsolve_attribution(
+    StandaloneControllerDataV67& data, const FixedDsecSnapshot& snapshot) {
+    const char* root_text = std::getenv("XSTAR_V0648123350_ATTRIBUTION_DIR");
+    if (!root_text || !*root_text) return;
+    const std::filesystem::path root(root_text);
+    std::filesystem::create_directories(root / "cpp_compact");
+    std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> msg{};
+    int rc = xstar_fixed_state_write_last_element_attribution_v06481235(
+        data.fixed_context, (root / "cpp_compact").string().c_str(), 20,
+        snapshot.sequence, snapshot.call_index, snapshot.evaluation_index, snapshot.kind.c_str(),
+        msg.data(), msg.size());
+    if (rc != 0) throw std::runtime_error(std::string("v0648123350 compact Ca attribution failed: ") + msg.data());
+    if (v0648123350_full_target(snapshot)) {
+        std::ostringstream name;
+        name << "cpp_full/call_" << std::setw(2) << std::setfill('0') << snapshot.call_index
+             << "_eval_" << std::setw(4) << snapshot.evaluation_index;
+        const auto full = root / name.str();
+        std::filesystem::create_directories(full);
+        msg.fill('\0');
+        rc = xstar_fixed_state_write_last_diagnostics_v1(
+            data.fixed_context, full.string().c_str(), snapshot.sequence, msg.data(), msg.size());
+        if (rc != 0) throw std::runtime_error(std::string("v0648123350 full attribution failed: ") + msg.data());
+        xstar_fixed_state_product_diagnostic_counts_v1 counts{};
+        xstar_fixed_state_product_diagnostic_counts_init_v1(&counts);
+        msg.fill('\0');
+        rc = xstar_fixed_state_get_last_product_diagnostic_counts_v1(
+            data.fixed_context, &counts, msg.data(), msg.size());
+        if (rc != 0) throw std::runtime_error(std::string("v0648123350 product diagnostic count failed: ") + msg.data());
+        std::vector<xstar_fixed_record_product_diagnostic_v1> rows(counts.record_count);
+        std::size_t row_count = rows.size();
+        if (row_count) {
+            msg.fill('\0');
+            rc = xstar_fixed_state_get_last_record_product_diagnostics_v1(
+                data.fixed_context, rows.data(), rows.size(), &row_count, msg.data(), msg.size());
+            if (rc != 0) throw std::runtime_error(std::string("v0648123350 product diagnostics failed: ") + msg.data());
+        }
+        std::ofstream owner(full / "cpp_ca_owner_array.csv");
+        if (!owner) throw std::runtime_error("cannot create v0648123350 owner-array attribution");
+        owner << "sequence,call_index,evaluation_index,source_position,record,data_type,rate_type,ion_stage,lower_row,upper_row,line_index,continuum_index,ans1,ans2,ans3,ans4,ans5,ans6,rcem_out,rcem_in,oplin,cemab_out,cemab_in,cabab,opakab\n" << std::setprecision(17);
+        const std::size_t line_stride = snapshot.oplin.size();
+        const std::size_t cont_stride = snapshot.opakab.size();
+        for (std::size_t i = 0; i < row_count; ++i) {
+            const auto& r = rows[i];
+            if (r.element_z != 20) continue;
+            const std::size_t ls = r.type50_line_index_one_based > 0 ? static_cast<std::size_t>(r.type50_line_index_one_based) : 0u;
+            const std::size_t cs = r.continuum_index_one_based > 0 ? static_cast<std::size_t>(r.continuum_index_one_based) : 0u;
+            const double ro = ls && ls < line_stride && ls < snapshot.rcem.size() ? snapshot.rcem[ls] : 0.0;
+            const double ri = ls && ls < line_stride && line_stride + ls < snapshot.rcem.size() ? snapshot.rcem[line_stride + ls] : 0.0;
+            const double ol = ls && ls < snapshot.oplin.size() ? snapshot.oplin[ls] : 0.0;
+            const double co = cs && cs < cont_stride && cs < snapshot.cemab.size() ? snapshot.cemab[cs] : 0.0;
+            const double ci = cs && cs < cont_stride && cont_stride + cs < snapshot.cemab.size() ? snapshot.cemab[cont_stride + cs] : 0.0;
+            const double ca = cs && cs < snapshot.cabab.size() ? snapshot.cabab[cs] : 0.0;
+            const double oa = cs && cs < snapshot.opakab.size() ? snapshot.opakab[cs] : 0.0;
+            owner << snapshot.sequence << ',' << snapshot.call_index << ',' << snapshot.evaluation_index << ','
+                  << r.source_position << ',' << r.record << ',' << r.data_type << ',' << r.rate_type << ','
+                  << r.ion_stage << ',' << r.lower_row << ',' << r.upper_row << ',' << r.type50_line_index_one_based << ','
+                  << r.continuum_index_one_based;
+            for (double x : r.ans) owner << ',' << x;
+            owner << ',' << ro << ',' << ri << ',' << ol << ',' << co << ',' << ci << ',' << ca << ',' << oa << '\n';
+        }
+        write_binary64_vector_v82_patch52(full / "cpp_rccemis.bin", snapshot.rccemis);
+        write_binary64_vector_v82_patch52(full / "cpp_rcem.bin", snapshot.rcem);
+        write_binary64_vector_v82_patch52(full / "cpp_cemab.bin", snapshot.cemab);
+        std::ofstream owner_manifest(full / "cpp_owner_manifest.csv");
+        owner_manifest << "key,value\n"
+                       << "schema,xstar-tools-v0648123350-owner-v1\n"
+                       << "sequence," << snapshot.sequence << "\n"
+                       << "call_index," << snapshot.call_index << "\n"
+                       << "evaluation_index," << snapshot.evaluation_index << "\n"
+                       << "line_stride," << line_stride << "\n"
+                       << "continuum_stride," << cont_stride << "\n"
+                       << "rccemis_count," << snapshot.rccemis.size() << "\n";
+        std::cerr << "V0648123350_CPP_FULL_ATTRIBUTION=" << full.string() << "\n";
+    }
+}
+
 int standalone_iteration_evaluator_v67(
     void* user_data,
     const xstar_thermal_state_v1* trial,
@@ -13710,9 +13853,11 @@ int standalone_iteration_evaluator_v67(
             v0648942_experimental_reuse && data->reference_trajectory_mode &&
             snapshot.call_index >= 1u && snapshot.call_index <= 4u &&
             snapshot.evaluation_index == v0648941_terminal_dsec_counts[snapshot.call_index - 1u];
-        if (!v0648941_terminal_reference_dsec) {
+        const bool v0648123350_target_projection = v0648123350_full_target(snapshot);
+        if (!v0648941_terminal_reference_dsec && !v0648123350_target_projection) {
             input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_DEFER_PRODUCT_PROJECTION;
         }
+        write_v0648123350_fixed_input_capture(*data, input, snapshot);
         if (snapshot.call_index == 1u && snapshot.evaluation_index == 1u) {
             write_v064812324_fixed_input_capture(*data, input, snapshot.sequence, "fixed_call1_eval1");
             if (input.global_xilevg && input.global_level_count > 0u) {
@@ -13735,6 +13880,39 @@ int standalone_iteration_evaluator_v67(
         xstar_fixed_source_workspace_output_init_v1(&source);
         source.lte_populations = snapshot.lte_populations.data();
         source.lte_populations_capacity = snapshot.lte_populations.size();
+        if (v0648123350_target_projection) {
+            const std::size_t line_capacity = std::max<std::size_t>({
+                data->line_tau_in.size(), static_cast<std::size_t>(data->program_info.native_line_count) + 1u,
+                static_cast<std::size_t>(data->program_info.record_count) + 1u});
+            const std::size_t continuum_capacity = std::max<std::size_t>({
+                data->source_tau_in.size(), static_cast<std::size_t>(data->program_info.native_continuum_count) + 1u,
+                data->energy.size()});
+            snapshot.rcem.assign(2u * line_capacity, 0.0);
+            snapshot.oplin.assign(line_capacity, 0.0);
+            snapshot.elum.assign(2u * line_capacity, 0.0);
+            snapshot.cemab.assign(2u * continuum_capacity, 0.0);
+            snapshot.cabab.assign(continuum_capacity, 0.0);
+            snapshot.opakab.assign(continuum_capacity, 0.0);
+            snapshot.rccemis.assign(2u * data->energy.size(), 0.0);
+            snapshot.opakc.assign(data->energy.size(), 0.0);
+            snapshot.opakcont.assign(data->energy.size(), 0.0);
+            snapshot.fline.assign(2u * line_capacity, 0.0);
+            snapshot.flinel.assign(data->energy.size(), 0.0);
+            snapshot.line_profile_workspace.assign(5u * data->energy.size(), 0.0);
+            source.rcem = snapshot.rcem.data(); source.rcem_capacity = snapshot.rcem.size();
+            source.oplin = snapshot.oplin.data(); source.oplin_capacity = snapshot.oplin.size();
+            source.elum = snapshot.elum.data(); source.elum_capacity = snapshot.elum.size();
+            source.cemab = snapshot.cemab.data(); source.cemab_capacity = snapshot.cemab.size();
+            source.cabab = snapshot.cabab.data(); source.cabab_capacity = snapshot.cabab.size();
+            source.opakab = snapshot.opakab.data(); source.opakab_capacity = snapshot.opakab.size();
+            source.rccemis = snapshot.rccemis.data(); source.rccemis_capacity = snapshot.rccemis.size();
+            source.opakc = snapshot.opakc.data(); source.opakc_capacity = snapshot.opakc.size();
+            source.opakcont = snapshot.opakcont.data(); source.opakcont_capacity = snapshot.opakcont.size();
+            source.fline = snapshot.fline.data(); source.fline_capacity = snapshot.fline.size();
+            source.flinel = snapshot.flinel.data(); source.flinel_capacity = snapshot.flinel.size();
+            source.line_profile_workspace = snapshot.line_profile_workspace.data();
+            source.line_profile_workspace_capacity = snapshot.line_profile_workspace.size();
+        }
         std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> message{};
         const std::string sequence = std::to_string(snapshot.sequence);
         ::setenv("XSTAR_NATIVE_SOURCE_SEQUENCE", sequence.c_str(), 1);
@@ -13773,6 +13951,15 @@ int standalone_iteration_evaluator_v67(
             snapshot.source_detail_active_windows);
         snapshot.source_detail_global_xilevg = source_detail_global_projection_v064812318(
             *data, snapshot.source_detail_pre_mapback_populations, snapshot.source_detail_active_windows);
+        if (v0648123350_target_projection) {
+            snapshot.rcem.resize(source.rcem_count); snapshot.oplin.resize(source.oplin_count);
+            snapshot.elum.resize(source.elum_count); snapshot.cemab.resize(source.cemab_count);
+            snapshot.cabab.resize(source.cabab_count); snapshot.opakab.resize(source.opakab_count);
+            snapshot.rccemis.resize(source.rccemis_count); snapshot.opakc.resize(source.opakc_count);
+            snapshot.opakcont.resize(source.opakcont_count); snapshot.fline.resize(source.fline_count);
+            snapshot.flinel.resize(source.flinel_count); snapshot.line_profile_workspace.resize(source.line_profile_workspace_count);
+        }
+        write_v0648123350_postsolve_attribution(*data, snapshot);
         snapshot.lte_populations.resize(source.lte_populations_count);
         snapshot.spectrum.resize(output.spectrum_count);
         snapshot.opacity.resize(output.opacity_count);
@@ -14519,6 +14706,7 @@ FixedDsecSnapshot evaluate_full_boundary_v67(
         ::unsetenv("XSTAR_V82_PATCH512_MG_TYPE53_KERNEL_AUDIT_PATH");
     }
     write_v064812321_fixed_radial_input(data, input, snapshot.sequence);
+    write_v0648123350_fixed_input_capture(data, input, snapshot);
     const int rc = xstar_fixed_state_run_with_source_workspaces_v1(
         data.fixed_context, &input, &output, &source, &data.cumulative_stats,
         message.data(), message.size());
@@ -14532,6 +14720,7 @@ FixedDsecSnapshot evaluate_full_boundary_v67(
         snapshot.source_detail_active_windows);
     snapshot.source_detail_global_xilevg = source_detail_global_projection_v064812318(
         data, snapshot.source_detail_pre_mapback_populations, snapshot.source_detail_active_windows);
+    write_v0648123350_postsolve_attribution(data, snapshot);
     if (data.call_index == 1u) {
         write_v064812324_population_state(data, "call1_detail_publication_global_xilevg",
             snapshot.source_detail_global_xilevg, snapshot.sequence, 0u, "accepted_boundary_detail_publication");

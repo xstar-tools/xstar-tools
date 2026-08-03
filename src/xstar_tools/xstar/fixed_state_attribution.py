@@ -101,6 +101,72 @@ def python_element_attribution_rows(
             }
         )
 
+    # v0.6.48.12.3.35 diagnostic-only source-record surface.  These rows
+    # expose the already-computed source-faithful ucalc results so a captured
+    # C++ fixed state can be compared record-by-record without changing any
+    # rate, matrix, population, emissivity, or publication calculation.
+    record_result_rows: list[dict[str, Any]] = []
+    scalar_fields = (
+        "record", "data_type", "rate_type", "ion_index", "ion_stage",
+        "idest1", "idest2", "ans1", "ans2", "ans3", "ans4", "ans5", "ans6",
+        "ans1_after_calc_hmc_ion_filter", "ans2_after_calc_hmc_ion_filter",
+        "density_scale", "escape_factor_in", "escape_factor_out", "status",
+        "ready", "rates_backend",
+    )
+    for ordinal, raw in enumerate(assembly.record_results, start=1):
+        row: dict[str, Any] = {"source": "python", "element_z": int(element_z), "record_order": ordinal}
+        for field in scalar_fields:
+            value = raw.get(field)
+            if value is None:
+                continue
+            if isinstance(value, (str, int, float, bool)):
+                row[field] = value
+        record_result_rows.append(row)
+
+    preliminary_record_rows: list[dict[str, Any]] = []
+    preliminary_record_order = 0
+    for stage, rate_result in sorted(item.calc_ion_rates.items()):
+        for contribution in rate_result.contributions:
+            preliminary_record_order += 1
+            preliminary_record_rows.append({
+                "source": "python",
+                "element_z": int(element_z),
+                "record_order": preliminary_record_order,
+                "record": int(contribution.record),
+                "data_type": int(contribution.data_type),
+                "rate_type": int(contribution.rate_type),
+                "ion_stage": int(stage),
+                "nlev": int(rate_result.nlev),
+                "idest1": int(contribution.idest1),
+                "idest2": int(contribution.idest2),
+                "status": str(contribution.status),
+                "ans1": float(contribution.ans1),
+                "ans2": float(contribution.ans2),
+                "ans3": float(contribution.ans3),
+                "ans4": float(contribution.ans4),
+                "ans5": float(contribution.ans5),
+                "ans6": float(contribution.ans6),
+                "ionization_contribution": float(contribution.added_to_pirti),
+                "recombination_contribution": float(contribution.added_to_rrrti),
+                "running_pirti": float(contribution.pirti_after),
+                "running_rrrti": float(contribution.rrrti_after),
+            })
+
+    preliminary_stage_rows: list[dict[str, Any]] = []
+    for stage in range(1, int(element_z) + 2):
+        preliminary_stage_rows.append({
+            "source": "python",
+            "element_z": int(element_z),
+            "stage": stage,
+            "ion_charge": stage - 1,
+            "preliminary_ionization": float(item.preliminary_pirt.get(stage, 0.0)),
+            "preliminary_recombination": float(item.preliminary_rrrt.get(stage, 0.0)),
+            "preliminary_fraction": float(item.preliminary_ion_fractions.get(stage, 0.0)),
+            "second_pass_ionization": float(item.second_pass_pirt.get(stage, 0.0)),
+            "second_pass_recombination": float(item.second_pass_rrrt.get(stage, 0.0)),
+            "final_fraction": float(item.fully_stripped_fraction if stage == int(element_z) + 1 else item.ion_fractions.get(stage, 0.0)),
+        })
+
     all_matrix_terms: list[dict[str, Any]] = []
     for term in assembly.terms:
         all_matrix_terms.append(
@@ -223,8 +289,11 @@ def python_element_attribution_rows(
 
     return {
         "stage_fractions": stage_rows,
+        "preliminary_stage_rates": preliminary_stage_rows,
+        "preliminary_records": preliminary_record_rows,
         "compact_populations": compact_rows,
         "electron_by_stage": electron_rows,
+        "record_results": record_result_rows,
         "matrix_terms": all_matrix_terms,
         "thermal_terms": term_rows,
         "thermal_records": record_rows,

@@ -15314,6 +15314,22 @@ int xstar_fixed_state_write_last_element_attribution_v06481235(
         }
 
         {
+            auto out = append_header(root / "cpp_preliminary_records.csv",
+                "sequence,kind,call_index,evaluation_index,element_z,source_position,record,data_type,rate_type,ion_stage,nlev,idest1,idest2,source_ionization_eligible,effective_ionization_eligible,source_recombination_eligible,ans1,ionization_contribution,recombination_contribution,running_pirti,running_rrrti");
+            for (const auto& row : selected->preliminary.audit_rows_v0648117) {
+                out << std::setprecision(17)
+                    << sequence << ',' << kind_text << ',' << call_index << ',' << evaluation_index << ','
+                    << element_z << ',' << row.source_position << ',' << row.record << ',' << row.data_type << ','
+                    << row.rate_type << ',' << row.ion_stage << ',' << row.nlev << ',' << row.source_idest1 << ','
+                    << row.source_idest2 << ',' << (row.source_ionization_eligible ? 1 : 0) << ','
+                    << (row.effective_ionization_eligible_v06481171 ? 1 : 0) << ','
+                    << (row.source_recombination_eligible ? 1 : 0) << ',' << row.ans1 << ','
+                    << row.ionization_contribution << ',' << row.recombination_contribution << ','
+                    << row.running_ionization << ',' << row.running_recombination << '\n';
+            }
+        }
+
+        {
             auto out = append_header(root / "cpp_compact_populations.csv",
                 "sequence,kind,call_index,evaluation_index,temperature_k,electron_fraction_input,element_z,active_min_stage,active_max_stage,compact_row,superlevel,ion_stage,ion_charge,is_normalization_row,thermal_compact_population");
             const std::size_t n = selected->thermal_compact_populations.size();
