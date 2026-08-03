@@ -526,6 +526,17 @@ extern "C" void xstar_opacity_type50_perf_snapshot_v064812327(
     std::uint64_t* inline_avx2_profiles, std::uint64_t* inline_avx2_blocks,
     std::uint64_t* inline_avx2_points, std::uint64_t* inline_scalar_points);
 
+extern "C" void xstar_opacity_type50_perf_reset_v064812328(void);
+extern "C" void xstar_opacity_type50_perf_snapshot_v064812328(
+    std::uint64_t* prod_avx2_profiles, std::uint64_t* prod_scalar_profiles,
+    std::uint64_t* prod_avx2_blocks, std::uint64_t* prod_avx2_points,
+    std::uint64_t* prod_scalar_profile_points, std::uint64_t* ncut4_profiles,
+    std::uint64_t* ncut4_fast_blocks, std::uint64_t* ncut4_boundary_fallback_blocks,
+    std::uint64_t* ncut4_fast_points, std::uint64_t* decomp_profiles,
+    std::uint64_t* decomp_avx2_points, std::uint64_t* decomp_scalar_points,
+    double* decomp_avx2_profile_seconds, double* decomp_scalar_profile_seconds,
+    double* decomp_consume_seconds);
+
 
 struct xstar_spectral_context {
     xstar_spectral_stats_v1 cumulative{};
@@ -536,35 +547,14 @@ namespace {
 thread_local xstar_spectral_perf_v064892 g_spectral_perf_v064892{};
 thread_local std::uint64_t g_type50_vectorized_profiles_v064812324 = 0u;
 thread_local std::uint64_t g_type50_scalar_profiles_v064812324 = 0u;
-static bool env_truthy_v064812326(const char* name) {
-    const char* value = std::getenv(name);
-    return value && *value && std::strcmp(value, "0") != 0 &&
-        std::strcmp(value, "false") != 0 && std::strcmp(value, "FALSE") != 0;
-}
-
 static int apply_line_profile_dispatch_v064812326(
     double optpp, double line_energy_ev, double vturb_km_s, double temperature_1e4k,
     double atomic_mass_amu, double natural_width_ev, const double* seed_profiles,
     int seed_radius, const double* epi, int ncn2, double* opakc, double* rccemis,
     long long* updated_bins, double* opacity_seconds, char* errbuf, std::size_t errbuf_size) {
-    static const bool schedule_v064812327 =
-        env_truthy_v064812326("XSTAR_V064812327_ENABLE_REBIN_SCHEDULE_CACHE");
-    static const bool inline_farwing_v064812327 =
-        env_truthy_v064812326("XSTAR_V064812327_ENABLE_INLINE_FARWING_AVX2");
-    if (schedule_v064812327 || inline_farwing_v064812327) {
-        return xstar_opacity_apply_line_profile_experimental_v064812327(
-            optpp, line_energy_ev, vturb_km_s, temperature_1e4k, atomic_mass_amu,
-            natural_width_ev, seed_profiles, seed_radius, epi, ncn2, opakc, rccemis,
-            updated_bins, opacity_seconds, errbuf, errbuf_size);
-    }
-    static const bool phase = env_truthy_v064812326("XSTAR_V064812326_TYPE50_PHASE_DECOMPOSITION");
-    static const bool range_avx2 = env_truthy_v064812326("XSTAR_V064812326_ENABLE_EXPERIMENTAL_RANGE_AVX2");
-    if (phase || range_avx2) {
-        return xstar_opacity_apply_line_profile_experimental_v064812326(
-            optpp, line_energy_ev, vturb_km_s, temperature_1e4k, atomic_mass_amu,
-            natural_width_ev, seed_profiles, seed_radius, epi, ncn2, opakc, rccemis,
-            updated_bins, opacity_seconds, errbuf, errbuf_size);
-    }
+    // 12.3.28: production Type-50 selection lives entirely inside
+    // xstar_opacity_apply_line_profile_v1.  Retired 12.3.26/12.3.27
+    // experiment dispatches are not part of the normal emissivity path.
     return xstar_opacity_apply_line_profile_v1(
         optpp, line_energy_ev, vturb_km_s, temperature_1e4k, atomic_mass_amu,
         natural_width_ev, seed_profiles, seed_radius, epi, ncn2, opakc, rccemis,
@@ -716,6 +706,28 @@ void xstar_spectral_type50_phase_perf_reset_v064812326(void) {
 
 void xstar_spectral_type50_perf_reset_v064812327(void) {
     xstar_opacity_type50_perf_reset_v064812327();
+}
+
+
+void xstar_spectral_type50_perf_reset_v064812328(void) {
+    xstar_opacity_type50_perf_reset_v064812328();
+}
+
+void xstar_spectral_type50_perf_snapshot_v064812328(
+    std::uint64_t* prod_avx2_profiles, std::uint64_t* prod_scalar_profiles,
+    std::uint64_t* prod_avx2_blocks, std::uint64_t* prod_avx2_points,
+    std::uint64_t* prod_scalar_profile_points, std::uint64_t* ncut4_profiles,
+    std::uint64_t* ncut4_fast_blocks, std::uint64_t* ncut4_boundary_fallback_blocks,
+    std::uint64_t* ncut4_fast_points, std::uint64_t* decomp_profiles,
+    std::uint64_t* decomp_avx2_points, std::uint64_t* decomp_scalar_points,
+    double* decomp_avx2_profile_seconds, double* decomp_scalar_profile_seconds,
+    double* decomp_consume_seconds) {
+    xstar_opacity_type50_perf_snapshot_v064812328(
+        prod_avx2_profiles, prod_scalar_profiles, prod_avx2_blocks, prod_avx2_points,
+        prod_scalar_profile_points, ncut4_profiles, ncut4_fast_blocks,
+        ncut4_boundary_fallback_blocks, ncut4_fast_points, decomp_profiles,
+        decomp_avx2_points, decomp_scalar_points, decomp_avx2_profile_seconds,
+        decomp_scalar_profile_seconds, decomp_consume_seconds);
 }
 
 void xstar_spectral_type50_perf_snapshot_v064812327(

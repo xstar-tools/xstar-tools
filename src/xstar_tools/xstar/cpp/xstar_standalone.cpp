@@ -17246,6 +17246,31 @@ void emit_performance_instrumentation_v064892(
         &type50_small_a_farwing_points_v064812327, &type50_large_a_points_v064812327,
         &type50_inline_avx2_profiles_v064812327, &type50_inline_avx2_blocks_v064812327,
         &type50_inline_avx2_points_v064812327, &type50_inline_scalar_points_v064812327);
+    std::uint64_t type50_prod_avx2_profiles_v064812328 = 0u;
+    std::uint64_t type50_prod_scalar_profiles_v064812328 = 0u;
+    std::uint64_t type50_prod_avx2_blocks_v064812328 = 0u;
+    std::uint64_t type50_prod_avx2_points_v064812328 = 0u;
+    std::uint64_t type50_prod_scalar_profile_points_v064812328 = 0u;
+    std::uint64_t type50_ncut4_profiles_v064812328 = 0u;
+    std::uint64_t type50_ncut4_fast_blocks_v064812328 = 0u;
+    std::uint64_t type50_ncut4_boundary_fallback_blocks_v064812328 = 0u;
+    std::uint64_t type50_ncut4_fast_points_v064812328 = 0u;
+    std::uint64_t type50_decomp_profiles_v064812328 = 0u;
+    std::uint64_t type50_decomp_avx2_points_v064812328 = 0u;
+    std::uint64_t type50_decomp_scalar_points_v064812328 = 0u;
+    double type50_decomp_avx2_profile_seconds_v064812328 = 0.0;
+    double type50_decomp_scalar_profile_seconds_v064812328 = 0.0;
+    double type50_decomp_consume_seconds_v064812328 = 0.0;
+    xstar_spectral_type50_perf_snapshot_v064812328(
+        &type50_prod_avx2_profiles_v064812328, &type50_prod_scalar_profiles_v064812328,
+        &type50_prod_avx2_blocks_v064812328, &type50_prod_avx2_points_v064812328,
+        &type50_prod_scalar_profile_points_v064812328, &type50_ncut4_profiles_v064812328,
+        &type50_ncut4_fast_blocks_v064812328, &type50_ncut4_boundary_fallback_blocks_v064812328,
+        &type50_ncut4_fast_points_v064812328, &type50_decomp_profiles_v064812328,
+        &type50_decomp_avx2_points_v064812328, &type50_decomp_scalar_points_v064812328,
+        &type50_decomp_avx2_profile_seconds_v064812328,
+        &type50_decomp_scalar_profile_seconds_v064812328,
+        &type50_decomp_consume_seconds_v064812328);
     auto write = [&](std::ostream& out) {
         out << std::fixed << std::setprecision(6)
             << "V064892_PERF_POLICY=MEASUREMENT_ONLY_BROAD_SPECTRAL_CONSTRUCTION_DECOMPOSITION\n"
@@ -17339,7 +17364,22 @@ void emit_performance_instrumentation_v064892(
             << "V064812327_TYPE50_INLINE_AVX2_PROFILES="<<type50_inline_avx2_profiles_v064812327<<"\n"
             << "V064812327_TYPE50_INLINE_AVX2_BLOCKS="<<type50_inline_avx2_blocks_v064812327<<"\n"
             << "V064812327_TYPE50_INLINE_AVX2_POINTS="<<type50_inline_avx2_points_v064812327<<"\n"
-            << "V064812327_TYPE50_INLINE_SCALAR_POINTS="<<type50_inline_scalar_points_v064812327<<"\n";
+            << "V064812327_TYPE50_INLINE_SCALAR_POINTS="<<type50_inline_scalar_points_v064812327<<"\n"
+            << "V064812328_TYPE50_PRODUCTION_AVX2_PROFILES="<<type50_prod_avx2_profiles_v064812328<<"\n"
+            << "V064812328_TYPE50_PRODUCTION_SCALAR_PROFILES="<<type50_prod_scalar_profiles_v064812328<<"\n"
+            << "V064812328_TYPE50_PRODUCTION_AVX2_BLOCKS="<<type50_prod_avx2_blocks_v064812328<<"\n"
+            << "V064812328_TYPE50_PRODUCTION_AVX2_POINTS="<<type50_prod_avx2_points_v064812328<<"\n"
+            << "V064812328_TYPE50_PRODUCTION_SCALAR_PROFILE_POINTS="<<type50_prod_scalar_profile_points_v064812328<<"\n"
+            << "V064812328_TYPE50_NCUT4_PROFILES="<<type50_ncut4_profiles_v064812328<<"\n"
+            << "V064812328_TYPE50_NCUT4_FAST_BLOCKS="<<type50_ncut4_fast_blocks_v064812328<<"\n"
+            << "V064812328_TYPE50_NCUT4_BOUNDARY_FALLBACK_BLOCKS="<<type50_ncut4_boundary_fallback_blocks_v064812328<<"\n"
+            << "V064812328_TYPE50_NCUT4_FAST_POINTS="<<type50_ncut4_fast_points_v064812328<<"\n"
+            << "V064812328_TYPE50_DECOMP_PROFILES="<<type50_decomp_profiles_v064812328<<"\n"
+            << "V064812328_TYPE50_DECOMP_AVX2_POINTS="<<type50_decomp_avx2_points_v064812328<<"\n"
+            << "V064812328_TYPE50_DECOMP_SCALAR_POINTS="<<type50_decomp_scalar_points_v064812328<<"\n"
+            << "V064812328_TYPE50_DECOMP_AVX2_PROFILE_SECONDS="<<type50_decomp_avx2_profile_seconds_v064812328<<"\n"
+            << "V064812328_TYPE50_DECOMP_SCALAR_PROFILE_SECONDS="<<type50_decomp_scalar_profile_seconds_v064812328<<"\n"
+            << "V064812328_TYPE50_DECOMP_CONSUME_SECONDS="<<type50_decomp_consume_seconds_v064812328<<"\n";
     };
     write(std::cout);
     if (write_file) {
@@ -17384,6 +17424,7 @@ int command_run_standalone_production_v67(const Options& options, const std::fil
         xstar_spectral_type50_vector_perf_reset_v064812324();
         xstar_spectral_type50_phase_perf_reset_v064812326();
         xstar_spectral_type50_perf_reset_v064812327();
+        xstar_spectral_type50_perf_reset_v064812328();
         auto params = xstar_atdb_runtime::read_production_parameters(options.parameters_path);
         auto atomic = xstar_atdb_runtime::resolve_atomic_data(options.parameters_path, params.raw_json, executable_path);
         std::cout << prefix << "COMMAND=RUN_PRODUCTION_STANDALONE\n"

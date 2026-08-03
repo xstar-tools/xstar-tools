@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.12.3.28 - 2026-08-02
+
+- Promote the 12.3.27 one-dispatch small-a `|v|>=5` far-wing AVX2 implementation into the normal standalone-C++ Type-50 production kernel on AVX2-capable x86 CPUs. The exact accepted 12.3.25 scalar Type-50 implementation remains the runtime fallback (`XSTAR_V064812328_FORCE_SCALAR_TYPE50=1`) and is also used automatically on unsupported CPUs/non-small-a profiles.
+- Remove `opacity_type50_experiments.cpp` from the normal opacity-library build and eliminate the 12.3.27 schedule-cache dispatch from `line_emissivity.cpp`; retired 12.3.26/12.3.27 telemetry remains zero ABI stubs only.
+- Replace the 12.3.27 `ev[4]`/`pv[4]` spill-and-lambda consumption in the promoted AVX2 path with direct lane extraction from AVX2 registers followed by the same scalar source-order trapezoid/rebin/`opakc` arithmetic.
+- Add an opt-in generic `ncut==4` consume specialization (`XSTAR_V064812328_ENABLE_NCUT4_UNROLLED_CONSUME=1`). A four-point block bypasses redundant boundary tests only when lane 3 is at/below the next continuum boundary; crossing blocks fall back to exact lane-by-lane source boundary handling. No element/model condition is used.
+- Add diagnostic optimized-path decomposition (`XSTAR_V064812328_TYPE50_DECOMPOSE=1`) into AVX2 far-wing profile arithmetic, remaining scalar profile arithmetic, and scalar trapezoid/rebin/`opakc` consumption.
+- Add a `ca19_ne1e8`-only host qualifier comparing promoted production, exact scalar fallback, diagnostic decomposition, and the opt-in `ncut==4` specialization. Every non-production mode must be nine-FITS bit-data equivalent to production. Production-zone ABI remains 6048110 and 12.3.25 science/publication behavior is frozen.
+
 ## 0.6.48.12.3.27 - 2026-08-02
 
 - Freeze the accepted 12.3.25 science, publication writers, and production Type-50 kernel while focusing performance qualification only on `helike_type69/ca19_ne1e8`.

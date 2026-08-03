@@ -171,6 +171,16 @@ void xstar_spectral_type50_perf_snapshot_v064812327(
     uint64_t* small_a_farwing_points, uint64_t* large_a_points,
     uint64_t* inline_avx2_profiles, uint64_t* inline_avx2_blocks,
     uint64_t* inline_avx2_points, uint64_t* inline_scalar_points);
+void xstar_spectral_type50_perf_reset_v064812328(void);
+void xstar_spectral_type50_perf_snapshot_v064812328(
+    uint64_t* prod_avx2_profiles, uint64_t* prod_scalar_profiles,
+    uint64_t* prod_avx2_blocks, uint64_t* prod_avx2_points,
+    uint64_t* prod_scalar_profile_points, uint64_t* ncut4_profiles,
+    uint64_t* ncut4_fast_blocks, uint64_t* ncut4_boundary_fallback_blocks,
+    uint64_t* ncut4_fast_points, uint64_t* decomp_profiles,
+    uint64_t* decomp_avx2_points, uint64_t* decomp_scalar_points,
+    double* decomp_avx2_profile_seconds, double* decomp_scalar_profile_seconds,
+    double* decomp_consume_seconds);
 int xstar_spectral_context_create_v1(
     xstar_spectral_context** context,
     char* error,
