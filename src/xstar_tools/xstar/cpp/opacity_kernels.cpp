@@ -103,6 +103,23 @@ thread_local std::uint64_t g_type50_next_epi_profiles_v064812330 = 0u;
 thread_local std::uint64_t g_type50_local_bins_profiles_v064812330 = 0u;
 thread_local std::uint64_t g_type50_cursor_profiles_v064812330 = 0u;
 
+// v0.6.48.12.3.31: cursor advancement is the normal AVX2 consume path.
+// The exact 12.3.30 boundary-hint path is retained as an explicit fallback.
+// Fresh decomposition uses coarse per-profile phase clocks only; there are no
+// per-point clocks or counters in production.
+thread_local std::uint64_t g_type50_prod_cursor_profiles_v064812331 = 0u;
+thread_local std::uint64_t g_type50_fallback_hint_profiles_v064812331 = 0u;
+thread_local std::uint64_t g_type50_decomp_profiles_v064812331 = 0u;
+thread_local std::uint64_t g_type50_decomp_avx2_points_v064812331 = 0u;
+thread_local std::uint64_t g_type50_decomp_scalar_points_v064812331 = 0u;
+thread_local std::uint64_t g_type50_decomp_boundary_events_v064812331 = 0u;
+thread_local std::uint64_t g_type50_decomp_opakc_bins_v064812331 = 0u;
+thread_local double g_type50_decomp_avx2_seconds_v064812331 = 0.0;
+thread_local double g_type50_decomp_scalar_seconds_v064812331 = 0.0;
+thread_local double g_type50_decomp_trapezoid_seconds_v064812331 = 0.0;
+thread_local double g_type50_decomp_boundary_rebin_seconds_v064812331 = 0.0;
+thread_local double g_type50_decomp_opakc_seconds_v064812331 = 0.0;
+
 static bool env_truthy_v064812324(const char* name) {
     const char* value = std::getenv(name);
     return value && *value && std::strcmp(value, "0") != 0 &&
@@ -1217,6 +1234,145 @@ static std::uint64_t fill_farwing_profile_blocks_v064812328(
     }
     return points;
 }
+
+struct Type50DecompEventV064812331 {
+    int point = 0;
+    int start_bin = 0;
+    int span = 0;
+    double optp2 = 0.0;
+};
+
+// Diagnostic-only low-overhead decomposition of the cursor production shape.
+// It uses five coarse per-profile clocks and no per-point clocks/counters.  The
+// shadow passes never touch public opacity; the real cursor kernel runs after
+// this function and remains the sole science update path.
+__attribute__((target("avx2")))
+static void decompose_cursor_profile_v064812331(
+    double optpp, double line_energy_ev, double dele, double aasmall,
+    double e00, double deleused, const double* epi, int n,
+    int mlmin, int mlmax, int ml1min, int first_core, int last_core,
+    const double* opakc) {
+    constexpr int ml2 = 10000;
+    const int first_point = mlmin + 1;
+    const int last_point = mlmax;
+    if (first_point > last_point) return;
+    const std::size_t count = static_cast<std::size_t>(last_point - first_point + 1);
+    auto energy_for = [=](int point) {
+        return source_add(e00, source_mul(static_cast<double>(point - ml2), deleused));
+    };
+
+    static thread_local std::vector<double> profiles;
+    static thread_local std::vector<Type50DecompEventV064812331> events;
+    static thread_local std::vector<double> scratch_opakc;
+    profiles.assign(count, std::numeric_limits<double>::quiet_NaN());
+    events.clear();
+    if (events.capacity() < count / 4u + 32u) events.reserve(count / 4u + 32u);
+
+    std::uint64_t avx_points = 0u;
+    const auto avx_started = std::chrono::steady_clock::now();
+    avx_points += fill_farwing_profile_blocks_v064812328(
+        first_point, std::min(last_point, first_core - 1), first_point, ml2,
+        e00, deleused, line_energy_ev, dele, aasmall, profiles.data());
+    avx_points += fill_farwing_profile_blocks_v064812328(
+        std::max(first_point, last_core + 1), last_point, first_point, ml2,
+        e00, deleused, line_energy_ev, dele, aasmall, profiles.data());
+    g_type50_decomp_avx2_seconds_v064812331 += std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - avx_started).count();
+
+    std::uint64_t scalar_points = 0u;
+    const auto scalar_started = std::chrono::steady_clock::now();
+    for (int point = first_point; point <= last_point; ++point) {
+        double& profile = profiles[static_cast<std::size_t>(point - first_point)];
+        if (!std::isnan(profile)) continue;
+        const double current_energy = energy_for(point);
+        const double delet = source_div(source_sub(current_energy, line_energy_ev), dele);
+        if (point == ml2 && aasmall <= xstar_constants::kLegacyLinopacCenterVoigtThreshold) {
+            profile = source_div(std::exp(-delet * delet),
+                xstar_constants::kLegacyLinopacProfileNormalization);
+        } else {
+            const double raw = voigte_small_a_positive_v064896(std::abs(delet), aasmall);
+            profile = source_div(raw, xstar_constants::kLegacyLinopacProfileNormalization);
+        }
+        ++scalar_points;
+    }
+    g_type50_decomp_scalar_seconds_v064812331 += std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - scalar_started).count();
+
+    // Boundary/rebin topology is independent of opacity magnitude for normal
+    // positive temporary-grid spacing.  Discover exact cursor spans once.
+    const auto boundary_started = std::chrono::steady_clock::now();
+    int cursor_ml1m = ml1min;
+    const double* epi_cursor = epi + (ml1min - 1);
+    for (int point = first_point; point <= last_point; ++point) {
+        const double current_energy = energy_for(point);
+        if (__builtin_expect(current_energy > *epi_cursor, 0)) {
+            const int start_bin = cursor_ml1m - 1;
+            int span = 0;
+            while (current_energy > *epi_cursor && cursor_ml1m < n) {
+                ++span;
+                ++cursor_ml1m;
+                ++epi_cursor;
+            }
+            events.push_back(Type50DecompEventV064812331{point, start_bin, span, 0.0});
+        }
+    }
+    g_type50_decomp_boundary_rebin_seconds_v064812331 += std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - boundary_started).count();
+
+    // Replay only the source trapezoid arithmetic.  Event positions come from
+    // the cursor topology pass; optp2 is computed in the same statement order.
+    const auto trapezoid_started = std::chrono::steady_clock::now();
+    double sume = 0.0;
+    double opsum = 0.0;
+    double tmpop = 0.0;
+    double previous_energy = energy_for(mlmin);
+    std::size_t event_index = 0u;
+    for (int point = first_point; point <= last_point; ++point) {
+        const double current_energy = energy_for(point);
+        const double profile = profiles[static_cast<std::size_t>(point - first_point)];
+        const double tmpopo = tmpop;
+        tmpop = optpp * profile;
+        const double tmpe = std::abs(source_sub(current_energy, previous_energy));
+        previous_energy = current_energy;
+        sume = source_add(sume, tmpe);
+        const double pair = source_add(tmpop, tmpopo);
+        const double weighted = source_mul(pair, tmpe);
+        const double interval = source_div(weighted, 2.0);
+        opsum = source_add(opsum, interval);
+        if (event_index < events.size() && events[event_index].point == point) {
+            if (sume > 1.0e-34) events[event_index].optp2 = source_div(opsum, sume);
+            opsum = 0.0;
+            sume = 0.0;
+            ++event_index;
+        }
+    }
+    g_type50_decomp_trapezoid_seconds_v064812331 += std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - trapezoid_started).count();
+
+    // Time actual sequential source_add writes on a scratch copy.  Public
+    // opakc remains untouched; the following real cursor run performs the only
+    // science-visible additions in exactly the accepted order.
+    scratch_opakc.assign(opakc, opakc + n);
+    std::uint64_t opakc_bins = 0u;
+    const auto opakc_started = std::chrono::steady_clock::now();
+    for (const auto& event : events) {
+        if (event.span <= 0) continue;
+        for (int j = 0; j < event.span; ++j) {
+            const int bin = event.start_bin + j;
+            scratch_opakc[static_cast<std::size_t>(bin)] = source_add(
+                scratch_opakc[static_cast<std::size_t>(bin)], event.optp2);
+            ++opakc_bins;
+        }
+    }
+    g_type50_decomp_opakc_seconds_v064812331 += std::chrono::duration<double>(
+        std::chrono::steady_clock::now() - opakc_started).count();
+
+    ++g_type50_decomp_profiles_v064812331;
+    g_type50_decomp_avx2_points_v064812331 += avx_points;
+    g_type50_decomp_scalar_points_v064812331 += scalar_points;
+    g_type50_decomp_boundary_events_v064812331 += events.size();
+    g_type50_decomp_opakc_bins_v064812331 += opakc_bins;
+}
 #endif
 
 // v0.6.48.9.6: exact Type-50 hot path.  The 9.5.1 implementation first
@@ -1367,14 +1523,10 @@ static int xstar_opacity_apply_line_profile_optimized_v064896(
         cpu_avx2_available_v064812324() && !force_scalar_v064812328;
     static const bool decompose_v064812328 =
         env_truthy_v064812324("XSTAR_V064812328_TYPE50_DECOMPOSE");
-    static const bool force_12328_consume_v064812330 =
-        env_truthy_v064812324("XSTAR_V064812330_FORCE_12328_CONSUME");
-    static const bool next_epi_cache_v064812330 =
-        env_truthy_v064812324("XSTAR_V064812330_ENABLE_NEXT_EPI_CACHE");
-    static const bool local_updated_bins_v064812330 =
-        env_truthy_v064812324("XSTAR_V064812330_ENABLE_LOCAL_UPDATED_BINS");
-    static const bool cursor_advance_v064812330 =
-        env_truthy_v064812324("XSTAR_V064812330_ENABLE_CURSOR_ADVANCE");
+    static const bool force_12330_hint_consume_v064812331 =
+        env_truthy_v064812324("XSTAR_V064812331_FORCE_12330_HINT_CONSUME");
+    static const bool decompose_cursor_v064812331 =
+        env_truthy_v064812324("XSTAR_V064812331_TYPE50_DECOMPOSE");
 
 #if (defined(__x86_64__) || defined(__i386__)) && (defined(__GNUC__) || defined(__clang__))
     if (production_inline_avx2_v064812328 && decompose_v064812328) {
@@ -1444,30 +1596,24 @@ static int xstar_opacity_apply_line_profile_optimized_v064896(
         const int last_point = mlmax;
         const auto core = small_a_core_bounds_v064812328(
             first_point, last_point, e00, deleused, line_energy_ev, dele);
-        if (force_12328_consume_v064812330) {
-            ++g_type50_fallback_12328_profiles_v064812330;
-            run_inline_farwing_profile_v064812328(
-                optpp, line_energy_ev, dele, aasmall, e00, deleused, epi, n,
-                mlmin, mlmax, ml1min, core.first, core.second, false,
-                opakc, updated_bins);
-        } else if (next_epi_cache_v064812330) {
-            ++g_type50_next_epi_profiles_v064812330;
-            run_inline_farwing_profile_v064812330<true,false,false>(
-                optpp,line_energy_ev,dele,aasmall,e00,deleused,epi,n,mlmin,mlmax,ml1min,core.first,core.second,opakc,updated_bins);
-        } else if (local_updated_bins_v064812330) {
-            ++g_type50_local_bins_profiles_v064812330;
-            run_inline_farwing_profile_v064812330<false,true,false>(
-                optpp,line_energy_ev,dele,aasmall,e00,deleused,epi,n,mlmin,mlmax,ml1min,core.first,core.second,opakc,updated_bins);
-        } else if (cursor_advance_v064812330) {
-            ++g_type50_cursor_profiles_v064812330;
-            run_inline_farwing_profile_v064812330<false,false,true>(
-                optpp,line_energy_ev,dele,aasmall,e00,deleused,epi,n,mlmin,mlmax,ml1min,core.first,core.second,opakc,updated_bins);
-        } else {
-            // 12.3.30 production: exactly the independently accepted 12.3.29
-            // boundary-hint path.  No register-resident state is folded in.
-            ++g_type50_prod_hint_profiles_v064812330;
+        if (force_12330_hint_consume_v064812331) {
+            // Explicit science-safe fallback: exact 12.3.30 production path.
+            ++g_type50_fallback_hint_profiles_v064812331;
             ++g_type50_hint_profiles_v064812329;
             run_inline_farwing_profile_v064812329<false,true,false>(
+                optpp,line_energy_ev,dele,aasmall,e00,deleused,epi,n,mlmin,mlmax,ml1min,core.first,core.second,opakc,updated_bins);
+        } else {
+            // 12.3.31 production: promote the independently qualified 12.3.30
+            // cursor-advance micro-path.  The hint remains present and science
+            // safe, but no performance claim is attached to it independently.
+            if (decompose_cursor_v064812331) {
+                decompose_cursor_profile_v064812331(
+                    optpp,line_energy_ev,dele,aasmall,e00,deleused,epi,n,
+                    mlmin,mlmax,ml1min,core.first,core.second,opakc);
+            }
+            ++g_type50_prod_cursor_profiles_v064812331;
+            ++g_type50_cursor_profiles_v064812330;
+            run_inline_farwing_profile_v064812330<false,false,true>(
                 optpp,line_energy_ev,dele,aasmall,e00,deleused,epi,n,mlmin,mlmax,ml1min,core.first,core.second,opakc,updated_bins);
         }
         ++g_type50_prod_avx2_profiles_v064812328;
@@ -1476,11 +1622,11 @@ static int xstar_opacity_apply_line_profile_optimized_v064896(
         const auto ended = std::chrono::steady_clock::now();
         *opacity_seconds = std::chrono::duration<double>(ended - started).count();
         write_message(errbuf, errbuf_size,
-            force_12328_consume_v064812330 ? "v064812330 exact 12.3.28 consume fallback" :
-            next_epi_cache_v064812330 ? "v064812330 cached next_epi consume" :
-            local_updated_bins_v064812330 ? "v064812330 local updated_bins consume" :
-            cursor_advance_v064812330 ? "v064812330 cursor-advance consume" :
-            "v064812330 production boundary-hint consume");
+            force_12330_hint_consume_v064812331 ?
+                "v064812331 exact 12.3.30 hinted consume fallback" :
+            decompose_cursor_v064812331 ?
+                "v064812331 cursor production with low-overhead decomposition" :
+                "v064812331 production cursor-advance consume");
         return 0;
     }
 #endif
@@ -1768,6 +1914,42 @@ void xstar_opacity_type50_perf_snapshot_v064812330(
     if (next_epi_profiles) *next_epi_profiles = g_type50_next_epi_profiles_v064812330;
     if (local_bins_profiles) *local_bins_profiles = g_type50_local_bins_profiles_v064812330;
     if (cursor_profiles) *cursor_profiles = g_type50_cursor_profiles_v064812330;
+}
+
+void xstar_opacity_type50_perf_reset_v064812331(void) {
+    g_type50_prod_cursor_profiles_v064812331 = 0u;
+    g_type50_fallback_hint_profiles_v064812331 = 0u;
+    g_type50_decomp_profiles_v064812331 = 0u;
+    g_type50_decomp_avx2_points_v064812331 = 0u;
+    g_type50_decomp_scalar_points_v064812331 = 0u;
+    g_type50_decomp_boundary_events_v064812331 = 0u;
+    g_type50_decomp_opakc_bins_v064812331 = 0u;
+    g_type50_decomp_avx2_seconds_v064812331 = 0.0;
+    g_type50_decomp_scalar_seconds_v064812331 = 0.0;
+    g_type50_decomp_trapezoid_seconds_v064812331 = 0.0;
+    g_type50_decomp_boundary_rebin_seconds_v064812331 = 0.0;
+    g_type50_decomp_opakc_seconds_v064812331 = 0.0;
+}
+
+void xstar_opacity_type50_perf_snapshot_v064812331(
+    std::uint64_t* prod_cursor_profiles, std::uint64_t* fallback_hint_profiles,
+    std::uint64_t* decomp_profiles, std::uint64_t* decomp_avx2_points,
+    std::uint64_t* decomp_scalar_points, std::uint64_t* decomp_boundary_events,
+    std::uint64_t* decomp_opakc_bins, double* decomp_avx2_seconds,
+    double* decomp_scalar_seconds, double* decomp_trapezoid_seconds,
+    double* decomp_boundary_rebin_seconds, double* decomp_opakc_seconds) {
+    if (prod_cursor_profiles) *prod_cursor_profiles = g_type50_prod_cursor_profiles_v064812331;
+    if (fallback_hint_profiles) *fallback_hint_profiles = g_type50_fallback_hint_profiles_v064812331;
+    if (decomp_profiles) *decomp_profiles = g_type50_decomp_profiles_v064812331;
+    if (decomp_avx2_points) *decomp_avx2_points = g_type50_decomp_avx2_points_v064812331;
+    if (decomp_scalar_points) *decomp_scalar_points = g_type50_decomp_scalar_points_v064812331;
+    if (decomp_boundary_events) *decomp_boundary_events = g_type50_decomp_boundary_events_v064812331;
+    if (decomp_opakc_bins) *decomp_opakc_bins = g_type50_decomp_opakc_bins_v064812331;
+    if (decomp_avx2_seconds) *decomp_avx2_seconds = g_type50_decomp_avx2_seconds_v064812331;
+    if (decomp_scalar_seconds) *decomp_scalar_seconds = g_type50_decomp_scalar_seconds_v064812331;
+    if (decomp_trapezoid_seconds) *decomp_trapezoid_seconds = g_type50_decomp_trapezoid_seconds_v064812331;
+    if (decomp_boundary_rebin_seconds) *decomp_boundary_rebin_seconds = g_type50_decomp_boundary_rebin_seconds_v064812331;
+    if (decomp_opakc_seconds) *decomp_opakc_seconds = g_type50_decomp_opakc_seconds_v064812331;
 }
 
 } // extern "C"

@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.48.12.3.31 - 2026-08-03
+
+- Promote the independently qualified 12.3.30 monotone `epi`/`opakc` cursor-advance consume path into the normal AVX2 Type-50 production path. The `ca19_ne1e8` host run measured `21.909288 s` Type-50 versus `23.558068 s` for the 12.3.30 hinted production path, with nine-FITS bit-data equivalence.
+- Retain the exact 12.3.30 boundary-hint implementation behind `XSTAR_V064812331_FORCE_12330_HINT_CONSUME=1` as an explicit qualification fallback. Keep the exact 12.3.25 scalar fallback unchanged.
+- Treat the boundary hint as science-safe but performance-neutral pending stronger repeated evidence: in the 12.3.30 host run the hinted production path (`23.558068 s`) and exact 12.3.28-style fallback (`23.554245 s`) were effectively tied.
+- Retire cached `next_epi` and local `updated_bins` from the 12.3.31 qualifier; their 12.3.30 host effects were small/noisy compared with cursor advancement. Register+hint, `ncut==4`, schedule caching, and heavy per-point counters remain retired.
+- Add diagnostic-only `XSTAR_V064812331_TYPE50_DECOMPOSE=1`, which uses five coarse per-profile clocks and shadow work to measure AVX2 small-`a` far-wing arithmetic, remaining scalar profile arithmetic, trapezoid arithmetic, boundary/rebin logic, and sequential `opakc` additions. The shadow phase never changes public opacity; the real cursor kernel executes afterward as the sole science update.
+- Add `v0648123310` readiness, separate-process randomized equivalence, local screening, and a `ca19_ne1e8`-only host qualifier comparing production, exact 12.3.30 fallback, and decomposition. Every non-production science mode must be nine-FITS bit-data equivalent to production.
+- Keep 12.3.25 science/publication behavior, production-zone ABI `6048110`, profile arithmetic, and source-order opacity additions frozen.
+
 ## 0.6.48.12.3.30 - 2026-08-03
 
 - Promote the independently accepted 12.3.29 likely-false Type-50 rebin boundary hint into the normal AVX2 production consume path. The branch condition and source-order arithmetic are unchanged; only compiler layout guidance is added. The host `ca19_ne1e8` qualification measured 22.449425 s Type-50 versus 23.766211 s for 12.3.28 production, with nine-FITS bit-data equivalence.

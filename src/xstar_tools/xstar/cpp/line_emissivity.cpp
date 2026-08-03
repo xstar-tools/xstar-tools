@@ -547,6 +547,14 @@ extern "C" void xstar_opacity_type50_perf_snapshot_v064812330(
     std::uint64_t* prod_hint_profiles, std::uint64_t* fallback_12328_profiles,
     std::uint64_t* next_epi_profiles, std::uint64_t* local_bins_profiles,
     std::uint64_t* cursor_profiles);
+extern "C" void xstar_opacity_type50_perf_reset_v064812331(void);
+extern "C" void xstar_opacity_type50_perf_snapshot_v064812331(
+    std::uint64_t* prod_cursor_profiles, std::uint64_t* fallback_hint_profiles,
+    std::uint64_t* decomp_profiles, std::uint64_t* decomp_avx2_points,
+    std::uint64_t* decomp_scalar_points, std::uint64_t* decomp_boundary_events,
+    std::uint64_t* decomp_opakc_bins, double* decomp_avx2_seconds,
+    double* decomp_scalar_seconds, double* decomp_trapezoid_seconds,
+    double* decomp_boundary_rebin_seconds, double* decomp_opakc_seconds);
 
 
 struct xstar_spectral_context {
@@ -749,6 +757,25 @@ void xstar_spectral_type50_perf_snapshot_v064812330(
     xstar_opacity_type50_perf_snapshot_v064812330(
         prod_hint_profiles, fallback_12328_profiles, next_epi_profiles,
         local_bins_profiles, cursor_profiles);
+}
+
+void xstar_spectral_type50_perf_reset_v064812331(void) {
+    xstar_opacity_type50_perf_reset_v064812331();
+}
+
+void xstar_spectral_type50_perf_snapshot_v064812331(
+    std::uint64_t* prod_cursor_profiles, std::uint64_t* fallback_hint_profiles,
+    std::uint64_t* decomp_profiles, std::uint64_t* decomp_avx2_points,
+    std::uint64_t* decomp_scalar_points, std::uint64_t* decomp_boundary_events,
+    std::uint64_t* decomp_opakc_bins, double* decomp_avx2_seconds,
+    double* decomp_scalar_seconds, double* decomp_trapezoid_seconds,
+    double* decomp_boundary_rebin_seconds, double* decomp_opakc_seconds) {
+    xstar_opacity_type50_perf_snapshot_v064812331(
+        prod_cursor_profiles, fallback_hint_profiles, decomp_profiles,
+        decomp_avx2_points, decomp_scalar_points, decomp_boundary_events,
+        decomp_opakc_bins, decomp_avx2_seconds, decomp_scalar_seconds,
+        decomp_trapezoid_seconds, decomp_boundary_rebin_seconds,
+        decomp_opakc_seconds);
 }
 
 void xstar_spectral_type50_perf_snapshot_v064812328(
