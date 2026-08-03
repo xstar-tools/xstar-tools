@@ -13086,6 +13086,74 @@ void advance_source_continuum_radiation_v82_patch52(
     }
 }
 
+
+// v0.6.48.12.3.35.2: diagnostic-only Ca VI radial transport commit probe.
+// This observes the exact local owner -> delr/fpr2 -> cumulative workspace
+// transition for a tiny fixed target set.  The CSV is never read back by the
+// production controller and therefore cannot influence science state.
+void write_v0648123352_transport_commit_probe(
+    const StandaloneControllerDataV67& data,
+    const FixedDsecSnapshot& local_boundary,
+    double delta_radius_cm,
+    double radius_cm,
+    const char* phase) {
+    const char* root_text = std::getenv("XSTAR_V0648123352_TRANSPORT_DIR");
+    if (!root_text || !*root_text || !phase || !*phase) return;
+    const std::filesystem::path root(root_text);
+    std::filesystem::create_directories(root);
+    const auto path = root / "cpp_transport_commit.csv";
+    const bool fresh = !std::filesystem::exists(path) || std::filesystem::file_size(path) == 0u;
+    std::ofstream out(path, std::ios::app);
+    if (!out) throw std::runtime_error("cannot create v0648123352 transport commit probe");
+    if (fresh) {
+        out << "sequence,call_index,evaluation_index,phase,target_kind,identity,delta_radius_cm,radius_cm,fpr2,"
+               "local_rcem_out,local_rcem_in,local_oplin,line_increment_out,line_increment_in,line_tau_increment,"
+               "cumulative_elum_out,cumulative_elum_in,cumulative_tau_in,cumulative_tau_out,"
+               "local_cemab_out,local_cemab_in,local_opakab,rrc_increment,rrc_tau_increment,"
+               "cumulative_elumab_out,cumulative_elumab_in,cumulative_tauc_in,cumulative_tauc_out\n";
+    }
+    const double fpr2 = xstar_constants::kLegacyHeattGeometryFactor *
+        std::pow(std::max(radius_cm, 0.0) * 1.0e-19, 2.0);
+    const std::size_t line_stride = local_boundary.oplin.size();
+    const std::size_t rcem_stride = local_boundary.rcem.size() >= 2u ? local_boundary.rcem.size() / 2u : 0u;
+    const std::size_t cont_stride = local_boundary.opakab.size();
+    const std::size_t cemab_stride = local_boundary.cemab.size() >= 2u ? local_boundary.cemab.size() / 2u : 0u;
+    auto get = [](const std::vector<double>& v, std::size_t i) {
+        return i < v.size() && std::isfinite(v[i]) ? v[i] : 0.0;
+    };
+    const std::array<std::size_t,2> line_targets{{68962u,69412u}};
+    for (const auto slot : line_targets) {
+        const double ro = slot < rcem_stride ? get(local_boundary.rcem, slot) : 0.0;
+        const double ri = slot < rcem_stride ? get(local_boundary.rcem, rcem_stride + slot) : 0.0;
+        const double op = slot < line_stride ? get(local_boundary.oplin, slot) : 0.0;
+        const double inc_o = ro * delta_radius_cm * fpr2;
+        const double inc_i = ri * delta_radius_cm * fpr2;
+        const double tau_inc = std::max(op, 0.0) * delta_radius_cm;
+        out << std::setprecision(17)
+            << local_boundary.sequence << ',' << data.call_index << ',' << local_boundary.evaluation_index << ',' << phase
+            << ",line," << slot << ',' << delta_radius_cm << ',' << radius_cm << ',' << fpr2 << ','
+            << ro << ',' << ri << ',' << op << ',' << inc_o << ',' << inc_i << ',' << tau_inc << ','
+            << get(data.line_luminosity, slot) << ',' << get(data.line_luminosity, line_stride + slot) << ','
+            << get(data.product_line_tau_in, slot) << ',' << get(data.product_line_tau_out, slot) << ','
+            << "0,0,0,0,0,0,0,0,0\n";
+    }
+    const std::array<std::size_t,2> rrc_targets{{22617u,22899u}};
+    for (const auto slot : rrc_targets) {
+        const double co = slot < cemab_stride ? get(local_boundary.cemab, slot) : 0.0;
+        const double ci = slot < cemab_stride ? get(local_boundary.cemab, cemab_stride + slot) : 0.0;
+        const double op = slot < cont_stride ? get(local_boundary.opakab, slot) : 0.0;
+        const double inc = 0.5 * (co + ci) * delta_radius_cm * fpr2;
+        const double tau_inc = std::max(op, 0.0) * delta_radius_cm;
+        out << std::setprecision(17)
+            << local_boundary.sequence << ',' << data.call_index << ',' << local_boundary.evaluation_index << ',' << phase
+            << ",rrc," << slot << ',' << delta_radius_cm << ',' << radius_cm << ',' << fpr2 << ','
+            << "0,0,0,0,0,0,0,0,0,0,"
+            << co << ',' << ci << ',' << op << ',' << inc << ',' << tau_inc << ','
+            << get(data.rrc_luminosity, slot) << ',' << get(data.rrc_luminosity, cont_stride + slot) << ','
+            << get(data.product_rrc_tau_in, slot) << ',' << get(data.product_rrc_tau_out, slot) << '\n';
+    }
+}
+
 void advance_atomic_luminosities_v82_patch520145(
     StandaloneControllerDataV67& data,
     FixedDsecSnapshot& local_boundary,
@@ -16134,6 +16202,8 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             if (g_performance_v064890) {
                 g_performance_v064890->continuum_transport_seconds += elapsed_seconds_v064890(continuum_transport_started_v064890);
             }
+            write_v0648123352_transport_commit_probe(
+                data, boundary, segment, boundary_radius_cm, "pre_atomic");
             if (segment > 0.0) {
                 source_transport_segment_cm.push_back(segment);
                 const auto atomic_luminosity_started_v064890 = std::chrono::steady_clock::now();
@@ -16144,6 +16214,8 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                 }
             }
             retain_pre_stpcut_cumulative_state_v82_patch520145(data, boundary);
+            write_v0648123352_transport_commit_probe(
+                data, boundary, segment, boundary_radius_cm, "post_atomic_pre_stpcut");
             FixedDsecSnapshot pretransport_boundary_v82_patch520145 = boundary;
 
             if (segment > 0.0) {
@@ -16154,6 +16226,8 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                     g_performance_v064890->stpcut_seconds += elapsed_seconds_v064890(stpcut_started_v064890);
                 }
             }
+            write_v0648123352_transport_commit_probe(
+                data, boundary, segment, boundary_radius_cm, "post_stpcut");
             // Decide whether the literal first-pass source predicate permits
             // another physical shell.  The Mg XI reference trajectory keeps
             // its accepted four-call boundary exactly; every other model is

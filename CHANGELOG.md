@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.12.3.35.2 - 2026-08-03
+
+- Diagnostic-only `helike_type69/ca19_xi2_ne1` transport-commit probe; no production science change and production-zone ABI `6048110` remains frozen.
+- Instrument representative Ca VI line identities 68962/69412 and continuum/RRC identities 22617/22899 at three phases around the literal source transport lifetime: pre-HEATT atomic accumulation, post-HEATT/pre-STPCUT, and post-STPCUT.
+- Dump the exact pending `delta_radius_cm`, radius, source-faithful `fpr2`, local `rcem/oplin/cemab/opakab`, calculated line/RRC increments, and cumulative `elum/tau0/elumab/tauc` values.
+- Run a probe-disabled and probe-enabled copy of the same single model and require all nine FITS data surfaces to be bit-identical.
+- Reuse the order-safe 12.3.35.1 Option-15/19 target logic and derive the canonical FORTRAN STPCUT shell thickness directly from consecutive `xo01_detal2` radial `tau_in` increments divided by the preceding local `opacity`, using the literal source relation `tau0=tau0+oplin*delr`.
+- Gate on the first transport scalar: local owner closed, C++ commit arithmetic exact, C++ pending `delr` equal to its own effective STPCUT interval, and a material C++/FORTRAN `delr` difference coherent with the ~0.9114 Option-15/19 scale.
+
 ## 0.6.48.12.3.35.1 - 2026-08-03
 
 - Diagnostic-only `helike_type69/ca19_xi2_ne1` attribution hotfix; no C++ production-physics change and production-zone ABI `6048110` remains frozen.
