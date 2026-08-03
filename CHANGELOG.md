@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.48.12.3.33 - 2026-08-03
+
+- Reject AVX2 `tmpop` preparation for production: paired Type-50 speedups were 0.865862902 and 0.938055070; paired total speedups were 0.958460234 and 0.994218789.
+- Reject AVX2 adjacent-`tmpe` preparation for production: paired Type-50 speedups were 0.981150117 and 0.934003456; paired total speedups were 0.993837579 and 0.979045632.
+- Make no C++ production/science/publication change; freeze the complete 12.3.32 production source surface used by the cpp-zone backend.
+- Add an all-62 cpp-zone `xout_step.log` requalification runner based on the order-aware 12.3.13 comparator.
+- Strip inherited Type-50 experiment/fallback/decomposition environment variables before every survey run so all 62 models exercise frozen default production.
+- Export `numeric_discrepancies_gt1pct.csv`, `next_model_priority.csv`, `section_summary.csv`, `material_inventory_issues.csv`, and `rank_order_diagnostics.csv`.
+- Treat survey completion separately from science closure: a successful 62-model run returns success even when true >1% discrepancies are found, so those discrepancies can drive the next targeted one-model repair.
+
 ## 0.6.48.12.3.32 - 2026-08-03
 
 - Keep 12.3.31 cursor advancement as the normal AVX2 Type-50 production path and retain the exact 12.3.30 boundary-hint implementation behind `XSTAR_V064812331_FORCE_12330_HINT_CONSUME=1`. No 12.3.25 science, publication, ABI 6048110, profile arithmetic, scalar trapezoid recurrence, or sequential opacity-addition ordering is changed.
