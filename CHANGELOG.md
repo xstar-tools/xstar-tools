@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.48.12.3.34 - 2026-08-03
+
+- Qualification-only STEP comparator repair; no model rerun and no C++ production/source/ABI change.
+- Fix Option 15 scientific-notation parsing to accept arbitrary exponent width (for example `E-101`).
+- Compare Option 5 signed `err` by relative difference instead of absolute `0.01`.
+- Split Options 1/23 into rank-position numerical arrays (normalized-L1 1% gate) and independent line identity/order/membership diagnostics. Tiny per-rank tail differences remain diagnostics only.
+- Keep Option 15/24 candidate/reference-only identities as material-inventory diagnostics separate from common-row numerical science.
+- Re-analyze the existing 62 archived cpp-zone/FORTRAN STEP logs only: numerical acceptance improves from 25/62 to 52/62; Options 1, 23, and 5 have zero numerical failures; remaining numerical failures are 10 Option-15 models plus Option 19 only in `ca19_xi2_ne1`.
+- Export a corrected `next_model_priority.csv`; `helike_type69/ca19_xi2_ne1` remains the first physical target.
+- Keep the entire C++ production source tree byte-identical to 12.3.33 and ABI `6048110` frozen.
+
 ## 0.6.48.12.3.33 - 2026-08-03
 
 - Reject AVX2 `tmpop` preparation for production: paired Type-50 speedups were 0.865862902 and 0.938055070; paired total speedups were 0.958460234 and 0.994218789.
