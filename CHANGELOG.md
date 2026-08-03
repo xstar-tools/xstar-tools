@@ -1,5 +1,17 @@
 # CHANGELOG
 
+# 0.6.48.12.3.36.1 - 2026-08-03
+
+## 0.6.48.12.3.36.1 — Option-15 material comparator + `ca19_ne1` one-model qualification
+
+- Comparator-only release: no production-science kernel changes relative to 0.6.48.12.3.36; production-zone ABI remains `6048110`.
+- Option 15 common-row numerical science is gated by normalized L1 for each material `ion × field` surface, with every material surface required to be `<1%`.
+- Per-cell Option-15 `>1%` relative differences remain explicit diagnostics and no longer turn tiny tails into a numerical-science REJECT.
+- Option-15/24 candidate/reference-only material identities remain separate inventory/publication diagnostics.
+- Reanalysis of the existing repaired `ca19_xi2_ne1` STEP logs: rowwise Option-15 diagnostics remain `796`, material-surface failures are `0`, maximum material normalized L1 is about `1.23e-4`, and overall STEP numeric science becomes ACCEPT while full publication science remains open.
+- Add a one-model `helike_type69/ca19_ne1` qualification runner using the frozen 0.6.48.12.3.36 `rread1` science repair and FORTRAN as the canonical oracle.
+- The `ca19_ne1` gate requires overall STEP numerical science, Option-15 material common-row science, and Option-19 numerical science to pass; rank/order and inventory diagnostics remain visible but do not reopen physics.
+
 # 0.6.48.12.3.36 - 2026-08-03
 
 ## 0.6.48.12.3.36 — FORTRAN `rread1` default-REAL radius literal repair
