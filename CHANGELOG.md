@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.12.3.38 - 2026-08-04
+
+- Qualification-only promotion stage for the generic fixed-state sparse preliminary cache introduced in 0.6.48.12.3.37.
+- Keeps `fixed_state_engine.cpp` byte-identical to 0.6.48.12.3.37; no numerical/science implementation changes.
+- Adds six-model cross-element baseline/candidate qualification: `ca19_xi4_ne1`, `ca19_xi4_ne1e12`, `ca19_ne1e8`, `c5_ne1`, `o7_ne1`, and `mg11_ne1e8`.
+- Requires nine-FITS data bit-exact parity and STEP numerical parity against frozen 0.6.48.12.3.36.9 for every model, canonical DSEC trajectories, sparse preliminary-cache memory reduction, high-ion Ca traversal improvement, and no material C/O/Mg performance regressions.
+- Reports candidate/internal FORTRAN timing ratios diagnostically to decide whether 0.6.48.12.3.39 residual-scaling audit is still required.
+- Production-zone ABI remains 6048110.
+
 ## 0.6.48.12.3.37 - 2026-08-04
 
 - Performance-only generic fixed-state sparse preliminary cache.
