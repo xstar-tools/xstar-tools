@@ -1,5 +1,17 @@
 # CHANGELOG
 
+# 0.6.48.12.3.36.6 - 2026-08-04
+
+## 0.6.48.12.3.36.6 — `ca19_xi4_ne1` one-model material-science qualification
+
+- Qualification-only release: no production-science change relative to 0.6.48.12.3.36; production-zone ABI remains `6048110`.
+- Retain the 0.6.48.12.3.36.1 Option-15 comparator byte-for-byte unchanged; every material `ion × field` surface still requires normalized L1 `<1%`.
+- Preserve rowwise Option-15 `>1%` discrepancies as diagnostics only and keep Options 1/23 rank/order plus Options 15/24 inventory/publication diagnostics separate from numerical-science acceptance.
+- Add a one-model `helike_type69/ca19_xi4_ne1` qualification against canonical FORTRAN XSTAR using frozen 0.6.48.12.3.36 production science.
+- Canonical FORTRAN trajectory metadata: 9 radial zones with DSEC counts `26;1;3;4;3;4;3;4;5`.
+- Reopen production physics only if material numerical science fails. If accepted, advance next to `helike_type69/o7_ne1`; the following old raw-priority model is `helike_type69/ca19_ne1e4`.
+- Archived 12.3.33 control under the unchanged comparator: 48 Option-15 rowwise diagnostics, 14 material surfaces, 0 material-surface failures, maximum normalized L1 `9.4915125574848312e-4` (~0.0949%), Option 5 ACCEPT under the repaired relative comparison, and Option 19 ACCEPT.
+
 # 0.6.48.12.3.36.5 - 2026-08-04
 
 ## 0.6.48.12.3.36.5 — `ca19_xi3p5_ne1` one-model material-science qualification
