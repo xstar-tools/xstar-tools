@@ -1,5 +1,15 @@
 # CHANGELOG
 
+# 0.6.48.12.3.36.7 - 2026-08-04
+
+- Qualification-only advance to `helike_type69/o7_ne1` after fresh `ca19_xi4_ne1` material numerical science ACCEPT.
+- Freeze all 0.6.48.12.3.36 production science and production-zone ABI `6048110`.
+- Retain the 0.6.48.12.3.36.1 STEP/Option-15 material comparator byte-for-byte unchanged.
+- Keep Option-15 rowwise >1% values diagnostic-only; gate material ion x field surfaces by normalized L1 <1%.
+- Keep Options 1/23 rank-order and Options 15/24 inventory diagnostics separate from numerical science.
+- FORTRAN XSTAR remains canonical. Reopen physics only for a fresh material numerical failure.
+- On ACCEPT, advance to `helike_type69/ca19_ne1e4`, then `helike_type69/ca19_xi1p5_ne1e4`.
+
 # 0.6.48.12.3.36.6 - 2026-08-04
 
 ## 0.6.48.12.3.36.6 — `ca19_xi4_ne1` one-model material-science qualification
