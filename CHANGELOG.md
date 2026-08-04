@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.12.3.40 - 2026-08-04
+
+- Promote the accepted 0.6.48.12.3.39 residual-scaling audit into a second generic fixed-state optimization.
+- Replace repeated full-lowered-inventory pass-1/pass-2 metadata scans with immutable source-order preliminary ordinals prepared at context construction and memoized pass-2 ordinals keyed by active stage window.
+- Preserve exact source order, preliminary Type7 compatibility semantics, rate arithmetic, record eligibility, public traversal counters, force-full qualification behavior, and production-zone ABI 6048110.
+- Add traversal-selection instrumentation that reports baseline-equivalent metadata records scanned, optimized records inspected, pass-2 window cache hits/builds, and pass-1/pass-2 non-rate timing.
+- Qualify on the six-model Ca/C/O/Mg performance set with nine-FITS data-bit-exact, STEP numerical, canonical trajectory, and no-regression gates.
+- No Ca-specific branch and no numerical/science/publication change.
+
 ## 0.6.48.12.3.39 - 2026-08-04
 
 - Promote 0.6.48.12.3.38 sparse-cache qualification result as the performance baseline.
