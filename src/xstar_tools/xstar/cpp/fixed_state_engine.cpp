@@ -1579,6 +1579,81 @@ void write_sparse_preliminary_cache_audit_v064812337(
         << row.pass12_seconds << ',' << row.rate_seconds << '\n';
 }
 
+
+// v0.6.48.12.3.39: diagnostic-only residual fixed-state scaling audit.
+// This observes the remaining full-element / active-window work after the
+// sparse preliminary-cache promotion.  No value from this sidecar is consumed
+// by production science or record eligibility.
+struct ResidualScalingAuditV064812339 {
+    int call_index = 0;
+    int source_sequence = 0;
+    int element_z = 0;
+    int active_min_stage = 0;
+    int active_max_stage = 0;
+    std::size_t full_row_count = 0u;
+    std::size_t active_row_count = 0u;
+    std::size_t full_record_count = 0u;
+    std::size_t preliminary_record_count = 0u;
+    std::size_t active_pass2_count = 0u;
+    std::size_t full_element_row_copy_bytes = 0u;
+    std::size_t active_element_row_bytes = 0u;
+    std::size_t active_buffer_matrix_bytes = 0u;
+    std::size_t active_buffer_nonmatrix_bytes = 0u;
+    std::size_t full_population_shadow_bytes = 0u;
+    std::size_t errc_identity_entries = 0u;
+    std::size_t errc_slot_entries = 0u;
+    std::size_t errc_owner_entries = 0u;
+    std::size_t line_wavelength_entries = 0u;
+    std::size_t type53_revisit_entries = 0u;
+    std::size_t type49_revisit_entries = 0u;
+    double pass12_seconds = 0.0;
+    double rate_seconds = 0.0;
+    double pass12_nonrate_seconds = 0.0;
+    double preliminary_balance_seconds = 0.0;
+    double active_view_seconds = 0.0;
+    double active_pass2_count_seconds = 0.0;
+    double post_pass2_prebuffer_seconds = 0.0;
+    double buffer_allocation_seconds = 0.0;
+    double element_solve_seconds = 0.0;
+    double full_population_mapback_seconds = 0.0;
+    double element_to_mapback_seconds = 0.0;
+};
+
+void write_residual_scaling_audit_v064812339(const ResidualScalingAuditV064812339& row) {
+    const char* path = std::getenv("XSTAR_V064812339_RESIDUAL_SCALING_AUDIT_PATH");
+    if (!path || !*path) return;
+    const std::filesystem::path output(path);
+    if (!output.parent_path().empty()) std::filesystem::create_directories(output.parent_path());
+    const bool write_header = !std::filesystem::exists(output) || std::filesystem::file_size(output) == 0u;
+    std::ofstream out(output, std::ios::app);
+    if (!out) throw std::runtime_error("cannot open v064812339 residual-scaling audit");
+    if (write_header) {
+        out << "call_index,source_sequence,element_z,active_min_stage,active_max_stage,full_row_count,active_row_count,"
+               "full_record_count,preliminary_record_count,active_pass2_count,full_element_row_copy_bytes,"
+               "active_element_row_bytes,active_buffer_matrix_bytes,active_buffer_nonmatrix_bytes,"
+               "full_population_shadow_bytes,errc_identity_entries,errc_slot_entries,errc_owner_entries,"
+               "line_wavelength_entries,type53_revisit_entries,type49_revisit_entries,pass12_seconds,rate_seconds,"
+               "pass12_nonrate_seconds,preliminary_balance_seconds,active_view_seconds,active_pass2_count_seconds,"
+               "post_pass2_prebuffer_seconds,buffer_allocation_seconds,element_solve_seconds,"
+               "full_population_mapback_seconds,element_to_mapback_seconds\n";
+    }
+    out << std::setprecision(17)
+        << row.call_index << ',' << row.source_sequence << ',' << row.element_z << ','
+        << row.active_min_stage << ',' << row.active_max_stage << ','
+        << row.full_row_count << ',' << row.active_row_count << ',' << row.full_record_count << ','
+        << row.preliminary_record_count << ',' << row.active_pass2_count << ','
+        << row.full_element_row_copy_bytes << ',' << row.active_element_row_bytes << ','
+        << row.active_buffer_matrix_bytes << ',' << row.active_buffer_nonmatrix_bytes << ','
+        << row.full_population_shadow_bytes << ',' << row.errc_identity_entries << ','
+        << row.errc_slot_entries << ',' << row.errc_owner_entries << ',' << row.line_wavelength_entries << ','
+        << row.type53_revisit_entries << ',' << row.type49_revisit_entries << ','
+        << row.pass12_seconds << ',' << row.rate_seconds << ',' << row.pass12_nonrate_seconds << ','
+        << row.preliminary_balance_seconds << ',' << row.active_view_seconds << ','
+        << row.active_pass2_count_seconds << ',' << row.post_pass2_prebuffer_seconds << ','
+        << row.buffer_allocation_seconds << ',' << row.element_solve_seconds << ','
+        << row.full_population_mapback_seconds << ',' << row.element_to_mapback_seconds << '\n';
+}
+
 struct NativeRecordDiagnostic {
     int element_index = 0;
     int element_z = 0;
@@ -10654,6 +10729,14 @@ int run_impl(
          element_slot_v064894 < ctx.program.elements.size();
          ++element_slot_v064894) {
         const auto& element = ctx.program.elements[element_slot_v064894];
+        const auto residual_element_started_v064812339 = clock_type::now();
+        ResidualScalingAuditV064812339 residual_audit_v064812339;
+        residual_audit_v064812339.call_index = environment_data_type("XSTAR_NATIVE_CALL_INDEX");
+        residual_audit_v064812339.source_sequence = environment_data_type("XSTAR_QUALIFICATION_SOURCE_SEQUENCE");
+        residual_audit_v064812339.element_z = element.element_z;
+        residual_audit_v064812339.full_row_count = static_cast<std::size_t>(element.n_rows);
+        residual_audit_v064812339.full_record_count = ctx.traversal_record_indices_v064894[element_slot_v064894].size();
+        residual_audit_v064812339.full_element_row_copy_bytes = element.rows.capacity() * sizeof(ElementRow);
         const std::vector<double> incoming_source_leveltemp_energy_v06481231 =
             ctx.source_leveltemp_energy_workspace_v06481231;
         const auto& traversal_order_v064894 =
@@ -10735,10 +10818,12 @@ int run_impl(
                 &ctx.program.records[static_cast<std::size_t>(index)]);
         }
 
+        const auto preliminary_balance_started_v064812339 = clock_type::now();
         const PreliminaryIonBalance preliminary = build_preliminary_ion_balance(
             ctx.program, element, preliminary_evaluated_v064812315,
             preliminary_records_v064812315, ctx.critical_ion_fraction,
             ctx.preliminary_type7_legacy_compat_v06481171, helium_preliminary_ablation_type);
+        residual_audit_v064812339.preliminary_balance_seconds = elapsed(preliminary_balance_started_v064812339);
         write_preliminary_ion_balance_audit_v0648117(
             element, preliminary, ctx.critical_ion_fraction);
         PreliminaryIonBalance active_balance = preliminary;
@@ -10756,12 +10841,18 @@ int run_impl(
         // element while assigning a larger atomic number.  Source-style
         // stage-window selection requires a complete one-ground-row-per-stage
         // topology, so preserve the legacy full compact basis for such inputs.
+        const auto active_view_started_v064812339 = clock_type::now();
         const ActiveElementView active = source_compact_oracle.has_value()
             ? make_source_compact_element_view(
                 element, source_compact_oracle->rows_by_element_z.at(element.element_z))
             : (element.n_ions == element.element_z
                 ? make_active_element_view(element, active_balance)
                 : make_full_element_view(element));
+        residual_audit_v064812339.active_view_seconds = elapsed(active_view_started_v064812339);
+        residual_audit_v064812339.active_min_stage = active.min_stage;
+        residual_audit_v064812339.active_max_stage = active.max_stage;
+        residual_audit_v064812339.active_row_count = static_cast<std::size_t>(active.element.n_rows);
+        residual_audit_v064812339.active_element_row_bytes = active.element.rows.capacity() * sizeof(ElementRow);
         ctx.retained_active_stage_windows[element.element_z] =
             std::make_pair(active.min_stage, active.max_stage);
         ctx.last_active_stage_windows_v064812318.push_back({{
@@ -10777,6 +10868,7 @@ int run_impl(
         // Type49/53/99 publication ownership are element-global in the current
         // C++ representation.  This is conservative; a later metadata-only
         // setup cache may remove those remaining inactive evaluations.
+        const auto active_pass2_count_started_v064812339 = clock_type::now();
         std::size_t active_pass2_count_v064812337 = 0u;
         for (std::size_t ordinal = 0; ordinal < traversal_order_v064894.size(); ++ordinal) {
             const int index = traversal_order_v064894[ordinal];
@@ -10790,6 +10882,7 @@ int run_impl(
                 ++active_pass2_count_v064812337;
             }
         }
+        residual_audit_v064812339.active_pass2_count_seconds = elapsed(active_pass2_count_started_v064812339);
 
         std::vector<EvaluatedRecord> evaluated;
         std::vector<const ProgramRecord*> evaluated_records;
@@ -10865,6 +10958,13 @@ int run_impl(
         sparse_cache_audit_v064812337.rate_seconds =
             stats.rate_seconds - sparse_cache_rate_before_v064812337;
         write_sparse_preliminary_cache_audit_v064812337(sparse_cache_audit_v064812337);
+        residual_audit_v064812339.preliminary_record_count = preliminary_cache_v064812337.size();
+        residual_audit_v064812339.active_pass2_count = active_pass2_count_v064812337;
+        residual_audit_v064812339.pass12_seconds = sparse_cache_audit_v064812337.pass12_seconds;
+        residual_audit_v064812339.rate_seconds = sparse_cache_audit_v064812337.rate_seconds;
+        residual_audit_v064812339.pass12_nonrate_seconds = std::max(0.0,
+            sparse_cache_audit_v064812337.pass12_seconds - sparse_cache_audit_v064812337.rate_seconds);
+        const auto post_pass2_prebuffer_started_v064812339 = clock_type::now();
 
         apply_magnesium_type99_persistent_leveltemp_v048746223(
             ctx.program, element, active, input, evaluated, evaluated_records);
@@ -11167,7 +11267,21 @@ int run_impl(
         const auto canonical_thermal_ledger =
             canonical_thermal_builder.finish(thermal_domain_contributions);
         stats.contributions_constructed += contributions.size();
+        residual_audit_v064812339.post_pass2_prebuffer_seconds = elapsed(post_pass2_prebuffer_started_v064812339);
+        const auto buffer_allocation_started_v064812339 = clock_type::now();
         ElementBuffers buffers = make_buffers(active.element, &input, source_compact_basis_seed);
+        residual_audit_v064812339.buffer_allocation_seconds = elapsed(buffer_allocation_started_v064812339);
+        residual_audit_v064812339.active_buffer_matrix_bytes =
+            (buffers.dense.capacity() + buffers.heat.capacity() + buffers.heat2.capacity()) * sizeof(double);
+        residual_audit_v064812339.active_buffer_nonmatrix_bytes =
+            (buffers.initial.capacity() + buffers.populations.capacity() + buffers.outer.capacity() +
+             buffers.rhs.capacity() + buffers.gamma.capacity() + buffers.alpha.capacity() +
+             buffers.fgamma.capacity() + buffers.falpha.capacity() + buffers.ion_population.capacity() +
+             buffers.ion_population_final.capacity() + buffers.ionization.capacity() + buffers.recombination.capacity() +
+             buffers.ionization_components.capacity() + buffers.recombination_components.capacity() +
+             buffers.row_residual.capacity() + buffers.row_scale.capacity() + buffers.relative_residual.capacity()) * sizeof(double) +
+            (buffers.superlevels.capacity() + buffers.ions.capacity()) * sizeof(int32_t) +
+            (buffers.igamma.capacity() + buffers.ialpha.capacity()) * sizeof(std::int64_t);
         xstar_element_input_v1 ein{};
         xstar_element_input_init_v1(&ein);
         ein.flags = XSTAR_ELEMENT_STRICT_SOURCE_ORDER | XSTAR_ELEMENT_ALLOW_DENSE_RESCUE;
@@ -11201,7 +11315,9 @@ int run_impl(
             canonical_thermal_ledger.terms.data(), canonical_thermal_ledger.terms.size(),
             &element_consumed_thermal_ledger_fingerprint,
             &eout, error.data(), error.size());
-        stats.element_seconds += elapsed(element_start);
+        const double residual_element_solve_seconds_v064812339 = elapsed(element_start);
+        stats.element_seconds += residual_element_solve_seconds_v064812339;
+        residual_audit_v064812339.element_solve_seconds = residual_element_solve_seconds_v064812339;
         if (rc != 0) throw std::runtime_error(std::string("native element solve failed z=") + std::to_string(element.element_z) + ": " + error.data());
         if (element_consumed_thermal_ledger_fingerprint != canonical_thermal_ledger.fingerprint ||
             (eout.status_flags & XSTAR_ELEMENT_STATUS_CANONICAL_THERMAL_LEDGER) == 0u) {
@@ -11486,6 +11602,7 @@ int run_impl(
             }
         }
 
+        const auto full_population_mapback_started_v064812339 = clock_type::now();
         std::vector<double> full_populations_pre_mapback(static_cast<std::size_t>(element.n_rows), 0.0);
         for (std::size_t row = 0; row < buffers.populations.size(); ++row) {
             const int full_row = active.full_row_start + static_cast<int>(row);
@@ -11506,6 +11623,17 @@ int run_impl(
         }
         all_populations.insert(all_populations.end(), full_populations.begin(), full_populations.end());
         fixed_full_population_offset += full_populations.size();
+        residual_audit_v064812339.full_population_shadow_bytes =
+            (full_populations_pre_mapback.capacity() + full_populations.capacity()) * sizeof(double);
+        residual_audit_v064812339.full_population_mapback_seconds = elapsed(full_population_mapback_started_v064812339);
+        residual_audit_v064812339.errc_identity_entries = source_errc_rank_energy_by_identity_v82_patch5205.size();
+        residual_audit_v064812339.errc_slot_entries = source_errc_rank_energy_by_slot_v82_patch5209.size();
+        residual_audit_v064812339.errc_owner_entries = source_errc_owner_by_slot_v82_patch5209.size();
+        residual_audit_v064812339.line_wavelength_entries = source_line_wavelength_by_identity_v82_patch5208.size();
+        residual_audit_v064812339.type53_revisit_entries = type53_revisit_evaluated_v82_patch5181.size();
+        residual_audit_v064812339.type49_revisit_entries = type49_revisit_evaluated_v82_patch52082.size();
+        residual_audit_v064812339.element_to_mapback_seconds = elapsed(residual_element_started_v064812339);
+        write_residual_scaling_audit_v064812339(residual_audit_v064812339);
 
         // Match local_zone.py exactly: accumulate explicit ion fractions
         // using (stage - 1), then add the fully stripped fraction at charge Z.

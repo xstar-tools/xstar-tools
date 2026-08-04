@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.12.3.39 - 2026-08-04
+
+- Promote 0.6.48.12.3.38 sparse-cache qualification result as the performance baseline.
+- Add diagnostic-only fixed-state residual scaling instrumentation for high-ion Ca.
+- Profile full-row/active-row metadata copying, pass-1/pass-2 non-rate overhead, active pass-2 counting, post-pass2 pre-solve work, element buffer/matrix allocation, element solve, population mapback, and retained ownership/revisit map sizes.
+- Add two-model `ca19_xi4_ne1` / `ca19_xi4_ne1e12` qualification harness with nine-FITS bit-exact and STEP numerical equality gates versus 0.6.48.12.3.38.
+- No optimization, numerical formula, rate, normalization, stage-selection, record-eligibility, Type50, publication, or ABI change.
+
 ## 0.6.48.12.3.38 - 2026-08-04
 
 - Qualification-only promotion stage for the generic fixed-state sparse preliminary cache introduced in 0.6.48.12.3.37.
