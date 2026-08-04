@@ -1,5 +1,16 @@
 # CHANGELOG
 
+# 0.6.48.12.3.36.2 - 2026-08-03
+
+## 0.6.48.12.3.36.2 — `ca19_xi1p5_ne1` one-model material-science qualification
+
+- Qualification-only release: no production-science change relative to 0.6.48.12.3.36; production-zone ABI remains `6048110`.
+- Retain the 0.6.48.12.3.36.1 Option-15 material comparator byte-for-byte unchanged. Common-row Option-15 numerical science remains gated by normalized L1 for every material `ion × field` surface, with all material surfaces required to be `<1%`.
+- Preserve per-cell Option-15 `>1%` differences as diagnostics only; do not hide or delete them.
+- Keep Options 1/23 rank/order diagnostics and Options 15/24 inventory/publication diagnostics separate from numerical-science acceptance.
+- Add a one-model `helike_type69/ca19_xi1p5_ne1` runner using FORTRAN XSTAR as the canonical oracle and the frozen 0.6.48.12.3.36 production science.
+- Reopen physics only if a material numerical surface actually fails. If the model passes, advance the one-model priority to `helike_type69/ca19_xi2p5_ne1`, followed by `helike_type69/ca19_xi3_ne1`.
+
 # 0.6.48.12.3.36.1 - 2026-08-03
 
 ## 0.6.48.12.3.36.1 — Option-15 material comparator + `ca19_ne1` one-model qualification
