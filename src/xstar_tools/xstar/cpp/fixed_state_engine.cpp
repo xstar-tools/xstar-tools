@@ -1530,6 +1530,55 @@ struct EvaluatedRecord {
     Type99SourceShadow type99_shadow{};
 };
 
+struct PreliminaryCachedRecordV064812337 {
+    std::size_t ordinal = 0u;
+    EvaluatedRecord evaluated{};
+};
+
+struct SparsePreliminaryCacheAuditV064812337 {
+    int element_z = 0;
+    int active_min_stage = 0;
+    int active_max_stage = 0;
+    std::size_t full_record_count = 0u;
+    std::size_t preliminary_record_count = 0u;
+    std::size_t active_pass2_count = 0u;
+    std::size_t dense_preliminary_baseline_bytes = 0u;
+    std::size_t sparse_preliminary_reserved_bytes = 0u;
+    std::size_t preliminary_pointer_reserved_bytes = 0u;
+    std::size_t pass2_evaluated_reserved_bytes = 0u;
+    std::size_t pass2_record_pointer_reserved_bytes = 0u;
+    std::size_t total_sparse_reserved_bytes = 0u;
+    double allocation_seconds = 0.0;
+    double pass12_seconds = 0.0;
+    double rate_seconds = 0.0;
+};
+
+void write_sparse_preliminary_cache_audit_v064812337(
+    const SparsePreliminaryCacheAuditV064812337& row) {
+    const char* path = std::getenv("XSTAR_V064812337_SPARSE_CACHE_AUDIT_PATH");
+    if (!path || !*path) return;
+    const std::filesystem::path output(path);
+    if (!output.parent_path().empty()) std::filesystem::create_directories(output.parent_path());
+    const bool write_header = !std::filesystem::exists(output) || std::filesystem::file_size(output) == 0u;
+    std::ofstream out(output, std::ios::app);
+    if (!out) throw std::runtime_error("cannot open v064812337 sparse-cache audit");
+    if (write_header) {
+        out << "element_z,active_min_stage,active_max_stage,full_record_count,preliminary_record_count,"
+               "active_pass2_count,dense_preliminary_baseline_bytes,sparse_preliminary_reserved_bytes,"
+               "preliminary_pointer_reserved_bytes,pass2_evaluated_reserved_bytes,"
+               "pass2_record_pointer_reserved_bytes,total_sparse_reserved_bytes,allocation_seconds,"
+               "pass12_seconds,rate_seconds\n";
+    }
+    out << std::setprecision(17)
+        << row.element_z << ',' << row.active_min_stage << ',' << row.active_max_stage << ','
+        << row.full_record_count << ',' << row.preliminary_record_count << ','
+        << row.active_pass2_count << ',' << row.dense_preliminary_baseline_bytes << ','
+        << row.sparse_preliminary_reserved_bytes << ',' << row.preliminary_pointer_reserved_bytes << ','
+        << row.pass2_evaluated_reserved_bytes << ',' << row.pass2_record_pointer_reserved_bytes << ','
+        << row.total_sparse_reserved_bytes << ',' << row.allocation_seconds << ','
+        << row.pass12_seconds << ',' << row.rate_seconds << '\n';
+}
+
 struct NativeRecordDiagnostic {
     int element_index = 0;
     int element_z = 0;
@@ -10616,12 +10665,15 @@ int run_impl(
         // calc_ion_rates families needed for pirti/rrrti.  Their EvaluatedRecord
         // values are cached and reused in pass 2, so an active preliminary record
         // is never evaluated twice.
-        std::vector<std::optional<EvaluatedRecord>> preliminary_cache_v064812315(
-            traversal_order_v064894.size());
-        std::vector<const EvaluatedRecord*> preliminary_evaluated_v064812315;
-        std::vector<const ProgramRecord*> preliminary_records_v064812315;
-        preliminary_evaluated_v064812315.reserve(traversal_order_v064894.size());
-        preliminary_records_v064812315.reserve(traversal_order_v064894.size());
+        // 0.6.48.12.3.37: the old source-faithful two-pass cache allocated one
+        // std::optional<EvaluatedRecord> for every lowered record even though
+        // pass 1 evaluates only a small source-order subset.  Keep exactly
+        // those pass-1 records in source order and reuse them in pass 2 with a
+        // monotonic ordinal cursor.  No record eligibility or arithmetic changes.
+        const auto sparse_cache_pass12_started_v064812337 = clock_type::now();
+        const double sparse_cache_rate_before_v064812337 = stats.rate_seconds;
+        double sparse_cache_allocation_seconds_v064812337 = 0.0;
+        std::vector<PreliminaryCachedRecordV064812337> preliminary_cache_v064812337;
 
         const auto evaluate_source_record_v064812315 = [&](const ProgramRecord& record) {
             const auto rate_start = clock_type::now();
@@ -10650,16 +10702,37 @@ int run_impl(
             if (source_preliminary_rate_record_v064812315(
                     ctx.program, element, record,
                     ctx.preliminary_type7_legacy_compat_v06481171)) {
-                preliminary_cache_v064812315[ordinal].emplace(
-                    evaluate_source_record_v064812315(record));
-                preliminary_evaluated_v064812315.push_back(
-                    &*preliminary_cache_v064812315[ordinal]);
-                preliminary_records_v064812315.push_back(&record);
+                EvaluatedRecord preliminary_item_v064812337 =
+                    evaluate_source_record_v064812315(record);
+                const std::size_t capacity_before_v064812337 =
+                    preliminary_cache_v064812337.capacity();
+                const auto allocation_started_v064812337 = clock_type::now();
+                preliminary_cache_v064812337.push_back(
+                    PreliminaryCachedRecordV064812337{ordinal, std::move(preliminary_item_v064812337)});
+                if (preliminary_cache_v064812337.capacity() != capacity_before_v064812337) {
+                    sparse_cache_allocation_seconds_v064812337 +=
+                        elapsed(allocation_started_v064812337);
+                }
             }
             ++hops;
         }
         if (hops != element.record_count) {
             throw std::runtime_error("prepared traversal count differs from declared record_count");
+        }
+
+        std::vector<const EvaluatedRecord*> preliminary_evaluated_v064812315;
+        std::vector<const ProgramRecord*> preliminary_records_v064812315;
+        {
+            const auto allocation_started_v064812337 = clock_type::now();
+            preliminary_evaluated_v064812315.reserve(preliminary_cache_v064812337.size());
+            preliminary_records_v064812315.reserve(preliminary_cache_v064812337.size());
+            sparse_cache_allocation_seconds_v064812337 += elapsed(allocation_started_v064812337);
+        }
+        for (const auto& cached_v064812337 : preliminary_cache_v064812337) {
+            const int index = traversal_order_v064894[cached_v064812337.ordinal];
+            preliminary_evaluated_v064812315.push_back(&cached_v064812337.evaluated);
+            preliminary_records_v064812315.push_back(
+                &ctx.program.records[static_cast<std::size_t>(index)]);
         }
 
         const PreliminaryIonBalance preliminary = build_preliminary_ion_balance(
@@ -10704,10 +10777,29 @@ int run_impl(
         // Type49/53/99 publication ownership are element-global in the current
         // C++ representation.  This is conservative; a later metadata-only
         // setup cache may remove those remaining inactive evaluations.
+        std::size_t active_pass2_count_v064812337 = 0u;
+        for (std::size_t ordinal = 0; ordinal < traversal_order_v064894.size(); ++ordinal) {
+            const int index = traversal_order_v064894[ordinal];
+            const auto& record = ctx.program.records[static_cast<std::size_t>(index)];
+            const bool active_stage_owned =
+                record.ion_stage >= active.min_stage && record.ion_stage <= active.max_stage;
+            const bool source_global_setup_owner = record.rate_type == 7;
+            const bool structural_owner = record.ion_stage <= 0;
+            if (force_full_record_traversal_v064812315 || active_stage_owned ||
+                source_global_setup_owner || structural_owner) {
+                ++active_pass2_count_v064812337;
+            }
+        }
+
         std::vector<EvaluatedRecord> evaluated;
         std::vector<const ProgramRecord*> evaluated_records;
-        evaluated.reserve(static_cast<std::size_t>(element.record_count));
-        evaluated_records.reserve(static_cast<std::size_t>(element.record_count));
+        {
+            const auto allocation_started_v064812337 = clock_type::now();
+            evaluated.reserve(active_pass2_count_v064812337);
+            evaluated_records.reserve(active_pass2_count_v064812337);
+            sparse_cache_allocation_seconds_v064812337 += elapsed(allocation_started_v064812337);
+        }
+        std::size_t preliminary_cursor_v064812337 = 0u;
         for (std::size_t ordinal = 0; ordinal < traversal_order_v064894.size(); ++ordinal) {
             const int index = traversal_order_v064894[ordinal];
             const auto& record = ctx.program.records[static_cast<std::size_t>(index)];
@@ -10718,9 +10810,16 @@ int run_impl(
             if (!(force_full_record_traversal_v064812315 || active_stage_owned ||
                   source_global_setup_owner || structural_owner)) continue;
 
+            while (preliminary_cursor_v064812337 < preliminary_cache_v064812337.size() &&
+                   preliminary_cache_v064812337[preliminary_cursor_v064812337].ordinal < ordinal) {
+                ++preliminary_cursor_v064812337;
+            }
             EvaluatedRecord item;
-            if (preliminary_cache_v064812315[ordinal].has_value()) {
-                item = std::move(*preliminary_cache_v064812315[ordinal]);
+            if (preliminary_cursor_v064812337 < preliminary_cache_v064812337.size() &&
+                preliminary_cache_v064812337[preliminary_cursor_v064812337].ordinal == ordinal) {
+                item = std::move(
+                    preliminary_cache_v064812337[preliminary_cursor_v064812337].evaluated);
+                ++preliminary_cursor_v064812337;
             } else {
                 item = evaluate_source_record_v064812315(record);
             }
@@ -10736,6 +10835,37 @@ int run_impl(
             evaluated.push_back(std::move(item));
             evaluated_records.push_back(&record);
         }
+        SparsePreliminaryCacheAuditV064812337 sparse_cache_audit_v064812337;
+        sparse_cache_audit_v064812337.element_z = element.element_z;
+        sparse_cache_audit_v064812337.active_min_stage = active.min_stage;
+        sparse_cache_audit_v064812337.active_max_stage = active.max_stage;
+        sparse_cache_audit_v064812337.full_record_count = traversal_order_v064894.size();
+        sparse_cache_audit_v064812337.preliminary_record_count = preliminary_cache_v064812337.size();
+        sparse_cache_audit_v064812337.active_pass2_count = active_pass2_count_v064812337;
+        sparse_cache_audit_v064812337.dense_preliminary_baseline_bytes =
+            traversal_order_v064894.size() * sizeof(std::optional<EvaluatedRecord>);
+        sparse_cache_audit_v064812337.sparse_preliminary_reserved_bytes =
+            preliminary_cache_v064812337.capacity() * sizeof(PreliminaryCachedRecordV064812337);
+        sparse_cache_audit_v064812337.preliminary_pointer_reserved_bytes =
+            preliminary_evaluated_v064812315.capacity() * sizeof(const EvaluatedRecord*) +
+            preliminary_records_v064812315.capacity() * sizeof(const ProgramRecord*);
+        sparse_cache_audit_v064812337.pass2_evaluated_reserved_bytes =
+            evaluated.capacity() * sizeof(EvaluatedRecord);
+        sparse_cache_audit_v064812337.pass2_record_pointer_reserved_bytes =
+            evaluated_records.capacity() * sizeof(const ProgramRecord*);
+        sparse_cache_audit_v064812337.total_sparse_reserved_bytes =
+            sparse_cache_audit_v064812337.sparse_preliminary_reserved_bytes +
+            sparse_cache_audit_v064812337.preliminary_pointer_reserved_bytes +
+            sparse_cache_audit_v064812337.pass2_evaluated_reserved_bytes +
+            sparse_cache_audit_v064812337.pass2_record_pointer_reserved_bytes;
+        sparse_cache_audit_v064812337.allocation_seconds =
+            sparse_cache_allocation_seconds_v064812337;
+        sparse_cache_audit_v064812337.pass12_seconds =
+            elapsed(sparse_cache_pass12_started_v064812337);
+        sparse_cache_audit_v064812337.rate_seconds =
+            stats.rate_seconds - sparse_cache_rate_before_v064812337;
+        write_sparse_preliminary_cache_audit_v064812337(sparse_cache_audit_v064812337);
+
         apply_magnesium_type99_persistent_leveltemp_v048746223(
             ctx.program, element, active, input, evaluated, evaluated_records);
         // v0.6.48.12.3.1: source leveltemp is shared across elements and
