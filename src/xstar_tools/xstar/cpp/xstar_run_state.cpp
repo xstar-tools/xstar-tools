@@ -222,6 +222,7 @@ void synthesize_metadata_from_native_case(WholeRunAccumulatedState& state) {
     state.level_identities.clear();
     state.line_identities.clear();
     state.rrc_identities.clear();
+    state.source_rrc_identities.clear();
     state.parameter_rows.clear();
     const auto rows_path = state.native_case_path / "rows.csv";
     std::ifstream rows(rows_path);
@@ -307,6 +308,7 @@ void load_exact_source_metadata(WholeRunAccumulatedState& state) {
         state.line_identities.push_back(std::move(row));
     });
     state.rrc_identities.clear();
+    state.source_rrc_identities.clear();
     read_csv_rows(root / "rrcs.csv", [&](const auto& value) {
         RrcIdentityState row;
         row.continuum_index = std::stoi(value("continuum_index"));
@@ -321,6 +323,10 @@ void load_exact_source_metadata(WholeRunAccumulatedState& state) {
         try { row.source_record = std::stoll(value("source_record")); } catch (...) { row.source_record = 0; }
         state.rrc_identities.push_back(std::move(row));
     });
+    // Product-metadata rrcs.csv is the exact source inventory before any
+    // retained-product compatibility padding; preserve it separately for
+    // STEP pprint(19/24).
+    state.source_rrc_identities = state.rrc_identities;
     state.parameter_rows.clear();
     read_csv_rows(root / "parameters.csv", [&](const auto& value) {
         ParameterRowState row;
@@ -546,6 +552,7 @@ ProductWritingState build_product_writing_state(const WholeRunAccumulatedState& 
     product.detail_level_identities = state.detail_level_identities;
     product.line_identities = state.line_identities;
     product.rrc_identities = state.rrc_identities;
+    product.source_rrc_identities = state.source_rrc_identities;
     product.legacy_pprint = state.legacy_pprint;
     product.embedded_public_fits_payloads_absent = state.embedded_public_fits_payloads_absent;
     product.embedded_full_xout_step_payload_absent = state.embedded_full_xout_step_payload_absent;

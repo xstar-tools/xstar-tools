@@ -358,6 +358,11 @@ struct WholeRunAccumulatedState {
     std::vector<LevelIdentityState> detail_level_identities;
     std::vector<LineIdentityState> line_identities;
     std::vector<RrcIdentityState> rrc_identities;
+    // v0.6.48.12.3.42.1.2: preserve the exact ATDB/source RRC identity
+    // inventory before the legacy 1849-slot FITS compatibility padding.
+    // STEP pprint(19/24) must walk this source inventory; FITS continues to
+    // use rrc_identities unchanged.
+    std::vector<RrcIdentityState> source_rrc_identities;
     LegacyPprintState legacy_pprint;
     bool embedded_public_fits_payloads_absent = false;
     bool embedded_full_xout_step_payload_absent = false;
@@ -405,6 +410,11 @@ struct ProductWritingState {
     std::vector<LevelIdentityState> detail_level_identities;
     std::vector<LineIdentityState> line_identities;
     std::vector<RrcIdentityState> rrc_identities;
+    // v0.6.48.12.3.42.1.2: preserve the exact ATDB/source RRC identity
+    // inventory before the legacy 1849-slot FITS compatibility padding.
+    // STEP pprint(19/24) must walk this source inventory; FITS continues to
+    // use rrc_identities unchanged.
+    std::vector<RrcIdentityState> source_rrc_identities;
     LegacyPprintState legacy_pprint;
     bool embedded_public_fits_payloads_absent = false;
     bool embedded_full_xout_step_payload_absent = false;

@@ -1,5 +1,16 @@
 # CHANGELOG
 
+# 0.6.48.12.3.42.1.2 - 2026-08-05
+
+- Publication-only repair after the fresh 0.6.48.12.3.42.1.1 host gate still rejected Option-15 inventory in all six models and O VII Option-19 inventory, while all FITS/science/trajectory/rank gates stayed frozen and accepted.
+- Correct the literal `pprint(15)` interpretation: the apparent `lrtyp != 9/14` test occurs after `drd` calls for ion and element records overwrite `lrtyp`, so it is not a line-rate-type exclusion. STEP Option 15 now walks the complete retained `nplin` identity inventory and applies only the literal wavelength gate (`0.1 < abs(wavelength) < 9e9`); active-element lowering supplies the element-abundance gate.
+- Preserve an independent `source_rrc_identities` vector before the historical 1849-slot synthetic RRC compatibility padding. STEP Options 19/24 now walk this exact ATDB-derived source inventory, while FITS continues to use the unchanged padded/synthetic `rrc_identities` surface.
+- The source RRC inventory comes from the existing ATDB lowerer, whose record set is built from each ion's parent-bounded `npfi(rate_type,ion)` chain. Option 19/24 then retain only source rate type 7 with valid `npconi2`, matching FORTRAN traversal semantics.
+- Keep the Option-24 stale-local FORTRAN alias quirk quarantined rather than propagating corrupted aliases.
+- Preserve production-zone ABI `6048110`, fixed-state/rate/matrix/Type50/thermal/opacity/emissivity science, `xstar_science_fits.cpp`, trajectories, and the 12.3.41 rank-attachment algorithm.
+- Existing all-62 offline projection remains: 5,735 Option-15 rows removed by the wavelength gate, exact projected Option-15 inventory in 62/62, zero semantic rank-attachment defects.
+- Final FITS qualification 12.3.43 remains deferred until this six-model host gate passes.
+
 # 0.6.48.12.3.42.1.1 - 2026-08-05
 
 - Hotfix for the failed 0.6.48.12.3.42.1 targeted STEP publication gate; still publication-only and still before final FITS qualification.

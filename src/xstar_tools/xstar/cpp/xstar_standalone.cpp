@@ -10083,6 +10083,11 @@ void ensure_retained_native_public_metadata_v172530(xstar_run_state::WholeRunAcc
             whole.line_identities.assign(lines.begin(), lines.begin() + static_cast<std::ptrdiff_t>(std::min<std::size_t>(lines.size(), 600u)));
         }
     }
+    // Preserve the exact source-derived RRC inventory before any legacy
+    // retained-product padding replaces its public/FITS identity surface.
+    if (whole.source_rrc_identities.empty() && !whole.rrc_identities.empty()) {
+        whole.source_rrc_identities = whole.rrc_identities;
+    }
     if (whole.rrc_identities.size() < 1849u) {
         // The historical retained-product surface pads the RRC identity vector
         // to the Mg-era 1849-slot publication capacity.  Preserve that exact
@@ -16192,6 +16197,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         whole.detail_level_identities = program.detail_level_identities;
         whole.line_identities = program.line_identities;
         whole.rrc_identities = program.rrc_identities;
+        whole.source_rrc_identities = program.rrc_identities;
         whole.element_metadata = program.element_metadata;
         whole.row_metadata = program.row_metadata;
         whole.python_callbacks = 0;

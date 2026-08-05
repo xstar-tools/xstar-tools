@@ -1077,9 +1077,15 @@ void append_native_public_rrc_sections(std::ofstream& out,
         out << " print option:19\n recombination continuum luminosities(erg/sec/10**38))\n"
                " index, ion, level, energy (eV), RRC luminosity \n";
     }
-    // Source pprint traverses rate-family-7 records and addresses the retained
-    // arrays only through exact npconi2. A zero pointer has no public slot.
-    for (const auto& id : state.rrc_identities) {
+    // Source pprint traverses the exact per-ion npfi(7,jkk) chains and
+    // addresses retained arrays through npconi2.  Do not walk the legacy
+    // 1849-slot FITS compatibility identity vector here: that vector may be
+    // synthesized after lowering and can attach a source rate owner to a
+    // different synthetic level identity.  12.3.42.1.2 retains the original
+    // ATDB-derived RRC identities separately for STEP publication.
+    const auto& source_rrcs = !state.source_rrc_identities.empty()
+        ? state.source_rrc_identities : state.rrc_identities;
+    for (const auto& id : source_rrcs) {
         if (id.continuum_index <= 0) continue;
         // pprint(19/24) traverses npfi(7,jkk) only. Production ATDB lowering
         // retains that source rate family explicitly; do not admit legacy
@@ -1206,13 +1212,14 @@ void append_native_detail_line_section(
     ordered.reserve(state.line_identities.size());
     for (const auto& id : state.line_identities) {
         const double source_wavelength = std::abs(id.wavelength_angstrom);
-        // Literal pprint(15) walks the complete nplin inventory.  Its public
-        // eligibility gate is rate type + wavelength (+ element abundance,
-        // already enforced by the active-element lowering); it does NOT
-        // whitelist line data types.  The 12.3.42.1 data-type restriction
-        // incorrectly removed about 200 canonical rows per qualification model.
+        // Literal pprint(15) walks the complete nplin inventory.  Although
+        // the source IF mentions lrtyp, pprint calls drd for the ion and then
+        // the element before that IF; those calls overwrite lrtyp.  Therefore
+        // the test is not a line-rate-type exclusion.  The observable public
+        // line gate is wavelength (+ element abundance, already enforced by
+        // active-element lowering).  Filtering id.rate_type here incorrectly
+        // removed canonical H I and terminal element blocks.
         if (id.line_index > 0 &&
-            id.rate_type != 9 && id.rate_type != 14 &&
             source_wavelength > 0.1 && source_wavelength < 9.0e9) {
             ordered.push_back(&id);
         }
