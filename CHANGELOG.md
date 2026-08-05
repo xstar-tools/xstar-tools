@@ -1,5 +1,14 @@
 # CHANGELOG
 
+# 0.6.48.12.3.42.1.3 - 2026-08-05
+
+- Final STEP-publication hotfix after 0.6.48.12.3.42.1.2 closed every targeted gate except O VII Option 19 inventory.
+- For `o7_ne1e10`, the remaining Option-19 difference is exactly 45 candidate-only O IV RRC identities, with zero FORTRAN-only rows. Every one of the 45 has a non-positive reconstructed physical threshold; every common/FORTRAN Option-19 row has a strictly positive threshold.
+- Add a generic `threshold_ev > 0` eligibility condition to STEP Option 19 only. The pre-fix 897-row candidate inventory projects to the canonical 852-row FORTRAN inventory with zero candidate-only, zero reference-only, and zero metadata mismatches.
+- Do not change Option 15, Option 24, rank attachment, trajectories, retained `elumab/tauc`, fixed-state/rate/matrix/Type50/thermal/opacity/emissivity science, or any FITS writer. All nine FITS data regions must remain bit-exact to 12.3.42.1.2.
+- New FITS evidence is recorded for 12.3.43: O VII `xout_rrc1.fits` contains the same 45 negative-threshold rows, while `ca19_xi2_ne1` has a separate 576-vs-608 RRC inventory gap. Therefore final FITS qualification must reopen `xout_rrc1` in addition to `xo01_detal2`, `xout_abund1`, and `xout_lines1`.
+- Production-zone ABI remains 6048110. Qualification reruns only `helike_type69/o7_ne1e10`.
+
 # 0.6.48.12.3.42.1.2 - 2026-08-05
 
 - Publication-only repair after the fresh 0.6.48.12.3.42.1.1 host gate still rejected Option-15 inventory in all six models and O VII Option-19 inventory, while all FITS/science/trajectory/rank gates stayed frozen and accepted.

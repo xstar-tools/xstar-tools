@@ -1111,7 +1111,16 @@ void append_native_public_rrc_sections(std::ofstream& out,
                 << std::setprecision(3) << id.threshold_ev
                 << std::setw(13) << tau_in << std::setw(13) << tau_out << "\n";
         }
-        if (write_luminosity && (std::abs(lum_in) > 1.0e-49 || std::abs(lum_out) > 1.0e-49)) {
+        // 0.6.48.12.3.42.1.3: canonical pprint(19) never publishes the
+        // non-physical negative-threshold O IV subset observed in the O VII
+        // qualification.  In FORTRAN those slots remain below the luminosity
+        // print floor; the native retained workspace can carry non-zero values
+        // there.  Treat a strictly positive physical RRC threshold as an
+        // Option-19 publication eligibility condition.  This is publication
+        // only: it does not modify the retained elumab/tauc science arrays or
+        // the FITS RRC writer.
+        if (write_luminosity && id.threshold_ev > 0.0 &&
+            (std::abs(lum_in) > 1.0e-49 || std::abs(lum_out) > 1.0e-49)) {
             out << std::setw(7) << id.continuum_index
                 << std::setw(6) << id.level_global_index << " "
                 << std::left << std::setw(10) << id.ion_label << std::right
