@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 0.6.48.12.3.43.1 - 2026-08-05
+
+- Targeted final-FITS publication attribution/repair after the 12.3.43 all-62 FITS audit.
+- Freeze production-zone ABI 6048110 and all fixed-state/rate/matrix/Type50/opacity/thermal-total/controller/STEP/population/detal4/continuum/spectrum science.
+- `xout_abund1`: restore literal source `phosphoru` element label and publish native radius/log-xi from live controller-owned radial zones; add per-element htt/cll retention attribution without guessing missing thermal components.
+- `xo01_detal3`: generalize literal source pescv/cfrac directional RRC publication projection while preserving the accepted RRC plane sum and all physical kernels.
+- `xout_rrc1`: publish from exact source RRC ownership, removing the terminal active-stage filter; targeted proof covers O IV removal plus Ca XX/Ca XIII restoration.
+- `xout_lines1`: comparator-only blank-sentinel and tightly constrained terminal fixed-capacity cutoff semantics; production rank/attachment is unchanged.
+- `xo01_detal2`: add targeted activity-shadow tracing only; writer eligibility remains frozen pending attribution.
+- Nine-model compact qualification with explicit prior-result target-coverage proof; no all-62 production rerun.
+
 # 0.6.48.12.3.43 - 2026-08-05
 
 - Final all-62 FITS qualification after 0.6.48.12.3.42.1.3 closes the last STEP publication residual. Qualification-only: no model rerun and no production-science change relative to 12.3.42.1.3.

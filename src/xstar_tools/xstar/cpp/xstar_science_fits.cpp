@@ -82,7 +82,10 @@ const std::array<const char*,31> kSymbols = {
 };
 const std::array<const char*,31> kElementNames = {
     "", "hydrogen", "helium", "lithium", "beryllium", "boron", "carbon", "nitrogen", "oxygen", "fluorine",
-    "neon", "sodium", "magnesium", "aluminum", "silicon", "phosphorus", "sulfur", "chlorine", "argon", "potassium",
+    // pprint(12) copies the source database element record into a 9-character
+    // column label.  The literal ATDB/XSTAR spelling for Z=15 is therefore
+    // "phosphoru", not the normalized English name "phosphorus".
+    "neon", "sodium", "magnesium", "aluminum", "silicon", "phosphoru", "sulfur", "chlorine", "argon", "potassium",
     "calcium", "scandium", "titanium", "vanadium", "chromium", "manganese", "iron", "cobalt", "nickel", "copper", "zinc"
 };
 
@@ -90,6 +93,106 @@ const std::array<const char*,31> kElementSymbolsLower = {
     "", "h", "he", "li", "be", "b", "c", "n", "o", "f", "ne", "na", "mg", "al", "si", "p",
     "s", "cl", "ar", "k", "ca", "sc", "ti", "v", "cr", "mn", "fe", "co", "ni", "cu", "zn"
 };
+
+std::filesystem::path v0648123431_publication_attribution_dir() {
+    const char* raw = std::getenv("XSTAR_V0648123431_PUBLICATION_ATTRIBUTION_DIR");
+    if (!raw || !*raw) return {};
+    std::filesystem::path dir(raw);
+    std::filesystem::create_directories(dir);
+    return dir;
+}
+
+void write_v0648123431_detal2_activity_trace(
+    std::size_t hdu_number,
+    const xstar_run_state::LineIdentityState& id,
+    double local_emis_in,
+    double local_emis_out,
+    double local_opacity,
+    bool physical_signal,
+    bool publication_shadow,
+    bool source_eligible) {
+    const char* raw_indices = std::getenv("XSTAR_V0648123431_DETAL2_TRACE_INDICES");
+    if (!raw_indices || !*raw_indices) return;
+    bool requested = false;
+    std::istringstream requested_stream(raw_indices);
+    std::string token;
+    while (std::getline(requested_stream, token, ',')) {
+        try {
+            if (std::stoll(token) == id.line_index) { requested = true; break; }
+        } catch (...) {}
+    }
+    if (!requested) return;
+    const auto dir = v0648123431_publication_attribution_dir();
+    if (dir.empty()) return;
+    const auto path = dir / "detal2_activity_shadow.csv";
+    const bool fresh = !std::filesystem::exists(path) || std::filesystem::file_size(path) == 0u;
+    std::ofstream out(path, std::ios::app);
+    if (!out) throw std::runtime_error("cannot write v0648123431 detal2 activity trace");
+    if (fresh) {
+        out << "hdu_number,line_index,ion,rate_type,data_type,wavelength_angstrom,"
+               "local_emis_in,local_emis_out,local_opacity,physical_signal,"
+               "publication_shadow,source_eligible\n";
+    }
+    out << std::setprecision(17)
+        << hdu_number << ',' << id.line_index << ',' << id.ion_label << ','
+        << id.rate_type << ',' << id.data_type << ',' << id.wavelength_angstrom << ','
+        << local_emis_in << ',' << local_emis_out << ',' << local_opacity << ','
+        << (physical_signal ? 1 : 0) << ',' << (publication_shadow ? 1 : 0) << ','
+        << (source_eligible ? 1 : 0) << '\n';
+}
+
+void write_v0648123431_abundance_thermal_trace(
+    const char* surface,
+    std::size_t output_zone_index,
+    std::size_t source_zone_index_value,
+    std::size_t accepted_sequence,
+    int element_z,
+    bool retained_present,
+    double retained_value,
+    double selected_value,
+    double total_value) {
+    const auto dir = v0648123431_publication_attribution_dir();
+    if (dir.empty()) return;
+    const auto path = dir / "abundance_element_thermal_retention.csv";
+    const bool fresh = !std::filesystem::exists(path) || std::filesystem::file_size(path) == 0u;
+    std::ofstream out(path, std::ios::app);
+    if (!out) throw std::runtime_error("cannot write v0648123431 abundance thermal trace");
+    if (fresh) {
+        out << "surface,output_zone_index,source_zone_index,accepted_sequence,element_z,"
+               "retained_present,retained_value,selected_value,total_value\n";
+    }
+    out << std::setprecision(17)
+        << surface << ',' << output_zone_index << ',' << source_zone_index_value << ','
+        << accepted_sequence << ',' << element_z << ',' << (retained_present ? 1 : 0) << ','
+        << retained_value << ',' << selected_value << ',' << total_value << '\n';
+}
+
+double source_pescv_v0648123431(double tau) {
+    double value = std::exp(-tau);
+    const double eps = static_cast<double>(static_cast<float>(1.0e-12));
+    value = std::max(value, eps);
+    return value / 2.0;
+}
+
+std::pair<double,double> source_rrc_directional_projection_v0648123431(
+    double retained_in,
+    double retained_out,
+    double tau_in,
+    double tau_out,
+    double cfrac) {
+    const double total = (std::isfinite(retained_in) ? retained_in : 0.0) +
+                         (std::isfinite(retained_out) ? retained_out : 0.0);
+    const double cf = std::clamp(cfrac, 0.0, 1.0);
+    const double ptmp1 = source_pescv_v0648123431(tau_in) * (1.0 - cf);
+    const double ptmp2 = source_pescv_v0648123431(tau_out) * (1.0 - cf) +
+                         2.0 * source_pescv_v0648123431(tau_in + tau_out) * cf;
+    const double denom = ptmp1 + ptmp2;
+    if (!(std::isfinite(total) && std::isfinite(denom) && denom > 0.0)) {
+        return {std::isfinite(retained_in) ? retained_in : 0.0,
+                std::isfinite(retained_out) ? retained_out : 0.0};
+    }
+    return {total * ptmp1 / denom, total * ptmp2 / denom};
+}
 const std::array<const char*,31> kRomanLower = {
     "", "i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x", "xi", "xii", "xiii", "xiv", "xv",
     "xvi", "xvii", "xviii", "xix", "xx", "xxi", "xxii", "xxiii", "xxiv", "xxv", "xxvi", "xxvii", "xxviii", "xxix", "xxx"
@@ -9296,8 +9399,12 @@ std::vector<LineRow> source_line_rows_from_identities(
                 static_cast<std::size_t>(id.line_index) < detail_activity_shadow.size() &&
                 detail_activity_shadow[static_cast<std::size_t>(id.line_index)];
             const bool signal = physical_signal || publication_shadow;
-            if (!signal || id.rate_type == 14 || id.rate_type == 9 ||
-                !(wavelength > 0.1) || !(wavelength < 9.0e9)) continue;
+            const bool source_eligible = signal && id.rate_type != 14 && id.rate_type != 9 &&
+                wavelength > 0.1 && wavelength < 9.0e9;
+            write_v0648123431_detal2_activity_trace(
+                hdu_number, id, local_emis_in, local_emis_out, local_opacity,
+                physical_signal, publication_shadow, source_eligible);
+            if (!source_eligible) continue;
         } else {
             // Literal writespectra2.f90 pre-ranking eligibility.  The parent
             // ion identity is already required by the live lowered identity.
@@ -10173,6 +10280,20 @@ void write_rrc_detail(const std::filesystem::path& path,
                     r.absorption = pw_rrc_absn[pi]; r.opacity = pw_rrc_opacity[pi];
                     r.tau_in = pw_rrc_tau_in[pi]; r.tau_out = pw_rrc_tau_out[pi];
                 }
+                // 0.6.48.12.3.43.1: calc_emisab_ion owns the directional RRC
+                // split through pescv(tau_in/out) and cfrac for every element.
+                // The generic native path previously published the retained
+                // half/half planes directly and skipped the source projection
+                // that the historical Mg template path applied later.  Re-split
+                // only the already accepted total RRC emissivity; rates,
+                // populations, opacity, tau, and controller state are frozen.
+                if (native_standalone_product_state(state)) {
+                    const double cfrac = parameter_value(state, "cfrac", 1.0);
+                    const auto directional = source_rrc_directional_projection_v0648123431(
+                        r.emis_in, r.emis_out, r.tau_in, r.tau_out, cfrac);
+                    r.emis_in = directional.first;
+                    r.emis_out = directional.second;
+                }
                 const long row = static_cast<long>(i + 1);
                 write_int(fptr, 1, row, static_cast<int>(r.record));
                 write_int(fptr, 2, row, id ? id->level_global_index : 0);
@@ -10292,23 +10413,18 @@ void write_rrc_detail(const std::filesystem::path& path,
             //   ptmp2 = pescv(tau_out) * (1-cfrac)
             //         + 2*pescv(tau_in+tau_out)*cfrac.
             //
-            // Therefore at the benchmark's exact cfrac=1 boundary ptmp1 is
-            // identically zero for every rate-7 RRC record: fstepr3 column 7
-            // is zero and the complete retained cemab emissivity belongs to
-            // column 8.  The native reduced calc_emisab bridge historically
-            // left 88 He rows per radial HDU in plane 0 even though their
-            // plane sum is source-faithful.  Repair only that directional
-            // ownership at publication; do not change the RRC rate, total
-            // emissivity, opacity, tau, or the accepted controller state.
+            // The native reduced calc_emisab bridge historically retained a
+            // source-faithful plane sum but could leave the directional owner
+            // in a half/half state.  Apply the same literal source projection
+            // used by the generic path for every cfrac.  At cfrac=1 this
+            // reduces exactly to inward=0, outward=total.  This remains a
+            // publication-only re-split of the accepted total emissivity.
             if (native_standalone_product_state(state)) {
-                const double cfrac = std::clamp(parameter_value(state, "cfrac", 1.0), 0.0, 1.0);
-                if (std::abs(cfrac - 1.0) <= 1.0e-15) {
-                    const double total_cemab =
-                        (std::isfinite(r.emis_in) ? r.emis_in : 0.0) +
-                        (std::isfinite(r.emis_out) ? r.emis_out : 0.0);
-                    r.emis_in = 0.0;
-                    r.emis_out = total_cemab;
-                }
+                const double cfrac = parameter_value(state, "cfrac", 1.0);
+                const auto directional = source_rrc_directional_projection_v0648123431(
+                    r.emis_in, r.emis_out, r.tau_in, r.tau_out, cfrac);
+                r.emis_in = directional.first;
+                r.emis_out = directional.second;
             }
 
             double tau_out = std::isfinite(r.tau_out) ? r.tau_out : 0.0;
@@ -10320,7 +10436,7 @@ void write_rrc_detail(const std::filesystem::path& path,
                 tau_in = cumulative_rrc_tau_in[label.index];
                 if (tau_in != 0.0) ++audit.tau_in_depth_fallback;
             }
-            write_real4(fptr, 7, row, 0.0);
+            write_real4(fptr, 7, row, r.emis_in);
             write_real4(fptr, 8, row, r.emis_out);
             write_real4(fptr, 9, row, r.absorption);
             write_real4(fptr, 10, row, r.opacity);
@@ -10952,48 +11068,32 @@ xstar_run_state::AbundanceRadialRowState abundance_output_base_row_for_zone(
     const auto& zone = state.radial_zones[source_index];
     const auto& eval = zone.accepted_controller.evaluation;
     xstar_run_state::AbundanceRadialRowState row;
-    const auto boundary_rows = abundance_boundary_rows(state);
-    if (output_zone_index < boundary_rows.size()) {
-        const auto& b = boundary_rows[output_zone_index];
-        row.row_index = output_zone_index + 1;
-        row.radius_cm = b.radius_cm;
-        // The legacy abundance table delta_r column follows the accumulated
-        // radial-depth column printed by the pprint/XOUT surface, not the local
-        // shell thickness used by the radial-product HDU keyword ROUTER.
-        row.delta_radius_cm = b.radial_depth_cm;
-        row.log_ionization_parameter = b.zeta;
-        row.electron_fraction = b.electron_fraction;
-        row.density_cm3 = b.density_cm3;
-        row.pressure_dyn_cm2 = parameter_value(state, "pressure", zone.pressure_dyn_cm2);
-        row.temperature_t4 = boundary_temperature_t4(b);
-    } else {
-        row.row_index = output_zone_index + 1;
-        row.radius_cm = zone.radius_cm;
-        row.delta_radius_cm = zone.delta_radius_cm;
-        row.log_ionization_parameter = zone.log_ionization_parameter;
-        row.electron_fraction = zone.electron_fraction;
-        row.density_cm3 = zone.density_cm3;
-        row.pressure_dyn_cm2 = zone.pressure_dyn_cm2;
-        row.temperature_t4 = zone.temperature_t4;
-    }
-    // The fourth physical pprint(12) row is emitted after the final residual
-    // transport.  Its thermodynamic state is the call-4 state, but its public
-    // cumulative rdel has reached the full column/density depth.  Keeping the
-    // pre-transport call-4 depth (2*d1 = 0.804892 D) shortened every zrtmp
-    // ion-column integral by the same 0.804892 factor.
+    // 0.6.48.12.3.43.1: pprint(12) consumes the live controller-owned r/rdel/
+    // zeta boundary state.  Do not prefer the historical
+    // accepted_radial_boundaries.csv bridge: after the source-radius repair it
+    // can contain an older projected trajectory even while STEP and the typed
+    // radial_zones are canonical.  The final physical pprint row is written
+    // after the residual transport, so its thermodynamic/evaluation owner is
+    // still the call-4 state but its geometry is the retained post-transport
+    // terminal boundary.
     const bool final_physical_row = state.terminal_synthetic_row_present &&
         state.radial_zones.size() >= 2u && output_zone_index + 2u == state.radial_zones.size();
-    if (final_physical_row) {
-        const double terminal_depth = benchmark_total_depth_cm_from_parameters(state);
-        if (terminal_depth > 0.0 && std::isfinite(terminal_depth)) row.delta_radius_cm = terminal_depth;
-    }
+    const auto& geometry_zone = final_physical_row ? state.radial_zones.back() : zone;
+    row.row_index = output_zone_index + 1;
+    row.radius_cm = geometry_zone.radius_cm;
+    row.delta_radius_cm = geometry_zone.delta_radius_cm;
+    row.log_ionization_parameter = geometry_zone.log_ionization_parameter;
+    row.electron_fraction = zone.electron_fraction;
+    row.density_cm3 = zone.density_cm3;
+    row.pressure_dyn_cm2 = zone.pressure_dyn_cm2;
+    row.temperature_t4 = zone.temperature_t4;
 
     // pprint option 17 and xout_abund1 use the controller-owned source
     // quantity hmctot = 2*(httot-cltot)/(httot+cltot).  Do not reconstruct
     // a different fractional residual from total_heating alone.
     row.fractional_heat_error = std::isfinite(eval.hmctot) ? eval.hmctot : 0.0;
     row.terminal_row = false;
-    return fill_missing_abundance_geometry(state, output_zone_index, row, &zone);
+    return fill_missing_abundance_geometry(state, output_zone_index, row, &geometry_zone);
 }
 
 const xstar_run_state::RadialZoneState* abundance_output_zone(
@@ -11236,11 +11336,16 @@ void write_abundances(const std::filesystem::path& path,
         for (int element = 1; element <= 30; ++element) {
             double value = 0.0;
             const auto it = elem_thermal.find(element);
-            if (it != elem_thermal.end()) value = it->second.heating;
+            const bool retained_present = it != elem_thermal.end();
+            const double retained_value = retained_present ? it->second.heating : 0.0;
+            if (retained_present) value = retained_value;
             else value = element == 1 ? st.hydrogen_heating : element == 2 ? st.helium_heating : element == 12 ? st.magnesium_heating : 0.0;
             if (!std::isfinite(value)) value = 0.0;
             element_sum += value;
             write_real4(fptr, 8 + element, row, value);
+            write_v0648123431_abundance_thermal_trace(
+                "HEATING", z, source_zone_index(state, z), seq, element,
+                retained_present, retained_value, value, st.total_heating);
         }
         double compton = cont_thermal.compton_heating;
         if (!(std::isfinite(compton) && compton != 0.0)) compton = st.compton_heating;
@@ -11269,11 +11374,16 @@ void write_abundances(const std::filesystem::path& path,
         for (int element = 1; element <= 30; ++element) {
             double value = 0.0;
             const auto it = elem_thermal.find(element);
-            if (it != elem_thermal.end()) value = it->second.cooling;
+            const bool retained_present = it != elem_thermal.end();
+            const double retained_value = retained_present ? it->second.cooling : 0.0;
+            if (retained_present) value = retained_value;
             else value = element == 1 ? st.hydrogen_cooling : element == 2 ? st.helium_cooling : element == 12 ? st.magnesium_cooling : 0.0;
             if (!std::isfinite(value)) value = 0.0;
             element_sum += value;
             write_real4(fptr, 8 + element, row, value);
+            write_v0648123431_abundance_thermal_trace(
+                "COOLING", z, source_zone_index(state, z), seq, element,
+                retained_present, retained_value, value, st.total_cooling);
         }
         double compton = cont_thermal.compton_cooling;
         double brems = cont_thermal.brems_cooling;
@@ -11560,16 +11670,28 @@ void write_public_rrc(const std::filesystem::path& path,
         double depth_in = 0.0;
     };
     std::vector<PublicRrcRowV82Patch52094> public_rows;
-    public_rows.reserve(state.rrc_identities.size());
-    for (const auto& identity : state.rrc_identities) {
+    const bool have_exact_source_rrcs = !state.source_rrc_identities.empty();
+    const auto& source_public_rrcs = have_exact_source_rrcs
+        ? state.source_rrc_identities : state.rrc_identities;
+    public_rows.reserve(source_public_rrcs.size());
+    std::set<int> published_continuum_indices;
+    for (const auto& identity : source_public_rrcs) {
         if (identity.continuum_index <= 0) continue;
-        if (!reference_mg11_product_state(state)) {
-            const int z = element_z_from_ion_label(identity.ion_label);
-            const int stage = roman_stage_from_ion_label(identity.ion_label);
-            const ElementMeta* element = nullptr;
-            for (const auto& e : elements) if (e.element_z == z) { element = &e; break; }
-            if (!element || !active_product_element_stage(state, elements, rows, z, stage, element->abundance)) continue;
-        }
+        // Literal writespectra4 ownership is the source rate-type-7 chain,
+        // not the terminal active-stage-filtered/padded FITS identity surface.
+        // Keep the positive-threshold RRC rule already qualified for STEP
+        // Option 19 in 12.3.42.1.3.  This simultaneously removes the 45 O IV
+        // non-physical rows and allows late Ca source stages (including the
+        // missing Ca XX / Ca XIII identities) to publish when their source
+        // elumab workspace is active.
+        if (have_exact_source_rrcs && identity.rate_type != 7) continue;
+        if (!have_exact_source_rrcs && identity.rate_type != 0 && identity.rate_type != 7) continue;
+        if (!(identity.threshold_ev > 0.0)) continue;
+        const int z = element_z_from_ion_label(identity.ion_label);
+        const ElementMeta* element = nullptr;
+        for (const auto& e : elements) if (e.element_z == z) { element = &e; break; }
+        if (!element || !(element->abundance > 1.0e-10)) continue;
+        if (!published_continuum_indices.insert(identity.continuum_index).second) continue;
         const std::size_t slot = static_cast<std::size_t>(identity.continuum_index);
         PublicRrcRowV82Patch52094 row;
         row.identity = &identity;
