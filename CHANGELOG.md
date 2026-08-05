@@ -1,5 +1,17 @@
 # CHANGELOG
 
+# 0.6.48.12.3.42 - 2026-08-05
+
+- Qualification-only fresh all-62 final STEP requalification; no production implementation change relative to 0.6.48.12.3.41.
+- Rerun all 62 canonical benchmark models with standalone/shared C++ `cpp-zone` against FORTRAN XSTAR as the scientific authority.
+- Freeze the repaired 0.6.48.12.3.36.1 STEP comparator: Option 15 common-row science is gated by material ion x field normalized L1 <1%; rowwise >1% tails remain diagnostic-only; Options 15/24 inventory remains separate.
+- Preserve the 0.6.48.12.3.41 source-literal Options 1/23 rank-identity attachment repair and report residual rank/order/membership independently from rank-position numerical science.
+- Require canonical zone counts and DSEC trajectories for every model.
+- Report candidate internal/FORTRAN total-time ratios per model and aggregate them by element, physical regime, ionization band, and density band rather than only globally.
+- Produce `summary.csv`, `section_summary.csv`, numerical-discrepancy, inventory, rank-order, performance-group, and `next_model_priority.csv` reports.
+- Support `--resume` so interrupted 62-model host runs continue from completed candidate products.
+- Production-zone ABI remains 6048110.
+
 # 0.6.48.12.3.41 - 2026-08-04
 
 - Publication-only source-literal rank/identity attachment repair; no rate, matrix, transport, thermal, or numerical-science change.
