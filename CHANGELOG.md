@@ -1,5 +1,14 @@
 # CHANGELOG
 
+# 0.6.48.12.3.43 - 2026-08-05
+
+- Final all-62 FITS qualification after 0.6.48.12.3.42.1.3 closes the last STEP publication residual. Qualification-only: no model rerun and no production-science change relative to 12.3.42.1.3.
+- Reuse the accepted 12.3.42 all-62 FITS snapshot because every post-42 STEP-publication repair preserved all nine FITS data regions and kept the FITS writer/science kernels frozen.
+- Audit all nine FITS products against canonical FORTRAN, explicitly reopening `xo01_detal2`, `xout_abund1`, and `xout_lines1` from the original roadmap plus `xout_rrc1` because 12.3.42.1.3 provided new direct RRC inventory evidence (O VII 897-vs-852 and a distinct `ca19_xi2_ne1` 576-vs-608 gap).
+- Keep `xo01_detail`, `xo01_detal3`, `xo01_detal4`, `xout_cont1`, and `xout_spect1` frozen unless this all-62 audit produces direct new evidence for a specific product.
+- Compare repeated `XSTAR_RADIAL` HDUs by occurrence, separate common-row numerical science from inventory/order/metadata, gate per-field normalized L1 at <1%, and keep rowwise >1% tails and `frac_heat_error` diagnostic-only.
+- Preserve production-zone ABI `6048110`; production implementation hashes remain frozen relative to 12.3.42.1.3.
+
 # 0.6.48.12.3.42.1.3 - 2026-08-05
 
 - Final STEP-publication hotfix after 0.6.48.12.3.42.1.2 closed every targeted gate except O VII Option 19 inventory.
