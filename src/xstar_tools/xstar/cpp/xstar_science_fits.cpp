@@ -11082,7 +11082,21 @@ xstar_run_state::AbundanceRadialRowState abundance_output_base_row_for_zone(
     row.row_index = output_zone_index + 1;
     row.radius_cm = geometry_zone.radius_cm;
     row.delta_radius_cm = geometry_zone.delta_radius_cm;
+    // 0.6.48.12.3.43.1.1: pprint(12) does not publish the retained input
+    // rlogxi field.  It recomputes zeta from the live source radius, density
+    // and rlrad38 at every radial row:
+    //   r19 = r * 1.e-19          (default REAL literal, then promoted)
+    //   skse = xlum/(xpx*r19*r19)
+    //   zeta = log10(max(1.d-24,skse))
+    // Use the same default-REAL radius scale already qualified by native STEP.
     row.log_ionization_parameter = geometry_zone.log_ionization_parameter;
+    const double xlum = parameter_value(state, "rlrad38", 0.0);
+    const double source_radius_scale = static_cast<double>(static_cast<float>(1.0e-19));
+    const double r19 = geometry_zone.radius_cm * source_radius_scale;
+    if (xlum > 0.0 && zone.density_cm3 > 0.0 && r19 > 0.0) {
+        const double skse = xlum / (zone.density_cm3 * r19 * r19);
+        row.log_ionization_parameter = std::log10(std::max(1.0e-24, skse));
+    }
     row.electron_fraction = zone.electron_fraction;
     row.density_cm3 = zone.density_cm3;
     row.pressure_dyn_cm2 = zone.pressure_dyn_cm2;

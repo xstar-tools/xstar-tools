@@ -16197,7 +16197,10 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         whole.detail_level_identities = program.detail_level_identities;
         whole.line_identities = program.line_identities;
         whole.rrc_identities = program.rrc_identities;
-        whole.source_rrc_identities = program.rrc_identities;
+        // 0.6.48.12.3.43.1.1: keep executable RRC identities distinct from
+        // the complete literal npfi(7,ion) publication inventory.
+        whole.source_rrc_identities = program.source_rrc_identities.empty()
+            ? program.rrc_identities : program.source_rrc_identities;
         whole.element_metadata = program.element_metadata;
         whole.row_metadata = program.row_metadata;
         whole.python_callbacks = 0;
@@ -18092,6 +18095,8 @@ int command_run_standalone_production_v67(const Options& options, const std::fil
             }
             std::cout << prefix << "SOURCE_LINE_IDENTITIES=" << product.line_identities.size() << "\n"
                       << prefix << "SOURCE_RRC_IDENTITIES=" << product.rrc_identities.size() << "\n"
+                      << prefix << "SOURCE_RRC_IDENTITIES_EXECUTABLE=" << product.rrc_identities.size() << "\n"
+                      << prefix << "SOURCE_RRC_IDENTITIES_PUBLICATION=" << product.source_rrc_identities.size() << "\n"
                       << prefix << "MAXIMUM_LINE_INDEX=" << max_line_index << "\n"
                       << prefix << "LAST_OPLIN_SIZE=" << last_ws.oplin.size() << "\n"
                       << prefix << "LAST_RCEM_SIZE=" << last_ws.rcem.size() << "\n"

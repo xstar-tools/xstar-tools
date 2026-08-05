@@ -64,6 +64,10 @@ struct ProgramStorage {
     std::vector<xstar_run_state::LevelIdentityState> detail_level_identities;
     std::vector<xstar_run_state::LineIdentityState> line_identities;
     std::vector<xstar_run_state::RrcIdentityState> rrc_identities;
+    // 0.6.48.12.3.43.1.1: publication-only, literal npfi(rate_type=7,ion)
+    // inventory.  Unlike rrc_identities this is not restricted to executable
+    // kActiveTypes and is never supplied to a rate/matrix kernel.
+    std::vector<xstar_run_state::RrcIdentityState> source_rrc_identities;
     std::vector<xstar_run_state::ElementMetadataState> element_metadata;
     std::vector<xstar_run_state::CompactRowMetadataState> row_metadata;
     // v82 patch 5.2: compact XSTAR rows can carry more than one source global

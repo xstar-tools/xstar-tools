@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.48.12.3.43.1.1 - 2026-08-05
+
+- Hotfix only for the two failed 0.6.48.12.3.43.1 targeted gates; do not advance to 43.2 until these close.
+- Freeze production-zone ABI `6048110`, fixed-state/rate/matrix/Type50/opacity/thermal/population kernels, controller trajectories, STEP numerics/rank arrays, detal2, detal3, detal4, continuum, line-list production ranking, and spectrum relative to 43.1.
+- `xout_abund1`: recompute published `zeta` from live radius, density, and `rlrad38` with the same default-REAL `1.e-19` radius scale already qualified by native STEP, instead of copying the retained input `rlogxi`.
+- RRC publication metadata: retain a separate complete literal `npfi(rate_type=7,ion)` source chain using the first source record's parent boundary, independent of executable `kActiveTypes` lowering; do not execute any added record.
+- `xout_rrc1`: consume that complete publication-only source inventory while preserving the 43.1 positive-threshold rule, so Ca XIII continuum index 23595 can be restored without reintroducing the O IV non-positive-threshold rows.
+- Four-model compact qualification only: `c5_ne1`, `ca19_xi3_ne1e4`, `ca19_xi2_ne1`, and `o7_ne1e10`.  The latter two are regression controls for the already-restored Ca XX and already-removed O IV inventories.
+- If this hotfix promotes, proceed to `0.6.48.12.3.43.2 — abundance per-element thermal retention + detal2 activity closure`; do not rerun all 62 yet.
+
 ## 0.6.48.12.3.43.1 - 2026-08-05
 
 - Targeted final-FITS publication attribution/repair after the 12.3.43 all-62 FITS audit.
