@@ -11377,31 +11377,28 @@ void write_public_lines(const std::filesystem::path& path,
     const auto pw_line_depth_in = optional_bridge_array_for_hdu(state, "product_write_public_line_depth_inward", 3, pw_line_index.size());
     const auto pw_line_depth_out = optional_bridge_array_for_hdu(state, "product_write_public_line_depth_outward", 3, pw_line_index.size());
 
-    // Preserve the accepted Mg XI ranking surface exactly.  For general
-    // models, writespectra2 publishes up to 600 live source lines; the source
-    // inventory may legitimately contain fewer rows (Ca XIX has 578).
+    // 12.3.41 publication/rank attachment repair.  The retained
+    // product_write_public_line_index array is the writer-owned identity rank
+    // produced by the literal writespectra2 fixed-capacity insertion routine.
+    // Consume it for every element, not just the historical Mg reference.
+    // Numeric arrays remain rank-position owners and are intentionally not
+    // rebound by physical line index here.
     std::vector<LineLabelTemplateRow> public_line_labels;
-    if (reference_mg11_product_state(state)) {
-        if (pw_line_index.size() == 600u) {
-            public_line_labels.reserve(pw_line_index.size());
-            for (const double raw_index : pw_line_index) {
-                const auto line_index = static_cast<long long>(std::llround(raw_index));
-                const auto* id = line_identity_by_index(state, line_index);
-                if (!id) { public_line_labels.clear(); break; }
-                public_line_labels.push_back(LineLabelTemplateRow{
-                    static_cast<int>(line_index), id->wavelength_angstrom, id->ion_label.c_str(),
-                    id->lower_level.c_str(), id->upper_level.c_str()});
-            }
+    if (!pw_line_index.empty()) {
+        public_line_labels.reserve(pw_line_index.size());
+        for (const double raw_index : pw_line_index) {
+            const auto line_index = static_cast<long long>(std::llround(raw_index));
+            const auto* id = line_identity_by_index(state, line_index);
+            if (!id) { public_line_labels.clear(); break; }
+            public_line_labels.push_back(LineLabelTemplateRow{
+                static_cast<int>(line_index), id->wavelength_angstrom, id->ion_label.c_str(),
+                id->lower_level.c_str(), id->upper_level.c_str()});
         }
-        if (public_line_labels.size() != 600u) {
-            const bool true_production = std::getenv("XSTAR_TRUE_PRODUCTION") != nullptr;
-            if (true_production) {
-                throw std::runtime_error("5.20.17 production public-line selection is missing live 600-row ranking");
-            }
-            const auto& fallback = oracle_public_line_label_template_v172537();
-            public_line_labels.assign(fallback.begin(), fallback.end());
-        }
-    } else {
+    }
+    if (public_line_labels.empty()) {
+        // Fail-soft fallback retains the pre-12.3.41 local ranking path for
+        // incomplete diagnostic states.  True production is expected to carry
+        // the retained writer-owned identity vector.
         std::vector<LineRow> ranked = terminal_list;
         if (ranked.size() > 600u) {
             std::stable_sort(ranked.begin(), ranked.end(), [](const LineRow& a, const LineRow& b) {

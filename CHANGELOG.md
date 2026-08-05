@@ -1,5 +1,16 @@
 # CHANGELOG
 
+# 0.6.48.12.3.41 - 2026-08-04
+
+- Publication-only source-literal rank/identity attachment repair; no rate, matrix, transport, thermal, or numerical-science change.
+- Reproduce the literal FORTRAN fixed-capacity insertion semantics used by `writespectra2.f90` and `pprint.f90` Options 1/23, including equal-strength insertion-before behavior and the historical full-list terminal-slot retention.
+- Keep the accepted 0.6.48.12.3.40 rank-position numerical arrays frozen while attaching source-literal line identities/order.
+- Make `xout_lines1.fits` consume the retained writer-owned public-line identity rank for all elements instead of recomputing labels from a separate stable sort.
+- STEP Options 1/23 now obtain identity ranks from the source line namespace/workspace rather than inheriting FITS-row identity/order.
+- Option 15/24 material inventory remains frozen and separate; it is not changed in this release.
+- Targeted qualification set: `ca19_ne1`, `ca19_xi4_ne1`, `c5_ne1`, `o7_ne1`, `mg11_ne1e8`. All-62 remains deferred to 0.6.48.12.3.42.
+- Production-zone ABI remains 6048110.
+
 ## 0.6.48.12.3.40 - 2026-08-04
 
 - Promote the accepted 0.6.48.12.3.39 residual-scaling audit into a second generic fixed-state optimization.

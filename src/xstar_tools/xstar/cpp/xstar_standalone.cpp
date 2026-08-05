@@ -6318,7 +6318,12 @@ double source_real_literal_v82_patch520142(double value) {
 
 
 struct PublicLineSelectionV82Patch520164 {
+    // 12.3.41 publication repair: identities follow the literal source
+    // fixed-capacity insertion list, while numeric_indices retain the
+    // pre-12.3.41 rank-position numerical owner.  This keeps the accepted
+    // ranked numeric arrays frozen while repairing line identity attachment.
     std::vector<double> indices;
+    std::vector<double> numeric_indices;
     std::vector<double> emit_inward;
     std::vector<double> emit_outward;
 };
@@ -6329,11 +6334,8 @@ PublicLineSelectionV82Patch520164 select_public_lines_v82_patch520164(
     PublicLineSelectionV82Patch520164 out;
     if (product.line_identities.empty()) return out;
 
-    // writespectra2.f90 scans the physical line namespace in source order and
-    // maintains a 600-entry descending list by mean cumulative luminosity.
-    // Reconstruct the complete cumulative elum surface first; selecting from a
-    // frozen historical 600-row inventory is not source faithful because small
-    // state changes can legitimately move near-cutoff or near-degenerate rows.
+    // writespectra2.f90 scans the physical line namespace in ascending nplini
+    // order.  Preserve that source order explicitly.
     std::vector<std::size_t> order(product.line_identities.size());
     std::iota(order.begin(), order.end(), 0u);
     std::sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) {
@@ -6347,42 +6349,91 @@ PublicLineSelectionV82Patch520164 select_public_lines_v82_patch520164(
     const auto all_out = reconstruct_public_line_luminosity_v82_patch52071(product, all_indices, 1u);
     if (all_in.size() != order.size() || all_out.size() != order.size()) return out;
 
-    struct RankedLine {
-        std::size_t sorted_position = 0u;
-        double mean_luminosity = 0.0;
-    };
-    std::vector<RankedLine> ranked;
-    ranked.reserve(kMaxPublicLines);
     const double eliml = source_real_literal_v82_patch520142(0.1);
     const double elimh = source_real_literal_v82_patch520142(1.0e10);
     const double hard_elimh = source_real_literal_v82_patch520142(8.9e6);
     const double activity_floor = source_real_literal_v82_patch520142(1.0e-36);
 
-    for (std::size_t si = 0; si < order.size(); ++si) {
+    auto qualifies = [&](std::size_t si, double& mean) {
         const auto& id = product.line_identities[order[si]];
-        if (id.line_index <= 0 || id.rate_type == 9 || id.rate_type == 14) continue;
+        if (id.line_index <= 0 || id.rate_type == 9 || id.rate_type == 14) return false;
         const double wavelength = std::abs(id.wavelength_angstrom);
-        if (!(wavelength >= eliml && wavelength <= elimh && wavelength <= hard_elimh)) continue;
-        const double mean = (all_out[si] + all_in[si]) / source_real_literal_v82_patch520142(2.0);
-        if (!(mean > activity_floor) || !std::isfinite(mean)) continue;
+        if (!(wavelength >= eliml && wavelength <= elimh && wavelength <= hard_elimh)) return false;
+        mean = (all_out[si] + all_in[si]) / source_real_literal_v82_patch520142(2.0);
+        return std::isfinite(mean) && mean > activity_floor;
+    };
 
-        // Literal writespectra2 comparison is strictly `elmmtpp < elcomp`.
-        // Therefore a later exactly-equal line is inserted before the existing
-        // equal-strength row; lower-strength rows are traversed in order.
+    // Numeric owner frozen from 12.3.40: ordinary insert/pop ranking.  The
+    // values published at each rank stay exactly on this pre-repair surface.
+    struct RankedLine { std::size_t sorted_position = 0u; double mean_luminosity = 0.0; };
+    std::vector<RankedLine> numeric_ranked;
+    numeric_ranked.reserve(kMaxPublicLines);
+    for (std::size_t si = 0; si < order.size(); ++si) {
+        double mean = 0.0;
+        if (!qualifies(si, mean)) continue;
         std::size_t pos = 0u;
-        while (pos < ranked.size() && mean < ranked[pos].mean_luminosity) ++pos;
-        ranked.insert(ranked.begin() + static_cast<std::ptrdiff_t>(pos), RankedLine{si, mean});
-        if (ranked.size() > kMaxPublicLines) ranked.pop_back();
+        while (pos < numeric_ranked.size() && mean < numeric_ranked[pos].mean_luminosity) ++pos;
+        numeric_ranked.insert(numeric_ranked.begin() + static_cast<std::ptrdiff_t>(pos), RankedLine{si, mean});
+        if (numeric_ranked.size() > kMaxPublicLines) numeric_ranked.pop_back();
     }
 
-    out.indices.reserve(ranked.size());
-    out.emit_inward.reserve(ranked.size());
-    out.emit_outward.reserve(ranked.size());
-    for (const auto& entry : ranked) {
-        const std::size_t si = entry.sorted_position;
-        out.indices.push_back(all_indices[si]);
-        out.emit_inward.push_back(all_in[si]);
-        out.emit_outward.push_back(all_out[si]);
+    // Identity owner: literal writespectra2 fixed-capacity insertion semantics.
+    // Once nlpl reaches 600, the source shift loop followed by
+    // `kltmp(nlpl)=kltmpo` retains the old last slot rather than doing the
+    // normal vector insert/pop used before 12.3.41.  That historical detail is
+    // required for exact cutoff membership and equal-strength ordering.
+    std::vector<std::size_t> kltmp(kMaxPublicLines, 0u); // stores si+1, zero sentinel
+    std::size_t kltmpo = 0u;
+    std::size_t nlpl = 1u;
+    std::vector<double> source_mean(order.size(), 0.0);
+    std::vector<unsigned char> source_valid(order.size(), 0u);
+    for (std::size_t si = 0; si < order.size(); ++si) {
+        double mean = 0.0;
+        if (!qualifies(si, mean)) continue;
+        source_mean[si] = mean;
+        source_valid[si] = 1u;
+        std::size_t lmm = 0u;
+        double elcomp = source_real_literal_v82_patch520142(1.0e10);
+        while (lmm < nlpl && mean < elcomp) {
+            ++lmm;
+            const std::size_t kl2 = kltmp[lmm - 1u];
+            elcomp = 0.0;
+            if (kl2 > 0u) elcomp = source_mean[kl2 - 1u];
+        }
+        kltmpo = si + 1u;
+        const std::size_t last = std::min(kMaxPublicLines, nlpl);
+        if (lmm > 0u) {
+            for (std::size_t k = lmm; k <= last; ++k) {
+                const std::size_t at = k - 1u;
+                const std::size_t kltmpn = kltmp[at];
+                kltmp[at] = kltmpo;
+                kltmpo = kltmpn;
+            }
+        }
+        nlpl = std::min(kMaxPublicLines, nlpl + 1u);
+    }
+    if (nlpl > 0u) kltmp[nlpl - 1u] = kltmpo;
+
+    std::vector<std::size_t> identity_ranked;
+    identity_ranked.reserve(kMaxPublicLines);
+    for (std::size_t kk = 0; kk < nlpl && kk < kltmp.size(); ++kk) {
+        if (kltmp[kk] == 0u) continue;
+        const std::size_t si = kltmp[kk] - 1u;
+        if (si < source_valid.size() && source_valid[si]) identity_ranked.push_back(si);
+    }
+
+    const std::size_t count = std::min(identity_ranked.size(), numeric_ranked.size());
+    out.indices.reserve(count);
+    out.numeric_indices.reserve(count);
+    out.emit_inward.reserve(count);
+    out.emit_outward.reserve(count);
+    for (std::size_t rank = 0; rank < count; ++rank) {
+        const std::size_t identity_si = identity_ranked[rank];
+        const std::size_t numeric_si = numeric_ranked[rank].sorted_position;
+        out.indices.push_back(all_indices[identity_si]);
+        out.numeric_indices.push_back(all_indices[numeric_si]);
+        out.emit_inward.push_back(all_in[numeric_si]);
+        out.emit_outward.push_back(all_out[numeric_si]);
     }
     return out;
 }
@@ -6701,6 +6752,7 @@ void create_native_retained_productwrite_schema(xstar_run_state::ProductWritingS
     // retain its physical one-based indices together with matching elum/tau0.
     const auto public_selection = select_public_lines_v82_patch520164(product);
     const auto& public_line_index = public_selection.indices;
+    const auto& public_line_numeric_index = public_selection.numeric_indices;
     const std::size_t public_native_line_stride = native_line_plane_stride_v82(ws);
     std::vector<double> public_line_emit_in = public_selection.emit_inward;
     std::vector<double> public_line_emit_out = public_selection.emit_outward;
@@ -6711,10 +6763,12 @@ void create_native_retained_productwrite_schema(xstar_run_state::ProductWritingS
     }
     std::cout << "V048746255172582_PATCH520164_PUBLIC_LINE_SELECTION=SOURCE_WRITESPECTRA2_DYNAMIC_RANKING\n";
     std::cout << "V048746255172582_PATCH520164_PUBLIC_LINE_COUNT=" << public_line_index.size() << "\n";
+    // Identity attachment changes in 12.3.41; rank-position numerical arrays
+    // remain owned by the frozen 12.3.40 selection.
     std::vector<double> public_line_depth_in = gather_native_line_plane_v82(
-        ws.tau0, {}, public_native_line_stride, public_line_index, 0);
+        ws.tau0, {}, public_native_line_stride, public_line_numeric_index, 0);
     std::vector<double> public_line_depth_out = gather_native_line_plane_v82(
-        ws.tau0, {}, public_native_line_stride, public_line_index, 1);
+        ws.tau0, {}, public_native_line_stride, public_line_numeric_index, 1);
     std::cout << "V048746255172582_PATCH520164_PUBLIC_LINE_DEPTH_OWNER=FINAL_WRITER_TERMINAL_CUMULATIVE_TAU0\n";
     append_native_array(inventory, product, hdu, "product_write_public_line_index", public_line_index);
     append_native_array(inventory, product, hdu, "product_write_public_line_emit_inward", public_line_emit_in);

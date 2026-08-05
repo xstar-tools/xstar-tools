@@ -729,6 +729,85 @@ struct PublicLineLogRow {
     long long index=0; std::string ion; double wavelength=0, emit_in=0, emit_out=0, depth_in=0, depth_out=0;
 };
 
+struct SourceRankIdentityV064812341 {
+    const xstar_run_state::LineIdentityState* identity = nullptr;
+    double key = 0.0;
+};
+
+std::vector<SourceRankIdentityV064812341> source_pprint_line_identity_rank_v064812341(
+    const xstar_run_state::ProductWritingState& state,
+    bool depth_mode,
+    std::size_t maximum_rows) {
+    std::vector<SourceRankIdentityV064812341> result;
+    if (state.radial_zones.empty() || state.line_identities.empty() || maximum_rows == 0u) return result;
+    const auto& ws = state.radial_zones.back().accepted_controller.evaluation.source_workspace;
+    const std::size_t elum_stride = ws.elum.size() >= 2u && ws.elum.size() % 2u == 0u ? ws.elum.size() / 2u : 0u;
+    const std::size_t tau_stride = ws.tau0.size() >= 2u && ws.tau0.size() % 2u == 0u ? ws.tau0.size() / 2u : 0u;
+    if ((!depth_mode && elum_stride == 0u) || (depth_mode && tau_stride == 0u)) return result;
+
+    std::vector<const xstar_run_state::LineIdentityState*> ordered;
+    ordered.reserve(state.line_identities.size());
+    for (const auto& id : state.line_identities) if (id.line_index > 0) ordered.push_back(&id);
+    std::sort(ordered.begin(), ordered.end(), [](const auto* a, const auto* b) {
+        return a->line_index < b->line_index;
+    });
+
+    std::vector<std::size_t> kltmp(maximum_rows, 0u); // ordered index + 1, zero sentinel
+    std::vector<double> keys(ordered.size(), 0.0);
+    std::vector<unsigned char> valid(ordered.size(), 0u);
+    std::size_t kltmpo = 0u;
+    std::size_t nlpl = 1u;
+    for (std::size_t si = 0; si < ordered.size(); ++si) {
+        const auto& id = *ordered[si];
+        if (id.rate_type == 9 || id.rate_type == 14) continue;
+        const double wavelength = std::abs(id.wavelength_angstrom);
+        if (!(wavelength >= 0.1 && wavelength <= 1.0e10 && wavelength <= 8.9e6)) continue;
+        const std::size_t slot = static_cast<std::size_t>(id.line_index);
+        double key = 0.0;
+        if (depth_mode) {
+            if (slot >= tau_stride || tau_stride + slot >= ws.tau0.size()) continue;
+            key = std::isfinite(ws.tau0[slot]) ? ws.tau0[slot] : 0.0;
+        } else {
+            if (slot >= elum_stride || elum_stride + slot >= ws.elum.size()) continue;
+            const double inward = std::isfinite(ws.elum[slot]) ? ws.elum[slot] : 0.0;
+            const double outward = std::isfinite(ws.elum[elum_stride + slot]) ? ws.elum[elum_stride + slot] : 0.0;
+            key = 0.5 * (inward + outward);
+        }
+        // pprint(1/23) uses a double-precision 1.d-49 activity gate.
+        if (!(std::isfinite(key) && key > 1.0e-49)) continue;
+        keys[si] = key;
+        valid[si] = 1u;
+
+        std::size_t lmm = 0u;
+        double elcomp = 1.0e10;
+        while (lmm < nlpl && key < elcomp) {
+            ++lmm;
+            const std::size_t kl2 = kltmp[lmm - 1u];
+            elcomp = 0.0;
+            if (kl2 > 0u) elcomp = keys[kl2 - 1u];
+        }
+        kltmpo = si + 1u;
+        const std::size_t last = std::min(maximum_rows, nlpl);
+        if (lmm > 0u) {
+            for (std::size_t k = lmm; k <= last; ++k) {
+                const std::size_t at = k - 1u;
+                const std::size_t kltmpn = kltmp[at];
+                kltmp[at] = kltmpo;
+                kltmpo = kltmpn;
+            }
+        }
+        nlpl = std::min(maximum_rows, nlpl + 1u);
+    }
+    if (nlpl > 0u) kltmp[nlpl - 1u] = kltmpo;
+    result.reserve(maximum_rows);
+    for (std::size_t kk = 0; kk < nlpl && kk < kltmp.size(); ++kk) {
+        if (kltmp[kk] == 0u) continue;
+        const std::size_t si = kltmp[kk] - 1u;
+        if (si < ordered.size() && valid[si]) result.push_back({ordered[si], keys[si]});
+    }
+    return result;
+}
+
 void append_native_public_line_sections(std::ofstream& out,
                                         const std::filesystem::path& output_dir,
                                         const xstar_run_state::ProductWritingState& state) {
@@ -752,7 +831,17 @@ void append_native_public_line_sections(std::ofstream& out,
     auto luminosity_rows=rows;
     std::stable_sort(luminosity_rows.begin(),luminosity_rows.end(),[](const auto&a,const auto&b){return (a.emit_in+a.emit_out)>(b.emit_in+b.emit_out);});
     const std::size_t luminosity_count=std::min<std::size_t>(500,luminosity_rows.size());
-    for(std::size_t k=0;k<luminosity_count;++k){const auto&r=luminosity_rows[k];out<<std::setw(8)<<(k+1)<<std::setw(8)<<r.index<<" "<<std::left<<std::setw(10)<<r.ion<<std::right<<std::setw(14)<<std::uppercase<<std::scientific<<std::setprecision(5)<<r.wavelength<<std::setw(14)<<r.emit_in<<std::setw(14)<<r.emit_out<<"\n";}
+    const auto luminosity_identities = source_pprint_line_identity_rank_v064812341(state, false, 500u);
+    for(std::size_t k=0;k<luminosity_count;++k){
+        const auto& numeric=luminosity_rows[k];
+        const auto* id = k < luminosity_identities.size() ? luminosity_identities[k].identity : nullptr;
+        const long long index = id ? id->line_index : numeric.index;
+        const std::string ion = id ? id->ion_label : numeric.ion;
+        const double wavelength = id ? id->wavelength_angstrom : numeric.wavelength;
+        out<<std::setw(8)<<(k+1)<<std::setw(8)<<index<<" "<<std::left<<std::setw(10)<<ion<<std::right
+           <<std::setw(14)<<std::uppercase<<std::scientific<<std::setprecision(5)<<wavelength
+           <<std::setw(14)<<numeric.emit_in<<std::setw(14)<<numeric.emit_out<<"\n";
+    }
     out<<"\n print option:23\n";
     if (state.diagnostic_preview_partial) {
         out<<" diagnostic partial values: terminal radial depth has not been reached\n";
@@ -777,7 +866,17 @@ void append_native_public_line_sections(std::ofstream& out,
     if(depth_rows.empty()) depth_rows=rows;
     std::stable_sort(depth_rows.begin(),depth_rows.end(),[](const auto&a,const auto&b){return a.depth_in>b.depth_in;});
     const std::size_t depth_count=std::min<std::size_t>(500,depth_rows.size());
-    for(std::size_t k=0;k<depth_count;++k){const auto&r=depth_rows[k];out<<std::setw(8)<<(k+1)<<std::setw(8)<<r.index<<" "<<std::left<<std::setw(10)<<r.ion<<std::right<<std::setw(14)<<std::uppercase<<std::scientific<<std::setprecision(5)<<r.wavelength<<std::setw(14)<<r.depth_in<<std::setw(14)<<r.depth_out<<"\n";}
+    const auto depth_identities = source_pprint_line_identity_rank_v064812341(state, true, 500u);
+    for(std::size_t k=0;k<depth_count;++k){
+        const auto& numeric=depth_rows[k];
+        const auto* id = k < depth_identities.size() ? depth_identities[k].identity : nullptr;
+        const long long index = id ? id->line_index : numeric.index;
+        const std::string ion = id ? id->ion_label : numeric.ion;
+        const double wavelength = id ? id->wavelength_angstrom : numeric.wavelength;
+        out<<std::setw(8)<<(k+1)<<std::setw(8)<<index<<" "<<std::left<<std::setw(10)<<ion<<std::right
+           <<std::setw(14)<<std::uppercase<<std::scientific<<std::setprecision(5)<<wavelength
+           <<std::setw(14)<<numeric.depth_in<<std::setw(14)<<numeric.depth_out<<"\n";
+    }
     out<<"\n";out.unsetf(std::ios::floatfield);out<<std::setprecision(17);
 }
 
