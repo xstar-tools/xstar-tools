@@ -1,5 +1,15 @@
 # CHANGELOG
 
+# 0.6.48.12.3.42.1 - 2026-08-05
+
+- Publication-only residual STEP semantic closure after the fresh 12.3.42 all-62 run closed all numerical/trajectory science but retained rank/inventory diagnostics.
+- Add the literal FORTRAN Option-15 line eligibility filter (`rate_type != 9/14`, `0.1 < abs(wavelength) < 9e9`); existing-62 projection removes 5,735 over-published rows and closes Option-15 inventory in 62/62.
+- Retain RRC source `rate_type` during ATDB lowering and restrict STEP Options 19/24 to source rate-type 7 ownership, matching `pprint.f90`.
+- Keep the 12.3.41 source-literal Options 1/23 identity owner frozen; classify 49 identical-membership local rank crossings and one rank-500 fixed-capacity cutoff sensitivity separately from attachment defects.
+- Quarantine the previously identified FORTRAN Option-24 stale-local alias bug instead of copying corrupted aliases into clean C++ metadata.
+- No changes to FITS science writers, fixed-state/rate/matrix/Type50/thermal/opacity science, trajectories, or production-zone ABI 6048110.
+- Final FITS qualification 12.3.43 remains deferred until the 12.3.42.1 targeted host gate passes.
+
 # 0.6.48.12.3.42 - 2026-08-05
 
 - Qualification-only fresh all-62 final STEP requalification; no production implementation change relative to 0.6.48.12.3.41.

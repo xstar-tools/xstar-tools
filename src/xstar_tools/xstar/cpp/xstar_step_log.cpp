@@ -1081,6 +1081,10 @@ void append_native_public_rrc_sections(std::ofstream& out,
     // arrays only through exact npconi2. A zero pointer has no public slot.
     for (const auto& id : state.rrc_identities) {
         if (id.continuum_index <= 0) continue;
+        // pprint(19/24) traverses npfi(7,jkk) only. Newly lowered metadata
+        // retains that source rate family explicitly. rate_type==0 is kept as
+        // a compatibility allowance for legacy/synthetic metadata caches.
+        if (id.rate_type != 0 && id.rate_type != 7) continue;
         const std::size_t slot = static_cast<std::size_t>(id.continuum_index);
         const double tau_in = slot < tauc_stride ? ws.tauc[slot] : 0.0;
         const double tau_out = slot < tauc_stride ? ws.tauc[tauc_stride + slot] : 0.0;
@@ -1201,7 +1205,10 @@ void append_native_detail_line_section(
     std::vector<const xstar_run_state::LineIdentityState*> ordered;
     ordered.reserve(state.line_identities.size());
     for (const auto& id : state.line_identities) {
+        const double source_wavelength = std::abs(id.wavelength_angstrom);
         if (id.line_index > 0 &&
+            id.rate_type != 9 && id.rate_type != 14 &&
+            source_wavelength > 0.1 && source_wavelength < 9.0e9 &&
             (id.data_type == 50 || id.data_type == 54 ||
              id.data_type == 71 || id.data_type == 76)) {
             ordered.push_back(&id);

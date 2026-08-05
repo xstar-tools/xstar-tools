@@ -1176,6 +1176,8 @@ ProgramStorage lower_atdb_in_memory(const std::filesystem::path& atdb,const Prod
                 id.upper_level="continuum";
                 id.lower_local_index=local;
                 id.upper_local_index=upper_seed>0?b.nlev+upper_seed-1:0;
+                id.rate_type=h.rate_type;
+                id.source_record=rec;
                 out.rrc_identities.push_back(id);
             }
         }

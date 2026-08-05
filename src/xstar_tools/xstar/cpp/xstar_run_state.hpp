@@ -73,6 +73,10 @@ struct RrcIdentityState {
     std::string upper_level;
     std::int32_t lower_local_index = 0;
     std::int32_t upper_local_index = 0;
+    // v0648123421: source publication ownership retained for pprint(19/24).
+    // Zero is reserved for legacy/synthetic metadata that predates this field.
+    std::int32_t rate_type = 0;
+    std::int64_t source_record = 0;
 };
 
 struct ExactSourceWorkspaceState {
