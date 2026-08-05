@@ -1081,10 +1081,10 @@ void append_native_public_rrc_sections(std::ofstream& out,
     // arrays only through exact npconi2. A zero pointer has no public slot.
     for (const auto& id : state.rrc_identities) {
         if (id.continuum_index <= 0) continue;
-        // pprint(19/24) traverses npfi(7,jkk) only. Newly lowered metadata
-        // retains that source rate family explicitly. rate_type==0 is kept as
-        // a compatibility allowance for legacy/synthetic metadata caches.
-        if (id.rate_type != 0 && id.rate_type != 7) continue;
+        // pprint(19/24) traverses npfi(7,jkk) only. Production ATDB lowering
+        // retains that source rate family explicitly; do not admit legacy
+        // rate_type==0 placeholders on this canonical publication path.
+        if (id.rate_type != 7) continue;
         const std::size_t slot = static_cast<std::size_t>(id.continuum_index);
         const double tau_in = slot < tauc_stride ? ws.tauc[slot] : 0.0;
         const double tau_out = slot < tauc_stride ? ws.tauc[tauc_stride + slot] : 0.0;
@@ -1206,11 +1206,14 @@ void append_native_detail_line_section(
     ordered.reserve(state.line_identities.size());
     for (const auto& id : state.line_identities) {
         const double source_wavelength = std::abs(id.wavelength_angstrom);
+        // Literal pprint(15) walks the complete nplin inventory.  Its public
+        // eligibility gate is rate type + wavelength (+ element abundance,
+        // already enforced by the active-element lowering); it does NOT
+        // whitelist line data types.  The 12.3.42.1 data-type restriction
+        // incorrectly removed about 200 canonical rows per qualification model.
         if (id.line_index > 0 &&
             id.rate_type != 9 && id.rate_type != 14 &&
-            source_wavelength > 0.1 && source_wavelength < 9.0e9 &&
-            (id.data_type == 50 || id.data_type == 54 ||
-             id.data_type == 71 || id.data_type == 76)) {
+            source_wavelength > 0.1 && source_wavelength < 9.0e9) {
             ordered.push_back(&id);
         }
     }

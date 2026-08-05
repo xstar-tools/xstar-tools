@@ -1,5 +1,17 @@
 # CHANGELOG
 
+# 0.6.48.12.3.42.1.1 - 2026-08-05
+
+- Hotfix for the failed 0.6.48.12.3.42.1 targeted STEP publication gate; still publication-only and still before final FITS qualification.
+- Repair Option 15 under-publication by removing the accidental data-type whitelist. Literal FORTRAN `pprint(15)` walks the complete `nplin` inventory and gates only by rate type, wavelength, and elemental abundance.
+- Make STEP Options 19/24 source ownership strict (`rate_type == 7`); remove the legacy `rate_type==0` compatibility allowance from the canonical production STEP path.
+- Preserve hidden ATDB `rate_type/source_record` ownership when the legacy retained-product helper pads RRC identities to 1849 synthetic slots. FITS-visible synthetic identity fields remain unchanged, so `xout_rrc1` remains frozen while STEP publication regains source ownership.
+- Make the quarantined Option-24 stale-local classifier semantic rather than index-list-specific: candidate-only rows are accepted only when they are clean He II identities and reference-only tails are negligible.
+- Extend retained RRC CSV metadata read/write with optional `rate_type/source_record` fields for forward-compatible diagnostic/bridge paths.
+- Force a clean candidate C++ rebuild in the hotfix qualification runner to prevent stale objects from masking RRC metadata changes.
+- Preserve ABI `6048110`, fixed-state/rate/matrix/Type50/thermal/opacity science, all nine FITS values, trajectories, and the 12.3.41 rank attachment algorithm.
+- Promotion still requires six fresh models with nine-FITS bit-exactness to 12.3.42, STEP numerical/rank-position freeze, canonical trajectories, exact Option-15/19 inventories, and only quarantined Option-24 stale-local differences.
+
 # 0.6.48.12.3.42.1 - 2026-08-05
 
 - Publication-only residual STEP semantic closure after the fresh 12.3.42 all-62 run closed all numerical/trajectory science but retained rank/inventory diagnostics.

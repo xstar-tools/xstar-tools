@@ -317,6 +317,8 @@ void load_exact_source_metadata(WholeRunAccumulatedState& state) {
         row.upper_level = value("upper_level");
         row.lower_local_index = std::stoi(value("lower_local_index"));
         row.upper_local_index = std::stoi(value("upper_local_index"));
+        try { row.rate_type = std::stoi(value("rate_type")); } catch (...) { row.rate_type = 0; }
+        try { row.source_record = std::stoll(value("source_record")); } catch (...) { row.source_record = 0; }
         state.rrc_identities.push_back(std::move(row));
     });
     state.parameter_rows.clear();

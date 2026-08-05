@@ -6058,11 +6058,11 @@ void write_native_productwrite_csvs(const xstar_run_state::ProductWritingState& 
     }
     {
         std::ofstream out(bridge / "rrc_identities.csv");
-        out << "continuum_index,level_global_index,threshold_ev,ion_label,lower_level,upper_level,lower_local_index,upper_local_index\n";
+        out << "continuum_index,level_global_index,threshold_ev,ion_label,lower_level,upper_level,lower_local_index,upper_local_index,rate_type,source_record\n";
         for (const auto& id : product.rrc_identities) {
             out << id.continuum_index << ',' << id.level_global_index << ',' << std::setprecision(17) << id.threshold_ev << ','
                 << csv_escape_field(id.ion_label) << ',' << csv_escape_field(id.lower_level) << ',' << csv_escape_field(id.upper_level) << ','
-                << id.lower_local_index << ',' << id.upper_local_index << '\n';
+                << id.lower_local_index << ',' << id.upper_local_index << ',' << id.rate_type << ',' << id.source_record << '\n';
         }
     }
 }
@@ -10084,8 +10084,27 @@ void ensure_retained_native_public_metadata_v172530(xstar_run_state::WholeRunAcc
         }
     }
     if (whole.rrc_identities.size() < 1849u) {
+        // The historical retained-product surface pads the RRC identity vector
+        // to the Mg-era 1849-slot publication capacity.  Preserve that exact
+        // FITS-visible synthetic identity surface, but do not discard hidden
+        // source ownership needed by pprint(19/24): carry rate_type/source_record
+        // from the real ATDB-derived identity at the same npconi2 slot.
+        std::map<std::int32_t, std::pair<std::int32_t, std::int64_t>> source_owner_by_continuum;
+        for (const auto& existing : whole.rrc_identities) {
+            if (existing.continuum_index > 0) {
+                source_owner_by_continuum[existing.continuum_index] =
+                    {existing.rate_type, existing.source_record};
+            }
+        }
         auto rrcs = synthesize_rrc_identities_from_native_state(whole.level_identities, 1849u, ws);
         if (rrcs.size() > whole.rrc_identities.size()) {
+            for (auto& synthetic : rrcs) {
+                const auto found = source_owner_by_continuum.find(synthetic.continuum_index);
+                if (found != source_owner_by_continuum.end()) {
+                    synthetic.rate_type = found->second.first;
+                    synthetic.source_record = found->second.second;
+                }
+            }
             whole.rrc_identities.assign(rrcs.begin(), rrcs.begin() + static_cast<std::ptrdiff_t>(std::min<std::size_t>(rrcs.size(), 1849u)));
         }
     }
