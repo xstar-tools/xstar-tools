@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.12.3.45.2.1 - 2026-08-06
+
+- Readiness-only hotfix for the 45.2 diagnostic-first package.
+- Fix the C++ byte-freeze check so it compares only tracked C++ source inputs from the 45.1 source manifest.
+- Ignore transient in-place build products (`*.so`, `*.o`, `xstar_cpp`) that may exist in a compiled 45.1 baseline working tree.
+- Keep the independent frozen-44 production-source hash gate unchanged.
+- No Python science/publication/transport changes; no C++ science changes; ABI 6048110 remains frozen.
+
 # 0.6.48.12.3.45.2 - 2026-08-06
 
 - Diagnostic-first Python-controller transport attribution only; no production-science repair is attempted in this release.
