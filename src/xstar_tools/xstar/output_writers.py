@@ -424,23 +424,36 @@ def build_detail_rrc_table(
     opakab: Sequence[float],
     tauc: np.ndarray,
     header: ShellOutputHeader,
+    source_publication_shadow: Mapping[int, Mapping[str, float]] | None = None,
 ) -> OutputTable:
     emiss = np.asarray(cemab, dtype=float)
     absorbed = np.asarray(cabab, dtype=float).reshape(-1)
     opacity = np.asarray(opakab, dtype=float).reshape(-1)
     depth = np.asarray(tauc, dtype=float)
+    shadow = source_publication_shadow or {}
     rows: list[RRCOutputMetadata] = []
+    payload: dict[int, tuple[float, float, float, float]] = {}
     for item in metadata.rrcs:
         i = item.continuum_index - 1
         if min(i, emiss.shape[1] - 1, absorbed.size - 1, opacity.size - 1, depth.shape[1] - 1) < 0:
             continue
-        if (
-            emiss[0, i] > DETAIL_RRC_ACTIVITY_FLOOR
-            or emiss[1, i] > DETAIL_RRC_ACTIVITY_FLOOR
-            or absorbed[i] > DETAIL_RRC_ACTIVITY_FLOOR
-            or opacity[i] > DETAIL_RRC_ACTIVITY_FLOOR
-        ):
+        current = (float(emiss[0, i]), float(emiss[1, i]), float(absorbed[i]), float(opacity[i]))
+        active = any(v > DETAIL_RRC_ACTIVITY_FLOOR for v in current)
+        if not active:
+            source = shadow.get(int(item.continuum_index))
+            if source is not None:
+                source_values = (
+                    float(source.get("emis_inward", 0.0)),
+                    float(source.get("emis_outward", 0.0)),
+                    float(source.get("integrated_absn", 0.0)),
+                    float(source.get("opacity", 0.0)),
+                )
+                if any(v > DETAIL_RRC_ACTIVITY_FLOOR for v in source_values):
+                    current = source_values
+                    active = True
+        if active:
             rows.append(item)
+            payload[int(item.continuum_index)] = current
     values = {
         "rrc index": np.asarray([r.continuum_index for r in rows], dtype=np.int32),
         "level index": np.asarray([r.level_global_index for r in rows], dtype=np.int32),
@@ -448,10 +461,10 @@ def build_detail_rrc_table(
         "ion": np.asarray([_fixed(r.ion_label, 8) for r in rows], dtype="U8"),
         "lower_level": np.asarray([_fixed(r.lower_level, 20) for r in rows], dtype="U20"),
         "upper_level": np.asarray([_fixed(r.upper_level, 20) for r in rows], dtype="U20"),
-        "emis_inward": _r4_array([emiss[0, r.continuum_index - 1] for r in rows]),
-        "emis_outward": _r4_array([emiss[1, r.continuum_index - 1] for r in rows]),
-        "integrated absn": _r4_array([absorbed[r.continuum_index - 1] for r in rows]),
-        "opacity": _r4_array([opacity[r.continuum_index - 1] for r in rows]),
+        "emis_inward": _r4_array([payload[r.continuum_index][0] for r in rows]),
+        "emis_outward": _r4_array([payload[r.continuum_index][1] for r in rows]),
+        "integrated absn": _r4_array([payload[r.continuum_index][2] for r in rows]),
+        "opacity": _r4_array([payload[r.continuum_index][3] for r in rows]),
         "tau_in": _r4_array([depth[0, r.continuum_index - 1] for r in rows]),
         "tau_out": _r4_array([depth[1, r.continuum_index - 1] for r in rows]),
     }
@@ -530,6 +543,7 @@ def build_detail_shell_output(
     dpthc: np.ndarray,
     ncn2: int,
     source_detail_line_activity_shadow: Sequence[bool] | None = None,
+    source_detail_rrc_publication_shadow: Mapping[int, Mapping[str, float]] | None = None,
 ) -> DetailShellOutput:
     return DetailShellOutput(
         levels=build_detail_level_table(metadata=metadata, populations=populations, lte_populations=lte_populations, header=header),
@@ -537,7 +551,10 @@ def build_detail_shell_output(
             metadata=metadata, rcem=rcem, oplin=oplin, tau0=tau0, header=header,
             source_activity_shadow=source_detail_line_activity_shadow,
         ),
-        rrcs=build_detail_rrc_table(metadata=metadata, cemab=cemab, cabab=cabab, opakab=opakab, tauc=tauc, header=header),
+        rrcs=build_detail_rrc_table(
+            metadata=metadata, cemab=cemab, cabab=cabab, opakab=opakab, tauc=tauc, header=header,
+            source_publication_shadow=source_detail_rrc_publication_shadow,
+        ),
         continuum=build_detail_continuum_table(epi_eV=epi_eV, zrems=zrems, opakc=opakc, rccemis=rccemis, dpthc=dpthc, ncn2=ncn2, header=header),
     )
 
@@ -1627,40 +1644,93 @@ def build_final_spectrum_table(
     )
 
 
-def _rank_final_lines(metadata: SourceOutputMetadata, elum: np.ndarray) -> list[LineOutputMetadata]:
+def _select_final_line_rows(
+    metadata: SourceOutputMetadata, elum: np.ndarray
+) -> tuple[list[LineOutputMetadata], list[LineOutputMetadata]]:
+    """Return source identity rank and frozen numerical rank separately."""
     lum = np.asarray(elum, dtype=float)
-    eligible: list[tuple[float, int, LineOutputMetadata]] = []
-    for order, row in enumerate(metadata.lines):
-        i = row.line_index - 1
-        if i < 0 or i >= lum.shape[1]:
-            continue
-        mean = 0.5 * (lum[0, i] + lum[1, i])
+    ordered = sorted(metadata.lines, key=lambda row: int(row.line_index))
+
+    def qualifies(row: LineOutputMetadata) -> tuple[bool, float]:
+        i = int(row.line_index) - 1
+        if i < 0 or i >= lum.shape[1] or row.rate_type in (9, 14):
+            return False, 0.0
         wave = abs(float(row.wavelength_angstrom))
-        if row.rate_type in (9, 14) or wave < 0.1 or wave > 1.0e10 or wave > 8.9e6 or mean <= FINAL_LINE_ACTIVITY_FLOOR:
+        if not (wave >= float(np.float32(0.1)) and wave <= float(np.float32(1.0e10)) and wave <= float(np.float32(8.9e6))):
+            return False, 0.0
+        mean = (float(lum[0, i]) + float(lum[1, i])) / float(np.float32(2.0))
+        return bool(np.isfinite(mean) and mean > float(np.float32(FINAL_LINE_ACTIVITY_FLOOR))), mean
+
+    # Frozen pre-12.3.41 numerical rank: insert before equal and pop the tail.
+    numeric: list[tuple[float, int, LineOutputMetadata]] = []
+    for order, row in enumerate(ordered):
+        ok, mean = qualifies(row)
+        if ok:
+            numeric.append((-mean, -order, row))
+    numeric.sort()
+    numeric_rows = [row for _, _, row in numeric[:FINAL_LINE_LIMIT]]
+
+    # Literal writespectra2 fixed-capacity kltmp identity rank.
+    kltmp = [0] * FINAL_LINE_LIMIT
+    keys = [0.0] * len(ordered)
+    valid = [False] * len(ordered)
+    kltmpo = 0
+    nlpl = 1
+    for si, row in enumerate(ordered):
+        ok, mean = qualifies(row)
+        if not ok:
             continue
-        eligible.append((mean, order, row))
-    eligible.sort(key=lambda item: (-item[0], item[1]))
-    return [item[2] for item in eligible[:FINAL_LINE_LIMIT]]
+        keys[si] = mean
+        valid[si] = True
+        lmm = 0
+        elcomp = 1.0e10
+        while lmm < nlpl and mean < elcomp:
+            lmm += 1
+            kl2 = kltmp[lmm - 1]
+            elcomp = keys[kl2 - 1] if kl2 > 0 else 0.0
+        kltmpo = si + 1
+        last = min(FINAL_LINE_LIMIT, nlpl)
+        if lmm > 0:
+            for k in range(lmm, last + 1):
+                at = k - 1
+                kltmpn = kltmp[at]
+                kltmp[at] = kltmpo
+                kltmpo = kltmpn
+        nlpl = min(FINAL_LINE_LIMIT, nlpl + 1)
+    if nlpl > 0:
+        kltmp[nlpl - 1] = kltmpo
+    identity_rows: list[LineOutputMetadata] = []
+    for kk in range(min(nlpl, len(kltmp))):
+        if kltmp[kk] == 0:
+            continue
+        si = kltmp[kk] - 1
+        if 0 <= si < len(ordered) and valid[si]:
+            identity_rows.append(ordered[si])
+    return identity_rows, numeric_rows
 
 
 def build_final_line_table(*, metadata: SourceOutputMetadata, elum: np.ndarray, tau0: np.ndarray, timing: dict[str, float] | None = None) -> OutputTable:
     _t0 = time.perf_counter()
     lum = np.asarray(elum, dtype=float); depth = np.asarray(tau0, dtype=float)
-    rows = _rank_final_lines(metadata, lum)
+    identity_rows, numeric_rows = _select_final_line_rows(metadata, lum)
+    count = min(len(identity_rows), len(numeric_rows))
+    identities = identity_rows[:count]
+    numerics = numeric_rows[:count]
     values = {
-        "index": np.asarray([r.line_index for r in rows], dtype=np.int32),
-        "ion": np.asarray([_fixed(r.ion_label, 9) for r in rows], dtype="U9"),
-        "lower_level": np.asarray([_fixed(r.lower_level, 20) for r in rows], dtype="U20"),
-        "upper_level": np.asarray([_fixed(r.upper_level, 20) for r in rows], dtype="U20"),
-        "wavelength": _r4_array([abs(r.wavelength_angstrom) for r in rows]),
-        "emit_inward": _r4_array([lum[0, r.line_index - 1] for r in rows]),
-        "emit_outward": _r4_array([lum[1, r.line_index - 1] for r in rows]),
-        "depth_inward": _r4_array([depth[0, r.line_index - 1] for r in rows]),
-        "depth_outward": _r4_array([depth[1, r.line_index - 1] for r in rows]),
+        "index": np.asarray([r.line_index for r in identities], dtype=np.int32),
+        "ion": np.asarray([_fixed(r.ion_label, 9) for r in identities], dtype="U9"),
+        "lower_level": np.asarray([_fixed(r.lower_level, 20) for r in identities], dtype="U20"),
+        "upper_level": np.asarray([_fixed(r.upper_level, 20) for r in identities], dtype="U20"),
+        "wavelength": _r4_array([abs(r.wavelength_angstrom) for r in identities]),
+        "emit_inward": _r4_array([lum[0, r.line_index - 1] for r in numerics]),
+        "emit_outward": _r4_array([lum[1, r.line_index - 1] for r in numerics]),
+        "depth_inward": _r4_array([depth[0, r.line_index - 1] for r in numerics]),
+        "depth_outward": _r4_array([depth[1, r.line_index - 1] for r in numerics]),
     }
+
     if timing is not None:
         timing["final_product_build.lines_seconds"] = float(time.perf_counter() - _t0)
-        timing["final_product_build.lines_rows"] = float(len(rows))
+        timing["final_product_build.lines_rows"] = float(count)
     return OutputTable(
         extension_name="XSTAR_LINES",
         columns=tuple(values),
@@ -2561,6 +2631,9 @@ def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int, ter
     source_detail_line_activity_shadow = _source_detail_line_activity_shadow(
         state, metadata, populations_out, workspace.oplin_physical
     )
+    source_detail_rrc_publication_shadow = state.control.get(
+        "source_detail_rrc_publication_shadow_v0648123451", {}
+    )
     ncn2 = int(state.control["ncn2"])
     record = build_detail_shell_output(
         metadata=metadata,
@@ -2581,6 +2654,7 @@ def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int, ter
         dpthc=workspace.dpthc,
         ncn2=ncn2,
         source_detail_line_activity_shadow=source_detail_line_activity_shadow,
+        source_detail_rrc_publication_shadow=source_detail_rrc_publication_shadow,
     )
     _maybe_export_detail_continuum_product_write_state(
         state, hdunum=int(hdunum), terminal_record=bool(terminal_record),

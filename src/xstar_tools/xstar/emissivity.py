@@ -609,6 +609,11 @@ def calc_emisab_ion(
                     denom = ptmp1 + ptmp2
                     if denom == 0.0:
                         raise CalcEmisabPortError("zero continuum escape denominator")
+                    _update_source_detail_rrc_publication_shadow_v0648123451(
+                        context.profile_control, continuum_index=continuum_index,
+                        ptmp1=ptmp1, ptmp2=ptmp2, abund1=abund1, abund2=abund2,
+                        xpx=xpx, ans3=result.ans3, ans4=result.ans4, opakab=result.opakab,
+                    )
                     if native_contributions is not None:
                         native_contributions.append({
                             "source_position": len(native_contributions) + 1,
@@ -774,6 +779,43 @@ def calc_emisab_element(
     )
 
 
+def _update_source_detail_rrc_publication_shadow_v0648123451(
+    control: Optional[MutableMapping[str, Any]], *, continuum_index: int,
+    ptmp1: float, ptmp2: float, abund1: float, abund2: float, xpx: float,
+    ans3: float, ans4: float, opakab: float,
+) -> None:
+    """Retain the last source-active rate-7 write for publication only.
+
+    The FORTRAN caller-local RRC slots are not overwritten when both endpoint
+    abundances fall below the REAL(4) source floor.  Python's deterministic
+    physical workspace is allowed to clear such a slot; this separate shadow
+    preserves only the observable ``fstepr3`` publication owner and is valid
+    for both pure-Python and Python-controller+C++ execution.
+    """
+    if not isinstance(control, MutableMapping) or int(continuum_index) <= 0:
+        return
+    if not (
+        float(abund1) > XSTAR_CALC_EMISAB_LEVEL_ABUNDANCE_FLOOR
+        or float(abund2) > XSTAR_CALC_EMISAB_LEVEL_ABUNDANCE_FLOOR
+    ):
+        return
+    den = float(ptmp1) + float(ptmp2)
+    if den == 0.0:
+        return
+    shadow = control.setdefault(
+        "source_detail_rrc_publication_shadow_v0648123451", {}
+    )
+    if not isinstance(shadow, MutableMapping):
+        shadow = {}
+        control["source_detail_rrc_publication_shadow_v0648123451"] = shadow
+    shadow[int(continuum_index)] = {
+        "emis_inward": float(ptmp1) * abs(float(ans3)) / den * float(abund2) * float(xpx),
+        "emis_outward": float(ptmp2) * abs(float(ans3)) / den * float(abund2) * float(xpx),
+        "integrated_absn": abs(float(ans4)) * float(abund1) * float(xpx),
+        "opacity": float(opakab),
+    }
+
+
 def calc_emisab_all(context: CalcEmisabContext) -> CalcEmisabResult:
     """Execute ``calc_emisab_all.f90`` in literal source order."""
     epi, _, _ = _radiation_arrays(context.radiation)
@@ -783,6 +825,8 @@ def calc_emisab_all(context: CalcEmisabContext) -> CalcEmisabResult:
         n_energy=len(epi),
     )
     context.workspace.clear_source_outputs()
+    if isinstance(context.profile_control, MutableMapping):
+        context.profile_control["source_detail_rrc_publication_shadow_v0648123451"] = {}
     native_product = _native_spectral_requested(product=True)
     native_shadow = _native_spectral_requested(shadow=True)
     native_contributions: Optional[list[dict[str, Any]]] = [] if (native_product or native_shadow) else None

@@ -1,5 +1,15 @@
 # CHANGELOG
 
+# 0.6.48.12.3.45.1 - 2026-08-06
+
+- Shared Python publication/rank parity hotfix; C++ production science remains frozen to the accepted 0.6.48.12.3.44 all-62 three-mode qualification and ABI 6048110.
+- Port the already-qualified FORTRAN/C++ fixed-capacity `kltmp` identity ranking into Python STEP Options 1 and 23, while preserving an independent numerical rank-position owner.
+- Apply the same source `writespectra2` fixed-capacity identity owner to Python `xout_lines1.fits`; numerical emission/depth columns remain attached by the frozen numerical rank owner.
+- Repair Option 27 text publication to the source `(1x,i4,1x,9a1,1pe16.8...)` width and source REAL(4) `1.e-15` activity threshold, so eight-character labels such as `ca_xviii` cannot concatenate with the numeric field.  This is a text/parser defect only; Ca XVIII science was already present in FITS.
+- Restore the source-compatible `phosphoru` abundance publication column name without changing physical element metadata.
+- Retain an output-only, last-active rate-type-7 RRC publication shadow so Python `xo01_detal3` can reproduce caller-local source slot lifetime (including the known C II/C IV 709/762 rows) without modifying physical `cemab/cabab/opakab`, rates, populations, equilibrium, or transport.
+- Qualification is staged: run only `c5_ne1e10` and `ca19_xi2_ne1` first; run the remaining five 45 smoke models only after the primary pair closes.
+
 ## 0.6.48.12.3.45 - 2026-08-06
 
 - Freeze the accepted 0.6.48.12.3.44 C++ production implementation and ABI 6048110 after all-62 three-mode parity reached 186/186 FITS payload bit-exact model-pairs, 186/186 normalized STEP exact model-pairs, and zero pairwise numerical/inventory/attachment/order failures.

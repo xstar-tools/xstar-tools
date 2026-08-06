@@ -65,7 +65,7 @@ NLPRNT = (
 ELEMENT_FULL_NAMES = (
     "hydrogen", "helium", "lithium", "beryllium", "boron",
     "carbon", "nitrogen", "oxygen", "fluorine", "neon",
-    "sodium", "magnesium", "aluminum", "silicon", "phosphorus",
+    "sodium", "magnesium", "aluminum", "silicon", "phosphoru",
     "sulfur", "chlorine", "argon", "potassium", "calcium",
     "scandium", "titanium", "vanadium", "chromium", "manganese",
     "iron", "cobalt", "nickel", "copper", "zinc",
@@ -74,7 +74,7 @@ ELEMENT_SYMBOL_TO_FULL_NAME = {
     "H": "hydrogen", "HE": "helium", "LI": "lithium", "BE": "beryllium",
     "B": "boron", "C": "carbon", "N": "nitrogen", "O": "oxygen",
     "F": "fluorine", "NE": "neon", "NA": "sodium", "MG": "magnesium",
-    "AL": "aluminum", "SI": "silicon", "P": "phosphorus", "S": "sulfur",
+    "AL": "aluminum", "SI": "silicon", "P": "phosphoru", "S": "sulfur",
     "CL": "chlorine", "AR": "argon", "K": "potassium", "CA": "calcium",
     "SC": "scandium", "TI": "titanium", "V": "vanadium", "CR": "chromium",
     "MN": "manganese", "FE": "iron", "CO": "cobalt", "NI": "nickel",
@@ -488,30 +488,100 @@ def _line_metadata_rows(state: XSTARPythonState) -> tuple[Any, ...]:
     return tuple(rows) if rows is not None else ()
 
 
-def _line_report_rank(rows: Sequence[Any], values: np.ndarray, *, limit: int = 500) -> list[Any]:
-    ranked: list[tuple[float, int, Any]] = []
+def _source_fixed_capacity_line_rank(
+    rows: Sequence[Any],
+    values: np.ndarray,
+    *,
+    depth_mode: bool,
+    limit: int = 500,
+    activity_floor: float = 1.0e-49,
+) -> list[Any]:
+    """Literal ``pprint.f90`` fixed-capacity ``kltmp`` identity rank.
+
+    This is the Python publication counterpart of the accepted C++
+    ``source_pprint_line_identity_rank_v064812341`` implementation. Equal
+    keys insert ahead of existing equal-key rows, and the source terminal-slot
+    retention is preserved after the fixed list reaches capacity.
+    """
+    maximum_rows = max(0, int(limit))
+    if maximum_rows == 0:
+        return []
     arr = np.asarray(values, dtype=float)
+    if arr.ndim != 2 or arr.shape[0] < 2:
+        return []
+    ordered = sorted(
+        (row for row in rows if int(getattr(row, "line_index", 0)) > 0),
+        key=lambda row: int(getattr(row, "line_index", 0)),
+    )
+    kltmp = [0] * maximum_rows
+    keys = [0.0] * len(ordered)
+    valid = [False] * len(ordered)
+    kltmpo = 0
+    nlpl = 1
+    for si, row in enumerate(ordered):
+        idx = int(getattr(row, "line_index", 0)) - 1
+        if idx < 0 or idx >= arr.shape[1]:
+            continue
+        rate_type = int(getattr(row, "rate_type", 50))
+        wave = abs(float(getattr(row, "wavelength_angstrom", 0.0)))
+        if rate_type in (9, 14) or not (wave >= 0.1 and wave <= 1.0e10 and wave <= 8.9e6):
+            continue
+        key = float(arr[0, idx]) if depth_mode else 0.5 * (float(arr[0, idx]) + float(arr[1, idx]))
+        if not np.isfinite(key) or not (key > float(activity_floor)):
+            continue
+        keys[si] = key
+        valid[si] = True
+        lmm = 0
+        elcomp = 1.0e10
+        while lmm < nlpl and key < elcomp:
+            lmm += 1
+            kl2 = kltmp[lmm - 1]
+            elcomp = keys[kl2 - 1] if kl2 > 0 else 0.0
+        kltmpo = si + 1
+        last = min(maximum_rows, nlpl)
+        if lmm > 0:
+            for k in range(lmm, last + 1):
+                at = k - 1
+                kltmpn = kltmp[at]
+                kltmp[at] = kltmpo
+                kltmpo = kltmpn
+        nlpl = min(maximum_rows, nlpl + 1)
+    if nlpl > 0:
+        kltmp[nlpl - 1] = kltmpo
+    out: list[Any] = []
+    for kk in range(min(nlpl, len(kltmp))):
+        if kltmp[kk] == 0:
+            continue
+        si = kltmp[kk] - 1
+        if 0 <= si < len(ordered) and valid[si]:
+            out.append(ordered[si])
+    return out
+
+
+def _numeric_line_rank(
+    rows: Sequence[Any], values: np.ndarray, *, depth_mode: bool, limit: int = 500
+) -> list[Any]:
+    """Independent ranked numerical owner used by Options 1/23."""
+    arr = np.asarray(values, dtype=float)
+    ranked: list[tuple[float, int, Any]] = []
     for order, row in enumerate(rows):
         idx = int(getattr(row, "line_index", 0)) - 1
-        if idx < 0 or idx >= arr.shape[-1]:
+        if idx < 0 or arr.ndim != 2 or arr.shape[0] < 2 or idx >= arr.shape[1]:
             continue
-        wave = abs(float(getattr(row, "wavelength_angstrom", 0.0)))
         rate_type = int(getattr(row, "rate_type", 50))
-        if rate_type in (9, 14) or wave <= 0.1 or wave >= 8.9e6:
+        wave = abs(float(getattr(row, "wavelength_angstrom", 0.0)))
+        if rate_type in (9, 14) or not (wave >= 0.1 and wave <= 1.0e10 and wave <= 8.9e6):
             continue
-        if arr.ndim == 2:
-            score = max(abs(float(arr[0, idx])), abs(float(arr[1, idx])))
-        else:
-            score = abs(float(arr[idx]))
-        if score <= 0.0:
+        key = float(arr[0, idx]) if depth_mode else 0.5 * (float(arr[0, idx]) + float(arr[1, idx]))
+        if not np.isfinite(key):
             continue
-        ranked.append((-score, order, row))
+        ranked.append((-key, -order, row))
     ranked.sort()
-    return [r for _, _, r in ranked[: int(limit)]]
+    return [row for _, _, row in ranked[: int(limit)]]
 
 
 def _option1_emission_line_luminosities(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
-    """Emit the lprint=1 ``pprint(1)`` emission-line luminosity report."""
+    """Emit source-ranked ``pprint(1)`` with independent numeric owner."""
     workspace = _workspace(state)
     rows = _line_metadata_rows(state)
     elum = np.asarray(getattr(workspace, "elum", np.zeros((2, 0))), dtype=float)
@@ -523,25 +593,23 @@ def _option1_emission_line_luminosities(state: XSTARPythonState, buf: LegacyPpri
         " emission line luminosities (erg/sec/10**38))",
         " index, ion, wavelength, reflected, transmitted",
     ])
-    for out_index, row in enumerate(_line_report_rank(rows, elum, limit=500), start=1):
-        idx = int(getattr(row, "line_index", 0)) - 1
-        ion = str(getattr(row, "ion_label", ""))[:8]
-        wave = abs(float(getattr(row, "wavelength_angstrom", 0.0)))
-        # ``heatt.f90``/``pprint.f90`` already stores ``elum`` in the
-        # units printed by XSTAR (erg/sec/10**38).  Do not divide by 1e38
-        # again; doing so made the v0.5.20 verbose text misleading without
-        # changing the physical arrays.
-        reflected = float(elum[0, idx])
-        transmitted = float(elum[1, idx])
+    identity_rows = _source_fixed_capacity_line_rank(rows, elum, depth_mode=False, limit=500)
+    numeric_rows = _numeric_line_rank(rows, elum, depth_mode=False, limit=500)
+    for out_index, (identity_row, numeric_row) in enumerate(zip(identity_rows, numeric_rows), start=1):
+        numeric_idx = int(getattr(numeric_row, "line_index", 0)) - 1
+        ion = str(getattr(identity_row, "ion_label", ""))[:8]
+        wave = abs(float(getattr(identity_row, "wavelength_angstrom", 0.0)))
+        reflected = float(elum[0, numeric_idx])
+        transmitted = float(elum[1, numeric_idx])
         buf.log_lines.append(
-            f"{out_index:9d}{int(getattr(row, 'line_index', 0)):8d} {ion:<8s}"
+            f"{out_index:9d}{int(getattr(identity_row, 'line_index', 0)):8d} {ion:<8s}"
             f"{wave:13.5E}{reflected:13.5E}{transmitted:13.5E}"
         )
     buf.source_calls.append("pprint(1)")
 
 
 def _option23_line_depths(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
-    """Emit the lprint=1 ``pprint(23)`` line-depth report."""
+    """Emit source-ranked ``pprint(23)`` with independent numeric owner."""
     workspace = _workspace(state)
     rows = _line_metadata_rows(state)
     tau0 = np.asarray(getattr(workspace, "tau0", np.zeros((2, 0))), dtype=float)
@@ -553,14 +621,16 @@ def _option23_line_depths(state: XSTARPythonState, buf: LegacyPprintBuffers) -> 
         " line depths",
         " index, ion, wavelength, reflected, transmitted",
     ])
-    for out_index, row in enumerate(_line_report_rank(rows, tau0, limit=500), start=1):
-        idx = int(getattr(row, "line_index", 0)) - 1
-        ion = str(getattr(row, "ion_label", ""))[:8]
-        wave = abs(float(getattr(row, "wavelength_angstrom", 0.0)))
-        reflected = float(tau0[0, idx])
-        transmitted = float(tau0[1, idx])
+    identity_rows = _source_fixed_capacity_line_rank(rows, tau0, depth_mode=True, limit=500)
+    numeric_rows = _numeric_line_rank(rows, tau0, depth_mode=True, limit=500)
+    for out_index, (identity_row, numeric_row) in enumerate(zip(identity_rows, numeric_rows), start=1):
+        numeric_idx = int(getattr(numeric_row, "line_index", 0)) - 1
+        ion = str(getattr(identity_row, "ion_label", ""))[:8]
+        wave = abs(float(getattr(identity_row, "wavelength_angstrom", 0.0)))
+        reflected = float(tau0[0, numeric_idx])
+        transmitted = float(tau0[1, numeric_idx])
         buf.log_lines.append(
-            f"{out_index:9d}{int(getattr(row, 'line_index', 0)):8d} {ion:<8s}"
+            f"{out_index:9d}{int(getattr(identity_row, 'line_index', 0)):8d} {ion:<8s}"
             f"{wave:13.5E}{reflected:13.5E}{transmitted:13.5E}"
         )
     buf.source_calls.append("pprint(23)")
@@ -708,11 +778,14 @@ def _option27_ion_column_densities(state: XSTARPythonState, buf: LegacyPprintBuf
         " ion column densities",
         " index, ion, column density",
     ])
+    source_column_floor = float(np.float32(1.0e-15))
     for k, ion in enumerate(metadata.ions):
         value = float(columns[k])
-        if value == 0.0:
+        if not (value > source_column_floor):
             continue
-        buf.log_lines.append(f"{int(ion.ion_index):5d} {str(ion.ion_label)[:8]:<8s}{value:14.8E}")
+        # Source format is (1x,i4,1x,9a1,1pe16.8).  The 9-character ion
+        # field preserves a separator for 8-character labels such as ca_xviii.
+        buf.log_lines.append(f"{int(ion.ion_index):5d} {str(ion.ion_label)[:9]:<9s}{value:16.8E}")
     buf.source_calls.append("pprint(27)")
 
 
