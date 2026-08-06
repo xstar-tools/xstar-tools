@@ -1,5 +1,13 @@
 # CHANGELOG
 
+# 0.6.48.12.3.43.1.1.1.1 - 2026-08-05
+
+- Diagnostic-only Ca XIII continuum 23595 `cemab -> elumab` lifetime attribution plus qualification-runner import hotfix.
+- Bundle `analyze_all62_fits.py` beside `compare_target_fits.py` and make the runner fail closed on comparator return code / missing `target_fits.json`, preventing the prior secondary `FileNotFoundError`.
+- Retain the accepted 43.1.1.1 `npcon`/rate-type-7 source-pointer repair unchanged. ABI `6048110`, `xstar_atdb_runtime`, FITS writer, fixed-state/rate/matrix/Type50/opacity/thermal/population/trajectory/STEP science are frozen.
+- Add an opt-in accepted-boundary probe for source record 158466 / continuum 23595. It records data/rate type, ion/lower/upper rows, active-stage window, lower/upper populations, record-product diagnostic reach, `ans3/ans4`, local `cemab(1/2)`, pre/post cumulative RRC luminosity, `delr`, radius, `fpr2`, opacity/tau, and the source-equivalent hypothetical HEATT increment.
+- Qualification runs only `helike_type69/ca19_xi3_ne1e4`; all nine FITS data regions, STEP numerics, rank arrays, and trajectory must be bit/numerically frozen to 43.1.1.1. The FORTRAN comparison is expected to remain exactly one missing RRC identity `(23595, ca_xiii, 2p4.1S_0)` while this attribution release identifies the first differing lifetime stage.
+
 # 0.6.48.12.3.43.1.1.1 - 2026-08-05
 
 - Publication-only Ca XIII 23595 hotfix.

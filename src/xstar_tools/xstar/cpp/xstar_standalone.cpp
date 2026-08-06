@@ -13359,6 +13359,130 @@ void write_v0648123352_transport_commit_probe(
     }
 }
 
+void write_v0648123431111_ca13_lifetime_probe(
+    const StandaloneControllerDataV67& data,
+    const FixedDsecSnapshot& local_boundary,
+    double delta_radius_cm,
+    double radius_cm,
+    const char* phase) {
+    const char* root_text = std::getenv("XSTAR_V0648123431111_CA13_LIFETIME_DIR");
+    if (!root_text || !*root_text || !phase || !*phase) return;
+    const std::filesystem::path root(root_text);
+    std::filesystem::create_directories(root);
+    const auto path = root / "ca13_23595_cemab_elumab_lifetime.csv";
+    const bool fresh = !std::filesystem::exists(path) || std::filesystem::file_size(path) == 0u;
+    std::ofstream out(path, std::ios::app);
+    if (!out) throw std::runtime_error("cannot create v0648123431111 Ca XIII lifetime probe");
+    if (fresh) {
+        out << "sequence,call_index,evaluation_index,phase,source_record,source_position,data_type,rate_type,element_z,ion_stage,lower_row,upper_row,continuum_index,"
+               "publication_identity_present,record_diag_present,record_diag_spectral,type49_valid,type53_valid,type99_valid,ans3,ans4,"
+               "active_min_stage,active_max_stage,active_full_row_start,active_full_row_end,lower_population,upper_population,"
+               "delta_radius_cm,radius_cm,fpr2,cemab_activity_floor,cemab1,cemab2,cemab_active,executable_rate7_gate,"
+               "elumabo1,elumabo2,hypothetical_delta_elumab,elumab1,elumab2,opakab,tauc1,tauc2\n";
+    }
+    constexpr std::size_t target_slot = 23595u;
+    constexpr long long target_record = 158466;
+    const xstar_fixed_program_record_v1* program_record = nullptr;
+    bool executable_rate7_gate = false;
+    bool publication_identity_present = false;
+    if (data.program) {
+        for (const auto& record : data.program->records) {
+            if (record.continuum_index_one_based == static_cast<int>(target_slot) && record.rate_type == 7) {
+                executable_rate7_gate = true;
+                if (!program_record || record.record == target_record) program_record = &record;
+            }
+            if (record.record == target_record) program_record = &record;
+        }
+        for (const auto& id : data.program->source_rrc_identities) {
+            if (id.continuum_index == static_cast<long long>(target_slot)) {
+                publication_identity_present = true;
+                break;
+            }
+        }
+    }
+    const xstar_run_state::RecordProductDiagnosticState* record_diag = nullptr;
+    for (const auto& row : local_boundary.record_product_diagnostics) {
+        if (row.record == target_record || row.continuum_index_one_based == static_cast<int>(target_slot)) {
+            record_diag = &row;
+            if (row.record == target_record) break;
+        }
+    }
+    int element_z = 20;
+    int ion_stage = 0;
+    int lower_row = 0;
+    int upper_row = 0;
+    long long source_position = 0;
+    int data_type = 0;
+    int rate_type = 7;
+    int element_index = 0;
+    if (program_record) {
+        source_position = program_record->source_position;
+        data_type = program_record->data_type;
+        rate_type = program_record->rate_type;
+        ion_stage = program_record->ion_stage;
+        lower_row = program_record->lower_row;
+        upper_row = program_record->upper_row;
+        element_index = program_record->element_index;
+        if (data.program) element_z = program_element_z_v82_patch4(*data.program, element_index);
+    } else if (record_diag) {
+        source_position = record_diag->source_position;
+        data_type = record_diag->data_type;
+        rate_type = record_diag->rate_type;
+        ion_stage = record_diag->ion_stage;
+        lower_row = record_diag->lower_row;
+        upper_row = record_diag->upper_row;
+        element_index = record_diag->element_index;
+        element_z = record_diag->element_z;
+    }
+    double lower_population = 0.0;
+    double upper_population = 0.0;
+    if (data.program && element_index > 0) {
+        const auto lower = program_population_index_v82_patch4(*data.program, element_index, lower_row);
+        const auto upper = program_population_index_v82_patch4(*data.program, element_index, upper_row);
+        if (lower && *lower < local_boundary.populations.size()) lower_population = local_boundary.populations[*lower];
+        if (upper && *upper < local_boundary.populations.size()) upper_population = local_boundary.populations[*upper];
+    }
+    int active_min_stage = 0, active_max_stage = 0, active_full_row_start = 0, active_full_row_end = 0;
+    if (const auto it = local_boundary.source_detail_active_windows.find(element_z);
+        it != local_boundary.source_detail_active_windows.end()) {
+        active_min_stage = it->second[0];
+        active_max_stage = it->second[1];
+        active_full_row_start = it->second[2];
+        active_full_row_end = it->second[3];
+    }
+    const std::size_t cemab_stride = local_boundary.cemab.size() >= 2u ? local_boundary.cemab.size() / 2u : 0u;
+    const std::size_t elumab_stride = data.rrc_luminosity.size() >= 2u ? data.rrc_luminosity.size() / 2u : 0u;
+    const std::size_t tauc_stride = local_boundary.tauc.size() >= 2u ? local_boundary.tauc.size() / 2u : 0u;
+    auto get = [](const std::vector<double>& values, std::size_t index) {
+        return index < values.size() && std::isfinite(values[index]) ? values[index] : 0.0;
+    };
+    const double cemab1 = target_slot < cemab_stride ? get(local_boundary.cemab, target_slot) : 0.0;
+    const double cemab2 = target_slot < cemab_stride ? get(local_boundary.cemab, cemab_stride + target_slot) : 0.0;
+    const double elumab1 = target_slot < elumab_stride ? get(data.rrc_luminosity, target_slot) : 0.0;
+    const double elumab2 = target_slot < elumab_stride ? get(data.rrc_luminosity, elumab_stride + target_slot) : 0.0;
+    const double opakab = target_slot < local_boundary.opakab.size() ? get(local_boundary.opakab, target_slot) : 0.0;
+    const double tauc1 = target_slot < tauc_stride ? get(local_boundary.tauc, target_slot) : 0.0;
+    const double tauc2 = target_slot < tauc_stride ? get(local_boundary.tauc, tauc_stride + target_slot) : 0.0;
+    const double floor = xstar_constants::kLegacyHeattRrcCemabActivityFloor;
+    const bool cemab_active = cemab1 > floor || cemab2 > floor;
+    const double fpr2 = xstar_constants::kLegacyHeattGeometryFactor *
+        std::pow(std::max(radius_cm, 0.0) * 1.0e-19, 2.0);
+    const double hypothetical_delta = 0.5 * (cemab1 + cemab2) * std::max(delta_radius_cm, 0.0) * fpr2;
+    const double ans3 = record_diag ? record_diag->ans[2] : 0.0;
+    const double ans4 = record_diag ? record_diag->ans[3] : 0.0;
+    out << std::setprecision(17)
+        << local_boundary.sequence << ',' << data.call_index << ',' << local_boundary.evaluation_index << ',' << phase << ','
+        << target_record << ',' << source_position << ',' << data_type << ',' << rate_type << ',' << element_z << ',' << ion_stage << ','
+        << lower_row << ',' << upper_row << ',' << target_slot << ',' << (publication_identity_present ? 1 : 0) << ','
+        << (record_diag ? 1 : 0) << ',' << (record_diag && record_diag->spectral ? 1 : 0) << ','
+        << (record_diag && record_diag->type49_valid ? 1 : 0) << ',' << (record_diag && record_diag->type53_valid ? 1 : 0) << ','
+        << (record_diag && record_diag->type99_valid ? 1 : 0) << ',' << ans3 << ',' << ans4 << ','
+        << active_min_stage << ',' << active_max_stage << ',' << active_full_row_start << ',' << active_full_row_end << ','
+        << lower_population << ',' << upper_population << ',' << delta_radius_cm << ',' << radius_cm << ',' << fpr2 << ',' << floor << ','
+        << cemab1 << ',' << cemab2 << ',' << (cemab_active ? 1 : 0) << ',' << (executable_rate7_gate ? 1 : 0) << ','
+        << elumab1 << ',' << elumab2 << ',' << hypothetical_delta << ',' << elumab1 << ',' << elumab2 << ',' << opakab << ',' << tauc1 << ',' << tauc2 << '\n';
+}
+
 void advance_atomic_luminosities_v82_patch520145(
     StandaloneControllerDataV67& data,
     FixedDsecSnapshot& local_boundary,
@@ -16413,6 +16537,8 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             }
             write_v0648123352_transport_commit_probe(
                 data, boundary, segment, boundary_radius_cm, "pre_atomic");
+            write_v0648123431111_ca13_lifetime_probe(
+                data, boundary, segment, boundary_radius_cm, "pre_heatt");
             if (segment > 0.0) {
                 source_transport_segment_cm.push_back(segment);
                 const auto atomic_luminosity_started_v064890 = std::chrono::steady_clock::now();
@@ -16422,6 +16548,8 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                     g_performance_v064890->atomic_luminosity_seconds += elapsed_seconds_v064890(atomic_luminosity_started_v064890);
                 }
             }
+            write_v0648123431111_ca13_lifetime_probe(
+                data, boundary, segment, boundary_radius_cm, "post_heatt");
             retain_pre_stpcut_cumulative_state_v82_patch520145(data, boundary);
             write_v0648123352_transport_commit_probe(
                 data, boundary, segment, boundary_radius_cm, "post_atomic_pre_stpcut");
