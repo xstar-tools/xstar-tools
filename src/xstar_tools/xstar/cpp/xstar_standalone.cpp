@@ -18096,7 +18096,34 @@ int command_run_standalone_production_v67(const Options& options, const std::fil
             std::cout << prefix << "SOURCE_LINE_IDENTITIES=" << product.line_identities.size() << "\n"
                       << prefix << "SOURCE_RRC_IDENTITIES=" << product.rrc_identities.size() << "\n"
                       << prefix << "SOURCE_RRC_IDENTITIES_EXECUTABLE=" << product.rrc_identities.size() << "\n"
-                      << prefix << "SOURCE_RRC_IDENTITIES_PUBLICATION=" << product.source_rrc_identities.size() << "\n"
+                      << prefix << "SOURCE_RRC_IDENTITIES_PUBLICATION=" << product.source_rrc_identities.size() << "\n";
+            // 0.6.48.12.3.43.1.1.1: narrow source-pointer/elumab attribution
+            // for the final Ca XIII publication residual.  This is diagnostic
+            // only and reads the already-retained identity/workspace state.
+            const auto find_rrc_23595 = [](const auto& identities) -> const xstar_run_state::RrcIdentityState* {
+                for (const auto& id : identities) if (id.continuum_index == 23595) return &id;
+                return nullptr;
+            };
+            const auto* executable_23595 = find_rrc_23595(product.rrc_identities);
+            const auto* publication_23595 = find_rrc_23595(product.source_rrc_identities);
+            const std::size_t ca13_slot = 23595u;
+            const std::size_t ca13_elumab_stride = last_ws.elumab.size() >= 2u ? last_ws.elumab.size() / 2u : 0u;
+            const std::size_t ca13_tauc_stride = last_ws.tauc.size() >= 2u ? last_ws.tauc.size() / 2u : 0u;
+            const double ca13_elumab_out = ca13_slot < ca13_elumab_stride ? last_ws.elumab[ca13_slot] : 0.0;
+            const double ca13_elumab_in = ca13_slot < ca13_elumab_stride ? last_ws.elumab[ca13_elumab_stride + ca13_slot] : 0.0;
+            const double ca13_tauc_out = ca13_slot < ca13_tauc_stride ? last_ws.tauc[ca13_slot] : 0.0;
+            const double ca13_tauc_in = ca13_slot < ca13_tauc_stride ? last_ws.tauc[ca13_tauc_stride + ca13_slot] : 0.0;
+            std::cout << "V064812343111_CA_XIII_23595_EXECUTABLE_IDENTITY_PRESENT=" << (executable_23595 ? "YES" : "NO") << "\n"
+                      << "V064812343111_CA_XIII_23595_PUBLICATION_IDENTITY_PRESENT=" << (publication_23595 ? "YES" : "NO") << "\n"
+                      << "V064812343111_CA_XIII_23595_PUBLICATION_SOURCE_RECORD=" << (publication_23595 ? publication_23595->source_record : 0) << "\n"
+                      << "V064812343111_CA_XIII_23595_PUBLICATION_RATE_TYPE=" << (publication_23595 ? publication_23595->rate_type : 0) << "\n"
+                      << "V064812343111_CA_XIII_23595_PUBLICATION_ION=" << (publication_23595 ? publication_23595->ion_label : "") << "\n"
+                      << "V064812343111_CA_XIII_23595_PUBLICATION_LEVEL=" << (publication_23595 ? publication_23595->lower_level : "") << "\n"
+                      << "V064812343111_CA_XIII_23595_PUBLICATION_THRESHOLD_EV=" << std::setprecision(17) << (publication_23595 ? publication_23595->threshold_ev : 0.0) << "\n"
+                      << "V064812343111_CA_XIII_23595_ELUMAB_OUT=" << std::setprecision(17) << ca13_elumab_out << "\n"
+                      << "V064812343111_CA_XIII_23595_ELUMAB_IN=" << std::setprecision(17) << ca13_elumab_in << "\n"
+                      << "V064812343111_CA_XIII_23595_TAUC_OUT=" << std::setprecision(17) << ca13_tauc_out << "\n"
+                      << "V064812343111_CA_XIII_23595_TAUC_IN=" << std::setprecision(17) << ca13_tauc_in << "\n"
                       << prefix << "MAXIMUM_LINE_INDEX=" << max_line_index << "\n"
                       << prefix << "LAST_OPLIN_SIZE=" << last_ws.oplin.size() << "\n"
                       << prefix << "LAST_RCEM_SIZE=" << last_ws.rcem.size() << "\n"
