@@ -1,5 +1,38 @@
 # CHANGELOG
 
+# 0.6.48.12.3.43.3 - 2026-08-06
+
+- All-62 final FITS requalification; production science frozen relative to 0.6.48.12.3.43.2.
+- Encodes only the scientifically accepted publication semantics: detal2 FORTRAN-only 66822/88440, RRC 23595 identical-state temperature cutoff, and established line blank-sentinel/terminal-cutoff behavior.
+- Rechecks all nine FITS products, STEP numerics, trajectory, rank-position numeric freeze, ABI 6048110, and reports performance by element and physical regime.
+
+## 0.6.48.12.3.43.2
+
+- Production publication/state repair for the two remaining 12.3.43 target classes: `xout_abund1` per-element thermal retention and `xo01_detal2` source activity/lifetime semantics.
+- Preserve ABI `6048110` and freeze accepted solver, rate, matrix, opacity, thermal, line-emissivity, fixed-state, controller trajectory, STEP, rank, continuum, detal3/detal4, line-list, spectrum, and RRC semantic-closure science.
+- `xout_abund1`: retain the already-computed accepted-boundary `element_thermal_products` (literal per-element `htt(lk)` / `cll(lk)`) through `copy_real_native_snapshot()` so the writer consumes direct source-owned values instead of falling back to zero outside H/He/Mg. No residual-total allocation is introduced.
+- `xo01_detal2`: replace the old endpoint-gate publication shadow with a publication-only replay of the observable `calc_emisab_ion` stale-`opakb1` lifetime. Active endpoints rely on the retained physical `rcem/oplin > 1d-64` gate; inactive endpoints may publish only when the carried source Type-50 opacity clears the same literal `fstepr2` threshold.
+- Retain record-product diagnostics at accepted boundaries so the detal2 replay has deterministic Type-50 source traversal/provenance without feeding diagnostics back into production science.
+- Qualify only the nine previously selected publication models (C, Ca, O, Mg controls), comparing `xout_abund1` and `xo01_detal2` directly to canonical FORTRAN while requiring the other seven FITS data regions, STEP numerics, rank numerics, and trajectories to remain frozen.
+- If targeted closure accepts, proceed to `0.6.48.12.3.43.3 — all-62 final FITS requalification`; do not rerun all 62 in this repair release.
+
+## 0.6.48.12.3.43.1.1.1.3
+
+- Diagnostic-only Ca XIII continuum 23595 identical-state Type49 cutoff proof and semantic closure.
+- Re-evaluate source record 158466 with the existing production `evaluate_record()` Type49 source-faithful path at source sequence 12, once at the live C++ temperature and once at the canonical FORTRAN final-shell temperature parsed from `xout_step.log`; all non-temperature caller inputs remain identical.
+- The probe never commits its result to solver, transport, thermal, spectral, STEP, or FITS state. Performance caches/counters are disabled for the replay.
+- Require the live-temperature replay to reproduce the committed Type49 `ans3`, require the FORTRAN-temperature replay to cross the literal `cemab > 1d-49` source publication floor, and require the implied `elumab` to agree with the canonical FORTRAN Option-19 row 23595 within 1%.
+- Freeze ABI `6048110`, all publication writers, ATDB lowering, standalone controller logic, and every production science source except the additive opt-in fixed-state diagnostic probe. All nine FITS data regions, STEP numerics, rank numerics, and trajectory remain qualification-frozen to 0.6.48.12.3.43.1.1.1.2.
+- If the identical-state proof closes, classify the single missing Ca XIII RRC row as a semantic hard-cutoff crossing caused by the tiny accepted thermodynamic-state difference and proceed to 0.6.48.12.3.43.2 rather than modifying Type49 production physics.
+
+## 0.6.48.12.3.43.1.1.1.2
+
+- Diagnostic-only Ca XIII continuum 23595 Type49 `ans3 -> cemab` cutoff attribution.
+- Moves the opt-in Ca XIII diagnostic root outside the file-silent production output tree.
+- Captures the existing full fixed-state Type49 source-shadow diagnostic for source record 158466 at the physical accepted shell; no Type49 arithmetic is changed.
+- Qualifies that all nine FITS data regions, STEP numerics, rank numerics, and trajectory remain frozen to 0.6.48.12.3.43.1.1.1.1.
+- Keeps ABI 6048110 and all fixed-state/rate/matrix/opacity/thermal/publication kernels frozen.
+
 ## 0.6.48.12.3.43.2 - 2026-08-06
 
 - Production publication/state repair for the two remaining 12.3.43 target classes: `xout_abund1` per-element thermal retention and `xo01_detal2` source activity/lifetime semantics.
