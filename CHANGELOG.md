@@ -1,5 +1,13 @@
 # CHANGELOG
 
+# 0.6.48.12.3.43.3.2 - 2026-08-06
+
+- Final semantic-closure/comparator hotfix; no production science changes and no model rerun.
+- Reanalyze the existing 43.3.1 all-62 archive with a fail-closed `xo01_detal3` full identity-union normalized-L1 gate (<1%).
+- Permit only the proven O IV non-positive-threshold publication rows and the narrow carbon 709/762 vs 681/691/726 inventory class, with zero attachments and preserved common order.
+- Freeze rank semantics by requiring the 43.3.1 rank diagnostic CSV to be byte-identical to the accepted 42 snapshot in addition to the frozen rank-numeric gate.
+- Preserve production-zone ABI 6048110.
+
 # 0.6.48.12.3.43.3.1 - 2026-08-06
 
 - Readiness-only hotfix for 43.3 all-62 final FITS requalification.
