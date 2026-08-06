@@ -1,5 +1,15 @@
 # CHANGELOG
 
+# 0.6.48.12.3.45.3 - 2026-08-06
+
+- Python-only `fstepr3` source-record detailed-RRC publication repair; C++ production science remains frozen to accepted 0.6.48.12.3.44 and production-zone ABI 6048110.
+- Add a dedicated `SourceOutputMetadata.detail_rrcs` inventory built from literal per-ion `npfi(7,ion) -> npnxt` traversal, excluding rate-type-1 continuum records from `xo01_detal3`.
+- Bump output-metadata cache format to v11 and retain generic RRC rate type/atomic number plus ordered detailed-RRC source records.
+- Apply source REAL(4) `1.e-10` element and `1.e-36` detailed-RRC activity thresholds in the detail writer.
+- Remove the 45.1 continuum-slot shadow from `xo01_detal3` authority; replace it with an output-only source-record publication shadow that survives fixed-state/DSEC trials for a shell and is consumed after shell publication.
+- Preserve `xout_rrc1`, STEP/rank publication, Option 27, abundance publication, radial transport, DSEC, and all physical C++/Python science kernels.
+- Re-run only `c5_ne1e10` and `ca19_xi2_ne1`; the known C5 Option-23 He II 508/515 crossing is intentionally not repaired here.
+
 ## 0.6.48.12.3.45.2.1 - 2026-08-06
 
 - Readiness-only hotfix for the 45.2 diagnostic-first package.

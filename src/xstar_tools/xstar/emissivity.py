@@ -609,6 +609,11 @@ def calc_emisab_ion(
                     denom = ptmp1 + ptmp2
                     if denom == 0.0:
                         raise CalcEmisabPortError("zero continuum escape denominator")
+                    _update_source_detail_rrc_record_shadow_v0648123453(
+                        context.profile_control, source_record=rec, continuum_index=continuum_index,
+                        ptmp1=ptmp1, ptmp2=ptmp2, abund1=abund1, abund2=abund2,
+                        xpx=xpx, ans3=result.ans3, ans4=result.ans4, opakab=result.opakab,
+                    )
                     _update_source_detail_rrc_publication_shadow_v0648123451(
                         context.profile_control, continuum_index=continuum_index,
                         ptmp1=ptmp1, ptmp2=ptmp2, abund1=abund1, abund2=abund2,
@@ -777,6 +782,46 @@ def calc_emisab_element(
         compact_xileve=tuple(float(v) for v in compact_xileve[1 : ipmat + 2]),
         ion_traces=tuple(ion_traces),
     )
+
+
+def _update_source_detail_rrc_record_shadow_v0648123453(
+    control: Optional[MutableMapping[str, Any]], *, source_record: int,
+    continuum_index: int, ptmp1: float, ptmp2: float, abund1: float,
+    abund2: float, xpx: float, ans3: float, ans4: float, opakab: float,
+) -> None:
+    """Retain the last source-active Type-7 write by source record.
+
+    Unlike the 45.1 continuum-slot map, this state cannot be confused with
+    another bound-free rate family.  It intentionally survives repeated
+    fixed-state/DSEC evaluations until the corresponding ``savd``/``fstepr3``
+    shell publication consumes it.  This mirrors the qualified C++ product
+    publication lifetime without mutating the physical emissivity workspace.
+    """
+    if not isinstance(control, MutableMapping):
+        return
+    rec = int(source_record); ci = int(continuum_index)
+    if rec <= 0 or ci <= 0:
+        return
+    if not (
+        float(abund1) > XSTAR_CALC_EMISAB_LEVEL_ABUNDANCE_FLOOR
+        or float(abund2) > XSTAR_CALC_EMISAB_LEVEL_ABUNDANCE_FLOOR
+    ):
+        return
+    den = float(ptmp1) + float(ptmp2)
+    if den == 0.0:
+        return
+    shadow = control.setdefault("source_detail_rrc_record_shadow_v0648123453", {})
+    if not isinstance(shadow, MutableMapping):
+        shadow = {}
+        control["source_detail_rrc_record_shadow_v0648123453"] = shadow
+    shadow[rec] = {
+        "source_record": rec,
+        "continuum_index": ci,
+        "emis_inward": float(ptmp1) * abs(float(ans3)) / den * float(abund2) * float(xpx),
+        "emis_outward": float(ptmp2) * abs(float(ans3)) / den * float(abund2) * float(xpx),
+        "integrated_absn": abs(float(ans4)) * float(abund1) * float(xpx),
+        "opacity": float(opakab),
+    }
 
 
 def _update_source_detail_rrc_publication_shadow_v0648123451(

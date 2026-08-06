@@ -703,7 +703,7 @@ def photon_number_luminosity(zremsz: Sequence[float], epi_eV: Sequence[float]) -
     return source_spectrum_ispcg2_diagnostics(zremsz, epi_eV)[0]
 
 
-OUTPUT_METADATA_CACHE_FORMAT_VERSION = 10
+OUTPUT_METADATA_CACHE_FORMAT_VERSION = 11
 
 
 def default_output_metadata_cache_path(fitsfile: str | Path) -> Path:
@@ -793,6 +793,9 @@ def save_source_output_metadata_cache(
                 rrc_source_record=np.asarray([row.source_record for row in metadata.rrcs], dtype=np.int64),
                 rrc_data_type=np.asarray([row.data_type for row in metadata.rrcs], dtype=np.int16),
                 rrc_rank_threshold_eV=np.asarray([row.rank_threshold_eV for row in metadata.rrcs], dtype=np.float64),
+                rrc_rate_type=np.asarray([row.rate_type for row in metadata.rrcs], dtype=np.int16),
+                rrc_atomic_number=np.asarray([row.atomic_number for row in metadata.rrcs], dtype=np.int16),
+                detail_rrc_source_record=np.asarray([row.source_record for row in metadata.detail_rrcs], dtype=np.int64),
             )
         os.replace(temporary_name, target)
     except Exception:
@@ -842,18 +845,27 @@ def load_source_output_metadata_cache(master: Any, path: str | Path) -> SourceOu
                 ion_label=str(d), lower_level=str(e), upper_level=str(f),
                 lower_local_index=int(g), upper_local_index=int(h),
                 source_record=int(i), data_type=int(j), rank_threshold_eV=float(k),
+                rate_type=int(l), atomic_number=int(m),
             )
-            for a, b, c, d, e, f, g, h, i, j, k in zip(
+            for a, b, c, d, e, f, g, h, i, j, k, l, m in zip(
                 z["rrc_continuum_index"], z["rrc_level_global_index"], z["rrc_threshold_eV"],
                 z["rrc_ion_label"], z["rrc_lower_level"], z["rrc_upper_level"],
                 z["rrc_lower_local_index"], z["rrc_upper_local_index"],
                 z["rrc_source_record"], z["rrc_data_type"], z["rrc_rank_threshold_eV"],
+                z["rrc_rate_type"], z["rrc_atomic_number"],
             )
+        )
+        rrc_by_source_record = {int(row.source_record): row for row in rrcs}
+        detail_rrcs = tuple(
+            rrc_by_source_record[int(rec)]
+            for rec in z["detail_rrc_source_record"]
+            if int(rec) in rrc_by_source_record and int(rrc_by_source_record[int(rec)].rate_type) == 7
         )
     return SourceOutputMetadata(
         levels=levels,
         lines=lines,
         rrcs=rrcs,
+        detail_rrcs=detail_rrcs,
         provenance={
             "source": "readtbl/setptrs packed ATDB pointers",
             "source_faithful": True,
@@ -1185,16 +1197,37 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
                 source_record=int(continuum_records[pos]),
                 data_type=data_type,
                 rank_threshold_eV=float(rank_threshold),
+                rate_type=int(continuum_rows[pos, 2]),
+                atomic_number=z,
             )
         )
+    # v0.6.48.12.3.45.3: fstepr3 does not consume the generic npcon
+    # inventory.  It starts at npfi(7,jkk) and walks npnxt while npar remains
+    # the current ion.  Build a dedicated identity sequence from that literal
+    # chain so rate-type-1 continuum records can never leak into detal3.
+    rrc_by_source_record = {int(row.source_record): row for row in rrcs}
+    detail_rrcs: list[RRCOutputMetadata] = []
+    seen_detail_records: set[int] = set()
+    for ion in range(1, int(derived.n_ions) + 1):
+        ion_record = int(derived.ion_records[ion]) if ion < len(derived.ion_records) else 0
+        rec = int(derived.npfi[7, ion]) if 7 < derived.npfi.shape[0] else 0
+        while rec > 0 and rec < len(derived.npar) and int(derived.npar[rec]) == ion_record:
+            row = rrc_by_source_record.get(rec)
+            if row is not None and int(row.rate_type) == 7 and rec not in seen_detail_records:
+                detail_rrcs.append(row)
+                seen_detail_records.add(rec)
+            rec = int(derived.npnxt[rec]) if rec < len(derived.npnxt) else 0
+
     return SourceOutputMetadata(
         levels=tuple(levels),
         lines=tuple(lines),
         rrcs=tuple(rrcs),
+        detail_rrcs=tuple(detail_rrcs),
         provenance={
             "source": "readtbl/setptrs packed ATDB pointers",
             "source_faithful": True,
-            "metadata_builder": "vectorized_numpy_v9_rrc_literal_rank_cache",
+            "metadata_builder": "vectorized_numpy_v10_fstepr3_source_record_inventory",
+            "detail_rrc_owner": "npfi(7,ion)->npnxt source chain",
             "metadata_cache_status": "built",
         },
     )
@@ -1228,6 +1261,7 @@ def _load_or_build_source_output_metadata(
             levels=metadata.levels,
             lines=metadata.lines,
             rrcs=metadata.rrcs,
+            detail_rrcs=metadata.detail_rrcs,
             provenance={
                 **dict(metadata.provenance),
                 "metadata_cache_status": (

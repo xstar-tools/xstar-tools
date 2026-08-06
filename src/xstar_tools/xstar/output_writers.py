@@ -17,7 +17,7 @@ import csv
 import hashlib
 import json
 import os
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Iterable, Mapping, MutableMapping, Sequence
 
 import time
 import numpy as np
@@ -136,6 +136,11 @@ class RRCOutputMetadata:
     source_record: int = 0
     data_type: int = 0
     rank_threshold_eV: float = 0.0
+    # v0.6.48.12.3.45.3: retain the literal source rate family so
+    # fstepr3 can use only the rate-type-7 chain.  npcon also contains
+    # rate-type-1 bound-free records, which are not fstepr3 rows.
+    rate_type: int = 0
+    atomic_number: int = 0
 
 
 @dataclass(frozen=True)
@@ -143,6 +148,10 @@ class SourceOutputMetadata:
     levels: tuple[LevelOutputMetadata, ...] = ()
     lines: tuple[LineOutputMetadata, ...] = ()
     rrcs: tuple[RRCOutputMetadata, ...] = ()
+    # Dedicated literal fstepr3 source-record inventory.  This is distinct
+    # from ``rrcs`` because the latter is shared by final/public RRC writers
+    # and may contain other bound-free rate families.
+    detail_rrcs: tuple[RRCOutputMetadata, ...] = ()
     provenance: Mapping[str, Any] = field(default_factory=dict)
 
 
@@ -424,36 +433,67 @@ def build_detail_rrc_table(
     opakab: Sequence[float],
     tauc: np.ndarray,
     header: ShellOutputHeader,
+    element_abundances: Sequence[float] | None = None,
     source_publication_shadow: Mapping[int, Mapping[str, float]] | None = None,
+    source_record_publication_shadow: Mapping[int, Mapping[str, float]] | None = None,
 ) -> OutputTable:
+    """Literal ``fstepr3`` detailed-RRC row selection.
+
+    v0.6.48.12.3.45.3 separates the detailed-RRC identity owner from the
+    generic/public RRC metadata.  ``fstepr3.f90`` walks the per-ion rate-type-7
+    source chain and tests the current one-based ``npconi2`` slot.  The 45.1
+    continuum-slot shadow is deliberately *not* an authority here: it could
+    neither represent the exact source-record family nor safely distinguish
+    detail publication from the other bound-free inventories.
+    """
+    del source_publication_shadow  # 45.1 slot shadow is never authoritative.
+    record_shadow = source_record_publication_shadow or {}
     emiss = np.asarray(cemab, dtype=float)
     absorbed = np.asarray(cabab, dtype=float).reshape(-1)
     opacity = np.asarray(opakab, dtype=float).reshape(-1)
     depth = np.asarray(tauc, dtype=float)
-    shadow = source_publication_shadow or {}
+    abund = None if element_abundances is None else np.asarray(element_abundances, dtype=float).reshape(-1)
+    if metadata.detail_rrcs:
+        source_rows = metadata.detail_rrcs
+    elif any(int(getattr(r, "rate_type", 0)) != 0 for r in metadata.rrcs):
+        source_rows = tuple(r for r in metadata.rrcs if int(getattr(r, "rate_type", 0)) == 7)
+    else:
+        # Backward-compatible synthetic/fixture metadata predating rate_type.
+        source_rows = metadata.rrcs
     rows: list[RRCOutputMetadata] = []
-    payload: dict[int, tuple[float, float, float, float]] = {}
-    for item in metadata.rrcs:
-        i = item.continuum_index - 1
-        if min(i, emiss.shape[1] - 1, absorbed.size - 1, opacity.size - 1, depth.shape[1] - 1) < 0:
+    payload: list[tuple[float, float, float, float]] = []
+    abundance_floor = _source_real_literal(1.0e-10)
+    activity_floor = _source_real_literal(1.0e-36)
+    for item in source_rows:
+        if int(getattr(item, "rate_type", 7)) != 7:
+            continue
+        z = int(getattr(item, "atomic_number", 0))
+        if abund is not None and z > 0:
+            if z > abund.size or not (float(abund[z - 1]) >= abundance_floor):
+                continue
+        i = int(item.continuum_index) - 1
+        if i < 0 or emiss.ndim != 2 or emiss.shape[0] < 2:
+            continue
+        if i >= emiss.shape[1] or i >= absorbed.size or i >= opacity.size or depth.ndim != 2 or depth.shape[0] < 2 or i >= depth.shape[1]:
             continue
         current = (float(emiss[0, i]), float(emiss[1, i]), float(absorbed[i]), float(opacity[i]))
-        active = any(v > DETAIL_RRC_ACTIVITY_FLOOR for v in current)
+        active = any(np.isfinite(v) and v > activity_floor for v in current)
         if not active:
-            source = shadow.get(int(item.continuum_index))
-            if source is not None:
-                source_values = (
-                    float(source.get("emis_inward", 0.0)),
-                    float(source.get("emis_outward", 0.0)),
-                    float(source.get("integrated_absn", 0.0)),
-                    float(source.get("opacity", 0.0)),
+            retained = record_shadow.get(int(item.source_record))
+            if retained is not None and int(retained.get("continuum_index", -1)) == int(item.continuum_index):
+                retained_values = (
+                    float(retained.get("emis_inward", 0.0)),
+                    float(retained.get("emis_outward", 0.0)),
+                    float(retained.get("integrated_absn", 0.0)),
+                    float(retained.get("opacity", 0.0)),
                 )
-                if any(v > DETAIL_RRC_ACTIVITY_FLOOR for v in source_values):
-                    current = source_values
+                if any(np.isfinite(v) and v > activity_floor for v in retained_values):
+                    current = retained_values
                     active = True
-        if active:
-            rows.append(item)
-            payload[int(item.continuum_index)] = current
+        if not active:
+            continue
+        rows.append(item)
+        payload.append(current)
     values = {
         "rrc index": np.asarray([r.continuum_index for r in rows], dtype=np.int32),
         "level index": np.asarray([r.level_global_index for r in rows], dtype=np.int32),
@@ -461,10 +501,10 @@ def build_detail_rrc_table(
         "ion": np.asarray([_fixed(r.ion_label, 8) for r in rows], dtype="U8"),
         "lower_level": np.asarray([_fixed(r.lower_level, 20) for r in rows], dtype="U20"),
         "upper_level": np.asarray([_fixed(r.upper_level, 20) for r in rows], dtype="U20"),
-        "emis_inward": _r4_array([payload[r.continuum_index][0] for r in rows]),
-        "emis_outward": _r4_array([payload[r.continuum_index][1] for r in rows]),
-        "integrated absn": _r4_array([payload[r.continuum_index][2] for r in rows]),
-        "opacity": _r4_array([payload[r.continuum_index][3] for r in rows]),
+        "emis_inward": _r4_array([v[0] for v in payload]),
+        "emis_outward": _r4_array([v[1] for v in payload]),
+        "integrated absn": _r4_array([v[2] for v in payload]),
+        "opacity": _r4_array([v[3] for v in payload]),
         "tau_in": _r4_array([depth[0, r.continuum_index - 1] for r in rows]),
         "tau_out": _r4_array([depth[1, r.continuum_index - 1] for r in rows]),
     }
@@ -544,6 +584,8 @@ def build_detail_shell_output(
     ncn2: int,
     source_detail_line_activity_shadow: Sequence[bool] | None = None,
     source_detail_rrc_publication_shadow: Mapping[int, Mapping[str, float]] | None = None,
+    source_detail_rrc_record_shadow: Mapping[int, Mapping[str, float]] | None = None,
+    element_abundances: Sequence[float] | None = None,
 ) -> DetailShellOutput:
     return DetailShellOutput(
         levels=build_detail_level_table(metadata=metadata, populations=populations, lte_populations=lte_populations, header=header),
@@ -553,7 +595,9 @@ def build_detail_shell_output(
         ),
         rrcs=build_detail_rrc_table(
             metadata=metadata, cemab=cemab, cabab=cabab, opakab=opakab, tauc=tauc, header=header,
+            element_abundances=element_abundances,
             source_publication_shadow=source_detail_rrc_publication_shadow,
+            source_record_publication_shadow=source_detail_rrc_record_shadow,
         ),
         continuum=build_detail_continuum_table(epi_eV=epi_eV, zrems=zrems, opakc=opakc, rccemis=rccemis, dpthc=dpthc, ncn2=ncn2, header=header),
     )
@@ -2631,8 +2675,13 @@ def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int, ter
     source_detail_line_activity_shadow = _source_detail_line_activity_shadow(
         state, metadata, populations_out, workspace.oplin_physical
     )
+    # 45.3: retain the legacy shadow in state for diagnostics/backward
+    # compatibility, but fstepr3 publication no longer consults it.
     source_detail_rrc_publication_shadow = state.control.get(
         "source_detail_rrc_publication_shadow_v0648123451", {}
+    )
+    source_detail_rrc_record_shadow = state.control.get(
+        "source_detail_rrc_record_shadow_v0648123453", {}
     )
     ncn2 = int(state.control["ncn2"])
     record = build_detail_shell_output(
@@ -2655,7 +2704,14 @@ def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int, ter
         ncn2=ncn2,
         source_detail_line_activity_shadow=source_detail_line_activity_shadow,
         source_detail_rrc_publication_shadow=source_detail_rrc_publication_shadow,
+        source_detail_rrc_record_shadow=source_detail_rrc_record_shadow,
+        element_abundances=state.plasma.abundances,
     )
+    # The source-record publication state belongs to this savd/fstepr3 shell.
+    # Consume it only after the row table has been materialized so DSEC trials
+    # within the shell can contribute, but later shells cannot inherit it.
+    if isinstance(state.control, MutableMapping):
+        state.control["source_detail_rrc_record_shadow_v0648123453"] = {}
     _maybe_export_detail_continuum_product_write_state(
         state, hdunum=int(hdunum), terminal_record=bool(terminal_record),
         workspace=workspace, record=record,
