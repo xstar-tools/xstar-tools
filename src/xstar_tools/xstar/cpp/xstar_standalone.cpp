@@ -13365,17 +13365,19 @@ void write_v0648123431111_ca13_lifetime_probe(
     double delta_radius_cm,
     double radius_cm,
     const char* phase) {
-    const char* root_text = std::getenv("XSTAR_V0648123431111_CA13_LIFETIME_DIR");
+    const char* root_text = std::getenv("XSTAR_V0648123431112_CA13_TYPE49_DIR");
     if (!root_text || !*root_text || !phase || !*phase) return;
     const std::filesystem::path root(root_text);
     std::filesystem::create_directories(root);
-    const auto path = root / "ca13_23595_cemab_elumab_lifetime.csv";
+    const auto path = root / "ca13_23595_type49_cemab_cutoff.csv";
     const bool fresh = !std::filesystem::exists(path) || std::filesystem::file_size(path) == 0u;
     std::ofstream out(path, std::ios::app);
-    if (!out) throw std::runtime_error("cannot create v0648123431111 Ca XIII lifetime probe");
+    if (!out) throw std::runtime_error("cannot create v0648123431112 Ca XIII Type49 cutoff probe");
     if (fresh) {
         out << "sequence,call_index,evaluation_index,phase,source_record,source_position,data_type,rate_type,element_z,ion_stage,lower_row,upper_row,continuum_index,"
-               "publication_identity_present,record_diag_present,record_diag_spectral,type49_valid,type53_valid,type99_valid,ans3,ans4,"
+               "publication_identity_present,record_diag_present,record_diag_spectral,type49_valid,type53_valid,type99_valid,ans1,ans2,ans3,ans4,ans5,ans6,"
+               "type49_threshold_ev,threshold_abs_sigma_cm2,threshold_stimulated_sigma_cm2,density_scale,"
+               "program_real_offset,program_real_count,program_int_offset,program_int_count,payload_r0,payload_r1,payload_r2,payload_r3,"
                "active_min_stage,active_max_stage,active_full_row_start,active_full_row_end,lower_population,upper_population,"
                "delta_radius_cm,radius_cm,fpr2,cemab_activity_floor,cemab1,cemab2,cemab_active,executable_rate7_gate,"
                "elumabo1,elumabo2,hypothetical_delta_elumab,elumab1,elumab2,opakab,tauc1,tauc2\n";
@@ -13468,15 +13470,50 @@ void write_v0648123431111_ca13_lifetime_probe(
     const double fpr2 = xstar_constants::kLegacyHeattGeometryFactor *
         std::pow(std::max(radius_cm, 0.0) * 1.0e-19, 2.0);
     const double hypothetical_delta = 0.5 * (cemab1 + cemab2) * std::max(delta_radius_cm, 0.0) * fpr2;
+    const double ans1 = record_diag ? record_diag->ans[0] : 0.0;
+    const double ans2 = record_diag ? record_diag->ans[1] : 0.0;
     const double ans3 = record_diag ? record_diag->ans[2] : 0.0;
     const double ans4 = record_diag ? record_diag->ans[3] : 0.0;
+    const double ans5 = record_diag ? record_diag->ans[4] : 0.0;
+    const double ans6 = record_diag ? record_diag->ans[5] : 0.0;
+    const double type49_threshold_ev = record_diag ? record_diag->type49_threshold_ev : 0.0;
+    const double threshold_abs_sigma_cm2 = record_diag ? record_diag->threshold_abs_sigma_cm2 : 0.0;
+    const double threshold_stimulated_sigma_cm2 = record_diag ? record_diag->threshold_stimulated_sigma_cm2 : 0.0;
+    const double density_scale = record_diag ? record_diag->density_scale : 0.0;
+    std::array<double,4> payload_head{{0.0,0.0,0.0,0.0}};
+    std::size_t program_real_offset = 0u, program_real_count = 0u, program_int_offset = 0u, program_int_count = 0u;
+    if (program_record && data.program) {
+        program_real_offset = program_record->real_offset; program_real_count = program_record->real_count;
+        program_int_offset = program_record->int_offset; program_int_count = program_record->int_count;
+        for (std::size_t k = 0; k < payload_head.size() && k < program_record->real_count; ++k) {
+            const std::size_t at = program_record->real_offset + k;
+            if (at < data.program->reals.size()) payload_head[k] = data.program->reals[at];
+        }
+    }
+    // v0.6.48.12.3.43.1.1.1.2: capture the already-computed full fixed-state
+    // diagnostic outside the production product tree.  This is strictly
+    // attribution-only and does not feed any solver, transport, or writer state.
+    if (std::string(phase) == "pre_heatt" && delta_radius_cm > 0.0 && data.fixed_context) {
+        const auto fixed_root = root / "fixed_state";
+        std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> diagnostic_message{};
+        const int diagnostic_rc = xstar_fixed_state_write_last_diagnostics_v1(
+            data.fixed_context, fixed_root.string().c_str(), static_cast<std::uint64_t>(local_boundary.sequence),
+            diagnostic_message.data(), diagnostic_message.size());
+        if (diagnostic_rc != 0) {
+            throw std::runtime_error(std::string("v0648123431112 Type49 diagnostic capture failed: ") + diagnostic_message.data());
+        }
+    }
     out << std::setprecision(17)
         << local_boundary.sequence << ',' << data.call_index << ',' << local_boundary.evaluation_index << ',' << phase << ','
         << target_record << ',' << source_position << ',' << data_type << ',' << rate_type << ',' << element_z << ',' << ion_stage << ','
         << lower_row << ',' << upper_row << ',' << target_slot << ',' << (publication_identity_present ? 1 : 0) << ','
         << (record_diag ? 1 : 0) << ',' << (record_diag && record_diag->spectral ? 1 : 0) << ','
         << (record_diag && record_diag->type49_valid ? 1 : 0) << ',' << (record_diag && record_diag->type53_valid ? 1 : 0) << ','
-        << (record_diag && record_diag->type99_valid ? 1 : 0) << ',' << ans3 << ',' << ans4 << ','
+        << (record_diag && record_diag->type99_valid ? 1 : 0) << ','
+        << ans1 << ',' << ans2 << ',' << ans3 << ',' << ans4 << ',' << ans5 << ',' << ans6 << ','
+        << type49_threshold_ev << ',' << threshold_abs_sigma_cm2 << ',' << threshold_stimulated_sigma_cm2 << ',' << density_scale << ','
+        << program_real_offset << ',' << program_real_count << ',' << program_int_offset << ',' << program_int_count << ','
+        << payload_head[0] << ',' << payload_head[1] << ',' << payload_head[2] << ',' << payload_head[3] << ','
         << active_min_stage << ',' << active_max_stage << ',' << active_full_row_start << ',' << active_full_row_end << ','
         << lower_population << ',' << upper_population << ',' << delta_radius_cm << ',' << radius_cm << ',' << fpr2 << ',' << floor << ','
         << cemab1 << ',' << cemab2 << ',' << (cemab_active ? 1 : 0) << ',' << (executable_rate7_gate ? 1 : 0) << ','

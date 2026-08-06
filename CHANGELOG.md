@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.48.12.3.43.1.1.1.2 - 2026-08-05
+
+- Diagnostic-only Ca XIII continuum 23595 Type49 `ans3 -> cemab` cutoff attribution.
+- Moves the opt-in Ca XIII diagnostic root outside the file-silent production output tree.
+- Captures the existing full fixed-state Type49 source-shadow diagnostic for source record 158466 at the physical accepted shell; no Type49 arithmetic is changed.
+- Qualifies that all nine FITS data regions, STEP numerics, rank numerics, and trajectory remain frozen to 0.6.48.12.3.43.1.1.1.1.
+- Keeps ABI 6048110 and all fixed-state/rate/matrix/opacity/thermal/publication kernels frozen.
+
 # 0.6.48.12.3.43.1.1.1.1 - 2026-08-05
 
 - Diagnostic-only Ca XIII continuum 23595 `cemab -> elumab` lifetime attribution plus qualification-runner import hotfix.
