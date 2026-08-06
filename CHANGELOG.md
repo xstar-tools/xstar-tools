@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.12.3.43.1.1.1.3 - 2026-08-05
+
+- Diagnostic-only Ca XIII continuum 23595 identical-state Type49 cutoff proof and semantic closure.
+- Re-evaluate source record 158466 with the existing production `evaluate_record()` Type49 source-faithful path at source sequence 12, once at the live C++ temperature and once at the canonical FORTRAN final-shell temperature parsed from `xout_step.log`; all non-temperature caller inputs remain identical.
+- The probe never commits its result to solver, transport, thermal, spectral, STEP, or FITS state. Performance caches/counters are disabled for the replay.
+- Require the live-temperature replay to reproduce the committed Type49 `ans3`, require the FORTRAN-temperature replay to cross the literal `cemab > 1d-49` source publication floor, and require the implied `elumab` to agree with the canonical FORTRAN Option-19 row 23595 within 1%.
+- Freeze ABI `6048110`, all publication writers, ATDB lowering, standalone controller logic, and every production science source except the additive opt-in fixed-state diagnostic probe. All nine FITS data regions, STEP numerics, rank numerics, and trajectory remain qualification-frozen to 0.6.48.12.3.43.1.1.1.2.
+- If the identical-state proof closes, classify the single missing Ca XIII RRC row as a semantic hard-cutoff crossing caused by the tiny accepted thermodynamic-state difference and proceed to 0.6.48.12.3.43.2 rather than modifying Type49 production physics.
+
 ## 0.6.48.12.3.43.1.1.1.2 - 2026-08-05
 
 - Diagnostic-only Ca XIII continuum 23595 Type49 `ans3 -> cemab` cutoff attribution.

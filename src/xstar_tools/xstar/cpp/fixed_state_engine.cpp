@@ -8122,6 +8122,93 @@ EvaluatedRecord evaluate_record(
     return out;
 }
 
+// v0.6.48.12.3.43.1.1.1.3: diagnostic-only identical-state Type49 proof
+// for the single Ca XIII continuum record 23595 / source record 158466.
+// The ordinary production evaluation above remains untouched.  When the
+// opt-in path is configured, re-evaluate the exact same lowered record and
+// caller radiation/escape state twice: at the live C++ temperature and at the
+// canonical FORTRAN shell temperature supplied by the qualification runner.
+// Neither result is committed to populations, spectral workspaces, transport,
+// thermal state, or product writers.
+void write_v0648123431113_type49_identical_state_probe(
+    xstar_fixed_state_context_impl& ctx,
+    const xstar_fixed_state_input_v1& input,
+    const SourceContinuumWorkspace* calc_emisab_workspace) {
+    const char* path_text = std::getenv("XSTAR_V0648123431113_TYPE49_IDENTICAL_STATE_PATH");
+    if (!path_text || !*path_text) return;
+    const int source_sequence = environment_data_type("XSTAR_NATIVE_SOURCE_SEQUENCE");
+    if (source_sequence != 12) return;
+    const char* fortran_temp_text = std::getenv("XSTAR_V0648123431113_FORTRAN_TEMPERATURE_K");
+    if (!fortran_temp_text || !*fortran_temp_text) {
+        throw std::runtime_error("v0648123431113 identical-state probe requires FORTRAN temperature");
+    }
+    char* end = nullptr;
+    const double fortran_temperature_k = std::strtod(fortran_temp_text, &end);
+    if (!end || end == fortran_temp_text || !std::isfinite(fortran_temperature_k) ||
+        !(fortran_temperature_k > 0.0)) {
+        throw std::runtime_error("v0648123431113 invalid FORTRAN temperature");
+    }
+
+    const ProgramRecord* target = nullptr;
+    for (const auto& record : ctx.program.records) {
+        if (record.record == 158466 && record.data_type == 49 && record.rate_type == 7) {
+            target = &record;
+            break;
+        }
+    }
+    if (!target) throw std::runtime_error("v0648123431113 target Type49 record 158466 not found");
+    if (target->element_index < 0 ||
+        static_cast<std::size_t>(target->element_index) >= ctx.program.elements.size()) {
+        throw std::runtime_error("v0648123431113 target element index invalid");
+    }
+    const auto& element = ctx.program.elements[static_cast<std::size_t>(target->element_index)];
+
+    const std::filesystem::path path(path_text);
+    if (!path.parent_path().empty()) std::filesystem::create_directories(path.parent_path());
+    const bool fresh = !std::filesystem::exists(path) || std::filesystem::file_size(path) == 0u;
+    std::ofstream out(path, std::ios::app);
+    if (!out) throw std::runtime_error("cannot create v0648123431113 identical-state Type49 probe");
+    if (fresh) {
+        out << "source_sequence,state_label,temperature_k,electron_density_cm3,hydrogen_density_cm3,"
+               "record,source_position,continuum_index,threshold_ev,rnist,exponent_energy_ev,exponent_dimensionless,"
+               "ans1,ans2,ans3,ans4,ans5,ans6,sumc_ev,phextrap_input_pairs,phextrap_output_pairs,"
+               "phextrap_input_energy_hash,phextrap_input_sigma_hash,phextrap_output_energy_hash,phextrap_output_sigma_hash,"
+               "source_faithful,replacement_applied\n";
+    }
+    auto emit_state = [&](const char* label, double temperature_k) {
+        xstar_fixed_state_input_v1 probe_input = input;
+        probe_input.temperature_k = temperature_k;
+        RateEvaluationContextV064894 probe_context =
+            make_rate_evaluation_context_v064894(probe_input, calc_emisab_workspace);
+        // Keep the proof independent of performance/cache mutation.  Local
+        // geometry is rebuilt from the same immutable payload/grid.
+        probe_context.bound_free_cache = nullptr;
+        probe_context.bound_free_perf = nullptr;
+        const EvaluatedRecord evaluated = evaluate_record(
+            ctx.program, element, *target, probe_input, probe_context);
+        if (!evaluated.type49_shadow.valid || !evaluated.type49_shadow.source_faithful_mode ||
+            !evaluated.type49_shadow.replacement_applied) {
+            throw std::runtime_error("v0648123431113 target Type49 source-shadow re-evaluation invalid");
+        }
+        const auto& sh = evaluated.type49_shadow;
+        const double sumc_ev = -evaluated.contribution.ans3 / kErgPerEv;
+        out << std::setprecision(17)
+            << source_sequence << ',' << label << ',' << temperature_k << ','
+            << probe_input.electron_density_cm3 << ',' << probe_input.hydrogen_density_cm3 << ','
+            << target->record << ',' << target->source_position << ',' << sh.continuum_index_one_based << ','
+            << sh.threshold_ev << ',' << sh.rnist << ',' << sh.exponent_energy_ev << ',' << sh.exponent_dimensionless << ','
+            << evaluated.contribution.ans1 << ',' << evaluated.contribution.ans2 << ','
+            << evaluated.contribution.ans3 << ',' << evaluated.contribution.ans4 << ','
+            << evaluated.contribution.ans5 << ',' << evaluated.contribution.ans6 << ',' << sumc_ev << ','
+            << sh.phextrap_input_pair_count << ',' << sh.phextrap_output_pair_count << ','
+            << sh.phextrap_input_energy_hash << ',' << sh.phextrap_input_sigma_hash << ','
+            << sh.phextrap_output_energy_hash << ',' << sh.phextrap_output_sigma_hash << ','
+            << (sh.source_faithful_mode ? 1 : 0) << ',' << (sh.replacement_applied ? 1 : 0) << '\n';
+    };
+    emit_state("cpp_temperature", input.temperature_k);
+    emit_state("fortran_temperature", fortran_temperature_k);
+}
+
 
 Type53SourceShadow evaluate_selected_fullgrid_bound_free_v064895(
     const Program& program,
@@ -10786,6 +10873,11 @@ int run_impl(
                 ? &*type53_calc_emisab_workspace_v82_patch5181 : nullptr);
     rate_context_v064894.bound_free_cache = &ctx.bound_free_prepared_v064895;
     rate_context_v064894.bound_free_perf = &ctx.bound_free_perf_v064895;
+
+    write_v0648123431113_type49_identical_state_probe(
+        ctx, input,
+        type53_calc_emisab_workspace_v82_patch5181
+            ? &*type53_calc_emisab_workspace_v82_patch5181 : nullptr);
 
     const auto traversal_start = clock_type::now();
     for (std::size_t element_slot_v064894 = 0;
