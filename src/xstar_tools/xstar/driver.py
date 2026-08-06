@@ -396,7 +396,10 @@ class XSTARPythonDriver:
         result.control["xi"] = xi
         result.control["zeta"] = float(np.log10(xi)) if xi > 0.0 else float("-inf")
 
+        from .diagnostic_v0648123452 import checkpoint as _v0648123452_checkpoint
+        _v0648123452_checkpoint(result, phase="zone_entry_pre_trnfrc")
         execute(XSTARSourceRoutine.TRNFRC)
+        _v0648123452_checkpoint(result, phase="post_trnfrc")
 
         # Source t/tinf are in 10^4 K; the Python state stores kelvin.
         tinf_K = float(result.control.get("tinf", 0.0)) * 1.0e4
@@ -404,12 +407,14 @@ class XSTARPythonDriver:
             result.plasma.temperature = tinf_K * 1.01
 
         self.run_xstarcalc(result, fixed_state=fixed_state)
+        _v0648123452_checkpoint(result, phase="post_xstarcalc")
 
         vturbi = float(result.control.get("vturbi", 0.0))
         if vturbi > float(np.float32(1.0e-34)):
             execute(XSTARSourceRoutine.GSSMOOTH)
 
         execute(XSTARSourceRoutine.HEATT)
+        _v0648123452_checkpoint(result, phase="post_heatt_accepted_zone")
 
         # xstar.f90 emits the short radial log and, on the final requested
         # pass, accumulates the abundance/heating/cooling row immediately
@@ -455,8 +460,11 @@ class XSTARPythonDriver:
         result.control["xcol"] = float(result.transfer.column)
         result.control["delr"] = delr
 
+        _v0648123452_checkpoint(result, phase="pre_stpcut_post_geometry")
         execute(XSTARSourceRoutine.STPCUT)
+        _v0648123452_checkpoint(result, phase="post_stpcut")
         execute(XSTARSourceRoutine.TRNFRN)
+        _v0648123452_checkpoint(result, phase="post_trnfrn")
 
         completed = tuple(
             result.provenance.get("completed_source_routines", [])[completed_before:]

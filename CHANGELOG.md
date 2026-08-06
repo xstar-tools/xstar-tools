@@ -1,5 +1,14 @@
 # CHANGELOG
 
+# 0.6.48.12.3.45.2 - 2026-08-06
+
+- Diagnostic-first Python-controller transport attribution only; no production-science repair is attempted in this release.
+- Keep all C++ production science frozen to accepted 0.6.48.12.3.44, preserve production-zone ABI 6048110, and keep the 0.6.48.12.3.45.1 Python publication/rank fixes frozen.
+- Add an environment-gated observational checkpoint hook at the source-order boundaries `zone_entry_pre_trnfrc`, `post_trnfrc`, `post_xstarcalc`, `post_heatt_accepted_zone`, `pre_stpcut_post_geometry`, `post_stpcut`, and `post_trnfrn`.
+- Capture zones 2 and 3 only, including full compressed transfer arrays, binary64 hashes/summaries, DSEC terminal/trajectory state, and selected He II line 508/515 `elum/elumo/tau0` values.
+- Re-run only the primary two smoke models (`c5_ne1e10`, `ca19_xi2_ne1`) against the frozen 44 standalone-C++ reference.
+- Emit full per-product FITS failure JSON/CSV and full STEP failure JSON, including Option-23 identity mismatch samples. The 45.2 completion gate measures diagnostic completeness, not science acceptance.
+
 # 0.6.48.12.3.45.1 - 2026-08-06
 
 - Shared Python publication/rank parity hotfix; C++ production science remains frozen to the accepted 0.6.48.12.3.44 all-62 three-mode qualification and ABI 6048110.
