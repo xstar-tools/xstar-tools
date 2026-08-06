@@ -1,5 +1,13 @@
 # CHANGELOG
 
+# 0.6.48.12.3.43.3.1 - 2026-08-06
+
+- Readiness-only hotfix for 43.3 all-62 final FITS requalification.
+- Production science and FITS/STEP/rank comparators are unchanged from 43.3.
+- Fix `PRODUCTION_SOURCE_TREE_FROZEN` so transient C/C++/Python build outputs (`*.o`, `*.so`, `*.a`, `*.dylib`, `*.dll`, `*.pyc`, `xstar_cpp`, `__pycache__`) are excluded from the source-tree hash.
+- This prevents a previously built 43.2 baseline from causing a false production-source freeze REJECT when compared with a clean 43.3.x extraction.
+- ABI remains 6048110 and the implementation baseline remains 0.6.48.12.3.43.2.
+
 # 0.6.48.12.3.43.3 - 2026-08-06
 
 - All-62 final FITS requalification; production science frozen relative to 0.6.48.12.3.43.2.
