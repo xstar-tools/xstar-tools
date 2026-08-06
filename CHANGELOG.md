@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.48.12.3.45 - 2026-08-06
+
+- Freeze the accepted 0.6.48.12.3.44 C++ production implementation and ABI 6048110 after all-62 three-mode parity reached 186/186 FITS payload bit-exact model-pairs, 186/186 normalized STEP exact model-pairs, and zero pairwise numerical/inventory/attachment/order failures.
+- Add a seven-model Python-controller + C++-backend smoke qualification against the frozen 0.6.48.12.3.44 standalone-C++ products; standalone C++ is not rerun.
+- Select representative C, Ca, O, and Mg models covering the prior carbon detal3 publication residual, Ca Type50-heavy low-ion performance, the Ca xi=2 trajectory/excited-matrix closure, the Ca XIII 23595 RRC cutoff case, high-ion Ca fixed-state behavior, O IV non-positive-threshold publication behavior, and the canonical Mg XI xi=2.5/ne=1e8 benchmark.
+- Require Python controller ownership (`--zone-backend python`) with all modular solver/rates/matrix/emissivity/opacity/thermal/engine backends selected as C++; keep the source-faithful Mg line kernel in Python for this accelerated-Python mode.
+- Compare all nine FITS products with exact cross-mode identity membership/attachment/common order and normalized-L1 science <1%; do not reuse FORTRAN-only inventory exceptions. Compare `xout_step.log` with the full qualified STEP comparator. FITS payload bit-exactness and normalized STEP exactness are retained as diagnostics.
+- Record Python+C++ wall time versus the frozen standalone-C++ wall time for each smoke model.
+- No C++ production-science, solver, rate, matrix, Type49, Type50, publication, trajectory, rank, or ABI change.
+
 ## 0.6.48.12.3.44 - 2026-08-06
 
 - Added all-62 three-mode cross-backend qualification for `cpp-zone`, `cpp-all`, and direct standalone C++.
