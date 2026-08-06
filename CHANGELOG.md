@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 0.6.48.12.3.43.2 - 2026-08-06
+
+- Production publication/state repair for the two remaining 12.3.43 target classes: `xout_abund1` per-element thermal retention and `xo01_detal2` source activity/lifetime semantics.
+- Preserve ABI `6048110` and freeze accepted solver, rate, matrix, opacity, thermal, line-emissivity, fixed-state, controller trajectory, STEP, rank, continuum, detal3/detal4, line-list, spectrum, and RRC semantic-closure science.
+- `xout_abund1`: retain the already-computed accepted-boundary `element_thermal_products` (literal per-element `htt(lk)` / `cll(lk)`) through `copy_real_native_snapshot()` so the writer consumes direct source-owned values instead of falling back to zero outside H/He/Mg. No residual-total allocation is introduced.
+- `xo01_detal2`: replace the old endpoint-gate publication shadow with a publication-only replay of the observable `calc_emisab_ion` stale-`opakb1` lifetime. Active endpoints rely on the retained physical `rcem/oplin > 1d-64` gate; inactive endpoints may publish only when the carried source Type-50 opacity clears the same literal `fstepr2` threshold.
+- Retain record-product diagnostics at accepted boundaries so the detal2 replay has deterministic Type-50 source traversal/provenance without feeding diagnostics back into production science.
+- Qualify only the nine previously selected publication models (C, Ca, O, Mg controls), comparing `xout_abund1` and `xo01_detal2` directly to canonical FORTRAN while requiring the other seven FITS data regions, STEP numerics, rank numerics, and trajectories to remain frozen.
+- If targeted closure accepts, proceed to `0.6.48.12.3.43.3 — all-62 final FITS requalification`; do not rerun all 62 in this repair release.
+
 ## 0.6.48.12.3.43.1.1.1.3 - 2026-08-05
 
 - Diagnostic-only Ca XIII continuum 23595 identical-state Type49 cutoff proof and semantic closure.

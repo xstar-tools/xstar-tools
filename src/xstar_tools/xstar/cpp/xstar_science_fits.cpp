@@ -9257,39 +9257,88 @@ std::vector<bool> source_detail_line_activity_shadow_v064812320(
     const xstar_run_state::FixedEvaluationState& evaluation,
     const std::vector<ElementMeta>& elements,
     double hydrogen_density_cm3) {
-    // Literal Python/source-faithful fstepr2 publication shadow.  This is
-    // identity-only state: it never writes rcem, oplin, tau0, line profiles,
-    // transport, equilibrium, or the public xout_lines1 inventory.
+    // v0.6.48.12.3.43.2 / literal calc_emisab_ion + fstepr2 lifetime replay.
+    //
+    // fstepr2 does NOT publish a line merely because the calc_emisab endpoint
+    // abundance gate is active; it publishes only when the resulting live
+    // rcem/oplin surface exceeds 1.d-64.  The caller already retained that
+    // live surface and source_line_rows_from_identities() tests it directly.
+    //
+    // The only additional identity state needed here is FORTRAN's observable
+    // stale local opakb1 behavior when the endpoint gate is false.  In
+    // calc_emisab_ion, ans1..ans6 are zeroed before the abundance test, UCalc
+    // is skipped when both endpoints are <= 1.e-34, but the subsequently
+    // executed
+    //
+    //     oplin(jkkl)=opakb1*abund1
+    //
+    // still consumes the last opakb1 value left by an earlier Type-50 UCalc.
+    // Reconstruct that carry in the actual fixed-state record traversal order,
+    // not line-index order.  This publication-only replay never modifies
+    // rcem/oplin/tau0 or any production science workspace.
     long long maximum_line_index = 0;
     for (const auto& line : state.line_identities) {
         maximum_line_index = std::max(maximum_line_index, static_cast<long long>(line.line_index));
     }
-    std::vector<bool> shadow(static_cast<std::size_t>(std::max<long long>(maximum_line_index, 0)) + 1u, false);
-    if (maximum_line_index <= 0) return shadow;
+    std::vector<bool> shadow(
+        static_cast<std::size_t>(std::max<long long>(maximum_line_index, 0)) + 1u, false);
+    if (maximum_line_index <= 0 || evaluation.record_product_diagnostics.empty()) return shadow;
 
     const auto& populations = !evaluation.source_detail_global_xilevg.empty()
         ? evaluation.source_detail_global_xilevg : evaluation.source_global_xilevg;
     if (populations.empty()) return shadow;
 
     std::map<std::pair<std::string,int>, const xstar_run_state::LevelIdentityState*> level_by_ion_local;
+    std::map<std::string,int> nlev_by_ion;
     const auto& source_levels = !state.detail_level_identities.empty()
         ? state.detail_level_identities : state.level_identities;
     for (const auto& level : source_levels) {
-        level_by_ion_local[{level.ion_label, static_cast<int>(level.upper_index)}] = &level;
+        const int local = static_cast<int>(level.upper_index);
+        level_by_ion_local[{level.ion_label, local}] = &level;
+        nlev_by_ion[level.ion_label] = std::max(nlev_by_ion[level.ion_label], local);
+    }
+
+    std::map<int, const xstar_run_state::LineIdentityState*> line_by_index;
+    for (const auto& line : state.line_identities) {
+        if (line.line_index > 0) line_by_index[line.line_index] = &line;
     }
 
     std::map<int,double> abundance_by_z;
     for (const auto& element : elements) abundance_by_z[element.element_z] = element.abundance;
 
-    // calc_emisab_ion uses a default-REAL 1.e-34 caller gate.  Cast through
-    // float to preserve the literal source comparison boundary.
     const double endpoint_floor = static_cast<double>(static_cast<float>(1.0e-34));
     constexpr double detail_activity_floor = 1.0e-64;
     double stale_opakb1 = 0.0;
-    const auto& oplin = evaluation.source_workspace.oplin;
 
-    for (const auto& line : state.line_identities) {
-        if (line.rate_type != 4 || line.data_type != 50 || line.line_index <= 0) continue;
+    for (const auto& diag : evaluation.record_product_diagnostics) {
+        // opakb1 is shared by the rate-4/9/14 branch inside one
+        // calc_emisab_ion invocation.  Type-9/14 rows never publish oplin,
+        // but an active Type-50 UCalc in either family can own the stale value
+        // subsequently observed by the next rate-4 skipped-UCalc row (and, on
+        // the canonical compiler stack, by the following ion call).  Preserve
+        // those lifetime updates while only allowing rate 4 to set the detail
+        // publication shadow.
+        if (!diag.type50_valid || diag.data_type != 50 ||
+            (diag.rate_type != 4 && diag.rate_type != 9 && diag.rate_type != 14) ||
+            diag.type50_line_index_one_based <= 0) continue;
+
+        // calc_emisab_all calls calc_emisab_ion only for the active ion-stage
+        // window.  Diagnostics may include the wider lowered record inventory,
+        // so exclude records the source emissivity loop never visits.
+        const auto active_it = evaluation.source_detail_active_windows.find(diag.element_z);
+        if (active_it != evaluation.source_detail_active_windows.end()) {
+            const int min_stage = active_it->second[0];
+            const int max_stage = active_it->second[1];
+            if (diag.ion_stage < min_stage || diag.ion_stage > max_stage) continue;
+        }
+
+        const auto line_it = line_by_index.find(diag.type50_line_index_one_based);
+        if (line_it == line_by_index.end() || !line_it->second) continue;
+        const auto& line = *line_it->second;
+        const auto nlev_it = nlev_by_ion.find(line.ion_label);
+        if (nlev_it == nlev_by_ion.end() || line.lower_local_index <= 0 ||
+            line.upper_local_index <= 0 || line.lower_local_index >= nlev_it->second ||
+            line.upper_local_index >= nlev_it->second) continue;
         const auto lo_it = level_by_ion_local.find({line.ion_label, line.lower_local_index});
         const auto up_it = level_by_ion_local.find({line.ion_label, line.upper_local_index});
         if (lo_it == level_by_ion_local.end() || up_it == level_by_ion_local.end()) continue;
@@ -9311,16 +9360,21 @@ std::vector<bool> source_detail_line_activity_shadow_v064812320(
         const std::size_t line_index = static_cast<std::size_t>(line.line_index);
 
         if (endpoint_active) {
-            // Native source workspaces retain the one-based nplini guard, so
-            // line_index directly addresses oplin.  Recover only the caller-
-            // local opakb1 carry from the deterministic physical value.
-            if (line_index < oplin.size() && source_abund1 != 0.0) {
-                const double candidate = oplin[line_index] / source_abund1;
-                if (std::isfinite(candidate)) stale_opakb1 = candidate;
-            }
-            if (line_index < shadow.size()) shadow[line_index] = true;
-        } else if (std::abs(stale_opakb1 * source_abund1) > detail_activity_floor) {
-            if (line_index < shadow.size()) shadow[line_index] = true;
+            // UCalc executes and overwrites opakb1 with the Type-50 thermal
+            // cross section.  Whether a rate-4 row is actually visible to
+            // fstepr2 is decided by the retained physical rcem/oplin surface,
+            // not by this endpoint gate.  Rate 9/14 participate only in the
+            // caller-local stale-opakb1 lifetime.
+            if (std::isfinite(diag.opakab)) stale_opakb1 = diag.opakab;
+            continue;
+        }
+
+        // UCalc was skipped: ans3 remains zero.  Only ml_data_type=4 writes
+        // oplin(jkkl)=opakb1*abund1; rate 9/14 never create a detail row here.
+        if (diag.rate_type != 4) continue;
+        if (line_index < shadow.size() &&
+            std::abs(stale_opakb1 * source_abund1) > detail_activity_floor) {
+            shadow[line_index] = true;
         }
     }
     return shadow;

@@ -5673,6 +5673,16 @@ xstar_run_state::FixedEvaluationState copy_real_native_snapshot(
         ws.zrems.size() == 5u * n && ws.dpthc.size() == 2u * n &&
         ws.dpthcont.size() == 2u * n && ws.zremsz.size() == n;
     ws.line_profile_workspace_exact = true;
+
+    // v0.6.48.12.3.43.2: retain the already-computed accepted-boundary
+    // product diagnostics in the production FixedEvaluationState.  The
+    // source pprint(12) abundance tables consume per-element htt/cll, and
+    // the fstepr2 publication replay consumes Type-50 record traversal
+    // order.  These are publication/lifetime surfaces only; no retained
+    // diagnostic is fed back into the solver, rates, matrix, thermal,
+    // opacity, transport, or controller trajectory.
+    target.record_product_diagnostics = source.record_product_diagnostics;
+    target.element_thermal_products = source.element_thermal_products;
     return target;
 }
 
