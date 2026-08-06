@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.48.12.3.44 - 2026-08-06
+
+- Added all-62 three-mode cross-backend qualification for `cpp-zone`, `cpp-all`, and direct standalone C++.
+- Production science remains frozen to the accepted 0.6.48.12.3.43.3.2 implementation; ABI 6048110 unchanged.
+- Requires pairwise parity across all nine FITS products and full `xout_step.log` science/identity semantics.
+- Cross-mode inventory/attachment differences are fail-closed; FORTRAN-only semantic publication exceptions are not reused between C++ modes.
+- Adds FITS data bit-exactness and normalized STEP exactness diagnostics, plus a fresh cpp-zone regression bridge to the accepted 43.3.1 all-62 dataset.
+- Adds element/regime performance summaries and `--resume` support for the 186-run campaign.
+
 # 0.6.48.12.3.43.3.2 - 2026-08-06
 
 - Final semantic-closure/comparator hotfix; no production science changes and no model rerun.
