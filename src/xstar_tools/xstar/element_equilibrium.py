@@ -6812,6 +6812,11 @@ def _assemble_element_matrix_impl(
                         next_record=int(derived.npnxt[record]),
                         strict=False,
                     )
+                if isinstance(profile_control, MutableMapping):
+                    _capture_fixed_state_detail3_candidate_v064812345336(
+                        profile_control=profile_control, derived=derived, block=block,
+                        basis=basis, levels=levels, result=result,
+                    )
                 if _rate_payload_probe:
                     _elapsed = time.perf_counter() - _rate_probe_eval_t0
                     _rate_probe_record_known += _elapsed
@@ -8606,6 +8611,192 @@ def msolvelucy(
     )
 
 
+# v0.6.48.12.3.45.3.3.6: frozen-44 generic detail3 publication is fed by
+# the fixed-state bound-free spectral stream, then attaches the solved
+# post-mapback populations.  The earlier 45.3.3.5 calc_emisab-only repair
+# guessed Type49/53 endpoint layouts and missed the persistent C5 rows.
+_V064812345336_RATE1_BOUND_FREE_DATA_TYPES = frozenset({
+    12, 15, 19, 23, 27, 35, 36, 49, 53, 55, 59, 64, 70, 85, 99,
+})
+
+
+def _reset_fixed_state_detail3_candidates_v064812345336(
+    profile_control: MutableMapping[str, Any], element_z: int
+) -> None:
+    bucket = profile_control.setdefault(
+        "_source_detail_rrc_fixed_state_candidates_v064812345336", {}
+    )
+    if isinstance(bucket, MutableMapping):
+        bucket.pop(int(element_z), None)
+    published = profile_control.setdefault(
+        "source_detail_rrc_fixed_state_absorption_v064812345336", {}
+    )
+    if isinstance(published, MutableMapping):
+        stale = [
+            int(ci) for ci, row in published.items()
+            if isinstance(row, Mapping) and int(row.get("element_z", 0) or 0) == int(element_z)
+        ]
+        for ci in stale:
+            published.pop(ci, None)
+
+
+def _capture_fixed_state_detail3_candidate_v064812345336(
+    *,
+    profile_control: MutableMapping[str, Any],
+    derived: XSTARDerivedPointers,
+    block: ElementIonBlock,
+    basis: ElementCompactBasis,
+    levels: UCalcLevelTable,
+    result: UCalcResult,
+) -> None:
+    if result.status is not UCalcStatus.EVALUATED:
+        return
+    if int(result.rate_type) != 1 or int(result.data_type) not in _V064812345336_RATE1_BOUND_FREE_DATA_TYPES:
+        return
+    rec = int(result.record)
+    if rec <= 0 or rec >= int(derived.npconi2.size):
+        return
+    ci = int(derived.npconi2[rec])
+    if ci <= 0 or ci >= int(derived.npcon.size):
+        return
+    # Fail closed on the canonical setptrs owner.  npconi2 alone can identify
+    # a historical/source record that no longer owns this continuum slot.
+    if int(derived.npcon[ci]) != rec:
+        return
+    lower, upper = _lower_upper(result, levels)
+    if lower <= 0 or upper <= 0:
+        return
+    raw_lower = int(block.compact_index(lower))
+    raw_upper = int(block.compact_index(upper))
+    if raw_lower <= 0 or raw_upper <= 0:
+        return
+    row_lower = min(int(basis.n_rows), raw_lower)
+    row_upper = min(int(basis.n_rows), raw_upper)
+    bucket = profile_control.setdefault(
+        "_source_detail_rrc_fixed_state_candidates_v064812345336", {}
+    )
+    if not isinstance(bucket, MutableMapping):
+        return
+    element_bucket = bucket.setdefault(int(block.element_z), {})
+    if not isinstance(element_bucket, MutableMapping):
+        return
+    element_bucket[int(ci)] = {
+        "continuum_index": int(ci),
+        "source_record": rec,
+        "rate_type": int(result.rate_type),
+        "data_type": int(result.data_type),
+        "element_z": int(block.element_z),
+        "ion_stage": int(block.ion_stage),
+        "ion_index": int(block.ion_index),
+        "idest1": int(result.idest1),
+        "idest2": int(result.idest2),
+        "lower_endpoint": int(lower),
+        "upper_endpoint": int(upper),
+        "raw_compact_lower": raw_lower,
+        "raw_compact_upper": raw_upper,
+        "compact_lower": row_lower,
+        "compact_upper": row_upper,
+        "ans4": float(result.ans4),
+    }
+
+
+def _finalize_fixed_state_detail3_absorption_v064812345336(
+    *,
+    profile_control: MutableMapping[str, Any],
+    master: XSTARMasterData,
+    derived: XSTARDerivedPointers,
+    element_z: int,
+    context: ElementEquilibriumContext,
+    solve: Optional[LucySolveResult],
+) -> None:
+    candidates_all = profile_control.get(
+        "_source_detail_rrc_fixed_state_candidates_v064812345336", {}
+    )
+    candidates = (
+        candidates_all.get(int(element_z), {})
+        if isinstance(candidates_all, Mapping) else {}
+    )
+    published_all = profile_control.setdefault(
+        "source_detail_rrc_fixed_state_absorption_v064812345336", {}
+    )
+    if not isinstance(published_all, MutableMapping):
+        return
+    # Remove this element's previous evaluation before committing this solve.
+    for ci in [
+        int(k) for k, row in published_all.items()
+        if isinstance(row, Mapping) and int(row.get("element_z", 0) or 0) == int(element_z)
+    ]:
+        published_all.pop(ci, None)
+
+    level_floor = float(np.float32(1.0e-34))
+    activity_floor = float(np.float32(1.0e-36))
+    active = 0
+    if solve is not None and isinstance(candidates, Mapping):
+        pops = np.asarray(solve.populations, dtype=float).reshape(-1)
+        for ci, raw in candidates.items():
+            if not isinstance(raw, Mapping):
+                continue
+            lo = int(raw.get("compact_lower", 0) or 0)
+            up = int(raw.get("compact_upper", 0) or 0)
+            if lo <= 0 or up <= 0 or lo > pops.size or up > pops.size:
+                continue
+            abund1 = float(pops[lo - 1]) * float(context.abundance)
+            abund2 = float(pops[up - 1]) * float(context.abundance)
+            if not (abund1 > level_floor or abund2 > level_floor):
+                continue
+            ans4 = float(raw.get("ans4", 0.0) or 0.0)
+            absorption = abs(ans4) * abund1 * float(context.hydrogen_density_cm3)
+            if not (math.isfinite(absorption) and absorption > activity_floor):
+                continue
+            row = dict(raw)
+            row.update({
+                "abundance_lower": abund1,
+                "abundance_upper": abund2,
+                "integrated_absn": float(absorption),
+                "publication_owner": "fixed_state_rate1_postsolve_v064812345336",
+            })
+            published_all[int(ci)] = row
+            active += 1
+
+    summary: Dict[str, Any] = {
+        "element_z": int(element_z),
+        "candidate_count": int(len(candidates) if isinstance(candidates, Mapping) else 0),
+        "active_absorption_count": int(active),
+    }
+    for target in (709, 762):
+        rec = int(derived.npcon[target]) if target < int(derived.npcon.size) else 0
+        hdr = None
+        if rec > 0:
+            try:
+                hdr = master.header(rec)
+            except Exception:
+                hdr = None
+        entry = published_all.get(target, {})
+        cand = candidates.get(target, {}) if isinstance(candidates, Mapping) else {}
+        prefix = f"continuum_{target}"
+        summary.update({
+            f"{prefix}_canonical_record": int(rec),
+            f"{prefix}_canonical_rate_type": int(getattr(hdr, "rate_type", 0) or 0),
+            f"{prefix}_canonical_data_type": int(getattr(hdr, "data_type", 0) or 0),
+            f"{prefix}_candidate": bool(cand),
+            f"{prefix}_candidate_idest1": int(cand.get("idest1", 0) or 0) if isinstance(cand, Mapping) else 0,
+            f"{prefix}_candidate_idest2": int(cand.get("idest2", 0) or 0) if isinstance(cand, Mapping) else 0,
+            f"{prefix}_candidate_ans4": float(cand.get("ans4", 0.0) or 0.0) if isinstance(cand, Mapping) else 0.0,
+            f"{prefix}_published": bool(entry),
+            f"{prefix}_absorption": float(entry.get("integrated_absn", 0.0) or 0.0) if isinstance(entry, Mapping) else 0.0,
+        })
+    profile_control["source_detail_rrc_fixed_state_summary_v064812345336"] = summary
+    trace_path = str(os.environ.get("XSTAR_V064812345336_FIXED_STATE_DETAIL3_TRACE", "")).strip()
+    if trace_path and (int(element_z) == 6 or summary.get("continuum_709_canonical_record") or summary.get("continuum_762_canonical_record")):
+        try:
+            path = Path(trace_path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(summary, sort_keys=True) + "\\n")
+        except Exception:
+            pass
+
+
 def solve_element_statistical_equilibrium(
     master: XSTARMasterData,
     derived: XSTARDerivedPointers,
@@ -8616,6 +8807,8 @@ def solve_element_statistical_equilibrium(
 ) -> ElementEquilibriumResult:
     """Run the complete translated element source sequence."""
     profile_control = context.profile_control or {}
+    if isinstance(profile_control, MutableMapping):
+        _reset_fixed_state_detail3_candidates_v064812345336(profile_control, int(element_z))
     if int(element_z) == 12:
         _matrix_assembly_t0 = time.perf_counter()
         with profile_component(
@@ -8771,6 +8964,11 @@ def solve_element_statistical_equilibrium(
         and solve.normalization_error <= 1.0e-10
         and assembly.basis.n_rows > 0
     )
+    if isinstance(profile_control, MutableMapping):
+        _finalize_fixed_state_detail3_absorption_v064812345336(
+            profile_control=profile_control, master=master, derived=derived,
+            element_z=int(element_z), context=context, solve=solve,
+        )
     return ElementEquilibriumResult(
         assembly=assembly,
         solve=solve,

@@ -440,6 +440,7 @@ def build_detail_rrc_table(
     source_slot_current_eval_sequence: int = 0,
     orphan_type7_absorption: Mapping[int, Mapping[str, Any]] | None = None,
     non_type7_absorption: Mapping[int, Mapping[str, Any]] | None = None,
+    fixed_state_non_type7_absorption: Mapping[int, Mapping[str, Any]] | None = None,
     publication_trace: list[dict[str, Any]] | None = None,
 ) -> OutputTable:
     """Frozen-44-compatible generic detailed-RRC row selection.
@@ -462,6 +463,7 @@ def build_detail_rrc_table(
     del source_slot_absorption_lifetime, source_slot_current_eval_sequence
     orphan_absorption = orphan_type7_absorption or {}
     non_type7_map = non_type7_absorption or {}
+    fixed_state_map = fixed_state_non_type7_absorption or {}
     emiss = np.asarray(cemab, dtype=float)
     absorbed = np.asarray(cabab, dtype=float).reshape(-1)
     opacity = np.asarray(opakab, dtype=float).reshape(-1)
@@ -529,6 +531,18 @@ def build_detail_rrc_table(
                     active = True
                     owner = "canonical_npcon_non_type7_calc_emisab_absorption_v064812345335"
                     non_type7_entry = candidate
+        fixed_state_entry: Mapping[str, Any] | None = None
+        if not active and rate_type == 1:
+            candidate = fixed_state_map.get(int(item.continuum_index))
+            if (isinstance(candidate, Mapping)
+                    and int(candidate.get("source_record", 0) or 0) == int(item.source_record)
+                    and int(candidate.get("rate_type", 0) or 0) == 1):
+                retained_absn = float(candidate.get("integrated_absn", 0.0) or 0.0)
+                if np.isfinite(retained_absn) and retained_absn > activity_floor:
+                    current = (current[0], current[1], retained_absn, current[3])
+                    active = True
+                    owner = "fixed_state_rate1_postsolve_absorption_v064812345336"
+                    fixed_state_entry = candidate
         if publication_trace is not None and int(item.continuum_index) in {709, 762}:
             publication_trace.append({
                 "phase": "detail3_publication",
@@ -543,6 +557,7 @@ def build_detail_rrc_table(
                 "record_shadow_present": bool(retained is not None),
                 "orphan_type7_entry": dict(orphan_entry) if orphan_entry is not None else None,
                 "non_type7_entry": dict(non_type7_entry) if non_type7_entry is not None else None,
+                "fixed_state_entry": dict(fixed_state_entry) if fixed_state_entry is not None else None,
             })
         if not active:
             continue
@@ -643,6 +658,7 @@ def build_detail_shell_output(
     source_detail_rrc_current_eval_sequence: int = 0,
     source_detail_rrc_orphan_absorption: Mapping[int, Mapping[str, Any]] | None = None,
     source_detail_rrc_non_type7_absorption: Mapping[int, Mapping[str, Any]] | None = None,
+    source_detail_rrc_fixed_state_absorption: Mapping[int, Mapping[str, Any]] | None = None,
     source_detail_rrc_publication_trace: list[dict[str, Any]] | None = None,
     element_abundances: Sequence[float] | None = None,
 ) -> DetailShellOutput:
@@ -661,6 +677,7 @@ def build_detail_shell_output(
             source_slot_current_eval_sequence=source_detail_rrc_current_eval_sequence,
             orphan_type7_absorption=source_detail_rrc_orphan_absorption,
             non_type7_absorption=source_detail_rrc_non_type7_absorption,
+            fixed_state_non_type7_absorption=source_detail_rrc_fixed_state_absorption,
             publication_trace=source_detail_rrc_publication_trace,
         ),
         continuum=build_detail_continuum_table(epi_eV=epi_eV, zrems=zrems, opakc=opakc, rccemis=rccemis, dpthc=dpthc, ncn2=ncn2, header=header),
@@ -2777,6 +2794,9 @@ def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int, ter
     source_detail_rrc_non_type7_absorption = state.control.get(
         "source_detail_rrc_non_type7_absorption_v064812345335", {}
     )
+    source_detail_rrc_fixed_state_absorption = state.control.get(
+        "source_detail_rrc_fixed_state_absorption_v064812345336", {}
+    )
     source_detail_rrc_publication_trace: list[dict[str, Any]] = []
     ncn2 = int(state.control["ncn2"])
     record = build_detail_shell_output(
@@ -2804,6 +2824,7 @@ def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int, ter
         source_detail_rrc_current_eval_sequence=source_detail_rrc_current_eval_sequence,
         source_detail_rrc_orphan_absorption=source_detail_rrc_orphan_absorption,
         source_detail_rrc_non_type7_absorption=source_detail_rrc_non_type7_absorption,
+        source_detail_rrc_fixed_state_absorption=source_detail_rrc_fixed_state_absorption,
         source_detail_rrc_publication_trace=source_detail_rrc_publication_trace,
         element_abundances=state.plasma.abundances,
     )
@@ -2846,6 +2867,7 @@ def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int, ter
         state.control["source_detail_rrc_orphan_trace_v06481234533"] = []
         state.control["source_detail_rrc_orphan_absorption_v06481234533"] = {}
         state.control["source_detail_rrc_non_type7_absorption_v064812345335"] = {}
+        state.control["source_detail_rrc_fixed_state_absorption_v064812345336"] = {}
     _maybe_export_detail_continuum_product_write_state(
         state, hdunum=int(hdunum), terminal_record=bool(terminal_record),
         workspace=workspace, record=record,

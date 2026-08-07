@@ -1,5 +1,12 @@
 # CHANGELOG
 
+# 0.6.48.12.3.45.3.3.6 - 2026-08-07
+
+- Move the remaining rate-1 generic `xo01_detal3` compatibility producer to the fixed-state UCalc stream and attach solved post-mapback populations after `msolvelucy`; the output-only map never mutates physical cemab/cabab/opakab.
+- Mirror the frozen-44 rate-1 bound-free spectral family instead of restricting the compatibility producer to Type49/53, and use authoritative UCalc endpoints rather than packed-payload endpoint guesses.
+- Add C5 host diagnostics that print the real canonical record/rate/data metadata and producer status for continuum 709/762.
+- Keep C++ science, ABI 6048110, Option-23 comparator, numerical tolerances, and retired `ca19_ne1e8` policy frozen.
+
 # 0.6.48.12.3.45.3.3.5 - 2026-08-07
 
 - Add output-only canonical rate-1 Type49/53 detail3 absorption producer using the real UCalc path.
