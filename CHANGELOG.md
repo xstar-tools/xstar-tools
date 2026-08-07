@@ -1,5 +1,15 @@
 # CHANGELOG
 
+# 0.6.48.12.3.45.3.3.4 - 2026-08-07
+
+- Shared Python FITS-publication parity repair after pure Python and Python+C++ reproduced the same C5/Ca/O strict FITS failures with all STEP science accepted.
+- Generic `xo01_detal3` identity ownership now matches frozen-44 C++'s broad canonical `npcon`/`npconi2` continuum surface instead of narrowing detailed FITS rows to rate type 7.
+- Type-7 record/orphan compatibility fallbacks remain Type-7-only; no physical continuum workspace is synthesized.
+- Output metadata cache format bumped to 13.
+- `xo01_detal2` source publication shadow is captured in actual `calc_emisab_all` Type50 record order, with rate 4/9/14 stale-`opakb1` lifetime and inactive rate-4-only publication semantics; physical rcem/oplin/tau remain unchanged.
+- C++ production science stays frozen from 0.6.48.12.3.44 and ABI stays 6048110. Option-23 comparator stays frozen from 45.3.3.2.
+- New pure-Python staged runner: C5 only first, then affected C5/Ca/O only after C5 accepts. `ca19_ne1e8` is explicitly retired from future reruns.
+
 # 0.6.48.12.3.45.3.3.3 - 2026-08-07
 
 - Add a dedicated seven-model **pure-Python** 45.x smoke runner against frozen 0.6.48.12.3.44 standalone-C++ products.

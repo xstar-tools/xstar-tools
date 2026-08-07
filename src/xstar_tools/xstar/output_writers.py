@@ -136,9 +136,9 @@ class RRCOutputMetadata:
     source_record: int = 0
     data_type: int = 0
     rank_threshold_eV: float = 0.0
-    # v0.6.48.12.3.45.3: retain the literal source rate family so
-    # fstepr3 can use only the rate-type-7 chain.  npcon also contains
-    # rate-type-1 bound-free records, which are not fstepr3 rows.
+    # Retain the literal source rate family.  STEP/public RRC source ownership
+    # is rate-type-7-only, while frozen-44 generic xo01_detal3 publication uses
+    # the broader canonical npcon/npconi2 continuum identity surface.
     rate_type: int = 0
     atomic_number: int = 0
 
@@ -149,8 +149,8 @@ class SourceOutputMetadata:
     lines: tuple[LineOutputMetadata, ...] = ()
     rrcs: tuple[RRCOutputMetadata, ...] = ()
     # FITS detail-RRC view of the canonical ``rrcs``/npcon inventory.
-    # Since 45.3.1 this must be exactly the rate-type-7 subsequence of rrcs;
-    # it is not an independently reconstructed npfi identity universe.
+    # Since 45.3.3.4 this mirrors frozen-44's broad canonical npcon/npconi2
+    # identity owner; STEP/public RRC source ownership remains separately Type 7.
     detail_rrcs: tuple[RRCOutputMetadata, ...] = ()
     provenance: Mapping[str, Any] = field(default_factory=dict)
 
@@ -441,20 +441,18 @@ def build_detail_rrc_table(
     orphan_type7_absorption: Mapping[int, Mapping[str, Any]] | None = None,
     publication_trace: list[dict[str, Any]] | None = None,
 ) -> OutputTable:
-    """Literal ``fstepr3`` detailed-RRC row selection.
+    """Frozen-44-compatible generic detailed-RRC row selection.
 
-    v0.6.48.12.3.45.3.3 keeps the canonical setptrs ``npcon`` metadata as
-    the FITS identity universe and filters it to rate type 7.  The execution
-    kernel still walks ``npfi(7,ion)`` when producing the physical values, but
-    FITS identity reconstruction must not use that narrower chain.  The 45.1
-    same-evaluation continuum-slot shadow remains deliberately non-authoritative.
+    The standalone-C++ reference owns generic ``xo01_detal3`` identities from
+    the complete canonical ``npcon``/``npconi2`` continuum surface, not from
+    the narrower source ``npfi(7,ion)`` chain.  Consequently canonical rate-1
+    as well as rate-7 records may be published when the current local
+    ``cemab/cabab/opakab`` slot passes the source REAL(4)-promoted 1.e-36
+    activity test.  This is publication ownership only: no physical workspace
+    values are synthesized or rewritten.
 
-    Frozen-44 standalone C++ additionally retains two Carbon publication rows
-    (709/762) that are not literal FORTRAN ``fstepr3`` rows.  For cross-mode
-    parity only, 45.3.3 evaluates canonical ``npcon`` Type-7 records that were
-    not visited by the active Python ``npfi(7,ion)`` traversal and may supply
-    *integrated absorption only* from that output-only orphan map.  This does
-    not modify physical cemab/cabab/opakab state.
+    Older Type-7 record/orphan shadows remain narrow compatibility fallbacks
+    for Type-7 rows only; they never make a rate-1 row active.
     """
     del source_publication_shadow  # 45.1 slot shadow is never authoritative.
     record_shadow = source_record_publication_shadow or {}
@@ -467,22 +465,21 @@ def build_detail_rrc_table(
     opacity = np.asarray(opakab, dtype=float).reshape(-1)
     depth = np.asarray(tauc, dtype=float)
     abund = None if element_abundances is None else np.asarray(element_abundances, dtype=float).reshape(-1)
-    if any(int(getattr(r, "rate_type", 0)) != 0 for r in metadata.rrcs):
-        # Canonical FITS identity owner: setptrs npcon order, Type-7 only.
-        # ``metadata.detail_rrcs`` is intentionally not authoritative here.
-        source_rows = tuple(r for r in metadata.rrcs if int(getattr(r, "rate_type", 0)) == 7)
+    if metadata.rrcs:
+        # Frozen-44 generic detailed-FITS identity owner: complete canonical
+        # setptrs npcon/npconi2 order.  Do not narrow this to rate type 7.
+        source_rows = metadata.rrcs
     elif metadata.detail_rrcs:
-        # Backward-compatible synthetic/fixture metadata predating rate_type.
+        # Backward-compatible synthetic/fixture metadata.
         source_rows = metadata.detail_rrcs
     else:
-        source_rows = metadata.rrcs
+        source_rows = ()
     rows: list[RRCOutputMetadata] = []
     payload: list[tuple[float, float, float, float]] = []
     abundance_floor = _source_real_literal(1.0e-10)
     activity_floor = _source_real_literal(1.0e-36)
     for item in source_rows:
-        if int(getattr(item, "rate_type", 7)) != 7:
-            continue
+        rate_type = int(getattr(item, "rate_type", 0) or 0)
         z = int(getattr(item, "atomic_number", 0))
         if abund is not None and z > 0:
             if z > abund.size or not (float(abund[z - 1]) >= abundance_floor):
@@ -495,8 +492,8 @@ def build_detail_rrc_table(
         current = (float(emiss[0, i]), float(emiss[1, i]), float(absorbed[i]), float(opacity[i]))
         active = any(np.isfinite(v) and v > activity_floor for v in current)
         owner = "physical_current" if active else "inactive"
-        retained = record_shadow.get(int(item.source_record)) if not active else None
-        if not active and retained is not None and int(retained.get("continuum_index", -1)) == int(item.continuum_index):
+        retained = record_shadow.get(int(item.source_record)) if (not active and rate_type == 7) else None
+        if not active and rate_type == 7 and retained is not None and int(retained.get("continuum_index", -1)) == int(item.continuum_index):
             retained_values = (
                 float(retained.get("emis_inward", 0.0)),
                 float(retained.get("emis_outward", 0.0)),
@@ -508,7 +505,7 @@ def build_detail_rrc_table(
                 active = True
                 owner = "source_record_lifetime_v0648123453"
         orphan_entry: Mapping[str, Any] | None = None
-        if not active:
+        if not active and rate_type == 7:
             candidate = orphan_absorption.get(int(item.continuum_index))
             if isinstance(candidate, Mapping) and int(candidate.get("source_record", 0) or 0) == int(item.source_record):
                 retained_absn = float(candidate.get("integrated_absn", 0.0) or 0.0)
@@ -2631,19 +2628,37 @@ def _source_detail_line_activity_shadow(
     populations_zero_based: Sequence[float],
     physical_oplin: Sequence[float],
 ) -> np.ndarray:
-    """Build a deterministic fstepr2 publication-identity shadow.
+    """Build the output-only fstepr2 publication-identity shadow.
 
-    This mirrors the literal ``calc_emisab_ion.f90`` Type50/rate-4 endpoint
-    abundance gate without reproducing its uninitialized/stale ``opakb1``
-    side effect.  The shadow is output-only: it can retain a zero/negligible
-    line row in source order, but it never changes rcem, oplin, tau0, the
-    continuum opacity, equilibrium, or transport.
+    Production 45.3.3.4 consumes the exact source-record-order replay captured
+    during ``calc_emisab_all``.  A deterministic line-index reconstruction is
+    retained only for old synthetic fixtures that do not carry that state.
+    Neither path changes rcem, oplin, tau0, continuum opacity, equilibrium, or
+    transport.
     """
     n_lines = max((int(row.line_index) for row in metadata.lines), default=0)
     shadow = np.zeros(n_lines, dtype=bool)
     if n_lines <= 0:
         return shadow
 
+    # 45.3.3.4: primary owner is the output-only replay captured directly in
+    # calc_emisab's actual source-record traversal.  This avoids reconstructing
+    # caller-local stale opakb1 lifetime from line-index order.
+    captured = state.control.get("source_detail_line_activity_shadow_v064812345334", {})
+    if isinstance(captured, Mapping):
+        for one_based, active in captured.items():
+            try:
+                i = int(one_based) - 1
+            except Exception:
+                continue
+            if bool(active) and 0 <= i < shadow.size:
+                shadow[i] = True
+        # The presence of the key proves this evaluation used the new source
+        # replay even when the resulting map is empty.
+        if "source_detail_line_activity_shadow_v064812345334" in state.control:
+            return shadow
+
+    # Backward-compatible synthetic-fixture fallback.
     pop = np.asarray(populations_zero_based, dtype=float).reshape(-1)
     oplin = np.asarray(physical_oplin, dtype=float).reshape(-1)
     abundances = state.plasma.abundances

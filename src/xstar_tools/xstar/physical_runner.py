@@ -703,7 +703,7 @@ def photon_number_luminosity(zremsz: Sequence[float], epi_eV: Sequence[float]) -
     return source_spectrum_ispcg2_diagnostics(zremsz, epi_eV)[0]
 
 
-OUTPUT_METADATA_CACHE_FORMAT_VERSION = 12
+OUTPUT_METADATA_CACHE_FORMAT_VERSION = 13
 
 
 def default_output_metadata_cache_path(fitsfile: str | Path) -> Path:
@@ -855,10 +855,11 @@ def load_source_output_metadata_cache(master: Any, path: str | Path) -> SourceOu
                 z["rrc_rate_type"], z["rrc_atomic_number"],
             )
         )
-        # v0.6.48.12.3.45.3.1: derive the detail FITS inventory from the
-        # canonical cached npcon sequence.  Never trust the 45.3 npfi-derived
-        # detail_rrc_source_record subset, even if present in an older sidecar.
-        detail_rrcs = tuple(row for row in rrcs if int(row.rate_type) == 7)
+        # v0.6.48.12.3.45.3.3.4: frozen-44 generic xo01_detal3 ownership
+        # uses the complete canonical npcon/npconi2 continuum identity surface,
+        # including rate types 7 and 1.  Keep the dedicated STEP/public-RRC
+        # Type-7 ownership separate; detailed FITS publication is broader.
+        detail_rrcs = rrcs
     return SourceOutputMetadata(
         levels=levels,
         lines=lines,
@@ -1204,13 +1205,12 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
                 atomic_number=z,
             )
         )
-    # v0.6.48.12.3.45.3.1: FITS detail-RRC identity ownership follows the
-    # canonical setptrs continuum table (npcon), exactly as the frozen-44 C++
-    # FITS implementation does.  Filter that canonical inventory to rate type
-    # 7; do not reconstruct the FITS identity universe from npfi(7,ion), which
-    # can omit valid canonical continuum identities.  The per-ion npfi walk
-    # remains the execution owner inside calc_emisab and STEP Options 19/24.
-    detail_rrcs = [row for row in rrcs if int(row.rate_type) == 7]
+    # v0.6.48.12.3.45.3.3.4: frozen-44 generic xo01_detal3 uses the broad
+    # canonical setptrs npcon/npconi2 identity universe, not source_rrc's
+    # rate-type-7-only view.  This intentionally includes canonical rate-type-1
+    # continua when their local detailed workspace activity passes fstepr3's
+    # 1.e-36 publication test.  STEP Options 19/24 remain Type-7-owned.
+    detail_rrcs = list(rrcs)
 
     return SourceOutputMetadata(
         levels=tuple(levels),
@@ -1220,8 +1220,8 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
         provenance={
             "source": "readtbl/setptrs packed ATDB pointers",
             "source_faithful": True,
-            "metadata_builder": "vectorized_numpy_v11_canonical_npcon_type7_detail_inventory",
-            "detail_rrc_owner": "canonical npcon filtered rate_type==7",
+            "metadata_builder": "vectorized_numpy_v13_frozen44_broad_npcon_detail_inventory",
+            "detail_rrc_owner": "canonical npcon/npconi2 broad continuum identity surface",
             "metadata_cache_status": "built",
         },
     )

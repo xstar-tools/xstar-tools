@@ -689,6 +689,12 @@ def calc_emisab_ion(
                         if result.ready:
                             evaluated += 1
                             _accumulate_ucalc_continuum(context.workspace, result)
+                    source_line_index = int(context.derived.nplini[rec]) if rec < len(context.derived.nplini) else int(line_index)
+                    _update_source_detail_line_publication_shadow_v064812345334(
+                        context.profile_control, rate_type=rate_type, data_type=header.data_type,
+                        line_index=source_line_index, abundance_lower=abund1,
+                        abundance_upper=abund2, opak_local=result.opakab,
+                    )
                     denom = ptmp1 + ptmp2
                     if denom == 0.0:
                         raise CalcEmisabPortError("zero line escape denominator")
@@ -791,6 +797,52 @@ def calc_emisab_element(
         compact_xileve=tuple(float(v) for v in compact_xileve[1 : ipmat + 2]),
         ion_traces=tuple(ion_traces),
     )
+
+
+def _begin_source_detail_line_publication_shadow_v064812345334(
+    control: Optional[MutableMapping[str, Any]],
+) -> None:
+    """Reset the evaluation-local Type-50 stale-opakb1 publication replay."""
+    if not isinstance(control, MutableMapping):
+        return
+    control["source_detail_line_activity_shadow_v064812345334"] = {}
+    control["source_detail_line_stale_opakb1_v064812345334"] = 0.0
+
+
+def _update_source_detail_line_publication_shadow_v064812345334(
+    control: Optional[MutableMapping[str, Any]], *, rate_type: int, data_type: int,
+    line_index: int, abundance_lower: float, abundance_upper: float,
+    opak_local: float,
+) -> None:
+    """Replay frozen-44 calc_emisab Type-50 stale-opakb1 identity lifetime.
+
+    Called in the actual source record traversal, this tracks the caller-local
+    ``opakb1`` carry across rate types 4/9/14.  Active records update the carry;
+    only an inactive rate-4 record may expose a detail-line identity.  The map
+    is output-only and never mutates rcem/oplin/tau or any physical workspace.
+    """
+    if not isinstance(control, MutableMapping):
+        return
+    if int(data_type) != 50 or int(rate_type) not in (4, 9, 14) or int(line_index) <= 0:
+        return
+    active = (
+        float(abundance_lower) > XSTAR_CALC_EMISAB_LEVEL_ABUNDANCE_FLOOR
+        or float(abundance_upper) > XSTAR_CALC_EMISAB_LEVEL_ABUNDANCE_FLOOR
+    )
+    stale = float(control.get("source_detail_line_stale_opakb1_v064812345334", 0.0) or 0.0)
+    if active:
+        if np.isfinite(float(opak_local)):
+            control["source_detail_line_stale_opakb1_v064812345334"] = float(opak_local)
+        return
+    if int(rate_type) != 4:
+        return
+    if abs(stale * float(abundance_lower)) <= 1.0e-64:
+        return
+    shadow = control.setdefault("source_detail_line_activity_shadow_v064812345334", {})
+    if not isinstance(shadow, MutableMapping):
+        shadow = {}
+        control["source_detail_line_activity_shadow_v064812345334"] = shadow
+    shadow[int(line_index)] = True
 
 
 def _update_source_detail_rrc_record_shadow_v0648123453(
@@ -1136,6 +1188,7 @@ def calc_emisab_all(context: CalcEmisabContext) -> CalcEmisabResult:
         n_energy=len(epi),
     )
     context.workspace.clear_source_outputs()
+    _begin_source_detail_line_publication_shadow_v064812345334(context.profile_control)
     _begin_source_detail_rrc_evaluation_v06481234532(context.profile_control)
     if isinstance(context.profile_control, MutableMapping):
         context.profile_control["source_detail_rrc_publication_shadow_v0648123451"] = {}
