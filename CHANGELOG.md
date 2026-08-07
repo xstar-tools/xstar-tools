@@ -1,5 +1,13 @@
 # CHANGELOG
 
+# 0.6.48.12.3.45.3.3.5 - 2026-08-07
+
+- Add output-only canonical rate-1 Type49/53 detail3 absorption producer using the real UCalc path.
+- Preserve physical cemab/cabab/opakab and all solver/transport science.
+- Consume the producer only with exact continuum/source-record/rate/data-type ownership.
+- Add end-to-end calc_emisab producer -> detail3 writer regression coverage.
+- Keep C5-first qualification; ca19_ne1e8 remains retired.
+
 # 0.6.48.12.3.45.3.3.4 - 2026-08-07
 
 - Shared Python FITS-publication parity repair after pure Python and Python+C++ reproduced the same C5/Ca/O strict FITS failures with all STEP science accepted.

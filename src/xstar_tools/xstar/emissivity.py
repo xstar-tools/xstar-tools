@@ -1179,6 +1179,142 @@ def _evaluate_canonical_npcon_orphan_type7_absorption_v06481234533(
     })
 
 
+def _evaluate_canonical_npcon_non_type7_detail3_absorption_v064812345335(
+    context: CalcEmisabContext, *, xpx: float, xh0: float, xh1: float,
+) -> None:
+    """Produce output-only detail3 absorption for canonical rate-1 Type49/53 rows.
+
+    Frozen-44 generic ``xo01_detal3`` ownership is broader than the executable
+    rate-type-7 ``npfi`` chain: canonical ``npcon/npconi2`` also contains
+    rate-type-1 bound-free identities.  Python's physical calc_emisab workspace
+    intentionally remains source-faithful to the rate-7 writer, so evaluate the
+    missing canonical rate-1 Type49/53 records here and retain *only*
+    ``abs(ans4)*abund1*n_H`` in an output-publication map.  No physical
+    cemab/cabab/opakab or continuum side-effect array is mutated.
+    """
+    control = context.profile_control
+    if not isinstance(control, MutableMapping):
+        return
+    published: dict[int, dict[str, Any]] = {}
+    npcon = np.asarray(getattr(context.derived, "npcon", ()), dtype=np.int64).reshape(-1)
+    limit = min(int(context.derived.ncsvn) + 1, int(npcon.size))
+    candidates: list[tuple[int, int]] = []
+    for ci in range(1, limit):
+        rec = int(npcon[ci])
+        if rec <= 0:
+            continue
+        try:
+            hdr = context.master.header(rec)
+        except Exception:
+            continue
+        if int(getattr(hdr, "rate_type", 0)) == 1 and int(getattr(hdr, "data_type", 0)) in (49, 53):
+            # Require literal canonical continuum ownership, not merely npcon
+            # array occupancy in a malformed fixture.
+            npconi2 = getattr(context.derived, "npconi2", ())
+            if rec < len(npconi2) and int(npconi2[rec]) == ci:
+                candidates.append((ci, rec))
+    if not candidates:
+        control["source_detail_rrc_non_type7_absorption_v064812345335"] = {}
+        control["source_detail_rrc_non_type7_summary_v064812345335"] = {
+            "candidate_count": 0, "active_absorption_count": 0,
+            "continuum_709_present": False, "continuum_762_present": False,
+        }
+        return
+
+    ion_record_to_index = {
+        int(context.derived.ion_records[ii]): ii
+        for ii in range(1, min(int(getattr(context.derived, "n_ions", 0)) + 1, len(context.derived.ion_records)))
+        if int(context.derived.ion_records[ii]) > 0
+    }
+    element_cache: dict[int, tuple[list[_IonDescriptor], np.ndarray, dict[int, int]]] = {}
+    activity_floor = float(np.float32(1.0e-36))
+    for ci, rec in candidates:
+        parent_ion_record = int(context.derived.npar[rec]) if rec < len(context.derived.npar) else 0
+        ion_index = int(ion_record_to_index.get(parent_ion_record, 0))
+        if ion_index <= 0:
+            continue
+        z = int(context.derived.ion_element_z[ion_index])
+        stage = int(context.derived.ion_stage[ion_index])
+        elem_ab = float(context.abundance(z))
+        if not (elem_ab > XSTAR_CALC_EMISAB_ABUNDANCE_FLOOR):
+            continue
+        element_record = int(context.derived.npar[parent_ion_record]) if 0 < parent_ion_record < len(context.derived.npar) else 0
+        if element_record not in element_cache:
+            ions = _iter_ion_descriptors(context, element_record, z)
+            compact_x, _, _ = _compact_element_populations(context, ions)
+            offsets: dict[int, int] = {}
+            off = 0
+            for ion in ions:
+                offsets[int(ion.ion_index)] = off
+                off += int(ion.nlev) - 1
+            element_cache[element_record] = (ions, compact_x, offsets)
+        ions, compact_x, offsets = element_cache[element_record]
+        ion = next((x for x in ions if int(x.ion_index) == ion_index), None)
+        if ion is None:
+            continue
+        ints = context.master.record_integers(rec)
+        if len(ints) < 4:
+            continue
+        idest1 = int(ints[-2])
+        idest2 = int(ion.nlev) + int(ints[-4]) - 1
+        off = int(offsets.get(ion_index, 0))
+        lower = idest1 + off
+        upper = idest2 + off
+        if lower <= 0 or upper <= 0 or lower >= compact_x.size or upper >= compact_x.size:
+            continue
+        abund1 = float(compact_x[lower]) * elem_ab
+        abund2 = float(compact_x[upper]) * elem_ab
+        if not (abund1 > XSTAR_CALC_EMISAB_LEVEL_ABUNDANCE_FLOOR or abund2 > XSTAR_CALC_EMISAB_LEVEL_ABUNDANCE_FLOOR):
+            continue
+        tau1, tau2 = context.escape.continuum_taus(ci)
+        if tau1 is None or tau2 is None:
+            if not context.escape.allow_missing_as_zero:
+                continue
+            tau1 = 0.0 if tau1 is None else tau1
+            tau2 = 0.0 if tau2 is None else tau2
+        ptmp1 = pescv(tau1) * (1.0 - context.covering_fraction)
+        ptmp2 = pescv(tau2) * (1.0 - context.covering_fraction) + 2.0 * pescv(tau1 + tau2) * context.covering_fraction
+        current_levels = build_level_table(context.master, context.derived, ion_index)
+        leveltemp = _copy_or_initialize_leveltemp(context.initial_leveltemp_workspace)
+        _overwrite_leveltemp(leveltemp, current_levels)
+        levels = UCalcLevelTable(levels=dict(leveltemp.levels), nlev=int(ion.nlev))
+        try:
+            result = _evaluate_ucalc(context, rec, _ucalc_context(
+                context, ion=ion, levels=levels, xpx=xpx, xh0=xh0, xh1=xh1,
+                ptmp1=ptmp1, ptmp2=ptmp2, abund1=abund1, abund2=abund2,
+            ))
+        except Exception:
+            continue
+        absorption = abs(float(result.ans4)) * abund1 * float(xpx)
+        if result.ready and np.isfinite(absorption) and absorption > activity_floor:
+            hdr = context.master.header(rec)
+            published[int(ci)] = {
+                "continuum_index": int(ci), "source_record": int(rec),
+                "rate_type": int(hdr.rate_type), "data_type": int(hdr.data_type),
+                "parent_ion_record": parent_ion_record, "ion_index": ion_index,
+                "element_z": z, "ion_stage": stage,
+                "integrated_absn": float(absorption),
+                "abundance_lower": float(abund1), "abundance_upper": float(abund2),
+                "ans4": float(result.ans4),
+            }
+    control["source_detail_rrc_non_type7_absorption_v064812345335"] = published
+    control["source_detail_rrc_non_type7_summary_v064812345335"] = {
+        "candidate_count": len(candidates),
+        "active_absorption_count": len(published),
+        "continuum_709_present": 709 in published,
+        "continuum_762_present": 762 in published,
+        "continuum_709_absorption": float(published.get(709, {}).get("integrated_absn", 0.0)),
+        "continuum_762_absorption": float(published.get(762, {}).get("integrated_absn", 0.0)),
+    }
+    trace_path = str(os.environ.get("XSTAR_V064812345335_NON_TYPE7_TRACE", "")).strip()
+    if trace_path:
+        payload = dict(control["source_detail_rrc_non_type7_summary_v064812345335"])
+        payload["published_continuum_indices"] = sorted(int(k) for k in published)
+        path = Path(trace_path); path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload, sort_keys=True) + "\n")
+
+
 def calc_emisab_all(context: CalcEmisabContext) -> CalcEmisabResult:
     """Execute ``calc_emisab_all.f90`` in literal source order."""
     epi, _, _ = _radiation_arrays(context.radiation)
@@ -1247,6 +1383,9 @@ def calc_emisab_all(context: CalcEmisabContext) -> CalcEmisabResult:
 
     _evaluate_canonical_npcon_orphan_type7_absorption_v06481234533(
         context, visited_type7_records=visited_type7_records, xpx=xpx, xh0=xh0, xh1=xh1
+    )
+    _evaluate_canonical_npcon_non_type7_detail3_absorption_v064812345335(
+        context, xpx=xpx, xh0=xh0, xh1=xh1
     )
 
     if native_contributions is not None:
@@ -1386,6 +1525,7 @@ class _SyntheticMaster:
             12: np.asarray([0, 0, 1, 0, 1, 0]),
             13: np.asarray([0, 1, 2, 0]),
             14: np.asarray([0, 1, 2, 0]),
+            15: np.asarray([0, 0, 1, 0, 1, 0]),
             20: np.asarray([1, 0, 0, 1, 0]),
             21: np.asarray([2, 0, 1, 2, 0]),
             22: np.asarray([0, 0, 0, 3, 0]),
@@ -1397,7 +1537,7 @@ class _SyntheticMaster:
             1: _SyntheticHeader(13, 11), 2: _SyntheticHeader(14, 12), 3: _SyntheticHeader(14, 12),
             10: _SyntheticHeader(50, 4), 11: _SyntheticHeader(11, 9),
             12: _SyntheticHeader(53, 7), 13: _SyntheticHeader(71, 14),
-            14: _SyntheticHeader(74, 7),
+            14: _SyntheticHeader(74, 7), 15: _SyntheticHeader(49, 1),
             20: _SyntheticHeader(6, 13), 21: _SyntheticHeader(6, 13), 22: _SyntheticHeader(6, 13),
             23: _SyntheticHeader(6, 13), 24: _SyntheticHeader(6, 13), 25: _SyntheticHeader(6, 13),
         }
@@ -1426,7 +1566,7 @@ class _SyntheticMaster:
 class _SyntheticDerived:
     def __init__(self) -> None:
         self.nlsvn = 1
-        self.ncsvn = 2
+        self.ncsvn = 3
         self.max_rate_type = 14
         self.npfirst = np.zeros(15, dtype=int); self.npfirst[11] = 1; self.npfirst[12] = 2
         self.npar = np.zeros(30, dtype=int)
@@ -1435,6 +1575,7 @@ class _SyntheticDerived:
         self.npar[2] = self.npar[3] = 1
         for rec in (10, 11, 12, 13): self.npar[rec] = 2
         self.npar[14] = 3
+        self.npar[15] = 2
         self.npnxt[10] = 0; self.npnxt[11] = 0; self.npnxt[12] = 0; self.npnxt[13] = 0; self.npnxt[14] = 0
         for rec in (20, 21, 22): self.npar[rec] = 2
         for rec in (23, 24, 25): self.npar[rec] = 3
@@ -1444,9 +1585,13 @@ class _SyntheticDerived:
         self.npfi[4,1]=10; self.npfi[7,1]=12; self.npfi[9,1]=11; self.npfi[13,1]=20; self.npfi[14,1]=13
         self.npfi[7,2]=14; self.npfi[13,2]=23
         self.nplini = np.zeros(30, dtype=int); self.nplini[10]=1; self.nplini[11]=1
-        self.npconi2 = np.zeros(30, dtype=int); self.npconi2[12]=1; self.npconi2[14]=2
+        self.npconi2 = np.zeros(30, dtype=int); self.npconi2[12]=1; self.npconi2[14]=2; self.npconi2[15]=3
+        self.npcon = np.asarray([0,12,14,15], dtype=int)
         self.nlevs = np.asarray([0,3,3], dtype=int)
+        self.n_ions = 2
         self.ion_records = np.asarray([0,2,3], dtype=int)
+        self.ion_element_z = np.asarray([0,8,8], dtype=int)
+        self.ion_stage = np.asarray([0,1,2], dtype=int)
         self.npilev = np.zeros((4,3), dtype=int)
         self.npilev[1:4,1]=[1,2,3]
         self.npilev[1:4,2]=[3,4,5]
@@ -1464,11 +1609,12 @@ def _synthetic_ucalc(record: int, context: UCalcContext) -> UCalcResult:
         }),
         13: (-8.0, 0.0, 0.0, {}),
         14: (-7.0, -3.0, 0.2, {}),
+        15: (-5.0, -5.0, 0.0, {}),
     }
     ans3, ans4, opak, diag = data[int(record)]
     return UCalcResult(
-        record=int(record), data_type={10:50,11:11,12:53,13:71,14:74}[int(record)],
-        rate_type={10:4,11:9,12:7,13:14,14:7}[int(record)],
+        record=int(record), data_type={10:50,11:11,12:53,13:71,14:74,15:49}[int(record)],
+        rate_type={10:4,11:9,12:7,13:14,14:7,15:1}[int(record)],
         status=UCalcStatus.EVALUATED, ans3=ans3, ans4=ans4, opakab=opak,
         diagnostics=diag,
     )
@@ -1482,7 +1628,7 @@ def run_source_order_validation(*, rtol: float = 2.0e-14, atol: float = 1.0e-30)
         bremsam=np.asarray([10.0, 8.0, 4.0, 1.0]),
         bremsint=np.asarray([20.0, 10.0, 3.0, 0.0]),
     )
-    workspace = CalcEmisabWorkspace.allocate(n_lines=1, n_continua=2, n_energy=4, continuum_fill=7.0)
+    workspace = CalcEmisabWorkspace.allocate(n_lines=1, n_continua=3, n_energy=4, continuum_fill=7.0)
     context = CalcEmisabContext(
         master=master, derived=derived,
         temperature_1e4K=2.0, electron_fraction_xee=1.2,
@@ -1493,9 +1639,9 @@ def run_source_order_validation(*, rtol: float = 2.0e-14, atol: float = 1.0e-30)
         bilevg=np.ones(6), rnisg=np.ones(6), radiation=radiation, workspace=workspace,
         escape=EscapeProbabilityContext(
             line_tau_in=np.asarray([0.0]), line_tau_out=np.asarray([0.0]),
-            continuum_tau_in=np.asarray([0.0,0.0]), continuum_tau_out=np.asarray([0.0,0.0]),
+            continuum_tau_in=np.asarray([0.0,0.0,0.0]), continuum_tau_out=np.asarray([0.0,0.0,0.0]),
         ),
-        covering_fraction=0.25, ucalc_evaluator=_synthetic_ucalc,
+        covering_fraction=0.25, ucalc_evaluator=_synthetic_ucalc, profile_control={},
     )
     before_continuum = {
         "brcems": workspace.brcems.copy(), "rccemis": workspace.rccemis.copy(),
@@ -1526,7 +1672,22 @@ def run_source_order_validation(*, rtol: float = 2.0e-14, atol: float = 1.0e-30)
     rt9_ready = bool(rt9.output_index == 1 and len([t for t in result.record_traces if t.rate_type == 9]) == 1)
     rt14_expected_increment = (0.1*xpx*0.5)*8.0/(8.0-4.0+float(np.float32(1e-24)))/XSTAR_CALC_EMISAB_ERG_PER_EV/XSTAR_CALC_EMISAB_FOUR_PI
     rt14_ready = bool(math.isclose(workspace.rccemis[1,2], 7.0+0.2+rt14_expected_increment, rel_tol=rtol, abs_tol=atol))
-    reset_ready = bool(np.count_nonzero(workspace.cemab[:,2]) == 0 and workspace.cabab[2] == 0.0 and workspace.opakab[2] == 0.0)
+    reset_ready = bool(
+        np.count_nonzero(workspace.cemab[:,2:4]) == 0
+        and workspace.cabab[2] == 0.0 and workspace.opakab[2] == 0.0
+        and workspace.cabab[3] == 0.0 and workspace.opakab[3] == 0.0
+    )
+    non_type7 = context.profile_control.get("source_detail_rrc_non_type7_absorption_v064812345335", {}) if isinstance(context.profile_control, Mapping) else {}
+    non_type7_ready = bool(
+        isinstance(non_type7, Mapping)
+        and 3 in non_type7
+        and int(non_type7[3].get("source_record", 0)) == 15
+        and int(non_type7[3].get("rate_type", 0)) == 1
+        and int(non_type7[3].get("data_type", 0)) == 49
+        and math.isclose(float(non_type7[3].get("integrated_absn", 0.0)), 2.5, rel_tol=rtol, abs_tol=atol)
+        and workspace.cabab[3] == 0.0 and workspace.opakab[3] == 0.0
+        and np.count_nonzero(workspace.cemab[:,3]) == 0
+    )
     carried_ready = bool(
         np.array_equal(workspace.brcems, before_continuum["brcems"])
         and np.allclose(workspace.opakc, before_continuum["opakc"] + np.asarray([1,2,3,4]))
@@ -1546,6 +1707,8 @@ def run_source_order_validation(*, rtol: float = 2.0e-14, atol: float = 1.0e-30)
         "rate_type_7_ready": bf_ready,
         "rate_type_9_no_output_ready": rt9_ready,
         "rate_type_14_ready": rt14_ready,
+        "canonical_non_type7_detail3_absorption_producer_ready": non_type7_ready,
+        "canonical_non_type7_detail3_absorption_map": dict(non_type7) if isinstance(non_type7, Mapping) else {},
         "ucalc_continuum_side_effects_ready": carried_ready,
         "record_source_order": [t.record for t in result.record_traces],
     }
