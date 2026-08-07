@@ -1,5 +1,16 @@
 # CHANGELOG
 
+# 0.6.48.12.3.45.3.2 - 2026-08-06
+
+- Python-only C5 Type-7 caller-local/retained-workspace lifetime attribution and cross-mode publication repair; C++ production science remains frozen to accepted 0.6.48.12.3.44 and ABI 6048110.
+- Preserve the 45.3.1 canonical `npcon` Type-7 FITS identity owner and the 45.3 source-record shadow.
+- Correct the earlier attribution: literal FORTRAN `calc_emisab_all` clears `cemab/cabab/opakab` each call and `calc_emisab_ion` writes zero `cemab/cabab` after a skipped Type-7 UCalc.  The C5 709/762 rows are therefore frozen-C++ retained-workspace compatibility rows, not literal FORTRAN `fstepr3` rows.
+- Add an output-only shell-local Type-7 integrated-absorption history keyed by one-based continuum slot and evaluation sequence.  Only a strictly earlier evaluation may supply the fallback; same-evaluation intermediate slot writes remain non-authoritative.
+- Require the retained slot writer record to differ from the canonical `npcon` row source record.  Same-record lifetime remains owned by the 45.3 source-record shadow.
+- Restore only `integrated absn` from the prior-evaluation slot history; emission and opacity are not synthesized, and physical `cemab/cabab/opakab` are never modified.
+- Add an environment-gated JSONL trace for continuum identities 709 and 762, recording Type-7 absorption updates, evaluation sequence, retained writer record, and final publication owner.
+- Qualification defaults to `c5_ne1e10` only.  The completion gate is FITS/detail3 repair; the known He II 508/515 Option-23 STEP crossing remains visible as an independent observed rejection.
+
 # 0.6.48.12.3.45.3.1 - 2026-08-06
 
 - Python-only `xo01_detal3` source-inventory hotfix after the first 45.3 C5 run exposed a deterministic 348-row-per-HDU RRC collapse (`2436 = 348 x 7` reference-only rows).

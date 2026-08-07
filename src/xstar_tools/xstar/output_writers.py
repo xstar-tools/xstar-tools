@@ -436,17 +436,29 @@ def build_detail_rrc_table(
     element_abundances: Sequence[float] | None = None,
     source_publication_shadow: Mapping[int, Mapping[str, float]] | None = None,
     source_record_publication_shadow: Mapping[int, Mapping[str, float]] | None = None,
+    source_slot_absorption_lifetime: Mapping[int, Mapping[str, Any]] | None = None,
+    source_slot_current_eval_sequence: int = 0,
+    publication_trace: list[dict[str, Any]] | None = None,
 ) -> OutputTable:
     """Literal ``fstepr3`` detailed-RRC row selection.
 
-    v0.6.48.12.3.45.3.1 uses the canonical setptrs ``npcon`` metadata as
+    v0.6.48.12.3.45.3.2 keeps the canonical setptrs ``npcon`` metadata as
     the FITS identity universe and filters it to rate type 7.  The execution
     kernel still walks ``npfi(7,ion)`` when producing the physical values, but
     FITS identity reconstruction must not use that narrower chain.  The 45.1
-    continuum-slot shadow remains deliberately non-authoritative.
+    same-evaluation continuum-slot shadow remains deliberately non-authoritative.
+
+    Frozen-44 standalone C++ additionally retains two Carbon publication rows
+    (709/762) that are not literal FORTRAN ``fstepr3`` rows.  For cross-mode
+    parity only, a shell-local slot history may supply *integrated absorption*
+    from a strictly earlier calc_emisab evaluation when the canonical row's
+    own source-record shadow is absent and the retained writer record differs.
+    This does not modify physical cemab/cabab/opakab state.
     """
     del source_publication_shadow  # 45.1 slot shadow is never authoritative.
     record_shadow = source_record_publication_shadow or {}
+    slot_history = source_slot_absorption_lifetime or {}
+    current_eval_sequence = int(source_slot_current_eval_sequence or 0)
     emiss = np.asarray(cemab, dtype=float)
     absorbed = np.asarray(cabab, dtype=float).reshape(-1)
     opacity = np.asarray(opakab, dtype=float).reshape(-1)
@@ -479,18 +491,60 @@ def build_detail_rrc_table(
             continue
         current = (float(emiss[0, i]), float(emiss[1, i]), float(absorbed[i]), float(opacity[i]))
         active = any(np.isfinite(v) and v > activity_floor for v in current)
-        if not active:
-            retained = record_shadow.get(int(item.source_record))
-            if retained is not None and int(retained.get("continuum_index", -1)) == int(item.continuum_index):
-                retained_values = (
-                    float(retained.get("emis_inward", 0.0)),
-                    float(retained.get("emis_outward", 0.0)),
-                    float(retained.get("integrated_absn", 0.0)),
-                    float(retained.get("opacity", 0.0)),
-                )
-                if any(np.isfinite(v) and v > activity_floor for v in retained_values):
-                    current = retained_values
+        owner = "physical_current" if active else "inactive"
+        retained = record_shadow.get(int(item.source_record)) if not active else None
+        if not active and retained is not None and int(retained.get("continuum_index", -1)) == int(item.continuum_index):
+            retained_values = (
+                float(retained.get("emis_inward", 0.0)),
+                float(retained.get("emis_outward", 0.0)),
+                float(retained.get("integrated_absn", 0.0)),
+                float(retained.get("opacity", 0.0)),
+            )
+            if any(np.isfinite(v) and v > activity_floor for v in retained_values):
+                current = retained_values
+                active = True
+                owner = "source_record_lifetime_v0648123453"
+        slot_entry: Mapping[str, Any] | None = None
+        if not active and current_eval_sequence > 0:
+            slot = slot_history.get(int(item.continuum_index))
+            if isinstance(slot, Mapping):
+                candidates: list[Mapping[str, Any]] = []
+                for key in ("latest", "previous"):
+                    entry = slot.get(key)
+                    if not isinstance(entry, Mapping):
+                        continue
+                    seq = int(entry.get("eval_sequence", 0) or 0)
+                    if 0 < seq < current_eval_sequence:
+                        candidates.append(entry)
+                if candidates:
+                    slot_entry = max(candidates, key=lambda e: int(e.get("eval_sequence", 0) or 0))
+            if slot_entry is not None:
+                writer_record = int(slot_entry.get("source_record", 0) or 0)
+                retained_absn = float(slot_entry.get("integrated_absn", 0.0) or 0.0)
+                # 45.3.2 cross-mode compatibility gate: never use a
+                # same-record history (the 45.3 record shadow owns that case),
+                # and never expose an intermediate write from the current
+                # evaluation (the 45.1 Ca over-publication class).
+                if (writer_record > 0 and writer_record != int(item.source_record) and
+                        np.isfinite(retained_absn) and retained_absn > activity_floor):
+                    current = (current[0], current[1], retained_absn, current[3])
                     active = True
+                    owner = "prior_eval_slot_absorption_v06481234532"
+        if publication_trace is not None and int(item.continuum_index) in {709, 762}:
+            publication_trace.append({
+                "phase": "detail3_publication",
+                "continuum_index": int(item.continuum_index),
+                "source_record": int(item.source_record),
+                "current_eval_sequence": current_eval_sequence,
+                "owner": owner,
+                "active": bool(active),
+                "current_emis_inward": float(current[0]),
+                "current_emis_outward": float(current[1]),
+                "current_integrated_absn": float(current[2]),
+                "current_opacity": float(current[3]),
+                "record_shadow_present": bool(retained is not None),
+                "slot_history_entry": dict(slot_entry) if slot_entry is not None else None,
+            })
         if not active:
             continue
         rows.append(item)
@@ -586,6 +640,9 @@ def build_detail_shell_output(
     source_detail_line_activity_shadow: Sequence[bool] | None = None,
     source_detail_rrc_publication_shadow: Mapping[int, Mapping[str, float]] | None = None,
     source_detail_rrc_record_shadow: Mapping[int, Mapping[str, float]] | None = None,
+    source_detail_rrc_slot_absorption_lifetime: Mapping[int, Mapping[str, Any]] | None = None,
+    source_detail_rrc_current_eval_sequence: int = 0,
+    source_detail_rrc_publication_trace: list[dict[str, Any]] | None = None,
     element_abundances: Sequence[float] | None = None,
 ) -> DetailShellOutput:
     return DetailShellOutput(
@@ -599,6 +656,9 @@ def build_detail_shell_output(
             element_abundances=element_abundances,
             source_publication_shadow=source_detail_rrc_publication_shadow,
             source_record_publication_shadow=source_detail_rrc_record_shadow,
+            source_slot_absorption_lifetime=source_detail_rrc_slot_absorption_lifetime,
+            source_slot_current_eval_sequence=source_detail_rrc_current_eval_sequence,
+            publication_trace=source_detail_rrc_publication_trace,
         ),
         continuum=build_detail_continuum_table(epi_eV=epi_eV, zrems=zrems, opakc=opakc, rccemis=rccemis, dpthc=dpthc, ncn2=ncn2, header=header),
     )
@@ -2684,6 +2744,13 @@ def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int, ter
     source_detail_rrc_record_shadow = state.control.get(
         "source_detail_rrc_record_shadow_v0648123453", {}
     )
+    source_detail_rrc_slot_absorption_lifetime = state.control.get(
+        "source_detail_rrc_slot_absorption_lifetime_v06481234532", {}
+    )
+    source_detail_rrc_current_eval_sequence = int(
+        state.control.get("source_detail_rrc_eval_sequence_v06481234532", 0) or 0
+    )
+    source_detail_rrc_publication_trace: list[dict[str, Any]] = []
     ncn2 = int(state.control["ncn2"])
     record = build_detail_shell_output(
         metadata=metadata,
@@ -2706,13 +2773,33 @@ def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int, ter
         source_detail_line_activity_shadow=source_detail_line_activity_shadow,
         source_detail_rrc_publication_shadow=source_detail_rrc_publication_shadow,
         source_detail_rrc_record_shadow=source_detail_rrc_record_shadow,
+        source_detail_rrc_slot_absorption_lifetime=source_detail_rrc_slot_absorption_lifetime,
+        source_detail_rrc_current_eval_sequence=source_detail_rrc_current_eval_sequence,
+        source_detail_rrc_publication_trace=source_detail_rrc_publication_trace,
         element_abundances=state.plasma.abundances,
     )
     # The source-record publication state belongs to this savd/fstepr3 shell.
     # Consume it only after the row table has been materialized so DSEC trials
     # within the shell can contribute, but later shells cannot inherit it.
     if isinstance(state.control, MutableMapping):
+        trace = state.control.get("source_detail_rrc_lifetime_trace_v06481234532", [])
+        if not isinstance(trace, list):
+            trace = []
+        trace.extend(source_detail_rrc_publication_trace)
+        trace_path = str(os.environ.get("XSTAR_V06481234532_RRC_LIFETIME_TRACE", "")).strip()
+        if trace_path and trace:
+            path = Path(trace_path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as handle:
+                for event in trace:
+                    payload = dict(event)
+                    payload.setdefault("hdunum", int(hdunum))
+                    payload.setdefault("terminal_record", bool(terminal_record))
+                    handle.write(json.dumps(payload, sort_keys=True) + "\n")
+        state.control["source_detail_rrc_lifetime_trace_v06481234532"] = []
         state.control["source_detail_rrc_record_shadow_v0648123453"] = {}
+        state.control["source_detail_rrc_slot_absorption_lifetime_v06481234532"] = {}
+        state.control["source_detail_rrc_eval_sequence_v06481234532"] = 0
     _maybe_export_detail_continuum_product_write_state(
         state, hdunum=int(hdunum), terminal_record=bool(terminal_record),
         workspace=workspace, record=record,

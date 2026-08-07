@@ -609,6 +609,10 @@ def calc_emisab_ion(
                     denom = ptmp1 + ptmp2
                     if denom == 0.0:
                         raise CalcEmisabPortError("zero continuum escape denominator")
+                    _update_source_detail_rrc_slot_absorption_lifetime_v06481234532(
+                        context.profile_control, source_record=rec, continuum_index=continuum_index,
+                        abund1=abund1, abund2=abund2, xpx=xpx, ans4=result.ans4,
+                    )
                     _update_source_detail_rrc_record_shadow_v0648123453(
                         context.profile_control, source_record=rec, continuum_index=continuum_index,
                         ptmp1=ptmp1, ptmp2=ptmp2, abund1=abund1, abund2=abund2,
@@ -824,18 +828,128 @@ def _update_source_detail_rrc_record_shadow_v0648123453(
     }
 
 
+def _source_detail_rrc_lifetime_trace_targets_v06481234532() -> set[int]:
+    raw = str(os.environ.get("XSTAR_V06481234532_RRC_TARGETS", "709,762"))
+    out: set[int] = set()
+    for token in raw.replace(";", ",").split(","):
+        try:
+            value = int(token.strip())
+        except Exception:
+            continue
+        if value > 0:
+            out.add(value)
+    return out
+
+
+def _append_source_detail_rrc_lifetime_trace_v06481234532(
+    control: Optional[MutableMapping[str, Any]], event: Mapping[str, Any],
+) -> None:
+    if not isinstance(control, MutableMapping):
+        return
+    ci = int(event.get("continuum_index", 0) or 0)
+    if ci > 0 and ci not in _source_detail_rrc_lifetime_trace_targets_v06481234532():
+        return
+    trace = control.setdefault("source_detail_rrc_lifetime_trace_v06481234532", [])
+    if not isinstance(trace, list):
+        trace = []
+        control["source_detail_rrc_lifetime_trace_v06481234532"] = trace
+    if len(trace) < 20000:
+        trace.append(dict(event))
+
+
+def _begin_source_detail_rrc_evaluation_v06481234532(
+    control: Optional[MutableMapping[str, Any]],
+) -> int:
+    """Advance the shell-local calc_emisab evaluation sequence.
+
+    The sequence is intentionally not reset by ``calc_emisab_all``.  It is
+    consumed/reset only after ``savd``/``fstepr3`` materializes a shell, so a
+    publication-only compatibility layer can distinguish a retained value from
+    an earlier DSEC/fixed-state evaluation from an intermediate write in the
+    currently published evaluation.
+    """
+    if not isinstance(control, MutableMapping):
+        return 0
+    seq = int(control.get("source_detail_rrc_eval_sequence_v06481234532", 0) or 0) + 1
+    control["source_detail_rrc_eval_sequence_v06481234532"] = seq
+    _append_source_detail_rrc_lifetime_trace_v06481234532(control, {
+        "phase": "calc_emisab_begin", "eval_sequence": seq, "continuum_index": 0,
+    })
+    return seq
+
+
+def _update_source_detail_rrc_slot_absorption_lifetime_v06481234532(
+    control: Optional[MutableMapping[str, Any]], *, source_record: int,
+    continuum_index: int, abund1: float, abund2: float, xpx: float, ans4: float,
+) -> None:
+    """Retain positive Type-7 absorption by continuum slot across evaluations.
+
+    Frozen-44 C++ retains two Carbon detail identities (709/762) that are not
+    literal FORTRAN ``fstepr3`` rows.  They are a cross-mode publication
+    compatibility artifact of the retained native source workspace.  The old
+    45.1 slot shadow was too broad because it also exposed intermediate writes
+    from the *current* evaluation, creating four Ca-only rows.
+
+    This state therefore stores only positive integrated absorption and keeps
+    both the latest and preceding evaluation owners.  The writer may consume
+    only an entry whose evaluation sequence is strictly older than the one
+    being published, and only for a canonical Type-7 identity whose source
+    record differs from the retained writer.  No physical workspace is changed.
+    """
+    if not isinstance(control, MutableMapping):
+        return
+    rec = int(source_record); ci = int(continuum_index)
+    if rec <= 0 or ci <= 0:
+        return
+    if not (
+        float(abund1) > XSTAR_CALC_EMISAB_LEVEL_ABUNDANCE_FLOOR
+        or float(abund2) > XSTAR_CALC_EMISAB_LEVEL_ABUNDANCE_FLOOR
+    ):
+        return
+    absorption = abs(float(ans4)) * float(abund1) * float(xpx)
+    activity_floor = float(np.float32(1.0e-36))
+    if not np.isfinite(absorption) or not (absorption > activity_floor):
+        return
+    seq = int(control.get("source_detail_rrc_eval_sequence_v06481234532", 0) or 0)
+    if seq <= 0:
+        seq = _begin_source_detail_rrc_evaluation_v06481234532(control)
+    history = control.setdefault("source_detail_rrc_slot_absorption_lifetime_v06481234532", {})
+    if not isinstance(history, MutableMapping):
+        history = {}
+        control["source_detail_rrc_slot_absorption_lifetime_v06481234532"] = history
+    slot = history.get(ci)
+    if not isinstance(slot, MutableMapping):
+        slot = {"latest": None, "previous": None}
+        history[ci] = slot
+    latest = slot.get("latest")
+    if isinstance(latest, Mapping) and int(latest.get("eval_sequence", 0) or 0) != seq:
+        slot["previous"] = dict(latest)
+    entry = {
+        "eval_sequence": seq,
+        "source_record": rec,
+        "continuum_index": ci,
+        "integrated_absn": float(absorption),
+        "abundance_lower": float(abund1),
+        "abundance_upper": float(abund2),
+    }
+    slot["latest"] = entry
+    _append_source_detail_rrc_lifetime_trace_v06481234532(control, {
+        "phase": "type7_absorption_update", **entry,
+    })
+
+
 def _update_source_detail_rrc_publication_shadow_v0648123451(
     control: Optional[MutableMapping[str, Any]], *, continuum_index: int,
     ptmp1: float, ptmp2: float, abund1: float, abund2: float, xpx: float,
     ans3: float, ans4: float, opakab: float,
 ) -> None:
-    """Retain the last source-active rate-7 write for publication only.
+    """Legacy 45.1 same-evaluation slot shadow (diagnostic only).
 
-    The FORTRAN caller-local RRC slots are not overwritten when both endpoint
-    abundances fall below the REAL(4) source floor.  Python's deterministic
-    physical workspace is allowed to clear such a slot; this separate shadow
-    preserves only the observable ``fstepr3`` publication owner and is valid
-    for both pure-Python and Python-controller+C++ execution.
+    Later attribution showed that literal FORTRAN ``calc_emisab_ion`` does
+    overwrite cemab/cabab after a skipped Type-7 UCalc, so this map must not
+    own ``fstepr3`` membership.  It is retained only for backward diagnostics
+    and is reset at every ``calc_emisab_all`` entry.  45.3.2 uses a separate
+    prior-evaluation absorption lifetime for frozen-C++ cross-mode parity.
     """
     if not isinstance(control, MutableMapping) or int(continuum_index) <= 0:
         return
@@ -870,6 +984,7 @@ def calc_emisab_all(context: CalcEmisabContext) -> CalcEmisabResult:
         n_energy=len(epi),
     )
     context.workspace.clear_source_outputs()
+    _begin_source_detail_rrc_evaluation_v06481234532(context.profile_control)
     if isinstance(context.profile_control, MutableMapping):
         context.profile_control["source_detail_rrc_publication_shadow_v0648123451"] = {}
     native_product = _native_spectral_requested(product=True)
