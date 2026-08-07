@@ -1,5 +1,15 @@
 # CHANGELOG
 
+# 0.6.48.12.3.45.3.3.1 - 2026-08-07
+
+- Readiness-guard-only hotfix on top of 0.6.48.12.3.45.3.3; orphan-Type7 science and publication logic are byte-frozen.
+- Replace the broad `src/` file-set equality check with tracked-source comparison that explicitly ignores generated C++ build products (`*.so`, `*.o`, `*.a`, `*.dylib`, `xstar_cpp`) and Python bytecode/cache files.
+- Continue to catch new/deleted tracked source files and enforce a 45.3.3 tracked-source manifest.
+- Require `emissivity.py`, `output_writers.py`, and `physical_runner.py` to be byte-identical to 45.3.3; permit only package/API version metadata changes in `__init__.py` and `xstar_api.h`.
+- Retain independent frozen-44 C++ production hashes and ABI 6048110.
+- Regression-test readiness with synthetic compiled artifacts in both baseline and candidate trees; readiness remains ACCEPT.
+- Preserve the C5-only first smoke and all 45.3.3 orphan diagnostics unchanged except the qualification-output prefix is now `V064812345331_`.
+
 # 0.6.48.12.3.45.3.3 - 2026-08-07
 
 - Python-only canonical `npcon` orphan-Type7 absorption attribution/repair; C++ production science remains frozen to accepted 0.6.48.12.3.44 and ABI 6048110.
