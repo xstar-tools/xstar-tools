@@ -1,5 +1,13 @@
 # CHANGELOG
 
+# 0.6.48.12.3.45.3.3.3 - 2026-08-07
+
+- Add a dedicated seven-model **pure-Python** 45.x smoke runner against frozen 0.6.48.12.3.44 standalone-C++ products.
+- Require Python ownership for the radial controller and all eight modular backend provenance surfaces; sanitize inherited native/CPP `XSTAR_ATOMIC_*` overrides.
+- Keep the 0.6.48.12.3.45.3.3.2 Option-23 comparator byte-identical: numerical science remains separate from rank/order diagnostics.
+- Add interruption-safe `--resume` for pure-Python products and avoid any C++ build step in the pure smoke wrapper.
+- Freeze production Python science to 45.3.3.2, C++ science to 44, and ABI 6048110; version metadata only in production sources.
+
 # 0.6.48.12.3.45.3.3.2 - 2026-08-07
 
 - Comparator/qualification-only hotfix on top of 0.6.48.12.3.45.3.3.1; Python and C++ production science are byte-frozen apart from version metadata.
