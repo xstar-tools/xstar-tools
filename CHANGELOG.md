@@ -1,5 +1,18 @@
 # CHANGELOG
 
+# 0.6.48.12.3.45.3.3.2 - 2026-08-07
+
+- Comparator/qualification-only hotfix on top of 0.6.48.12.3.45.3.3.1; Python and C++ production science are byte-frozen apart from version metadata.
+- Use the accepted frozen 0.6.48.12.3.44 standalone-C++ products as the seven-model Python-controller qualification reference. FORTRAN is not the pass/fail product reference for this 45.x parity campaign.
+- Repair Options 1/23 ranked-array gating so numerical science and rank/identity/order diagnostics are independent, as already stated by the comparator policy.
+- `scientific_accept` for ranked Options 1/23 now follows the numerical ranked-array gate only. A rank/order/membership diagnostic is still emitted and retained in `ranking_or_order_diagnostic_sections`, but it no longer vetoes science.
+- Preserve the existing <1% ranked numeric policy: normalized-L1 must remain within tolerance; per-rank >1% cells remain visible as diagnostics.
+- Add explicit Option-23 outputs per model: numeric science gate, rank/order diagnostic flag, rowwise >1% diagnostic count, and maximum ranked-array normalized L1.
+- Add a comparator selftest reproducing the C5 He II 508/515 rank swap: the swap remains diagnostic while science ACCEPTs; a genuine >1% ranked-array mismatch still REJECTs.
+- Add a dedicated all-seven Python-controller + C++-backend smoke runner against frozen 44 standalone-C++ products.
+- Keep strict FITS membership/order/attachment gates unchanged; this release does not alter the still-open C5 `xo01_detal3` 709/762 issue.
+- Keep ABI 6048110 and frozen-44 C++ production hashes unchanged.
+
 # 0.6.48.12.3.45.3.3.1 - 2026-08-07
 
 - Readiness-guard-only hotfix on top of 0.6.48.12.3.45.3.3; orphan-Type7 science and publication logic are byte-frozen.
