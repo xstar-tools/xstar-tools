@@ -562,6 +562,7 @@ def calc_emisab_ion(
     leveltemp_workspace: UCalcLevelTable,
     record_traces: list[CalcEmisabRecordTrace],
     native_contributions: Optional[list[dict[str, Any]]] = None,
+    visited_type7_records: Optional[set[int]] = None,
 ) -> CalcEmisabIonTrace:
     """Translate one call to ``calc_emisab_ion.f90``."""
     current_levels = build_level_table(context.master, context.derived, ion.ion_index)
@@ -581,6 +582,8 @@ def calc_emisab_ion(
             ints = context.master.record_integers(rec)
 
             if rate_type == 7 and len(ints) >= 4:
+                if visited_type7_records is not None:
+                    visited_type7_records.add(int(rec))
                 idest1 = int(ints[-2])
                 idest2 = ion.nlev + int(ints[-4]) - 1
                 continuum_index = int(context.derived.npconi2[rec])
@@ -748,6 +751,7 @@ def calc_emisab_element(
     leveltemp_workspace: UCalcLevelTable,
     record_traces: list[CalcEmisabRecordTrace],
     native_contributions: Optional[list[dict[str, Any]]] = None,
+    visited_type7_records: Optional[set[int]] = None,
 ) -> CalcEmisabElementTrace:
     """Translate ``calc_emisab_element.f90`` in ion source order."""
     ipmat = 0
@@ -767,6 +771,7 @@ def calc_emisab_element(
                 leveltemp_workspace=leveltemp_workspace,
                 record_traces=record_traces,
                 native_contributions=native_contributions,
+                visited_type7_records=visited_type7_records,
             )
         else:
             trace = CalcEmisabIonTrace(
@@ -975,6 +980,153 @@ def _update_source_detail_rrc_publication_shadow_v0648123451(
     }
 
 
+def _append_source_detail_rrc_orphan_trace_v06481234533(
+    control: Optional[MutableMapping[str, Any]], event: Mapping[str, Any],
+) -> None:
+    if not isinstance(control, MutableMapping):
+        return
+    trace = control.setdefault("source_detail_rrc_orphan_trace_v06481234533", [])
+    if not isinstance(trace, list):
+        trace = []
+        control["source_detail_rrc_orphan_trace_v06481234533"] = trace
+    if len(trace) < 20000:
+        trace.append(dict(event))
+
+
+def _evaluate_canonical_npcon_orphan_type7_absorption_v06481234533(
+    context: CalcEmisabContext, *, visited_type7_records: set[int],
+    xpx: float, xh0: float, xh1: float,
+) -> None:
+    """Evaluate publication-only absorption for canonical Type-7 runtime orphans.
+
+    A runtime orphan is a canonical ``npcon`` Type-7 record that was not
+    visited by the active ``npfi(7,ion)`` source traversal in this
+    ``calc_emisab_all`` evaluation.  The evaluator reuses the already selected
+    UCalc implementation, but commits *only* ``abs(ans4)*abund1*n_H`` to an
+    output-only map.  It never mutates cemab/cabab/opakab or continuum side
+    effects.
+    """
+    control = context.profile_control
+    if not isinstance(control, MutableMapping):
+        return
+    orphan_map: dict[int, dict[str, Any]] = {}
+    canonical: list[tuple[int,int]] = []
+    npcon = np.asarray(getattr(context.derived, "npcon", ()), dtype=np.int64).reshape(-1)
+    limit = min(int(context.derived.ncsvn) + 1, int(npcon.size))
+    for ci in range(1, limit):
+        rec = int(npcon[ci])
+        if rec <= 0:
+            continue
+        try:
+            hdr = context.master.header(rec)
+        except Exception:
+            continue
+        if int(getattr(hdr, "rate_type", 0)) == 7:
+            canonical.append((ci, rec))
+    orphans = [(ci, rec) for ci, rec in canonical if rec not in visited_type7_records]
+    if not canonical:
+        control["source_detail_rrc_orphan_absorption_v06481234533"] = {}
+        control["source_detail_rrc_orphan_summary_v06481234533"] = {
+            "canonical_type7_count": 0, "visited_type7_count": len(set(visited_type7_records)),
+            "orphan_type7_count": 0, "orphan_active_absorption_count": 0,
+            "orphan_709_present": False, "orphan_762_present": False,
+            "orphan_709_absorption": 0.0, "orphan_762_absorption": 0.0,
+        }
+        return
+    ion_record_to_index = {
+        int(context.derived.ion_records[ii]): ii
+        for ii in range(1, min(int(context.derived.n_ions) + 1, len(context.derived.ion_records)))
+        if int(context.derived.ion_records[ii]) > 0
+    }
+    element_cache: dict[int, tuple[list[_IonDescriptor], np.ndarray, dict[int,int]]] = {}
+    active_count = 0
+    activity_floor = float(np.float32(1.0e-36))
+    for ci, rec in orphans:
+        parent_ion_record = int(context.derived.npar[rec]) if rec < len(context.derived.npar) else 0
+        ion_index = int(ion_record_to_index.get(parent_ion_record, 0))
+        event: dict[str, Any] = {
+            "phase": "orphan_type7_evaluation", "continuum_index": int(ci),
+            "source_record": int(rec), "parent_ion_record": parent_ion_record,
+            "visited": False, "status": "unresolved",
+        }
+        if ion_index <= 0:
+            _append_source_detail_rrc_orphan_trace_v06481234533(control, event); continue
+        z = int(context.derived.ion_element_z[ion_index])
+        stage = int(context.derived.ion_stage[ion_index])
+        event.update(element_z=z, ion_stage=stage, runtime_stage_active=bool(context.min_stage(z) <= stage <= context.max_stage(z)))
+        elem_ab = float(context.abundance(z))
+        if not (elem_ab > XSTAR_CALC_EMISAB_ABUNDANCE_FLOOR):
+            event["status"] = "element_below_floor"; _append_source_detail_rrc_orphan_trace_v06481234533(control,event); continue
+        element_record = int(context.derived.npar[parent_ion_record]) if 0 < parent_ion_record < len(context.derived.npar) else 0
+        if element_record not in element_cache:
+            ions = _iter_ion_descriptors(context, element_record, z)
+            compact_x, _, _ = _compact_element_populations(context, ions)
+            offsets: dict[int,int] = {}
+            off = 0
+            for ion in ions:
+                offsets[int(ion.ion_index)] = off
+                off += int(ion.nlev) - 1
+            element_cache[element_record] = (ions, compact_x, offsets)
+        ions, compact_x, offsets = element_cache[element_record]
+        ion = next((x for x in ions if int(x.ion_index) == ion_index), None)
+        if ion is None:
+            event["status"] = "ion_not_in_element_chain"; _append_source_detail_rrc_orphan_trace_v06481234533(control,event); continue
+        ints = context.master.record_integers(rec)
+        if len(ints) < 4:
+            event["status"] = "short_record"; _append_source_detail_rrc_orphan_trace_v06481234533(control,event); continue
+        idest1 = int(ints[-2]); idest2 = int(ion.nlev) + int(ints[-4]) - 1
+        off = int(offsets.get(ion_index, 0)); lower = idest1 + off; upper = idest2 + off
+        if lower <= 0 or upper <= 0 or lower >= compact_x.size or upper >= compact_x.size:
+            event.update(status="compact_index_out_of_range", idest1=idest1, idest2=idest2, compact_offset=off); _append_source_detail_rrc_orphan_trace_v06481234533(control,event); continue
+        abund1 = float(compact_x[lower]) * elem_ab; abund2 = float(compact_x[upper]) * elem_ab
+        event.update(idest1=idest1, idest2=idest2, compact_offset=off, abundance_lower=abund1, abundance_upper=abund2)
+        if not (abund1 > XSTAR_CALC_EMISAB_LEVEL_ABUNDANCE_FLOOR or abund2 > XSTAR_CALC_EMISAB_LEVEL_ABUNDANCE_FLOOR):
+            event["status"] = "endpoints_below_floor"; _append_source_detail_rrc_orphan_trace_v06481234533(control,event); continue
+        tau1, tau2 = context.escape.continuum_taus(ci)
+        if tau1 is None or tau2 is None:
+            if not context.escape.allow_missing_as_zero:
+                event["status"] = "missing_tau"; _append_source_detail_rrc_orphan_trace_v06481234533(control,event); continue
+            tau1 = 0.0 if tau1 is None else tau1; tau2 = 0.0 if tau2 is None else tau2
+        ptmp1 = pescv(tau1) * (1.0 - context.covering_fraction)
+        ptmp2 = pescv(tau2) * (1.0 - context.covering_fraction) + 2.0 * pescv(tau1 + tau2) * context.covering_fraction
+        current_levels = build_level_table(context.master, context.derived, ion_index)
+        leveltemp = _copy_or_initialize_leveltemp(context.initial_leveltemp_workspace)
+        _overwrite_leveltemp(leveltemp, current_levels)
+        levels = UCalcLevelTable(levels=dict(leveltemp.levels), nlev=int(ion.nlev))
+        try:
+            result = _evaluate_ucalc(context, rec, _ucalc_context(
+                context, ion=ion, levels=levels, xpx=xpx, xh0=xh0, xh1=xh1,
+                ptmp1=ptmp1, ptmp2=ptmp2, abund1=abund1, abund2=abund2,
+            ))
+        except Exception as exc:
+            event.update(status="ucalc_error", error=str(exc)); _append_source_detail_rrc_orphan_trace_v06481234533(control,event); continue
+        absorption = abs(float(result.ans4)) * abund1 * float(xpx)
+        event.update(status=str(result.status.value), ans4=float(result.ans4), integrated_absn=float(absorption))
+        if result.ready and np.isfinite(absorption) and absorption > activity_floor:
+            orphan_map[int(ci)] = {
+                "continuum_index": int(ci), "source_record": int(rec),
+                "parent_ion_record": parent_ion_record, "ion_index": ion_index,
+                "element_z": z, "ion_stage": stage, "integrated_absn": float(absorption),
+                "runtime_stage_active": bool(context.min_stage(z) <= stage <= context.max_stage(z)),
+            }
+            active_count += 1
+        _append_source_detail_rrc_orphan_trace_v06481234533(control,event)
+    control["source_detail_rrc_orphan_absorption_v06481234533"] = orphan_map
+    control["source_detail_rrc_orphan_summary_v06481234533"] = {
+        "canonical_type7_count": len(canonical),
+        "visited_type7_count": len(set(visited_type7_records)),
+        "orphan_type7_count": len(orphans),
+        "orphan_active_absorption_count": active_count,
+        "orphan_709_present": 709 in orphan_map,
+        "orphan_762_present": 762 in orphan_map,
+        "orphan_709_absorption": float(orphan_map.get(709, {}).get("integrated_absn", 0.0)),
+        "orphan_762_absorption": float(orphan_map.get(762, {}).get("integrated_absn", 0.0)),
+    }
+    _append_source_detail_rrc_orphan_trace_v06481234533(control, {
+        "phase": "orphan_type7_summary", **control["source_detail_rrc_orphan_summary_v06481234533"]
+    })
+
+
 def calc_emisab_all(context: CalcEmisabContext) -> CalcEmisabResult:
     """Execute ``calc_emisab_all.f90`` in literal source order."""
     epi, _, _ = _radiation_arrays(context.radiation)
@@ -1005,6 +1157,7 @@ def calc_emisab_all(context: CalcEmisabContext) -> CalcEmisabResult:
     leveltemp = _copy_or_initialize_leveltemp(context.initial_leveltemp_workspace)
     retain_traces = bool(getattr(context, "retain_traces", True))
     element_traces: list[CalcEmisabElementTrace] = []
+    visited_type7_records: set[int] = set()
     record_traces: list[CalcEmisabRecordTrace] | _TraceSink = [] if retain_traces else _TraceSink()
 
     element_record = int(context.derived.npfirst[11])
@@ -1030,6 +1183,7 @@ def calc_emisab_all(context: CalcEmisabContext) -> CalcEmisabResult:
                 leveltemp_workspace=leveltemp,
                 record_traces=record_traces,
                 native_contributions=native_contributions,
+                visited_type7_records=visited_type7_records,
             ))
         else:
             element_traces.append(CalcEmisabElementTrace(
@@ -1037,6 +1191,10 @@ def calc_emisab_all(context: CalcEmisabContext) -> CalcEmisabResult:
                 abundant=False, compact_population_count=0, compact_xileve=(), ion_traces=(),
             ))
         element_record = int(context.derived.npnxt[element_record])
+
+    _evaluate_canonical_npcon_orphan_type7_absorption_v06481234533(
+        context, visited_type7_records=visited_type7_records, xpx=xpx, xh0=xh0, xh1=xh1
+    )
 
     if native_contributions is not None:
         from .cpp_backend_spectral import apply_spectral_contributions_cpp

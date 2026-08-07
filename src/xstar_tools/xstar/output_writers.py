@@ -438,11 +438,12 @@ def build_detail_rrc_table(
     source_record_publication_shadow: Mapping[int, Mapping[str, float]] | None = None,
     source_slot_absorption_lifetime: Mapping[int, Mapping[str, Any]] | None = None,
     source_slot_current_eval_sequence: int = 0,
+    orphan_type7_absorption: Mapping[int, Mapping[str, Any]] | None = None,
     publication_trace: list[dict[str, Any]] | None = None,
 ) -> OutputTable:
     """Literal ``fstepr3`` detailed-RRC row selection.
 
-    v0.6.48.12.3.45.3.2 keeps the canonical setptrs ``npcon`` metadata as
+    v0.6.48.12.3.45.3.3 keeps the canonical setptrs ``npcon`` metadata as
     the FITS identity universe and filters it to rate type 7.  The execution
     kernel still walks ``npfi(7,ion)`` when producing the physical values, but
     FITS identity reconstruction must not use that narrower chain.  The 45.1
@@ -450,15 +451,17 @@ def build_detail_rrc_table(
 
     Frozen-44 standalone C++ additionally retains two Carbon publication rows
     (709/762) that are not literal FORTRAN ``fstepr3`` rows.  For cross-mode
-    parity only, a shell-local slot history may supply *integrated absorption*
-    from a strictly earlier calc_emisab evaluation when the canonical row's
-    own source-record shadow is absent and the retained writer record differs.
-    This does not modify physical cemab/cabab/opakab state.
+    parity only, 45.3.3 evaluates canonical ``npcon`` Type-7 records that were
+    not visited by the active Python ``npfi(7,ion)`` traversal and may supply
+    *integrated absorption only* from that output-only orphan map.  This does
+    not modify physical cemab/cabab/opakab state.
     """
     del source_publication_shadow  # 45.1 slot shadow is never authoritative.
     record_shadow = source_record_publication_shadow or {}
-    slot_history = source_slot_absorption_lifetime or {}
-    current_eval_sequence = int(source_slot_current_eval_sequence or 0)
+    # 45.3.2 prior-evaluation slot history is retained only as diagnostic state;
+    # it is no longer a publication authority.
+    del source_slot_absorption_lifetime, source_slot_current_eval_sequence
+    orphan_absorption = orphan_type7_absorption or {}
     emiss = np.asarray(cemab, dtype=float)
     absorbed = np.asarray(cabab, dtype=float).reshape(-1)
     opacity = np.asarray(opakab, dtype=float).reshape(-1)
@@ -504,38 +507,21 @@ def build_detail_rrc_table(
                 current = retained_values
                 active = True
                 owner = "source_record_lifetime_v0648123453"
-        slot_entry: Mapping[str, Any] | None = None
-        if not active and current_eval_sequence > 0:
-            slot = slot_history.get(int(item.continuum_index))
-            if isinstance(slot, Mapping):
-                candidates: list[Mapping[str, Any]] = []
-                for key in ("latest", "previous"):
-                    entry = slot.get(key)
-                    if not isinstance(entry, Mapping):
-                        continue
-                    seq = int(entry.get("eval_sequence", 0) or 0)
-                    if 0 < seq < current_eval_sequence:
-                        candidates.append(entry)
-                if candidates:
-                    slot_entry = max(candidates, key=lambda e: int(e.get("eval_sequence", 0) or 0))
-            if slot_entry is not None:
-                writer_record = int(slot_entry.get("source_record", 0) or 0)
-                retained_absn = float(slot_entry.get("integrated_absn", 0.0) or 0.0)
-                # 45.3.2 cross-mode compatibility gate: never use a
-                # same-record history (the 45.3 record shadow owns that case),
-                # and never expose an intermediate write from the current
-                # evaluation (the 45.1 Ca over-publication class).
-                if (writer_record > 0 and writer_record != int(item.source_record) and
-                        np.isfinite(retained_absn) and retained_absn > activity_floor):
+        orphan_entry: Mapping[str, Any] | None = None
+        if not active:
+            candidate = orphan_absorption.get(int(item.continuum_index))
+            if isinstance(candidate, Mapping) and int(candidate.get("source_record", 0) or 0) == int(item.source_record):
+                retained_absn = float(candidate.get("integrated_absn", 0.0) or 0.0)
+                if np.isfinite(retained_absn) and retained_absn > activity_floor:
                     current = (current[0], current[1], retained_absn, current[3])
                     active = True
-                    owner = "prior_eval_slot_absorption_v06481234532"
+                    owner = "canonical_npcon_orphan_type7_absorption_v06481234533"
+                    orphan_entry = candidate
         if publication_trace is not None and int(item.continuum_index) in {709, 762}:
             publication_trace.append({
                 "phase": "detail3_publication",
                 "continuum_index": int(item.continuum_index),
                 "source_record": int(item.source_record),
-                "current_eval_sequence": current_eval_sequence,
                 "owner": owner,
                 "active": bool(active),
                 "current_emis_inward": float(current[0]),
@@ -543,7 +529,7 @@ def build_detail_rrc_table(
                 "current_integrated_absn": float(current[2]),
                 "current_opacity": float(current[3]),
                 "record_shadow_present": bool(retained is not None),
-                "slot_history_entry": dict(slot_entry) if slot_entry is not None else None,
+                "orphan_type7_entry": dict(orphan_entry) if orphan_entry is not None else None,
             })
         if not active:
             continue
@@ -642,6 +628,7 @@ def build_detail_shell_output(
     source_detail_rrc_record_shadow: Mapping[int, Mapping[str, float]] | None = None,
     source_detail_rrc_slot_absorption_lifetime: Mapping[int, Mapping[str, Any]] | None = None,
     source_detail_rrc_current_eval_sequence: int = 0,
+    source_detail_rrc_orphan_absorption: Mapping[int, Mapping[str, Any]] | None = None,
     source_detail_rrc_publication_trace: list[dict[str, Any]] | None = None,
     element_abundances: Sequence[float] | None = None,
 ) -> DetailShellOutput:
@@ -658,6 +645,7 @@ def build_detail_shell_output(
             source_record_publication_shadow=source_detail_rrc_record_shadow,
             source_slot_absorption_lifetime=source_detail_rrc_slot_absorption_lifetime,
             source_slot_current_eval_sequence=source_detail_rrc_current_eval_sequence,
+            orphan_type7_absorption=source_detail_rrc_orphan_absorption,
             publication_trace=source_detail_rrc_publication_trace,
         ),
         continuum=build_detail_continuum_table(epi_eV=epi_eV, zrems=zrems, opakc=opakc, rccemis=rccemis, dpthc=dpthc, ncn2=ncn2, header=header),
@@ -2750,6 +2738,9 @@ def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int, ter
     source_detail_rrc_current_eval_sequence = int(
         state.control.get("source_detail_rrc_eval_sequence_v06481234532", 0) or 0
     )
+    source_detail_rrc_orphan_absorption = state.control.get(
+        "source_detail_rrc_orphan_absorption_v06481234533", {}
+    )
     source_detail_rrc_publication_trace: list[dict[str, Any]] = []
     ncn2 = int(state.control["ncn2"])
     record = build_detail_shell_output(
@@ -2775,6 +2766,7 @@ def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int, ter
         source_detail_rrc_record_shadow=source_detail_rrc_record_shadow,
         source_detail_rrc_slot_absorption_lifetime=source_detail_rrc_slot_absorption_lifetime,
         source_detail_rrc_current_eval_sequence=source_detail_rrc_current_eval_sequence,
+        source_detail_rrc_orphan_absorption=source_detail_rrc_orphan_absorption,
         source_detail_rrc_publication_trace=source_detail_rrc_publication_trace,
         element_abundances=state.plasma.abundances,
     )
@@ -2800,6 +2792,22 @@ def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int, ter
         state.control["source_detail_rrc_record_shadow_v0648123453"] = {}
         state.control["source_detail_rrc_slot_absorption_lifetime_v06481234532"] = {}
         state.control["source_detail_rrc_eval_sequence_v06481234532"] = 0
+        orphan_trace = state.control.get("source_detail_rrc_orphan_trace_v06481234533", [])
+        if not isinstance(orphan_trace, list):
+            orphan_trace = []
+        orphan_trace.extend(source_detail_rrc_publication_trace)
+        orphan_trace_path = str(os.environ.get("XSTAR_V06481234533_RRC_ORPHAN_TRACE", "")).strip()
+        if orphan_trace_path and orphan_trace:
+            path = Path(orphan_trace_path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as handle:
+                for event in orphan_trace:
+                    payload = dict(event)
+                    payload.setdefault("hdunum", int(hdunum))
+                    payload.setdefault("terminal_record", bool(terminal_record))
+                    handle.write(json.dumps(payload, sort_keys=True) + "\n")
+        state.control["source_detail_rrc_orphan_trace_v06481234533"] = []
+        state.control["source_detail_rrc_orphan_absorption_v06481234533"] = {}
     _maybe_export_detail_continuum_product_write_state(
         state, hdunum=int(hdunum), terminal_record=bool(terminal_record),
         workspace=workspace, record=record,

@@ -1,5 +1,16 @@
 # CHANGELOG
 
+# 0.6.48.12.3.45.3.3 - 2026-08-07
+
+- Python-only canonical `npcon` orphan-Type7 absorption attribution/repair; C++ production science remains frozen to accepted 0.6.48.12.3.44 and ABI 6048110.
+- Preserve the 45.3.1 canonical `npcon` Type-7 FITS identity universe and the 45.3 source-record publication lifetime; retire the rejected 45.3.2 prior-evaluation slot history from publication authority.
+- Track Type-7 source records actually visited by the active Python `npfi(7,ion)` traversal, then define runtime orphans as canonical `npcon` Type-7 records not visited in that evaluation.
+- Evaluate each resolvable orphan through the already-selected UCalc implementation using the same compact-level destination mapping, endpoint abundances, escape factors, and source context as ordinary Type-7 execution.
+- Retain only `abs(ans4) * lower_population * n_H` in an output-only orphan map. Do not call continuum side-effect accumulation and do not modify `cemab`, `cabab`, `opakab`, populations, rates, thermal state, or transport.
+- Allow `xo01_detal3` to use that orphan absorption only for the exact canonical source-record/continuum identity when the current physical row and ordinary source-record lifetime are inactive.
+- Add runtime diagnostics for canonical Type-7 count, visited Type-7 count, orphan count, active orphan absorption count, and explicit 709/762 presence/absorption/publication ownership.
+- Qualification defaults to `c5_ne1e10` only and fails closed if 709/762 are not proven runtime orphans with positive absorption. The independent He II 508/515 Option-23 STEP crossing remains observational and untouched.
+
 # 0.6.48.12.3.45.3.2 - 2026-08-06
 
 - Python-only C5 Type-7 caller-local/retained-workspace lifetime attribution and cross-mode publication repair; C++ production science remains frozen to accepted 0.6.48.12.3.44 and ABI 6048110.
