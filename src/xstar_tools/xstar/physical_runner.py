@@ -703,7 +703,7 @@ def photon_number_luminosity(zremsz: Sequence[float], epi_eV: Sequence[float]) -
     return source_spectrum_ispcg2_diagnostics(zremsz, epi_eV)[0]
 
 
-OUTPUT_METADATA_CACHE_FORMAT_VERSION = 11
+OUTPUT_METADATA_CACHE_FORMAT_VERSION = 12
 
 
 def default_output_metadata_cache_path(fitsfile: str | Path) -> Path:
@@ -855,12 +855,10 @@ def load_source_output_metadata_cache(master: Any, path: str | Path) -> SourceOu
                 z["rrc_rate_type"], z["rrc_atomic_number"],
             )
         )
-        rrc_by_source_record = {int(row.source_record): row for row in rrcs}
-        detail_rrcs = tuple(
-            rrc_by_source_record[int(rec)]
-            for rec in z["detail_rrc_source_record"]
-            if int(rec) in rrc_by_source_record and int(rrc_by_source_record[int(rec)].rate_type) == 7
-        )
+        # v0.6.48.12.3.45.3.1: derive the detail FITS inventory from the
+        # canonical cached npcon sequence.  Never trust the 45.3 npfi-derived
+        # detail_rrc_source_record subset, even if present in an older sidecar.
+        detail_rrcs = tuple(row for row in rrcs if int(row.rate_type) == 7)
     return SourceOutputMetadata(
         levels=levels,
         lines=lines,
@@ -1175,6 +1173,11 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
             if 0 < local_index < derived.npilev.shape[0]
             else 0
         )
+        # v0.6.48.12.3.45.3.1: continuum/RRC metadata must resolve the
+        # element from the current continuum owner.  45.3 accidentally reused
+        # the stale ``z`` left by the preceding line loop, which caused the
+        # new fstepr3 abundance gate to suppress every C5 RRC row.
+        z = int(derived.ion_element_z[ion])
         data_type = int(continuum_rows[pos, 1])
         # Literal xstarsetup.f90 rate-7 rank coordinate.  Type 49 is special:
         #   eth = rdat1(np1r) * 13.598
@@ -1201,22 +1204,13 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
                 atomic_number=z,
             )
         )
-    # v0.6.48.12.3.45.3: fstepr3 does not consume the generic npcon
-    # inventory.  It starts at npfi(7,jkk) and walks npnxt while npar remains
-    # the current ion.  Build a dedicated identity sequence from that literal
-    # chain so rate-type-1 continuum records can never leak into detal3.
-    rrc_by_source_record = {int(row.source_record): row for row in rrcs}
-    detail_rrcs: list[RRCOutputMetadata] = []
-    seen_detail_records: set[int] = set()
-    for ion in range(1, int(derived.n_ions) + 1):
-        ion_record = int(derived.ion_records[ion]) if ion < len(derived.ion_records) else 0
-        rec = int(derived.npfi[7, ion]) if 7 < derived.npfi.shape[0] else 0
-        while rec > 0 and rec < len(derived.npar) and int(derived.npar[rec]) == ion_record:
-            row = rrc_by_source_record.get(rec)
-            if row is not None and int(row.rate_type) == 7 and rec not in seen_detail_records:
-                detail_rrcs.append(row)
-                seen_detail_records.add(rec)
-            rec = int(derived.npnxt[rec]) if rec < len(derived.npnxt) else 0
+    # v0.6.48.12.3.45.3.1: FITS detail-RRC identity ownership follows the
+    # canonical setptrs continuum table (npcon), exactly as the frozen-44 C++
+    # FITS implementation does.  Filter that canonical inventory to rate type
+    # 7; do not reconstruct the FITS identity universe from npfi(7,ion), which
+    # can omit valid canonical continuum identities.  The per-ion npfi walk
+    # remains the execution owner inside calc_emisab and STEP Options 19/24.
+    detail_rrcs = [row for row in rrcs if int(row.rate_type) == 7]
 
     return SourceOutputMetadata(
         levels=tuple(levels),
@@ -1226,8 +1220,8 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
         provenance={
             "source": "readtbl/setptrs packed ATDB pointers",
             "source_faithful": True,
-            "metadata_builder": "vectorized_numpy_v10_fstepr3_source_record_inventory",
-            "detail_rrc_owner": "npfi(7,ion)->npnxt source chain",
+            "metadata_builder": "vectorized_numpy_v11_canonical_npcon_type7_detail_inventory",
+            "detail_rrc_owner": "canonical npcon filtered rate_type==7",
             "metadata_cache_status": "built",
         },
     )

@@ -1,5 +1,15 @@
 # CHANGELOG
 
+# 0.6.48.12.3.45.3.1 - 2026-08-06
+
+- Python-only `xo01_detal3` source-inventory hotfix after the first 45.3 C5 run exposed a deterministic 348-row-per-HDU RRC collapse (`2436 = 348 x 7` reference-only rows).
+- Fix `build_source_output_metadata()` so each continuum/RRC row recomputes `z = ion_element_z[ion]`; 45.3 accidentally reused the stale element from the preceding line loop, causing the new element-abundance gate to reject the entire C5 RRC inventory.
+- Restore the canonical setptrs `npcon` sequence as the FITS detailed-RRC identity owner and filter it to `rate_type == 7`, matching the frozen-44 qualified C++ FITS implementation.  Do not reconstruct FITS identities from the narrower per-ion `npfi(7,ion) -> npnxt` chain.
+- Retain the useful 45.3 source-record-keyed publication lifetime for inactive-current-slot recovery; keep the 45.1 continuum-slot shadow non-authoritative.
+- Bump output-metadata cache format from v11 to v12 so a 45.3 cache cannot preserve the rejected npfi-derived detail inventory.
+- Freeze all C++ production science, ABI 6048110, STEP/rank publication, transport, DSEC, and `xout_rrc1`.
+- Qualification defaults to only `c5_ne1e10` (`--phase first-one`).  Do not run Ca until the C5 catastrophic detail3 inventory regression is removed.
+
 # 0.6.48.12.3.45.3 - 2026-08-06
 
 - Python-only `fstepr3` source-record detailed-RRC publication repair; C++ production science remains frozen to accepted 0.6.48.12.3.44 and production-zone ABI 6048110.

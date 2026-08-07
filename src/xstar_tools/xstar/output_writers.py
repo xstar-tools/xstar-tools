@@ -148,9 +148,9 @@ class SourceOutputMetadata:
     levels: tuple[LevelOutputMetadata, ...] = ()
     lines: tuple[LineOutputMetadata, ...] = ()
     rrcs: tuple[RRCOutputMetadata, ...] = ()
-    # Dedicated literal fstepr3 source-record inventory.  This is distinct
-    # from ``rrcs`` because the latter is shared by final/public RRC writers
-    # and may contain other bound-free rate families.
+    # FITS detail-RRC view of the canonical ``rrcs``/npcon inventory.
+    # Since 45.3.1 this must be exactly the rate-type-7 subsequence of rrcs;
+    # it is not an independently reconstructed npfi identity universe.
     detail_rrcs: tuple[RRCOutputMetadata, ...] = ()
     provenance: Mapping[str, Any] = field(default_factory=dict)
 
@@ -439,12 +439,11 @@ def build_detail_rrc_table(
 ) -> OutputTable:
     """Literal ``fstepr3`` detailed-RRC row selection.
 
-    v0.6.48.12.3.45.3 separates the detailed-RRC identity owner from the
-    generic/public RRC metadata.  ``fstepr3.f90`` walks the per-ion rate-type-7
-    source chain and tests the current one-based ``npconi2`` slot.  The 45.1
-    continuum-slot shadow is deliberately *not* an authority here: it could
-    neither represent the exact source-record family nor safely distinguish
-    detail publication from the other bound-free inventories.
+    v0.6.48.12.3.45.3.1 uses the canonical setptrs ``npcon`` metadata as
+    the FITS identity universe and filters it to rate type 7.  The execution
+    kernel still walks ``npfi(7,ion)`` when producing the physical values, but
+    FITS identity reconstruction must not use that narrower chain.  The 45.1
+    continuum-slot shadow remains deliberately non-authoritative.
     """
     del source_publication_shadow  # 45.1 slot shadow is never authoritative.
     record_shadow = source_record_publication_shadow or {}
@@ -453,12 +452,14 @@ def build_detail_rrc_table(
     opacity = np.asarray(opakab, dtype=float).reshape(-1)
     depth = np.asarray(tauc, dtype=float)
     abund = None if element_abundances is None else np.asarray(element_abundances, dtype=float).reshape(-1)
-    if metadata.detail_rrcs:
-        source_rows = metadata.detail_rrcs
-    elif any(int(getattr(r, "rate_type", 0)) != 0 for r in metadata.rrcs):
+    if any(int(getattr(r, "rate_type", 0)) != 0 for r in metadata.rrcs):
+        # Canonical FITS identity owner: setptrs npcon order, Type-7 only.
+        # ``metadata.detail_rrcs`` is intentionally not authoritative here.
         source_rows = tuple(r for r in metadata.rrcs if int(getattr(r, "rate_type", 0)) == 7)
-    else:
+    elif metadata.detail_rrcs:
         # Backward-compatible synthetic/fixture metadata predating rate_type.
+        source_rows = metadata.detail_rrcs
+    else:
         source_rows = metadata.rrcs
     rows: list[RRCOutputMetadata] = []
     payload: list[tuple[float, float, float, float]] = []
@@ -2675,8 +2676,8 @@ def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int, ter
     source_detail_line_activity_shadow = _source_detail_line_activity_shadow(
         state, metadata, populations_out, workspace.oplin_physical
     )
-    # 45.3: retain the legacy shadow in state for diagnostics/backward
-    # compatibility, but fstepr3 publication no longer consults it.
+    # 45.3.1: retain the legacy slot shadow for diagnostics/backward
+    # compatibility only; detail3 publication never consults it.
     source_detail_rrc_publication_shadow = state.control.get(
         "source_detail_rrc_publication_shadow_v0648123451", {}
     )
