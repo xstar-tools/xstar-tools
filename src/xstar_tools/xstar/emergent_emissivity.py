@@ -1,3 +1,17 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: calc_emis_all.f90 / calc_emis_element.f90 / calc_emis_ion.f90 / rlbin.f90 / binemis.f90 / linopac.f90
+#   Role: Full-grid emission/opacity producer and line-profile/Type50 application path.
+#   Relation: Source-faithful spectral producer with qualified optimized-equivalent Type50 profile work in C++.
+#   Concordance: EMIS-001; TYPE50-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# Atomic-data note (XSTAR Manual Ch. 12; Mendoza et al. 2021, Appendix A):
+#   Rule: data type selects the record formula/interpretation; rate type selects downstream use.
+#   Type 50 is an ATDB data type for radiative line records (lambda, gf, A); Type 91 is the APED
+#   radiative-line form. Their data type determines record decoding, while rate type/source topology
+#   determines how line results are accumulated and published.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Source-faithful translation of XSTAR ``calc_emis_all``.
 
 The bounded source chain is::

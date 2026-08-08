@@ -1,5 +1,20 @@
 # CHANGELOG
 
+# 0.6.55 - Python Fortran/source and atomic-data comments - 2026-08-08
+
+- Added marked Fortran/source-correspondence comments to 45 production Python modules under `src/xstar_tools/xstar/`.
+- Added source-derived ATDB data-type comments to 20 modules using XSTAR Manual Chapter 12 and Mendoza et al. (2021) Appendix A.
+- Explicitly documented that ATDB data type selects the UCalc formula/record interpretation while rate type selects downstream use.
+- Added `qualification/python_source_comment_overlay.json` and a byte-exact normalization gate proving the comments do not alter executable Python source.
+- Preserved science revision `0.6.48.12.3.45.3.3.8`, frozen C++ baseline `0.6.48.12.3.44`, and ABI `6048110`.
+
+## 0.6.54 - stable native reference names and atomic-data documentation
+
+- Renamed four version-labeled C++ runtime reference headers to stable names and removed version labels from their namespaces; numerical payloads/oracle hashes are unchanged.
+- Moved `constants.def` into `src/xstar_tools/xstar/cpp/`; Python and C++ now consume the same file there, and C++ no longer includes a header/data definition from its parent directory.
+- Added concise atomic-data/data-type comments grounded in XSTAR Manual Chapter 12, Mendoza et al. (2021) Appendix A, and canonical `ucalc.f90`.
+- Scientific revision remains `0.6.48.12.3.45.3.3.8`; ABI remains `6048110`.
+
 ## 0.6.54 - stable native reference names and atomic-data documentation - 2026-08-08
 
 - Renamed four version-labeled C++ runtime reference headers to stable names and removed version labels from their namespaces; numerical payloads/oracle hashes are unchanged.

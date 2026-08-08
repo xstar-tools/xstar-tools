@@ -1,3 +1,16 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: setptrs.f90 plus calc_hmc*/calc_emis* source-index traversal
+#   Role: Build source-indexed active element/ion/level/line/continuum subsets without renumbering XSTAR identities.
+#   Relation: Index/cache transformation only; source pointer identity and ordering remain authoritative.
+#   Concordance: DB-001; BACKEND-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# Atomic-data note (XSTAR Manual Ch. 12; Mendoza et al. 2021, Appendix A):
+#   Rule: data type selects the record formula/interpretation; rate type selects downstream use.
+#   Subset selection may filter records for work size but must preserve the original record header,
+#   including independent data-type and rate-type meanings.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Per-run active ATDB subset indexes for memory-sensitive XSTAR runs.
 
 The first implementation is deliberately conservative: it precomputes and

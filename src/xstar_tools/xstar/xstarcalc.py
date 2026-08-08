@@ -1,3 +1,12 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: xstarcalc.f90
+#   Role: One-zone source boundary: bremsmap -> optional dsec -> calc_hmc_all -> calc_emisab_all -> calc_emis_all.
+#   Relation: Source-order translation; caller-owned workspaces and print/lifetime behavior are part of the contract.
+#   Concordance: ARCH-001; DSEC-001; THERM-001; EMISAB-001; EMIS-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Complete local-zone assembly of XSTAR ``xstarcalc.f90``.
 
 This module joins the previously accepted bounded source ports in their literal

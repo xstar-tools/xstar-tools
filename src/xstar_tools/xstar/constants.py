@@ -1,3 +1,12 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: constants.f90; literal-sensitive uses in rread1.f90 / dsec.f90 / trnfrc.f90
+#   Role: Expose the source constants shared by the Python translation and the relocated cpp/constants.def table.
+#   Relation: Source-exact or qualification-pinned constants; do not modernize rounded legacy literals without science requalification.
+#   Concordance: INPUT-001; THERM-001; RADIAL-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Shared XSTAR numerical constants loaded from ``xstar/cpp/constants.def``.
 
 The definition file lives with the native backend because C++ includes it directly;

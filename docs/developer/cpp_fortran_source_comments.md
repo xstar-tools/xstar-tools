@@ -65,3 +65,8 @@ python tools/qualification/check_source_concordance.py
 ```
 
 A scientific code change cannot be hidden inside this mechanism: the checker removes only the explicitly marked leading comment block and then hashes the remaining bytes against the frozen baseline.
+
+
+## Python companion comments
+
+The corresponding production Python modules are annotated in `0.6.55`; see `python_fortran_source_comments.md`. The Python pass uses the same authority hierarchy and records the Manual Chapter 12 / Mendoza et al. Appendix A distinction between ATDB data type (record formula) and rate type (downstream use).

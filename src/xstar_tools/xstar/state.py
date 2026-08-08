@@ -1,3 +1,12 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: globaldata modules; savd.f90 / unsavd.f90 / rstepr*.f90
+#   Role: Typed Python representation of caller-owned XSTAR workspaces and persisted radial/publication state.
+#   Relation: Storage/lifetime translation; array ownership and persistence boundaries must follow the source.
+#   Concordance: STATE-001; RADIAL-001; TERMINAL-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Typed state containers for the source-faithful Python XSTAR port."""
 
 from __future__ import annotations

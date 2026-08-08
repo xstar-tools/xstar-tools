@@ -1,6 +1,6 @@
 # XSTAR tools architecture at the parity-freeze boundary
 
-**Productization version:** 0.6.54  
+**Productization version:** 0.6.55  
 **Qualified science revision:** `0.6.48.12.3.45.3.3.8`  
 **Canonical executable authority:** XSTAR Fortran 2.59g  
 **Frozen C++ production baseline:** `0.6.48.12.3.44`  
@@ -169,3 +169,8 @@ Before merging a refactor that touches scientific behavior or a module listed by
 5. if a frozen/pinned source must change, treat it as a dedicated science/refactor qualification rather than ordinary productization.
 
 See `fortran_source_map.md` for the routine-level map and `python_cpp_fortran_concordance.md` for the implementation/qualification matrix.
+
+
+## 0.6.55 Python source-comment overlay
+
+The production Python source now carries marked Fortran/source-correspondence comments parallel to the C++ comments. The comments also document the atomic-database distinction between **data type** (record formula/interpretation in `ucalc`) and **rate type** (downstream use of the returned rates). The overlay is comment-only: removing the marked leading block from every annotated module must reproduce its exact `0.6.54` bytes. See `python_fortran_source_comments.md` and `qualification/python_source_comment_overlay.json`.

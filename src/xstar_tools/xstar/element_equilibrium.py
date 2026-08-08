@@ -1,3 +1,17 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: calc_hmc_element.f90 / calc_hmc_ion.f90 / levwkelement.f90 / levwk.f90 / msolvelucy.f90
+#   Role: Assemble and solve per-ion/element statistical-equilibrium systems on the compact source basis.
+#   Relation: Source-order matrix translation with qualified compact storage and terminal endpoint clamps.
+#   Concordance: LEVEL-001; MATRIX-001; TERMINAL-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# Atomic-data note (XSTAR Manual Ch. 12; Mendoza et al. 2021, Appendix A):
+#   Rule: data type selects the record formula/interpretation; rate type selects downstream use.
+#   UCalc has already interpreted the record by data type when matrix assembly sees ans*/idest*. Matrix
+#   insertion/thermal ownership follows rate type and source traversal; this layer must not reinterpret a
+#   rate type as a data type.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Source-faithful element statistical-equilibrium subsystem.
 
 This module translates the execution sequence

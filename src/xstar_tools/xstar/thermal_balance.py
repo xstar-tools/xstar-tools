@@ -1,3 +1,12 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: heatf.f90 / calc_hmc_all.f90
+#   Role: Combine source heating/cooling terms into the fixed-state thermal-balance residual.
+#   Relation: Source-exact/source-order reduction where cancellation and roundoff are observable.
+#   Concordance: THERM-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Source-faithful translation of XSTAR's ``heatf.f90`` subsystem.
 
 The bounded source path is::

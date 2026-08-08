@@ -1,3 +1,12 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: xstarcalc.f90 scientific boundary; no Fortran backend-dispatch analogue
+#   Role: Python controller bridge to the qualified C++ production-zone ABI.
+#   Relation: Backend dispatch only; native scientific ownership remains in source-mapped C++ kernels.
+#   Concordance: BACKEND-001; ARCH-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Shared standalone-production controller backends for accelerated Python.
 
 0.6.48.11.0 exposes the accepted production controller through two native

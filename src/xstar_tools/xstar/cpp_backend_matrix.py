@@ -1,3 +1,16 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: calc_hmc_ion.f90 / calc_hmc_element.f90 / msolvelucy.f90 / ucalc.f90
+#   Role: Python/native bridge and attribution helpers for the C++ statistical-equilibrium matrix path.
+#   Relation: Bridge/diagnostic layer; does not redefine the source matrix equations.
+#   Concordance: MATRIX-001; LEVEL-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# Atomic-data note (XSTAR Manual Ch. 12; Mendoza et al. 2021, Appendix A):
+#   Rule: data type selects the record formula/interpretation; rate type selects downstream use.
+#   When record metadata crosses the bridge, data type selects the native UCalc/operator branch and rate
+#   type retains source application semantics.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Optional C++ matrix backend loader.
 
 v0.5.67 starts ``libxstar_matrix.so`` as the dedicated shared library for

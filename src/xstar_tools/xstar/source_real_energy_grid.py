@@ -1,3 +1,12 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: ener.f90
+#   Role: Construct the accepted source REAL energy grid used by XSTAR continuum/radiation work.
+#   Relation: Source-exact numerical helper; REAL rounding and grid endpoints are observable invariants.
+#   Concordance: ARCH-001; INPUT-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Literal arithmetic-kind translation of the XSTAR ``ener.f90`` grid."""
 from __future__ import annotations
 import numpy as np

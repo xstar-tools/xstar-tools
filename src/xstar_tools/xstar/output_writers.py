@@ -1,3 +1,16 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: fstepr.f90 / fstepr2.f90 / fstepr3.f90 / fstepr4.f90 / writespectra*.f90
+#   Role: Own radial detail products and final continuum/line/RRC/spectrum publication.
+#   Relation: Source-equivalent publication; identity, source order, REAL(4) writer behavior, and terminal workspace ownership are qualified.
+#   Concordance: DETAIL-001; FINAL-001; TERMINAL-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# Atomic-data note (XSTAR Manual Ch. 12; Mendoza et al. 2021, Appendix A):
+#   Rule: data type selects the record formula/interpretation; rate type selects downstream use.
+#   Output membership follows source pointer/rate-type traversal and retained workspaces; it must not be
+#   narrowed by assuming a particular data type. The data type only defines how a record was evaluated.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Source-faithful detail and final-output writers from the XSTAR caller.
 
 This module translates the caller-visible contracts of ``savd -> fstepr*``

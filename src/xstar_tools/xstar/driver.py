@@ -1,3 +1,12 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: xstar.f90 / xstarcalc.f90
+#   Role: Register and execute source routine translations on the shared Python state.
+#   Relation: Python orchestration infrastructure; scientific ownership remains in the mapped source routines.
+#   Concordance: ARCH-001; BACKEND-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Executable stage skeleton for the source-faithful Python XSTAR port."""
 
 from __future__ import annotations

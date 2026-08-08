@@ -1,3 +1,12 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: comp2.f90 / cmpfnc.f90
+#   Role: Compton heating/cooling leaf used by calc_hmc_all.
+#   Relation: Source-faithful thermal leaf including source interpolation and literal semantics.
+#   Concordance: THERM-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Source-faithful translation of XSTAR's relativistic Compton subsystem.
 
 This module translates the coherent source path

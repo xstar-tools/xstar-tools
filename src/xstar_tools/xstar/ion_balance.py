@@ -1,3 +1,16 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: calc_ion_rates.f90 / istruc.f90 / ioneqm.f90
+#   Role: Build preliminary total ionization/recombination rates and solve the local ion-stage balance.
+#   Relation: Source-order translation; record traversal and preliminary population ownership are qualification-pinned.
+#   Concordance: ION-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# Atomic-data note (XSTAR Manual Ch. 12; Mendoza et al. 2021, Appendix A):
+#   Rule: data type selects the record formula/interpretation; rate type selects downstream use.
+#   calc_ion_rates traverses records by rate-type ownership while ucalc interprets each record by data
+#   type. Never infer data type from rate type (for example rate type 15 can carry data type 95).
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Source-faithful pre-matrix ionization balance for ``calc_hmc_element``.
 
 This module translates the first pass of ``calc_hmc_element.f90``:

@@ -1,3 +1,12 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: leqt2f.f90 / ludcmp.f90 / lubksb.f90 / mprove.f90 / msolvelucy.f90
+#   Role: Source-equivalent linear solve/refinement helpers for statistical equilibrium.
+#   Relation: Mathematically/source-order equivalent numerical kernels; normalization and clamping behavior are qualified.
+#   Concordance: LEVEL-001; MATRIX-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Source translations of XSTAR's Numerical Recipes linear algebra helpers."""
 from __future__ import annotations
 

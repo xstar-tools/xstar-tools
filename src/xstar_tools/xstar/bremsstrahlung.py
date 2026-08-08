@@ -1,3 +1,12 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: bremem.f90
+#   Role: Bremsstrahlung cooling/emission leaf used by calc_hmc_all.
+#   Relation: Source-faithful thermal leaf; numerical constants/order remain source-derived.
+#   Concordance: THERM-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Source-faithful translation of XSTAR's ``bremem.f90`` subsystem.
 
 The bounded source path is::

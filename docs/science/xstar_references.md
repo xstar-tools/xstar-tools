@@ -96,7 +96,7 @@ Related implementation: `atomic_database.py`, ATDB fingerprint/cache metadata, n
 
 #### Atomic-data record semantics used by the native comments
 
-The 0.6.54 C++ comments use two source-specific distinctions from **XSTAR Manual Chapter 12** and **Mendoza et al. (2021), Appendix A**. A record's **data type** determines the formula/layout by which its constants are interpreted to calculate a rate or cross section; its **rate type** determines how XSTAR uses the returned quantity in the physical calculation. The ASCII database record header described by the manual contains six integers: data type, rate type, continuation flag, number of real values, number of integer values, and number of character values. The current `ucalc.f90` remains the executable dispatcher and therefore the final authority for present branching.
+The 0.6.54 C++ comments and 0.6.55 Python comments use two source-specific distinctions from **XSTAR Manual Chapter 12** and **Mendoza et al. (2021), Appendix A**. A record's **data type** determines the formula/layout by which its constants are interpreted to calculate a rate or cross section; its **rate type** determines how XSTAR uses the returned quantity in the physical calculation. The ASCII database record header described by the manual contains six integers: data type, rate type, continuation flag, number of real values, number of integer values, and number of character values. The current `ucalc.f90` remains the executable dispatcher and therefore the final authority for present branching.
 
 The Appendix-A families called out directly in the native implementation are:
 

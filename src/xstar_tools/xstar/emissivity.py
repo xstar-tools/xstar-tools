@@ -1,3 +1,16 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: calc_emisab_all.f90 / calc_emisab_element.f90 / calc_emisab_ion.f90
+#   Role: Reduced-grid integrated emissivity/opacity producer used before full-grid publication.
+#   Relation: Source-order translation; compact aliases, record traversal, carried continuum state, and rank semantics are qualified.
+#   Concordance: EMISAB-001; TERMINAL-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# Atomic-data note (XSTAR Manual Ch. 12; Mendoza et al. 2021, Appendix A):
+#   Rule: data type selects the record formula/interpretation; rate type selects downstream use.
+#   calc_emisab traverses records according to rate-type/source topology and invokes UCalc for
+#   data-type-specific formulas. Keep publication ownership separate from the record formula identifier.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Source-faithful translation of XSTAR ``calc_emisab_all``.
 
 The translated source chain is::

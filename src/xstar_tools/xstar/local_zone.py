@@ -1,3 +1,12 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: calc_hmc_all.f90 / calc_hmc_element.f90 / calc_hmc_ion.f90
+#   Role: Fixed-state all-element thermal/rate/matrix controller for one local zone.
+#   Relation: Source-order orchestration; element traversal, continuum leaf order, and caller-visible totals are preserved.
+#   Concordance: THERM-001; MATRIX-001; ION-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Fixed-state core of XSTAR ``calc_hmc_all.f90``.
 
 This module is the first Milestone-4 source port.  It preserves the outer

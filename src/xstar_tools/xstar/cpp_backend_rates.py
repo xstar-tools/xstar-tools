@@ -1,3 +1,16 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: ucalc.f90 / calc_hmc_ion.f90
+#   Role: Python/native bridge for low-level rate evaluation and packed record exchange.
+#   Relation: Bridge layer over source-equivalent C++ rate kernels.
+#   Concordance: MATRIX-001; ION-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# Atomic-data note (XSTAR Manual Ch. 12; Mendoza et al. 2021, Appendix A):
+#   Rule: data type selects the record formula/interpretation; rate type selects downstream use.
+#   Preserve data_type and rate_type independently in native payloads: formula selection and downstream
+#   rate ownership are distinct ATDB fields.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Optional C++ rates backend loader.
 
 This module intentionally exposes only a small status/probe interface in

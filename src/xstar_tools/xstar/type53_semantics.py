@@ -1,3 +1,17 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: ucalc.f90 label 53 / phextrap.f90 / phint53.f90 / calc_hmc_ion.f90
+#   Role: Characterize Type-53 resonance-averaged TOPbase photoionization answer and matrix-insertion semantics.
+#   Relation: Qualification/diagnostic layer over the source branch; not an independent physics implementation.
+#   Concordance: MATRIX-001; DSEC-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# Atomic-data note (XSTAR Manual Ch. 12; Mendoza et al. 2021, Appendix A):
+#   Rule: data type selects the record formula/interpretation; rate type selects downstream use.
+#   Appendix A Type 53 is a tabulated resonance-averaged partial photoionization cross section with bound
+#   and parent-level identities. Current ucalc.f90 is authoritative for threshold/pointer/end-point
+#   arithmetic.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Type-53 answer-semantics and matrix-insertion qualification for v0.6.48.7.13.
 
 The tool joins the applied native values and the translated source-style shadow

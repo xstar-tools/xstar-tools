@@ -1,3 +1,12 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: calc_hmc_all.f90 / heatf.f90 / dsec.f90
+#   Role: Python/native bridge for fixed-state thermal/controller calculations.
+#   Relation: Backend bridge only; source arithmetic/order is owned by native thermal/fixed-state engines.
+#   Concordance: THERM-001; DSEC-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Persistent native thermal-transfer and convergence engine for v0.6.48.3.
 
 The native library owns the translated ``heatt`` arithmetic and the complete

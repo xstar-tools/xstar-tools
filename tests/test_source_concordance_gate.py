@@ -14,7 +14,7 @@ def _concordance():
 def test_source_concordance_metadata_and_docs_exist():
     data = _concordance()
     assert data["schema"] == "xstar-tools-source-concordance-v1"
-    assert data["productization_version"] == "0.6.54"
+    assert data["productization_version"] == "0.6.55"
     assert data["science_revision"] == "0.6.48.12.3.45.3.3.8"
     assert data["canonical_fortran"]["version"] == "2.59g"
     for rel in data["documentation"] + data["diagrams"]:
@@ -36,12 +36,17 @@ def test_source_concordance_entries_have_real_characterization_tests():
 
 def test_source_comments_obey_freeze_policy():
     data = _concordance()
-    frozen = json.loads((ROOT / "qualification" / "parity_freeze_science_hashes.json").read_text())
+    overlay = json.loads((ROOT / "qualification" / "python_source_comment_overlay.json").read_text())
+    assert sorted(data["source_comment_files"]) == sorted(overlay["files"])
+    assert len(data["source_comment_files"]) == 45
     for rel in data["source_comment_files"]:
-        assert rel not in frozen
         text = (ROOT / rel).read_text(errors="replace")
-        assert "Source correspondence:" in text
-        assert "Concordance:" in text
+        assert text.startswith("# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN\n")
+        assert "Source correspondence:" in text[:5000]
+        assert "Concordance:" in text[:5000]
+    assert data["pinned_source_policy"]["frozen_python_comments_deferred"] is False
+    assert data["pinned_source_policy"]["production_python_comment_overlay_enabled"] is True
+    assert data["pinned_source_policy"]["python_comment_overlay_manifest"] == "qualification/python_source_comment_overlay.json"
     assert data["pinned_source_policy"]["non_science_cpp_refactor_manifest"] == "qualification/cpp_non_science_refactor_0_6_54.json"
     assert len(data["cpp_source_comment_files"]) == 47
     for rel in data["cpp_source_comment_files"]:

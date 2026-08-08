@@ -1,3 +1,12 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: calc_emisab*.f90 / calc_emis*.f90 / linopac.f90
+#   Role: Python/native bridge for reduced/full-grid spectral and Type50 work.
+#   Relation: Backend bridge only; scientific semantics are owned by mapped source-equivalent kernels.
+#   Concordance: EMISAB-001; EMIS-001; TYPE50-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Persistent native emissivity/opacity contribution engine for v0.6.48.3.
 
 Python retains atomic-data traversal and scalar UCalc evaluation in this

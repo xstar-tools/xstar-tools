@@ -1,3 +1,16 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: readtbl.f90 / setptrs.f90 / ucalc.f90
+#   Role: Inventory packed ATDB coverage by data type and rate type and exercise registered UCalc branches.
+#   Relation: Coverage/qualification utility over the source record model; no independent physics.
+#   Concordance: DB-001; MATRIX-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# Atomic-data note (XSTAR Manual Ch. 12; Mendoza et al. 2021, Appendix A):
+#   Rule: data type selects the record formula/interpretation; rate type selects downstream use.
+#   The inventory intentionally counts both identifiers independently: data type selects the UCalc
+#   formula/record layout, while rate type identifies downstream use of the returned rates.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Coverage and product writers for the source-faithful ``ucalc`` subsystem."""
 
 from __future__ import annotations

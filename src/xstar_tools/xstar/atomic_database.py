@@ -1,3 +1,17 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: readtbl.f90 / setptrs.f90 / xstarsetup.f90
+#   Role: Read packed ATDB records and construct the one-based record/ion/line/continuum pointer topology used by the source.
+#   Relation: Source-faithful storage translation; pointer identity and source traversal order are scientific state.
+#   Concordance: DB-001; INPUT-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# Atomic-data note (XSTAR Manual Ch. 12; Mendoza et al. 2021, Appendix A):
+#   Rule: data type selects the record formula/interpretation; rate type selects downstream use.
+#   Manual Ch. 12: each record header is data type, rate type, continuation, nreal, nint, nchar. Data type
+#   selects how constants are interpreted in ucalc; rate type selects how the returned rates are consumed.
+#   Preserve them as independent fields.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Source-faithful port of XSTAR's packed atomic-database initialization.
 
 This module translates the runtime-relevant behavior of ``readtbl.f90`` and

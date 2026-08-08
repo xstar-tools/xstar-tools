@@ -1,3 +1,12 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: calc_hmc_element.f90 / calc_hmc_ion.f90 / calc_ion_rates.f90 / levwkelement.f90
+#   Role: Python/native bridge for the element fixed-state operator.
+#   Relation: Backend bridge only; source traversal/solve semantics are owned by the C++ element engine.
+#   Concordance: ION-001; LEVEL-001; MATRIX-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Persistent one-call native element matrix/Lucy engine for v0.6.45.1.
 
 The public C ABI lives in ``cpp/xstar_element_engine.h`` and the implementation

@@ -1,3 +1,12 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: dsec.f90
+#   Role: Iterate the source thermal/convergence controller for a zone.
+#   Relation: Source-faithful stateful control algorithm; stopping tests, secant state, and REAL rounding are qualified.
+#   Concordance: DSEC-001; THERM-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Source-faithful translation of XSTAR ``dsec.f90``.
 
 ``dsec`` solves charge conservation and, for positive ``nlim``, thermal

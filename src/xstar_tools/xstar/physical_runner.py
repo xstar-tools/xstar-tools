@@ -1,3 +1,12 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: rread1.f90; xstar.f90; xstarcalc.f90
+#   Role: Construct a physical run from XSTAR parameters/data and drive the source-equivalent radial/controller path.
+#   Relation: Source-faithful controller adapter, including default-REAL/default-value and input-state semantics.
+#   Concordance: INPUT-001; ARCH-001; RADIAL-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Public end-to-end execution API for the source-faithful Python XSTAR port.
 
 The four public entry points in this module accept ordinary XSTAR parameter

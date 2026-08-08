@@ -1,3 +1,16 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: ucalc.f90 / calc_hmc_ion.f90 / calc_hmc_element.f90
+#   Role: Lower active Python ATDB records into the fixed-state native program consumed by the C++ engine.
+#   Relation: Storage/lowering transformation constrained to preserve source record order and endpoint semantics.
+#   Concordance: MATRIX-001; LEVEL-001; BACKEND-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# Atomic-data note (XSTAR Manual Ch. 12; Mendoza et al. 2021, Appendix A):
+#   Rule: data type selects the record formula/interpretation; rate type selects downstream use.
+#   Native opcodes are derived from ATDB data types. Rate type remains separate metadata controlling
+#   matrix/thermal/application semantics; do not collapse the two identifiers.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Active-ATDB compiler for the genuine v0.6.48.7.13 native fixed-state engine.
 
 The compiler lowers source ATDB topology plus raw formula coefficients.  It

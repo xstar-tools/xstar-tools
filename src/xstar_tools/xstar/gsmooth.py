@@ -1,3 +1,12 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: gsmooth.f90 / gsmooth2.f90
+#   Role: Apply the source Gaussian smoothing branch used for nonzero turbulent broadening.
+#   Relation: Source-faithful numerical translation with source active-range/integral behavior.
+#   Concordance: RADIAL-001; EMIS-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Source-faithful translation of XSTAR ``gsmooth.f90`` and ``gsmooth2.f90``.
 
 ``gsmooth`` is the optional turbulent/thermal Gaussian convolution inserted by

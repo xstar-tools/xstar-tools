@@ -1,3 +1,16 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: readtbl.f90 / setptrs.f90 plus calc_hmc*/ucalc record traversal
+#   Role: Pack active ATDB metadata for native backends without changing XSTAR record identity.
+#   Relation: Storage transformation only; one-based record numbers, parent pointers, data type, and rate type remain distinct.
+#   Concordance: DB-001; BACKEND-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# Atomic-data note (XSTAR Manual Ch. 12; Mendoza et al. 2021, Appendix A):
+#   Rule: data type selects the record formula/interpretation; rate type selects downstream use.
+#   The compact header preserves both data_type and rate_type because they answer different questions: how
+#   to evaluate the constants versus where the resulting rate belongs.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Compact active-ATDB export for modular C++ backends.
 
 The export intentionally preserves one-based XSTAR indices while packing only

@@ -1,3 +1,17 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: heatt.f90
+#   Role: Apply shell-local continuum, line, and recombination-continuum transfer after xstarcalc.
+#   Relation: Source-faithful array ownership/traversal translation, including retained leveltemp workspace semantics.
+#   Concordance: RADIAL-001; STATE-001; EMIS-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# Atomic-data note (XSTAR Manual Ch. 12; Mendoza et al. 2021, Appendix A):
+#   Rule: data type selects the record formula/interpretation; rate type selects downstream use.
+#   RRC/line work traverses the setptrs hierarchy and record rate types, while any UCalc evaluation still
+#   uses each record data type. Publication/transfer membership and formula selection are intentionally
+#   separate.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Source-faithful translation of XSTAR ``heatt.f90``.
 
 ``heatt`` performs the shell-local continuum, line, and recombination-continuum

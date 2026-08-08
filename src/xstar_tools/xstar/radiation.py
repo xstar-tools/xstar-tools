@@ -1,3 +1,12 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: bremsmap.f90 / nbinc.f90 / huntf.f90
+#   Role: Map the live high-resolution radiation field to the reduced grid with source search/range semantics.
+#   Relation: Source-faithful numerical translation including one-based bin boundaries and caller-owned tails.
+#   Concordance: ARCH-001; EMISAB-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Source-faithful translation of XSTAR ``bremsmap.f90``.
 
 The source path is::

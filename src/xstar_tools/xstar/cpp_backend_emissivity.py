@@ -1,3 +1,12 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: calc_emisab*.f90 / calc_emis*.f90
+#   Role: Python/native emissivity bridge for source-equivalent spectral producers.
+#   Relation: Backend bridge only; no independent publication physics.
+#   Concordance: EMISAB-001; EMIS-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Optional C++ emissivity/output backend loader.
 
 v0.6.0a19 adds ``libxstar_emissivity.so`` for the binemis final-product

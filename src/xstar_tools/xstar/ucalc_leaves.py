@@ -1,3 +1,16 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: ucalc.f90 leaf dependencies including calt*, exintn, phextrap, spline/interpolation helpers
+#   Role: Small source formula translations used by individual UCalc data-type branches.
+#   Relation: Formula-level source translations; units and branch-specific record layouts follow the ATDB data-type definition.
+#   Concordance: MATRIX-001; TYPE50-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# Atomic-data note (XSTAR Manual Ch. 12; Mendoza et al. 2021, Appendix A):
+#   Rule: data type selects the record formula/interpretation; rate type selects downstream use.
+#   Appendix A is the record-layout authority for listed data types; current ucalc.f90 is the executable
+#   authority for exact arithmetic, endpoint rules, and newer/unlisted labels.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Leaf-routine translations used by the source-faithful ``ucalc`` port.
 
 The functions in this module mirror small XSTAR Fortran source files rather

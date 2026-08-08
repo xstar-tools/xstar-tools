@@ -1,3 +1,16 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: ucalc.f90 / calc_hmc_ion.f90; no direct Fortran backend-dispatch analogue
+#   Role: Optional Python/native bridge for compact record classification and low-level native backend counters.
+#   Relation: Backend/observability layer; scientific ownership remains in mapped source-equivalent kernels.
+#   Concordance: BACKEND-001; MATRIX-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# Atomic-data note (XSTAR Manual Ch. 12; Mendoza et al. 2021, Appendix A):
+#   Rule: data type selects the record formula/interpretation; rate type selects downstream use.
+#   Native counters and payloads distinguish unsupported data type from unsupported rate type because those
+#   fields mean formula selection versus downstream rate ownership.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Load optional flat-layout C++ backend libraries.
 
 v0.6.3 keeps every C++ source and shared object directly in

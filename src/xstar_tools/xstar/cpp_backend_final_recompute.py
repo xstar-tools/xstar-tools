@@ -1,3 +1,12 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: final xstar.f90 sequence / xstarcalc.f90 / pprint.f90 / writespectra*.f90
+#   Role: Bridge terminal fixed-state recomputation into final publication while preserving source lifetime ownership.
+#   Relation: Backend/lifetime bridge; no independent physics.
+#   Concordance: TERMINAL-001; FINAL-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Native final zero-thickness fixed-state bridge for accelerated Python.
 
 v0.6.48.10.1.1 keeps the radial/zone controller in Python and replaces only the

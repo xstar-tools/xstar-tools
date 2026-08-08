@@ -1,3 +1,12 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: freef.f90
+#   Role: Free-free heating/cooling leaf used by calc_hmc_all.
+#   Relation: Source-faithful thermal leaf; accumulation ownership follows calc_hmc_all.
+#   Concordance: THERM-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Source-faithful translation of XSTAR's ``freef.f90`` subsystem.
 
 The bounded source path is::

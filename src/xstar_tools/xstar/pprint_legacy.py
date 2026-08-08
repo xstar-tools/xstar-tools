@@ -1,3 +1,12 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: pprint.f90 / nbinc.f90 / huntf.f90
+#   Role: Produce the legacy STEP print options and abundance/log diagnostics.
+#   Relation: Source-exact/source-equivalent formatting and numerical option semantics where qualified.
+#   Concordance: STEP-001; TERMINAL-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Source-faithful bounded translation of the legacy XSTAR ``pprint`` path.
 
 The original ``pprint.f90`` routine is a 30-way computed-GOTO report writer.

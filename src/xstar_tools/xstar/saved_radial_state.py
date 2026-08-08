@@ -1,3 +1,12 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: savd.f90 / unsavd.f90 / rstepr*.f90
+#   Role: Persist and restore shell/pass workspaces with source insertion/lifetime semantics.
+#   Relation: Source-lifetime translation; publication snapshots are distinct from live solve workspaces.
+#   Concordance: STATE-001; DETAIL-001; TERMINAL-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Source-faithful saved radial shell/pass state and ``unsavd.f90`` port.
 
 The original XSTAR radial driver persists each shell through ``savd`` into four

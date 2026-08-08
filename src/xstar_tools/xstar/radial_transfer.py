@@ -1,3 +1,12 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: xstar.f90 / step.f90 / trnfrc.f90 / heatt.f90 / stpcut.f90 / trnfrn.f90
+#   Role: Drive shell/pass radial transfer around the accepted one-zone xstarcalc operator.
+#   Relation: Source-order controller translation; geometry, step decisions, direction, and state lifetimes are qualified.
+#   Concordance: ARCH-001; RADIAL-001; STATE-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Bounded radial-shell translation from ``xstar.f90``.
 
 This module translates the bounded first-pass Milestone-5 sequence::

@@ -1,3 +1,12 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: xstar.f90 radial/pass predicates and density/termination branches
+#   Role: Represent source radial/pass loop predicates without inventing a new convergence policy.
+#   Relation: Controller translation only; branch decisions follow source semantics.
+#   Concordance: RADIAL-001; ARCH-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Source-faithful radial density and pass-control contracts from ``xstar.f90``.
 
 The original radial caller has two important control paths that are not

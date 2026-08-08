@@ -1,3 +1,20 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: ucalc.f90 and its calt*/phint*/linopac leaf routines
+#   Role: Central packed-record evaluator: decode one ATDB data type and return source ans1..ans6/idest1..idest4 semantics.
+#   Relation: Source-faithful branch translation over the current Fortran computed-GOTO range 1..102.
+#   Concordance: DB-001; ION-001; MATRIX-001; EMISAB-001; TYPE50-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# Atomic-data note (XSTAR Manual Ch. 12; Mendoza et al. 2021, Appendix A):
+#   Rule: data type selects the record formula/interpretation; rate type selects downstream use.
+#   Manual Ch. 12 defines data type as the fitting/interpretation formula and rate type as the downstream
+#   use of the result. Mendoza et al. (2021) Appendix A documents record layouts. Important implemented
+#   families include 49/53 partial photoionization, 50/91 radiative lines, 51/98 CHIANTI collisions, 70/99
+#   superlevels, 72 autoionization, 76 two-photon, 85/86/88 K-shell data, and 95 collisional ionization.
+#   Types 89/96/97 are present in current ucalc.f90 but are not enumerated in the supplied
+#   Appendix-A/Ch.-12 tables; their authority is executable Fortran.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Source-faithful Python execution layer for ``xstarlib/src/ucalc.f90``.
 
 The module owns the complete packed-record -> branch -> result contract used by

@@ -1,3 +1,16 @@
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN
+# Source correspondence:
+#   Fortran: ucalc.f90 label 50 / deleafnd.f90 / linopac.f90
+#   Role: Derive live Type-50 line-profile inputs shared with the qualified C++ opacity path.
+#   Relation: Source-derived provenance helper; no reference-product physics is injected.
+#   Concordance: TYPE50-001
+#   Qualification: accepted science revision 0.6.48.12.3.45.3.3.8; frozen C++ baseline 0.6.48.12.3.44.
+# Atomic-data note (XSTAR Manual Ch. 12; Mendoza et al. 2021, Appendix A):
+#   Rule: data type selects the record formula/interpretation; rate type selects downstream use.
+#   Appendix A Type 50 stores wavelength, weighted oscillator strength, Einstein A, and lower/upper level
+#   IDs. The profile path must preserve that record identity independently of downstream rate-type handling.
+# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END
+
 """Type-50 profile scalar provenance shared by the Python runtime.
 
 v82 patch 5.20.17.3.5 aligns the live Python Type-50 profile inputs with the
