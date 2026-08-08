@@ -1,6 +1,6 @@
 # CHANGELOG
 
-# 0.6.48.12.3.45.3.3.9 - 2026-08-07
+## 0.6.48.12.3.45.3.3.9 - 2026-08-07
 
 - Repair generic `xo01_detal3` Type7 publication ownership from the final source-order continuum slot rather than canonical source-record identity.
 - Retain every visited rate-7 slot write, including explicit zero writes, so alias writers can activate a canonical identity and later zero writes can clear stale earlier activity.
@@ -8,7 +8,7 @@
 - Freeze C5 at accepted 45.3.3.7/8 behavior: no new 709/762 logic or diagnostics, and C5 is absent from the runnable qualification manifest.
 - Qualification runs only `ca19_xi2_ne1` and `o7_ne1e10` and emits exact canonical plus final-slot-writer metadata for Ca 22608/23076 and the 45 O7 residual identities.
 
-# 0.6.48.12.3.45.3.3.8 - 2026-08-07
+## 0.6.48.12.3.45.3.3.8 - 2026-08-07
 
 - Port frozen-44 C++ generic `xo01_detal3` fixed-state publication semantics into Python as an output-only full spectral publication bridge for canonical rate-type-1 bound-free records.
 - Apply the same active-ion-stage gate used by the frozen C++ spectral stream, closing the two Python-only Ca detail3 rows seen in 45.3.3.7.
@@ -18,21 +18,21 @@
 - Keep standalone-C++ production hashes frozen to accepted 0.6.48.12.3.44 and ABI 6048110.
 - Qualification remains staged: C5 first; only after C5 ACCEPT run `ca19_xi2_ne1` and `o7_ne1e10`. `ca19_ne1e8` remains retired from reruns.
 
-# 0.6.48.12.3.45.3.3.7 - 2026-08-07
+## 0.6.48.12.3.45.3.3.7 - 2026-08-07
 
 - Fix the final C5 `xo01_detal3` terminal-record publication residual by retaining one output-only replay snapshot of the final physical shell's fixed-state rate-1 detail3 absorption map.
 - The replay is overwritten after each physical detail shell, is eligible only when `terminal_record=True`, and is cleared immediately after the terminal detail record.
 - No physical `cemab/cabab/opakab`, populations, rates, matrices, transport, STEP science, C++ production science, or ABI behavior changes.
 - C5 remains the mandatory first qualification model; `ca19_xi2_ne1` and `o7_ne1e10` remain blocked until C5 fully accepts. `ca19_ne1e8` remains retired.
 
-# 0.6.48.12.3.45.3.3.6 - 2026-08-07
+## 0.6.48.12.3.45.3.3.6 - 2026-08-07
 
 - Move the remaining rate-1 generic `xo01_detal3` compatibility producer to the fixed-state UCalc stream and attach solved post-mapback populations after `msolvelucy`; the output-only map never mutates physical cemab/cabab/opakab.
 - Mirror the frozen-44 rate-1 bound-free spectral family instead of restricting the compatibility producer to Type49/53, and use authoritative UCalc endpoints rather than packed-payload endpoint guesses.
 - Add C5 host diagnostics that print the real canonical record/rate/data metadata and producer status for continuum 709/762.
 - Keep C++ science, ABI 6048110, Option-23 comparator, numerical tolerances, and retired `ca19_ne1e8` policy frozen.
 
-# 0.6.48.12.3.45.3.3.5 - 2026-08-07
+## 0.6.48.12.3.45.3.3.5 - 2026-08-07
 
 - Add output-only canonical rate-1 Type49/53 detail3 absorption producer using the real UCalc path.
 - Preserve physical cemab/cabab/opakab and all solver/transport science.
@@ -40,7 +40,7 @@
 - Add end-to-end calc_emisab producer -> detail3 writer regression coverage.
 - Keep C5-first qualification; ca19_ne1e8 remains retired.
 
-# 0.6.48.12.3.45.3.3.4 - 2026-08-07
+## 0.6.48.12.3.45.3.3.4 - 2026-08-07
 
 - Shared Python FITS-publication parity repair after pure Python and Python+C++ reproduced the same C5/Ca/O strict FITS failures with all STEP science accepted.
 - Generic `xo01_detal3` identity ownership now matches frozen-44 C++'s broad canonical `npcon`/`npconi2` continuum surface instead of narrowing detailed FITS rows to rate type 7.
@@ -50,7 +50,7 @@
 - C++ production science stays frozen from 0.6.48.12.3.44 and ABI stays 6048110. Option-23 comparator stays frozen from 45.3.3.2.
 - New pure-Python staged runner: C5 only first, then affected C5/Ca/O only after C5 accepts. `ca19_ne1e8` is explicitly retired from future reruns.
 
-# 0.6.48.12.3.45.3.3.3 - 2026-08-07
+## 0.6.48.12.3.45.3.3.3 - 2026-08-07
 
 - Add a dedicated seven-model **pure-Python** 45.x smoke runner against frozen 0.6.48.12.3.44 standalone-C++ products.
 - Require Python ownership for the radial controller and all eight modular backend provenance surfaces; sanitize inherited native/CPP `XSTAR_ATOMIC_*` overrides.
@@ -58,20 +58,20 @@
 - Add interruption-safe `--resume` for pure-Python products and avoid any C++ build step in the pure smoke wrapper.
 - Freeze production Python science to 45.3.3.2, C++ science to 44, and ABI 6048110; version metadata only in production sources.
 
-# 0.6.48.12.3.45.3.3.2 - 2026-08-07
+## 0.6.48.12.3.45.3.3.2 - 2026-08-07
 
 - Comparator/qualification-only hotfix on top of 0.6.48.12.3.45.3.3.1; Python and C++ production science are byte-frozen apart from version metadata.
 - Use the accepted frozen 0.6.48.12.3.44 standalone-C++ products as the seven-model Python-controller qualification reference. FORTRAN is not the pass/fail product reference for this 45.x parity campaign.
 - Repair Options 1/23 ranked-array gating so numerical science and rank/identity/order diagnostics are independent, as already stated by the comparator policy.
 - `scientific_accept` for ranked Options 1/23 now follows the numerical ranked-array gate only. A rank/order/membership diagnostic is still emitted and retained in `ranking_or_order_diagnostic_sections`, but it no longer vetoes science.
-- Preserve the existing <1% ranked numeric policy: normalized-L1 must remain within tolerance; per-rank >1% cells remain visible as diagnostics.
-- Add explicit Option-23 outputs per model: numeric science gate, rank/order diagnostic flag, rowwise >1% diagnostic count, and maximum ranked-array normalized L1.
+- Preserve the existing `<1%` ranked numeric policy: normalized-L1 must remain within tolerance; per-rank `>1%` cells remain visible as diagnostics.
+- Add explicit Option-23 outputs per model: numeric science gate, rank/order diagnostic flag, rowwise `>1%` diagnostic count, and maximum ranked-array normalized L1.
 - Add a comparator selftest reproducing the C5 He II 508/515 rank swap: the swap remains diagnostic while science ACCEPTs; a genuine >1% ranked-array mismatch still REJECTs.
 - Add a dedicated all-seven Python-controller + C++-backend smoke runner against frozen 44 standalone-C++ products.
 - Keep strict FITS membership/order/attachment gates unchanged; this release does not alter the still-open C5 `xo01_detal3` 709/762 issue.
 - Keep ABI 6048110 and frozen-44 C++ production hashes unchanged.
 
-# 0.6.48.12.3.45.3.3.1 - 2026-08-07
+## 0.6.48.12.3.45.3.3.1 - 2026-08-07
 
 - Readiness-guard-only hotfix on top of 0.6.48.12.3.45.3.3; orphan-Type7 science and publication logic are byte-frozen.
 - Replace the broad `src/` file-set equality check with tracked-source comparison that explicitly ignores generated C++ build products (`*.so`, `*.o`, `*.a`, `*.dylib`, `xstar_cpp`) and Python bytecode/cache files.
@@ -81,7 +81,7 @@
 - Regression-test readiness with synthetic compiled artifacts in both baseline and candidate trees; readiness remains ACCEPT.
 - Preserve the C5-only first smoke and all 45.3.3 orphan diagnostics unchanged except the qualification-output prefix is now `V064812345331_`.
 
-# 0.6.48.12.3.45.3.3 - 2026-08-07
+# #0.6.48.12.3.45.3.3 - 2026-08-07
 
 - Python-only canonical `npcon` orphan-Type7 absorption attribution/repair; C++ production science remains frozen to accepted 0.6.48.12.3.44 and ABI 6048110.
 - Preserve the 45.3.1 canonical `npcon` Type-7 FITS identity universe and the 45.3 source-record publication lifetime; retire the rejected 45.3.2 prior-evaluation slot history from publication authority.
@@ -92,7 +92,7 @@
 - Add runtime diagnostics for canonical Type-7 count, visited Type-7 count, orphan count, active orphan absorption count, and explicit 709/762 presence/absorption/publication ownership.
 - Qualification defaults to `c5_ne1e10` only and fails closed if 709/762 are not proven runtime orphans with positive absorption. The independent He II 508/515 Option-23 STEP crossing remains observational and untouched.
 
-# 0.6.48.12.3.45.3.2 - 2026-08-06
+## 0.6.48.12.3.45.3.2 - 2026-08-06
 
 - Python-only C5 Type-7 caller-local/retained-workspace lifetime attribution and cross-mode publication repair; C++ production science remains frozen to accepted 0.6.48.12.3.44 and ABI 6048110.
 - Preserve the 45.3.1 canonical `npcon` Type-7 FITS identity owner and the 45.3 source-record shadow.
@@ -103,7 +103,7 @@
 - Add an environment-gated JSONL trace for continuum identities 709 and 762, recording Type-7 absorption updates, evaluation sequence, retained writer record, and final publication owner.
 - Qualification defaults to `c5_ne1e10` only.  The completion gate is FITS/detail3 repair; the known He II 508/515 Option-23 STEP crossing remains visible as an independent observed rejection.
 
-# 0.6.48.12.3.45.3.1 - 2026-08-06
+## 0.6.48.12.3.45.3.1 - 2026-08-06
 
 - Python-only `xo01_detal3` source-inventory hotfix after the first 45.3 C5 run exposed a deterministic 348-row-per-HDU RRC collapse (`2436 = 348 x 7` reference-only rows).
 - Fix `build_source_output_metadata()` so each continuum/RRC row recomputes `z = ion_element_z[ion]`; 45.3 accidentally reused the stale element from the preceding line loop, causing the new element-abundance gate to reject the entire C5 RRC inventory.
@@ -113,7 +113,7 @@
 - Freeze all C++ production science, ABI 6048110, STEP/rank publication, transport, DSEC, and `xout_rrc1`.
 - Qualification defaults to only `c5_ne1e10` (`--phase first-one`).  Do not run Ca until the C5 catastrophic detail3 inventory regression is removed.
 
-# 0.6.48.12.3.45.3 - 2026-08-06
+## 0.6.48.12.3.45.3 - 2026-08-06
 
 - Python-only `fstepr3` source-record detailed-RRC publication repair; C++ production science remains frozen to accepted 0.6.48.12.3.44 and production-zone ABI 6048110.
 - Add a dedicated `SourceOutputMetadata.detail_rrcs` inventory built from literal per-ion `npfi(7,ion) -> npnxt` traversal, excluding rate-type-1 continuum records from `xo01_detal3`.
@@ -131,7 +131,7 @@
 - Keep the independent frozen-44 production-source hash gate unchanged.
 - No Python science/publication/transport changes; no C++ science changes; ABI 6048110 remains frozen.
 
-# 0.6.48.12.3.45.2 - 2026-08-06
+## 0.6.48.12.3.45.2 - 2026-08-06
 
 - Diagnostic-first Python-controller transport attribution only; no production-science repair is attempted in this release.
 - Keep all C++ production science frozen to accepted 0.6.48.12.3.44, preserve production-zone ABI 6048110, and keep the 0.6.48.12.3.45.1 Python publication/rank fixes frozen.
@@ -140,7 +140,7 @@
 - Re-run only the primary two smoke models (`c5_ne1e10`, `ca19_xi2_ne1`) against the frozen 44 standalone-C++ reference.
 - Emit full per-product FITS failure JSON/CSV and full STEP failure JSON, including Option-23 identity mismatch samples. The 45.2 completion gate measures diagnostic completeness, not science acceptance.
 
-# 0.6.48.12.3.45.1 - 2026-08-06
+## 0.6.48.12.3.45.1 - 2026-08-06
 
 - Shared Python publication/rank parity hotfix; C++ production science remains frozen to the accepted 0.6.48.12.3.44 all-62 three-mode qualification and ABI 6048110.
 - Port the already-qualified FORTRAN/C++ fixed-capacity `kltmp` identity ranking into Python STEP Options 1 and 23, while preserving an independent numerical rank-position owner.
@@ -156,7 +156,7 @@
 - Add a seven-model Python-controller + C++-backend smoke qualification against the frozen 0.6.48.12.3.44 standalone-C++ products; standalone C++ is not rerun.
 - Select representative C, Ca, O, and Mg models covering the prior carbon detal3 publication residual, Ca Type50-heavy low-ion performance, the Ca xi=2 trajectory/excited-matrix closure, the Ca XIII 23595 RRC cutoff case, high-ion Ca fixed-state behavior, O IV non-positive-threshold publication behavior, and the canonical Mg XI xi=2.5/ne=1e8 benchmark.
 - Require Python controller ownership (`--zone-backend python`) with all modular solver/rates/matrix/emissivity/opacity/thermal/engine backends selected as C++; keep the source-faithful Mg line kernel in Python for this accelerated-Python mode.
-- Compare all nine FITS products with exact cross-mode identity membership/attachment/common order and normalized-L1 science <1%; do not reuse FORTRAN-only inventory exceptions. Compare `xout_step.log` with the full qualified STEP comparator. FITS payload bit-exactness and normalized STEP exactness are retained as diagnostics.
+- Compare all nine FITS products with exact cross-mode identity membership/attachment/common order and normalized-L1 science `<1%`; do not reuse FORTRAN-only inventory exceptions. Compare `xout_step.log` with the full qualified STEP comparator. FITS payload bit-exactness and normalized STEP exactness are retained as diagnostics.
 - Record Python+C++ wall time versus the frozen standalone-C++ wall time for each smoke model.
 - No C++ production-science, solver, rate, matrix, Type49, Type50, publication, trajectory, rank, or ABI change.
 
@@ -169,15 +169,15 @@
 - Adds FITS data bit-exactness and normalized STEP exactness diagnostics, plus a fresh cpp-zone regression bridge to the accepted 43.3.1 all-62 dataset.
 - Adds element/regime performance summaries and `--resume` support for the 186-run campaign.
 
-# 0.6.48.12.3.43.3.2 - 2026-08-06
+## 0.6.48.12.3.43.3.2 - 2026-08-06
 
 - Final semantic-closure/comparator hotfix; no production science changes and no model rerun.
-- Reanalyze the existing 43.3.1 all-62 archive with a fail-closed `xo01_detal3` full identity-union normalized-L1 gate (<1%).
+- Reanalyze the existing 43.3.1 all-62 archive with a fail-closed `xo01_detal3` full identity-union normalized-L1 gate (`<1%`).
 - Permit only the proven O IV non-positive-threshold publication rows and the narrow carbon 709/762 vs 681/691/726 inventory class, with zero attachments and preserved common order.
 - Freeze rank semantics by requiring the 43.3.1 rank diagnostic CSV to be byte-identical to the accepted 42 snapshot in addition to the frozen rank-numeric gate.
 - Preserve production-zone ABI 6048110.
 
-# 0.6.48.12.3.43.3.1 - 2026-08-06
+## 0.6.48.12.3.43.3.1 - 2026-08-06
 
 - Readiness-only hotfix for 43.3 all-62 final FITS requalification.
 - Production science and FITS/STEP/rank comparators are unchanged from 43.3.
@@ -185,38 +185,11 @@
 - This prevents a previously built 43.2 baseline from causing a false production-source freeze REJECT when compared with a clean 43.3.x extraction.
 - ABI remains 6048110 and the implementation baseline remains 0.6.48.12.3.43.2.
 
-# 0.6.48.12.3.43.3 - 2026-08-06
+## 0.6.48.12.3.43.3 - 2026-08-06
 
 - All-62 final FITS requalification; production science frozen relative to 0.6.48.12.3.43.2.
 - Encodes only the scientifically accepted publication semantics: detal2 FORTRAN-only 66822/88440, RRC 23595 identical-state temperature cutoff, and established line blank-sentinel/terminal-cutoff behavior.
 - Rechecks all nine FITS products, STEP numerics, trajectory, rank-position numeric freeze, ABI 6048110, and reports performance by element and physical regime.
-
-## 0.6.48.12.3.43.2
-
-- Production publication/state repair for the two remaining 12.3.43 target classes: `xout_abund1` per-element thermal retention and `xo01_detal2` source activity/lifetime semantics.
-- Preserve ABI `6048110` and freeze accepted solver, rate, matrix, opacity, thermal, line-emissivity, fixed-state, controller trajectory, STEP, rank, continuum, detal3/detal4, line-list, spectrum, and RRC semantic-closure science.
-- `xout_abund1`: retain the already-computed accepted-boundary `element_thermal_products` (literal per-element `htt(lk)` / `cll(lk)`) through `copy_real_native_snapshot()` so the writer consumes direct source-owned values instead of falling back to zero outside H/He/Mg. No residual-total allocation is introduced.
-- `xo01_detal2`: replace the old endpoint-gate publication shadow with a publication-only replay of the observable `calc_emisab_ion` stale-`opakb1` lifetime. Active endpoints rely on the retained physical `rcem/oplin > 1d-64` gate; inactive endpoints may publish only when the carried source Type-50 opacity clears the same literal `fstepr2` threshold.
-- Retain record-product diagnostics at accepted boundaries so the detal2 replay has deterministic Type-50 source traversal/provenance without feeding diagnostics back into production science.
-- Qualify only the nine previously selected publication models (C, Ca, O, Mg controls), comparing `xout_abund1` and `xo01_detal2` directly to canonical FORTRAN while requiring the other seven FITS data regions, STEP numerics, rank numerics, and trajectories to remain frozen.
-- If targeted closure accepts, proceed to `0.6.48.12.3.43.3 — all-62 final FITS requalification`; do not rerun all 62 in this repair release.
-
-## 0.6.48.12.3.43.1.1.1.3
-
-- Diagnostic-only Ca XIII continuum 23595 identical-state Type49 cutoff proof and semantic closure.
-- Re-evaluate source record 158466 with the existing production `evaluate_record()` Type49 source-faithful path at source sequence 12, once at the live C++ temperature and once at the canonical FORTRAN final-shell temperature parsed from `xout_step.log`; all non-temperature caller inputs remain identical.
-- The probe never commits its result to solver, transport, thermal, spectral, STEP, or FITS state. Performance caches/counters are disabled for the replay.
-- Require the live-temperature replay to reproduce the committed Type49 `ans3`, require the FORTRAN-temperature replay to cross the literal `cemab > 1d-49` source publication floor, and require the implied `elumab` to agree with the canonical FORTRAN Option-19 row 23595 within 1%.
-- Freeze ABI `6048110`, all publication writers, ATDB lowering, standalone controller logic, and every production science source except the additive opt-in fixed-state diagnostic probe. All nine FITS data regions, STEP numerics, rank numerics, and trajectory remain qualification-frozen to 0.6.48.12.3.43.1.1.1.2.
-- If the identical-state proof closes, classify the single missing Ca XIII RRC row as a semantic hard-cutoff crossing caused by the tiny accepted thermodynamic-state difference and proceed to 0.6.48.12.3.43.2 rather than modifying Type49 production physics.
-
-## 0.6.48.12.3.43.1.1.1.2
-
-- Diagnostic-only Ca XIII continuum 23595 Type49 `ans3 -> cemab` cutoff attribution.
-- Moves the opt-in Ca XIII diagnostic root outside the file-silent production output tree.
-- Captures the existing full fixed-state Type49 source-shadow diagnostic for source record 158466 at the physical accepted shell; no Type49 arithmetic is changed.
-- Qualifies that all nine FITS data regions, STEP numerics, rank numerics, and trajectory remain frozen to 0.6.48.12.3.43.1.1.1.1.
-- Keeps ABI 6048110 and all fixed-state/rate/matrix/opacity/thermal/publication kernels frozen.
 
 ## 0.6.48.12.3.43.2 - 2026-08-06
 
@@ -245,7 +218,7 @@
 - Qualifies that all nine FITS data regions, STEP numerics, rank numerics, and trajectory remain frozen to 0.6.48.12.3.43.1.1.1.1.
 - Keeps ABI 6048110 and all fixed-state/rate/matrix/opacity/thermal/publication kernels frozen.
 
-# 0.6.48.12.3.43.1.1.1.1 - 2026-08-05
+## 0.6.48.12.3.43.1.1.1.1 - 2026-08-05
 
 - Diagnostic-only Ca XIII continuum 23595 `cemab -> elumab` lifetime attribution plus qualification-runner import hotfix.
 - Bundle `analyze_all62_fits.py` beside `compare_target_fits.py` and make the runner fail closed on comparator return code / missing `target_fits.json`, preventing the prior secondary `FileNotFoundError`.
@@ -253,34 +226,13 @@
 - Add an opt-in accepted-boundary probe for source record 158466 / continuum 23595. It records data/rate type, ion/lower/upper rows, active-stage window, lower/upper populations, record-product diagnostic reach, `ans3/ans4`, local `cemab(1/2)`, pre/post cumulative RRC luminosity, `delr`, radius, `fpr2`, opacity/tau, and the source-equivalent hypothetical HEATT increment.
 - Qualification runs only `helike_type69/ca19_xi3_ne1e4`; all nine FITS data regions, STEP numerics, rank arrays, and trajectory must be bit/numerically frozen to 43.1.1.1. The FORTRAN comparison is expected to remain exactly one missing RRC identity `(23595, ca_xiii, 2p4.1S_0)` while this attribution release identifies the first differing lifetime stage.
 
-# 0.6.48.12.3.43.1.1.1 - 2026-08-05
+## 0.6.48.12.3.43.1.1.1 - 2026-08-05
 
 - Publication-only Ca XIII 23595 hotfix.
 - Build exact source RRC publication identities from the canonical one-based `npcon` continuum ownership table and retain only source rate type 7.
 - Add fail-closed diagnostic attribution for source identity, source record, threshold, retained `elumab`, and `tauc` at continuum index 23595.
 - Freeze ABI 6048110 and all fixed-state/rate/matrix/Type50/opacity/thermal/population/trajectory/STEP science.
 - Targeted qualification: Ca XIII primary plus Ca XX and O IV RRC regression controls.
-
-## 0.6.48.12.3.43.1.1
-
-- Hotfix only for the two failed 0.6.48.12.3.43.1 targeted gates; do not advance to 43.2 until these close.
-- Freeze production-zone ABI `6048110`, fixed-state/rate/matrix/Type50/opacity/thermal/population kernels, controller trajectories, STEP numerics/rank arrays, detal2, detal3, detal4, continuum, line-list production ranking, and spectrum relative to 43.1.
-- `xout_abund1`: recompute published `zeta` from live radius, density, and `rlrad38` with the same default-REAL `1.e-19` radius scale already qualified by native STEP, instead of copying the retained input `rlogxi`.
-- RRC publication metadata: retain a separate complete literal `npfi(rate_type=7,ion)` source chain using the first source record's parent boundary, independent of executable `kActiveTypes` lowering; do not execute any added record.
-- `xout_rrc1`: consume that complete publication-only source inventory while preserving the 43.1 positive-threshold rule, so Ca XIII continuum index 23595 can be restored without reintroducing the O IV non-positive-threshold rows.
-- Four-model compact qualification only: `c5_ne1`, `ca19_xi3_ne1e4`, `ca19_xi2_ne1`, and `o7_ne1e10`.  The latter two are regression controls for the already-restored Ca XX and already-removed O IV inventories.
-- If this hotfix promotes, proceed to `0.6.48.12.3.43.2 — abundance per-element thermal retention + detal2 activity closure`; do not rerun all 62 yet.
-
-## 0.6.48.12.3.43.1
-
-- Targeted final-FITS publication attribution/repair after the 12.3.43 all-62 FITS audit.
-- Freeze production-zone ABI 6048110 and all fixed-state/rate/matrix/Type50/opacity/thermal-total/controller/STEP/population/detal4/continuum/spectrum science.
-- `xout_abund1`: restore literal source `phosphoru` element label and publish native radius/log-xi from live controller-owned radial zones; add per-element htt/cll retention attribution without guessing missing thermal components.
-- `xo01_detal3`: generalize literal source pescv/cfrac directional RRC publication projection while preserving the accepted RRC plane sum and all physical kernels.
-- `xout_rrc1`: publish from exact source RRC ownership, removing the terminal active-stage filter; targeted proof covers O IV removal plus Ca XX/Ca XIII restoration.
-- `xout_lines1`: comparator-only blank-sentinel and tightly constrained terminal fixed-capacity cutoff semantics; production rank/attachment is unchanged.
-- `xo01_detal2`: add targeted activity-shadow tracing only; writer eligibility remains frozen pending attribution.
-- Nine-model compact qualification with explicit prior-result target-coverage proof; no all-62 production rerun.
 
 ## 0.6.48.12.3.43.1.1 - 2026-08-05
 
@@ -303,7 +255,7 @@
 - `xo01_detal2`: add targeted activity-shadow tracing only; writer eligibility remains frozen pending attribution.
 - Nine-model compact qualification with explicit prior-result target-coverage proof; no all-62 production rerun.
 
-# 0.6.48.12.3.43 - 2026-08-05
+## 0.6.48.12.3.43 - 2026-08-05
 
 - Final all-62 FITS qualification after 0.6.48.12.3.42.1.3 closes the last STEP publication residual. Qualification-only: no model rerun and no production-science change relative to 12.3.42.1.3.
 - Reuse the accepted 12.3.42 all-62 FITS snapshot because every post-42 STEP-publication repair preserved all nine FITS data regions and kept the FITS writer/science kernels frozen.
@@ -321,7 +273,7 @@
 - New FITS evidence is recorded for 12.3.43: O VII `xout_rrc1.fits` contains the same 45 negative-threshold rows, while `ca19_xi2_ne1` has a separate 576-vs-608 RRC inventory gap. Therefore final FITS qualification must reopen `xout_rrc1` in addition to `xo01_detal2`, `xout_abund1`, and `xout_lines1`.
 - Production-zone ABI remains 6048110. Qualification reruns only `helike_type69/o7_ne1e10`.
 
-# 0.6.48.12.3.42.1.2 - 2026-08-05
+## 0.6.48.12.3.42.1.2 - 2026-08-05
 
 - Publication-only repair after the fresh 0.6.48.12.3.42.1.1 host gate still rejected Option-15 inventory in all six models and O VII Option-19 inventory, while all FITS/science/trajectory/rank gates stayed frozen and accepted.
 - Correct the literal `pprint(15)` interpretation: the apparent `lrtyp != 9/14` test occurs after `drd` calls for ion and element records overwrite `lrtyp`, so it is not a line-rate-type exclusion. STEP Option 15 now walks the complete retained `nplin` identity inventory and applies only the literal wavelength gate (`0.1 < abs(wavelength) < 9e9`); active-element lowering supplies the element-abundance gate.
@@ -332,7 +284,7 @@
 - Existing all-62 offline projection remains: 5,735 Option-15 rows removed by the wavelength gate, exact projected Option-15 inventory in 62/62, zero semantic rank-attachment defects.
 - Final FITS qualification 12.3.43 remains deferred until this six-model host gate passes.
 
-# 0.6.48.12.3.42.1.1 - 2026-08-05
+## 0.6.48.12.3.42.1.1 - 2026-08-05
 
 - Hotfix for the failed 0.6.48.12.3.42.1 targeted STEP publication gate; still publication-only and still before final FITS qualification.
 - Repair Option 15 under-publication by removing the accidental data-type whitelist. Literal FORTRAN `pprint(15)` walks the complete `nplin` inventory and gates only by rate type, wavelength, and elemental abundance.
@@ -344,7 +296,7 @@
 - Preserve ABI `6048110`, fixed-state/rate/matrix/Type50/thermal/opacity science, all nine FITS values, trajectories, and the 12.3.41 rank attachment algorithm.
 - Promotion still requires six fresh models with nine-FITS bit-exactness to 12.3.42, STEP numerical/rank-position freeze, canonical trajectories, exact Option-15/19 inventories, and only quarantined Option-24 stale-local differences.
 
-# 0.6.48.12.3.42.1 - 2026-08-05
+## 0.6.48.12.3.42.1 - 2026-08-05
 
 - Publication-only residual STEP semantic closure after the fresh 12.3.42 all-62 run closed all numerical/trajectory science but retained rank/inventory diagnostics.
 - Add the literal FORTRAN Option-15 line eligibility filter (`rate_type != 9/14`, `0.1 < abs(wavelength) < 9e9`); existing-62 projection removes 5,735 over-published rows and closes Option-15 inventory in 62/62.
@@ -354,7 +306,7 @@
 - No changes to FITS science writers, fixed-state/rate/matrix/Type50/thermal/opacity science, trajectories, or production-zone ABI 6048110.
 - Final FITS qualification 12.3.43 remains deferred until the 12.3.42.1 targeted host gate passes.
 
-# 0.6.48.12.3.42 - 2026-08-05
+## 0.6.48.12.3.42 - 2026-08-05
 
 - Qualification-only fresh all-62 final STEP requalification; no production implementation change relative to 0.6.48.12.3.41.
 - Rerun all 62 canonical benchmark models with standalone/shared C++ `cpp-zone` against FORTRAN XSTAR as the scientific authority.
@@ -366,7 +318,7 @@
 - Support `--resume` so interrupted 62-model host runs continue from completed candidate products.
 - Production-zone ABI remains 6048110.
 
-# 0.6.48.12.3.41 - 2026-08-04
+## 0.6.48.12.3.41 - 2026-08-04
 
 - Publication-only source-literal rank/identity attachment repair; no rate, matrix, transport, thermal, or numerical-science change.
 - Reproduce the literal FORTRAN fixed-capacity insertion semantics used by `writespectra2.f90` and `pprint.f90` Options 1/23, including equal-strength insertion-before behavior and the historical full-list terminal-slot retention.
@@ -412,54 +364,41 @@
 - Primary benchmark is `helike_type69/ca19_xi4_ne1`; all nine FITS data regions must remain bit-exact against frozen 0.6.48.12.3.36.9.
 - Production-zone ABI remains 6048110. No numerical formula, rate, normalization, stage-selection, record-eligibility, publication, or Type50 science change.
 
+## 0.6.48.12.3.36.9 - 2026-08-04
 
 - Qualification-only advance to `helike_type69/ca19_xi1p5_ne1e4` after fresh `ca19_ne1e4` material numerical science ACCEPT.
 - Freeze all 0.6.48.12.3.36 production science and production-zone ABI `6048110`.
 - Retain the 0.6.48.12.3.36.1 STEP/Option-15 material comparator byte-for-byte unchanged.
-- Keep Option-15 rowwise >1% values diagnostic-only; gate material ion x field surfaces by normalized L1 <1%.
+- Keep Option-15 rowwise >1% values diagnostic-only; gate material ion x field surfaces by normalized L1 `<1%`.
 - Keep Options 1/23 rank-order and Options 15/24 inventory diagnostics separate from numerical science.
 - FORTRAN XSTAR remains canonical. Reopen physics only for a fresh material numerical failure.
 - Canonical `ca19_xi1p5_ne1e4` trajectory: 4 radial zones, DSEC `24;9;17;16`.
 - Archived 12.3.33 control: 1 rowwise Option-15 diagnostic, 36 material surfaces, 0 material failures, max normalized L1 `9.281096180612689e-05` (~0.00928%), Option 19 ACCEPT.
 - This is the final historical one-cell Option-15 priority from the repaired 12.3.34 list. On ACCEPT, freeze physics and mark the historical material-priority sequence complete; the recommended next phase is a final all-62 material requalification, not another one-model physics repair.
 
-# 0.6.48.12.3.36.9 - 2026-08-04
-
-- Qualification-only advance to `helike_type69/ca19_xi1p5_ne1e4` after fresh `ca19_ne1e4` material numerical science ACCEPT.
-- Freeze all 0.6.48.12.3.36 production science and production-zone ABI `6048110`.
-- Retain the 0.6.48.12.3.36.1 STEP/Option-15 material comparator byte-for-byte unchanged.
-- Keep Option-15 rowwise >1% values diagnostic-only; gate material ion x field surfaces by normalized L1 <1%.
-- Keep Options 1/23 rank-order and Options 15/24 inventory diagnostics separate from numerical science.
-- FORTRAN XSTAR remains canonical. Reopen physics only for a fresh material numerical failure.
-- Canonical `ca19_xi1p5_ne1e4` trajectory: 4 radial zones, DSEC `24;9;17;16`.
-- Archived 12.3.33 control: 1 rowwise Option-15 diagnostic, 36 material surfaces, 0 material failures, max normalized L1 `9.281096180612689e-05` (~0.00928%), Option 19 ACCEPT.
-- This is the final historical one-cell Option-15 priority from the repaired 12.3.34 list. On ACCEPT, freeze physics and mark the historical material-priority sequence complete; the recommended next phase is a final all-62 material requalification, not another one-model physics repair.
-
-# 0.6.48.12.3.36.8 - 2026-08-04
+## 0.6.48.12.3.36.8 - 2026-08-04
 
 - Qualification-only advance to `helike_type69/ca19_ne1e4` after fresh `o7_ne1` material numerical science ACCEPT.
 - Freeze all 0.6.48.12.3.36 production science and production-zone ABI `6048110`.
 - Retain the 0.6.48.12.3.36.1 STEP/Option-15 material comparator byte-for-byte unchanged.
-- Keep Option-15 rowwise >1% values diagnostic-only; gate material ion x field surfaces by normalized L1 <1%.
+- Keep Option-15 rowwise >1% values diagnostic-only; gate material ion x field surfaces by normalized L1 `<1%`.
 - Keep Options 1/23 rank-order and Options 15/24 inventory diagnostics separate from numerical science.
 - FORTRAN XSTAR remains canonical. Reopen physics only for a fresh material numerical failure.
 - Canonical `ca19_ne1e4` trajectory: 4 radial zones, DSEC `24;9;17;16`.
 - Archived 12.3.33 control: 1 rowwise Option-15 diagnostic, 36 material surfaces, 0 material failures, max normalized L1 `9.281096180612689e-05` (~0.00928%), Option 19 ACCEPT.
 - On ACCEPT, advance to `helike_type69/ca19_xi1p5_ne1e4`, the final historical one-cell Option-15 priority from the repaired 12.3.34 list.
 
-# 0.6.48.12.3.36.7 - 2026-08-04
+## 0.6.48.12.3.36.7 - 2026-08-04
 
 - Qualification-only advance to `helike_type69/o7_ne1` after fresh `ca19_xi4_ne1` material numerical science ACCEPT.
 - Freeze all 0.6.48.12.3.36 production science and production-zone ABI `6048110`.
 - Retain the 0.6.48.12.3.36.1 STEP/Option-15 material comparator byte-for-byte unchanged.
-- Keep Option-15 rowwise >1% values diagnostic-only; gate material ion x field surfaces by normalized L1 <1%.
+- Keep Option-15 rowwise >1% values diagnostic-only; gate material ion x field surfaces by normalized L1 `<1%`.
 - Keep Options 1/23 rank-order and Options 15/24 inventory diagnostics separate from numerical science.
 - FORTRAN XSTAR remains canonical. Reopen physics only for a fresh material numerical failure.
 - On ACCEPT, advance to `helike_type69/ca19_ne1e4`, then `helike_type69/ca19_xi1p5_ne1e4`.
 
-# 0.6.48.12.3.36.6 - 2026-08-04
-
-## 0.6.48.12.3.36.6 — `ca19_xi4_ne1` one-model material-science qualification
+## 0.6.48.12.3.36.6 — `ca19_xi4_ne1` one-model material-science qualification - 2026-08-04
 
 - Qualification-only release: no production-science change relative to 0.6.48.12.3.36; production-zone ABI remains `6048110`.
 - Retain the 0.6.48.12.3.36.1 Option-15 comparator byte-for-byte unchanged; every material `ion × field` surface still requires normalized L1 `<1%`.
@@ -469,9 +408,7 @@
 - Reopen production physics only if material numerical science fails. If accepted, advance next to `helike_type69/o7_ne1`; the following old raw-priority model is `helike_type69/ca19_ne1e4`.
 - Archived 12.3.33 control under the unchanged comparator: 48 Option-15 rowwise diagnostics, 14 material surfaces, 0 material-surface failures, maximum normalized L1 `9.4915125574848312e-4` (~0.0949%), Option 5 ACCEPT under the repaired relative comparison, and Option 19 ACCEPT.
 
-# 0.6.48.12.3.36.5 - 2026-08-04
-
-## 0.6.48.12.3.36.5 — `ca19_xi3p5_ne1` one-model material-science qualification
+## 0.6.48.12.3.36.5 — `ca19_xi3p5_ne1` one-model material-science qualification - 2026-08-04
 
 - Qualification-only release: no production-science change relative to 0.6.48.12.3.36; production-zone ABI remains `6048110`.
 - Retain the 0.6.48.12.3.36.1 Option-15 comparator byte-for-byte unchanged; every material `ion × field` surface still requires normalized L1 `<1%`.
@@ -481,9 +418,7 @@
 - Reopen production physics only if material numerical science fails. If accepted, advance next to `helike_type69/ca19_xi4_ne1`; following old raw-priority model is `helike_type69/o7_ne1`.
 - Archived 12.3.33 control under the unchanged comparator: 80 Option-15 rowwise diagnostics, 16 material surfaces, 0 material-surface failures, maximum normalized L1 `8.8086210961349184e-4` (~0.0881%), Option 19 ACCEPT.
 
-# 0.6.48.12.3.36.4 - 2026-08-04
-
-## 0.6.48.12.3.36.4 — `ca19_xi3_ne1` one-model material-science qualification
+## 0.6.48.12.3.36.4 — `ca19_xi3_ne1` one-model material-science qualification - 2026-08-04
 
 - Qualification-only release: no production-science change relative to 0.6.48.12.3.36; production-zone ABI remains `6048110`.
 - Retain the 0.6.48.12.3.36.1 Option-15 comparator byte-for-byte unchanged. Common-row Option-15 numerical science remains gated by normalized L1 for each material `ion × field` surface, with every material surface required to be `<1%`.
@@ -492,9 +427,7 @@
 - Reopen production physics only if a material numerical surface actually fails. If accepted, advance next to `helike_type69/ca19_xi3p5_ne1`; the following historical-priority model is `helike_type69/ca19_xi4_ne1`.
 - Archived 12.3.33 control under the unchanged material comparator: 153 rowwise Option-15 diagnostics, 26 material surfaces, 0 material-surface failures, maximum normalized L1 `5.7602545050357756e-4` (~0.0576%), and Option 19 numerical science ACCEPT. This is a comparator control only; the fresh 36.4 host run remains authoritative.
 
-# 0.6.48.12.3.36.3 - 2026-08-04
-
-## 0.6.48.12.3.36.3 — `ca19_xi2p5_ne1` one-model material-science qualification
+## 0.6.48.12.3.36.3 — `ca19_xi2p5_ne1` one-model material-science qualification - 2026-08-04
 
 - Qualification-only release: no production-science change relative to 0.6.48.12.3.36; production-zone ABI remains `6048110`.
 - Retain the 0.6.48.12.3.36.1 Option-15 comparator byte-for-byte unchanged. Common-row Option-15 numerical science remains gated by normalized L1 for each material `ion × field` surface, with every material surface required to be `<1%`.
@@ -502,9 +435,7 @@
 - Add a one-model `helike_type69/ca19_xi2p5_ne1` qualification against canonical FORTRAN XSTAR using the frozen 0.6.48.12.3.36 production science.
 - Reopen production physics only if a material numerical surface actually fails. If accepted, advance next to `helike_type69/ca19_xi3_ne1`; the following historical-priority model is `helike_type69/ca19_xi3p5_ne1`.
 
-# 0.6.48.12.3.36.2 - 2026-08-03
-
-## 0.6.48.12.3.36.2 — `ca19_xi1p5_ne1` one-model material-science qualification
+## 0.6.48.12.3.36.2 — `ca19_xi1p5_ne1` one-model material-science qualification - 2026-08-03
 
 - Qualification-only release: no production-science change relative to 0.6.48.12.3.36; production-zone ABI remains `6048110`.
 - Retain the 0.6.48.12.3.36.1 Option-15 material comparator byte-for-byte unchanged. Common-row Option-15 numerical science remains gated by normalized L1 for every material `ion × field` surface, with all material surfaces required to be `<1%`.
@@ -513,9 +444,7 @@
 - Add a one-model `helike_type69/ca19_xi1p5_ne1` runner using FORTRAN XSTAR as the canonical oracle and the frozen 0.6.48.12.3.36 production science.
 - Reopen physics only if a material numerical surface actually fails. If the model passes, advance the one-model priority to `helike_type69/ca19_xi2p5_ne1`, followed by `helike_type69/ca19_xi3_ne1`.
 
-# 0.6.48.12.3.36.1 - 2026-08-03
-
-## 0.6.48.12.3.36.1 — Option-15 material comparator + `ca19_ne1` one-model qualification
+## 0.6.48.12.3.36.1 — Option-15 material comparator + `ca19_ne1` one-model qualification  - 2026-08-03
 
 - Comparator-only release: no production-science kernel changes relative to 0.6.48.12.3.36; production-zone ABI remains `6048110`.
 - Option 15 common-row numerical science is gated by normalized L1 for each material `ion × field` surface, with every material surface required to be `<1%`.
@@ -525,9 +454,7 @@
 - Add a one-model `helike_type69/ca19_ne1` qualification runner using the frozen 0.6.48.12.3.36 `rread1` science repair and FORTRAN as the canonical oracle.
 - The `ca19_ne1` gate requires overall STEP numerical science, Option-15 material common-row science, and Option-19 numerical science to pass; rank/order and inventory diagnostics remain visible but do not reopen physics.
 
-# 0.6.48.12.3.36 - 2026-08-03
-
-## 0.6.48.12.3.36 — FORTRAN `rread1` default-REAL radius literal repair
+## 0.6.48.12.3.36 — FORTRAN `rread1` default-REAL radius literal repair  - 2026-08-03
 
 - Treat FORTRAN XSTAR as the canonical oracle when Python and C++ agree with one another but disagree with the source.
 - Correct Python initial-radius construction to preserve the unsuffixed `rread1.f90` literal `1.e+19` as default REAL before REAL(8) promotion.
@@ -543,238 +470,7 @@
 - Classifies the first STEP-input frontier as gate membership, GSSMOOTH transformation, or a dominant pre-GSSMOOTH opacity family.
 - Qualification remains one-model/two-pass and requires nine-FITS bit-data equivalence between probe-disabled and probe-enabled runs.
 
-## 0.6.48.12.3.35.2
-
-- Diagnostic-only `helike_type69/ca19_xi2_ne1` transport-commit probe; no production science change and production-zone ABI `6048110` remains frozen.
-- Instrument representative Ca VI line identities 68962/69412 and continuum/RRC identities 22617/22899 at three phases around the literal source transport lifetime: pre-HEATT atomic accumulation, post-HEATT/pre-STPCUT, and post-STPCUT.
-- Dump the exact pending `delta_radius_cm`, radius, source-faithful `fpr2`, local `rcem/oplin/cemab/opakab`, calculated line/RRC increments, and cumulative `elum/tau0/elumab/tauc` values.
-- Run a probe-disabled and probe-enabled copy of the same single model and require all nine FITS data surfaces to be bit-identical.
-- Reuse the order-safe 12.3.35.1 Option-15/19 target logic and derive the canonical FORTRAN STPCUT shell thickness directly from consecutive `xo01_detal2` radial `tau_in` increments divided by the preceding local `opacity`, using the literal source relation `tau0=tau0+oplin*delr`.
-- Gate on the first transport scalar: local owner closed, C++ commit arithmetic exact, C++ pending `delr` equal to its own effective STPCUT interval, and a material C++/FORTRAN `delr` difference coherent with the ~0.9114 Option-15/19 scale.
-
-## 0.6.48.12.3.35.1
-
-- Diagnostic-only `helike_type69/ca19_xi2_ne1` attribution hotfix; no C++ production-physics change and production-zone ABI `6048110` remains frozen.
-- Correct the source-faithful Python Type-39/DR oracle to the literal FORTRAN intrinsic `EXP` used by `ucalc.f90`, eliminating the false 12.3.35 record-163403 attribution caused by the generic clamped `_expo()` helper.
-- Retain full C++ diagnostic owner arrays at every accepted radial `final`, not only call-1/final-18, and add `elum_out/elum_in` ownership columns alongside `rcem`, `cemab`, `cabab`, `opakab`, and line/continuum identities.
-- Rework the fixed-evaluation gate to distinguish raw relative differences from material population differences using absolute floors, so vanishing `~1e-240` compact populations cannot select the causal evaluation.
-- Make the Option-15 attribution order-safe: match by printed line identity, require the 22,919 common identities to preserve exact relative sequence, keep the 83 C++-only identities as inventory diagnostics, and target only material Ca VI signals.
-- Use the same `1e-30` comparison floor as the 12.3.34 STEP comparator when selecting affected Option-15/19 targets; this yields 22 affected common Ca VI Option-19 identities rather than admitting two numerical tails.
-- Compare C++ and Python rate records only in like-for-like execution contexts (preliminary ion balance to preliminary ion balance; second-pass fixed records to second-pass fixed records). Product-owner UCalc rows are never paired with preliminary rows solely by record number.
-- Qualify success by either a real target-linked upstream rate/population mismatch or a conservative downstream attribution frontier. Reproducing the ~0.9114 Ca VI Option-15/19 scale is necessary but is not itself accepted as a physical root cause.
-
-## 0.6.48.12.3.34
-
-- Qualification-only STEP comparator repair; no model rerun and no C++ production/source/ABI change.
-- Fix Option 15 scientific-notation parsing to accept arbitrary exponent width (for example `E-101`).
-- Compare Option 5 signed `err` by relative difference instead of absolute `0.01`.
-- Split Options 1/23 into rank-position numerical arrays (normalized-L1 1% gate) and independent line identity/order/membership diagnostics. Tiny per-rank tail differences remain diagnostics only.
-- Keep Option 15/24 candidate/reference-only identities as material-inventory diagnostics separate from common-row numerical science.
-- Re-analyze the existing 62 archived cpp-zone/FORTRAN STEP logs only: numerical acceptance improves from 25/62 to 52/62; Options 1, 23, and 5 have zero numerical failures; remaining numerical failures are 10 Option-15 models plus Option 19 only in `ca19_xi2_ne1`.
-- Export a corrected `next_model_priority.csv`; `helike_type69/ca19_xi2_ne1` remains the first physical target.
-- Keep the entire C++ production source tree byte-identical to 12.3.33 and ABI `6048110` frozen.
-
-## 0.6.48.12.3.33
-
-- Reject AVX2 `tmpop` preparation for production: paired Type-50 speedups were 0.865862902 and 0.938055070; paired total speedups were 0.958460234 and 0.994218789.
-- Reject AVX2 adjacent-`tmpe` preparation for production: paired Type-50 speedups were 0.981150117 and 0.934003456; paired total speedups were 0.993837579 and 0.979045632.
-- Make no C++ production/science/publication change; freeze the complete 12.3.32 production source surface used by the cpp-zone backend.
-- Add an all-62 cpp-zone `xout_step.log` requalification runner based on the order-aware 12.3.13 comparator.
-- Strip inherited Type-50 experiment/fallback/decomposition environment variables before every survey run so all 62 models exercise frozen default production.
-- Export `numeric_discrepancies_gt1pct.csv`, `next_model_priority.csv`, `section_summary.csv`, `material_inventory_issues.csv`, and `rank_order_diagnostics.csv`.
-- Treat survey completion separately from science closure: a successful 62-model run returns success even when true >1% discrepancies are found, so those discrepancies can drive the next targeted one-model repair.
-
-## 0.6.48.12.3.32
-
-- Keep 12.3.31 cursor advancement as the normal AVX2 Type-50 production path and retain the exact 12.3.30 boundary-hint implementation behind `XSTAR_V064812331_FORCE_12330_HINT_CONSUME=1`. No 12.3.25 science, publication, ABI 6048110, profile arithmetic, scalar trapezoid recurrence, or sequential opacity-addition ordering is changed.
-- Add independent opt-in AVX2 `tmpop` preparation (`XSTAR_V064812332_ENABLE_AVX2_TMPOP_PREP=1`): four far-wing profile values are multiplied by `optpp` in one AVX2 multiply, and precomputed `tmpop0..3` values feed the unchanged scalar recurrence in lane order. Scalar/core/tail profile points remain on the frozen path.
-- Add independent opt-in AVX2 adjacent-`tmpe` preparation (`XSTAR_V064812332_ENABLE_AVX2_TMPE_PREP=1`): the existing four-lane energy vector is shifted to `[previous,e0,e1,e2]`, subtracted in AVX2, absolute-valued by sign-bit clearing, and the resulting `tmpe0..3` values feed the unchanged scalar recurrence in lane order.
-- Do not combine the two experiments. If both flags are present, production cursor is used. The 12.3.31 five-phase decomposition is not part of the 12.3.32 host qualifier; scalar profile and `opakc` work are intentionally not optimized here.
-- Add profile/block/point telemetry for each preparation candidate and a 600-case separate-process bit-exact qualifier against the exact 12.3.25 scalar oracle.
-- Add a `ca19_ne1e8`-only repeated interleaved host timing sequence: `production-A -> tmpop-A -> production-B -> tmpop-B -> production-C -> tmpe-A -> production-D -> tmpe-B`, followed by one exact hinted-fallback science check. No candidate is production default in 12.3.32; promotion requires the host interleaved evidence.
-
-## 0.6.48.12.3.31
-
-- Promote the independently qualified 12.3.30 monotone `epi`/`opakc` cursor-advance consume path into the normal AVX2 Type-50 production path. The `ca19_ne1e8` host run measured `21.909288 s` Type-50 versus `23.558068 s` for the 12.3.30 hinted production path, with nine-FITS bit-data equivalence.
-- Retain the exact 12.3.30 boundary-hint implementation behind `XSTAR_V064812331_FORCE_12330_HINT_CONSUME=1` as an explicit qualification fallback. Keep the exact 12.3.25 scalar fallback unchanged.
-- Treat the boundary hint as science-safe but performance-neutral pending stronger repeated evidence: in the 12.3.30 host run the hinted production path (`23.558068 s`) and exact 12.3.28-style fallback (`23.554245 s`) were effectively tied.
-- Retire cached `next_epi` and local `updated_bins` from the 12.3.31 qualifier; their 12.3.30 host effects were small/noisy compared with cursor advancement. Register+hint, `ncut==4`, schedule caching, and heavy per-point counters remain retired.
-- Add diagnostic-only `XSTAR_V064812331_TYPE50_DECOMPOSE=1`, which uses five coarse per-profile clocks and shadow work to measure AVX2 small-`a` far-wing arithmetic, remaining scalar profile arithmetic, trapezoid arithmetic, boundary/rebin logic, and sequential `opakc` additions. The shadow phase never changes public opacity; the real cursor kernel executes afterward as the sole science update.
-- Add `v0648123310` readiness, separate-process randomized equivalence, local screening, and a `ca19_ne1e8`-only host qualifier comparing production, exact 12.3.30 fallback, and decomposition. Every non-production science mode must be nine-FITS bit-data equivalent to production.
-- Keep 12.3.25 science/publication behavior, production-zone ABI `6048110`, profile arithmetic, and source-order opacity additions frozen.
-
-## 0.6.48.12.3.30
-
-- Promote the independently accepted 12.3.29 likely-false Type-50 rebin boundary hint into the normal AVX2 production consume path. The branch condition and source-order arithmetic are unchanged; only compiler layout guidance is added. The host `ca19_ne1e8` qualification measured 22.449425 s Type-50 versus 23.766211 s for 12.3.28 production, with nine-FITS bit-data equivalence.
-- Keep an exact 12.3.28 consume fallback behind `XSTAR_V064812330_FORCE_12328_CONSUME=1`; the exact 12.3.25 scalar fallback remains available through `XSTAR_V064812328_FORCE_SCALAR_TYPE50=1`.
-- Retire register+hint, `ncut==4`, schedule-cache, and heavy per-point consume-counter modes from the 12.3.30 host qualifier. Their historical ABI/reporting code remains non-default, but none participates in production selection.
-- Add three independent, opt-in, element-generic micro-experiments layered on the promoted boundary-hint baseline: cached `next_epi` (`XSTAR_V064812330_ENABLE_NEXT_EPI_CACHE=1`), local per-profile `updated_bins` accumulation (`XSTAR_V064812330_ENABLE_LOCAL_UPDATED_BINS=1`), and monotone `epi`/`opakc` cursor advancement (`XSTAR_V064812330_ENABLE_CURSOR_ADVANCE=1`). No experiment combines changes.
-- Add profile-level telemetry only for the new modes, avoiding per-point measurement overhead. Add a `ca19_ne1e8`-only qualifier comparing promoted production, exact 12.3.28 fallback, and the three independent micro-experiments. Every non-production mode must be nine-FITS bit-data equivalent to production.
-- Keep 12.3.25 science/publication behavior and production-zone ABI 6048110 frozen. The remaining `xo01_detal2`, `xout_abund1`, and `xout_lines1` publication work remains a separate track.
-
-## 0.6.48.12.3.29
-
-- Freeze the accepted 12.3.28 production Type-50 inline far-wing AVX2 function as the default path; 12.3.29 experiments are dispatched only when explicitly enabled, so the normal path does not inherit experiment helper/template overhead. The exact 12.3.25 scalar fallback remains available.
-- Retire the negative 12.3.28 `ncut==4` consume experiment from the 12.3.29 qualifier.
-- Add opt-in generic register-resident source-order consumption (`XSTAR_V064812329_ENABLE_REGISTER_CONSUME=1`): `sume`, `opsum`, `tmpop`, previous energy, and `ml1m` remain direct locals, while `epi` and `opakc` cursors advance monotonically on source boundary crossings. `updated_bins` is accumulated locally and committed once per profile. Arithmetic and `opakc` update order are unchanged.
-- Add an independent opt-in likely-false boundary-layout hint (`XSTAR_V064812329_ENABLE_BOUNDARY_HINT=1`) using `__builtin_expect` around the unchanged `current_energy > next_epi` decision. It can be measured alone or together with register consumption.
-- Add diagnostic consume counters (`XSTAR_V064812329_TYPE50_CONSUME_COUNTERS=1`) for consumed points, boundary true/false points, boundary events, output bins advanced, and maximum bins per event. Counter mode is excluded from performance acceptance.
-- Add a `ca19_ne1e8`-only host qualifier that compares frozen production, register consume, branch hint, combined register+hint, and diagnostic counters. Every experiment must be nine-FITS bit-data equivalent to production. No experiment is production default in 12.3.29. Production-zone ABI remains 6048110 and 12.3.25 science/publication is frozen.
-
-## 0.6.48.12.3.28
-
-- Promote the 12.3.27 one-dispatch small-a `|v|>=5` far-wing AVX2 implementation into the normal standalone-C++ Type-50 production kernel on AVX2-capable x86 CPUs. The exact accepted 12.3.25 scalar Type-50 implementation remains the runtime fallback (`XSTAR_V064812328_FORCE_SCALAR_TYPE50=1`) and is also used automatically on unsupported CPUs/non-small-a profiles.
-- Remove `opacity_type50_experiments.cpp` from the normal opacity-library build and eliminate the 12.3.27 schedule-cache dispatch from `line_emissivity.cpp`; retired 12.3.26/12.3.27 telemetry remains zero ABI stubs only.
-- Replace the 12.3.27 `ev[4]`/`pv[4]` spill-and-lambda consumption in the promoted AVX2 path with direct lane extraction from AVX2 registers followed by the same scalar source-order trapezoid/rebin/`opakc` arithmetic.
-- Add an opt-in generic `ncut==4` consume specialization (`XSTAR_V064812328_ENABLE_NCUT4_UNROLLED_CONSUME=1`). A four-point block bypasses redundant boundary tests only when lane 3 is at/below the next continuum boundary; crossing blocks fall back to exact lane-by-lane source boundary handling. No element/model condition is used.
-- Add diagnostic optimized-path decomposition (`XSTAR_V064812328_TYPE50_DECOMPOSE=1`) into AVX2 far-wing profile arithmetic, remaining scalar profile arithmetic, and scalar trapezoid/rebin/`opakc` consumption.
-- Add a `ca19_ne1e8`-only host qualifier comparing promoted production, exact scalar fallback, diagnostic decomposition, and the opt-in `ncut==4` specialization. Every non-production mode must be nine-FITS bit-data equivalent to production. Production-zone ABI remains 6048110 and 12.3.25 science/publication behavior is frozen.
-
-## 0.6.48.12.3.27
-
-- Freeze the accepted 12.3.25 science, publication writers, and production Type-50 kernel while focusing performance qualification only on `helike_type69/ca19_ne1e8`.
-- Add an opt-in, geometry-only source-exact Type-50 rebin-schedule cache (`XSTAR_V064812327_ENABLE_REBIN_SCHEDULE_CACHE=1`). The cache key describes continuum-grid/rebin geometry; cached events store only temporary-grid boundary point and output span length. Profile/trapezoid arithmetic and every `opakc += optp2` commit remain sequential and source ordered.
-- Add an opt-in one-dispatch inline small-a far-wing AVX2 experiment (`XSTAR_V064812327_ENABLE_INLINE_FARWING_AVX2=1`). It vectorizes only contiguous `|v|>=5`, small-damping profile points, then consumes the four results sequentially through the unchanged trapezoid/rebin/opacity arithmetic. No full-profile buffer, per-four target dispatch, FMA, element-Z condition, or output-order change is introduced.
-- Add Type-50 schedule-cache statistics, `ncut` histogram, profile-point family counts, and inline-AVX2 point/block counters with O(1)-per-profile reporting.
-- Add a `ca19_ne1e8`-only host qualifier with frozen baseline, schedule-cache, and inline-farwing modes. A combined mode runs only when both individual experiments are independently bit-exact and faster in Type-50 profile time on the host.
-- Require all experimental modes to be nine-FITS bit-data equivalent to the frozen baseline. Keep the remaining `xo01_detal2`, `xout_abund1`, and `xout_lines1` publication work separate and frozen in this candidate. Production-zone ABI remains 6048110.
-
-## 0.6.48.12.3.26
-
-- Freeze the accepted 12.3.25 science and publication implementation. `opacity_kernels.cpp` is byte-for-byte identical to 12.3.25; `fixed_state_engine.cpp`, the matrix/rate/solver engines, and `xstar_science_fits.cpp` are frozen.
-- Focus performance qualification exclusively on `helike_type69/ca19_ne1e8`; no broad C/O/Mg/Ca rerun is required in this measurement candidate.
-- Add a diagnostic-only Type-50 three-pass decomposition in a separate translation unit: source-identical scalar profile values are generated first, source-ordered trapezoid/rebin work builds contiguous opacity-span events second, and the original per-bin `opakc += optp2` additions are replayed third. This permits profile-value, trapezoid/rebin, and range-update timing without per-bin clocks.
-- Add an opt-in experimental contiguous range-update AVX2 path (`XSTAR_V064812326_ENABLE_EXPERIMENTAL_RANGE_AVX2=1`). The production default remains the exact 12.3.25 scalar Type-50 kernel.
-- Add a three-mode host qualifier for `ca19_ne1e8`: frozen baseline, diagnostic phase decomposition, and experimental range AVX2. Both experimental modes must be nine-FITS bit-data equivalent to the baseline.
-- Keep the remaining `xo01_detal2`, `xout_abund1`, and `xout_lines1` publication issues as a separate frozen track in this candidate. Production-zone ABI remains 6048110.
-
-## 0.6.48.12.3.25
-
-- Repair generic detailed-matrix endpoint ownership to match literal `msolvelucy.f90` `min(ipmat,indb(...))`: source endpoints above the selected compact dimension alias to the normalization row instead of being discarded. The production path contains no Ca or record-number special case.
-- Apply the literal `calc_hmc_ion.f90` detailed-matrix source gate generically: rate types 8 and 15, plus the rate1+Type53 ownership case, do not enter the detailed matrix. Preliminary ion-balance/thermal ownership remains separate.
-- Generalize source `calc_hmc_element` runtime-seed policy to every element: a compact seed mapped from global `xilevg` is never pre-normalized before `msolvelucy`. The prior H/He/Mg/C-only preservation booleans are removed.
-- Retain the 12.3.24 exact Type-50 temporary-bound localization but restore the scalar source-faithful profile as production default. The 12.3.24 four-point AVX2 microkernel is not promoted.
-- Add an opt-in, experimental bulk AVX2 profile generator (`XSTAR_V064812325_ENABLE_EXPERIMENTAL_BULK_AVX2=1`) entered once per accepted line; rebin and opacity accumulation remain scalar/source ordered. It is qualification-only and never enabled by default.
-- Fix the diagnostic compact-seed CSV one-based guard indexing.
-- Add a five-model C/O/Mg/Ca qualifier plus exact final C++/Python matrix-term presence, required terminal Type49 commit checks, Ca XVIII/Ca XVII population closure, downstream spectrum reporting, and `ca19_ne1e8` scalar/bulk/FORTRAN performance reports. Production-zone ABI remains 6048110.
-
-## 0.6.48.12.3.24
-
-- Add a generic Type-50 `linopac` performance path that algebraically localizes the valid 20,000-point temporary-grid interval and then corrects the estimated integer bounds with the literal source energy predicate. No element-Z or model-specific condition is used.
-- Add runtime-dispatched AVX2 evaluation for four independent small-damping (`0<a<=0.2`) far-wing Voigt values at a time. Every trapezoid, rebin decision, and `opakc +=` remains scalar and in the original source order. Non-AVX2 CPUs and `XSTAR_V064812324_FORCE_SCALAR_TYPE50=1` use the scalar path.
-- Preserve the accepted 12.3.22 Type-50 source eligibility gate and the 12.3.23 source `expo/eint` correction. Production-zone ABI remains 6048110.
-- Correct the diagnostic fixed-state Python replay so per-element `initial_global_populations` are populated from the captured dense source `xilevg` rather than an explicit empty mapping. This is diagnostic-only.
-- Add diagnostic-only call-1 population-state captures for eval-1 input, every DSEC post-mapback state, accepted-boundary post-mapback state, and detail-publication global projection.
-- Add a two-model qualifier for `ca19_ne1` and `ca19_ne1e8`. It performs candidate-vs-scalar nine-FITS bit-data equivalence, reports C++/FORTRAN timing and Type-50 profile work/vectorization, and localizes the Ca XVIII population discrepancy across last-DSEC, accepted-boundary, and detail-publication states.
-
-## 0.6.48.12.3.23
-
-- Repair the source `expo.f90` / `eint.f90` contract generically in the C++ fixed-state engine: source `expo()` clamps at +/-60, while the generic numerical overflow helper remains +/-700 for paths that do not call source `expo`.
-- Apply the literal source `expo(t)`/`exp(-t)`/`expo(-t)` distinction inside the shared `eint_values` helper used by source EINT callers.
-- Repair Type-95 detailed balance to divide by source `expo(-1./tt)` rather than the generic +/-700 exponential guard. The change contains no element-Z or Ca-specific condition.
-- Preserve the accepted 12.3.22 all-element Type-50 speed gate, active-stage two-pass traversal, atomic ordering, FITS publication logic, and production-zone ABI 6048110.
-- Add a C/O/Mg/Ca regression runner plus the one-shot Ca fixed-state matrix replay and detailed `ca19_ne1` population/spectrum checks. Independent publication issues (missing detail rows, Ca thermal attribution, abundance radius, H line-depth identity) are reported but not altered by this rate fix.
-
-## 0.6.48.12.3.22
-
-- Generalize the literal FORTRAN Type-50 inner `linopac` gate to the shared C++ `FULL_LINE` path for every element: scalar line state is retained, but profile/rebin work is skipped unless `opakb1 > REAL(1.e-34)`.
-- Treat data type 91 as the same source family because `ucalc.f90` explicitly jumps to label 50; deliberately exclude data type 89 because its FORTRAN branch uses the different `opakb1*delr > 1.d-8` predicate.
-- Preserve the already-generic 12.3.14 endpoint-abundance gate and 12.3.15 active-stage two-pass traversal. No element-Z performance branch is introduced.
-- Add a six-model C/O/Mg/Ca targeted qualifier that runs directly from the unpacked source tree and requires zero source-rejected-but-called Type-50 profiles plus frozen core trajectory/thermal/option-17/22 science.
-
-## 0.6.48.12.3.21.2
-
-- Fix the one-shot fixed-radial Python replay when the native C++ line-tau workspace is an active-element source-index prefix while Python retains the full ATDB `nlsvn` domain.
-- Preserve source index `line_index-1`, require the native prefix to cover every active source line, and zero-extend only the inactive tail.
-- Keep production science unchanged; resume mode reuses the existing C++ diagnostic capture.
-
-## 0.6.48.12.3.21.1
-
-Diagnostic hotfix only. Fixes the one-shot Python radial replay import so `FixedStateElementRequest` is imported from `xstar.local_zone`, where it is defined. Adds package-local `PYTHONPATH` provenance validation, disables user-site shadowing, and adds a resume wrapper that reuses an already completed 12.3.21 C++ diagnostic capture. No production science or C++ numerical implementation is changed.
-
-## 0.6.48.12.3.21
-
-- Diagnostic-only one-model `ca19_ne1` Ca XVIII/Ca XVII matrix-term attribution from the call-1 final recompute that publishes the first `XSTAR_RADIAL` extension, including live line and continuum optical-depth state; production rate/matrix/atomic/FITS science is unchanged.
-- Diagnostic-only Type-50 outer-gate and source-inner `linopac` acceptance/work counters, including source-rejected-but-called profile bins/seconds and derived source-equivalent calls/bins/seconds.
-- Adds a one-shot source-faithful Python fixed-state replay and analyzer that identifies the first differing atomic record/data type/rate type.
-
-## 0.6.48.12.3.20 — generic npilev source ordinals + Type50 fstepr2 publication shadow
-
-- Generalize the existing FORTRAN `setptrs`/`npilev` source-ordinal mapping from Mg-only to every element for both primary global row ownership and row aliases. This is a topology/addressing correction, not an element-specific row shift.
-- Add the accepted source-faithful Type-50/rate-4 `fstepr2` publication-activity shadow to the generic C++ detail-line writer. It mirrors the default-REAL `1.e-34` endpoint gate, reconstructs caller-local stale `opakb1` from the retained physical `oplin`, and applies only the `1.d-64` detail identity gate.
-- The shadow is output-only and does not modify `rcem`, `oplin`, `tau0`, profiles, transport, equilibrium, or the public `xout_lines1.fits` inventory.
-- Targeted qualification remains `helike_type69/ca19_ne1`, with blocking gates for the Ca XVIII local-level >=25 `index/e_excitation/population` tail and full `xo01_detal2` FORTRAN inventory. `xo01_detal3`, Option 19/`xout_rrc1`, Option 27, and `xo01_detal4` are frozen.
-
-## 0.6.48.12.3.19 — source detailed-FITS identity/inventory and Type53 direction closure
-
-- Extend the 12.3.17/12.3.18 population-lifetime work without changing its accepted Option-19/RRC physics. The remaining `xo01_detail.fits` mismatch is an identity/publication problem: FORTRAN `fstepr` walks every source ion/local-level `npilev` role, while the generic C++ metadata had collapsed each shared continuum/next-ion-ground compact row to one identity and then applied a non-source terminal-stage filter.
-- Retain a dedicated `detail_level_identities` inventory from source `npilev` addresses. `xo01_detail.fits` now traverses those source roles without active-stage filtering and applies only the literal `xilev > 1.d-34` publication gate. The 12.3.18 dense source-detail population projection remains the value owner, so inactive upper aliases stay zero while legitimate shared continuum aliases and active Ca XVIII levels remain publishable.
-- Make generic `xo01_detal2.fits` follow literal `fstepr2`: detail-order line identities bypass the terminal-product stage filter and are selected by local `rcem(1/2)`/`oplin > 1.d-64`, rate-type exclusions, and wavelength bounds. Public `xout_lines1.fits` keeps its separate active/ranked selection semantics.
-- Make generic `xo01_detal3.fits` follow literal `fstepr3`: detail inventory bypasses the public-RRC active-stage filter and uses the local `cemab(1/2)`/`cabab`/`opakab > 1.e-36` gate. Public `xout_rrc1.fits` remains on the accepted 12.3.17 post-map-back inventory and is explicitly frozen by qualification.
-- Fix generic Type53 detailed-RRC direction ownership by retaining the live source `ptmp1/ptmp2` escape factors in all Type53 shadow lifetimes (`calc_hmc`, `calc_emisab`, and `calc_emis`). This moves the affected Ca Type53 emissivity from the stale default inward owner to the source outward owner without altering the accepted Type53 Milne/rate calculation.
-- Add a single-model `helike_type69/ca19_ne1` qualifier that blocks on complete `xo01_detail`, `xo01_detal2`, and `xo01_detal3` inventories/identities, Type53 direction, <=1% normalized-L1 numeric parity, frozen `xo01_detal4`, frozen Option-19/`xout_rrc1`/Option-27, and pruned/forced bit-exact equivalence.
-- No Ca-specific production branch, empirical rescaling, solver change, Type50 change, `xo01_detal4` science change, or production-zone ABI change. ABI remains 6048110.
-
-## 0.6.48.12.3.18 — source `fstepr` detail-population lifetime separation
-
-- Keep the accepted 12.3.17 post-mapback population view unchanged for Option-19/Type53/RRC physics. The `ca19_ne1` host run closes Ca XVII Option-19 to <0.1% and removes all non-source Ca XVIII RRC rows, so this stage does not alter that spectral path.
-- Repair the 12.3.17 overcorrection in `xo01_detail.fits:XSTAR_RADIAL`. FORTRAN `fstepr` publishes the global `xilevg` produced by `calc_hmc_all`, with the literal `xilev > 1.d-34` gate. `calc_hmc_all` maps the overlapping local element array back ion-by-ion (`1..nlev-1`, then the terminal row), so its public global identities cannot be reconstructed by blindly expanding every compact row after inactive zeros are filled.
-- Retain the solved compact/full-row population snapshot plus the per-element active `mml/mmu` window, then reconstruct the source `calc_hmc_all` global writeback using the actual compact-row alias topology. Internal shared rows between active ions retain both global identities; when the highest active stage is truncated, the upper shared terminal/next-ground row is suppressed because the following inactive ion zeroes that local overlap before the global map-back.
-- Use the dedicated dense detail snapshot only for `xo01_detail.fits` population publication. LTE continues to use the retained source `rnisg` surface; no `lte==0` heuristic is introduced.
-- Add a single-model `ca19_ne1` qualifier requiring the FORTRAN Ca XVIII radial lifetime (32, 32, 31, 0, 0 rows), exact identities, <=1% population/LTE values, no stale outer Ca XVIII row, frozen Option-19/RRC closure, frozen Option-27, and pruned/forced equivalence.
-- No Ca-specific production branch, empirical scaling, solver change, or production-zone ABI change. ABI remains 6048110.
-
-## 0.6.48.12.3.17 — source post-map-back terminal-alias RRC repair
-
-- Fix the remaining low-density Ca Option-19/RRC defect without empirical scaling. FORTRAN `calc_hmc_element` maps the compact highest-active-ion continuum row back to `xileve`, then the next inactive ion zeros that same overlapping row before `calc_emisab_all`/`calc_emis_all`; C++ had exposed the compact normalization value directly to spectral construction and retained it as a physical next-ion ground population.
-- Add a generic post-map-back population view that zeros only the shared upper-boundary row when `active.max_stage < element_z`. Use it for bound-free/RRC and broad spectral abundance consumers while leaving compact solver/thermal arithmetic unchanged.
-- Commit the same post-map-back zero into the full population output/global `xilevg` state, preventing stale upper-boundary normalization aliases from surviving into later evaluations or `xo01_detail.fits`. Qualification-only fixed-state closure applies the same rule.
-- This source lifetime explains both observed `ca19_ne1` symptoms: the 25 extra Ca XVIII Option-19 rows and the stage-wide ~19.9% high Ca XVII integrated RRC luminosities. No `/xee` correction and no Ca-specific branch are introduced.
-- Add a single-model `ca19_ne1` pruned/forced qualifier. Blocking gates require Ca XVII Option-19 values within 1%, zero Ca XVIII Option-19/xout_rrc1 rows, source-matching Ca XVIII detail inventory, and frozen Option-27 parity. All-nine-FITS pruned/forced bit-exact remains reported separately.
-- Preserve the 12.3.16 source-`xii` Option-27 fix, 12.3.15 active-stage two-pass path, 12.3.14 Type50 source gates, and production-zone ABI 6048110.
-
-## 0.6.48.12.3.16 — source `xii` abundance/Option-27 publication repair
-
-- Repair the low-ionization Ca terminal-stage publication defect exposed by `ca19_ne1`: the compact active-element solver uses the next-ion ground row as its normalization row, but the product layer had later reinterpreted that expanded full-row slot as a physical population of the next ion. This produced a false Ca XIX abundance/column and removed part of the true Ca XVIII column.
-- Retain the already-computed final per-ion `xii` stage fractions from the fixed-state element diagnostic and carry them through accepted DSEC snapshots into `FixedEvaluationState`. `xout_abund1.fits` now uses this source `pprint(12)` stage-fraction surface instead of reconstructing ion fractions from the expanded full-level vector whenever the retained `xii` surface is available.
-- Keep the historical full-level reconstruction only as a fallback for old/synthetic states; no solver, rate, thermal, Type50, or active-window arithmetic is changed.
-- Fix Option 27 formatting to mirror FORTRAN `(1x,i4,1x,9a1,1pe16.8)`: a 9-character ion field followed by a 16-character scientific value prevents eight-character names such as `ca_xviii` from concatenating with the number. The writer also restores the source default-REAL `xcoltmp > 1.e-15` publication threshold instead of the former `abs(v) > 1e-30` test.
-- Add a targeted three-model qualifier (`c5_ne1`, `mg11_ne1e8`, `ca19_ne1`). The Ca model additionally runs forced-full mode and requires source-`xii` abundance/column publication to be identical between pruned and forced-full execution, Ca XVIII column density within 1% of FORTRAN, and no spurious Ca XIX abundance/column.
-- Keep the known Ca XVII Option-19 RRC normalization discrepancy and the 12.3.15 inactive-RRC A/B issue separate from this publication fix. Production-zone ABI remains 6048110; no Ca-specific physics or performance branch is introduced.
-
-## 0.6.48.12.3.15 — source two-pass active-stage traversal candidate
-
-- Build on the scientifically accepted targeted 0.6.48.12.3.14 generic Type50 source gates; retain both source-REAL `1.e-34` gates unchanged.
-- Reorder the native element evaluator to mirror `calc_hmc_element.f90`: a restricted `calc_ion_rates`-equivalent first pass establishes `pirti/rrrti` and literal `mml/mmu` before the expensive per-ion body is evaluated.
-- Reuse first-pass `EvaluatedRecord` values when the same record belongs to the active second-pass window, avoiding duplicate rate evaluation.
-- Fully evaluate second-pass records only for active stages, while conservatively retaining all rate-type-7 records as source-global setup/`errc` owners and retaining structural records.
-- Add `XSTAR_V064812315_FORCE_FULL_RECORD_TRAVERSAL=1` for same-executable A/B qualification. The targeted qualifier requires all nine FITS data payloads to be bit-exact between pruned and forced-full modes.
-- Add per-controller-call record-evaluation counters so high-ionization Ca pruning can be measured directly rather than inferred from wall time.
-- No element-specific performance shortcut is introduced; production-zone ABI 6048110, DSEC/thermal/source/ionization fixes, and Python science remain frozen.
-
-## 0.6.48.12.3.14
-
-- Restore the two literal FORTRAN Type-50 performance gates generically for all elements. The broad `calc_emisab_ion` line stream now requires density-scaled endpoint abundance above default-REAL `1.e-34` for rate families 4/9/14; ordinary Type-50 profile traversal now requires `opakb1 > REAL(1.e-34)` while retaining scalar line publication.
-- Keep the complete atomic record traversal unchanged in this candidate so rate/matrix ownership remains frozen; the separate FORTRAN-style active-ion two-pass optimization is deliberately deferred until this Type-50 change is host-qualified.
-- Add a four-model targeted performance/science qualifier (`c5_ne1`, `ca19_ne1`, `ca19_ne1e8`, `ca19_ne1e12`) against the frozen 12.3.13 all-62 outputs and canonical FORTRAN logs.
-- Add a qualification-only step-log comparator that separates numeric science, publication inventory/identity, formatting, and ranked-list metadata. Offline reinterpretation of the frozen 12.3.13 logs gives numeric science 62/62 while preserving inventory/ranking/formatting defects as independent report-fidelity gates.
-- No Python science, DSEC/controller, thermal, Type88, retained-xcol, option-17/22 writer science, or production-zone ABI changes. ABI remains 6048110.
-
-## 0.6.48.12.3.13
-
-- Qualification-only all-62 `xout_step.log` science survey after 0.6.48.12.3.12 closed the ionization-parameter state-ownership defect in `c5_ne1` and the remaining eight historical option-17 failures.
-- Replace positional comparison of identity-bearing print sections with source-identity alignment. Options 1/23 align by line index with rank/top-500 membership diagnostic-only; option 15 aligns by line index; options 19/24 align by continuum storage index; option 27 aligns by ion identity.
-- Compare scientific numerics at a 1% relative tolerance. Option 17 retains chronological zone semantics and exact DSEC identity while treating base-10 logarithms as physical quantities and one-last-digit 0.01-dex differences as display-quantization ambiguous. H-C percentage columns use a one-percentage-point absolute tolerance.
-- Treat option 16 as CPU timing/accounting only and exclude it from science acceptance. Separate numeric >1% discrepancies, material inventory mismatches, and rank/order diagnostics into dedicated CSV outputs.
-- Preserve all production science from 0.6.48.12.3.12.1 byte-for-byte apart from version metadata. No pure-Python rerun, `cpp-all`, or nine-FITS audit is part of this stage.
-
-## 0.6.48.12.3.12.1
-
-- Qualification-only follow-up after `c5_ne1` closed option-17/22 ionization-parameter parity.
-- Add targeted runner for the remaining eight historical option-17 failures.
-- No production science implementation changes from 0.6.48.12.3.12.
-
-# 0.6.48.12.3.35.3 - 2026-08-03
+## 0.6.48.12.3.35.3 - 2026-08-03
 
 - Diagnostic-only one-model STEP limiter attribution for `helike_type69/ca19_xi2_ne1`.
 - Keeps production ABI 6048110 and all atomic/rate/matrix/Type50/HEATT/STPCUT science frozen from 12.3.35.2.
@@ -782,237 +478,6 @@ Diagnostic hotfix only. Fixes the one-shot Python radial replay import so `Fixed
 - Captures all active STEP candidates so the C++ candidate nearest the FORTRAN effective shell interval can be identified without changing the production calculation.
 - Classifies the first STEP-input frontier as gate membership, GSSMOOTH transformation, or a dominant pre-GSSMOOTH opacity family.
 - Qualification remains one-model/two-pass and requires nine-FITS bit-data equivalence between probe-disabled and probe-enabled runs.
-
-## 0.6.48.12.3.35.2
-
-- Diagnostic-only `helike_type69/ca19_xi2_ne1` transport-commit probe; no production science change and production-zone ABI `6048110` remains frozen.
-- Instrument representative Ca VI line identities 68962/69412 and continuum/RRC identities 22617/22899 at three phases around the literal source transport lifetime: pre-HEATT atomic accumulation, post-HEATT/pre-STPCUT, and post-STPCUT.
-- Dump the exact pending `delta_radius_cm`, radius, source-faithful `fpr2`, local `rcem/oplin/cemab/opakab`, calculated line/RRC increments, and cumulative `elum/tau0/elumab/tauc` values.
-- Run a probe-disabled and probe-enabled copy of the same single model and require all nine FITS data surfaces to be bit-identical.
-- Reuse the order-safe 12.3.35.1 Option-15/19 target logic and derive the canonical FORTRAN STPCUT shell thickness directly from consecutive `xo01_detal2` radial `tau_in` increments divided by the preceding local `opacity`, using the literal source relation `tau0=tau0+oplin*delr`.
-- Gate on the first transport scalar: local owner closed, C++ commit arithmetic exact, C++ pending `delr` equal to its own effective STPCUT interval, and a material C++/FORTRAN `delr` difference coherent with the ~0.9114 Option-15/19 scale.
-
-## 0.6.48.12.3.35.1
-
-- Diagnostic-only `helike_type69/ca19_xi2_ne1` attribution hotfix; no C++ production-physics change and production-zone ABI `6048110` remains frozen.
-- Correct the source-faithful Python Type-39/DR oracle to the literal FORTRAN intrinsic `EXP` used by `ucalc.f90`, eliminating the false 12.3.35 record-163403 attribution caused by the generic clamped `_expo()` helper.
-- Retain full C++ diagnostic owner arrays at every accepted radial `final`, not only call-1/final-18, and add `elum_out/elum_in` ownership columns alongside `rcem`, `cemab`, `cabab`, `opakab`, and line/continuum identities.
-- Rework the fixed-evaluation gate to distinguish raw relative differences from material population differences using absolute floors, so vanishing `~1e-240` compact populations cannot select the causal evaluation.
-- Make the Option-15 attribution order-safe: match by printed line identity, require the 22,919 common identities to preserve exact relative sequence, keep the 83 C++-only identities as inventory diagnostics, and target only material Ca VI signals.
-- Use the same `1e-30` comparison floor as the 12.3.34 STEP comparator when selecting affected Option-15/19 targets; this yields 22 affected common Ca VI Option-19 identities rather than admitting two numerical tails.
-- Compare C++ and Python rate records only in like-for-like execution contexts (preliminary ion balance to preliminary ion balance; second-pass fixed records to second-pass fixed records). Product-owner UCalc rows are never paired with preliminary rows solely by record number.
-- Qualify success by either a real target-linked upstream rate/population mismatch or a conservative downstream attribution frontier. Reproducing the ~0.9114 Ca VI Option-15/19 scale is necessary but is not itself accepted as a physical root cause.
-
-## 0.6.48.12.3.34
-
-- Qualification-only STEP comparator repair; no model rerun and no C++ production/source/ABI change.
-- Fix Option 15 scientific-notation parsing to accept arbitrary exponent width (for example `E-101`).
-- Compare Option 5 signed `err` by relative difference instead of absolute `0.01`.
-- Split Options 1/23 into rank-position numerical arrays (normalized-L1 1% gate) and independent line identity/order/membership diagnostics. Tiny per-rank tail differences remain diagnostics only.
-- Keep Option 15/24 candidate/reference-only identities as material-inventory diagnostics separate from common-row numerical science.
-- Re-analyze the existing 62 archived cpp-zone/FORTRAN STEP logs only: numerical acceptance improves from 25/62 to 52/62; Options 1, 23, and 5 have zero numerical failures; remaining numerical failures are 10 Option-15 models plus Option 19 only in `ca19_xi2_ne1`.
-- Export a corrected `next_model_priority.csv`; `helike_type69/ca19_xi2_ne1` remains the first physical target.
-- Keep the entire C++ production source tree byte-identical to 12.3.33 and ABI `6048110` frozen.
-
-## 0.6.48.12.3.33
-
-- Reject AVX2 `tmpop` preparation for production: paired Type-50 speedups were 0.865862902 and 0.938055070; paired total speedups were 0.958460234 and 0.994218789.
-- Reject AVX2 adjacent-`tmpe` preparation for production: paired Type-50 speedups were 0.981150117 and 0.934003456; paired total speedups were 0.993837579 and 0.979045632.
-- Make no C++ production/science/publication change; freeze the complete 12.3.32 production source surface used by the cpp-zone backend.
-- Add an all-62 cpp-zone `xout_step.log` requalification runner based on the order-aware 12.3.13 comparator.
-- Strip inherited Type-50 experiment/fallback/decomposition environment variables before every survey run so all 62 models exercise frozen default production.
-- Export `numeric_discrepancies_gt1pct.csv`, `next_model_priority.csv`, `section_summary.csv`, `material_inventory_issues.csv`, and `rank_order_diagnostics.csv`.
-- Treat survey completion separately from science closure: a successful 62-model run returns success even when true >1% discrepancies are found, so those discrepancies can drive the next targeted one-model repair.
-
-## 0.6.48.12.3.32
-
-- Keep 12.3.31 cursor advancement as the normal AVX2 Type-50 production path and retain the exact 12.3.30 boundary-hint implementation behind `XSTAR_V064812331_FORCE_12330_HINT_CONSUME=1`. No 12.3.25 science, publication, ABI 6048110, profile arithmetic, scalar trapezoid recurrence, or sequential opacity-addition ordering is changed.
-- Add independent opt-in AVX2 `tmpop` preparation (`XSTAR_V064812332_ENABLE_AVX2_TMPOP_PREP=1`): four far-wing profile values are multiplied by `optpp` in one AVX2 multiply, and precomputed `tmpop0..3` values feed the unchanged scalar recurrence in lane order. Scalar/core/tail profile points remain on the frozen path.
-- Add independent opt-in AVX2 adjacent-`tmpe` preparation (`XSTAR_V064812332_ENABLE_AVX2_TMPE_PREP=1`): the existing four-lane energy vector is shifted to `[previous,e0,e1,e2]`, subtracted in AVX2, absolute-valued by sign-bit clearing, and the resulting `tmpe0..3` values feed the unchanged scalar recurrence in lane order.
-- Do not combine the two experiments. If both flags are present, production cursor is used. The 12.3.31 five-phase decomposition is not part of the 12.3.32 host qualifier; scalar profile and `opakc` work are intentionally not optimized here.
-- Add profile/block/point telemetry for each preparation candidate and a 600-case separate-process bit-exact qualifier against the exact 12.3.25 scalar oracle.
-- Add a `ca19_ne1e8`-only repeated interleaved host timing sequence: `production-A -> tmpop-A -> production-B -> tmpop-B -> production-C -> tmpe-A -> production-D -> tmpe-B`, followed by one exact hinted-fallback science check. No candidate is production default in 12.3.32; promotion requires the host interleaved evidence.
-
-## 0.6.48.12.3.31
-
-- Promote the independently qualified 12.3.30 monotone `epi`/`opakc` cursor-advance consume path into the normal AVX2 Type-50 production path. The `ca19_ne1e8` host run measured `21.909288 s` Type-50 versus `23.558068 s` for the 12.3.30 hinted production path, with nine-FITS bit-data equivalence.
-- Retain the exact 12.3.30 boundary-hint implementation behind `XSTAR_V064812331_FORCE_12330_HINT_CONSUME=1` as an explicit qualification fallback. Keep the exact 12.3.25 scalar fallback unchanged.
-- Treat the boundary hint as science-safe but performance-neutral pending stronger repeated evidence: in the 12.3.30 host run the hinted production path (`23.558068 s`) and exact 12.3.28-style fallback (`23.554245 s`) were effectively tied.
-- Retire cached `next_epi` and local `updated_bins` from the 12.3.31 qualifier; their 12.3.30 host effects were small/noisy compared with cursor advancement. Register+hint, `ncut==4`, schedule caching, and heavy per-point counters remain retired.
-- Add diagnostic-only `XSTAR_V064812331_TYPE50_DECOMPOSE=1`, which uses five coarse per-profile clocks and shadow work to measure AVX2 small-`a` far-wing arithmetic, remaining scalar profile arithmetic, trapezoid arithmetic, boundary/rebin logic, and sequential `opakc` additions. The shadow phase never changes public opacity; the real cursor kernel executes afterward as the sole science update.
-- Add `v0648123310` readiness, separate-process randomized equivalence, local screening, and a `ca19_ne1e8`-only host qualifier comparing production, exact 12.3.30 fallback, and decomposition. Every non-production science mode must be nine-FITS bit-data equivalent to production.
-- Keep 12.3.25 science/publication behavior, production-zone ABI `6048110`, profile arithmetic, and source-order opacity additions frozen.
-
-## 0.6.48.12.3.30
-
-- Promote the independently accepted 12.3.29 likely-false Type-50 rebin boundary hint into the normal AVX2 production consume path. The branch condition and source-order arithmetic are unchanged; only compiler layout guidance is added. The host `ca19_ne1e8` qualification measured 22.449425 s Type-50 versus 23.766211 s for 12.3.28 production, with nine-FITS bit-data equivalence.
-- Keep an exact 12.3.28 consume fallback behind `XSTAR_V064812330_FORCE_12328_CONSUME=1`; the exact 12.3.25 scalar fallback remains available through `XSTAR_V064812328_FORCE_SCALAR_TYPE50=1`.
-- Retire register+hint, `ncut==4`, schedule-cache, and heavy per-point consume-counter modes from the 12.3.30 host qualifier. Their historical ABI/reporting code remains non-default, but none participates in production selection.
-- Add three independent, opt-in, element-generic micro-experiments layered on the promoted boundary-hint baseline: cached `next_epi` (`XSTAR_V064812330_ENABLE_NEXT_EPI_CACHE=1`), local per-profile `updated_bins` accumulation (`XSTAR_V064812330_ENABLE_LOCAL_UPDATED_BINS=1`), and monotone `epi`/`opakc` cursor advancement (`XSTAR_V064812330_ENABLE_CURSOR_ADVANCE=1`). No experiment combines changes.
-- Add profile-level telemetry only for the new modes, avoiding per-point measurement overhead. Add a `ca19_ne1e8`-only qualifier comparing promoted production, exact 12.3.28 fallback, and the three independent micro-experiments. Every non-production mode must be nine-FITS bit-data equivalent to production.
-- Keep 12.3.25 science/publication behavior and production-zone ABI 6048110 frozen. The remaining `xo01_detal2`, `xout_abund1`, and `xout_lines1` publication work remains a separate track.
-
-## 0.6.48.12.3.29
-
-- Freeze the accepted 12.3.28 production Type-50 inline far-wing AVX2 function as the default path; 12.3.29 experiments are dispatched only when explicitly enabled, so the normal path does not inherit experiment helper/template overhead. The exact 12.3.25 scalar fallback remains available.
-- Retire the negative 12.3.28 `ncut==4` consume experiment from the 12.3.29 qualifier.
-- Add opt-in generic register-resident source-order consumption (`XSTAR_V064812329_ENABLE_REGISTER_CONSUME=1`): `sume`, `opsum`, `tmpop`, previous energy, and `ml1m` remain direct locals, while `epi` and `opakc` cursors advance monotonically on source boundary crossings. `updated_bins` is accumulated locally and committed once per profile. Arithmetic and `opakc` update order are unchanged.
-- Add an independent opt-in likely-false boundary-layout hint (`XSTAR_V064812329_ENABLE_BOUNDARY_HINT=1`) using `__builtin_expect` around the unchanged `current_energy > next_epi` decision. It can be measured alone or together with register consumption.
-- Add diagnostic consume counters (`XSTAR_V064812329_TYPE50_CONSUME_COUNTERS=1`) for consumed points, boundary true/false points, boundary events, output bins advanced, and maximum bins per event. Counter mode is excluded from performance acceptance.
-- Add a `ca19_ne1e8`-only host qualifier that compares frozen production, register consume, branch hint, combined register+hint, and diagnostic counters. Every experiment must be nine-FITS bit-data equivalent to production. No experiment is production default in 12.3.29. Production-zone ABI remains 6048110 and 12.3.25 science/publication is frozen.
-
-## 0.6.48.12.3.28
-
-- Promote the 12.3.27 one-dispatch small-a `|v|>=5` far-wing AVX2 implementation into the normal standalone-C++ Type-50 production kernel on AVX2-capable x86 CPUs. The exact accepted 12.3.25 scalar Type-50 implementation remains the runtime fallback (`XSTAR_V064812328_FORCE_SCALAR_TYPE50=1`) and is also used automatically on unsupported CPUs/non-small-a profiles.
-- Remove `opacity_type50_experiments.cpp` from the normal opacity-library build and eliminate the 12.3.27 schedule-cache dispatch from `line_emissivity.cpp`; retired 12.3.26/12.3.27 telemetry remains zero ABI stubs only.
-- Replace the 12.3.27 `ev[4]`/`pv[4]` spill-and-lambda consumption in the promoted AVX2 path with direct lane extraction from AVX2 registers followed by the same scalar source-order trapezoid/rebin/`opakc` arithmetic.
-- Add an opt-in generic `ncut==4` consume specialization (`XSTAR_V064812328_ENABLE_NCUT4_UNROLLED_CONSUME=1`). A four-point block bypasses redundant boundary tests only when lane 3 is at/below the next continuum boundary; crossing blocks fall back to exact lane-by-lane source boundary handling. No element/model condition is used.
-- Add diagnostic optimized-path decomposition (`XSTAR_V064812328_TYPE50_DECOMPOSE=1`) into AVX2 far-wing profile arithmetic, remaining scalar profile arithmetic, and scalar trapezoid/rebin/`opakc` consumption.
-- Add a `ca19_ne1e8`-only host qualifier comparing promoted production, exact scalar fallback, diagnostic decomposition, and the opt-in `ncut==4` specialization. Every non-production mode must be nine-FITS bit-data equivalent to production. Production-zone ABI remains 6048110 and 12.3.25 science/publication behavior is frozen.
-
-## 0.6.48.12.3.27
-
-- Freeze the accepted 12.3.25 science, publication writers, and production Type-50 kernel while focusing performance qualification only on `helike_type69/ca19_ne1e8`.
-- Add an opt-in, geometry-only source-exact Type-50 rebin-schedule cache (`XSTAR_V064812327_ENABLE_REBIN_SCHEDULE_CACHE=1`). The cache key describes continuum-grid/rebin geometry; cached events store only temporary-grid boundary point and output span length. Profile/trapezoid arithmetic and every `opakc += optp2` commit remain sequential and source ordered.
-- Add an opt-in one-dispatch inline small-a far-wing AVX2 experiment (`XSTAR_V064812327_ENABLE_INLINE_FARWING_AVX2=1`). It vectorizes only contiguous `|v|>=5`, small-damping profile points, then consumes the four results sequentially through the unchanged trapezoid/rebin/opacity arithmetic. No full-profile buffer, per-four target dispatch, FMA, element-Z condition, or output-order change is introduced.
-- Add Type-50 schedule-cache statistics, `ncut` histogram, profile-point family counts, and inline-AVX2 point/block counters with O(1)-per-profile reporting.
-- Add a `ca19_ne1e8`-only host qualifier with frozen baseline, schedule-cache, and inline-farwing modes. A combined mode runs only when both individual experiments are independently bit-exact and faster in Type-50 profile time on the host.
-- Require all experimental modes to be nine-FITS bit-data equivalent to the frozen baseline. Keep the remaining `xo01_detal2`, `xout_abund1`, and `xout_lines1` publication work separate and frozen in this candidate. Production-zone ABI remains 6048110.
-
-## 0.6.48.12.3.26
-
-- Freeze the accepted 12.3.25 science and publication implementation. `opacity_kernels.cpp` is byte-for-byte identical to 12.3.25; `fixed_state_engine.cpp`, the matrix/rate/solver engines, and `xstar_science_fits.cpp` are frozen.
-- Focus performance qualification exclusively on `helike_type69/ca19_ne1e8`; no broad C/O/Mg/Ca rerun is required in this measurement candidate.
-- Add a diagnostic-only Type-50 three-pass decomposition in a separate translation unit: source-identical scalar profile values are generated first, source-ordered trapezoid/rebin work builds contiguous opacity-span events second, and the original per-bin `opakc += optp2` additions are replayed third. This permits profile-value, trapezoid/rebin, and range-update timing without per-bin clocks.
-- Add an opt-in experimental contiguous range-update AVX2 path (`XSTAR_V064812326_ENABLE_EXPERIMENTAL_RANGE_AVX2=1`). The production default remains the exact 12.3.25 scalar Type-50 kernel.
-- Add a three-mode host qualifier for `ca19_ne1e8`: frozen baseline, diagnostic phase decomposition, and experimental range AVX2. Both experimental modes must be nine-FITS bit-data equivalent to the baseline.
-- Keep the remaining `xo01_detal2`, `xout_abund1`, and `xout_lines1` publication issues as a separate frozen track in this candidate. Production-zone ABI remains 6048110.
-
-## 0.6.48.12.3.25
-
-- Repair generic detailed-matrix endpoint ownership to match literal `msolvelucy.f90` `min(ipmat,indb(...))`: source endpoints above the selected compact dimension alias to the normalization row instead of being discarded. The production path contains no Ca or record-number special case.
-- Apply the literal `calc_hmc_ion.f90` detailed-matrix source gate generically: rate types 8 and 15, plus the rate1+Type53 ownership case, do not enter the detailed matrix. Preliminary ion-balance/thermal ownership remains separate.
-- Generalize source `calc_hmc_element` runtime-seed policy to every element: a compact seed mapped from global `xilevg` is never pre-normalized before `msolvelucy`. The prior H/He/Mg/C-only preservation booleans are removed.
-- Retain the 12.3.24 exact Type-50 temporary-bound localization but restore the scalar source-faithful profile as production default. The 12.3.24 four-point AVX2 microkernel is not promoted.
-- Add an opt-in, experimental bulk AVX2 profile generator (`XSTAR_V064812325_ENABLE_EXPERIMENTAL_BULK_AVX2=1`) entered once per accepted line; rebin and opacity accumulation remain scalar/source ordered. It is qualification-only and never enabled by default.
-- Fix the diagnostic compact-seed CSV one-based guard indexing.
-- Add a five-model C/O/Mg/Ca qualifier plus exact final C++/Python matrix-term presence, required terminal Type49 commit checks, Ca XVIII/Ca XVII population closure, downstream spectrum reporting, and `ca19_ne1e8` scalar/bulk/FORTRAN performance reports. Production-zone ABI remains 6048110.
-
-## 0.6.48.12.3.24
-
-- Add a generic Type-50 `linopac` performance path that algebraically localizes the valid 20,000-point temporary-grid interval and then corrects the estimated integer bounds with the literal source energy predicate. No element-Z or model-specific condition is used.
-- Add runtime-dispatched AVX2 evaluation for four independent small-damping (`0<a<=0.2`) far-wing Voigt values at a time. Every trapezoid, rebin decision, and `opakc +=` remains scalar and in the original source order. Non-AVX2 CPUs and `XSTAR_V064812324_FORCE_SCALAR_TYPE50=1` use the scalar path.
-- Preserve the accepted 12.3.22 Type-50 source eligibility gate and the 12.3.23 source `expo/eint` correction. Production-zone ABI remains 6048110.
-- Correct the diagnostic fixed-state Python replay so per-element `initial_global_populations` are populated from the captured dense source `xilevg` rather than an explicit empty mapping. This is diagnostic-only.
-- Add diagnostic-only call-1 population-state captures for eval-1 input, every DSEC post-mapback state, accepted-boundary post-mapback state, and detail-publication global projection.
-- Add a two-model qualifier for `ca19_ne1` and `ca19_ne1e8`. It performs candidate-vs-scalar nine-FITS bit-data equivalence, reports C++/FORTRAN timing and Type-50 profile work/vectorization, and localizes the Ca XVIII population discrepancy across last-DSEC, accepted-boundary, and detail-publication states.
-
-## 0.6.48.12.3.23
-
-- Repair the source `expo.f90` / `eint.f90` contract generically in the C++ fixed-state engine: source `expo()` clamps at +/-60, while the generic numerical overflow helper remains +/-700 for paths that do not call source `expo`.
-- Apply the literal source `expo(t)`/`exp(-t)`/`expo(-t)` distinction inside the shared `eint_values` helper used by source EINT callers.
-- Repair Type-95 detailed balance to divide by source `expo(-1./tt)` rather than the generic +/-700 exponential guard. The change contains no element-Z or Ca-specific condition.
-- Preserve the accepted 12.3.22 all-element Type-50 speed gate, active-stage two-pass traversal, atomic ordering, FITS publication logic, and production-zone ABI 6048110.
-- Add a C/O/Mg/Ca regression runner plus the one-shot Ca fixed-state matrix replay and detailed `ca19_ne1` population/spectrum checks. Independent publication issues (missing detail rows, Ca thermal attribution, abundance radius, H line-depth identity) are reported but not altered by this rate fix.
-
-## 0.6.48.12.3.22
-
-- Generalize the literal FORTRAN Type-50 inner `linopac` gate to the shared C++ `FULL_LINE` path for every element: scalar line state is retained, but profile/rebin work is skipped unless `opakb1 > REAL(1.e-34)`.
-- Treat data type 91 as the same source family because `ucalc.f90` explicitly jumps to label 50; deliberately exclude data type 89 because its FORTRAN branch uses the different `opakb1*delr > 1.d-8` predicate.
-- Preserve the already-generic 12.3.14 endpoint-abundance gate and 12.3.15 active-stage two-pass traversal. No element-Z performance branch is introduced.
-- Add a six-model C/O/Mg/Ca targeted qualifier that runs directly from the unpacked source tree and requires zero source-rejected-but-called Type-50 profiles plus frozen core trajectory/thermal/option-17/22 science.
-
-## 0.6.48.12.3.21.2
-
-- Fix the one-shot fixed-radial Python replay when the native C++ line-tau workspace is an active-element source-index prefix while Python retains the full ATDB `nlsvn` domain.
-- Preserve source index `line_index-1`, require the native prefix to cover every active source line, and zero-extend only the inactive tail.
-- Keep production science unchanged; resume mode reuses the existing C++ diagnostic capture.
-
-## 0.6.48.12.3.21.1
-
-Diagnostic hotfix only. Fixes the one-shot Python radial replay import so `FixedStateElementRequest` is imported from `xstar.local_zone`, where it is defined. Adds package-local `PYTHONPATH` provenance validation, disables user-site shadowing, and adds a resume wrapper that reuses an already completed 12.3.21 C++ diagnostic capture. No production science or C++ numerical implementation is changed.
-
-## 0.6.48.12.3.21
-
-- Diagnostic-only one-model `ca19_ne1` Ca XVIII/Ca XVII matrix-term attribution from the call-1 final recompute that publishes the first `XSTAR_RADIAL` extension, including live line and continuum optical-depth state; production rate/matrix/atomic/FITS science is unchanged.
-- Diagnostic-only Type-50 outer-gate and source-inner `linopac` acceptance/work counters, including source-rejected-but-called profile bins/seconds and derived source-equivalent calls/bins/seconds.
-- Adds a one-shot source-faithful Python fixed-state replay and analyzer that identifies the first differing atomic record/data type/rate type.
-
-## 0.6.48.12.3.20 — generic npilev source ordinals + Type50 fstepr2 publication shadow
-
-- Generalize the existing FORTRAN `setptrs`/`npilev` source-ordinal mapping from Mg-only to every element for both primary global row ownership and row aliases. This is a topology/addressing correction, not an element-specific row shift.
-- Add the accepted source-faithful Type-50/rate-4 `fstepr2` publication-activity shadow to the generic C++ detail-line writer. It mirrors the default-REAL `1.e-34` endpoint gate, reconstructs caller-local stale `opakb1` from the retained physical `oplin`, and applies only the `1.d-64` detail identity gate.
-- The shadow is output-only and does not modify `rcem`, `oplin`, `tau0`, profiles, transport, equilibrium, or the public `xout_lines1.fits` inventory.
-- Targeted qualification remains `helike_type69/ca19_ne1`, with blocking gates for the Ca XVIII local-level >=25 `index/e_excitation/population` tail and full `xo01_detal2` FORTRAN inventory. `xo01_detal3`, Option 19/`xout_rrc1`, Option 27, and `xo01_detal4` are frozen.
-
-## 0.6.48.12.3.19 — source detailed-FITS identity/inventory and Type53 direction closure
-
-- Extend the 12.3.17/12.3.18 population-lifetime work without changing its accepted Option-19/RRC physics. The remaining `xo01_detail.fits` mismatch is an identity/publication problem: FORTRAN `fstepr` walks every source ion/local-level `npilev` role, while the generic C++ metadata had collapsed each shared continuum/next-ion-ground compact row to one identity and then applied a non-source terminal-stage filter.
-- Retain a dedicated `detail_level_identities` inventory from source `npilev` addresses. `xo01_detail.fits` now traverses those source roles without active-stage filtering and applies only the literal `xilev > 1.d-34` publication gate. The 12.3.18 dense source-detail population projection remains the value owner, so inactive upper aliases stay zero while legitimate shared continuum aliases and active Ca XVIII levels remain publishable.
-- Make generic `xo01_detal2.fits` follow literal `fstepr2`: detail-order line identities bypass the terminal-product stage filter and are selected by local `rcem(1/2)`/`oplin > 1.d-64`, rate-type exclusions, and wavelength bounds. Public `xout_lines1.fits` keeps its separate active/ranked selection semantics.
-- Make generic `xo01_detal3.fits` follow literal `fstepr3`: detail inventory bypasses the public-RRC active-stage filter and uses the local `cemab(1/2)`/`cabab`/`opakab > 1.e-36` gate. Public `xout_rrc1.fits` remains on the accepted 12.3.17 post-map-back inventory and is explicitly frozen by qualification.
-- Fix generic Type53 detailed-RRC direction ownership by retaining the live source `ptmp1/ptmp2` escape factors in all Type53 shadow lifetimes (`calc_hmc`, `calc_emisab`, and `calc_emis`). This moves the affected Ca Type53 emissivity from the stale default inward owner to the source outward owner without altering the accepted Type53 Milne/rate calculation.
-- Add a single-model `helike_type69/ca19_ne1` qualifier that blocks on complete `xo01_detail`, `xo01_detal2`, and `xo01_detal3` inventories/identities, Type53 direction, <=1% normalized-L1 numeric parity, frozen `xo01_detal4`, frozen Option-19/`xout_rrc1`/Option-27, and pruned/forced bit-exact equivalence.
-- No Ca-specific production branch, empirical rescaling, solver change, Type50 change, `xo01_detal4` science change, or production-zone ABI change. ABI remains 6048110.
-
-## 0.6.48.12.3.18 — source `fstepr` detail-population lifetime separation
-
-- Keep the accepted 12.3.17 post-mapback population view unchanged for Option-19/Type53/RRC physics. The `ca19_ne1` host run closes Ca XVII Option-19 to <0.1% and removes all non-source Ca XVIII RRC rows, so this stage does not alter that spectral path.
-- Repair the 12.3.17 overcorrection in `xo01_detail.fits:XSTAR_RADIAL`. FORTRAN `fstepr` publishes the global `xilevg` produced by `calc_hmc_all`, with the literal `xilev > 1.d-34` gate. `calc_hmc_all` maps the overlapping local element array back ion-by-ion (`1..nlev-1`, then the terminal row), so its public global identities cannot be reconstructed by blindly expanding every compact row after inactive zeros are filled.
-- Retain the solved compact/full-row population snapshot plus the per-element active `mml/mmu` window, then reconstruct the source `calc_hmc_all` global writeback using the actual compact-row alias topology. Internal shared rows between active ions retain both global identities; when the highest active stage is truncated, the upper shared terminal/next-ground row is suppressed because the following inactive ion zeroes that local overlap before the global map-back.
-- Use the dedicated dense detail snapshot only for `xo01_detail.fits` population publication. LTE continues to use the retained source `rnisg` surface; no `lte==0` heuristic is introduced.
-- Add a single-model `ca19_ne1` qualifier requiring the FORTRAN Ca XVIII radial lifetime (32, 32, 31, 0, 0 rows), exact identities, <=1% population/LTE values, no stale outer Ca XVIII row, frozen Option-19/RRC closure, frozen Option-27, and pruned/forced equivalence.
-- No Ca-specific production branch, empirical scaling, solver change, or production-zone ABI change. ABI remains 6048110.
-
-## 0.6.48.12.3.17 — source post-map-back terminal-alias RRC repair
-
-- Fix the remaining low-density Ca Option-19/RRC defect without empirical scaling. FORTRAN `calc_hmc_element` maps the compact highest-active-ion continuum row back to `xileve`, then the next inactive ion zeros that same overlapping row before `calc_emisab_all`/`calc_emis_all`; C++ had exposed the compact normalization value directly to spectral construction and retained it as a physical next-ion ground population.
-- Add a generic post-map-back population view that zeros only the shared upper-boundary row when `active.max_stage < element_z`. Use it for bound-free/RRC and broad spectral abundance consumers while leaving compact solver/thermal arithmetic unchanged.
-- Commit the same post-map-back zero into the full population output/global `xilevg` state, preventing stale upper-boundary normalization aliases from surviving into later evaluations or `xo01_detail.fits`. Qualification-only fixed-state closure applies the same rule.
-- This source lifetime explains both observed `ca19_ne1` symptoms: the 25 extra Ca XVIII Option-19 rows and the stage-wide ~19.9% high Ca XVII integrated RRC luminosities. No `/xee` correction and no Ca-specific branch are introduced.
-- Add a single-model `ca19_ne1` pruned/forced qualifier. Blocking gates require Ca XVII Option-19 values within 1%, zero Ca XVIII Option-19/xout_rrc1 rows, source-matching Ca XVIII detail inventory, and frozen Option-27 parity. All-nine-FITS pruned/forced bit-exact remains reported separately.
-- Preserve the 12.3.16 source-`xii` Option-27 fix, 12.3.15 active-stage two-pass path, 12.3.14 Type50 source gates, and production-zone ABI 6048110.
-
-## 0.6.48.12.3.16 — source `xii` abundance/Option-27 publication repair
-
-- Repair the low-ionization Ca terminal-stage publication defect exposed by `ca19_ne1`: the compact active-element solver uses the next-ion ground row as its normalization row, but the product layer had later reinterpreted that expanded full-row slot as a physical population of the next ion. This produced a false Ca XIX abundance/column and removed part of the true Ca XVIII column.
-- Retain the already-computed final per-ion `xii` stage fractions from the fixed-state element diagnostic and carry them through accepted DSEC snapshots into `FixedEvaluationState`. `xout_abund1.fits` now uses this source `pprint(12)` stage-fraction surface instead of reconstructing ion fractions from the expanded full-level vector whenever the retained `xii` surface is available.
-- Keep the historical full-level reconstruction only as a fallback for old/synthetic states; no solver, rate, thermal, Type50, or active-window arithmetic is changed.
-- Fix Option 27 formatting to mirror FORTRAN `(1x,i4,1x,9a1,1pe16.8)`: a 9-character ion field followed by a 16-character scientific value prevents eight-character names such as `ca_xviii` from concatenating with the number. The writer also restores the source default-REAL `xcoltmp > 1.e-15` publication threshold instead of the former `abs(v) > 1e-30` test.
-- Add a targeted three-model qualifier (`c5_ne1`, `mg11_ne1e8`, `ca19_ne1`). The Ca model additionally runs forced-full mode and requires source-`xii` abundance/column publication to be identical between pruned and forced-full execution, Ca XVIII column density within 1% of FORTRAN, and no spurious Ca XIX abundance/column.
-- Keep the known Ca XVII Option-19 RRC normalization discrepancy and the 12.3.15 inactive-RRC A/B issue separate from this publication fix. Production-zone ABI remains 6048110; no Ca-specific physics or performance branch is introduced.
-
-## 0.6.48.12.3.15 — source two-pass active-stage traversal candidate
-
-- Build on the scientifically accepted targeted 0.6.48.12.3.14 generic Type50 source gates; retain both source-REAL `1.e-34` gates unchanged.
-- Reorder the native element evaluator to mirror `calc_hmc_element.f90`: a restricted `calc_ion_rates`-equivalent first pass establishes `pirti/rrrti` and literal `mml/mmu` before the expensive per-ion body is evaluated.
-- Reuse first-pass `EvaluatedRecord` values when the same record belongs to the active second-pass window, avoiding duplicate rate evaluation.
-- Fully evaluate second-pass records only for active stages, while conservatively retaining all rate-type-7 records as source-global setup/`errc` owners and retaining structural records.
-- Add `XSTAR_V064812315_FORCE_FULL_RECORD_TRAVERSAL=1` for same-executable A/B qualification. The targeted qualifier requires all nine FITS data payloads to be bit-exact between pruned and forced-full modes.
-- Add per-controller-call record-evaluation counters so high-ionization Ca pruning can be measured directly rather than inferred from wall time.
-- No element-specific performance shortcut is introduced; production-zone ABI 6048110, DSEC/thermal/source/ionization fixes, and Python science remain frozen.
-
-## 0.6.48.12.3.14
-
-- Restore the two literal FORTRAN Type-50 performance gates generically for all elements. The broad `calc_emisab_ion` line stream now requires density-scaled endpoint abundance above default-REAL `1.e-34` for rate families 4/9/14; ordinary Type-50 profile traversal now requires `opakb1 > REAL(1.e-34)` while retaining scalar line publication.
-- Keep the complete atomic record traversal unchanged in this candidate so rate/matrix ownership remains frozen; the separate FORTRAN-style active-ion two-pass optimization is deliberately deferred until this Type-50 change is host-qualified.
-- Add a four-model targeted performance/science qualifier (`c5_ne1`, `ca19_ne1`, `ca19_ne1e8`, `ca19_ne1e12`) against the frozen 12.3.13 all-62 outputs and canonical FORTRAN logs.
-- Add a qualification-only step-log comparator that separates numeric science, publication inventory/identity, formatting, and ranked-list metadata. Offline reinterpretation of the frozen 12.3.13 logs gives numeric science 62/62 while preserving inventory/ranking/formatting defects as independent report-fidelity gates.
-- No Python science, DSEC/controller, thermal, Type88, retained-xcol, option-17/22 writer science, or production-zone ABI changes. ABI remains 6048110.
-
-## 0.6.48.12.3.13
-
-- Qualification-only all-62 `xout_step.log` science survey after 0.6.48.12.3.12 closed the ionization-parameter state-ownership defect in `c5_ne1` and the remaining eight historical option-17 failures.
-- Replace positional comparison of identity-bearing print sections with source-identity alignment. Options 1/23 align by line index with rank/top-500 membership diagnostic-only; option 15 aligns by line index; options 19/24 align by continuum storage index; option 27 aligns by ion identity.
-- Compare scientific numerics at a 1% relative tolerance. Option 17 retains chronological zone semantics and exact DSEC identity while treating base-10 logarithms as physical quantities and one-last-digit 0.01-dex differences as display-quantization ambiguous. H-C percentage columns use a one-percentage-point absolute tolerance.
-- Treat option 16 as CPU timing/accounting only and exclude it from science acceptance. Separate numeric >1% discrepancies, material inventory mismatches, and rank/order diagnostics into dedicated CSV outputs.
-- Preserve all production science from 0.6.48.12.3.12.1 byte-for-byte apart from version metadata. No pure-Python rerun, `cpp-all`, or nine-FITS audit is part of this stage.
-
-## 0.6.48.12.3.12.1
-
-- Qualification-only follow-up after `c5_ne1` closed option-17/22 ionization-parameter parity.
-- Add targeted runner for the remaining eight historical option-17 failures.
-- No production science implementation changes from 0.6.48.12.3.12.
 
 ## 0.6.48.12.3.35.2 - 2026-08-03
 
@@ -1188,7 +653,7 @@ Diagnostic hotfix only. Fixes the one-shot Python radial replay import so `Fixed
 
 ## 0.6.48.12.3.18 — source `fstepr` detail-population lifetime separation - 2026-08-01
 
-- Keep the accepted 12.3.17 post-mapback population view unchanged for Option-19/Type53/RRC physics. The `ca19_ne1` host run closes Ca XVII Option-19 to <0.1% and removes all non-source Ca XVIII RRC rows, so this stage does not alter that spectral path.
+- Keep the accepted 12.3.17 post-mapback population view unchanged for Option-19/Type53/RRC physics. The `ca19_ne1` host run closes Ca XVII Option-19 to `<0.1%` and removes all non-source Ca XVIII RRC rows, so this stage does not alter that spectral path.
 - Repair the 12.3.17 overcorrection in `xo01_detail.fits:XSTAR_RADIAL`. FORTRAN `fstepr` publishes the global `xilevg` produced by `calc_hmc_all`, with the literal `xilev > 1.d-34` gate. `calc_hmc_all` maps the overlapping local element array back ion-by-ion (`1..nlev-1`, then the terminal row), so its public global identities cannot be reconstructed by blindly expanding every compact row after inactive zeros are filled.
 - Retain the solved compact/full-row population snapshot plus the per-element active `mml/mmu` window, then reconstruct the source `calc_hmc_all` global writeback using the actual compact-row alias topology. Internal shared rows between active ions retain both global identities; when the highest active stage is truncated, the upper shared terminal/next-ground row is suppressed because the following inactive ion zeroes that local overlap before the global map-back.
 - Use the dedicated dense detail snapshot only for `xo01_detail.fits` population publication. LTE continues to use the retained source `rnisg` surface; no `lte==0` heuristic is introduced.
@@ -1251,7 +716,7 @@ Diagnostic hotfix only. Fixes the one-shot Python radial replay import so `Fixed
 - Make option 22 use terminal retained radius, startup `ispcg2` `enlum`, and final-writer `zremsz`/electron state for `gamma`, `u1`, `ux`, and pressure `Xi`.
 - Add one-model `helike_type69/c5_ne1` qualification; no DSEC/rate/population/thermal science change.
 
-# 0.6.48.12.3.11.1 — all-62 survey runner/readiness hotfix - 2026-08-01
+## 0.6.48.12.3.11.1 — all-62 survey runner/readiness hotfix - 2026-08-01
 
 - No science change. Fix the all-62 step-log survey entrypoint after 0.6.48.12.3.11: the reused 12.3.10 readiness checker hard-coded the 12.3.10 version and rejected 12.3.11 before model 1.
 - Add a 12.3.11-specific all-62 wrapper and readiness checker that verify the retained-xcol termination fix plus the frozen normalization, Type88, source-spectrum logging, ABI, manifest, and semantic comparator surfaces.
@@ -1271,7 +736,7 @@ Diagnostic hotfix only. Fixes the one-shot Python radial replay import so `Fixed
 - Add a 15-model failed-zone/thermal regression runner and a separate 62-model xout_step-only survey.
 - Add semantic step-log comparison for source spectrum, option 17, final thermal values, option 22, and verbose report-section diagnostics.
 
-# 0.6.48.12.3.9 — generic terminal normalization-seed source parity - 2026-07-31
+## 0.6.48.12.3.9 — generic terminal normalization-seed source parity - 2026-07-31
 
 - Fix the remaining source-faithful global-to-compact population seed gap exposed by the 12.3.8 O VII transition attribution. Python/source semantics execute `x(ipmat2+1)=0.` after every element's overlapping global `xilevg` -> compact mapping and before `msolvelucy`; C++ had promoted this terminal zero only for H/He/Mg/C and left O/Ca seeded from the prior fully-stripped global population.
 - Apply the terminal normalization-row zero generically to every element, while preserving already-qualified H/He/Mg element-specific diagnostic identity branches. No DSEC tolerances, secant/root arithmetic, preliminary rates, matrix terms, Type50, Type88, radial transport, or product writers are changed.
@@ -1279,7 +744,7 @@ Diagnostic hotfix only. Fixes the one-shot Python radial replay import so `Fixed
 - Extend qualification-only selected solve capture to call-1 evaluations 25 and 26, the first late-evaluation region where 12.3.8 reanalysis found a material O population/HMCTOT split.
 - Add a single-model `helike_type69/o7_ne1e12` qualification runner. It performs no pure-Python rerun, verifies the O normalization seed is exactly zero at evaluations 2/25/26, and checks zone/DSEC/option-17/final thermal values against FORTRAN. No O-family, 15-model, 62-model, or `cpp-all` run is performed.
 
-# 0.6.48.12.3.8 — O VII call-1 state-transition attribution - 2026-07-31
+## 0.6.48.12.3.8 — O VII call-1 state-transition attribution - 2026-07-31
 
 - Freeze the real 0.6.48.12.3.7 Type88 caller-capacity correction and all previously accepted science. No DSEC tolerance, controller, rate, population, or thermal science behavior changes in this revision.
 - Respond to the remaining O VII `31;9;15` vs Python/FORTRAN `36;9;16` trajectory by comparing the exact state written by one fixed-state evaluation with the state consumed by the next.
@@ -1295,7 +760,7 @@ Diagnostic hotfix only. Fixes the one-shot Python radial replay import so `Fixed
 - Repair the eval-1 comparator to ignore implementation-local ion ordinals and compare source-semantic ion stage/charge, and to align matrix terms by semantic identity rather than emission order.
 - Add one-model `o7_ne1e12` Type88 science qualification. No broad O-density or 15/62-target rerun is performed.
 
-# 0.6.48.12.3.6 — O VII eval-1 detailed population/Lucy solve attribution - 2026-07-31
+## 0.6.48.12.3.6 — O VII eval-1 detailed population/Lucy solve attribution - 2026-07-31
 
 - Freeze all 0.6.48.12.3.5.2 science behavior, including the accepted xi=2 final-zero line-tau correction.
 - Add a diagnostic-only Python selector for requesting Lucy traces from an arbitrary element during live DSEC evaluation; production behavior is unchanged when unset.
@@ -1305,7 +770,7 @@ Diagnostic hotfix only. Fixes the one-shot Python radial replay import so `Fixed
 - Add a source-stage-aware Python/C++ comparator that reports the first material locus from basis/input through final compact populations.
 - Keep runtime qualification restricted to `helike_type69/o7_ne1e12`; no broad benchmark run and no `cpp-all`.
 
-# 0.6.48.12.3.5.2 — O VII DSEC snapshot ownership hotfix - 2026-07-31
+## 0.6.48.12.3.5.2 — O VII DSEC snapshot ownership hotfix - 2026-07-31
 
 - Fix the second-evaluation crash in the pure-Python call-1 DSEC attribution capture. With `diagnostics_mode=none`, `last_calc_hmc_all` is intentionally reduced to a scalar `SimpleNamespace`; the input-snapshot path incorrectly reached through that reduced object for `global_level_index_by_key`.
 - Snapshot `global_level_index_by_key` from the current mutable `DsecMutableRuntimeState`, which is the source-faithful owner committed by the previous trial and the state actually entering the next trial.
@@ -1313,7 +778,7 @@ Diagnostic hotfix only. Fixes the one-shot Python radial replay import so `Fixed
 - Preserve all O VII science kernels and the accepted 12.3.4 xi=2 final-zero live-line-tau correction. No rates, matrices, populations, root/controller logic, radial transport, or product writers are changed.
 - Add `run_v064812352_o7_call1_dsec_attribution.sh`; it keeps the 12.3.5 output layout so the user's completed cpp-zone result can be reused without rebuilding or rerunning C++.
 
-# 0.6.48.12.3.5.1 — O VII attribution runner hotfix - 2026-07-31
+## 0.6.48.12.3.5.1 — O VII attribution runner hotfix - 2026-07-31
 
 - Fix pure-Python call-1 DSEC attribution capture: production-memory mode suppressed `element_results` even though the live evaluation callback requires them. Retain element results only while a live DSEC gate is installed; continue to discard complete per-evaluation fixed-state result history and source-sized diagnostic arrays.
 - Fix final-print JSON parsing: `compare_final_print.py` stores `[candidate, reference]` arrays, while the 12.3.5 runner expected mapping rows. Accept both forms and compute the relative difference identically.
@@ -1332,7 +797,7 @@ Diagnostic hotfix only. Fixes the one-shot Python radial replay import so `Fixed
 - Add an O-only trajectory comparator that separates same-input fixed-state divergence from later DSEC/controller-state divergence and identifies the first causal evaluation.
 - The default 12.3.5 runner executes only `helike_type69/o7_ne1e12`; no 15-model or 62-model survey and no `cpp-all` path are entered.
 
-# 0.6.48.12.3.4 — O VII attribution + xi=2 final-zero thermal-state fix - 2026-07-31
+## 0.6.48.12.3.4 — O VII attribution + xi=2 final-zero thermal-state fix - 2026-07-31
 
 - Narrow the active qualification set from the 15 failed zone/thermal targets to exactly three physical cases: `helike_type69/o7_ne1e12`, `helike_type69/ca19_xi2_ne1e8`, and `mg_ca_triplet_targets/mg11_xi2_ne1e8`. No 15-model or 62-model broad run is performed in this revision.
 - Repair a generic post-loop source-lifetime error in standalone cpp-zone final recomputation. FORTRAN passes the live `tau0/tauc` line escape state into the final zero-thickness `xstarcalc` regardless of radial-zone count; C++ previously enabled `XSTAR_FIXED_RUNTIME_STATE_LINE_TAU_ACTIVE` only for `call_index >= 3`, incorrectly disabling live line escape in final recomputes of one- and two-zone models. The final snapshot now enables live line tau explicitly while physical DSEC-call behavior is unchanged.
@@ -1341,7 +806,7 @@ Diagnostic hotfix only. Fixes the one-shot Python radial replay import so `Fixed
 - Add an automatic Python-vs-C++ O VII attribution comparator. It verifies identical trial T/xee, aligns thermal ledgers by source record/data type/rate type/ion identity, and reports the first material element plus dominant data/rate family and record/source position.
 - Keep the fixed-state engine, element engine, line emissivity, thermal kernels, output writers, option-17 writer, Python local-zone science, and accelerated final-recompute bridge byte-identical to 0.6.48.12.3.3. Production-zone ABI remains 6048110.
 
-# 0.6.48.12.3.3 — targeted cpp-zone zone/thermal repair qualification - 2026-07-31
+## 0.6.48.12.3.3 — targeted cpp-zone zone/thermal repair qualification - 2026-07-31
 
 - Convert the 0.6.48.12.3.2.2 all-62 survey into a targeted repair stage. The source survey found 9 DSEC/zone failures and 9 blocking thermal failures, with 3 overlapping benchmark IDs; the union is 15 benchmark IDs (13 unique physical parameter cases).
 - Run only that 15-ID union. The other 47 benchmark IDs are frozen and are not rerun while zone and thermal science are repaired.
@@ -1395,13 +860,13 @@ Qualification-runner hotfix only; no science implementation changes.
 - cpp-zone can requalify an existing same-version Python+CPP product directory if the acceptance marker is absent, avoiding an expensive rerun solely to create the marker.
 - Existing Type49/53 Z=1..30 persistent leveltemp science and final-recompute bridge are byte-identical to 0.6.48.12.3.1.1.
 
-# 0.6.48.12.3.1.1 — runner reference-materialization hotfix - 2026-07-30
+## 0.6.48.12.3.1.1 — runner reference-materialization hotfix - 2026-07-30
 
 - Fix `set -u` failure in both 12.3.1 qualification runners by separating `local input`, `local label`, and `local dest` declarations.
 - Require the same-version Python+CPP acceptance marker before cpp-zone uses a directory as its current Python+CPP product reference.
 - No C++ or Python science change from 0.6.48.12.3.1.
 
-# 0.6.48.12.3.1 — Z=1–30 persistent leveltemp and Python+CPP terminal bridge - 2026-07-30
+## 0.6.48.12.3.1 — Z=1–30 persistent leveltemp and Python+CPP terminal bridge - 2026-07-30
 
 - Generalize source-persistent `leveltemp(2,1:5000)` ownership for Type49/Type53 from the historical Mg-only reconstruction to the full supported Z=1–30 C++ path.
 - Carry the 5000-column source energy workspace persistently across elements and fixed-state evaluations. For a Type49/53 destination column not written by any active ion in the current source passes, use the incoming shared workspace value instead of a static ATDB level snapshot.
@@ -1412,7 +877,7 @@ Qualification-runner hotfix only; no science implementation changes.
 - Advance only the final-recompute bridge ABI to `60481231`; production-zone ABI remains `6048110`, fixed-state program ABI remains `60486`, and the public xstar API ABI remains unchanged.
 - Add separate one-model host qualification runners for Python-zone+C++ science and cpp-zone. Python+CPP must close products/option-17 against accepted pure Python and its terminal final-print against FORTRAN; cpp-zone must first close the Ca fixed-state gate and then close products against the fresh same-version Python+CPP reference, option-17/final-print against FORTRAN, while never entering `cpp-all`.
 
-# 0.6.48.12.3 — generic bound-free source promotion and Ca zone/product qualification - 2026-07-30
+## 0.6.48.12.3 — generic bound-free source promotion and Ca zone/product qualification - 2026-07-30
 
 - Promote the already-computed source-faithful Type49/Type53 `phint53`/Milne results for all non-frozen generic elements while preserving the qualified H/He/C/Mg compatibility paths exactly.
 - Require lowered continuum context and live optical-depth workspaces for generic Type53 instead of silently retaining the old approximate bound-free rates.
@@ -1422,14 +887,14 @@ Qualification-runner hotfix only; no science implementation changes.
 - Keep broader smoke gated behind a successful Ca marker. Do not enter `cpp-all` in 12.3 until Ca cpp-zone science and products pass.
 - Preserve production-zone ABI 6048110 and the accepted 11.9.3 Python output writer bit-exactly. No empirical scaling and no Ca-specific physics branch are introduced.
 
-# 0.6.48.12.2.1.1 - 2026-07-30
+## 0.6.48.12.2.1.1 - 2026-07-30
 
 - Diagnostic-runner hotfix for the Ca call-1/eval-1 attribution workflow.
 - The production DSEC hot path intentionally elides per-record provenance; `write_last_diagnostics_v1()` therefore had no completed record diagnostic sidecar at eval 1.
 - `run_v06481221_ca_attribution.sh` now sets `XSTAR_V064897_FORCE_096_RECORD_PROVENANCE=1` only for the attribution run, restoring the existing diagnostic record sidecar without changing fixed-state science, controller logic, or product writers.
 - Source-tree `PYTHONPATH`, all-element solve-response capture, and the 12.2.1 Python/C++ attribution tooling are otherwise unchanged.
 
-# 0.6.48.12.2.1 - 2026-07-30
+## 0.6.48.12.2.1 - 2026-07-30
 
 - Add diagnostic-only Ca call-1/eval-1 fixed-state attribution for Python vs C++.
 - Capture pure-Python evaluation 1 only, aborting before the remaining DSEC trajectory.
@@ -1545,7 +1010,7 @@ The Ca XVIII line 88440 omission remaining in accepted 11.9.3 is now treated sep
 
 Run only `helike_type69/ca19_xi2_ne1` with `run_v064811942_multimodel.sh ... python-one`.  The immediate regression target is recovery of the accepted 11.9.3 inventory before any decision is made about the single 88440 compatibility row.
 
-# 0.6.48.11.9.4.1 - 2026-07-29
+## 0.6.48.11.9.4.1 - 2026-07-29
 
 Pure-Python Type50 detail-publication regression hotfix.
 
@@ -1554,7 +1019,7 @@ Pure-Python Type50 detail-publication regression hotfix.
 - Keeps raw Type50 stale-state reconstruction output-only; no changes to physical `rcem`, `oplin`, `opakc`, equilibrium, continuum/RRC, transport, or C++ science.
 - Expected to restore the 11.9.3 zero/negligible `xo01_detal2` rows and make Ca XVIII line 88440 abundance-active on its own (`caabund=1`).
 
-# 0.6.48.11.9.4 - 2026-07-29
+## 0.6.48.11.9.4 - 2026-07-29
 
 - Pure-Python detail-line publication-shadow closure only.
 - Advance the caller-local Type50 `opakb1` publication shadow from the raw source Type50 evaluation for every eligible source record, including records later excluded from public output.
@@ -1563,14 +1028,14 @@ Pure-Python Type50 detail-publication regression hotfix.
 - Target the remaining Ca XVIII source line 88440 identity omission after the artificial/non-published Type50 source sequence near line 88438.
 - Retain repeated `XSTAR_RADIAL` comparator occurrence semantics and the one-model pure-Python qualification workflow.
 
-# 0.6.48.11.9.3 - 2026-07-29
+## 0.6.48.11.9.3 - 2026-07-29
 
 - Pure-Python detail-line publication closure: add a generic Type50/rate-4 source activity shadow based on the literal `calc_emisab_ion.f90` endpoint-abundance gate (`1.e-34`).
 - Preserve FORTRAN zero/negligible detail-line identities without writing stale/uninitialized `opakb1` into physical `oplin`, continuum opacity, equilibrium, rates, or transport. A deterministic output-only stale-scalar shadow is reconstructed only for row identity.
 - Fix the multi-model FITS comparator so repeated `XSTAR_RADIAL` HDUs are keyed and reported by occurrence (`XSTAR_RADIAL#1`, `#2`, ...), rather than silently overwriting all but the final shell.
 - Keep the 0.6.48.11.9.2 source-default-REAL column-limit correction and `python-one` workflow. No equilibrium, rate, transport, continuum, RRC, or C++ scientific changes.
 
-# 0.6.48.11.9.2 - 2026-07-29
+## 0.6.48.11.9.2 - 2026-07-29
 
 - Pure-Python Ca XIX xi=2 radial-boundary correction: normalize the user `column` input through source default-REAL (`float32`) semantics before promoting it to the Python REAL(8)-equivalent `xpxcol`. For `column=1e20`, this preserves the FORTRAN value `1.0000000200408773e20` and therefore the final boundary shell instead of terminating at exact binary64 `1e20`.
 - Add `python-one MODEL_ID`, a no-C++ single-model qualification stage for iterative pure-Python repair. It reuses the same FORTRAN comparator and supports `XSTAR_QUALIFICATION_CACHE_DIR` so the expensive ATDB pointer/metadata cache can be reused across one-model runs.
@@ -1585,7 +1050,7 @@ Pure-Python Type50 detail-publication regression hotfix.
 - Compares every successful Python model directly with its canonical FORTRAN products.
 - This release intentionally makes no Python physics correction before the first all-Python smoke evidence is available.
 
-# 0.6.48.11.9 — C Type53 source-faithful Milne promotion / high-ion solve closure - 2026-07-29
+## 0.6.48.11.9 — C Type53 source-faithful Milne promotion / high-ion solve closure - 2026-07-29
 
 - Promotes the already-computed source-faithful `phint53`/Milne shadow for carbon Type53 records into the committed native rate answers.
 - Removes the generic carbon use of the legacy `exp(+threshold/kT)` reverse-rate approximation that 11.8 attributed to catastrophic C V↔C VI and C VI↔terminal matrix coefficients.
@@ -1594,7 +1059,7 @@ Pure-Python Type50 detail-publication regression hotfix.
 - Retains the 11.8 compact-solve attribution, 11.7.1 frozen-Mg Type7 compatibility boundary, ABI 6048110, and all existing Mg bit-exact gates.
 - Does not modify STEP, Type50, GSSMOOTH, active-window selection, Lucy normalization, matrix assembly semantics, or any empirical record-specific scale.
 
-# 0.6.48.11.8 — C call-1 compact matrix / high-ion / terminal-row solve attribution - 2026-07-29
+## 0.6.48.11.8 — C call-1 compact matrix / high-ion / terminal-row solve attribution - 2026-07-29
 
 - Build on the accepted 0.6.48.11.7.1 frozen-Mg regression boundary. The host smoke restored all nine frozen Mg FITS bit-exact and showed 252 Mg Type7 old-vs-source preliminary-eligibility differences isolated behind the reference-only compatibility path.
 - Keep production science unchanged for this release. The 11.7 literal generic Type7 endpoint rule, the 11.7.1 frozen-Mg compatibility path, the 11.6 carbon seed provenance correction, STEP, Type50, GSSMOOTH, and the Lucy-style solve are not reassigned.
@@ -1604,7 +1069,7 @@ Pure-Python Type50 detail-publication regression hotfix.
 - Repair qualification-only STEP diagnostic parsing: the runtime stream remains intentionally frozen under `V0648117_STEP_*`, so 11.8 parses that retained prefix instead of falsely expecting a new runtime marker namespace.
 - Keep the all-nine-FITS frozen Mg comparator blocking and preserve production-zone ABI 6048110. Qualification remains standalone-smoke first.
 
-# 0.6.48.11.7.1 — frozen-Mg Type7 compatibility/regression hotfix - 2026-07-29
+## 0.6.48.11.7.1 — frozen-Mg Type7 compatibility/regression hotfix - 2026-07-29
 
 - Repair the 0.6.48.11.7 frozen `mg11_ne1e8` bit-exact regression in `xo01_detal2.fits` and `xo01_detal4.fits` without reverting the generic source-backed Type7 endpoint rule.
 - Add an ABI-preserving fixed-state context switch, enabled only by the explicit frozen Mg reference trajectory, that uses the accepted pre-11.7 preliminary Type7 eligibility when accumulating `pirti`. Generic models continue to use `idest1 == 1 && idest2 <= nlev + 2`.
@@ -1619,7 +1084,7 @@ Pure-Python Type50 detail-publication regression hotfix.
 - Keep the 11.6 carbon seed correction, Type50 record-5740 provenance, STEP, GSSMOOTH, Lucy solve, O/Ca behavior, and frozen Mg XI path unchanged apart from diagnostic namespace promotion.
 - Do not force any carbon ion stage into the active basis: any active-window change must arise from the corrected source-rate totals and literal `mml/mmu` search.
 
-# 0.6.48.11.6 - 2026-07-29
+## 0.6.48.11.6 - 2026-07-29
 
 - Correct the C runtime population seed provenance that 0.6.48.11.5 attributed to the first radial STEP blocker: Type50 source position 8740 / record 5740 / C III rows 29 -> 33 at about 12.709136 eV.
 - The 11.5 host audit showed that the native C III ground population (~0.782) exceeded the FORTRAN value (~2.2144e-6) by ~3.53e5, matching the ~3.527e5 excess line opacity. No empirical Type50 opacity scale is introduced.
