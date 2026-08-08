@@ -1,0 +1,35 @@
+digraph publication_ownership {
+  graph [rankdir=LR, bgcolor="transparent", pad=0.2, nodesep=0.35, ranksep=0.5];
+  node [shape=box, style="rounded", fontname="Helvetica", fontsize=10];
+  edge [fontname="Helvetica", fontsize=9];
+
+  state [label="zone scientific state\nlevels / lines / RRC / continuum"];
+  savd [label="savd", shape=box3d];
+  d1 [label="fstepr\nxoNN_detail.fits", shape=folder];
+  d2 [label="fstepr2\nxoNN_detal2.fits", shape=folder];
+  d3 [label="fstepr3\nxoNN_detal3.fits", shape=folder];
+  d4 [label="fstepr4\nxoNN_detal4.fits", shape=folder];
+  unsavd [label="unsavd / rstepr*\nnext pass restores shell-owned state"];
+  accum [label="integrated radial accumulators\nelum / elumab / depths / zrems"];
+  s1 [label="writespectra\nxout_spect1.fits", shape=folder];
+  s2 [label="writespectra2\nxout_lines1.fits", shape=folder];
+  s3 [label="writespectra3\nxout_cont1.fits", shape=folder];
+  s4 [label="writespectra4\nxout_rrc1.fits", shape=folder];
+  step [label="pprint\nxout_step.log + xout_abund1.fits", shape=folder];
+
+  state -> savd;
+  savd -> d1;
+  savd -> d2;
+  savd -> d3;
+  savd -> d4;
+  d1 -> unsavd [style=dashed];
+  d2 -> unsavd [style=dashed];
+  d3 -> unsavd [style=dashed];
+  d4 -> unsavd [style=dashed];
+  state -> accum;
+  accum -> s1;
+  accum -> s2;
+  accum -> s3;
+  accum -> s4;
+  state -> step;
+}

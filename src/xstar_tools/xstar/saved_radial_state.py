@@ -16,6 +16,11 @@ the same caller-visible persistence contract in memory:
 This is transfer state, not a detail-output implementation.  No FITS file is
 created and no output writer is registered.
 """
+# Source correspondence:
+#   Fortran: savd.f90 / unsavd.f90 / rstepr* persistence semantics.
+#   Role: shell-to-shell/pass state lifetime, including REAL(4) persisted values.
+#   Concordance: STATE-001; qualification: accepted detail/terminal publication lineage.
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

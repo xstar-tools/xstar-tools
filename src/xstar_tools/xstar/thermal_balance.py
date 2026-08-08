@@ -11,6 +11,11 @@ Compton rates, adds ``freef`` heating, and evaluates XSTAR's normalized thermal
 residual ``hmctot``.  The implementation preserves source expression order and
 Fortran default-real literal rounding.
 """
+# Source correspondence:
+#   Fortran: heatf.f90, called by calc_hmc_all.f90.
+#   Role: source thermal-family aggregation and normalized heat-cool residual.
+#   Concordance: THERM-001; qualification: accepted thermal/all-62 science.
+
 from __future__ import annotations
 
 from .constants import LEGACY_BOLTZMANN_EV_PER_T4

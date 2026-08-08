@@ -14,6 +14,11 @@ This module translates those inline contracts without introducing output
 writers or an invented convergence algorithm.
 """
 
+# Source correspondence:
+#   Fortran: inline radial/pass predicates in xstar.f90.
+#   Role: density.dat progression and literal pass/shell loop contracts.
+#   Concordance: RADIAL-001; qualification: all-62 STEP science accepted at 12.3.42.
+
 from __future__ import annotations
 
 from dataclasses import dataclass

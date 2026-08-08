@@ -10,6 +10,11 @@ to choose the adjacent ion-stage block and the latter to describe the solved
 multilevel operator.
 """
 
+# Source correspondence:
+#   Fortran: calc_ion_rates.f90 / istruc.f90 / ioneqm.f90
+#   Role: preliminary total-rate ion balance and adjacent active-stage selection.
+#   Concordance: ION-001; qualification: accepted science revision 45.3.3.8.
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

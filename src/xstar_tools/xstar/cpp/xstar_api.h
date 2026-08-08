@@ -1,6 +1,17 @@
 #ifndef XSTAR_API_H
 #define XSTAR_API_H
 
+/*
+ * Source correspondence:
+ *   Fortran: xstar.f90 / xstarcalc.f90 scientific execution boundary.
+ *   Role: stable native dispatch/API envelope over qualified C++ science kernels.
+ *   Concordance: BACKEND-001; science baseline 45.3.3.8 / C++ baseline 12.3.44.
+ *
+ * This API-layer comment does not redefine the separate frozen production-zone
+ * ABI 6048110 used by cpp_backend_production_zone.py. Production C++ science
+ * files are hash-pinned and are documented in the concordance without edits.
+ */
+
 #include <stddef.h>
 #include <stdint.h>
 #include "xstar_element_engine.h"

@@ -12,6 +12,11 @@ charge-accounting development, but the result then advertises that complete
 fixed-state local-zone parity is not yet ready.
 """
 
+# Source correspondence:
+#   Fortran: calc_hmc_all.f90 / calc_hmc_element.f90 and continuum thermal leaves.
+#   Role: fixed-temperature element solve plus source-owned thermal aggregation.
+#   Concordance: THERM-001; qualification: accepted science revision 45.3.3.8.
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace

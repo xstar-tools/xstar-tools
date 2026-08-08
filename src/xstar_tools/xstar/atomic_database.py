@@ -13,6 +13,11 @@ editing/sorting instructions deliberately remain unsupported for immutable
 FITS input.
 """
 
+# Source correspondence:
+#   Fortran: readtbl.f90 / setptrs.f90 / xstarsetup.f90
+#   Role: packed atomic-data loading and canonical one-based derived pointers.
+#   Concordance: DB-001; qualification: accepted science revision 45.3.3.8.
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

@@ -14,6 +14,11 @@ The numerical control flow intentionally follows the Fortran labels and branch
 order.  It does not replace the source algorithm with a generic root finder.
 """
 
+# Source correspondence:
+#   Fortran: dsec.f90
+#   Role: source-ordered charge/thermal nonlinear controller around calc_hmc_all.
+#   Concordance: DSEC-001; qualification: all-62 STEP science accepted at 12.3.42.
+
 from __future__ import annotations
 
 import csv

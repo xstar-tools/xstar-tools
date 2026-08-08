@@ -13,6 +13,7 @@ recursive-include src/xstar_tools *.py *.def *.dat *.json *.csv *.h *.hpp *.cpp 
 include PARITY_FREEZE.md
 recursive-include qualification *.json *.py *.md
 include tools/qualification/check_parity_freeze.py
+include tools/qualification/check_source_concordance.py
 prune historical
 
 include .github/workflows/parity-freeze.yml

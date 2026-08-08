@@ -17,6 +17,11 @@ all-ion compact alias map, inactive-ion compact offsets, the rate-type-9
 double ``ucalc`` call, and the source-local ``kkkl`` continuum pointer reused
 by rate types 9 and 42.
 """
+# Source correspondence:
+#   Fortran: calc_emis_all/element/ion.f90 / rlbin.f90 / linopac.f90.
+#   Role: full-grid line/continuum emissivity and opacity after calc_emisab_all.
+#   Concordance: EMIS-001 / TYPE50-001; qualification: C++ 44 and science 45.3.3.8.
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

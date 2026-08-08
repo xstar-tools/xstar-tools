@@ -1,0 +1,30 @@
+digraph controller_radial_flow {
+  graph [rankdir=TB, bgcolor="transparent", pad=0.2, nodesep=0.35, ranksep=0.45];
+  node [shape=box, style="rounded", fontname="Helvetica", fontsize=10];
+  edge [fontname="Helvetica", fontsize=9];
+
+  start [label="xstar.f90\nstartup + parameter read"];
+  setup [label="ener + xstarsetup + init\natomic data / grids / initial state"];
+  pass [label="radial pass loop\n1..npass"];
+  restore [label="unsavd\nrestore prior-pass shell state"];
+  step [label="step\nchoose shell thickness"];
+  trnfrc [label="trnfrc\ncontinuum transfer into shell"];
+  zone [label="xstarcalc\none-zone state + spectra", shape=box3d];
+  smooth [label="gsmooth (optional) + heatt"];
+  pprint [label="pprint 9/12\nSTEP/radial accumulation"];
+  save [label="savd -> fstepr*\npersist detail shell state"];
+  stop [label="stpcut + trnfrn\ntermination and outward/inward transfer"];
+  final [label="final zero-thickness xstarcalc\nterminal state"];
+  finalprint [label="pprint 22 + final print options"];
+  products [label="writespectra*\nxout_spect1 / lines1 / cont1 / rrc1", shape=folder];
+
+  start -> setup -> pass;
+  pass -> restore [label="passes > 1"];
+  pass -> step [label="first pass"];
+  restore -> step;
+  step -> trnfrc -> zone -> smooth -> pprint -> save -> stop;
+  stop -> step [label="next shell", constraint=false];
+  stop -> pass [label="next pass"];
+  pass -> final [label="after final pass"];
+  final -> finalprint -> products;
+}

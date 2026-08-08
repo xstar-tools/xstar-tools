@@ -1,0 +1,25 @@
+digraph backend_dispatch {
+  graph [rankdir=TB, bgcolor="transparent", pad=0.2, nodesep=0.35, ranksep=0.45];
+  node [shape=box, style="rounded", fontname="Helvetica", fontsize=10];
+  edge [fontname="Helvetica", fontsize=9];
+
+  user [label="run request / current internal backend flags"];
+  pyctl [label="Python controller + radial flow\ndriver.py / physical_runner.py"];
+  pure [label="pure Python zone path\nsource-faithful Python kernels"];
+  modular [label="modular C++ kernel adapters\nrates / matrix / emissivity / thermal"];
+  zone [label="shared production-zone bridge\ncpp_backend_production_zone.py\nABI 6048110"];
+  native [label="standalone C++ controller\nxstar_standalone.cpp"];
+  core [label="frozen C++ production science\n0.6.48.12.3.44", shape=box3d];
+  products [label="qualified FITS + STEP products", shape=folder];
+
+  user -> pyctl;
+  pyctl -> pure [label="reference/pure path"];
+  pyctl -> modular [label="hybrid modular path"];
+  pyctl -> zone [label="cpp-zone / cpp-all"];
+  user -> native [label="standalone"];
+  modular -> core;
+  zone -> core;
+  native -> core;
+  pure -> products;
+  core -> products;
+}

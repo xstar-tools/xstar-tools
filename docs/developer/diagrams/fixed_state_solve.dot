@@ -1,0 +1,29 @@
+digraph fixed_state_solve {
+  graph [rankdir=TB, bgcolor="transparent", pad=0.2, nodesep=0.35, ranksep=0.45];
+  node [shape=box, style="rounded", fontname="Helvetica", fontsize=10];
+  edge [fontname="Helvetica", fontsize=9];
+
+  zone [label="xstarcalc"];
+  dsec [label="dsec (when thermal solve requested)\nrepeated calc_hmc_all trials"];
+  hmc [label="calc_hmc_all"];
+  elem [label="calc_hmc_element\nper element"];
+  pre [label="calc_ion_rates -> istruc/ioneqm\nselect adjacent mml..mmu ion block"];
+  levels [label="levwkelement / levwk\ncompact levels + LTE populations"];
+  rates [label="calc_hmc_ion / ucalc\nsource-ordered record rates"];
+  matrix [label="matrix assembly\ncompact row endpoints"];
+  solve [label="msolvelucy\nstatistical-equilibrium solve"];
+  thermal [label="comp2 + freef + bremem + heatf\ncontinuum thermal terms"];
+  finalhmc [label="final calc_hmc_all\ncommitted local state"];
+  emisab [label="calc_emisab_all\nintegrated line/RRC products"];
+  emis [label="calc_emis_all\nfull-grid emissivity/opacity"];
+
+  zone -> dsec;
+  dsec -> hmc [label="trial"];
+  hmc -> elem;
+  elem -> pre -> levels -> rates -> matrix -> solve;
+  solve -> thermal;
+  thermal -> dsec [label="heat-cool residual", constraint=false];
+  zone -> finalhmc [label="after thermal solution"];
+  finalhmc -> elem [style=dashed, label="same source operator"];
+  finalhmc -> emisab -> emis;
+}

@@ -17,6 +17,11 @@ The low-level kernels preserve the source's active-range mutation and caller-
 owned tail semantics.  Default-real constants that participate in mixed
 real(4)/real(8) expressions are rounded through binary32 before use.
 """
+# Source correspondence:
+#   Fortran: xstar.f90 / step.f90 / trnfrc.f90 / stpcut.f90 / trnfrn.f90.
+#   Role: radial shell transfer, stepping, termination, and pass-state ownership.
+#   Concordance: RADIAL-001; qualification: all-62 STEP/FITS accepted at 12.3.42-44.
+
 from __future__ import annotations
 
 from dataclasses import dataclass

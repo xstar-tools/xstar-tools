@@ -1,5 +1,14 @@
 # CHANGELOG
 
+# 0.6.52 - Milestone 2 source concordance - 2026-08-08
+
+- Re-read the supplied XSTAR 2.59g Fortran source and supplied XSTAR manual/papers and documented the authority hierarchy: accepted qualification evidence, canonical executable source semantics, then literature context.
+- Added `docs/developer/architecture.md`, `fortran_source_map.md`, and `python_cpp_fortran_concordance.md`.
+- Added `docs/science/xstar_references.md` and four Graphviz/SVG architecture diagrams.
+- Added `qualification/source_concordance.json`, a dependency-free source-concordance CI checker, and contract tests.
+- Added concise source-correspondence comments only to unpinned Python/C API files. Frozen C++ production sources and frozen Python publication/controller sources remain byte-identical to 0.6.51.
+- No science revision, accepted comparator policy, C5 behavior, Ca/O exception, Type50 science, radial trajectory, matrix semantics, or production-zone ABI is changed.
+
 # 0.6.51 - 2026-08-08
 
 - Pre-Milestone-2 documentation/history cleanup on the frozen `0.6.48.12.3.45.3.3.8` science baseline.
