@@ -68,3 +68,14 @@ def test_benchmark_reference_cleanup_is_enforced():
     freeze = json.loads((ROOT / "qualification" / "parity_freeze.json").read_text())
     assert freeze["benchmark_reference_cleanup"]["deprecated_compiled_case_bundled"] is False
     assert freeze["benchmark_reference_cleanup"]["unreferenced_benchmark_directories_archived"] == 13
+
+
+def test_python_history_cleanup_is_enforced():
+    freeze = json.loads((ROOT / "qualification" / "parity_freeze.json").read_text())
+    cleanup = freeze["python_history_cleanup"]
+    assert cleanup["distribution_version"] == "0.6.56"
+    assert cleanup["archived_python_modules"] == 51
+    assert cleanup["archived_tests"] == 36
+    assert cleanup["removed_console_scripts"] == 5
+    assert cleanup["active_xstar_python_modules"] == 81
+    assert (ROOT / cleanup["manifest_path"]).is_file()

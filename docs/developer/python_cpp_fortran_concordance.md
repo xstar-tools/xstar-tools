@@ -153,3 +153,8 @@ The comments do not redefine the scientific baseline. `qualification/cpp_source_
 ## 0.6.55 Python source-comment overlay
 
 The production Python source now carries marked Fortran/source-correspondence comments parallel to the C++ comments. The comments also document the atomic-database distinction between **data type** (record formula/interpretation in `ucalc`) and **rate type** (downstream use of the returned rates). The overlay is comment-only: removing the marked leading block from every annotated module must reproduce its exact `0.6.54` bytes. See `python_fortran_source_comments.md` and `qualification/python_source_comment_overlay.json`.
+
+
+## 0.6.56 active-namespace note
+
+The source concordance maps production behavior, not the historical parity-campaign tooling surface. `0.6.56` archives one-off Python audit/attribution/closure modules that have no live runtime caller. The Type53 diagnostic formerly named `type53_semantics.py` remains provenance only; active Type53 science remains mapped through the UCalc/ionization/matrix implementation entries. Historical characterization lineage does not replace the current runnable characterization-test requirement for future scientific refactors.

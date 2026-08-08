@@ -16,6 +16,7 @@ include tools/qualification/check_parity_freeze.py
 include tools/qualification/check_source_concordance.py
 include tools/qualification/check_cpp_source_comments.py
 include tools/qualification/check_python_source_comments.py
+include tools/qualification/check_python_history_cleanup.py
 include tools/qualification/check_cpp_non_science_refactor.py
 prune historical
 

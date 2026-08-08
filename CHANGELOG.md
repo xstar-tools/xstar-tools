@@ -1,5 +1,14 @@
 # CHANGELOG
 
+# 0.6.56 - active Python namespace / parity-history cleanup - 2026-08-08
+
+- Move 51 parity-campaign-only Python audit, attribution, closure, replay, and oracle utilities out of `src/xstar_tools/xstar/` into `historical/python/xstar_parity_campaign/`, preserving their 0.6.55 bytes and SHA-256 hashes.
+- Move 36 dedicated historical tests with those modules; active tests no longer import archived parity-campaign modules.
+- Remove five obsolete installed audit commands: fixed-state parity, He bound-free audit, Type53 semantics, helium-family isolation, and Type50-manifold audit.
+- Keep diagnostic/parity helpers that still have live runtime callers, including continuum diagnostics, physical/radial output parity, Type50 profile provenance, zone1 DSEC diagnostics, and the current diagnostic checkpoint.
+- Add a dependency-free active-namespace cleanup gate and preserve the Type53 source-comment record as archived provenance.
+- No active scientific implementation, frozen C++ science, ABI `6048110`, comparator semantics, or accepted science revision is changed.
+
 # 0.6.55 - Python Fortran/source and atomic-data comments - 2026-08-08
 
 - Added marked Fortran/source-correspondence comments to 45 production Python modules under `src/xstar_tools/xstar/`.

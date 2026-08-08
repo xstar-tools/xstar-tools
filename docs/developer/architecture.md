@@ -1,6 +1,6 @@
 # XSTAR tools architecture at the parity-freeze boundary
 
-**Productization version:** 0.6.55  
+**Productization version:** 0.6.56  
 **Qualified science revision:** `0.6.48.12.3.45.3.3.8`  
 **Canonical executable authority:** XSTAR Fortran 2.59g  
 **Frozen C++ production baseline:** `0.6.48.12.3.44`  
@@ -174,3 +174,8 @@ See `fortran_source_map.md` for the routine-level map and `python_cpp_fortran_co
 ## 0.6.55 Python source-comment overlay
 
 The production Python source now carries marked Fortran/source-correspondence comments parallel to the C++ comments. The comments also document the atomic-database distinction between **data type** (record formula/interpretation in `ucalc`) and **rate type** (downstream use of the returned rates). The overlay is comment-only: removing the marked leading block from every annotated module must reproduce its exact `0.6.54` bytes. See `python_fortran_source_comments.md` and `qualification/python_source_comment_overlay.json`.
+
+
+## 0.6.56 active Python namespace cleanup
+
+The active `xstar_tools.xstar` namespace contains runtime/scientific modules plus only those diagnostics that still have live callers. One-off parity-campaign audits, attribution scripts, closure/replay tools, and their dedicated tests live under `historical/python/xstar_parity_campaign/` and are excluded from normal distributions. Active `src/`, `tests/`, and `tools/` must not import those archived modules; this is enforced by `tools/qualification/check_python_history_cleanup.py`.

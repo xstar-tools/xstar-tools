@@ -1,10 +1,10 @@
 # Python / Fortran source-comment index
 
-**Productization version:** `0.6.55`  
+**Productization version:** `0.6.56`  
 **Science revision:** `0.6.48.12.3.45.3.3.8`  
 **Frozen C++ scientific baseline:** `0.6.48.12.3.44`
 
-This index is the Python companion to `cpp_fortran_source_comments.md`. The marked top-of-file comments are documentation-only. `qualification/python_source_comment_overlay.json` pins both the annotated `0.6.55` bytes and the exact pre-comment `0.6.54` bytes. Removing only the marked block must recover the latter.
+This index is the Python companion to `cpp_fortran_source_comments.md`. The marked top-of-file comments are documentation-only. `qualification/python_source_comment_overlay.json` pins both the annotated `0.6.55` bytes and the exact pre-comment `0.6.54` bytes. In `0.6.56`, 44 annotated modules remain active; the old Type53 semantics qualification utility was moved byte-for-byte to `historical/python/xstar_parity_campaign/`. Removing only the marked block must still recover the `0.6.54` baseline for every annotated file.
 
 ## Atomic-database terminology
 
@@ -60,12 +60,15 @@ Appendix A documents the important current families such as Types 49/53 (partial
 | `state.py` | globaldata modules; savd.f90 / unsavd.f90 / rstepr*.f90 | `STATE-001; RADIAL-001; TERMINAL-001` | no |
 | `thermal_balance.py` | heatf.f90 / calc_hmc_all.f90 | `THERM-001` | no |
 | `type50_profile_provenance.py` | ucalc.f90 label 50 / deleafnd.f90 / linopac.f90 | `TYPE50-001` | yes |
-| `type53_semantics.py` | ucalc.f90 label 53 / phextrap.f90 / phint53.f90 / calc_hmc_ion.f90 | `MATRIX-001; DSEC-001` | yes |
 | `ucalc.py` | ucalc.f90 and its calt*/phint*/linopac leaf routines | `DB-001; ION-001; MATRIX-001; EMISAB-001; TYPE50-001` | yes |
 | `ucalc_dispatch.py` | ucalc.f90 computed-GOTO data-type dispatch | `MATRIX-001; DB-001` | yes |
 | `ucalc_inventory.py` | readtbl.f90 / setptrs.f90 / ucalc.f90 | `DB-001; MATRIX-001` | yes |
 | `ucalc_leaves.py` | ucalc.f90 leaf dependencies including calt*, exintn, phextrap, spline/interpolation helpers | `MATRIX-001; TYPE50-001` | yes |
 | `xstarcalc.py` | xstarcalc.f90 | `ARCH-001; DSEC-001; THERM-001; EMISAB-001; EMIS-001` | no |
+
+## Archived annotated parity utility
+
+`type53_semantics.py` is no longer an active runtime/developer module. Its exact annotated 0.6.55 bytes and pre-comment 0.6.54 hash remain recorded in `qualification/python_source_comment_overlay.json`, and the full history archive retains it at `historical/python/xstar_parity_campaign/src/xstar_tools/xstar/type53_semantics.py`. The active Type53 implementation correspondence is documented through `ucalc.py`, `ucalc_dispatch.py`, `ionization.py`, and the C++ rate/matrix paths.
 
 ## Verification
 
