@@ -23,7 +23,22 @@ def _overlay():
     return json.loads((ROOT / "qualification" / "cpp_source_comment_overlay.json").read_text())
 
 
-def test_all_cpp_h_hpp_files_have_source_correspondence_blocks():
+def _cleanup():
+    return json.loads((ROOT / "qualification" / "cpp_history_cleanup_0_6_57.json").read_text())
+
+
+def _resolve(rel: str) -> Path | None:
+    p = ROOT / rel
+    if p.is_file():
+        return p
+    for info in _cleanup()["archived_cpp_sources"].values():
+        if info["original_path"] == rel:
+            hp = ROOT / info["historical_path"]
+            return hp if hp.is_file() else None
+    return None
+
+
+def test_all_active_cpp_h_hpp_files_have_source_correspondence_blocks():
     files = sorted(
         p.relative_to(ROOT).as_posix()
         for p in (ROOT / "src/xstar_tools/xstar/cpp").iterdir()
@@ -31,10 +46,12 @@ def test_all_cpp_h_hpp_files_have_source_correspondence_blocks():
     )
     data = _overlay()
     overlay = data["files"]
+    cleanup = _cleanup()
+    archived_originals = {x["original_path"] for x in cleanup["archived_cpp_sources"].values()}
     assert data["schema"] == "xstar-tools-cpp-source-comment-overlay-v2"
     assert data["productization_version"] == "0.6.54"
-    assert len(files) == 47
-    assert files == sorted(overlay)
+    assert len(files) == 45
+    assert files == sorted(set(overlay) - archived_originals)
     for rel in files:
         text = (ROOT / rel).read_text(errors="replace")[:3000]
         assert text.startswith("// XSTAR-SOURCE-CORRESPONDENCE-BEGIN\n")
@@ -42,17 +59,29 @@ def test_all_cpp_h_hpp_files_have_source_correspondence_blocks():
             assert f"// {field}" in text
 
 
-def test_cpp_source_comment_overlay_pins_current_0654_bytes():
+def test_cpp_source_comment_overlay_pins_active_and_archived_0654_bytes():
+    historical_present = (ROOT / "historical").is_dir()
+    cleanup_by_original = {x["original_path"]: x for x in _cleanup()["archived_cpp_sources"].values()}
     for rel, info in _overlay()["files"].items():
-        raw = (ROOT / rel).read_bytes()
+        p = _resolve(rel)
+        if p is None:
+            assert not historical_present
+            assert cleanup_by_original[rel]["comment_overlay_annotated_sha256_0_6_54"] == info["annotated_sha256_0_6_54"]
+            continue
+        raw = p.read_bytes()
         assert _sha(raw) == info["annotated_sha256_0_6_54"]
         assert _sha(_strip(raw)) == info["normalized_sha256_0_6_54"]
 
 
-def test_pinned_cpp_current_hashes_match_parity_freeze_after_stripping_top_comments():
+def test_pinned_cpp_hashes_match_parity_freeze_after_stripping_top_comments():
     overlay = _overlay()["files"]
     frozen = json.loads((ROOT / "qualification" / "parity_freeze_science_hashes.json").read_text())
+    cleanup_by_original = {x["original_path"]: x for x in _cleanup()["archived_cpp_sources"].values()}
     for rel, expected in frozen.items():
         if rel not in overlay:
             continue
-        assert _sha(_strip((ROOT / rel).read_bytes())) == expected
+        p = _resolve(rel)
+        if p is None:
+            assert cleanup_by_original[rel]["science_freeze_sha256"] == expected
+        else:
+            assert _sha(_strip(p.read_bytes())) == expected

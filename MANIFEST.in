@@ -21,3 +21,5 @@ include tools/qualification/check_cpp_non_science_refactor.py
 prune historical
 
 include .github/workflows/parity-freeze.yml
+include tools/qualification/check_cpp_history_cleanup.py
+include qualification/cpp_history_cleanup_0_6_57.json

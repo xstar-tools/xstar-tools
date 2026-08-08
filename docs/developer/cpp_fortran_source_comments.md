@@ -20,7 +20,6 @@ Every `.cpp`, `.h`, and `.hpp` file under `src/xstar_tools/xstar/cpp/` carries a
 | `line_emissivity.cpp` | calc_emisab_all.f90; calc_emisab_element.f90; calc_emisab_ion.f90; calc_emis_all.f90; calc_emis_element.f90; calc_emis_ion.f90; binemis.f90; linopac.f90; voigte.f90; huntf.f90; nbinc.f90 | Source-equivalent spectral producer; Type50/profile portions call qualified optimized-equivalent opacity kernels. | `EMISAB-001; EMIS-001; TYPE50-001` |
 | `matrix_kernels.cpp` | calc_hmc_ion.f90; ucalc.f90; leqt2f.f90; msolvelucy.f90 | Source-equivalent matrix construction with compact C++ storage; source one-based endpoints and terminal clamps are preserved. | `MATRIX-001; LEVEL-001` |
 | `opacity_kernels.cpp` | linopac.f90; voigte.f90; huntf.f90; nbinc.f90 | Optimized-equivalent: AVX2/cursor transformations may change execution shape but preserve accepted line order, active range, boundaries, and per-bin arithmetic. | `TYPE50-001; EMIS-001` |
-| `opacity_type50_experiments.cpp` | linopac.f90; voigte.f90; huntf.f90; nbinc.f90 | Experimental optimized variants of linopac; production science remains owned by the qualified path in opacity_kernels.cpp. | `TYPE50-001` |
 | `rate_kernels.cpp` | ucalc.f90; calc_hmc_ion.f90; calc_emisab_ion.f90; linopac.f90 | Source-equivalent low-level kernels; unsuffixed REAL literal behavior and one-based matrix endpoints are preserved where observable. | `MATRIX-001; EMISAB-001; TYPE50-001` |
 | `source_order_thermal_reducer.hpp` | calc_hmc_all.f90; calc_hmc_element.f90; calc_hmc_ion.f90 | Optimized storage/reduction helper constrained to reproduce the source accumulation ownership/order where roundoff is observable. | `THERM-001` |
 | `source_real_energy_grid.hpp` | ener.f90 | Source-exact numeric helper for the accepted energy-grid construction. | `ARCH-001; INPUT-001` |
@@ -33,7 +32,6 @@ Every `.cpp`, `.h`, and `.hpp` file under `src/xstar_tools/xstar/cpp/` carries a
 | `xstar_api.hpp` | No direct Fortran routine; wraps the xstar_api.h boundary around xstarcalc-equivalent execution. | Infrastructure only; must be behaviorally transparent to scientific results. | `BACKEND-001` |
 | `xstar_atdb_runtime.cpp` | xstarsetup.f90; readtbl.f90; setptrs.f90; rread1.f90 | Source-exact identities/pointers with C++ storage; parameter/default-REAL details are preserved where qualified. | `DB-001; INPUT-001` |
 | `xstar_atdb_runtime.hpp` | xstarsetup.f90; readtbl.f90; setptrs.f90; rread1.f90 | Storage/interface representation of the source reader and setptrs relationships. | `DB-001; INPUT-001` |
-| `xstar_backend_common.cpp` | No direct Fortran routine. | Infrastructure only; no scientific ownership. | `BACKEND-001` |
 | `xstar_backend_common.hpp` | No direct Fortran routine; supports calc_hmc/calc_emis-equivalent backend kernels. | C++ infrastructure/storage only. | `BACKEND-001` |
 | `xstar_backend_cpp.cpp` | Scientific boundary: xstarcalc.f90; no Fortran backend-dispatch analogue. | Productization dispatch only; selected component science is mapped in its owning files. | `BACKEND-001` |
 | `xstar_backend_plugin.h` | No direct Fortran routine. | Infrastructure only; no physics or source arithmetic. | `BACKEND-001` |
@@ -70,3 +68,9 @@ A scientific code change cannot be hidden inside this mechanism: the checker rem
 ## Python companion comments
 
 The corresponding production Python modules are annotated in `0.6.55`; see `python_fortran_source_comments.md`. The Python pass uses the same authority hierarchy and records the Manual Chapter 12 / Mendoza et al. Appendix A distinction between ATDB data type (record formula) and rate type (downstream use).
+
+## Archived C++ source-comment provenance
+
+- `historical/cpp/retired_sources/opacity_type50_experiments.cpp` - retired Type50 12.3.26/12.3.27 experimental kernels; not part of the active native build.
+- `historical/cpp/retired_sources/xstar_backend_common.cpp` - unused backend scaffold translation unit; production shared helpers remain in `xstar_backend_common.hpp`.
+- The active C++ source/header set contains 45 files; no active header was removed in 0.6.57.

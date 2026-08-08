@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.57 - C++ namespace/history cleanup - 2026-08-08
+
+- Archive retired `opacity_type50_experiments.cpp` and unused `xstar_backend_common.cpp` outside the installed C++ tree.
+- Preserve retired source bytes under `historical/cpp/retired_sources/`; keep all active headers because each remains a build/runtime/public-interface dependency.
+- Archive superseded `Makefile.before_v67` under `historical/cpp/build/`.
+- Add a C++ history-cleanup gate; active native science and ABI remain unchanged.
+
 # 0.6.56 - active Python namespace / parity-history cleanup - 2026-08-08
 
 - Move 51 parity-campaign-only Python audit, attribution, closure, replay, and oracle utilities out of `src/xstar_tools/xstar/` into `historical/python/xstar_parity_campaign/`, preserving their 0.6.55 bytes and SHA-256 hashes.

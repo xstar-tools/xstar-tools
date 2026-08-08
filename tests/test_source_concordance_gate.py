@@ -14,7 +14,7 @@ def _concordance():
 def test_source_concordance_metadata_and_docs_exist():
     data = _concordance()
     assert data["schema"] == "xstar-tools-source-concordance-v1"
-    assert data["productization_version"] == "0.6.56"
+    assert data["productization_version"] == "0.6.57"
     assert data["science_revision"] == "0.6.48.12.3.45.3.3.8"
     assert data["canonical_fortran"]["version"] == "2.59g"
     for rel in data["documentation"] + data["diagrams"]:
@@ -51,7 +51,7 @@ def test_source_comments_obey_freeze_policy():
     assert data["pinned_source_policy"]["production_python_comment_overlay_enabled"] is True
     assert data["pinned_source_policy"]["python_comment_overlay_manifest"] == "qualification/python_source_comment_overlay.json"
     assert data["pinned_source_policy"]["non_science_cpp_refactor_manifest"] == "qualification/cpp_non_science_refactor_0_6_54.json"
-    assert len(data["cpp_source_comment_files"]) == 47
+    assert len(data["cpp_source_comment_files"]) == 45
     for rel in data["cpp_source_comment_files"]:
         text = (ROOT / rel).read_text(errors="replace")
         assert text.startswith("// XSTAR-SOURCE-CORRESPONDENCE-BEGIN\n")
