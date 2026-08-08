@@ -1,5 +1,15 @@
 # CHANGELOG
 
+# 0.6.51 - 2026-08-08
+
+- Pre-Milestone-2 documentation/history cleanup on the frozen `0.6.48.12.3.45.3.3.8` science baseline.
+- Remove all version-specific artifacts from active `docs/`, including old host instructions, physical-DSEC notes, versioned validation references, and the malformed `docs/v06481232_cpp_ucalc_102_label_coverage.csv/` directory.
+- Preserve scientifically useful backend ownership, shared/persistent C++ zone, performance, attribution, packaging, and rejected-optimization history under `historical/documentation/`.
+- Canonicalize three byte-identical UCalc coverage CSV snapshots and three byte-identical JSON summaries to one historical copy of each; remove four redundant files.
+- Move all 108 root `XSTAR_TOOLS_*.md` qualification reports to `historical/qualification/reports/` and all 26 root conversation handoffs to `historical/conversations/`.
+- Add relocation metadata and extend the parity-freeze gate so active docs cannot regain version-specific artifacts and root parity reports/handoffs cannot reappear.
+- No `src/` scientific/runtime source, frozen C++, ABI `6048110`, comparator policy, thresholds, or accepted scientific outputs are changed.
+
 # 0.6.50 - 2026-08-08
 
 - Milestone benchmark/reference cleanup on the frozen `0.6.48.12.3.45.3.3.8` science baseline.

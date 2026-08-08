@@ -45,9 +45,9 @@ def test_frozen_evidence_is_stable_and_versioned_tools_are_archived():
     assert not [p for p in active.glob("v064*") if p.is_dir()]
 
 
-def test_productization_entry_version_is_0650():
+def test_productization_entry_version_is_0651():
     freeze = json.loads((ROOT / "qualification" / "parity_freeze.json").read_text())
-    assert freeze["productization_entry_version"] == "0.6.50"
+    assert freeze["productization_entry_version"] == "0.6.51"
     assert freeze["qualification_history"]["active_version_specific_directories"] == 0
 
 
