@@ -1,5 +1,14 @@
 # CHANGELOG
 
+# 0.6.53 - C++ Fortran-source correspondence comments - 2026-08-08
+
+- Re-read the relevant canonical XSTAR 2.59g Fortran routines and add a standardized `XSTAR-SOURCE-CORRESPONDENCE` comment block to all 47 `.cpp`, `.h`, and `.hpp` files under `src/xstar_tools/xstar/cpp/`.
+- Each block identifies the Fortran authority (or explicitly states that no direct Fortran routine exists), the C++ role, implementation relation, concordance IDs, and qualification boundary.
+- Preserve the accepted C++/science bytes through a reversible comment overlay: `qualification/cpp_source_comment_overlay.json` records the exact 0.6.52 baseline hash and 0.6.53 annotated hash for every C++/header file.
+- `check_parity_freeze.py` strips only the marked documentation block before comparing parity-pinned C++ files to the original frozen hashes; any non-comment change is still rejected.
+- Add `tools/qualification/check_cpp_source_comments.py` and contract tests proving all 47 annotations are complete and reversible.
+- Scientific revision remains `0.6.48.12.3.45.3.3.8`; frozen C++ scientific baseline remains `0.6.48.12.3.44`; ABI remains `6048110`.
+
 # 0.6.52 - Milestone 2 source concordance - 2026-08-08
 
 - Re-read the supplied XSTAR 2.59g Fortran source and supplied XSTAR manual/papers and documented the authority hierarchy: accepted qualification evidence, canonical executable source semantics, then literature context.

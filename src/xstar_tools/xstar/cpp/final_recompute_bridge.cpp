@@ -1,3 +1,13 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: final section of xstar.f90; xstarcalc.f90; pprint.f90; writespectra*.f90
+// Role: Recompute the terminal zero-thickness/final local state consumed by final STEP and FITS
+//   publication.
+// Relation: Source-lifetime bridge around the accepted fixed-state operator; output ownership follows the
+//   final Fortran sequence.
+// Concordance: TERMINAL-001; FINAL-001
+// Qualification: terminal/publication closure 43.x-45.3.3.8
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #include "xstar_final_recompute_bridge.h"
 #include "xstar_atdb_runtime.hpp"
 #include "xstar_fixed_state_engine.h"

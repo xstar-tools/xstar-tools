@@ -1,3 +1,12 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: xstar.f90; xstarcalc.f90; pprint.f90; writespectra*.f90
+// Role: Qualification harness for replaying/validating a compiled reference case and its public products.
+// Relation: C++ infrastructure, not a direct Fortran routine translation; validates the same full-run
+//   scientific boundary.
+// Concordance: ARCH-001; BACKEND-001; FINAL-001
+// Qualification: three-mode qualification 12.3.44
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #include "xstar_api.h"
 #include "xstar_standalone_internal.hpp"
 

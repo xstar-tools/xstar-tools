@@ -1,3 +1,11 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: No direct Fortran routine.
+// Role: Standalone executable/backend-discovery utility helpers.
+// Relation: Infrastructure only; no scientific operation.
+// Concordance: BACKEND-001
+// Qualification: ABI/productization boundary
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #ifndef XSTAR_STANDALONE_INTERNAL_HPP
 #define XSTAR_STANDALONE_INTERNAL_HPP
 

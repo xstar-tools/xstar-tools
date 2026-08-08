@@ -1,3 +1,12 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: ucalc.f90; calc_hmc_ion.f90; calc_emisab_ion.f90; linopac.f90
+// Role: Modular native rate-to-matrix, line-emissivity, and selected line-opacity kernels.
+// Relation: Source-equivalent low-level kernels; unsuffixed REAL literal behavior and one-based matrix
+//   endpoints are preserved where observable.
+// Concordance: MATRIX-001; EMISAB-001; TYPE50-001
+// Qualification: modular-kernel qualification leading to 12.3.44
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 // Modular rates backend for xstar_atomic/source_port.
 //
 // v0.5.54 adds the first real Mg record_type=7 C++ kernel.  The Python

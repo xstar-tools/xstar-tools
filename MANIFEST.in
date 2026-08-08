@@ -14,6 +14,7 @@ include PARITY_FREEZE.md
 recursive-include qualification *.json *.py *.md
 include tools/qualification/check_parity_freeze.py
 include tools/qualification/check_source_concordance.py
+include tools/qualification/check_cpp_source_comments.py
 prune historical
 
 include .github/workflows/parity-freeze.yml

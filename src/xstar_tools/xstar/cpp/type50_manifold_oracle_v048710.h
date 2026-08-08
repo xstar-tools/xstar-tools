@@ -1,3 +1,11 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: ucalc.f90 Type50 producer context; calc_hmc_ion.f90; linopac.f90
+// Role: Historical Type50 manifold reference values used during native-port attribution.
+// Relation: Reference/oracle data, not executable source correspondence.
+// Concordance: TYPE50-001; MATRIX-001
+// Qualification: historical Type50 qualification; frozen science baseline
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #pragma once
 
 #include <array>

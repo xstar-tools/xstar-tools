@@ -1,3 +1,11 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: calc_hmc_element.f90; calc_hmc_ion.f90; calc_ion_rates.f90; levwkelement.f90
+// Role: C ABI structures/functions for per-element ion/rate/matrix/level-population evaluation.
+// Relation: Interface representation of the mapped element fixed-state operator.
+// Concordance: ION-001; LEVEL-001; MATRIX-001
+// Qualification: matrix repair 12.3.25; C++ 12.3.44
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #ifndef XSTAR_ELEMENT_ENGINE_H
 #define XSTAR_ELEMENT_ENGINE_H
 

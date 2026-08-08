@@ -1,3 +1,11 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: Scientific boundary: xstarcalc.f90; no Fortran backend-dispatch analogue.
+// Role: Dispatch adapter selecting native C++ implementations for qualified scientific components.
+// Relation: Productization dispatch only; selected component science is mapped in its owning files.
+// Concordance: BACKEND-001
+// Qualification: three-mode parity 12.3.44
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #include "xstar_backend_plugin.h"
 #include "xstar_standalone_internal.hpp"
 

@@ -1,3 +1,14 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: calc_hmc_element.f90; calc_hmc_ion.f90; calc_ion_rates.f90; istruc.f90; ioneqm.f90;
+//   levwkelement.f90; msolvelucy.f90
+// Role: Native per-element fixed-state ion/level population, rate, matrix, and thermal-contribution
+//   evaluation.
+// Relation: Source-equivalent operator with different storage; source traversal/order, endpoint clamping,
+//   and solve invariants are qualified.
+// Concordance: ION-001; LEVEL-001; MATRIX-001; THERM-001
+// Qualification: matrix repair 12.3.25; all-62 C++ 12.3.44
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #include "xstar_element_engine.h"
 #include "source_order_thermal_reducer.hpp"
 #include "canonical_thermal_term.hpp"

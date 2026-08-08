@@ -1,3 +1,11 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: No direct Fortran routine.
+// Role: C++ backend error/status namespace used around translated scientific kernels.
+// Relation: Infrastructure only; must not alter scientific state or Fortran-equivalent control decisions.
+// Concordance: BACKEND-001
+// Qualification: ABI 6048110 freeze
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #ifndef XSTAR_BACKEND_ERROR_CODES_HPP
 #define XSTAR_BACKEND_ERROR_CODES_HPP
 

@@ -1,3 +1,12 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: calc_hmc_all.f90; calc_hmc_element.f90; calc_hmc_ion.f90
+// Role: Source-order four-channel thermal accumulation and tagged reductions.
+// Relation: Optimized storage/reduction helper constrained to reproduce the source accumulation
+//   ownership/order where roundoff is observable.
+// Concordance: THERM-001
+// Qualification: thermal/source-order qualification 12.3.44
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #ifndef XSTAR_SOURCE_ORDER_THERMAL_REDUCER_HPP
 #define XSTAR_SOURCE_ORDER_THERMAL_REDUCER_HPP
 

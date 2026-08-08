@@ -1,3 +1,12 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: calc_hmc_ion.f90; ucalc.f90; leqt2f.f90; msolvelucy.f90
+// Role: Batched UCalc/rate conversion and source matrix-term assembly for the multilevel kinetic operator.
+// Relation: Source-equivalent matrix construction with compact C++ storage; source one-based endpoints and
+//   terminal clamps are preserved.
+// Concordance: MATRIX-001; LEVEL-001
+// Qualification: Ca XVIII/Ca XVII matrix repair 12.3.25; C++ 12.3.44
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #include "xstar_constants.h"
 // Optional XSTAR matrix-assembly kernels.
 //

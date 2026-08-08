@@ -1,3 +1,12 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: ener.f90
+// Role: Construct the source logarithmic energy grid while reproducing default-REAL literal/operation
+//   semantics used by ener.
+// Relation: Source-exact numeric helper for the accepted energy-grid construction.
+// Concordance: ARCH-001; INPUT-001
+// Qualification: default-REAL policy frozen with 12.3.36 and C++ 12.3.44
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #ifndef XSTAR_SOURCE_REAL_ENERGY_GRID_HPP
 #define XSTAR_SOURCE_REAL_ENERGY_GRID_HPP
 

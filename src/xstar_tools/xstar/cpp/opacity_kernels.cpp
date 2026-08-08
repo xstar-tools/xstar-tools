@@ -1,3 +1,13 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: linopac.f90; voigte.f90; huntf.f90; nbinc.f90
+// Role: Production line-opacity/profile kernel, including the accepted Type50 hot path and source
+//   arithmetic helpers.
+// Relation: Optimized-equivalent: AVX2/cursor transformations may change execution shape but preserve
+//   accepted line order, active range, boundaries, and per-bin arithmetic.
+// Concordance: TYPE50-001; EMIS-001
+// Qualification: Type50 optimization 12.3.26-31; frozen production path 12.3.44
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #include "xstar_backend_common.hpp"
 #include "xstar_spectral_engine.h"
 #include "xstar_constants.h"

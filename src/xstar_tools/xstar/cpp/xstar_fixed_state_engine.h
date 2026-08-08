@@ -1,3 +1,15 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: calc_hmc_all.f90; calc_hmc_element.f90; calc_hmc_ion.f90; calc_emisab_all.f90;
+//   calc_emisab_element.f90; calc_emisab_ion.f90; calc_emis_all.f90; calc_emis_element.f90;
+//   calc_emis_ion.f90
+// Role: C ABI data model for the shared fixed-state scientific evaluator and retained publication
+//   workspaces.
+// Relation: Interface/storage representation; source scientific ownership remains in the mapped Fortran
+//   operators.
+// Concordance: MATRIX-001; THERM-001; EMISAB-001; EMIS-001
+// Qualification: C++ baseline 12.3.44
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #ifndef XSTAR_FIXED_STATE_ENGINE_H
 #define XSTAR_FIXED_STATE_ENGINE_H
 

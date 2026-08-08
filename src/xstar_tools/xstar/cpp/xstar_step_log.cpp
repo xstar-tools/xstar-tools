@@ -1,3 +1,13 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: pprint.f90; nbinc.f90; huntf.f90
+// Role: Native STEP/log publication including source-ranked lines, RRC/edge inventories, ion columns, and
+//   controller summaries.
+// Relation: Source-exact/source-equivalent print-option semantics where qualified; numerical science is
+//   separated from identity/order/inventory diagnostics.
+// Concordance: STEP-001; TERMINAL-001
+// Qualification: comparator 12.3.34/36.1/41/42; Python rank parity 45.1/45.3.3.2
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #include "xstar_step_log.hpp"
 #include "xstar_constants.h"
 

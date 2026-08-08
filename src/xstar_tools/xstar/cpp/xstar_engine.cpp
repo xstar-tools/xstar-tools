@@ -1,3 +1,12 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: ucalc.f90 (including Type63); anl1.f90; calc_hmc_ion.f90
+// Role: Low-level native atomic-rate/contribution construction used by the element/fixed-state engines.
+// Relation: Source-equivalent selected UCalc/anl1 branches and contribution construction; operation order
+//   is preserved where qualified.
+// Concordance: MATRIX-001; ION-001
+// Qualification: all-element native construction qualification; C++ 12.3.44
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #include "xstar_backend_common.hpp"
 #include "compact_arrays.hpp"
 #include "xstar_constants.h"

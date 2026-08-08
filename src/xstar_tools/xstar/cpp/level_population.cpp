@@ -1,3 +1,12 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: leqt2f.f90; ludcmp.f90; lubksb.f90; mprove.f90; msolvelucy.f90
+// Role: Dense linear-system solve/refinement used for statistical-equilibrium level populations.
+// Relation: Mathematically/source-order equivalent solver kernel; solution clamping/refinement behavior is
+//   part of qualification.
+// Concordance: LEVEL-001; MATRIX-001
+// Qualification: matrix/population qualification 12.3.25 and 12.3.44
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #include <algorithm>
 #include <cmath>
 #include <cstddef>

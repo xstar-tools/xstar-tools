@@ -1,3 +1,15 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: calc_hmc_all.f90; calc_hmc_element.f90; calc_hmc_ion.f90; calc_emisab_all.f90;
+//   calc_emisab_element.f90; calc_emisab_ion.f90; calc_emis_all.f90; calc_emis_element.f90;
+//   calc_emis_ion.f90; ucalc.f90; linopac.f90
+// Role: Shared native fixed-state scientific engine: ion/level solve, rates, thermal terms, reduced/full
+//   spectral construction, and retained publication state.
+// Relation: Source-equivalent core with qualified optimized subkernels; ordering/lifetime/IEEE invariants
+//   are part of the contract.
+// Concordance: ION-001; MATRIX-001; THERM-001; EMISAB-001; EMIS-001; TYPE50-001
+// Qualification: 12.3.25 science repair; Type50 12.3.31; all-62 12.3.44
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #include "xstar_fixed_state_engine.h"
 #include "source_real_energy_grid.hpp"
 #include "source_order_thermal_reducer.hpp"

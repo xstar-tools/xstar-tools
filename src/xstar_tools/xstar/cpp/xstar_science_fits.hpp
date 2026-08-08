@@ -1,3 +1,11 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: fstepr*.f90; writespectra*.f90
+// Role: C++ publication API for source-equivalent scientific FITS products.
+// Relation: Interface-only wrapper for the native publication owner.
+// Concordance: DETAIL-001; FINAL-001
+// Qualification: C++ FITS baseline 12.3.44
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #ifndef XSTAR_SCIENCE_FITS_HPP
 #define XSTAR_SCIENCE_FITS_HPP
 

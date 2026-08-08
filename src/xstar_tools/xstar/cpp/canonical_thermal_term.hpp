@@ -1,3 +1,12 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: calc_hmc_all.f90; calc_hmc_element.f90; calc_hmc_ion.f90
+// Role: Canonical tagging/fingerprinting of source-owned heating/cooling terms before C++ reduction.
+// Relation: C++ representation helper; preserves source term identity and accumulation ownership rather
+//   than translating a single Fortran array type.
+// Concordance: THERM-001; MATRIX-001
+// Qualification: science 45.3.3.8; C++ baseline 12.3.44
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #ifndef XSTAR_CANONICAL_THERMAL_TERM_HPP
 #define XSTAR_CANONICAL_THERMAL_TERM_HPP
 

@@ -1,3 +1,11 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: No direct Fortran routine.
+// Role: Plugin/backend ABI declaration used to select scientific component implementations.
+// Relation: Infrastructure only; no physics or source arithmetic.
+// Concordance: BACKEND-001
+// Qualification: ABI 6048110 freeze
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #ifndef XSTAR_BACKEND_PLUGIN_H
 #define XSTAR_BACKEND_PLUGIN_H
 

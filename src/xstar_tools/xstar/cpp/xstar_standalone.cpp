@@ -1,3 +1,14 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: xstar.f90; xstarcalc.f90; step.f90; trnfrc.f90; trnfrn.f90; stpcut.f90; savd/unsavd.f90;
+//   pprint.f90; writespectra*.f90
+// Role: Standalone native controller implementing the full radial/pass lifecycle around the shared zone
+//   science and public outputs.
+// Relation: Source-equivalent controller with C++ state objects; branch/order/geometry/publication
+//   invariants are qualification-pinned.
+// Concordance: ARCH-001; RADIAL-001; STATE-001; STEP-001; FINAL-001; TERMINAL-001
+// Qualification: all-62 STEP 12.3.42; FITS 12.3.43.3; three-mode 12.3.44
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #include "xstar_api.h"
 #include "xstar_python_bridge.h"
 #include "xstar_fixed_state_engine.h"

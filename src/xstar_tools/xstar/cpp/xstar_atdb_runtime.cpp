@@ -1,3 +1,13 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: xstarsetup.f90; readtbl.f90; setptrs.f90; rread1.f90
+// Role: Resolve/read production atomic data and parameters, construct source-equivalent
+//   record/level/line/RRC pointer topology, and retain source reader semantics.
+// Relation: Source-exact identities/pointers with C++ storage; parameter/default-REAL details are preserved
+//   where qualified.
+// Concordance: DB-001; INPUT-001
+// Qualification: all-element pointer qualification; radius/default-REAL 12.3.36; C++ 12.3.44
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #include "xstar_atdb_runtime.hpp"
 
 #include <fitsio.h>

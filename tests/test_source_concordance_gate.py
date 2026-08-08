@@ -14,7 +14,7 @@ def _concordance():
 def test_source_concordance_metadata_and_docs_exist():
     data = _concordance()
     assert data["schema"] == "xstar-tools-source-concordance-v1"
-    assert data["productization_version"] == "0.6.52"
+    assert data["productization_version"] == "0.6.53"
     assert data["science_revision"] == "0.6.48.12.3.45.3.3.8"
     assert data["canonical_fortran"]["version"] == "2.59g"
     for rel in data["documentation"] + data["diagrams"]:
@@ -34,7 +34,7 @@ def test_source_concordance_entries_have_real_characterization_tests():
             assert (ROOT / rel).is_file()
 
 
-def test_source_comments_do_not_modify_parity_hash_pinned_files():
+def test_source_comments_obey_freeze_policy():
     data = _concordance()
     frozen = json.loads((ROOT / "qualification" / "parity_freeze_science_hashes.json").read_text())
     for rel in data["source_comment_files"]:
@@ -42,6 +42,12 @@ def test_source_comments_do_not_modify_parity_hash_pinned_files():
         text = (ROOT / rel).read_text(errors="replace")
         assert "Source correspondence:" in text
         assert "Concordance:" in text
+    assert len(data["cpp_source_comment_files"]) == 47
+    for rel in data["cpp_source_comment_files"]:
+        text = (ROOT / rel).read_text(errors="replace")
+        assert text.startswith("// XSTAR-SOURCE-CORRESPONDENCE-BEGIN\n")
+        assert "// Fortran:" in text[:2500]
+        assert "// Concordance:" in text[:2500]
 
 
 def test_every_parity_pinned_scientific_source_has_a_refactor_rule():

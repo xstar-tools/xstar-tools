@@ -1,3 +1,13 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: xstarsetup.f90 (coheat.dat load); cmpfnc.f90; comp2.f90
+// Role: Embedded qualification snapshot of the coheat.dat Compton heating/cooling interpolation table used
+//   by cmpfnc.
+// Relation: Data-equivalent snapshot used by qualified native evaluation; interpolation semantics remain
+//   those of cmpfnc/hunt3.
+// Concordance: THERM-001
+// Qualification: C++ baseline 12.3.44
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #ifndef XSTAR_COHEAT_TABLE_V048724_H
 #define XSTAR_COHEAT_TABLE_V048724_H
 

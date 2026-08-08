@@ -1,3 +1,11 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: pprint.f90
+// Role: C++ interface for final/zone STEP log generation.
+// Relation: Interface-only wrapper around source-mapped pprint publication.
+// Concordance: STEP-001
+// Qualification: STEP baseline 12.3.42/44
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #ifndef XSTAR_STEP_LOG_HPP
 #define XSTAR_STEP_LOG_HPP
 

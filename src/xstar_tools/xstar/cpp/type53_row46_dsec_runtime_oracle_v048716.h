@@ -1,3 +1,11 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: ucalc.f90 Type53 branch; calc_hmc_ion.f90; dsec.f90
+// Role: Historical Type53 row-46 runtime reference used during DSEC attribution.
+// Relation: Reference/oracle data, not a Fortran routine translation.
+// Concordance: MATRIX-001; DSEC-001
+// Qualification: historical Type53/DSEC attribution; frozen science baseline
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #pragma once
 
 #include <array>

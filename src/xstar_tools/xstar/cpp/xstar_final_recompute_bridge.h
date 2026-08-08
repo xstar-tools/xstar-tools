@@ -1,3 +1,11 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: final xstar.f90 sequence; xstarcalc.f90
+// Role: C ABI contract for terminal/final-state recomputation before public final outputs.
+// Relation: Interface-only representation of the source terminal lifetime boundary.
+// Concordance: TERMINAL-001; FINAL-001
+// Qualification: terminal publication closure through 45.3.3.8
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #ifndef XSTAR_FINAL_RECOMPUTE_BRIDGE_H
 #define XSTAR_FINAL_RECOMPUTE_BRIDGE_H
 

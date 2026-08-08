@@ -1,6 +1,6 @@
 # XSTAR tools architecture at the parity-freeze boundary
 
-**Productization version:** 0.6.52  
+**Productization version:** 0.6.53  
 **Qualified science revision:** `0.6.48.12.3.45.3.3.8`  
 **Canonical executable authority:** XSTAR Fortran 2.59g  
 **Frozen C++ production baseline:** `0.6.48.12.3.44`  
@@ -73,7 +73,7 @@ The source deliberately separates integrated/reduced-grid products from full-gri
 - `calc_emis_all` constructs the emergent full-grid continuum/line opacity/emissivity state;
 - `linopac` is the line-profile accumulation primitive used by the Type50 path.
 
-The frozen optimized C++ Type50 implementation changes traversal mechanics, not science: monotone cursors and source-compatible SIMD/scalar helpers reduce repeated range searches while preserving source ordering and the accepted numerical update semantics. These optimized files are hash-pinned and are therefore documented in the concordance instead of being edited for Milestone 2 comments.
+The frozen optimized C++ Type50 implementation changes traversal mechanics, not science: monotone cursors and source-compatible SIMD/scalar helpers reduce repeated range searches while preserving source ordering and the accepted numerical update semantics. In 0.6.53 these files carry a standardized source-correspondence comment block. The block is a reversible documentation overlay: stripping it must reproduce the exact frozen baseline bytes.
 
 ### 6. Publication and terminal-state ownership
 
@@ -130,7 +130,7 @@ Important ownership areas are:
 - `xstar_standalone.cpp`: standalone native controller;
 - `cpp_backend_production_zone.py`: Python-to-native production-zone ABI (`6048110`).
 
-All production C++ science files are hash-pinned to the accepted C++ 44 baseline. Milestone 2 therefore **does not edit those files even for comments**. Optimization correspondence and invariants are recorded in `python_cpp_fortran_concordance.md`.
+All production C++ science files remain semantically pinned to the accepted C++ 44 baseline. Starting in 0.6.53, concise Fortran-source comments are permitted only inside the marked `XSTAR-SOURCE-CORRESPONDENCE` block. The parity gate strips exactly that block and requires the remaining bytes to match the frozen baseline hash; any executable or unmarked textual change remains a freeze violation. Optimization correspondence and invariants are also recorded in `python_cpp_fortran_concordance.md`.
 
 ![Backend dispatch](diagrams/backend_dispatch.svg)
 

@@ -1,3 +1,11 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: No direct Fortran routine; supports calc_hmc/calc_emis-equivalent backend kernels.
+// Role: Shared compact-packet/error helpers for native backend modules.
+// Relation: C++ infrastructure/storage only.
+// Concordance: BACKEND-001
+// Qualification: ABI 6048110 freeze
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #ifndef XSTAR_BACKEND_COMMON_HPP
 #define XSTAR_BACKEND_COMMON_HPP
 

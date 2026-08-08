@@ -1,3 +1,12 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: heatt.f90; dsec.f90; calc_hmc_all.f90
+// Role: Thermal-state update/HEATT transport correction and native DSEC nonlinear evaluation loop support.
+// Relation: Source-exact controller arithmetic/order where qualified; fixed-state science evaluations are
+//   delegated to calc_hmc-equivalent engines.
+// Concordance: THERM-001; DSEC-001
+// Qualification: DSEC/trajectory closure 12.3.42; C++ 12.3.44
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #include "xstar_thermal_engine.h"
 
 #include <algorithm>

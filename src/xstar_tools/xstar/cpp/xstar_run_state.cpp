@@ -1,3 +1,13 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: savd.f90; unsavd.f90; rstepr*.f90; final state in xstar.f90
+// Role: Native run-state persistence/transfer between accepted zones, radial passes, publication snapshots,
+//   and terminal outputs.
+// Relation: Object-storage equivalent of source persisted/local lifetime state; publication ownership is
+//   intentionally separated from physical solve state.
+// Concordance: STATE-001; RADIAL-001; DETAIL-001; TERMINAL-001
+// Qualification: state/lifetime closure 12.3.43-45; C++ 12.3.44
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #include "xstar_run_state.hpp"
 
 #include <algorithm>

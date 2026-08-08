@@ -1,3 +1,11 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: xstarcalc.f90
+// Role: Stable bridge for one production-zone evaluation using the shared native scientific operator.
+// Relation: C ABI wrapper around the xstarcalc-equivalent zone boundary; no independent physics.
+// Concordance: ARCH-001; BACKEND-001
+// Qualification: production-zone ABI 6048110; 12.3.44
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #ifndef XSTAR_PRODUCTION_ZONE_BRIDGE_H
 #define XSTAR_PRODUCTION_ZONE_BRIDGE_H
 

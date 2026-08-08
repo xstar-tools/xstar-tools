@@ -1,3 +1,12 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: linopac.f90 / Type50 ucalc context as exercised inside dsec.f90
+// Role: Historical runtime reference values used to qualify Type50 behavior during DSEC evaluations.
+// Relation: Reference/oracle data, not a Fortran code translation; captures accepted source-observable
+//   behavior.
+// Concordance: TYPE50-001; DSEC-001
+// Qualification: historical Type50/DSEC attribution; frozen science baseline
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #pragma once
 
 #include <array>

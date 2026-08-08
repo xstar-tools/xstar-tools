@@ -1,3 +1,11 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: Scientific boundary: xstarcalc.f90; no Fortran backend-dispatch analogue.
+// Role: Backend adapter for Python-controlled component execution through the common native ABI.
+// Relation: Productization bridge; does not redefine scientific equations.
+// Concordance: BACKEND-001
+// Qualification: Python/C++ controller parity through 12.3.44 and 45.x
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #include "xstar_backend_plugin.h"
 #include "xstar_python_bridge.h"
 #include "xstar_standalone_internal.hpp"

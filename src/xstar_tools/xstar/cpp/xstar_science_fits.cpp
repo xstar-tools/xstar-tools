@@ -1,3 +1,14 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: fstepr.f90; fstepr2.f90; fstepr3.f90; fstepr4.f90; writespectra.f90; writespectra2.f90;
+//   writespectra3.f90; writespectra4.f90; pprint.f90 option 12 publication
+// Role: Native FITS publication for per-shell detail products and final
+//   spectra/lines/continuum/RRC/abundance surfaces.
+// Relation: Source-equivalent publication with explicit source lifetime/REAL(4) writer semantics and
+//   accepted Ca/O structural exceptions.
+// Concordance: DETAIL-001; FINAL-001; TERMINAL-001; STEP-001
+// Qualification: all-62 FITS 12.3.43.3; C++ 12.3.44; Python science 45.3.3.8
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #include "xstar_science_fits.hpp"
 #include "xstar_constants.h"
 

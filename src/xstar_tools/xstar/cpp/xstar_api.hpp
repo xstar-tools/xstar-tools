@@ -1,3 +1,11 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: No direct Fortran routine; wraps the xstar_api.h boundary around xstarcalc-equivalent execution.
+// Role: C++ RAII/convenience wrapper for the public C ABI.
+// Relation: Infrastructure only; must be behaviorally transparent to scientific results.
+// Concordance: BACKEND-001
+// Qualification: ABI 6048110 freeze
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #ifndef XSTAR_API_HPP
 #define XSTAR_API_HPP
 

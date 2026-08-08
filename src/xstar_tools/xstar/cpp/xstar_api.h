@@ -1,3 +1,11 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: Scientific boundary: xstar.f90 / xstarcalc.f90; no direct ABI analogue in Fortran.
+// Role: Stable C ABI declarations for configuration, zone evaluation, components, and statistics.
+// Relation: Interface-only productization layer; scientific meaning comes from the mapped engines.
+// Concordance: BACKEND-001; ARCH-001
+// Qualification: ABI 6048110 freeze
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #ifndef XSTAR_API_H
 #define XSTAR_API_H
 

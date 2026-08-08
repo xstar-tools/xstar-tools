@@ -1,3 +1,11 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: heatt.f90; dsec.f90; calc_hmc_all.f90
+// Role: C ABI for thermal/HEATT workspaces, DSEC controller configuration, evaluations, and statistics.
+// Relation: Interface representation of the source thermal controller/operator boundary.
+// Concordance: THERM-001; DSEC-001
+// Qualification: DSEC/thermal baseline 12.3.42/44
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #ifndef XSTAR_THERMAL_ENGINE_H
 #define XSTAR_THERMAL_ENGINE_H
 

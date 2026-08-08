@@ -1,3 +1,11 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: No direct Fortran routine; bridges Python control to xstarcalc-equivalent native components.
+// Role: C declarations used by the Python/native interoperability layer.
+// Relation: Infrastructure only; scientific ownership is delegated to mapped kernels.
+// Concordance: BACKEND-001
+// Qualification: Python/C++ parity campaign 45.x
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #ifndef XSTAR_PYTHON_BRIDGE_H
 #define XSTAR_PYTHON_BRIDGE_H
 

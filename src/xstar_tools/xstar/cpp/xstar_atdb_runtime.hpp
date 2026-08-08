@@ -1,3 +1,12 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: xstarsetup.f90; readtbl.f90; setptrs.f90; rread1.f90
+// Role: Native atomic-data/parameter structures exposing the source database topology to production
+//   engines.
+// Relation: Storage/interface representation of the source reader and setptrs relationships.
+// Concordance: DB-001; INPUT-001
+// Qualification: C++ baseline 12.3.44
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #ifndef XSTAR_ATDB_RUNTIME_HPP
 #define XSTAR_ATDB_RUNTIME_HPP
 

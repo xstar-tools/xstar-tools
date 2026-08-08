@@ -1,3 +1,13 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: calc_emisab_all.f90; calc_emisab_element.f90; calc_emisab_ion.f90; calc_emis_all.f90;
+//   calc_emis_element.f90; calc_emis_ion.f90; binemis.f90; linopac.f90
+// Role: C ABI for integrated/full-grid emissivity and opacity construction.
+// Relation: Interface representation of source-equivalent spectral producers and qualified Type50
+//   optimization.
+// Concordance: EMISAB-001; EMIS-001; TYPE50-001
+// Qualification: spectral/Type50 closure through 12.3.44
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #ifndef XSTAR_SPECTRAL_ENGINE_H
 #define XSTAR_SPECTRAL_ENGINE_H
 

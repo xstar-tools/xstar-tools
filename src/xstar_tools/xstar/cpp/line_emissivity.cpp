@@ -1,3 +1,15 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: calc_emisab_all.f90; calc_emisab_element.f90; calc_emisab_ion.f90; calc_emis_all.f90;
+//   calc_emis_element.f90; calc_emis_ion.f90; binemis.f90; linopac.f90; voigte.f90; huntf.f90;
+//   nbinc.f90
+// Role: Native spectral workspace: integrated line emission plus full-grid line binning/profile application
+//   and source helper numerics.
+// Relation: Source-equivalent spectral producer; Type50/profile portions call qualified
+//   optimized-equivalent opacity kernels.
+// Concordance: EMISAB-001; EMIS-001; TYPE50-001
+// Qualification: spectral closure 5.20.x; Type50 12.3.31; C++ 12.3.44
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 // Optional XSTAR emissivity/output kernels.
 //
 // v0.6.0a19 starts libxstar_emissivity.so as a plain C ABI shared library.

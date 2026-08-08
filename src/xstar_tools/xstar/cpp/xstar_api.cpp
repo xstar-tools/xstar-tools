@@ -1,3 +1,13 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: Scientific boundary: xstar.f90 / xstarcalc.f90; no direct ABI analogue in Fortran.
+// Role: Public C ABI context/configuration and dispatch into the qualified engine, spectral, thermal,
+//   element, and backend components.
+// Relation: Productization infrastructure over the Fortran-equivalent scientific boundary; no independent
+//   physics.
+// Concordance: BACKEND-001; ARCH-001
+// Qualification: ABI 6048110; three-mode parity 12.3.44
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #include "xstar_api.h"
 #include "xstar_backend_plugin.h"
 #include "xstar_standalone_internal.hpp"

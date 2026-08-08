@@ -1,3 +1,12 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: savd.f90; unsavd.f90; rstepr*.f90; pprint.f90; writespectra*.f90
+// Role: Structures for accepted controller state, radial snapshots, exact source workspaces, STEP state,
+//   and final product-writing state.
+// Relation: C++ storage model for source lifetimes and publication ownership.
+// Concordance: STATE-001; DETAIL-001; STEP-001; FINAL-001; TERMINAL-001
+// Qualification: 12.3.43-45 lifetime/publication qualification
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #ifndef XSTAR_RUN_STATE_HPP
 #define XSTAR_RUN_STATE_HPP
 

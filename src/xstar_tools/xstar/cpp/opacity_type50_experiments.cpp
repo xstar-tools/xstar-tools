@@ -1,3 +1,12 @@
+// XSTAR-SOURCE-CORRESPONDENCE-BEGIN
+// Fortran: linopac.f90; voigte.f90; huntf.f90; nbinc.f90
+// Role: Non-authoritative experimental Type50/vector/rebin kernels retained for performance comparison.
+// Relation: Experimental optimized variants of linopac; production science remains owned by the qualified
+//   path in opacity_kernels.cpp.
+// Concordance: TYPE50-001
+// Qualification: performance experiments 12.3.26-32; not the frozen production owner
+// XSTAR-SOURCE-CORRESPONDENCE-END
+
 #include "xstar_backend_common.hpp"
 #include "xstar_spectral_engine.h"
 #include "xstar_constants.h"
