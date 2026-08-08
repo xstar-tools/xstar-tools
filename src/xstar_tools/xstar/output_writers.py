@@ -425,6 +425,22 @@ def build_detail_line_table(
     )
 
 
+def _detail3_publication_trace_targets_v064812345339() -> set[int]:
+    raw = str(os.environ.get(
+        "XSTAR_V064812345339_DETAIL3_TARGETS",
+        "22608,23076,3000,3001,3002,3006,3007,3008,3009,3010,3039,3040,3041,3045,3046,3047,3048,3049,3050,3051,3052,3074,3075,3076,3077,3078,3079,3080,3081,3082,3083,3084,3094,3095,3096,3127,3128,3129,3130,3131,3166,3167,3168,3169,3170,3200,3214",
+    ))
+    out: set[int] = set()
+    for token in raw.replace(";", ",").split(","):
+        try:
+            value = int(token.strip())
+        except Exception:
+            continue
+        if value > 0:
+            out.add(value)
+    return out
+
+
 def build_detail_rrc_table(
     *,
     metadata: SourceOutputMetadata,
@@ -442,6 +458,7 @@ def build_detail_rrc_table(
     non_type7_absorption: Mapping[int, Mapping[str, Any]] | None = None,
     fixed_state_non_type7_absorption: Mapping[int, Mapping[str, Any]] | None = None,
     fixed_state_non_type7_publication: Mapping[int, Mapping[str, Any]] | None = None,
+    type7_final_slot_publication: Mapping[int, Mapping[str, Any]] | None = None,
     publication_trace: list[dict[str, Any]] | None = None,
 ) -> OutputTable:
     """Frozen-44-compatible generic detailed-RRC row selection.
@@ -466,6 +483,7 @@ def build_detail_rrc_table(
     non_type7_map = non_type7_absorption or {}
     fixed_state_map = fixed_state_non_type7_absorption or {}
     fixed_state_full_map = fixed_state_non_type7_publication or {}
+    type7_final_slot_map = type7_final_slot_publication or {}
     emiss = np.asarray(cemab, dtype=float)
     absorbed = np.asarray(cabab, dtype=float).reshape(-1)
     opacity = np.asarray(opakab, dtype=float).reshape(-1)
@@ -498,8 +516,35 @@ def build_detail_rrc_table(
         current = (float(emiss[0, i]), float(emiss[1, i]), float(absorbed[i]), float(opacity[i]))
         active = any(np.isfinite(v) and v > activity_floor for v in current)
         owner = "physical_current" if active else "inactive"
-        retained = record_shadow.get(int(item.source_record)) if (not active and rate_type == 7) else None
-        if not active and rate_type == 7 and retained is not None and int(retained.get("continuum_index", -1)) == int(item.continuum_index):
+
+        # 45.3.3.9: frozen C++ generic detail3 membership is owned by the
+        # final one-based local continuum slot written by the rate-7 traversal,
+        # not by canonical source-record identity.  A later zero write clears
+        # an earlier positive value.  The Python calc_emisab traversal now
+        # retains that exact source-order slot state separately from the
+        # physical arrays, which may subsequently be transformed/cleared.
+        # When present it is authoritative, including an explicit zero.
+        type7_slot_entry: Mapping[str, Any] | None = None
+        authoritative_type7_slot = False
+        data_type = int(getattr(item, "data_type", 0) or 0)
+        candidate = type7_final_slot_map.get(int(item.continuum_index))
+        if isinstance(candidate, Mapping) and int(candidate.get("rate_type", 0) or 0) == 7:
+                current = (
+                    float(candidate.get("emis_inward", 0.0) or 0.0),
+                    float(candidate.get("emis_outward", 0.0) or 0.0),
+                    float(candidate.get("integrated_absn", 0.0) or 0.0),
+                    float(candidate.get("opacity", 0.0) or 0.0),
+                )
+                active = any(np.isfinite(v) and v > activity_floor for v in current)
+                owner = (
+                    "source_type7_final_slot_v064812345339"
+                    if active else "source_type7_final_slot_zero_v064812345339"
+                )
+                type7_slot_entry = candidate
+                authoritative_type7_slot = True
+
+        retained = record_shadow.get(int(item.source_record)) if (not active and rate_type == 7 and not authoritative_type7_slot) else None
+        if not active and rate_type == 7 and not authoritative_type7_slot and retained is not None and int(retained.get("continuum_index", -1)) == int(item.continuum_index):
             retained_values = (
                 float(retained.get("emis_inward", 0.0)),
                 float(retained.get("emis_outward", 0.0)),
@@ -511,7 +556,7 @@ def build_detail_rrc_table(
                 active = True
                 owner = "source_record_lifetime_v0648123453"
         orphan_entry: Mapping[str, Any] | None = None
-        if not active and rate_type == 7:
+        if not active and rate_type == 7 and not authoritative_type7_slot:
             candidate = orphan_absorption.get(int(item.continuum_index))
             if isinstance(candidate, Mapping) and int(candidate.get("source_record", 0) or 0) == int(item.source_record):
                 retained_absn = float(candidate.get("integrated_absn", 0.0) or 0.0)
@@ -521,7 +566,7 @@ def build_detail_rrc_table(
                     owner = "canonical_npcon_orphan_type7_absorption_v06481234533"
                     orphan_entry = candidate
         fixed_state_full_entry: Mapping[str, Any] | None = None
-        if not active and rate_type == 1:
+        if not active and rate_type == 1 and not authoritative_type7_slot:
             candidate = fixed_state_full_map.get(int(item.continuum_index))
             if (isinstance(candidate, Mapping)
                     and int(candidate.get("source_record", 0) or 0) == int(item.source_record)
@@ -538,7 +583,7 @@ def build_detail_rrc_table(
                     owner = "fixed_state_rate1_postsolve_full_v064812345338"
                     fixed_state_full_entry = candidate
         non_type7_entry: Mapping[str, Any] | None = None
-        if not active and rate_type == 1:
+        if not active and rate_type == 1 and not authoritative_type7_slot:
             candidate = non_type7_map.get(int(item.continuum_index))
             if (isinstance(candidate, Mapping)
                     and int(candidate.get("source_record", 0) or 0) == int(item.source_record)
@@ -551,7 +596,7 @@ def build_detail_rrc_table(
                     owner = "canonical_npcon_non_type7_calc_emisab_absorption_v064812345335"
                     non_type7_entry = candidate
         fixed_state_entry: Mapping[str, Any] | None = None
-        if not active and rate_type == 1:
+        if not active and rate_type == 1 and not authoritative_type7_slot:
             candidate = fixed_state_map.get(int(item.continuum_index))
             if (isinstance(candidate, Mapping)
                     and int(candidate.get("source_record", 0) or 0) == int(item.source_record)
@@ -562,11 +607,18 @@ def build_detail_rrc_table(
                     active = True
                     owner = "fixed_state_rate1_postsolve_absorption_v064812345336"
                     fixed_state_entry = candidate
-        if publication_trace is not None and int(item.continuum_index) in {709, 762}:
+        trace_targets = _detail3_publication_trace_targets_v064812345339()
+        if publication_trace is not None and int(item.continuum_index) in trace_targets:
             publication_trace.append({
                 "phase": "detail3_publication",
                 "continuum_index": int(item.continuum_index),
                 "source_record": int(item.source_record),
+                "rate_type": int(rate_type),
+                "data_type": int(data_type),
+                "atomic_number": int(z),
+                "ion_label": str(getattr(item, "ion_label", "")),
+                "lower_level": str(getattr(item, "lower_level", "")),
+                "upper_level": str(getattr(item, "upper_level", "")),
                 "owner": owner,
                 "active": bool(active),
                 "current_emis_inward": float(current[0]),
@@ -574,6 +626,7 @@ def build_detail_rrc_table(
                 "current_integrated_absn": float(current[2]),
                 "current_opacity": float(current[3]),
                 "record_shadow_present": bool(retained is not None),
+                "type7_final_slot_entry": dict(type7_slot_entry) if type7_slot_entry is not None else None,
                 "orphan_type7_entry": dict(orphan_entry) if orphan_entry is not None else None,
                 "non_type7_entry": dict(non_type7_entry) if non_type7_entry is not None else None,
                 "fixed_state_full_entry": dict(fixed_state_full_entry) if fixed_state_full_entry is not None else None,
@@ -680,6 +733,7 @@ def build_detail_shell_output(
     source_detail_rrc_non_type7_absorption: Mapping[int, Mapping[str, Any]] | None = None,
     source_detail_rrc_fixed_state_absorption: Mapping[int, Mapping[str, Any]] | None = None,
     source_detail_rrc_fixed_state_publication: Mapping[int, Mapping[str, Any]] | None = None,
+    source_detail_rrc_type7_final_slot: Mapping[int, Mapping[str, Any]] | None = None,
     source_detail_rrc_publication_trace: list[dict[str, Any]] | None = None,
     element_abundances: Sequence[float] | None = None,
 ) -> DetailShellOutput:
@@ -700,6 +754,7 @@ def build_detail_shell_output(
             non_type7_absorption=source_detail_rrc_non_type7_absorption,
             fixed_state_non_type7_absorption=source_detail_rrc_fixed_state_absorption,
             fixed_state_non_type7_publication=source_detail_rrc_fixed_state_publication,
+            type7_final_slot_publication=source_detail_rrc_type7_final_slot,
             publication_trace=source_detail_rrc_publication_trace,
         ),
         continuum=build_detail_continuum_table(epi_eV=epi_eV, zrems=zrems, opakc=opakc, rccemis=rccemis, dpthc=dpthc, ncn2=ncn2, header=header),
@@ -2854,6 +2909,9 @@ def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int, ter
             state.control, terminal_record=bool(terminal_record)
         )
     )
+    source_detail_rrc_type7_final_slot = state.control.get(
+        "source_detail_rrc_type7_final_slot_v064812345339", {}
+    )
     source_detail_rrc_publication_trace: list[dict[str, Any]] = []
     ncn2 = int(state.control["ncn2"])
     record = build_detail_shell_output(
@@ -2883,6 +2941,7 @@ def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int, ter
         source_detail_rrc_non_type7_absorption=source_detail_rrc_non_type7_absorption,
         source_detail_rrc_fixed_state_absorption=source_detail_rrc_fixed_state_absorption,
         source_detail_rrc_fixed_state_publication=source_detail_rrc_fixed_state_publication,
+        source_detail_rrc_type7_final_slot=source_detail_rrc_type7_final_slot,
         source_detail_rrc_publication_trace=source_detail_rrc_publication_trace,
         element_abundances=state.plasma.abundances,
     )

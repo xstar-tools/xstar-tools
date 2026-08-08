@@ -1,5 +1,13 @@
 # CHANGELOG
 
+# 0.6.48.12.3.45.3.3.9 - 2026-08-07
+
+- Repair generic `xo01_detal3` Type7 publication ownership from the final source-order continuum slot rather than canonical source-record identity.
+- Retain every visited rate-7 slot write, including explicit zero writes, so alias writers can activate a canonical identity and later zero writes can clear stale earlier activity.
+- Keep the final-slot bridge output-only; physical `cemab/cabab/opakab`, rates, matrices, populations, thermal/transport science, STEP, C++, and ABI 6048110 remain frozen.
+- Freeze C5 at accepted 45.3.3.7/8 behavior: no new 709/762 logic or diagnostics, and C5 is absent from the runnable qualification manifest.
+- Qualification runs only `ca19_xi2_ne1` and `o7_ne1e10` and emits exact canonical plus final-slot-writer metadata for Ca 22608/23076 and the 45 O7 residual identities.
+
 # 0.6.48.12.3.45.3.3.8 - 2026-08-07
 
 - Port frozen-44 C++ generic `xo01_detal3` fixed-state publication semantics into Python as an output-only full spectral publication bridge for canonical rate-type-1 bound-free records.
