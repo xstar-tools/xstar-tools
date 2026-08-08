@@ -1,10 +1,10 @@
-"""Shared XSTAR numerical constants loaded from :mod:`constants.def`.
+"""Shared XSTAR numerical constants loaded from ``xstar/cpp/constants.def``.
 
-``constants.def`` is included directly by the C++ backend and parsed here by
-Python, so the historical source-faithful and modern values have one numerical
-source of truth.  The current benchmark contract intentionally keeps the
-source-faithful collision value.  A future CODATA promotion
-must update the definition file only after reference recapture.
+The definition file lives with the native backend because C++ includes it directly;
+Python parses the same file so both implementations share one numerical source of
+truth.  The current benchmark contract intentionally keeps the source-faithful
+collision value.  A future CODATA promotion must update the definition file only
+after reference recapture.
 """
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ _DEFINITION = re.compile(
 
 
 def _load_constants() -> dict[str, float]:
-    path = Path(__file__).with_name("constants.def")
+    path = Path(__file__).with_name("cpp") / "constants.def"
     values: dict[str, float] = {}
     for line in path.read_text(encoding="utf-8").splitlines():
         text = line.strip()

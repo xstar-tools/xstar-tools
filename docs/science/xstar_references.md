@@ -94,6 +94,33 @@ Related implementation: `atomic_database.py`, ATDB fingerprint/cache metadata, n
 
 **Relation:** database/provenance context; source-exact behavior comes from current Fortran + ATDB.
 
+#### Atomic-data record semantics used by the native comments
+
+The 0.6.54 C++ comments use two source-specific distinctions from **XSTAR Manual Chapter 12** and **Mendoza et al. (2021), Appendix A**. A record's **data type** determines the formula/layout by which its constants are interpreted to calculate a rate or cross section; its **rate type** determines how XSTAR uses the returned quantity in the physical calculation. The ASCII database record header described by the manual contains six integers: data type, rate type, continuation flag, number of real values, number of integer values, and number of character values. The current `ucalc.f90` remains the executable dispatcher and therefore the final authority for present branching.
+
+The Appendix-A families called out directly in the native implementation are:
+
+| Data type | Source description used by the concordance | Native relevance |
+|---|---|---|
+| 49 | level-resolved partial photoionization cross section represented by energy/cross-section pairs | bound-free lowering and matrix/continuum ownership |
+| 50 | bound-bound radiative line record containing wavelength/radiative information and lower/upper level identities | line rates, Type50 opacity/profile path, DSEC/manifold oracles |
+| 51 | CHIANTI/Burgess-Tully effective collision strength for a bound-bound transition | collision-strength lowering/evaluation |
+| 53 | resonance-averaged TOPbase partial photoionization cross section represented by energy/cross-section pairs | bound-free lowering and Type53 DSEC attribution |
+| 63 | collisional transition probability reconstructed from quantum-defect/hydrogenic information | bound-bound collision path |
+| 70 | superlevel recombination/photoionization data over density/temperature with a photoionization curve | superlevel bound-free path |
+| 71 | radiative transitions from superlevels to spectroscopic levels | superlevel line path |
+| 72 | satellite-level autoionization data | autoionization path |
+| 76 | two-photon radiative decay | two-photon radiative branch |
+| 85 | Fe K-edge photoionization parameterization | inner-shell bound-free path |
+| 86 | Auger/radiative widths of a K-vacancy level | K-vacancy width/rate path |
+| 88 | damped-excess photoionization cross section to a K-shell superlevel | K-shell bound-free path |
+| 91 | APED radiative line data | routed by current `ucalc.f90` through Type-50 radiative handling |
+| 95 | level collisional-ionization fit | collisional-ionization path |
+| 98 | variable-length CHIANTI/Burgess-Tully effective collision-strength record | general collision-strength evaluator |
+| 99 | newer superlevel recombination/photoionization table | superlevel bound-free/recombination path |
+
+Types **89, 96, and 97** are present in the supplied current `ucalc.f90` but are not enumerated in the requested Appendix-A/Chapter-12 data-type snapshots. Comments for those branches therefore identify the **current executable Fortran source**, not the two reference tables, as their semantic basis.
+
 ### T. R. Kallman, D. Liedahl, A. Osterheld, W. Goldstein & S. Kahn (1996), “Photoionization Equilibrium Modeling of Iron L Line Emission,” *ApJ* 465, 994-1009
 
 **Scientific topic:** detailed Fe L emission in photoionized gas, including the importance of recombination cascades and multilevel line formation.

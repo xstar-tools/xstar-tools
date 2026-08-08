@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## 0.6.54 - stable native reference names and atomic-data documentation - 2026-08-08
+
+- Renamed four version-labeled C++ runtime reference headers to stable names and removed version labels from their namespaces; numerical payloads/oracle hashes are unchanged.
+- Moved `constants.def` into `src/xstar_tools/xstar/cpp/`; Python and C++ now consume the same file there, and C++ no longer includes a header/data definition from its parent directory.
+- Added concise atomic-data/data-type comments grounded in XSTAR Manual Chapter 12, Mendoza et al. (2021) Appendix A, and canonical `ucalc.f90`.
+- Scientific revision remains `0.6.48.12.3.45.3.3.8`; ABI remains `6048110`.
+
 # 0.6.53 - C++ Fortran-source correspondence comments - 2026-08-08
 
 - Re-read the relevant canonical XSTAR 2.59g Fortran routines and add a standardized `XSTAR-SOURCE-CORRESPONDENCE` comment block to all 47 `.cpp`, `.h`, and `.hpp` files under `src/xstar_tools/xstar/cpp/`.

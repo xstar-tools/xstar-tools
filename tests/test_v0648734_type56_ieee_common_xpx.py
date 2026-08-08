@@ -23,12 +23,12 @@ def test_release_and_shared_constant_values() -> None:
 
 def test_constants_def_is_single_numeric_source_for_python_and_cpp() -> None:
     root = Path("src/xstar_tools")
-    definition = root / "xstar/constants.def"
+    definition = root / "xstar/cpp/constants.def"
     python_loader = root / "xstar/constants.py"
     cpp_header = root / "xstar/cpp/xstar_constants.h"
     assert definition.is_file()
-    assert "constants.def" in python_loader.read_text()
-    assert '#include "../constants.def"' in cpp_header.read_text()
+    assert 'with_name("cpp") / "constants.def"' in python_loader.read_text()
+    assert '#include "constants.def"' in cpp_header.read_text()
 
     pattern = re.compile(
         r"(8\.617(?:07|333262(?:145)?|385)?e-[58]|0\.8617(?:07|333262145)?)"

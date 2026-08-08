@@ -12,7 +12,12 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace xstar_type53_row46_dsec_runtime_oracle_v048716 {
+// Appendix-A atomic-data context: Type 53 is a level-resolved, resonance-
+// averaged TOPbase partial photoionization cross section represented by
+// energy/cross-section pairs and bound/residual-ion level identities.  These
+// entries preserve one qualified DSEC attribution surface for that path.
+
+namespace xstar_type53_row46_dsec_runtime_oracle {
 
 struct Entry {
     std::uint64_t source_position;
@@ -91,4 +96,4 @@ inline constexpr std::array<Entry, 44> kEntries{{
     Entry{6308ULL, 1694ULL, 46, 78, 4973, 208, 54.419998168945312, 0, 54.391998291015625, 2, 1, 1, 0.0049051930554756817, 0, 0, 0.99510681775750298, 1, 0.00038851680376114032, {{0.17724520565036747, 2.8944286473388369e-05, -2.768295316309426e-15, -2.0938264540235478e-11, -2.4592843097213057e-16, -5.4921267427695804e-12}}},
 }};
 
-} // namespace xstar_type53_row46_dsec_runtime_oracle_v048716
+} // namespace xstar_type53_row46_dsec_runtime_oracle

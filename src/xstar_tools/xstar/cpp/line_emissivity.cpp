@@ -35,6 +35,9 @@ inline double source_real_literal(double value) {
 }
 
 // v0.6.48.12.3.22: source-faithful Type-50-family linopac eligibility.
+// XSTAR Appendix-A/Chapter-12 terminology: Type 50 is the ordinary radiative
+// line record (wavelength, gf, Einstein A, lower/upper levels); Type 91 is the
+// APED radiative-line form and ucalc.f90 routes it to label 50.
 // This predicate is deliberately element-agnostic.  FORTRAN ucalc label 50
 // applies the default-REAL opakb1 > 1.e-34 gate before linopac for ordinary
 // radiative-line records.  Data type 91 explicitly jumps to label 50 and

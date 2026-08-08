@@ -14,12 +14,12 @@
 #include "source_real_energy_grid.hpp"
 #include "source_order_thermal_reducer.hpp"
 #include "canonical_thermal_term.hpp"
-#include "coheat_table_v048724.h"
+#include "coheat_table.h"
 #include "xstar_element_engine.h"
 #include "xstar_spectral_engine.h"
-#include "type50_manifold_oracle_v048710.h"
-#include "type50_dsec_runtime_oracle_v048713.h"
-#include "type53_row46_dsec_runtime_oracle_v048716.h"
+#include "type50_manifold_oracle.h"
+#include "type50_dsec_runtime_oracle.h"
+#include "type53_row46_dsec_runtime_oracle.h"
 
 #include "xstar_constants.h"
 #include <algorithm>
@@ -341,31 +341,31 @@ void write_c_type53_promotion_audit_v0648119(
     out << ',' << max_abs(legacy) << ',' << max_abs(source_values) << ',' << max_abs(committed_values) << '\n';
 }
 
-const xstar_type50_manifold_oracle_v048710::Entry* find_type50_manifold_oracle_entry(
+const xstar_type50_manifold_oracle::Entry* find_type50_manifold_oracle_entry(
     std::uint64_t source_position,
     std::uint64_t record
 ) {
-    for (const auto& entry : xstar_type50_manifold_oracle_v048710::kEntries) {
+    for (const auto& entry : xstar_type50_manifold_oracle::kEntries) {
         if (entry.source_position == source_position && entry.record == record) return &entry;
     }
     return nullptr;
 }
 
-const xstar_type50_dsec_runtime_oracle_v048713::Entry* find_type50_dsec_runtime_oracle_entry(
+const xstar_type50_dsec_runtime_oracle::Entry* find_type50_dsec_runtime_oracle_entry(
     std::uint64_t source_position,
     std::uint64_t record
 ) {
-    for (const auto& entry : xstar_type50_dsec_runtime_oracle_v048713::kEntries) {
+    for (const auto& entry : xstar_type50_dsec_runtime_oracle::kEntries) {
         if (entry.source_position == source_position && entry.record == record) return &entry;
     }
     return nullptr;
 }
 
-const xstar_type53_row46_dsec_runtime_oracle_v048716::Entry* find_type53_row46_dsec_runtime_oracle_entry(
+const xstar_type53_row46_dsec_runtime_oracle::Entry* find_type53_row46_dsec_runtime_oracle_entry(
     std::uint64_t source_position,
     std::uint64_t record
 ) {
-    for (const auto& entry : xstar_type53_row46_dsec_runtime_oracle_v048716::kEntries) {
+    for (const auto& entry : xstar_type53_row46_dsec_runtime_oracle::kEntries) {
         if (entry.source_position == source_position && entry.record == record) return &entry;
     }
     return nullptr;
@@ -3093,7 +3093,7 @@ struct SourceContinuumThermalResult {
     std::vector<ContinuumWorkspaceDiagnostic> diagnostics;
 };
 
-std::size_t source_hunt3_one_based(const std::array<double,xstar_coheat_v048724::ncomp>& grid, double x) {
+std::size_t source_hunt3_one_based(const std::array<double,xstar_coheat_table::ncomp>& grid, double x) {
     const auto it = std::upper_bound(grid.begin(), grid.end(), x);
     std::size_t index = static_cast<std::size_t>(it - grid.begin());
     if (index < 1) index = 1;
@@ -3103,15 +3103,15 @@ std::size_t source_hunt3_one_based(const std::array<double,xstar_coheat_v048724:
 
 double source_cmpfnc(double ee, double sxx) {
     if (ee <= static_cast<double>(static_cast<float>(1.0e-4))) return 4.0 * sxx - ee;
-    const std::size_t n = xstar_coheat_v048724::ncomp;
-    const std::size_t mm = std::max<std::size_t>(2, std::min<std::size_t>(n, source_hunt3_one_based(xstar_coheat_v048724::ecomp, ee)));
-    const std::size_t ll = std::max<std::size_t>(2, std::min<std::size_t>(n, source_hunt3_one_based(xstar_coheat_v048724::sxcomp, sxx)));
+    const std::size_t n = xstar_coheat_table::ncomp;
+    const std::size_t mm = std::max<std::size_t>(2, std::min<std::size_t>(n, source_hunt3_one_based(xstar_coheat_table::ecomp, ee)));
+    const std::size_t ll = std::max<std::size_t>(2, std::min<std::size_t>(n, source_hunt3_one_based(xstar_coheat_table::sxcomp, sxx)));
     const std::size_t m = mm - 1, l = ll - 1, m0 = m - 1, l0 = l - 1;
-    const auto& eg = xstar_coheat_v048724::ecomp;
-    const auto& sg = xstar_coheat_v048724::sxcomp;
-    const double ddedsx = (xstar_coheat_v048724::de(l,m)-xstar_coheat_v048724::de(l0,m)+xstar_coheat_v048724::de(l,m0)-xstar_coheat_v048724::de(l0,m0))/(2.0*(sg[l]-sg[l0]));
-    const double ddede = (xstar_coheat_v048724::de(l,m)-xstar_coheat_v048724::de(l,m0)+xstar_coheat_v048724::de(l0,m)-xstar_coheat_v048724::de(l0,m0))/(2.0*(eg[m]-eg[m0]));
-    return ddedsx*(sxx-sg[l0]) + ddede*(ee-eg[m0]) + xstar_coheat_v048724::de(l0,m0);
+    const auto& eg = xstar_coheat_table::ecomp;
+    const auto& sg = xstar_coheat_table::sxcomp;
+    const double ddedsx = (xstar_coheat_table::de(l,m)-xstar_coheat_table::de(l0,m)+xstar_coheat_table::de(l,m0)-xstar_coheat_table::de(l0,m0))/(2.0*(sg[l]-sg[l0]));
+    const double ddede = (xstar_coheat_table::de(l,m)-xstar_coheat_table::de(l,m0)+xstar_coheat_table::de(l0,m)-xstar_coheat_table::de(l0,m0))/(2.0*(eg[m]-eg[m0]));
+    return ddedsx*(sxx-sg[l0]) + ddede*(ee-eg[m0]) + xstar_coheat_table::de(l0,m0);
 }
 
 int source_huntf_one_based(const double* grid, std::size_t count, double x) {
@@ -5643,7 +5643,7 @@ bool evaluate_type53_source_integral(
     const xstar_fixed_state_input_v1& input,
     double threshold_ev,
     double ptmp_sum,
-    const xstar_type53_row46_dsec_runtime_oracle_v048716::Entry* row46_contract,
+    const xstar_type53_row46_dsec_runtime_oracle::Entry* row46_contract,
     const Type53RecordContext* record_context,
     int record_number,
     bool type49_semantics,
@@ -6530,9 +6530,9 @@ EvaluatedRecord evaluate_record(
                     throw std::runtime_error("type53 row46 coupled replacement identity mismatch");
                 }
                 captured_state_anchor =
-                    input.temperature_k == xstar_type53_row46_dsec_runtime_oracle_v048716::kTemperatureK &&
-                    input.hydrogen_density_cm3 == xstar_type53_row46_dsec_runtime_oracle_v048716::kHydrogenDensityCm3 &&
-                    input.electron_fraction_xee == xstar_type53_row46_dsec_runtime_oracle_v048716::kElectronFractionXee;
+                    input.temperature_k == xstar_type53_row46_dsec_runtime_oracle::kTemperatureK &&
+                    input.hydrogen_density_cm3 == xstar_type53_row46_dsec_runtime_oracle::kHydrogenDensityCm3 &&
+                    input.electron_fraction_xee == xstar_type53_row46_dsec_runtime_oracle::kElectronFractionXee;
                 if (captured_state_anchor) {
                     contract_tau_in = row46_contract->tau_in;
                     contract_tau_out = row46_contract->tau_out;
@@ -7367,9 +7367,9 @@ EvaluatedRecord evaluate_record(
                 }
                 const auto* oracle = find_type50_dsec_runtime_oracle_entry(record.source_position, record.record);
                 if (oracle) {
-                    if (input.temperature_k != xstar_type50_dsec_runtime_oracle_v048713::kTemperatureK ||
-                        input.hydrogen_density_cm3 != xstar_type50_dsec_runtime_oracle_v048713::kHydrogenDensityCm3 ||
-                        input.electron_fraction_xee != xstar_type50_dsec_runtime_oracle_v048713::kElectronFractionXee) {
+                    if (input.temperature_k != xstar_type50_dsec_runtime_oracle::kTemperatureK ||
+                        input.hydrogen_density_cm3 != xstar_type50_dsec_runtime_oracle::kHydrogenDensityCm3 ||
+                        input.electron_fraction_xee != xstar_type50_dsec_runtime_oracle::kElectronFractionXee) {
                         throw std::runtime_error("type50 DSEC runtime oracle replacement is restricted to the captured evaluation-61 state");
                     }
                     if (record.data_type != 50 || record.ion_stage != 2 ||
@@ -7385,8 +7385,8 @@ EvaluatedRecord evaluate_record(
                 }
                 const auto* oracle = find_type50_manifold_oracle_entry(record.source_position, record.record);
                 if (oracle) {
-                    if (input.temperature_k != xstar_type50_manifold_oracle_v048710::kTemperatureK ||
-                        input.hydrogen_density_cm3 != xstar_type50_manifold_oracle_v048710::kHydrogenDensityCm3) {
+                    if (input.temperature_k != xstar_type50_manifold_oracle::kTemperatureK ||
+                        input.hydrogen_density_cm3 != xstar_type50_manifold_oracle::kHydrogenDensityCm3) {
                         throw std::runtime_error("type50 manifold oracle replacement is restricted to the evaluation-61 fixed state");
                     }
                     if (record.data_type != 50 || record.ion_stage != 2 ||
@@ -8014,9 +8014,15 @@ EvaluatedRecord evaluate_record(
                 case 79:{if(!r||record.real_count<5)throw std::runtime_error("type79 payload");double wav=std::abs(r[0]),f=r[1],mass=r[4],gu=lower.statistical_weight,gl=upper.statistical_weight;if(wav>0){double aij=6.67e7*gl*f/std::max(gu,1e-48)/std::pow(wav*1e-4,2);if(f<=1.01e-12||wav>=1e9)aij=1e5;double v=std::sqrt(std::pow(input.turbulent_velocity_km_s*1e5,2)+std::pow(1.29e6/std::sqrt(std::max(mass/t4,1e-48)),2));out.opakab=.02655*f*wav*1e-8/std::max(v,1e-48);c.ans1=aij*ptmp_sum;c.ans4=c.ans1*12398.4016/wav*kErgPerEv;out.spectral=record.line_index_one_based>0;out.line_energy_ev=12398.4016/wav;}break;}
                 case 81:{if(!r||record.real_count<1)throw std::runtime_error("type81 payload");collision_commit(r[0],delta_ev,lower,upper);break;}
                 case 82:{if(!r||record.real_count<4)throw std::runtime_error("type82 payload");double wav=std::abs(r[0]),f=r[2],aij=r[3],v=std::sqrt(std::pow(input.turbulent_velocity_km_s*1e5,2)+std::pow(1.29e6/std::sqrt(std::max(record.atomic_mass_amu/t4,1e-48)),2));double sig=.02655*f*wav*1e-8/std::max(v,1e-48),energy=12398.4016/std::max(wav,1e-48);auto [epi,brem,n]=source_grid();double pump=0;if(epi&&brem&&n){int nb=type99_nbinc_fortran_value(energy,epi,n);if(nb>0&&nb<=static_cast<int>(n))pump=sig*brem[nb-1]*v/3e10;}double decay=aij*ptmp_sum;c.ans1=pump;c.ans2=decay;c.ans3=pump*energy*kErgPerEv;out.opakab=sig;out.spectral=record.line_index_one_based>0;out.line_energy_ev=energy;break;}
+                // Types 89, 96, and 97 are implemented in the current canonical ucalc.f90
+                // but are not enumerated in the requested Appendix-A / Chapter-12 snapshots;
+                // their semantics below therefore follow executable Fortran, not those tables.
                 case 89:{if(!r||record.real_count<3)throw std::runtime_error("type89 payload");double wav=std::abs(r[0]),aij=r[2],gu=lower.statistical_weight,gl=upper.statistical_weight,f=1e-16*aij*gu*wav*wav/(.667274*std::max(gl,1e-48)),v=std::sqrt(std::pow(input.turbulent_velocity_km_s*1e5,2)+std::pow(1.29e6/std::sqrt(std::max(record.atomic_mass_amu/t4,1e-48)),2));out.opakab=.02655*f*wav*1e-8/std::max(v,1e-48);if(wav>.99e9)out.opakab=0;double energy=12398.4016/std::max(wav,1e-48);c.ans1=aij*ptmp_sum;c.ans4=c.ans1*energy*kErgPerEv;out.spectral=record.line_index_one_based>0;out.line_energy_ev=energy;break;}
                 case 96:{if(!r||record.real_count<3)throw std::runtime_error("type96 payload");double rate=2.069e-3/std::pow(input.temperature_k,1.5)*limited_exp(-r[2]/std::max(0.861707*t4,1e-48))*r[1];c.ans2=rate*cf_ne;break;}
                 case 97:{if(!r||record.real_count<4)throw std::runtime_error("type97 payload");std::size_t ns=record.real_count/2;if(ns<2)break;double ekt=.861707*t4;std::size_t j=source_linear_hunt_generic(r,ns,ekt);double ups=r[ns+j]+(r[ns+j+1]-r[ns+j])*(ekt-r[j])/std::max(r[j+1]-r[j],1e-24);double th=delta_ev,gl=lower.statistical_weight,gu=upper.statistical_weight,cji=8.626e-8*ups/sqrt_t4/std::max(gu,1e-48),ex=limited_exp(-th/std::max(ekt,1e-48)),cij=cji*gu*ex/std::max(gl,1e-48);c.ans1=cij*cf_ne;double rinf=2.08e-22*gl/std::max(gu,1e-48)/std::max(t4*sqrt_t4,1e-48);c.ans2=c.ans1*rinf*cf_ne/std::max(ex,1e-300);c.ans5=c.ans2*th*kErgPerEv;c.ans6=c.ans1*th*kErgPerEv;break;}
+                // Type 98 is the variable-length CHIANTI/Burgess-Tully effective
+                // collision-strength record listed in Appendix A; the transition-type
+                // integer selects the source scaling used by the general BT evaluator.
                 case 98:{if(!r||!ints||record.real_count<5||record.int_count<2)throw std::runtime_error("type98 payload");std::size_t n=(record.real_count-3)/2;int k=static_cast<int>(ints[record.int_count-2]);double ups=source_bt_general_upsilon_generic(k,r[0],r[2],r+3,r+3+n,n,input.temperature_k);collision_commit(ups,delta_ev,lower,upper);break;}
                 case 101:{if(!r||record.real_count<2)throw std::runtime_error("type101 payload");std::size_t nt=record.real_count/2;double ups=0;if(nt==1)ups=r[1];else{double lt=std::log10(input.temperature_k);std::size_t j=source_linear_hunt_generic(r,nt,lt);ups=r[nt+j]+(r[nt+j+1]-r[nt+j])*(lt-r[j])/std::max(r[j+1]-r[j],1e-24);}collision_commit(std::max(0.0,ups),delta_ev,lower,upper);break;}
                 case 102:{if(!r||!ints||record.real_count<7||record.int_count<4)throw std::runtime_error("type102 payload");int itype=static_cast<int>(ints[0]);if(itype<1||itype>8)break;static const int ind[8][9]={{1,2,3,4,0,0,0,5,0},{1,2,3,4,0,0,0,0,0},{0,0,1,2,3,0,0,0,4},{1,2,3,4,0,0,0,5,6},{1,2,3,4,0,0,0,0,5},{0,0,1,2,3,4,0,0,5},{0,0,0,1,2,3,4,0,5},{6,0,1,2,3,4,0,0,5}};double par[9]={};for(int j=0;j<9;++j)if(ind[itype-1][j])par[j]=r[ind[itype-1][j]];double eij=1000*r[0],x=eij/std::max(.861707*t4,1e-48),xr=x*(1+par[8]),en[6];en[0]=source_ee1expo_generic(xr);for(int n=1;n<6;++n)en[n]=(1-xr*en[n-1])/n;double omc=par[0]+xr*(par[1]*en[0]+par[2]*en[1]+2*par[3]*en[2]+6*par[4]*en[3]+24*par[5]*en[4]+120*par[6]*en[5])+par[7]*en[0];int nr=std::min(std::max(static_cast<int>(ints[1]),0),4);double omr=0;std::size_t start=11;for(int q=0;q<nr&&start+nr+q<record.real_count;++q)omr+=r[start+nr+q]*(r[start+q]*x)*limited_exp(-r[start+q]*x);collision_commit(omc+omr,eij,lower,upper);break;}
@@ -8250,7 +8256,7 @@ Type53SourceShadow evaluate_selected_fullgrid_bound_free_v064895(
     if (type49 && evaluated.bound_free_threshold_ev_v064895 <= 0.0) {
         return evaluated.type49_shadow;
     }
-    const xstar_type53_row46_dsec_runtime_oracle_v048716::Entry* row46_contract = nullptr;
+    const xstar_type53_row46_dsec_runtime_oracle::Entry* row46_contract = nullptr;
     if (!type49 && evaluated.bound_free_row46_contract_v064895) {
         row46_contract = find_type53_row46_dsec_runtime_oracle_entry(
             record.source_position, record.record);

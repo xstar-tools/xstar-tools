@@ -1,15 +1,15 @@
 # C++ / Fortran source-comment index
 
-**Productization version:** `0.6.53`  
+**Productization version:** `0.6.54`  
 **Science revision:** `0.6.48.12.3.45.3.3.8`  
 **Frozen C++ scientific baseline:** `0.6.48.12.3.44`
 
-Every `.cpp`, `.h`, and `.hpp` file under `src/xstar_tools/xstar/cpp/` carries a marked `XSTAR-SOURCE-CORRESPONDENCE` comment block. The comments are documentation-only: removing the marked block must reproduce the exact `0.6.52` pre-comment bytes recorded in `qualification/cpp_source_comment_overlay.json`.
+Every `.cpp`, `.h`, and `.hpp` file under `src/xstar_tools/xstar/cpp/` carries a marked `XSTAR-SOURCE-CORRESPONDENCE` comment block. The marked top-of-file blocks remain documentation-only and are pinned by `qualification/cpp_source_comment_overlay.json`. Version `0.6.54` also performs an approved non-science native-layout refactor: four version-labeled runtime headers receive stable names, `constants.def` moves into this C++ directory, and atomic-data comments are added from the XSTAR Manual Chapter 12 and Mendoza et al. (2021) Appendix A. `qualification/cpp_non_science_refactor_0_6_54.json` canonicalizes comments/whitespace and reverses only those approved path/identifier relocations; all 47 files must then match their `0.6.53` canonical non-comment hashes.
 
 | C++ file | Fortran authority | Relation | Concordance |
 |---|---|---|---|
 | `canonical_thermal_term.hpp` | calc_hmc_all.f90; calc_hmc_element.f90; calc_hmc_ion.f90 | C++ representation helper; preserves source term identity and accumulation ownership rather than translating a single Fortran array type. | `THERM-001; MATRIX-001` |
-| `coheat_table_v048724.h` | xstarsetup.f90 (coheat.dat load); cmpfnc.f90; comp2.f90 | Data-equivalent snapshot used by qualified native evaluation; interpolation semantics remain those of cmpfnc/hunt3. | `THERM-001` |
+| `coheat_table.h` | xstarsetup.f90 (coheat.dat load); cmpfnc.f90; comp2.f90 | Data-equivalent snapshot used by qualified native evaluation; interpolation semantics remain those of cmpfnc/hunt3. | `THERM-001` |
 | `compact_arrays.hpp` | levwkelement.f90; levwk.f90; calc_hmc_ion.f90 | Storage transformation only; indices/endpoints must reproduce the Fortran compact basis and clamping semantics. | `LEVEL-001; MATRIX-001` |
 | `compiled_case.cpp` | xstar.f90; xstarcalc.f90; pprint.f90; writespectra*.f90 | C++ infrastructure, not a direct Fortran routine translation; validates the same full-run scientific boundary. | `ARCH-001; BACKEND-001; FINAL-001` |
 | `element_engine.cpp` | calc_hmc_element.f90; calc_hmc_ion.f90; calc_ion_rates.f90; istruc.f90; ioneqm.f90; levwkelement.f90; msolvelucy.f90 | Source-equivalent operator with different storage; source traversal/order, endpoint clamping, and solve invariants are qualified. | `ION-001; LEVEL-001; MATRIX-001; THERM-001` |
@@ -25,9 +25,9 @@ Every `.cpp`, `.h`, and `.hpp` file under `src/xstar_tools/xstar/cpp/` carries a
 | `source_order_thermal_reducer.hpp` | calc_hmc_all.f90; calc_hmc_element.f90; calc_hmc_ion.f90 | Optimized storage/reduction helper constrained to reproduce the source accumulation ownership/order where roundoff is observable. | `THERM-001` |
 | `source_real_energy_grid.hpp` | ener.f90 | Source-exact numeric helper for the accepted energy-grid construction. | `ARCH-001; INPUT-001` |
 | `thermal_kernels.cpp` | heatt.f90; dsec.f90; calc_hmc_all.f90 | Source-exact controller arithmetic/order where qualified; fixed-state science evaluations are delegated to calc_hmc-equivalent engines. | `THERM-001; DSEC-001` |
-| `type50_dsec_runtime_oracle_v048713.h` | linopac.f90 / Type50 ucalc context as exercised inside dsec.f90 | Reference/oracle data, not a Fortran code translation; captures accepted source-observable behavior. | `TYPE50-001; DSEC-001` |
-| `type50_manifold_oracle_v048710.h` | ucalc.f90 Type50 producer context; calc_hmc_ion.f90; linopac.f90 | Reference/oracle data, not executable source correspondence. | `TYPE50-001; MATRIX-001` |
-| `type53_row46_dsec_runtime_oracle_v048716.h` | ucalc.f90 Type53 branch; calc_hmc_ion.f90; dsec.f90 | Reference/oracle data, not a Fortran routine translation. | `MATRIX-001; DSEC-001` |
+| `type50_dsec_runtime_oracle.h` | linopac.f90 / Type50 ucalc context as exercised inside dsec.f90 | Reference/oracle data, not a Fortran code translation; captures accepted source-observable behavior. | `TYPE50-001; DSEC-001` |
+| `type50_manifold_oracle.h` | ucalc.f90 Type50 producer context; calc_hmc_ion.f90; linopac.f90 | Reference/oracle data, not executable source correspondence. | `TYPE50-001; MATRIX-001` |
+| `type53_row46_dsec_runtime_oracle.h` | ucalc.f90 Type53 branch; calc_hmc_ion.f90; dsec.f90 | Reference/oracle data, not a Fortran routine translation. | `MATRIX-001; DSEC-001` |
 | `xstar_api.cpp` | Scientific boundary: xstar.f90 / xstarcalc.f90; no direct ABI analogue in Fortran. | Productization infrastructure over the Fortran-equivalent scientific boundary; no independent physics. | `BACKEND-001; ARCH-001` |
 | `xstar_api.h` | Scientific boundary: xstar.f90 / xstarcalc.f90; no direct ABI analogue in Fortran. | Interface-only productization layer; scientific meaning comes from the mapped engines. | `BACKEND-001; ARCH-001` |
 | `xstar_api.hpp` | No direct Fortran routine; wraps the xstar_api.h boundary around xstarcalc-equivalent execution. | Infrastructure only; must be behaviorally transparent to scientific results. | `BACKEND-001` |

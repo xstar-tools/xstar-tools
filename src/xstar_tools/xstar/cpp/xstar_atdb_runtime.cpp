@@ -38,6 +38,15 @@ constexpr int kType53LayoutMagicZ1Z30V06481231 = 224;
 constexpr int kType49LayoutMagicZ1Z30V06481231 = 225;
 constexpr double kEvAngstrom = 12398.419843320026;
 
+// Atomic-database record semantics (XSTAR Manual, Chapter 12; Mendoza et al.
+// 2021, Appendix A): a record's data type selects the formula/layout used to
+// interpret its constants, while its rate type tells XSTAR how the resulting
+// rate participates in the physics.  The source ASCII record header carries
+// six integers: data type, rate type, continuation flag, number of reals,
+// number of integers, and number of characters.  ucalc.f90 is the canonical
+// dispatcher that converts those heterogeneous payloads to the standard XSTAR
+// rate outputs.  Keep data-type parsing separate from rate-type ownership.
+
 const std::set<int> kLegacyActiveTypes = {
     1,2,7,9,10,30,38,39,49,50,51,53,54,56,57,59,60,62,63,66,68,69,71,72,73,74,76,77,86,88,95,99
 };
@@ -767,6 +776,10 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
     else if (dt==10) { need(rr.size()>=4 && !ii.empty(),"short payload"); int id1=ii[0]; lower=row_for_source_endpoint(l,b,id1); upper=row_for_local(l,ion,b.nlev); out.reals=rr; out.ints={id1}; energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
     else if (dt==30) { need(!ii.empty(),"missing nmax"); out.reals.clear(); out.ints={ii[0]}; matrix=false; }
     else if (dt==38 || dt==39) { need((dt==38&&rr.size()>=4)||(dt==39&&rr.size()>=2),"short payload"); out.ints.clear(); matrix=false; }
+    // Types 50 and 91 are bound-bound radiative line records: wavelength and
+    // Einstein A plus source lower/upper level identities.  Appendix A lists
+    // Type 50 with gf explicitly; Type 91 is the APED form and ucalc.f90 jumps
+    // directly to the Type-50 branch, so they share endpoint/radiative handling.
     else if (dt==50 || dt==91) {
         need(ii.size()>=2 && rr.size()>=3,"short payload"); int id1=ii[0],id2=ii[1]; int r1=row_for_local(l,ion,id1),r2=row_for_local(l,ion,id2);
         const auto* s1=find_snapshot(l,ion,id1); const auto* s2=find_snapshot(l,ion,id2); double e1=s1?s1->energy:row_energy(l,r1),e2=s2?s2->energy:row_energy(l,r2);
@@ -780,6 +793,9 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
         width=type50_natural_width_ev_v82_patch5207(db,d,ion,source_upper_local,aij);
         out.reals={aij,oscillator,wavelength,energy,e1,e2}; out.ints={id1,id2};
     }
+    // Type 51 stores CHIANTI/Burgess-Tully effective collision-strength
+    // information for a bound-bound transition.  Current ucalc.f90 also accepts
+    // later fixed-point variants; lowering preserves the source endpoints here.
     else if (dt==51 || dt==56 || dt==69) { need(ii.size()>=2,"short integer payload"); int a=0,c=0; if(dt==51){need(ii.size()>=3,"short integer payload");a=ii[2];c=ii[1];out.ints={ii[0]};}else{a=ii[0];c=ii[1];out.ints.clear();} auto q=local_pair(l,ion,a,c);lower=q.first;upper=q.second;energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
     else if (dt==54) { need(ii.size()>=4,"short integer payload"); int a=ii[ii.size()-4],c=ii[ii.size()-3],iq=ii[ii.size()-2];auto q=local_pair(l,ion,a,c);lower=q.first;upper=q.second;int ni=row_n(l,upper),nf=row_n(l,lower),li=row_l(l,upper),lf=row_l(l,lower);need(ni>0&&nf>0&&li>=0&&lf>=0&&iq>0,"missing quantum numbers");if(ni<nf)std::swap(ni,nf);out.reals.clear();out.ints={ni,nf,li,lf,iq};energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
     else if (dt==57) { need(ii.size()>=2,"short integer payload"); int i57=ii[0],local=ii[ii.size()-2],parent_local=b.nlev;lower=row_for_local(l,ion,local);upper=row_for_local(l,ion,parent_local);const auto* lv=find_level(l,ion,local);const auto* pv=find_level(l,ion,parent_local);need(lv&&pv,"lacks literal Type-13 levels");int pn=lv->principal_n?lv->principal_n:(row_n(l,lower)?row_n(l,lower):i57);double eth=std::max(pv->energy-lv->energy,0.0);out.reals={lv->energy,eth,lv->weight,pv->weight};out.ints={i57,pn,local};energy=eth; }
@@ -809,7 +825,13 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
     else if (dt==60 || dt==62) { need(ii.size()>=2 && rr.size()>=(dt==60?3u:6u),"short payload");auto q=local_pair(l,ion,ii[0],ii[1]);lower=q.first;upper=q.second;out.ints.clear();energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
     else if (dt==66) { need(ii.size()>=2 && rr.size()>=6,"short payload"); auto q=local_pair(l,ion,ii[0],ii[1]); lower=q.first; upper=q.second; out.reals=rr; out.ints={ii[0],ii[1]}; energy=rr[0]>0.0?rr[0]:std::abs(row_energy(l,upper)-row_energy(l,lower)); }
     else if (dt==68) { need(ii.size()>=3&&rr.size()>=3,"short payload");auto q=local_pair(l,ion,ii[0],ii[1]);lower=q.first;upper=q.second;out.reals.assign(rr.begin(),rr.begin()+3);out.ints={ii[2]};energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
+    // Type 63 is a bound-bound collisional transition whose probability is
+    // reconstructed from quantum-defect/hydrogenic quantum numbers in ucalc.
     else if (dt==63) { need(ii.size()>=4,"short integer payload");int a=ii[ii.size()-4],c=ii[ii.size()-3],iq=ii[ii.size()-2];int initial=row_for_local(l,ion,a),final=row_for_local(l,ion,c);double ei=row_energy(l,initial),ef=row_energy(l,final);lower=initial;upper=final;if((ei/(1.0e-24+ef)-1.0)>=1.0e-8)std::swap(lower,upper);int ni=row_n(l,initial),li=row_l(l,initial),nf=row_n(l,final),lf=row_l(l,final);need(ni>0&&nf>0&&li>=0&&lf>=0&&iq>0,"missing quantum numbers");out.reals.clear();out.ints={ni,li,nf,lf,iq,initial,final};energy=std::abs(ei-ef); }
+    // Types 49 and 53 are level-resolved partial photoionization curves stored
+    // as energy/cross-section pairs.  Appendix A identifies Type 53 as the
+    // resonance-averaged TOPbase form; both carry bound and residual-ion level
+    // identities, so threshold and destination ownership are part of lowering.
     else if (dt==49 || dt==53) {
         need(ii.size()>=4&&rr.size()>=4,"short payload");int id1=ii[ii.size()-2],off=std::max<int>(0,ii[ii.size()-4]),id2=b.nlev+off-1;lower=row_for_local(l,ion,id1);upper=row_for_idest(l,b,id2);
         const auto* bound=find_level(l,ion,id1);const auto* partition=find_snapshot(l,ion,b.nlev);need(bound&&partition,"lacks literal bound/partition level");double base=bound->ionpot-bound->energy;double pweight=partition->weight;need(pweight>0,"invalid Milne partition weight");double destination_weight=pweight,excited_e=0.0,excited_w=pweight;
@@ -888,11 +910,15 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
             case 64: { need(ii.size()>=3,"short integer payload"); set_pair(ii[ii.size()-2],b.nlev); break; }
             case 65: { need(ii.size()>=2&&!rr.empty(),"short payload"); set_pair(ii[ii.size()-2],b.nlev); break; }
             case 67: need(ii.size()>=2&&rr.size()>=3,"short payload"); energy_order_pair(ii[0],ii[1]); break;
+            // Type 70 is the older superlevel recombination/photoionization table:
+            // density and temperature grids plus recombination coefficients and a PI curve.
             case 70: { need(ii.size()>=5,"short integer payload"); int id1=std::min<int>(ii[ii.size()-2],std::max(b.nlev-1,1)); int id2=std::max<int>(b.nlev+ii[ii.size()-3]-1,b.nlev); set_pair(id1,id2); break; }
             case 75: { need(ii.size()>=3&&rr.size()>=2,"short payload"); int id1=std::max<int>(ii[ii.size()-3],1); int id2=std::max<int>(ii[ii.size()-2]+b.nlev-1,1); set_pair(id1,id2); break; }
             case 79: need(ii.size()>=2&&rr.size()>=5,"short payload"); upper_lower_pair(ii[0],ii[1]); break;
             case 81: need(ii.size()>=2&&!rr.empty(),"short payload"); energy_order_pair(ii[0],ii[1]); break;
             case 82: need(ii.size()>=2&&rr.size()>=4,"short payload"); upper_lower_pair(ii[0],ii[1]); break;
+            // Type 85 is the compact Fe K-edge photoionization parameterization
+            // (effective charge, threshold, strength/width/scaling parameters).
             case 85: { need(ii.size()>=3&&rr.size()>=5,"short payload"); set_pair(ii[ii.size()-2],1); break; }
             case 89: need(ii.size()>=2&&rr.size()>=3,"short payload"); upper_lower_pair(ii[0],ii[1]); break;
             case 92: need(ii.size()>=3&&rr.size()>=42,"short payload"); set_pair(ii[0],ii[1]); break;
@@ -904,12 +930,23 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
             default: throw std::runtime_error("missing all-element lowerer for active data type "+std::to_string(dt));
         }
     }
+    // Type 76 is the two-photon radiative decay record.  It has explicit lower
+    // and upper level identities and is spectrally distinct from ordinary lines.
     else if (dt==76) { need(ii.size()>=2&&!rr.empty(),"short payload");auto q=local_pair(l,ion,ii[0],ii[1]);lower=q.first;upper=q.second;out.reals={std::max(rr[0],0.0)};out.ints.clear();energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
+    // Type 71 is the density/temperature-dependent radiative transition table
+    // from superlevels to spectroscopic levels; Type 77 is its collisional analogue.
     else if (dt==71 || dt==77) { need(ii.size()>=4,"short integer payload");lower=row_for_local(l,ion,ii[ii.size()-4]);upper=row_for_local(l,ion,ii[ii.size()-3]);energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
+    // Type 72 contains satellite-level autoionization data (autoionization
+    // rate, energy above threshold, statistical weight, and continuum endpoint).
     else if (dt==72) { need(ii.size()>=4&&rr.size()>=2,"short payload");auto q=local_pair(l,ion,ii[ii.size()-4],ii[ii.size()-3]);lower=q.first;upper=q.second;out.ints={row_for_local(l,ion,1),row_for_local(l,ion,b.nlev)};energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
     else if (dt==73) { need(ii.size()>=3&&rr.size()>=7,"short payload");auto q=local_pair(l,ion,ii[0],ii[1]);lower=q.first;upper=q.second;out.reals.assign(rr.begin(),rr.begin()+7);out.ints={ii[2]};energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
     else if (dt==74) { need(ii.size()>=2,"short integer payload");lower=row_for_local(l,ion,ii[ii.size()-2]);upper=row_for_local(l,ion,b.nlev);out.ints.clear();energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
+    // Type 86 stores K-vacancy Auger/radiative widths and level identities.
+    // These widths contribute to damping/lifetime handling rather than a PI grid.
     else if (dt==86) { need(ii.size()>=5&&rr.size()>=2,"short payload");int id1=ii[ii.size()-4],id2=b.nlev+ii[ii.size()-5]-1;lower=row_for_local(l,ion,id1);upper=row_for_idest(l,b,id2);out.reals={rr[1]};out.ints.clear();energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
+    // Type 88 stores the damped excess photoionization cross section to a
+    // K-shell superlevel as energy/cross-section pairs; ucalc extrapolates from
+    // the source threshold and applies the inner-shell photoabsorption ownership.
     else if (dt==88) { need(ii.size()>=2&&rr.size()>=4,"short payload");int local=ii[ii.size()-2];lower=row_for_local(l,ion,local);upper=row_for_local(l,ion,b.nlev);const auto* bound=find_level(l,ion,local);const auto* cont=find_level(l,ion,b.nlev);need(bound,"lacks bound level");double threshold=bound->ionpot>0?std::max(bound->ionpot-bound->energy,0.0):(cont&&cont->energy>0?std::max(cont->energy-bound->energy,0.0):std::abs(row_energy(l,upper)-row_energy(l,lower)));// v82 patch 5.19.5: actual v0.6.47.2 second-pass lifetime capture proves
         // records 40294/40379/40380 use the ordinary local Type-13 threshold
         // calculated above.  Do not replace those values with the historical
@@ -924,7 +961,12 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
         // old compact fixtures continue to load.
         const int calc_emis_idest2=ii.size()>=4?ii[ii.size()-4]:b.nlev;
         out.ints={static_cast<std::int64_t>(rr.size()/2),owner,local,calc_emis_idest2};energy=threshold; }
+    // Type 95 is the level collisional-ionization fit: threshold energy,
+    // temperature scale, and tabulated effective-collision-strength values.
     else if (dt==95) { need(rr.size()>=6&&ii.size()>=2,"short payload");if(rt==5){int id1=ii[0],id2=b.nlev-1+(ii.size()>=3?ii[1]:1);lower=row_for_local(l,ion,id1);upper=row_for_idest(l,b,id2);}else lower=upper=row_for_local(l,ion,1);out.ints.push_back(row_for_local(l,ion,b.nlev));energy=std::abs(row_energy(l,upper)-row_energy(l,lower)); }
+    // Type 99 is the newer superlevel recombination/photoionization table.
+    // Like Type 70 it combines density/temperature recombination data with a
+    // photoionization grid, but Appendix A records the updated coefficient layout.
     else if (dt==99) {
         need(ii.size()>=4&&rr.size()>=8,"short payload");int setup_idest1=ii[ii.size()-2];int id1=std::min<int>(setup_idest1,std::max(b.nlev-1,1)),id2=b.nlev+ii[ii.size()-4]-1;lower=row_for_local(l,ion,id1);upper=row_for_idest(l,b,id2);const auto* bound=find_level(l,ion,id1);const auto* setup_bound=find_level(l,ion,setup_idest1);const auto* parentlv=find_level(l,ion,b.nlev);need(bound&&setup_bound&&parentlv,"lacks literal bound/parent levels");const double source_errc_rank_energy=std::max(0.1,setup_bound->ionpot-setup_bound->energy);double dest_e=parentlv->energy,dest_w=parentlv->weight,ex_e=0,ex_w=0,threshold=0;int ex_mode=0;
         if(id2<=b.nlev){const auto* dest=find_level(l,ion,id2);need(dest,"lacks destination level");dest_e=dest->energy;dest_w=dest->weight;threshold=std::abs(bound->energy-parentlv->energy);}else{auto bit=std::find_if(l.blocks.begin(),l.blocks.end(),[&](const Block& x){return x.ion_index==ion;});need(bit!=l.blocks.end()&&std::next(bit)!=l.blocks.end(),"has no next-ion destination");int local2=id2-b.nlev+1;const auto* ex=find_level(l,std::next(bit)->ion_index,local2);need(ex,"lacks next-ion destination level");ex_mode=1;ex_e=ex->energy;ex_w=ex->weight;dest_w=ex_w;threshold=std::abs(bound->energy+ex_e);dest_e=parentlv->energy+ex_e;}

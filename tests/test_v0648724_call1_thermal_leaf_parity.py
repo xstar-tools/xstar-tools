@@ -7,7 +7,7 @@ def test_literal_comp2_and_scoped_oracle_present():
     engine=(ROOT/'src/xstar_tools/xstar/cpp/fixed_state_engine.cpp').read_text()
     header=(ROOT/'src/xstar_tools/xstar/cpp/xstar_fixed_state_engine.h').read_text()
     assert 'source_cmpfnc' in engine and 'source_comp2' in engine
-    assert 'coheat_table_v048724.h' in engine
+    assert 'coheat_table.h' in engine
     assert 'XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE' in header
     assert 'hmctot_override' in header
 

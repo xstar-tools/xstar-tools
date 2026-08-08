@@ -12,7 +12,12 @@
 #include <array>
 #include <cstdint>
 
-namespace xstar_type50_dsec_runtime_oracle_v048713 {
+// Appendix-A atomic-data context: Type 50 is a bound-bound radiative line
+// record carrying wavelength, oscillator-strength/radiative information, and
+// lower/upper level identities.  This header stores qualification observations
+// of that Type-50 path during DSEC; it does not define the atomic-data format.
+
+namespace xstar_type50_dsec_runtime_oracle {
 
 struct Entry {
     std::uint64_t source_position;
@@ -118,4 +123,4 @@ inline constexpr std::array<Entry, 79> kEntries{{
     Entry{6712ULL, 1795ULL, 51, 59, 509, 8.113864417850277e-10, 0.0, 0.0, 1.0, 1.0, 1.0, {{0.0, 112604000.0, -0.00047723735727146836, -0.0, 0.0, 0.0}}},
 }};
 
-} // namespace xstar_type50_dsec_runtime_oracle_v048713
+} // namespace xstar_type50_dsec_runtime_oracle

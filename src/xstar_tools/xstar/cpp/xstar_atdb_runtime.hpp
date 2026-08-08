@@ -60,6 +60,10 @@ struct ProductionParameters {
     std::string spectrum = "pow";
 };
 
+// ProgramStorage carries the lowered form of heterogeneous ATDB records.  The
+// source database deliberately permits different real/integer/character payload
+// layouts per data type; lowering must therefore be driven by the record's data
+// type before rate-type consumers attach physical ownership.
 struct ProgramStorage {
     std::string program_id;
     std::vector<xstar_fixed_program_element_v1> elements;

@@ -11,7 +11,11 @@
 #include <array>
 #include <cstdint>
 
-namespace xstar_type50_manifold_oracle_v048710 {
+// Appendix-A atomic-data context: Type 50 is the ordinary bound-bound radiative
+// line record.  These entries are frozen attribution/oracle values for the
+// Type-50 manifold, not an alternate definition of the Type-50 payload.
+
+namespace xstar_type50_manifold_oracle {
 
 struct Entry {
     std::uint64_t source_position;
@@ -109,4 +113,4 @@ inline constexpr double kTemperatureK = 64991.46221159782;
 inline constexpr double kHydrogenDensityCm3 = 100000000.0;
 inline constexpr double kCoveringFraction = 0.0;
 
-} // namespace xstar_type50_manifold_oracle_v048710
+} // namespace xstar_type50_manifold_oracle

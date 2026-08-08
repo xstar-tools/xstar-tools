@@ -8,13 +8,13 @@
 // Qualification: C++ baseline 12.3.44
 // XSTAR-SOURCE-CORRESPONDENCE-END
 
-#ifndef XSTAR_COHEAT_TABLE_V048724_H
-#define XSTAR_COHEAT_TABLE_V048724_H
+#ifndef XSTAR_COHEAT_TABLE_H
+#define XSTAR_COHEAT_TABLE_H
 
 #include <array>
 #include <cstddef>
 
-namespace xstar_coheat_v048724 {
+namespace xstar_coheat_table {
 inline constexpr std::size_t ncomp = 101;
 inline constexpr std::array<double,ncomp> ecomp = {
     0x1.ad7f29abcaf48p-24,

@@ -56,6 +56,10 @@ struct LevelIdentityState {
     std::int16_t upper_index = 0;
 };
 
+// `data_type` and `rate_type` retain the two independent atomic-database
+// classifications described in XSTAR Manual Chapter 12: data type determines
+// record interpretation/rate calculation; rate type determines physical use of
+// that returned rate.  Do not collapse them into a single transition-family tag.
 struct LineIdentityState {
     std::int32_t line_index = 0;
     double wavelength_angstrom = 0.0;

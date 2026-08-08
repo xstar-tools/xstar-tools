@@ -89,7 +89,7 @@ Accepted production transformations include monotone cursor advancement and spec
 4. optimization fallbacks do not change qualified numerical products;
 5. production and reference paths passed the accepted Type50 decomposition and downstream FITS/STEP parity gates.
 
-The production implementation remains frozen. In 0.6.53, pinned C++ files carry only a reversible marked documentation block; removing that block reproduces the exact frozen source bytes.
+The production science remains frozen. Version 0.6.53 introduced reversible top-of-file C++ correspondence comments. Version 0.6.54 adds only an approved native-layout/name relocation plus source-derived atomic-data comments: four version-labeled runtime headers are renamed, `constants.def` is colocated with the C++ sources, and no C++ file may include a parent-directory header. The 0.6.54 refactor gate removes comments/formatting and reverses only the explicitly listed path/identifier aliases; the resulting canonical C++ content must match 0.6.53.
 
 ### `RADIAL-001` - radial controller
 
@@ -143,8 +143,8 @@ Freeze:
 The `characterization_tests` entries in `qualification/source_concordance.json` preserve qualification/characterization lineage. Some old tests still depend on legacy import names or optional scientific dependencies and are therefore not a claim that every listed test runs in every productization environment. Before changing a scientific implementation, the affected concordance ID must have at least one **current runnable characterization test** in the target development environment. If the listed lineage is stale, unavailable, or too expensive, add or modernize a small characterization fixture **before** changing the implementation; do not simply drop the concordance requirement.
 
 
-## C++ source correspondence comments (0.6.53)
+## C++ source correspondence comments and 0.6.54 native-layout refactor
 
 All 47 `.cpp`, `.h`, and `.hpp` files under `src/xstar_tools/xstar/cpp/` now begin with a concise marked block containing: Fortran authority, C++ role, implementation relation, concordance IDs, and qualification boundary. Files that are C++ infrastructure or historical oracle data explicitly say that they have **no direct Fortran routine**, while identifying the scientific boundary or source behavior they support.
 
-These comments do not redefine the frozen source baseline. `qualification/cpp_source_comment_overlay.json` records the exact 0.6.52 pre-comment hash and current annotated hash. The freeze checker removes only the marked block and then compares the remaining bytes against `qualification/parity_freeze_science_hashes.json`. Therefore documentation can be present in production sources without weakening the science freeze.
+The comments do not redefine the scientific baseline. `qualification/cpp_source_comment_overlay.json` pins the current annotated and top-comment-normalized bytes. `qualification/cpp_non_science_refactor_0_6_54.json` separately proves that, after comment/whitespace removal and reversal of only the approved stable-name/include relocations, all 47 C++/header files retain the same canonical non-comment content as 0.6.53. The frozen C++44 production manifest remains untouched.
