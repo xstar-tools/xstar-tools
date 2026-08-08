@@ -6813,9 +6813,10 @@ def _assemble_element_matrix_impl(
                         strict=False,
                     )
                 if isinstance(profile_control, MutableMapping):
-                    _capture_fixed_state_detail3_candidate_v064812345336(
+                    _capture_fixed_state_detail3_candidate_v064812345338(
                         profile_control=profile_control, derived=derived, block=block,
-                        basis=basis, levels=levels, result=result,
+                        basis=basis, levels=levels, result=result, context=context,
+                        ucontext=ucontext, ptmp1=ptmp1, ptmp2=ptmp2,
                     )
                 if _rate_payload_probe:
                     _elapsed = time.perf_counter() - _rate_probe_eval_t0
@@ -8611,25 +8612,28 @@ def msolvelucy(
     )
 
 
-# v0.6.48.12.3.45.3.3.6: frozen-44 generic detail3 publication is fed by
-# the fixed-state bound-free spectral stream, then attaches the solved
-# post-mapback populations.  The earlier 45.3.3.5 calc_emisab-only repair
-# guessed Type49/53 endpoint layouts and missed the persistent C5 rows.
-_V064812345336_RATE1_BOUND_FREE_DATA_TYPES = frozenset({
+# v0.6.48.12.3.45.3.3.8: frozen-44 generic detail3 publication is a
+# full bound-free spectral/publication stream, not an absorption-only sidecar.
+# C++ applies the source active-ion-stage gate before constructing that stream,
+# then attaches solved post-mapback populations and commits four row-local
+# values: inward/outward cemab, cabab, and opakab.  Keep this bridge output-only
+# in Python: it repairs product publication parity without mutating the physical
+# emissivity/opacity workspace used by transport or equilibrium.
+_V064812345338_RATE1_BOUND_FREE_DATA_TYPES = frozenset({
     12, 15, 19, 23, 27, 35, 36, 49, 53, 55, 59, 64, 70, 85, 99,
 })
 
 
-def _reset_fixed_state_detail3_candidates_v064812345336(
+def _reset_fixed_state_detail3_candidates_v064812345338(
     profile_control: MutableMapping[str, Any], element_z: int
 ) -> None:
     bucket = profile_control.setdefault(
-        "_source_detail_rrc_fixed_state_candidates_v064812345336", {}
+        "_source_detail_rrc_fixed_state_candidates_v064812345338", {}
     )
     if isinstance(bucket, MutableMapping):
         bucket.pop(int(element_z), None)
     published = profile_control.setdefault(
-        "source_detail_rrc_fixed_state_absorption_v064812345336", {}
+        "source_detail_rrc_fixed_state_publication_v064812345338", {}
     )
     if isinstance(published, MutableMapping):
         stale = [
@@ -8640,7 +8644,7 @@ def _reset_fixed_state_detail3_candidates_v064812345336(
             published.pop(ci, None)
 
 
-def _capture_fixed_state_detail3_candidate_v064812345336(
+def _capture_fixed_state_detail3_candidate_v064812345338(
     *,
     profile_control: MutableMapping[str, Any],
     derived: XSTARDerivedPointers,
@@ -8648,10 +8652,19 @@ def _capture_fixed_state_detail3_candidate_v064812345336(
     basis: ElementCompactBasis,
     levels: UCalcLevelTable,
     result: UCalcResult,
+    context: ElementEquilibriumContext,
+    ucontext: UCalcContext,
+    ptmp1: float,
+    ptmp2: float,
 ) -> None:
     if result.status is not UCalcStatus.EVALUATED:
         return
-    if int(result.rate_type) != 1 or int(result.data_type) not in _V064812345336_RATE1_BOUND_FREE_DATA_TYPES:
+    if int(result.rate_type) != 1 or int(result.data_type) not in _V064812345338_RATE1_BOUND_FREE_DATA_TYPES:
+        return
+    # fixed_state_engine.cpp constructs the broad spectral stream only for
+    # active source ion stages.  The evaluator itself intentionally visits the
+    # complete lowered inventory, so this gate must live at publication capture.
+    if int(block.ion_stage) < int(context.min_ion_stage) or int(block.ion_stage) > int(context.max_ion_stage):
         return
     rec = int(result.record)
     if rec <= 0 or rec >= int(derived.npconi2.size):
@@ -8673,7 +8686,7 @@ def _capture_fixed_state_detail3_candidate_v064812345336(
     row_lower = min(int(basis.n_rows), raw_lower)
     row_upper = min(int(basis.n_rows), raw_upper)
     bucket = profile_control.setdefault(
-        "_source_detail_rrc_fixed_state_candidates_v064812345336", {}
+        "_source_detail_rrc_fixed_state_candidates_v064812345338", {}
     )
     if not isinstance(bucket, MutableMapping):
         return
@@ -8696,11 +8709,20 @@ def _capture_fixed_state_detail3_candidate_v064812345336(
         "raw_compact_upper": raw_upper,
         "compact_lower": row_lower,
         "compact_upper": row_upper,
+        "ans3": float(result.ans3),
         "ans4": float(result.ans4),
+        "ptmp1": float(ptmp1),
+        "ptmp2": float(ptmp2),
+        "parent_record": int(block.ion_record),
+        "next_record": int(derived.npnxt[rec]) if rec < int(derived.npnxt.size) else 0,
+        # Private in-memory context used only for Type49/53 threshold-opacity
+        # re-evaluation after the solve.  It is deliberately omitted from the
+        # public row committed below and therefore never serialized.
+        "_ucontext": ucontext,
     }
 
 
-def _finalize_fixed_state_detail3_absorption_v064812345336(
+def _finalize_fixed_state_detail3_publication_v064812345338(
     *,
     profile_control: MutableMapping[str, Any],
     master: XSTARMasterData,
@@ -8708,20 +8730,20 @@ def _finalize_fixed_state_detail3_absorption_v064812345336(
     element_z: int,
     context: ElementEquilibriumContext,
     solve: Optional[LucySolveResult],
+    dispatcher: Optional[SourceFaithfulUCalc] = None,
 ) -> None:
     candidates_all = profile_control.get(
-        "_source_detail_rrc_fixed_state_candidates_v064812345336", {}
+        "_source_detail_rrc_fixed_state_candidates_v064812345338", {}
     )
     candidates = (
         candidates_all.get(int(element_z), {})
         if isinstance(candidates_all, Mapping) else {}
     )
     published_all = profile_control.setdefault(
-        "source_detail_rrc_fixed_state_absorption_v064812345336", {}
+        "source_detail_rrc_fixed_state_publication_v064812345338", {}
     )
     if not isinstance(published_all, MutableMapping):
         return
-    # Remove this element's previous evaluation before committing this solve.
     for ci in [
         int(k) for k, row in published_all.items()
         if isinstance(row, Mapping) and int(row.get("element_z", 0) or 0) == int(element_z)
@@ -8731,10 +8753,19 @@ def _finalize_fixed_state_detail3_absorption_v064812345336(
     level_floor = float(np.float32(1.0e-34))
     activity_floor = float(np.float32(1.0e-36))
     active = 0
+    emission_active = 0
+    absorption_active = 0
+    opacity_active = 0
+    dispatcher = dispatcher or default_source_faithful_ucalc()
     if solve is not None and isinstance(candidates, Mapping):
         pops = np.asarray(solve.populations, dtype=float).reshape(-1)
         for ci, raw in candidates.items():
             if not isinstance(raw, Mapping):
+                continue
+            # Repeat the C++ source-stage publication gate at commit so a
+            # malformed/stale candidate can never cross element active bounds.
+            stage = int(raw.get("ion_stage", 0) or 0)
+            if stage < int(context.min_ion_stage) or stage > int(context.max_ion_stage):
                 continue
             lo = int(raw.get("compact_lower", 0) or 0)
             up = int(raw.get("compact_upper", 0) or 0)
@@ -8744,58 +8775,93 @@ def _finalize_fixed_state_detail3_absorption_v064812345336(
             abund2 = float(pops[up - 1]) * float(context.abundance)
             if not (abund1 > level_floor or abund2 > level_floor):
                 continue
+
+            data_type = int(raw.get("data_type", 0) or 0)
+            ans3 = float(raw.get("ans3", 0.0) or 0.0)
             ans4 = float(raw.get("ans4", 0.0) or 0.0)
-            absorption = abs(ans4) * abund1 * float(context.hydrogen_density_cm3)
-            if not (math.isfinite(absorption) and absorption > activity_floor):
+            density = float(context.hydrogen_density_cm3)
+
+            # fixed_state_engine.cpp uses the retained Type49/53 source shadow
+            # escape state for those two branches; other generic bound-free
+            # records use the broad spectral covering split 1-cfrac / 1+cfrac.
+            if data_type in (49, 53):
+                ptmp1 = float(raw.get("ptmp1", 0.5) or 0.0)
+                ptmp2 = float(raw.get("ptmp2", 0.5) or 0.0)
+            else:
+                cfrac = min(1.0, max(0.0, float(context.covering_fraction)))
+                ptmp1 = 1.0 - cfrac
+                ptmp2 = 1.0 + cfrac
+            denom = ptmp1 + ptmp2
+            emis_in = 0.0
+            emis_out = 0.0
+            if denom != 0.0:
+                common = abs(ans3) * abund2 * density / denom
+                emis_in = ptmp1 * common
+                emis_out = ptmp2 * common
+            absorption = abs(ans4) * abund1 * density
+
+            # C++ generic bound-free publication keeps scalar opakab zero
+            # except for Type49/53, whose reduced calc_emisab source shadow
+            # carries the net threshold opacity.  Re-evaluate only those two
+            # records with solved populations on the same reduced UCalc state.
+            opacity = 0.0
+            if data_type in (49, 53):
+                ucontext = raw.get("_ucontext")
+                if isinstance(ucontext, UCalcContext):
+                    try:
+                        post = dispatcher.evaluate_record_number(
+                            master,
+                            int(raw.get("source_record", 0) or 0),
+                            replace(ucontext, abund1=abund1, abund2=abund2),
+                            parent_record=int(raw.get("parent_record", 0) or 0),
+                            next_record=int(raw.get("next_record", 0) or 0),
+                            strict=False,
+                        )
+                        if post.status is UCalcStatus.EVALUATED and math.isfinite(float(post.opakab)):
+                            opacity = max(0.0, float(post.opakab))
+                    except Exception:
+                        opacity = 0.0
+
+            values = (emis_in, emis_out, absorption, opacity)
+            if not any(math.isfinite(v) and v > activity_floor for v in values):
                 continue
-            row = dict(raw)
+            row = {k: v for k, v in raw.items() if not str(k).startswith("_")}
             row.update({
                 "abundance_lower": abund1,
                 "abundance_upper": abund2,
+                "emis_inward": float(emis_in),
+                "emis_outward": float(emis_out),
                 "integrated_absn": float(absorption),
-                "publication_owner": "fixed_state_rate1_postsolve_v064812345336",
+                "opacity": float(opacity),
+                "publication_owner": "fixed_state_rate1_postsolve_full_v064812345338",
             })
             published_all[int(ci)] = row
             active += 1
+            emission_active += int((math.isfinite(emis_in) and emis_in > activity_floor) or (math.isfinite(emis_out) and emis_out > activity_floor))
+            absorption_active += int(math.isfinite(absorption) and absorption > activity_floor)
+            opacity_active += int(math.isfinite(opacity) and opacity > activity_floor)
 
-    summary: Dict[str, Any] = {
+    summary = {
         "element_z": int(element_z),
+        "min_ion_stage": int(context.min_ion_stage),
+        "max_ion_stage": int(context.max_ion_stage),
         "candidate_count": int(len(candidates) if isinstance(candidates, Mapping) else 0),
-        "active_absorption_count": int(active),
+        "active_publication_count": int(active),
+        "emission_active_count": int(emission_active),
+        "absorption_active_count": int(absorption_active),
+        "opacity_active_count": int(opacity_active),
+        "published_continuum_indices": [int(v) for v in sorted(published_all) if isinstance(published_all.get(v), Mapping) and int(published_all[v].get("element_z",0) or 0)==int(element_z)],
     }
-    for target in (709, 762):
-        rec = int(derived.npcon[target]) if target < int(derived.npcon.size) else 0
-        hdr = None
-        if rec > 0:
-            try:
-                hdr = master.header(rec)
-            except Exception:
-                hdr = None
-        entry = published_all.get(target, {})
-        cand = candidates.get(target, {}) if isinstance(candidates, Mapping) else {}
-        prefix = f"continuum_{target}"
-        summary.update({
-            f"{prefix}_canonical_record": int(rec),
-            f"{prefix}_canonical_rate_type": int(getattr(hdr, "rate_type", 0) or 0),
-            f"{prefix}_canonical_data_type": int(getattr(hdr, "data_type", 0) or 0),
-            f"{prefix}_candidate": bool(cand),
-            f"{prefix}_candidate_idest1": int(cand.get("idest1", 0) or 0) if isinstance(cand, Mapping) else 0,
-            f"{prefix}_candidate_idest2": int(cand.get("idest2", 0) or 0) if isinstance(cand, Mapping) else 0,
-            f"{prefix}_candidate_ans4": float(cand.get("ans4", 0.0) or 0.0) if isinstance(cand, Mapping) else 0.0,
-            f"{prefix}_published": bool(entry),
-            f"{prefix}_absorption": float(entry.get("integrated_absn", 0.0) or 0.0) if isinstance(entry, Mapping) else 0.0,
-        })
-    profile_control["source_detail_rrc_fixed_state_summary_v064812345336"] = summary
-    trace_path = str(os.environ.get("XSTAR_V064812345336_FIXED_STATE_DETAIL3_TRACE", "")).strip()
-    if trace_path and (int(element_z) == 6 or summary.get("continuum_709_canonical_record") or summary.get("continuum_762_canonical_record")):
+    profile_control["source_detail_rrc_fixed_state_summary_v064812345338"] = summary
+    trace_path = str(os.environ.get("XSTAR_V064812345338_FIXED_STATE_DETAIL3_TRACE", "")).strip()
+    if trace_path:
         try:
             path = Path(trace_path)
             path.parent.mkdir(parents=True, exist_ok=True)
             with path.open("a", encoding="utf-8") as handle:
-                handle.write(json.dumps(summary, sort_keys=True) + "\\n")
+                handle.write(json.dumps(summary, sort_keys=True) + "\n")
         except Exception:
             pass
-
 
 def solve_element_statistical_equilibrium(
     master: XSTARMasterData,
@@ -8808,7 +8874,7 @@ def solve_element_statistical_equilibrium(
     """Run the complete translated element source sequence."""
     profile_control = context.profile_control or {}
     if isinstance(profile_control, MutableMapping):
-        _reset_fixed_state_detail3_candidates_v064812345336(profile_control, int(element_z))
+        _reset_fixed_state_detail3_candidates_v064812345338(profile_control, int(element_z))
     if int(element_z) == 12:
         _matrix_assembly_t0 = time.perf_counter()
         with profile_component(
@@ -8965,9 +9031,9 @@ def solve_element_statistical_equilibrium(
         and assembly.basis.n_rows > 0
     )
     if isinstance(profile_control, MutableMapping):
-        _finalize_fixed_state_detail3_absorption_v064812345336(
+        _finalize_fixed_state_detail3_publication_v064812345338(
             profile_control=profile_control, master=master, derived=derived,
-            element_z=int(element_z), context=context, solve=solve,
+            element_z=int(element_z), context=context, solve=solve, dispatcher=dispatcher,
         )
     return ElementEquilibriumResult(
         assembly=assembly,

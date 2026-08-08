@@ -1,5 +1,15 @@
 # CHANGELOG
 
+# 0.6.48.12.3.45.3.3.8 - 2026-08-07
+
+- Port frozen-44 C++ generic `xo01_detal3` fixed-state publication semantics into Python as an output-only full spectral publication bridge for canonical rate-type-1 bound-free records.
+- Apply the same active-ion-stage gate used by the frozen C++ spectral stream, closing the two Python-only Ca detail3 rows seen in 45.3.3.7.
+- Retain the complete row-local publication surface after the solve: inward emission, outward emission, integrated absorption, and opacity. This targets the 45 O IV identities across five O7 detail HDUs (225 missing row occurrences in 45.3.3.7).
+- Preserve exact canonical `npcon`/`npconi2` and source-record attachment, Type49/53 post-solve threshold opacity semantics, and the terminal replay lifetime introduced in 45.3.3.7.
+- Keep the bridge output-only: no physical `cemab/cabab/opakab`, populations, rates, matrices, transport, thermal state, DSEC trajectory, STEP comparator, or C++ production science changes.
+- Keep standalone-C++ production hashes frozen to accepted 0.6.48.12.3.44 and ABI 6048110.
+- Qualification remains staged: C5 first; only after C5 ACCEPT run `ca19_xi2_ne1` and `o7_ne1e10`. `ca19_ne1e8` remains retired from reruns.
+
 # 0.6.48.12.3.45.3.3.7 - 2026-08-07
 
 - Fix the final C5 `xo01_detal3` terminal-record publication residual by retaining one output-only replay snapshot of the final physical shell's fixed-state rate-1 detail3 absorption map.

@@ -441,6 +441,7 @@ def build_detail_rrc_table(
     orphan_type7_absorption: Mapping[int, Mapping[str, Any]] | None = None,
     non_type7_absorption: Mapping[int, Mapping[str, Any]] | None = None,
     fixed_state_non_type7_absorption: Mapping[int, Mapping[str, Any]] | None = None,
+    fixed_state_non_type7_publication: Mapping[int, Mapping[str, Any]] | None = None,
     publication_trace: list[dict[str, Any]] | None = None,
 ) -> OutputTable:
     """Frozen-44-compatible generic detailed-RRC row selection.
@@ -464,6 +465,7 @@ def build_detail_rrc_table(
     orphan_absorption = orphan_type7_absorption or {}
     non_type7_map = non_type7_absorption or {}
     fixed_state_map = fixed_state_non_type7_absorption or {}
+    fixed_state_full_map = fixed_state_non_type7_publication or {}
     emiss = np.asarray(cemab, dtype=float)
     absorbed = np.asarray(cabab, dtype=float).reshape(-1)
     opacity = np.asarray(opakab, dtype=float).reshape(-1)
@@ -518,6 +520,23 @@ def build_detail_rrc_table(
                     active = True
                     owner = "canonical_npcon_orphan_type7_absorption_v06481234533"
                     orphan_entry = candidate
+        fixed_state_full_entry: Mapping[str, Any] | None = None
+        if not active and rate_type == 1:
+            candidate = fixed_state_full_map.get(int(item.continuum_index))
+            if (isinstance(candidate, Mapping)
+                    and int(candidate.get("source_record", 0) or 0) == int(item.source_record)
+                    and int(candidate.get("rate_type", 0) or 0) == 1):
+                retained_values = (
+                    float(candidate.get("emis_inward", 0.0) or 0.0),
+                    float(candidate.get("emis_outward", 0.0) or 0.0),
+                    float(candidate.get("integrated_absn", 0.0) or 0.0),
+                    float(candidate.get("opacity", 0.0) or 0.0),
+                )
+                if any(np.isfinite(v) and v > activity_floor for v in retained_values):
+                    current = retained_values
+                    active = True
+                    owner = "fixed_state_rate1_postsolve_full_v064812345338"
+                    fixed_state_full_entry = candidate
         non_type7_entry: Mapping[str, Any] | None = None
         if not active and rate_type == 1:
             candidate = non_type7_map.get(int(item.continuum_index))
@@ -557,6 +576,7 @@ def build_detail_rrc_table(
                 "record_shadow_present": bool(retained is not None),
                 "orphan_type7_entry": dict(orphan_entry) if orphan_entry is not None else None,
                 "non_type7_entry": dict(non_type7_entry) if non_type7_entry is not None else None,
+                "fixed_state_full_entry": dict(fixed_state_full_entry) if fixed_state_full_entry is not None else None,
                 "fixed_state_entry": dict(fixed_state_entry) if fixed_state_entry is not None else None,
             })
         if not active:
@@ -659,6 +679,7 @@ def build_detail_shell_output(
     source_detail_rrc_orphan_absorption: Mapping[int, Mapping[str, Any]] | None = None,
     source_detail_rrc_non_type7_absorption: Mapping[int, Mapping[str, Any]] | None = None,
     source_detail_rrc_fixed_state_absorption: Mapping[int, Mapping[str, Any]] | None = None,
+    source_detail_rrc_fixed_state_publication: Mapping[int, Mapping[str, Any]] | None = None,
     source_detail_rrc_publication_trace: list[dict[str, Any]] | None = None,
     element_abundances: Sequence[float] | None = None,
 ) -> DetailShellOutput:
@@ -678,6 +699,7 @@ def build_detail_shell_output(
             orphan_type7_absorption=source_detail_rrc_orphan_absorption,
             non_type7_absorption=source_detail_rrc_non_type7_absorption,
             fixed_state_non_type7_absorption=source_detail_rrc_fixed_state_absorption,
+            fixed_state_non_type7_publication=source_detail_rrc_fixed_state_publication,
             publication_trace=source_detail_rrc_publication_trace,
         ),
         continuum=build_detail_continuum_table(epi_eV=epi_eV, zrems=zrems, opakc=opakc, rccemis=rccemis, dpthc=dpthc, ncn2=ncn2, header=header),
@@ -2764,26 +2786,26 @@ def _source_detail_line_activity_shadow(
 
 
 
-def _select_fixed_state_detail3_absorption_v064812345337(
+def _select_fixed_state_detail3_publication_v064812345338(
     control: Mapping[str, Any], *, terminal_record: bool
 ) -> Mapping[int, Mapping[str, Any]]:
-    current = control.get("source_detail_rrc_fixed_state_absorption_v064812345336", {})
+    current = control.get("source_detail_rrc_fixed_state_publication_v064812345338", {})
     if isinstance(current, Mapping) and current:
         return current
     if bool(terminal_record):
-        replay = control.get("source_detail_rrc_fixed_state_terminal_replay_v064812345337", {})
+        replay = control.get("source_detail_rrc_fixed_state_terminal_replay_v064812345338", {})
         if isinstance(replay, Mapping):
             return replay
     return {}
 
 
-def _commit_fixed_state_detail3_terminal_replay_v064812345337(
+def _commit_fixed_state_detail3_terminal_replay_v064812345338(
     control: MutableMapping[str, Any],
     *,
     current_fixed_state_map: Mapping[int, Mapping[str, Any]] | None,
     terminal_record: bool,
 ) -> None:
-    key = "source_detail_rrc_fixed_state_terminal_replay_v064812345337"
+    key = "source_detail_rrc_fixed_state_terminal_replay_v064812345338"
     if bool(terminal_record):
         control[key] = {}
         return
@@ -2792,7 +2814,6 @@ def _commit_fixed_state_detail3_terminal_replay_v064812345337(
         int(ci): dict(row) for ci, row in src.items()
         if isinstance(row, Mapping)
     }
-
 
 def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int, terminal_record: bool = False) -> DetailShellOutput:
     from .radial_transfer import _workspace_from_state, _level_arrays_from_state
@@ -2825,8 +2846,11 @@ def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int, ter
     source_detail_rrc_non_type7_absorption = state.control.get(
         "source_detail_rrc_non_type7_absorption_v064812345335", {}
     )
-    source_detail_rrc_fixed_state_absorption = (
-        _select_fixed_state_detail3_absorption_v064812345337(
+    source_detail_rrc_fixed_state_absorption = state.control.get(
+        "source_detail_rrc_fixed_state_absorption_v064812345336", {}
+    )
+    source_detail_rrc_fixed_state_publication = (
+        _select_fixed_state_detail3_publication_v064812345338(
             state.control, terminal_record=bool(terminal_record)
         )
     )
@@ -2858,6 +2882,7 @@ def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int, ter
         source_detail_rrc_orphan_absorption=source_detail_rrc_orphan_absorption,
         source_detail_rrc_non_type7_absorption=source_detail_rrc_non_type7_absorption,
         source_detail_rrc_fixed_state_absorption=source_detail_rrc_fixed_state_absorption,
+        source_detail_rrc_fixed_state_publication=source_detail_rrc_fixed_state_publication,
         source_detail_rrc_publication_trace=source_detail_rrc_publication_trace,
         element_abundances=state.plasma.abundances,
     )
@@ -2905,13 +2930,14 @@ def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int, ter
         # A terminal detail record may replay only that snapshot, after which
         # the replay is cleared.
         current_fixed = state.control.get(
-            "source_detail_rrc_fixed_state_absorption_v064812345336", {}
+            "source_detail_rrc_fixed_state_publication_v064812345338", {}
         )
-        _commit_fixed_state_detail3_terminal_replay_v064812345337(
+        _commit_fixed_state_detail3_terminal_replay_v064812345338(
             state.control,
             current_fixed_state_map=current_fixed if isinstance(current_fixed, Mapping) else {},
             terminal_record=bool(terminal_record),
         )
+        state.control["source_detail_rrc_fixed_state_publication_v064812345338"] = {}
         state.control["source_detail_rrc_fixed_state_absorption_v064812345336"] = {}
     _maybe_export_detail_continuum_product_write_state(
         state, hdunum=int(hdunum), terminal_record=bool(terminal_record),
