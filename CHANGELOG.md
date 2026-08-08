@@ -1,5 +1,12 @@
 # CHANGELOG
 
+# 0.6.48.12.3.45.3.3.7 - 2026-08-07
+
+- Fix the final C5 `xo01_detal3` terminal-record publication residual by retaining one output-only replay snapshot of the final physical shell's fixed-state rate-1 detail3 absorption map.
+- The replay is overwritten after each physical detail shell, is eligible only when `terminal_record=True`, and is cleared immediately after the terminal detail record.
+- No physical `cemab/cabab/opakab`, populations, rates, matrices, transport, STEP science, C++ production science, or ABI behavior changes.
+- C5 remains the mandatory first qualification model; `ca19_xi2_ne1` and `o7_ne1e10` remain blocked until C5 fully accepts. `ca19_ne1e8` remains retired.
+
 # 0.6.48.12.3.45.3.3.6 - 2026-08-07
 
 - Move the remaining rate-1 generic `xo01_detal3` compatibility producer to the fixed-state UCalc stream and attach solved post-mapback populations after `msolvelucy`; the output-only map never mutates physical cemab/cabab/opakab.

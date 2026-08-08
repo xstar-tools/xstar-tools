@@ -2763,6 +2763,37 @@ def _source_detail_line_activity_shadow(
     return shadow
 
 
+
+def _select_fixed_state_detail3_absorption_v064812345337(
+    control: Mapping[str, Any], *, terminal_record: bool
+) -> Mapping[int, Mapping[str, Any]]:
+    current = control.get("source_detail_rrc_fixed_state_absorption_v064812345336", {})
+    if isinstance(current, Mapping) and current:
+        return current
+    if bool(terminal_record):
+        replay = control.get("source_detail_rrc_fixed_state_terminal_replay_v064812345337", {})
+        if isinstance(replay, Mapping):
+            return replay
+    return {}
+
+
+def _commit_fixed_state_detail3_terminal_replay_v064812345337(
+    control: MutableMapping[str, Any],
+    *,
+    current_fixed_state_map: Mapping[int, Mapping[str, Any]] | None,
+    terminal_record: bool,
+) -> None:
+    key = "source_detail_rrc_fixed_state_terminal_replay_v064812345337"
+    if bool(terminal_record):
+        control[key] = {}
+        return
+    src = current_fixed_state_map or {}
+    control[key] = {
+        int(ci): dict(row) for ci, row in src.items()
+        if isinstance(row, Mapping)
+    }
+
+
 def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int, terminal_record: bool = False) -> DetailShellOutput:
     from .radial_transfer import _workspace_from_state, _level_arrays_from_state
 
@@ -2794,8 +2825,10 @@ def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int, ter
     source_detail_rrc_non_type7_absorption = state.control.get(
         "source_detail_rrc_non_type7_absorption_v064812345335", {}
     )
-    source_detail_rrc_fixed_state_absorption = state.control.get(
-        "source_detail_rrc_fixed_state_absorption_v064812345336", {}
+    source_detail_rrc_fixed_state_absorption = (
+        _select_fixed_state_detail3_absorption_v064812345337(
+            state.control, terminal_record=bool(terminal_record)
+        )
     )
     source_detail_rrc_publication_trace: list[dict[str, Any]] = []
     ncn2 = int(state.control["ncn2"])
@@ -2867,6 +2900,18 @@ def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int, ter
         state.control["source_detail_rrc_orphan_trace_v06481234533"] = []
         state.control["source_detail_rrc_orphan_absorption_v06481234533"] = {}
         state.control["source_detail_rrc_non_type7_absorption_v064812345335"] = {}
+        # 45.3.3.7 terminal replay lifetime: snapshot the just-materialized
+        # physical shell before consuming its fixed-state publication map.
+        # A terminal detail record may replay only that snapshot, after which
+        # the replay is cleared.
+        current_fixed = state.control.get(
+            "source_detail_rrc_fixed_state_absorption_v064812345336", {}
+        )
+        _commit_fixed_state_detail3_terminal_replay_v064812345337(
+            state.control,
+            current_fixed_state_map=current_fixed if isinstance(current_fixed, Mapping) else {},
+            terminal_record=bool(terminal_record),
+        )
         state.control["source_detail_rrc_fixed_state_absorption_v064812345336"] = {}
     _maybe_export_detail_continuum_product_write_state(
         state, hdunum=int(hdunum), terminal_record=bool(terminal_record),
