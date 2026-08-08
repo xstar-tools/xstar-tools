@@ -200,7 +200,7 @@ def audit(records_source: Path, output_dir: Path, *, evaluation: int = 61) -> di
             "shadow_to_applied_ratio": shadow / applied if applied != 0.0 else (math.inf if shadow != 0.0 else 1.0),
         }
 
-    oracle_path = Path(__file__).resolve().parents[1] / "benchmarks" / "v064873_type53_runtime_oracle_v0472" / "type53_runtime_oracle.csv"
+    oracle_path = Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "historical" / "v064873_type53_runtime_oracle_v0472" / "type53_runtime_oracle.csv"
     oracle_available = oracle_path.is_file()
     oracle_exact = False
     if oracle_available:

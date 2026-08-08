@@ -2048,9 +2048,16 @@ def validate_v0444_complete_fixed_state_regression(
     path: Optional[str | Path] = None,
 ) -> V0444CompleteFixedStateRegressionGate:
     if path is None:
-        from xstar_tools.benchmarks import complete_fixed_state_v0444_acceptance_path
-
-        target = complete_fixed_state_v0444_acceptance_path() / "xstar_calc_hmc_all_v0444_acceptance_summary.json"
+        target = (
+            Path(__file__).resolve().parents[3]
+            / "tests/fixtures/historical/complete_fixed_state_v0444_acceptance"
+            / "xstar_calc_hmc_all_v0444_acceptance_summary.json"
+        )
+        if not target.is_file():
+            raise FileNotFoundError(
+                "the historical v0444 acceptance fixture is no longer bundled; "
+                "provide path=... explicitly"
+            )
     else:
         target = Path(path)
         if target.is_dir():

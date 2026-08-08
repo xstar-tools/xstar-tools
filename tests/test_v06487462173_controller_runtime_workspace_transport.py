@@ -51,8 +51,8 @@ def test_runtime_workspace_transport_executes_all_61_sequences(tmp_path: Path):
     import subprocess
 
     package = root()
-    trajectory = package / "src/xstar_tools/benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8/trajectory.csv"
-    program = package / "src/xstar_tools/benchmarks/v06485_active_family_phase2_fixture"
+    trajectory = package / "tests/fixtures/historical/v0648_compiled_case_helike_type69_mg11_ne1e8/trajectory.csv"
+    program = package / "tests/fixtures/historical/v06485_active_family_phase2_fixture"
     workspaces = tmp_path / "workspaces"
     for row in csv.DictReader(trajectory.open()):
         sequence = int(row["sequence"])

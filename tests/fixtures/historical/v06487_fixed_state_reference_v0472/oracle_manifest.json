@@ -1,0 +1,34 @@
+{
+  "accepted_ion_state_count": 4,
+  "all_61_electron_fraction_oracle": true,
+  "all_61_ion_population_oracle": false,
+  "all_61_level_population_oracle": false,
+  "files": [
+    {
+      "path": "trajectory_state_oracle.csv",
+      "sha256": "cce443875ebef6705b30a40d46881bd80857c66f32e61fbee62fa7572b0cf876",
+      "size_bytes": 7197
+    },
+    {
+      "path": "accepted_ion_populations.csv",
+      "sha256": "790c357fbffa808a785497ac2ab8c29696bdc7fe446c3ab81a8063a4022e40f2",
+      "size_bytes": 3645
+    },
+    {
+      "path": "final_level_populations.csv",
+      "sha256": "37ece8459f61b9fd2fee266ae2e43a7d7f1707931463d969a1bb836425a11602",
+      "size_bytes": 81559
+    }
+  ],
+  "final_level_mapped_rows": 615,
+  "final_level_reference_rows": 616,
+  "final_level_unmapped_rows": 1,
+  "immutable": true,
+  "production_promotion_ready": false,
+  "program_rows_sha256": "9df5593dda150e7c5a5b37d11fd23b39149e27b32921a28963af322cc9b30449",
+  "reference_bundle": "v06486_qualification_reference_v0472",
+  "reference_manifest_sha256": "40ea839df91ef2388c911782df2a9d003780ea7b576a845c748ecbf8ca7763c1",
+  "schema": "xstar-tools-v06487-fixed-state-oracle-v1",
+  "source_release": "0.6.47.2",
+  "trajectory_state_count": 61
+}

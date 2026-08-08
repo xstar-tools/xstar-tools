@@ -14,8 +14,8 @@ from xstar_tools.xstar.native_fixed_program import (
 
 ROOT = Path(__file__).resolve().parents[1]
 CPP = ROOT / "src/xstar_tools/xstar/cpp"
-PROGRAM = ROOT / "src/xstar_tools/benchmarks/v06485_active_family_phase2_fixture"
-TRAJECTORY = ROOT / "src/xstar_tools/benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8/trajectory.csv"
+PROGRAM = ROOT / "tests/fixtures/historical/v06485_active_family_phase2_fixture"
+TRAJECTORY = ROOT / "tests/fixtures/historical/v0648_compiled_case_helike_type69_mg11_ne1e8/trajectory.csv"
 PHASE2_TYPES = {1, 2, 9, 30, 38, 39, 60, 62, 68, 72, 73, 76, 95}
 ALL_ACTIVE_TYPES = {49, 50, 51, 53, 54, 56, 57, 63, 69, 71, 74, 77, 86, 88, 99} | PHASE2_TYPES
 

@@ -1,0 +1,7 @@
+program_abi=60485
+program_id=v06485_active_family_phase2_fixture
+program_kind=raw_atomic_coefficients
+contains_evaluated_results=false
+active_atdb_lowered=false
+element_count=1
+record_count=27

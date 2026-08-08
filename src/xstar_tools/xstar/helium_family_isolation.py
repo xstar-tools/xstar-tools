@@ -62,7 +62,6 @@ def read_csv(path: Path) -> list[dict[str, str]]:
 def discover_reference(root: Path, name: str) -> Path:
     candidates = (
         root / "src/xstar_tools/benchmarks/v06486_qualification_reference_v0472" / name,
-        root / "src/xstar_tools/benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8" / name,
     )
     for candidate in candidates:
         if candidate.is_file() and candidate.stat().st_size:
@@ -310,7 +309,7 @@ def isolate(
     radiation = radiation_csv.resolve() if radiation_csv else discover_reference(root, "reference_radiation_v0472_full.csv")
     if sha256(radiation) != RADIATION_SHA256:
         raise RuntimeError("qualification radiation SHA-256 mismatch")
-    oracle_dir = root / "src/xstar_tools/benchmarks/v064873_type53_runtime_oracle_v0472"
+    oracle_dir = root / "tests/fixtures/historical/v064873_type53_runtime_oracle_v0472"
     oracle = load_oracle(oracle_dir)
     executable = root / "src/xstar_tools/xstar/cpp/xstar_cpp"
     env = dict(os.environ)

@@ -1,0 +1,42 @@
+{
+  "capture_csv_sha256": "ec0dae9b51cfaa3f0a4c24687ae1f6b2ee2717e178e13ee69a2421a0c5dd20b3",
+  "capture_csv_size_bytes": 18952,
+  "capture_kind": "exact_v06472_fixed_state_evaluator_replay",
+  "electron_fraction_xee": 1.2003632957721315,
+  "evaluation_ordinal": 61,
+  "full_dsec_runtime_capture": false,
+  "hydrogen_density_cm3": 100000000.0,
+  "lowered_program_inputs": {
+    "manifest.txt": {
+      "sha256": "f767ed3dae62270024191b9e3409bf3aedf8a2549dfa931b71abc84eb02b031d",
+      "size_bytes": 614
+    },
+    "reals.txt": {
+      "sha256": "ede21e0701da83b349e138839993a315eb967b415e20d54851d1391c71b90a44",
+      "size_bytes": 40926931
+    },
+    "records.csv": {
+      "sha256": "9b625e01f580a3f037a576cd19c8ac56597ef70329b756fe74345f9e37f3fafc",
+      "size_bytes": 750746
+    },
+    "rows.csv": {
+      "sha256": "9df5593dda150e7c5a5b37d11fd23b39149e27b32921a28963af322cc9b30449",
+      "size_bytes": 29357
+    }
+  },
+  "oracle_freeze_ready": true,
+  "production_promotion_ready": false,
+  "radiation_bins": 9999,
+  "radiation_csv_sha256": "8cd5771924724d5aa8fcf5af8c533f5b5ca9887e24a94ac2d7b4557c0ff7b108",
+  "records": 31,
+  "release": "0.6.48.7.3",
+  "result": "ACCEPT",
+  "schema": "xstar-tools-v064873-v0472-type53-runtime-capture-v1",
+  "source_archive_sha256": "85ff0184bd95daf046fd28923837239c5192f8d309b0716556d1d804b0453060",
+  "source_module_sha256": "67439524b5453d73ca184346bb844ce2cc23faad771b402effb33932a2bf8e06",
+  "source_package_version": "0.6.47.2",
+  "source_records_csv_sha256": "57354ecb8f71b794cdd9a633eb7cc3e5804d23322f66ba967f87e7a6b875ae5c",
+  "source_runtime_values_present": true,
+  "state_json_sha256": "53d7320d15d6aa0557adb9bb33faf9c4a59f5be36bd68f9af0ffe10783fbcd3d",
+  "temperature_k": 64991.46221159782
+}

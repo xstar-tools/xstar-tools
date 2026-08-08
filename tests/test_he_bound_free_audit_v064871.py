@@ -76,7 +76,7 @@ def test_cli_removes_stale_json_on_failure(tmp_path: Path) -> None:
 
 
 def test_audit_reports_current_oracle_metadata_for_exact_31_record_scope(tmp_path: Path) -> None:
-    oracle = Path(__file__).resolve().parents[1] / "src/xstar_tools/benchmarks/v064873_type53_runtime_oracle_v0472/type53_runtime_oracle.csv"
+    oracle = Path(__file__).resolve().parents[1] / "tests/fixtures/historical/v064873_type53_runtime_oracle_v0472/type53_runtime_oracle.csv"
     diagnostics = tmp_path / "diagnostics"
     diagnostics.mkdir()
     records = diagnostics / "evaluation_0061_records.csv"

@@ -14,7 +14,7 @@ from xstar_tools.xstar.qualification import compare_directories
 
 
 ROOT = Path(__file__).resolve().parents[1]
-REFERENCE = ROOT / "src/xstar_tools/benchmarks/v06486_qualification_reference_v0472"
+REFERENCE = ROOT / "tests/fixtures/historical/v06486_qualification_reference_v0472"
 
 
 def mutate_first_float_cell(path: Path) -> tuple[int, str, tuple[int, ...]]:

@@ -9,7 +9,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 CPP = ROOT / "src/xstar_tools/xstar/cpp"
-FIXTURE = ROOT / "src/xstar_tools/benchmarks/v06485_active_family_phase2_fixture"
+FIXTURE = ROOT / "tests/fixtures/historical/v06485_active_family_phase2_fixture"
 
 
 def _run(program: Path) -> subprocess.CompletedProcess[str]:

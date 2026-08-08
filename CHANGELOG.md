@@ -1,5 +1,15 @@
 # CHANGELOG
 
+# 0.6.50 - 2026-08-08
+
+- Milestone benchmark/reference cleanup on the frozen `0.6.48.12.3.45.3.3.8` science baseline.
+- Move 13 completely unreferenced benchmark/acceptance/oracle directories to `historical/qualification/benchmarks/`.
+- Move legacy test/development fixtures to `tests/fixtures/historical/` and update their historical tests/dev diagnostics.
+- Retire the ~44 MB deprecated `v0648_compiled_case_helike_type69_mg11_ne1e8` fixture from normal package data while preserving the compiled-case C ABI and archiving the fixture for reproducibility.
+- Reduce active `v06486_qualification_reference_v0472` package data to the full radiation grid and trajectory only; retain `v0648724_call1_thermal_leaf_reference` temporarily for frozen standalone C++ lookup.
+- Remove obsolete benchmark package-data entries and delete unused `acceptance.py`, `matrix.py`, and `smoke.py`.
+- Extend the parity-freeze gate to enforce the reduced benchmark footprint; frozen C++ sources, ABI `6048110`, comparators, and accepted science remain unchanged.
+
 # 0.6.49 - 2026-08-08
 
 - Milestone 1.1 productization-only qualification-history cleanup on the accepted `0.6.48.12.3.45.3.3.8` science baseline.

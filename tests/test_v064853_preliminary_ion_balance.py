@@ -7,8 +7,8 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 CPP = ROOT / "src/xstar_tools/xstar/cpp"
-FIXTURE = ROOT / "src/xstar_tools/benchmarks/v06485_active_family_phase2_fixture"
-REFERENCE = ROOT / "src/xstar_tools/benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8"
+FIXTURE = ROOT / "tests/fixtures/historical/v06485_active_family_phase2_fixture"
+REFERENCE = ROOT / "tests/fixtures/historical/v0648_compiled_case_helike_type69_mg11_ne1e8"
 
 
 def test_preliminary_rates_feed_stage_selection_without_direct_matrix_injection() -> None:

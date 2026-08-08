@@ -173,4 +173,4 @@ def test_trajectory_products_and_frozen_v0444_gate(tmp_path: Path) -> None:
         row.event for row in result.trajectory
     ]
     assert loaded.ntotit == result.ntotit
-    assert validate_v0444_complete_fixed_state_regression().ready is True
+    assert validate_v0444_complete_fixed_state_regression(ROOT / "tests/fixtures/historical/complete_fixed_state_v0444_acceptance").ready is True

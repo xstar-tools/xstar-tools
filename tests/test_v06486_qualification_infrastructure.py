@@ -13,9 +13,9 @@ from xstar_tools.xstar.qualification import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
-REFERENCE = ROOT / "src/xstar_tools/benchmarks/v06486_qualification_reference_v0472"
-FIXTURE = ROOT / "src/xstar_tools/benchmarks/v06485_active_family_phase2_fixture"
-BENCH = ROOT / "src/xstar_tools/benchmarks/v0648_compiled_case_helike_type69_mg11_ne1e8"
+REFERENCE = ROOT / "tests/fixtures/historical/v06486_qualification_reference_v0472"
+FIXTURE = ROOT / "tests/fixtures/historical/v06485_active_family_phase2_fixture"
+BENCH = ROOT / "tests/fixtures/historical/v0648_compiled_case_helike_type69_mg11_ne1e8"
 CPP = ROOT / "src/xstar_tools/xstar/cpp"
 
 

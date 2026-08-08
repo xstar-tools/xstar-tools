@@ -45,7 +45,26 @@ def test_frozen_evidence_is_stable_and_versioned_tools_are_archived():
     assert not [p for p in active.glob("v064*") if p.is_dir()]
 
 
-def test_productization_entry_version_is_0649():
+def test_productization_entry_version_is_0650():
     freeze = json.loads((ROOT / "qualification" / "parity_freeze.json").read_text())
-    assert freeze["productization_entry_version"] == "0.6.49"
+    assert freeze["productization_entry_version"] == "0.6.50"
     assert freeze["qualification_history"]["active_version_specific_directories"] == 0
+
+
+def test_benchmark_reference_cleanup_is_enforced():
+    benchmark_root = ROOT / "src" / "xstar_tools" / "benchmarks"
+    assert sorted(p.name for p in benchmark_root.iterdir() if p.is_dir()) == [
+        "v06486_qualification_reference_v0472",
+        "v0648724_call1_thermal_leaf_reference",
+    ]
+    assert sorted(
+        p.name
+        for p in (benchmark_root / "v06486_qualification_reference_v0472").iterdir()
+        if p.is_file()
+    ) == ["reference_radiation_v0472_full.csv", "trajectory.csv"]
+    assert not (benchmark_root / "v0648_compiled_case_helike_type69_mg11_ne1e8").exists()
+    for obsolete in ("acceptance.py", "matrix.py", "smoke.py"):
+        assert not (benchmark_root / obsolete).exists()
+    freeze = json.loads((ROOT / "qualification" / "parity_freeze.json").read_text())
+    assert freeze["benchmark_reference_cleanup"]["deprecated_compiled_case_bundled"] is False
+    assert freeze["benchmark_reference_cleanup"]["unreferenced_benchmark_directories_archived"] == 13

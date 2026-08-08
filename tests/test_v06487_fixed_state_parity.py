@@ -7,7 +7,7 @@ from pathlib import Path
 from xstar_tools.xstar.fixed_state_parity import compare_fixed_state, verify_oracle
 
 ROOT = Path(__file__).resolve().parents[1]
-ORACLE = ROOT / "src/xstar_tools/benchmarks/v06487_fixed_state_reference_v0472"
+ORACLE = ROOT / "tests/fixtures/historical/v06487_fixed_state_reference_v0472"
 
 
 def _write_csv(path: Path, rows: list[dict[str, object]], fields: list[str]) -> None:
