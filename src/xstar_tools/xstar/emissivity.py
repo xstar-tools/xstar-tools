@@ -612,12 +612,6 @@ def calc_emisab_ion(
                     denom = ptmp1 + ptmp2
                     if denom == 0.0:
                         raise CalcEmisabPortError("zero continuum escape denominator")
-                    _update_source_detail_rrc_type7_final_slot_v064812345339(
-                        context.profile_control, source_record=rec, continuum_index=continuum_index,
-                        data_type=header.data_type, ptmp1=ptmp1, ptmp2=ptmp2,
-                        abund1=abund1, abund2=abund2, xpx=xpx, ans3=result.ans3,
-                        ans4=result.ans4, opakab=result.opakab,
-                    )
                     _update_source_detail_rrc_slot_absorption_lifetime_v06481234532(
                         context.profile_control, source_record=rec, continuum_index=continuum_index,
                         abund1=abund1, abund2=abund2, xpx=xpx, ans4=result.ans4,
@@ -1001,67 +995,6 @@ def _update_source_detail_rrc_slot_absorption_lifetime_v06481234532(
     })
 
 
-def _update_source_detail_rrc_type7_final_slot_v064812345339(
-    control: Optional[MutableMapping[str, Any]], *, source_record: int,
-    continuum_index: int, data_type: int, ptmp1: float, ptmp2: float,
-    abund1: float, abund2: float, xpx: float, ans3: float, ans4: float,
-    opakab: float,
-) -> None:
-    """Retain the final source-order rate-7 continuum-slot write.
-
-    Frozen standalone C++ owns generic ``xo01_detal3`` membership from the
-    final one-based local ``cemab/cabab/opakab`` continuum slot.  The writer
-    does not require the record that last wrote that slot to be the canonical
-    ``npcon`` owner.  Conversely, a later source-order zero write must erase an
-    earlier positive write.
-
-    Python's older record-keyed shadows cannot represent either rule.  This
-    output-only slot state is therefore updated for *every* visited rate-7
-    record, including zero/inactive writes.  It never mutates the
-    physical emissivity workspace and is reset at the beginning of every
-    ``calc_emisab_all`` evaluation.
-    """
-    if not isinstance(control, MutableMapping):
-        return
-    rec = int(source_record); ci = int(continuum_index); dt = int(data_type)
-    if rec <= 0 or ci <= 0:
-        return
-    den = float(ptmp1) + float(ptmp2)
-    if den == 0.0:
-        emis_in = emis_out = 0.0
-    else:
-        common = abs(float(ans3)) / den * float(abund2) * float(xpx)
-        emis_in = float(ptmp1) * common
-        emis_out = float(ptmp2) * common
-    absorption = abs(float(ans4)) * float(abund1) * float(xpx)
-    values = (float(emis_in), float(emis_out), float(absorption), float(opakab))
-    activity_floor = float(np.float32(1.0e-36))
-    active = any(np.isfinite(v) and v > activity_floor for v in values)
-    slots = control.setdefault('source_detail_rrc_type7_final_slot_v064812345339', {})
-    if not isinstance(slots, MutableMapping):
-        slots = {}
-        control['source_detail_rrc_type7_final_slot_v064812345339'] = slots
-    slots[ci] = {
-        'continuum_index': ci,
-        'source_record': rec,
-        'rate_type': 7,
-        'data_type': dt,
-        'emis_inward': values[0],
-        'emis_outward': values[1],
-        'integrated_absn': values[2],
-        'opacity': values[3],
-        'active': bool(active),
-        'abundance_lower': float(abund1),
-        'abundance_upper': float(abund2),
-        'endpoint_active': bool(
-            float(abund1) > XSTAR_CALC_EMISAB_LEVEL_ABUNDANCE_FLOOR
-            or float(abund2) > XSTAR_CALC_EMISAB_LEVEL_ABUNDANCE_FLOOR
-        ),
-        'eval_sequence': int(control.get('source_detail_rrc_eval_sequence_v06481234532', 0) or 0),
-        'publication_owner': 'source_type7_final_slot_v064812345339',
-    }
-
-
 def _update_source_detail_rrc_publication_shadow_v0648123451(
     control: Optional[MutableMapping[str, Any]], *, continuum_index: int,
     ptmp1: float, ptmp2: float, abund1: float, abund2: float, xpx: float,
@@ -1395,7 +1328,6 @@ def calc_emisab_all(context: CalcEmisabContext) -> CalcEmisabResult:
     _begin_source_detail_rrc_evaluation_v06481234532(context.profile_control)
     if isinstance(context.profile_control, MutableMapping):
         context.profile_control["source_detail_rrc_publication_shadow_v0648123451"] = {}
-        context.profile_control["source_detail_rrc_type7_final_slot_v064812345339"] = {}
     native_product = _native_spectral_requested(product=True)
     native_shadow = _native_spectral_requested(shadow=True)
     native_contributions: Optional[list[dict[str, Any]]] = [] if (native_product or native_shadow) else None

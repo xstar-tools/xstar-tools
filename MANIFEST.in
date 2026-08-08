@@ -4,13 +4,14 @@ include XSTAR_PYTHON_PORT.md
 include pyproject.toml
 include setup.py
 include setup.cfg
-include run_v0648942_cpp_against_reference.sh
-include run_v0648942_cpp_products.sh
-include run_v0648942_performance_benchmark.sh
-recursive-include tools/qualification/v064892 *.py
-recursive-include tools/qualification/v0648942 *.py *.sh
 recursive-include docs *
 recursive-include examples *
 recursive-include tests *.py
 recursive-include xstar_test_run *.csv *.md
 recursive-include src/xstar_tools *.py *.def *.dat *.json *.csv *.h *.hpp *.cpp Makefile
+include PARITY_FREEZE.md
+recursive-include qualification *.json *.py *.md
+include tools/qualification/check_parity_freeze.py
+prune historical
+
+include .github/workflows/parity-freeze.yml

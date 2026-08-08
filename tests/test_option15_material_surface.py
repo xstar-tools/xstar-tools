@@ -4,8 +4,8 @@ from pathlib import Path
 
 
 def _mod():
-    p=Path(__file__).resolve().parents[1]/'tools/qualification/v0648123361/compare_step_log_science.py'
-    spec=importlib.util.spec_from_file_location('v0648123361_cmp',p)
+    p=Path(__file__).resolve().parents[1]/'qualification/frozen/option15/compare_step_log_science.py'
+    spec=importlib.util.spec_from_file_location('frozen_option15_material_cmp',p)
     mod=importlib.util.module_from_spec(spec); assert spec.loader; spec.loader.exec_module(mod); return mod
 
 

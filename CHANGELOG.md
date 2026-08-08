@@ -1,5 +1,15 @@
 # CHANGELOG
 
+# 0.6.49 - 2026-08-08
+
+- Milestone 1.1 productization-only qualification-history cleanup on the accepted `0.6.48.12.3.45.3.3.8` science baseline.
+- Keep the complete `src/` runtime/science tree byte-identical to 45.3.3.8; distribution metadata advances to `0.6.49` outside `src/`.
+- Copy the four currently operational frozen evidence artifacts to stable names under `qualification/frozen/`, preserving their accepted SHA-256 hashes.
+- Point `parity_freeze.json`, the freeze checker, and active tests at the stable evidence paths; remove active-test dependency on `tools/qualification/v064...`.
+- Archive all 125 version-specific qualification directories under `historical/qualification/versioned/` and all 145 historical root launchers under `historical/qualification/launchers/`.
+- Remove obsolete version-specific qualification entries from `MANIFEST.in` and exclude `historical/` from normal source distributions.
+- Keep C++ baseline `0.6.48.12.3.44`, ABI `6048110`, comparators, C5 behavior, Ca/O structural exceptions, and all frozen numerical/material science unchanged.
+
 ## 0.6.48.12.3.45.3.3.9 - 2026-08-07
 
 - Repair generic `xo01_detal3` Type7 publication ownership from the final source-order continuum slot rather than canonical source-record identity.
