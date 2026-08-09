@@ -50,3 +50,6 @@ include qualification/legacy_source_port_cli_cleanup_0_6_65.json
 
 include tools/qualification/check_public_python_api.py
 include qualification/public_python_api_0_6_66.json
+
+include tools/qualification/check_unified_cli.py
+include qualification/unified_cli_0_6_68.json

@@ -1,5 +1,16 @@
 # CHANGELOG
 
+# xstar_tools 0.6.68 - 2026-08-09
+
+- Complete Milestone 5 CLI consolidation around the primary `xstar-tools <command>` interface: `run`, `inspect`, `data`, `backends`, `compare`, `doctor`, and `version`.
+- Make `xstar-tools run INPUT --mode ...` construct `XStarConfig` and call the same top-level `run_xstar(config)` orchestration layer as the stable Python API; remove the historical source-port CLI from the normal run path.
+- Add `xstar-tools dev ...` and `xstar-tools qualify ...` namespaces, while retaining existing legacy console scripts for one deprecation cycle; retain top-level `xstar-tools benchmark ...` as a warning compatibility alias.
+- Add standard Python logging to normal CLI runs, preserve human-readable science progress, and add optional `--json-log` JSONL events/provenance plus `--summary-json` final result output.
+- Expose the accepted public-suite comparator directly as `xstar-tools compare`, preserving the 0.6.67 Option-24 Fortran stale-local semantic quarantine.
+- Extend `xstar-tools doctor` with optional local scientific-data validation and make `version` report package, science, C API ABI, and production-zone ABI separately.
+- Add `qualification/unified_cli_0_6_68.json`, `tools/qualification/check_unified_cli.py`, developer documentation, and CLI/API orchestration characterization tests.
+- No `src/xstar_tools/xstar/` scientific implementation or C++ scientific source/header changes; the complete scientific tree is byte-identical to 0.6.67, accepted science remains `0.6.48.12.3.45.3.3.8`, frozen C++ baseline remains `0.6.48.12.3.44`, C API ABI remains `60487`, and production-zone ABI remains `6048110`.
+
 # xstar_tools 0.6.67 - 2026-08-09
 
 - Restore the already-qualified Option-24 Fortran `pprint(24)` stale-local semantic quarantine in the public benchmark comparator without changing Python/C++ Option-24 science.

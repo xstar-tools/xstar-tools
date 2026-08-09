@@ -382,7 +382,7 @@ def print_record(rec: RawRecord, max_values: int = 20) -> None:
         print(f"chars:    {rec.chars!r}")
 
 
-def main() -> None:
+def main(argv: Optional[list[str]] = None) -> None:
     ap = argparse.ArgumentParser(description="Low-level inspector for XSTAR atdb.fits")
     ap.add_argument("fitsfile", help="Path to atdb.fits")
     ap.add_argument("--summary", action="store_true", help="Print JSON summary")
@@ -395,7 +395,7 @@ def main() -> None:
     ap.add_argument("--dump", action="store_true", help="Dump selected records")
     ap.add_argument("--no-reals", action="store_true", help="Do not read/dump real values")
     ap.add_argument("--max-values", type=int, default=20, help="Max values shown from each array")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
 
     with XSTARATDB(args.fitsfile, load_reals=False) as db:
         if args.summary or args.summary_json:

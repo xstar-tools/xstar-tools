@@ -47,6 +47,22 @@ xstar-tools doctor --require zone-cpp
 xstar-tools version
 ```
 
+The primary Milestone-5 command tree is:
+
+```text
+xstar-tools run
+xstar-tools inspect
+xstar-tools data
+xstar-tools backends
+xstar-tools compare
+xstar-tools doctor
+xstar-tools version
+```
+
+Advanced development and release qualification interfaces live under `xstar-tools dev ...` and `xstar-tools qualify ...`. Legacy console scripts remain installed for one deprecation cycle.
+
+Normal `xstar-tools run` execution uses standard Python logging plus human-readable science progress. Add `--json-log FILE.jsonl` for structured run-start/run-completion/failure events with final provenance, and `--summary-json FILE.json` for the stable `XStarResult` payload. The CLI constructs `XStarConfig` and calls the same `run_xstar(config)` orchestration layer as the public Python API.
+
 ## Atomic data
 
 For explicit, reproducible runs, provide the XSTAR data directory containing at least:
@@ -77,24 +93,19 @@ OUT=$(pwd)/run-o7
 `pure-python` keeps the Python controller/radial flow, Python local-zone implementation, and all modular science backends in Python. It is the primary source-faithful reference and debugging mode.
 
 ```bash
-xstar-tools run \
+xstar-tools run "$RUN" \
   --mode pure-python \
-  --run-script "$RUN" \
-  --atdb "$DATA/atdb.fits" \
-  --coheat-data "$DATA/coheat.dat" \
+  --data-dir "$DATA" \
   --output-dir "$OUT/pure-python" \
-  --summary-json "$OUT/pure-python/summary.json" \
-  --print-summary
+  --summary-json "$OUT/pure-python/summary.json"
 ```
 
 For expensive development runs, an explicit reusable cache directory can be supplied:
 
 ```bash
-xstar-tools run \
+xstar-tools run "$RUN" \
   --mode pure-python \
-  --run-script "$RUN" \
-  --atdb "$DATA/atdb.fits" \
-  --coheat-data "$DATA/coheat.dat" \
+  --data-dir "$DATA" \
   --cache-dir "$OUT/cache" \
   --output-dir "$OUT/pure-python"
 ```
@@ -104,14 +115,11 @@ xstar-tools run \
 `zone-python` retains the Python controller and source-faithful orchestration but enables the qualified modular C++ kernels. This is the normal accelerated Python mode.
 
 ```bash
-xstar-tools run \
+xstar-tools run "$RUN" \
   --mode zone-python \
-  --run-script "$RUN" \
-  --atdb "$DATA/atdb.fits" \
-  --coheat-data "$DATA/coheat.dat" \
+  --data-dir "$DATA" \
   --output-dir "$OUT/zone-python" \
-  --summary-json "$OUT/zone-python/summary.json" \
-  --print-summary
+  --summary-json "$OUT/zone-python/summary.json"
 ```
 
 The mode resolver explicitly selects C++ for the solver, rates, matrix, emissivity, opacity, thermal, and engine backends while leaving the radial controller in Python.
@@ -121,20 +129,17 @@ The mode resolver explicitly selects C++ for the solver, rates, matrix, emissivi
 `zone-cpp` is the stable public name for the frozen `cpp-zone` concept. Python provides the invocation/interface, while a persistent shared C++ production-zone context advances the run zone by zone.
 
 ```bash
-xstar-tools run \
+xstar-tools run "$RUN" \
   --mode zone-cpp \
-  --run-script "$RUN" \
-  --atdb "$DATA/atdb.fits" \
-  --coheat-data "$DATA/coheat.dat" \
+  --data-dir "$DATA" \
   --output-dir "$OUT/zone-cpp" \
-  --summary-json "$OUT/zone-cpp/summary.json" \
-  --print-summary
+  --summary-json "$OUT/zone-cpp/summary.json"
 ```
 
 The legacy equivalent remains available for compatibility:
 
 ```bash
-xstar-tools run \
+xstar-tools dev legacy-run \
   --run-script "$RUN" \
   --atdb "$DATA/atdb.fits" \
   --coheat-data "$DATA/coheat.dat" \
@@ -154,14 +159,11 @@ Prefer `--mode zone-cpp` in new work.
 `zone-all` is the public name for the current `cpp-all` shared production path.
 
 ```bash
-xstar-tools run \
+xstar-tools run "$RUN" \
   --mode zone-all \
-  --run-script "$RUN" \
-  --atdb "$DATA/atdb.fits" \
-  --coheat-data "$DATA/coheat.dat" \
+  --data-dir "$DATA" \
   --output-dir "$OUT/zone-all" \
-  --summary-json "$OUT/zone-all/summary.json" \
-  --print-summary
+  --summary-json "$OUT/zone-all/summary.json"
 ```
 
 Use this mode when the complete shared C++ production path is desired but Python should still own invocation, capability checks, and provenance collection.
@@ -207,13 +209,10 @@ src/xstar_tools/xstar/cpp/xstar-cpp run-production \
 You can also invoke the same native path through the Python public interface:
 
 ```bash
-xstar-tools run \
+xstar-tools run "$RUN" \
   --mode xstar-cpp \
-  --run-script "$RUN" \
-  --atdb "$DATA/atdb.fits" \
-  --coheat-data "$DATA/coheat.dat" \
-  --output-dir "$OUT/xstar-cpp-via-python" \
-  --print-summary
+  --data-dir "$DATA" \
+  --output-dir "$OUT/xstar-cpp-via-python"
 ```
 
 The native frontend writes `xstar_execution_provenance.json` with the package/science revisions, ABIs, native executable identity, CPU dispatch information, fallbacks, return code, and supplied atomic-data hashes.
@@ -376,7 +375,7 @@ The subset intentionally avoids routine C5 reruns and the retired slow `helike_t
 ## List the benchmark cases
 
 ```bash
-xstar-tools benchmark list \
+xstar-tools qualify benchmark list \
   --suite-archive /path/to/original_xstar_benchmark_run.tar.gz
 ```
 
@@ -388,7 +387,7 @@ DATA=/media/linux/mhd/xstar/xstar/data
 RUNS=/path/to/original_xstar_benchmark_run.tar.gz
 OUT=$(pwd)/benchmark-0.6.61
 
-xstar-tools benchmark run \
+xstar-tools qualify benchmark run \
   --package "$PACKAGE" \
   --data "$DATA" \
   --suite-archive "$RUNS" \
@@ -402,7 +401,7 @@ xstar-tools benchmark run \
 To run only the three full C++ modes and skip the Python subset:
 
 ```bash
-xstar-tools benchmark run \
+xstar-tools qualify benchmark run \
   --package "$PACKAGE" \
   --data "$DATA" \
   --suite-archive "$RUNS" \
@@ -414,7 +413,7 @@ xstar-tools benchmark run \
 To change the subset, repeat `--python-case`; for example:
 
 ```bash
-xstar-tools benchmark run \
+xstar-tools qualify benchmark run \
   --package "$PACKAGE" \
   --data "$DATA" \
   --suite-archive "$RUNS" \
@@ -427,7 +426,7 @@ xstar-tools benchmark run \
 To test the orchestration without executing science:
 
 ```bash
-xstar-tools benchmark run \
+xstar-tools qualify benchmark run \
   --package "$PACKAGE" \
   --data "$DATA" \
   --suite-archive "$RUNS" \
@@ -442,7 +441,7 @@ After the runs finish:
 ```bash
 FORTRAN=/path/to/original_xstar.tar.gz
 
-xstar-tools benchmark compare \
+xstar-tools compare \
   --package "$PACKAGE" \
   --run-root "$OUT" \
   --fortran-reference-archive "$FORTRAN" \
@@ -474,7 +473,7 @@ When `v064812344_all62_three_mode.tar.gz` is available:
 ```bash
 CPP44=/path/to/v064812344_all62_three_mode.tar.gz
 
-xstar-tools benchmark compare \
+xstar-tools compare \
   --package "$PACKAGE" \
   --run-root "$OUT" \
   --fortran-reference-archive "$FORTRAN" \
@@ -504,7 +503,7 @@ comparisons/current_cpp_cross_mode_exact.csv
 With only the Fortran reference available:
 
 ```bash
-xstar-tools benchmark all \
+xstar-tools qualify benchmark all \
   --package "$PACKAGE" \
   --data "$DATA" \
   --suite-archive "$RUNS" \
@@ -517,7 +516,7 @@ xstar-tools benchmark all \
 After the C++ 0.6.48.12.3.44 reference archive is available:
 
 ```bash
-xstar-tools benchmark all \
+xstar-tools qualify benchmark all \
   --package "$PACKAGE" \
   --data "$DATA" \
   --suite-archive "$RUNS" \

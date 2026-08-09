@@ -227,7 +227,10 @@ def test_unified_cli_backends_and_doctor_json():
     assert set(data["modes"]) == {"pure-python", "zone-python", "zone-cpp", "zone-all", "xstar-cpp"}
     doctor = subprocess.run([sys.executable, "-m", "xstar_tools.cli.main", "doctor", "--require", "pure-python", "--json"], cwd=root, text=True, capture_output=True, env=env)
     assert doctor.returncode == 0, doctor.stdout + doctor.stderr
-    assert json.loads(doctor.stdout)["doctor"] == {"required_mode": "pure-python", "ready": True}
+    doctor_data = json.loads(doctor.stdout)["doctor"]
+    assert doctor_data["required_mode"] == "pure-python"
+    assert doctor_data["mode_ready"] is True
+    assert doctor_data["ready"] is True
 
 def test_public_contract_checker_passes():
     root = Path(__file__).resolve().parents[1]
