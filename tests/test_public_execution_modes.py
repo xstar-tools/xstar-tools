@@ -12,7 +12,7 @@ import pytest
 
 from xstar_tools.execution import (
     advanced_execution_provenance, infer_public_mode, resolve_mode, execution_provenance, run_xstar,
-    SCIENCE_REVISION, ZONE_ABI_VERSION,
+    SCIENCE_REVISION, ZONE_ABI_VERSION, package_version,
 )
 
 
@@ -150,7 +150,7 @@ def test_xstar_cpp_native_frontend_accepts_xstar_style_tokens_without_python(tmp
     root = Path(__file__).resolve().parents[1]
     source = root / "src/xstar_tools/xstar/native/xstar_cpp_frontend.cpp"
     frontend = tmp_path / "xstar-cpp"
-    proc = subprocess.run([compiler, "-std=c++17", "-Wall", "-Wextra", "-Wpedantic", "-O0", '-DXSTAR_TOOLS_PACKAGE_VERSION="0.6.62"', "-o", str(frontend), str(source), "-lstdc++fs"], text=True, capture_output=True)
+    proc = subprocess.run([compiler, "-std=c++17", "-Wall", "-Wextra", "-Wpedantic", "-O0", f'-DXSTAR_TOOLS_PACKAGE_VERSION="{package_version()}"', "-o", str(frontend), str(source), "-lstdc++fs"], text=True, capture_output=True)
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "warning:" not in (proc.stdout + proc.stderr)
 
@@ -175,7 +175,7 @@ def test_xstar_cpp_native_frontend_accepts_xstar_style_tokens_without_python(tmp
     assert payload["coheat_file"] == str(coheat)
     native_prov = json.loads((tmp_path / "out/xstar_execution_provenance.json").read_text())
     assert native_prov["requested_mode"] == native_prov["actual_mode"] == "xstar-cpp"
-    assert native_prov["package_version"] == "0.6.62"
+    assert native_prov["package_version"] == package_version()
     assert native_prov["science_revision"] == SCIENCE_REVISION
     assert native_prov["c_api_abi"] > 0 and native_prov["zone_abi"] == ZONE_ABI_VERSION
     import hashlib

@@ -39,3 +39,6 @@ include tools/qualification/check_public_benchmark_suite.py
 
 include tools/qualification/check_test_history_cleanup.py
 include qualification/test_history_cleanup_0_6_62.json
+
+include tools/qualification/check_example_history_cleanup.py
+include qualification/example_history_cleanup_0_6_63.json

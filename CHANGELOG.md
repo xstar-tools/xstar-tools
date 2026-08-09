@@ -1,5 +1,15 @@
 # CHANGELOG
 
+# xstar_tools 0.6.63 - 2026-08-09
+
+- Clean the active `examples/` surface: archive 150 legacy numbered/parity-era example files under `historical/examples/xstar_atomic_legacy/`, preserving hashes and relocation provenance.
+- Remove all active-example references to the retired `xstar_atomic` namespace.
+- Archive 35 tests whose only target was the retired example scripts.
+- Replace the active examples with current backend-capability, stable public-mode, native `xstar-cpp`, and public benchmark examples.
+- Keep `examples/reference_outputs/` active because current tests and documentation still consume those validation fixtures.
+- Replace the Sphinx examples page so it no longer literal-includes retired scripts.
+- Add an example-history cleanup gate; no scientific implementation or ABI changes.
+
 # xstar_tools 0.6.62 - 2026-08-09
 
 - Clean the active test namespace: archive 189 obsolete tests while preserving them under `historical/tests/` with hashes and relocation provenance.
