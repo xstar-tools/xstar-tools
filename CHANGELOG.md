@@ -1,5 +1,14 @@
 # CHANGELOG
 
+# xstar_tools 0.6.64 - 2026-08-09
+
+- Remove the generated empty `o7_solver_source_fit_density_xstar_grid/` directory from the package tree and make its absence an explicit cleanliness contract.
+- Archive 31 top-level parity/attribution/probe modules from `src/xstar_tools/` that have no active source importer and no active console entry point; preserve their exact bytes and hashes under `historical/python/source_root_parity_campaign/`.
+- Keep intentional public facades such as `matrix.py`, `rates.py`, `runs.py`, `solve.py`, and `validate.py` even though internal runtime code does not import them.
+- Update the Python/C++/Fortran concordance Markdown to use `tests/test_source_characterization_current.py` as the current characterization anchor instead of retired `test_source_port_*` tests.
+- Remove archived parity modules from active Sphinx API declarations.
+- Add a source-root history-cleanup gate; no scientific implementation, C++ science source, ABI, or accepted science revision changes.
+
 # xstar_tools 0.6.63 - 2026-08-09
 
 - Clean the active `examples/` surface: archive 150 legacy numbered/parity-era example files under `historical/examples/xstar_atomic_legacy/`, preserving hashes and relocation provenance.

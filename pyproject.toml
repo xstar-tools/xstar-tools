@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xstar-tools"
-version = "0.6.63"
+version = "0.6.64"
 description = "Source-faithful Python/C++ XSTAR tools, atomic-data utilities, benchmarks, and runtime"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -110,3 +110,7 @@ where = ["src"]
   "v0648724_call1_thermal_leaf_reference/*",
 ]
 "xstar_tools.xstar" = ["data/coheat.dat", "cpp/*", "native/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = ["historical"]

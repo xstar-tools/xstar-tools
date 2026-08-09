@@ -4,10 +4,9 @@ from pathlib import Path
 def test_generated_density_grid_output_not_bundled_as_files():
     root = Path(__file__).resolve().parents[1]
     generated = root / "o7_solver_source_fit_density_xstar_grid"
-    # Some example smoke tests may create an empty output directory at runtime.
-    # The package must not bundle generated density-grid products as inputs.
-    if generated.exists():
-        assert not any(path.is_file() for path in generated.rglob("*"))
+    # This is generated output from the retired O VII density-grid example, not
+    # a package input.  It must not exist in a source or distribution tree.
+    assert not generated.exists()
 
 
 def test_compact_o7_density_inputs_bundled_under_xstar_test_run():

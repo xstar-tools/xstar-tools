@@ -42,3 +42,6 @@ include qualification/test_history_cleanup_0_6_62.json
 
 include tools/qualification/check_example_history_cleanup.py
 include qualification/example_history_cleanup_0_6_63.json
+
+include tools/qualification/check_source_root_history_cleanup.py
+include qualification/source_root_history_cleanup_0_6_64.json

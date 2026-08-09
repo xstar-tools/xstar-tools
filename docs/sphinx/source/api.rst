@@ -8,7 +8,7 @@ modules that provide those APIs.
 Workflow-first public API
 -------------------------
 
-.. automodule:: xstar_atomic.workflow
+.. automodule:: xstar_tools.workflow
    :members:
    :undoc-members:
    :show-inheritance:
@@ -16,7 +16,7 @@ Workflow-first public API
 High-level database object
 --------------------------
 
-.. automodule:: xstar_atomic.api
+.. automodule:: xstar_tools.api
    :members:
    :undoc-members:
    :show-inheritance:
@@ -24,7 +24,7 @@ High-level database object
 Local context objects
 ---------------------
 
-.. automodule:: xstar_atomic.context
+.. automodule:: xstar_tools.context
    :members:
    :undoc-members:
    :show-inheritance:
@@ -32,7 +32,7 @@ Local context objects
 Rate-evaluator namespaces
 -------------------------
 
-.. automodule:: xstar_atomic.rates
+.. automodule:: xstar_tools.rates
    :members:
    :undoc-members:
    :show-inheritance:
@@ -40,7 +40,7 @@ Rate-evaluator namespaces
 Type-50 source-code rate evaluator
 ----------------------------------
 
-.. automodule:: xstar_atomic.rates_type50
+.. automodule:: xstar_tools.rates_type50
    :members:
    :undoc-members:
    :show-inheritance:
@@ -48,12 +48,12 @@ Type-50 source-code rate evaluator
 Matrix and solver namespaces
 ----------------------------
 
-.. automodule:: xstar_atomic.matrix
+.. automodule:: xstar_tools.matrix
    :members:
    :undoc-members:
    :show-inheritance:
 
-.. automodule:: xstar_atomic.solve
+.. automodule:: xstar_tools.solve
    :members:
    :undoc-members:
    :show-inheritance:
@@ -61,18 +61,18 @@ Matrix and solver namespaces
 Same-run validation and XSTAR-run helpers
 -----------------------------------------
 
-.. automodule:: xstar_atomic.benchmark
+.. automodule:: xstar_tools.benchmark
    :members:
    :undoc-members:
    :show-inheritance:
 
 
-.. automodule:: xstar_atomic.validate
+.. automodule:: xstar_tools.validate
    :members:
    :undoc-members:
    :show-inheritance:
 
-.. automodule:: xstar_atomic.runs
+.. automodule:: xstar_tools.runs
    :members:
    :undoc-members:
    :show-inheritance:
@@ -80,7 +80,7 @@ Same-run validation and XSTAR-run helpers
 Source-code-first audit workflows
 ---------------------------------
 
-.. automodule:: xstar_atomic.audit
+.. automodule:: xstar_tools.audit
    :members:
    :undoc-members:
    :show-inheritance:
@@ -88,7 +88,7 @@ Source-code-first audit workflows
 Low-level hierarchy / packed FITS reader
 ----------------------------------------
 
-.. automodule:: xstar_atomic.hierarchy
+.. automodule:: xstar_tools.hierarchy
    :members:
    :undoc-members:
    :show-inheritance:
@@ -96,7 +96,7 @@ Low-level hierarchy / packed FITS reader
 Line decoder
 ------------
 
-.. automodule:: xstar_atomic.lines
+.. automodule:: xstar_tools.lines
    :members:
    :undoc-members:
    :show-inheritance:
@@ -104,7 +104,7 @@ Line decoder
 Photoionization decoder
 -----------------------
 
-.. automodule:: xstar_atomic.photoionization
+.. automodule:: xstar_tools.photoionization
    :members:
    :undoc-members:
    :show-inheritance:
@@ -112,7 +112,7 @@ Photoionization decoder
 Collision decoder
 -----------------
 
-.. automodule:: xstar_atomic.collisions
+.. automodule:: xstar_tools.collisions
    :members:
    :undoc-members:
    :show-inheritance:
@@ -120,7 +120,7 @@ Collision decoder
 Recombination and charge exchange
 ---------------------------------
 
-.. automodule:: xstar_atomic.recombination
+.. automodule:: xstar_tools.recombination
    :members:
    :undoc-members:
    :show-inheritance:
@@ -128,7 +128,7 @@ Recombination and charge exchange
 Emissivity tools
 ----------------
 
-.. automodule:: xstar_atomic.emissivity
+.. automodule:: xstar_tools.emissivity
    :members:
    :undoc-members:
    :show-inheritance:
@@ -136,7 +136,7 @@ Emissivity tools
 Prototype solver internals
 --------------------------
 
-.. automodule:: xstar_atomic.solver
+.. automodule:: xstar_tools.solver
    :members:
    :undoc-members:
    :show-inheritance:
@@ -144,7 +144,7 @@ Prototype solver internals
 Legacy validation helpers
 -------------------------
 
-.. automodule:: xstar_atomic.validation
+.. automodule:: xstar_tools.validation
    :members:
    :undoc-members:
    :show-inheritance:
@@ -152,7 +152,7 @@ Legacy validation helpers
 Export tools
 ------------
 
-.. automodule:: xstar_atomic.export
+.. automodule:: xstar_tools.export
    :members:
    :undoc-members:
    :show-inheritance:
@@ -162,7 +162,7 @@ Export tools
 XSTAR live-state schema
 -----------------------
 
-.. automodule:: xstar_atomic.xstar_state
+.. automodule:: xstar_tools.xstar_state
    :members:
    :undoc-members:
    :show-inheritance:
@@ -170,7 +170,7 @@ XSTAR live-state schema
 XSTAR command and output-recreation planning
 -------------------------------------------
 
-.. automodule:: xstar_atomic.xstar_run
+.. automodule:: xstar_tools.xstar_run
    :members:
    :undoc-members:
    :show-inheritance:
@@ -178,7 +178,7 @@ XSTAR command and output-recreation planning
 XSTAR output readers
 --------------------
 
-.. automodule:: xstar_atomic.xstar_outputs
+.. automodule:: xstar_tools.xstar_outputs
    :members:
    :undoc-members:
    :show-inheritance:
@@ -186,7 +186,7 @@ XSTAR output readers
 Data download and path helpers
 ------------------------------
 
-.. automodule:: xstar_atomic.data
+.. automodule:: xstar_tools.data
    :members:
    :undoc-members:
    :show-inheritance:
@@ -194,54 +194,15 @@ Data download and path helpers
 XSTAR detail-state readers and type-50 audits
 ---------------------------------------------
 
-.. automodule:: xstar_atomic.xstar_detail
+.. automodule:: xstar_tools.xstar_detail
    :members:
    :undoc-members:
    :show-inheritance:
-
-Priority native type-51 integration audit
------------------------------------------
-
-.. automodule:: xstar_atomic.xstar_priority_native_type51_integration
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Native type-50/type-71 rate and selected-system audits
--------------------------------------------------------
-
-.. automodule:: xstar_atomic.rates_type71
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-.. automodule:: xstar_atomic.xstar_type50_type71_native_parity
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-.. automodule:: xstar_atomic.xstar_priority_native_type50_type71_integration
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-
-Type-53 exact live-radiation rates
-----------------------------------
-
-.. automodule:: xstar_atomic.rates_type53
-   :members:
-
-.. automodule:: xstar_atomic.xstar_type53_live_native_parity
-   :members:
-
-.. automodule:: xstar_atomic.xstar_priority_native_type53_integration
-   :members:
 
 Source-faithful atomic-database initialization
 ----------------------------------------------
 
-.. automodule:: xstar_atomic.source_port.atomic_database
+.. automodule:: xstar_tools.xstar.atomic_database
    :members:
    :undoc-members:
    :show-inheritance:
@@ -249,7 +210,7 @@ Source-faithful atomic-database initialization
 Complete source-faithful ucalc subsystem
 ----------------------------------------
 
-.. automodule:: xstar_atomic.source_port.ucalc
+.. automodule:: xstar_tools.xstar.ucalc
    :members:
    :undoc-members:
    :show-inheritance:
@@ -257,12 +218,12 @@ Complete source-faithful ucalc subsystem
 Complete element statistical-equilibrium subsystem
 ---------------------------------------------------
 
-.. automodule:: xstar_atomic.source_port.element_equilibrium
+.. automodule:: xstar_tools.xstar.element_equilibrium
    :members:
    :undoc-members:
    :show-inheritance:
 
-.. automodule:: xstar_atomic.source_port.linear_algebra
+.. automodule:: xstar_tools.xstar.linear_algebra
    :members:
    :undoc-members:
    :show-inheritance:
