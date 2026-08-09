@@ -1,5 +1,14 @@
 # CHANGELOG
 
+# xstar_tools 0.6.67 - 2026-08-09
+
+- Restore the already-qualified Option-24 Fortran `pprint(24)` stale-local semantic quarantine in the public benchmark comparator without changing Python/C++ Option-24 science.
+- Keep the frozen Option-23 comparator byte-identical and add `qualification/current/compare_step_log_science.py` as a productization overlay used by the public benchmark harness.
+- Report `STEP_OPTION24_NUMERIC_SCIENCE`, inventory exactness, the Fortran stale-local quirk gate, and final Option-24 science separately.
+- Validate the supplied 62 `zone-cpp` results against `original_xstar`: Option-24 numeric science 62/62 ACCEPT and final Option-24 science 62/62 ACCEPT; 549 candidate-only clean He II identities and 13 negligible Fortran-only tails, with maximum tail `4.534e-18`.
+- Split Python-controller host version labeling into distribution/package version `0.6.67` and frozen science revision `0.6.48.12.3.45.3.3.8`.
+- No `xstar_tools.xstar` scientific implementation or C++ scientific source/header changes; frozen C++ baseline `0.6.48.12.3.44`, C API ABI `60487`, and production-zone ABI `6048110` remain unchanged.
+
 # xstar_tools 0.6.66 - 2026-08-09
 
 - Add the Milestone-4 stable public Python API: `XStarConfig`, `XStarData`, `XStarProducts`, `XStarResult`, and configuration-driven `run_xstar(config)`.
