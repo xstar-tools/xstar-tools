@@ -51,7 +51,7 @@ Important correspondence:
 | Paper topic | Equation/algorithm content | Fortran routine(s) | Python/C++ implementation | Relation |
 |---|---|---|---|---|
 | basic model assumptions | steady-state photoionized gas with simplified diffuse transfer/escape treatment | radial caller, transfer and escape routines | radial/escape modules | source model implements the paper's approximation; current source details prevail |
-| multilevel populations | simultaneous excitation/ionization through explicit levels plus superlevels/continuum levels | `levwk*`, `calc_hmc_ion/element`, `msolvelucy` | `element_equilibrium.py`, native fixed-state engine | mathematically/source equivalent |
+| multilevel populations | simultaneous excitation/ionization through explicit levels plus superlevels/continuum levels | `levwk*`, `calc_hmc_ion/element`, `msolvelucy` | `element_equilibrium.py`, native local-zone engine | mathematically/source equivalent |
 | Compton heating/cooling | paper equation (1) gives the nonrelativistic Compton energy exchange form | `comp2.f90` | `compton.py`, native thermal kernel | mathematically equivalent and qualified |
 | bremsstrahlung cooling | paper equation (2) summarizes free-free cooling | `freef.f90`, `bremem.f90` | `free_free.py`, `bremsstrahlung.py` | mathematically/source equivalent |
 | recombination/RRC | Milne-relation recombination rates and emissivity (paper equations 3-4) | photoionization/recombination `ucalc` branches, `calc_emisab_*`, `calc_emis_*` | `ucalc.py`, emissivity modules, C++ rate/spectral kernels | source-equivalent; current ATDB/data types govern details |
@@ -72,7 +72,7 @@ Correspondence:
 | Paper concept | Fortran | Python/C++ | Relation |
 |---|---|---|---|
 | database record families and level-specific rates | packed ATDB + `readtbl`, `setptrs`, `drd`, `ucalc` | `atomic_database.py`, `ucalc.py`, native ATDB/rate kernels | source-exact identity/traversal; storage optimized |
-| statistical-equilibrium balance over level transitions | `calc_hmc_ion/element`, `msolvelucy` | `element_equilibrium.py`, matrix/fixed-state engine | mathematically/source equivalent |
+| statistical-equilibrium balance over level transitions | `calc_hmc_ion/element`, `msolvelucy` | `element_equilibrium.py`, matrix/local-zone engine | mathematically/source equivalent |
 | continuum level representing the adjacent ion/ionization channel | compact level topology and parent/continuum pointers | derived pointers + compact basis | source-exact identities are required; 12.3.25 endpoint repair is part of qualification |
 | detailed-balance/LTE design | `calc_rates_level_lte`, `levwk*`, inverse-rate branches | level/LTE/rate modules | source-equivalent |
 | state-specific recombination/photoionization | ATDB data types and `ucalc` | `ucalc.py`, native rate kernels | current Fortran/data records are canonical |

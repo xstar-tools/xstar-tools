@@ -25,7 +25,7 @@ def test_controller_uses_same_e7_policy():
 
 
 def test_helium_type53_live_escape_binding_present():
-    text = (ROOT / "src/xstar_tools/xstar/cpp/fixed_state_engine.cpp").read_text()
+    text = (ROOT / "src/xstar_tools/xstar/cpp/local_zone_engine.cpp").read_text()
     assert "XSTAR_QUALIFICATION_HELIUM_TYPE53_INTERVAL_SOURCE_ORDER" in text
     assert "contract_tau_in = input.continuum_tau_in[continuum_index - 1]" in text
     assert "type53_helium_live_escape_state_applied" in text
@@ -33,7 +33,7 @@ def test_helium_type53_live_escape_binding_present():
 
 
 def test_call1_residual_is_directly_bound():
-    text = (ROOT / "src/xstar_tools/xstar/cpp/fixed_state_engine.cpp").read_text()
+    text = (ROOT / "src/xstar_tools/xstar/cpp/local_zone_engine.cpp").read_text()
     assert "output.elcter = input.charge_residual_override" in text
 
 

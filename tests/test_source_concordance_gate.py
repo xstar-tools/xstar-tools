@@ -14,7 +14,7 @@ def _concordance():
 def test_source_concordance_metadata_and_docs_exist():
     data = _concordance()
     assert data["schema"] == "xstar-tools-source-concordance-v1"
-    assert data["productization_version"] == "0.6.57"
+    assert data["productization_version"] == "0.6.59"
     assert data["science_revision"] == "0.6.48.12.3.45.3.3.8"
     assert data["canonical_fortran"]["version"] == "2.59g"
     for rel in data["documentation"] + data["diagrams"]:
@@ -77,7 +77,7 @@ def test_required_architecture_diagrams_are_registered():
     data = _concordance()
     assert {Path(rel).name for rel in data["diagrams"]} == {
         "controller_radial_flow.svg",
-        "fixed_state_solve.svg",
+        "local_zone_solve.svg",
         "publication_ownership.svg",
         "backend_dispatch.svg",
     }

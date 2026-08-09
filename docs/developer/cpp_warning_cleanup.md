@@ -6,7 +6,7 @@ Makefile's `-Wall -Wextra -Wpedantic` policy without suppressing warning classes
 The touched sources are:
 
 - `opacity_kernels.cpp`: compile-time-unused Type50 experiment/template values are marked `[[maybe_unused]]`.
-- `fixed_state_engine.cpp`: nonzero-bin bookkeeping is written with explicit braces and statements.
+- `local_zone_engine.cpp`: nonzero-bin bookkeeping is written with explicit braces and statements.
 - `xstar_atdb_runtime.cpp`: loop/throw and environment-candidate checks use explicit independent control flow; one retained helper is marked `[[maybe_unused]]`.
 - `xstar_standalone.cpp`: unread locals are removed; retained legacy/diagnostic helpers and unused parameters are marked `[[maybe_unused]]`.
 - `xstar_science_fits.cpp`: retained but currently uncalled publication/oracle helpers and unused parameters are marked `[[maybe_unused]]`.

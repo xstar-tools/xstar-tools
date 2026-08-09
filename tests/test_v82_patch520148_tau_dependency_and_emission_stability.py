@@ -12,7 +12,7 @@ def test_cfrac1_rrc_outward_escape_is_exp_of_total_tau():
 
 def test_patch520148_keeps_full_curve_for_opacity_but_base_curve_for_deferred_emission():
     root = Path(__file__).resolve().parents[1]
-    text = (root / 'src/xstar_tools/xstar/cpp/fixed_state_engine.cpp').read_text()
+    text = (root / 'src/xstar_tools/xstar/cpp/local_zone_engine.cpp').read_text()
     assert 'prefer_full_calc_emis_shadow' in text
     assert 'emission_curve_v82_patch520148' in text
     assert 'emission_curve_v82_patch520148, false' in text

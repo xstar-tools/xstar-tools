@@ -8675,7 +8675,7 @@ def _capture_fixed_state_detail3_candidate_v064812345338(
         return
     if int(result.rate_type) != 1 or int(result.data_type) not in _V064812345338_RATE1_BOUND_FREE_DATA_TYPES:
         return
-    # fixed_state_engine.cpp constructs the broad spectral stream only for
+    # local_zone_engine.cpp constructs the broad spectral stream only for
     # active source ion stages.  The evaluator itself intentionally visits the
     # complete lowered inventory, so this gate must live at publication capture.
     if int(block.ion_stage) < int(context.min_ion_stage) or int(block.ion_stage) > int(context.max_ion_stage):
@@ -8795,7 +8795,7 @@ def _finalize_fixed_state_detail3_publication_v064812345338(
             ans4 = float(raw.get("ans4", 0.0) or 0.0)
             density = float(context.hydrogen_density_cm3)
 
-            # fixed_state_engine.cpp uses the retained Type49/53 source shadow
+            # local_zone_engine.cpp uses the retained Type49/53 source shadow
             # escape state for those two branches; other generic bound-free
             # records use the broad spectral covering split 1-cfrac / 1+cfrac.
             if data_type in (49, 53):

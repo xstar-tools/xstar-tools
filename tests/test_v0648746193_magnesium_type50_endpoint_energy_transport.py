@@ -19,7 +19,7 @@ def test_endpoint_capture_contract():
 
 def test_cpp_endpoint_transport_and_closure():
     text = (
-        ROOT / "src/xstar_tools/xstar/cpp/fixed_state_engine.cpp"
+        ROOT / "src/xstar_tools/xstar/cpp/local_zone_engine.cpp"
     ).read_text()
     assert "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_ENDPOINT_ENERGY_TRANSPORT" in text
     assert "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_ENDPOINT_MAP_CSV" in text

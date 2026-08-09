@@ -63,7 +63,7 @@ The two-step population strategy is explicitly described in the XSTAR manual:
 
 The accepted C++ implementation preserves the source compact-row endpoint behavior, including the terminal clamp required by `msolvelucy` semantics.
 
-![Fixed-state solve](diagrams/fixed_state_solve.svg)
+![Local-zone solve](diagrams/local_zone_solve.svg)
 
 ### 5. Spectral construction and Type50
 
@@ -121,7 +121,7 @@ The accepted C++ path is not a separate scientific model. It is a source-equival
 Important ownership areas are:
 
 - `xstar_atdb_runtime.cpp`: native ATDB traversal, pointer/layout construction, parameter/default-real compatibility;
-- `fixed_state_engine.cpp`, `element_engine.cpp`, `matrix_kernels.cpp`, `level_population.cpp`, `rate_kernels.cpp`: local rate/matrix/population solve;
+- `local_zone_engine.cpp`, `element_engine.cpp`, `matrix_kernels.cpp`, `level_population.cpp`, `rate_kernels.cpp`: local rate/matrix/population solve;
 - `thermal_kernels.cpp`: source thermal leaves/reduction;
 - `line_emissivity.cpp`, `opacity_kernels.cpp`: line/RRC/full-grid spectral kernels including Type50;
 - `xstar_engine.cpp`, `xstar_run_state.*`: production state orchestration;

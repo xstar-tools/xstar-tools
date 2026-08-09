@@ -12,7 +12,7 @@ REFERENCE = ROOT / "tests/fixtures/historical/v0648_compiled_case_helike_type69_
 
 
 def test_preliminary_rates_feed_stage_selection_without_direct_matrix_injection() -> None:
-    source = (CPP / "fixed_state_engine.cpp").read_text()
+    source = (CPP / "local_zone_engine.cpp").read_text()
     assert "build_preliminary_ion_balance" in source
     assert "c.rate_type == 8 || c.rate_type == 6" in source
     assert "make_active_element_view" in source

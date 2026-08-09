@@ -10,7 +10,7 @@
 #ifndef XSTAR_ATDB_RUNTIME_HPP
 #define XSTAR_ATDB_RUNTIME_HPP
 
-#include "xstar_fixed_state_engine.h"
+#include "xstar_local_zone_engine.h"
 #include "xstar_run_state.hpp"
 
 #include <cstdint>

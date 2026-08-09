@@ -10,7 +10,7 @@ CPP = ROOT / "src/xstar_tools/xstar/cpp"
 
 def test_shared_source_order_reducer_is_used_by_both_engines() -> None:
     element = (CPP / "element_engine.cpp").read_text()
-    fixed = (CPP / "fixed_state_engine.cpp").read_text()
+    fixed = (CPP / "local_zone_engine.cpp").read_text()
     assert '#include "source_order_thermal_reducer.hpp"' in element
     assert '#include "source_order_thermal_reducer.hpp"' in fixed
     assert "FourChannelAccumulator thermal_reducer" in element
@@ -52,7 +52,7 @@ int main() {
 
 
 def test_independent_mode_forbids_source_scalar_closures() -> None:
-    fixed = (CPP / "fixed_state_engine.cpp").read_text()
+    fixed = (CPP / "local_zone_engine.cpp").read_text()
     runner = (ROOT / "run_v04874621_independent_thermal_parity.sh").read_text()
     assert "XSTAR_QUALIFICATION_INDEPENDENT_THERMAL_PARITY" in fixed
     assert "independent Thermal parity forbids" in fixed
@@ -63,7 +63,7 @@ def test_independent_mode_forbids_source_scalar_closures() -> None:
 
 
 def test_elcter_is_charge_residual_not_computed_fraction() -> None:
-    fixed = (CPP / "fixed_state_engine.cpp").read_text()
+    fixed = (CPP / "local_zone_engine.cpp").read_text()
     standalone = (CPP / "xstar_standalone.cpp").read_text()
     assert "output.electron_fraction_xee = computed_electron_fraction" in fixed
     assert "output.elcter = input.electron_fraction_xee - computed_electron_fraction" in fixed

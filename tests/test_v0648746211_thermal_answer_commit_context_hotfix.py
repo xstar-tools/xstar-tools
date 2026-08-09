@@ -34,7 +34,7 @@ def test_record47_preliminary_context_failure_is_documented_as_excluded() -> Non
 
 def test_v21_scientific_implementation_is_preserved() -> None:
     cpp = ROOT / "src/xstar_tools/xstar/cpp"
-    fixed = (cpp / "fixed_state_engine.cpp").read_text()
+    fixed = (cpp / "local_zone_engine.cpp").read_text()
     element = (cpp / "element_engine.cpp").read_text()
     assert '#include "source_order_thermal_reducer.hpp"' in fixed
     assert '#include "source_order_thermal_reducer.hpp"' in element

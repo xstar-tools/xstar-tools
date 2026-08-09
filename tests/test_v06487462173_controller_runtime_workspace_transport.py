@@ -37,7 +37,7 @@ def test_standalone_binds_sequence_workspace_and_line_tau_paths():
 
 
 def test_sequence_dependent_engine_state_is_not_process_static():
-    text=(root()/"src/xstar_tools/xstar/cpp/fixed_state_engine.cpp").read_text()
+    text=(root()/"src/xstar_tools/xstar/cpp/local_zone_engine.cpp").read_text()
     assert "static thread_local HydrogenType50EscapeStateV04874618 state" in text
     assert "static thread_local MagnesiumType50EscapeStateV04874619 state" in text
     assert "std::map<int, MagnesiumType99PrimaryCoolingStateV04874620> states" in text

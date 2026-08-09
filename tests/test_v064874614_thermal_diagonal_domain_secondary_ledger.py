@@ -9,7 +9,7 @@ def test_release_version():
     assert xstar_tools.__version__=='0.6.48.7.46.21.5'
 
 def test_native_source_order_contract_present():
-    text=(ROOT/'src/xstar_tools/xstar/cpp/fixed_state_engine.cpp').read_text()
+    text=(ROOT/'src/xstar_tools/xstar/cpp/local_zone_engine.cpp').read_text()
     assert 'XSTAR_QUALIFICATION_THERMAL_DIAGONAL_DOMAIN_SOURCE_FAITHFUL' in text
     assert 'forward_diag_loss' in text and 'reverse_diag_loss' in text
     assert 'source_order_index' in text

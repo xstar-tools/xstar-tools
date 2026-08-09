@@ -25,3 +25,7 @@ include tools/qualification/check_cpp_history_cleanup.py
 include qualification/cpp_history_cleanup_0_6_57.json
 include tools/qualification/check_cpp_warning_cleanup.py
 include qualification/cpp_warning_cleanup_0_6_58.json
+
+include tools/qualification/check_local_zone_naming_cleanup.py
+include qualification/local_zone_naming_cleanup_0_6_59.json
+include tools/qualification/local_zone_naming_compat.py

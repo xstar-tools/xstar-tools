@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.59 - local-zone naming cleanup - 2026-08-08
+
+- Rename the active fixed-state source/module filenames to the architecture term `local_zone`: `all_element_local_zone.py`, `complete_local_zone.py`, `source_port_complete_local_zone_cli.py`, `local_zone_engine.cpp`, and `xstar_local_zone_engine.h`.
+- Rename the native shared library target from `libxstar_fixed_state.so` to `libxstar_local_zone.so`; exported `xstar_fixed_state_*` C ABI symbols remain unchanged for ABI 6048110 compatibility.
+- Rename active examples, the complete-local-zone characterization test, and the fixed-state architecture diagram to `local_zone` filenames.
+- Preserve historical output keys/fixture names and frozen qualification manifests that use `fixed_state`; those names are evidence, not current source architecture.
+- No scientific or numerical behavior change.
+
 ## 0.6.58 - warning-clean C++ build - 2026-08-08
 
 - Fix all compiler warnings reported by the active native `make` build under `-Wall -Wextra -Wpedantic` without adding warning-suppression flags.

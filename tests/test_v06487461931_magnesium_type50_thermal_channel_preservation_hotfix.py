@@ -4,7 +4,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_cpp_preserves_preclosure_thermal_channels():
-    text = (ROOT / "src/xstar_tools/xstar/cpp/fixed_state_engine.cpp").read_text()
+    text = (ROOT / "src/xstar_tools/xstar/cpp/local_zone_engine.cpp").read_text()
     assert "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_THERMAL_CHANNEL_PRESERVATION" in text
     assert "const double pre_closure_ans3 = contribution.ans3" in text
     assert "const double pre_closure_ans4 = contribution.ans4" in text

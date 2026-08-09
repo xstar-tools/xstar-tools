@@ -59,7 +59,7 @@ def test_atomic_data_type_comments_are_grounded_and_scoped():
     assert "data type" in atdb and "rate type" in atdb and "six integers" in atdb
     for token in ("Types 50 and 91", "Types 49 and 53", "Type 63", "Type 70", "Type 85", "Type 86", "Type 88", "Type 95", "Type 99"):
         assert token in atdb
-    fixed = (CPP / "fixed_state_engine.cpp").read_text()
+    fixed = (CPP / "local_zone_engine.cpp").read_text()
     assert "Types 89, 96, and 97" in fixed
     assert "not enumerated in the requested Appendix-A / Chapter-12 snapshots" in fixed
     assert "Type 98" in fixed and "Burgess-Tully" in fixed

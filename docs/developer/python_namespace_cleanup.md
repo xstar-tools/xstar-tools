@@ -46,7 +46,7 @@ These were qualification tools for superseded pre-freeze campaigns, not current 
 
 ## Remaining ambiguous/facade modules
 
-A second-pass orphan scan still finds a small set of modules with no static inbound import in the current tree, including facade/source-port surfaces such as `runtime.py`, `standalone.py`, `thermal.py`, `transfer.py`, `opacity.py`, `ionization.py`, `stepping.py`, `inventory.py`, and `complete_fixed_state.py`. They are deliberately retained in `0.6.56`: absence of an internal caller is not enough to prove that an intended public/source-port facade is dead. Removing those should be part of the later public API/CLI consolidation, where external compatibility can be considered explicitly.
+A second-pass orphan scan still finds a small set of modules with no static inbound import in the current tree, including facade/source-port surfaces such as `runtime.py`, `standalone.py`, `thermal.py`, `transfer.py`, `opacity.py`, `ionization.py`, `stepping.py`, `inventory.py`, and `complete_local_zone.py`. They are deliberately retained in `0.6.56`: absence of an internal caller is not enough to prove that an intended public/source-port facade is dead. Removing those should be part of the later public API/CLI consolidation, where external compatibility can be considered explicitly.
 
 ## Gate
 

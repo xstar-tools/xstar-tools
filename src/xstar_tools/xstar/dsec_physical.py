@@ -20,7 +20,7 @@ from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
 
 import numpy as np
 
-from .all_element_fixed_state import (
+from .all_element_local_zone import (
     AllElementFixedStatePlan,
     build_all_element_fixed_state_requests,
 )

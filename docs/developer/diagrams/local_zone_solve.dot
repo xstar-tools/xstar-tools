@@ -1,4 +1,4 @@
-digraph fixed_state_solve {
+digraph local_zone_solve {
   graph [rankdir=TB, bgcolor="transparent", pad=0.2, nodesep=0.35, ranksep=0.45];
   node [shape=box, style="rounded", fontname="Helvetica", fontsize=10];
   edge [fontname="Helvetica", fontsize=9];

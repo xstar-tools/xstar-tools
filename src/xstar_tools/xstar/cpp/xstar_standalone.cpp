@@ -11,7 +11,7 @@
 
 #include "xstar_api.h"
 #include "xstar_python_bridge.h"
-#include "xstar_fixed_state_engine.h"
+#include "xstar_local_zone_engine.h"
 #include "xstar_spectral_engine.h"
 #include "xstar_thermal_engine.h"
 #include "source_real_energy_grid.hpp"
@@ -10725,7 +10725,7 @@ struct StandaloneControllerDataV67 {
     std::vector<double> energy;
     std::vector<double> flux;
     std::vector<double> dsec_bremsa;
-    // Runtime escape arrays are zero-based because fixed_state_engine consumes
+    // Runtime escape arrays are zero-based because local_zone_engine consumes
     // source one-based pointers as tau[index-1]. Product workspaces retain the
     // original one-based slot domain (slot zero is the source sentinel).
     std::vector<double> source_tau_in;
@@ -14378,7 +14378,7 @@ int standalone_iteration_evaluator_v67(
         std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> message{};
         const std::string sequence = std::to_string(snapshot.sequence);
         ::setenv("XSTAR_NATIVE_SOURCE_SEQUENCE", sequence.c_str(), 1);
-        // 0.6.48.11.6 diagnostic-only call identity lets fixed_state_engine
+        // 0.6.48.11.6 diagnostic-only call identity lets local_zone_engine
         // emit a producer inventory for the first accepted C V zone without
         // changing the historical source-sequence semantics.
         const std::string native_call_v0648115 = std::to_string(data->call_index);

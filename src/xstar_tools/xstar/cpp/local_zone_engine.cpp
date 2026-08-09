@@ -10,7 +10,7 @@
 // Qualification: 12.3.25 science repair; Type50 12.3.31; all-62 12.3.44
 // XSTAR-SOURCE-CORRESPONDENCE-END
 
-#include "xstar_fixed_state_engine.h"
+#include "xstar_local_zone_engine.h"
 #include "source_real_energy_grid.hpp"
 #include "source_order_thermal_reducer.hpp"
 #include "canonical_thermal_term.hpp"

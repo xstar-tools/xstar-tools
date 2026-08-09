@@ -25,12 +25,12 @@ The terms do not supersede qualification evidence. The parity freeze remains the
 | `DB-001` | `readtbl.f90`, `setptrs.f90`, `xstarsetup.f90` | `atomic_database.py` (`readtbl`, `setptrs`, pointer/cache validation) | `xstar_atdb_runtime.cpp` native reader/pointer layout | source-exact identities with equivalent storage | `test_source_port_atomic_database_v041.py`; all-element qualification; 12.3.44 |
 | `ION-001` | `calc_ion_rates.f90`, `istruc.f90`, `ioneqm.f90`, first pass of `calc_hmc_element.f90` | `ion_balance.py` | fixed-state/element engine total-rate pass | source-exact stage-selection logic | `test_source_port_pre_matrix_v0424.py`, `test_v064853_preliminary_ion_balance.py`, all-62 |
 | `LEVEL-001` | `levwkelement.f90`, `levwk.f90` | `element_equilibrium.py` compact basis and LTE tables | `level_population.cpp`, fixed-state layout | mathematically equivalent representation with source-one-based topology | level/matrix source-port tests; 12.3.25 |
-| `MATRIX-001` | `calc_hmc_ion.f90`, `calc_hmc_element.f90`, `msolvelucy.f90` | `element_equilibrium.py`, `linear_algebra.py` | `fixed_state_engine.cpp`, `element_engine.cpp`, `matrix_kernels.cpp` | source-equivalent operator/solve | `test_source_port_element_equilibrium_v043.py`, matrix tests; 12.3.25 terminal clamp; 12.3.44 |
+| `MATRIX-001` | `calc_hmc_ion.f90`, `calc_hmc_element.f90`, `msolvelucy.f90` | `element_equilibrium.py`, `linear_algebra.py` | `local_zone_engine.cpp`, `element_engine.cpp`, `matrix_kernels.cpp` | source-equivalent operator/solve | `test_source_port_element_equilibrium_v043.py`, matrix tests; 12.3.25 terminal clamp; 12.3.44 |
 | `THERM-001` | `calc_hmc_all.f90`, `comp2.f90`, `freef.f90`, `bremem.f90`, `heatf.f90` | `local_zone.py`, `compton.py`, `free_free.py`, `bremsstrahlung.py`, `thermal_balance.py` | `thermal_kernels.cpp`, fixed-state thermal reduction | source-equivalent, selected native reductions optimized-equivalent | source-port 0.4.39-0.4.43 tests; thermal parity; 12.3.44 |
 | `DSEC-001` | `dsec.f90` | `dsec.py` | fixed-state/standalone DSEC controller support | source-exact nonlinear branch/order contract | `test_source_port_v0445_dsec.py` and later DSEC ownership/trajectory tests; 12.3.42 |
 | `EMISAB-001` | `calc_emisab_all/element/ion.f90` | `emissivity.py` | `line_emissivity.cpp`, fixed-state product state, `xstar_science_fits.cpp` | source-exact producer order; output lifetime bridge qualified separately | `test_source_port_v0461_calc_emisab.py`; 12.3.43.x; 45.3.3.8 |
 | `EMIS-001` | `calc_emis_all/element/ion.f90`, `rlbin.f90` | `emergent_emissivity.py` | `line_emissivity.cpp`, `opacity_kernels.cpp`, spectral fixed-state path | source-equivalent / optimized-equivalent where qualified | `test_source_port_v0462_calc_emis.py`; continuum/spectrum closure; 12.3.43.3/44 |
-| `TYPE50-001` | `linopac.f90`, Type50 `ucalc` producer context | `_source_linopac_*` in `emergent_emissivity.py`; Type50 provenance helpers | `opacity_kernels.cpp`, Type50 production specialization in `fixed_state_engine.cpp` | optimized-equivalent | Type50 source corrections; 12.3.26-31, especially 12.3.31 decomposition; 12.3.44 |
+| `TYPE50-001` | `linopac.f90`, Type50 `ucalc` producer context | `_source_linopac_*` in `emergent_emissivity.py`; Type50 provenance helpers | `opacity_kernels.cpp`, Type50 production specialization in `local_zone_engine.cpp` | optimized-equivalent | Type50 source corrections; 12.3.26-31, especially 12.3.31 decomposition; 12.3.44 |
 | `RADIAL-001` | inline `xstar.f90`, `step.f90`, `trnfrc.f90`, `stpcut.f90`, `trnfrn.f90` | `radial_transfer.py`, `radial_control.py` | native run controller/state | source-exact predicates/order, equivalent object storage | `test_source_port_v0464_radial_transfer.py`, `v0468` pass control; O7 terminal repair; 12.3.42-44 |
 | `STATE-001` | `savd.f90`, `unsavd.f90`, `rstepr*` | `saved_radial_state.py`, save/restore in `radial_transfer.py` | native run-state/detail persistence | source-exact persistence semantics | `test_source_port_v0467_unsavd_multipass.py`; 12.3.43-45 |
 | `DETAIL-001` | `fstepr.f90`, `fstepr2.f90`, `fstepr3.f90`, `fstepr4.f90` | `output_writers.py` plus producer-owned retained publication state | `xstar_science_fits.cpp` | source-equivalent publication with accepted structural exceptions | `test_source_port_v0469_output_writers.py`; 12.3.43.3; 45.3.3.7/8 |
@@ -93,7 +93,7 @@ The production science remains frozen. Version 0.6.53 introduced reversible top-
 
 ### `RADIAL-001` - radial controller
 
-The Python port factors inline blocks from `xstar.f90` into functions for testing, but source order remains part of the contract. In particular, `stpcut` termination and the exact initial radius feed the shell trajectory; changing either can shift all downstream zone states even if the local fixed-state solver is unchanged.
+The Python port factors inline blocks from `xstar.f90` into functions for testing, but source order remains part of the contract. In particular, `stpcut` termination and the exact initial radius feed the shell trajectory; changing either can shift all downstream zone states even if the local-zone solver is unchanged.
 
 ### `STATE-001` and `TERMINAL-001` - state lifetime
 
@@ -134,7 +134,7 @@ A scientific refactor PR should include a statement like:
 Concordance: MATRIX-001, THERM-001
 Characterization:
   pytest -q tests/test_source_port_element_equilibrium_v043.py
-  pytest -q tests/test_source_port_v0443_complete_fixed_state.py
+  pytest -q tests/test_source_port_v0443_complete_local_zone.py
 Freeze:
   python tools/qualification/check_parity_freeze.py
   python tools/qualification/check_source_concordance.py

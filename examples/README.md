@@ -1232,12 +1232,12 @@ PYTHONPATH=src python examples/104_prepare_xstar_msolvelucy_state_probe.py \
   --print-summary
 ```
 
-### `105_port_xstar_calc_hmc_all_fixed_state.py`
+### `105_port_xstar_calc_hmc_all_local_zone.py`
 
 Run the fixed-temperature/fixed-electron-fraction `calc_hmc_all` path through the translated pre-matrix sequence, source-derived ion limits, and the validated multilevel element solver. The output keeps preliminary `pirt/rrrt` distinct from post-solve `stotg/atotg`, writes per-record first-pass diagnostics, and can compare directly with the bounded XSTAR probe.
 
 ```bash
-PYTHONPATH=src python examples/105_port_xstar_calc_hmc_all_fixed_state.py \
+PYTHONPATH=src python examples/105_port_xstar_calc_hmc_all_local_zone.py \
   --atdb /path/to/xstar/data/atdb.fits \
   --pointer-cache /path/to/xstar_atomic_derived_pointers.npz \
   --element-z 8 --min-ion-stage 3 --max-ion-stage 8 \
@@ -1281,7 +1281,7 @@ PYTHONPATH=src python examples/107_audit_v0434_oxygen_corrections.py \
 ```
 
 
-### `108_port_xstar_calc_hmc_all_all_elements_fixed_state.py`
+### `108_port_xstar_calc_hmc_all_all_elements_local_zone.py`
 
 Run the complete source-order pre-continuum element loop for every element with
 positive abundance in a captured `calc_hmc_all` call. The accepted v0.4.34
@@ -1291,7 +1291,7 @@ uses translated autonomous initialization for H and He.
 
 ```bash
 PYTHONPATH=src python \
-  examples/108_port_xstar_calc_hmc_all_all_elements_fixed_state.py \
+  examples/108_port_xstar_calc_hmc_all_all_elements_local_zone.py \
   --atdb /path/to/xstar/data/atdb.fits \
   --pointer-cache /path/to/xstar_atomic_derived_pointers.npz \
   --temperature-k 76655.18557758832 \
@@ -1486,7 +1486,7 @@ v0442_heatf_acceptance_ready=True
 After this gate passes, the next bounded target is complete fixed-state
 `calc_hmc_all` thermal/charge parity, followed by `dsec`.
 
-### `116_validate_xstar_calc_hmc_all_complete_fixed_state.py`
+### `116_validate_xstar_calc_hmc_all_complete_local_zone.py`
 
 Executes the complete translated fixed-state `calc_hmc_all` chain and compares
 its final thermal and charge state against the existing seventeen-hook
@@ -1496,7 +1496,7 @@ totals explicit ownership and reruns the current same-call pre-continuum,
 frozen regression through v0.4.42. No XSTAR rebuild is required.
 
 ```bash
-PYTHONPATH=src python   examples/116_validate_xstar_calc_hmc_all_complete_fixed_state.py   --atdb /media/linux/mhd/xstar/xstar/data/atdb.fits   --pointer-cache xstar_atomic_database_port_v041/xstar_atomic_derived_pointers.npz   --temperature-k 76655.18557758832   --hydrogen-density-cm3 1.0e8   --electron-fraction-xee 1.2046560563936872   --live-rate-grid-probe-csv     xstar_runs/helike_type69/o7_ne1e8/xstar_live_rate_grid_probe.csv   --live-rate-grid-state last   --escape-npz xstar_o7_escape_state_v045.npz   --xstar-population-probe-csv     xstar_runs/helike_type69/o7_ne1e8/xstar_population_closure_probe.csv   --xstar-population-solve-call-id 219   --population-probe-runtime-policy use   --xstar-calc-hmc-probe-dir     xstar_runs/helike_type69/o7_ne1e8_all_elements_v0443_complete   --xstar-calc-hmc-call-id 73   --coheat-data /media/linux/mhd/xstar/xstar/data/coheat.dat   --oxygen-call73-regression-dir     oxygen_call73_v0434_acceptance/xstar_o_calc_hmc_all_fixed_state_v0434   --all-element-v0438-regression-dir     xstar_all_calc_hmc_all_fixed_state_v0438_allprobe   --comp2-v0439-regression-dir xstar_comp2_call73_v0439   --freef-v0440-regression-dir xstar_freef_call73_v0440   --bremem-v0441-regression-dir xstar_bremem_call73_v0441   --heatf-v0442-regression-dir xstar_heatf_call73_v0442   --initial-population-policy require-all   --out-dir xstar_calc_hmc_all_complete_call73_v0444   --print-summary
+PYTHONPATH=src python   examples/116_validate_xstar_calc_hmc_all_complete_local_zone.py   --atdb /media/linux/mhd/xstar/xstar/data/atdb.fits   --pointer-cache xstar_atomic_database_port_v041/xstar_atomic_derived_pointers.npz   --temperature-k 76655.18557758832   --hydrogen-density-cm3 1.0e8   --electron-fraction-xee 1.2046560563936872   --live-rate-grid-probe-csv     xstar_runs/helike_type69/o7_ne1e8/xstar_live_rate_grid_probe.csv   --live-rate-grid-state last   --escape-npz xstar_o7_escape_state_v045.npz   --xstar-population-probe-csv     xstar_runs/helike_type69/o7_ne1e8/xstar_population_closure_probe.csv   --xstar-population-solve-call-id 219   --population-probe-runtime-policy use   --xstar-calc-hmc-probe-dir     xstar_runs/helike_type69/o7_ne1e8_all_elements_v0443_complete   --xstar-calc-hmc-call-id 73   --coheat-data /media/linux/mhd/xstar/xstar/data/coheat.dat   --oxygen-call73-regression-dir     oxygen_call73_v0434_acceptance/xstar_o_calc_hmc_all_fixed_state_v0434   --all-element-v0438-regression-dir     xstar_all_calc_hmc_all_fixed_state_v0438_allprobe   --comp2-v0439-regression-dir xstar_comp2_call73_v0439   --freef-v0440-regression-dir xstar_freef_call73_v0440   --bremem-v0441-regression-dir xstar_bremem_call73_v0441   --heatf-v0442-regression-dir xstar_heatf_call73_v0442   --initial-population-policy require-all   --out-dir xstar_calc_hmc_all_complete_call73_v0444   --print-summary
 ```
 
 The required final line is:

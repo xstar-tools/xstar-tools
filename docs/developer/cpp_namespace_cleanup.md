@@ -10,7 +10,7 @@ Version 0.6.57 separates retired C++ parity/performance sources from the active 
 
 ## Headers
 
-No current `.h` or `.hpp` file was archived. The coheat/Type50/Type53 oracle headers are still consumed by `fixed_state_engine.cpp`; public API headers remain intentional product interfaces.
+No current `.h` or `.hpp` file was archived. The coheat/Type50/Type53 oracle headers are still consumed by `local_zone_engine.cpp`; public API headers remain intentional product interfaces.
 
 ## Rule
 

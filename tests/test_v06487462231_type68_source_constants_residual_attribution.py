@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXED = ROOT / "src/xstar_tools/xstar/cpp/fixed_state_engine.cpp"
+FIXED = ROOT / "src/xstar_tools/xstar/cpp/local_zone_engine.cpp"
 
 
 def test_type68_native_branch_uses_named_source_constants():

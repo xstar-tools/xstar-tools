@@ -34,7 +34,7 @@ def test_rrc_output_metadata_cache_roundtrip_retains_literal_type49_rank_identit
 
 def test_cpp_rrc_path_consumes_live_continuum_tau_without_merging_dual_curve_owners():
     root=Path(__file__).resolve().parents[1]
-    fixed=(root/'src/xstar_tools/xstar/cpp/fixed_state_engine.cpp').read_text()
+    fixed=(root/'src/xstar_tools/xstar/cpp/local_zone_engine.cpp').read_text()
     assert 'NativeBoundFreeCurve opacity_curve;' in fixed
     assert 'NativeBoundFreeCurve emission_curve;' in fixed
     assert 'const bool live_tau_available = continuum_index > 0' in fixed

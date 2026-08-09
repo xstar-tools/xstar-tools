@@ -3,7 +3,7 @@ import math
 import struct
 
 ROOT = Path(__file__).resolve().parents[1]
-CPP = ROOT / "src/xstar_tools/xstar/cpp/fixed_state_engine.cpp"
+CPP = ROOT / "src/xstar_tools/xstar/cpp/local_zone_engine.cpp"
 UCALC = ROOT / "src/xstar_tools/xstar/ucalc.py"
 LOWERER = ROOT / "src/xstar_tools/xstar/native_fixed_program.py"
 
