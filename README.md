@@ -170,3 +170,7 @@ Use `run_v06481237_o7_type88_fix.sh` for the one-model `o7_ne1e12` repair gate. 
 ### 0.6.48.12.3.36.1 comparator/qualification policy
 
 Option 15 now separates common-row material numerical science from per-cell tail diagnostics and inventory publication diagnostics. Common identities are grouped by ion and physical field (`ref_lum`, `trn_lum`, `backward_depth`, `forward_depth`); each material surface is gated by normalized L1 `<1%`. Individual cells above 1% remain counted and exported but do not fail numerical science by themselves. FORTRAN remains the canonical oracle. Version 0.6.48.12.3.36.1 makes no production-science change relative to 0.6.48.12.3.36 and adds a one-model `helike_type69/ca19_ne1` qualification runner.
+
+## Stable execution modes
+
+`xstar-tools` exposes five stable execution modes: `pure-python`, `zone-python`, `zone-cpp`, `zone-all`, and `xstar-cpp`. Inspect the current installation with `xstar-tools backends` or `xstar-tools doctor`. See `docs/developer/execution_modes.md` for the frozen mapping and provenance contract.

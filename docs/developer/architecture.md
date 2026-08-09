@@ -179,3 +179,7 @@ The production Python source now carries marked Fortran/source-correspondence co
 ## 0.6.56 active Python namespace cleanup
 
 The active `xstar_tools.xstar` namespace contains runtime/scientific modules plus only those diagnostics that still have live callers. One-off parity-campaign audits, attribution scripts, closure/replay tools, and their dedicated tests live under `historical/python/xstar_parity_campaign/` and are excluded from normal distributions. Active `src/`, `tests/`, and `tools/` must not import those archived modules; this is enforced by `tools/qualification/check_python_history_cleanup.py`.
+
+## Stable public execution modes
+
+The productization-facing execution boundary is defined in [execution_modes.md](execution_modes.md). Public mode names are stable; legacy backend flags remain advanced aliases. Any refactor that changes a mode-to-internal-path mapping must update the Milestone 3 characterization contract before implementation.

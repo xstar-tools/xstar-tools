@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.6.60 - stable public execution modes - 2026-08-08
+
+- Add five stable public modes: `pure-python`, `zone-python`, `zone-cpp`, `zone-all`, and `xstar-cpp`.
+- Map `zone-cpp`/`zone-all` exactly to the frozen `cpp-zone`/`cpp-all` shared-production paths; keep legacy backend flags as advanced compatibility aliases.
+- Add `xstar_tools.backends.available()` / `describe()`, unified `xstar-tools backends` / `doctor`, and `xstar-tools run --mode ...`.
+- Add a public `xstar-cpp` native frontend while retaining compatibility executable `xstar_cpp`; normal direct native production accepts XSTAR-style `name=value` tokens without Python, while `run-production --parameters` remains the machine-readable path.
+- Add execution provenance for requested/actual mode, package/science versions, C/zone ABIs, C++ identities, CPU feature path, fallback events, and atomic-data paths/SHA-256 hashes.
+- Add a characterization contract proving public names select the same internal paths as the frozen legacy modes. No scientific behavior change.
+
 ## 0.6.59 - local-zone naming cleanup - 2026-08-08
 
 - Rename the active fixed-state source/module filenames to the architecture term `local_zone`: `all_element_local_zone.py`, `complete_local_zone.py`, `source_port_complete_local_zone_cli.py`, `local_zone_engine.cpp`, and `xstar_local_zone_engine.h`.

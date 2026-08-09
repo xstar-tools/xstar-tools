@@ -68,11 +68,13 @@ API_TARGET := libxstar_api.so
 CPP_BACKEND_TARGET := libxstar_backend_cpp.so
 PYTHON_BACKEND_TARGET := libxstar_backend_python.so
 EXECUTABLE_TARGET := xstar_cpp
+PUBLIC_EXECUTABLE_TARGET := xstar-cpp
+PUBLIC_EXECUTABLE_SOURCE := ../native/xstar_cpp_frontend.cpp
 EXECUTABLE_OBJECTS := xstar_standalone.o xstar_science_fits.o xstar_run_state.o xstar_step_log.o xstar_atdb_runtime.o
 
 PHYSICS_TARGETS := $(SOLVER_TARGET) $(RATES_TARGET) $(MATRIX_TARGET) \
 	$(EMISSIVITY_TARGET) $(OPACITY_TARGET) $(THERMAL_TARGET) $(ENGINE_TARGET) $(LOCAL_ZONE_TARGET) $(FINAL_RECOMPUTE_TARGET) $(PRODUCTION_ZONE_TARGET)
-STANDALONE_TARGETS := $(API_TARGET) $(CPP_BACKEND_TARGET) $(PYTHON_BACKEND_TARGET) $(EXECUTABLE_TARGET)
+STANDALONE_TARGETS := $(API_TARGET) $(CPP_BACKEND_TARGET) $(PYTHON_BACKEND_TARGET) $(EXECUTABLE_TARGET) $(PUBLIC_EXECUTABLE_TARGET)
 TARGETS := $(PHYSICS_TARGETS) $(STANDALONE_TARGETS)
 
 PUBLIC_HEADERS := xstar_api.h xstar_backend_plugin.h xstar_python_bridge.h xstar_api.hpp xstar_element_engine.h xstar_spectral_engine.h xstar_thermal_engine.h xstar_local_zone_engine.h xstar_production_zone_bridge.h
@@ -144,6 +146,9 @@ xstar_atdb_runtime.o: xstar_atdb_runtime.cpp xstar_atdb_runtime.hpp xstar_local_
 $(EXECUTABLE_TARGET): $(EXECUTABLE_OBJECTS) $(API_TARGET) $(LOCAL_ZONE_TARGET) $(EMISSIVITY_TARGET) $(THERMAL_TARGET) $(CPP_BACKEND_TARGET)
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -o $@ $(EXECUTABLE_OBJECTS) \
 		-L. -lxstar_api -lxstar_local_zone -lxstar_emissivity -lxstar_thermal $(CFITSIO_LIBS) $(CFITSIO_RPATH) $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
+
+$(PUBLIC_EXECUTABLE_TARGET): $(EXECUTABLE_TARGET) $(PUBLIC_EXECUTABLE_SOURCE)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -o $@ $(PUBLIC_EXECUTABLE_SOURCE) $(STDCXXFS_LIBS)
 
 print-config:
 	@echo CXX=$(CXX)

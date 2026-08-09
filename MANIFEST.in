@@ -29,3 +29,6 @@ include qualification/cpp_warning_cleanup_0_6_58.json
 include tools/qualification/check_local_zone_naming_cleanup.py
 include qualification/local_zone_naming_cleanup_0_6_59.json
 include tools/qualification/local_zone_naming_compat.py
+
+include src/xstar_tools/xstar/native/xstar_cpp_frontend.cpp
+include tools/qualification/check_public_execution_modes.py
