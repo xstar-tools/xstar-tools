@@ -34,6 +34,8 @@ make -C src/xstar_tools/xstar/cpp -j2
 
 The build uses CFITSIO and a C++17 compiler. `zone-python`, `zone-cpp`, `zone-all`, and `xstar-cpp` require the corresponding C++ libraries/executable to be built. `pure-python` does not require the C++ runtime.
 
+The native frontend uses C++17 `std::filesystem`. GNU/libstdc++ builds link the compatibility library through `FILESYSTEM_LIBS` (default `-lstdc++fs`) so older GCC toolchains work as well as current ones. If a non-GNU standard library does not provide that compatibility archive, override it explicitly, for example `make -C src/xstar_tools/xstar/cpp FILESYSTEM_LIBS=`.
+
 Check the installation with:
 
 ```bash

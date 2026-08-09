@@ -32,7 +32,10 @@
 
 namespace {
 
-constexpr const char* kPackageVersion = "0.6.60";
+#ifndef XSTAR_TOOLS_PACKAGE_VERSION
+#define XSTAR_TOOLS_PACKAGE_VERSION "unknown"
+#endif
+constexpr const char* kPackageVersion = XSTAR_TOOLS_PACKAGE_VERSION;
 constexpr const char* kScienceRevision = "0.6.48.12.3.45.3.3.8";
 constexpr std::uint32_t kCApiAbi = 60487u;
 constexpr std::uint32_t kZoneAbi = 6048110u;

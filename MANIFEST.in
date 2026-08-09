@@ -36,3 +36,6 @@ include tools/qualification/check_public_execution_modes.py
 recursive-include tools/benchmarks *
 
 include tools/qualification/check_public_benchmark_suite.py
+
+include tools/qualification/check_test_history_cleanup.py
+include qualification/test_history_cleanup_0_6_62.json

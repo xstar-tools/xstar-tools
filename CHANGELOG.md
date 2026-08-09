@@ -1,5 +1,17 @@
 # CHANGELOG
 
+# xstar_tools 0.6.62 - 2026-08-09
+
+- Clean the active test namespace: archive 189 obsolete tests while preserving them under `historical/tests/` with hashes and relocation provenance.
+- Remove all active-test references to the retired `xstar_atomic` namespace; keep 66 tests that target current code/contracts.
+- Move two no-longer-consumed historical fixture directories out of the lean test tree.
+- Add a dependency-free current source-characterization test and a test-history cleanup gate.
+- Fix the public `xstar-cpp` frontend build on GCC/libstdc++ toolchains that require the C++17 filesystem compatibility library: the Makefile now links `$(FILESYSTEM_LIBS)` (default `-lstdc++fs`) instead of the undefined `STDCXXFS_LIBS`.
+- Make native `xstar-cpp` provenance receive the current distribution version from `pyproject.toml` at build time instead of hard-coding `0.6.60`.
+- Make the retained native-thermal characterization tests build only `libxstar_thermal.so` when it is absent, instead of depending on stale build artifacts.
+- Repair the packaged O VII density-grid reference template so it points to the shipped density-specific `xstar_test_run/o7_ne*/` CSVs rather than placeholder rows.
+- No scientific implementation or frozen ABI is changed; accepted science remains `0.6.48.12.3.45.3.3.8`, frozen C++ baseline remains `0.6.48.12.3.44`, and production-zone ABI remains `6048110`.
+
 # xstar_tools 0.6.61 - 2026-08-09
 
 - Rewrote `README.md` around the five stable public execution modes with CLI, native, Python API, provenance, and benchmark examples.

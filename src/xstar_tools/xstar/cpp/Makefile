@@ -54,6 +54,15 @@ RPATH_ORIGIN := -Wl,-rpath,'$$ORIGIN'
 FILESYSTEM_LINK_MODE ?= compatibility-default
 FILESYSTEM_LIBS ?= -lstdc++fs
 
+# Distribution version embedded in the Python-free xstar-cpp provenance sidecar.
+# Read it from the source-tree pyproject so productization version bumps do not
+# require editing the native frontend source.  A caller may override this when
+# building the cpp directory outside a complete source tree.
+PACKAGE_VERSION ?= $(shell sed -n 's/^version = "\([^"]*\)"/\1/p' ../../../../pyproject.toml 2>/dev/null | head -n 1)
+ifeq ($(strip $(PACKAGE_VERSION)),)
+PACKAGE_VERSION := unknown
+endif
+
 SOLVER_TARGET := libxstar_solver.so
 RATES_TARGET := libxstar_rates.so
 MATRIX_TARGET := libxstar_matrix.so
@@ -148,7 +157,7 @@ $(EXECUTABLE_TARGET): $(EXECUTABLE_OBJECTS) $(API_TARGET) $(LOCAL_ZONE_TARGET) $
 		-L. -lxstar_api -lxstar_local_zone -lxstar_emissivity -lxstar_thermal $(CFITSIO_LIBS) $(CFITSIO_RPATH) $(COMMON_LIBS) $(FILESYSTEM_LIBS) $(RPATH_ORIGIN)
 
 $(PUBLIC_EXECUTABLE_TARGET): $(EXECUTABLE_TARGET) $(PUBLIC_EXECUTABLE_SOURCE)
-	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -o $@ $(PUBLIC_EXECUTABLE_SOURCE) $(STDCXXFS_LIBS)
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -DXSTAR_TOOLS_PACKAGE_VERSION=\"$(PACKAGE_VERSION)\" -o $@ $(PUBLIC_EXECUTABLE_SOURCE) $(FILESYSTEM_LIBS)
 
 print-config:
 	@echo CXX=$(CXX)
@@ -165,6 +174,7 @@ print-config:
 	@echo V064897_NATIVE=$(V064897_NATIVE)
 	@echo FILESYSTEM_LINK_MODE=$(FILESYSTEM_LINK_MODE)
 	@echo FILESYSTEM_LIBS=$(FILESYSTEM_LIBS)
+	@echo PACKAGE_VERSION=$(PACKAGE_VERSION)
 
 # These are ABI/scaffold tests only. They deliberately do not claim science parity.
 test: all

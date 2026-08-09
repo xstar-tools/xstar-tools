@@ -232,7 +232,7 @@ def test_example22_missing_grid_writes_template_and_exits_cleanly(tmp_path):
 
 
 def test_packaged_xstar_grid_template_exists():
-    path = ROOT / "examples" / "reference_inputs" / "xstar_o7_density_grid_references_template.csv"
+    path = ROOT / "docs" / "validation" / "xstar_inputs" / "xstar_o7_density_grid_references_template.csv"
     assert path.exists()
     text = path.read_text(encoding="utf-8")
     assert "electron_density_cm^-3" in text

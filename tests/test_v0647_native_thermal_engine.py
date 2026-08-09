@@ -1,11 +1,43 @@
 from types import SimpleNamespace
-import numpy as np
+from pathlib import Path
+import shutil
+import subprocess
 
+import numpy as np
+import pytest
+
+from xstar_tools.xstar import cpp_backend_thermal as _thermal_backend
 from xstar_tools.xstar.cpp_backend_thermal import (
     apply_heatt_cpp,
     run_dsec_cpp,
     thermal_engine_status,
 )
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _ensure_native_thermal_library():
+    """Build only the native thermal test dependency when it is not prebuilt."""
+    root = Path(__file__).resolve().parents[1]
+    cpp_dir = root / "src/xstar_tools/xstar/cpp"
+    library = cpp_dir / "libxstar_thermal.so"
+    built_here = not library.exists()
+    if built_here:
+        if shutil.which("g++") is None or shutil.which("make") is None:
+            pytest.skip("native thermal characterization requires g++ and make")
+        proc = subprocess.run(
+            ["make", "-C", str(cpp_dir), "libxstar_thermal.so"],
+            text=True,
+            capture_output=True,
+        )
+        if proc.returncode != 0:
+            pytest.skip("could not build native thermal characterization library: " + proc.stderr[-1000:])
+    _thermal_backend._LIB = None
+    try:
+        yield
+    finally:
+        _thermal_backend._LIB = None
+        if built_here:
+            library.unlink(missing_ok=True)
 
 
 def test_native_thermal_engine_status():
