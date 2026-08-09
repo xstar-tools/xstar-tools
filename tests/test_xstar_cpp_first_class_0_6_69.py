@@ -84,7 +84,7 @@ def test_frontend_accepts_par_data_output_and_structured_extensions(tmp_path):
     assert envelope['atomic_database']==str(data/'atdb.fits')
     assert envelope['coheat_file']==str(data/'coheat.dat')
     summary_data=json.loads(summary.read_text())
-    assert summary_data['success'] is True and summary_data['package_version']=='0.6.69'
+    assert summary_data['success'] is True and summary_data['package_version']==package_version()
     assert summary_data['produced_fits']==['xout_abund1.fits']
     prov_data=json.loads(prov.read_text())
     assert prov_data['c_api_abi']==C_API_ABI_VERSION and prov_data['zone_abi']==ZONE_ABI_VERSION
@@ -116,7 +116,7 @@ def test_all_three_native_modes_share_one_scientific_production_operator():
 
 
 def test_package_version_is_productization_only():
-    assert package_version()=='0.6.69'
+    assert tuple(map(int,package_version().split('.'))) >= (0,6,69)
     assert SCIENCE_REVISION=='0.6.48.12.3.45.3.3.8'
     assert C_API_ABI_VERSION==60487
     assert ZONE_ABI_VERSION==6048110

@@ -1,21 +1,24 @@
-"""Sphinx configuration for xstar-atomic documentation."""
-
+"""Sphinx configuration for the productized xstar-tools documentation."""
 from __future__ import annotations
 
-import os
+import re
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 sys.path.insert(0, str(SRC))
 
-project = "xstar-atomic"
+project = "xstar-tools"
 author = "Ashkbiz Danehkar"
-release = "0.3.133"
-version = "0.3.133"
+
+_pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+_match = re.search(r'^version\s*=\s*["\']([^"\']+)["\']', _pyproject, re.MULTILINE)
+release = _match.group(1) if _match else "unknown"
+version = release
 
 extensions = [
+    "myst_parser",
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
     "sphinx.ext.napoleon",
@@ -29,10 +32,26 @@ autodoc_member_order = "bysource"
 napoleon_google_docstring = True
 napoleon_numpy_docstring = True
 
+source_suffix = {
+    ".rst": "restructuredtext",
+    ".md": "markdown",
+}
+myst_enable_extensions = ["colon_fence", "deflist", "fieldlist"]
+
 html_theme = "sphinx_rtd_theme"
+html_title = f"xstar-tools {release}"
 html_static_path = ["_static"]
 templates_path = ["_templates"]
-exclude_patterns = []
+exclude_patterns = [
+    "_build",
+    "sphinx",
+    "*.tex",
+    "TODO.md",
+    "validation/**",
+]
+
+nitpicky = False
+nitpick_ignore = []
 
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),

@@ -56,3 +56,7 @@ include qualification/unified_cli_0_6_68.json
 
 include tools/qualification/check_xstar_cpp_first_class.py
 include qualification/xstar_cpp_first_class_0_6_69.json
+
+include .github/workflows/docs.yml
+include tools/qualification/check_documentation_milestone.py
+include qualification/documentation_milestone_0_6_70.json
