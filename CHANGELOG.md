@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.69 — Milestone 6 first-class `xstar-cpp` - 2026-08-09
+
+- Promoted `xstar-cpp` from a thin stable alias to a first-class Python-free native frontend.
+- Added `--input` for HEASoft/IRAF-style `.par` files, `--data-dir`, `--output`, structured summary/provenance/profile outputs, progress modes, threads, deterministic-run provenance, and read-only `--print-option` extraction.
+- Added runtime C API / production-zone ABI queries and fail-fast compatibility checks while keeping C API ABI `60487` and production-zone ABI `6048110` unchanged.
+- Linked the public frontend to the same frozen shared native core used by Python `zone-cpp` / `zone-all`; the compatibility `xstar_cpp run-production` executable remains the single standalone scientific control implementation.
+- Added native ABI/user documentation and qualification coverage. No Python or C++ scientific implementation changed.
+
 # xstar_tools 0.6.68 - 2026-08-09
 
 - Complete Milestone 5 CLI consolidation around the primary `xstar-tools <command>` interface: `run`, `inspect`, `data`, `backends`, `compare`, `doctor`, and `version`.

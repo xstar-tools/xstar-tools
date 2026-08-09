@@ -12,7 +12,7 @@ import pytest
 
 from xstar_tools.execution import (
     advanced_execution_provenance, infer_public_mode, resolve_mode, execution_provenance, run_xstar,
-    SCIENCE_REVISION, ZONE_ABI_VERSION, package_version,
+    SCIENCE_REVISION, ZONE_ABI_VERSION, C_API_ABI_VERSION, package_version,
 )
 
 
@@ -150,7 +150,18 @@ def test_xstar_cpp_native_frontend_accepts_xstar_style_tokens_without_python(tmp
     root = Path(__file__).resolve().parents[1]
     source = root / "src/xstar_tools/xstar/native/xstar_cpp_frontend.cpp"
     frontend = tmp_path / "xstar-cpp"
-    proc = subprocess.run([compiler, "-std=c++17", "-Wall", "-Wextra", "-Wpedantic", "-O0", f'-DXSTAR_TOOLS_PACKAGE_VERSION="{package_version()}"', "-o", str(frontend), str(source), "-lstdc++fs"], text=True, capture_output=True)
+    api_stub = tmp_path / "api_stub.cpp"
+    api_stub.write_text(
+        '#include <cstdint>\n'
+        f'extern "C" std::uint32_t xstar_api_abi_version(void){{return {C_API_ABI_VERSION}u;}}\n'
+        f'extern "C" const char* xstar_api_version_string(void){{return "{SCIENCE_REVISION}";}}\n', encoding="utf-8")
+    zone_stub = tmp_path / "zone_stub.cpp"
+    zone_stub.write_text(
+        '#include <cstdint>\n'
+        f'extern "C" std::int32_t xstar_production_zone_abi_version_v0648110(void){{return {ZONE_ABI_VERSION};}}\n', encoding="utf-8")
+    subprocess.run([compiler, "-shared", "-fPIC", "-o", str(tmp_path / "libxstar_api.so"), str(api_stub)], check=True)
+    subprocess.run([compiler, "-shared", "-fPIC", "-o", str(tmp_path / "libxstar_production_zone.so"), str(zone_stub)], check=True)
+    proc = subprocess.run([compiler, "-std=c++17", "-Wall", "-Wextra", "-Wpedantic", "-O0", f'-DXSTAR_TOOLS_PACKAGE_VERSION="{package_version()}"', "-o", str(frontend), str(source), "-L", str(tmp_path), "-lxstar_api", "-lxstar_production_zone", "-lstdc++fs", "-Wl,-rpath,$ORIGIN"], text=True, capture_output=True)
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "warning:" not in (proc.stdout + proc.stderr)
 

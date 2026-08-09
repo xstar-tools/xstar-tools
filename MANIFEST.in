@@ -53,3 +53,6 @@ include qualification/public_python_api_0_6_66.json
 
 include tools/qualification/check_unified_cli.py
 include qualification/unified_cli_0_6_68.json
+
+include tools/qualification/check_xstar_cpp_first_class.py
+include qualification/xstar_cpp_first_class_0_6_69.json

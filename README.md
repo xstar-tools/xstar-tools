@@ -2,7 +2,7 @@
 
 `xstar_tools` is a source-faithful Python/C++ implementation and productization layer for XSTAR photoionization calculations. The project keeps the accepted scientific behavior tied to XSTAR Fortran 2.59g while exposing stable Python, accelerated Python, shared C++, and native standalone execution modes.
 
-The current distribution is **0.6.67**. The accepted scientific revision remains **0.6.48.12.3.45.3.3.8**, the frozen all-62 C++ scientific baseline remains **0.6.48.12.3.44**, the public C API ABI is **60487**, and the production-zone ABI is **6048110**.
+The current distribution is **0.6.69**. The accepted scientific revision remains **0.6.48.12.3.45.3.3.8**, the frozen all-62 C++ scientific baseline remains **0.6.48.12.3.44**, the public C API ABI is **60487**, and the production-zone ABI is **6048110**.
 
 User-facing controller logs now label the **package version** and **science revision** separately. For backward compatibility, the legacy Python `xstar_tools.__version__` symbol remains the frozen science revision; use `xstar_tools.__package_version__` or `xstar-tools version` for the distribution version.
 
@@ -170,7 +170,7 @@ Use this mode when the complete shared C++ production path is desired but Python
 
 ## `xstar-cpp`
 
-`xstar-cpp` is the native standalone executable. Normal runs do not require a Python runtime.
+`xstar-cpp` is the first-class native standalone executable. Normal runs do not require a Python runtime.
 
 After building:
 
@@ -179,26 +179,48 @@ make -C src/xstar_tools/xstar/cpp -j2
 src/xstar_tools/xstar/cpp/xstar-cpp --help
 ```
 
-It accepts XSTAR-style `name=value` arguments directly:
+Run a standard HEASoft/IRAF-style parameter file directly:
 
 ```bash
 src/xstar_tools/xstar/cpp/xstar-cpp \
-  --atomic-db "$DATA/atdb.fits" \
-  --coheat "$DATA/coheat.dat" \
-  --output-dir "$OUT/xstar-cpp" \
-  spectrum=pow \
-  nsteps=10 \
-  niter=99 \
-  density=1e10 \
-  temperature=100 \
-  column=1e20 \
-  rlogxi=1.5 \
-  habund=1 \
-  heabund=1 \
-  oabund=1
+  --input xstar.par \
+  --data-dir "$DATA" \
+  --output "$OUT/xstar-cpp"
 ```
 
-For machine-readable workflows, the qualified native payload remains available:
+XSTAR-style `name=value` parameters remain valid without a `.par` file:
+
+```bash
+src/xstar_tools/xstar/cpp/xstar-cpp \
+  --data-dir "$DATA" \
+  --output "$OUT/xstar-cpp" \
+  spectrum=pow nsteps=10 niter=99 density=1e10 temperature=100 \
+  column=1e20 rlogxi=1.5 habund=1 heabund=1 oabund=1
+```
+
+Optional native orchestration features include:
+
+```text
+--json-summary FILE
+--provenance FILE
+--progress {none,text,json}
+--threads N
+--profile FILE
+--deterministic
+--print-option N
+```
+
+These are `xstar-cpp` extensions, not required XSTAR inputs. `--print-option` is read-only and extracts a section from the completed `xout_step.log`; it does not change STEP science.
+
+Runtime ABI compatibility is explicit:
+
+```bash
+src/xstar_tools/xstar/cpp/xstar-cpp --abi
+```
+
+Packaged builds query the linked C API (`60487`) and production-zone ABI (`6048110`) before science and fail clearly on mismatch.
+
+For machine-readable compatibility workflows, the qualified native payload remains available:
 
 ```bash
 src/xstar_tools/xstar/cpp/xstar-cpp run-production \
@@ -206,7 +228,7 @@ src/xstar_tools/xstar/cpp/xstar-cpp run-production \
   --output-dir "$OUT/xstar-cpp"
 ```
 
-You can also invoke the same native path through the Python public interface:
+You can also invoke the same native scientific path through the Python public interface:
 
 ```bash
 xstar-tools run "$RUN" \
@@ -215,7 +237,7 @@ xstar-tools run "$RUN" \
   --output-dir "$OUT/xstar-cpp-via-python"
 ```
 
-The native frontend writes `xstar_execution_provenance.json` with the package/science revisions, ABIs, native executable identity, CPU dispatch information, fallbacks, return code, and supplied atomic-data hashes.
+The public frontend contains no scientific algorithms. It delegates to the compatibility `xstar_cpp run-production` executable, while `zone-cpp`/`zone-all` use the same frozen standalone production operator through `libxstar_production_zone.so`. See `docs/developer/xstar_cpp.md` and `docs/developer/c_abi.md`.
 
 ## Python API
 

@@ -1,27 +1,34 @@
-// xstar-cpp stable native command-line frontend.
+// xstar-cpp first-class native command-line frontend.
 //
-// Productization role only: this file contains no XSTAR science.  For normal
-// native runs it preserves literal XSTAR-style name=value tokens in a small
-// JSON parameter envelope, then execs the already-qualified sibling
-// `xstar_cpp run-production` executable.  Existing native commands (including
-// `run-production --parameters ...`) are passed through unchanged.
+// Productization role only: this file contains no XSTAR science. It accepts
+// standard XSTAR-style inputs, writes the same literal JSON parameter envelope
+// consumed by the qualified sibling `xstar_cpp run-production` executable,
+// verifies the linked public C/production-zone ABIs, and records optional
+// orchestration/provenance artifacts. Scientific execution remains exclusively
+// in the frozen native core.
 // No Python interpreter or Python library is used by this frontend.
+
+#include "../cpp/xstar_api.h"
+#include "../cpp/xstar_production_zone_bridge.h"
 
 #include <array>
 #include <cerrno>
+#include <chrono>
 #include <cstdint>
-#include <cstring>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <optional>
 #include <regex>
 #include <set>
 #include <sstream>
+#include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
-#include <iomanip>
 
 #if defined(__unix__) || defined(__APPLE__)
 #include <sys/wait.h>
@@ -36,9 +43,10 @@ namespace {
 #define XSTAR_TOOLS_PACKAGE_VERSION "unknown"
 #endif
 constexpr const char* kPackageVersion = XSTAR_TOOLS_PACKAGE_VERSION;
-constexpr const char* kScienceRevision = "0.6.48.12.3.45.3.3.8";
-constexpr std::uint32_t kCApiAbi = 60487u;
-constexpr std::uint32_t kZoneAbi = 6048110u;
+constexpr const char* kScienceRevision = XSTAR_API_VERSION_STRING;
+constexpr std::uint32_t kExpectedCApiAbi = XSTAR_API_ABI_VERSION;
+constexpr std::int32_t kExpectedZoneAbi = XSTAR_PRODUCTION_ZONE_ABI_V0648110;
+constexpr int kAbiMismatchExit = 70;
 
 std::string json_escape(const std::string& value);
 
@@ -108,7 +116,11 @@ std::optional<std::string> sha256_file(const std::filesystem::path& path) {
     std::ifstream in(path, std::ios::binary);
     if (!in) return std::nullopt;
     Sha256 sha; std::array<unsigned char,65536> buf{};
-    while (in) { in.read(reinterpret_cast<char*>(buf.data()), static_cast<std::streamsize>(buf.size())); const auto n=in.gcount(); if(n>0) sha.update(buf.data(),static_cast<std::size_t>(n)); }
+    while (in) {
+        in.read(reinterpret_cast<char*>(buf.data()), static_cast<std::streamsize>(buf.size()));
+        const auto n=in.gcount();
+        if(n>0) sha.update(buf.data(),static_cast<std::size_t>(n));
+    }
     return sha.final_hex();
 }
 
@@ -128,42 +140,6 @@ bool cpu_has_avx2() {
 #endif
 }
 
-int run_native_wait(const std::filesystem::path& native, const std::vector<std::string>& args) {
-    const pid_t pid=::fork();
-    if(pid<0) return 127;
-    if(pid==0) {
-        std::vector<std::string> storage; storage.reserve(args.size()+1); storage.push_back(native.string()); storage.insert(storage.end(),args.begin(),args.end());
-        std::vector<char*> argv; argv.reserve(storage.size()+1); for(auto& item:storage) argv.push_back(item.data()); argv.push_back(nullptr);
-        ::execv(native.c_str(),argv.data()); _exit(127);
-    }
-    int status=0; while(::waitpid(pid,&status,0)<0) { if(errno!=EINTR) return 127; }
-    if(WIFEXITED(status)) return WEXITSTATUS(status);
-    if(WIFSIGNALED(status)) return 128+WTERMSIG(status);
-    return 127;
-}
-
-void write_execution_provenance(const std::filesystem::path& output_dir, int returncode,
-                                const std::string& atdb, const std::string& coheat) {
-    std::error_code ec; std::filesystem::create_directories(output_dir,ec); if(ec) return;
-    std::ofstream out(output_dir/"xstar_execution_provenance.json"); if(!out) return;
-    const auto atdb_hash=atdb.empty()?std::optional<std::string>{}:sha256_file(atdb);
-    const auto coheat_hash=coheat.empty()?std::optional<std::string>{}:sha256_file(coheat);
-    out << "{\n"
-        << "  \"requested_mode\": \"xstar-cpp\",\n"
-        << "  \"actual_mode\": \"xstar-cpp\",\n"
-        << "  \"package_version\": \"" << kPackageVersion << "\",\n"
-        << "  \"science_revision\": \"" << kScienceRevision << "\",\n"
-        << "  \"c_api_abi\": " << kCApiAbi << ",\n"
-        << "  \"zone_abi\": " << kZoneAbi << ",\n"
-        << "  \"cpp\": {\"used\": true, \"executable\": \"xstar_cpp\", \"version\": \"" << kScienceRevision << "\"},\n"
-        << "  \"cpu\": {\"avx2\": " << (cpu_has_avx2()?"true":"false") << ", \"type50_dispatch\": \"runtime-avx2-or-scalar\"},\n"
-        << "  \"fallback_events\": [],\n"
-        << "  \"atomic_data\": {";
-    if(!atdb.empty()) out << "\"atdb_path\": \"" << json_escape(atdb) << "\", \"atdb_sha256\": " << (atdb_hash?"\""+*atdb_hash+"\"":"null");
-    if(!coheat.empty()) { if(!atdb.empty()) out << ", "; out << "\"coheat_path\": \"" << json_escape(coheat) << "\", \"coheat_sha256\": " << (coheat_hash?"\""+*coheat_hash+"\"":"null"); }
-    out << "},\n  \"native_returncode\": " << returncode << "\n}\n";
-}
-
 std::string json_escape(const std::string& value) {
     std::ostringstream out;
     for (unsigned char c : value) {
@@ -179,26 +155,10 @@ std::string json_escape(const std::string& value) {
                 if (c < 0x20) {
                     static constexpr char hex[] = "0123456789abcdef";
                     out << "\\u00" << hex[(c >> 4) & 0xf] << hex[c & 0xf];
-                } else {
-                    out << static_cast<char>(c);
-                }
+                } else out << static_cast<char>(c);
         }
     }
     return out.str();
-}
-
-[[noreturn]] void exec_native(const std::filesystem::path& native, const std::vector<std::string>& args) {
-    std::vector<std::string> storage;
-    storage.reserve(args.size() + 1);
-    storage.push_back(native.string());
-    storage.insert(storage.end(), args.begin(), args.end());
-    std::vector<char*> argv;
-    argv.reserve(storage.size() + 1);
-    for (auto& item : storage) argv.push_back(item.data());
-    argv.push_back(nullptr);
-    ::execv(native.c_str(), argv.data());
-    std::cerr << "xstar-cpp: failed to exec " << native << ": errno=" << errno << "\n";
-    std::exit(127);
 }
 
 std::filesystem::path sibling_native(const char* argv0) {
@@ -208,21 +168,91 @@ std::filesystem::path sibling_native(const char* argv0) {
     return self.parent_path() / "xstar_cpp";
 }
 
+struct RuntimeAbi {
+    std::uint32_t c_api = 0;
+    std::int32_t zone = 0;
+    std::string api_version;
+};
+
+RuntimeAbi runtime_abi() {
+    RuntimeAbi result;
+    result.c_api = xstar_api_abi_version();
+    result.zone = xstar_production_zone_abi_version_v0648110();
+    const char* version = xstar_api_version_string();
+    if (version) result.api_version = version;
+    return result;
+}
+
+bool verify_runtime_abi(std::ostream& err, RuntimeAbi* observed = nullptr) {
+    const RuntimeAbi abi = runtime_abi();
+    if (observed) *observed = abi;
+    bool ok = true;
+    if (abi.c_api != kExpectedCApiAbi) {
+        err << "xstar-cpp: C API ABI mismatch: frontend expects " << kExpectedCApiAbi
+            << " but linked libxstar_api reports " << abi.c_api << "\n";
+        ok = false;
+    }
+    if (abi.zone != kExpectedZoneAbi) {
+        err << "xstar-cpp: production-zone ABI mismatch: frontend expects " << kExpectedZoneAbi
+            << " but linked libxstar_production_zone reports " << abi.zone << "\n";
+        ok = false;
+    }
+    if (!abi.api_version.empty() && abi.api_version != kScienceRevision) {
+        err << "xstar-cpp: science revision mismatch: frontend expects " << kScienceRevision
+            << " but linked libxstar_api reports " << abi.api_version << "\n";
+        ok = false;
+    }
+    return ok;
+}
+
+void print_version(std::ostream& out) {
+    const auto abi = runtime_abi();
+    out << "xstar-cpp package version " << kPackageVersion << "\n"
+        << "xstar-cpp science revision " << kScienceRevision << "\n"
+        << "xstar-cpp C API ABI " << abi.c_api << "\n"
+        << "xstar-cpp production-zone ABI " << abi.zone << "\n";
+}
+
+void print_abi(std::ostream& out) {
+    const auto abi = runtime_abi();
+    out << "package_version=" << kPackageVersion << "\n"
+        << "science_revision=" << kScienceRevision << "\n"
+        << "expected_c_api_abi=" << kExpectedCApiAbi << "\n"
+        << "runtime_c_api_abi=" << abi.c_api << "\n"
+        << "expected_production_zone_abi=" << kExpectedZoneAbi << "\n"
+        << "runtime_production_zone_abi=" << abi.zone << "\n"
+        << "runtime_api_science_revision=" << abi.api_version << "\n";
+}
+
 void usage(std::ostream& out) {
     out <<
-        "xstar-cpp - stable native XSTAR execution frontend\n\n"
-        "Normal XSTAR-style run (no Python):\n"
-        "  xstar-cpp [--atomic-db atdb.fits] [--coheat coheat.dat] [--output-dir DIR] name=value ...\n"
-        "  xstar-cpp run-xstar [same options] name=value ...\n\n"
-        "Machine-readable qualified path:\n"
-        "  xstar-cpp run-production --parameters parameters.json --output-dir DIR\n\n"
-        "Frontend options for XSTAR-style runs:\n"
-        "  --atomic-db PATH       write atomic_database into the native parameter envelope\n"
-        "  --coheat PATH          write coheat_file into the native parameter envelope\n"
-        "  --output-dir DIR       native output directory (default: .)\n"
-        "  --parameters-out PATH  keep/write the generated JSON at PATH\n"
+        "xstar-cpp - first-class native XSTAR execution frontend\n\n"
+        "Standard-compatible native run (no Python):\n"
+        "  xstar-cpp --input xstar.par --data-dir /path/to/xstar/data --output run1\n"
+        "  xstar-cpp xstar.par --data-dir /path/to/xstar/data --output run1\n"
+        "  xstar-cpp --data-dir DATA --output run1 name=value [name=value ...]\n\n"
+        "Standard input options:\n"
+        "  --input PATH           HEASoft/IRAF-style .par parameter file\n"
+        "  --data-dir DIR         directory containing atdb.fits and coheat.dat\n"
+        "  --output DIR           output directory (alias: --output-dir)\n"
+        "  --atomic-db PATH       explicit atdb.fits path\n"
+        "  --coheat PATH          explicit coheat.dat path\n\n"
+        "xstar-cpp orchestration extensions (not canonical XSTAR parameters):\n"
+        "  --json-summary FILE    write machine-readable run summary\n"
+        "  --provenance FILE      write provenance JSON to an additional path\n"
+        "  --progress MODE        none, text, or json (default: text)\n"
+        "  --threads N            set OMP_NUM_THREADS for this native run\n"
+        "  --profile FILE         write frontend wall-time/profile JSON\n"
+        "  --deterministic        record reproducible-run intent in provenance\n"
+        "  --print-option N       print requested completed xout_step.log section\n"
+        "  --parameters-out PATH  keep/write generated JSON parameter envelope\n"
+        "  --abi                  show compiled/runtime ABI identities\n"
+        "  --version              show package/science/ABI versions\n"
         "  --help                 show this help\n\n"
-        "All other existing xstar_cpp commands are passed through unchanged.\n";
+        "Compatibility interfaces remain available, including:\n"
+        "  xstar-cpp run-production --parameters parameters.json --output-dir DIR\n"
+        "  xstar-cpp run-xstar name=value ...\n\n"
+        "All scientific execution delegates to the qualified sibling xstar_cpp core.\n";
 }
 
 bool is_passthrough_command(const std::string& arg) {
@@ -233,127 +263,368 @@ bool is_passthrough_command(const std::string& arg) {
         "convergence-self-test", "secant-ieee-self-test", "trajectory-alignment-self-test",
         "controller-canonical-e7-self-test", "fixed-state-self-test", "run-fixed-state",
         "fixed-state-batch-self-test", "run-fixed-trajectory", "run-fixed-evaluation",
-        "standalone-capabilities", "--version", "-V"
+        "standalone-capabilities"
     };
     return commands.count(arg) != 0;
 }
 
-struct FrontendInput {
-    std::filesystem::path output_dir{"."};
-    std::filesystem::path parameters_out;
-    std::string atomic_db;
-    std::string coheat;
-    std::vector<std::pair<std::string, std::string>> parameters;
-};
+std::vector<std::string> parse_csv_row(const std::string& line) {
+    std::vector<std::string> fields;
+    std::string current;
+    bool quoted = false;
+    for (std::size_t i=0;i<line.size();++i) {
+        const char c=line[i];
+        if (quoted) {
+            if (c=='"') {
+                if (i+1<line.size() && line[i+1]=='"') { current.push_back('"'); ++i; }
+                else quoted=false;
+            } else current.push_back(c);
+        } else if (c=='"') quoted=true;
+        else if (c==',') { fields.push_back(current); current.clear(); }
+        else current.push_back(c);
+    }
+    if (quoted) throw std::runtime_error("unterminated quoted field in .par file");
+    fields.push_back(current);
+    return fields;
+}
 
-bool parse_xstar_style(int argc, char** argv, int start, FrontendInput& input, std::string& error) {
-    for (int i = start; i < argc; ++i) {
-        std::string arg = argv[i];
-        auto value_after = [&](const char* flag) -> const char* {
-            if (i + 1 >= argc) {
-                error = std::string("missing value for ") + flag;
-                return nullptr;
-            }
-            return argv[++i];
-        };
-        if (arg == "--atomic-db") {
-            const char* v = value_after("--atomic-db"); if (!v) return false; input.atomic_db = v;
-        } else if (arg == "--coheat") {
-            const char* v = value_after("--coheat"); if (!v) return false; input.coheat = v;
-        } else if (arg == "--output-dir") {
-            const char* v = value_after("--output-dir"); if (!v) return false; input.output_dir = v;
-        } else if (arg == "--parameters-out") {
-            const char* v = value_after("--parameters-out"); if (!v) return false; input.parameters_out = v;
-        } else if (arg == "--") {
-            continue;
+std::string trim(std::string value) {
+    const auto first=value.find_first_not_of(" \t\r\n");
+    if(first==std::string::npos) return {};
+    const auto last=value.find_last_not_of(" \t\r\n");
+    return value.substr(first,last-first+1u);
+}
+
+void set_parameter(std::vector<std::pair<std::string,std::string>>& parameters,
+                   const std::string& key, const std::string& value) {
+    for (auto& item : parameters) {
+        if (item.first == key) { item.second = value; return; }
+    }
+    parameters.emplace_back(key,value);
+}
+
+void load_par_file(const std::filesystem::path& path,
+                   std::vector<std::pair<std::string,std::string>>& parameters) {
+    std::ifstream in(path);
+    if(!in) throw std::runtime_error("could not read parameter file: " + path.string());
+    std::string line;
+    std::size_t lineno=0;
+    while(std::getline(in,line)) {
+        ++lineno;
+        const std::string stripped=trim(line);
+        if(stripped.empty() || stripped[0]=='#') continue;
+        const auto fields=parse_csv_row(line);
+        if(fields.size()>=4u) {
+            const std::string key=trim(fields[0]);
+            if(!key.empty()) set_parameter(parameters,key,trim(fields[3]));
+        } else if(fields.size()==1u) {
+            const auto pos=fields[0].find('=');
+            if(pos==std::string::npos || pos==0u)
+                throw std::runtime_error("unsupported parameter row " + std::to_string(lineno) + " in " + path.string());
+            set_parameter(parameters,trim(fields[0].substr(0,pos)),trim(fields[0].substr(pos+1u)));
         } else {
-            const auto pos = arg.find('=');
-            if (pos == std::string::npos || pos == 0) {
-                error = "expected XSTAR-style name=value token, got: " + arg;
-                return false;
-            }
-            input.parameters.emplace_back(arg.substr(0, pos), arg.substr(pos + 1));
+            throw std::runtime_error("unsupported parameter row " + std::to_string(lineno) + " in " + path.string());
         }
     }
-    if (input.parameters.empty()) {
-        error = "no XSTAR-style name=value parameters were provided";
-        return false;
+    if(parameters.empty()) throw std::runtime_error("no XSTAR parameters found in " + path.string());
+}
+
+struct FrontendInput {
+    std::filesystem::path input_file;
+    std::filesystem::path data_dir;
+    std::filesystem::path output_dir{"."};
+    std::filesystem::path parameters_out;
+    std::filesystem::path json_summary;
+    std::filesystem::path provenance_path;
+    std::filesystem::path profile_path;
+    std::string atomic_db;
+    std::string coheat;
+    std::string progress{"text"};
+    int threads=0;
+    int print_option=-1;
+    bool deterministic=false;
+    std::vector<std::pair<std::string,std::string>> parameters;
+};
+
+bool parse_int(const std::string& text, int minimum, int& result) {
+    try {
+        std::size_t used=0;
+        const long value=std::stol(text,&used,10);
+        if(used!=text.size() || value<minimum || value>2147483647L) return false;
+        result=static_cast<int>(value); return true;
+    } catch(...) { return false; }
+}
+
+bool parse_frontend(int argc, char** argv, int start, FrontendInput& input, std::string& error) {
+    for (int i=start;i<argc;++i) {
+        const std::string arg=argv[i];
+        auto value_after = [&](const char* flag) -> const char* {
+            if(i+1>=argc) { error=std::string("missing value for ")+flag; return nullptr; }
+            return argv[++i];
+        };
+        if(arg=="--input") { const char* v=value_after("--input"); if(!v) return false; input.input_file=v; }
+        else if(arg=="--data-dir") { const char* v=value_after("--data-dir"); if(!v) return false; input.data_dir=v; }
+        else if(arg=="--output" || arg=="--output-dir") { const char* v=value_after(arg.c_str()); if(!v) return false; input.output_dir=v; }
+        else if(arg=="--atomic-db") { const char* v=value_after("--atomic-db"); if(!v) return false; input.atomic_db=v; }
+        else if(arg=="--coheat") { const char* v=value_after("--coheat"); if(!v) return false; input.coheat=v; }
+        else if(arg=="--parameters-out") { const char* v=value_after("--parameters-out"); if(!v) return false; input.parameters_out=v; }
+        else if(arg=="--json-summary") { const char* v=value_after("--json-summary"); if(!v) return false; input.json_summary=v; }
+        else if(arg=="--provenance") { const char* v=value_after("--provenance"); if(!v) return false; input.provenance_path=v; }
+        else if(arg=="--profile") { const char* v=value_after("--profile"); if(!v) return false; input.profile_path=v; }
+        else if(arg=="--progress") {
+            const char* v=value_after("--progress"); if(!v) return false; input.progress=v;
+            if(input.progress!="none" && input.progress!="text" && input.progress!="json") { error="--progress must be none, text, or json"; return false; }
+        } else if(arg=="--threads") {
+            const char* v=value_after("--threads"); if(!v) return false;
+            if(!parse_int(v,1,input.threads)) { error="--threads must be an integer >= 1"; return false; }
+        } else if(arg=="--print-option") {
+            const char* v=value_after("--print-option"); if(!v) return false;
+            if(!parse_int(v,0,input.print_option)) { error="--print-option must be a non-negative integer"; return false; }
+        } else if(arg=="--deterministic") input.deterministic=true;
+        else if(arg=="--") continue;
+        else if(arg.rfind("--",0)==0) { error="unknown xstar-cpp option: "+arg; return false; }
+        else {
+            const auto pos=arg.find('=');
+            if(pos!=std::string::npos && pos>0u) set_parameter(input.parameters,arg.substr(0,pos),arg.substr(pos+1u));
+            else if(input.input_file.empty() && std::filesystem::is_regular_file(arg)) input.input_file=arg;
+            else { error="expected XSTAR-style name=value token or parameter file, got: "+arg; return false; }
+        }
+    }
+    try {
+        if(!input.input_file.empty()) {
+            std::vector<std::pair<std::string,std::string>> from_file;
+            load_par_file(input.input_file,from_file);
+            for(auto it=from_file.rbegin();it!=from_file.rend();++it) {
+                bool overridden=false;
+                for(const auto& cli : input.parameters) if(cli.first==it->first) { overridden=true; break; }
+                if(!overridden) input.parameters.insert(input.parameters.begin(),*it);
+            }
+        }
+    } catch(const std::exception& exc) { error=exc.what(); return false; }
+    if(input.parameters.empty()) { error="no XSTAR parameters were provided"; return false; }
+    if(!input.data_dir.empty()) {
+        if(input.atomic_db.empty()) input.atomic_db=(input.data_dir/"atdb.fits").string();
+        if(input.coheat.empty()) input.coheat=(input.data_dir/"coheat.dat").string();
+        if(!std::filesystem::is_regular_file(input.atomic_db)) { error="missing atomic database: "+input.atomic_db; return false; }
+        if(!std::filesystem::is_regular_file(input.coheat)) { error="missing coheat data: "+input.coheat; return false; }
     }
     return true;
 }
 
 std::filesystem::path write_envelope(const FrontendInput& input) {
     std::error_code ec;
-    std::filesystem::create_directories(input.output_dir, ec);
-    if (ec) throw std::runtime_error("could not create output directory: " + input.output_dir.string());
-    auto path = input.parameters_out.empty() ? input.output_dir / ".xstar-cpp-parameters.json" : input.parameters_out;
-    if (path.has_parent_path()) std::filesystem::create_directories(path.parent_path(), ec);
-    if (ec) throw std::runtime_error("could not create parameter-envelope directory: " + path.parent_path().string());
-    std::ofstream out(path);
-    if (!out) throw std::runtime_error("could not write parameter envelope: " + path.string());
+    std::filesystem::create_directories(input.output_dir,ec);
+    if(ec) throw std::runtime_error("could not create output directory: "+input.output_dir.string());
+    auto path=input.parameters_out.empty()?input.output_dir/".xstar-cpp-parameters.json":input.parameters_out;
+    if(path.has_parent_path()) std::filesystem::create_directories(path.parent_path(),ec);
+    if(ec) throw std::runtime_error("could not create parameter-envelope directory: "+path.parent_path().string());
+    std::ofstream out(path); if(!out) throw std::runtime_error("could not write parameter envelope: "+path.string());
     out << "{\n";
-    bool first = true;
-    auto emit = [&](const std::string& key, const std::string& value) {
-        if (!first) out << ",\n";
-        first = false;
+    bool first=true;
+    auto emit=[&](const std::string& key,const std::string& value) {
+        if(!first) out << ",\n";
+        first=false;
         out << "  \"" << json_escape(key) << "\": \"" << json_escape(value) << "\"";
     };
-    for (const auto& [key, value] : input.parameters) emit(key, value);
-    if (!input.atomic_db.empty()) emit("atomic_database", input.atomic_db);
-    if (!input.coheat.empty()) emit("coheat_file", input.coheat);
+    for(const auto& item:input.parameters) emit(item.first,item.second);
+    if(!input.atomic_db.empty()) emit("atomic_database",input.atomic_db);
+    if(!input.coheat.empty()) emit("coheat_file",input.coheat);
     out << "\n}\n";
     return std::filesystem::absolute(path);
 }
 
+int run_native_wait(const std::filesystem::path& native,const std::vector<std::string>& args) {
+    const pid_t pid=::fork();
+    if(pid<0) return 127;
+    if(pid==0) {
+        std::vector<std::string> storage; storage.reserve(args.size()+1u); storage.push_back(native.string()); storage.insert(storage.end(),args.begin(),args.end());
+        std::vector<char*> av; av.reserve(storage.size()+1u); for(auto& item:storage) av.push_back(item.data()); av.push_back(nullptr);
+        ::execv(native.c_str(),av.data()); _exit(127);
+    }
+    int status=0; while(::waitpid(pid,&status,0)<0) { if(errno!=EINTR) return 127; }
+    if(WIFEXITED(status)) return WEXITSTATUS(status);
+    if(WIFSIGNALED(status)) return 128+WTERMSIG(status);
+    return 127;
+}
+
+[[noreturn]] void exec_native(const std::filesystem::path& native,const std::vector<std::string>& args) {
+    std::vector<std::string> storage; storage.reserve(args.size()+1u); storage.push_back(native.string()); storage.insert(storage.end(),args.begin(),args.end());
+    std::vector<char*> av; av.reserve(storage.size()+1u); for(auto& item:storage) av.push_back(item.data()); av.push_back(nullptr);
+    ::execv(native.c_str(),av.data());
+    std::cerr << "xstar-cpp: failed to exec " << native << ": errno=" << errno << "\n";
+    std::exit(127);
+}
+
+void progress_event(const FrontendInput& input,const std::string& event,const std::string& detail="") {
+    if(input.progress=="none") return;
+    if(input.progress=="json") {
+        std::cout << "{\"schema\":\"xstar-cpp-progress-v1\",\"event\":\"" << json_escape(event) << "\"";
+        if(!detail.empty()) std::cout << ",\"detail\":\"" << json_escape(detail) << "\"";
+        std::cout << "}\n" << std::flush;
+    } else {
+        std::cout << "xstar-cpp: " << event;
+        if(!detail.empty()) std::cout << " " << detail;
+        std::cout << "\n" << std::flush;
+    }
+}
+
+std::vector<std::string> principal_products(const std::filesystem::path& output_dir) {
+    static const std::array<const char*,9> names={{
+        "xout_abund1.fits","xout_lines1.fits","xout_rrc1.fits","xout_cont1.fits","xout_spect1.fits",
+        "xo01_detail.fits","xo01_detal2.fits","xo01_detal3.fits","xo01_detal4.fits"}};
+    std::vector<std::string> found;
+    for(const char* name:names) if(std::filesystem::is_regular_file(output_dir/name)) found.emplace_back(name);
+    return found;
+}
+
+void ensure_parent(const std::filesystem::path& path) {
+    if(!path.has_parent_path()) return;
+    std::error_code ec; std::filesystem::create_directories(path.parent_path(),ec);
+    if(ec) throw std::runtime_error("could not create directory: "+path.parent_path().string());
+}
+
+void write_execution_provenance(const std::filesystem::path& path,const FrontendInput& input,
+                                const RuntimeAbi& abi,int returncode,double wall_seconds) {
+    ensure_parent(path);
+    std::ofstream out(path); if(!out) throw std::runtime_error("could not write provenance: "+path.string());
+    const auto atdb_hash=input.atomic_db.empty()?std::optional<std::string>{}:sha256_file(input.atomic_db);
+    const auto coheat_hash=input.coheat.empty()?std::optional<std::string>{}:sha256_file(input.coheat);
+    out << "{\n"
+        << "  \"schema\": \"xstar-cpp-provenance-v1\",\n"
+        << "  \"requested_mode\": \"xstar-cpp\",\n"
+        << "  \"actual_mode\": \"xstar-cpp\",\n"
+        << "  \"package_version\": \"" << kPackageVersion << "\",\n"
+        << "  \"science_revision\": \"" << kScienceRevision << "\",\n"
+        << "  \"c_api_abi\": " << abi.c_api << ",\n"
+        << "  \"zone_abi\": " << abi.zone << ",\n"
+        << "  \"runtime_api_science_revision\": \"" << json_escape(abi.api_version) << "\",\n"
+        << "  \"threads\": " << input.threads << ",\n"
+        << "  \"deterministic_requested\": " << (input.deterministic?"true":"false") << ",\n"
+        << "  \"cpp\": {\"used\": true, \"executable\": \"xstar_cpp\", \"version\": \"" << kScienceRevision << "\"},\n"
+        << "  \"cpu\": {\"avx2\": " << (cpu_has_avx2()?"true":"false") << ", \"type50_dispatch\": \"runtime-avx2-or-scalar\"},\n"
+        << "  \"fallback_events\": [],\n"
+        << "  \"atomic_data\": {";
+    bool first=true;
+    if(!input.atomic_db.empty()) { out << "\"atdb_path\": \"" << json_escape(input.atomic_db) << "\", \"atdb_sha256\": " << (atdb_hash?"\""+*atdb_hash+"\"":"null"); first=false; }
+    if(!input.coheat.empty()) { if(!first) out << ", "; out << "\"coheat_path\": \"" << json_escape(input.coheat) << "\", \"coheat_sha256\": " << (coheat_hash?"\""+*coheat_hash+"\"":"null"); }
+    out << "},\n  \"wall_seconds\": " << std::setprecision(12) << wall_seconds << ",\n"
+        << "  \"native_returncode\": " << returncode << "\n}\n";
+}
+
+void write_summary(const std::filesystem::path& path,const FrontendInput& input,const RuntimeAbi& abi,
+                   int returncode,double wall_seconds,const std::filesystem::path& parameter_path) {
+    ensure_parent(path); std::ofstream out(path); if(!out) throw std::runtime_error("could not write summary: "+path.string());
+    const auto products=principal_products(input.output_dir);
+    out << "{\n  \"schema\": \"xstar-cpp-summary-v1\",\n"
+        << "  \"success\": " << (returncode==0?"true":"false") << ",\n"
+        << "  \"return_code\": " << returncode << ",\n"
+        << "  \"package_version\": \"" << kPackageVersion << "\",\n"
+        << "  \"science_revision\": \"" << kScienceRevision << "\",\n"
+        << "  \"c_api_abi\": " << abi.c_api << ",\n  \"zone_abi\": " << abi.zone << ",\n"
+        << "  \"output_dir\": \"" << json_escape(std::filesystem::absolute(input.output_dir).string()) << "\",\n"
+        << "  \"parameters\": \"" << json_escape(parameter_path.string()) << "\",\n"
+        << "  \"step_log\": " << (std::filesystem::is_regular_file(input.output_dir/"xout_step.log")?"\"xout_step.log\"":"null") << ",\n"
+        << "  \"produced_fits\": [";
+    for(std::size_t i=0;i<products.size();++i) { if(i) out << ", "; out << "\"" << json_escape(products[i]) << "\""; }
+    out << "],\n  \"wall_seconds\": " << std::setprecision(12) << wall_seconds << "\n}\n";
+}
+
+void write_profile(const std::filesystem::path& path,const FrontendInput& input,int returncode,double wall_seconds) {
+    ensure_parent(path); std::ofstream out(path); if(!out) throw std::runtime_error("could not write profile: "+path.string());
+    out << "{\n  \"schema\": \"xstar-cpp-profile-v1\",\n"
+        << "  \"scope\": \"frontend-orchestration\",\n"
+        << "  \"wall_seconds\": " << std::setprecision(12) << wall_seconds << ",\n"
+        << "  \"threads\": " << input.threads << ",\n"
+        << "  \"return_code\": " << returncode << "\n}\n";
+}
+
+bool line_is_print_marker(const std::string& line,int* option=nullptr) {
+    static const std::regex re("print\\s+option\\s*:\\s*([0-9]+)",std::regex::icase);
+    std::smatch m; if(!std::regex_search(line,m,re)) return false;
+    if(option) *option=std::stoi(m[1].str());
+    return true;
+}
+
+bool print_step_option(const std::filesystem::path& step_log,int requested,std::ostream& out) {
+    std::ifstream in(step_log); if(!in) return false;
+    bool active=false,found=false; std::string line;
+    while(std::getline(in,line)) {
+        int option=-1;
+        if(line_is_print_marker(line,&option)) {
+            if(active && option!=requested) break;
+            active=(option==requested); if(active) found=true;
+        }
+        if(active) out << line << "\n";
+    }
+    return found;
+}
+
+int run_frontend(const std::filesystem::path& native,FrontendInput& input) {
+    RuntimeAbi abi;
+    if(!verify_runtime_abi(std::cerr,&abi)) return kAbiMismatchExit;
+    if(input.threads>0) ::setenv("OMP_NUM_THREADS",std::to_string(input.threads).c_str(),1);
+    if(input.deterministic) ::setenv("XSTAR_TOOLS_REPRODUCIBLE","1",1);
+    const auto parameters=write_envelope(input);
+    progress_event(input,"run_started",input.output_dir.string());
+    const auto start=std::chrono::steady_clock::now();
+    const int rc=run_native_wait(native,{"run-production","--parameters",parameters.string(),"--output-dir",input.output_dir.string()});
+    const double wall=std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count();
+    const auto default_provenance=input.output_dir/"xstar_execution_provenance.json";
+    write_execution_provenance(default_provenance,input,abi,rc,wall);
+    if(!input.provenance_path.empty() && std::filesystem::absolute(input.provenance_path)!=std::filesystem::absolute(default_provenance))
+        write_execution_provenance(input.provenance_path,input,abi,rc,wall);
+    if(!input.json_summary.empty()) write_summary(input.json_summary,input,abi,rc,wall,parameters);
+    if(!input.profile_path.empty()) write_profile(input.profile_path,input,rc,wall);
+    progress_event(input,rc==0?"run_completed":"run_failed","return_code="+std::to_string(rc));
+    if(rc==0 && input.print_option>=0) {
+        if(!print_step_option(input.output_dir/"xout_step.log",input.print_option,std::cout)) {
+            std::cerr << "xstar-cpp: requested print option " << input.print_option << " was not found in xout_step.log\n";
+            return 3;
+        }
+    }
+    return rc;
+}
+
 } // namespace
 
-int main(int argc, char** argv) {
-    const auto native = sibling_native(argc > 0 ? argv[0] : "xstar-cpp");
-    if (argc == 1) {
-        usage(std::cout);
-        return 0;
+int main(int argc,char** argv) {
+    const auto native=sibling_native(argc>0?argv[0]:"xstar-cpp");
+    if(argc==1) { usage(std::cout); return 0; }
+    const std::string first=argv[1];
+    if(first=="--help" || first=="-h" || first=="help") { usage(std::cout); return 0; }
+    if(first=="--version" || first=="-V") { print_version(std::cout); return 0; }
+    if(first=="--abi") {
+        print_abi(std::cout);
+        return verify_runtime_abi(std::cerr)?0:kAbiMismatchExit;
     }
-    const std::string first = argv[1];
-    if (first == "--help" || first == "-h" || first == "help") {
-        usage(std::cout);
-        return 0;
-    }
-    if (is_passthrough_command(first)) {
-        std::vector<std::string> args;
-        for (int i = 1; i < argc; ++i) args.emplace_back(argv[i]);
-        if (first != "run-production") exec_native(native, args);
-        std::filesystem::path output_dir{"."};
-        std::filesystem::path parameters;
-        for (int i=2;i<argc;++i) {
+    if(is_passthrough_command(first)) {
+        if(!verify_runtime_abi(std::cerr)) return kAbiMismatchExit;
+        std::vector<std::string> args; for(int i=1;i<argc;++i) args.emplace_back(argv[i]);
+        if(first!="run-production") exec_native(native,args);
+        FrontendInput input; std::filesystem::path parameters;
+        for(int i=2;i<argc;++i) {
             const std::string arg=argv[i];
-            if(arg=="--output-dir" && i+1<argc) output_dir=argv[++i];
+            if(arg=="--output-dir" && i+1<argc) input.output_dir=argv[++i];
             else if(arg=="--parameters" && i+1<argc) parameters=argv[++i];
         }
-        std::string atdb,coheat;
         if(!parameters.empty()) {
-            if(auto v=json_string_field(parameters,"atomic_database")) atdb=*v;
-            if(auto v=json_string_field(parameters,"coheat_file")) coheat=*v;
+            if(auto v=json_string_field(parameters,"atomic_database")) input.atomic_db=*v;
+            if(auto v=json_string_field(parameters,"coheat_file")) input.coheat=*v;
         }
+        RuntimeAbi abi=runtime_abi();
+        const auto start=std::chrono::steady_clock::now();
         const int rc=run_native_wait(native,args);
-        write_execution_provenance(output_dir,rc,atdb,coheat);
+        const double wall=std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count();
+        try { write_execution_provenance(input.output_dir/"xstar_execution_provenance.json",input,abi,rc,wall); }
+        catch(const std::exception& exc) { std::cerr << "xstar-cpp: " << exc.what() << "\n"; }
         return rc;
     }
 
-    const int start = first == "run-xstar" ? 2 : 1;
-    FrontendInput input;
-    std::string error;
-    if (!parse_xstar_style(argc, argv, start, input, error)) {
-        std::cerr << "xstar-cpp: " << error << "\n";
-        usage(std::cerr);
-        return 2;
+    const int start=first=="run-xstar"?2:1;
+    FrontendInput input; std::string error;
+    if(!parse_frontend(argc,argv,start,input,error)) {
+        std::cerr << "xstar-cpp: " << error << "\n"; usage(std::cerr); return 2;
     }
-    try {
-        const auto parameters = write_envelope(input);
-        const int rc=run_native_wait(native,{"run-production", "--parameters", parameters.string(), "--output-dir", input.output_dir.string()});
-        write_execution_provenance(input.output_dir,rc,input.atomic_db,input.coheat);
-        return rc;
-    } catch (const std::exception& exc) {
-        std::cerr << "xstar-cpp: " << exc.what() << "\n";
-        return 2;
-    }
+    try { return run_frontend(native,input); }
+    catch(const std::exception& exc) { std::cerr << "xstar-cpp: " << exc.what() << "\n"; return 2; }
 }
