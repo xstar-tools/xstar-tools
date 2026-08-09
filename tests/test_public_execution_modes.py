@@ -200,7 +200,8 @@ def test_backends_capability_api_exposes_all_public_modes():
     assert tuple(available) == ("pure-python", "zone-python", "zone-cpp", "zone-all", "xstar-cpp")
     assert available["pure-python"] is True
     described = backends.describe()
-    assert described["package_version"] == "0.6.60"
+    from xstar_tools.execution import package_version
+    assert described["package_version"] == package_version()
     assert described["science_revision"] == SCIENCE_REVISION
     assert described["zone_abi"] == ZONE_ABI_VERSION
     assert set(described["modes"]) == set(available)

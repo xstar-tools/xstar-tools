@@ -1,5 +1,50 @@
 # CHANGELOG
 
+# xstar_tools 0.6.61 - 2026-08-09
+
+- Rewrote `README.md` around the five stable public execution modes with CLI, native, Python API, provenance, and benchmark examples.
+- Added `xstar-tools benchmark list|run|compare|all` and the `xstar-tools-benchmark` console entry point.
+- Added a canonical 62-case benchmark harness: all 62 cases run by default in `zone-cpp`, `zone-all`, and `xstar-cpp`; a default O/Mg/Ca subset runs in `pure-python` and `zone-python`.
+- Added resumable case-state/log/output manifests and optional C++ build support.
+- Added Fortran comparison using the accepted FITS normalized-L1 material policy and frozen Option-23 STEP numeric science gate, including exact matching of the two documented Ca/O structural exceptions.
+- Added optional comparison to `v064812344_all62_three_mode.tar.gz`, mapping `zone-cpp -> cpp-zone`, `zone-all -> cpp-all`, and `xstar-cpp -> standalone-cpp`, with FITS payload and normalized STEP exactness checks.
+- Added current `zone-cpp`/`zone-all`/`xstar-cpp` cross-mode exactness comparison.
+- Benchmark and reference archives remain external and are explicitly excluded from package contents.
+- No frozen scientific Python or C++ implementation was changed; accepted science revision remains `0.6.48.12.3.45.3.3.8` and production-zone ABI remains `6048110`.
+
+## 0.6.60 - stable public execution modes
+
+- Add five stable public modes: `pure-python`, `zone-python`, `zone-cpp`, `zone-all`, and `xstar-cpp`.
+- Map `zone-cpp`/`zone-all` exactly to the frozen `cpp-zone`/`cpp-all` shared-production paths; keep legacy backend flags as advanced compatibility aliases.
+- Add `xstar_tools.backends.available()` / `describe()`, unified `xstar-tools backends` / `doctor`, and `xstar-tools run --mode ...`.
+- Add a public `xstar-cpp` native frontend while retaining compatibility executable `xstar_cpp`; normal direct native production accepts XSTAR-style `name=value` tokens without Python, while `run-production --parameters` remains the machine-readable path.
+- Add execution provenance for requested/actual mode, package/science versions, C/zone ABIs, C++ identities, CPU feature path, fallback events, and atomic-data paths/SHA-256 hashes.
+- Add a characterization contract proving public names select the same internal paths as the frozen legacy modes. No scientific behavior change.
+
+## 0.6.59 - local-zone naming cleanup
+
+- Rename the active fixed-state source/module filenames to the architecture term `local_zone`: `all_element_local_zone.py`, `complete_local_zone.py`, `source_port_complete_local_zone_cli.py`, `local_zone_engine.cpp`, and `xstar_local_zone_engine.h`.
+- Rename the native shared library target from `libxstar_fixed_state.so` to `libxstar_local_zone.so`; exported `xstar_fixed_state_*` C ABI symbols remain unchanged for ABI 6048110 compatibility.
+- Rename active examples, the complete-local-zone characterization test, and the fixed-state architecture diagram to `local_zone` filenames.
+- Preserve historical output keys/fixture names and frozen qualification manifests that use `fixed_state`; those names are evidence, not current source architecture.
+- No scientific or numerical behavior change.
+
+## 0.6.58 - C++ warning-clean build
+
+- Fix all compiler warnings reported by the active native Makefile under `-Wall -Wextra -Wpedantic` without adding warning-suppression flags.
+- Make Type50 template/retired-helper unusedness explicit with `[[maybe_unused]]`; preserve the accepted profile arithmetic and dispatch unchanged.
+- Expand misleading one-line control flow in fixed-state and ATDB runtime code into explicit braces/statements without changing evaluation order.
+- Remove only unread, side-effect-free locals and mark retained legacy/diagnostic helpers or parameters `[[maybe_unused]]` in standalone, FITS publication, ATDB, and STEP-log code.
+- Add `qualification/cpp_warning_cleanup_0_6_58.json`, a dependency-free warning-cleanup checker, developer documentation, and contract tests.
+- Preserve accepted science revision `0.6.48.12.3.45.3.3.8`, frozen C++ science baseline `0.6.48.12.3.44`, and ABI `6048110`.
+
+## 0.6.57 - C++ namespace/history cleanup
+
+- Archive retired `opacity_type50_experiments.cpp` and unused `xstar_backend_common.cpp` outside the installed C++ tree.
+- Preserve retired source bytes under `historical/cpp/retired_sources/`; keep all active headers because each remains a build/runtime/public-interface dependency.
+- Archive superseded `Makefile.before_v67` under `historical/cpp/build/`.
+- Add a C++ history-cleanup gate; active native science and ABI remain unchanged.
+
 ## 0.6.60 - stable public execution modes - 2026-08-08
 
 - Add five stable public modes: `pure-python`, `zone-python`, `zone-cpp`, `zone-all`, and `xstar-cpp`.

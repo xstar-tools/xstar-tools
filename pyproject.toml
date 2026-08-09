@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xstar-tools"
-version = "0.6.60"
+version = "0.6.61"
 description = "Source-faithful Python/C++ XSTAR tools, atomic-data utilities, benchmarks, and runtime"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -35,6 +35,7 @@ sparse = ["scipy>=1.8"]
 [project.scripts]
 
 xstar-tools = "xstar_tools.cli.main:main"
+xstar-tools-benchmark = "xstar_tools.benchmarks.public_suite:main"
 xstar-tools-run-xstar = "xstar_tools.cli.run_xstar:main"
 xstar-tools-inspect-atdb = "xstar_tools.cli.inspect_atdb:main"
 xstar-tools-xstinitable = "xstar_tools.cli.xstinitable:main"

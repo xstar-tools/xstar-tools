@@ -69,6 +69,9 @@ def main(argv: list[str] | None = None) -> int:
         return _backends(rest)
     if command == "doctor":
         return _doctor(rest)
+    if command == "benchmark":
+        from xstar_tools.benchmarks.public_suite import main as benchmark_main
+        return int(benchmark_main(rest))
     if command in {"version", "--version", "-V"}:
         from xstar_tools.execution import package_version, SCIENCE_REVISION
         print(f"xstar-tools {package_version()} (science {SCIENCE_REVISION})")
