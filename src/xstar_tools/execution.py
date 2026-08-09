@@ -5,7 +5,7 @@ execution paths.  It does not implement scientific calculations itself.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, replace
 from enum import Enum
 from hashlib import sha256
 import json
@@ -15,6 +15,8 @@ from pathlib import Path
 import platform
 import subprocess
 import tempfile
+import time
+import shutil
 from typing import Any, Mapping
 from contextlib import contextmanager
 
@@ -394,16 +396,17 @@ def _native_payload_from_command(command: str, *, atdb_path: str | Path, coheat_
     return payload
 
 
-def run_xstar(*, mode: str | ExecutionMode = ExecutionMode.PURE_PYTHON, run_script: str | Path | None = None,
+def _run_xstar_legacy(*, mode: str | ExecutionMode = ExecutionMode.PURE_PYTHON, run_script: str | Path | None = None,
               command: str | None = None, atdb_path: str | Path | None = None,
-              coheat_path: str | Path | None = None, output_dir: str | Path = ".", **kwargs: Any) -> PublicRunResult:
+              coheat_path: str | Path | None = None, output_dir: str | Path = ".",
+              _mapping_override: ModeMapping | None = None, **kwargs: Any) -> PublicRunResult:
     """Run XSTAR through one of the five stable public execution modes.
 
     Advanced/internal backend flags remain available through the legacy runner;
     this function deliberately accepts only the stable public mode boundary.
     """
     mode_name = normalize_mode(mode)
-    mapping = resolve_mode(mode_name)
+    mapping = _mapping_override or resolve_mode(mode_name)
     if (run_script is None) == (command is None):
         raise ValueError("exactly one of run_script or command is required")
     if mapping.standalone:
@@ -461,6 +464,159 @@ def run_xstar(*, mode: str | ExecutionMode = ExecutionMode.PURE_PYTHON, run_scri
         atdb_path=prov.get("atdb_path", atdb_path), coheat_path=coheat_path)
     summary["provenance"] = prov
     return PublicRunResult(bool(summary.get("ready")), mode_name, summary)
+
+
+def _config_progress_callback(event: str, details: Mapping[str, Any]) -> None:
+    detail = " ".join(f"{key}={value}" for key, value in sorted(details.items()))
+    print(f"xstar: {event}" + (f" {detail}" if detail else ""), flush=True)
+
+
+@contextmanager
+def _public_run_environment(*, threads: int, reproducible: bool):
+    updates = {"OMP_NUM_THREADS": str(int(threads)), "XSTAR_TOOLS_REPRODUCIBLE": "1" if reproducible else "0"}
+    old = {key: os.environ.get(key) for key in updates}
+    try:
+        os.environ.update(updates)
+        yield
+    finally:
+        for key, value in old.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
+def _mapping_with_advanced_overrides(mapping: ModeMapping, overrides: Mapping[str, str]) -> ModeMapping:
+    if not overrides:
+        return mapping
+    fields: dict[str, str] = {}
+    rename = {"backend": "global_backend"}
+    for key, value in overrides.items():
+        fields[rename.get(key, key)] = value
+    return replace(mapping, **fields)
+
+
+def _prepare_public_output_directory(path: Path, *, overwrite: bool) -> Path:
+    out = Path(path).expanduser().resolve()
+    if out.exists() and any(out.iterdir()):
+        if not overwrite:
+            raise FileExistsError(
+                f"output directory is not empty: {out}; pass overwrite=True to replace it deterministically"
+            )
+        shutil.rmtree(out)
+    out.mkdir(parents=True, exist_ok=True)
+    return out
+
+
+def _run_xstar_config(config: Any):
+    from .config import XStarConfig
+    from .data import XStarData
+    from .result import XStarProducts, XStarResult
+
+    if not isinstance(config, XStarConfig):
+        raise TypeError("run_xstar(config) requires an XStarConfig instance")
+    config.validate()
+    data = config.data_dir if isinstance(config.data_dir, XStarData) else XStarData.from_directory(config.data_dir)
+    data.validate()
+    output_dir = _prepare_public_output_directory(Path(config.output_dir), overwrite=bool(config.overwrite))
+    mapping = _mapping_with_advanced_overrides(resolve_mode(config.mode_name), config.advanced_backend_overrides)
+
+    legacy_kwargs: dict[str, Any] = {
+        "mode": config.mode_name,
+        "atdb_path": data.atdb,
+        "coheat_path": data.coheat,
+        "output_dir": output_dir,
+        "overwrite": True,
+        "_mapping_override": mapping,
+    }
+    if config.cache_dir is not None:
+        legacy_kwargs["cache_dir"] = config.cache_dir
+    legacy_kwargs["use_cache"] = bool(config.use_cache)
+    legacy_kwargs["rebuild_cache"] = bool(config.rebuild_cache)
+    if config.progress and config.mode_name in {"pure-python", "zone-python"}:
+        legacy_kwargs["progress_callback"] = _config_progress_callback
+
+    source_script = config.source_run_script()
+    temp_dir = None
+    if source_script is not None:
+        legacy_kwargs["run_script"] = source_script
+    else:
+        command = config.to_xstar_command()
+        if config.mode_name in {"zone-cpp", "zone-all"}:
+            temp_dir = tempfile.TemporaryDirectory(prefix="xstar_tools_public_config_")
+            script = Path(temp_dir.name) / "run_xstar.sh"
+            script.write_text("#!/bin/sh\n" + command + "\n", encoding="utf-8")
+            legacy_kwargs["run_script"] = script
+        else:
+            legacy_kwargs["command"] = command
+
+    started = time.perf_counter()
+    try:
+        with _public_run_environment(threads=config.threads, reproducible=config.reproducible):
+            legacy = _run_xstar_legacy(**legacy_kwargs)
+    finally:
+        if temp_dir is not None:
+            temp_dir.cleanup()
+    elapsed = time.perf_counter() - started
+
+    summary = dict(legacy.summary)
+    provenance = dict(summary.get("provenance", {}))
+    underlying_execution = dict(provenance.get("execution", {}))
+    execution = execution_provenance(
+        requested_mode=config.mode_name, provenance=provenance, atdb_path=data.atdb, coheat_path=data.coheat,
+        cpp=underlying_execution.get("cpp") if isinstance(underlying_execution.get("cpp"), Mapping) else None,
+    )
+    execution.update(underlying_execution)
+    execution.update({
+        "public_api": "XStarConfig",
+        "input_source_kind": config.source_kind,
+        "threads": int(config.threads),
+        "reproducible": bool(config.reproducible),
+        "advanced_backend_overrides": dict(config.advanced_backend_overrides),
+    })
+    if config.advanced_backend_overrides:
+        execution["actual_mode"] = "advanced"
+    provenance["execution"] = execution
+    provenance["data"] = data.identity()
+
+    return_code = int(summary.get("returncode", 0 if legacy.ready else 1))
+    success = bool(legacy.ready) and return_code == 0
+    products = XStarProducts(output_dir)
+    diagnostics_raw = summary.get("diagnostics", ())
+    warnings_raw = summary.get("warnings", ())
+    diagnostics = tuple(str(x) for x in diagnostics_raw) if isinstance(diagnostics_raw, (list, tuple)) else (() if not diagnostics_raw else (str(diagnostics_raw),))
+    warnings = tuple(str(x) for x in warnings_raw) if isinstance(warnings_raw, (list, tuple)) else (() if not warnings_raw else (str(warnings_raw),))
+    fallback_events = execution.get("fallback_events", provenance.get("fallback_events", ()))
+    if isinstance(fallback_events, (list, tuple)):
+        warnings = warnings + tuple(f"backend fallback: {item}" for item in fallback_events)
+    timings = summary.get("timings", summary.get("runtime_profile", {}))
+    if not isinstance(timings, Mapping):
+        timings = {}
+    return XStarResult(
+        success=success, status="success" if success else "failed", return_code=return_code,
+        output_dir=output_dir, products=products, step_log=products.step_log, runtime_seconds=float(elapsed),
+        timings=dict(timings), provenance=provenance, diagnostics=diagnostics, warnings=warnings, raw_summary=summary,
+    )
+
+
+def run_xstar(config: Any = None, *, mode: str | ExecutionMode = ExecutionMode.PURE_PYTHON,
+              run_script: str | Path | None = None, command: str | None = None,
+              atdb_path: str | Path | None = None, coheat_path: str | Path | None = None,
+              output_dir: str | Path = ".", **kwargs: Any):
+    """Run XSTAR through the stable public API.
+
+    Recommended usage is ``run_xstar(XStarConfig(...))``.  The Milestone-3
+    keyword-style call remains a compatibility alias and returns
+    :class:`PublicRunResult`.
+    """
+    if config is not None:
+        if any(x is not None for x in (run_script, command, atdb_path, coheat_path)) or output_dir != "." or mode != ExecutionMode.PURE_PYTHON or kwargs:
+            raise TypeError("run_xstar(XStarConfig) cannot be combined with legacy execution keyword arguments")
+        return _run_xstar_config(config)
+    return _run_xstar_legacy(
+        mode=mode, run_script=run_script, command=command, atdb_path=atdb_path,
+        coheat_path=coheat_path, output_dir=output_dir, **kwargs,
+    )
 
 
 __all__ = [

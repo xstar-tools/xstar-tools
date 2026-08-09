@@ -21,6 +21,95 @@ ATDB_FILENAME = "atdb.fits"
 PACKAGE_DIR = Path(__file__).resolve().parent
 
 
+from dataclasses import dataclass
+from hashlib import sha256
+from typing import Any
+
+
+@dataclass(frozen=True)
+class XStarDataValidation:
+    """Result of validating a local XSTAR scientific-data directory."""
+    valid: bool
+    directory: Path
+    atdb: Path
+    coheat: Path
+    constants: Path
+    caches: tuple[Path, ...] = ()
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "valid": self.valid,
+            "directory": str(self.directory),
+            "atdb": str(self.atdb),
+            "coheat": str(self.coheat),
+            "constants": str(self.constants),
+            "caches": [str(p) for p in self.caches],
+        }
+
+
+def _sha256_path(path: Path) -> str:
+    h = sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+@dataclass(frozen=True)
+class XStarData:
+    """Stable locator for local XSTAR atomic/scientific data.
+
+    Validation is intentionally local-only.  It never downloads ``atdb.fits``
+    or any other large scientific data as a side effect of a run.
+    """
+    directory: Path
+    cache_dirs: tuple[Path, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "directory", Path(self.directory).expanduser().resolve())
+        object.__setattr__(self, "cache_dirs", tuple(Path(p).expanduser().resolve() for p in self.cache_dirs))
+
+    @classmethod
+    def from_directory(cls, directory: str | Path, *, cache_dirs: tuple[str | Path, ...] = ()) -> "XStarData":
+        return cls(Path(directory), tuple(Path(p) for p in cache_dirs))
+
+    @property
+    def atdb(self) -> Path:
+        return self.directory / "atdb.fits"
+
+    @property
+    def coheat(self) -> Path:
+        return self.directory / "coheat.dat"
+
+    @property
+    def constants(self) -> Path:
+        return Path(__file__).resolve().parent / "xstar" / "cpp" / "constants.def"
+
+    def validate(self) -> XStarDataValidation:
+        if not self.directory.is_dir():
+            raise FileNotFoundError(f"XSTAR data directory not found: {self.directory}")
+        problem = _atdb_file_problem(self.atdb)
+        if problem is not None:
+            raise FileNotFoundError(f"invalid atdb.fits at {self.atdb}: {problem}")
+        if not self.coheat.is_file():
+            raise FileNotFoundError(f"required coheat.dat not found: {self.coheat}")
+        if not self.constants.is_file():
+            raise FileNotFoundError(f"package constants.def not found: {self.constants}")
+        bad_caches = [p for p in self.cache_dirs if not p.exists()]
+        if bad_caches:
+            raise FileNotFoundError("optional cache path(s) do not exist: " + ", ".join(map(str, bad_caches)))
+        return XStarDataValidation(True, self.directory, self.atdb, self.coheat, self.constants, self.cache_dirs)
+
+    def identity(self) -> dict[str, Any]:
+        validation = self.validate()
+        return {
+            **validation.as_dict(),
+            "atdb_sha256": _sha256_path(self.atdb),
+            "coheat_sha256": _sha256_path(self.coheat),
+            "constants_sha256": _sha256_path(self.constants),
+        }
+
+
 def _project_root_from_source_tree() -> Optional[Path]:
     """Return the repository/source-tree root when running from ``src/``.
 

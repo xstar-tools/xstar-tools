@@ -1,5 +1,15 @@
 # CHANGELOG
 
+# xstar_tools 0.6.66 - 2026-08-09
+
+- Add the Milestone-4 stable public Python API: `XStarConfig`, `XStarData`, `XStarProducts`, `XStarResult`, and configuration-driven `run_xstar(config)`.
+- Support parameter sources from HEASoft/IRAF-style `.par` files, in-memory mappings, and original Fortran run directories containing `run_xstar.sh`; provide deterministic `.par` export.
+- Add a local-only `XStarData` validator for `atdb.fits`, `coheat.dat`, package `constants.def`, and optional cache paths; validation never downloads large scientific data.
+- Add deterministic output-directory policy, run-scoped thread/reproducibility environment restoration, complete public provenance, typed product accessors, and repeated-run support with explicit `overwrite=True`.
+- Preserve the Milestone-3 keyword-style `run_xstar(mode=..., ...)` API for compatibility while recommending `run_xstar(XStarConfig(...))` for new applications.
+- Add `qualification/public_python_api_0_6_66.json`, a dependency-light checker, developer documentation, and characterization tests.
+- No `xstar_tools.xstar` scientific implementation or C++ scientific source/header changes; accepted science revision and ABIs remain frozen.
+
 # xstar_tools 0.6.65 - 2026-08-09
 
 - Retire the remaining historical source-port attribution/DSEC/probe command layer from active `src/xstar_tools/`: archive 39 top-level modules and remove 37 obsolete console-script aliases.

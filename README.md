@@ -2,7 +2,7 @@
 
 `xstar_tools` is a source-faithful Python/C++ implementation and productization layer for XSTAR photoionization calculations. The project keeps the accepted scientific behavior tied to XSTAR Fortran 2.59g while exposing stable Python, accelerated Python, shared C++, and native standalone execution modes.
 
-The current distribution is **0.6.65**. The accepted scientific revision remains **0.6.48.12.3.45.3.3.8**, the frozen all-62 C++ scientific baseline remains **0.6.48.12.3.44**, the public C API ABI is **60487**, and the production-zone ABI is **6048110**.
+The current distribution is **0.6.66**. The accepted scientific revision remains **0.6.48.12.3.45.3.3.8**, the frozen all-62 C++ scientific baseline remains **0.6.48.12.3.44**, the public C API ABI is **60487**, and the production-zone ABI is **6048110**.
 
 ## Stable execution modes
 
@@ -218,25 +218,95 @@ The native frontend writes `xstar_execution_provenance.json` with the package/sc
 
 ## Python API
 
-The stable execution modes are also available directly from Python:
+The recommended stable Python API is configuration-driven:
 
 ```python
-from xstar_tools import BackendMode, run_xstar
+from xstar_tools import XStarConfig, BackendMode, run_xstar
 
-result = run_xstar(
-    mode=BackendMode.ZONE_CPP,
-    run_script="original_xstar/helike_type69/o7_ne1e10/run_xstar.sh",
-    atdb_path="/media/linux/mhd/xstar/xstar/data/atdb.fits",
-    coheat_path="/media/linux/mhd/xstar/xstar/data/coheat.dat",
-    output_dir="run-o7-zone-cpp",
+config = XStarConfig(
+    input_file="xstar.par",
+    data_dir="/media/linux/mhd/xstar/xstar/data",
+    output_dir="run1",
+    mode=BackendMode.ZONE_PYTHON,
 )
 
-print(result.ready)
-print(result.mode)
-print(result.summary["provenance"]["execution"])
+result = run_xstar(config)
+
+print(result.success)
+print(result.return_code)
+print(result.products.spectrum)
+print(result.step_log)
+print(result.provenance["execution"])
 ```
 
-Available modes and runtime capabilities can be queried programmatically:
+The same object can be constructed from an in-memory mapping:
+
+```python
+config = XStarConfig.from_mapping(
+    {
+        "spectrum": "pow",
+        "density": "1e10",
+        "temperature": "100",
+        "column": "1e20",
+        "rlogxi": "1.5",
+    },
+    data_dir="/media/linux/mhd/xstar/xstar/data",
+    output_dir="run-mapping",
+    mode=BackendMode.PURE_PYTHON,
+)
+```
+
+Or from an original Fortran run directory containing `run_xstar.sh`:
+
+```python
+config = XStarConfig.from_fortran_run_directory(
+    "original_xstar/helike_type69/o7_ne1e10",
+    data_dir="/media/linux/mhd/xstar/xstar/data",
+    output_dir="run-o7",
+    mode=BackendMode.ZONE_CPP,
+)
+result = run_xstar(config)
+```
+
+Canonical HEASoft-style parameter files can be read/written without running science:
+
+```python
+config = XStarConfig.from_par_file(
+    "xstar.par",
+    data_dir="/media/linux/mhd/xstar/xstar/data",
+    output_dir="run1",
+)
+config.to_par_file("canonical-xstar.par")
+```
+
+Local scientific data has one explicit locator and validator:
+
+```python
+from xstar_tools.data import XStarData
+
+data = XStarData.from_directory("/media/linux/mhd/xstar/xstar/data")
+data.validate()
+```
+
+`XStarData.validate()` never downloads `atdb.fits` or other large data. Downloads remain explicit user actions.
+
+The public result is `XStarResult`; `result.products` is an `XStarProducts` accessor for the nine principal FITS outputs and `xout_step.log`. The default API refuses to run into a non-empty output directory; pass `overwrite=True` in `XStarConfig` to replace that directory deterministically.
+
+The Milestone-3 keyword-style form remains available for compatibility with existing benchmark and CLI code:
+
+```python
+from xstar_tools import run_xstar
+
+legacy = run_xstar(
+    mode="zone-cpp",
+    run_script="run_xstar.sh",
+    atdb_path="/path/to/atdb.fits",
+    coheat_path="/path/to/coheat.dat",
+    output_dir="run-legacy",
+)
+```
+
+Available modes and runtime capabilities can still be queried programmatically:
 
 ```python
 from xstar_tools import backends
