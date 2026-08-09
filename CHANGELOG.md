@@ -1,5 +1,14 @@
 # CHANGELOG
 
+# xstar_tools 0.6.65 - 2026-08-09
+
+- Retire the remaining historical source-port attribution/DSEC/probe command layer from active `src/xstar_tools/`: archive 39 top-level modules and remove 37 obsolete console-script aliases.
+- `source_port_dsec_eval2_internal_cli.py` is historical-only and now lives under `historical/python/source_port_cli_campaign/`.
+- Keep `source_port_physical_runner_cli.py` active because the stable `xstar-tools run` path and public execution-mode characterization still use it.
+- Preserve all retired module bytes and SHA-256 hashes in the full history archive; the lean distribution excludes them.
+- Extend the local-zone/source-root/parity cleanup gates so historical relocation is recognized without weakening the frozen science evidence.
+- No scientific implementation, C++ science source, accepted science revision, or ABI changes.
+
 # xstar_tools 0.6.64 - 2026-08-09
 
 - Remove the generated empty `o7_solver_source_fit_density_xstar_grid/` directory from the package tree and make its absence an explicit cleanliness contract.

@@ -13,7 +13,6 @@ def test_active_local_zone_paths_and_legacy_abi():
       'src/xstar_tools/xstar/local_zone.py',
       'src/xstar_tools/xstar/all_element_local_zone.py',
       'src/xstar_tools/xstar/complete_local_zone.py',
-      'src/xstar_tools/source_port_complete_local_zone_cli.py',
       'src/xstar_tools/xstar/cpp/local_zone_engine.cpp',
       'src/xstar_tools/xstar/cpp/xstar_local_zone_engine.h',
     ]
@@ -29,3 +28,9 @@ def test_naming_manifest_is_behavior_neutral():
     assert d['policy']['science_behavior_changed'] is False
     assert all(v['normalizes_to_base'] for k,v in d['renamed_paths'].items() if not k.endswith('.svg'))
     assert all(v['normalizes_to_base'] for v in d['approved_shared_source_edits'].values())
+
+
+def test_local_zone_source_port_cli_is_historical_after_065_cleanup():
+    assert not (ROOT/'src/xstar_tools/source_port_complete_local_zone_cli.py').exists()
+    if (ROOT/'historical').exists():
+        assert (ROOT/'historical/python/source_port_cli_campaign/source_port_complete_local_zone_cli.py').is_file()

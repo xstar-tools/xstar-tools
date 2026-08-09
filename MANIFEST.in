@@ -45,3 +45,5 @@ include qualification/example_history_cleanup_0_6_63.json
 
 include tools/qualification/check_source_root_history_cleanup.py
 include qualification/source_root_history_cleanup_0_6_64.json
+include tools/qualification/check_legacy_source_port_cli_cleanup.py
+include qualification/legacy_source_port_cli_cleanup_0_6_65.json

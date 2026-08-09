@@ -2,7 +2,7 @@
 
 `xstar_tools` is a source-faithful Python/C++ implementation and productization layer for XSTAR photoionization calculations. The project keeps the accepted scientific behavior tied to XSTAR Fortran 2.59g while exposing stable Python, accelerated Python, shared C++, and native standalone execution modes.
 
-The current distribution is **0.6.61**. The accepted scientific revision remains **0.6.48.12.3.45.3.3.8**, the frozen all-62 C++ scientific baseline remains **0.6.48.12.3.44**, the public C API ABI is **60487**, and the production-zone ABI is **6048110**.
+The current distribution is **0.6.65**. The accepted scientific revision remains **0.6.48.12.3.45.3.3.8**, the frozen all-62 C++ scientific baseline remains **0.6.48.12.3.44**, the public C API ABI is **60487**, and the production-zone ABI is **6048110**.
 
 ## Stable execution modes
 
