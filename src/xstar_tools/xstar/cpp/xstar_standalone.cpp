@@ -5051,7 +5051,7 @@ std::vector<StandaloneElementSpec> active_elements_from_parameters(const std::st
     return out;
 }
 
-void write_native_standalone_case_metadata(const std::filesystem::path& dir, const std::vector<StandaloneElementSpec>& elements) {
+[[maybe_unused]] void write_native_standalone_case_metadata(const std::filesystem::path& dir, const std::vector<StandaloneElementSpec>& elements) {
     std::filesystem::create_directories(dir);
     {
         std::ofstream out(dir / "elements.csv");
@@ -5075,7 +5075,7 @@ void write_native_standalone_case_metadata(const std::filesystem::path& dir, con
     }
 }
 
-xstar_run_state::ProductWritingState build_standalone_native_product_state(
+[[maybe_unused]] xstar_run_state::ProductWritingState build_standalone_native_product_state(
     const Options& options,
     const std::filesystem::path& case_dir,
     const std::filesystem::path& metadata_dir,
@@ -5916,7 +5916,7 @@ double two_plane_or_scalar(const std::vector<double>& values, std::size_t plane_
     return 0.0;
 }
 
-std::vector<double> line_plane_values(const std::vector<double>& primary,
+[[maybe_unused]] std::vector<double> line_plane_values(const std::vector<double>& primary,
                                       const std::vector<double>& fallback,
                                       std::size_t count,
                                       std::size_t plane) {
@@ -5960,11 +5960,10 @@ std::vector<double> rrc_plane_values(const xstar_run_state::ProductWritingState&
 }
 
 std::vector<double> rrc_scalar_values(const xstar_run_state::ProductWritingState& product,
-                                      const xstar_run_state::ExactSourceWorkspaceState& ws,
+                                      [[maybe_unused]] const xstar_run_state::ExactSourceWorkspaceState& ws,
                                       const std::vector<double>& primary,
                                       const std::vector<double>& fallback) {
     std::vector<double> out(product.rrc_identities.size(), 0.0);
-    const std::size_t continuum_count = ws.native_continuum_count;
     for (std::size_t i = 0; i < product.rrc_identities.size(); ++i) {
         // Native opakab/cabab arrays use the source one-based continuum
         // pointer as the actual vector slot; slot zero is intentionally unused.
@@ -6249,7 +6248,7 @@ std::vector<double> gather_native_line_plane_v82(
     return out;
 }
 
-std::vector<double> public_line_indices_v82() {
+[[maybe_unused]] std::vector<double> public_line_indices_v82() {
     std::vector<double> out;
     out.reserve(kV82PublicLineInventory.size());
     for (const auto index : kV82PublicLineInventory) out.push_back(static_cast<double>(index));
@@ -6975,7 +6974,7 @@ void read_source_populations_v1724(
     SourcePopulationGlobalV1724& global,
     SourcePopulationCompactV1724& compact);
 
-xstar_run_state::ProductWritingState build_real_native_product_state_from_fixed_engine(
+[[maybe_unused]] xstar_run_state::ProductWritingState build_real_native_product_state_from_fixed_engine(
     Options& options,
     const std::filesystem::path& output,
     double& measured_run_seconds,
@@ -8487,7 +8486,7 @@ ThermalLedgerGateV1712 compare_sequence_thermal_ledger_v1716(
     return result;
 }
 
-int command_run_native_sequence1_v1715(Options options) {
+[[maybe_unused]] int command_run_native_sequence1_v1715(Options options) {
     const auto output = std::filesystem::path(options.output_dir);
     std::filesystem::create_directories(output);
     for (const char* name : {"xo01_detail.fits", "xo01_detal2.fits", "xo01_detal3.fits", "xo01_detal4.fits",
@@ -8591,7 +8590,6 @@ int command_run_native_sequence1_v1715(Options options) {
     const auto row = read_single_csv_row_v1711(output / "native_thermal_budget.csv");
     const auto number = [&](const char* key) { auto it=row.find(key); if(it==row.end()) throw std::runtime_error(std::string("thermal budget missing ")+key); return std::stod(it->second); };
     const auto integer = [&](const char* key) { return static_cast<std::size_t>(number(key)); };
-    const auto text = [&](const char* key) { auto it=row.find(key); if(it==row.end()) throw std::runtime_error(std::string("thermal budget missing ")+key); return it->second; };
 
     const bool radiation_ok = integer("input_radiation_count") == 9999 && integer("input_dsec_radiation_count") == 9999 &&
         integer("input_bremsa_count") == 9999 && relative_one_percent_v1711(number("covering_fraction"), 1.0);
@@ -10559,7 +10557,7 @@ bool write_full61_retention_staging_v172521(
 
 
 
-void promote_true_production_surface_v65(xstar_run_state::WholeRunAccumulatedState& whole) {
+[[maybe_unused]] void promote_true_production_surface_v65(xstar_run_state::WholeRunAccumulatedState& whole) {
     std::size_t fallback_energy_count = 0;
     for (const auto& zone : whole.radial_zones) {
         const auto& evaluation = zone.accepted_controller.evaluation;
@@ -11533,7 +11531,7 @@ void write_sequence58_final_population_boundary_audit_v82_patch511(
 }
 
 void write_call3_opacity_producer_decomposition_v82_patch511(
-    StandaloneControllerDataV67& data,
+    [[maybe_unused]] StandaloneControllerDataV67& data,
     const std::filesystem::path& transfer_dir) {
     const auto component_path = transfer_dir / "call3_continuum_opacity_component_attribution.csv";
     const auto producer_path = transfer_dir / "native_opacity_producer_inventory.csv";
@@ -13755,7 +13753,7 @@ void advance_stpcut_depths_v82_patch520145(
     }
 }
 
-void advance_consecutive_transport_v71(
+[[maybe_unused]] void advance_consecutive_transport_v71(
     StandaloneControllerDataV67& data,
     FixedDsecSnapshot& local_boundary,
     double delta_radius_cm,
@@ -15799,7 +15797,7 @@ bool diagnostic_attribution_enabled_v82_patch52017() {
 void write_sequence23_diagnostic_preview_v82_patch513(
     const Options& options,
     const xstar_atdb_runtime::ProductionParameters& params,
-    const xstar_atdb_runtime::ResolvedAtomicData& atomic,
+    [[maybe_unused]] const xstar_atdb_runtime::ResolvedAtomicData& atomic,
     const StandaloneControllerDataV67& data,
     const xstar_run_state::WholeRunAccumulatedState& seed,
     const std::vector<FixedDsecSnapshot>& finals,
@@ -15826,7 +15824,6 @@ void write_sequence23_diagnostic_preview_v82_patch513(
         preview.fixed_evaluations.push_back(copy_real_native_snapshot(snapshot, 0.0));
     }
 
-    const double total_depth_cm = params.column_cm2 / std::max(params.density_cm3, 1.0);
     const double sequence23_depth_cm = data.cumulative_depth_cm;
     auto append_preview_zone = [&](const FixedDsecSnapshot& snapshot,
                                    std::size_t zone_index,
@@ -18439,7 +18436,7 @@ int command_run_standalone_production_v67(const Options& options, const std::fil
 }
 
 
-int command_standalone_capabilities_v66() {
+[[maybe_unused]] int command_standalone_capabilities_v66() {
     std::cout << "V048746255172566_STANDALONE_EXECUTABLE=YES\n"
               << "V048746255172566_TWO_ARGUMENT_INTERFACE=YES\n"
               << "V048746255172566_FILE_SILENT_POLICY=IMPLEMENTED\n"
@@ -18479,7 +18476,7 @@ std::filesystem::path resolve_standalone_atomic_database_v66(const Options& opti
     return {};
 }
 
-int command_run_standalone_production_v66(const Options& options) {
+[[maybe_unused]] int command_run_standalone_production_v66(const Options& options) {
     if (options.parameters_path.empty() || options.output_dir.empty()) {
         std::cerr << "run-production requires --parameters and --output-dir\n";
         std::cout << "V048746255172566_RESULT=REJECT_NOT_STANDALONE_PRODUCTION_PATH\n";
@@ -18821,7 +18818,7 @@ int command_run_native_resumable_trajectory_v1724(Options options, bool true_pro
     return data.gate_failed_v1724 ? 20 : (rc == 0 ? 1 : rc);
 }
 
-int command_run_native_sequence12345678_v1723(Options options) {
+[[maybe_unused]] int command_run_native_sequence12345678_v1723(Options options) {
     const auto output = std::filesystem::path(options.output_dir);
     std::filesystem::create_directories(output);
     for (const char* name : {"xo01_detail.fits", "xo01_detal2.fits", "xo01_detal3.fits", "xo01_detal4.fits",
@@ -19584,7 +19581,7 @@ int command_run_native_sequence12345678_v1723(Options options) {
 
 }
 
-int command_run_native_controller_v1711(Options options) {
+[[maybe_unused]] int command_run_native_controller_v1711(Options options) {
     const auto started = std::chrono::steady_clock::now();
     const auto output = std::filesystem::path(options.output_dir);
     std::filesystem::create_directories(output);

@@ -23,3 +23,5 @@ prune historical
 include .github/workflows/parity-freeze.yml
 include tools/qualification/check_cpp_history_cleanup.py
 include qualification/cpp_history_cleanup_0_6_57.json
+include tools/qualification/check_cpp_warning_cleanup.py
+include qualification/cpp_warning_cleanup_0_6_58.json

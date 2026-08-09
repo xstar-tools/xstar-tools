@@ -14330,7 +14330,11 @@ int run_impl(
                             else { vmax = std::max(vmax, value); vmin = std::min(vmin, value); }
                         }
                         if (std::isfinite(value) && value != 0.0) {
-                            if (nz == 0u) first = i + 1u; last = i + 1u; ++nz;
+                            if (nz == 0u) {
+                                first = i + 1u;
+                            }
+                            last = i + 1u;
+                            ++nz;
                         }
                     }
                     stream << source_sequence_v82_patch511 << ',' << phase << ',' << values.size() << ','

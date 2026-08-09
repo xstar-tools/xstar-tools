@@ -27,6 +27,10 @@ def _cleanup():
     return json.loads((ROOT / "qualification" / "cpp_history_cleanup_0_6_57.json").read_text())
 
 
+def _warning():
+    return json.loads((ROOT / "qualification" / "cpp_warning_cleanup_0_6_58.json").read_text())
+
+
 def _resolve(rel: str) -> Path | None:
     p = ROOT / rel
     if p.is_file():
@@ -69,8 +73,15 @@ def test_cpp_source_comment_overlay_pins_active_and_archived_0654_bytes():
             assert cleanup_by_original[rel]["comment_overlay_annotated_sha256_0_6_54"] == info["annotated_sha256_0_6_54"]
             continue
         raw = p.read_bytes()
-        assert _sha(raw) == info["annotated_sha256_0_6_54"]
-        assert _sha(_strip(raw)) == info["normalized_sha256_0_6_54"]
+        warning = _warning()["files"]
+        if rel in warning:
+            winfo = warning[rel]
+            assert winfo["base_sha256_0_6_57"] == info["annotated_sha256_0_6_54"]
+            assert winfo["comment_overlay_normalized_sha256_0_6_54"] == info["normalized_sha256_0_6_54"]
+            assert _sha(raw) == winfo["cleaned_sha256_0_6_58"]
+        else:
+            assert _sha(raw) == info["annotated_sha256_0_6_54"]
+            assert _sha(_strip(raw)) == info["normalized_sha256_0_6_54"]
 
 
 def test_pinned_cpp_hashes_match_parity_freeze_after_stripping_top_comments():
@@ -84,4 +95,9 @@ def test_pinned_cpp_hashes_match_parity_freeze_after_stripping_top_comments():
         if p is None:
             assert cleanup_by_original[rel]["science_freeze_sha256"] == expected
         else:
-            assert _sha(_strip(p.read_bytes())) == expected
+            warning = _warning()["files"]
+            if rel in warning:
+                assert _sha(p.read_bytes()) == warning[rel]["cleaned_sha256_0_6_58"]
+                assert warning[rel]["science_freeze_sha256"] == expected
+            else:
+                assert _sha(_strip(p.read_bytes())) == expected

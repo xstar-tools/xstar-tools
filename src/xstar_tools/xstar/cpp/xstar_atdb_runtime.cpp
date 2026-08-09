@@ -654,7 +654,10 @@ int row_for_source_endpoint(const Layout& l,const Block& b,int local_or_idest) {
     throw std::runtime_error("ATDB source endpoint is non-positive");
 }
 const Block& block_for(const Layout& l,int ion) {
-    for (const auto& b:l.blocks) if (b.ion_index==ion) return b; throw std::runtime_error("missing layout ion block");
+    for (const auto& b : l.blocks) {
+        if (b.ion_index == ion) return b;
+    }
+    throw std::runtime_error("missing layout ion block");
 }
 const LevelValue& row_level(const Layout& l,int row) {
     if (row<=0 || row>l.n_rows) throw std::runtime_error("compact row outside layout");
@@ -670,7 +673,7 @@ std::pair<int,int> local_pair(const Layout& l,int ion,int a,int b) {
 }
 
 double mass_for_z(int z) { return z>0 && z<static_cast<int>(kAtomicMass.size()) ? kAtomicMass[static_cast<std::size_t>(z)] : std::max(1.0,2.0*z); }
-std::string ion_label(const Block& b) { return trim(b.label); }
+[[maybe_unused]] std::string ion_label(const Block& b) { return trim(b.label); }
 
 struct LoweredRecord {
     xstar_fixed_program_record_v1 record{};
@@ -1048,12 +1051,16 @@ ResolvedAtomicData resolve_atomic_data(const std::filesystem::path& parameters_p
     ResolvedAtomicData r; const auto base=parameters_path.parent_path();
     auto add_json=[&](std::vector<std::filesystem::path>& out,const char* key){auto v=json_string(json,key,"");if(!v.empty()){std::filesystem::path p(v);append_candidate(out,p.is_relative()?base/p:p);}};
     add_json(r.atdb_candidates,"atomic_database"); add_json(r.atdb_candidates,"atomic_db"); add_json(r.atdb_candidates,"atdb"); append_candidate(r.atdb_candidates,base/"atdb.fits");
-    if(const char* v=std::getenv("XSTAR_ATOMIC_DB"))append_candidate(r.atdb_candidates,v); if(const char* v=std::getenv("XSTAR_ATDB_FITS"))append_candidate(r.atdb_candidates,v);
-    if(const char* v=std::getenv("XSTAR_DATA"))append_candidate(r.atdb_candidates,std::filesystem::path(v)/"atdb.fits"); if(const char* v=std::getenv("XSTAR_HOME"))append_candidate(r.atdb_candidates,std::filesystem::path(v)/"data"/"atdb.fits");
+    if (const char* v = std::getenv("XSTAR_ATOMIC_DB")) append_candidate(r.atdb_candidates, v);
+    if (const char* v = std::getenv("XSTAR_ATDB_FITS")) append_candidate(r.atdb_candidates, v);
+    if (const char* v = std::getenv("XSTAR_DATA")) append_candidate(r.atdb_candidates, std::filesystem::path(v) / "atdb.fits");
+    if (const char* v = std::getenv("XSTAR_HOME")) append_candidate(r.atdb_candidates, std::filesystem::path(v) / "data" / "atdb.fits");
     if(!executable_path.empty()){auto d=executable_path.parent_path();append_candidate(r.atdb_candidates,d/"../data/atdb.fits");append_candidate(r.atdb_candidates,d/"../../data/atdb.fits");}
     append_candidate(r.atdb_candidates,"src/xstar_tools/xstar/data/atdb.fits"); append_candidate(r.atdb_candidates,"atdb.fits"); r.atdb=first_file(r.atdb_candidates);
     add_json(r.coheat_candidates,"coheat_file"); add_json(r.coheat_candidates,"coheat"); append_candidate(r.coheat_candidates,base/"coheat.dat");
-    if(const char* v=std::getenv("XSTAR_COHEAT"))append_candidate(r.coheat_candidates,v); if(const char* v=std::getenv("XSTAR_DATA"))append_candidate(r.coheat_candidates,std::filesystem::path(v)/"coheat.dat"); if(const char* v=std::getenv("XSTAR_HOME"))append_candidate(r.coheat_candidates,std::filesystem::path(v)/"data"/"coheat.dat");
+    if (const char* v = std::getenv("XSTAR_COHEAT")) append_candidate(r.coheat_candidates, v);
+    if (const char* v = std::getenv("XSTAR_DATA")) append_candidate(r.coheat_candidates, std::filesystem::path(v) / "coheat.dat");
+    if (const char* v = std::getenv("XSTAR_HOME")) append_candidate(r.coheat_candidates, std::filesystem::path(v) / "data" / "coheat.dat");
     if(!executable_path.empty()){auto d=executable_path.parent_path();append_candidate(r.coheat_candidates,d/"../data/coheat.dat");append_candidate(r.coheat_candidates,d/"../../data/coheat.dat");}
     append_candidate(r.coheat_candidates,"src/xstar_tools/xstar/data/coheat.dat"); append_candidate(r.coheat_candidates,"coheat.dat"); r.coheat=first_file(r.coheat_candidates); return r;
 }

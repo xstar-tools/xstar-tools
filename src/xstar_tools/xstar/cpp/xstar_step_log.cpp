@@ -418,7 +418,7 @@ void append_native_radial_summary(std::ofstream& out,
             local_e.reserve(static_cast<std::size_t>(nr)); local_z.reserve(static_cast<std::size_t>(nr));
             local_fwd.reserve(static_cast<std::size_t>(nr)); local_bck.reserve(static_cast<std::size_t>(nr));
             for(long long rr=1;st==0&&rr<=nr;++rr){
-                int any=0; double v=0;
+                int any=0;
                 double fwd=0.0,bck=0.0;
                 if(cf){fits_read_col(df,TDOUBLE,cf,rr,1,1,nullptr,&fwd,&any,&st);if(!std::isfinite(fwd))fwd=0.0;}
                 if(cb){fits_read_col(df,TDOUBLE,cb,rr,1,1,nullptr,&bck,&any,&st);if(!std::isfinite(bck))bck=0.0;}
@@ -999,7 +999,7 @@ std::map<std::pair<long long,long long>,long long> load_native_ion_row_minima(
     return minima;
 }
 
-std::vector<RrcSourceRecord> load_rrc_source_records(
+[[maybe_unused]] std::vector<RrcSourceRecord> load_rrc_source_records(
     const std::filesystem::path& output_dir,
     const xstar_run_state::ProductWritingState& state) {
     std::vector<RrcSourceRecord> out;
@@ -1064,7 +1064,7 @@ std::vector<RrcSourceRecord> load_rrc_source_records(
 
 struct ShellGeometry { double radius_cm = 0.0; double delta_cm = 0.0; };
 std::vector<int> named_hdu_numbers(fitsfile* fptr, const std::string& extname);
-std::vector<ShellGeometry> native_shell_geometry(
+[[maybe_unused]] std::vector<ShellGeometry> native_shell_geometry(
     const std::filesystem::path& output_dir,
     const xstar_run_state::ProductWritingState& state);
 

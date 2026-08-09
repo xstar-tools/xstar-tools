@@ -821,7 +821,7 @@ std::string roman(int value) {
     return out;
 }
 
-std::string ion_label(int z, int stage, bool underscore = false) {
+[[maybe_unused]] std::string ion_label(int z, int stage, bool underscore = false) {
     if (z < 1 || z > 30) return "unknown";
     std::string result = kSymbols[static_cast<std::size_t>(z)];
     if (underscore) {
@@ -836,7 +836,7 @@ std::string ion_label(int z, int stage, bool underscore = false) {
     return result;
 }
 
-std::string level_label(const RowMeta* row, int local_row) {
+[[maybe_unused]] std::string level_label(const RowMeta* row, int local_row) {
     std::ostringstream out;
     if (row && row->principal_n > 0) out << "n=" << row->principal_n << " l=" << row->orbital_l;
     else out << "row=" << local_row;
@@ -1111,11 +1111,11 @@ double boundary_temperature_t4(const BridgeBoundaryRow& row) {
 }
 
 
-double positive_finite_or(double value, double fallback = 0.0) {
+[[maybe_unused]] double positive_finite_or(double value, double fallback = 0.0) {
     return (std::isfinite(value) && value > 0.0) ? value : fallback;
 }
 
-double finite_or(double value, double fallback = 0.0) {
+[[maybe_unused]] double finite_or(double value, double fallback = 0.0) {
     return std::isfinite(value) ? value : fallback;
 }
 
@@ -1203,7 +1203,7 @@ void write_radial_keywords(fitsfile* fptr,
     check_fits(status, "write state source");
 }
 
-std::vector<LineRow> build_line_rows(const xstar_run_state::ProductWritingState& state,
+[[maybe_unused]] std::vector<LineRow> build_line_rows(const xstar_run_state::ProductWritingState& state,
                                      const std::vector<ElementMeta>& elements,
                                      const std::vector<RowMeta>& rows,
                                      std::size_t zone_index) {
@@ -1243,7 +1243,7 @@ std::vector<LineRow> build_line_rows(const xstar_run_state::ProductWritingState&
     return out;
 }
 
-std::vector<RrcRow> build_rrc_rows(const xstar_run_state::ProductWritingState& state,
+[[maybe_unused]] std::vector<RrcRow> build_rrc_rows(const xstar_run_state::ProductWritingState& state,
                                    const std::vector<ElementMeta>& elements,
                                    const std::vector<RowMeta>& rows,
                                    std::size_t zone_index) {
@@ -1332,7 +1332,7 @@ std::map<std::pair<int,int>,double> ion_fractions(
     return out;
 }
 
-std::vector<RowMeta> oracle_detail_population_rows(const std::vector<RowMeta>& rows) {
+[[maybe_unused]] std::vector<RowMeta> oracle_detail_population_rows(const std::vector<RowMeta>& rows) {
     // Oracle product detail rows exclude terminal normalization/fully stripped
     // rows. For the H/He/Mg qualification case this restores the expected
     // per-zone detail table length: H 32 + He 77 + Mg 507 = 616.
@@ -1439,7 +1439,7 @@ bool oracle_detail_rrc_inventory(long long index) {
     return in_oracle_segments(index, kOracleDetailRrcSegments);
 }
 
-bool oracle_public_rrc_inventory(long long index) {
+[[maybe_unused]] bool oracle_public_rrc_inventory(long long index) {
     return in_oracle_segments(index, kOraclePublicRrcSegments);
 }
 
@@ -2243,8 +2243,8 @@ const std::vector<double>& oracle_detail_lte_template_v172537() {
 
 std::vector<xstar_run_state::LevelIdentityState> public_detail_levels(
     const xstar_run_state::ProductWritingState& state,
-    const std::vector<ElementMeta>& elements,
-    const std::vector<RowMeta>& rows) {
+    [[maybe_unused]] const std::vector<ElementMeta>& elements,
+    [[maybe_unused]] const std::vector<RowMeta>& rows) {
     // Preserve the fully-qualified Mg XI public identity surface bit-for-bit.
     if (reference_mg11_product_state(state)) {
         std::vector<xstar_run_state::LevelIdentityState> out;
@@ -2274,7 +2274,7 @@ std::vector<xstar_run_state::LevelIdentityState> public_detail_levels(
     return source_levels;
 }
 
-const xstar_run_state::LevelIdentityState* level_by_global(
+[[maybe_unused]] const xstar_run_state::LevelIdentityState* level_by_global(
     const std::vector<xstar_run_state::LevelIdentityState>& levels,
     std::int32_t global_index) {
     for (const auto& level : levels) if (level.global_index == global_index) return &level;
@@ -4936,7 +4936,7 @@ const std::vector<LineLabelTemplateRow>& oracle_detail_line_label_template_v1725
     return rows;
 }
 
-const std::vector<LineLabelTemplateRow>& oracle_public_line_label_template_v172537() {
+[[maybe_unused]] const std::vector<LineLabelTemplateRow>& oracle_public_line_label_template_v172537() {
     static const std::vector<LineLabelTemplateRow> rows = {
         {411, 303.78, "he_ii", "1s1.2S_1/2", "1s0.2p1.2P_3/2"},
         {410, 303.786, "he_ii", "1s1.2S_1/2", "1s0.2p1.2P_1/2"},
@@ -7397,7 +7397,7 @@ const std::vector<RrcLabelTemplateRow>& oracle_detail_rrc_label_template_v172537
     return rows;
 }
 
-const std::vector<RrcLabelTemplateRow>& oracle_public_rrc_label_template_v172537() {
+[[maybe_unused]] const std::vector<RrcLabelTemplateRow>& oracle_public_rrc_label_template_v172537() {
     static const std::vector<RrcLabelTemplateRow> rows = {
         {1, 0, 0.3777, "h_i", "1s0.6f1.2F", "continuum"},
         {2, 0, 0.545493, "h_i", "1s0.5f1.2F_7/2", "continuum"},
@@ -8519,7 +8519,7 @@ std::filesystem::path bridge_array_path(
     throw std::runtime_error("cannot find native product bridge array: " + name);
 }
 
-std::vector<double> bridge_array(
+[[maybe_unused]] std::vector<double> bridge_array(
     const xstar_run_state::ProductWritingState& state,
     const std::string& name,
     std::size_t expected_count) {
@@ -9024,7 +9024,7 @@ std::map<long long,std::size_t> line_workspace_index_by_line_index(
     return out;
 }
 
-std::size_t safe_workspace_index(long long one_based, std::size_t fallback) {
+[[maybe_unused]] std::size_t safe_workspace_index(long long one_based, std::size_t fallback) {
     return one_based > 0 ? static_cast<std::size_t>(one_based - 1) : fallback;
 }
 
@@ -9125,7 +9125,7 @@ bool line_row_has_signal(const LineRow& row);
 LineRow line_row_from_identity(const xstar_run_state::LineIdentityState& id,
                                const xstar_run_state::FixedEvaluationState& evaluation,
                                double density_cm3,
-                               double luminosity_scale_1e38,
+                               [[maybe_unused]] double luminosity_scale_1e38,
                                std::size_t workspace_index,
                                const LineBridgeArrays* bridge = nullptr,
                                bool public_units = false) {
@@ -9579,7 +9579,7 @@ std::map<long long,LineRow> diagnostic_line_rows_by_index(
 }
 
 
-long long resolve_detail_rrc_index_for_diag(
+[[maybe_unused]] long long resolve_detail_rrc_index_for_diag(
     const RecordDiag& r,
     const std::vector<ElementMeta>& elements,
     const std::vector<RowMeta>& rows) {
@@ -9761,7 +9761,7 @@ std::map<long long,RrcRow> diagnostic_rrc_rows_by_index(
     return out;
 }
 
-bool rrc_row_has_signal(const RrcRow& row) {
+[[maybe_unused]] bool rrc_row_has_signal(const RrcRow& row) {
     return row.emis_in != 0.0 || row.emis_out != 0.0 || row.absorption != 0.0 || row.opacity != 0.0 ||
         (std::isfinite(row.tau_in) && row.tau_in != 0.0) ||
         (std::isfinite(row.tau_out) && row.tau_out != 0.0);
@@ -9785,7 +9785,7 @@ RrcRow merged_rrc_row(const RrcRow& base, const RrcRow* diagnostic) {
 }
 
 
-const xstar_run_state::LineIdentityState* line_identity_by_row_record(
+[[maybe_unused]] const xstar_run_state::LineIdentityState* line_identity_by_row_record(
     const xstar_run_state::ProductWritingState& state,
     const LineRow& row) {
     return line_identity_by_index(state, row.record);
@@ -10035,12 +10035,12 @@ void write_line_detail(const std::filesystem::path& path,
     audit_json << "  ]\n}\n";
 }
 
-int element_index_for_z(const std::vector<ElementMeta>& elements, int z) {
+[[maybe_unused]] int element_index_for_z(const std::vector<ElementMeta>& elements, int z) {
     for (const auto& e : elements) if (e.element_z == z) return e.element_index;
     return 0;
 }
 
-std::size_t continuum_plane_count(const xstar_run_state::ExactSourceWorkspaceState& ws) {
+[[maybe_unused]] std::size_t continuum_plane_count(const xstar_run_state::ExactSourceWorkspaceState& ws) {
     if (ws.native_continuum_count > 0) return ws.native_continuum_count;
     if (!ws.elumab.empty() && ws.elumab.size() % 2 == 0) return ws.elumab.size() / 2;
     if (!ws.tauc.empty() && ws.tauc.size() % 2 == 0) return ws.tauc.size() / 2;
@@ -10606,7 +10606,7 @@ std::vector<ContinuumDiagRow> read_continuum_diagnostics(
     return out;
 }
 
-std::vector<ContinuumDiagRow> read_continuum_diagnostics_by_full_bin(
+[[maybe_unused]] std::vector<ContinuumDiagRow> read_continuum_diagnostics_by_full_bin(
     const xstar_run_state::ProductWritingState& state,
     std::size_t sequence,
     std::size_t full_count) {
@@ -10777,7 +10777,7 @@ double source_continuum_opacity_for_bin(
     if (value == 0.0) value = continuum_diag_opacity_for_bin(diagnostics_by_bin, index);
     return std::isfinite(value) ? value : 0.0;
 }
-double source_continuum_emis_in_for_bin(
+[[maybe_unused]] double source_continuum_emis_in_for_bin(
     const xstar_run_state::FixedEvaluationState& evaluation,
     const std::vector<ContinuumDiagRow>& diagnostics_by_bin,
     const std::vector<double>& retained_rccemis,
@@ -11104,7 +11104,7 @@ void write_abundance_base(fitsfile* fptr, long row, const xstar_run_state::Abund
     for (int col = 1; col <= 8; ++col) write_real4(fptr, col, row, values[static_cast<std::size_t>(col - 1)]);
 }
 
-xstar_run_state::AbundanceRadialRowState abundance_base_row_for_zone(
+[[maybe_unused]] xstar_run_state::AbundanceRadialRowState abundance_base_row_for_zone(
     const xstar_run_state::ProductWritingState& state, std::size_t zone_index) {
     if (zone_index < state.abundance_radial_rows.size()) return state.abundance_radial_rows[zone_index];
     if (zone_index >= state.radial_zones.size()) return {};

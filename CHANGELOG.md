@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.6.58 - warning-clean C++ build - 2026-08-08
+
+- Fix all compiler warnings reported by the active native `make` build under `-Wall -Wextra -Wpedantic` without adding warning-suppression flags.
+- Expand misleading one-line control flow in `fixed_state_engine.cpp` and `xstar_atdb_runtime.cpp` while preserving evaluation order and behavior.
+- Remove truly unused locals and mark retained legacy/diagnostic helpers or compile-time-unused template values `[[maybe_unused]]`.
+- Add `qualification/cpp_warning_cleanup_0_6_58.json` and a warning-cleanup gate that pins both the 0.6.57 and 0.6.58 bytes of the six touched C++ files.
+- Full native `make` completes with zero warnings; accepted science revision, frozen C++ science baseline, and ABI `6048110` remain unchanged.
+
 ## 0.6.57 - C++ namespace/history cleanup - 2026-08-08
 
 - Archive retired `opacity_type50_experiments.cpp` and unused `xstar_backend_common.cpp` outside the installed C++ tree.

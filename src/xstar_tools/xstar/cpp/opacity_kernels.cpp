@@ -667,7 +667,7 @@ static std::pair<int,int> small_a_core_bounds_v064812328(
 
 #if (defined(__x86_64__) || defined(__i386__)) && (defined(__GNUC__) || defined(__clang__))
 __attribute__((target("avx2")))
-static int run_inline_farwing_profile_v064812328(
+[[maybe_unused]] static int run_inline_farwing_profile_v064812328(
     double optpp, double line_energy_ev, double dele, double aasmall,
     double e00, double deleused, const double* epi, int n,
     int mlmin, int mlmax, int ml1min, int first_core, int last_core,
@@ -1290,7 +1290,8 @@ static int run_inline_farwing_profile_v064812332(
     };
 
     auto consume_vector_point = [&](double current_energy, double profile,
-                                    double prepared_tmpop, double prepared_tmpe) {
+                                    [[maybe_unused]] double prepared_tmpop,
+                                    [[maybe_unused]] double prepared_tmpe) {
         double new_tmpop;
         if constexpr (PrepareTmpopV064812332) new_tmpop = prepared_tmpop;
         else new_tmpop = optpp * profile;
@@ -1326,7 +1327,7 @@ static int run_inline_farwing_profile_v064812332(
     const __m256d sqp4 = _mm256_set1_pd(source_real_literal(1.772453851));
     const __m256d norm4 = _mm256_set1_pd(xstar_constants::kLegacyLinopacProfileNormalization);
     const __m256d sign = _mm256_set1_pd(-0.0);
-    const __m256d optpp4 = _mm256_set1_pd(optpp);
+    [[maybe_unused]] const __m256d optpp4 = _mm256_set1_pd(optpp);
 
 #define XSTAR_V064812332_EXTRACT4(VEC, A0, A1, A2, A3) do { \
         const __m128d lo_v064812332 = _mm256_castpd256_pd128((VEC)); \
