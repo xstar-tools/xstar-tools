@@ -544,7 +544,10 @@ def main(argv: list[str] | None = None) -> int:
             path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         return 0 if bool(summary.get("ready")) else 2
     # Import NumPy-heavy runner modules only after thread caps/backend selection are set.
-    from .xstar.physical_output_diagnostics import diagnose_physical_output_mismatch
+    # ``physical_output_diagnostics`` was retired to the historical parity
+    # archive in 0.6.56.  It must not remain a startup dependency for normal
+    # pure-python/zone-python execution; import it only if the deprecated
+    # --diagnostics-dir compatibility path is explicitly requested.
     from .xstar.physical_runner import (
         XSTARPythonRunnerError,
         run_c5_ne1_acceptance,
@@ -600,6 +603,13 @@ def main(argv: list[str] | None = None) -> int:
             elif isinstance(summary.get("python_run"), dict):
                 summary["python_run"] = annotate(dict(summary["python_run"]))
             if args.diagnostics_dir is not None:
+                try:
+                    from .xstar.physical_output_diagnostics import diagnose_physical_output_mismatch
+                except ModuleNotFoundError as exc:
+                    raise XSTARPythonRunnerError(
+                        "--diagnostics-dir refers to a retired parity-campaign helper; "
+                        "normal pure-python/zone-python runs do not require it"
+                    ) from exc
                 diagnosis = diagnose_physical_output_mismatch(
                     result.original_run_dir,
                     result.python_run.output_dir,

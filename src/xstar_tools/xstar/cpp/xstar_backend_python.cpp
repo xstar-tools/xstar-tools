@@ -6,11 +6,16 @@
 // Qualification: Python/C++ controller parity through 12.3.44 and 45.x
 // XSTAR-SOURCE-CORRESPONDENCE-END
 
+// CPython may define POSIX/XOPEN feature-test macros in pyconfig.h.
+// Python's C-API requires Python.h before any system/standard header; project
+// headers below eventually include <stdint.h>, which can include glibc
+// <features.h> first and trigger macro-redefinition warnings on newer Fedora.
+#define PY_SSIZE_T_CLEAN
+#include <Python.h>
+
 #include "xstar_backend_plugin.h"
 #include "xstar_python_bridge.h"
 #include "xstar_standalone_internal.hpp"
-
-#include <Python.h>
 #include <algorithm>
 #include <array>
 #include <cstdint>

@@ -148,7 +148,7 @@ def test_xstar_cpp_native_frontend_accepts_xstar_style_tokens_without_python(tmp
     if compiler is None:
         pytest.skip("g++ is required for the native frontend characterization")
     root = Path(__file__).resolve().parents[1]
-    source = root / "src/xstar_tools/xstar/native/xstar_cpp_frontend.cpp"
+    source = root / "src/xstar_tools/xstar/cpp/xstar_cpp_frontend.cpp"
     frontend = tmp_path / "xstar-cpp"
     api_stub = tmp_path / "api_stub.cpp"
     api_stub.write_text(

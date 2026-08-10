@@ -12,7 +12,7 @@ import pytest
 from xstar_tools.execution import C_API_ABI_VERSION, SCIENCE_REVISION, ZONE_ABI_VERSION, package_version
 
 ROOT=Path(__file__).resolve().parents[1]
-FRONTEND=ROOT/'src/xstar_tools/xstar/native/xstar_cpp_frontend.cpp'
+FRONTEND=ROOT/'src/xstar_tools/xstar/cpp/xstar_cpp_frontend.cpp'
 CPP=ROOT/'src/xstar_tools/xstar/cpp'
 
 

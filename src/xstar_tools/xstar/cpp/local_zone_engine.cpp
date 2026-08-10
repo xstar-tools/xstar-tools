@@ -3391,7 +3391,12 @@ SourceComp2Result source_comp2(const double* epi, const double* bremsa, std::siz
     const double sxx = 1.0 / (emc2 / (ekt + static_cast<double>(static_cast<float>(1.0e-10))));
     double eee = epi[0], ee = eee / emc2;
     double tmp1 = bremsa[0] * source_cmpfnc(ee,sxx);
-    double sum1=0.0, sum2=0.0, sum3=0.0;
+    double sum1=0.0;
+    // Fortran comp2 also accumulates sum2 and uses it only for the optional
+    // diagnostic ``cfake`` print.  Production C++ does not publish cfake, but
+    // keep the source-equivalent accumulation for concordance/diagnostic work.
+    [[maybe_unused]] double sum2=0.0;
+    double sum3=0.0;
     for (std::size_t k=1;k<n;++k) {
         const double tmp1o=tmp1, eeeo=eee, eeo=ee;
         eee=epi[k]; ee=eee/emc2; tmp1=bremsa[k]*source_cmpfnc(ee,sxx);
@@ -3442,7 +3447,12 @@ SourceContinuumThermalResult source_continuum_thermal(
     double eee = epi[0];
     double ee = eee / emc2;
     double tmp1 = bremsa[0] * source_cmpfnc(ee, sxx);
-    double sum1 = 0.0, sum2 = 0.0, sum3 = 0.0;
+    double sum1 = 0.0;
+    // Source comp2's sum2 feeds only the optional cfake diagnostic.  Retain
+    // the accumulation because per-bin diagnostics record the same integral,
+    // while marking the aggregate intentionally unused in production.
+    [[maybe_unused]] double sum2 = 0.0;
+    double sum3 = 0.0;
     for (std::size_t k = 0; k < n; ++k) {
         auto& row = out.diagnostics[k];
         row.reduced_bin_one_based = k + 1;

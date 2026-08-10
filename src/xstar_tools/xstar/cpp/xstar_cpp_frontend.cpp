@@ -8,8 +8,8 @@
 // in the frozen native core.
 // No Python interpreter or Python library is used by this frontend.
 
-#include "../cpp/xstar_api.h"
-#include "../cpp/xstar_production_zone_bridge.h"
+#include "xstar_api.h"
+#include "xstar_production_zone_bridge.h"
 
 #include <array>
 #include <cerrno>

@@ -1,5 +1,17 @@
 # CHANGELOG
 
+# 0.6.74 — Fedora/Python-3.13 host compatibility and benchmark semantic restoration - 2026-08-10
+
+- Includes `Python.h` before project/system headers in `xstar_backend_python.cpp`, following the CPython C-API include-order requirement and eliminating newer glibc/Python 3.13 `_POSIX_C_SOURCE` / `_XOPEN_SOURCE` redefinition warnings.
+- Retains the source-equivalent Fortran `comp2` `sum2`/`cfake` diagnostic accumulation while marking the aggregate intentionally `[[maybe_unused]]`, eliminating GCC unused-but-set warnings without changing arithmetic.
+- Removes the retired `physical_output_diagnostics` module from normal pure-python/zone-python startup; the legacy `--diagnostics-dir` path now imports it lazily and fails clearly if explicitly requested.
+- Restores the final frozen C++ FITS publication semantics from 43.3/43.3.2 in the public benchmark comparator: Ca detal2 stale-`opakb1`, Ca XIII RRC cutoff, C detail3 709/762 vs 681/691/726, and O IV non-positive-threshold detail3 inventory classes.
+- Detail3 semantic closure recomputes normalized L1 over the full identity union with zero on the absent side and remains fail-closed for unknown identities, common-order changes, metadata/attachment failures, or union NL1 >=1%.
+- Reanalysis of the uploaded 0.6.67 zone-cpp benchmark: STEP 62/62 ACCEPT, common-row FITS numerical science 62/62 ACCEPT, final semantic FITS/science 62/62 ACCEPT; the old public strict-inventory gate had reported 49/62.
+- Direct comparison to the frozen `0.6.48.12.3.44` `cpp-zone` archive is exact on all 558 persisted FITS HDU payload pairs and all 62 normalized STEP logs. This is the primary acceptance result; Fortran-only Option-24 and final-FITS inventory/order quirks remain diagnostics and do not reopen C++ science.
+- Consolidate the public `xstar_cpp_frontend.cpp` into `src/xstar_tools/xstar/cpp/`; all active C++ sources/headers now live in that directory, and normal `make all` no longer reads C++ source/header/version inputs from a parent directory.
+- Accepted scientific revision remains `0.6.48.12.3.45.3.3.8`; frozen C++ baseline remains `0.6.48.12.3.44`; C API ABI remains `60487`; production-zone ABI remains `6048110`.
+
 # 0.6.73 — source-level scientific function documentation - 2026-08-10
 
 - Re-read the supplied XSTAR manual and five reference papers page-by-page and map their physical/process descriptions back to the active Python/C++ implementation.

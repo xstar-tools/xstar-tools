@@ -55,13 +55,10 @@ FILESYSTEM_LINK_MODE ?= compatibility-default
 FILESYSTEM_LIBS ?= -lstdc++fs
 
 # Distribution version embedded in the Python-free xstar-cpp provenance sidecar.
-# Read it from the source-tree pyproject so productization version bumps do not
-# require editing the native frontend source.  A caller may override this when
-# building the cpp directory outside a complete source tree.
-PACKAGE_VERSION ?= $(shell sed -n 's/^version = "\([^"]*\)"/\1/p' ../../../../pyproject.toml 2>/dev/null | head -n 1)
-ifeq ($(strip $(PACKAGE_VERSION)),)
-PACKAGE_VERSION := unknown
-endif
+# Keep the default local to this directory so `make all` is self-contained: no
+# source/header/build input is read from a parent directory. Packaging may
+# override PACKAGE_VERSION on the make command line.
+PACKAGE_VERSION ?= 0.6.74
 
 SOLVER_TARGET := libxstar_solver.so
 RATES_TARGET := libxstar_rates.so
@@ -78,7 +75,7 @@ CPP_BACKEND_TARGET := libxstar_backend_cpp.so
 PYTHON_BACKEND_TARGET := libxstar_backend_python.so
 EXECUTABLE_TARGET := xstar_cpp
 PUBLIC_EXECUTABLE_TARGET := xstar-cpp
-PUBLIC_EXECUTABLE_SOURCE := ../native/xstar_cpp_frontend.cpp
+PUBLIC_EXECUTABLE_SOURCE := xstar_cpp_frontend.cpp
 EXECUTABLE_OBJECTS := xstar_standalone.o xstar_science_fits.o xstar_run_state.o xstar_step_log.o xstar_atdb_runtime.o
 
 PHYSICS_TARGETS := $(SOLVER_TARGET) $(RATES_TARGET) $(MATRIX_TARGET) \

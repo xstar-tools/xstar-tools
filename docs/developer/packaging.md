@@ -29,7 +29,7 @@ The build hook:
 1. builds normal Python modules/package data;
 2. evaluates `XSTAR_TOOLS_NATIVE`;
 3. validates Linux build prerequisites;
-4. copies `cpp/`, `native/`, and `pyproject.toml` to a temporary staging tree;
+4. copies the self-contained `src/xstar_tools/xstar/cpp/` tree to a temporary staging directory;
 5. runs `make clean` and then the retained `make all` there;
 6. verifies every required runtime artifact exists;
 7. copies only runtime binaries/libraries to the wheel build tree;
