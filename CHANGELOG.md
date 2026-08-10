@@ -1,5 +1,13 @@
 # CHANGELOG
 
+# 0.6.77 — warning-clean retained-helper annotations - 2026-08-10
+
+- Fix the 12 `-Wunused-function` warnings emitted by the real C++ Makefile build in `xstar_standalone.cpp` and `xstar_step_log.cpp`.
+- Mark only the intentionally retained internal/qualification helpers `[[maybe_unused]]`; do not add `-Wno-*` suppression flags and do not alter scientific expressions.
+- Add `qualification/cpp_unused_function_cleanup_0_6_77.json` and a checker that proves stripping only those 12 attributes reconstructs the exact 0.6.76 translation-unit bytes.
+- Extend historical qualification compatibility by exact SHA-256 only; original milestone manifests remain unchanged.
+- Preserve accepted science revision `0.6.48.12.3.45.3.3.8`, frozen C++ baseline `0.6.48.12.3.44`, C API ABI `60487`, and production-zone ABI `6048110`.
+
 # 0.6.76 — source-name hygiene and retired diagnostic cleanup - 2026-08-10
 
 - Rename 401 active private C++ helpers and 21 private Python helpers from development-version/patch labels to stable semantic names.

@@ -5378,7 +5378,7 @@ const std::array<const char*,31> kStandaloneRoman = {{"","i","ii","iii","iv","v"
 // Purpose: Implement active elements from parameters in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-std::vector<StandaloneElementSpec> active_elements_from_parameters(const std::string& json) {
+[[maybe_unused]] std::vector<StandaloneElementSpec> active_elements_from_parameters(const std::string& json) {
     std::vector<StandaloneElementSpec> out;
     for (int z = 1; z <= 30; ++z) {
         const std::string key = std::string(kStandaloneSymbols[static_cast<std::size_t>(z)]) + "abund";
@@ -6094,7 +6094,7 @@ double vector_at_or_zero(const std::vector<double>& values, std::size_t index) {
 // Purpose: Implement two plane or scalar in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-double two_plane_or_scalar(const std::vector<double>& values, std::size_t plane_count, std::size_t compact_index, std::size_t direct_index, std::size_t plane) {
+[[maybe_unused]] double two_plane_or_scalar(const std::vector<double>& values, std::size_t plane_count, std::size_t compact_index, std::size_t direct_index, std::size_t plane) {
     if (plane_count > 0 && direct_index < plane_count && plane * plane_count + direct_index < values.size()) {
         return values[plane * plane_count + direct_index];
     }
@@ -7237,7 +7237,7 @@ void read_source_populations(
 // Purpose: Build real native product state from fixed engine from the source-ordered inputs required by the next calculation stage.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-xstar_run_state::ProductWritingState build_real_native_product_state_from_fixed_engine(
+[[maybe_unused]] xstar_run_state::ProductWritingState build_real_native_product_state_from_fixed_engine(
     Options& options,
     const std::filesystem::path& output,
     double& measured_run_seconds,
@@ -7483,7 +7483,7 @@ struct NativeControllerOracleRow {
 // Purpose: Implement native controller acceptance oracle in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-const std::array<NativeControllerOracleRow,61>& native_controller_acceptance_oracle() {
+[[maybe_unused]] const std::array<NativeControllerOracleRow,61>& native_controller_acceptance_oracle() {
     // Qualification-only oracle.  These values never drive a controller
     // state transition.  Trial temperatures and electron fractions are
     // generated exclusively by xstar_thermal_run_evaluation_loop_v1.
@@ -7570,7 +7570,7 @@ bool zero_aware_controller_equal(double actual, double expected) {
 // Purpose: Implement zero aware relative error in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-double zero_aware_relative_error(double actual, double expected) {
+[[maybe_unused]] double zero_aware_relative_error(double actual, double expected) {
     if (!std::isfinite(actual) || !std::isfinite(expected)) {
         return std::numeric_limits<double>::infinity();
     }
@@ -7672,7 +7672,7 @@ std::vector<double> source_powerlaw(
 // Purpose: Load single csv row into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-std::map<std::string,std::string> read_single_csv_row(const std::filesystem::path& path) {
+[[maybe_unused]] std::map<std::string,std::string> read_single_csv_row(const std::filesystem::path& path) {
     std::ifstream input(path);
     if (!input) throw std::runtime_error("cannot open sequence-1 thermal budget: " + path.string());
     std::string header_line, value_line;
@@ -8873,7 +8873,7 @@ SequencePopulationHashGateV1716 compare_sequence_population_hashes(
 // Purpose: Compute compare sequence thermal ledger as a contribution to, or control step in, the local thermal-equilibrium iteration.
 // Reference context: XSTAR Manual s11.4.4 and s11.6; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-ThermalLedgerGateV1712 compare_sequence_thermal_ledger(
+[[maybe_unused]] ThermalLedgerGateV1712 compare_sequence_thermal_ledger(
     const std::filesystem::path& path,
     const std::string& expected_identity_hash,
     const std::string& expected_order_hash,
@@ -8964,7 +8964,7 @@ struct Sequence2HydrogenGateV1717 {
 // Purpose: Implement compare sequence2 hydrogen state in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-Sequence2HydrogenGateV1717 compare_sequence2_hydrogen_state(
+[[maybe_unused]] Sequence2HydrogenGateV1717 compare_sequence2_hydrogen_state(
     const std::filesystem::path& evaluation1_populations,
     const std::filesystem::path& evaluation2_populations,
     const std::filesystem::path& evaluation2_solve_rows,
@@ -19012,7 +19012,7 @@ int command_run_standalone_production(const Options& options, const std::filesys
 // Purpose: Compute resolve standalone atomic database as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
 // Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
 // XSTAR-FUNCTION-COMMENT-END
-std::filesystem::path resolve_standalone_atomic_database(const Options& options) {
+[[maybe_unused]] std::filesystem::path resolve_standalone_atomic_database(const Options& options) {
     std::vector<std::filesystem::path> candidates;
     if (!options.atomic_db_path.empty()) candidates.emplace_back(options.atomic_db_path);
     if (!options.parameters_path.empty() && std::filesystem::is_regular_file(options.parameters_path)) {

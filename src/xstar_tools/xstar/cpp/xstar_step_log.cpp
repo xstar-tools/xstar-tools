@@ -1033,7 +1033,7 @@ struct RrcSourceRecord {
 // Purpose: Provide csv double for final science-product publication from already-committed run state.
 // Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
 // XSTAR-FUNCTION-COMMENT-END
-double csv_double(const std::vector<std::string>& fields, std::size_t index) {
+[[maybe_unused]] double csv_double(const std::vector<std::string>& fields, std::size_t index) {
     if (index >= fields.size() || fields[index].empty()) return 0.0;
     try { return std::stod(fields[index]); } catch (...) { return 0.0; }
 }
@@ -1060,7 +1060,7 @@ std::string roman_lower(long long value) {
 // Purpose: Provide source ion label for final science-product publication from already-committed run state.
 // Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
 // XSTAR-FUNCTION-COMMENT-END
-std::string source_ion_label(long long element_z, long long ion_index) {
+[[maybe_unused]] std::string source_ion_label(long long element_z, long long ion_index) {
     std::string symbol;
     if (element_z == 1) symbol = "h";
     else if (element_z == 2) symbol = "he";
@@ -1081,7 +1081,7 @@ bool hydrogen_or_helium_ion_label(const std::string& label) {
 // Purpose: Load native ion row minima into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
 // Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
 // XSTAR-FUNCTION-COMMENT-END
-std::map<std::pair<long long,long long>,long long> load_native_ion_row_minima(
+[[maybe_unused]] std::map<std::pair<long long,long long>,long long> load_native_ion_row_minima(
     const std::filesystem::path& output_dir,
     const xstar_run_state::ProductWritingState& state) {
     std::map<std::pair<long long,long long>,long long> minima;

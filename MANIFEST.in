@@ -85,3 +85,6 @@ include tools/qualification/check_benchmark_cli_adapter_0_6_75.py
 include tools/qualification/check_source_name_hygiene_0_6_76.py
 include tools/qualification/source_name_hygiene_compat.py
 include qualification/source_name_hygiene_0_6_76.json
+
+include tools/qualification/check_cpp_unused_function_cleanup_0_6_77.py
+include qualification/cpp_unused_function_cleanup_0_6_77.json

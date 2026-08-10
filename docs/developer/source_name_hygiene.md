@@ -9,3 +9,8 @@ Exported C-linkage symbols are different: their spelling is part of the ABI. Exi
 If a cleaner semantic C API is introduced later, add new semantic wrapper/alias symbols while retaining the old exports for a documented deprecation/ABI transition cycle. Remove old exported names only as an intentional ABI revision with qualification.
 
 The 0.6.76 boundary is enforced by `qualification/source_name_hygiene_0_6_76.json` and `tools/qualification/check_source_name_hygiene_0_6_76.py`. Historical qualification manifests are not rewritten; compatibility checkers accept only exact source hashes pinned by the 0.6.76 hygiene manifest.
+
+### 0.6.77 warning-only overlay
+
+The subsequent 0.6.77 compiler-hygiene boundary does not rename or retire additional symbols. It marks twelve intentionally retained translation-unit-local helpers `[[maybe_unused]]` so the real Makefile build is warning-clean. The dedicated 0.6.77 checker requires that removing only those attributes reconstructs the exact 0.6.76 C++ source bytes and forbids `-Wno-*` suppression.
+
