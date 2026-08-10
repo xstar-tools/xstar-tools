@@ -1,5 +1,16 @@
 # CHANGELOG
 
+# 0.6.78 — Milestone 10 layered CI and release engineering - 2026-08-10
+
+- Add Tier 0 PR CI for Python syntax/imports, public API type contracts, conservative lint/format policy, complete C++ compilation, active tests, package metadata, generated-artifact rejection, ABI/header checks, and parity-freeze integrity.
+- Add Tier 1 selected O/Mg/Ca scientific smoke on scientific/orchestration changes; C5 remains excluded by default and is manual opt-in only.
+- Add Tier 2 selected-fixture parity across pure-python, zone-python, zone-cpp, zone-all, and xstar-cpp, including canonical Fortran material science, frozen C++44 exact regression, direct current-backend material comparisons, provenance, and STEP diagnostics.
+- Add Tier 3 nightly/manual/release-candidate all-62 qualification with reports grouped by element, density regime, ionization regime, backend, and runtime rather than a single global average.
+- Split packaging CI into distinct sdist, Python-wheel, clean-wheel-install, editable-install, and native-wheel jobs; keep conda and docs as independent workflows.
+- Add controlled-hardware performance CI as a report-only performance surface separate from scientific acceptance.
+- Add testable CI helper scripts, Milestone-10 documentation, a qualification manifest/checker, and regression tests.
+- Preserve accepted science revision `0.6.48.12.3.45.3.3.8`, frozen C++ baseline `0.6.48.12.3.44`, C API ABI `60487`, and production-zone ABI `6048110`.
+
 # 0.6.77 — warning-clean retained-helper annotations - 2026-08-10
 
 - Fix the 12 `-Wunused-function` warnings emitted by the real C++ Makefile build in `xstar_standalone.cpp` and `xstar_step_log.cpp`.

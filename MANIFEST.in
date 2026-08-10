@@ -88,3 +88,12 @@ include qualification/source_name_hygiene_0_6_76.json
 
 include tools/qualification/check_cpp_unused_function_cleanup_0_6_77.py
 include qualification/cpp_unused_function_cleanup_0_6_77.json
+
+# Milestone 10 layered CI/release-engineering contracts.
+recursive-include tools/ci *.py
+include tools/qualification/check_ci_release_engineering_0_6_78.py
+include .github/workflows/ci-tier0.yml
+include .github/workflows/ci-tier1-science-smoke.yml
+include .github/workflows/ci-tier2-backend-parity.yml
+include .github/workflows/ci-tier3-all62.yml
+include .github/workflows/performance.yml
