@@ -314,6 +314,40 @@ def execution_provenance(*, requested_mode: str, provenance: Mapping[str, Any] |
     }
 
 
+_PUBLIC_PYTHON_PROVENANCE_KEYS = (
+    "runner",
+    "source_faithful_calculation_path",
+    "verbose_pprint_complete",
+    "strict_ten_product_contract",
+    "xstar_outputs_used_as_python_inputs",
+    "active_subset_enabled",
+    "active_subset_summary",
+    "backend_selection",
+    "solver_backend",
+    "rates_backend",
+    "matrix_backend",
+    "emissivity_backend",
+    "opacity_backend",
+    "thermal_backend",
+    "engine_backend",
+    "compact_active_atdb_export",
+    "atdb_path",
+    "pointer_cache_status",
+    "metadata_cache_status",
+)
+
+
+def _public_python_provenance(provenance: Mapping[str, Any]) -> dict[str, Any]:
+    """Return stable production provenance without parity-campaign attribution.
+
+    The source-faithful Python runner intentionally retains extensive internal
+    diagnostics for development qualification.  Stable public runs expose the
+    same concise execution/data provenance contract as the native modes and do
+    not serialize historical Mg/DSEC/shadow/forensic attribution by default.
+    """
+    return {key: provenance[key] for key in _PUBLIC_PYTHON_PROVENANCE_KEYS if key in provenance}
+
+
 def _cpp_dir() -> Path:
     return Path(__file__).resolve().parent / "xstar" / "cpp"
 
@@ -462,6 +496,11 @@ def _run_xstar_legacy(*, mode: str | ExecutionMode = ExecutionMode.PURE_PYTHON, 
         return PublicRunResult(bool(summary.get("ready")), mode_name, summary)
 
     from .xstar.physical_runner import run_xstar_python_script, run_xstar_python_command
+    include_debug_provenance = bool(kwargs.pop("include_debug_provenance", False))
+    # Stable public Python modes are production runs: retain the accepted
+    # diagnostics_mode computational path but do not capture/write parity-
+    # campaign sidecars unless the caller explicitly opts in.
+    kwargs.setdefault("write_diagnostic_files", False)
     call = run_xstar_python_script if run_script is not None else run_xstar_python_command
     source = run_script if run_script is not None else command
     with _backend_environment(mapping):
@@ -472,9 +511,13 @@ def _run_xstar_legacy(*, mode: str | ExecutionMode = ExecutionMode.PURE_PYTHON, 
             **kwargs,
         )
     summary = result.as_dict()
-    prov = dict(summary.get("provenance", {}))
-    prov["execution"] = execution_provenance(requested_mode=mode_name, provenance=prov,
-        atdb_path=prov.get("atdb_path", atdb_path), coheat_path=coheat_path)
+    internal_prov = dict(summary.get("provenance", {}))
+    execution = execution_provenance(
+        requested_mode=mode_name, provenance=internal_prov,
+        atdb_path=internal_prov.get("atdb_path", atdb_path), coheat_path=coheat_path,
+    )
+    prov = internal_prov if include_debug_provenance else _public_python_provenance(internal_prov)
+    prov["execution"] = execution
     summary["provenance"] = prov
     return PublicRunResult(bool(summary.get("ready")), mode_name, summary)
 

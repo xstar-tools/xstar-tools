@@ -1,5 +1,14 @@
 # CHANGELOG
 
+# 0.6.80 — production Python diagnostics cleanup - 2026-08-10
+
+- Keep the accepted `diagnostics_mode=full` numerical/orchestration path for `pure-python` and `zone-python`, but separate diagnostic computation from diagnostic file emission.
+- Stable public `run_xstar` / `xstar-tools run` executions no longer capture or write parity-campaign sidecars such as phase snapshots, UCalc continuum side effects, continuum diagnostic summaries, or `radial_spectrum_diagnostics_v0500/`.
+- Stable public Python `runner_summary.json` now exposes concise production provenance and omits historical Mg/DSEC/shadow/forensic attribution by default.
+- Preserve explicit debug behavior through `xstar-tools dev legacy-run --diagnostics full` and through the compatibility Python call with `write_diagnostic_files=True, include_debug_provenance=True`.
+- Do not switch production runs to `diagnostics_mode=none`, because that mode has separate internal retention/ownership semantics; this release changes observability/output only.
+- Preserve accepted science revision `0.6.48.12.3.45.3.3.8`, frozen C++ baseline `0.6.48.12.3.44`, C API ABI `60487`, and production-zone ABI `6048110`.
+
 # 0.6.79 — Milestone 11 current-reference normalization and release-candidate boundary - 2026-08-10
 
 - Add `references/current/` as the canonical metadata catalog for current scientific/reference decisions without moving or rewriting frozen historical evidence.

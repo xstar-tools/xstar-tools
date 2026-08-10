@@ -106,3 +106,8 @@ include .github/workflows/release-candidate.yml
 include qualification/zone_cpp_0667_vs_cpp44_0_6_74.csv
 include qualification/zone_cpp_0667_reanalysis_0_6_74.csv
 
+# 0.6.80 production Python diagnostics/output cleanup.
+include tools/qualification/check_python_production_diagnostics_0_6_80.py
+include qualification/python_production_diagnostics_0_6_80.json
+include docs/developer/python_production_diagnostics.md
+include tests/test_python_production_diagnostics_0_6_80.py

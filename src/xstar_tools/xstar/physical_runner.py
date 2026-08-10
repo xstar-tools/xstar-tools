@@ -2606,6 +2606,7 @@ def run_xstar_from_parameters(
     rebuild_cache: bool = False,
     progress_callback: ProgressCallback | None = None,
     diagnostics_mode: str = "full",
+    write_diagnostic_files: bool = True,
     active_subset: bool = True,
     profile_components: str | bool = "none",
     profile_rss: bool = False,
@@ -2698,7 +2699,9 @@ def run_xstar_from_parameters(
             n_active_rate_records=compact_result.n_active_rate_records,
         )
     high_volume_diagnostics = diagnostics_mode == "full"
+    emit_high_volume_diagnostics = bool(high_volume_diagnostics and write_diagnostic_files)
     state.control["diagnostics_mode"] = diagnostics_mode
+    state.control["write_diagnostic_files"] = bool(write_diagnostic_files)
     state.control["active_subset_enabled"] = bool(active_subset)
     state.control["profile_components"] = normalize_profile_level(profile_components)
     state.control["profile_rss"] = bool(profile_rss)
@@ -2707,9 +2710,9 @@ def run_xstar_from_parameters(
     state.control["progress_debug"] = bool(progress_debug)
     state.control["output_final_recompute"] = bool(output_final_recompute)
     state.control["mg_line_kernel"] = str(mg_line_kernel).strip().lower()
-    state.control["radial_spectrum_parity_diagnostic_enabled"] = high_volume_diagnostics
-    state.control["continuum_phase_snapshot_enabled"] = high_volume_diagnostics
-    state.control["ucalc_continuum_side_effect_diagnostics_enabled"] = high_volume_diagnostics
+    state.control["radial_spectrum_parity_diagnostic_enabled"] = emit_high_volume_diagnostics
+    state.control["continuum_phase_snapshot_enabled"] = emit_high_volume_diagnostics
+    state.control["ucalc_continuum_side_effect_diagnostics_enabled"] = emit_high_volume_diagnostics
     try:
         _emit_progress(
             progress_callback,
@@ -2730,7 +2733,7 @@ def run_xstar_from_parameters(
             completed_passes=len(radial.pass_results),
             completed_zones=sum(len(item.shell_results) for item in radial.pass_results),
         )
-        if high_volume_diagnostics:
+        if emit_high_volume_diagnostics:
             _radial_diag_t0 = time.perf_counter()
             radial_diag_products = write_python_runtime_radial_spectrum_diagnostics(state, out)
             runtime_phase_wall_timing["radial_spectrum_diagnostics_seconds"] = float(time.perf_counter() - _radial_diag_t0)
@@ -2791,7 +2794,7 @@ def run_xstar_from_parameters(
             timing_footer=dict(timing_footer),
             timing_breakdown=dict(writer_breakdown),
         )
-        if high_volume_diagnostics:
+        if emit_high_volume_diagnostics:
             _continuum_diag_t0 = time.perf_counter()
             continuum_diag_products = write_continuum_diagnostics(state, out)
             runtime_phase_wall_timing["continuum_diagnostics_seconds"] = float(time.perf_counter() - _continuum_diag_t0)
@@ -2853,6 +2856,7 @@ def run_xstar_from_parameters(
                 "xstar_outputs_used_as_python_inputs": False,
                 "diagnostics_mode": diagnostics_mode,
                 "high_volume_diagnostics_enabled": bool(high_volume_diagnostics),
+                "diagnostic_files_written": bool(emit_high_volume_diagnostics),
                 "active_subset_enabled": bool(active_subset),
                 "active_subset_summary": dict(state.provenance.get("active_atdb_subset", {})),
                 "profile_components_enabled": normalize_profile_level(profile_components) != "none",
@@ -2969,6 +2973,7 @@ def run_xstar_python(
     rebuild_cache: bool = False,
     progress_callback: ProgressCallback | None = None,
     diagnostics_mode: str = "full",
+    write_diagnostic_files: bool = True,
     active_subset: bool = True,
     profile_components: str | bool = "none",
     profile_rss: bool = False,
@@ -3012,6 +3017,7 @@ def run_xstar_python(
         rebuild_cache=rebuild_cache,
         progress_callback=progress_callback,
         diagnostics_mode=diagnostics_mode,
+        write_diagnostic_files=write_diagnostic_files,
         active_subset=active_subset,
         profile_components=profile_components,
         profile_rss=profile_rss,
@@ -3056,6 +3062,7 @@ def run_xstar_python_command(
     rebuild_cache: bool = False,
     progress_callback: ProgressCallback | None = None,
     diagnostics_mode: str = "full",
+    write_diagnostic_files: bool = True,
     active_subset: bool = True,
     profile_components: str | bool = "none",
     profile_rss: bool = False,
@@ -3083,6 +3090,7 @@ def run_xstar_python_command(
         rebuild_cache=rebuild_cache,
         progress_callback=progress_callback,
         diagnostics_mode=diagnostics_mode,
+        write_diagnostic_files=write_diagnostic_files,
         active_subset=active_subset,
         profile_components=profile_components,
         profile_rss=profile_rss,
@@ -3115,6 +3123,7 @@ def run_xstar_python_script(
     rebuild_cache: bool = False,
     progress_callback: ProgressCallback | None = None,
     diagnostics_mode: str = "full",
+    write_diagnostic_files: bool = True,
     active_subset: bool = True,
     profile_components: str | bool = "none",
     profile_rss: bool = False,
@@ -3144,6 +3153,7 @@ def run_xstar_python_script(
         rebuild_cache=rebuild_cache,
         progress_callback=progress_callback,
         diagnostics_mode=diagnostics_mode,
+        write_diagnostic_files=write_diagnostic_files,
         active_subset=active_subset,
         profile_components=profile_components,
         profile_rss=profile_rss,
@@ -3363,6 +3373,7 @@ def run_c5_ne1_acceptance(
     rebuild_cache: bool = False,
     progress_callback: ProgressCallback | None = None,
     diagnostics_mode: str = "full",
+    write_diagnostic_files: bool = True,
     active_subset: bool = True,
     profile_components: str | bool = "none",
     profile_rss: bool = False,
@@ -3388,6 +3399,7 @@ def run_c5_ne1_acceptance(
         rebuild_cache=rebuild_cache,
         progress_callback=progress_callback,
         diagnostics_mode=diagnostics_mode,
+        write_diagnostic_files=write_diagnostic_files,
         active_subset=active_subset,
         profile_components=profile_components,
         profile_rss=profile_rss,
