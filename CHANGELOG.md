@@ -1,5 +1,15 @@
 # CHANGELOG
 
+# 0.6.79 — Milestone 11 current-reference normalization and release-candidate boundary - 2026-08-10
+
+- Add `references/current/` as the canonical metadata catalog for current scientific/reference decisions without moving or rewriting frozen historical evidence.
+- Add a 62-case model registry derived from the qualified frozen C++44 exact model list, with element, density, ionization, smoke-eligibility, and Fortran publication-diagnostic metadata.
+- Make accepted Ca/O detail3 inventory exceptions, frozen C5 behavior, and the Option-24 Fortran stale-local quarantine explicit current reference metadata.
+- Add content-addressed indexes for compact local reference inputs/comparators and an external-asset catalog that requires the known frozen C++44 archive SHA-256 while leaving genuinely unknown historical archive hashes unset rather than guessed.
+- Add `references/historical/` as an index to immutable historical fixture/evidence locations instead of duplicating their bytes.
+- Add a public release-candidate static boundary and tag workflow that composes parity-freeze, layered-CI, current-reference, clean-tree, package/ABI, changelog, license, and release-workflow contracts. Dynamic Tier-2/Tier-3 science and packaging/docs/conda evidence remain separate required workflows.
+- Do not run all-62 as part of this source/reference normalization; preserve accepted science revision `0.6.48.12.3.45.3.3.8`, frozen C++ baseline `0.6.48.12.3.44`, C API ABI `60487`, and production-zone ABI `6048110`.
+
 # 0.6.78 — Milestone 10 layered CI and release engineering - 2026-08-10
 
 - Add Tier 0 PR CI for Python syntax/imports, public API type contracts, conservative lint/format policy, complete C++ compilation, active tests, package metadata, generated-artifact rejection, ABI/header checks, and parity-freeze integrity.

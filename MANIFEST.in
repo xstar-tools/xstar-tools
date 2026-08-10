@@ -97,3 +97,12 @@ include .github/workflows/ci-tier1-science-smoke.yml
 include .github/workflows/ci-tier2-backend-parity.yml
 include .github/workflows/ci-tier3-all62.yml
 include .github/workflows/performance.yml
+# Milestone 11 current-reference normalization and release-candidate boundary.
+recursive-include references/current *.json *.csv *.md *.sha256
+include references/historical/README.md
+include tools/qualification/check_reference_normalization_0_6_79.py
+recursive-include tools/release *.py
+include .github/workflows/release-candidate.yml
+include qualification/zone_cpp_0667_vs_cpp44_0_6_74.csv
+include qualification/zone_cpp_0667_reanalysis_0_6_74.csv
+
