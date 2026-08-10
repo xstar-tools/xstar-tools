@@ -84,10 +84,18 @@ class _Output(ctypes.Structure):
     ]
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the p operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _p(a: np.ndarray) -> _DBLP:
     return a.ctypes.data_as(_DBLP)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the arr operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _arr(value: Any, *, n: int | None = None) -> np.ndarray:
     a = np.ascontiguousarray(np.asarray(value, dtype=np.float64).reshape(-1))
     if n is not None:
@@ -97,6 +105,10 @@ def _arr(value: Any, *, n: int | None = None) -> np.ndarray:
     return a
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Load operation for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _load() -> ctypes.CDLL:
     global _LIB
     if _LIB is not None:
@@ -140,6 +152,10 @@ class NativeFinalRecomputeResult:
     rrc_stage_limits: dict[int, tuple[int, int]]
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Restore source active stage ownership for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _restore_source_active_stage_ownership(
     state: Any,
     cemab: np.ndarray,
@@ -247,6 +263,10 @@ def _restore_source_active_stage_ownership(
     return masked, masked_nonzero, line_masked, line_masked_nonzero, stage_limits
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Apply native final recompute for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def apply_native_final_recompute(state: Any) -> NativeFinalRecomputeResult:
     """Replace only the final local xstarcalc fixed-state/emissivity work."""
     from .radial_transfer import RadialTransferWorkspace
@@ -347,6 +367,10 @@ def apply_native_final_recompute(state: Any) -> NativeFinalRecomputeResult:
     inp.global_xilevg = _p(gx); inp.global_bilevg = _p(gb); inp.global_rnisg = _p(gr); inp.global_level_count = gx.size
     inp.source_leveltemp_energy_ev = _p(leveltemp_energy); inp.source_leveltemp_count = leveltemp_energy.size
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the bind operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def bind(name: str, array: np.ndarray) -> None:
         setattr(out, name, _p(array)); setattr(out, name + "_capacity", array.size)
     bind("populations", populations); bind("lte_populations", lte); bind("rcem", rcem); bind("oplin", oplin)

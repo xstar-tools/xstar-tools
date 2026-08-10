@@ -8,6 +8,7 @@ The developer documentation is organized around the frozen scientific boundary a
 architecture
 fortran_source_map
 python_cpp_fortran_concordance
+function_commenting
 execution_modes
 public_python_api
 unified_cli

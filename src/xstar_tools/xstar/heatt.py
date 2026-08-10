@@ -115,6 +115,10 @@ class HeattResult:
     source_file: str = "xstar/xstarlib/src/heatt.f90"
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the vector operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual s. 11.4.4, heating/cooling aggregation and temperature update support.
+# XSTAR-FUNCTION-COMMENT-END
 def _vector(values: Sequence[float], *, name: str, minimum: int) -> np.ndarray:
     arr = np.asarray(values, dtype=float).reshape(-1)
     if arr.size < int(minimum):
@@ -124,6 +128,10 @@ def _vector(values: Sequence[float], *, name: str, minimum: int) -> np.ndarray:
     return arr
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the matrix operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual s. 11.4.4, heating/cooling aggregation and temperature update support.
+# XSTAR-FUNCTION-COMMENT-END
 def _matrix(
     values: Sequence[Sequence[float]],
     *,
@@ -141,12 +149,20 @@ def _matrix(
     return arr
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Copy leveltemp for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual s. 11.4.4, heating/cooling aggregation and temperature update support.
+# XSTAR-FUNCTION-COMMENT-END
 def _copy_leveltemp(initial: Optional[UCalcLevelTable]) -> UCalcLevelTable:
     if initial is None:
         return UCalcLevelTable(levels={}, nlev=0)
     return UCalcLevelTable(levels=dict(initial.levels), nlev=int(initial.nlev))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the overwrite leveltemp operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual s. 11.4.4, heating/cooling aggregation and temperature update support.
+# XSTAR-FUNCTION-COMMENT-END
 def _overwrite_leveltemp(
     workspace: UCalcLevelTable, current: UCalcLevelTable
 ) -> UCalcLevelTable:
@@ -156,6 +172,10 @@ def _overwrite_leveltemp(
     return workspace
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the abundance operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual s. 11.4.4, heating/cooling aggregation and temperature update support.
+# XSTAR-FUNCTION-COMMENT-END
 def _abundance(abundances_by_z: Mapping[int, float] | Sequence[float], z: int) -> float:
     if isinstance(abundances_by_z, Mapping):
         return float(abundances_by_z.get(int(z), 0.0))
@@ -170,6 +190,10 @@ def _abundance(abundances_by_z: Mapping[int, float] | Sequence[float], z: int) -
     return 0.0
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the source fac operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual s. 11.4.4, heating/cooling aggregation and temperature update support.
+# XSTAR-FUNCTION-COMMENT-END
 def _source_fac(tau: float) -> float:
     value = float(tau)
     if value > XSTAR_HEATT_FAC_THRESHOLD:
@@ -178,12 +202,20 @@ def _source_fac(tau: float) -> float:
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the native heatt requested operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual s. 11.4.4, heating/cooling aggregation and temperature update support.
+# XSTAR-FUNCTION-COMMENT-END
 def _native_heatt_requested() -> bool:
     enabled = os.environ.get("XSTAR_ATOMIC_THERMAL_ENGINE_CPP", "").strip().lower()
     product = os.environ.get("XSTAR_ATOMIC_THERMAL_ENGINE_CPP_PRODUCT", "").strip().lower()
     return enabled not in {"", "0", "false", "no", "off"} and product not in {"", "0", "false", "no", "off"}
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the heatt native operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual s. 11.4.4, heating/cooling aggregation and temperature update support.
+# XSTAR-FUNCTION-COMMENT-END
 def _heatt_native(
     *, temperature_1e4K: float, radius_cm: float, covering_fraction: float,
     zone_thickness_cm: float, electron_fraction_xee: float,
@@ -315,6 +347,10 @@ def _heatt_native(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Apply the source heating/temperature-control bookkeeping after a local-zone solve and prepare values used by radial/STEP output.
+# Reference context: XSTAR Manual s. 11.4.4, heating/cooling aggregation and temperature update support.
+# XSTAR-FUNCTION-COMMENT-END
 def heatt(
     *,
     temperature_1e4K: float,
@@ -674,6 +710,10 @@ class _DirectHeader:
 
 
 class _DirectHeattMaster:
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Initialize this object and establish the invariants required by later operations.
+    # Reference context: XSTAR Manual s. 11.4.4, heating/cooling aggregation and temperature update support.
+    # XSTAR-FUNCTION-COMMENT-END
     def __init__(self) -> None:
         self._headers = {
             1: _DirectHeader(13, 11),
@@ -703,20 +743,40 @@ class _DirectHeattMaster:
             7: np.asarray([2.0]),
         }
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the header operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual s. 11.4.4, heating/cooling aggregation and temperature update support.
+    # XSTAR-FUNCTION-COMMENT-END
     def header(self, record: int) -> _DirectHeader:
         return self._headers[int(record)]
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Record integers for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual s. 11.4.4, heating/cooling aggregation and temperature update support.
+    # XSTAR-FUNCTION-COMMENT-END
     def record_integers(self, record: int) -> np.ndarray:
         return self._integers[int(record)]
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Record reals for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual s. 11.4.4, heating/cooling aggregation and temperature update support.
+    # XSTAR-FUNCTION-COMMENT-END
     def record_reals(self, record: int) -> np.ndarray:
         return self._reals[int(record)]
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Record chars for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual s. 11.4.4, heating/cooling aggregation and temperature update support.
+    # XSTAR-FUNCTION-COMMENT-END
     def record_chars(self, record: int) -> bytes:
         return b""
 
 
 class _DirectHeattDerived:
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Initialize this object and establish the invariants required by later operations.
+    # Reference context: XSTAR Manual s. 11.4.4, heating/cooling aggregation and temperature update support.
+    # XSTAR-FUNCTION-COMMENT-END
     def __init__(self) -> None:
         self.npfirst = np.zeros(20, dtype=int)
         self.npfirst[11] = 1
@@ -739,6 +799,10 @@ class _DirectHeattDerived:
         self.ion_records = np.asarray([0, 2, 0], dtype=int)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Provide the direct-source reference for fortran heatt reference case for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual s. 11.4.4, heating/cooling aggregation and temperature update support.
+# XSTAR-FUNCTION-COMMENT-END
 def direct_fortran_heatt_reference_case() -> Mapping[str, Any]:
     """Frozen output from unmodified ``heatt.f90`` compiled with stubs."""
     return {
@@ -762,6 +826,10 @@ def direct_fortran_heatt_reference_case() -> Mapping[str, Any]:
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Provide the direct-source reference for heatt python result for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual s. 11.4.4, heating/cooling aggregation and temperature update support.
+# XSTAR-FUNCTION-COMMENT-END
 def _direct_heatt_python_result() -> HeattResult:
     master = _DirectHeattMaster()
     derived = _DirectHeattDerived()
@@ -837,6 +905,10 @@ def _direct_heatt_python_result() -> HeattResult:
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Execute direct fortran heatt validation for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual s. 11.4.4, heating/cooling aggregation and temperature update support.
+# XSTAR-FUNCTION-COMMENT-END
 def run_direct_fortran_heatt_validation(
     *, rtol: float = 2.0e-15, atol: float = 0.0
 ) -> Mapping[str, Any]:

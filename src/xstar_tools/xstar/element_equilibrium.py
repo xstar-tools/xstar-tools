@@ -94,6 +94,10 @@ class ElementIonBlock:
     ion_counter: int = 0
     label: str = ""
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the compact index operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def compact_index(self, local_level: int) -> int:
         return self.compact_start + int(local_level) - 1
 
@@ -107,6 +111,10 @@ class ElementBasisRow:
     ion_counter: int = 0
     roles: List[Dict[str, Any]] = field(default_factory=list)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Test whether shared alias holds for the current runtime state.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def is_shared_alias(self) -> bool:
         return len(self.roles) > 1
@@ -128,11 +136,19 @@ class ElementCompactBasis:
     role_to_row: Dict[Tuple[int, int], int] = field(default_factory=dict)
     ion_stage_by_counter: Dict[int, int] = field(default_factory=dict)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the row operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def row(self, compact_index: int) -> ElementBasisRow:
         if compact_index < 1 or compact_index > self.n_rows:
             raise IndexError(f"compact row {compact_index} outside 1..{self.n_rows}")
         return self.rows[compact_index - 1]
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the endpoint row operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def endpoint_row(self, ion_index: int, local_endpoint: int) -> int:
         block = next((b for b in self.blocks if b.ion_index == int(ion_index)), None)
         if block is None:
@@ -145,6 +161,10 @@ class ElementCompactBasis:
             )
         return row
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the nsup operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def nsup(self) -> np.ndarray:
         out = np.zeros(self.n_rows + 1, dtype=np.int32)
@@ -152,6 +172,10 @@ class ElementCompactBasis:
             out[row.compact_index] = row.superlevel
         return out
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the nion operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def nion(self) -> np.ndarray:
         """One-based compact ion-block counters used internally by ``msolvelucy``."""
@@ -160,6 +184,10 @@ class ElementCompactBasis:
             out[row.compact_index] = row.ion_counter
         return out
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the ion stage operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def ion_stage(self) -> np.ndarray:
         """Physical ion stage for each compact row, matching XSTAR probe ``nion``.
@@ -200,6 +228,10 @@ class EscapeProbabilityContext:
     continuum_tau_out: Optional[np.ndarray] = None
     allow_missing_as_zero: bool = False
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the value operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     @staticmethod
     def _value(values: Optional[np.ndarray], index: int) -> Optional[float]:
         if values is None or index <= 0 or index > len(values):
@@ -207,9 +239,17 @@ class EscapeProbabilityContext:
         value = float(values[index - 1])
         return value if math.isfinite(value) else None
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the line taus operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def line_taus(self, index: int) -> Tuple[Optional[float], Optional[float]]:
         return self._value(self.line_tau_in, index), self._value(self.line_tau_out, index)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the continuum taus operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def continuum_taus(self, index: int) -> Tuple[Optional[float], Optional[float]]:
         return self._value(self.continuum_tau_in, index), self._value(self.continuum_tau_out, index)
 
@@ -263,6 +303,10 @@ class ElementEquilibriumContext:
     # observational only and is normally active only for Mg Z=12 hot-path runs.
     profile_control: Optional[MutableMapping[str, Any]] = None
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the electron density cm3 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def electron_density_cm3(self) -> float:
         return self.hydrogen_density_cm3 * self.electron_fraction_xee
@@ -319,21 +363,41 @@ class NativeRecordTermSequence:
 
     __slots__ = ("contribution", "_metadata")
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Initialize this object and establish the invariants required by later operations.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def __init__(self, contribution: NativeElementContribution, metadata: Mapping[str, Any]):
         self.contribution = contribution
         self._metadata = dict(metadata)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Return the logical item count represented by this object.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def __len__(self) -> int:
         return 4
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the source ipmat clamped operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def source_ipmat_clamped(self) -> bool:
         return bool(self._metadata.get("source_ipmat_clamped", False))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the matrix kind counts operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def matrix_kind_counts(self) -> tuple[int, int, int]:
         return (4, 0, 0)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the materialize operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def _materialize(self) -> List[MatrixTerm]:
         c = self.contribution
         m = self._metadata
@@ -360,9 +424,17 @@ class NativeRecordTermSequence:
             ))
         return result
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Iterate over the logical items in source/runtime order.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def __iter__(self):
         return iter(self._materialize())
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Return the requested logical item while preserving this object's indexing convention.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def __getitem__(self, item):
         return self._materialize()[item]
 
@@ -370,6 +442,10 @@ class NativeRecordTermSequence:
 class NativeConstructionCollector:
     """Ordered contribution stream that avoids retaining Python MatrixTerm objects."""
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Initialize this object and establish the invariants required by later operations.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def __init__(self, density_scale: float):
         self.density_scale = float(density_scale)
         self._entries: List[Any] = []
@@ -377,24 +453,48 @@ class NativeConstructionCollector:
         self._materialized: List[MatrixTerm] = []
         self._virtual_term_count = 0
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Return the logical item count represented by this object.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def __len__(self) -> int:
         return int(self._virtual_term_count)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Report whether this container/state has meaningful content.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def __bool__(self) -> bool:
         return self._virtual_term_count > 0
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the native contributions operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def native_contributions(self) -> Optional[List[NativeElementContribution]]:
         return self._contributions if not self._materialized else None
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the materialized term count operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def materialized_term_count(self) -> int:
         return len(self._materialized)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the contribution count operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def contribution_count(self) -> int:
         return len(self._contributions)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the group to contribution operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def _group_to_contribution(
         self, group: Sequence[MatrixTerm], source_position: int
     ) -> Optional[NativeElementContribution]:
@@ -421,6 +521,10 @@ class NativeConstructionCollector:
             density_scale=xpx,
         )
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the extend operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def extend(self, values: Any) -> None:
         if isinstance(values, NativeRecordTermSequence):
             contribution = values.contribution
@@ -453,6 +557,10 @@ class NativeConstructionCollector:
         self._materialized.extend(items)
         self._virtual_term_count += len(items)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Iterate over the logical items in source/runtime order.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def __iter__(self):
         for entry in self._entries:
             if entry[0] == "contribution":
@@ -464,15 +572,27 @@ class NativeConstructionCollector:
             else:
                 yield from entry[1]
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Return the requested logical item while preserving this object's indexing convention.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def __getitem__(self, item):
         return list(self)[item]
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the count family terms operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def count_family_terms(self, families: set[tuple[int, int]]) -> int:
         count = sum(4 for c in self._contributions if (int(c.rate_type), int(c.data_type)) in families)
         count += sum(1 for term in self._materialized if (int(term.rate_type), int(term.data_type)) in families)
         return count
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the term sequence has clamp operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _term_sequence_has_clamp(values: Any) -> bool:
     marker = getattr(values, "source_ipmat_clamped", None)
     if marker is not None:
@@ -480,6 +600,10 @@ def _term_sequence_has_clamp(values: Any) -> bool:
     return any(bool(getattr(term, "source_ipmat_clamped", False)) for term in values)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the term sequence kind counts operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _term_sequence_kind_counts(values: Any) -> tuple[int, int, int]:
     counts = getattr(values, "matrix_kind_counts", None)
     if counts is not None:
@@ -625,6 +749,10 @@ class ElementEquilibriumResult:
 # Source helpers
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Evaluate the source line escape-probability approximation used to reduce net radiative decay when resonance photons are trapped.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def pescl(tau: float) -> float:
     """Translate ``pescl.f90`` line escape probability."""
     tau = float(tau)
@@ -641,17 +769,29 @@ def pescl(tau: float) -> float:
     return value / 2.0
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Evaluate the continuum/recombination escape factor used for optically thick free-bound photons.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def pescv(tau: float) -> float:
     """Translate ``pescv.f90`` RRC escape probability."""
     return max(math.exp(-float(tau)), 1.0e-12) / 2.0
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the iter ion records operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _iter_ion_records(derived: XSTARDerivedPointers, element_z: int) -> Iterator[Tuple[int, int, int]]:
     for ion_index in range(1, derived.n_ions + 1):
         if int(derived.ion_element_z[ion_index]) == int(element_z):
             yield ion_index, int(derived.ion_stage[ion_index]), int(derived.ion_records[ion_index])
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Record label for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _record_label(master: XSTARMasterData, record: int) -> str:
     try:
         return master.record_chars(record).decode("latin-1", errors="replace").strip("\x00 ")
@@ -662,11 +802,19 @@ def _record_label(master: XSTARMasterData, record: int) -> str:
 _LEVEL_TABLE_CACHE: Dict[Tuple[int, int, int], UCalcLevelTable] = {}
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Clear level table cache for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def clear_level_table_cache() -> None:
     """Clear the process-local level-table cache used by hot Mg/Ca loops."""
     _LEVEL_TABLE_CACHE.clear()
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Translate ATDB level records into the level metadata needed for compact multilevel statistical equilibrium.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def build_level_table(
     master: XSTARMasterData,
     derived: XSTARDerivedPointers,
@@ -721,6 +869,10 @@ def build_level_table(
     return table
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Copy level table for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _copy_level_table(table: UCalcLevelTable) -> UCalcLevelTable:
     """Copy the mutable Fortran ``leveltemp`` workspace state.
 
@@ -733,6 +885,10 @@ def _copy_level_table(table: UCalcLevelTable) -> UCalcLevelTable:
     return UCalcLevelTable(levels=dict(table.levels), nlev=int(table.nlev))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the overwrite leveltemp workspace operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _overwrite_leveltemp_workspace(
     workspace: UCalcLevelTable,
     current: UCalcLevelTable,
@@ -769,6 +925,10 @@ def _overwrite_leveltemp_workspace(
     return workspace
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Initialize leveltemp workspace from levwkelement for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _initialize_leveltemp_workspace_from_levwkelement(
     basis: "ElementCompactBasis",
     level_tables: Mapping[int, UCalcLevelTable],
@@ -866,6 +1026,10 @@ def _initialize_leveltemp_workspace_from_levwkelement(
     return workspace, owner_by_column, trace
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Construct the selected-ion compact basis, including spectroscopic/superlevel/continuum endpoints, on which the kinetic matrix is assembled.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def build_element_compact_basis(
     master: XSTARMasterData,
     derived: XSTARDerivedPointers,
@@ -996,6 +1160,10 @@ def build_element_compact_basis(
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Map global level populations onto the current compact selected-ion basis without inventing levels or changing source identities.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def map_global_populations_to_compact_basis(
     basis: ElementCompactBasis,
     global_populations: Mapping[Tuple[int, int, int], float],
@@ -1035,6 +1203,10 @@ def map_global_populations_to_compact_basis(
         mapped[basis.normalization_row] = 0.0
     return mapped
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build the source-shaped level workspace for one ion, including LTE/support quantities used by rate inversion and normalization.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def levwk(levels: UCalcLevelTable, context: ElementEquilibriumContext) -> np.ndarray:
     """Translate ``levwk.f90`` for one ion."""
     nlev = levels.nlev
@@ -1066,6 +1238,10 @@ def levwk(levels: UCalcLevelTable, context: ElementEquilibriumContext) -> np.nda
     return rniss
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Assemble per-element level workspaces and compact endpoint topology across the selected contiguous ion stages.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def levwkelement(
     master: XSTARMasterData,
     derived: XSTARDerivedPointers,
@@ -1110,6 +1286,10 @@ def levwkelement(
     return rnise, level_tables
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the escape factors operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _escape_factors(
     record: int,
     rate_type: int,
@@ -1147,11 +1327,19 @@ def _escape_factors(
     return ptmp1, ptmp2, None
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the endpoint energy operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _endpoint_energy(levels: UCalcLevelTable, endpoint: int) -> Optional[float]:
     level = levels.get(endpoint)
     return None if level is None else float(level.energy_ev)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the lower upper operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _lower_upper(result: UCalcResult, levels: UCalcLevelTable) -> Tuple[int, int]:
     id1, id2 = int(result.idest1), int(result.idest2)
     lower, upper = id1, id2
@@ -1169,6 +1357,10 @@ def _lower_upper(result: UCalcResult, levels: UCalcLevelTable) -> Tuple[int, int
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the matrix cpp active for mg operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _matrix_cpp_active_for_mg() -> bool:
     """Return true when libxstar_matrix.so should own Mg matrix-term batches."""
     try:
@@ -1182,6 +1374,10 @@ def _matrix_cpp_active_for_mg() -> bool:
     return bool(flags & 2)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the matrix mg rates matrix active for mg operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _matrix_mg_rates_matrix_active_for_mg() -> bool:
     """Return true when the coarse Mg rates+matrix ABI is available."""
     try:
@@ -1194,6 +1390,10 @@ def _matrix_mg_rates_matrix_active_for_mg() -> bool:
     return bool(flags & 32)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the matrix mg ion source scan active for mg operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _matrix_mg_ion_source_scan_active_for_mg() -> bool:
     """Return true when C++ can traverse Mg ion source-pointer chains."""
     try:
@@ -1208,14 +1408,26 @@ def _matrix_mg_ion_source_scan_active_for_mg() -> bool:
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the env truthy operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _env_truthy(name: str, default: str = "0") -> bool:
     return str(os.environ.get(name, default)).strip().lower() in {"1", "true", "yes", "on"}
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the env falsy operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _env_falsy(name: str) -> bool:
     return str(os.environ.get(name, "")).strip().lower() in {"0", "false", "no", "off"}
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the matrix mg ion type49 auto enabled for mg operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _matrix_mg_ion_type49_auto_enabled_for_mg() -> bool:
     """Return true when proven Mg rate-7/data-49 C++ direct terms may run.
 
@@ -1237,6 +1449,10 @@ def _matrix_mg_ion_type49_auto_enabled_for_mg() -> bool:
         return False
     return _matrix_mg_ion_source_scan_active_for_mg()
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the rates cpp active for mg operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _rates_cpp_active_for_mg() -> bool:
     """Return true when the legacy optional C++ rates backend should own Mg batches."""
     try:
@@ -1251,10 +1467,18 @@ def _rates_cpp_active_for_mg() -> bool:
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the mg type49 shadow term signature operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _mg_type49_shadow_term_signature(term: MatrixTerm) -> tuple[str, int, int]:
     return (str(term.role), int(term.row), int(term.column))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the mg type49 shadow float diff operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _mg_type49_shadow_float_diff(a: float, b: float) -> tuple[float, float]:
     aa = float(a)
     bb = float(b)
@@ -1263,6 +1487,10 @@ def _mg_type49_shadow_float_diff(a: float, b: float) -> tuple[float, float]:
     return abs_diff, abs_diff / scale
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the mg type49 shadow record compare operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _mg_type49_shadow_record_compare(
     *,
     record: int,
@@ -1355,6 +1583,10 @@ def _mg_type49_shadow_record_compare(
 
     py_diag = dict(getattr(result, "diagnostics", {}) or {})
     nested_py_diag = dict(py_diag.get("phint53_diagnostics", {}) or {}) if isinstance(py_diag.get("phint53_diagnostics", {}), Mapping) else {}
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the diag float operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def _diag_float(mapping: Mapping[str, Any], key: str) -> float:
         try:
             return float(mapping.get(key, 0.0))
@@ -1444,6 +1676,10 @@ def _mg_type49_shadow_record_compare(
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the mg type49 shadow sample score operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _mg_type49_shadow_sample_score(sample: Mapping[str, Any], *, mode: str) -> float:
     keys = (
         ("scalar_pirt_abs_diff", "scalar_rrrt_abs_diff", "max_matrix_abs_diff")
@@ -1460,6 +1696,10 @@ def _mg_type49_shadow_sample_score(sample: Mapping[str, Any], *, mode: str) -> f
     return float(out)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the mg type49 shadow store worst operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _mg_type49_shadow_store_worst(
     profile_control: MutableMapping[str, Any],
     sample: Mapping[str, Any],
@@ -1481,6 +1721,10 @@ def _mg_type49_shadow_store_worst(
     del worst[int(sample_limit):]
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the mg type49 shadow add sample operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _mg_type49_shadow_add_sample(profile_control: MutableMapping[str, Any], sample: Mapping[str, Any], *, sample_limit: int) -> None:
     samples = profile_control.setdefault("mg_type49_shadow_parity_samples", [])
     if isinstance(samples, list) and len(samples) < int(sample_limit):
@@ -1562,6 +1806,10 @@ def _mg_type49_shadow_add_sample(profile_control: MutableMapping[str, Any], samp
         summary["ready_exact"] = bool(float(summary.get("records_mismatched", 0.0)) == 0.0 and float(summary.get("records_compared", 0.0)) > 0.0)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the mg type53 shadow record compare operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _mg_type53_shadow_record_compare(**kwargs: Any) -> dict[str, Any]:
     """Compare Python-applied type53 scalar/matrix effects against shadow C++ rows.
 
@@ -1611,6 +1859,10 @@ def _mg_type53_shadow_record_compare(**kwargs: Any) -> dict[str, Any]:
     return sample
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the mg type53 shadow add sample operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _mg_type53_shadow_add_sample(profile_control: MutableMapping[str, Any], sample: Mapping[str, Any], *, sample_limit: int) -> None:
     samples = profile_control.setdefault("mg_type53_shadow_parity_samples", [])
     if isinstance(samples, list) and len(samples) < int(sample_limit):
@@ -1692,6 +1944,10 @@ def _mg_type53_shadow_add_sample(profile_control: MutableMapping[str, Any], samp
         summary["ready_exact"] = bool(float(summary.get("records_mismatched", 0.0)) == 0.0 and float(summary.get("records_compared", 0.0)) > 0.0)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the matrix terms from cpp rows operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _matrix_terms_from_cpp_rows(rows: Sequence[Mapping[str, Any]]) -> List[MatrixTerm]:
     out: List[MatrixTerm] = []
     for row in rows:
@@ -1723,6 +1979,10 @@ def _matrix_terms_from_cpp_rows(rows: Sequence[Mapping[str, Any]]) -> List[Matri
     return out
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the native element construction capture enabled operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _native_element_construction_capture_enabled() -> bool:
     return (
         str(os.environ.get("XSTAR_ATOMIC_ELEMENT_CONSTRUCTION_CPP", "0")).strip().lower() in {"1", "true", "yes", "on"}
@@ -1731,6 +1991,10 @@ def _native_element_construction_capture_enabled() -> bool:
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the matrix terms for result operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _matrix_terms_for_result(
     *,
     result: UCalcResult,
@@ -1815,10 +2079,18 @@ def _matrix_terms_for_result(
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the env true operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _env_true(name: str, default: str = "0") -> bool:
     return str(os.environ.get(name, default)).strip().lower() in {"1", "true", "yes", "on"}
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the validate mg simple payload batch rows operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _validate_mg_simple_payload_batch_rows(
     rows: Sequence[Mapping[str, Any]],
     stats: Mapping[str, Any],
@@ -1868,6 +2140,10 @@ def _validate_mg_simple_payload_batch_rows(
                 )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Compare mg simple payload maps for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _compare_mg_simple_payload_maps(
     accepted: Mapping[int, Mapping[str, Any]],
     candidate: Mapping[int, Mapping[str, Any]],
@@ -1929,6 +2205,10 @@ def _compare_mg_simple_payload_maps(
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the array checkpoint operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _array_checkpoint(value: Any) -> Dict[str, Any]:
     """Return an exact byte fingerprint plus compact numeric diagnostics."""
     arr = np.ascontiguousarray(np.asarray(value))
@@ -1951,6 +2231,10 @@ def _array_checkpoint(value: Any) -> Dict[str, Any]:
     return result
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Record mg simple payload checkpoint for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _record_mg_simple_payload_checkpoint(
     profile_control: MutableMapping[str, Any],
     *,
@@ -2011,10 +2295,18 @@ MATRIX_ASSEMBLY_DATAFLOW_SECTIONS: Tuple[str, ...] = (
 )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the matrix dataflow enabled operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _matrix_dataflow_enabled(element_z: int) -> bool:
     return int(element_z) == 12 and _env_true("XSTAR_ATOMIC_MATRIX_ASSEMBLY_DATAFLOW_PROBE")
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the matrix dataflow new evaluation operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _matrix_dataflow_new_evaluation(
     control: MutableMapping[str, Any],
     *,
@@ -2052,6 +2344,10 @@ def _matrix_dataflow_new_evaluation(
     return row
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the matrix dataflow get evaluation operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _matrix_dataflow_get_evaluation(
     control: MutableMapping[str, Any],
     evaluation_index: int,
@@ -2065,6 +2361,10 @@ def _matrix_dataflow_get_evaluation(
     return None
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the matrix dataflow add operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _matrix_dataflow_add(
     control: MutableMapping[str, Any],
     evaluation_index: int,
@@ -2108,6 +2408,10 @@ def _matrix_dataflow_add(
         row["matrix_dimension"] = max(int(row.get("matrix_dimension", 0)), int(matrix_dimension))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the matrix dataflow section seconds operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _matrix_dataflow_section_seconds(
     control: MutableMapping[str, Any],
     evaluation_index: int,
@@ -2119,6 +2423,10 @@ def _matrix_dataflow_section_seconds(
     return float(row.get("sections", {}).get(section, {}).get("exclusive_wall_seconds", 0.0) or 0.0)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the matrix dataflow finish assembly operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _matrix_dataflow_finish_assembly(
     control: MutableMapping[str, Any],
     evaluation_index: int,
@@ -2135,6 +2443,10 @@ def _matrix_dataflow_finish_assembly(
     row["term_count"] = int(term_count)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the matrix dataflow finalize accounting operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _matrix_dataflow_finalize_accounting(
     control: MutableMapping[str, Any],
     evaluation_index: int,
@@ -2226,10 +2538,18 @@ RATE_PAYLOAD_DATAFLOW_SECTIONS: Tuple[str, ...] = (
 )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the rate payload dataflow enabled operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _rate_payload_dataflow_enabled(element_z: int) -> bool:
     return int(element_z) == 12 and _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_DATAFLOW_PROBE")
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the rate payload new evaluation operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _rate_payload_new_evaluation(
     control: MutableMapping[str, Any],
     *,
@@ -2267,6 +2587,10 @@ def _rate_payload_new_evaluation(
     return row
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the rate payload get evaluation operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _rate_payload_get_evaluation(
     control: MutableMapping[str, Any],
     evaluation_index: int,
@@ -2280,6 +2604,10 @@ def _rate_payload_get_evaluation(
     return None
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the rate payload add operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _rate_payload_add(
     control: MutableMapping[str, Any],
     evaluation_index: int,
@@ -2318,6 +2646,10 @@ def _rate_payload_add(
     item["allocation_count"] = float(item.get("allocation_count", 0.0)) + max(0.0, float(allocation_count))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the rate payload classify operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _rate_payload_classify(
     control: MutableMapping[str, Any],
     evaluation_index: int,
@@ -2348,6 +2680,10 @@ def _rate_payload_classify(
         bucket["terms_emitted"] += max(0.0, float(terms_emitted))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the rate payload finalize operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _rate_payload_finalize(
     control: MutableMapping[str, Any],
     evaluation_index: int,
@@ -2392,10 +2728,18 @@ _RATE_PAYLOAD_BATCHED_SHADOW_FAMILIES: Tuple[Tuple[int, int], ...] = (
 )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the rate payload batched shadow enabled operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _rate_payload_batched_shadow_enabled(element_z: int) -> bool:
     return int(element_z) == 12 and _env_true("XSTAR_ATOMIC_RATE_PAYLOAD_BATCHED_ORCHESTRATION_SHADOW")
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the term shadow row operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _term_shadow_row(term: MatrixTerm) -> Dict[str, Any]:
     return {
         "term_index": int(term.term_index), "record": int(term.record),
@@ -2412,6 +2756,10 @@ def _term_shadow_row(term: MatrixTerm) -> Dict[str, Any]:
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the reverse oracle terms by position operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _reverse_oracle_terms_by_position(
     candidate_terms: Sequence[MatrixTerm],
     accepted_by_position: Mapping[int, MatrixTerm],
@@ -2430,6 +2778,10 @@ def _reverse_oracle_terms_by_position(
     ]
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Execute rate payload batched orchestration shadow for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _run_rate_payload_batched_orchestration_shadow(
     control: MutableMapping[str, Any],
     *,
@@ -2835,6 +3187,10 @@ def _run_rate_payload_batched_orchestration_shadow(
             "source_row_unclamped", "source_column_unclamped", "source_ipmat_clamped",
         )
         float_fields = ("aj1", "aj2", "cj", "cj2")
+        # XSTAR-FUNCTION-COMMENT-BEGIN
+        # Purpose: Implement the sig operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+        # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+        # XSTAR-FUNCTION-COMMENT-END
         def sig(row: Mapping[str, Any]) -> Tuple[Any, ...]:
             return (int(row["record"]), str(row["role"]), int(row["row"]), int(row["column"]))
         py_map = {sig(row): row for row in accepted_rows}
@@ -2871,6 +3227,10 @@ def _run_rate_payload_batched_orchestration_shadow(
                         worst = {"key": list(key), "field": field, "accepted": a, "cpp": b, "abs_diff": diff, "rel_diff": rel}
         summary["worst_mismatch"] = worst
 
+        # XSTAR-FUNCTION-COMMENT-BEGIN
+        # Purpose: Implement the contribution operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+        # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+        # XSTAR-FUNCTION-COMMENT-END
         def contribution(rows_in: Sequence[Mapping[str, Any]]) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
             d = np.zeros((basis.n_rows, basis.n_rows), dtype=np.float64)
             h = np.zeros_like(d); h2 = np.zeros_like(d)
@@ -2892,6 +3252,10 @@ def _run_rate_payload_batched_orchestration_shadow(
         # identity.  Direct C++ paths may reserve term-index ranges, after which
         # later accepted paths can reuse a numeric index.  v0.6.30 therefore
         # substitutes rows using the full stable matrix-term identity.
+        # XSTAR-FUNCTION-COMMENT-BEGIN
+        # Purpose: Implement the replacement key operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+        # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+        # XSTAR-FUNCTION-COMMENT-END
         def replacement_key(row: Mapping[str, Any]) -> Tuple[Any, ...]:
             return (
                 int(row["record"]), int(row["rate_type"]), int(row["data_type"]),
@@ -2902,6 +3266,10 @@ def _run_rate_payload_batched_orchestration_shadow(
                 bool(row["source_ipmat_clamped"]),
             )
 
+        # XSTAR-FUNCTION-COMMENT-BEGIN
+        # Purpose: Implement the duplicate count operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+        # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+        # XSTAR-FUNCTION-COMMENT-END
         def duplicate_count(values: Sequence[Any]) -> int:
             counts: Dict[Any, int] = {}
             for value in values:
@@ -2973,6 +3341,10 @@ def _run_rate_payload_batched_orchestration_shadow(
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the rate payload four family seed elision differential requested operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _rate_payload_four_family_seed_elision_differential_requested(element_z: int) -> bool:
     """Enable the v0.6.39 accepted-live seed-elision differential diagnostic."""
     return bool(
@@ -2983,6 +3355,10 @@ def _rate_payload_four_family_seed_elision_differential_requested(element_z: int
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the rate payload four family full reverse verification requested operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _rate_payload_four_family_full_reverse_verification_requested(element_z: int) -> bool:
     """Route promoted verification requests through the complete v0.6.37 oracle.
 
@@ -2998,6 +3374,10 @@ def _rate_payload_four_family_full_reverse_verification_requested(element_z: int
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the rate payload four family product candidate enabled operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _rate_payload_four_family_product_candidate_enabled(element_z: int) -> bool:
     """Retain only the accepted-live v0.6.39 diagnostic replacement path.
 
@@ -3011,6 +3391,10 @@ def _rate_payload_four_family_product_candidate_enabled(element_z: int) -> bool:
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the rate payload four family product promoted enabled operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _rate_payload_four_family_product_promoted_enabled(
     element_z: int, profile_control: Mapping[str, Any]
 ) -> bool:
@@ -3026,6 +3410,10 @@ def _rate_payload_four_family_product_promoted_enabled(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the parent element atomic mass operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _parent_element_atomic_mass(
     master: XSTARMasterData, derived: XSTARDerivedPointers, record: int
 ) -> float:
@@ -3036,6 +3424,10 @@ def _parent_element_atomic_mass(
     return float(value)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Execute rate payload four family product candidate for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _run_rate_payload_four_family_product_candidate(
     control: MutableMapping[str, Any],
     *,
@@ -3139,6 +3531,10 @@ def _run_rate_payload_four_family_product_candidate(
     control.setdefault("mg_rate_payload_four_family_product_evaluations", []).append(summary)
     original_terms = list(terms)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the replacement key operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def replacement_key(row: Mapping[str, Any]) -> Tuple[Any, ...]:
         return (
             int(row["record"]), int(row["rate_type"]), int(row["data_type"]),
@@ -3149,14 +3545,26 @@ def _run_rate_payload_four_family_product_candidate(
             bool(row["source_ipmat_clamped"]),
         )
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the ordered hash operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def ordered_hash(term_rows: Sequence[Mapping[str, Any]]) -> str:
         payload = json.dumps(list(term_rows), sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
         return hashlib.sha256(payload).hexdigest()
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the array hash operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def array_hash(array: np.ndarray) -> str:
         value = np.ascontiguousarray(np.asarray(array, dtype=np.float64))
         return hashlib.sha256(value.view(np.uint8)).hexdigest()
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the materialize operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def materialize(term_list: Sequence[MatrixTerm]) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         dense = np.zeros((basis.n_rows, basis.n_rows), dtype=np.float64)
         heat = np.zeros_like(dense)
@@ -3172,6 +3580,10 @@ def _run_rate_payload_four_family_product_candidate(
         rhs[basis.normalization_row - 1] = 1.0
         return dense, heat, heat2, normalized, rhs
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the first sequence difference operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def first_sequence_difference(
         left: Sequence[Mapping[str, Any]], right: Sequence[Mapping[str, Any]]
     ) -> Dict[str, Any]:
@@ -3193,6 +3605,10 @@ def _run_rate_payload_four_family_product_candidate(
             }
         return {}
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the cell contribution rows operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def cell_contribution_rows(term_list: Sequence[MatrixTerm]) -> List[Dict[str, Any]]:
         cells: Dict[Tuple[int, int], List[Dict[str, Any]]] = {}
         for position, term in enumerate(term_list):
@@ -3680,6 +4096,10 @@ def _run_rate_payload_four_family_product_candidate(
         summary["live_matrix_commit"] = False
         return original_terms
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the native element engine env enabled operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _native_element_engine_env_enabled(element_z: int, *, product: bool = False, shadow: bool = False) -> bool:
     """Return whether the v0.6.45.1 compact native element-construction boundary is requested."""
     enabled = str(os.environ.get("XSTAR_ATOMIC_ELEMENT_ENGINE_CPP", "0")).strip().lower() in {"1", "true", "yes", "on"}
@@ -3698,6 +4118,10 @@ def _native_element_engine_env_enabled(element_z: int, *, product: bool = False,
     return True
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Record native element engine profile for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _record_native_element_engine_profile(
     profile_control: MutableMapping[str, Any],
     metrics: Mapping[str, Any],
@@ -3767,6 +4191,10 @@ def _record_native_element_engine_profile(
         if status == "fallback": bucket["fallbacks"] = int(bucket.get("fallbacks", 0)) + 1
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the native element solve mismatch operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _native_element_solve_mismatch(python_solve: Any, native_solve: Any) -> Dict[str, Any]:
     """Return the first exact mismatch between Python and native element results."""
     array_fields = (
@@ -3801,6 +4229,10 @@ def _native_element_solve_mismatch(python_solve: Any, native_solve: Any) -> Dict
     return {}
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the assemble element matrix impl operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _assemble_element_matrix_impl(
     master: XSTARMasterData,
     derived: XSTARDerivedPointers,
@@ -4216,9 +4648,17 @@ def _assemble_element_matrix_impl(
     # v0.6.0a39 applied-speed instrumentation.  This is observational only:
     # it records whether requested C++ rate7 paths actually consume records
     # before the Python ucalc remaining-rate7 loop sees them.
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the env enabled operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def _env_enabled(name: str, default: str = "0") -> bool:
         return str(os.environ.get(name, default)).strip().lower() in {"1", "true", "yes", "on"}
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the applied speed summary operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def _applied_speed_summary() -> Dict[str, Any] | None:
         if int(element_z) != 12:
             return None
@@ -4271,12 +4711,20 @@ def _assemble_element_matrix_impl(
             })
         return summary_obj
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the as key operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def _as_key(value: Any) -> str:
         try:
             return str(int(value))
         except Exception:
             return str(value)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the speed add counter operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def _speed_add_counter(section: str, key: Any, amount: float = 1.0) -> None:
         summary_obj = _applied_speed_summary()
         if summary_obj is None:
@@ -4285,9 +4733,17 @@ def _assemble_element_matrix_impl(
         k = _as_key(key)
         bucket[k] = float(bucket.get(k, 0.0)) + float(amount)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the speed add elapsed operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def _speed_add_elapsed(section: str, key: Any, amount: float = 0.0) -> None:
         _speed_add_counter(section, key, float(amount))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the speed nested update operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def _speed_nested_update(section: str, name: str, **values: Any) -> None:
         summary_obj = _applied_speed_summary()
         if summary_obj is None:
@@ -4299,9 +4755,17 @@ def _assemble_element_matrix_impl(
             else:
                 bucket[k] = v
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the speed timing add operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def _speed_timing_add(name: str, elapsed_seconds: float, count: float = 1.0) -> None:
         _speed_nested_update("timing_splits", name, elapsed_seconds=float(elapsed_seconds), count=float(count))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the matrix hidden timing add operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def _matrix_hidden_timing_add(name: str, elapsed_seconds: float, *, ion_stage: int | None = None, field: str | None = None) -> None:
         if int(element_z) != 12:
             return
@@ -4313,6 +4777,10 @@ def _assemble_element_matrix_impl(
                 per_ion = diag.setdefault("hidden_loop_timing_by_ion", {}).setdefault(str(int(ion_stage)), {})
                 per_ion[field] = float(per_ion.get(field, 0.0)) + float(elapsed_seconds)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the matrix diag update operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def _matrix_diag_update(section: str, name: str | None = None, **values: Any) -> None:
         summary_obj = _applied_speed_summary()
         if summary_obj is None:
@@ -4328,6 +4796,10 @@ def _assemble_element_matrix_impl(
             else:
                 bucket[k] = v
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the matrix diag nested add operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def _matrix_diag_nested_add(section: str, name: Any, subname: Any, **values: Any) -> None:
         summary_obj = _applied_speed_summary()
         if summary_obj is None:
@@ -4358,6 +4830,10 @@ def _assemble_element_matrix_impl(
     _transition_family_topology_bucket_hit_counts: Dict[int, Dict[str, int]] = {}
     _transition_family_topology_bucket_miss_counts: Dict[int, Dict[str, int]] = {}
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the transition family key operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def _transition_family_key(
         block_obj: Any,
         rate_type: int,
@@ -4386,6 +4862,10 @@ def _assemble_element_matrix_impl(
             int(getattr(basis, "normalization_row", 0)),
         )
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the transition family endpoint bucket operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def _transition_family_endpoint_bucket(endpoint: int, nlev: int) -> int:
         iv = int(endpoint)
         nl = max(0, int(nlev))
@@ -4399,6 +4879,10 @@ def _assemble_element_matrix_impl(
             return 3
         return 4
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the transition family topology bucket key operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def _transition_family_topology_bucket_key(
         block_obj: Any,
         rate_type: int,
@@ -4431,6 +4915,10 @@ def _assemble_element_matrix_impl(
             int(getattr(basis, "normalization_row", 0)),
         )
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the transition family record topology bucket event operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def _transition_family_record_topology_bucket_event(data_type: int, key: Tuple[Any, ...]) -> None:
         dtype = int(data_type)
         seen = _transition_family_topology_bucket_seen_counts.setdefault(dtype, {})
@@ -4446,6 +4934,10 @@ def _assemble_element_matrix_impl(
             bucket = _transition_family_topology_bucket_hit_counts.setdefault(dtype, {})
         bucket[skey] = int(bucket.get(skey, 0)) + 1
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the transition family record key event operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def _transition_family_record_key_event(data_type: int, key: Tuple[Any, ...], event: str) -> None:
         dtype = int(data_type)
         if event == "seen":
@@ -4463,16 +4955,28 @@ def _assemble_element_matrix_impl(
         skey = repr(key)
         bucket[skey] = int(bucket.get(skey, 0)) + 1
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the transition family local add operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def _transition_family_local_add(local: Dict[int, Dict[str, float]], data_type: int, **values: float) -> None:
         bucket = local.setdefault(int(data_type), {})
         for k, v in values.items():
             bucket[k] = float(bucket.get(k, 0.0)) + float(v)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the transition family local add by ion operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def _transition_family_local_add_by_ion(local: Dict[int, Dict[int, Dict[str, float]]], ion_stage: int, data_type: int, **values: float) -> None:
         bucket = local.setdefault(int(ion_stage), {}).setdefault(int(data_type), {})
         for k, v in values.items():
             bucket[k] = float(bucket.get(k, 0.0)) + float(v)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the duplicate cpp row count operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def _duplicate_cpp_row_count(rows: Sequence[Mapping[str, Any]]) -> int:
         seen: set[tuple[Any, ...]] = set()
         dup = 0
@@ -4491,6 +4995,10 @@ def _assemble_element_matrix_impl(
                 seen.add(key)
         return dup
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the speed kernel update operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def _speed_kernel_update(name: str, **values: Any) -> None:
         summary_obj = _applied_speed_summary()
         if summary_obj is None:
@@ -4502,6 +5010,10 @@ def _assemble_element_matrix_impl(
             else:
                 bucket[k] = v
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the speed note operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def _speed_note(text: str, limit: int = 32) -> None:
         summary_obj = _applied_speed_summary()
         if summary_obj is None:
@@ -4510,6 +5022,10 @@ def _assemble_element_matrix_impl(
         if isinstance(notes, list) and len(notes) < limit:
             notes.append(str(text))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the rate7 classifier add operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def _rate7_classifier_add(
         *,
         source_record: int,
@@ -4525,6 +5041,10 @@ def _assemble_element_matrix_impl(
     ) -> None:
         if not _rate7_classifier_enabled or int(result_rate_type) != 7:
             return
+        # XSTAR-FUNCTION-COMMENT-BEGIN
+        # Purpose: Implement the add operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+        # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+        # XSTAR-FUNCTION-COMMENT-END
         def _add(target: Dict[Any, Dict[str, float]], key: Any) -> None:
             item = target.setdefault(key, {"records_seen": 0.0, "elapsed_seconds": 0.0, "matrix_inserted": 0.0})
             item["records_seen"] += 1.0
@@ -4622,6 +5142,10 @@ def _assemble_element_matrix_impl(
                 and str(os.environ.get("XSTAR_ATOMIC_MATRIX_MG_ION_SOURCE_SCAN_CPP", "1")).strip().lower() in {"1", "true", "yes", "on"}
             )
 
+            # XSTAR-FUNCTION-COMMENT-BEGIN
+            # Purpose: Build type51 cpp cache for this module while preserving the surrounding source/runtime invariants.
+            # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+            # XSTAR-FUNCTION-COMMENT-END
             def _build_type51_cpp_cache(ucontext_for_payload: UCalcContext) -> None:
                 nonlocal type51_cpp_stats_recorded
                 if type51_cpp_cache or not type51_cpp_enabled:
@@ -4750,6 +5274,10 @@ def _assemble_element_matrix_impl(
                     type51_cpp_stats_recorded = True
 
 
+            # XSTAR-FUNCTION-COMMENT-BEGIN
+            # Purpose: Build mg type51 payload for this module while preserving the surrounding source/runtime invariants.
+            # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+            # XSTAR-FUNCTION-COMMENT-END
             def _build_mg_type51_payload(record_number: int, ucontext_for_payload: UCalcContext) -> Optional[Dict[str, Any]]:
                 """Decode one Mg type-51 collision row for C++ rates+matrix ABI."""
                 try:
@@ -4806,6 +5334,10 @@ def _assemble_element_matrix_impl(
 
 
 
+            # XSTAR-FUNCTION-COMMENT-BEGIN
+            # Purpose: Implement the mg terms close operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+            # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+            # XSTAR-FUNCTION-COMMENT-END
             def _mg_terms_close(left: List[MatrixTerm], right: List[MatrixTerm]) -> bool:
                 if len(left) != len(right):
                     return False
@@ -4819,6 +5351,10 @@ def _assemble_element_matrix_impl(
                 return True
 
 
+            # XSTAR-FUNCTION-COMMENT-BEGIN
+            # Purpose: Implement the flush pending mg type51 rates matrix operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+            # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+            # XSTAR-FUNCTION-COMMENT-END
             def _flush_pending_mg_type51_rates_matrix() -> None:
                 nonlocal n_eval, n_unmapped, n_blocked, n_source_clamps, _ion_rate_elapsed, _ion_matrix_elapsed
                 if not pending_cpp_mg_type51_payload:
@@ -5078,6 +5614,10 @@ def _assemble_element_matrix_impl(
                     _ion_matrix_elapsed += time.perf_counter() - _matrix_t0
 
 
+            # XSTAR-FUNCTION-COMMENT-BEGIN
+            # Purpose: Implement the flush pending mg rates matrix operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+            # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+            # XSTAR-FUNCTION-COMMENT-END
             def _flush_pending_mg_rates_matrix() -> None:
                 nonlocal n_eval, n_unmapped, n_blocked, n_source_clamps, _ion_matrix_elapsed
                 _flush_pending_mg_type51_rates_matrix()
@@ -5235,6 +5775,10 @@ def _assemble_element_matrix_impl(
                 if is_mg_profile:
                     _ion_matrix_elapsed += time.perf_counter() - _matrix_t0
 
+            # XSTAR-FUNCTION-COMMENT-BEGIN
+            # Purpose: Implement the timed flush pending mg rates matrix operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+            # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+            # XSTAR-FUNCTION-COMMENT-END
             def _timed_flush_pending_mg_rates_matrix() -> None:
                 _probe_t0 = time.perf_counter() if _rate_payload_probe else 0.0
                 _records_before = int(len(pending_cpp_mg_type51_payload) + len(pending_cpp_mg_rates_matrix))
@@ -7536,6 +8080,10 @@ def _assemble_element_matrix_impl(
                             )
                             break
 
+                # XSTAR-FUNCTION-COMMENT-BEGIN
+                # Purpose: Implement the materialize checkpoint operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+                # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+                # XSTAR-FUNCTION-COMMENT-END
                 def _materialize_checkpoint(_source_terms: Sequence[MatrixTerm]) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
                     _dense = np.zeros((basis.n_rows, basis.n_rows), dtype=np.float64)
                     _heat = np.zeros_like(_dense)
@@ -8011,6 +8559,10 @@ def _assemble_element_matrix_impl(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Accumulate source-ordered radiative, collisional, ionization, recombination, and Auger terms into the statistical-equilibrium operator.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def assemble_element_matrix(
     master: XSTARMasterData,
     derived: XSTARDerivedPointers,
@@ -8046,6 +8598,10 @@ def assemble_element_matrix(
         return result
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Solve normalized for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _solve_normalized(
     matrix: np.ndarray,
     normalization_row: int,
@@ -8073,6 +8629,10 @@ def _solve_normalized(
         return x, "numpy_lstsq_fallback", rank
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the source fixed difference operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _source_fixed_difference(
     previous: np.ndarray, current: np.ndarray, *, epsilon: float
 ) -> float:
@@ -8092,6 +8652,10 @@ def _source_fixed_difference(
     return float(diff2)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the source outer difference operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _source_outer_difference(
     previous: np.ndarray, current: np.ndarray, *, epsilon: float
 ) -> float:
@@ -8113,6 +8677,10 @@ def _source_outer_difference(
     return float(diff)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Solve the normalized multilevel kinetic system with the Lucy superlevel iteration/normalization semantics used by XSTAR.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def msolvelucy(
     assembly: ElementMatrixAssembly,
     context: ElementEquilibriumContext,
@@ -8134,6 +8702,10 @@ def msolvelucy(
     _workspace_copy_bytes = 0
     _workspace_allocation_bytes = 0
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the solver timing add operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def _solver_timing_add(name: str, elapsed_seconds: float, count: float = 1.0) -> None:
         if not _mg_profile:
             return
@@ -8146,6 +8718,10 @@ def msolvelucy(
         except Exception:
             pass
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the profiled copy operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def _profiled_copy(values: np.ndarray) -> np.ndarray:
         nonlocal _workspace_copy_seconds, _workspace_copy_count, _workspace_copy_bytes
         if not _allocation_probe:
@@ -8157,6 +8733,10 @@ def msolvelucy(
         _workspace_copy_bytes += int(result.nbytes)
         return result
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the profiled zeros operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def _profiled_zeros(shape: Any, dtype: Any = float) -> np.ndarray:
         nonlocal _workspace_allocation_seconds, _workspace_allocation_count, _workspace_allocation_bytes
         if not _allocation_probe:
@@ -8168,6 +8748,10 @@ def msolvelucy(
         _workspace_allocation_bytes += int(result.nbytes)
         return result
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the profiled ones operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def _profiled_ones(shape: Any, dtype: Any = float) -> np.ndarray:
         nonlocal _workspace_allocation_seconds, _workspace_allocation_count, _workspace_allocation_bytes
         if not _allocation_probe:
@@ -8638,6 +9222,10 @@ _V064812345338_RATE1_BOUND_FREE_DATA_TYPES = frozenset({
 })
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the reset fixed state detail3 candidates v064812345338 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _reset_fixed_state_detail3_candidates_v064812345338(
     profile_control: MutableMapping[str, Any], element_z: int
 ) -> None:
@@ -8658,6 +9246,10 @@ def _reset_fixed_state_detail3_candidates_v064812345338(
             published.pop(ci, None)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Capture fixed state detail3 candidate v064812345338 for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _capture_fixed_state_detail3_candidate_v064812345338(
     *,
     profile_control: MutableMapping[str, Any],
@@ -8736,6 +9328,10 @@ def _capture_fixed_state_detail3_candidate_v064812345338(
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Finalize fixed state detail3 publication v064812345338 for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _finalize_fixed_state_detail3_publication_v064812345338(
     *,
     profile_control: MutableMapping[str, Any],
@@ -8877,6 +9473,10 @@ def _finalize_fixed_state_detail3_publication_v064812345338(
         except Exception:
             pass
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Execute the full second-stage element solve: compact levels, record-rate matrix construction, normalized populations, and element heating/cooling diagnostics.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def solve_element_statistical_equilibrium(
     master: XSTARMasterData,
     derived: XSTARDerivedPointers,
@@ -9056,6 +9656,10 @@ def solve_element_statistical_equilibrium(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Register element equilibrium stage for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def register_element_equilibrium_stage(
     driver: Any,
     *,
@@ -9066,6 +9670,10 @@ def register_element_equilibrium_stage(
     """Register the translated ELEMENT_POPULATIONS stage on the source driver."""
     from .driver import XSTARStage
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the handler operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+    # XSTAR-FUNCTION-COMMENT-END
     def _handler(state: Any) -> None:
         if state.atomic.master is None or state.atomic.derived is None:
             raise ElementEquilibriumError("atomic database state must be initialized first")
@@ -9112,6 +9720,10 @@ def register_element_equilibrium_stage(
 # Products
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write csv for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def _write_csv(path: Path, rows: Sequence[Mapping[str, Any]], fieldnames: Sequence[str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="") as handle:
@@ -9121,6 +9733,10 @@ def _write_csv(path: Path, rows: Sequence[Mapping[str, Any]], fieldnames: Sequen
             writer.writerow(row)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write element equilibrium products for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+# XSTAR-FUNCTION-COMMENT-END
 def write_element_equilibrium_products(
     result: ElementEquilibriumResult,
     out_dir: str | Path,

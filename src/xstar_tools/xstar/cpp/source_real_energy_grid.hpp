@@ -18,10 +18,18 @@
 
 namespace xstar_source_real_energy_grid {
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement default real for the source-compatible continuum energy grid, including default-REAL rounding where the original Fortran used unsuffixed REAL literals.
+// Reference context: XSTAR Manual ss11.6-11.6.4 (continuum/radiation grid); exact default-REAL semantics are a frozen source-compatibility invariant.
+// XSTAR-FUNCTION-COMMENT-END
 inline double default_real(double value) {
     return static_cast<double>(static_cast<float>(value));
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement default real reciprocal for the source-compatible continuum energy grid, including default-REAL rounding where the original Fortran used unsuffixed REAL literals.
+// Reference context: XSTAR Manual ss11.6-11.6.4 (continuum/radiation grid); exact default-REAL semantics are a frozen source-compatibility invariant.
+// XSTAR-FUNCTION-COMMENT-END
 inline double default_real_reciprocal(std::size_t denominator) {
     if (denominator == 0u) throw std::runtime_error("ener default-real reciprocal denominator is zero");
     const float one = 1.0f;
@@ -29,6 +37,10 @@ inline double default_real_reciprocal(std::size_t denominator) {
     return static_cast<double>(one / denom);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement build for the source-compatible continuum energy grid, including default-REAL rounding where the original Fortran used unsuffixed REAL literals.
+// Reference context: XSTAR Manual ss11.6-11.6.4 (continuum/radiation grid); exact default-REAL semantics are a frozen source-compatibility invariant.
+// XSTAR-FUNCTION-COMMENT-END
 inline std::vector<double> build(std::size_t n) {
     // Literal arithmetic-kind translation of ener.f90.  The destination
     // variables are REAL(8), but the literals 0.1, 4.e+5, 1., 1.e+6 and

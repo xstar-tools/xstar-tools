@@ -79,3 +79,13 @@ python tools/qualification/check_source_concordance.py
 ```
 
 The Python comment checker strips only the marked leading block and verifies byte identity with the recorded `0.6.54` baseline. This is stronger than an AST-only check and prevents executable changes from being hidden in the comment pass.
+
+## 0.6.73 function-level expansion
+
+The original leading correspondence blocks remain pinned historical evidence.
+Version 0.6.73 adds a second, reversible `XSTAR-FUNCTION-COMMENT` overlay at
+function definitions so maintainers can understand local purpose and physical
+context without first opening the manual/papers. The older overlay checker
+strips this newer layer before validating its original hashes; the dedicated
+`check_source_function_comments.py` gate independently proves the new layer is
+comment-only. See `function_commenting.md`.

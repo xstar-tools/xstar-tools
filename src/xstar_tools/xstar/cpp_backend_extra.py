@@ -41,6 +41,10 @@ class ExtraBackendStatus:
     cpp_abi_version: int | None = None
     cpp_feature_flags: int | None = None
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Serialize the current state into a plain mapping for diagnostics, provenance, or machine-readable output.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def as_dict(self) -> dict[str, object]:
         return dict(asdict(self))
 
@@ -96,6 +100,10 @@ class MgIonAccumulatorProbe:
     source_order_records: int = 0
     product_active: int = 0
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Serialize the current state into a plain mapping for diagnostics, provenance, or machine-readable output.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def as_dict(self) -> dict[str, object]:
         return dict(asdict(self))
 
@@ -126,6 +134,10 @@ _LIBRARY_INFO = {
 }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the candidate library paths operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _candidate_library_paths(kind: str) -> list[Path]:
     info = _LIBRARY_INFO[kind]
     paths: list[Path] = []
@@ -145,6 +157,10 @@ def _candidate_library_paths(kind: str) -> list[Path]:
     return unique
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Load library for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _load_library(kind: str) -> ctypes.CDLL | None:
     if kind in _LIBS:
         return _LIBS[kind]
@@ -222,11 +238,19 @@ def _load_library(kind: str) -> ctypes.CDLL | None:
         return None
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the cpp import error operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def cpp_import_error(kind: str) -> str | None:
     err = _ERRORS.get(kind)
     return None if err is None else repr(err)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the backend status operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def backend_status(kind: str, requested: str | None = None) -> ExtraBackendStatus:
     info = _LIBRARY_INFO[kind]
     req = (requested or os.environ.get(str(info["backend_env"])) or os.environ.get("XSTAR_ATOMIC_BACKEND") or "python").strip().lower()
@@ -268,22 +292,42 @@ def backend_status(kind: str, requested: str | None = None) -> ExtraBackendStatu
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the opacity backend status operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def opacity_backend_status(requested: str | None = None) -> ExtraBackendStatus:
     return backend_status("opacity", requested)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the thermal backend status operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def thermal_backend_status(requested: str | None = None) -> ExtraBackendStatus:
     return backend_status("thermal", requested)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the engine backend status operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def engine_backend_status(requested: str | None = None) -> ExtraBackendStatus:
     return backend_status("engine", requested)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the enabled from env operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _enabled_from_env(name: str, default: str = "0") -> bool:
     return str(os.environ.get(name, default)).strip().lower() in {"1", "true", "yes", "on"}
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Construct probe for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _make_probe(enabled: bool, lib_available: bool, counters: np.ndarray | None, message: str, error: str | None = None) -> MgIonAccumulatorProbe:
     vals = {name: 0 for name in _COUNTER_NAMES}
     if counters is not None:
@@ -299,6 +343,10 @@ def _make_probe(enabled: bool, lib_available: bool, counters: np.ndarray | None,
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the eval mg ion accumulator cpp operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def eval_mg_ion_accumulator_cpp(
     *,
     element_z: int = 12,
@@ -350,6 +398,10 @@ def eval_mg_ion_accumulator_cpp(
     return _make_probe(True, True, counters, msg)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the probe mg ion accumulator skeleton operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def probe_mg_ion_accumulator_skeleton(
     *,
     element_z: int = 12,
@@ -373,6 +425,10 @@ def probe_mg_ion_accumulator_skeleton(
 
 _RATE_PAYLOAD_SHADOW_ROLE = {1: "forward_offdiag", 2: "reverse_offdiag", 3: "forward_diag_loss", 4: "reverse_diag_loss"}
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the eval mg rate payload batched orchestration shadow cpp operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def eval_mg_rate_payload_batched_orchestration_shadow_cpp(
     records: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], str, dict[str, float]]:
@@ -450,6 +506,10 @@ def eval_mg_rate_payload_batched_orchestration_shadow_cpp(
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the eval mg rate payload native scalar shadow cpp operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def eval_mg_rate_payload_native_scalar_shadow_cpp(
     records: list[dict[str, Any]],
     *,

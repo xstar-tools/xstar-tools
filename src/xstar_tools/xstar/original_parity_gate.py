@@ -29,6 +29,10 @@ SUMMARY_RE = re.compile(r"^\s*([+-]?\d+\.\d+)\s+([+-]?\d+\.\d+)\s+([+-]?\d+\.\d+
 KV_RE = re.compile(r"([A-Za-z_][A-Za-z0-9_()/-]*)=\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][+-]?\d+)?)")
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the sha256 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def sha256(path: Path) -> str:
     h = hashlib.sha256()
     with path.open("rb") as f:
@@ -37,6 +41,10 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the fits headers operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def fits_headers(path: Path) -> list[dict[str, str]]:
     data = path.read_bytes()
     pos = 0
@@ -73,6 +81,10 @@ def fits_headers(path: Path) -> list[dict[str, str]]:
     return headers
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the fits signature operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def fits_signature(path: Path) -> list[dict[str, Any]]:
     sig = []
     for h in fits_headers(path):
@@ -90,6 +102,10 @@ def fits_signature(path: Path) -> list[dict[str, Any]]:
     return sig
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the extract step metrics operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def extract_step_metrics(path: Path) -> dict[str, Any]:
     text = path.read_text(errors="replace")
     lines = text.splitlines()
@@ -124,11 +140,19 @@ def extract_step_metrics(path: Path) -> dict[str, Any]:
     return metrics
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the relerr operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def relerr(a: float, b: float) -> float:
     denom = max(abs(a), 1.0e-300)
     return abs(b - a) / denom
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the main operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--original-dir", required=True)

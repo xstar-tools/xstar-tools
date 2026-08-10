@@ -1,5 +1,16 @@
 # CHANGELOG
 
+# 0.6.73 — source-level scientific function documentation - 2026-08-10
+
+- Re-read the supplied XSTAR manual and five reference papers page-by-page and map their physical/process descriptions back to the active Python/C++ implementation.
+- Add reversible per-function comment blocks to 1,490 Python functions/methods and 1,177 C++ functions across 102 active source/header files.
+- Explain the local algorithm and scientific role at the function definition, including ionization balance, multilevel statistical equilibrium, LTE/detailed balance, thermal balance, line/continuum/RRC emission and opacity, Type-50 profiles, radial transfer/DSEC, ATDB record dispatch, and final publication.
+- Document the ATDB distinction that data type controls record interpretation/evaluation while rate type controls how the evaluated quantity is consumed.
+- Keep ABI/parsing/serialization/diagnostic helpers explicitly identified as implementation helpers rather than assigning unsupported literature equations to them.
+- Add a reversible comment-overlay qualification gate: removing only the new markers reproduces exact 0.6.72 source bytes; Python ASTs remain identical and all active C++ translation units compile warning-clean.
+- Preserve accepted Option-24 semantics in the comments: native/Python publication keeps clean He II Type-7 identities and does not reproduce the known Fortran pprint(24) stale-local H I/He II alias.
+- No executable scientific statement changes; science revision `0.6.48.12.3.45.3.3.8`, frozen C++ baseline `0.6.48.12.3.44`, C API ABI `60487`, and production-zone ABI `6048110` remain unchanged.
+
 # 0.6.72 — Milestone 9: conda/conda-forge packaging - 2026-08-09
 
 - Add a conda-forge-ready single-package recipe/feedstock seed under `conda/`, using the mature conda-build `meta.yaml` format.

@@ -7,6 +7,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools" / "qualification"))
 from local_zone_naming_compat import current_path, current_rel, normalize_bytes
+from function_comment_overlay import strip_cpp_function_comments
 BEGIN = b"// XSTAR-SOURCE-CORRESPONDENCE-BEGIN\n"
 END = b"// XSTAR-SOURCE-CORRESPONDENCE-END\n\n"
 
@@ -75,7 +76,7 @@ def test_cpp_source_comment_overlay_pins_active_and_archived_0654_bytes():
             assert not historical_present
             assert cleanup_by_original[rel]["comment_overlay_annotated_sha256_0_6_54"] == info["annotated_sha256_0_6_54"]
             continue
-        raw = normalize_bytes(p.read_bytes())
+        raw = normalize_bytes(strip_cpp_function_comments(p.read_bytes()))
         warning = _warning()["files"]
         if rel in warning:
             winfo = warning[rel]
@@ -100,7 +101,7 @@ def test_pinned_cpp_hashes_match_parity_freeze_after_stripping_top_comments():
         else:
             warning = _warning()["files"]
             if rel in warning:
-                assert _sha(normalize_bytes(p.read_bytes())) == warning[rel]["cleaned_sha256_0_6_58"]
+                assert _sha(normalize_bytes(strip_cpp_function_comments(p.read_bytes()))) == warning[rel]["cleaned_sha256_0_6_58"]
                 assert warning[rel]["science_freeze_sha256"] == expected
             else:
-                assert _sha(_strip(normalize_bytes(p.read_bytes()))) == expected
+                assert _sha(_strip(normalize_bytes(strip_cpp_function_comments(p.read_bytes())))) == expected

@@ -57,6 +57,10 @@ class DsecTransitionStateParity:
     max_relative_difference: float
     xstar_source_dir: str
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Report whether all prerequisites/results required by this stage are present and internally consistent.
+    # Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; dsec trial-to-trial state transition.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def ready(self) -> bool:
         return bool(
@@ -72,10 +76,18 @@ class DsecTransitionStateParity:
         )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the relative difference operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; dsec trial-to-trial state transition.
+# XSTAR-FUNCTION-COMMENT-END
 def _relative_difference(a: float, b: float) -> float:
     return abs(float(a) - float(b)) / max(abs(float(a)), abs(float(b)), 1.0e-300)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the add float row operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; dsec trial-to-trial state transition.
+# XSTAR-FUNCTION-COMMENT-END
 def _add_float_row(
     rows: list[DsecTransitionParityRow],
     *,
@@ -114,6 +126,10 @@ def _add_float_row(
     return ok
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the sequence operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; dsec trial-to-trial state transition.
+# XSTAR-FUNCTION-COMMENT-END
 def _sequence(value: Any, *names: str) -> np.ndarray:
     for name in names:
         if hasattr(value, name):
@@ -121,6 +137,10 @@ def _sequence(value: Any, *names: str) -> np.ndarray:
     return np.zeros(0, dtype=float)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the dense global operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; dsec trial-to-trial state transition.
+# XSTAR-FUNCTION-COMMENT-END
 def _dense_global(
     values: Mapping[Tuple[int, int, int], float],
     index_by_key: Mapping[Tuple[int, int, int], int],
@@ -139,6 +159,10 @@ def _dense_global(
     return dense, tuple(sorted(set(unmapped)))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the dense snapshot global operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; dsec trial-to-trial state transition.
+# XSTAR-FUNCTION-COMMENT-END
 def _dense_snapshot_global(
     direct_values: Optional[Sequence[float]],
     logical_values: Mapping[Tuple[int, int, int], float],
@@ -160,6 +184,10 @@ def _dense_snapshot_global(
     return _dense_global(logical_values, index_by_key, n)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the leveltemp python value operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; dsec trial-to-trial state transition.
+# XSTAR-FUNCTION-COMMENT-END
 def _leveltemp_python_value(workspace: Any, *, column: int, quantity: str) -> float:
     if workspace is None:
         return 0.0
@@ -181,6 +209,10 @@ def _leveltemp_python_value(workspace: Any, *, column: int, quantity: str) -> fl
     raise KeyError(quantity)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Compare dsec transition state for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; dsec trial-to-trial state transition.
+# XSTAR-FUNCTION-COMMENT-END
 def compare_dsec_transition_state(
     snapshot: DsecCalcHMCAllInputSnapshot,
     xstar: DsecMatchingInputState,
@@ -573,6 +605,10 @@ def compare_dsec_transition_state(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write dsec transition state products for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; dsec trial-to-trial state transition.
+# XSTAR-FUNCTION-COMMENT-END
 def write_dsec_transition_state_products(
     parity: DsecTransitionStateParity,
     out_dir: str | Path,
@@ -622,6 +658,10 @@ def write_dsec_transition_state_products(
     return {"csv": csv_path, "json": json_path, "markdown": md_path}
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write dsec input snapshot products for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; dsec trial-to-trial state transition.
+# XSTAR-FUNCTION-COMMENT-END
 def write_dsec_input_snapshot_products(
     snapshot: DsecCalcHMCAllInputSnapshot,
     xstar: DsecMatchingInputState,

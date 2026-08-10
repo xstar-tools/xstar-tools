@@ -27,6 +27,10 @@ from .atomic_database import XSTARMasterData, XSTARDerivedPointers
 from .ucalc import SourceFaithfulUCalc, UCalcContext
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the jsonable operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 12; Mendoza et al. (2021), ATDB data/rate-type inventory.
+# XSTAR-FUNCTION-COMMENT-END
 def _jsonable(value: Any) -> Any:
     if isinstance(value, (np.integer,)):
         return int(value)
@@ -43,6 +47,10 @@ def _jsonable(value: Any) -> Any:
     return value
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build ucalc data type inventory for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 12; Mendoza et al. (2021), ATDB data/rate-type inventory.
+# XSTAR-FUNCTION-COMMENT-END
 def build_ucalc_data_type_inventory(
     master: XSTARMasterData,
     dispatcher: SourceFaithfulUCalc | None = None,
@@ -82,6 +90,10 @@ def build_ucalc_data_type_inventory(
     return rows
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build ucalc branch catalog rows for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 12; Mendoza et al. (2021), ATDB data/rate-type inventory.
+# XSTAR-FUNCTION-COMMENT-END
 def build_ucalc_branch_catalog_rows(
     dispatcher: SourceFaithfulUCalc | None = None,
 ) -> list[dict[str, Any]]:
@@ -103,6 +115,10 @@ def build_ucalc_branch_catalog_rows(
     return rows
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build ucalc index only samples for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 12; Mendoza et al. (2021), ATDB data/rate-type inventory.
+# XSTAR-FUNCTION-COMMENT-END
 def build_ucalc_index_only_samples(
     master: XSTARMasterData,
     derived: XSTARDerivedPointers,
@@ -166,6 +182,10 @@ def build_ucalc_index_only_samples(
     return rows
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write csv for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 12; Mendoza et al. (2021), ATDB data/rate-type inventory.
+# XSTAR-FUNCTION-COMMENT-END
 def _write_csv(path: Path, rows: Iterable[Mapping[str, Any]]) -> None:
     materialized = list(rows)
     fieldnames: list[str] = []
@@ -179,6 +199,10 @@ def _write_csv(path: Path, rows: Iterable[Mapping[str, Any]]) -> None:
         writer.writerows(materialized)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write ucalc subsystem products for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 12; Mendoza et al. (2021), ATDB data/rate-type inventory.
+# XSTAR-FUNCTION-COMMENT-END
 def write_ucalc_subsystem_products(
     master: XSTARMasterData,
     derived: XSTARDerivedPointers,

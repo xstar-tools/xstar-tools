@@ -14,6 +14,10 @@ import time
 from typing import Any, Iterator, MutableMapping
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the current rss mb operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Performance instrumentation only; it must not change XSTAR science.
+# XSTAR-FUNCTION-COMMENT-END
 def current_rss_mb() -> float | None:
     """Return current process resident set size in MiB on Linux, else ``None``."""
     try:
@@ -25,6 +29,10 @@ def current_rss_mb() -> float | None:
     return None
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Append profile for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Performance instrumentation only; it must not change XSTAR science.
+# XSTAR-FUNCTION-COMMENT-END
 def _append_profile(control: MutableMapping[str, Any], record: dict[str, Any]) -> None:
     rows = control.setdefault("performance_profile", [])
     if isinstance(rows, list):
@@ -34,6 +42,10 @@ def _append_profile(control: MutableMapping[str, Any], record: dict[str, Any]) -
 PROFILE_LEVELS = {"none": 0, "summary": 1, "nested": 2, "forensic": 3}
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Normalize profile level for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Performance instrumentation only; it must not change XSTAR science.
+# XSTAR-FUNCTION-COMMENT-END
 def normalize_profile_level(value: Any) -> str:
     """Normalize profiling level for v0.5.49 timing controls.
 
@@ -55,20 +67,36 @@ def normalize_profile_level(value: Any) -> str:
     return "summary"
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Profile level for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Performance instrumentation only; it must not change XSTAR science.
+# XSTAR-FUNCTION-COMMENT-END
 def profile_level(control: MutableMapping[str, Any]) -> str:
     return normalize_profile_level(control.get("profile_components", False))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Profile level at least for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Performance instrumentation only; it must not change XSTAR science.
+# XSTAR-FUNCTION-COMMENT-END
 def profile_level_at_least(control: MutableMapping[str, Any], minimum: str) -> bool:
     current = PROFILE_LEVELS.get(profile_level(control), 0)
     required = PROFILE_LEVELS.get(normalize_profile_level(minimum), 0)
     return current >= required
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the performance enabled operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Performance instrumentation only; it must not change XSTAR science.
+# XSTAR-FUNCTION-COMMENT-END
 def performance_enabled(control: MutableMapping[str, Any]) -> bool:
     return profile_level_at_least(control, "summary")
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Profile rss enabled for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Performance instrumentation only; it must not change XSTAR science.
+# XSTAR-FUNCTION-COMMENT-END
 def profile_rss_enabled(control: MutableMapping[str, Any]) -> bool:
     value = control.get("profile_rss", False)
     if isinstance(value, bool):
@@ -76,6 +104,10 @@ def profile_rss_enabled(control: MutableMapping[str, Any]) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Profile terminal enabled for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Performance instrumentation only; it must not change XSTAR science.
+# XSTAR-FUNCTION-COMMENT-END
 def profile_terminal_enabled(control: MutableMapping[str, Any]) -> bool:
     """Return whether profile rows should be mirrored to live terminal progress.
 
@@ -90,6 +122,10 @@ def profile_terminal_enabled(control: MutableMapping[str, Any]) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Profile callback for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Performance instrumentation only; it must not change XSTAR science.
+# XSTAR-FUNCTION-COMMENT-END
 def _profile_callback(control: MutableMapping[str, Any], emit_progress: Any) -> Any:
     if emit_progress is False:
         return None
@@ -102,6 +138,10 @@ def _profile_callback(control: MutableMapping[str, Any], emit_progress: Any) -> 
     return None
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Record profile event for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Performance instrumentation only; it must not change XSTAR science.
+# XSTAR-FUNCTION-COMMENT-END
 def record_profile_event(
     control: MutableMapping[str, Any],
     name: str,
@@ -152,6 +192,10 @@ def record_profile_event(
         callback("profile_component", {"component": str(name), **details})
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Profile component for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Performance instrumentation only; it must not change XSTAR science.
+# XSTAR-FUNCTION-COMMENT-END
 @contextmanager
 def profile_component(
     control: MutableMapping[str, Any],
@@ -224,6 +268,10 @@ def profile_component(
             callback("profile_component", {"component": str(name), **details})
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the add grouped operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Performance instrumentation only; it must not change XSTAR science.
+# XSTAR-FUNCTION-COMMENT-END
 def _add_grouped(grouped: dict[str, dict[str, float]], name: str, row: dict[str, Any]) -> None:
     item = grouped.setdefault(
         name,
@@ -249,6 +297,10 @@ def _add_grouped(grouped: dict[str, dict[str, float]], name: str, row: dict[str,
         item["max_rss_delta_mb"] = max(item["max_rss_delta_mb"], float(row["rss_delta_mb"]))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the summarize profile operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Performance instrumentation only; it must not change XSTAR science.
+# XSTAR-FUNCTION-COMMENT-END
 def summarize_profile(control: MutableMapping[str, Any]) -> dict[str, Any]:
     """Return compact timing/RSS totals grouped by component and element."""
     rows = control.get("performance_profile", [])
@@ -397,9 +449,17 @@ def summarize_profile(control: MutableMapping[str, Any]) -> dict[str, Any]:
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the summarize other emissivity hotspots operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Performance instrumentation only; it must not change XSTAR science.
+# XSTAR-FUNCTION-COMMENT-END
 def _summarize_other_emissivity_hotspots(rows: list[dict[str, Any]], top_n: int) -> dict[str, Any]:
     selected = [r for r in rows if str(r.get("component", "")).startswith("calc_emis")]
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the group operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Performance instrumentation only; it must not change XSTAR science.
+    # XSTAR-FUNCTION-COMMENT-END
     def _group(key_name: str, value_fn: Any) -> list[dict[str, Any]]:
         grouped: dict[str, dict[str, Any]] = {}
         for row in selected:
@@ -437,6 +497,10 @@ def _summarize_other_emissivity_hotspots(rows: list[dict[str, Any]], top_n: int)
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the summarize simple payload batching probe operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Performance instrumentation only; it must not change XSTAR science.
+# XSTAR-FUNCTION-COMMENT-END
 def _summarize_simple_payload_batching_probe(
     control: MutableMapping[str, Any], rows: list[dict[str, Any]], top_n: int
 ) -> dict[str, Any]:
@@ -451,6 +515,10 @@ def _summarize_simple_payload_batching_probe(
     selected = [r for r in rows if str(r.get("component", "")) in names]
     call_rows = [r for r in selected if str(r.get("component", "")).endswith("cpp_kernel")]
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the call projection operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Performance instrumentation only; it must not change XSTAR science.
+    # XSTAR-FUNCTION-COMMENT-END
     def _call_projection(row: dict[str, Any]) -> dict[str, Any]:
         fields = (
             "component", "elapsed_seconds", "element_z", "ion_index", "ion_stage",
@@ -472,6 +540,10 @@ def _summarize_simple_payload_batching_probe(
         for row in sorted(call_rows, key=lambda r: float(r.get("elapsed_seconds", 0.0) or 0.0), reverse=True)[:max(1, top_n)]
     ]
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the group operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Performance instrumentation only; it must not change XSTAR science.
+    # XSTAR-FUNCTION-COMMENT-END
     def _group(label: str, key_fn: Any) -> list[dict[str, Any]]:
         grouped: dict[str, dict[str, Any]] = {}
         for row in call_rows:
@@ -608,6 +680,10 @@ MATRIX_ASSEMBLY_DATAFLOW_SECTIONS = (
 )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the summarize matrix assembly dataflow operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Performance instrumentation only; it must not change XSTAR science.
+# XSTAR-FUNCTION-COMMENT-END
 def summarize_matrix_assembly_dataflow(
     control: MutableMapping[str, Any],
     *,
@@ -733,6 +809,10 @@ RATE_PAYLOAD_DATAFLOW_SECTIONS = (
 )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the summarize rate payload dataflow operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Performance instrumentation only; it must not change XSTAR science.
+# XSTAR-FUNCTION-COMMENT-END
 def summarize_rate_payload_dataflow(
     control: MutableMapping[str, Any],
     *,
@@ -807,6 +887,10 @@ def summarize_rate_payload_dataflow(
             "accounting_overrun_seconds": float(row.get("accounting_overrun_seconds", 0.0) or 0.0),
             "accounting_ok": bool(row.get("accounting_ok", False)),
         })
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the top group operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Performance instrumentation only; it must not change XSTAR science.
+    # XSTAR-FUNCTION-COMMENT-END
     def _top_group(table: dict[str, dict[str, float]]) -> list[dict[str, Any]]:
         items = sorted(table.items(), key=lambda kv: float(kv[1].get("exclusive_wall_seconds", 0.0)), reverse=True)
         return [{"key": key, **dict(values)} for key, values in items[:max(1, int(top_n))]]
@@ -840,6 +924,10 @@ def summarize_rate_payload_dataflow(
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the summarize rate payload batched orchestration shadow operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Performance instrumentation only; it must not change XSTAR science.
+# XSTAR-FUNCTION-COMMENT-END
 def summarize_rate_payload_batched_orchestration_shadow(
     control: MutableMapping[str, Any],
     *,
@@ -1014,6 +1102,10 @@ def summarize_rate_payload_batched_orchestration_shadow(
         ],
     }
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the summarize runtime phase map operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Performance instrumentation only; it must not change XSTAR science.
+# XSTAR-FUNCTION-COMMENT-END
 def summarize_runtime_phase_map(
     control: MutableMapping[str, Any],
     *,
@@ -1032,6 +1124,10 @@ def summarize_runtime_phase_map(
         name: {"wall_seconds": 0.0, "call_count": 0.0, "components": {}} for name in phases
     }
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the add operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Performance instrumentation only; it must not change XSTAR science.
+    # XSTAR-FUNCTION-COMMENT-END
     def _add(phase: str, seconds: Any, *, count: float = 1.0, component: str | None = None) -> None:
         try:
             value = float(seconds or 0.0)
@@ -1124,6 +1220,10 @@ def summarize_runtime_phase_map(
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the summarize rate payload four family product operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Performance instrumentation only; it must not change XSTAR science.
+# XSTAR-FUNCTION-COMMENT-END
 def summarize_rate_payload_four_family_product(
     control: MutableMapping[str, Any],
     *,

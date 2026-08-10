@@ -83,6 +83,10 @@ class CompleteLocalXstarcalcResult:
     source_file: str = "xstar/xstarlib/src/xstarcalc.f90"
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Require source handler for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 14, local xstarcalc sequence: balance then integrated/full-grid emission.
+# XSTAR-FUNCTION-COMMENT-END
 def _require_source_handler(state: XSTARPythonState, key: str) -> SourceStateHandler:
     handler = state.control.get(key)
     if not callable(handler):
@@ -92,6 +96,10 @@ def _require_source_handler(state: XSTARPythonState, key: str) -> SourceStateHan
     return handler
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Apply dsec to state for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 14, local xstarcalc sequence: balance then integrated/full-grid emission.
+# XSTAR-FUNCTION-COMMENT-END
 def apply_dsec_to_state(state: XSTARPythonState) -> Any:
     """Invoke the caller-supplied translated ``dsec`` state handler."""
     result = _require_source_handler(state, "dsec_source_handler")(state)
@@ -104,6 +112,10 @@ def apply_dsec_to_state(state: XSTARPythonState) -> Any:
     return result
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Apply calc hmc all to state for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 14, local xstarcalc sequence: balance then integrated/full-grid emission.
+# XSTAR-FUNCTION-COMMENT-END
 def apply_calc_hmc_all_to_state(state: XSTARPythonState) -> Any:
     """Invoke the caller-supplied final ``calc_hmc_all`` state handler."""
     result = _require_source_handler(state, "calc_hmc_all_source_handler")(state)
@@ -117,6 +129,10 @@ def apply_calc_hmc_all_to_state(state: XSTARPythonState) -> Any:
     return result
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Register complete local xstarcalc source routines for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 14, local xstarcalc sequence: balance then integrated/full-grid emission.
+# XSTAR-FUNCTION-COMMENT-END
 def register_complete_local_xstarcalc_source_routines(
     driver: XSTARPythonDriver,
 ) -> None:
@@ -130,6 +146,10 @@ def register_complete_local_xstarcalc_source_routines(
     register_calc_emis_all_source_routine(driver)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Run the local xstarcalc sequence: equilibrium/rates, integrated emissivity, then full-grid emergent radiation.
+# Reference context: XSTAR Manual Ch. 14, local xstarcalc sequence: balance then integrated/full-grid emission.
+# XSTAR-FUNCTION-COMMENT-END
 def run_complete_local_xstarcalc(
     state: XSTARPythonState,
     *,
@@ -174,6 +194,10 @@ def run_complete_local_xstarcalc(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the continuum length from context operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 14, local xstarcalc sequence: balance then integrated/full-grid emission.
+# XSTAR-FUNCTION-COMMENT-END
 def _continuum_length_from_context(context: Any) -> int:
     radiation = getattr(context, "radiation", None)
     for name in ("epim", "epi"):
@@ -185,6 +209,10 @@ def _continuum_length_from_context(context: Any) -> int:
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the synthetic complete ucalc operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 14, local xstarcalc sequence: balance then integrated/full-grid emission.
+# XSTAR-FUNCTION-COMMENT-END
 def _synthetic_complete_ucalc(record: int, context: Any) -> UCalcResult:
     """Shared reduced/full-grid evaluator used by the assembly fixture."""
     payload = {
@@ -226,6 +254,10 @@ def _synthetic_complete_ucalc(record: int, context: Any) -> UCalcResult:
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build validation state for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 14, local xstarcalc sequence: balance then integrated/full-grid emission.
+# XSTAR-FUNCTION-COMMENT-END
 def _build_validation_state(*, nlimdt: int) -> tuple[XSTARPythonState, list[str]]:
     # Import the frozen synthetic ATDB/pointer model from the immediately
     # preceding accepted subsystem.  The fixture remains independent of any
@@ -249,6 +281,10 @@ def _build_validation_state(*, nlimdt: int) -> tuple[XSTARPythonState, list[str]
     state.plasma.xee = 1.0
     state.plasma.xpx = 5.0
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the dsec handler operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual Ch. 14, local xstarcalc sequence: balance then integrated/full-grid emission.
+    # XSTAR-FUNCTION-COMMENT-END
     def dsec_handler(runtime: XSTARPythonState) -> Mapping[str, Any]:
         calls.append("dsec")
         mapped = np.asarray(runtime.radiation.bremsam, dtype=float)
@@ -268,6 +304,10 @@ def _build_validation_state(*, nlimdt: int) -> tuple[XSTARPythonState, list[str]
             "converged": True,
         }
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Calculate hmc all handler for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual Ch. 14, local xstarcalc sequence: balance then integrated/full-grid emission.
+    # XSTAR-FUNCTION-COMMENT-END
     def calc_hmc_all_handler(runtime: XSTARPythonState) -> Mapping[str, Any]:
         calls.append("calc_hmc_all")
         runtime.control["calc_hmc_saw_dsec_state"] = bool(
@@ -353,6 +393,10 @@ def _build_validation_state(*, nlimdt: int) -> tuple[XSTARPythonState, list[str]
     return state, calls
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Execute complete local xstarcalc validation for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 14, local xstarcalc sequence: balance then integrated/full-grid emission.
+# XSTAR-FUNCTION-COMMENT-END
 def run_complete_local_xstarcalc_validation(
     *, rtol: float = 2.0e-14, atol: float = 1.0e-30
 ) -> Mapping[str, Any]:
@@ -460,6 +504,10 @@ def run_complete_local_xstarcalc_validation(
     return summary
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write complete local xstarcalc validation products for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 14, local xstarcalc sequence: balance then integrated/full-grid emission.
+# XSTAR-FUNCTION-COMMENT-END
 def write_complete_local_xstarcalc_validation_products(
     summary: Mapping[str, Any], out_dir: str | Path
 ) -> Mapping[str, str]:

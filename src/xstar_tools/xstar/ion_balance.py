@@ -71,6 +71,10 @@ class CalcIonRatesContext:
     reusable_work_arrays: Optional[Dict[str, Any]] = None
     profile_control: Optional[MutableMapping[str, Any]] = None
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the electron density cm3 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual s. 11.4.1; Kallman & Bautista (2001), two-stage ion/level population solve.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def electron_density_cm3(self) -> float:
         return float(self.hydrogen_density_cm3) * float(self.electron_fraction_xee)
@@ -158,6 +162,10 @@ class IstrucResult:
     fractions: np.ndarray
     ioneqm: IoneqmResult
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the n rates operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual s. 11.4.1; Kallman & Bautista (2001), two-stage ion/level population solve.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def n_rates(self) -> int:
         return int(self.ionization_rates.size - 1)
@@ -175,6 +183,10 @@ class IonStageLimitResult:
     iterations: int
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the ion indices for element operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual s. 11.4.1; Kallman & Bautista (2001), two-stage ion/level population solve.
+# XSTAR-FUNCTION-COMMENT-END
 def _ion_indices_for_element(derived: XSTARDerivedPointers, element_z: int) -> List[int]:
     values = [
         ion_index
@@ -185,6 +197,10 @@ def _ion_indices_for_element(derived: XSTARDerivedPointers, element_z: int) -> L
     return values
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the element nnz operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual s. 11.4.1; Kallman & Bautista (2001), two-stage ion/level population solve.
+# XSTAR-FUNCTION-COMMENT-END
 def _element_nnz(master: XSTARMasterData, derived: XSTARDerivedPointers, element_z: int) -> int:
     """Return source ``nnz=idat(np1i+nidt-2)`` for an element header."""
     record = int(derived.npfirst[11]) if 11 < len(derived.npfirst) else 0
@@ -204,6 +220,10 @@ def _element_nnz(master: XSTARMasterData, derived: XSTARDerivedPointers, element
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the selected rate records for ion operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual s. 11.4.1; Kallman & Bautista (2001), two-stage ion/level population solve.
+# XSTAR-FUNCTION-COMMENT-END
 def _selected_rate_records_for_ion(
     master: XSTARMasterData,
     derived: XSTARDerivedPointers,
@@ -243,6 +263,10 @@ def _selected_rate_records_for_ion(
     return list(selected_records)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the mg pre matrix candidate topology operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual s. 11.4.1; Kallman & Bautista (2001), two-stage ion/level population solve.
+# XSTAR-FUNCTION-COMMENT-END
 def _mg_pre_matrix_candidate_topology(
     master: XSTARMasterData,
     *,
@@ -277,6 +301,10 @@ def _mg_pre_matrix_candidate_topology(
     return value[0], value[1], False
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the pre matrix rate additions operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual s. 11.4.1; Kallman & Bautista (2001), two-stage ion/level population solve.
+# XSTAR-FUNCTION-COMMENT-END
 def _pre_matrix_rate_additions(
     *, rate_type: int, idest1: int, idest2: int, nlev: int, ans1: float
 ) -> Tuple[float, float]:
@@ -292,6 +320,10 @@ def _pre_matrix_rate_additions(
     return add_pi, add_rr
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the mg pre matrix summary operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual s. 11.4.1; Kallman & Bautista (2001), two-stage ion/level population solve.
+# XSTAR-FUNCTION-COMMENT-END
 def _mg_pre_matrix_summary(control: Optional[MutableMapping[str, Any]]) -> Optional[MutableMapping[str, Any]]:
     if not isinstance(control, MutableMapping):
         return None
@@ -333,6 +365,10 @@ def _mg_pre_matrix_summary(control: Optional[MutableMapping[str, Any]]) -> Optio
     return summary if isinstance(summary, MutableMapping) else None
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the parent destination context operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual s. 11.4.1; Kallman & Bautista (2001), two-stage ion/level population solve.
+# XSTAR-FUNCTION-COMMENT-END
 def _parent_destination_context(
     master: XSTARMasterData,
     derived: XSTARDerivedPointers,
@@ -363,6 +399,10 @@ def _parent_destination_context(
     return energy, weight
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Traverse one ion's owned rate records and accumulate the preliminary total ionization and recombination rates used before the multilevel matrix solve.
+# Reference context: XSTAR Manual s. 11.4.1; Kallman & Bautista (2001), two-stage ion/level population solve.
+# XSTAR-FUNCTION-COMMENT-END
 def calc_ion_rates(
     master: XSTARMasterData,
     derived: XSTARDerivedPointers,
@@ -843,6 +883,10 @@ def calc_ion_rates(
         },
     )
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Solve the adjacent ion-stage birth/death balance from total ionization and recombination rates, producing provisional ionic fractions.
+# Reference context: XSTAR Manual s. 11.4.1; Kallman & Bautista (2001), two-stage ion/level population solve.
+# XSTAR-FUNCTION-COMMENT-END
 def ioneqm(
     ionization_rates: Sequence[float],
     recombination_rates: Sequence[float],
@@ -919,6 +963,10 @@ def ioneqm(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Arrange the source one-based ionization/recombination arrays and call ioneqm to reproduce the preliminary charge-state distribution.
+# Reference context: XSTAR Manual s. 11.4.1; Kallman & Bautista (2001), two-stage ion/level population solve.
+# XSTAR-FUNCTION-COMMENT-END
 def istruc(
     ionization_rates: Sequence[float],
     recombination_rates: Sequence[float],
@@ -949,6 +997,10 @@ def istruc(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Choose the contiguous mml..mmu ion block around materially populated stages; this limits the subsequent full level-population matrix.
+# Reference context: XSTAR Manual s. 11.4.1; Kallman & Bautista (2001), two-stage ion/level population solve.
+# XSTAR-FUNCTION-COMMENT-END
 def select_ion_stage_limits(
     fractions: Sequence[float],
     *,
@@ -1005,6 +1057,10 @@ def select_ion_stage_limits(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Run the complete first-stage element balance: total rates, provisional ion fractions, and active-stage selection before matrix assembly.
+# Reference context: XSTAR Manual s. 11.4.1; Kallman & Bautista (2001), two-stage ion/level population solve.
+# XSTAR-FUNCTION-COMMENT-END
 def calc_element_pre_matrix_balance(
     master: XSTARMasterData,
     derived: XSTARDerivedPointers,

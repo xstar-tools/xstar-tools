@@ -33,10 +33,18 @@ KBOLTZ_KEV_K = LEGACY_BOLTZMANN_KEV_PER_K
 UPSILON_COLL_COEFF = 8.629e-6
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the expo operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.7 and 12.1; current Fortran ucalc helper formulas.
+# XSTAR-FUNCTION-COMMENT-END
 def expo(x: float) -> float:
     return math.exp(min(max(float(x), -60.0), 60.0))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the exintn operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.7 and 12.1; current Fortran ucalc helper formulas.
+# XSTAR-FUNCTION-COMMENT-END
 def exintn(x: float, n: int, e1_in: float = -1.0) -> float:
     """Translation of ``exintn.f90`` for n=1..6."""
     x = float(x)
@@ -60,6 +68,10 @@ def exintn(x: float, n: int, e1_in: float = -1.0) -> float:
     raise ValueError("exintn supports n=1..6")
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the natural cubic spline operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.7 and 12.1; current Fortran ucalc helper formulas.
+# XSTAR-FUNCTION-COMMENT-END
 def natural_cubic_spline(x: Sequence[float], y: Sequence[float], value: float) -> float:
     """Natural cubic spline compatible with XSTAR's prepspline/calcspline use."""
     xa=np.asarray(x,dtype=float); ya=np.asarray(y,dtype=float)
@@ -87,6 +99,10 @@ def natural_cubic_spline(x: Sequence[float], y: Sequence[float], value: float) -
     return float(ya[j]+b[j]*dx+c[j]*dx*dx+d[j]*dx**3)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the phextrap operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.7 and 12.1; current Fortran ucalc helper formulas.
+# XSTAR-FUNCTION-COMMENT-END
 def phextrap(energy_ryd: Sequence[float], sigma_cm2: Sequence[float], threshold_ev: float, max_points: int) -> tuple[np.ndarray,np.ndarray]:
     """Literal translation of ``phextrap.f90``.
 
@@ -129,6 +145,10 @@ def phextrap(energy_ryd: Sequence[float], sigma_cm2: Sequence[float], threshold_
     return np.asarray(out_e,float),np.asarray(out_s,float)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the bkhsgo operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.7 and 12.1; current Fortran ucalc helper formulas.
+# XSTAR-FUNCTION-COMMENT-END
 def bkhsgo(epi_ev: Sequence[float], threshold_ev: float, d: float, b: Sequence[float], coeff: Sequence[Sequence[float]]) -> np.ndarray:
     """Translation of ``bkhsgo.f90``."""
     epi=np.asarray(epi_ev,float); out=np.zeros_like(epi)
@@ -147,6 +167,10 @@ def bkhsgo(epi_ev: Sequence[float], threshold_ev: float, d: float, b: Sequence[f
     return out
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the intin operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.7 and 12.1; current Fortran ucalc helper formulas.
+# XSTAR-FUNCTION-COMMENT-END
 def intin(x1: float,x2: float,x0: float,temp_k: float) -> tuple[float,float]:
     ryk=7.2438e15; s1=x1*ryk/temp_k; s2=x2*ryk/temp_k; s0=x0*ryk/temp_k; dele=ryk/temp_k
     if s1-s0 < 90.0:
@@ -158,6 +182,10 @@ def intin(x1: float,x2: float,x0: float,temp_k: float) -> tuple[float,float]:
     return ri2,ri3
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the milne operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.7 and 12.1; current Fortran ucalc helper formulas.
+# XSTAR-FUNCTION-COMMENT-END
 def milne(temp_k: float, energy_ryd: Sequence[float], sigma_mb: Sequence[float], threshold_ryd: float) -> float:
     """Translation of ``milne.f90`` returning alpha in cm3/s."""
     x=np.asarray(energy_ryd,float); y=np.asarray(sigma_mb,float); n=min(x.size,y.size)
@@ -174,6 +202,10 @@ def milne(temp_k: float, energy_ryd: Sequence[float], sigma_mb: Sequence[float],
     return total*.79788*40.4153
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the gull1 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.7 and 12.1; current Fortran ucalc helper formulas.
+# XSTAR-FUNCTION-COMMENT-END
 def gull1(n: int, rs: float) -> tuple[np.ndarray,np.ndarray]:
     """Translation of ``gull1.f90``; returned arrays contain logarithmic g values."""
     if n < 1 or n > 99: raise ValueError("gull1 requires 1<=n<=99")
@@ -211,6 +243,10 @@ def gull1(n: int, rs: float) -> tuple[np.ndarray,np.ndarray]:
     return gu,gl
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the hphotx operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.7 and 12.1; current Fortran ucalc helper formulas.
+# XSTAR-FUNCTION-COMMENT-END
 def hphotx(energy_above_threshold_ryd: float, ion_charge: int, principal_n: int) -> np.ndarray:
     """Translation of ``hphotx.f90``; cross sections are returned in Mb."""
     en=max(float(energy_above_threshold_ryd),0.0); ic=max(int(ion_charge),1); nq=max(int(principal_n),1)
@@ -222,6 +258,10 @@ def hphotx(energy_above_threshold_ryd: float, ion_charge: int, principal_n: int)
     return out
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the pexs operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.7 and 12.1; current Fortran ucalc helper formulas.
+# XSTAR-FUNCTION-COMMENT-END
 def pexs(nmin: int, zc: float, eion_ryd: float, far: float, gam: float, scal: float, energy_ryd: Sequence[float]) -> np.ndarray:
     """Translation of ``pexs.f90``."""
     nmax=30; e=np.asarray(energy_ryd,float); out=np.zeros_like(e)
@@ -239,6 +279,10 @@ def pexs(nmin: int, zc: float, eion_ryd: float, far: float, gam: float, scal: fl
     return scal*out
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the calt70 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.7 and 12.1; current Fortran ucalc helper formulas.
+# XSTAR-FUNCTION-COMMENT-END
 def calt70(reals: Sequence[float], integers: Sequence[int], temp_k: float, density: float, threshold_ryd: float) -> tuple[float,np.ndarray,np.ndarray,dict]:
     """Translation of ``calt70.f90`` including density/temperature interpolation."""
     rr=np.asarray(reals,float); ii=list(int(v) for v in integers)
@@ -259,22 +303,38 @@ def calt70(reals: Sequence[float], integers: Sequence[int], temp_k: float, densi
     return rec,xs_e[:end],xs[:end],{"log10_recombination":logrec,"milne_alpha":alpha,"scale":scale,"nden":nden,"ntem":ntem,"nxs":nxs}
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the interp hunt operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.7 and 12.1; current Fortran ucalc helper formulas.
+# XSTAR-FUNCTION-COMMENT-END
 def _interp_hunt(n: int, x: Sequence[float], y: Sequence[float], value: float) -> float:
     n=max(1,min(int(n),len(x),len(y))); xa=np.asarray(x[:n],float); ya=np.asarray(y[:n],float)
     if n==1: return float(ya[0])
     return float(np.interp(value,xa,ya,left=ya[0],right=ya[-1]))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Calculate sampson p for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.7 and 12.1; current Fortran ucalc helper formulas.
+# XSTAR-FUNCTION-COMMENT-END
 def calc_sampson_p(om: Sequence[float], z: int, temp_k: float) -> float:
     dE,a,z2s,c0,cr,cr1,r,s=list(om[:8]); y=dE/(KBOLTZ_KEV_K*temp_k); a1=a+1; e1=exintn(y,1); er=exintn(a1*y,int(r)); er1=exintn(a1*y,int(r+1)); term=cr*er/a1**(r-1)+cr1*er1/a1**r
     z2gamma=c0+1.333*z2s*e1*expo(y)+(y*expo(a1*y)*term if term>0 else 0.0); return z2gamma/max((z-s)**2,1e-300)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Calculate sampson h for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.7 and 12.1; current Fortran ucalc helper formulas.
+# XSTAR-FUNCTION-COMMENT-END
 def calc_sampson_h(om: Sequence[float], z: int, temp_k: float) -> float:
     dE,z2s,a,c0,c1,c2,csw=list(om[:7]); y=dE/(KBOLTZ_KEV_K*temp_k); a1=a+1; e1=exintn(y,1); er=exintn(a1*y,1); er1=exintn(a1*y,2,er); term=c1*er+c2*er1/a1
     val=c0+1.333*z2s*e1*expo(y)+(y*expo(a1*y)*term if term>0 else 0.0); return val*2*csw/max(z*z,1e-300)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Calculate sampson s for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.7 and 12.1; current Fortran ucalc helper formulas.
+# XSTAR-FUNCTION-COMMENT-END
 def calc_sampson_s(om: Sequence[float], z: int, temp_k: float) -> float:
     dE,a1g,a1eg,z2sh,a2,c0,c1,c2,a2e,cere,cere1,re,s,se=list(om[:14]); y=dE/(KBOLTZ_KEV_K*temp_k)
     aa=a2+1; e1=exintn(y,1); er=exintn(aa*y,1); er1=exintn(aa*y,2,er); term=c1*er+c2*er1/aa; z2g=c0+1.333*z2sh*e1*expo(y)+(y*expo(aa*y)*term if a1g!=0 and term>0 else 0.0)
@@ -282,6 +342,10 @@ def calc_sampson_s(om: Sequence[float], z: int, temp_k: float) -> float:
     return a1g*z2g/max((z-s)**2,1e-300)+a1eg*z2ge/max((z-se)**2,1e-300)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Calculate kato for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.7 and 12.1; current Fortran ucalc helper formulas.
+# XSTAR-FUNCTION-COMMENT-END
 def calc_kato(kind: int, par: Sequence[float], z: int, temp_k: float) -> float:
     dE,A,B,C,D,E,P,Q,X1=list(par[:9]); y=dE/(KBOLTZ_KEV_K*temp_k)
     if kind==1:
@@ -289,6 +353,10 @@ def calc_kato(kind: int, par: Sequence[float], z: int, temp_k: float) -> float:
     e1=exintn(X1*y,1); term3=expo(y*(1-X1)); term1=A/y+C/X1+D/2*(1/X1**2-y/X1)+(E/y)*math.log(X1); term2=expo(y*X1)*e1*(B-C*y+D*y*y/2+E/y); return y*term3*(term1+term2)+P*((1+1/y)-term3*(X1+1/y))+Q*(1-term3)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Calculate maxwell rates for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.7 and 12.1; current Fortran ucalc helper formulas.
+# XSTAR-FUNCTION-COMMENT-END
 def calc_maxwell_rates(coll_type: int,min_t: float,max_t: float,tarr: Sequence[float],om: Sequence[float],de_kev: float,temp_k: float,z: int,degl: float,degu: float) -> tuple[float,float,float,dict]:
     """Python translation of ``calc_maxwell_rates.f90``.
 

@@ -30,6 +30,10 @@
 
 namespace {
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source real literal as a local helper for the line emissivity module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 inline double source_real_literal(double value) {
     return static_cast<double>(static_cast<float>(value));
 }
@@ -43,22 +47,42 @@ inline double source_real_literal(double value) {
 // radiative-line records.  Data type 91 explicitly jumps to label 50 and
 // therefore shares the same rule.  Data type 89 does not: its source branch
 // uses a different optical-depth gate (opakb1*delr > 1.e-8), so it must not be
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement is as a local helper for the line emissivity module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 // folded into this predicate.
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute source type50 linopac family for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 inline bool source_type50_linopac_family(int data_type, int rate_type) {
     return rate_type == 4 && (data_type == 50 || data_type == 91);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute source type50 linopac accept for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 inline bool source_type50_linopac_accept(double opakb1, int data_type, int rate_type) {
     if (!source_type50_linopac_family(data_type, rate_type)) return true;
     return std::isfinite(opakb1) && opakb1 > source_real_literal(1.0e-34);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write message from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void write_message(char* errbuf, std::size_t errbuf_size, const char* message) {
     if (!errbuf || errbuf_size == 0) return;
     std::strncpy(errbuf, message ? message : "", errbuf_size - 1);
     errbuf[errbuf_size - 1] = '\0';
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute voigte cpp for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 static inline double voigte_cpp(double vs, double a) {
     static const double ak[19] = {
         -1.12470432, -0.15516677, 3.28867591, -2.34357915, 0.42139162,
@@ -102,6 +126,10 @@ static inline double voigte_cpp(double vs, double a) {
     return psi * (ex + aa * (h1p + aa * (h2p + aa * (h3p + aa * h4p))));
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement huntf cpp as a local helper for the line emissivity module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 static inline int huntf_cpp(const double* xx, double x, int n) {
     const double floor = source_real_literal(1.0e-34);
     if (!xx || n < 2) return 1;
@@ -122,6 +150,10 @@ static inline int huntf_cpp(const double* xx, double x, int n) {
     return jlo;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement nbinc cpp as a local helper for the line emissivity module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 static inline int nbinc_cpp(double e, const double* epi, int ncn2) {
     int n = ncn2;
     int numcon2 = std::max(2, n / 50);
@@ -142,6 +174,10 @@ constexpr long long kSourceBinemisNegativeHalfSteps = 499997LL;
 constexpr long long kSourceBinemisPositiveHalfSteps = 499999LL;
 constexpr double kSourceBinemisFarV = 50.0;
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute binemis profile cpp for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 static inline double binemis_profile_cpp(double energy, double etmp, double dele, double aasmall) {
     const double delet = (energy - etmp) / dele;
     double h = aasmall > source_real_literal(1.0e-9)
@@ -150,6 +186,10 @@ static inline double binemis_profile_cpp(double energy, double etmp, double dele
     return h / source_real_literal(1.772) / dele / source_real_literal(1.602197e-12);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement binemis far segment average cpp as a local helper for the line emissivity module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 static inline double binemis_far_segment_average_cpp(
     double e1, double e2, double etmp, double dele, double aasmall) {
     if (!(e2 > e1) || !(dele > 0.0)) return 0.0;
@@ -192,6 +232,10 @@ static inline double binemis_far_segment_average_cpp(
     return 0.5 * sum; // integral/(e2-e1) = half*sum/(2*half)
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement binemis source qmin as a local helper for the line emissivity module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 static inline long long binemis_source_qmin(double e00, double h) {
     long long q = std::max(-kSourceBinemisNegativeHalfSteps,
         static_cast<long long>(std::floor(-e00 / h)) + 1LL);
@@ -199,6 +243,10 @@ static inline long long binemis_source_qmin(double e00, double h) {
     return q;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement binemis source qmax as a local helper for the line emissivity module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 static inline long long binemis_source_qmax(double e00, double h, double emax) {
     long long q = std::min(kSourceBinemisPositiveHalfSteps,
         static_cast<long long>(std::ceil((emax - e00) / h)) - 1LL);
@@ -206,6 +254,10 @@ static inline long long binemis_source_qmax(double e00, double h, double emax) {
     return q;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement binemis first q above as a local helper for the line emissivity module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 static inline long long binemis_first_q_above(double boundary, double e00, double h) {
     long long q = static_cast<long long>(std::floor((boundary - e00) / h)) + 1LL;
     while (e00 + static_cast<double>(q) * h <= boundary) ++q;
@@ -216,12 +268,28 @@ static inline long long binemis_first_q_above(double boundary, double e00, doubl
 
 extern "C" {
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Return the ABI version for the emissivity interface so callers can reject incompatible binary layouts before execution.
+// Reference context: Implementation/compatibility helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_emissivity_abi_version() { return 60460; }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Report the compiled emissivity backend name capability metadata used by backend selection and provenance.
+// Reference context: Implementation/provenance helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 const char* xstar_emissivity_backend_name() { return "xstar_emissivity_native_spectral_engine_v0646"; }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Report the compiled emissivity feature flags capability metadata used by backend selection and provenance.
+// Reference context: Implementation/provenance helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_emissivity_feature_flags() { return 1 | 2 | 4 | 8 | 16; }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute emissivity build binemis profile for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_emissivity_build_binemis_profile(
     int ncn2,
     int nbtpp,
@@ -586,6 +654,10 @@ namespace {
 thread_local xstar_spectral_perf_v064892 g_spectral_perf_v064892{};
 thread_local std::uint64_t g_type50_vectorized_profiles_v064812324 = 0u;
 thread_local std::uint64_t g_type50_scalar_profiles_v064812324 = 0u;
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Apply line profile dispatch to the current model state while preserving the source ordering and normalization expected by later stages.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 static int apply_line_profile_dispatch_v064812326(
     double optpp, double line_energy_ev, double vturb_km_s, double temperature_1e4k,
     double atomic_mass_amu, double natural_width_ev, const double* seed_profiles,
@@ -600,6 +672,10 @@ static int apply_line_profile_dispatch_v064812326(
         updated_bins, opacity_seconds, errbuf, errbuf_size);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute spectral family slot for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 std::size_t spectral_family_slot_v064892(int data_type) {
     switch (data_type) {
         case 49: return 0u;
@@ -613,6 +689,10 @@ std::size_t spectral_family_slot_v064892(int data_type) {
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement add perf as a local helper for the line emissivity module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void add_perf_v064892(xstar_spectral_perf_v064892& dst, const xstar_spectral_perf_v064892& src) {
     dst.apply_calls += src.apply_calls;
     dst.contributions += src.contributions;
@@ -638,6 +718,10 @@ void add_perf_v064892(xstar_spectral_perf_v064892& dst, const xstar_spectral_per
     dst.native_profile_seconds += src.native_profile_seconds;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement valid workspace as a local helper for the line emissivity module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 bool valid_workspace(const xstar_spectral_workspace_v1* w, char* error, std::size_t error_size) {
     if (!w || w->struct_size < sizeof(xstar_spectral_workspace_v1) ||
         w->abi_version != XSTAR_SPECTRAL_ENGINE_ABI_VERSION) {
@@ -659,6 +743,10 @@ bool valid_workspace(const xstar_spectral_workspace_v1* w, char* error, std::siz
     return true;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement add stats as a local helper for the line emissivity module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void add_stats(xstar_spectral_stats_v1& dst, const xstar_spectral_stats_v1& src) {
     dst.calls += src.calls;
     dst.contributions_attempted += src.contributions_attempted;
@@ -677,14 +765,26 @@ void add_stats(xstar_spectral_stats_v1& dst, const xstar_spectral_stats_v1& src)
 
 extern "C" {
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Return the ABI version for the spectral engine interface so callers can reject incompatible binary layouts before execution.
+// Reference context: Implementation/compatibility helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 uint32_t xstar_spectral_engine_abi_version(void) {
     return XSTAR_SPECTRAL_ENGINE_ABI_VERSION;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Report the compiled spectral engine backend name capability metadata used by backend selection and provenance.
+// Reference context: Implementation/provenance helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 const char* xstar_spectral_engine_backend_name(void) {
     return "xstar_native_emissivity_opacity_exact_grid_engine_v06472";
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Report the compiled spectral engine feature flags capability metadata used by backend selection and provenance.
+// Reference context: Implementation/provenance helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 uint32_t xstar_spectral_engine_feature_flags(void) {
     return XSTAR_SPECTRAL_STATUS_SOURCE_ORDERED |
            XSTAR_SPECTRAL_STATUS_NATIVE_EMISSIVITY |
@@ -693,6 +793,10 @@ uint32_t xstar_spectral_engine_feature_flags(void) {
            XSTAR_SPECTRAL_STATUS_EXACT_GRID_ORACLE;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Initialize the spectral workspace init structure to its ABI-safe defaults before the caller supplies model-specific values.
+// Reference context: Implementation/ABI helper; scientific meaning is defined by the consuming engine.
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_spectral_workspace_init_v1(xstar_spectral_workspace_v1* workspace) {
     if (!workspace) return;
     std::memset(workspace, 0, sizeof(*workspace));
@@ -700,6 +804,10 @@ void xstar_spectral_workspace_init_v1(xstar_spectral_workspace_v1* workspace) {
     workspace->abi_version = XSTAR_SPECTRAL_ENGINE_ABI_VERSION;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Initialize the spectral stats init structure to its ABI-safe defaults before the caller supplies model-specific values.
+// Reference context: Implementation/ABI helper; scientific meaning is defined by the consuming engine.
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_spectral_stats_init_v1(xstar_spectral_stats_v1* stats) {
     if (!stats) return;
     std::memset(stats, 0, sizeof(*stats));
@@ -707,6 +815,10 @@ void xstar_spectral_stats_init_v1(xstar_spectral_stats_v1* stats) {
     stats->abi_version = XSTAR_SPECTRAL_ENGINE_ABI_VERSION;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute spectral perf init for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_spectral_perf_init_v064892(xstar_spectral_perf_v064892* perf) {
     if (!perf) return;
     std::memset(perf, 0, sizeof(*perf));
@@ -714,10 +826,18 @@ void xstar_spectral_perf_init_v064892(xstar_spectral_perf_v064892* perf) {
     perf->abi_version = XSTAR_SPECTRAL_PERF_V064892_ABI_VERSION;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute spectral perf reset for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_spectral_perf_reset_v064892(void) {
     xstar_spectral_perf_init_v064892(&g_spectral_perf_v064892);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute spectral perf snapshot for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_spectral_perf_snapshot_v064892(xstar_spectral_perf_v064892* perf) {
     if (!perf) return 2;
     *perf = g_spectral_perf_v064892;
@@ -728,34 +848,62 @@ int xstar_spectral_perf_snapshot_v064892(xstar_spectral_perf_v064892* perf) {
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute spectral type50 vector perf reset for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_spectral_type50_vector_perf_reset_v064812324(void) {
     g_type50_vectorized_profiles_v064812324 = 0u;
     g_type50_scalar_profiles_v064812324 = 0u;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute spectral type50 vector perf snapshot for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_spectral_type50_vector_perf_snapshot_v064812324(
     std::uint64_t* vectorized_profiles, std::uint64_t* scalar_profiles) {
     if (vectorized_profiles) *vectorized_profiles = g_type50_vectorized_profiles_v064812324;
     if (scalar_profiles) *scalar_profiles = g_type50_scalar_profiles_v064812324;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute spectral type50 phase perf reset for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_spectral_type50_phase_perf_reset_v064812326(void) {
     xstar_opacity_type50_phase_perf_reset_v064812326();
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute spectral type50 perf reset for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_spectral_type50_perf_reset_v064812327(void) {
     xstar_opacity_type50_perf_reset_v064812327();
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute spectral type50 perf reset for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_spectral_type50_perf_reset_v064812328(void) {
     xstar_opacity_type50_perf_reset_v064812328();
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute spectral type50 perf reset for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_spectral_type50_perf_reset_v064812329(void) {
     xstar_opacity_type50_perf_reset_v064812329();
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute spectral type50 perf snapshot for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_spectral_type50_perf_snapshot_v064812329(
     std::uint64_t* register_profiles, std::uint64_t* hint_profiles,
     std::uint64_t* consumed_points, std::uint64_t* boundary_true_points,
@@ -766,10 +914,18 @@ void xstar_spectral_type50_perf_snapshot_v064812329(
         boundary_false_points, boundary_events, output_bins_advanced, max_bins_per_event);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute spectral type50 perf reset for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_spectral_type50_perf_reset_v064812330(void) {
     xstar_opacity_type50_perf_reset_v064812330();
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute spectral type50 perf snapshot for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_spectral_type50_perf_snapshot_v064812330(
     std::uint64_t* prod_hint_profiles, std::uint64_t* fallback_12328_profiles,
     std::uint64_t* next_epi_profiles, std::uint64_t* local_bins_profiles,
@@ -779,10 +935,18 @@ void xstar_spectral_type50_perf_snapshot_v064812330(
         local_bins_profiles, cursor_profiles);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute spectral type50 perf reset for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_spectral_type50_perf_reset_v064812331(void) {
     xstar_opacity_type50_perf_reset_v064812331();
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute spectral type50 perf snapshot for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_spectral_type50_perf_snapshot_v064812331(
     std::uint64_t* prod_cursor_profiles, std::uint64_t* fallback_hint_profiles,
     std::uint64_t* decomp_profiles, std::uint64_t* decomp_avx2_points,
@@ -798,10 +962,18 @@ void xstar_spectral_type50_perf_snapshot_v064812331(
         decomp_opakc_seconds);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute spectral type50 perf reset for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_spectral_type50_perf_reset_v064812332(void) {
     xstar_opacity_type50_perf_reset_v064812332();
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute spectral type50 perf snapshot for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_spectral_type50_perf_snapshot_v064812332(
     std::uint64_t* tmpop_profiles, std::uint64_t* tmpop_blocks,
     std::uint64_t* tmpop_points, std::uint64_t* tmpe_profiles,
@@ -811,6 +983,10 @@ void xstar_spectral_type50_perf_snapshot_v064812332(
         tmpe_profiles, tmpe_blocks, tmpe_points);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute spectral type50 perf snapshot for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_spectral_type50_perf_snapshot_v064812328(
     std::uint64_t* prod_avx2_profiles, std::uint64_t* prod_scalar_profiles,
     std::uint64_t* prod_avx2_blocks, std::uint64_t* prod_avx2_points,
@@ -828,6 +1004,10 @@ void xstar_spectral_type50_perf_snapshot_v064812328(
         decomp_scalar_profile_seconds, decomp_consume_seconds);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute spectral type50 perf snapshot for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_spectral_type50_perf_snapshot_v064812327(
     std::uint64_t* schedule_profiles, std::uint64_t* cache_hits,
     std::uint64_t* cache_misses, std::uint64_t* cache_uncached,
@@ -846,6 +1026,10 @@ void xstar_spectral_type50_perf_snapshot_v064812327(
         inline_avx2_blocks, inline_avx2_points, inline_scalar_points);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute spectral type50 phase perf snapshot for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_spectral_type50_phase_perf_snapshot_v064812326(
     std::uint64_t* phase_profiles, std::uint64_t* span_events, std::uint64_t* span_bins,
     std::uint64_t* vectorizable_span_events, std::uint64_t* vectorizable_span_bins,
@@ -860,6 +1044,10 @@ void xstar_spectral_type50_phase_perf_snapshot_v064812326(
         range_avx2_bins, range_scalar_bins);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Create and validate persistent runtime state for spectral context create, loading only the data needed by subsequent calls.
+// Reference context: Implementation/lifetime helper; the scientific work is performed by the shared engine routines called from this context.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_spectral_context_create_v1(
     xstar_spectral_context** context,
     char* error,
@@ -881,10 +1069,18 @@ int xstar_spectral_context_create_v1(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Destroy the persistent spectral context destroy context and release its owned resources without changing external science state.
+// Reference context: Implementation/lifetime helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_spectral_context_destroy(xstar_spectral_context* context) {
     delete context;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Reset reusable spectral context reset state between model evaluations while preserving immutable loaded data and ABI invariants.
+// Reference context: Implementation/lifetime helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_spectral_context_reset_v1(
     xstar_spectral_context* context,
     char* error,
@@ -899,6 +1095,10 @@ int xstar_spectral_context_reset_v1(
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute spectral apply contributions for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_spectral_apply_contributions_v1(
     xstar_spectral_context* context,
     const xstar_spectral_contribution_v1* contributions,

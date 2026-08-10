@@ -123,6 +123,10 @@ struct ExactSourceWorkspaceState {
     bool accumulated_output_workspace_exact = false;
     bool line_profile_workspace_exact = false;
 
+    // XSTAR-FUNCTION-COMMENT-BEGIN
+    // Purpose: Report whether complete has all required retained fields for final product publication and terminal-state reconstruction.
+    // Reference context: XSTAR Manual ch14 (state lifetime/iteration flow) and ch5 (final products).
+    // XSTAR-FUNCTION-COMMENT-END
     bool complete() const {
         return level_identity_exact && lte_populations_exact && line_workspace_exact &&
             line_tau_workspace_exact && rrc_workspace_exact && rrc_tau_workspace_exact &&
@@ -155,6 +159,10 @@ struct LegacyPprintState {
     double final_total_cooling = 0.0;
     double final_hmctot = 0.0;
 
+    // XSTAR-FUNCTION-COMMENT-BEGIN
+    // Purpose: Report whether complete has all required retained fields for final product publication and terminal-state reconstruction.
+    // Reference context: XSTAR Manual ch14 (state lifetime/iteration flow) and ch5 (final products).
+    // XSTAR-FUNCTION-COMMENT-END
     bool complete() const {
         return initialized_from_native_controller && option_sequence_exact &&
             finalized_from_native_controller;

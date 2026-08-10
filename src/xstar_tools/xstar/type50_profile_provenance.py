@@ -44,6 +44,10 @@ CPP_ATOMIC_MASS_AMU: tuple[float, ...] = (
 SOURCE_TYPE50_DAMPING_EV_SECOND = 4.136e-15
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the ion index for record operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _ion_index_for_record(derived: Any, record: int, ion_index: int | None) -> int:
     if ion_index is not None and int(ion_index) > 0:
         return int(ion_index)
@@ -59,6 +63,10 @@ def _ion_index_for_record(derived: Any, record: int, ion_index: int | None) -> i
     return 0
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the cpp parity atomic mass amu operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def cpp_parity_atomic_mass_amu(
     master: Any,
     derived: Any,
@@ -90,6 +98,10 @@ def cpp_parity_atomic_mass_amu(
     return 1.0
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the source type50 natural width ev operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def source_type50_natural_width_ev(
     master: Any,
     derived: Any,

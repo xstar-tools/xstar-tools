@@ -38,6 +38,10 @@ class LinearSolveResult:
     method: str = "leqt2f_ludcmp_lubksb_mprove_source_order"
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the source row product operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual s. 11.4.1, multilevel statistical-equilibrium matrix solution.
+# XSTAR-FUNCTION-COMMENT-END
 def _source_row_product(matrix: np.ndarray, row: int, vector: np.ndarray, n: int) -> float:
     """Fortran-order row dot product using explicit left-to-right accumulation."""
     total = 0.0
@@ -46,6 +50,10 @@ def _source_row_product(matrix: np.ndarray, row: int, vector: np.ndarray, n: int
     return float(total)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Factor the dense kinetic matrix using the source-compatible LU decomposition and pivot scaling used by the translated solver.
+# Reference context: XSTAR Manual s. 11.4.1, multilevel statistical-equilibrium matrix solution.
+# XSTAR-FUNCTION-COMMENT-END
 def ludcmp(a: np.ndarray, *, tiny: float = 1.0e-20) -> LUDecomposition:
     """Translate ``ludcmp.f90`` with explicit source-order loops."""
     lu = np.asarray(a, dtype=float).copy()
@@ -119,6 +127,10 @@ def ludcmp(a: np.ndarray, *, tiny: float = 1.0e-20) -> LUDecomposition:
     return LUDecomposition(lu=lu, pivots=pivots, determinant_sign=d, singular_rows=tuple(singular))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Back-substitute through an LU factorization to recover one population/update vector.
+# Reference context: XSTAR Manual s. 11.4.1, multilevel statistical-equilibrium matrix solution.
+# XSTAR-FUNCTION-COMMENT-END
 def lubksb(decomposition: LUDecomposition, b: np.ndarray) -> np.ndarray:
     """Translate ``lubksb.f90`` forward/back substitution in source order."""
     a = decomposition.lu
@@ -147,6 +159,10 @@ def lubksb(decomposition: LUDecomposition, b: np.ndarray) -> np.ndarray:
     return x
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the mprove operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual s. 11.4.1, multilevel statistical-equilibrium matrix solution.
+# XSTAR-FUNCTION-COMMENT-END
 def mprove(a: np.ndarray, decomposition: LUDecomposition, b: np.ndarray, x: np.ndarray) -> np.ndarray:
     """Translate one iterative-improvement pass from ``mprove.f90``."""
     original = np.asarray(a, dtype=float)
@@ -166,6 +182,10 @@ def mprove(a: np.ndarray, decomposition: LUDecomposition, b: np.ndarray, x: np.n
     return improved
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the leqt2f python operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual s. 11.4.1, multilevel statistical-equilibrium matrix solution.
+# XSTAR-FUNCTION-COMMENT-END
 def _leqt2f_python(a: np.ndarray, b: np.ndarray, *, clamp_source_range: bool = True) -> LinearSolveResult:
     """Pure-Python source-order LU/refinement implementation."""
     original = np.asarray(a, dtype=float)
@@ -210,6 +230,10 @@ def _leqt2f_python(a: np.ndarray, b: np.ndarray, *, clamp_source_range: bool = T
     return LinearSolveResult(solution=x, residual=residual, max_scaled_residual=float(max_scaled))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Solve the source-shaped linear system used by the level-population operator while preserving the qualified numerical path.
+# Reference context: XSTAR Manual s. 11.4.1, multilevel statistical-equilibrium matrix solution.
+# XSTAR-FUNCTION-COMMENT-END
 def leqt2f(a: np.ndarray, b: np.ndarray, *, clamp_source_range: bool = True) -> LinearSolveResult:
     """Translate ``leqt2f.f90`` with optional C++ acceleration.
 
@@ -239,6 +263,10 @@ def leqt2f(a: np.ndarray, b: np.ndarray, *, clamp_source_range: bool = True) -> 
     return _leqt2f_python(a, b, clamp_source_range=clamp_source_range)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the solver backend status operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual s. 11.4.1, multilevel statistical-equilibrium matrix solution.
+# XSTAR-FUNCTION-COMMENT-END
 def solver_backend_status() -> dict[str, object]:
     status = resolve_active_backend()
     return {

@@ -12,11 +12,19 @@ from __future__ import annotations
 import numpy as np
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the source default real operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual s. 11.6.5, discrete continuum energy grid.
+# XSTAR-FUNCTION-COMMENT-END
 def source_default_real(value: float) -> float:
     """Evaluate a source default-REAL literal then promote it to Python float."""
     return float(np.float32(value))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the source default real reciprocal operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual s. 11.6.5, discrete continuum energy grid.
+# XSTAR-FUNCTION-COMMENT-END
 def source_default_real_reciprocal(denominator: int) -> float:
     """Translate ``1./float(denominator)`` as a default-REAL expression."""
     if int(denominator) == 0:
@@ -24,6 +32,10 @@ def source_default_real_reciprocal(denominator: int) -> float:
     return float(np.float32(np.float32(1.0) / np.float32(int(denominator))))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the source ener grid operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual s. 11.6.5, discrete continuum energy grid.
+# XSTAR-FUNCTION-COMMENT-END
 def source_ener_grid(ncn2: int) -> np.ndarray:
     """Return the source-faithful REAL(8) EPI grid from ``ener.f90``.
 

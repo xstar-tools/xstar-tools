@@ -17,6 +17,10 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the ensure astropy numpy compat operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _ensure_astropy_numpy_compat() -> None:
     """Install narrow runtime shims needed by older Astropy on newer NumPy."""
     if not hasattr(np, "in1d"):
@@ -26,17 +30,29 @@ def _ensure_astropy_numpy_compat() -> None:
     except Exception:
         return
     if not hasattr(fbi, "_check_interpolation_as_method"):
+        # XSTAR-FUNCTION-COMMENT-BEGIN
+        # Purpose: Check interpolation as method for this module while preserving the surrounding source/runtime invariants.
+        # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+        # XSTAR-FUNCTION-COMMENT-END
         def _check_interpolation_as_method(method: Any, *args: Any, **kwargs: Any) -> Any:
             return method
         fbi._check_interpolation_as_method = _check_interpolation_as_method  # type: ignore[attr-defined]
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the fits open operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _fits_open(path: Path):
     _ensure_astropy_numpy_compat()
     from astropy.io import fits
     return fits.open(path)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the as float operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _as_float(value: Any, default: float = 0.0) -> float:
     try:
         val = float(value)
@@ -47,6 +63,10 @@ def _as_float(value: Any, default: float = 0.0) -> float:
     return val
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the rel diff operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _rel_diff(a: float, b: float) -> float:
     aa = _as_float(a)
     bb = _as_float(b)
@@ -54,6 +74,10 @@ def _rel_diff(a: float, b: float) -> float:
     return abs(aa - bb) / den
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write csv for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _write_csv(path: Path, rows: Sequence[Mapping[str, Any]], fields: Sequence[str] | None = None) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if fields is None:
@@ -70,14 +94,26 @@ def _write_csv(path: Path, rows: Sequence[Mapping[str, Any]], fields: Sequence[s
             writer.writerow({key: row.get(key, "") for key in fields})
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the norm name operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _norm_name(name: str) -> str:
     return str(name).strip().lower().replace("-", "_").replace(" ", "_")
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the column names operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _column_names(data: Any) -> list[str]:
     return [str(name) for name in getattr(data, "names", [])]
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Locate column for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _find_column(data: Any, names: Sequence[str]) -> str | None:
     mapping = {_norm_name(name): str(name) for name in _column_names(data)}
     for name in names:
@@ -87,6 +123,10 @@ def _find_column(data: Any, names: Sequence[str]) -> str | None:
     return None
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the hdu data by name operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _hdu_data_by_name(path: Path, candidates: Sequence[str]) -> Any | None:
     if not path.is_file():
         return None
@@ -103,6 +143,10 @@ def _hdu_data_by_name(path: Path, candidates: Sequence[str]) -> Any | None:
     return None
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the classify radial row operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _classify_radial_row(radius: float, delta_r: float, index: int, total: int) -> str:
     if index == 1 and delta_r == 0.0:
         return "initial_row"
@@ -115,6 +159,10 @@ def _classify_radial_row(radius: float, delta_r: float, index: int, total: int) 
     return "intermediate_row"
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the abundance rows operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _abundance_rows(path: Path, label: str) -> list[dict[str, Any]]:
     data = _hdu_data_by_name(path, ("ABUNDANCES", "ABUNDANCE"))
     if data is None:
@@ -145,10 +193,18 @@ def _abundance_rows(path: Path, label: str) -> list[dict[str, Any]]:
     return rows
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the spectra data operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _spectra_data(path: Path) -> Any | None:
     return _hdu_data_by_name(path, ("XSTAR_SPECTRA", "SPECTRA"))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the spectra comparison rows operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _spectra_comparison_rows(python_file: Path, original_file: Path) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     py = _spectra_data(python_file)
     xo = _spectra_data(original_file)
@@ -209,6 +265,10 @@ def _spectra_comparison_rows(python_file: Path, original_file: Path) -> tuple[li
     return rows, summary
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the summarize array operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _summarize_array(name: str, arr: Any, *, row_kind: str, pass_index: int, zone_index: int, phase: str) -> dict[str, Any]:
     a = np.asarray(arr, dtype=float).reshape(-1)
     finite = a[np.isfinite(a)]
@@ -228,6 +288,10 @@ def _summarize_array(name: str, arr: Any, *, row_kind: str, pass_index: int, zon
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Append pprint27 shell column contributions for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _append_pprint27_shell_column_contributions(state: Any, opacity_rows: list[dict[str, Any]], *, zone_index: int, pass_index: int, direction: int) -> None:
     """Record per-shell ion-column contributions for the verbose pprint(27) audit.
 
@@ -284,6 +348,10 @@ def _append_pprint27_shell_column_contributions(state: Any, opacity_rows: list[d
             "diagnostic_note": "pprint(27) trapezoid contribution; inflated if radial shell thickness is inflated",
         })
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Append python radial shell diagnostic for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def append_python_radial_shell_diagnostic(state: Any, *, zone_index: int, pass_index: int, direction: int) -> None:
     """Capture Python radial state after one bounded radial shell."""
     if not bool(state.control.get("radial_spectrum_parity_diagnostic_enabled", False)):
@@ -524,6 +592,10 @@ def append_python_radial_shell_diagnostic(state: Any, *, zone_index: int, pass_i
     # v0.5.09: source accumulation/detail-output retention diagnostics.
     # Track the exact rows/arrays feeding xo01_detal4 and writespectra3, with
     # separate high-energy windows matching the observed XSTAR-only tails.
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the he counts operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     def _he_counts(threshold: float) -> dict[str, int | float]:
         mask = epi_for_retention > float(threshold) if epi_for_retention.size else np.zeros(0, dtype=bool)
         nn = min(mask.size, op_for_retention.size, z.shape[1] if z.ndim == 2 else 0, rc.shape[1] if rc.ndim == 2 else 0)
@@ -695,6 +767,10 @@ def append_python_radial_shell_diagnostic(state: Any, *, zone_index: int, pass_i
     })
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write python runtime radial spectrum diagnostics for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def write_python_runtime_radial_spectrum_diagnostics(state: Any, out_dir: str | Path) -> dict[str, str]:
     """Write Python runtime radial/spectrum diagnostic rows captured during 142."""
     base = Path(out_dir) / "radial_spectrum_diagnostics_v0500"
@@ -714,6 +790,10 @@ def write_python_runtime_radial_spectrum_diagnostics(state: Any, out_dir: str | 
     return products
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Compare radial spectrum products for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def compare_radial_spectrum_products(
     original_dir: str | Path,
     python_dir: str | Path,

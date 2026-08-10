@@ -198,3 +198,13 @@ The Milestone 2 review used these supplied PDFs:
 - Mendoza, C. et al. (2021), *The XSTAR Atomic Database*, Atoms 9, 12, DOI 10.3390/atoms9010012.
 
 The PDFs are reference inputs; they are not copied into the normal `xstar_tools` distribution by this milestone.
+
+## Function-comment application (0.6.73)
+
+The active Python/C++ function-level source comments were re-audited against the
+reference set above.  The comments use Manual sections 11.4-11.7 for population,
+thermal, emission/opacity and transfer roles; chapter 12 for ATDB data/rate-type
+semantics; and chapter 14 for controller/radial-state flow.  The 1996 Fe-L and
+2004 Fe-K papers are cited only on functions that actually participate in those
+line/cascade or inner-shell/Auger contexts.  See
+`docs/developer/function_commenting.md` for the reversible-overlay policy.

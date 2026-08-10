@@ -39,10 +39,18 @@ class BackendSelection:
     thermal_backend: BackendName = "python"
     engine_backend: BackendName = "python"
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Serialize the current state into a plain mapping for diagnostics, provenance, or machine-readable output.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def as_dict(self) -> dict[str, str]:
         return dict(asdict(self))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Normalize backend name for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def normalize_backend_name(value: str | None, *, default: str = "python") -> BackendName:
     name = (value or default or "python").strip().lower()
     if name not in _VALID_BACKENDS:
@@ -50,6 +58,10 @@ def normalize_backend_name(value: str | None, *, default: str = "python") -> Bac
     return name  # type: ignore[return-value]
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Resolve backend selection for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def resolve_backend_selection(
     *,
     global_backend: str | None = None,
@@ -72,6 +84,10 @@ def resolve_backend_selection(
         default="python",
     )
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the one operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def one(kernel: str, explicit: str | None) -> BackendName:
         return normalize_backend_name(
             explicit or os.environ.get(_KERNEL_ENV[kernel]) or global_value,
@@ -90,6 +106,10 @@ def resolve_backend_selection(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the install backend environment operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def install_backend_environment(selection: BackendSelection) -> None:
     """Publish a selection into process environment variables."""
     os.environ[_GLOBAL_ENV] = selection.global_backend
@@ -102,6 +122,10 @@ def install_backend_environment(selection: BackendSelection) -> None:
     os.environ[_KERNEL_ENV["engine"]] = selection.engine_backend
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the backend selection from mapping operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def backend_selection_from_mapping(mapping: Mapping[str, object] | None) -> BackendSelection:
     data = dict(mapping or {})
     return resolve_backend_selection(

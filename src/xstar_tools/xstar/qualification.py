@@ -30,6 +30,10 @@ SCIENCE_PRODUCT_FILES = {
 }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the sha256 file operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Qualification bookkeeping only; no direct scientific formula.
+# XSTAR-FUNCTION-COMMENT-END
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -38,6 +42,10 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the relative files operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Qualification bookkeeping only; no direct scientific formula.
+# XSTAR-FUNCTION-COMMENT-END
 def _relative_files(root: Path) -> list[Path]:
     return sorted(
         p.relative_to(root)
@@ -46,6 +54,10 @@ def _relative_files(root: Path) -> list[Path]:
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the create reference manifest operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Qualification bookkeeping only; no direct scientific formula.
+# XSTAR-FUNCTION-COMMENT-END
 def create_reference_manifest(
     root: Path,
     *,
@@ -74,6 +86,10 @@ def create_reference_manifest(
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write reference manifest for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Qualification bookkeeping only; no direct scientific formula.
+# XSTAR-FUNCTION-COMMENT-END
 def write_reference_manifest(root: Path, source_archive_sha256: str = "") -> dict[str, Any]:
     manifest = create_reference_manifest(root, source_archive_sha256=source_archive_sha256)
     (root / "reference_manifest.json").write_text(
@@ -84,6 +100,10 @@ def write_reference_manifest(root: Path, source_archive_sha256: str = "") -> dic
     return manifest
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the verify reference bundle operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Qualification bookkeeping only; no direct scientific formula.
+# XSTAR-FUNCTION-COMMENT-END
 def verify_reference_bundle(root: Path) -> dict[str, Any]:
     manifest_path = root / "reference_manifest.json"
     if not manifest_path.is_file():
@@ -126,6 +146,10 @@ def verify_reference_bundle(root: Path) -> dict[str, Any]:
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Read csv for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Qualification bookkeeping only; no direct scientific formula.
+# XSTAR-FUNCTION-COMMENT-END
 def _read_csv(path: Path) -> tuple[list[str], list[list[str]]]:
     with path.open(newline="", encoding="utf-8") as handle:
         reader = csv.reader(handle)
@@ -136,12 +160,20 @@ def _read_csv(path: Path) -> tuple[list[str], list[list[str]]]:
         return header, [row for row in reader]
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build source order maps for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Qualification bookkeeping only; no direct scientific formula.
+# XSTAR-FUNCTION-COMMENT-END
 def build_source_order_maps(program_dir: Path, output_dir: Path) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
     element_header, element_rows = _read_csv(program_dir / "elements.csv")
     row_header, row_rows = _read_csv(program_dir / "rows.csv")
     record_header, record_rows = _read_csv(program_dir / "records.csv")
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Convert the current value to dicts without changing its scientific meaning.
+    # Reference context: Qualification bookkeeping only; no direct scientific formula.
+    # XSTAR-FUNCTION-COMMENT-END
     def to_dicts(header: list[str], data: list[list[str]], name: str) -> list[dict[str, str]]:
         result: list[dict[str, str]] = []
         for index, row in enumerate(data, 2):
@@ -342,6 +374,10 @@ def build_source_order_maps(program_dir: Path, output_dir: Path) -> dict[str, An
     return manifest
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Read manifest value for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Qualification bookkeeping only; no direct scientific formula.
+# XSTAR-FUNCTION-COMMENT-END
 def _read_manifest_value(path: Path, key: str) -> str:
     for line in path.read_text(encoding="utf-8").splitlines():
         if line.startswith(key + "="):
@@ -349,10 +385,18 @@ def _read_manifest_value(path: Path, key: str) -> str:
     return ""
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the float bits operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Qualification bookkeeping only; no direct scientific formula.
+# XSTAR-FUNCTION-COMMENT-END
 def _float_bits(value: float) -> bytes:
     return struct.pack(">d", float(value))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Parse float for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Qualification bookkeeping only; no direct scientific formula.
+# XSTAR-FUNCTION-COMMENT-END
 def _parse_float(text: str) -> float | None:
     try:
         return float(text)
@@ -371,6 +415,10 @@ class Difference:
     relative_delta: float | None = None
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Compare csv for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Qualification bookkeeping only; no direct scientific formula.
+# XSTAR-FUNCTION-COMMENT-END
 def _compare_csv(
     reference: Path,
     candidate: Path,
@@ -433,6 +481,10 @@ def _compare_csv(
     return differences
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the canonical header operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Qualification bookkeeping only; no direct scientific formula.
+# XSTAR-FUNCTION-COMMENT-END
 def _canonical_header(header: Any, *, ignore_volatile: bool) -> list[tuple[str, str, str]]:
     cards: list[tuple[str, str, str]] = []
     for card in header.cards:
@@ -442,6 +494,10 @@ def _canonical_header(header: Any, *, ignore_volatile: bool) -> list[tuple[str, 
     return cards
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Compare fits for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Qualification bookkeeping only; no direct scientific formula.
+# XSTAR-FUNCTION-COMMENT-END
 def _compare_fits(
     reference: Path,
     candidate: Path,
@@ -556,6 +612,10 @@ def _compare_fits(
     return differences
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Compare directories for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Qualification bookkeeping only; no direct scientific formula.
+# XSTAR-FUNCTION-COMMENT-END
 def compare_directories(
     reference_dir: Path,
     candidate_dir: Path,
@@ -647,17 +707,29 @@ def compare_directories(
     return result
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Resolve output json for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Qualification bookkeeping only; no direct scientific formula.
+# XSTAR-FUNCTION-COMMENT-END
 def _resolve_output_json(path: str | None) -> Path | None:
     if not path:
         return None
     return Path(path).expanduser().resolve()
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Clear output json for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Qualification bookkeeping only; no direct scientific formula.
+# XSTAR-FUNCTION-COMMENT-END
 def _clear_output_json(path: Path | None) -> None:
     if path is not None:
         path.unlink(missing_ok=True)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write json for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Qualification bookkeeping only; no direct scientific formula.
+# XSTAR-FUNCTION-COMMENT-END
 def _write_json(data: dict[str, Any], path: Path | None) -> None:
     text = json.dumps(data, indent=2, sort_keys=True) + "\n"
     if path is not None:
@@ -668,6 +740,10 @@ def _write_json(data: dict[str, Any], path: Path | None) -> None:
     print(text, end="")
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build parser for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Qualification bookkeeping only; no direct scientific formula.
+# XSTAR-FUNCTION-COMMENT-END
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -698,6 +774,10 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the main operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Qualification bookkeeping only; no direct scientific formula.
+# XSTAR-FUNCTION-COMMENT-END
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     output_json = _resolve_output_json(getattr(args, "output_json", None))

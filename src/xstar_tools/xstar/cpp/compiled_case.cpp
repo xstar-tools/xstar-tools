@@ -43,6 +43,10 @@ struct ScienceFile {
     std::uintmax_t size = 0;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement split csv as a local helper for the compiled case module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<std::string> split_csv(const std::string& line) {
     std::vector<std::string> result;
     std::string item;
@@ -54,6 +58,10 @@ std::vector<std::string> split_csv(const std::string& line) {
     return result;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Parse u64 from its external text/argument representation into validated native values.
+// Reference context: Implementation/input helper; XSTAR Manual ch4 describes parameter inputs, but this parser has no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 bool parse_u64(const std::string& text, std::uint64_t& value) {
     try {
         std::size_t used = 0;
@@ -64,6 +72,10 @@ bool parse_u64(const std::string& text, std::uint64_t& value) {
     } catch (...) { return false; }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Parse int from its external text/argument representation into validated native values.
+// Reference context: Implementation/input helper; XSTAR Manual ch4 describes parameter inputs, but this parser has no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 bool parse_int(const std::string& text, int& value) {
     try {
         std::size_t used = 0;
@@ -74,6 +86,10 @@ bool parse_int(const std::string& text, int& value) {
     } catch (...) { return false; }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Parse double from its external text/argument representation into validated native values.
+// Reference context: Implementation/input helper; XSTAR Manual ch4 describes parameter inputs, but this parser has no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 bool parse_double(const std::string& text, double& value) {
     try {
         std::size_t used = 0;
@@ -84,6 +100,10 @@ bool parse_double(const std::string& text, double& value) {
     } catch (...) { return false; }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load manifest into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 std::map<std::string, std::string> load_manifest(const fs::path& path) {
     std::ifstream input(path);
     if (!input) throw std::runtime_error("could not open manifest: " + path.string());
@@ -98,6 +118,10 @@ std::map<std::string, std::string> load_manifest(const fs::path& path) {
     return values;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load trajectory into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<EvaluationRecord> load_trajectory(const fs::path& path) {
     std::ifstream input(path);
     if (!input) throw std::runtime_error("could not open trajectory: " + path.string());
@@ -131,6 +155,10 @@ std::vector<EvaluationRecord> load_trajectory(const fs::path& path) {
     return rows;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement initialize stats as a local helper for the compiled case module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 void initialize_stats(xstar_compiled_case_stats_v1& stats) {
     const std::uint32_t original_size = stats.struct_size;
     stats = {};
@@ -152,11 +180,19 @@ struct xstar_compiled_case_context {
 
 namespace {
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement populate identity as a local helper for the compiled case module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 void populate_identity(const xstar_compiled_case_context& context, xstar_compiled_case_stats_v1& stats) {
     copy_text(stats.case_id, sizeof(stats.case_id), context.manifest.at("case_id"));
     copy_text(stats.parameter_fingerprint, sizeof(stats.parameter_fingerprint), context.manifest.at("parameter_fingerprint"));
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement execute native program as a local helper for the compiled case module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 void execute_native_program(const xstar_compiled_case_context& context, xstar_compiled_case_stats_v1& stats) {
     const auto started = std::chrono::steady_clock::now();
     volatile double state_checksum = 0.0;
@@ -181,6 +217,10 @@ void execute_native_program(const xstar_compiled_case_context& context, xstar_co
     populate_identity(context, stats);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Validate the invariants required by validate output; reject malformed dimensions, pointers, or state before scientific kernels are entered.
+// Reference context: Implementation/safety helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 int validate_output(const xstar_zone_input_v1* input, xstar_zone_output_v1* output, std::string& error) {
     if (!input || !output || input->struct_size < sizeof(*input) || output->struct_size < sizeof(*output)) {
         error = "invalid zone input/output";
@@ -199,6 +239,10 @@ int validate_output(const xstar_zone_input_v1* input, xstar_zone_output_v1* outp
 
 extern "C" {
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Initialize the compiled case stats init structure to its ABI-safe defaults before the caller supplies model-specific values.
+// Reference context: Implementation/ABI helper; scientific meaning is defined by the consuming engine.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_compiled_case_stats_init_v1(xstar_compiled_case_stats_v1* stats) {
     if (!stats) return XSTAR_STATUS_INVALID_ARGUMENT;
     stats->struct_size = sizeof(*stats);
@@ -206,6 +250,10 @@ int xstar_compiled_case_stats_init_v1(xstar_compiled_case_stats_v1* stats) {
     return XSTAR_STATUS_OK;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Create and validate persistent runtime state for compiled case context create, loading only the data needed by subsequent calls.
+// Reference context: Implementation/lifetime helper; the scientific work is performed by the shared engine routines called from this context.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_compiled_case_context_create_v1(
     const char* case_directory,
     xstar_compiled_case_context** output,
@@ -277,10 +325,18 @@ int xstar_compiled_case_context_create_v1(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Destroy the persistent compiled case context destroy context and release its owned resources without changing external science state.
+// Reference context: Implementation/lifetime helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_compiled_case_context_destroy(xstar_compiled_case_context* context) {
     delete context;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement compiled case run files as a local helper for the compiled case module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_compiled_case_run_files_v1(
     xstar_compiled_case_context* context,
     const char* output_directory,
@@ -323,6 +379,10 @@ int xstar_compiled_case_run_files_v1(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement compiled case run zone as a local helper for the compiled case module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_compiled_case_run_zone_v1(
     xstar_compiled_case_context* context,
     const xstar_zone_input_v1* input,
@@ -365,6 +425,10 @@ int xstar_compiled_case_run_zone_v1(
     return XSTAR_STATUS_OK;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement compiled case run batch as a local helper for the compiled case module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_compiled_case_run_batch_v1(
     xstar_compiled_case_context* context,
     const xstar_zone_input_v1* inputs,

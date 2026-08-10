@@ -97,6 +97,10 @@ extern "C" int xstar_emissivity_build_binemis_profile(
     const double* line_auger_rate_s, double* out_flat, double* stats,
     char* errbuf, std::size_t errbuf_size);
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement copy text as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void copy_text(char* target, std::size_t cap, const std::string& value) {
     if (!target || cap == 0) return;
     const std::size_t n = std::min(cap - 1, value.size());
@@ -106,6 +110,10 @@ void copy_text(char* target, std::size_t cap, const std::string& value) {
 
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement elapsed as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 double elapsed(const clock_type::time_point& start) {
     return std::chrono::duration<double>(clock_type::now() - start).count();
 }
@@ -114,6 +122,10 @@ double elapsed(const clock_type::time_point& start) {
 // xo01_detal4 inward-emission cells.  This sidecar is enabled only when the
 // host runner supplies XSTAR_V82_PATCH5201738_RCCEMIS_ATTRIBUTION_DIR.  It
 // never feeds a production array.
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write patch5201738 fixed rccemis edge from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void write_patch5201738_fixed_rccemis_edge(
     std::size_t source_sequence,
     const char* stage,
@@ -144,6 +156,10 @@ void write_patch5201738_fixed_rccemis_edge(
 // records the exact bin-1 delta before/after each selected record and enough
 // source metadata to audit the record's support/escape inputs.  Enabled only
 // by the host diagnostic environment variable.
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write patch52017381 selected rrc bin1 record from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void write_patch52017381_selected_rrc_bin1_record(
     std::size_t source_sequence,
     std::size_t selected_order,
@@ -198,6 +214,10 @@ void write_patch52017381_selected_rrc_bin1_record(
         << bin1_before_in << ',' << bin1_after_in << ',' << (bin1_after_in - bin1_before_in) << '\n';
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement binary64 sequence fnv1a as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::uint64_t binary64_sequence_fnv1a(const double* values, std::size_t count) {
     // Stable little-endian FNV-1a over the exact IEEE-754 payload.  This is
     // intentionally independent of host byte order so Python qualification
@@ -216,16 +236,28 @@ std::uint64_t binary64_sequence_fnv1a(const double* values, std::size_t count) {
     return hash;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement binary64 sequence fnv1a as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::uint64_t binary64_sequence_fnv1a(const std::vector<double>& values) {
     return binary64_sequence_fnv1a(values.data(), values.size());
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement hex u64 as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::string hex_u64(std::uint64_t value) {
     std::ostringstream out;
     out << std::hex << std::setw(16) << std::setfill('0') << value;
     return out.str();
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement environment data type as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use.
+// XSTAR-FUNCTION-COMMENT-END
 int environment_data_type(const char* name) {
     const char* value = nullptr;
     if (std::string(name) == "XSTAR_QUALIFICATION_SOURCE_SEQUENCE") {
@@ -241,11 +273,19 @@ int environment_data_type(const char* name) {
     return static_cast<int>(parsed);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute native production mode within the element/ion population workflow, preserving the source ion-stage ordering and active-stage semantics.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 bool native_production_mode() {
     const char* value = std::getenv("XSTAR_NATIVE_PRODUCTION");
     return value && std::string(value) == "1";
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement native promoted flag as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 bool native_promoted_flag(const char* name) {
     if (!native_production_mode()) return false;
     static const std::unordered_set<std::string> promoted = {
@@ -280,6 +320,10 @@ bool native_promoted_flag(const char* name) {
     return promoted.count(name) != 0u;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement environment flag as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 bool environment_flag(const char* name) {
     const char* value = std::getenv(name);
     if (!value || !*value) return native_promoted_flag(name);
@@ -293,6 +337,10 @@ bool environment_flag(const char* name) {
 // phint53 shadow, and the actually committed answers for the two call-1
 // high-ion records that dominated the 11.8 matrix attribution.  It never
 // feeds a production array.
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write c type53 promotion audit from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 53 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 void write_c_type53_promotion_audit_v0648119(
     std::uint64_t source_position,
     std::int64_t record_number,
@@ -341,6 +389,10 @@ void write_c_type53_promotion_audit_v0648119(
     out << ',' << max_abs(legacy) << ',' << max_abs(source_values) << ',' << max_abs(committed_values) << '\n';
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement find type50 manifold oracle entry as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 50 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 const xstar_type50_manifold_oracle::Entry* find_type50_manifold_oracle_entry(
     std::uint64_t source_position,
     std::uint64_t record
@@ -351,6 +403,10 @@ const xstar_type50_manifold_oracle::Entry* find_type50_manifold_oracle_entry(
     return nullptr;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement find type50 dsec runtime oracle entry as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 50 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 const xstar_type50_dsec_runtime_oracle::Entry* find_type50_dsec_runtime_oracle_entry(
     std::uint64_t source_position,
     std::uint64_t record
@@ -361,6 +417,10 @@ const xstar_type50_dsec_runtime_oracle::Entry* find_type50_dsec_runtime_oracle_e
     return nullptr;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement find type53 row46 dsec runtime oracle entry as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 53 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 const xstar_type53_row46_dsec_runtime_oracle::Entry* find_type53_row46_dsec_runtime_oracle_entry(
     std::uint64_t source_position,
     std::uint64_t record
@@ -371,6 +431,10 @@ const xstar_type53_row46_dsec_runtime_oracle::Entry* find_type53_row46_dsec_runt
     return nullptr;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute type53 row46 original contribution slot within the element/ion population workflow, preserving the source ion-stage ordering and active-stage semantics.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int type53_row46_original_contribution_slot(const xstar_element_contribution_v1& contribution) {
     const auto* entry = find_type53_row46_dsec_runtime_oracle_entry(
         contribution.source_position, contribution.record);
@@ -378,6 +442,10 @@ int type53_row46_original_contribution_slot(const xstar_element_contribution_v1&
     return (entry->first_source_order_index - 1) / 4;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute reorder type53 row46 coupled contributions within the element/ion population workflow, preserving the source ion-stage ordering and active-stage semantics.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void reorder_type53_row46_coupled_contributions(
     std::vector<xstar_element_contribution_v1>& contributions
 ) {
@@ -410,6 +478,10 @@ void reorder_type53_row46_coupled_contributions(
     for (std::size_t i = 0; i < slots.size(); ++i) contributions[i] = *slots[i];
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute restore source contribution order within the element/ion population workflow, preserving the source ion-stage ordering and active-stage semantics.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void restore_source_contribution_order(
     std::vector<xstar_element_contribution_v1>& contributions
 ) {
@@ -425,6 +497,10 @@ void restore_source_contribution_order(
         });
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source runtime pow10 as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 __attribute__((noinline)) double source_runtime_pow10(double exponent) {
     // Python's float power (used by the immutable v0.6.47.2 reference for
     // calt77) dispatches to the platform libm pow entry point.  A volatile
@@ -435,6 +511,10 @@ __attribute__((noinline)) double source_runtime_pow10(double exponent) {
     return runtime_pow(10.0, exponent);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement trim as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::string trim(std::string value) {
     const auto first = value.find_first_not_of(" \t\r\n");
     if (first == std::string::npos) return {};
@@ -442,6 +522,10 @@ std::string trim(std::string value) {
     return value.substr(first, last - first + 1);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement split csv as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<std::string> split_csv(const std::string& line) {
     std::vector<std::string> out;
     std::string current;
@@ -467,6 +551,10 @@ std::vector<std::string> split_csv(const std::string& line) {
 }
 
 template <typename T>
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Parse number from its external text/argument representation into validated native values.
+// Reference context: Implementation/input helper; XSTAR Manual ch4 describes parameter inputs, but this parser has no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 T parse_number(const std::string& text, const char* field) {
     std::istringstream stream(text);
     T value{};
@@ -483,6 +571,10 @@ struct HydrogenType50EscapeStateV04874618 {
     std::vector<double> tau_out;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load binary64 payload into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<double> read_binary64_payload_v04874618(const std::filesystem::path& path) {
     std::ifstream input(path, std::ios::binary | std::ios::ate);
     if (!input) throw std::runtime_error("cannot open hydrogen Type-50 line-tau payload: " + path.string());
@@ -500,12 +592,20 @@ std::vector<double> read_binary64_payload_v04874618(const std::filesystem::path&
     return values;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Validate the invariants required by required environment path; reject malformed dimensions, pointers, or state before scientific kernels are entered.
+// Reference context: Implementation/safety helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 std::string required_environment_path_v04874618(const char* name) {
     const char* value = std::getenv(name);
     if (!value || !*value) throw std::runtime_error(std::string("missing required environment path: ") + name);
     return value;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load hydrogen type50 escape state into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 50 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 HydrogenType50EscapeStateV04874618 load_hydrogen_type50_escape_state_v04874618() {
     HydrogenType50EscapeStateV04874618 state;
     state.enabled = environment_flag("XSTAR_QUALIFICATION_HYDROGEN_TYPE50_ESCAPE_STATE");
@@ -553,6 +653,10 @@ HydrogenType50EscapeStateV04874618 load_hydrogen_type50_escape_state_v04874618()
     return state;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement hydrogen type50 escape state as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 50 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 const HydrogenType50EscapeStateV04874618& hydrogen_type50_escape_state_v04874618() {
     // The standalone all-61 controller transports a different line optical-depth
     // workspace before each fixed-state callback.  Cache only the currently
@@ -598,6 +702,10 @@ struct MagnesiumType50EscapeStateV04874619 {
     std::vector<double> tau_out;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load binary64 payload into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<double> read_binary64_payload_v04874619(const std::filesystem::path& path) {
     std::ifstream input(path, std::ios::binary | std::ios::ate);
     if (!input) throw std::runtime_error("cannot open magnesium Type-50 line-tau payload: " + path.string());
@@ -615,6 +723,10 @@ std::vector<double> read_binary64_payload_v04874619(const std::filesystem::path&
     return values;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load magnesium type50 escape state into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 50 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 MagnesiumType50EscapeStateV04874619 load_magnesium_type50_escape_state_v04874619() {
     MagnesiumType50EscapeStateV04874619 state;
     state.enabled = environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_ESCAPE_STATE");
@@ -779,6 +891,10 @@ MagnesiumType50EscapeStateV04874619 load_magnesium_type50_escape_state_v04874619
     return state;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement magnesium type50 escape state as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 50 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 const MagnesiumType50EscapeStateV04874619& magnesium_type50_escape_state_v04874619() {
     // Mg Type-50 activity and line optical depths are sequence-dependent.  The
     // persistent controller binds the sequence and workspace paths before each
@@ -839,6 +955,10 @@ struct MagnesiumType99PrimaryCoolingStateV04874620 {
     std::map<std::pair<std::int64_t, std::string>, MagnesiumType99PrimaryCoolingRowV04874620> rows;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load magnesium type99 primary cooling state into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 99 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 MagnesiumType99PrimaryCoolingStateV04874620 load_magnesium_type99_primary_cooling_state_v04874620() {
     MagnesiumType99PrimaryCoolingStateV04874620 state;
     state.enabled = environment_flag(kMagnesiumType99PrimaryCoolingReductionEnv);
@@ -1085,6 +1205,10 @@ magnesium_primary_cooling_order_state_v048746202() {
 
 // Literal v0.6.47.2 Python translation of pescl.f90.  The accepted source
 // reference uses Python binary64 math.pi and libm exp/log/sqrt semantics.
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement pescl as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 double pescl_v0472_binary64(double tau) {
     double value = 0.0;
     if (tau < 1.0) {
@@ -1102,6 +1226,10 @@ double pescl_v0472_binary64(double tau) {
     return value / 2.0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load manifest into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::unordered_map<std::string, std::string> read_manifest(const std::string& path) {
     std::ifstream input(path);
     if (!input) throw std::runtime_error("cannot open manifest: " + path);
@@ -1565,6 +1693,10 @@ struct SparsePreliminaryCacheAuditV064812337 {
     double rate_seconds = 0.0;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write sparse preliminary cache audit from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void write_sparse_preliminary_cache_audit_v064812337(
     const SparsePreliminaryCacheAuditV064812337& row) {
     const char* path = std::getenv("XSTAR_V064812337_SPARSE_CACHE_AUDIT_PATH");
@@ -1631,6 +1763,10 @@ struct ResidualScalingAuditV064812339 {
     double element_to_mapback_seconds = 0.0;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write residual scaling audit from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void write_residual_scaling_audit_v064812339(const ResidualScalingAuditV064812339& row) {
     const char* path = std::getenv("XSTAR_V064812339_RESIDUAL_SCALING_AUDIT_PATH");
     if (!path || !*path) return;
@@ -1690,6 +1826,10 @@ struct TraversalSelectionAuditV064812340 {
     double pass12_nonrate_seconds = 0.0;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write traversal selection audit from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void write_traversal_selection_audit_v064812340(const TraversalSelectionAuditV064812340& row) {
     const char* path = std::getenv("XSTAR_V064812340_TRAVERSAL_SELECTION_AUDIT_PATH");
     if (!path || !*path) return;
@@ -1763,6 +1903,10 @@ struct ActiveElementView {
 // element solver works on a compact active-stage population vector. Translate
 // explicitly at every product/spectral consumer. Rows outside the active
 // window have source population zero; they must never index the compact vector.
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute active population for full row as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 double active_population_for_full_row(
     const ActiveElementView& active,
     const std::vector<double>& populations,
@@ -1788,6 +1932,10 @@ double active_population_for_full_row(
 // map-back, so their population view sees the shared upper-boundary row as
 // exact zero.  Keep the compact value for the solver/thermal ledger, but hide
 // it from all post-map-back spectral/product consumers.
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute source post mapback population for full row as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 double source_post_mapback_population_for_full_row_v064812317(
     const ActiveElementView& active,
     const std::vector<double>& populations,
@@ -2075,6 +2223,10 @@ struct FixedStateClosureData {
     double charge_residual = 0.0;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement fixed state closure file as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::filesystem::path fixed_state_closure_file(const char* suffix) {
     const char* root_value = std::getenv("XSTAR_QUALIFICATION_FIXED_STATE_PARITY_CLOSURE_DIR");
     if (!root_value || !*root_value) {
@@ -2086,6 +2238,10 @@ std::filesystem::path fixed_state_closure_file(const char* suffix) {
     return std::filesystem::path(root_value) / name.str();
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load fixed state closure data into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 FixedStateClosureData load_fixed_state_closure_data() {
     FixedStateClosureData out;
     {
@@ -2229,6 +2385,10 @@ struct ThermalDiagonalDiagnostic {
     double cooling2_contribution = 0.0;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute thermal compact population closure file as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::filesystem::path thermal_compact_population_closure_file() {
     const char* root_value = std::getenv("XSTAR_QUALIFICATION_THERMAL_COMPACT_POPULATION_CLOSURE_DIR");
     if (!root_value || !*root_value) {
@@ -2241,6 +2401,10 @@ std::filesystem::path thermal_compact_population_closure_file() {
     return std::filesystem::path(root_value) / name.str();
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load thermal compact population closure data into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 ThermalCompactPopulationClosureData load_thermal_compact_population_closure_data() {
     ThermalCompactPopulationClosureData out;
     out.sequence = required_environment_integer("XSTAR_QUALIFICATION_SOURCE_SEQUENCE");
@@ -2315,6 +2479,10 @@ ThermalCompactPopulationClosureData load_thermal_compact_population_closure_data
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute thermal compact population values for element as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<double> thermal_compact_population_values_for_element(
     const ThermalCompactPopulationClosureData& closure,
     const ActiveElementView& active
@@ -2366,6 +2534,10 @@ struct ThermalComponentClosureData {
     double elcter = 0.0;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute thermal component closure file as a contribution to, or control step in, the local thermal-equilibrium iteration.
+// Reference context: XSTAR Manual s11.4.4 and s11.6; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::filesystem::path thermal_component_closure_file() {
     const char* root_value = std::getenv("XSTAR_QUALIFICATION_THERMAL_COMPONENT_PARITY_CLOSURE_DIR");
     if (!root_value || !*root_value) {
@@ -2377,6 +2549,10 @@ std::filesystem::path thermal_component_closure_file() {
     return std::filesystem::path(root_value) / name.str();
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load thermal component closure data into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 ThermalComponentClosureData load_thermal_component_closure_data() {
     const auto path = thermal_component_closure_file();
     std::ifstream input(path);
@@ -2430,6 +2606,10 @@ ThermalComponentClosureData load_thermal_component_closure_data() {
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute matrix closure file as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::filesystem::path matrix_closure_file(const char* suffix, int element_z) {
     const char* root_value = std::getenv("XSTAR_QUALIFICATION_MATRIX_CONSTRUCTION_CLOSURE_DIR");
     if (!root_value || !*root_value) {
@@ -2443,6 +2623,10 @@ std::filesystem::path matrix_closure_file(const char* suffix, int element_z) {
     return std::filesystem::path(root_value) / name.str();
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load matrix closure contribution corrections into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<MatrixClosureContributionCorrection> load_matrix_closure_contribution_corrections(int element_z) {
     const auto path = matrix_closure_file("_contributions.csv", element_z);
     std::ifstream input(path);
@@ -2484,6 +2668,10 @@ std::vector<MatrixClosureContributionCorrection> load_matrix_closure_contributio
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Apply matrix closure contribution corrections to the current model state while preserving the source ordering and normalization expected by later stages.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void apply_matrix_closure_contribution_corrections(
     std::vector<xstar_element_contribution_v1>& contributions,
     const ElementProgram& active_element,
@@ -2598,6 +2786,10 @@ void apply_matrix_closure_contribution_corrections(
     restore_source_contribution_order(contributions);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Validate the invariants required by required environment integer; reject malformed dimensions, pointers, or state before scientific kernels are entered.
+// Reference context: Implementation/safety helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 int required_environment_integer(const char* name) {
     const char* value = std::getenv(name);
     if (!value || !*value) throw std::runtime_error(std::string("missing environment integer: ") + name);
@@ -2609,6 +2801,10 @@ int required_environment_integer(const char* name) {
     return static_cast<int>(parsed);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load source compact oracle into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 SourceCompactOracle load_source_compact_oracle() {
     const char* path_value = std::getenv("XSTAR_QUALIFICATION_SOURCE_SOLVE_ROWS_CSV");
     if (!path_value || !*path_value) {
@@ -2751,6 +2947,10 @@ struct NativeElementDiagnostic {
 // v0.6.48.11.8: diagnostic-only call-1 carbon compact-solve attribution.
 // This is intentionally downstream of the element solve and never mutates
 // populations, matrices, rates, active windows, opacity, or controller state.
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write c call1 compact solve attribution from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void write_c_call1_compact_solve_attribution_v0648118(
     const Program& program,
     const NativeElementDiagnostic& diagnostic) {
@@ -3093,6 +3293,10 @@ struct SourceContinuumThermalResult {
     std::vector<ContinuumWorkspaceDiagnostic> diagnostics;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source hunt3 one based as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::size_t source_hunt3_one_based(const std::array<double,xstar_coheat_table::ncomp>& grid, double x) {
     const auto it = std::upper_bound(grid.begin(), grid.end(), x);
     std::size_t index = static_cast<std::size_t>(it - grid.begin());
@@ -3101,6 +3305,10 @@ std::size_t source_hunt3_one_based(const std::array<double,xstar_coheat_table::n
     return index;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source cmpfnc as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 double source_cmpfnc(double ee, double sxx) {
     if (ee <= static_cast<double>(static_cast<float>(1.0e-4))) return 4.0 * sxx - ee;
     const std::size_t n = xstar_coheat_table::ncomp;
@@ -3114,6 +3322,10 @@ double source_cmpfnc(double ee, double sxx) {
     return ddedsx*(sxx-sg[l0]) + ddede*(ee-eg[m0]) + xstar_coheat_table::de(l0,m0);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source huntf one based as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int source_huntf_one_based(const double* grid, std::size_t count, double x) {
     if (!grid || count < 3) return 1;
     const int n = static_cast<int>(count);
@@ -3130,6 +3342,10 @@ int source_huntf_one_based(const double* grid, std::size_t count, double x) {
     return std::max(1, std::min(n, jlo));
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Build source continuum workspace from the source-ordered inputs required by the next calculation stage.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 SourceContinuumWorkspace build_source_continuum_workspace(
     const double* full_epi,
     const double* full_bremsa,
@@ -3160,6 +3376,10 @@ SourceContinuumWorkspace build_source_continuum_workspace(
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate the source-equivalent Compton heating/cooling contribution from the local radiation field.
+// Reference context: XSTAR Manual ss11.4.4 and 11.6; Kallman & Bautista (2001), high-density/Compton treatment.
+// XSTAR-FUNCTION-COMMENT-END
 SourceComp2Result source_comp2(const double* epi, const double* bremsa, std::size_t n, double temperature_k, double hydrogen_density, double electron_fraction) {
     if (!epi || !bremsa || n < 2) throw std::runtime_error("source comp2 requires complete DSEC radiation workspace");
     const double emc2 = static_cast<double>(static_cast<float>(5.11e5));
@@ -3191,6 +3411,10 @@ SourceComp2Result source_comp2(const double* epi, const double* bremsa, std::siz
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Accumulate continuum thermal terms (including Compton/free-free channels) on the source energy grid for the local-zone thermal balance.
+// Reference context: XSTAR Manual ss11.4.4, 11.6; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 SourceContinuumThermalResult source_continuum_thermal(
     const double* full_epi,
     const double* full_bremsa,
@@ -3509,12 +3733,20 @@ struct xstar_fixed_state_context_impl {
     std::vector<double> last_source_line_profile_workspace_v064894;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement join path as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::string join_path(const std::string& base, const std::string& name) {
     if (base.empty()) return name;
     if (base.back() == '/') return base + name;
     return base + "/" + name;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load elements into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void load_elements(const std::string& path, Program& program) {
     std::ifstream input(path);
     if (!input) throw std::runtime_error("cannot open elements.csv");
@@ -3570,6 +3802,10 @@ void load_elements(const std::string& path, Program& program) {
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load rows into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void load_rows(const std::string& path, Program& program) {
     std::ifstream input(path);
     if (!input) throw std::runtime_error("cannot open rows.csv");
@@ -3605,6 +3841,10 @@ void load_rows(const std::string& path, Program& program) {
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load records into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void load_records(const std::string& path, Program& program) {
     std::ifstream input(path);
     if (!input) throw std::runtime_error("cannot open records.csv");
@@ -3647,6 +3887,10 @@ void load_records(const std::string& path, Program& program) {
 }
 
 template <typename T>
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load scalar file into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<T> load_scalar_file(const std::string& path, const char* name) {
     std::ifstream input(path);
     if (!input) throw std::runtime_error(std::string("cannot open ") + name);
@@ -3662,6 +3906,10 @@ std::vector<T> load_scalar_file(const std::string& path, const char* name) {
 
 void validate_program(Program& p);
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load program into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 Program load_program(const std::string& directory) {
     Program p;
     const auto manifest = read_manifest(join_path(directory, "manifest.txt"));
@@ -3692,6 +3940,10 @@ Program load_program(const std::string& directory) {
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Validate the invariants required by validate program; reject malformed dimensions, pointers, or state before scientific kernels are entered.
+// Reference context: Implementation/safety helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 void validate_program(Program& p) {
     if (p.id.empty()) throw std::runtime_error("program_id missing");
     if (p.elements.empty()) throw std::runtime_error("program contains no elements");
@@ -3734,6 +3986,10 @@ void validate_program(Program& p) {
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load program bundle into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 Program load_program_bundle(const xstar_fixed_program_bundle_v1& bundle) {
     constexpr std::size_t kHistoricalBundlePrefix = offsetof(xstar_fixed_program_bundle_v1, lte_ions);
     if (bundle.struct_size < kHistoricalBundlePrefix || bundle.abi_version != XSTAR_FIXED_STATE_ENGINE_ABI_VERSION) {
@@ -3857,6 +4113,10 @@ Program load_program_bundle(const xstar_fixed_program_bundle_v1& bundle) {
 
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement limited exp as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 double limited_exp(double x) {
     return std::exp(std::max(-700.0, std::min(700.0, x)));
 }
@@ -3866,17 +4126,29 @@ double limited_exp(double x) {
 // evaluating exp().  eint.f90 and Type 95 both call expo(), so their
 // source-faithful paths must use this helper rather than the generic
 // numerical overflow guard above.
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source expo as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 double source_expo(double x) {
     return std::exp(std::max(-60.0, std::min(60.0, x)));
 }
 
 // Retained name for existing Type-53/source users; same literal source
 // expo.f90 contract.
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement type53 expo as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 53 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 double type53_expo(double x) {
     return source_expo(x);
 }
 
 /* XSTAR-style scaled x*exp(x)*E1(x), copied from the validated collision translation. */
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement expint scaled as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 double expint_scaled(double x) {
     if (!(x > 0.0) || !std::isfinite(x)) return 0.0;
     if (x <= 1.0) {
@@ -3902,6 +4174,10 @@ double expint_scaled(double x) {
     return numerator / denominator;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement type69 expint scaled source order as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 69 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 double type69_expint_scaled_source_order(double x) {
     if (!(x > 0.0) || !std::isfinite(x)) return 0.0;
     if (x > 1.0) {
@@ -3920,6 +4196,10 @@ double type69_expint_scaled_source_order(double x) {
     return e1 * x * type53_expo(x);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate type69 upsilon using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 69 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 double type69_upsilon(const double* r, std::size_t n, double temperature_k) {
     if (!r || n < 6 || temperature_k <= 0.0 || r[0] <= 0.0) return -1.0;
     double y = r[0] / temperature_k * 1.160443e4;
@@ -3948,6 +4228,10 @@ double type69_upsilon(const double* r, std::size_t n, double temperature_k) {
     return std::max(0.0, gamma);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute interp linear for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 double interp_linear(const double* x, const double* y, std::size_t n, double value) {
     if (!x || !y || n == 0) return 0.0;
     if (value <= x[0]) return y[0];
@@ -3958,6 +4242,10 @@ double interp_linear(const double* x, const double* y, std::size_t n, double val
     return dx == 0.0 ? y[k] : y[k] + (value - x[k]) * (y[k + 1] - y[k]) / dx;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute natural spline9 for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 double natural_spline9(const double* y, double x) {
     const int n = 9;
     const double h = 0.125;
@@ -3984,6 +4272,10 @@ double natural_spline9(const double* y, double x) {
     return aa * y[k] + bb * y[k + 1] + ((aa * aa * aa - aa) * m[k] + (bb * bb * bb - bb) * m[k + 1]) * h * h / 6.0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute type51 splinem5 for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 double type51_splinem5(const double* p, double x) {
     const double s = 1.0 / 30.0;
     const double s2 = 32.0 * s * (19.0*p[0] - 43.0*p[1] + 30.0*p[2] - 7.0*p[3] + p[4]);
@@ -4018,6 +4310,10 @@ double type51_splinem5(const double* p, double x) {
     return t0 + x0 * (t1 + x0 * (t2 + x0 * t3));
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate type51 upsilon legacy using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 51 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 double type51_upsilon_legacy(
     const double* r, std::size_t n, const std::int64_t* ints,
     std::size_t ni, double temperature_k
@@ -4071,6 +4367,10 @@ struct Type51UpsilonEvaluation {
     double upsilon = 0.0;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate type51 upsilon using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 51 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 Type51UpsilonEvaluation type51_upsilon(
     const double* r, std::size_t n, const std::int64_t* ints,
     std::size_t ni, double temperature_k
@@ -4144,6 +4444,10 @@ Type51UpsilonEvaluation type51_upsilon(
     return result;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate type56 upsilon using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 56 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 double type56_upsilon(const double* r, std::size_t n, double temperature_k) {
     if (!r || n < 4 || (n % 2) != 0 || !(temperature_k > 0.0)) return -1.0;
     const std::size_t points = n / 2;
@@ -4176,6 +4480,10 @@ double type56_upsilon(const double* r, std::size_t n, double temperature_k) {
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement eint values as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void eint_values(double t, double& e1, double& e2, double& e3) {
     if (!(t > 0.0)) { e1 = e2 = e3 = 0.0; return; }
     const double scaled = expint_scaled(t);
@@ -4189,6 +4497,10 @@ void eint_values(double t, double& e1, double& e2, double& e3) {
     e3 = 0.5 * (source_expo(-t) - t * e2);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement type57 szirc as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 57 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 double type57_szirc(int n, double temperature, double rz, double rno) {
     static const double abethe[11] = {1.134,0.603,0.412,0.313,0.252,0.211,0.181,0.159,0.142,0.128,1.307};
     static const double hbethe[11] = {1.48,3.64,5.93,8.32,10.75,12.90,15.05,17.20,19.35,21.50,2.15};
@@ -4211,6 +4523,10 @@ double type57_szirc(int n, double temperature, double rz, double rno) {
     return std::isfinite(cii) ? std::max(0.0, cii) : 0.0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement type57 irc as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 57 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 double type57_irc(int n, double temperature, double rc, double rno) {
     if (n <= 0 || temperature <= 0.0 || rc <= 0.0 || rno <= n) return 0.0;
     if (std::abs(rc-1.0) > 0.0) return type57_szirc(n, temperature, rc, rno);
@@ -4246,6 +4562,10 @@ double type57_irc(int n, double temperature, double rc, double rno) {
     return std::isfinite(se) ? std::max(0.0,se) : 0.0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement type57 coefficients as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 57 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 bool type57_coefficients(int n, double temperature, double density, double e1, double eth, double& cion, double& crec) {
     cion=crec=0.0;
     if (n<=0 || temperature<=0.0 || density<=0.0 || eth<e1) return true;
@@ -4274,12 +4594,20 @@ bool type57_coefficients(int n, double temperature, double density, double e1, d
     return std::isfinite(cion)&&std::isfinite(crec);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement bracket index as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::size_t bracket_index(const double* grid, std::size_t n, double x) {
     if (n < 2 || x <= grid[0]) return 0;
     for (std::size_t i=0;i+1<n;++i) if (x < grid[i+1]) return i;
     return n-2;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute bilinear log table for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 double bilinear_log_table(const double* dens, std::size_t nd, const double* temp, std::size_t nt, const double* table, double logn, double logt) {
     const std::size_t ni=bracket_index(dens,nd,logn), ti=bracket_index(temp,nt,logt);
     const double n0=dens[ni],n1=dens[ni+1],t0=temp[ti],t1=temp[ti+1];
@@ -4290,6 +4618,10 @@ double bilinear_log_table(const double* dens, std::size_t nd, const double* temp
     return r0+(r1-r0)/(n1-n0+1.0e-36)*(logn-n0);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate type71 rate using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 71 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 bool type71_rate(const double* r, std::size_t nr, const std::int64_t* ints, std::size_t ni, double temperature, double density, double& aij, double& wavelength) {
     aij=wavelength=0.0;
     if (!r||!ints||ni<2||nr<4) return false;
@@ -4306,17 +4638,29 @@ bool type71_rate(const double* r, std::size_t nr, const std::int64_t* ints, std:
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute collision pair upward within the element/ion population workflow, preserving the source ion-stage ordering and active-stage semantics.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 double collision_pair_upward(double upsilon, double delta_ev, double temperature_k, double ne, double gl) {
     const double t4=temperature_k/1.0e4;
     return xstar_constants::kCollisionRateCoefficientPerSqrtT4*upsilon*limited_exp(-delta_ev/std::max(kBoltzmannEvK*temperature_k,1.0e-300))*ne/
         (std::sqrt(std::max(t4,1.0e-300))*std::max(gl,1.0e-300));
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute collision pair downward within the element/ion population workflow, preserving the source ion-stage ordering and active-stage semantics.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 double collision_pair_downward(double upsilon, double temperature_k, double ne, double gu) {
     const double t4=temperature_k/1.0e4;
     return xstar_constants::kCollisionRateCoefficientPerSqrtT4*upsilon*ne/(std::sqrt(std::max(t4,1.0e-300))*std::max(gu,1.0e-300));
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate callaway upsilon using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use.
+// XSTAR-FUNCTION-COMMENT-END
 double callaway_upsilon(
     int data_type,
     const double* r,
@@ -4362,6 +4706,10 @@ double callaway_upsilon(
     return ups;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate type68 upsilon using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 68 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 double type68_upsilon(const double* r, std::size_t nr, int z, double temperature_k, double wavelength_a) {
     if (!r||nr<3||z<=0||!(temperature_k>0.0)||!(wavelength_a>0.0)) throw std::runtime_error("invalid type68 payload");
     const double floor_k=2.8777e6/wavelength_a;
@@ -4370,6 +4718,10 @@ double type68_upsilon(const double* r, std::size_t nr, int z, double temperature
     return std::max(0.0,r[0]+r[1]*tt+r[2]*tt*tt);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate type66 upsilon using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 66 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 double type66_upsilon(const double* r, std::size_t nr, double temperature_k) {
     if (!r || nr < 6 || !(temperature_k > 0.0)) throw std::runtime_error("invalid type66 payload");
     double total = 0.0;
@@ -4389,6 +4741,10 @@ double type66_upsilon(const double* r, std::size_t nr, double temperature_k) {
     return total;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate type59 sigma cm2 using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 59 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 double type59_sigma_cm2(const double* r, std::size_t original_real_count,
                         int l2, double energy_ev) {
     if (!r || original_real_count < 6 || !(energy_ev > 0.0)) return 0.0;
@@ -4427,6 +4783,10 @@ struct Type59PhintResultV0648111 {
 // overwrites the reduced prefix using the same full-grid slots and the
 // retained tail.  Direct full-grid downward integration is therefore the
 // same cumulative value for the reduced integer index.
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute type59 source bremsint at one based as a contribution to, or control step in, the local thermal-equilibrium iteration.
+// Reference context: XSTAR Manual s11.4.4 and s11.6; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 double type59_source_bremsint_at_one_based(
     const double* epi, const double* bremsa, std::size_t n, int one_based) {
     if (!epi || !bremsa || n < 3u || one_based < 1 ||
@@ -4450,6 +4810,10 @@ double type59_source_bremsint_at_one_based(
     return cumulative;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement type59 phintfo source as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 59 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 Type59PhintResultV0648111 type59_phintfo_source(
     const double* r, std::size_t original_real_count, int l2,
     double threshold_ev, double swrat, bool zero_reverse,
@@ -4539,6 +4903,10 @@ Type59PhintResultV0648111 type59_phintfo_source(
 // are used only by opcode 200.  The original H/He/Mg opcodes remain untouched.
 // ---------------------------------------------------------------------------
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source ee1expo generic as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 double source_ee1expo_generic(double x) {
     if (!(x > 0.0)) return 0.0;
     if (x >= 1.0) {
@@ -4547,6 +4915,10 @@ double source_ee1expo_generic(double x) {
     return (-std::log(x)-0.57721566+x*(0.99999193+x*(-0.24991055+x*(0.05519968+x*(-0.00976004+x*0.0010707857)))))*limited_exp(x);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source ff2 generic as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 double source_ff2_generic(double x) {
     static const double q[15] = {1.0,2.1958e2,2.0984e4,1.1517e6,4.0349e7,9.49e8,1.5345e10,1.7182e11,1.3249e12,6.9071e12,2.3531e13,4.9432e13,5.7760e13,3.0225e13,3.3641e12};
     static const double pp[15] = {1.0,2.1658e2,2.0336e4,1.0911e6,3.7114e7,8.3963e8,1.2889e10,1.3449e11,9.4002e11,4.2571e12,1.1743e13,1.7549e13,1.0806e13,4.9776e11,0.0};
@@ -4556,6 +4928,10 @@ double source_ff2_generic(double x) {
     return den != 0.0 ? num/den : 0.0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute source linear hunt generic for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 std::size_t source_linear_hunt_generic(const double* x, std::size_t n, double v) {
     if (!x || n < 2) return 0;
     if (v <= x[0]) return 0;
@@ -4565,6 +4941,10 @@ std::size_t source_linear_hunt_generic(const double* x, std::size_t n, double v)
     return j==0?0:std::min(j-1,n-2);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute source natural spline y2 generic for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<double> source_natural_spline_y2_generic(const std::vector<double>& x,const std::vector<double>& y) {
     const std::size_t n=std::min(x.size(),y.size());
     std::vector<double> y2(n,0.0),u(n>1?n-1:0,0.0);
@@ -4581,6 +4961,10 @@ std::vector<double> source_natural_spline_y2_generic(const std::vector<double>& 
     return y2;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute source natural spline eval generic for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 double source_natural_spline_eval_generic(const std::vector<double>& x,const std::vector<double>& y,const std::vector<double>& y2,double v) {
     const std::size_t n=std::min({x.size(),y.size(),y2.size()}); if(!n) return 0.0; if(n==1) return y[0];
     if (v <= x[0]) return y[0];
@@ -4591,6 +4975,10 @@ double source_natural_spline_eval_generic(const std::vector<double>& x,const std
     return a*y[lo]+b*y[hi]+((a*a*a-a)*y2[lo]+(b*b*b-b)*y2[hi])*h*h/6.0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate source bt general upsilon generic using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use.
+// XSTAR-FUNCTION-COMMENT-END
 double source_bt_general_upsilon_generic(int k,double eij_ryd,double c,const double* xg,const double* yg,std::size_t n,double temperature_k) {
     if(!xg||!yg||n<2||!(eij_ryd>0.0)||!(temperature_k>0.0)) return 0.0;
     const double kte=temperature_k/eij_ryd/1.57888e5;
@@ -4603,6 +4991,10 @@ double source_bt_general_upsilon_generic(int k,double eij_ryd,double c,const dou
 }
 
 struct SourceLineEscapeGeneric { double ptmp1=0.5; double ptmp2=0.5; };
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute source line escape generic for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 SourceLineEscapeGeneric source_line_escape_generic(const Program& program,const ProgramRecord& record,const xstar_fixed_state_input_v1& input){
     SourceLineEscapeGeneric out;
     const bool has=(input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_DSEC_COVERING_FRACTION)!=0u;
@@ -4617,6 +5009,10 @@ SourceLineEscapeGeneric source_line_escape_generic(const Program& program,const 
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate source phintfo sigma generic using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use.
+// XSTAR-FUNCTION-COMMENT-END
 Type59PhintResultV0648111 source_phintfo_sigma_generic(
     const std::vector<double>& sigma,double threshold_ev,double swrat,bool zero_reverse,
     const xstar_fixed_state_input_v1& source_input){
@@ -4636,6 +5032,10 @@ Type59PhintResultV0648111 source_phintfo_sigma_generic(
     double a1=sumr,a2=ne*sumi,a3=sumh,a4=ne*sumc,a5=sumh2,a6=ne*sumc2;if(zero_reverse){a2=a4=a6=0.0;}double old5=a5;a5=-a6;a6=-old5;double old3=a3;a3=-a4;a4=-old3;out.ans={{a1,a2,a3,a4,a5,a6}};return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source gull1 generic as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<double> source_gull1_generic(int n,double rs,bool upper){
     std::vector<double> gu(100,0.0),gl(100,0.0); if(n<1||n>99)return upper?gu:gl; const double dn=n,r=rs,pi=std::acos(-1.0); double f1=std::lgamma(2*n);double g0=.5*std::log(pi/2)+std::log(8*dn)+dn*std::log(4*dn)-f1;
     if(r==0)gu[n-1]=g0-2*dn;else{double ss=std::sqrt(r);gu[n-1]=g0-2*std::atan(dn*ss)/ss-.5*std::log(std::max(1-std::exp(-2*pi/ss),1e-300));}gu[n-1]=std::exp(gu[n-1]);double fn=1e-300/std::max(gu[n-1],1e-300);gu[n-1]*=fn;
@@ -4645,10 +5045,18 @@ std::vector<double> source_gull1_generic(int n,double rs,bool upper){
     gl[0]=0;if(n>=3)gu[0]=(4*dn*dn-16+6*(1+dn*dn*r))*gu[1]-4*dn*dn*(dn-2)*(dn+2)*(1+9*r)*gu[2];double cn=std::log(dn)-dn*std::log(4*dn*dn)-(2*dn+4)*std::log(1+dn*dn*r);gu[0]=cn+std::log(1+r)+2*std::log(std::max(std::abs(gu[0]),1e-300))-2*std::log(fn);double clu=cn+std::log(1+r),cll=cn;for(int l=1;l<n;++l){double dl=l;clu+=std::log(std::max(4*dn*dn*(dn-dl)*(dn+dl)*(1+(dl+1)*(dl+1)*r),1e-300));cll+=std::log(std::max(4*dn*dn*(dn-dl)*(dn+dl)*(1+(dl-1)*(dl-1)*r),1e-300));gu[l]=clu+2*std::log(std::max(std::abs(gu[l]),1e-300))-2*std::log(fn);gl[l]=cll+2*std::log(std::max(std::abs(gl[l]),1e-300))-2*std::log(fn);}return upper?gu:gl;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source hphotx mb generic as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 double source_hphotx_mb_generic(double en,int charge,int nq,int l){
     en=std::max(en,0.0);charge=std::max(charge,1);nq=std::max(nq,1);l=std::clamp(l,0,nq-1);double rk=std::sqrt(en)/(charge*charge),rs=rk*rk;auto gu=source_gull1_generic(nq,rs,true);auto gl=source_gull1_generic(nq,rs,false);double cons=.54492*std::acos(0.0);double theta1=(1+nq*nq*rs)*std::exp(std::min(700.0,gu[l]));double theta2=l>0?(1+nq*nq*rs)*std::exp(std::min(700.0,gl[l])):0.0;return cons*((l+1)*theta1+l*theta2)/(2*l+1)*nq*nq/(charge*charge);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate source pexs sigma mb generic using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use.
+// XSTAR-FUNCTION-COMMENT-END
 double source_pexs_sigma_mb_generic(int nmin,double zc,double eion,double far,double gam,double scal,double energy_ryd){
     constexpr int nmax=30;if(nmin>=nmax||nmin<1)return 0.0;int nres=nmax;std::array<double,31>x{},area{};for(int n=nmin;n<=nmax;++n){x[n]=-(zc/n)*(zc/n);area[n]=8.06725*far*std::pow(static_cast<double>(nmin),3)/std::pow(static_cast<double>(n),3);if(n>nmin&&x[n]-x[n-1]>gam/2)nres=n;}double shifted=energy_ryd-eion,xmin=x[nmin]-30*gam,xres=x[nres];if(shifted<xmin||shifted>=0)return 0.0;double out=0.0;if(shifted<=xres){for(int n=nmin;n<=nmax;++n){out+=area[n]/std::acos(-1.0)*gam/2/(std::pow(shifted-x[n],2)+std::pow(gam/2,2));out+=area[n]/std::acos(-1.0)*gam/2/(std::pow(std::abs(shifted)-x[n],2)+std::pow(gam/2,2));}}else{double sj=xres;for(int n=nmin;n<=nmax;++n){out+=area[n]/std::acos(-1.0)*gam/2/(std::pow(sj-x[n],2)+std::pow(gam/2,2));out+=area[n]/std::acos(-1.0)*gam/2/(std::pow(std::abs(sj)-x[n],2)+std::pow(gam/2,2));}}return std::max(0.0,scal*out);
 }
@@ -4656,6 +5064,10 @@ double source_pexs_sigma_mb_generic(int nmin,double zc,double eion,double far,do
 
 double type99_milne_alpha(const std::vector<double>& energy_ryd,const std::vector<double>& sigma_mb,double threshold_ryd,double temperature_k);
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source exintn generic as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 double source_exintn_generic(double x, int n, double e1_in = -1.0) {
     if (!(x > 0.0) || n < 1 || n > 6) return 0.0;
     double e1 = e1_in;
@@ -4677,6 +5089,10 @@ double source_exintn_generic(double x, int n, double e1_in = -1.0) {
     return (limited_exp(-x)*(24.0-6*x+2*x*x-x*x*x+x*x*x*x)-x*x*x*x*x*e1)/120.0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source interp hunt generic as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 double source_interp_hunt_generic(int n,const double* x,const double* y,double value) {
     if(!x||!y||n<=0) return 0.0;
     if(n==1||value<=x[0]) return y[0];
@@ -4685,6 +5101,10 @@ double source_interp_hunt_generic(int n,const double* x,const double* y,double v
     return y[j]+(y[j+1]-y[j])*(value-x[j])/std::max(x[j+1]-x[j],1e-300);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source sampson p generic as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 double source_sampson_p_generic(const double* om,int z,double temp_k) {
     const double dE=om[0],a=om[1],z2s=om[2],c0=om[3],cr=om[4],cr1=om[5],rr=om[6],s=om[7];
     const double y=dE/(xstar_constants::kLegacyBoltzmannKevPerK*temp_k),a1=a+1.0,e1=source_exintn_generic(y,1),er=source_exintn_generic(a1*y,static_cast<int>(rr)),er1=source_exintn_generic(a1*y,static_cast<int>(rr+1.0));
@@ -4692,11 +5112,19 @@ double source_sampson_p_generic(const double* om,int z,double temp_k) {
     return z2gamma/std::max(std::pow(static_cast<double>(z)-s,2.0),1e-300);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source sampson h generic as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 double source_sampson_h_generic(const double* om,int z,double temp_k) {
     const double dE=om[0],z2s=om[1],a=om[2],c0=om[3],c1=om[4],c2=om[5],csw=om[6];const double y=dE/(xstar_constants::kLegacyBoltzmannKevPerK*temp_k),a1=a+1.0,e1=source_exintn_generic(y,1),er=source_exintn_generic(a1*y,1),er1=source_exintn_generic(a1*y,2,er),term=c1*er+c2*er1/a1;
     const double val=c0+1.333*z2s*e1*limited_exp(y)+(term>0.0?y*limited_exp(a1*y)*term:0.0);return val*2.0*csw/std::max(static_cast<double>(z*z),1e-300);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source sampson s generic as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 double source_sampson_s_generic(const double* om,int z,double temp_k) {
     const double dE=om[0],a1g=om[1],a1eg=om[2],z2sh=om[3],a2=om[4],c0=om[5],c1=om[6],c2=om[7],a2e=om[8],cere=om[9],cere1=om[10],re=om[11],s=om[12],se=om[13];const double y=dE/(xstar_constants::kLegacyBoltzmannKevPerK*temp_k);
     double aa=a2+1.0,e1=source_exintn_generic(y,1),er=source_exintn_generic(aa*y,1),er1=source_exintn_generic(aa*y,2,er),term=c1*er+c2*er1/aa;const double z2g=c0+1.333*z2sh*e1*limited_exp(y)+(a1g!=0.0&&term>0.0?y*limited_exp(aa*y)*term:0.0);
@@ -4704,6 +5132,10 @@ double source_sampson_s_generic(const double* om,int z,double temp_k) {
     return a1g*z2g/std::max(std::pow(static_cast<double>(z)-s,2.0),1e-300)+a1eg*z2ge/std::max(std::pow(static_cast<double>(z)-se,2.0),1e-300);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source kato generic as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 double source_kato_generic(int kind,const double* p,int z,double temp_k) {
     (void)z;const double dE=p[0],A=p[1],B=p[2],C=p[3],D=p[4],E=p[5],P=p[6],Q=p[7],X1=p[8],y=dE/(xstar_constants::kLegacyBoltzmannKevPerK*temp_k);
     if(kind==1){const double e1=source_exintn_generic(y,1),term1=A/y+C+D/2.0*(1.0-y),term2=B-C*y+D/2.0*y*y+E/y;return y*(term1+limited_exp(y)*e1*term2);}
@@ -4712,6 +5144,10 @@ double source_kato_generic(int kind,const double* p,int z,double temp_k) {
 }
 
 struct SourceMaxwellGeneric { double exc=0.0,dex=0.0,ups=0.0; };
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source calc maxwell generic as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 SourceMaxwellGeneric source_calc_maxwell_generic(int ct,double min_t,double max_t,const double* tarr,const double* om,double de_kev,double temp_k,int z,double degl,double degu) {
     SourceMaxwellGeneric out;if(!(de_kev>0.0)||!(temp_k>0.0)||temp_k<min_t||temp_k>max_t||!tarr||!om)return out;
     const double chi=de_kev/(xstar_constants::kLegacyBoltzmannKevPerK*temp_k),chi_inv=1.0/std::max(chi,1e-300);double ups=0.0,rate=0.0;enum Kind{NONE,EUPS,PUPS,ERATE,PRATE}kind=NONE;
@@ -4724,12 +5160,20 @@ SourceMaxwellGeneric source_calc_maxwell_generic(int ct,double min_t,double max_
     ups=std::max(0.0,ups);rate=std::max(0.0,rate);out.ups=ups;if(kind==EUPS){if(chi>=200.0)return out;out.exc=8.629e-6*ups*std::exp(-chi)/(std::sqrt(temp_k)*std::max(degl,1e-300));out.dex=8.629e-6*ups/(std::sqrt(temp_k)*std::max(degu,1e-300));}else if(kind==PUPS){out.exc=out.dex=0.0;}else{out.exc=rate;out.dex=rate*limited_exp(chi)*degl/std::max(degu,1e-300);}return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source quadratic three point generic as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 double source_quadratic_three_point_generic(double x0,double y0,double x1,double y1,double x2,double y2,double x) {
     const double d0=(x0-x1)*(x0-x2),d1=(x1-x0)*(x1-x2),d2=(x2-x0)*(x2-x1);if(std::abs(d0)<1e-300||std::abs(d1)<1e-300||std::abs(d2)<1e-300)return y1;
     return y0*(x-x1)*(x-x2)/d0+y1*(x-x0)*(x-x2)/d1+y2*(x-x0)*(x-x1)/d2;
 }
 
 struct SourceCalt70Generic { bool valid=false; double rec=0.0; std::vector<double> e_ryd; std::vector<double> xs_mb; };
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source calt70 generic as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 SourceCalt70Generic source_calt70_generic(const double* r,std::size_t nr,const std::int64_t* ints,std::size_t ni,double temp_k,double density,double threshold_ryd) {
     SourceCalt70Generic out;if(!r||!ints||ni<3)return out;int nd=static_cast<int>(ints[0]),nt=static_cast<int>(ints[1]),nx=static_cast<int>(ints[2]);if(nd<1||nt<2||nx<1)return out;std::size_t need=static_cast<std::size_t>(nd+nt+nd*nt+2*nx);if(nr<need)return out;
     const double* dg=r;const double* tg=r+nd;const double* tab=tg+nt;double rne=std::clamp(std::log10(std::max(density,1e-300)),dg[0],dg[nd-1]),rte=std::clamp(std::log10(std::max(temp_k,1e-300)),tg[0],tg[nt-1]);std::vector<double> vals(nd,0.0);for(int i=0;i<nd;++i)vals[i]=source_interp_hunt_generic(nt,tg,tab+i*nt,rte);double logrec=0.0;
@@ -4737,6 +5181,10 @@ SourceCalt70Generic source_calt70_generic(const double* r,std::size_t nr,const s
     const double* xs0=tab+nd*nt;std::vector<double> e(nx),mb(nx);for(int i=0;i<nx;++i){e[i]=xs0[2*i];mb[i]=xs0[2*i+1];}double alpha=type99_milne_alpha(e,mb,threshold_ryd,temp_k),scale=out.rec/(1e-24+alpha);for(double&v:mb)v=std::clamp(v*scale,0.0,1e6);int end=1;for(int i=0;i<nx;++i)if(mb[i]>mb[0]*1e-6)end=i+1;out.e_ryd.assign(e.begin(),e.begin()+end);out.xs_mb.assign(mb.begin(),mb.begin()+end);out.valid=!out.e_ryd.empty();return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate type73 rate using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 73 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 double type73_rate(const double* r, std::size_t nr, int z, double temperature_k) {
     if (!r||nr<7||z<=0||!(temperature_k>0.0)) throw std::runtime_error("invalid type73 payload");
     const double wav=std::abs(r[0]);
@@ -4760,6 +5208,10 @@ double type73_rate(const double* r, std::size_t nr, int z, double temperature_k)
     return std::max(0.0,crate);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute type95 spline rho for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 double type95_spline_rho(const double* r, std::size_t nr, double xx) {
     if (!r||nr<6) throw std::runtime_error("type95 payload too short");
     const std::size_t ns=(nr-2)/2;
@@ -4773,6 +5225,10 @@ double type95_spline_rho(const double* r, std::size_t nr, double xx) {
     return r[ly]+(xx-r[lx])*(r[ry]-r[ly])/denom;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate type77 rates using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 77 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 bool type77_rates(const double* r, std::size_t nr, const std::int64_t* ints, std::size_t ni, double temperature, double density, double endpoint_delta_ev, double& upward, double& downward) {
     upward=downward=0.0;
     if (!r||!ints||ni<3) return false;
@@ -4817,6 +5273,10 @@ struct Type99PhintResult {
     int cached_atmp22_stale_reuses = 0;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement type99 nbinc fortran value as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 99 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 int type99_nbinc_fortran_value(double energy, const double* epi, std::size_t count) {
     if (!epi || count < 3) return 1;
     const int n = static_cast<int>(count);
@@ -4835,6 +5295,10 @@ int type99_nbinc_fortran_value(double energy, const double* epi, std::size_t cou
     return std::max(1, std::min(numcon3, jlo));
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Build type99 reduced radiation from the source-ordered inputs required by the next calculation stage.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 99 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 void build_type99_reduced_radiation(
     const double* full_epi,
     const double* full_bremsa,
@@ -4852,6 +5316,10 @@ void build_type99_reduced_radiation(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute type99 find53 cross section within the element/ion population workflow, preserving the source ion-stage ordering and active-stage semantics.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 double type99_find53_cross_section(
     const std::vector<double>& energy_ryd,
     const std::vector<double>& sigma_cm2,
@@ -4873,6 +5341,10 @@ double type99_find53_cross_section(
     return std::max(0.0, s0 + f * (s1 - s0));
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute type99 milne intin for the bound-free/photoionization/recombination-continuum path using the current radiation field and level populations.
+// Reference context: XSTAR Manual ss11.5, 11.6.1, 11.7; Kallman & Bautista (2001); ATDB ch12.
+// XSTAR-FUNCTION-COMMENT-END
 std::pair<double,double> type99_milne_intin(double x1, double x2, double x0, double temperature_k) {
     constexpr double ryk = 7.2438e15;
     const double temp = std::max(temperature_k, 1.0e-300);
@@ -4894,6 +5366,10 @@ std::pair<double,double> type99_milne_intin(double x1, double x2, double x0, dou
     return {ri2, ri3};
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute type99 milne alpha for the bound-free/photoionization/recombination-continuum path using the current radiation field and level populations.
+// Reference context: XSTAR Manual ss11.5, 11.6.1, 11.7; Kallman & Bautista (2001); ATDB ch12.
+// XSTAR-FUNCTION-COMMENT-END
 double type99_milne_alpha(
     const std::vector<double>& energy_ryd,
     const std::vector<double>& sigma_mb,
@@ -4925,6 +5401,10 @@ double type99_milne_alpha(
     return std::isfinite(alpha) ? std::max(alpha, 0.0) : 0.0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate evaluate type99 phint53hunt using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 99 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 Type99PhintResult evaluate_type99_phint53hunt(
     const std::vector<double>& energy_ryd,
     const std::vector<double>& sigma_cm2,
@@ -5046,6 +5526,10 @@ Type99PhintResult evaluate_type99_phint53hunt(
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Parse type99 persistent leveltemp context from its external text/argument representation into validated native values.
+// Reference context: Implementation/input helper; XSTAR Manual ch4 describes parameter inputs, but this parser has no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 Type99PersistentLeveltempContextV048746223 parse_type99_persistent_leveltemp_context_v048746223(
     const ProgramRecord& record,
     const double* payload,
@@ -5138,6 +5622,10 @@ Type99PersistentLeveltempContextV048746223 parse_type99_persistent_leveltemp_con
     return context;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate evaluate type99 source faithful using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 99 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 bool evaluate_type99_source_faithful(
     const ProgramRecord& record,
     const double* payload,
@@ -5363,11 +5851,19 @@ bool evaluate_type99_source_faithful(
     return valid;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement row at as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 const ElementRow& row_at(const ElementProgram& element, int one_based) {
     if (one_based < 1 || one_based > element.n_rows) throw std::runtime_error("row index outside element");
     return element.rows[static_cast<std::size_t>(one_based - 1)];
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement sequence1 type88 lower bracket as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.7, 12.1.1-12.1.2; Kallman et al. (2004), K-shell/Auger/fluorescence physics. Data type(s) 88 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 int sequence1_type88_lower_bracket(double energy,const double* grid,int n) {
     if (n<=1||energy<=grid[0]) return 0;
     int lo=0,hi=n-1;
@@ -5375,6 +5871,10 @@ int sequence1_type88_lower_bracket(double energy,const double* grid,int n) {
     return grid[hi]<=energy?hi:lo;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate sequence1 type88 photo rate using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7, 12.1.1-12.1.2; Kallman et al. (2004), K-shell/Auger/fluorescence physics. Data type(s) 88 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 double sequence1_type88_photo_rate(const double* raw,int raw_count,double threshold,const double* epi,const double* bremsa,int n_grid,int phextrap_limit) {
     const int n0=raw_count/2;
     if (n0<=0||threshold<=0.0||n_grid<3||phextrap_limit<3) return 0.0;
@@ -5429,6 +5929,10 @@ double sequence1_type88_photo_rate(const double* raw,int raw_count,double thresh
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Build bound free geometry from the source-ordered inputs required by the next calculation stage.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 BoundFreePreparedGeometryV064895 prepare_bound_free_geometry_v064895(
     const double* payload,
     std::size_t real_count,
@@ -5635,6 +6139,10 @@ BoundFreePreparedGeometryV064895 prepare_bound_free_geometry_v064895(
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate evaluate type53 source integral using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 53 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 bool evaluate_type53_source_integral(
     const double* payload,
     std::size_t real_count,
@@ -5980,6 +6488,10 @@ struct RateEvaluationContextV064894 {
     std::size_t type59_full_source_count = 0;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Build rate evaluation context from the source-ordered inputs required by the next calculation stage.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use.
+// XSTAR-FUNCTION-COMMENT-END
 RateEvaluationContextV064894 make_rate_evaluation_context_v064894(
     const xstar_fixed_state_input_v1& input,
     const SourceContinuumWorkspace* calc_emisab_workspace) {
@@ -6030,6 +6542,10 @@ RateEvaluationContextV064894 make_rate_evaluation_context_v064894(
     return context;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute prepared bound free geometry for the bound-free/photoionization/recombination-continuum path using the current radiation field and level populations.
+// Reference context: XSTAR Manual ss11.5, 11.6.1, 11.7; Kallman & Bautista (2001); ATDB ch12.
+// XSTAR-FUNCTION-COMMENT-END
 const BoundFreePreparedGeometryV064895* prepared_bound_free_geometry_v064895(
     const Program& program,
     const ProgramRecord& record,
@@ -6076,6 +6592,10 @@ const BoundFreePreparedGeometryV064895* prepared_bound_free_geometry_v064895(
     return &geometry;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Dispatch one atomic-database record by data type, evaluate its rate/cross section with the source-faithful formula, and return the quantities consumed by the record rate type.
+// Reference context: XSTAR Manual ss11.7, 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type selects record interpretation; rate type selects downstream use.
+// XSTAR-FUNCTION-COMMENT-END
 EvaluatedRecord evaluate_record(
     const Program& program,
     const ElementProgram& element,
@@ -8148,6 +8668,10 @@ EvaluatedRecord evaluate_record(
 // canonical FORTRAN shell temperature supplied by the qualification runner.
 // Neither result is committed to populations, spectral workspaces, transport,
 // thermal state, or product writers.
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write write from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 49 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 void write_v0648123431113_type49_identical_state_probe(
     xstar_fixed_state_context_impl& ctx,
     const xstar_fixed_state_input_v1& input,
@@ -8228,6 +8752,10 @@ void write_v0648123431113_type49_identical_state_probe(
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate evaluate selected fullgrid bound free using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use.
+// XSTAR-FUNCTION-COMMENT-END
 Type53SourceShadow evaluate_selected_fullgrid_bound_free_v064895(
     const Program& program,
     const ElementProgram& element,
@@ -8285,6 +8813,10 @@ Type53SourceShadow evaluate_selected_fullgrid_bound_free_v064895(
     return shadow;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute ground row for stage within the element/ion population workflow, preserving the source ion-stage ordering and active-stage semantics.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int ground_row_for_stage(const ElementProgram& element, int stage) {
     const int charge = stage - 1;
     int found = 0;
@@ -8296,6 +8828,10 @@ int ground_row_for_stage(const ElementProgram& element, int stage) {
     return found;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute source persistent leveltemp destination energy z1 z30 as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 double source_persistent_leveltemp_destination_energy_z1_z30_v06481231(
     const ActiveElementView& active,
     const xstar_element_contribution_v1& contribution,
@@ -8361,6 +8897,10 @@ double source_persistent_leveltemp_destination_energy_z1_z30_v06481231(
     return candidate_energy(owner_stage);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute advance source leveltemp first pass z1 z30 as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void advance_source_leveltemp_first_pass_z1_z30_v06481231(
     const Program& program,
     const ElementProgram& element,
@@ -8392,6 +8932,10 @@ void advance_source_leveltemp_first_pass_z1_z30_v06481231(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Apply type53 persistent leveltemp z1 z30 to the current model state while preserving the source ordering and normalization expected by later stages.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 53 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 void apply_type53_persistent_leveltemp_z1_z30_v06481231(
     const ElementProgram& element,
     const ActiveElementView& active,
@@ -8440,6 +8984,10 @@ void apply_type53_persistent_leveltemp_z1_z30_v06481231(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Apply type49 persistent leveltemp z1 z30 to the current model state while preserving the source ordering and normalization expected by later stages.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 49 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 void apply_type49_persistent_leveltemp_z1_z30_v06481231(
     const ElementProgram& element,
     const ActiveElementView& active,
@@ -8495,6 +9043,10 @@ struct Type99ResolvedValueV048746223 {
     int owner_stage = 0;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute resolve type99 leveltemp value as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 Type99ResolvedValueV048746223 resolve_type99_leveltemp_value_v048746223(
     const ActiveElementView& active,
     const xstar_element_contribution_v1& contribution,
@@ -8538,6 +9090,10 @@ Type99ResolvedValueV048746223 resolve_type99_leveltemp_value_v048746223(
     return value;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Apply magnesium type99 persistent leveltemp to the current model state while preserving the source ordering and normalization expected by later stages.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 99 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 void apply_magnesium_type99_persistent_leveltemp_v048746223(
     const Program& program,
     const ElementProgram& element,
@@ -8638,6 +9194,10 @@ void apply_magnesium_type99_persistent_leveltemp_v048746223(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute source nlev for stage within the element/ion population workflow, preserving the source ion-stage ordering and active-stage semantics.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int source_nlev_for_stage_v0648117(
     const Program& program,
     const ElementProgram& element,
@@ -8656,6 +9216,10 @@ int source_nlev_for_stage_v0648117(
     return element.normalization_row >= ground ? element.normalization_row - ground + 1 : 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source idest for full row as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int source_idest_for_full_row_v0648117(
     const Program& program,
     const ElementProgram& element,
@@ -8676,6 +9240,10 @@ int source_idest_for_full_row_v0648117(
     return full_row >= ground ? full_row - ground + 1 : 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate source preliminary rate record using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use.
+// XSTAR-FUNCTION-COMMENT-END
 bool source_preliminary_rate_record_v064812315(
     const Program& program,
     const ElementProgram& element,
@@ -8694,6 +9262,10 @@ bool source_preliminary_rate_record_v064812315(
     return false;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Build the provisional ion-stage distribution from total ionization and recombination rates before the detailed level-population solve; this distribution defines the materially active ion window.
+// Reference context: XSTAR Manual s11.4.1 (two-stage population solution); Kallman & Bautista (2001), ionization/recombination balance.
+// XSTAR-FUNCTION-COMMENT-END
 PreliminaryIonBalance build_preliminary_ion_balance(
     const Program& program,
     const ElementProgram& element,
@@ -8857,6 +9429,10 @@ PreliminaryIonBalance build_preliminary_ion_balance(
     return result;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write preliminary ion balance audit from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void write_preliminary_ion_balance_audit_v0648117(
     const ElementProgram& element,
     const PreliminaryIonBalance& balance,
@@ -8907,6 +9483,10 @@ void write_preliminary_ion_balance_audit_v0648117(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Build full element view from the source-ordered inputs required by the next calculation stage.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 ActiveElementView make_full_element_view(const ElementProgram& full) {
     ActiveElementView view;
     view.element = full;
@@ -8917,6 +9497,10 @@ ActiveElementView make_full_element_view(const ElementProgram& full) {
     return view;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Build active element view from the source-ordered inputs required by the next calculation stage.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 ActiveElementView make_active_element_view(
     const ElementProgram& full,
     const PreliminaryIonBalance& balance) {
@@ -8971,6 +9555,10 @@ ActiveElementView make_active_element_view(
     return view;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Build source compact element view from the source-ordered inputs required by the next calculation stage.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 ActiveElementView make_source_compact_element_view(
     const ElementProgram& full,
     const std::vector<SourceCompactOracleRow>& source_rows) {
@@ -9017,6 +9605,10 @@ struct RuntimeInitialSeed {
     bool loaded = false;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source faithful runtime initial seed as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 RuntimeInitialSeed source_faithful_runtime_initial_seed(
     const ElementProgram& e,
     std::size_t compact_index,
@@ -9098,6 +9690,10 @@ RuntimeInitialSeed source_faithful_runtime_initial_seed(
     return seed;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Build buffers from the source-ordered inputs required by the next calculation stage.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 ElementBuffers make_buffers(const ElementProgram& e, const xstar_fixed_state_input_v1* runtime_input = nullptr, bool preserve_initial_seed = false) {
     ElementBuffers b;
     const bool native_sequence1_source_seed =
@@ -9155,6 +9751,10 @@ ElementBuffers make_buffers(const ElementProgram& e, const xstar_fixed_state_inp
     return b;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement bind output as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void bind_output(xstar_element_output_v1& out, ElementBuffers& b, int element_z) {
     xstar_element_output_init_v1(&out);
     out.element_z = element_z;
@@ -9182,6 +9782,10 @@ void bind_output(xstar_element_output_v1& out, ElementBuffers& b, int element_z)
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute lte topology for element as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<LteIonTopology> lte_topology_for_element_v82_patch54(
     const Program& program,
     const ElementProgram& element
@@ -9223,6 +9827,10 @@ std::vector<LteIonTopology> lte_topology_for_element_v82_patch54(
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute lte leveltemp row as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 const LteLevelData* lte_leveltemp_row_v82_patch56(
     const Program& program, int element_index, int ion_stage, int local_level) {
     for (const auto& level : program.lte_levels) {
@@ -9232,6 +9840,10 @@ const LteLevelData* lte_leveltemp_row_v82_patch56(
     return nullptr;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute compute element lte populations as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<double> compute_element_lte_populations_v82_patch54(
     const Program& program,
     const ElementProgram& element,
@@ -9438,6 +10050,10 @@ std::vector<double> compute_element_lte_populations_v82_patch54(
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute LTE level populations for the active element from level energies/statistical weights and the local thermodynamic state, for detailed-balance and high-density limits.
+// Reference context: XSTAR Manual s11.4.3; Bautista & Kallman (2001), detailed-balance/LTE construction.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<double> compute_exact_lte_populations(
     const Program& program,
     const xstar_fixed_state_input_v1& input,
@@ -9504,6 +10120,10 @@ std::vector<double> compute_exact_lte_populations(
     return all;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Validate the invariants required by validate io; reject malformed dimensions, pointers, or state before scientific kernels are entered.
+// Reference context: Implementation/safety helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 void validate_io(const xstar_fixed_state_input_v1& in, xstar_fixed_state_output_v1& out) {
     if (in.struct_size < sizeof(in) || in.abi_version != XSTAR_FIXED_STATE_ENGINE_ABI_VERSION) throw std::runtime_error("fixed-state input ABI mismatch");
     if (out.struct_size < sizeof(out) || out.abi_version != XSTAR_FIXED_STATE_ENGINE_ABI_VERSION) throw std::runtime_error("fixed-state output ABI mismatch");
@@ -9544,6 +10164,10 @@ struct NativeBoundFreeCurve {
     std::vector<std::int64_t> generic_ints;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate type59 curve sigma cm2 using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 59 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 double type59_curve_sigma_cm2(const NativeBoundFreeCurve& curve, double energy_ev) {
     if (!curve.type59_analytic || !(curve.type59_e0 > 0.0) || !(curve.type59_ya > 0.0) ||
         !(energy_ev > 0.0)) return 0.0;
@@ -9566,6 +10190,10 @@ struct Phint53GridMapV82Patch57 {
     bool valid = false;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement phint53 nbinc one based as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int phint53_nbinc_one_based_v82_patch57(double energy_ev, const double* epi, int ncn2) {
     if (!epi || ncn2 < 3) return 1;
     const int numcon2 = std::max(2, ncn2 / 50);
@@ -9588,6 +10216,10 @@ int phint53_nbinc_one_based_v82_patch57(double energy_ev, const double* epi, int
     return std::clamp(jlo, 1, n);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement phextrap source as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void phextrap_source_v82_patch57(const NativeBoundFreeCurve& curve,
                                  int ncn2,
                                  std::vector<double>& energy_ryd,
@@ -9624,6 +10256,10 @@ void phextrap_source_v82_patch57(const NativeBoundFreeCurve& curve,
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement phint53 grid map as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 Phint53GridMapV82Patch57 phint53_grid_map_v82_patch57(
     const NativeBoundFreeCurve& curve, const double* epi, int ncn2) {
     Phint53GridMapV82Patch57 out;
@@ -9728,6 +10364,10 @@ Phint53GridMapV82Patch57 phint53_grid_map_v82_patch57(
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute native bound free curve for the bound-free/photoionization/recombination-continuum path using the current radiation field and level populations.
+// Reference context: XSTAR Manual ss11.5, 11.6.1, 11.7; Kallman & Bautista (2001); ATDB ch12.
+// XSTAR-FUNCTION-COMMENT-END
 bool native_bound_free_curve(const Program& program,
                              const ProgramRecord& record,
                              const EvaluatedRecord& evaluated,
@@ -9853,6 +10493,10 @@ struct Type88StaleOpakabV82Patch52010 {
 // its scalar opakab result through the caller-owned opakab(kkkl) argument.
 // Reconstruct only that scalar publication here; the existing Type-88
 // full-grid continuum kernels remain untouched.
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source type88 stale opakab as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.7, 12.1.1-12.1.2; Kallman et al. (2004), K-shell/Auger/fluorescence physics. Data type(s) 88 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 Type88StaleOpakabV82Patch52010 source_type88_stale_opakab_v82_patch52010(
     const NativeBoundFreeCurve& curve,
     double rnist,
@@ -9901,6 +10545,10 @@ Type88StaleOpakabV82Patch52010 source_type88_stale_opakab_v82_patch52010(
 // expo.f90 (historical +/-60 clamp), exactly like the accepted rate/integral
 // evaluator and the pure-Python source port.  A generic +/-700 exponential
 // suppresses the high-excess-energy recombination tail and perturbs heatt.
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Apply native bound free rrc from abundances to the current model state while preserving the source ordering and normalization expected by later stages.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void accumulate_native_bound_free_rrc_from_abundances_v82_patch520(
     const NativeBoundFreeCurve& curve,
     const EvaluatedRecord& evaluated,
@@ -10013,6 +10661,10 @@ void accumulate_native_bound_free_rrc_from_abundances_v82_patch520(
 // revisiting ranked rate-7 bound-free records and ungated Type-88/rate-42.
 // Reconstruct only the phint53 photoabsorption side effect here.  This helper
 // deliberately does not publish scalar opakab and does not touch RRC emission.
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Apply native bound free opacity from abundances to the current model state while preserving the source ordering and normalization expected by later stages.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void accumulate_native_bound_free_opacity_from_abundances_v82_patch5206(
     const NativeBoundFreeCurve& curve,
     const ProgramRecord& record,
@@ -10039,6 +10691,10 @@ void accumulate_native_bound_free_opacity_from_abundances_v82_patch5206(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute effective spectral covering fraction for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 double effective_spectral_covering_fraction_v82_patch58(
     const xstar_fixed_state_input_v1& input) {
     const bool has_dsec_covering =
@@ -10049,6 +10705,10 @@ double effective_spectral_covering_fraction_v82_patch58(
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate source generic bound free sigma cm2 using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use.
+// XSTAR-FUNCTION-COMMENT-END
 double source_generic_bound_free_sigma_cm2_v0648120(const NativeBoundFreeCurve& curve,double energy_ev) {
     const int dt=curve.generic_data_type;const auto& r=curve.generic_reals;const auto& ii=curve.generic_ints;const double th=curve.threshold_ev;
     if(!(energy_ev>=th)||!(th>0.0))return 0.0;
@@ -10063,6 +10723,10 @@ double source_generic_bound_free_sigma_cm2_v0648120(const NativeBoundFreeCurve& 
     return 0.0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Accumulate bound-free opacity/emissivity and recombination-continuum contributions on the publication/radiation grids from the evaluated level-resolved records.
+// Reference context: XSTAR Manual ss11.5, 11.6.1, 11.7; Kallman & Bautista (2001), Milne/recombination-continuum treatment.
+// XSTAR-FUNCTION-COMMENT-END
 void accumulate_native_bound_free_surface(const NativeBoundFreeCurve& curve,
                                           const EvaluatedRecord& evaluated,
                                           const ProgramRecord& record,
@@ -10201,6 +10865,10 @@ struct SourceRlbinAuditResultV82Patch5171 {
     std::set<int> selected_slots;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source rlbin exact audit as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 SourceRlbinAuditResultV82Patch5171 source_rlbin_exact_audit_v82_patch5171(
     const std::vector<SourceFeatureAuditCandidateV82Patch5171>& raw,
     const double* energy_grid_ev,
@@ -10287,10 +10955,18 @@ struct SourceConsumerDecisionV82Patch5208 {
     std::string rejection_reason;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source real literal as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 inline double source_real_literal_v82_patch5208(double value) {
     return static_cast<double>(static_cast<float>(value));
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source calc emis consumer as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 SourceConsumerDecisionV82Patch5208 source_calc_emis_consumer_v82_patch5208(
     int slot_one_based,
     double wavelength_a,
@@ -10364,6 +11040,10 @@ SourceConsumerDecisionV82Patch5208 source_calc_emis_consumer_v82_patch5208(
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source feature consumer as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::string source_feature_consumer_v82_patch5171(const std::string& family, int data_type) {
     if (family == "RRC") {
         if (data_type == 49 || data_type == 53 || data_type == 99) return "RATE7_NCBIN_GATED";
@@ -10407,6 +11087,10 @@ struct MgType53OpacityKernelRowV82Patch512 {
     double threshold_stimulated_cross_section_cm2 = 0.0;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Execute one source-faithful local-zone solve: reset per-call state, build provisional ion balance, assemble/solve active multilevel systems, accumulate thermal and spectral terms, and publish the committed zone outputs.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch14; Kallman & Bautista (2001). This is the native counterpart of the calc_hmc/levwk/ucalc local-zone workflow.
+// XSTAR-FUNCTION-COMMENT-END
 int run_impl(
     xstar_fixed_state_context_impl& ctx,
     const xstar_fixed_state_input_v1& input,
@@ -14875,6 +15559,10 @@ int run_impl(
 
 struct xstar_fixed_state_context : xstar_fixed_state_context_impl {};
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement create context from program as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 static std::unique_ptr<xstar_fixed_state_context> create_context_from_program(Program program) {
     auto ptr = std::make_unique<xstar_fixed_state_context>();
     ptr->program = std::move(program);
@@ -14946,8 +15634,20 @@ static std::unique_ptr<xstar_fixed_state_context> create_context_from_program(Pr
 
 extern "C" {
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Return the ABI version for the fixed state engine interface so callers can reject incompatible binary layouts before execution.
+// Reference context: Implementation/compatibility helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 uint32_t xstar_fixed_state_engine_abi_version(void) { return XSTAR_FIXED_STATE_ENGINE_ABI_VERSION; }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Report the compiled fixed state engine backend name capability metadata used by backend selection and provenance.
+// Reference context: Implementation/provenance helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 const char* xstar_fixed_state_engine_backend_name(void) { return "xstar_native_fixed_state_active_family_phase2_trajectory_v06485"; }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Report the compiled fixed state engine feature flags capability metadata used by backend selection and provenance.
+// Reference context: Implementation/provenance helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 uint32_t xstar_fixed_state_engine_feature_flags(void) {
     return XSTAR_FIXED_STATE_STATUS_RAW_PROGRAM_LOADED |
         XSTAR_FIXED_STATE_STATUS_LINKED_TRAVERSAL |
@@ -14961,6 +15661,10 @@ uint32_t xstar_fixed_state_engine_feature_flags(void) {
         XSTAR_FIXED_STATE_STATUS_DSEC_RUNTIME_STATE_ABI;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Initialize the fixed state input init structure to its ABI-safe defaults before the caller supplies model-specific values.
+// Reference context: Implementation/ABI helper; scientific meaning is defined by the consuming engine.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_fixed_state_input_init_v1(xstar_fixed_state_input_v1* input) {
     if (!input) return 1;
     std::memset(input, 0, sizeof(*input));
@@ -14974,6 +15678,10 @@ int xstar_fixed_state_input_init_v1(xstar_fixed_state_input_v1* input) {
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Initialize the fixed state output init structure to its ABI-safe defaults before the caller supplies model-specific values.
+// Reference context: Implementation/ABI helper; scientific meaning is defined by the consuming engine.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_fixed_state_output_init_v1(xstar_fixed_state_output_v1* output) {
     if (!output) return 1;
     std::memset(output, 0, sizeof(*output));
@@ -14982,6 +15690,10 @@ int xstar_fixed_state_output_init_v1(xstar_fixed_state_output_v1* output) {
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Initialize the fixed source workspace output init structure to its ABI-safe defaults before the caller supplies model-specific values.
+// Reference context: Implementation/ABI helper; scientific meaning is defined by the consuming engine.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_fixed_source_workspace_output_init_v1(
     xstar_fixed_source_workspace_output_v1* output) {
     if (!output) return 1;
@@ -14991,6 +15703,10 @@ int xstar_fixed_source_workspace_output_init_v1(
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Initialize the fixed state stats init structure to its ABI-safe defaults before the caller supplies model-specific values.
+// Reference context: Implementation/ABI helper; scientific meaning is defined by the consuming engine.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_fixed_state_stats_init_v1(xstar_fixed_state_stats_v1* stats) {
     if (!stats) return 1;
     std::memset(stats, 0, sizeof(*stats));
@@ -14999,6 +15715,10 @@ int xstar_fixed_state_stats_init_v1(xstar_fixed_state_stats_v1* stats) {
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute bound free perf init for the bound-free/photoionization/recombination-continuum path using the current radiation field and level populations.
+// Reference context: XSTAR Manual ss11.5, 11.6.1, 11.7; Kallman & Bautista (2001); ATDB ch12.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_bound_free_perf_init_v064895(xstar_bound_free_perf_v064895* perf) {
     if (!perf) return 1;
     std::memset(perf, 0, sizeof(*perf));
@@ -15007,6 +15727,10 @@ int xstar_bound_free_perf_init_v064895(xstar_bound_free_perf_v064895* perf) {
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute fixed state get bound free perf for the bound-free/photoionization/recombination-continuum path using the current radiation field and level populations.
+// Reference context: XSTAR Manual ss11.5, 11.6.1, 11.7; Kallman & Bautista (2001); ATDB ch12.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_fixed_state_get_bound_free_perf_v064895(
     const xstar_fixed_state_context* context,
     xstar_bound_free_perf_v064895* perf) {
@@ -15028,6 +15752,10 @@ int xstar_fixed_state_get_bound_free_perf_v064895(
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Initialize the fixed state program info init structure to its ABI-safe defaults before the caller supplies model-specific values.
+// Reference context: Implementation/ABI helper; scientific meaning is defined by the consuming engine.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_fixed_state_program_info_init_v1(xstar_fixed_state_program_info_v1* info) {
     if (!info) return 1;
     std::memset(info, 0, sizeof(*info));
@@ -15036,6 +15764,10 @@ int xstar_fixed_state_program_info_init_v1(xstar_fixed_state_program_info_v1* in
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Create and validate persistent runtime state for fixed state context create, loading only the data needed by subsequent calls.
+// Reference context: Implementation/lifetime helper; the scientific work is performed by the shared engine routines called from this context.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_fixed_state_context_create_v1(const char* program_directory, xstar_fixed_state_context** context, char* message, size_t message_size) {
     if (!program_directory || !context) {
         copy_text(message, message_size, "program_directory and context are required");
@@ -15053,6 +15785,10 @@ int xstar_fixed_state_context_create_v1(const char* program_directory, xstar_fix
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Initialize the fixed program bundle init structure to its ABI-safe defaults before the caller supplies model-specific values.
+// Reference context: Implementation/ABI helper; scientific meaning is defined by the consuming engine.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_fixed_program_bundle_init_v1(xstar_fixed_program_bundle_v1* bundle) {
     if (!bundle) return 1;
     std::memset(bundle, 0, sizeof(*bundle));
@@ -15061,6 +15797,10 @@ int xstar_fixed_program_bundle_init_v1(xstar_fixed_program_bundle_v1* bundle) {
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Create and validate persistent runtime state for fixed state context create from bundle, loading only the data needed by subsequent calls.
+// Reference context: Implementation/lifetime helper; the scientific work is performed by the shared engine routines called from this context.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_fixed_state_context_create_from_bundle_v1(
     const xstar_fixed_program_bundle_v1* bundle,
     xstar_fixed_state_context** context,
@@ -15082,6 +15822,10 @@ int xstar_fixed_state_context_create_from_bundle_v1(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Destroy the persistent fixed state context destroy context and release its owned resources without changing external science state.
+// Reference context: Implementation/lifetime helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_fixed_state_context_destroy(xstar_fixed_state_context* context) {
     if (!context) return;
     if (context->element_context) xstar_element_engine_context_destroy(context->element_context);
@@ -15089,6 +15833,10 @@ void xstar_fixed_state_context_destroy(xstar_fixed_state_context* context) {
     delete context;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement fixed state context get program info as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_fixed_state_context_get_program_info_v1(
     const xstar_fixed_state_context* context,
     xstar_fixed_state_program_info_v1* info,
@@ -15119,6 +15867,10 @@ int xstar_fixed_state_context_get_program_info_v1(
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute fixed state context set runtime line tau for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_fixed_state_context_set_runtime_line_tau_v1(
     xstar_fixed_state_context* context,
     const double* tau_in,
@@ -15155,6 +15907,10 @@ int xstar_fixed_state_context_set_runtime_line_tau_v1(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute fixed state context set critical ion fraction within the element/ion population workflow, preserving the source ion-stage ordering and active-stage semantics.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_fixed_state_context_set_critical_ion_fraction_v1(
     xstar_fixed_state_context* context,
     double critical_ion_fraction,
@@ -15174,6 +15930,10 @@ int xstar_fixed_state_context_set_critical_ion_fraction_v1(
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute fixed state context set source leveltemp energy as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_fixed_state_context_set_source_leveltemp_energy_v06481231(
     xstar_fixed_state_context* context,
     const double* energy_ev,
@@ -15205,6 +15965,10 @@ int xstar_fixed_state_context_set_source_leveltemp_energy_v06481231(
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement fixed state context set preliminary type7 legacy compat as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 7 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_fixed_state_context_set_preliminary_type7_legacy_compat_v06481171(
     xstar_fixed_state_context* context,
     int enabled,
@@ -15222,6 +15986,10 @@ int xstar_fixed_state_context_set_preliminary_type7_legacy_compat_v06481171(
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Reset reusable fixed state context reset state between model evaluations while preserving immutable loaded data and ABI invariants.
+// Reference context: Implementation/lifetime helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_fixed_state_context_reset_v1(xstar_fixed_state_context* context, char* message, size_t message_size) {
     if (!context) return 1;
     std::array<char, XSTAR_FIXED_STATE_MESSAGE_SIZE> error{};
@@ -15262,6 +16030,10 @@ int xstar_fixed_state_context_reset_v1(xstar_fixed_state_context* context, char*
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement fixed state run as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_fixed_state_run_v1(xstar_fixed_state_context* context, const xstar_fixed_state_input_v1* input, xstar_fixed_state_output_v1* output, xstar_fixed_state_stats_v1* stats, char* message, size_t message_size) {
     if (!context || !input || !output || !stats) return 1;
     try {
@@ -15277,6 +16049,10 @@ int xstar_fixed_state_run_v1(xstar_fixed_state_context* context, const xstar_fix
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement fixed state run with source workspaces as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_fixed_state_run_with_source_workspaces_v1(
     xstar_fixed_state_context* context,
     const xstar_fixed_state_input_v1* input,
@@ -15307,6 +16083,10 @@ int xstar_fixed_state_run_with_source_workspaces_v1(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement fixed state copy last source workspaces as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_fixed_state_copy_last_source_workspaces_v064894(
     xstar_fixed_state_context* context,
     xstar_fixed_source_workspace_output_v1* source_workspaces,
@@ -15391,6 +16171,10 @@ int xstar_fixed_state_copy_last_source_workspaces_v064894(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute fixed state get last thermal components as a contribution to, or control step in, the local thermal-equilibrium iteration.
+// Reference context: XSTAR Manual s11.4.4 and s11.6; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_fixed_state_get_last_thermal_components_v1(
     const xstar_fixed_state_context* context,
     xstar_fixed_state_thermal_components_v1* components,
@@ -15441,6 +16225,10 @@ int xstar_fixed_state_get_last_thermal_components_v1(
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Initialize the fixed state product diagnostic counts init structure to its ABI-safe defaults before the caller supplies model-specific values.
+// Reference context: Implementation/ABI helper; scientific meaning is defined by the consuming engine.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_fixed_state_product_diagnostic_counts_init_v1(
     xstar_fixed_state_product_diagnostic_counts_v1* counts) {
     if (!counts) return 1;
@@ -15450,6 +16238,10 @@ int xstar_fixed_state_product_diagnostic_counts_init_v1(
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement fixed state get last product diagnostic counts as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_fixed_state_get_last_product_diagnostic_counts_v1(
     const xstar_fixed_state_context* context,
     xstar_fixed_state_product_diagnostic_counts_v1* counts,
@@ -15471,6 +16263,10 @@ int xstar_fixed_state_get_last_product_diagnostic_counts_v1(
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement fixed state get last record product diagnostics as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_fixed_state_get_last_record_product_diagnostics_v1(
     const xstar_fixed_state_context* context,
     xstar_fixed_record_product_diagnostic_v1* rows,
@@ -15560,6 +16356,10 @@ int xstar_fixed_state_get_last_record_product_diagnostics_v1(
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute fixed state get last continuum product diagnostics for the bound-free/photoionization/recombination-continuum path using the current radiation field and level populations.
+// Reference context: XSTAR Manual ss11.5, 11.6.1, 11.7; Kallman & Bautista (2001); ATDB ch12.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_fixed_state_get_last_continuum_product_diagnostics_v1(
     const xstar_fixed_state_context* context,
     xstar_fixed_continuum_product_diagnostic_v1* rows,
@@ -15601,6 +16401,10 @@ int xstar_fixed_state_get_last_continuum_product_diagnostics_v1(
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute fixed state get last element product diagnostics within the element/ion population workflow, preserving the source ion-stage ordering and active-stage semantics.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_fixed_state_get_last_element_product_diagnostics_v1(
     const xstar_fixed_state_context* context,
     xstar_fixed_element_product_diagnostic_v1* rows,
@@ -15631,6 +16435,10 @@ int xstar_fixed_state_get_last_element_product_diagnostics_v1(
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute fixed state get last ion stage fractions within the element/ion population workflow, preserving the source ion-stage ordering and active-stage semantics.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_fixed_state_get_last_ion_stage_fractions_v064812316(
     const xstar_fixed_state_context* context,
     xstar_fixed_ion_stage_fraction_v064812316* rows,
@@ -15668,6 +16476,10 @@ int xstar_fixed_state_get_last_ion_stage_fractions_v064812316(
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute fixed state get last detail pre mapback populations as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_fixed_state_get_last_detail_pre_mapback_populations_v064812318(
     const xstar_fixed_state_context* context,
     double* values,
@@ -15694,6 +16506,10 @@ int xstar_fixed_state_get_last_detail_pre_mapback_populations_v064812318(
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute fixed state get last active stage windows within the element/ion population workflow, preserving the source ion-stage ordering and active-stage semantics.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_fixed_state_get_last_active_stage_windows_v064812318(
     const xstar_fixed_state_context* context,
     xstar_fixed_active_stage_window_v064812318* rows,
@@ -15726,6 +16542,10 @@ int xstar_fixed_state_get_last_active_stage_windows_v064812318(
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute fixed state write last element fixed state within the element/ion population workflow, preserving the source ion-stage ordering and active-stage semantics.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_fixed_state_write_last_element_fixed_state_v0648121(
     const xstar_fixed_state_context* context,
     const char* output_csv,
@@ -15769,6 +16589,10 @@ int xstar_fixed_state_write_last_element_fixed_state_v0648121(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute fixed state write last element attribution within the element/ion population workflow, preserving the source ion-stage ordering and active-stage semantics.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_fixed_state_write_last_element_attribution_v06481235(
     const xstar_fixed_state_context* context,
     const char* output_dir,
@@ -15943,6 +16767,10 @@ int xstar_fixed_state_write_last_element_attribution_v06481235(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute fixed state write last thermal budget as a contribution to, or control step in, the local thermal-equilibrium iteration.
+// Reference context: XSTAR Manual s11.4.4 and s11.6; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_fixed_state_write_last_thermal_budget_v1(
     const xstar_fixed_state_context* context,
     const char* output_csv,
@@ -16059,6 +16887,10 @@ int xstar_fixed_state_write_last_thermal_budget_v1(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement fixed state write visited report as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_fixed_state_write_visited_report_v1(const xstar_fixed_state_context* context, const char* output_path, char* message, size_t message_size) {
     if (!context || !output_path || !*output_path) {
         copy_text(message, message_size, "context and output_path are required");
@@ -16077,6 +16909,10 @@ int xstar_fixed_state_write_visited_report_v1(const xstar_fixed_state_context* c
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement fixed state write last diagnostics as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_fixed_state_write_last_diagnostics_v1(
     const xstar_fixed_state_context* context,
     const char* output_directory,
@@ -16944,6 +17780,10 @@ int xstar_fixed_state_write_last_diagnostics_v1(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement fixed state run batch as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_fixed_state_run_batch_v1(xstar_fixed_state_context* context, const xstar_fixed_state_input_v1* inputs, size_t input_count, xstar_fixed_state_output_v1* outputs, xstar_fixed_state_stats_v1* stats, char* message, size_t message_size) {
     if (!context || (!inputs && input_count) || (!outputs && input_count) || !stats) return 1;
     for (std::size_t k = 0; k < input_count; ++k) {

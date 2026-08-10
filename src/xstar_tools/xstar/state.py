@@ -33,6 +33,10 @@ class XSTARAtomicState:
     pointers: Dict[str, Any] = field(default_factory=dict)
     provenance: Dict[str, Any] = field(default_factory=dict)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Close operation for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: Runtime state container; scientific meaning follows the producing routines.
+    # XSTAR-FUNCTION-COMMENT-END
     def close(self) -> None:
         """Close any memory-mapped FITS handle owned by the atomic state."""
         if self.master is not None and hasattr(self.master, "close"):

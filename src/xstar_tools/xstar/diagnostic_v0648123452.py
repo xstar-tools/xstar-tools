@@ -16,11 +16,19 @@ from typing import Any, Iterable
 import numpy as np
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the enabled dir operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _enabled_dir() -> Path | None:
     raw = os.environ.get("XSTAR_V0648123452_DIAGNOSTIC_DIR", "").strip()
     return Path(raw).resolve() if raw else None
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the target zones operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _target_zones() -> set[int]:
     raw = os.environ.get("XSTAR_V0648123452_ZONES", "2,3")
     out: set[int] = set()
@@ -35,6 +43,10 @@ def _target_zones() -> set[int]:
     return out or {2, 3}
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the target lines operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _target_lines() -> tuple[int, ...]:
     raw = os.environ.get("XSTAR_V0648123452_TARGET_LINES", "508,515")
     vals: list[int] = []
@@ -49,11 +61,19 @@ def _target_lines() -> tuple[int, ...]:
     return tuple(dict.fromkeys(vals))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the array hash operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _array_hash(arr: Any) -> str:
     a = np.ascontiguousarray(np.asarray(arr, dtype=np.float64))
     return hashlib.sha256(a.view(np.uint8)).hexdigest()
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the array summary operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _array_summary(name: str, arr: Any) -> dict[str, Any]:
     a = np.asarray(arr, dtype=np.float64)
     finite = a[np.isfinite(a)]
@@ -67,12 +87,20 @@ def _array_summary(name: str, arr: Any) -> dict[str, Any]:
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write jsonl for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _write_jsonl(path: Path, row: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n")
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Append csv for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _append_csv(path: Path, rows: Iterable[dict[str, Any]]) -> None:
     rows = list(rows)
     if not rows:
@@ -98,6 +126,10 @@ def _append_csv(path: Path, rows: Iterable[dict[str, Any]]) -> None:
         writer.writerows(rows)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the workspace arrays operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _workspace_arrays(state: Any) -> dict[str, np.ndarray]:
     workspace = state.control.get("radial_transfer_workspace")
     if workspace is None:
@@ -121,12 +153,20 @@ def _workspace_arrays(state: Any) -> dict[str, np.ndarray]:
     return out
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the line metadata operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _line_metadata(state: Any) -> dict[int, Any]:
     metadata = state.control.get("output_atomic_metadata")
     rows = getattr(metadata, "lines", ()) if metadata is not None else ()
     return {int(getattr(row, "line_index", 0)): row for row in rows}
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the line rows operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _line_rows(state: Any, phase: str, arrays: dict[str, np.ndarray]) -> list[dict[str, Any]]:
     meta = _line_metadata(state)
     zone = int(getattr(state.transfer, "zone_index", 0) or 0)
@@ -136,6 +176,10 @@ def _line_rows(state: Any, phase: str, arrays: dict[str, np.ndarray]) -> list[di
     for line_index in _target_lines():
         i = line_index - 1
         row = meta.get(line_index)
+        # XSTAR-FUNCTION-COMMENT-BEGIN
+        # Purpose: Implement the val operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+        # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+        # XSTAR-FUNCTION-COMMENT-END
         def val(name: str, plane: int) -> float | None:
             arr = arrays.get(name)
             if arr is None or arr.ndim < 2 or plane >= arr.shape[0] or i < 0 or i >= arr.shape[1]:
@@ -160,6 +204,10 @@ def _line_rows(state: Any, phase: str, arrays: dict[str, np.ndarray]) -> list[di
     return rows
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the checkpoint operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def checkpoint(state: Any, *, phase: str) -> None:
     out = _enabled_dir()
     if out is None:

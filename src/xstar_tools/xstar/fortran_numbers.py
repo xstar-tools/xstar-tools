@@ -15,6 +15,10 @@ _OMITTED_E_RE = re.compile(
 )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Parse fortran float for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Fortran numeric-format compatibility helper; no direct scientific formula.
+# XSTAR-FUNCTION-COMMENT-END
 def parse_fortran_float(value: Any) -> float:
     """Return a Python float from standard or width-compressed Fortran text.
 

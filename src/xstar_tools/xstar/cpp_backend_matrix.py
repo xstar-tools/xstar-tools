@@ -42,6 +42,10 @@ class MatrixBackendStatus:
     cpp_abi_version: int | None = None
     cpp_feature_flags: int | None = None
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Serialize the current state into a plain mapping for diagnostics, provenance, or machine-readable output.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def as_dict(self) -> dict[str, object]:
         return dict(asdict(self))
 
@@ -54,6 +58,10 @@ _SOURCE_HEADER_CACHE: dict[tuple[int, int], tuple[np.ndarray, np.ndarray]] = {}
 _MG_SIMPLE_PAYLOAD_IMMUTABLE_CACHE: dict[tuple[int, int], dict[str, Any]] = {}
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the mg simple payload immutable cache operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _mg_simple_payload_immutable_cache(master: Any, derived: Any) -> tuple[dict[str, Any], bool, int]:
     """Return run-local immutable Mg source arrays and cache diagnostics.
 
@@ -82,6 +90,10 @@ def _mg_simple_payload_immutable_cache(master: Any, derived: Any) -> tuple[dict[
     return cached, False, 0 if compact_existed else immutable_bytes
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the mg simple payload support counts operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _mg_simple_payload_support_counts(
     cache: dict[str, Any], ion_specs: list[dict[str, int]]
 ) -> tuple[dict[tuple[int, int], int], dict[tuple[int, int], int], int, int, float]:
@@ -117,6 +129,10 @@ def _mg_simple_payload_support_counts(
     return support_index, source_index, hits, misses, time.perf_counter() - started
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Record header arrays from ptrs for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _record_header_arrays_from_ptrs(ptrs: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Return cached 1-based record rate/data-type arrays for source scans.
 
@@ -140,6 +156,10 @@ def _record_header_arrays_from_ptrs(ptrs: np.ndarray) -> tuple[np.ndarray, np.nd
     return cached
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the compact matrix arrays operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _compact_matrix_arrays(master: Any, derived: Any) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Return cached C-contiguous compact ATDB arrays for matrix backends."""
     key = (id(master), id(derived))
@@ -157,6 +177,10 @@ def _compact_matrix_arrays(master: Any, derived: Any) -> tuple[np.ndarray, np.nd
     return cached
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the candidate library paths operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _candidate_library_paths() -> list[Path]:
     env_path = os.environ.get("XSTAR_ATOMIC_MATRIX_LIB")
     paths: list[Path] = []
@@ -182,6 +206,10 @@ def _candidate_library_paths() -> list[Path]:
     return unique
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Load cpp library for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _load_cpp_library() -> ctypes.CDLL | None:
     global _CPP_LIB, _CPP_LOAD_ERROR, _CPP_LIBRARY_PATH
     if _CPP_LIB is not None:
@@ -363,12 +391,20 @@ def _load_cpp_library() -> ctypes.CDLL | None:
         return None
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the cpp import error operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def cpp_import_error() -> str | None:
     if _CPP_LOAD_ERROR is None:
         return None
     return f"{type(_CPP_LOAD_ERROR).__name__}: {_CPP_LOAD_ERROR}"
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the backend name operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _backend_name(lib: ctypes.CDLL | None) -> str | None:
     if lib is None:
         return None
@@ -379,6 +415,10 @@ def _backend_name(lib: ctypes.CDLL | None) -> str | None:
         return None
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the abi version operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _abi_version(lib: ctypes.CDLL | None) -> int | None:
     if lib is None:
         return None
@@ -388,6 +428,10 @@ def _abi_version(lib: ctypes.CDLL | None) -> int | None:
         return None
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the feature flags operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _feature_flags(lib: ctypes.CDLL | None) -> int | None:
     if lib is None:
         return None
@@ -397,6 +441,10 @@ def _feature_flags(lib: ctypes.CDLL | None) -> int | None:
         return None
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the matrix backend status operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def matrix_backend_status(requested: str | None = None) -> MatrixBackendStatus:
     req = (requested or os.environ.get("XSTAR_ATOMIC_MATRIX_BACKEND") or "python").strip().lower()
     if req not in {"python", "cpp", "auto"}:
@@ -420,6 +468,10 @@ def matrix_backend_status(requested: str | None = None) -> MatrixBackendStatus:
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the probe cpp matrix operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def probe_cpp_matrix(*, n_records: int = 0, n_basis_rows: int = 0) -> str:
     lib = _load_cpp_library()
     if lib is None:
@@ -442,6 +494,10 @@ _ROLE = {
 }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build mg type7 terms matrix cpp detailed for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def build_mg_type7_terms_matrix_cpp_detailed(
     records: list[dict[str, Any]],
     *,
@@ -455,8 +511,16 @@ def build_mg_type7_terms_matrix_cpp_detailed(
         raise RuntimeError("C++ matrix shared library is not available" + (f": {cpp_import_error()}" if cpp_import_error() else ""))
     n = int(len(records))
     t0 = time.perf_counter()
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the i64 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def i64(name: str) -> np.ndarray:
         return np.ascontiguousarray([int(r[name]) for r in records], dtype=np.int64)
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the f64 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def f64(name: str) -> np.ndarray:
         return np.ascontiguousarray([float(r[name]) for r in records], dtype=np.float64)
     record = i64("record")
@@ -529,6 +593,10 @@ def build_mg_type7_terms_matrix_cpp_detailed(
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build mg rates and matrix cpp detailed for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def build_mg_rates_and_matrix_cpp_detailed(
     records: list[dict[str, Any]],
     *,
@@ -548,8 +616,16 @@ def build_mg_rates_and_matrix_cpp_detailed(
         raise RuntimeError("C++ Mg rates+matrix kernel is not available" + (f": {cpp_import_error()}" if cpp_import_error() else ""))
     n = int(len(records))
     t0 = time.perf_counter()
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the i64 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def i64(name: str) -> np.ndarray:
         return np.ascontiguousarray([int(r.get(name, 0)) for r in records], dtype=np.int64)
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the f64 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def f64(name: str) -> np.ndarray:
         return np.ascontiguousarray([float(r.get(name, 0.0)) for r in records], dtype=np.float64)
     record = i64("record")
@@ -624,6 +700,10 @@ def build_mg_rates_and_matrix_cpp_detailed(
     return rows, message, stats
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build mg type51 rates and matrix cpp detailed for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def build_mg_type51_rates_and_matrix_cpp_detailed(
     records: list[dict[str, Any]],
     *,
@@ -645,8 +725,16 @@ def build_mg_type51_rates_and_matrix_cpp_detailed(
         raise RuntimeError("C++ matrix Mg type51 rates+matrix kernel is not available" + (f": {cpp_import_error()}" if cpp_import_error() else ""))
     n = int(len(records))
     t0 = time.perf_counter()
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the i64 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def i64(name: str) -> np.ndarray:
         return np.ascontiguousarray([int(r.get(name, 0)) for r in records], dtype=np.int64)
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the f64 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def f64(name: str) -> np.ndarray:
         return np.ascontiguousarray([float(r.get(name, 0.0)) for r in records], dtype=np.float64)
     record = i64("record")
@@ -742,6 +830,10 @@ def build_mg_type51_rates_and_matrix_cpp_detailed(
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the eval mg ion type51 rates and matrix cpp detailed operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def eval_mg_ion_type51_rates_and_matrix_cpp_detailed(
     records: list[dict[str, Any]],
     *,
@@ -778,8 +870,16 @@ def eval_mg_ion_type51_rates_and_matrix_cpp_detailed(
         return rows, message, stats
     n = int(len(records))
     t0 = time.perf_counter()
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the i64 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def i64(name: str) -> np.ndarray:
         return np.ascontiguousarray([int(r.get(name, 0)) for r in records], dtype=np.int64)
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the f64 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def f64(name: str) -> np.ndarray:
         return np.ascontiguousarray([float(r.get(name, 0.0)) for r in records], dtype=np.float64)
     record = i64("record")
@@ -877,6 +977,10 @@ def eval_mg_ion_type51_rates_and_matrix_cpp_detailed(
     return rows, message, stats
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the scan mg ion source records cpp detailed operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def scan_mg_ion_source_records_cpp_detailed(
     *,
     master: Any,
@@ -950,6 +1054,10 @@ def scan_mg_ion_source_records_cpp_detailed(
     return rows, message, stats
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the eval mg ion source simple payloads cpp detailed operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def eval_mg_ion_source_simple_payloads_cpp_detailed(
     *,
     master: Any,
@@ -1045,6 +1153,10 @@ def eval_mg_ion_source_simple_payloads_cpp_detailed(
     return rows, message, stats
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the eval mg element simple payloads batch shadow cpp detailed operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def eval_mg_element_simple_payloads_batch_shadow_cpp_detailed(
     *,
     master: Any,
@@ -1184,6 +1296,10 @@ def eval_mg_element_simple_payloads_batch_shadow_cpp_detailed(
     }
     return rows, message, stats
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Accumulate mg ion source simple terms cpp detailed for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def accumulate_mg_ion_source_simple_terms_cpp_detailed(
     *,
     master: Any,
@@ -1304,6 +1420,10 @@ def accumulate_mg_ion_source_simple_terms_cpp_detailed(
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the radiation grid arrays for type49 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _radiation_grid_arrays_for_type49(radiation: Any) -> tuple[np.ndarray, np.ndarray]:
     """Return literal calc_hmc caller-owned reduced epim/bremsam arrays.
 
@@ -1339,6 +1459,10 @@ def _radiation_grid_arrays_for_type49(radiation: Any) -> tuple[np.ndarray, np.nd
         brem = np.zeros(int(epi.size), dtype=np.float64)
     return np.ascontiguousarray(epi), np.ascontiguousarray(brem[: epi.size])
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the radiation extrap max points for type49 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _radiation_extrap_max_points_for_type49(radiation: Any, full_grid_size: int) -> int:
     """Return Python ``phextrap`` capacity for type49/type53 shadow parity.
 
@@ -1357,11 +1481,19 @@ def _radiation_extrap_max_points_for_type49(radiation: Any, full_grid_size: int)
     return int(full_grid_size)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the radiation grid arrays for type53 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _radiation_grid_arrays_for_type53(radiation: Any) -> tuple[np.ndarray, np.ndarray]:
     """Return the calc_hmc reduced grid shared by Type49 and Type53 matrix rates."""
     return _radiation_grid_arrays_for_type49(radiation)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Accumulate mg ion rate7 type49 terms cpp detailed for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def accumulate_mg_ion_rate7_type49_terms_cpp_detailed(
     *,
     master: Any,
@@ -1474,6 +1606,10 @@ def accumulate_mg_ion_rate7_type49_terms_cpp_detailed(
     }
     return rows, message, stats
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Accumulate mg ion rate7 type53 terms cpp detailed for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def accumulate_mg_ion_rate7_type53_terms_cpp_detailed(
     *,
     master: Any,
@@ -1542,6 +1678,10 @@ def accumulate_mg_ion_rate7_type53_terms_cpp_detailed(
     parent_energy_entries_packed = 0.0
     parent_weight_entries_packed = 0.0
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Map lookup number for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def _map_lookup_number(mapping: Any, key: int) -> float | None:
         """Return numeric map value for integer/string destination keys.
 
@@ -1642,6 +1782,10 @@ def accumulate_mg_ion_rate7_type53_terms_cpp_detailed(
     return rows, message, stats
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the dense fill terms matrix cpp operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def dense_fill_terms_matrix_cpp(
     terms: list[dict[str, Any]],
     *,
@@ -1686,6 +1830,10 @@ def dense_fill_terms_matrix_cpp(
     return dense, heat, heat2, message, stats
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the eval simple ucalc matrix cpp operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def eval_simple_ucalc_matrix_cpp(
     records: list[dict[str, Any]],
     *,
@@ -1706,8 +1854,16 @@ def eval_simple_ucalc_matrix_cpp(
         raise RuntimeError("C++ matrix simple-ucalc kernel is not available" + (f": {cpp_import_error()}" if cpp_import_error() else ""))
     n = int(len(records))
     t0 = time.perf_counter()
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the i64 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def i64(name: str) -> np.ndarray:
         return np.ascontiguousarray([int(r.get(name, 0)) for r in records], dtype=np.int64)
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the f64 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def f64(name: str) -> np.ndarray:
         return np.ascontiguousarray([float(r.get(name, 0.0)) for r in records], dtype=np.float64)
     record = i64("record")
@@ -1768,6 +1924,10 @@ def eval_simple_ucalc_matrix_cpp(
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the eval type51 ucalc matrix cpp operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def eval_type51_ucalc_matrix_cpp(
     records: list[dict[str, Any]],
     *,
@@ -1785,8 +1945,16 @@ def eval_type51_ucalc_matrix_cpp(
         raise RuntimeError("C++ matrix type51 ucalc kernel is not available" + (f": {cpp_import_error()}" if cpp_import_error() else ""))
     n = int(len(records))
     t0 = time.perf_counter()
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the i64 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def i64(name: str) -> np.ndarray:
         return np.ascontiguousarray([int(r.get(name, 0)) for r in records], dtype=np.int64)
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the f64 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def f64(name: str) -> np.ndarray:
         return np.ascontiguousarray([float(r.get(name, 0.0)) for r in records], dtype=np.float64)
     record = i64("record")

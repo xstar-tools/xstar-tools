@@ -50,6 +50,10 @@ class DsecPortError(RuntimeError):
     """Raised when the translated ``dsec`` path cannot proceed."""
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the r4 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec nonlinear charge/thermal controller.
+# XSTAR-FUNCTION-COMMENT-END
 def _r4(value: float) -> float:
     """Round a default-real Fortran literal before promotion to real(8)."""
 
@@ -111,6 +115,10 @@ class DsecMutableRuntimeState:
     calc_hmc_all_call_count: int = 0
     provenance: Dict[str, Any] = field(default_factory=dict)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Validate/normalize dataclass state immediately after construction.
+    # Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec nonlinear charge/thermal controller.
+    # XSTAR-FUNCTION-COMMENT-END
     def __post_init__(self) -> None:
         if not math.isfinite(self.temperature_t4) or self.temperature_t4 <= 0.0:
             raise DsecPortError("temperature_t4 must be finite and positive")
@@ -152,10 +160,18 @@ class DsecMutableRuntimeState:
             for index, owner in self.last_leveltemp_owner_by_column.items()
         }
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the temperature k operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec nonlinear charge/thermal controller.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def temperature_k(self) -> float:
         return float(self.temperature_t4) * 1.0e4
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the requests for next call operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec nonlinear charge/thermal controller.
+    # XSTAR-FUNCTION-COMMENT-END
     def requests_for_next_call(self) -> Tuple[FixedStateElementRequest, ...]:
         """Return source-order requests seeded from the current mutable state."""
 
@@ -208,6 +224,10 @@ class DsecMutableRuntimeState:
             )
         return tuple(requests)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Commit calc hmc all for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec nonlinear charge/thermal controller.
+    # XSTAR-FUNCTION-COMMENT-END
     def commit_calc_hmc_all(self, result: FixedStateCalcHMCAllResult) -> None:
         """Commit one trial exactly where the Fortran call returns."""
 
@@ -405,6 +425,10 @@ class DsecEvaluation:
 
 
 class DsecEvaluator(Protocol):
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Evaluate this object as a callable using its configured runtime/scientific state.
+    # Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec nonlinear charge/thermal controller.
+    # XSTAR-FUNCTION-COMMENT-END
     def __call__(self, state: DsecMutableRuntimeState) -> DsecEvaluation: ...
 
 
@@ -443,6 +467,10 @@ class CalcHMCAllDsecEvaluator:
     evaluations: List[DsecEvaluation] = field(default_factory=list, init=False)
     input_snapshots: List[DsecCalcHMCAllInputSnapshot] = field(default_factory=list, init=False)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Validate/normalize dataclass state immediately after construction.
+    # Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec nonlinear charge/thermal controller.
+    # XSTAR-FUNCTION-COMMENT-END
     def __post_init__(self) -> None:
         # Reuse one source-faithful dispatcher across every ion, element, and
         # repeated dsec trial.  This mirrors the single Fortran ucalc routine
@@ -453,6 +481,10 @@ class CalcHMCAllDsecEvaluator:
 
             self.dispatcher = default_source_faithful_ucalc()
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Evaluate this object as a callable using its configured runtime/scientific state.
+    # Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec nonlinear charge/thermal controller.
+    # XSTAR-FUNCTION-COMMENT-END
     def __call__(self, state: DsecMutableRuntimeState) -> DsecEvaluation:
         evaluation_index = len(self.evaluations) + 1
         if self.pre_evaluation_callback is not None:
@@ -670,6 +702,10 @@ class DsecResult:
     prefix_terminated: bool = False
     maximum_evaluations: Optional[int] = None
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the converged operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec nonlinear charge/thermal controller.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def converged(self) -> bool:
         if self.prefix_terminated:
@@ -677,6 +713,10 @@ class DsecResult:
         thermal_ok = self.thermal_converged if self.requested_thermal_iteration else True
         return bool(self.lnerr == 0 and self.charge_converged and thermal_ok)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the final hmctot operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec nonlinear charge/thermal controller.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def final_hmctot(self) -> float:
         if math.isfinite(float(getattr(self.state, "last_hmctot", float("nan")))):
@@ -688,6 +728,10 @@ class DsecResult:
                 return float(event.hmctot)
         return float("nan")
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the final elcter operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec nonlinear charge/thermal controller.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def final_elcter(self) -> float:
         if math.isfinite(float(getattr(self.state, "last_elcter", float("nan")))):
@@ -701,9 +745,17 @@ class DsecResult:
 
 
 class _TrajectoryRecorder:
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Initialize this object and establish the invariants required by later operations.
+    # Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec nonlinear charge/thermal controller.
+    # XSTAR-FUNCTION-COMMENT-END
     def __init__(self) -> None:
         self.rows: List[DsecTrajectoryEvent] = []
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the add operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec nonlinear charge/thermal controller.
+    # XSTAR-FUNCTION-COMMENT-END
     def add(
         self,
         event: str,
@@ -794,6 +846,10 @@ class _TrajectoryRecorder:
         )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the fortran divide operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec nonlinear charge/thermal controller.
+# XSTAR-FUNCTION-COMMENT-END
 def _fortran_divide(numerator: float, denominator: float) -> float:
     """Use IEEE division semantics instead of Python's zero-division error."""
 
@@ -801,6 +857,10 @@ def _fortran_divide(numerator: float, denominator: float) -> float:
         return float(np.float64(numerator) / np.float64(denominator))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the native dsec requested operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec nonlinear charge/thermal controller.
+# XSTAR-FUNCTION-COMMENT-END
 def _native_dsec_requested() -> bool:
     value = os.environ.get("XSTAR_ATOMIC_THERMAL_ENGINE_CPP", "").strip().lower()
     enabled = value not in {"", "0", "false", "no", "off"}
@@ -808,6 +868,10 @@ def _native_dsec_requested() -> bool:
     return enabled and product not in {"", "0", "false", "no", "off"}
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the native trace events operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec nonlinear charge/thermal controller.
+# XSTAR-FUNCTION-COMMENT-END
 def _native_trace_events(rows: Sequence[Mapping[str, Any]], state: DsecMutableRuntimeState, *, nlim: int, tinf_t4: float) -> Tuple[DsecTrajectoryEvent, ...]:
     names = {
         1: "begin", 2: "after_calc_hmc_all", 3: "charge_multiply_xee",
@@ -841,6 +905,10 @@ def _native_trace_events(rows: Sequence[Mapping[str, Any]], state: DsecMutableRu
     return tuple(result)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Drive the nonlinear local equilibrium search by repeatedly evaluating calc_hmc_all at trial temperature/electron states, following source branch/bracketing/state-commit order.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec nonlinear charge/thermal controller.
+# XSTAR-FUNCTION-COMMENT-END
 def dsec(
     state: DsecMutableRuntimeState,
     *,
@@ -1535,6 +1603,10 @@ def dsec(
 _TRAJECTORY_FIELDS: Tuple[str, ...] = tuple(DsecTrajectoryEvent.__dataclass_fields__)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write dsec trajectory products for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec nonlinear charge/thermal controller.
+# XSTAR-FUNCTION-COMMENT-END
 def write_dsec_trajectory_products(
     result: DsecResult,
     out_dir: str | Path,
@@ -1589,6 +1661,10 @@ def write_dsec_trajectory_products(
     return {"csv": csv_path, "json": json_path, "markdown": md_path}
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Load python dsec trajectory for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec nonlinear charge/thermal controller.
+# XSTAR-FUNCTION-COMMENT-END
 def load_python_dsec_trajectory(path: str | Path) -> DsecResult:
     """Load products written by :func:`write_dsec_trajectory_products`.
 
@@ -1705,6 +1781,10 @@ class DsecProbeTrajectory:
 _PROBE_SENTINEL = 9.0e299
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the optional probe float operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec nonlinear charge/thermal controller.
+# XSTAR-FUNCTION-COMMENT-END
 def _optional_probe_float(value: Any) -> Optional[float]:
     if value is None or str(value).strip() == "":
         return None
@@ -1712,6 +1792,10 @@ def _optional_probe_float(value: Any) -> Optional[float]:
     return None if abs(parsed) >= _PROBE_SENTINEL else float(parsed)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Load xstar dsec trajectory for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec nonlinear charge/thermal controller.
+# XSTAR-FUNCTION-COMMENT-END
 def load_xstar_dsec_trajectory(
     path: str | Path,
     *,
@@ -1808,6 +1892,10 @@ class DsecTrajectoryParityResult:
     max_absolute_difference: float
     max_relative_difference: float
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Report whether all prerequisites/results required by this stage are present and internally consistent.
+    # Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec nonlinear charge/thermal controller.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def ready(self) -> bool:
         return bool(
@@ -1822,12 +1910,20 @@ class DsecTrajectoryParityResult:
         )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the residual sign operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec nonlinear charge/thermal controller.
+# XSTAR-FUNCTION-COMMENT-END
 def _residual_sign(value: float, zero_atol: float) -> int:
     if abs(value) <= zero_atol:
         return 0
     return -1 if value < 0.0 else 1
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Compare dsec trajectory for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec nonlinear charge/thermal controller.
+# XSTAR-FUNCTION-COMMENT-END
 def compare_dsec_trajectory(
     python_result: DsecResult,
     reference: DsecProbeTrajectory,
@@ -1975,6 +2071,10 @@ def compare_dsec_trajectory(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write dsec trajectory parity products for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec nonlinear charge/thermal controller.
+# XSTAR-FUNCTION-COMMENT-END
 def write_dsec_trajectory_parity_products(
     parity: DsecTrajectoryParityResult,
     out_dir: str | Path,
@@ -2058,6 +2158,10 @@ _V0444_REQUIRED_TRUE = (
 )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Validate the current state invariants before the value is consumed downstream.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec nonlinear charge/thermal controller.
+# XSTAR-FUNCTION-COMMENT-END
 def validate_v0444_complete_fixed_state_regression(
     path: Optional[str | Path] = None,
 ) -> V0444CompleteFixedStateRegressionGate:
@@ -2099,6 +2203,10 @@ class DsecAcceptanceResult:
     final_calc_hmc_all_ready: bool
     final_fixed_state_parity_ready: bool = True
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Report whether all prerequisites/results required by this stage are present and internally consistent.
+    # Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec nonlinear charge/thermal controller.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def ready(self) -> bool:
         return bool(
@@ -2113,6 +2221,10 @@ class DsecAcceptanceResult:
         )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build dsec acceptance for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec nonlinear charge/thermal controller.
+# XSTAR-FUNCTION-COMMENT-END
 def build_dsec_acceptance(
     parity: DsecTrajectoryParityResult,
     *,
@@ -2144,6 +2256,10 @@ def build_dsec_acceptance(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write dsec acceptance products for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec nonlinear charge/thermal controller.
+# XSTAR-FUNCTION-COMMENT-END
 def write_dsec_acceptance_products(
     acceptance: DsecAcceptanceResult,
     out_dir: str | Path,

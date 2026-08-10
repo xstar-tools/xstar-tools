@@ -27,6 +27,10 @@ struct FourChannelAccumulator {
     double heating2 = 0.0;
     double cooling2 = 0.0;
 
+    // XSTAR-FUNCTION-COMMENT-BEGIN
+    // Purpose: Implement accumulate primary for deterministic, source-ordered reduction of per-record heating/cooling terms before the thermal-balance update.
+    // Reference context: XSTAR Manual s11.4.4; Kallman & Bautista (2001). Ordering/rounding are implementation invariants of the qualified port.
+    // XSTAR-FUNCTION-COMMENT-END
     void accumulate_primary(double population, double coefficient) {
         if (!std::isfinite(population) || !std::isfinite(coefficient)) {
             throw std::runtime_error("non-finite primary Thermal term");
@@ -36,6 +40,10 @@ struct FourChannelAccumulator {
         else heating -= product;
     }
 
+    // XSTAR-FUNCTION-COMMENT-BEGIN
+    // Purpose: Implement accumulate secondary for deterministic, source-ordered reduction of per-record heating/cooling terms before the thermal-balance update.
+    // Reference context: XSTAR Manual s11.4.4; Kallman & Bautista (2001). Ordering/rounding are implementation invariants of the qualified port.
+    // XSTAR-FUNCTION-COMMENT-END
     void accumulate_secondary(double population, double coefficient) {
         if (!std::isfinite(population) || !std::isfinite(coefficient)) {
             throw std::runtime_error("non-finite secondary Thermal term");
@@ -45,15 +53,27 @@ struct FourChannelAccumulator {
         else heating2 -= product;
     }
 
+    // XSTAR-FUNCTION-COMMENT-BEGIN
+    // Purpose: Implement accumulate for deterministic, source-ordered reduction of per-record heating/cooling terms before the thermal-balance update.
+    // Reference context: XSTAR Manual s11.4.4; Kallman & Bautista (2001). Ordering/rounding are implementation invariants of the qualified port.
+    // XSTAR-FUNCTION-COMMENT-END
     void accumulate(double population, double coefficient, double coefficient2) {
         accumulate_primary(population, coefficient);
         accumulate_secondary(population, coefficient2);
     }
 
+    // XSTAR-FUNCTION-COMMENT-BEGIN
+    // Purpose: Implement values for deterministic, source-ordered reduction of per-record heating/cooling terms before the thermal-balance update.
+    // Reference context: XSTAR Manual s11.4.4; Kallman & Bautista (2001). Ordering/rounding are implementation invariants of the qualified port.
+    // XSTAR-FUNCTION-COMMENT-END
     std::array<double, 4> values() const {
         return {{heating, cooling, heating2, cooling2}};
     }
 
+    // XSTAR-FUNCTION-COMMENT-BEGIN
+    // Purpose: Implement abundance weighted for deterministic, source-ordered reduction of per-record heating/cooling terms before the thermal-balance update.
+    // Reference context: XSTAR Manual s11.4.4; Kallman & Bautista (2001). Ordering/rounding are implementation invariants of the qualified port.
+    // XSTAR-FUNCTION-COMMENT-END
     std::array<double, 4> abundance_weighted(double abundance) const {
         if (!std::isfinite(abundance)) {
             throw std::runtime_error("non-finite elemental abundance");
@@ -76,26 +96,46 @@ struct TaggedFourChannelAccumulator {
     FourChannelAccumulator type53;
     FourChannelAccumulator non_type53;
 
+    // XSTAR-FUNCTION-COMMENT-BEGIN
+    // Purpose: Implement family for deterministic, source-ordered reduction of per-record heating/cooling terms before the thermal-balance update.
+    // Reference context: XSTAR Manual s11.4.4; Kallman & Bautista (2001). Ordering/rounding are implementation invariants of the qualified port.
+    // XSTAR-FUNCTION-COMMENT-END
     FourChannelAccumulator& family(bool is_type53) {
         return is_type53 ? type53 : non_type53;
     }
 
+    // XSTAR-FUNCTION-COMMENT-BEGIN
+    // Purpose: Implement accumulate primary for deterministic, source-ordered reduction of per-record heating/cooling terms before the thermal-balance update.
+    // Reference context: XSTAR Manual s11.4.4; Kallman & Bautista (2001). Ordering/rounding are implementation invariants of the qualified port.
+    // XSTAR-FUNCTION-COMMENT-END
     void accumulate_primary(double population, double coefficient, bool is_type53) {
         total.accumulate_primary(population, coefficient);
         family(is_type53).accumulate_primary(population, coefficient);
     }
 
+    // XSTAR-FUNCTION-COMMENT-BEGIN
+    // Purpose: Implement accumulate secondary for deterministic, source-ordered reduction of per-record heating/cooling terms before the thermal-balance update.
+    // Reference context: XSTAR Manual s11.4.4; Kallman & Bautista (2001). Ordering/rounding are implementation invariants of the qualified port.
+    // XSTAR-FUNCTION-COMMENT-END
     void accumulate_secondary(double population, double coefficient, bool is_type53) {
         total.accumulate_secondary(population, coefficient);
         family(is_type53).accumulate_secondary(population, coefficient);
     }
 
+    // XSTAR-FUNCTION-COMMENT-BEGIN
+    // Purpose: Implement accumulate for deterministic, source-ordered reduction of per-record heating/cooling terms before the thermal-balance update.
+    // Reference context: XSTAR Manual s11.4.4; Kallman & Bautista (2001). Ordering/rounding are implementation invariants of the qualified port.
+    // XSTAR-FUNCTION-COMMENT-END
     void accumulate(double population, double coefficient, double coefficient2, bool is_type53) {
         accumulate_primary(population, coefficient, is_type53);
         accumulate_secondary(population, coefficient2, is_type53);
     }
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement binary64 equal for deterministic, source-ordered reduction of per-record heating/cooling terms before the thermal-balance update.
+// Reference context: XSTAR Manual s11.4.4; Kallman & Bautista (2001). Ordering/rounding are implementation invariants of the qualified port.
+// XSTAR-FUNCTION-COMMENT-END
 inline bool binary64_equal(double left, double right) {
     if (std::isnan(left) || std::isnan(right)) return false;
     if (left == right) return true;

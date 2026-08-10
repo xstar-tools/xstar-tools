@@ -28,13 +28,25 @@ struct SolveResult {
     double max_scaled_residual;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement M as a local helper for the level population module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 inline double& M(std::vector<double>& a, int n, int i, int j) {
     return a[static_cast<size_t>(i) * static_cast<size_t>(n) + static_cast<size_t>(j)];
 }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement M as a local helper for the level population module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 inline const double& M(const std::vector<double>& a, int n, int i, int j) {
     return a[static_cast<size_t>(i) * static_cast<size_t>(n) + static_cast<size_t>(j)];
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Solve the dense linear population system in-place using the source-equivalent elimination/back-substitution contract used by the level solver.
+// Reference context: XSTAR Manual s11.4.1 (population-flow equations and normalization row).
+// XSTAR-FUNCTION-COMMENT-END
 SolveResult leqt2f_kernel(const double* a_ptr, const double* b_ptr, int n, bool clamp) {
     if (a_ptr == nullptr || b_ptr == nullptr) {
         throw std::runtime_error("null input pointer in xstar_solver_leqt2f");
@@ -191,6 +203,10 @@ SolveResult leqt2f_kernel(const double* a_ptr, const double* b_ptr, int n, bool 
     };
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write error from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void write_error(char* err, size_t err_len, const std::string& msg) {
     if (err == nullptr || err_len == 0) return;
     const size_t ncopy = std::min(err_len - 1, msg.size());
@@ -202,14 +218,26 @@ void write_error(char* err, size_t err_len, const std::string& msg) {
 
 extern "C" {
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Return the ABI version for the solver interface so callers can reject incompatible binary layouts before execution.
+// Reference context: Implementation/compatibility helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_solver_abi_version() {
     return 1;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Report the compiled solver backend name capability metadata used by backend selection and provenance.
+// Reference context: Implementation/provenance helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 const char* xstar_solver_backend_name() {
     return "xstar_solver_so_leqt2f_v1";
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute solver leqt2f as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_solver_leqt2f(
     const double* a,
     const double* b,
@@ -241,6 +269,10 @@ int xstar_solver_leqt2f(
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute solver leqt2f trace as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_solver_leqt2f_trace_v1(
     const double* a,
     const double* b,

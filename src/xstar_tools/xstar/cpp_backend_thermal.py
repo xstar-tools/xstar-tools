@@ -148,10 +148,18 @@ _EVALUATOR = ctypes.CFUNCTYPE(
 )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the p operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _p(a: np.ndarray) -> ctypes.POINTER(ctypes.c_double):
     return a.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Load operation for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _load() -> ctypes.CDLL:
     global _LIB
     if _LIB is not None:
@@ -194,6 +202,10 @@ def _load() -> ctypes.CDLL:
     raise RuntimeError("; ".join(errors))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the context operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _context() -> ctypes.c_void_p:
     value = getattr(_TLS, "context", None)
     if value:
@@ -208,6 +220,10 @@ def _context() -> ctypes.c_void_p:
     return out
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the thermal engine status operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def thermal_engine_status() -> dict[str, Any]:
     try:
         lib = _load()
@@ -222,10 +238,18 @@ def thermal_engine_status() -> dict[str, Any]:
         return {"available": False, "abi_version": None, "implementation": None, "feature_flags": 0, "load_error": str(exc)}
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the f64 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _f64(value: Any) -> np.ndarray:
     return np.ascontiguousarray(np.asarray(value, dtype=np.float64))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Apply heatt cpp for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def apply_heatt_cpp(*, lines: Iterable[Mapping[str, Any]], rrcs: Iterable[Mapping[str, Any]], **values: Any) -> dict[str, Any]:
     lib = _load()
     started = time.perf_counter()
@@ -284,6 +308,10 @@ def apply_heatt_cpp(*, lines: Iterable[Mapping[str, Any]], rrcs: Iterable[Mappin
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Execute dsec cpp for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def run_dsec_cpp(state: Any, evaluator: Callable[[Any], Any], *, nlim: int, tinf_t4: float,
                   charge_tolerance: float, thermal_tolerance: float,
                   temperature_stagnation_tolerance: float,
@@ -301,6 +329,10 @@ def run_dsec_cpp(state: Any, evaluator: Callable[[Any], Any], *, nlim: int, tinf
     )
     callback_error: list[BaseException] = []
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the callback operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     @_EVALUATOR
     def callback(_user: int, trial: ctypes.POINTER(_ThermalState), output: ctypes.POINTER(_Evaluation),
                  _error: bytes, _error_size: int) -> int:

@@ -70,6 +70,10 @@ class PhysicalOutputParityResult:
     source_file: str = "xstar/src/xstar/xstar.f90"
     provenance: Mapping[str, Any] = field(default_factory=dict)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Serialize the current state into a plain mapping for diagnostics, provenance, or machine-readable output.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     def as_dict(self) -> dict[str, Any]:
         return {
             "xstar_run_dir": self.xstar_run_dir,
@@ -90,11 +94,19 @@ class PhysicalOutputParityResult:
         }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the relative difference operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _relative_difference(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     scale = np.maximum(np.maximum(np.abs(a), np.abs(b)), 1.0e-300)
     return np.abs(a - b) / scale
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Compare numeric for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _compare_numeric(
     hdu_name: str,
     column_name: str,
@@ -128,6 +140,10 @@ def _compare_numeric(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the normalized strings operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _normalized_strings(values: Any) -> np.ndarray:
     arr = np.asarray(values)
     if arr.dtype.kind == "S":
@@ -135,6 +151,10 @@ def _normalized_strings(values: Any) -> np.ndarray:
     return np.char.rstrip(arr.astype(str))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Compare strings for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _compare_strings(
     hdu_name: str,
     column_name: str,
@@ -172,6 +192,10 @@ _HEADER_PREFIX_EXCLUDE = (
 )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the physical header values operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _physical_header_values(header: Any) -> dict[str, Any]:
     values: dict[str, Any] = {}
     for key, value in header.items():
@@ -183,6 +207,10 @@ def _physical_header_values(header: Any) -> dict[str, Any]:
     return values
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Compare headers for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _compare_headers(
     hdu_name: str,
     xheader: Any,
@@ -218,6 +246,10 @@ def _compare_headers(
     return ready, details, notes
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Compare fits product for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def compare_fits_product(
     xstar_path: str | Path,
     python_path: str | Path,
@@ -321,6 +353,10 @@ _FINAL_ASSIGNMENT = re.compile(
 )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the step log vectors operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _step_log_vectors(text: str) -> tuple[list[np.ndarray], list[np.ndarray]]:
     zones: list[np.ndarray] = []
     finals: list[np.ndarray] = []
@@ -339,6 +375,10 @@ def _step_log_vectors(text: str) -> tuple[list[np.ndarray], list[np.ndarray]]:
     return zones, finals
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Compare step log for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def compare_step_log(
     xstar_path: str | Path,
     python_path: str | Path,
@@ -384,6 +424,10 @@ def compare_step_log(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the discover required files operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _discover_required_files(xstar_dir: Path, python_dir: Path) -> tuple[str, ...]:
     names = set(FINAL_FITS_PRODUCTS) | set(LEGACY_TEXT_PRODUCTS)
     for pattern in DETAIL_PATTERNS:
@@ -392,6 +436,10 @@ def _discover_required_files(xstar_dir: Path, python_dir: Path) -> tuple[str, ..
     return tuple(sorted(names))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Compare physical output directories for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def compare_physical_output_directories(
     xstar_run_dir: str | Path,
     python_run_dir: str | Path,
@@ -439,6 +487,10 @@ def compare_physical_output_directories(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Execute physical parity harness self test for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def run_physical_parity_harness_self_test(
     generated_dir: str | Path,
     *,

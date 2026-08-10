@@ -74,3 +74,13 @@ The corresponding production Python modules are annotated in `0.6.55`; see `pyth
 - `historical/cpp/retired_sources/opacity_type50_experiments.cpp` - retired Type50 12.3.26/12.3.27 experimental kernels; not part of the active native build.
 - `historical/cpp/retired_sources/xstar_backend_common.cpp` - unused backend scaffold translation unit; production shared helpers remain in `xstar_backend_common.hpp`.
 - The active C++ source/header set contains 45 files; no active header was removed in 0.6.57.
+
+## 0.6.73 function-level expansion
+
+The original leading correspondence blocks remain pinned historical evidence.
+Version 0.6.73 adds a second, reversible `XSTAR-FUNCTION-COMMENT` overlay at
+function definitions so maintainers can understand local purpose and physical
+context without first opening the manual/papers. The older overlay checker
+strips this newer layer before validating its original hashes; the dedicated
+`check_source_function_comments.py` gate independently proves the new layer is
+comment-only. See `function_commenting.md`.

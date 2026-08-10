@@ -63,6 +63,10 @@ class EscapeStateBuildResult:
     exact_live_arrays: bool = True
     source_writer_threshold_reconstruction: bool = False
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the complete operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.5-11.6, line and recombination-continuum escape probabilities.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def complete(self) -> bool:
         return (
@@ -72,6 +76,10 @@ class EscapeStateBuildResult:
             and self.n_out_of_range_rrc_indices == 0
         )
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Serialize the current state into a plain mapping for diagnostics, provenance, or machine-readable output.
+    # Reference context: XSTAR Manual ss. 11.5-11.6, line and recombination-continuum escape probabilities.
+    # XSTAR-FUNCTION-COMMENT-END
     def as_dict(self) -> Dict[str, Any]:
         return {
             "run_dir": str(self.run_dir),
@@ -104,6 +112,10 @@ class EscapeStateBuildResult:
         }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Select hdu for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.5-11.6, line and recombination-continuum escape probabilities.
+# XSTAR-FUNCTION-COMMENT-END
 def _select_hdu(hdus: Sequence[Mapping[str, Any]], selector: str | int) -> Mapping[str, Any]:
     if not hdus:
         raise EscapeStateError("detail file contains no XSTAR_RADIAL extensions")
@@ -130,6 +142,10 @@ def _select_hdu(hdus: Sequence[Mapping[str, Any]], selector: str | int) -> Mappi
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the selected prefix operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6, line and recombination-continuum escape probabilities.
+# XSTAR-FUNCTION-COMMENT-END
 def _selected_prefix(hdus: Sequence[Mapping[str, Any]], selected: Mapping[str, Any]) -> Sequence[Mapping[str, Any]]:
     """Return all radial HDUs through the selected zone, in source order."""
     for pos, hdu in enumerate(hdus):
@@ -138,6 +154,10 @@ def _selected_prefix(hdus: Sequence[Mapping[str, Any]], selected: Mapping[str, A
     return (selected,)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Map hdu history for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.5-11.6, line and recombination-continuum escape probabilities.
+# XSTAR-FUNCTION-COMMENT-END
 def _map_hdu_history(
     hdus: Sequence[Mapping[str, Any]], *, size: int, index_keys: Sequence[str],
 ) -> tuple[np.ndarray, np.ndarray, int, int, int, int, int]:
@@ -172,6 +192,10 @@ def _map_hdu_history(
     return tau_in, tau_out, unique, duplicates, out_of_range, carried, accepted
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the number operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6, line and recombination-continuum escape probabilities.
+# XSTAR-FUNCTION-COMMENT-END
 def _number(row: Mapping[str, Any], *keys: str) -> float | None:
     for key in keys:
         value = row.get(key)
@@ -184,6 +208,10 @@ def _number(row: Mapping[str, Any], *keys: str) -> float | None:
     return None
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the index operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6, line and recombination-continuum escape probabilities.
+# XSTAR-FUNCTION-COMMENT-END
 def _index(row: Mapping[str, Any], *keys: str) -> int | None:
     value = _number(row, *keys)
     if value is None:
@@ -194,6 +222,10 @@ def _index(row: Mapping[str, Any], *keys: str) -> int | None:
     return rounded
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Map rows for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.5-11.6, line and recombination-continuum escape probabilities.
+# XSTAR-FUNCTION-COMMENT-END
 def _map_rows(
     rows: Iterable[Mapping[str, Any]],
     *,
@@ -224,6 +256,10 @@ def _map_rows(
     return tau_in, tau_out, accepted, duplicates, out_of_range
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Load escape state from xstar run for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.5-11.6, line and recombination-continuum escape probabilities.
+# XSTAR-FUNCTION-COMMENT-END
 def load_escape_state_from_xstar_run(
     run_dir: str | Path,
     derived: XSTARDerivedPointers,
@@ -345,6 +381,10 @@ def load_escape_state_from_xstar_run(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write escape state npz for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.5-11.6, line and recombination-continuum escape probabilities.
+# XSTAR-FUNCTION-COMMENT-END
 def write_escape_state_npz(result: EscapeStateBuildResult, path: str | Path) -> Path:
     """Write a reusable escape-state NPZ in the element CLI schema."""
     target = Path(path)
@@ -361,6 +401,10 @@ def write_escape_state_npz(result: EscapeStateBuildResult, path: str | Path) -> 
     return target
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write escape state summary for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.5-11.6, line and recombination-continuum escape probabilities.
+# XSTAR-FUNCTION-COMMENT-END
 def write_escape_state_summary(result: EscapeStateBuildResult, out_dir: str | Path) -> Dict[str, Path]:
     """Write JSON and Markdown coverage reports for a derived escape state."""
     root = Path(out_dir)

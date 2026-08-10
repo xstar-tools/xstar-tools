@@ -44,6 +44,10 @@ class RatesBackendStatus:
     cpp_abi_version: int | None = None
     cpp_feature_flags: int | None = None
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Serialize the current state into a plain mapping for diagnostics, provenance, or machine-readable output.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def as_dict(self) -> dict[str, object]:
         return dict(asdict(self))
 
@@ -53,6 +57,10 @@ _CPP_LOAD_ERROR: BaseException | None = None
 _CPP_LIBRARY_PATH: str | None = None
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the candidate library paths operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _candidate_library_paths() -> list[Path]:
     env_path = os.environ.get("XSTAR_ATOMIC_RATES_LIB")
     paths: list[Path] = []
@@ -78,6 +86,10 @@ def _candidate_library_paths() -> list[Path]:
     return unique
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Load cpp library for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _load_cpp_library() -> ctypes.CDLL | None:
     global _CPP_LIB, _CPP_LOAD_ERROR, _CPP_LIBRARY_PATH
     if _CPP_LIB is not None:
@@ -163,12 +175,20 @@ def _load_cpp_library() -> ctypes.CDLL | None:
         return None
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the cpp import error operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def cpp_import_error() -> str | None:
     if _CPP_LOAD_ERROR is None:
         return None
     return f"{type(_CPP_LOAD_ERROR).__name__}: {_CPP_LOAD_ERROR}"
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the backend name operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _backend_name(lib: ctypes.CDLL | None) -> str | None:
     if lib is None:
         return None
@@ -179,6 +199,10 @@ def _backend_name(lib: ctypes.CDLL | None) -> str | None:
         return None
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the abi version operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _abi_version(lib: ctypes.CDLL | None) -> int | None:
     if lib is None:
         return None
@@ -188,6 +212,10 @@ def _abi_version(lib: ctypes.CDLL | None) -> int | None:
         return None
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the feature flags operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _feature_flags(lib: ctypes.CDLL | None) -> int | None:
     if lib is None:
         return None
@@ -197,6 +225,10 @@ def _feature_flags(lib: ctypes.CDLL | None) -> int | None:
         return None
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the rates backend status operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def rates_backend_status(requested: str | None = None) -> RatesBackendStatus:
     req = (requested or os.environ.get("XSTAR_ATOMIC_RATES_BACKEND") or "python").strip().lower()
     if req not in {"python", "cpp", "auto"}:
@@ -220,6 +252,10 @@ def rates_backend_status(requested: str | None = None) -> RatesBackendStatus:
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the probe cpp mg rates operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def probe_cpp_mg_rates(*, n_ions: int = 0, n_records: int = 0) -> str:
     """Call the v0.5.53 skeleton Mg rates entry point.
 
@@ -251,6 +287,10 @@ _ROLE_BY_CODE = {
 }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build mg type7 terms cpp detailed for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def build_mg_type7_terms_cpp_detailed(
     records: list[dict[str, Any]],
     *,
@@ -275,8 +315,16 @@ def build_mg_type7_terms_cpp_detailed(
 
     n = len(records)
     packing_t0 = time.perf_counter()
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the i64 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def i64(name: str) -> np.ndarray:
         return np.ascontiguousarray([int(r[name]) for r in records], dtype=np.int64)
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the f64 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def f64(name: str) -> np.ndarray:
         return np.ascontiguousarray([float(r[name]) for r in records], dtype=np.float64)
 
@@ -353,6 +401,10 @@ def build_mg_type7_terms_cpp_detailed(
     return terms, message, stats
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build mg type7 terms cpp for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def build_mg_type7_terms_cpp(
     records: list[dict[str, Any]],
     *,
@@ -370,6 +422,10 @@ def build_mg_type7_terms_cpp(
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build mg type4 line emissivity cpp detailed for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def build_mg_type4_line_emissivity_cpp_detailed(
     records: list[dict[str, Any]],
     *,
@@ -400,9 +456,17 @@ def build_mg_type4_line_emissivity_cpp_detailed(
     n = len(records)
     packing_t0 = time.perf_counter()
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the i64 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def i64(name: str) -> np.ndarray:
         return np.ascontiguousarray([int(r[name]) for r in records], dtype=np.int64)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the f64 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def f64(name: str) -> np.ndarray:
         return np.ascontiguousarray([float(r[name]) for r in records], dtype=np.float64)
 
@@ -472,6 +536,10 @@ def build_mg_type4_line_emissivity_cpp_detailed(
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Apply mg type4 type50 coarse cpp detailed for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def apply_mg_type4_type50_coarse_cpp_detailed(
     records: list[dict[str, Any]],
     *,
@@ -504,8 +572,16 @@ def apply_mg_type4_type50_coarse_cpp_detailed(
         raise RuntimeError("C++ rates shared library does not expose xstar_rates_apply_mg_type4_type50_coarse")
     n = len(records)
     packing_t0 = time.perf_counter()
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the i64 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def i64(name: str) -> np.ndarray:
         return np.ascontiguousarray([int(r[name]) for r in records], dtype=np.int64)
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the f64 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def f64(name: str) -> np.ndarray:
         return np.ascontiguousarray([float(r[name]) for r in records], dtype=np.float64)
     record_arr=i64("record"); data_type_arr=i64("data_type"); ion_index_arr=i64("ion_index"); ion_stage_arr=i64("ion_stage"); line_index_arr=i64("line_index"); nb1_arr=i64("nb1")
@@ -538,6 +614,10 @@ def apply_mg_type4_type50_coarse_cpp_detailed(
     if rc != 0:
         raise RuntimeError(message or f"xstar_rates_apply_mg_type4_type50_coarse failed with code {rc}")
     ints=out_i64.reshape((n,12)); floats=out_f64.reshape((n,12))
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the status reason operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def _status_reason(code: int) -> str:
         return {
             1: "full_cpp_applied",
@@ -579,6 +659,10 @@ def apply_mg_type4_type50_coarse_cpp_detailed(
     return rows, message, stats
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Apply linopac profile cpp for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def apply_linopac_profile_cpp(
     *,
     optpp: float,

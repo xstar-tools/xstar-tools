@@ -19,10 +19,18 @@ class StandaloneContext:
     fallback_count: int = 0
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the create context operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def create_context(config: Mapping[str, Any]) -> StandaloneContext:
     return StandaloneContext(config=dict(config))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the reset context operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def reset_context(context: StandaloneContext) -> None:
     context.zones_attempted = 0
     context.zones_completed = 0
@@ -30,6 +38,10 @@ def reset_context(context: StandaloneContext) -> None:
     context.fallback_count = 0
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the context stats operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def context_stats(context: StandaloneContext) -> dict[str, int]:
     return {
         "zones_attempted": context.zones_attempted,
@@ -39,6 +51,10 @@ def context_stats(context: StandaloneContext) -> dict[str, int]:
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Execute zone for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def run_zone(
     context: StandaloneContext,
     zone: Mapping[str, Any],
@@ -69,6 +85,10 @@ def run_zone(
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Execute batch for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def run_batch(
     context: StandaloneContext,
     zones: Sequence[Mapping[str, Any]],
@@ -79,6 +99,10 @@ def run_batch(
     return [run_zone(context, zone, allow_scaffold=allow_scaffold) for zone in zones]
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the echo json operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def echo_json(request: Any) -> Any:
     """Small JSON-bridge self-test callable."""
     return {"backend": "python", "request": request, "version": "0.6.48.7.46.21.5"}

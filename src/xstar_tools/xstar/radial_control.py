@@ -80,6 +80,10 @@ class TabulatedRadialDensityState:
     initialized: bool = False
     source_path: str | None = None
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the from rows operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, radial stepping/control predicates.
+    # XSTAR-FUNCTION-COMMENT-END
     @classmethod
     def from_rows(
         cls,
@@ -106,6 +110,10 @@ class TabulatedRadialDensityState:
             source_path=source_path,
         )
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the from file operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, radial stepping/control predicates.
+    # XSTAR-FUNCTION-COMMENT-END
     @classmethod
     def from_file(cls, path: str | Path) -> "TabulatedRadialDensityState":
         """Read the two-column list-directed input used by ``density.dat``."""
@@ -136,10 +144,18 @@ class TabulatedRadialDensityState:
             rows.append((radius, density))
         return cls.from_rows(rows, source_path=str(source))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the row count operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, radial stepping/control predicates.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def row_count(self) -> int:
         return int(self.radii_cm.size)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Read next for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, radial stepping/control predicates.
+    # XSTAR-FUNCTION-COMMENT-END
     def read_next(self) -> TabulatedDensityReadResult:
         """Perform one source-order sequential read with retained EOF values."""
         idx = int(self.next_index_zero_based)
@@ -171,6 +187,10 @@ class TabulatedRadialDensityState:
         )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Initialize tabulated radial density for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, radial stepping/control predicates.
+# XSTAR-FUNCTION-COMMENT-END
 def initialize_tabulated_radial_density(
     state: XSTARPythonState,
     table: TabulatedRadialDensityState,
@@ -203,6 +223,10 @@ def initialize_tabulated_radial_density(
     return result
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Advance tabulated radial density for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, radial stepping/control predicates.
+# XSTAR-FUNCTION-COMMENT-END
 def advance_tabulated_radial_density(
     state: XSTARPythonState,
 ) -> TabulatedDensityReadResult:
@@ -264,6 +288,10 @@ class RadialPassConvergenceContract:
     source_file: str = "xstar/src/xstar/xstar.f90"
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build radial pass convergence contract for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, radial stepping/control predicates.
+# XSTAR-FUNCTION-COMMENT-END
 def build_radial_pass_convergence_contract(
     *, numrec: int, npass: int
 ) -> RadialPassConvergenceContract:
@@ -287,6 +315,10 @@ def build_radial_pass_convergence_contract(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the first pass shell condition operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, radial stepping/control predicates.
+# XSTAR-FUNCTION-COMMENT-END
 def first_pass_shell_condition(state: XSTARPythonState) -> bool:
     """Evaluate the literal first-pass ``do while`` state predicate."""
     return bool(
@@ -301,6 +333,10 @@ def first_pass_shell_condition(state: XSTARPythonState) -> bool:
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the repeated pass shell condition operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, radial stepping/control predicates.
+# XSTAR-FUNCTION-COMMENT-END
 def repeated_pass_shell_condition(
     state: XSTARPythonState, *, completed_shells: int
 ) -> bool:
@@ -326,6 +362,10 @@ __all__ = [
 ]
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Provide the direct-source reference for fortran tabulated density reference cases for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, radial stepping/control predicates.
+# XSTAR-FUNCTION-COMMENT-END
 def direct_fortran_tabulated_density_reference_cases() -> dict[str, object]:
     """Frozen outputs from the literal inline ``xstar.f90`` density fragment."""
     return {
@@ -365,6 +405,10 @@ def direct_fortran_tabulated_density_reference_cases() -> dict[str, object]:
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Execute direct fortran tabulated density validation for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, radial stepping/control predicates.
+# XSTAR-FUNCTION-COMMENT-END
 def run_direct_fortran_tabulated_density_validation(
     *, rtol: float = 2.0e-15, atol: float = 0.0
 ) -> dict[str, bool]:

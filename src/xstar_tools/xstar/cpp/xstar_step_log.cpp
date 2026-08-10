@@ -34,11 +34,19 @@
 namespace xstar_step_log {
 namespace {
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide true production mode for final science-product publication from already-committed run state.
+// Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
+// XSTAR-FUNCTION-COMMENT-END
 bool true_production_mode_v65() {
     const char* value = std::getenv("XSTAR_TRUE_PRODUCTION");
     return value && std::string(value) == "1";
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute count lines for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 std::size_t count_lines(const std::filesystem::path& path) {
     std::ifstream input(path);
     std::size_t count = 0;
@@ -47,6 +55,10 @@ std::size_t count_lines(const std::filesystem::path& path) {
     return count;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide human time for final science-product publication from already-committed run state.
+// Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
+// XSTAR-FUNCTION-COMMENT-END
 std::string human_time(double seconds) {
     if (seconds < 0.0 || !std::isfinite(seconds)) seconds = 0.0;
     const long long whole = static_cast<long long>(seconds);
@@ -57,6 +69,10 @@ std::string human_time(double seconds) {
     return out.str();
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Validate the invariants required by require legacy pprint payload; reject malformed dimensions, pointers, or state before scientific kernels are entered.
+// Reference context: Implementation/safety helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 void require_legacy_pprint_payload(const xstar_run_state::ProductWritingState& state) {
     // v17.25.32: allow a native compact step log while scientific product
     // families are still being repaired.  Oracle/public payload absence is
@@ -77,6 +93,10 @@ void require_legacy_pprint_payload(const xstar_run_state::ProductWritingState& s
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load atomic data version into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
+// XSTAR-FUNCTION-COMMENT-END
 std::string read_atomic_data_version(const std::filesystem::path& atdb) {
     fitsfile* fptr = nullptr;
     int status = 0;
@@ -96,6 +116,10 @@ std::string read_atomic_data_version(const std::filesystem::path& atdb) {
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide parameter numeric value for final science-product publication from already-committed run state.
+// Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
+// XSTAR-FUNCTION-COMMENT-END
 double parameter_numeric_value(const xstar_run_state::ParameterRowState& row) {
     float value = 0.0f;
     static_assert(sizeof(value) == sizeof(row.value_bits), "parameter bits size mismatch");
@@ -104,6 +128,10 @@ double parameter_numeric_value(const xstar_run_state::ParameterRowState& row) {
     return static_cast<double>(value);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide parameter row for final science-product publication from already-committed run state.
+// Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
+// XSTAR-FUNCTION-COMMENT-END
 const xstar_run_state::ParameterRowState* parameter_row(
     const xstar_run_state::ProductWritingState& state,
     const std::string& name) {
@@ -111,6 +139,10 @@ const xstar_run_state::ParameterRowState* parameter_row(
     return nullptr;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide parameter number for final science-product publication from already-committed run state.
+// Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
+// XSTAR-FUNCTION-COMMENT-END
 double parameter_number(const xstar_run_state::ProductWritingState& state,
                         const std::string& name,
                         double fallback = 0.0) {
@@ -118,6 +150,10 @@ double parameter_number(const xstar_run_state::ProductWritingState& state,
     return row ? parameter_numeric_value(*row) : fallback;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide parameter text for final science-product publication from already-committed run state.
+// Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
+// XSTAR-FUNCTION-COMMENT-END
 std::string parameter_text(const xstar_run_state::ProductWritingState& state,
                            const std::string& name,
                            const std::string& fallback = "") {
@@ -125,6 +161,10 @@ std::string parameter_text(const xstar_run_state::ProductWritingState& state,
     return row && !row->comment.empty() ? row->comment : fallback;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide e3 for final science-product publication from already-committed run state.
+// Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
+// XSTAR-FUNCTION-COMMENT-END
 std::string e3(double value) {
     std::ostringstream out;
     out << std::uppercase << std::scientific << std::setprecision(3)
@@ -132,6 +172,10 @@ std::string e3(double value) {
     return out.str();
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Append native input parameters from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
+// XSTAR-FUNCTION-COMMENT-END
 void append_native_input_parameters(std::ofstream& out,
                                     const xstar_run_state::ProductWritingState& state) {
     out << " print option: 3\n \n print option: 2\n input parameters:\n";
@@ -209,6 +253,10 @@ bool read_spectrum_column(const std::filesystem::path& path,
                           std::vector<double>& energy,
                           std::vector<std::vector<double>>& values);
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide finite nonzero vector for final science-product publication from already-committed run state.
+// Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
+// XSTAR-FUNCTION-COMMENT-END
 bool finite_nonzero_vector(const std::vector<double>& values) {
     return std::any_of(values.begin(), values.end(), [](double value) {
         return std::isfinite(value) && std::abs(value) > 1.0e-300;
@@ -216,6 +264,10 @@ bool finite_nonzero_vector(const std::vector<double>& values) {
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide source pprint nry zero based for final science-product publication from already-committed run state.
+// Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
+// XSTAR-FUNCTION-COMMENT-END
 std::size_t source_pprint_nry_zero_based(
     double x,
     const std::vector<double>& energy) {
@@ -255,12 +307,20 @@ std::size_t source_pprint_nry_zero_based(
     return std::min(n - 1u, jlo_one_based);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide source option17 reference bin zero based for final science-product publication from already-committed run state.
+// Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
+// XSTAR-FUNCTION-COMMENT-END
 std::size_t source_option17_reference_bin_zero_based(
     const std::vector<double>& energy) {
     // pprint option 9/17: nry=nbinc(13.6,epi,ncn2)+1.
     return source_pprint_nry_zero_based(13.6, energy);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide source option17 radiation balance percent for final science-product publication from already-committed run state.
+// Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
+// XSTAR-FUNCTION-COMMENT-END
 bool source_option17_radiation_balance_percent(
     const xstar_run_state::FixedEvaluationState& evaluation,
     double& percent) {
@@ -293,6 +353,10 @@ bool source_option17_radiation_balance_percent(
     return std::isfinite(percent);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Append native radial summary from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
+// XSTAR-FUNCTION-COMMENT-END
 void append_native_radial_summary(std::ofstream& out,
                                   const std::filesystem::path& output_dir,
                                   const xstar_run_state::ProductWritingState& state) {
@@ -669,6 +733,10 @@ void append_native_radial_summary(std::ofstream& out,
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide move to last named hdu for final science-product publication from already-committed run state.
+// Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
+// XSTAR-FUNCTION-COMMENT-END
 bool move_to_last_named_hdu(fitsfile* fptr, const std::string& extname) {
     int status = 0;
     int nhdus = 0;
@@ -687,6 +755,10 @@ bool move_to_last_named_hdu(fitsfile* fptr, const std::string& extname) {
     return false;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide column number for final science-product publication from already-committed run state.
+// Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
+// XSTAR-FUNCTION-COMMENT-END
 int column_number(fitsfile* fptr, const char* name) {
     int status = 0;
     int col = 0;
@@ -694,6 +766,10 @@ int column_number(fitsfile* fptr, const char* name) {
     return status == 0 ? col : 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide table rows for final science-product publication from already-committed run state.
+// Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
+// XSTAR-FUNCTION-COMMENT-END
 long long table_rows(fitsfile* fptr) {
     int status = 0;
     LONGLONG rows = 0;
@@ -701,6 +777,10 @@ long long table_rows(fitsfile* fptr) {
     return status == 0 ? static_cast<long long>(rows) : 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load integer cell into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
+// XSTAR-FUNCTION-COMMENT-END
 long long read_integer_cell(fitsfile* fptr, int col, long long row) {
     if (col <= 0) return 0;
     int status = 0;
@@ -711,6 +791,10 @@ long long read_integer_cell(fitsfile* fptr, int col, long long row) {
     return status == 0 ? static_cast<long long>(value) : 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load double cell into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
+// XSTAR-FUNCTION-COMMENT-END
 double read_double_cell(fitsfile* fptr, int col, long long row) {
     if (col <= 0) return 0.0;
     int status = 0;
@@ -721,6 +805,10 @@ double read_double_cell(fitsfile* fptr, int col, long long row) {
     return status == 0 && std::isfinite(value) ? value : 0.0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load string cell into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
+// XSTAR-FUNCTION-COMMENT-END
 std::string read_string_cell(fitsfile* fptr, int col, long long row) {
     if (col <= 0) return "unavailable";
     int status = 0;
@@ -744,6 +832,10 @@ struct SourceRankIdentityV064812341 {
     double key = 0.0;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute source pprint line identity rank for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<SourceRankIdentityV064812341> source_pprint_line_identity_rank_v064812341(
     const xstar_run_state::ProductWritingState& state,
     bool depth_mode,
@@ -818,6 +910,10 @@ std::vector<SourceRankIdentityV064812341> source_pprint_line_identity_rank_v0648
     return result;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Append native public line sections from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
+// XSTAR-FUNCTION-COMMENT-END
 void append_native_public_line_sections(std::ofstream& out,
                                         const std::filesystem::path& output_dir,
                                         const xstar_run_state::ProductWritingState& state) {
@@ -892,6 +988,10 @@ void append_native_public_line_sections(std::ofstream& out,
 
 struct DetailRrcLogRow { long long index=0,level_index=0; std::string ion,lower,upper; double energy=0; };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide split simple csv for final science-product publication from already-committed run state.
+// Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<std::string> split_simple_csv(const std::string& line) {
     std::vector<std::string> out;
     std::string current;
@@ -905,6 +1005,10 @@ std::vector<std::string> split_simple_csv(const std::string& line) {
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide csv integer for final science-product publication from already-committed run state.
+// Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
+// XSTAR-FUNCTION-COMMENT-END
 long long csv_integer(const std::vector<std::string>& fields, std::size_t index) {
     if (index >= fields.size() || fields[index].empty()) return 0;
     try { return std::stoll(fields[index]); } catch (...) { return 0; }
@@ -925,11 +1029,19 @@ struct RrcSourceRecord {
     std::string ion_label;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide csv double for final science-product publication from already-committed run state.
+// Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
+// XSTAR-FUNCTION-COMMENT-END
 double csv_double(const std::vector<std::string>& fields, std::size_t index) {
     if (index >= fields.size() || fields[index].empty()) return 0.0;
     try { return std::stod(fields[index]); } catch (...) { return 0.0; }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide roman lower for final science-product publication from already-committed run state.
+// Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
+// XSTAR-FUNCTION-COMMENT-END
 std::string roman_lower(long long value) {
     struct Roman { int value; const char* text; };
     static const Roman tokens[] = {
@@ -944,6 +1056,10 @@ std::string roman_lower(long long value) {
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide source ion label for final science-product publication from already-committed run state.
+// Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
+// XSTAR-FUNCTION-COMMENT-END
 std::string source_ion_label(long long element_z, long long ion_index) {
     std::string symbol;
     if (element_z == 1) symbol = "h";
@@ -953,10 +1069,18 @@ std::string source_ion_label(long long element_z, long long ion_index) {
     return symbol + "_" + roman_lower(ion_index);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide hydrogen or helium ion label for final science-product publication from already-committed run state.
+// Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
+// XSTAR-FUNCTION-COMMENT-END
 bool hydrogen_or_helium_ion_label(const std::string& label) {
     return label.rfind("h_", 0) == 0 || label.rfind("he_", 0) == 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load native ion row minima into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
+// XSTAR-FUNCTION-COMMENT-END
 std::map<std::pair<long long,long long>,long long> load_native_ion_row_minima(
     const std::filesystem::path& output_dir,
     const xstar_run_state::ProductWritingState& state) {
@@ -999,6 +1123,10 @@ std::map<std::pair<long long,long long>,long long> load_native_ion_row_minima(
     return minima;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load rrc source records into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
+// XSTAR-FUNCTION-COMMENT-END
 [[maybe_unused]] std::vector<RrcSourceRecord> load_rrc_source_records(
     const std::filesystem::path& output_dir,
     const xstar_run_state::ProductWritingState& state) {
@@ -1068,6 +1196,10 @@ std::vector<int> named_hdu_numbers(fitsfile* fptr, const std::string& extname);
     const std::filesystem::path& output_dir,
     const xstar_run_state::ProductWritingState& state);
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Publish Option-24 recombination-edge rows from clean per-ion Type-7 identities and current continuum optical depths; do not reproduce the known Fortran pprint(24) stale-local H I/He II alias.
+// Reference context: XSTAR Manual ss11.5, 11.7 and ch12 rate type 7; frozen Option-24 qualification semantics from the accepted parity campaign.
+// XSTAR-FUNCTION-COMMENT-END
 void append_native_public_rrc_sections(std::ofstream& out,
                                        const std::filesystem::path&,
                                        const xstar_run_state::ProductWritingState& state,
@@ -1148,6 +1280,10 @@ void append_native_public_rrc_sections(std::ofstream& out,
     out << std::setprecision(17);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Append native ion columns from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
+// XSTAR-FUNCTION-COMMENT-END
 void append_native_ion_columns(std::ofstream& out,const std::filesystem::path& output_dir){
     fitsfile*f=nullptr;int status=0;fits_open_file(&f,(output_dir/"xout_abund1.fits").c_str(),READONLY,&status);
     out<<" print option:27\n ion column densities\n index, ion, column density\n";
@@ -1159,6 +1295,10 @@ void append_native_ion_columns(std::ofstream& out,const std::filesystem::path& o
     out<<"\n";out.unsetf(std::ios::floatfield);out<<std::setprecision(17);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide named hdu numbers for final science-product publication from already-committed run state.
+// Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<int> named_hdu_numbers(fitsfile* fptr, const std::string& extname) {
     std::vector<int> out;
     int status = 0, nhdus = 0;
@@ -1175,6 +1315,10 @@ std::vector<int> named_hdu_numbers(fitsfile* fptr, const std::string& extname) {
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide native shell geometry for final science-product publication from already-committed run state.
+// Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<ShellGeometry> native_shell_geometry(
     const std::filesystem::path& output_dir,
     const xstar_run_state::ProductWritingState& state) {
@@ -1214,6 +1358,10 @@ std::vector<ShellGeometry> native_shell_geometry(
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Append native detail line section from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
+// XSTAR-FUNCTION-COMMENT-END
 void append_native_detail_line_section(
     std::ofstream& out,
     const std::filesystem::path& output_dir,
@@ -1321,6 +1469,10 @@ void append_native_detail_line_section(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load spectrum column into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
+// XSTAR-FUNCTION-COMMENT-END
 bool read_spectrum_column(const std::filesystem::path& path,
                           const char* extname,
                           const char* energy_name,
@@ -1343,6 +1495,10 @@ bool read_spectrum_column(const std::filesystem::path& path,
     int cs=0;fits_close_file(f,&cs);return true;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide trapezoid values for final science-product publication from already-committed run state.
+// Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
+// XSTAR-FUNCTION-COMMENT-END
 double trapezoid_values(const std::vector<double>& energy,const std::vector<double>& value){
     if (energy.size() != value.size() || energy.size() < 2) return 0.0;
     double sum = 0.0;
@@ -1352,6 +1508,10 @@ double trapezoid_values(const std::vector<double>& energy,const std::vector<doub
     return sum;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Append native energy sums from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
+// XSTAR-FUNCTION-COMMENT-END
 void append_native_energy_sums(std::ofstream& out,const std::filesystem::path& output_dir,const xstar_run_state::ProductWritingState& state){
     std::vector<double> ce,de;std::vector<std::vector<double>> cv,dv;
     bool have_incident=read_spectrum_column(output_dir/"xout_spect1.fits","XSTAR_SPECTRA","energy",{"incident"},ce,cv) &&
@@ -1406,6 +1566,10 @@ void append_native_energy_sums(std::ofstream& out,const std::filesystem::path& o
     out.unsetf(std::ios::floatfield);out<<std::setprecision(17);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Append native product sections from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
+// XSTAR-FUNCTION-COMMENT-END
 void append_native_product_sections(std::ofstream& out,const std::filesystem::path& output_dir,const xstar_run_state::ProductWritingState& state){
     append_native_public_line_sections(out,output_dir,state);
     append_native_public_rrc_sections(out,output_dir,state,true,false);
@@ -1416,6 +1580,10 @@ void append_native_product_sections(std::ofstream& out,const std::filesystem::pa
     append_native_energy_sums(out,output_dir,state);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Append source like timing footer from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
+// XSTAR-FUNCTION-COMMENT-END
 void append_source_like_timing_footer(std::ofstream& out,
                                       double measured_run_seconds,
                                       double formatter_seconds) {
@@ -1429,6 +1597,10 @@ void append_source_like_timing_footer(std::ofstream& out,
 
 } // namespace
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write the native STEP diagnostic/publication log from the committed radial/product state using the accepted per-option publication semantics.
+// Reference context: XSTAR Manual ch5 (output/print controls) plus ss11.5-11.6 for the reported line/continuum/RRC quantities.
+// XSTAR-FUNCTION-COMMENT-END
 Result write_native_step_log(
     const std::filesystem::path& output_dir,
     xstar_run_state::ProductWritingState& state) {
@@ -1485,12 +1657,20 @@ Result write_native_step_log(
     return result;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write python step log from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
+// XSTAR-FUNCTION-COMMENT-END
 Result write_python_step_log(
     const std::filesystem::path& output_dir,
     xstar_run_state::ProductWritingState& state) {
     return write_native_step_log(output_dir, state);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write python step log prefix from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
+// XSTAR-FUNCTION-COMMENT-END
 Result write_python_step_log_prefix(
     const std::filesystem::path& output_dir,
     xstar_run_state::ProductWritingState& state) {

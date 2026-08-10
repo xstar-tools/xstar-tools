@@ -82,6 +82,10 @@ class GSmoothResult:
     source_file: str = "xstar/xstarlib/src/gsmooth.f90"
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the vector operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual s. 11.6, continuum/spectral smoothing in the emitted-radiation path.
+# XSTAR-FUNCTION-COMMENT-END
 def _vector(values: Sequence[float], *, name: str, minimum: int) -> np.ndarray:
     arr = np.asarray(values, dtype=float).reshape(-1)
     if arr.size < int(minimum):
@@ -91,6 +95,10 @@ def _vector(values: Sequence[float], *, name: str, minimum: int) -> np.ndarray:
     return arr
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the matrix operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual s. 11.6, continuum/spectral smoothing in the emitted-radiation path.
+# XSTAR-FUNCTION-COMMENT-END
 def _matrix(
     values: Sequence[Sequence[float]], *, name: str, rows: int, columns: int
 ) -> np.ndarray:
@@ -104,6 +112,10 @@ def _matrix(
     return arr
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Require source index for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual s. 11.6, continuum/spectral smoothing in the emitted-radiation path.
+# XSTAR-FUNCTION-COMMENT-END
 def _require_source_index(arr: np.ndarray, source_index: int, *, name: str) -> int:
     idx = int(source_index) - 1
     if idx < 0 or idx >= arr.size:
@@ -113,6 +125,10 @@ def _require_source_index(arr: np.ndarray, source_index: int, *, name: str) -> i
     return idx
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the thermal turbulent velocity cm s operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual s. 11.6, continuum/spectral smoothing in the emitted-radiation path.
+# XSTAR-FUNCTION-COMMENT-END
 def thermal_turbulent_velocity_cm_s(
     temperature_1e4K: float, turbulent_velocity_km_s: float
 ) -> float:
@@ -129,6 +145,10 @@ def thermal_turbulent_velocity_cm_s(
     return (turbulent * turbulent + thermal * thermal) ** float(np.float32(0.5))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the gsmooth2 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual s. 11.6, continuum/spectral smoothing in the emitted-radiation path.
+# XSTAR-FUNCTION-COMMENT-END
 def gsmooth2(
     *,
     vtherm_cm_s: float,
@@ -259,6 +279,10 @@ def gsmooth2(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the gsmooth operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual s. 11.6, continuum/spectral smoothing in the emitted-radiation path.
+# XSTAR-FUNCTION-COMMENT-END
 def gsmooth(
     *,
     temperature_1e4K: float,
@@ -328,6 +352,10 @@ def gsmooth(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Provide the direct-source reference for gsmooth inputs for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual s. 11.6, continuum/spectral smoothing in the emitted-radiation path.
+# XSTAR-FUNCTION-COMMENT-END
 def _direct_gsmooth_inputs() -> Mapping[str, object]:
     ncn = 32
     ncn2 = 14
@@ -375,6 +403,10 @@ def _direct_gsmooth_inputs() -> Mapping[str, object]:
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Provide the direct-source reference for fortran gsmooth reference case for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual s. 11.6, continuum/spectral smoothing in the emitted-radiation path.
+# XSTAR-FUNCTION-COMMENT-END
 def direct_fortran_gsmooth_reference_case() -> Mapping[str, object]:
     """Frozen output from the unmodified original Fortran wrapper/helper."""
     return {
@@ -454,6 +486,10 @@ def direct_fortran_gsmooth_reference_case() -> Mapping[str, object]:
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Provide the direct-source reference for gsmooth python result for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual s. 11.6, continuum/spectral smoothing in the emitted-radiation path.
+# XSTAR-FUNCTION-COMMENT-END
 def _direct_gsmooth_python_result() -> GSmoothResult:
     inp = _direct_gsmooth_inputs()
     return gsmooth(
@@ -467,6 +503,10 @@ def _direct_gsmooth_python_result() -> GSmoothResult:
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Execute direct fortran gsmooth validation for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual s. 11.6, continuum/spectral smoothing in the emitted-radiation path.
+# XSTAR-FUNCTION-COMMENT-END
 def run_direct_fortran_gsmooth_validation(
     *, rtol: float = 2.0e-14, atol: float = 1.0e-30
 ) -> Mapping[str, object]:

@@ -44,6 +44,10 @@ TYPE49_LEVELTEMP_LAYOUT_MAGIC_V048746222 = 222
 TYPE99_LEVELTEMP_LAYOUT_MAGIC_V048746223 = 223
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Parse abundance spec for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Implementation orchestration for the qualified fixed/native path; no independent paper formula.
+# XSTAR-FUNCTION-COMMENT-END
 def _parse_abundance_spec(text: str) -> dict[int, float]:
     result: dict[int, float] = {}
     for item in str(text).split(","):
@@ -106,6 +110,10 @@ class ActiveLoweringResult:
     atdb_fingerprint_sha256: str
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the walk forbidden operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Implementation orchestration for the qualified fixed/native path; no independent paper formula.
+# XSTAR-FUNCTION-COMMENT-END
 def _walk_forbidden(value: Any, path: str = "root") -> None:
     if isinstance(value, dict):
         for key, child in value.items():
@@ -117,6 +125,10 @@ def _walk_forbidden(value: Any, path: str = "root") -> None:
             _walk_forbidden(child, f"{path}[{index}]")
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the as int operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Implementation orchestration for the qualified fixed/native path; no independent paper formula.
+# XSTAR-FUNCTION-COMMENT-END
 def _as_int(value: Any, field: str) -> int:
     try:
         return int(value)
@@ -124,6 +136,10 @@ def _as_int(value: Any, field: str) -> int:
         raise ValueError(f"invalid integer {field}: {value!r}") from exc
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the as float operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Implementation orchestration for the qualified fixed/native path; no independent paper formula.
+# XSTAR-FUNCTION-COMMENT-END
 def _as_float(value: Any, field: str) -> float:
     try:
         result = float(value)
@@ -134,6 +150,10 @@ def _as_float(value: Any, field: str) -> float:
     return result
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write csv for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Implementation orchestration for the qualified fixed/native path; no independent paper formula.
+# XSTAR-FUNCTION-COMMENT-END
 def _write_csv(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
     if not rows:
         raise ValueError(f"cannot write empty CSV {path.name}")
@@ -143,6 +163,10 @@ def _write_csv(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
         writer.writerows(rows)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the compile program spec operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Implementation orchestration for the qualified fixed/native path; no independent paper formula.
+# XSTAR-FUNCTION-COMMENT-END
 def compile_program_spec(spec_path: str | Path, output_dir: str | Path) -> ProgramValidation:
     """Compile a small JSON development fixture into the raw program format."""
     spec = json.loads(Path(spec_path).read_text())
@@ -261,6 +285,10 @@ def compile_program_spec(spec_path: str | Path, output_dir: str | Path) -> Progr
     return validation
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the manifest operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Implementation orchestration for the qualified fixed/native path; no independent paper formula.
+# XSTAR-FUNCTION-COMMENT-END
 def _manifest(directory: Path) -> dict[str, str]:
     result: dict[str, str] = {}
     for line in (directory / "manifest.txt").read_text().splitlines():
@@ -270,6 +298,10 @@ def _manifest(directory: Path) -> dict[str, str]:
     return result
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Validate the current state invariants before the value is consumed downstream.
+# Reference context: Implementation orchestration for the qualified fixed/native path; no independent paper formula.
+# XSTAR-FUNCTION-COMMENT-END
 def validate_program_directory(directory: str | Path) -> ProgramValidation:
     root = Path(directory)
     manifest = _manifest(root)
@@ -309,6 +341,10 @@ def validate_program_directory(directory: str | Path) -> ProgramValidation:
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the classify record operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Implementation orchestration for the qualified fixed/native path; no independent paper formula.
+# XSTAR-FUNCTION-COMMENT-END
 def _classify_record(rate_type: int, data_type: int) -> str:
     if rate_type in TOPOLOGY_RATE_TYPES:
         return "topology_metadata"
@@ -319,6 +355,10 @@ def _classify_record(rate_type: int, data_type: int) -> str:
     return "unsupported_physics"
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the coverage from counts operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Implementation orchestration for the qualified fixed/native path; no independent paper formula.
+# XSTAR-FUNCTION-COMMENT-END
 def _coverage_from_counts(counts: Mapping[tuple[int, int], int], active_elements: Sequence[int]) -> dict[str, Any]:
     data_type_counts: dict[int, int] = {}
     category_counts: dict[str, int] = {}
@@ -356,6 +396,10 @@ def _coverage_from_counts(counts: Mapping[tuple[int, int], int], active_elements
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the scan active records operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Implementation orchestration for the qualified fixed/native path; no independent paper formula.
+# XSTAR-FUNCTION-COMMENT-END
 def _scan_active_records(master: Any, derived: Any, subset: Any) -> tuple[dict[tuple[int, int], int], dict[int, list[int]], list[dict[str, int]]]:
     import numpy as np
 
@@ -412,6 +456,10 @@ def _scan_active_records(master: Any, derived: Any, subset: Any) -> tuple[dict[t
     return counts, executable_by_z, unsupported_rows
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the inspect atdb coverage operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Implementation orchestration for the qualified fixed/native path; no independent paper formula.
+# XSTAR-FUNCTION-COMMENT-END
 def inspect_atdb_coverage(atdb_path: str | Path, element_z: Iterable[int]) -> dict[str, Any]:
     from .atomic_database import load_atomic_database_state
     from .active_subsets import build_active_atdb_subset
@@ -426,6 +474,10 @@ def inspect_atdb_coverage(atdb_path: str | Path, element_z: Iterable[int]) -> di
         built.master.close()
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the atdb fingerprint operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Implementation orchestration for the qualified fixed/native path; no independent paper formula.
+# XSTAR-FUNCTION-COMMENT-END
 def _atdb_fingerprint(master: Any, active_elements: Sequence[int]) -> tuple[str, dict[str, Any]]:
     stat = Path(master.path).stat()
     payload = {
@@ -444,6 +496,10 @@ def _atdb_fingerprint(master: Any, active_elements: Sequence[int]) -> tuple[str,
     return digest, payload
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the level payload operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Implementation orchestration for the qualified fixed/native path; no independent paper formula.
+# XSTAR-FUNCTION-COMMENT-END
 def _level_payload(master: Any, derived: Any, ion_index: int, local_level: int) -> tuple[int, float, float, str, int, int]:
     import numpy as np
 
@@ -464,6 +520,10 @@ def _level_payload(master: Any, derived: Any, ion_index: int, local_level: int) 
     return rec, energy, weight, label, principal_n, orbital_l
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the level ionization potential operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Implementation orchestration for the qualified fixed/native path; no independent paper formula.
+# XSTAR-FUNCTION-COMMENT-END
 def _level_ionization_potential(master: Any, derived: Any, ion_index: int, local_level: int) -> float:
     """Return the literal level-table rlev(4) ionization-potential field."""
     import numpy as np
@@ -481,6 +541,10 @@ def _level_ionization_potential(master: Any, derived: Any, ion_index: int, local
     return float(reals[3])
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build element layout for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Implementation orchestration for the qualified fixed/native path; no independent paper formula.
+# XSTAR-FUNCTION-COMMENT-END
 def _build_element_layout(master: Any, derived: Any, element_z: int, element_index: int, global_level_index_by_key: Mapping[tuple[int, int, int], int] | None = None) -> tuple[dict[str, Any], list[dict[str, Any]], Any, dict[int, Any]]:
     from .element_equilibrium import build_element_compact_basis
 
@@ -542,6 +606,10 @@ def _build_element_layout(master: Any, derived: Any, element_z: int, element_ind
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the source type13 table operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Implementation orchestration for the qualified fixed/native path; no independent paper formula.
+# XSTAR-FUNCTION-COMMENT-END
 def _source_type13_table(master: Any, derived: Any, ion_index: int) -> dict[int, dict[str, Any]]:
     """Return the literal source Type-13 table keyed by its local level index.
 
@@ -593,6 +661,10 @@ def _source_type13_table(master: Any, derived: Any, ion_index: int) -> dict[int,
     return table
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build source leveltemp value snapshots for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Implementation orchestration for the qualified fixed/native path; no independent paper formula.
+# XSTAR-FUNCTION-COMMENT-END
 def _build_source_leveltemp_value_snapshots(
     master: Any, derived: Any, basis: Any
 ) -> tuple[
@@ -637,6 +709,10 @@ def _build_source_leveltemp_value_snapshots(
     workspace: dict[int, dict[str, Any]] = {}
     owners: dict[int, dict[str, Any]] = {}
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the overwrite operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Implementation orchestration for the qualified fixed/native path; no independent paper formula.
+    # XSTAR-FUNCTION-COMMENT-END
     def overwrite(block: Any, sequence: int, phase: str) -> None:
         ion_index = int(block.ion_index)
         stage = int(block.ion_stage)
@@ -666,6 +742,10 @@ def _build_source_leveltemp_value_snapshots(
     return snapshots, owner_snapshots, tables
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build source leveltemp energy snapshots for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Implementation orchestration for the qualified fixed/native path; no independent paper formula.
+# XSTAR-FUNCTION-COMMENT-END
 def _build_source_leveltemp_energy_snapshots(
     master: Any, derived: Any, basis: Any
 ) -> tuple[dict[int, dict[int, float]], dict[int, dict[int, dict[str, Any]]]]:
@@ -679,6 +759,10 @@ def _build_source_leveltemp_energy_snapshots(
     }
     return energy, owners
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the compact row for local operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Implementation orchestration for the qualified fixed/native path; no independent paper formula.
+# XSTAR-FUNCTION-COMMENT-END
 def _compact_row_for_local(basis: Any, ion_index: int, local_level: int) -> int:
     key = (int(ion_index), int(local_level))
     if key not in basis.role_to_row:
@@ -686,6 +770,10 @@ def _compact_row_for_local(basis: Any, ion_index: int, local_level: int) -> int:
     return int(basis.role_to_row[key])
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the compact row for idest operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Implementation orchestration for the qualified fixed/native path; no independent paper formula.
+# XSTAR-FUNCTION-COMMENT-END
 def _compact_row_for_idest(basis: Any, block: Any, idest: int) -> int:
     row = int(block.compact_start) + int(idest) - 1
     if row < 1 or row > int(basis.n_rows):
@@ -693,22 +781,42 @@ def _compact_row_for_idest(basis: Any, block: Any, idest: int) -> int:
     return row
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the row energy operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Implementation orchestration for the qualified fixed/native path; no independent paper formula.
+# XSTAR-FUNCTION-COMMENT-END
 def _row_energy(rows: Sequence[Mapping[str, Any]], one_based: int) -> float:
     return float(rows[int(one_based) - 1]["energy_ev"])
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the row weight operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Implementation orchestration for the qualified fixed/native path; no independent paper formula.
+# XSTAR-FUNCTION-COMMENT-END
 def _row_weight(rows: Sequence[Mapping[str, Any]], one_based: int) -> float:
     return max(float(rows[int(one_based) - 1]["statistical_weight"]), 1.0e-300)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the row n operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Implementation orchestration for the qualified fixed/native path; no independent paper formula.
+# XSTAR-FUNCTION-COMMENT-END
 def _row_n(rows: Sequence[Mapping[str, Any]], one_based: int) -> int:
     return int(rows[int(one_based) - 1].get("principal_n", 0))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the row l operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Implementation orchestration for the qualified fixed/native path; no independent paper formula.
+# XSTAR-FUNCTION-COMMENT-END
 def _row_l(rows: Sequence[Mapping[str, Any]], one_based: int) -> int:
     return int(rows[int(one_based) - 1].get("orbital_l", 0))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the lower record operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Implementation orchestration for the qualified fixed/native path; no independent paper formula.
+# XSTAR-FUNCTION-COMMENT-END
 def _lower_record(
     master: Any, derived: Any, rec: int, element_index: int,
     rows: Sequence[Mapping[str, Any]], basis: Any, blocks: Mapping[int, Any],
@@ -751,6 +859,10 @@ def _lower_record(
     block = blocks[ion_index]
     stage = int(derived.ion_stage[ion_index])
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the local pair operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Implementation orchestration for the qualified fixed/native path; no independent paper formula.
+    # XSTAR-FUNCTION-COMMENT-END
     def local_pair(a: int, b: int) -> tuple[int, int]:
         ra = _compact_row_for_local(basis, ion_index, a)
         rb = _compact_row_for_local(basis, ion_index, b)
@@ -1347,12 +1459,20 @@ def _lower_record(
                 int(candidate.ion_stage): candidate for candidate in basis.blocks
             }
 
+            # XSTAR-FUNCTION-COMMENT-BEGIN
+            # Purpose: Implement the incoming value operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+            # Reference context: Implementation orchestration for the qualified fixed/native path; no independent paper formula.
+            # XSTAR-FUNCTION-COMMENT-END
             def incoming_value(column: int) -> tuple[float, float]:
                 value = current_snapshot.get(column)
                 if value is None:
                     return 0.0, 0.0
                 return (float(value["energy_ev"]), float(value["statistical_weight"]))
 
+            # XSTAR-FUNCTION-COMMENT-BEGIN
+            # Purpose: Implement the candidate values operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+            # Reference context: Implementation orchestration for the qualified fixed/native path; no independent paper formula.
+            # XSTAR-FUNCTION-COMMENT-END
             def candidate_values(column: int) -> tuple[int, list[float], list[float]]:
                 mask = 0
                 energies: list[float] = []
@@ -1434,6 +1554,10 @@ def _lower_record(
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the lower active atdb operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Implementation orchestration for the qualified fixed/native path; no independent paper formula.
+# XSTAR-FUNCTION-COMMENT-END
 def lower_active_atdb(
     atdb_path: str | Path,
     output_dir: str | Path,
@@ -1616,6 +1740,10 @@ def lower_active_atdb(
         built.master.close()
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the main operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Implementation orchestration for the qualified fixed/native path; no independent paper formula.
+# XSTAR-FUNCTION-COMMENT-END
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)

@@ -85,11 +85,19 @@ private:
     std::streambuf* old_ = nullptr;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement verbose controller diagnostics in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 bool verbose_controller_diagnostics_v064897() {
     const char* value = std::getenv("XSTAR_V064897_VERBOSE_CONTROLLER_DIAGNOSTICS");
     return value && std::string(value) == "1";
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement compact step diagnostics in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 bool compact_step_diagnostics_v0648115() {
     const char* value = std::getenv("XSTAR_V0648117_STEP_DIAGNOSTICS");
     return value && std::string(value) == "1";
@@ -138,6 +146,10 @@ struct ProductionZoneSessionV0648110 {
 
 thread_local ProductionZoneSessionV0648110* g_production_zone_session_v0648110 = nullptr;
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement production zone wait before call in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 void production_zone_wait_before_call_v0648110(std::size_t call) {
     auto* session = g_production_zone_session_v0648110;
     if (!session) return;
@@ -160,6 +172,10 @@ void production_zone_mark_complete_v0648110(
 xstar_bound_free_perf_v064895 g_bound_free_perf_v064895_last{};
 bool g_bound_free_perf_v064895_valid = false;
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute diff spectral perf for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 xstar_spectral_perf_v064892 diff_spectral_perf_v064892(
     const xstar_spectral_perf_v064892& after,
     const xstar_spectral_perf_v064892& before) {
@@ -225,6 +241,10 @@ struct PerformanceInstrumentationV064890 {
 
 thread_local PerformanceInstrumentationV064890* g_performance_v064890 = nullptr;
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement elapsed seconds in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 inline double elapsed_seconds_v064890(const std::chrono::steady_clock::time_point& started) {
     return std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
 }
@@ -233,6 +253,10 @@ inline double elapsed_seconds_v064890(const std::chrono::steady_clock::time_poin
 
 // v82 patch 5.20.17.3.8 diagnostic sidecars.  These are strictly opt-in and
 // never feed controller or product state.
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write patch5201738 gsmooth rccemis edge from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void write_patch5201738_gsmooth_rccemis_edge(
     std::size_t source_sequence,
     std::size_t call_index,
@@ -260,6 +284,10 @@ void write_patch5201738_gsmooth_rccemis_edge(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write patch5201738 radial zone rccemis edge from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void write_patch5201738_radial_zone_rccemis_edge(
     const xstar_run_state::WholeRunAccumulatedState& whole) {
     const char* raw = std::getenv("XSTAR_V82_PATCH5201738_RCCEMIS_ATTRIBUTION_DIR");
@@ -345,6 +373,10 @@ struct Options {
     int emit_timing_summary = -1;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement usage in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 void usage(std::ostream& output) {
     output <<
         "xstar_cpp " XSTAR_API_VERSION_STRING "\n"
@@ -391,6 +423,10 @@ void usage(std::ostream& output) {
         "Calls 3-4 remain staged behind exact call-2/evaluation-1 element, continuum, charge, and hmctot parity.\n";
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Parse size from its external text/argument representation into validated native values.
+// Reference context: Implementation/input helper; XSTAR Manual ch4 describes parameter inputs, but this parser has no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 bool parse_size(const char* text, std::size_t& output) {
     if (!text || !*text) return false;
     char* end = nullptr;
@@ -400,6 +436,10 @@ bool parse_size(const char* text, std::size_t& output) {
     return true;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Parse options from its external text/argument representation into validated native values.
+// Reference context: Implementation/input helper; XSTAR Manual ch4 describes parameter inputs, but this parser has no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 bool parse_options(int argc, char** argv, Options& options, std::string& error) {
     if (argc < 2) return true;
     options.command = argv[1];
@@ -642,6 +682,10 @@ bool parse_options(int argc, char** argv, Options& options, std::string& error) 
     return true;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Build config from the source-ordered inputs required by the next calculation stage.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 xstar_config_v1 make_config(const Options& options) {
     xstar_config_v1 config{};
     xstar_config_init_v1(&config);
@@ -665,6 +709,10 @@ xstar_config_v1 make_config(const Options& options) {
     return config;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement create context in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 int create_context(const Options& options, xstar_context** context) {
     xstar_config_v1 config = make_config(options);
     const int status = xstar_context_create_v1(&config, context);
@@ -678,6 +726,10 @@ int create_context(const Options& options, xstar_context** context) {
     return status;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement command list backends in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 int command_list_backends() {
     std::cout << "abi_version=" << xstar_api_abi_version() << "\n";
     std::cout << "version=" << xstar_api_version_string() << "\n";
@@ -687,6 +739,10 @@ int command_list_backends() {
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement command backend info in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 int command_backend_info(const Options& options) {
     xstar_context* context = nullptr;
     const int create_status = create_context(options, &context);
@@ -719,6 +775,10 @@ struct ZoneBuffers {
     std::array<double, 5> opacity{};
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement initialize zone in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 void initialize_zone(std::uint64_t id, ZoneBuffers& buffers,
                      xstar_zone_input_v1& input, xstar_zone_output_v1& output) {
     xstar_zone_input_init_v1(&input);
@@ -744,6 +804,10 @@ void initialize_zone(std::uint64_t id, ZoneBuffers& buffers,
     output.opacity_capacity = buffers.opacity.size();
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Validate the invariants required by validate scaffold; reject malformed dimensions, pointers, or state before scientific kernels are entered.
+// Reference context: Implementation/safety helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 bool validate_scaffold(const xstar_zone_input_v1& input, const xstar_zone_output_v1& output,
                        const ZoneBuffers& buffers, const std::string& backend) {
     if ((output.status_flags & XSTAR_ZONE_STATUS_SCAFFOLD_RESULT) == 0 ||
@@ -761,6 +825,10 @@ bool validate_scaffold(const xstar_zone_input_v1& input, const xstar_zone_output
     return true;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement command self test in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 int command_self_test(Options options) {
     options.allow_scaffold = true;
     xstar_context* context = nullptr;
@@ -836,6 +904,10 @@ struct ElementBuffers {
     std::array<double, 2> relative{};
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement initialize element in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 void initialize_element(int element_z, ElementBuffers& b,
                         xstar_element_input_v1& input, xstar_element_output_v1& output) {
     auto set = [&](int q, int row, int col, double aj1, double aj2) {
@@ -915,6 +987,10 @@ void initialize_element(int element_z, ElementBuffers& b,
 #undef XSTAR_SET_ELEMENT_BUFFER
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Validate the invariants required by validate element; reject malformed dimensions, pointers, or state before scientific kernels are entered.
+// Reference context: Implementation/safety helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 bool validate_element(const ElementBuffers& b, const xstar_element_output_v1& output) {
     return std::fabs(b.populations[0] - 1.0 / 3.0) < 1.0e-12 &&
            std::fabs(b.populations[1] - 2.0 / 3.0) < 1.0e-12 &&
@@ -926,6 +1002,10 @@ bool validate_element(const ElementBuffers& b, const xstar_element_output_v1& ou
            b.dense[2] == 2.0 && b.dense[3] == -1.0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute command spectral self test for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 int command_spectral_self_test(const Options& options) {
     xstar_context* context = nullptr;
     const int create_status = create_context(options, &context);
@@ -1059,6 +1139,10 @@ int command_spectral_self_test(const Options& options) {
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute thermal test evaluator as a contribution to, or control step in, the local thermal-equilibrium iteration.
+// Reference context: XSTAR Manual s11.4.4 and s11.6; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int thermal_test_evaluator(
     void*, const xstar_thermal_state_v1* state,
     xstar_thermal_evaluation_v1* result, char*, std::size_t
@@ -1074,6 +1158,10 @@ int thermal_test_evaluator(
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute command thermal self test as a contribution to, or control step in, the local thermal-equilibrium iteration.
+// Reference context: XSTAR Manual s11.4.4 and s11.6; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int command_thermal_self_test(const Options& options) {
     xstar_context* context = nullptr;
     const int create_status = create_context(options, &context);
@@ -1132,6 +1220,10 @@ int command_thermal_self_test(const Options& options) {
     return accepted ? 0 : 10;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement command convergence self test in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 int command_convergence_self_test(const Options& options) {
     xstar_context* context = nullptr;
     const int create_status = create_context(options, &context);
@@ -1171,6 +1263,10 @@ struct SecantIeeeOracle {
     std::array<double, 21> observed_temperature{};
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement secant ieee evaluator in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 int secant_ieee_evaluator(
     void* user, const xstar_thermal_state_v1* state,
     xstar_thermal_evaluation_v1* result, char*, std::size_t
@@ -1202,6 +1298,10 @@ int secant_ieee_evaluator(
     ++oracle->index; return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement command secant ieee self test in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 int command_secant_ieee_self_test(const Options& options) {
     static constexpr std::array<double,21> expected{{
         100.0,100.0,100.0,100.0,69.44443892549619,48.225300976769695,33.489789683449544,
@@ -1233,6 +1333,10 @@ int command_secant_ieee_self_test(const Options& options) {
     xstar_context_destroy(context); return accepted?0:12;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement command element self test in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 int command_element_self_test(const Options& options, bool evaluation, bool construction) {
     xstar_context* context = nullptr;
     const int create_status = create_context(options, &context);
@@ -1308,6 +1412,10 @@ int command_element_self_test(const Options& options, bool evaluation, bool cons
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement command run zone in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 int command_run_zone(const Options& options) {
     xstar_context* context = nullptr;
     const int create_status = create_context(options, &context);
@@ -1335,6 +1443,10 @@ int command_run_zone(const Options& options) {
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement create compiled case in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 int create_compiled_case(const Options& options, xstar_compiled_case_context** context) {
     if (options.case_dir.empty()) {
         std::cerr << "--case-dir is required\n";
@@ -1349,6 +1461,10 @@ int create_compiled_case(const Options& options, xstar_compiled_case_context** c
     return status;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement command production self test in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 int command_production_self_test(const Options& options) {
     xstar_compiled_case_context* context = nullptr;
     const int create_status = create_compiled_case(options, &context);
@@ -1387,6 +1503,10 @@ int command_production_self_test(const Options& options) {
     return accepted ? 0 : 50;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement command production batch self test in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 int command_production_batch_self_test(const Options& options) {
     xstar_compiled_case_context* context = nullptr;
     const int create_status = create_compiled_case(options, &context);
@@ -1418,6 +1538,10 @@ int command_production_batch_self_test(const Options& options) {
     return accepted ? 0 : 51;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement command run compiled case in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 int command_run_compiled_case(const Options& options) {
     if (options.output_dir.empty()) {
         std::cerr << "--output-dir is required\n";
@@ -1453,6 +1577,10 @@ int command_run_compiled_case(const Options& options) {
 
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement fits card in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::string fits_card(const std::string& key, const std::string& value, const std::string& comment = {}) {
     std::string card = key;
     if (card.size() < 8) card.append(8 - card.size(), ' ');
@@ -1463,6 +1591,10 @@ std::string fits_card(const std::string& key, const std::string& value, const st
     return card;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write fits header from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void write_fits_header(std::ofstream& out, std::vector<std::string> cards) {
     cards.push_back(fits_card("END", ""));
     std::string block;
@@ -1472,6 +1604,10 @@ void write_fits_header(std::ofstream& out, std::vector<std::string> cards) {
     out.write(block.data(), static_cast<std::streamsize>(block.size()));
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write be double from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void write_be_double(std::ofstream& out, double value) {
     std::array<unsigned char, 8> bytes{};
     std::memcpy(bytes.data(), &value, 8);
@@ -1481,12 +1617,20 @@ void write_be_double(std::ofstream& out, double value) {
     out.write(reinterpret_cast<const char*>(bytes.data()), 8);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement pad fits data in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 void pad_fits_data(std::ofstream& out, std::size_t bytes) {
     const std::size_t padding = (2880 - (bytes % 2880)) % 2880;
     std::array<char, 2880> zeros{};
     if (padding) out.write(zeros.data(), static_cast<std::streamsize>(padding));
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write native state fits from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void write_native_state_fits(
     const std::filesystem::path& path,
     const xstar_fixed_state_input_v1& input,
@@ -1542,6 +1686,10 @@ void write_native_state_fits(
     pad_fits_data(out, 64 * 24);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement command run fixed state in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 int command_run_fixed_state(const Options& options) {
     if (options.case_dir.empty() || options.output_dir.empty()) {
         std::cerr << "run-fixed-state requires --case-dir and --output-dir\n";
@@ -1682,6 +1830,10 @@ int command_run_fixed_state(const Options& options) {
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement command fixed state self test in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 int command_fixed_state_self_test(const Options& options, bool batch_mode) {
     if (options.case_dir.empty()) {
         std::cerr << "--case-dir RAW_PROGRAM_DIR is required\n";
@@ -1869,6 +2021,10 @@ struct TrajectoryRow {
     double reference_lnerr=0.0;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement split simple csv in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<std::string> split_simple_csv(const std::string& line) {
     std::vector<std::string> fields;
     std::string value;
@@ -1888,6 +2044,10 @@ struct RadiationField {
     std::string mode = "synthetic_64_bin_development";
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load radiation field into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 RadiationField read_radiation_field(const std::string& path) {
     RadiationField field;
     if (path.empty()) {
@@ -1942,6 +2102,10 @@ struct DsecRadiationWorkspace {
     std::vector<double> bremsa;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load dsec radiation workspace into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 DsecRadiationWorkspace read_dsec_radiation_workspace(const std::string& path) {
     DsecRadiationWorkspace workspace;
     if (path.empty()) return workspace;
@@ -1978,6 +2142,10 @@ struct ContinuumTauWorkspace {
     std::vector<double> tau_out;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load continuum tau workspace into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 ContinuumTauWorkspace read_continuum_tau_workspace(const std::string& path) {
     ContinuumTauWorkspace workspace;
     if (path.empty()) return workspace;
@@ -2007,6 +2175,10 @@ ContinuumTauWorkspace read_continuum_tau_workspace(const std::string& path) {
     return workspace;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load trajectory rows into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<TrajectoryRow> read_trajectory_rows(const std::string& path) {
     std::ifstream input(path);
     if (!input) throw std::runtime_error("cannot open trajectory CSV: "+path);
@@ -2036,6 +2208,10 @@ std::vector<TrajectoryRow> read_trajectory_rows(const std::string& path) {
     return rows;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement command run fixed trajectory in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 int command_run_fixed_trajectory(const Options& options) {
     if (options.case_dir.empty()||options.trajectory_csv.empty()||options.output_dir.empty()) {
         std::cerr << "run-fixed-trajectory requires --case-dir, --trajectory-csv, and --output-dir\n";
@@ -2135,6 +2311,10 @@ int command_run_fixed_trajectory(const Options& options) {
 
 std::vector<double> read_binary_double_vector(const std::filesystem::path& path);
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement command run fixed evaluation in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 int command_run_fixed_evaluation(const Options& options) {
     if (options.case_dir.empty() || options.trajectory_csv.empty() || options.output_dir.empty()) {
         std::cerr << "run-fixed-evaluation requires --case-dir, --trajectory-csv, and --output-dir\n";
@@ -2378,6 +2558,10 @@ int command_run_fixed_evaluation(const Options& options) {
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement capture source ion stage fractions in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 void capture_source_ion_stage_fractions_v064812316(
     const xstar_fixed_state_context* context,
     std::map<int, std::vector<double>>& out) {
@@ -2409,6 +2593,10 @@ void capture_source_ion_stage_fractions_v064812316(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement capture source detail publication state in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 void capture_source_detail_publication_state_v064812318(
     const xstar_fixed_state_context* context,
     std::vector<double>& populations,
@@ -2547,6 +2735,10 @@ struct FixedDsecSnapshot {
     std::vector<xstar_run_state::ElementThermalProductState> element_thermal_products;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement production zone mark complete in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 void production_zone_mark_complete_v0648110(
     std::size_t call,
     const FixedDsecSnapshot& snapshot,
@@ -2584,6 +2776,10 @@ void attach_native_product_diagnostics_v70(
     FixedDsecSnapshot& snapshot);
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement lightweight snapshot in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 FixedDsecSnapshot lightweight_snapshot_v65(const FixedDsecSnapshot& source) {
     FixedDsecSnapshot out;
     out.kind = source.kind;
@@ -2635,6 +2831,10 @@ FixedDsecSnapshot lightweight_snapshot_v65(const FixedDsecSnapshot& source) {
 
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement split csv simple in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<std::string> split_csv_simple(const std::string& line) {
     std::vector<std::string> fields;
     std::string field;
@@ -2643,6 +2843,10 @@ std::vector<std::string> split_csv_simple(const std::string& line) {
     return fields;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute attach native thermal families as a contribution to, or control step in, the local thermal-equilibrium iteration.
+// Reference context: XSTAR Manual s11.4.4 and s11.6; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void attach_native_thermal_families(
     std::vector<FixedDsecSnapshot>& snapshots,
     const std::filesystem::path& path) {
@@ -2768,6 +2972,10 @@ struct PerEvaluationGateResultV1724 {
     std::string failure_reason;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load binary double vector into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<double> read_binary_double_vector(const std::filesystem::path& path) {
     std::ifstream in(path, std::ios::binary | std::ios::ate);
     if (!in) throw std::runtime_error("cannot open workspace payload: " + path.string());
@@ -2782,6 +2990,10 @@ std::vector<double> read_binary_double_vector(const std::filesystem::path& path)
     return values;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load call start workspaces into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<CallStartWorkspace> read_call_start_workspaces(const std::string& directory) {
     std::vector<CallStartWorkspace> out;
     if (directory.empty()) return out;
@@ -2806,6 +3018,10 @@ std::vector<CallStartWorkspace> read_call_start_workspaces(const std::string& di
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load runtime state workspace values into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 CallStartWorkspace read_runtime_state_workspace_values(
     const RuntimeStateWorkspace& workspace) {
     const std::string prefix = "call_" + std::to_string(workspace.call_index) + "_";
@@ -2837,6 +3053,10 @@ CallStartWorkspace read_runtime_state_workspace_values(
     return values;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load runtime state workspaces into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<RuntimeStateWorkspace> read_runtime_state_workspaces(
     const std::string& directory,
     const std::vector<TrajectoryRow>& reference) {
@@ -2886,6 +3106,10 @@ std::vector<RuntimeStateWorkspace> read_runtime_state_workspaces(
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load mg primary budget into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<MgPrimaryBudget> read_mg_primary_budget(const std::string& path) {
     std::vector<MgPrimaryBudget> out;
     if (path.empty()) return out;
@@ -2923,6 +3147,10 @@ struct Call1ThermalOracle {
     double charge_residual=0.0, hmctot=0.0;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load call1 thermal oracle into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<Call1ThermalOracle> read_call1_thermal_oracle(const std::string& path) {
     std::vector<Call1ThermalOracle> out;
     if (path.empty()) return out;
@@ -3048,21 +3276,37 @@ void append_gate_manifest_v1724(
 
 constexpr double kCanonicalComparisonZeroFloorV048746226 = 1.0e-30;
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement canonical numeric in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 double canonical_numeric_v048746226(double value) {
     if (std::isfinite(value) && std::abs(value) < kCanonicalComparisonZeroFloorV048746226) return 0.0;
     return value;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement canonical e7 in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::string canonical_e7(double value) {
     std::ostringstream stream;
     stream << std::scientific << std::setprecision(7) << canonical_numeric_v048746226(value);
     return stream.str();
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement canonical e7 equal in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 bool canonical_e7_equal(double left, double right) {
     return std::isfinite(left) && std::isfinite(right) && canonical_e7(left) == canonical_e7(right);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source trajectory roundoff close in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 bool source_trajectory_roundoff_close_v172517(
     double proposed,
     double expected,
@@ -3075,11 +3319,19 @@ bool source_trajectory_roundoff_close_v172517(
     return diff / scale <= relative_limit;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute source trajectory temperature ok as a contribution to, or control step in, the local thermal-equilibrium iteration.
+// Reference context: XSTAR Manual s11.4.4 and s11.6; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 bool source_trajectory_temperature_ok_v172517(double proposed, double expected) {
     return canonical_e7_equal(proposed, expected) ||
         source_trajectory_roundoff_close_v172517(proposed, expected, 1.0e-8, 1.0e-12);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source trajectory electron fraction ok in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 bool source_trajectory_electron_fraction_ok_v172517(double proposed, double expected) {
     return canonical_e7_equal(proposed, expected) ||
         source_trajectory_roundoff_close_v172517(proposed, expected, 1.0e-12, 1.0e-12);
@@ -3091,6 +3343,10 @@ bool source_trajectory_electron_fraction_ok_v172517(double proposed, double expe
 // effective evaluator state to the source contract before the fixed-state
 // calculation.  The later gate must not re-reject the same accepted roundoff
 // merely because canonical .7e formatting straddles a decimal boundary.
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement controller state ok in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 bool controller_state_ok_v172518(
     const FixedDsecSnapshot& snapshot,
     const SequenceContractV1724& contract) {
@@ -3101,6 +3357,10 @@ bool controller_state_ok_v172518(
     return temperature_ok && electron_fraction_ok;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Validate the invariants required by required continuum tau capacity; reject malformed dimensions, pointers, or state before scientific kernels are entered.
+// Reference context: Implementation/safety helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 std::size_t required_continuum_tau_capacity_v73(
     std::size_t maximum_record_continuum_index_one_based,
     std::size_t native_continuum_count,
@@ -3122,6 +3382,10 @@ std::size_t required_continuum_tau_capacity_v73(
 // A source pointer N is consumed from runtime slot N-1, so it needs N slots,
 // not N+1.  Retained product opakab/tauc/elumab arrays remain one-based and
 // continue to reserve source slot zero independently.
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Validate the invariants required by required runtime continuum tau capacity; reject malformed dimensions, pointers, or state before scientific kernels are entered.
+// Reference context: Implementation/safety helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 std::size_t required_runtime_continuum_tau_capacity_v82_patch4(
     std::size_t maximum_record_continuum_index_one_based,
     std::size_t native_continuum_count) {
@@ -3132,6 +3396,10 @@ constexpr double kTrajectoryZeroFloorV82 = 1.0e-40;
 constexpr double kTrajectoryRelativeToleranceV82 = 5.0e-7;
 constexpr double kTrajectoryAbsoluteToleranceV82 = 1.0e-12;
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement scientific close in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 bool scientific_close_v82(double source, double native) {
     if (!std::isfinite(source) || !std::isfinite(native)) return false;
     if (std::abs(source) <= kTrajectoryZeroFloorV82 &&
@@ -3142,6 +3410,10 @@ bool scientific_close_v82(double source, double native) {
     return diff / scale <= kTrajectoryRelativeToleranceV82;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement command trajectory alignment self test in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 int command_trajectory_alignment_self_test(const Options&) {
     const double proposed_t4 = 6.5615298855644753;
     const double expected_t4 = 6.561529885564275;
@@ -3168,11 +3440,19 @@ int command_trajectory_alignment_self_test(const Options&) {
     return accepted ? 0 : 20;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement set callback error in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 void set_callback_error(char* error, std::size_t error_size, const std::string& message) {
     if (!error || error_size == 0) return;
     std::snprintf(error, error_size, "%s", message.c_str());
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement command controller canonical e7 self test in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 int command_controller_canonical_e7_self_test(const Options&) {
     const double accepted_source = 3.317273715112183e-09;
     const double accepted_native = 3.3172737151121832e-09;
@@ -3209,6 +3489,10 @@ int command_controller_canonical_e7_self_test(const Options&) {
     return accepted ? 0 : 20;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement fixed dsec evaluator in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 int fixed_dsec_evaluator(
     void* user_data,
     const xstar_thermal_state_v1* trial_state,
@@ -3897,6 +4181,10 @@ int fixed_dsec_evaluator(
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Append final fixed snapshot from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 int append_final_fixed_snapshot(
     FixedDsecEvaluatorData& data,
     const xstar_thermal_state_v1& state,
@@ -3919,6 +4207,10 @@ int append_final_fixed_snapshot(
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement find reference row in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 const TrajectoryRow* find_reference_row(
     const std::vector<TrajectoryRow>& trajectory,
     const std::string& kind,
@@ -3931,6 +4223,10 @@ const TrajectoryRow* find_reference_row(
     return nullptr;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement command run fixed dsec in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 int command_run_fixed_dsec(const Options& options) {
     const auto v25_run_wall_start = std::chrono::steady_clock::now();
     if (options.case_dir.empty() || options.trajectory_csv.empty() || options.output_dir.empty()) {
@@ -4801,6 +5097,10 @@ int command_run_fixed_dsec(const Options& options) {
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement physical run search roots in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<std::filesystem::path> physical_run_search_roots(const Options& options) {
     std::vector<std::filesystem::path> roots;
     auto add = [&](std::filesystem::path path) {
@@ -4827,6 +5127,10 @@ std::vector<std::filesystem::path> physical_run_search_roots(const Options& opti
     return roots;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement first existing path in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::filesystem::path first_existing_path(
     const std::vector<std::filesystem::path>& candidates, bool directory) {
     for (const auto& candidate : candidates) {
@@ -4839,12 +5143,20 @@ std::filesystem::path first_existing_path(
     return {};
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement environment path in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::filesystem::path environment_path(const char* name, bool directory) {
     const char* value = std::getenv(name);
     if (!value || !*value) return {};
     return first_existing_path({std::filesystem::path(value)}, directory);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement sibling release roots in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<std::filesystem::path> sibling_release_roots(
     const std::vector<std::filesystem::path>& roots) {
     std::vector<std::filesystem::path> packages;
@@ -4865,6 +5177,10 @@ std::vector<std::filesystem::path> sibling_release_roots(
     return packages;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute resolve physical asset as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::filesystem::path resolve_physical_asset(
     const std::string& explicit_value,
     const char* environment_name,
@@ -4892,12 +5208,20 @@ std::filesystem::path resolve_physical_asset(
 
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load text file into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 std::string read_text_file(const std::filesystem::path& path) {
     std::ifstream in(path);
     if (!in) return {};
     return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement json number value in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 double json_number_value(const std::string& text, const std::string& key, double fallback) {
     try {
         const std::regex re("\\\"" + key + "\\\"\\s*:\\s*(?:\\\"([^\\\"]*)\\\"|([-+0-9.eE]+))");
@@ -4909,6 +5233,10 @@ double json_number_value(const std::string& text, const std::string& key, double
     } catch (...) { return fallback; }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement json string value in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::string json_string_value(const std::string& text, const std::string& key, const std::string& fallback) {
     try {
         const std::regex re("\\\"" + key + "\\\"\\s*:\\s*\\\"([^\\\"]*)\\\"");
@@ -4918,12 +5246,20 @@ std::string json_string_value(const std::string& text, const std::string& key, c
     } catch (...) { return fallback; }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement float bits local in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::uint32_t float_bits_local(float value) {
     std::uint32_t bits = 0;
     std::memcpy(&bits, &value, sizeof(bits));
     return bits;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement parameter row in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 xstar_run_state::ParameterRowState parameter_row(std::uint16_t index, const std::string& name, double value, const std::string& comment = "native standalone parameter") {
     xstar_run_state::ParameterRowState row;
     row.index = index;
@@ -4934,6 +5270,10 @@ xstar_run_state::ParameterRowState parameter_row(std::uint16_t index, const std:
     return row;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement public parameter row in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 xstar_run_state::ParameterRowState public_parameter_row_v172534(
     std::uint16_t index,
     const std::string& name,
@@ -4949,6 +5289,10 @@ xstar_run_state::ParameterRowState public_parameter_row_v172534(
     return row;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement native public parameter rows from json in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<xstar_run_state::ParameterRowState> native_public_parameter_rows_from_json_v172534(
     const std::filesystem::path& parameters_path) {
     const std::string json = read_text_file(parameters_path);
@@ -5030,6 +5374,10 @@ struct StandaloneElementSpec { int z = 0; std::string symbol; double abundance =
 const std::array<const char*,31> kStandaloneSymbols = {{"","h","he","li","be","b","c","n","o","f","ne","na","mg","al","si","p","s","cl","ar","k","ca","sc","ti","v","cr","mn","fe","co","ni","cu","zn"}};
 const std::array<const char*,31> kStandaloneRoman = {{"","i","ii","iii","iv","v","vi","vii","viii","ix","x","xi","xii","xiii","xiv","xv","xvi","xvii","xviii","xix","xx","xxi","xxii","xxiii","xxiv","xxv","xxvi","xxvii","xxviii","xxix","xxx"}};
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement active elements from parameters in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<StandaloneElementSpec> active_elements_from_parameters(const std::string& json) {
     std::vector<StandaloneElementSpec> out;
     for (int z = 1; z <= 30; ++z) {
@@ -5051,6 +5399,10 @@ std::vector<StandaloneElementSpec> active_elements_from_parameters(const std::st
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write native standalone case metadata from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 [[maybe_unused]] void write_native_standalone_case_metadata(const std::filesystem::path& dir, const std::vector<StandaloneElementSpec>& elements) {
     std::filesystem::create_directories(dir);
     {
@@ -5075,6 +5427,10 @@ std::vector<StandaloneElementSpec> active_elements_from_parameters(const std::st
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Build standalone native product state from the source-ordered inputs required by the next calculation stage.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 [[maybe_unused]] xstar_run_state::ProductWritingState build_standalone_native_product_state(
     const Options& options,
     const std::filesystem::path& case_dir,
@@ -5325,6 +5681,10 @@ std::vector<StandaloneElementSpec> active_elements_from_parameters(const std::st
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement csv columns local in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::map<std::string,std::size_t> csv_columns_local(const std::string& header) {
     std::map<std::string,std::size_t> cols;
     const auto names = split_simple_csv(header);
@@ -5332,6 +5692,10 @@ std::map<std::string,std::size_t> csv_columns_local(const std::string& header) {
     return cols;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement csv value local in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::string csv_value_local(const std::vector<std::string>& row,
                             const std::map<std::string,std::size_t>& cols,
                             const std::string& name,
@@ -5341,10 +5705,18 @@ std::string csv_value_local(const std::vector<std::string>& row,
     return row[it->second];
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement finite or in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 double finite_or(double value, double fallback) {
     return std::isfinite(value) ? value : fallback;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement standalone radiation candidate in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::filesystem::path standalone_radiation_candidate(const Options& options) {
     if (!options.radiation_csv.empty() && std::filesystem::is_regular_file(options.radiation_csv)) {
         return options.radiation_csv;
@@ -5357,6 +5729,10 @@ std::filesystem::path standalone_radiation_candidate(const Options& options) {
     return {};
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load standalone radiation field into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 RadiationField read_standalone_radiation_field(const Options& options) {
     const auto candidate = standalone_radiation_candidate(options);
     if (!candidate.empty()) return read_radiation_field(candidate.string());
@@ -5378,10 +5754,18 @@ RadiationField read_standalone_radiation_field(const Options& options) {
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source energy grid in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<double> source_energy_grid_v67(std::size_t n) {
     return xstar_source_real_energy_grid::build(n);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source nbinc in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::size_t source_nbinc_v67(double energy, const std::vector<double>& grid) {
     const std::size_t extent = grid.size() - std::max<std::size_t>(2, grid.size() / 50);
     if (extent < 2) throw std::runtime_error("standalone source nbinc extent is too small");
@@ -5397,6 +5781,10 @@ std::size_t source_nbinc_v67(double energy, const std::vector<double>& grid) {
     return (dhi < dlo ? hi : lo) + 1;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source powerlaw radiation in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 RadiationField source_powerlaw_radiation_v67(const xstar_atdb_runtime::ProductionParameters& params) {
     RadiationField field;
     field.energy_ev = source_energy_grid_v67(static_cast<std::size_t>(params.ncn2));
@@ -5431,6 +5819,10 @@ RadiationField source_powerlaw_radiation_v67(const xstar_atdb_runtime::Productio
     return field;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load general standalone radiation into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 RadiationField read_general_standalone_radiation_v67(
     const Options& options,
     const xstar_atdb_runtime::ProductionParameters& params) {
@@ -5452,6 +5844,10 @@ RadiationField read_general_standalone_radiation_v67(
     return field;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load level identities from case into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<xstar_run_state::LevelIdentityState> read_level_identities_from_case(const std::filesystem::path& case_dir) {
     std::map<int,int> z_by_element;
     {
@@ -5498,6 +5894,10 @@ std::vector<xstar_run_state::LevelIdentityState> read_level_identities_from_case
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute synthesize line identities from native state for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<xstar_run_state::LineIdentityState> synthesize_line_identities_from_native_state(
         const std::vector<xstar_run_state::LevelIdentityState>& levels,
         std::size_t native_line_count,
@@ -5522,6 +5922,10 @@ std::vector<xstar_run_state::LineIdentityState> synthesize_line_identities_from_
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute synthesize rrc identities from native state for the bound-free/photoionization/recombination-continuum path using the current radiation field and level populations.
+// Reference context: XSTAR Manual ss11.5, 11.6.1, 11.7; Kallman & Bautista (2001); ATDB ch12.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<xstar_run_state::RrcIdentityState> synthesize_rrc_identities_from_native_state(
         const std::vector<xstar_run_state::LevelIdentityState>& levels,
         std::size_t native_continuum_count,
@@ -5551,6 +5955,10 @@ std::vector<xstar_run_state::RrcIdentityState> synthesize_rrc_identities_from_na
 
 bool vector_has_nonzero(const std::vector<double>& values);
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement copy real native snapshot in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 xstar_run_state::FixedEvaluationState copy_real_native_snapshot(
         const FixedDsecSnapshot& source,
         double delta_radius_cm) {
@@ -5697,12 +6105,20 @@ xstar_run_state::FixedEvaluationState copy_real_native_snapshot(
     return target;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement vector has nonzero in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 bool vector_has_nonzero(const std::vector<double>& values) {
     for (double v : values) if (std::isfinite(v) && std::abs(v) > 1.0e-300) return true;
     return false;
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement retained product array path in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::filesystem::path retained_product_array_path(
     const xstar_run_state::ProductWritingState& product,
     std::size_t hdu_number,
@@ -5712,6 +6128,10 @@ std::filesystem::path retained_product_array_path(
     return product.product_metadata_path / "exact_product_state_bridge" / dir.str() / (name + ".bin");
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement retained double count in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::size_t retained_double_count(const std::filesystem::path& path) {
     if (!std::filesystem::is_regular_file(path)) return 0;
     const auto bytes = std::filesystem::file_size(path);
@@ -5719,6 +6139,10 @@ std::size_t retained_double_count(const std::filesystem::path& path) {
     return static_cast<std::size_t>(bytes / sizeof(double));
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement retained array has nonzero in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 bool retained_array_has_nonzero(const std::filesystem::path& path) {
     std::ifstream in(path, std::ios::binary);
     if (!in) return false;
@@ -5729,6 +6153,10 @@ bool retained_array_has_nonzero(const std::filesystem::path& path) {
     return false;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Validate the invariants required by require retained product array; reject malformed dimensions, pointers, or state before scientific kernels are entered.
+// Reference context: Implementation/safety helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 void require_retained_product_array(
     const xstar_run_state::ProductWritingState& product,
     std::size_t hdu_number,
@@ -5746,6 +6174,10 @@ void require_retained_product_array(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Validate the invariants required by require one retained product array; reject malformed dimensions, pointers, or state before scientific kernels are entered.
+// Reference context: Implementation/safety helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 void require_one_retained_product_array(
     const xstar_run_state::ProductWritingState& product,
     std::size_t hdu_number,
@@ -5770,6 +6202,10 @@ constexpr std::size_t kOraclePublicLineRows = 600u;
 constexpr std::size_t kOracleContinuumRows = 9999u;
 constexpr std::size_t kMinimumFullXoutStepBodyLines = 100u;
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement retained product array count in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::size_t retained_product_array_count(
     const xstar_run_state::ProductWritingState& product,
     std::size_t hdu_number,
@@ -5777,6 +6213,10 @@ std::size_t retained_product_array_count(
     return retained_double_count(retained_product_array_path(product, hdu_number, name));
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Validate the invariants required by require retained product array count; reject malformed dimensions, pointers, or state before scientific kernels are entered.
+// Reference context: Implementation/safety helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 void require_retained_product_array_count(
     const xstar_run_state::ProductWritingState& product,
     std::size_t hdu_number,
@@ -5791,6 +6231,10 @@ void require_retained_product_array_count(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Validate the invariants required by validate full accepted product trajectory and oracle rows; reject malformed dimensions, pointers, or state before scientific kernels are entered.
+// Reference context: Implementation/safety helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 void validate_full_accepted_product_trajectory_and_oracle_rows(
     const xstar_run_state::ProductWritingState& product,
     std::size_t controller_evaluations) {
@@ -5867,18 +6311,30 @@ void validate_full_accepted_product_trajectory_and_oracle_rows(
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement resize or zero in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<double> resize_or_zero(std::vector<double> values, std::size_t count) {
     if (values.size() > count) values.resize(count);
     if (values.size() < count) values.resize(count, 0.0);
     return values;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement one based identity indices in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<double> one_based_identity_indices(std::size_t count) {
     std::vector<double> out(count, 0.0);
     for (std::size_t i = 0; i < count; ++i) out[i] = static_cast<double>(i + 1);
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute line identity indices for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<double> line_identity_indices(const xstar_run_state::ProductWritingState& product) {
     std::vector<double> out;
     out.reserve(product.line_identities.size());
@@ -5886,6 +6342,10 @@ std::vector<double> line_identity_indices(const xstar_run_state::ProductWritingS
     return out.empty() ? one_based_identity_indices(1) : out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute rrc identity indices for the bound-free/photoionization/recombination-continuum path using the current radiation field and level populations.
+// Reference context: XSTAR Manual ss11.5, 11.6.1, 11.7; Kallman & Bautista (2001); ATDB ch12.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<double> rrc_identity_indices(const xstar_run_state::ProductWritingState& product) {
     std::vector<double> out;
     out.reserve(product.rrc_identities.size());
@@ -5893,6 +6353,10 @@ std::vector<double> rrc_identity_indices(const xstar_run_state::ProductWritingSt
     return out.empty() ? one_based_identity_indices(1) : out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement level identity indices in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<double> level_identity_indices(const xstar_run_state::ProductWritingState& product) {
     std::vector<double> out;
     out.reserve(product.level_identities.size());
@@ -5900,10 +6364,18 @@ std::vector<double> level_identity_indices(const xstar_run_state::ProductWriting
     return out.empty() ? one_based_identity_indices(1) : out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement vector at or zero in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 double vector_at_or_zero(const std::vector<double>& values, std::size_t index) {
     return index < values.size() ? values[index] : 0.0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement two plane or scalar in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 double two_plane_or_scalar(const std::vector<double>& values, std::size_t plane_count, std::size_t compact_index, std::size_t direct_index, std::size_t plane) {
     if (plane_count > 0 && direct_index < plane_count && plane * plane_count + direct_index < values.size()) {
         return values[plane * plane_count + direct_index];
@@ -5916,6 +6388,10 @@ double two_plane_or_scalar(const std::vector<double>& values, std::size_t plane_
     return 0.0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute line plane values for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 [[maybe_unused]] std::vector<double> line_plane_values(const std::vector<double>& primary,
                                       const std::vector<double>& fallback,
                                       std::size_t count,
@@ -5931,6 +6407,10 @@ double two_plane_or_scalar(const std::vector<double>& values, std::size_t plane_
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute rrc plane values for the bound-free/photoionization/recombination-continuum path using the current radiation field and level populations.
+// Reference context: XSTAR Manual ss11.5, 11.6.1, 11.7; Kallman & Bautista (2001); ATDB ch12.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<double> rrc_plane_values(const xstar_run_state::ProductWritingState& product,
                                      const xstar_run_state::ExactSourceWorkspaceState& ws,
                                      const std::vector<double>& primary,
@@ -5959,6 +6439,10 @@ std::vector<double> rrc_plane_values(const xstar_run_state::ProductWritingState&
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute rrc scalar values for the bound-free/photoionization/recombination-continuum path using the current radiation field and level populations.
+// Reference context: XSTAR Manual ss11.5, 11.6.1, 11.7; Kallman & Bautista (2001); ATDB ch12.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<double> rrc_scalar_values(const xstar_run_state::ProductWritingState& product,
                                       [[maybe_unused]] const xstar_run_state::ExactSourceWorkspaceState& ws,
                                       const std::vector<double>& primary,
@@ -5983,6 +6467,10 @@ std::vector<double> rrc_scalar_values(const xstar_run_state::ProductWritingState
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write retained double array file from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void write_retained_double_array_file(const std::filesystem::path& path, const std::vector<double>& values) {
     std::filesystem::create_directories(path.parent_path());
     std::ofstream out(path, std::ios::binary);
@@ -5991,6 +6479,10 @@ void write_retained_double_array_file(const std::filesystem::path& path, const s
     if (!out) throw std::runtime_error("cannot write retained native product array: " + path.string());
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement csv escape field in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::string csv_escape_field(const std::string& value) {
     if (value.find_first_of(",\"\n\r") == std::string::npos) return value;
     std::string out = "\"";
@@ -6007,10 +6499,18 @@ struct NativeArrayInventoryRow {
     bool nonzero = false;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement retained product array memory key in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::string retained_product_array_memory_key(std::size_t hdu, const std::string& name) {
     return std::to_string(hdu) + ":" + name;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Append native array from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void append_native_array(std::vector<NativeArrayInventoryRow>& inventory,
                          xstar_run_state::ProductWritingState& product,
                          std::size_t hdu,
@@ -6025,6 +6525,10 @@ void append_native_array(std::vector<NativeArrayInventoryRow>& inventory,
     inventory.push_back(NativeArrayInventoryRow{hdu, name, path, values.size(), vector_has_nonzero(values)});
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write native productwrite csvs from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void write_native_productwrite_csvs(const xstar_run_state::ProductWritingState& product,
                                     const std::filesystem::path& bridge,
                                     const std::vector<NativeArrayInventoryRow>& inventory) {
@@ -6087,6 +6591,10 @@ void write_native_productwrite_csvs(const xstar_run_state::ProductWritingState& 
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Build true native xout step equivalent from the source-ordered inputs required by the next calculation stage.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<std::string> build_true_native_xout_step_equivalent(const xstar_run_state::ProductWritingState& product) {
     std::vector<std::string> lines;
     lines.push_back("Native xstar_cpp ProductWritingState scientific body: true native equivalent, not legacy pprint replay.");
@@ -6197,6 +6705,10 @@ const std::array<long long,600> kV82PublicLineInventory = {
     16421, 16484, 14548, 512, 513, 16007, 16172, 16604, 15849, 16331, 537, 538
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute native line plane stride for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 std::size_t native_line_plane_stride_v82(
     const xstar_run_state::ExactSourceWorkspaceState& ws) {
     std::size_t stride = ws.oplin.size();
@@ -6206,12 +6718,20 @@ std::size_t native_line_plane_stride_v82(
     return stride;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute native line scalar for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 double native_line_scalar_v82(const std::vector<double>& values, long long line_index) {
     if (line_index <= 0) return 0.0;
     const auto slot = static_cast<std::size_t>(line_index);
     return slot < values.size() && std::isfinite(values[slot]) ? values[slot] : 0.0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute native line plane for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 double native_line_plane_v82(const std::vector<double>& values,
                              std::size_t stride,
                              std::size_t plane,
@@ -6222,6 +6742,10 @@ double native_line_plane_v82(const std::vector<double>& values,
     return slot < stride && at < values.size() && std::isfinite(values[at]) ? values[at] : 0.0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute gather native line scalar for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<double> gather_native_line_scalar_v82(
     const std::vector<double>& values,
     const std::vector<double>& line_indices) {
@@ -6232,6 +6756,10 @@ std::vector<double> gather_native_line_scalar_v82(
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute gather native line plane for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<double> gather_native_line_plane_v82(
     const std::vector<double>& primary,
     const std::vector<double>& fallback,
@@ -6248,6 +6776,10 @@ std::vector<double> gather_native_line_plane_v82(
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute public line indices for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 [[maybe_unused]] std::vector<double> public_line_indices_v82() {
     std::vector<double> out;
     out.reserve(kV82PublicLineInventory.size());
@@ -6256,6 +6788,10 @@ std::vector<double> gather_native_line_plane_v82(
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute reconstruct public line luminosity for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<double> reconstruct_public_line_luminosity_v82_patch52071(
     const xstar_run_state::ProductWritingState& product,
     const std::vector<double>& line_indices,
@@ -6306,6 +6842,10 @@ std::vector<double> reconstruct_public_line_luminosity_v82_patch52071(
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute source zero based continuum planes for the bound-free/photoionization/recombination-continuum path using the current radiation field and level populations.
+// Reference context: XSTAR Manual ss11.5, 11.6.1, 11.7; Kallman & Bautista (2001); ATDB ch12.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<double> source_zero_based_continuum_planes_v82(
     const std::vector<double>& native_values,
     std::size_t source_count) {
@@ -6332,6 +6872,10 @@ std::vector<double> source_zero_based_continuum_planes_v82(
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source real literal in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 double source_real_literal_v82_patch520142(double value) {
     return static_cast<double>(static_cast<float>(value));
 }
@@ -6348,6 +6892,10 @@ struct PublicLineSelectionV82Patch520164 {
     std::vector<double> emit_outward;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute select public lines for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 PublicLineSelectionV82Patch520164 select_public_lines_v82_patch520164(
     const xstar_run_state::ProductWritingState& product) {
     constexpr std::size_t kMaxPublicLines = 600u;
@@ -6458,6 +7006,10 @@ PublicLineSelectionV82Patch520164 select_public_lines_v82_patch520164(
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement public parameter real in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 double public_parameter_real_v82_patch520142(
     const xstar_run_state::ProductWritingState& product,
     const std::string& name,
@@ -6473,6 +7025,10 @@ double public_parameter_real_v82_patch520142(
     return fallback;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute rank writer binemis lines for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<long long> rank_writer_binemis_lines_v82_patch520142(
     const xstar_run_state::ProductWritingState& product,
     const std::vector<double>& compact_elum,
@@ -6542,6 +7098,10 @@ std::vector<long long> rank_writer_binemis_lines_v82_patch520142(
     return slots;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Build writer time binemis from the source-ordered inputs required by the next calculation stage.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 bool build_writer_time_binemis_v82_patch520142(
     const xstar_run_state::ProductWritingState& product,
     const xstar_run_state::FixedEvaluationState& final_eval,
@@ -6632,6 +7192,10 @@ bool build_writer_time_binemis_v82_patch520142(
     return true;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement create native retained productwrite schema in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 void create_native_retained_productwrite_schema(xstar_run_state::ProductWritingState& product) {
     // v82 patch 5.20.17.2: this is now the single product-write projection
     // routine for both diagnostic bridges and file-silent production.  The
@@ -6878,6 +7442,10 @@ void create_native_retained_productwrite_schema(xstar_run_state::ProductWritingS
               << product.retained_product_arrays.size() << "\n";
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Validate the invariants required by validate complete productwrite schema; reject malformed dimensions, pointers, or state before scientific kernels are entered.
+// Reference context: Implementation/safety helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 void validate_complete_productwrite_schema(const xstar_run_state::ProductWritingState& product) {
     if (product.product_metadata_path.empty()) {
         throw std::runtime_error("complete ProductWritingState schema missing product_metadata_path");
@@ -6949,6 +7517,10 @@ void validate_complete_productwrite_schema(const xstar_run_state::ProductWriting
     require_retained_product_array(product, 3, "product_write_spectrum_emit_outward", true);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Validate the invariants required by validate real native product state; reject malformed dimensions, pointers, or state before scientific kernels are entered.
+// Reference context: Implementation/safety helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 void validate_real_native_product_state(const xstar_run_state::ProductWritingState& product) {
     if (product.fixed_evaluations.empty()) throw std::runtime_error("real native ProductWritingState has no fixed evaluations");
     if (product.radial_zones.size() != 5) throw std::runtime_error("real native ProductWritingState requires five retained radial zones");
@@ -6974,6 +7546,10 @@ void read_source_populations_v1724(
     SourcePopulationGlobalV1724& global,
     SourcePopulationCompactV1724& compact);
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Build real native product state from fixed engine from the source-ordered inputs required by the next calculation stage.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 [[maybe_unused]] xstar_run_state::ProductWritingState build_real_native_product_state_from_fixed_engine(
     Options& options,
     const std::filesystem::path& output,
@@ -7194,6 +7770,10 @@ void read_source_populations_v1724(
     return product;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement command run native reconstructed products in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 int command_run_native_reconstructed_products_v172526(Options) {
     std::cerr << "run-native-reconstructed-products is disabled in v17.25.29: "
               << "native product publication must use retained full-61 ProductWritingState artifacts "
@@ -7212,6 +7792,10 @@ struct NativeControllerOracleRow {
     int lnerr;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement native controller acceptance oracle in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 const std::array<NativeControllerOracleRow,61>& native_controller_acceptance_oracle_v15926() {
     // Qualification-only oracle.  These values never drive a controller
     // state transition.  Trial temperatures and electron fractions are
@@ -7284,6 +7868,10 @@ const std::array<NativeControllerOracleRow,61>& native_controller_acceptance_ora
 
 constexpr double kNativeControllerZeroFloorV1710 = 1.0e-30;
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement zero aware controller equal in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 bool zero_aware_controller_equal_v1711(double actual, double expected) {
     if (!std::isfinite(actual) || !std::isfinite(expected)) return false;
     if (std::abs(actual) < kNativeControllerZeroFloorV1710 &&
@@ -7291,6 +7879,10 @@ bool zero_aware_controller_equal_v1711(double actual, double expected) {
     return canonical_e7_equal(actual, expected);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement zero aware relative error in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 double zero_aware_relative_error_v1711(double actual, double expected) {
     if (!std::isfinite(actual) || !std::isfinite(expected)) {
         return std::numeric_limits<double>::infinity();
@@ -7302,10 +7894,18 @@ double zero_aware_relative_error_v1711(double actual, double expected) {
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source energy grid in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<double> source_energy_grid_v1711(std::size_t n) {
     return xstar_source_real_energy_grid::build(n);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source huntf in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::size_t source_huntf_v1711(const std::vector<double>& grid, double x, std::size_t n) {
     if (n < 2 || grid.size() < n) throw std::runtime_error("sequence-1 huntf grid is invalid");
     constexpr double floor = 1.0e-36;
@@ -7325,11 +7925,19 @@ std::size_t source_huntf_v1711(const std::vector<double>& grid, double x, std::s
     return std::max<std::size_t>(1, std::min(n, jlo));
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source nbinc in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::size_t source_nbinc_v1711(double energy, const std::vector<double>& grid) {
     const std::size_t n2 = std::max<std::size_t>(2, grid.size() / 50);
     return source_huntf_v1711(grid, energy, grid.size() - n2);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source powerlaw in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<double> source_powerlaw_v1711(
     double index, double luminosity_1e38, const std::vector<double>& energy) {
     constexpr double erg_per_ev = 1.602197e-12;
@@ -7373,6 +7981,10 @@ std::vector<double> source_powerlaw_v1711(
     return radiation;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load single csv row into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 std::map<std::string,std::string> read_single_csv_row_v1711(const std::filesystem::path& path) {
     std::ifstream input(path);
     if (!input) throw std::runtime_error("cannot open sequence-1 thermal budget: " + path.string());
@@ -7388,12 +8000,20 @@ std::map<std::string,std::string> read_single_csv_row_v1711(const std::filesyste
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement relative one percent in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 bool relative_one_percent_v1711(double actual, double expected) {
     if (!std::isfinite(actual) || !std::isfinite(expected)) return false;
     if (std::abs(expected) < 1.0e-30) return std::abs(actual) < 1.0e-30;
     return std::abs(actual - expected) / std::abs(expected) <= 0.01;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute fnv1a lines for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 std::uint64_t fnv1a_lines_v1712(const std::vector<std::string>& lines) {
     std::uint64_t hash = UINT64_C(14695981039346656037);
     for (const auto& line : lines) {
@@ -7407,12 +8027,20 @@ std::uint64_t fnv1a_lines_v1712(const std::vector<std::string>& lines) {
     return hash;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement hex64 in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::string hex64_v1712(std::uint64_t value) {
     std::ostringstream out;
     out << std::hex << std::setfill('0') << std::setw(16) << value;
     return out.str();
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Parse thermal binary64 from its external text/argument representation into validated native values.
+// Reference context: Implementation/input helper; XSTAR Manual ch4 describes parameter inputs, but this parser has no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 double parse_thermal_binary64_v79(const std::string& text) {
     char* end = nullptr;
     errno = 0;
@@ -7426,6 +8054,10 @@ double parse_thermal_binary64_v79(const std::string& text) {
     return value;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement canonical zero aware e7 in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::string canonical_zero_aware_e7_v1712(const std::string& text) {
     char* end = nullptr;
     const double value = std::strtod(text.c_str(), &end);
@@ -7439,6 +8071,10 @@ std::string canonical_zero_aware_e7_v1712(const std::string& text) {
     return out.str();
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement canonical zero aware e7 value in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::string canonical_zero_aware_e7_value_v1715(double value) {
     if (!std::isfinite(value)) {
         std::ostringstream out;
@@ -7452,6 +8088,10 @@ std::string canonical_zero_aware_e7_value_v1715(double value) {
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute source canonical helium population e7 as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::optional<std::string> source_canonical_helium_population_e7_v1718(
     int source_sequence,
     int compact_row) {
@@ -7500,6 +8140,10 @@ std::optional<std::string> source_canonical_helium_population_e7_v1718(
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute source canonical sequence5 population e7 as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::optional<std::string> source_canonical_sequence5_population_e7_v1720(
     int element_z,
     int row,
@@ -7549,6 +8193,10 @@ std::optional<std::string> source_canonical_sequence5_population_e7_v1720(
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute source canonical sequence6 population e7 as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::optional<std::string> source_canonical_sequence6_population_e7_v1721(
     int element_z,
     int row,
@@ -7601,6 +8249,10 @@ std::optional<std::string> source_canonical_sequence6_population_e7_v1721(
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute source canonical sequence7 population e7 as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::optional<std::string> source_canonical_sequence7_population_e7_v1722(
     int element_z,
     int row,
@@ -7665,6 +8317,10 @@ std::optional<std::string> source_canonical_sequence7_population_e7_v1722(
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute source canonical sequence8 population e7 as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::optional<std::string> source_canonical_sequence8_population_e7_v1723(
     int element_z,
     int row,
@@ -7718,6 +8374,10 @@ std::optional<std::string> source_canonical_sequence8_population_e7_v1723(
     return std::nullopt;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement canonical ledger value in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::string canonical_ledger_value_v1715(
     const std::vector<std::string>& fields,
     const std::map<std::string,std::size_t>& columns,
@@ -7796,6 +8456,10 @@ std::string canonical_ledger_value_v1715(
     return canonical_zero_aware_e7_value_v1715(value);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load case abundances into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 std::map<int,double> read_case_abundances_v1712(const std::filesystem::path& case_dir) {
     const auto path = case_dir / "elements.csv";
     std::ifstream input(path);
@@ -7845,6 +8509,10 @@ struct Sequence1PopulationGateV1714 {
     bool final_zero_aware_ok = false;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute compare sequence1 populations as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 Sequence1PopulationGateV1714 compare_sequence1_populations_v1714(
     const std::filesystem::path& path) {
     std::ifstream input(path);
@@ -7897,6 +8565,10 @@ Sequence1PopulationGateV1714 compare_sequence1_populations_v1714(
     return result;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute compare sequence1 thermal ledger as a contribution to, or control step in, the local thermal-equilibrium iteration.
+// Reference context: XSTAR Manual s11.4.4 and s11.6; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 ThermalLedgerGateV1712 compare_sequence1_thermal_ledger_v1712(
     const std::filesystem::path& path,
     int source_canonical_sequence = 0) {
@@ -7997,6 +8669,10 @@ ThermalLedgerGateV1712 compare_sequence1_thermal_ledger_v1712(
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load csv rows into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<std::map<std::string,std::string>> read_csv_rows_v1716(
     const std::filesystem::path& path) {
     std::ifstream input(path);
@@ -8018,6 +8694,10 @@ std::vector<std::map<std::string,std::string>> read_csv_rows_v1716(
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement binary64 equal in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 bool binary64_equal_v79(double left, double right) {
     std::uint64_t a = 0, b = 0;
     static_assert(sizeof(a) == sizeof(left), "binary64 width mismatch");
@@ -8026,6 +8706,10 @@ bool binary64_equal_v79(double left, double right) {
     return a == b;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement binary64 hex in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::string binary64_hex_v79(double value) {
     std::uint64_t bits = 0;
     std::memcpy(&bits, &value, sizeof(bits));
@@ -8043,6 +8727,10 @@ struct Sequence16MgSourceTargetsV79 {
     double elcter = 0.0;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load sequence16 mg source targets into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 Sequence16MgSourceTargetsV79 read_sequence16_mg_source_targets_v79(
     const std::filesystem::path& path) {
     const auto rows = read_csv_rows_v1716(path);
@@ -8073,6 +8761,10 @@ struct Sequence16MgSolveRowV80 {
     double final_population = 0.0;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load sequence16 source solve rows into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 std::map<int,Sequence16MgSolveRowV80> read_sequence16_source_solve_rows_v80(
     const std::filesystem::path& path) {
     const auto rows = read_csv_rows_v1716(path);
@@ -8100,6 +8792,10 @@ std::map<int,Sequence16MgSolveRowV80> read_sequence16_source_solve_rows_v80(
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load sequence16 native solve rows into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 std::map<int,Sequence16MgSolveRowV80> read_sequence16_native_solve_rows_v80(
     const std::filesystem::path& path) {
     const auto rows = read_csv_rows_v1716(path);
@@ -8182,12 +8878,20 @@ struct MgLedgerEntryV80 {
     bool deferred_primary = false;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute thermal role as a contribution to, or control step in, the local thermal-equilibrium iteration.
+// Reference context: XSTAR Manual s11.4.4 and s11.6; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::string thermal_role_v80(bool primary, double coefficient) {
     if (coefficient > 0.0) return primary ? "primary_cooling" : "secondary_cooling";
     if (coefficient < 0.0) return primary ? "primary_heating" : "secondary_heating";
     return primary ? "primary_zero" : "secondary_zero";
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement channel index in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::size_t channel_index_v80(const std::string& role) {
     if (role == "primary_heating") return 0u;
     if (role == "primary_cooling") return 1u;
@@ -8196,6 +8900,10 @@ std::size_t channel_index_v80(const std::string& role) {
     return 4u;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Build sequence16 mg ledger from the source-ordered inputs required by the next calculation stage.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 Sequence16MgLedgerGateV80 build_sequence16_mg_ledger_v80(
     const std::filesystem::path& thermal_ledger_path,
     const std::filesystem::path& native_solve_rows_path,
@@ -8407,6 +9115,10 @@ struct SequencePopulationHashGateV1716 {
     bool final_ok = false;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute compare sequence population hashes as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 SequencePopulationHashGateV1716 compare_sequence_population_hashes_v1716(
     const std::filesystem::path& path,
     const std::string& expected_initial_hash,
@@ -8470,6 +9182,10 @@ SequencePopulationHashGateV1716 compare_sequence_population_hashes_v1716(
     return result;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute compare sequence thermal ledger as a contribution to, or control step in, the local thermal-equilibrium iteration.
+// Reference context: XSTAR Manual s11.4.4 and s11.6; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 ThermalLedgerGateV1712 compare_sequence_thermal_ledger_v1716(
     const std::filesystem::path& path,
     const std::string& expected_identity_hash,
@@ -8486,6 +9202,10 @@ ThermalLedgerGateV1712 compare_sequence_thermal_ledger_v1716(
     return result;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement command run native sequence1 in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 [[maybe_unused]] int command_run_native_sequence1_v1715(Options options) {
     const auto output = std::filesystem::path(options.output_dir);
     std::filesystem::create_directories(output);
@@ -8736,6 +9456,10 @@ ThermalLedgerGateV1712 compare_sequence_thermal_ledger_v1716(
 
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load population global level map into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 std::pair<std::vector<int>,std::size_t> read_population_global_level_map_v1716(
     const std::filesystem::path& case_dir) {
     const auto path = case_dir / "rows.csv";
@@ -8803,6 +9527,10 @@ struct Sequence2HydrogenGateV1717 {
     double expected_xh1 = 0.0;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement compare sequence2 hydrogen state in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 Sequence2HydrogenGateV1717 compare_sequence2_hydrogen_state_v1717(
     const std::filesystem::path& evaluation1_populations,
     const std::filesystem::path& evaluation2_populations,
@@ -8875,6 +9603,10 @@ struct RepeatedHydrogenGateV1718 {
     double expected_xh1 = 0.0;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement compare repeated hydrogen state in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 RepeatedHydrogenGateV1718 compare_repeated_hydrogen_state_v1718(
     const std::filesystem::path& previous_populations,
     const std::filesystem::path& current_populations,
@@ -8949,6 +9681,10 @@ struct HydrogenFinalContractQualificationV17258 {
     std::string qualified_hash;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement hydrogen contract roundoff row ok in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 bool hydrogen_contract_roundoff_row_ok_v17258(
     double raw_value,
     const std::string& expected_e7,
@@ -8962,6 +9698,10 @@ bool hydrogen_contract_roundoff_row_ok_v17258(
     return rel <= relative_error_limit;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement hydrogen final contract qualification in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 HydrogenFinalContractQualificationV17258 hydrogen_final_contract_qualification_v17258(
     const std::filesystem::path& current_populations,
     const std::map<int,std::string>& expected_sequence,
@@ -9006,6 +9746,10 @@ HydrogenFinalContractQualificationV17258 hydrogen_final_contract_qualification_v
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute source canonical population e7 as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::optional<std::string> source_canonical_population_e7_v1724(
     std::size_t sequence, int element_z, int row, bool compact_row) {
     if (compact_row) {
@@ -9024,6 +9768,10 @@ std::optional<std::string> source_canonical_population_e7_v1724(
     return value_it->second;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load sequence contracts into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 std::map<std::size_t,SequenceContractV1724> read_sequence_contracts_v1724(
     const std::filesystem::path& path) {
     const auto rows = read_csv_rows_v1716(path);
@@ -9063,6 +9811,10 @@ std::map<std::size_t,SequenceContractV1724> read_sequence_contracts_v1724(
     return contracts;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load source populations into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void read_source_populations_v1724(
     const std::filesystem::path& path,
     SourcePopulationGlobalV1724& global,
@@ -9083,6 +9835,10 @@ void read_source_populations_v1724(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute thermal budget row as a contribution to, or control step in, the local thermal-equilibrium iteration.
+// Reference context: XSTAR Manual s11.4.4 and s11.6; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::map<std::string,std::string> thermal_budget_row_v1724(
     const std::filesystem::path& path, std::size_t sequence) {
     const auto rows = read_csv_rows_v1716(path);
@@ -9092,6 +9848,10 @@ std::map<std::string,std::string> thermal_budget_row_v1724(
     throw std::runtime_error("native thermal budget lacks source sequence " + std::to_string(sequence));
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement frozen initial hash in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::string frozen_initial_hash_v1724(std::size_t sequence) {
     static const std::map<std::size_t,std::string> values = {
         {1,"6ca95ec3f58eb4ce"},{2,"1c4fd4b9e0449c1c"},{3,"678993d55301ca6f"},
@@ -9101,6 +9861,10 @@ std::string frozen_initial_hash_v1724(std::size_t sequence) {
     const auto found = values.find(sequence); return found == values.end() ? std::string{} : found->second;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement frozen final hash in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::string frozen_final_hash_v1724(std::size_t sequence) {
     static const std::map<std::size_t,std::string> values = {
         {1,"e58dafeeb80ec929"},{2,"62e2e6a285b579c5"},{3,"4d9949f5d0067afd"},
@@ -9110,6 +9874,10 @@ std::string frozen_final_hash_v1724(std::size_t sequence) {
     const auto found = values.find(sequence); return found == values.end() ? std::string{} : found->second;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement frozen hydrogen hash in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::string frozen_hydrogen_hash_v1724(std::size_t sequence) {
     static const std::map<std::size_t,std::string> values = {
         {2,"8628e532f73dd01b"},{3,"92d0c9f560bcd078"},{4,"b1f0735be972aeb0"},
@@ -9119,6 +9887,10 @@ std::string frozen_hydrogen_hash_v1724(std::size_t sequence) {
     const auto found = values.find(sequence); return found == values.end() ? std::string{} : found->second;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement committed state continuity in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 bool committed_state_continuity_v1724(
     const std::filesystem::path& previous_populations,
     const std::filesystem::path& current_solve_rows) {
@@ -9143,6 +9915,10 @@ bool committed_state_continuity_v1724(
     return compared;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write first failure from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void write_first_failure_v1724(
     FixedDsecEvaluatorData& data,
     const FixedDsecSnapshot& snapshot,
@@ -9187,6 +9963,10 @@ void write_first_failure_v1724(
         << "}\n";
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Append gate manifest from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void append_gate_manifest_v1724(
     FixedDsecEvaluatorData& data,
     const FixedDsecSnapshot& snapshot,
@@ -9219,6 +9999,10 @@ void append_gate_manifest_v1724(
         << gate.ledger_order_hash << ',' << gate.ledger_values_hash << ',' << gate.failure_reason << '\n';
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate evaluate per sequence gate using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use.
+// XSTAR-FUNCTION-COMMENT-END
 PerEvaluationGateResultV1724 evaluate_per_sequence_gate_v1724(
     FixedDsecEvaluatorData& data,
     const FixedDsecSnapshot& snapshot) {
@@ -9579,6 +10363,10 @@ PerEvaluationGateResultV1724 evaluate_per_sequence_gate_v1724(
     return gate;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write accepted checkpoint from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void write_accepted_checkpoint_v1724(
     FixedDsecEvaluatorData& data,
     const FixedDsecSnapshot& snapshot,
@@ -9641,6 +10429,10 @@ void write_accepted_checkpoint_v1724(
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement regular file size or zero in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::uintmax_t regular_file_size_or_zero_v172521(const std::filesystem::path& path) {
     std::error_code ec;
     if (!std::filesystem::is_regular_file(path, ec)) return 0;
@@ -9648,6 +10440,10 @@ std::uintmax_t regular_file_size_or_zero_v172521(const std::filesystem::path& pa
     return ec ? 0 : size;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement copy fixed evaluation state in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 xstar_run_state::FixedEvaluationState copy_fixed_evaluation_state_v172524(const FixedDsecSnapshot& source) {
     xstar_run_state::FixedEvaluationState target;
     target.kind = source.kind;
@@ -9735,6 +10531,10 @@ xstar_run_state::FixedEvaluationState copy_fixed_evaluation_state_v172524(const 
 
 bool diagnostic_attribution_enabled_v82_patch52017();
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement retain controller owned product workspaces in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 void retain_controller_owned_product_workspaces_v63(
     xstar_run_state::WholeRunAccumulatedState& whole,
     const std::filesystem::path& parameters_path) {
@@ -9965,6 +10765,10 @@ struct ProductPublicationResultV172524 {
     std::string error;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement remove native products in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 void remove_native_products_v172524(const std::filesystem::path& output) {
     for (const char* name : {"xo01_detail.fits", "xo01_detal2.fits", "xo01_detal3.fits", "xo01_detal4.fits",
              "xout_abund1.fits", "xout_cont1.fits", "xout_lines1.fits", "xout_rrc1.fits", "xout_spect1.fits", "xout_step.log"}) {
@@ -9973,6 +10777,10 @@ void remove_native_products_v172524(const std::filesystem::path& output) {
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement count native fits products in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::size_t count_native_fits_products_v172524(const std::filesystem::path& output) {
     std::size_t count = 0;
     for (const char* name : {"xo01_detail.fits", "xo01_detal2.fits", "xo01_detal3.fits", "xo01_detal4.fits",
@@ -9985,6 +10793,10 @@ std::size_t count_native_fits_products_v172524(const std::filesystem::path& outp
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement fill retained product surface arrays in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 void fill_retained_product_surface_arrays_v172530(
     xstar_run_state::FixedEvaluationState& evaluation,
     std::size_t fallback_energy_count) {
@@ -10022,6 +10834,10 @@ void fill_retained_product_surface_arrays_v172530(
         !ws.line_profile_workspace.empty();
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement ensure retained native public metadata in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 void ensure_retained_native_public_metadata_v172530(xstar_run_state::WholeRunAccumulatedState& whole) {
     // v17.25.33: refresh level identities from the retained native ATDB case
     // whenever the fallback metadata loader left identity columns blank.  The
@@ -10137,6 +10953,10 @@ void ensure_retained_native_public_metadata_v172530(xstar_run_state::WholeRunAcc
         whole.rrc_identities.size() >= 1849u;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement promote retained native product surface in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 void promote_retained_native_product_surface_v172530(xstar_run_state::WholeRunAccumulatedState& whole) {
     std::size_t fallback_energy_count = 0;
     for (const auto& evaluation : whole.fixed_evaluations) {
@@ -10196,6 +11016,10 @@ void promote_retained_native_product_surface_v172530(xstar_run_state::WholeRunAc
     whole.embedded_full_xout_step_payload_absent = true;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement retained native product surface complete in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 bool retained_native_product_surface_complete_v172530(const xstar_run_state::ProductWritingState& product) {
     if (!product.product_state_complete || !product.native_detail_state_retained ||
         !product.exact_source_metadata_retained || !product.exact_source_workspaces_retained ||
@@ -10214,6 +11038,10 @@ bool retained_native_product_surface_complete_v172530(const xstar_run_state::Pro
     return has_continuum && has_depth;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement publish full61 products in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 ProductPublicationResultV172524 publish_full61_products_v172524(
     const Options& options,
     const std::filesystem::path& output,
@@ -10386,6 +11214,10 @@ ProductPublicationResultV172524 publish_full61_products_v172524(
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write full61 retention staging from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 bool write_full61_retention_staging_v172521(
     const std::filesystem::path& output,
     const FixedDsecEvaluatorData& data,
@@ -10557,6 +11389,10 @@ bool write_full61_retention_staging_v172521(
 
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement promote true production surface in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 [[maybe_unused]] void promote_true_production_surface_v65(xstar_run_state::WholeRunAccumulatedState& whole) {
     std::size_t fallback_energy_count = 0;
     for (const auto& zone : whole.radial_zones) {
@@ -10601,6 +11437,10 @@ bool write_full61_retention_staging_v172521(
     whole.embedded_full_xout_step_payload_absent = true;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement publish true production products in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 ProductPublicationResultV172524 publish_true_production_products_v65(
     const Options& options,
     const std::filesystem::path& output,
@@ -10914,6 +11754,10 @@ read_sequence59_native_solve_rows_v82_patch510(
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute sequence23 population first owner as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::string sequence23_population_first_owner_v82_patch510(
     double source_call_start,
     const Sequence23PopulationSolveRowV82Patch510& source,
@@ -10932,6 +11776,10 @@ std::string sequence23_population_first_owner_v82_patch510(
     return "CLOSED_OR_UNRESOLVED";
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write sequence23 population owner audit from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void write_sequence23_population_owner_audit_v82_patch510(
     StandaloneControllerDataV67& data,
     const FixedDsecSnapshot& boundary,
@@ -11040,6 +11888,10 @@ std::map<PopulationSolveKeyV82Patch510,Sequence23PopulationSolveRowV82Patch510>
 read_native_solve_rows_v82_patch511(const std::filesystem::path& response_path, const std::filesystem::path& stage_path);
 bool relative_close_v82_patch511(double source, double native);
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement call1 source workspace dir in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::filesystem::path call1_source_workspace_dir_v82_patch512(
     const StandaloneControllerDataV67& data, int sequence) {
     std::ostringstream name;
@@ -11047,6 +11899,10 @@ std::filesystem::path call1_source_workspace_dir_v82_patch512(
     return data.call1_source_workspaces_root / name.str();
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement native call1 sweep dir in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::filesystem::path native_call1_sweep_dir_v82_patch512(
     const StandaloneControllerDataV67& data, int sequence) {
     std::ostringstream name;
@@ -11054,6 +11910,10 @@ std::filesystem::path native_call1_sweep_dir_v82_patch512(
     return data.call1_dsec_population_sweep_dir / "native" / name.str();
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Append call1 dsec population sweep from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void append_call1_dsec_population_sweep_v82_patch512(
     StandaloneControllerDataV67& data,
     const FixedDsecSnapshot& snapshot,
@@ -11231,6 +12091,10 @@ void append_call1_dsec_population_sweep_v82_patch512(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write mg type53 source native opacity record attribution from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void write_mg_type53_source_native_opacity_record_attribution_v82_patch512(
     StandaloneControllerDataV67& data) {
     if (!data.reference_diagnostics_enabled || data.sequence23_diagnostic_dir.empty() ||
@@ -11329,6 +12193,10 @@ void write_mg_type53_source_native_opacity_record_attribution_v82_patch512(
               << "V048746255172582_CALL2_MG_TYPE53_SOURCE_NATIVE_OPACITY_RECORD_ATTRIBUTION=WRITTEN\n";
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Validate the invariants required by validate coheat file; reject malformed dimensions, pointers, or state before scientific kernels are entered.
+// Reference context: Implementation/safety helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 bool validate_coheat_file_v67(const std::filesystem::path& path, std::size_t& rows) {
     rows = 0;
     std::ifstream input(path);
@@ -11347,6 +12215,10 @@ bool validate_coheat_file_v67(const std::filesystem::path& path, std::size_t& ro
     return rows >= 100;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement global bilevg floor in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 double global_bilevg_floor_v82_patch52(
     const StandaloneControllerDataV67& data,
     std::size_t global_zero_based) {
@@ -11357,6 +12229,10 @@ double global_bilevg_floor_v82_patch52(
     return 1.0e-37;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement recompute global bilevg in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 void recompute_global_bilevg_v82_patch52(StandaloneControllerDataV67& data) {
     if (data.global_bilevg.size() != data.global_level_count) {
         data.global_bilevg.assign(data.global_level_count, 0.0);
@@ -11400,6 +12276,10 @@ read_native_solve_rows_v82_patch511(
     return read_sequence59_native_solve_rows_v82_patch510(response_path, stage_path);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement relative close in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 bool relative_close_v82_patch511(double source, double native) {
     if (!std::isfinite(source) || !std::isfinite(native)) return false;
     if (source == native) return true;
@@ -11408,6 +12288,10 @@ bool relative_close_v82_patch511(double source, double native) {
     return std::abs(source - native) / scale <= 5.0e-7;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute sequence58 population first phase as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::string sequence58_population_first_phase_v82_patch511(
     double source_input_global,
     const Sequence23PopulationSolveRowV82Patch510& source,
@@ -11432,6 +12316,10 @@ std::string sequence58_population_first_phase_v82_patch511(
     return "CLOSED_OR_UNRESOLVED";
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write sequence58 final population boundary audit from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void write_sequence58_final_population_boundary_audit_v82_patch511(
     StandaloneControllerDataV67& data,
     const std::filesystem::path& sequence58_native_root,
@@ -11530,6 +12418,10 @@ void write_sequence58_final_population_boundary_audit_v82_patch511(
               << "V048746255172582_SEQUENCE58_FINAL_POPULATION_BOUNDARY_AUDIT=WRITTEN\n";
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write call3 opacity producer decomposition from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void write_call3_opacity_producer_decomposition_v82_patch511(
     [[maybe_unused]] StandaloneControllerDataV67& data,
     const std::filesystem::path& transfer_dir) {
@@ -11589,6 +12481,10 @@ void write_call3_opacity_producer_decomposition_v82_patch511(
     std::cout << "V048746255172582_CALL3_CONTINUUM_OPACITY_PRODUCER_DECOMPOSITION=WRITTEN\n";
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute update global populations as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void update_global_populations_v67(
     StandaloneControllerDataV67& data,
     const std::vector<double>& populations,
@@ -11636,6 +12532,10 @@ void update_global_populations_v67(
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source detail global projection in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<double> source_detail_global_projection_v064812318(
     const StandaloneControllerDataV67& data,
     const std::vector<double>& pre_mapback,
@@ -11685,6 +12585,10 @@ std::vector<double> source_detail_global_projection_v064812318(
     return dense;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement commit call2 to call3 global state in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 void commit_call2_to_call3_global_state_v82_patch52(
     StandaloneControllerDataV67& data,
     const FixedDsecSnapshot& boundary) {
@@ -11702,6 +12606,10 @@ void commit_call2_to_call3_global_state_v82_patch52(
     data.global_workspace_initialized = true;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement fill standalone input in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 void fill_standalone_input_v67(
     StandaloneControllerDataV67& data,
     const xstar_thermal_state_v1& trial,
@@ -11808,6 +12716,10 @@ void fill_standalone_input_v67(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Build call start workspace from the source-ordered inputs required by the next calculation stage.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void prepare_call_start_workspace_v71(
     StandaloneControllerDataV67& data,
     std::size_t call_index) {
@@ -11855,6 +12767,10 @@ struct VectorAuditV82Patch4 {
     bool scientific = false;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement audit vector in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 VectorAuditV82Patch4 audit_vector_v82_patch4(
     const std::vector<double>& source,
     const std::vector<double>& native) {
@@ -11919,6 +12835,10 @@ VectorAuditV82Patch4 audit_vector_v82_patch4(
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement binary64 vector hash in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::string binary64_vector_hash_v82_patch4(const std::vector<double>& values) {
     std::uint64_t hash = 1469598103934665603ULL;
     for (double value : values) {
@@ -11933,11 +12853,19 @@ std::string binary64_vector_hash_v82_patch4(const std::vector<double>& values) {
     return hex64_v1712(hash);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement audit slot text in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::string audit_slot_text_v82_patch4(std::size_t slot) {
     return slot == std::numeric_limits<std::size_t>::max()
         ? std::string("NONE") : std::to_string(slot);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement program element z in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 int program_element_z_v82_patch4(const xstar_atdb_runtime::ProgramStorage& program, int element_index) {
     for (const auto& element : program.elements) {
         if (element.element_index == element_index) return element.element_z;
@@ -11945,6 +12873,10 @@ int program_element_z_v82_patch4(const xstar_atdb_runtime::ProgramStorage& progr
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute program population index as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::optional<std::size_t> program_population_index_v82_patch4(
     const xstar_atdb_runtime::ProgramStorage& program,
     int element_index,
@@ -11956,6 +12888,10 @@ std::optional<std::size_t> program_population_index_v82_patch4(
     return std::nullopt;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement audit call2 final opakab in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 void audit_call2_final_opakab_v82_patch4(
     StandaloneControllerDataV67& data,
     const FixedDsecSnapshot& boundary,
@@ -12116,6 +13052,10 @@ void audit_call2_final_opakab_v82_patch4(
               << "V048746255172582_CALL2_FINAL_OPAKAB_TYPE99_PUBLICATION=" << (type99_native_nonzero_source_zero == 0u ? "ACCEPT_SOURCE_ZERO" : "REJECT_SPURIOUS_NATIVE") << "\n";
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement print vector audit in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 void print_vector_audit_v82_patch4(const char* name, const VectorAuditV82Patch4& audit) {
     std::cout << "V048746255172582_CALL3_" << name << "_SOURCE_ROWS=" << audit.source_rows << "\n"
               << "V048746255172582_CALL3_" << name << "_NATIVE_ROWS=" << audit.native_rows << "\n"
@@ -12133,11 +13073,19 @@ void print_vector_audit_v82_patch4(const char* name, const VectorAuditV82Patch4&
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement v06481238 selected eval in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 bool v06481238_selected_eval(std::size_t evaluation_index) {
     static const std::set<std::size_t> selected{1u,2u,3u,4u,5u,6u,9u,15u,21u,24u,25u,26u};
     return selected.count(evaluation_index) != 0u;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement v06481238 element slice in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<double> v06481238_element_slice(
     const StandaloneControllerDataV67& data,
     const std::vector<double>& values,
@@ -12158,6 +13106,10 @@ std::vector<double> v06481238_element_slice(
     throw std::runtime_error("v06481238 requested element is absent from lowered program");
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement v06481238 write f64 in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 void v06481238_write_f64(const std::filesystem::path& path, const std::vector<double>& values) {
     if (!path.parent_path().empty()) std::filesystem::create_directories(path.parent_path());
     std::ofstream out(path, std::ios::binary);
@@ -12168,6 +13120,10 @@ void v06481238_write_f64(const std::filesystem::path& path, const std::vector<do
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write write from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void write_v06481238_o7_state_transition(
     const StandaloneControllerDataV67& data,
     const FixedDsecSnapshot& snapshot,
@@ -12202,6 +13158,10 @@ void write_v06481238_o7_state_transition(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute audit sequence58 lte as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void audit_sequence58_lte_v82_patch53(
     StandaloneControllerDataV67& data,
     const FixedDsecSnapshot& snapshot) {
@@ -12266,6 +13226,10 @@ void audit_sequence58_lte_v82_patch53(
               << (audit.scientific ? "ACCEPT" : "REJECT") << "\n";
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement audit call3 boundary in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 void audit_call3_boundary_v82_patch4(StandaloneControllerDataV67& data) {
     if (!data.reference_diagnostics_enabled) return;
     if (!data.sequence23_boundary_gate_configured) {
@@ -12436,6 +13400,10 @@ void audit_call3_boundary_v82_patch4(StandaloneControllerDataV67& data) {
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write binary64 vector from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void write_binary64_vector_v82_patch52(
     const std::filesystem::path& path,
     const std::vector<double>& values) {
@@ -12448,6 +13416,10 @@ void write_binary64_vector_v82_patch52(
     if (!out) throw std::runtime_error("cannot write v82 patch5.2 transfer diagnostic: " + path.string());
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write continuum transfer stage from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void write_continuum_transfer_stage_v82_patch52(
     StandaloneControllerDataV67& data,
     const std::string& name,
@@ -12458,6 +13430,10 @@ void write_continuum_transfer_stage_v82_patch52(
     write_binary64_vector_v82_patch52(dir / (name + ".bin"), values);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement brcems from boundary in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<double> brcems_from_boundary_v82_patch52(
     const FixedDsecSnapshot& boundary,
     std::size_t bins) {
@@ -12470,6 +13446,10 @@ std::vector<double> brcems_from_boundary_v82_patch52(
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute dense bremem source as a contribution to, or control step in, the local thermal-equilibrium iteration.
+// Reference context: XSTAR Manual s11.4.4 and s11.6; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<double> dense_bremem_source_v82_patch56(
     const FixedDsecSnapshot& boundary,
     const std::vector<double>& energy_ev,
@@ -12493,6 +13473,10 @@ std::vector<double> dense_bremem_source_v82_patch56(
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement gsmooth2 source in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 void gsmooth2_source_v82_patch54(
     double vtherm_cm_s,
     const std::vector<double>& energy_ev,
@@ -12568,6 +13552,10 @@ void gsmooth2_source_v82_patch54(
     for (std::size_t kl = 2u; kl < n; ++kl) values[kl] = product[kl];
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement gsmooth source in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 void gsmooth_source_v82_patch54(
     double temperature_t4,
     double turbulent_velocity_km_s,
@@ -12611,6 +13599,10 @@ struct SourceStepResultV82Patch520111 {
     bool remaining_column_was_final_limit = false;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source step in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 SourceStepResultV82Patch520111 source_step_v82_patch520111(
     const StandaloneControllerDataV67& data,
     const std::vector<double>& post_gsmooth_opakc,
@@ -12682,6 +13674,10 @@ SourceStepResultV82Patch520111 source_step_v82_patch520111(
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute advance source continuum radiation for the bound-free/photoionization/recombination-continuum path using the current radiation field and level populations.
+// Reference context: XSTAR Manual ss11.5, 11.6.1, 11.7; Kallman & Bautista (2001); ATDB ch12.
+// XSTAR-FUNCTION-COMMENT-END
 void advance_source_continuum_radiation_v82_patch52(
     StandaloneControllerDataV67& data,
     FixedDsecSnapshot& boundary,
@@ -13194,6 +14190,10 @@ void advance_source_continuum_radiation_v82_patch52(
 // array.  This separates gate membership from pre/post-GSSMOOTH opacity and
 // records the additive opacity-family decomposition already retained on the
 // accepted boundary by the frozen 11.6 diagnostics.
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write write from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void write_v0648123353_step_limiter_probe(
     const StandaloneControllerDataV67& data,
     const FixedDsecSnapshot& boundary,
@@ -13315,6 +14315,10 @@ void write_v0648123353_step_limiter_probe(
             << dom << ',' << (domv/denom) << '\n';
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write write from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void write_v0648123352_transport_commit_probe(
     const StandaloneControllerDataV67& data,
     const FixedDsecSnapshot& local_boundary,
@@ -13378,6 +14382,10 @@ void write_v0648123352_transport_commit_probe(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write write from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void write_v0648123431111_ca13_lifetime_probe(
     const StandaloneControllerDataV67& data,
     const FixedDsecSnapshot& local_boundary,
@@ -13539,6 +14547,10 @@ void write_v0648123431111_ca13_lifetime_probe(
         << elumab1 << ',' << elumab2 << ',' << hypothetical_delta << ',' << elumab1 << ',' << elumab2 << ',' << opakab << ',' << tauc1 << ',' << tauc2 << '\n';
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement advance atomic luminosities in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 void advance_atomic_luminosities_v82_patch520145(
     StandaloneControllerDataV67& data,
     FixedDsecSnapshot& local_boundary,
@@ -13598,6 +14610,10 @@ void advance_atomic_luminosities_v82_patch520145(
     local_boundary.elumab = data.rrc_luminosity;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement retain pre stpcut cumulative state in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 void retain_pre_stpcut_cumulative_state_v82_patch520145(
     StandaloneControllerDataV67& data,
     FixedDsecSnapshot& local_boundary) {
@@ -13663,6 +14679,10 @@ void retain_pre_stpcut_cumulative_state_v82_patch520145(
     local_boundary.zremsz = data.accumulated_zremsz;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement advance stpcut depths in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 void advance_stpcut_depths_v82_patch520145(
     StandaloneControllerDataV67& data,
     FixedDsecSnapshot& local_boundary,
@@ -13753,6 +14773,10 @@ void advance_stpcut_depths_v82_patch520145(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement advance consecutive transport in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 [[maybe_unused]] void advance_consecutive_transport_v71(
     StandaloneControllerDataV67& data,
     FixedDsecSnapshot& local_boundary,
@@ -13766,6 +14790,10 @@ void advance_stpcut_depths_v82_patch520145(
         data.parameters ? data.parameters->density_cm3 : 0.0);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Build iteration snapshot from the source-ordered inputs required by the next calculation stage.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 FixedDsecSnapshot make_iteration_snapshot_v67(
     StandaloneControllerDataV67& data,
     const xstar_thermal_state_v1& trial) {
@@ -13802,6 +14830,10 @@ FixedDsecSnapshot make_iteration_snapshot_v67(
     return snapshot;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute attach native thermal components as a contribution to, or control step in, the local thermal-equilibrium iteration.
+// Reference context: XSTAR Manual s11.4.4 and s11.6; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void attach_native_thermal_components_v70(
     xstar_fixed_state_context* context,
     FixedDsecSnapshot& snapshot) {
@@ -13832,6 +14864,10 @@ void attach_native_thermal_components_v70(
     snapshot.thermal_families_native = true;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement attach native product diagnostics in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 void attach_native_product_diagnostics_v70(
     xstar_fixed_state_context* context,
     FixedDsecSnapshot& snapshot) {
@@ -13947,6 +14983,10 @@ void attach_native_product_diagnostics_v70(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute fill continuum shape for the bound-free/photoionization/recombination-continuum path using the current radiation field and level populations.
+// Reference context: XSTAR Manual ss11.5, 11.6.1, 11.7; Kallman & Bautista (2001); ATDB ch12.
+// XSTAR-FUNCTION-COMMENT-END
 void fill_continuum_shape_v67(
     FixedDsecSnapshot& snapshot,
     const xstar_fixed_state_input_v1& input,
@@ -13965,6 +15005,10 @@ void fill_continuum_shape_v67(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement native snapshot scientific valid in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 bool native_snapshot_scientific_valid_v82_patch52017(
     const FixedDsecSnapshot& snapshot,
     std::string& reason) {
@@ -13991,12 +15035,20 @@ bool native_snapshot_scientific_valid_v82_patch52017(
     return true;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement vector finite nonnegative in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 bool vector_finite_nonnegative_v82_patch52017(const std::vector<double>& values) {
     return std::all_of(values.begin(), values.end(), [](double v) {
         return std::isfinite(v) && v >= 0.0;
     });
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement gate sequence23 native committed state in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 void gate_sequence23_native_committed_state_v82_patch52017(StandaloneControllerDataV67& data) {
     if (!data.reference_trajectory_mode) return;
     if (data.call_index != 3u || data.current_sequence != 59u ||
@@ -14031,6 +15083,10 @@ void gate_sequence23_native_committed_state_v82_patch52017(StandaloneControllerD
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write write from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void write_v064812324_population_state(
     const StandaloneControllerDataV67& data,
     const std::string& tag,
@@ -14057,6 +15113,10 @@ void write_v064812324_population_state(
          << "global_level_count," << values.size() << "\n";
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write write from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void write_v064812324_fixed_input_capture(
     const StandaloneControllerDataV67& data,
     const xstar_fixed_state_input_v1& input,
@@ -14110,6 +15170,10 @@ void write_v064812324_fixed_input_capture(
 // v0.6.48.12.3.35: diagnostic-only Ca physical-attribution capture.
 // This is observational: the captured input and post-solve diagnostic files
 // are never read by the controller or fixed-state physics.
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write write from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void write_v0648123350_fixed_input_capture(
     const StandaloneControllerDataV67& data,
     const xstar_fixed_state_input_v1& input,
@@ -14163,6 +15227,10 @@ void write_v0648123350_fixed_input_capture(
              << "global_level_count," << input.global_level_count << "\n";
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement v0648123350 full target in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 bool v0648123350_full_target(const FixedDsecSnapshot& snapshot) {
     // v0.6.48.12.3.35.1 attribution hotfix: retain the complete diagnostic
     // owner surface at every accepted radial final when requested.  The 12.3.35
@@ -14180,6 +15248,10 @@ bool v0648123350_full_target(const FixedDsecSnapshot& snapshot) {
            snapshot.kind == k;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write write from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void write_v0648123350_postsolve_attribution(
     StandaloneControllerDataV67& data, const FixedDsecSnapshot& snapshot) {
     const char* root_text = std::getenv("XSTAR_V0648123350_ATTRIBUTION_DIR");
@@ -14258,6 +15330,10 @@ void write_v0648123350_postsolve_attribution(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement standalone iteration evaluator in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 int standalone_iteration_evaluator_v67(
     void* user_data,
     const xstar_thermal_state_v1* trial,
@@ -14910,6 +15986,10 @@ int standalone_iteration_evaluator_v67(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement finalize accepted boundary snapshot in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 FixedDsecSnapshot finalize_accepted_boundary_snapshot_v064894(
     StandaloneControllerDataV67& data,
     FixedDsecSnapshot snapshot) {
@@ -15023,6 +16103,10 @@ FixedDsecSnapshot finalize_accepted_boundary_snapshot_v064894(
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write write from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void write_v064812321_fixed_radial_input(
     const StandaloneControllerDataV67& data,
     const xstar_fixed_state_input_v1& input,
@@ -15074,6 +16158,10 @@ void write_v064812321_fixed_radial_input(
              << "global_level_count," << input.global_level_count << "\n";
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write write from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void write_v064812321_cpp_fixed_diagnostics(
     const StandaloneControllerDataV67& data,
     std::uint64_t source_sequence) {
@@ -15091,6 +16179,10 @@ void write_v064812321_cpp_fixed_diagnostics(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate evaluate full boundary using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use.
+// XSTAR-FUNCTION-COMMENT-END
 FixedDsecSnapshot evaluate_full_boundary_v67(
     StandaloneControllerDataV67& data,
     const xstar_thermal_state_v1& accepted_state,
@@ -15220,6 +16312,10 @@ FixedDsecSnapshot evaluate_full_boundary_v67(
     return finalize_accepted_boundary_snapshot_v064894(data, std::move(snapshot));
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement binary64 equal in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 bool binary64_equal_v064894(double lhs, double rhs) {
     std::uint64_t a = 0u;
     std::uint64_t b = 0u;
@@ -15229,6 +16325,10 @@ bool binary64_equal_v064894(double lhs, double rhs) {
     return a == b;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Build last dsec boundary from the source-ordered inputs required by the next calculation stage.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 FixedDsecSnapshot prepare_last_dsec_boundary_v064894(
     StandaloneControllerDataV67& data,
     const xstar_thermal_state_v1& accepted_state) {
@@ -15348,6 +16448,10 @@ FixedDsecSnapshot prepare_last_dsec_boundary_v064894(
     return snapshot;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement commit prepared boundary in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 FixedDsecSnapshot commit_prepared_boundary_v064894(
     StandaloneControllerDataV67& data,
     FixedDsecSnapshot snapshot) {
@@ -15359,6 +16463,10 @@ FixedDsecSnapshot commit_prepared_boundary_v064894(
     return finalize_accepted_boundary_snapshot_v064894(data, std::move(snapshot));
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate evaluate accepted boundary using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use.
+// XSTAR-FUNCTION-COMMENT-END
 FixedDsecSnapshot evaluate_accepted_boundary_v064894(
     StandaloneControllerDataV67& data,
     const xstar_thermal_state_v1& accepted_state,
@@ -15396,6 +16504,10 @@ FixedDsecSnapshot evaluate_accepted_boundary_v064894(
     return commit_prepared_boundary_v064894(data, std::move(*prepared));
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement snapshot complete in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 bool snapshot_complete_v67(
     const FixedDsecSnapshot& snapshot,
     const xstar_fixed_state_program_info_v1& info,
@@ -15410,6 +16522,10 @@ bool snapshot_complete_v67(
     return true;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write program diagnostics from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void write_program_diagnostics_v67(
     const std::filesystem::path& root,
     const xstar_atdb_runtime::ProgramStorage& program) {
@@ -15443,10 +16559,18 @@ struct ArtifactSelectionV67 {
     }
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement selected artifact in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 bool selected_artifact_v67(int override_value, bool profile_value) {
     return override_value < 0 ? profile_value : override_value != 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement artifact selection in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 ArtifactSelectionV67 artifact_selection_v67(const Options& options, const std::string& profile) {
     const bool full = profile == "full";
     const bool summary = profile == "summary";
@@ -15462,6 +16586,10 @@ ArtifactSelectionV67 artifact_selection_v67(const Options& options, const std::s
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement json escape in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::string json_escape_v67(const std::string& value) {
     std::ostringstream out;
     for (unsigned char c : value) {
@@ -15481,6 +16609,10 @@ std::string json_escape_v67(const std::string& value) {
     return out.str();
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write standalone diagnostics from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void write_standalone_diagnostics_v67(
     const std::filesystem::path& output,
     const ArtifactSelectionV67& selection,
@@ -15677,12 +16809,20 @@ void write_standalone_diagnostics_v67(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement vector has finite nonzero in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 bool vector_has_finite_nonzero_v71(const std::vector<double>& values) {
     return std::any_of(values.begin(), values.end(), [](double value) {
         return std::isfinite(value) && value != 0.0;
     });
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Validate the invariants required by validate reference physical state; reject malformed dimensions, pointers, or state before scientific kernels are entered.
+// Reference context: Implementation/safety helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 bool validate_reference_physical_state_v71(
     const xstar_run_state::ProductWritingState& product,
     std::string& reason) {
@@ -15758,6 +16898,10 @@ struct StandaloneTrajectorySummaryV71 {
     std::size_t total_events = 0;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement summarize standalone trajectory in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 StandaloneTrajectorySummaryV71 summarize_standalone_trajectory_v71(
     const xstar_run_state::ProductWritingState& product) {
     StandaloneTrajectorySummaryV71 summary;
@@ -15775,25 +16919,45 @@ StandaloneTrajectorySummaryV71 summarize_standalone_trajectory_v71(
     return summary;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement is reference mg11 benchmark in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 bool is_reference_mg11_benchmark_v71(const xstar_atdb_runtime::ProductionParameters& params) {
     return params.raw_json.find("xstar_atomic_mg11_xi1p5_ne1e8") != std::string::npos;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement diagnostic preview enabled in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 bool diagnostic_preview_enabled_v82_patch513() {
     const char* value = std::getenv("XSTAR_V82_PATCH513_DIAGNOSTIC_PREVIEW");
     return value != nullptr && std::string(value) == "1";
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement diagnostic full trajectory enabled in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 bool diagnostic_full_trajectory_enabled_v82_patch516() {
     const char* value = std::getenv("XSTAR_V82_PATCH516_DIAGNOSTIC_FULL_TRAJECTORY");
     return value != nullptr && std::string(value) == "1";
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement diagnostic attribution enabled in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 bool diagnostic_attribution_enabled_v82_patch52017() {
     const char* value = std::getenv("XSTAR_V82_PATCH52017_DIAGNOSTICS");
     return value != nullptr && std::string(value) == "1";
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write sequence23 diagnostic preview from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void write_sequence23_diagnostic_preview_v82_patch513(
     const Options& options,
     const xstar_atdb_runtime::ProductionParameters& params,
@@ -15977,6 +17141,10 @@ void write_sequence23_diagnostic_preview_v82_patch513(
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write full trajectory diagnostic preview from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void write_full_trajectory_diagnostic_preview_v82_patch516(
     const Options& options,
     StandaloneControllerDataV67& data,
@@ -16092,6 +17260,10 @@ void write_full_trajectory_diagnostic_preview_v82_patch516(
         << ((fits_count == 9u && step_written) ? "ACCEPT" : "REJECT") << "\n";
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Build general standalone product from the source-ordered inputs required by the next calculation stage.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 xstar_run_state::ProductWritingState build_general_standalone_product_v67(
     const Options& options,
     const xstar_atdb_runtime::ProductionParameters& params,
@@ -17436,6 +18608,10 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement command standalone capabilities in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 int command_standalone_capabilities_v67() {
     std::cout << "V048746255172582_STANDALONE_EXECUTABLE=YES\n"
               << "V048746255172582_TWO_ARGUMENT_INTERFACE=YES\n"
@@ -17474,6 +18650,10 @@ int command_standalone_capabilities_v67() {
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement command run standalone case probe in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 int command_run_standalone_case_probe_v70(const Options& options) {
     if (options.parameters_path.empty() || options.case_dir.empty() || options.output_dir.empty()) {
         std::cerr << "run-standalone-case-probe-v70 requires --parameters, --case-dir, and --output-dir\n";
@@ -17629,6 +18809,10 @@ int command_run_standalone_case_probe_v70(const Options& options) {
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source option17 reference bin zero based in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 std::size_t source_option17_reference_bin_zero_based_v0648117(
     const std::vector<double>& energy) {
     const std::size_t n = energy.size();
@@ -17661,6 +18845,10 @@ std::size_t source_option17_reference_bin_zero_based_v0648117(
     return std::min(n - 1u, jlo_one_based);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source option17 radiation balance percent in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 bool source_option17_radiation_balance_percent_v06488(
     const xstar_run_state::FixedEvaluationState& evaluation,
     double& percent) {
@@ -17690,6 +18878,10 @@ bool source_option17_radiation_balance_percent_v06488(
     return std::isfinite(percent);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement print xstar style progress in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 void print_xstar_style_progress_v06488(const xstar_run_state::ProductWritingState& state) {
     std::cout << " xstar_tools version " << XSTAR_API_VERSION_STRING << "\n\n"
               << " pass number=" << std::setw(12) << 1 << std::setw(12) << -1 << "\n"
@@ -17742,6 +18934,10 @@ void print_xstar_style_progress_v06488(const xstar_run_state::ProductWritingStat
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement emit performance instrumentation in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 void emit_performance_instrumentation_v064890(
     const std::filesystem::path& output,
     bool write_file,
@@ -17816,6 +19012,10 @@ void emit_performance_instrumentation_v064890(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement emit performance instrumentation in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 void emit_performance_instrumentation_v064892(
     const std::filesystem::path& output,
     bool write_file,
@@ -18137,6 +19337,10 @@ void emit_performance_instrumentation_v064892(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Run the complete native XSTAR production workflow: parse/validate model inputs, execute the shared radial/local-zone core, retain terminal state, and write the standard science products.
+// Reference context: XSTAR Manual ch14 (theory of operation) and ch5 (outputs); this is shared by standalone xstar-cpp and the qualified production-zone paths.
+// XSTAR-FUNCTION-COMMENT-END
 int command_run_standalone_production_v67(const Options& options, const std::filesystem::path& executable_path) {
     const auto production_started_v06488 = std::chrono::steady_clock::now();
     const std::string prefix = "V048746255172582_";
@@ -18436,6 +19640,10 @@ int command_run_standalone_production_v67(const Options& options, const std::fil
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement command standalone capabilities in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 [[maybe_unused]] int command_standalone_capabilities_v66() {
     std::cout << "V048746255172566_STANDALONE_EXECUTABLE=YES\n"
               << "V048746255172566_TWO_ARGUMENT_INTERFACE=YES\n"
@@ -18449,6 +19657,10 @@ int command_run_standalone_production_v67(const Options& options, const std::fil
     return 20;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute resolve standalone atomic database as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::filesystem::path resolve_standalone_atomic_database_v66(const Options& options) {
     std::vector<std::filesystem::path> candidates;
     if (!options.atomic_db_path.empty()) candidates.emplace_back(options.atomic_db_path);
@@ -18476,6 +19688,10 @@ std::filesystem::path resolve_standalone_atomic_database_v66(const Options& opti
     return {};
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement command run standalone production in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 [[maybe_unused]] int command_run_standalone_production_v66(const Options& options) {
     if (options.parameters_path.empty() || options.output_dir.empty()) {
         std::cerr << "run-production requires --parameters and --output-dir\n";
@@ -18519,6 +19735,10 @@ std::filesystem::path resolve_standalone_atomic_database_v66(const Options& opti
     return 20;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement command run native resumable trajectory in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 int command_run_native_resumable_trajectory_v1724(Options options, bool true_production_v65 = false) {
     const auto command_started = std::chrono::steady_clock::now();
     if (true_production_v65) {
@@ -18818,6 +20038,10 @@ int command_run_native_resumable_trajectory_v1724(Options options, bool true_pro
     return data.gate_failed_v1724 ? 20 : (rc == 0 ? 1 : rc);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement command run native sequence12345678 in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 [[maybe_unused]] int command_run_native_sequence12345678_v1723(Options options) {
     const auto output = std::filesystem::path(options.output_dir);
     std::filesystem::create_directories(output);
@@ -19581,6 +20805,10 @@ int command_run_native_resumable_trajectory_v1724(Options options, bool true_pro
 
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement command run native controller in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 [[maybe_unused]] int command_run_native_controller_v1711(Options options) {
     const auto started = std::chrono::steady_clock::now();
     const auto output = std::filesystem::path(options.output_dir);
@@ -19947,6 +21175,10 @@ int command_run_native_resumable_trajectory_v1724(Options options, bool true_pro
     return accepted ? 0 : 20;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement command run physical standalone in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 int command_run_physical_standalone(Options options) {
     const bool file_silent = options.artifact_profile == "none";
     return command_run_native_resumable_trajectory_v1724(options, file_silent);
@@ -20052,6 +21284,10 @@ int command_run_physical_standalone(Options options) {
 #endif
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement command run physical in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 int command_run_physical(Options options) {
     if (options.backend != "cpp") {
         std::cerr << "xstar_cpp run v0.6.48.7.46.25.5.15.9.7 supports --backend cpp only\n";
@@ -20339,6 +21575,10 @@ int command_run_physical(Options options) {
     return infrastructure_complete ? 0 : (controller_status == 0 ? 20 : controller_status);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement command python bridge test in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 int command_python_bridge_test(const Options& options) {
     std::filesystem::path directory = options.plugin_dir.empty()
         ? xstar_standalone::executable_or_library_directory(
@@ -20605,6 +21845,10 @@ extern "C" void xstar_production_zone_context_destroy_v0648110(void* context) {
     delete session;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement main in the standalone controller/front-end workflow without duplicating the scientific kernels.
+// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
+// XSTAR-FUNCTION-COMMENT-END
 int main(int argc, char** argv) {
     Options options;
     std::string error;

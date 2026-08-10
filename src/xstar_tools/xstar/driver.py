@@ -103,6 +103,10 @@ SOURCE_ORDER: Sequence[XSTARStage] = (
 class UnportedXSTARSourceRoutine(NotImplementedError):
     """Raised when a source-level routine is absent from a requested plan."""
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Initialize this object and establish the invariants required by later operations.
+    # Reference context: XSTAR Manual Ch. 14, theory-of-operation and source routine ordering.
+    # XSTAR-FUNCTION-COMMENT-END
     def __init__(self, routine: XSTARSourceRoutine, *, state: XSTARPythonState | None = None):
         self.routine = routine
         self.state = state
@@ -114,6 +118,10 @@ class UnportedXSTARSourceRoutine(NotImplementedError):
 class UnportedXSTARRoutine(NotImplementedError):
     """Raised at the first untranslated source stage."""
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Initialize this object and establish the invariants required by later operations.
+    # Reference context: XSTAR Manual Ch. 14, theory-of-operation and source routine ordering.
+    # XSTAR-FUNCTION-COMMENT-END
     def __init__(
         self,
         stage: XSTARStage,
@@ -168,6 +176,10 @@ class XSTARPythonDriver:
         default_factory=lambda: dict(_DEFAULT_SOURCE_ROUTINES)
     )
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Register operation for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual Ch. 14, theory-of-operation and source routine ordering.
+    # XSTAR-FUNCTION-COMMENT-END
     def register(
         self,
         stage: XSTARStage,
@@ -179,9 +191,17 @@ class XSTARPythonDriver:
         if source_routines is not None:
             self.source_routines[stage] = tuple(source_routines)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the implemented stages operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual Ch. 14, theory-of-operation and source routine ordering.
+    # XSTAR-FUNCTION-COMMENT-END
     def implemented_stages(self) -> List[XSTARStage]:
         return [stage for stage in SOURCE_ORDER if stage in self.handlers]
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Register source routine for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual Ch. 14, theory-of-operation and source routine ordering.
+    # XSTAR-FUNCTION-COMMENT-END
     def register_source_routine(
         self,
         routine: XSTARSourceRoutine | str,
@@ -191,9 +211,17 @@ class XSTARPythonDriver:
         key = routine if isinstance(routine, XSTARSourceRoutine) else XSTARSourceRoutine(str(routine))
         self.routine_handlers[key] = handler
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the implemented source routines operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual Ch. 14, theory-of-operation and source routine ordering.
+    # XSTAR-FUNCTION-COMMENT-END
     def implemented_source_routines(self) -> List[XSTARSourceRoutine]:
         return [routine for routine in XSTARSourceRoutine if routine in self.routine_handlers]
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Execute source routines for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual Ch. 14, theory-of-operation and source routine ordering.
+    # XSTAR-FUNCTION-COMMENT-END
     def run_source_routines(
         self,
         routines: Sequence[XSTARSourceRoutine],
@@ -210,6 +238,10 @@ class XSTARPythonDriver:
             result.provenance.setdefault("completed_source_routines", []).append(routine.value)
         return result
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Execute xstarcalc for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual Ch. 14, theory-of-operation and source routine ordering.
+    # XSTAR-FUNCTION-COMMENT-END
     def run_xstarcalc(
         self,
         state: Optional[XSTARPythonState] = None,
@@ -234,6 +266,10 @@ class XSTARPythonDriver:
         """
         result = state or XSTARPythonState()
 
+        # XSTAR-FUNCTION-COMMENT-BEGIN
+        # Purpose: Implement the execute operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+        # Reference context: XSTAR Manual Ch. 14, theory-of-operation and source routine ordering.
+        # XSTAR-FUNCTION-COMMENT-END
         def execute(routine: XSTARSourceRoutine) -> None:
             handler = self.routine_handlers.get(routine)
             if handler is None:
@@ -298,6 +334,10 @@ class XSTARPythonDriver:
         return result
 
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Execute radial shell for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual Ch. 14, theory-of-operation and source routine ordering.
+    # XSTAR-FUNCTION-COMMENT-END
     def run_radial_shell(
         self,
         state: Optional[XSTARPythonState] = None,
@@ -344,6 +384,10 @@ class XSTARPythonDriver:
         result.control["kk"] = kk
         result.control["ldir"] = ldir
 
+        # XSTAR-FUNCTION-COMMENT-BEGIN
+        # Purpose: Implement the execute operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+        # Reference context: XSTAR Manual Ch. 14, theory-of-operation and source routine ordering.
+        # XSTAR-FUNCTION-COMMENT-END
         def execute(routine: XSTARSourceRoutine) -> None:
             handler = self.routine_handlers.get(routine)
             if handler is None:
@@ -493,6 +537,10 @@ class XSTARPythonDriver:
         }
         return result
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Execute the translated top-level XSTAR controller in source routine order using registered source-faithful stages.
+    # Reference context: XSTAR Manual Ch. 14, theory-of-operation and source routine ordering.
+    # XSTAR-FUNCTION-COMMENT-END
     def run(
         self,
         state: Optional[XSTARPythonState] = None,

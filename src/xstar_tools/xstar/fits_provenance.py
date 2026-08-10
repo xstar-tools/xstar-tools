@@ -23,6 +23,10 @@ class PythonFitsProvenance:
     backend_kind: str
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the python fits provenance operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Implementation helper around the source-faithful XSTAR model; no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def python_fits_provenance() -> PythonFitsProvenance:
     """Return truthful product provenance for the active Python driver mode."""
     selection = resolve_backend_selection()
@@ -60,6 +64,10 @@ def python_fits_provenance() -> PythonFitsProvenance:
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Apply python primary fits header for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Implementation helper around the source-faithful XSTAR model; no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def apply_python_primary_fits_header(
     header: Any,
     *,

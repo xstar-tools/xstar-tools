@@ -181,18 +181,34 @@ class _Output(ctypes.Structure):
     ]
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the p64 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _p64(array: np.ndarray) -> ctypes.POINTER(ctypes.c_double):
     return array.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the pi32 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _pi32(array: np.ndarray) -> ctypes.POINTER(ctypes.c_int32):
     return array.ctypes.data_as(ctypes.POINTER(ctypes.c_int32))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the pi64 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _pi64(array: np.ndarray) -> ctypes.POINTER(ctypes.c_int64):
     return array.ctypes.data_as(ctypes.POINTER(ctypes.c_int64))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Load operation for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _load() -> ctypes.CDLL:
     global _LIB, _LOAD_ERROR
     if _LIB is not None:
@@ -234,6 +250,10 @@ def _load() -> ctypes.CDLL:
     raise RuntimeError(_LOAD_ERROR or "libxstar_engine.so unavailable")
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the context operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _context() -> ctypes.c_void_p:
     ctx = getattr(_TLS, "context", None)
     if ctx:
@@ -250,6 +270,10 @@ def _context() -> ctypes.c_void_p:
     return value
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the element engine status operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def element_engine_status() -> dict[str, Any]:
     try:
         lib = _load()
@@ -265,10 +289,18 @@ def element_engine_status() -> dict[str, Any]:
         return {"available": False, "abi_version": None, "implementation": None, "load_error": str(exc)}
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the env true operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _env_true(name: str) -> bool:
     return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the element engine cpp product enabled operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def element_engine_cpp_product_enabled(element_z: int) -> bool:
     if not _env_true("XSTAR_ATOMIC_ELEMENT_ENGINE_CPP"):
         return False
@@ -280,6 +312,10 @@ def element_engine_cpp_product_enabled(element_z: int) -> bool:
     return int(element_z) in selected and _env_true("XSTAR_ATOMIC_ELEMENT_ENGINE_CPP_PRODUCT")
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the element engine cpp shadow enabled operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def element_engine_cpp_shadow_enabled(element_z: int) -> bool:
     if not _env_true("XSTAR_ATOMIC_ELEMENT_ENGINE_CPP"):
         return False
@@ -291,6 +327,10 @@ def element_engine_cpp_shadow_enabled(element_z: int) -> bool:
     return int(element_z) in selected and _env_true("XSTAR_ATOMIC_ELEMENT_ENGINE_CPP_SHADOW")
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the contributions from terms operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _contributions_from_terms(terms: Any, density_scale: float) -> list[Any]:
     values = list(terms)
     if len(values) % 4 != 0:
@@ -323,6 +363,10 @@ def _contributions_from_terms(terms: Any, density_scale: float) -> list[Any]:
     return result
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Execute element engine cpp for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def run_element_engine_cpp(assembly: Any, context: Any) -> tuple[Any, dict[str, Any]]:
     """Run native matrix construction, Lucy solve, and derived state commit."""
     from .element_equilibrium import LucySolveResult

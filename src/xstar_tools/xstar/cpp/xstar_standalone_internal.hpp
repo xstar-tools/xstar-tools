@@ -21,6 +21,10 @@
 
 namespace xstar_standalone {
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement copy text as a small shared native helper used by the standalone/backend orchestration layer.
+// Reference context: Implementation helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 inline void copy_text(char* destination, std::size_t capacity, const std::string& value) {
     if (destination == nullptr || capacity == 0) return;
     const std::size_t count = std::min(capacity - 1, value.size());
@@ -28,15 +32,27 @@ inline void copy_text(char* destination, std::size_t capacity, const std::string
     destination[count] = '\0';
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement field text as a small shared native helper used by the standalone/backend orchestration layer.
+// Reference context: Implementation helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 inline std::string field_text(const char* value, std::size_t capacity) {
     if (value == nullptr || capacity == 0) return {};
     return std::string(value, strnlen(value, capacity));
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement valid struct as a small shared native helper used by the standalone/backend orchestration layer.
+// Reference context: Implementation helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 inline bool valid_struct(std::uint32_t actual, std::size_t expected) {
     return actual >= expected;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement requested component backend as a small shared native helper used by the standalone/backend orchestration layer.
+// Reference context: Implementation helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 inline std::string requested_component_backend(const xstar_config_v1& config, std::uint32_t id) {
     const char* value = nullptr;
     switch (id) {
@@ -57,6 +73,10 @@ inline std::string requested_component_backend(const xstar_config_v1& config, st
     return result;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement component name as a small shared native helper used by the standalone/backend orchestration layer.
+// Reference context: Implementation helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 inline const char* component_name(std::uint32_t id) {
     switch (id) {
         case XSTAR_COMPONENT_ENGINE: return "engine";
@@ -71,6 +91,10 @@ inline const char* component_name(std::uint32_t id) {
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement executable or library directory as a small shared native helper used by the standalone/backend orchestration layer.
+// Reference context: Implementation helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 inline std::filesystem::path executable_or_library_directory(const void* symbol_address) {
 #ifdef __linux__
     Dl_info info{};

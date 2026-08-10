@@ -24,6 +24,10 @@
 namespace xstar_run_state {
 namespace {
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement json escape as a local helper for the xstar run state module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 std::string json_escape(const std::string& value) {
     std::string out;
     out.reserve(value.size() + 8);
@@ -40,6 +44,10 @@ std::string json_escape(const std::string& value) {
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement float bits as a local helper for the xstar run state module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 std::uint32_t float_bits(float value) {
     std::uint32_t bits = 0;
     static_assert(sizeof(bits) == sizeof(value), "binary32 size mismatch");
@@ -48,6 +56,10 @@ std::uint32_t float_bits(float value) {
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement manifest bool as a local helper for the xstar run state module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 bool manifest_bool(const std::filesystem::path& path, const std::string& key) {
     std::ifstream input(path);
     if (!input) return false;
@@ -61,6 +73,10 @@ bool manifest_bool(const std::filesystem::path& path, const std::string& key) {
     return tail.find("true") != std::string::npos;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement manifest string as a local helper for the xstar run state module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 std::string manifest_string(const std::filesystem::path& path, const std::string& key) {
     std::ifstream input(path);
     if (!input) return "MISSING";
@@ -79,6 +95,10 @@ std::string manifest_string(const std::filesystem::path& path, const std::string
 // v25.5.15 keeps the bridge loader validation explicit and enables public
 // product writing only through an opt-in manifest gate.  Product parity remains
 // outside this milestone.
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load tauc bridge payload scaffold into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 bool load_tauc_bridge_payload_scaffold(const std::filesystem::path& metadata_root) {
     const auto bridge = metadata_root / "exact_product_state_bridge";
     const auto manifest = bridge / "manifest.json";
@@ -89,6 +109,10 @@ bool load_tauc_bridge_payload_scaffold(const std::filesystem::path& metadata_roo
            std::filesystem::is_regular_file(bridge / "tauc_native_load_scaffold.json");
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load radial accumulation bridge payload scaffold into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 bool load_radial_accumulation_bridge_payload_scaffold(const std::filesystem::path& metadata_root) {
     const auto bridge = metadata_root / "exact_product_state_bridge";
     const auto manifest = bridge / "manifest.json";
@@ -99,6 +123,10 @@ bool load_radial_accumulation_bridge_payload_scaffold(const std::filesystem::pat
            std::filesystem::is_regular_file(bridge / "radial_accumulation_native_load_scaffold.json");
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load dpthcont zremsz bridge payload scaffold into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 bool load_dpthcont_zremsz_bridge_payload_scaffold(const std::filesystem::path& metadata_root) {
     const auto bridge = metadata_root / "exact_product_state_bridge";
     const auto manifest = bridge / "manifest.json";
@@ -111,6 +139,10 @@ bool load_dpthcont_zremsz_bridge_payload_scaffold(const std::filesystem::path& m
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load line rrc continuum bridge payload scaffold into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 bool load_line_rrc_continuum_bridge_payload_scaffold(const std::filesystem::path& metadata_root) {
     const auto bridge = metadata_root / "exact_product_state_bridge";
     const auto manifest = bridge / "manifest.json";
@@ -120,6 +152,10 @@ bool load_line_rrc_continuum_bridge_payload_scaffold(const std::filesystem::path
            std::filesystem::is_regular_file(bridge / "line_rrc_continuum_native_load_scaffold.json");
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load native product writing state loader into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 bool load_native_product_writing_state_loader(const std::filesystem::path& metadata_root) {
     const auto bridge = metadata_root / "exact_product_state_bridge";
     const auto manifest = bridge / "manifest.json";
@@ -141,6 +177,10 @@ bool load_native_product_writing_state_loader(const std::filesystem::path& metad
            std::filesystem::is_regular_file(bridge / "xout_step_body_from_pprint.log");
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load bridge legacy pprint body into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void load_bridge_legacy_pprint_body(const std::filesystem::path& metadata_root,
                                     LegacyPprintState& pprint) {
     const auto bridge = metadata_root / "exact_product_state_bridge";
@@ -159,6 +199,10 @@ void load_bridge_legacy_pprint_body(const std::filesystem::path& metadata_root,
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement split csv quoted as a local helper for the xstar run state module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<std::string> split_csv_quoted(const std::string& line) {
     std::vector<std::string> fields;
     std::string field;
@@ -184,6 +228,10 @@ std::vector<std::string> split_csv_quoted(const std::string& line) {
 }
 
 template <typename Callback>
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load csv rows into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void read_csv_rows(const std::filesystem::path& path, Callback callback) {
     std::ifstream input(path);
     if (!input) throw std::runtime_error("cannot open native product metadata: " + path.string());
@@ -207,6 +255,10 @@ void read_csv_rows(const std::filesystem::path& path, Callback callback) {
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement simple columns of as a local helper for the xstar run state module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 std::map<std::string,std::size_t> simple_columns_of(const std::string& header) {
     std::map<std::string,std::size_t> out;
     std::size_t start = 0;
@@ -221,6 +273,10 @@ std::map<std::string,std::size_t> simple_columns_of(const std::string& header) {
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement simple field as a local helper for the xstar run state module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 std::string simple_field(const std::vector<std::string>& fields, const std::map<std::string,std::size_t>& columns,
                          const std::string& name, const std::string& fallback = "") {
     const auto it = columns.find(name);
@@ -228,6 +284,10 @@ std::string simple_field(const std::vector<std::string>& fields, const std::map<
     return fields[it->second];
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement synthesize metadata from native case as a local helper for the xstar run state module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void synthesize_metadata_from_native_case(WholeRunAccumulatedState& state) {
     state.level_identities.clear();
     state.line_identities.clear();
@@ -277,6 +337,10 @@ void synthesize_metadata_from_native_case(WholeRunAccumulatedState& state) {
     state.exact_source_metadata_retained = !state.level_identities.empty();
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load exact source metadata into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void load_exact_source_metadata(WholeRunAccumulatedState& state) {
     const auto root = state.product_metadata_path;
     if (!std::filesystem::is_directory(root)) {
@@ -353,6 +417,10 @@ void load_exact_source_metadata(WholeRunAccumulatedState& state) {
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write retention report from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void write_retention_report(const WholeRunAccumulatedState& state,
                             const std::filesystem::path& path) {
     std::ofstream out(path);
@@ -439,6 +507,10 @@ void write_retention_report(const WholeRunAccumulatedState& state,
 
 } // namespace
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Build native product state from the source-ordered inputs required by the next calculation stage.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void prepare_native_product_state(
     WholeRunAccumulatedState& state,
     const std::filesystem::path& diagnostics_path) {
@@ -541,6 +613,10 @@ void prepare_native_product_state(
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Build product writing state from the source-ordered inputs required by the next calculation stage.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 ProductWritingState build_product_writing_state(const WholeRunAccumulatedState& state) {
     ProductWritingState product;
     product.release = state.release;
@@ -587,6 +663,10 @@ ProductWritingState build_product_writing_state(const WholeRunAccumulatedState& 
     return product;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write run state manifest from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
+// XSTAR-FUNCTION-COMMENT-END
 void write_run_state_manifest(
     const std::filesystem::path& path,
     const WholeRunAccumulatedState& whole,

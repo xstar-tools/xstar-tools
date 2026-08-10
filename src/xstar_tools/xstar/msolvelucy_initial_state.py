@@ -34,11 +34,19 @@ class MSolveLucyInitialPopulationReference:
     populations: np.ndarray
     source_path: str
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the population sum operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Implementation helper around the source-faithful XSTAR model; no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def population_sum(self) -> float:
         return float(np.sum(self.populations))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Read rows for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Implementation helper around the source-faithful XSTAR model; no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _read_rows(path: Path) -> List[Dict[str, str]]:
     if not path.exists():
         raise MSolveLucyInitialStateError(f"missing initial-population probe: {path}")
@@ -49,6 +57,10 @@ def _read_rows(path: Path) -> List[Dict[str, str]]:
     return rows
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Resolve call id for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Implementation helper around the source-faithful XSTAR model; no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _resolve_call_id(rows: Sequence[Mapping[str, str]], requested: Optional[int]) -> int:
     ids = sorted({int(row["calc_hmc_all_call_id"]) for row in rows})
     if requested is None:
@@ -60,6 +72,10 @@ def _resolve_call_id(rows: Sequence[Mapping[str, str]], requested: Optional[int]
     return int(requested)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Load msolvelucy initial population reference for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Implementation helper around the source-faithful XSTAR model; no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def load_msolvelucy_initial_population_reference(
     probe_dir: str | Path,
     *,
@@ -160,6 +176,10 @@ class MSolveLucyInitialPopulationParityResult:
     element_results: List[Dict[str, object]] = field(default_factory=list)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Compare msolvelucy initial population for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Implementation helper around the source-faithful XSTAR model; no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def compare_msolvelucy_initial_population(
     python_populations: Sequence[float],
     reference: MSolveLucyInitialPopulationReference,
@@ -226,6 +246,10 @@ def compare_msolvelucy_initial_population(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Compare msolvelucy initial populations for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Implementation helper around the source-faithful XSTAR model; no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def compare_msolvelucy_initial_populations(
     python_populations_by_element: Mapping[int, Sequence[float]],
     probe_dir: str | Path,

@@ -44,14 +44,26 @@ class SavedRadialStatePortError(RuntimeError):
     """Raised when saved shell/pass state violates the source contract."""
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the real4 scalar operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Chs. 5 and 14, per-shell state persistence across radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def _real4_scalar(value: float) -> float:
     return float(np.float32(float(value)))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the real4 array operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Chs. 5 and 14, per-shell state persistence across radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def _real4_array(values: Sequence[float]) -> np.ndarray:
     return np.asarray(values, dtype=np.float32).astype(float)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the index vector operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Chs. 5 and 14, per-shell state persistence across radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def _index_vector(
     values: Optional[Sequence[int]], *, size: int, name: str
 ) -> np.ndarray:
@@ -109,6 +121,10 @@ class SavedShellSnapshot:
     source_file: str = "xstar/xstarlib/src/savd.f90"
     storage_contract: str = "caller-owned in-memory fstepr-real4 equivalent"
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Validate SavedShellSnapshot invariants before the value is consumed downstream.
+    # Reference context: XSTAR Manual Chs. 5 and 14, per-shell state persistence across radial passes.
+    # XSTAR-FUNCTION-COMMENT-END
     def validate(self) -> None:
         if self.pass_index < 1 or self.zone_index < 0:
             raise SavedRadialStatePortError("invalid pass/zone index in snapshot")
@@ -190,6 +206,10 @@ class SavedRadialPassState:
     )
     insertion_log: list[Mapping[str, int | bool]] = field(default_factory=list)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Validate/normalize dataclass state immediately after construction.
+    # Reference context: XSTAR Manual Chs. 5 and 14, per-shell state persistence across radial passes.
+    # XSTAR-FUNCTION-COMMENT-END
     def __post_init__(self) -> None:
         if int(self.pass_index) < 1:
             raise SavedRadialStatePortError("pass_index must be positive")
@@ -198,10 +218,18 @@ class SavedRadialPassState:
                 "saved pass must reserve one-based HDUs 1 and 2"
             )
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the hdu count operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual Chs. 5 and 14, per-shell state persistence across radial passes.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def hdu_count(self) -> int:
         return len(self.hdu_snapshots) - 1
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Insert after hdu for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual Chs. 5 and 14, per-shell state persistence across radial passes.
+    # XSTAR-FUNCTION-COMMENT-END
     def insert_after_hdu(
         self, hdunum: int, snapshot: SavedShellSnapshot
     ) -> int:
@@ -223,6 +251,10 @@ class SavedRadialPassState:
         )
         return inserted
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the snapshot at hdu operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual Chs. 5 and 14, per-shell state persistence across radial passes.
+    # XSTAR-FUNCTION-COMMENT-END
     def snapshot_at_hdu(self, hdunum: int) -> SavedShellSnapshot:
         hdu = int(hdunum)
         if hdu < 1 or hdu > self.hdu_count:
@@ -236,6 +268,10 @@ class SavedRadialPassState:
             )
         return snapshot
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the populated hdus operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual Chs. 5 and 14, per-shell state persistence across radial passes.
+    # XSTAR-FUNCTION-COMMENT-END
     def populated_hdus(self) -> tuple[int, ...]:
         return tuple(
             index
@@ -250,6 +286,10 @@ class SavedRadialStateStore:
 
     passes: dict[int, SavedRadialPassState] = field(default_factory=dict)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the begin pass operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual Chs. 5 and 14, per-shell state persistence across radial passes.
+    # XSTAR-FUNCTION-COMMENT-END
     def begin_pass(self, pass_index: int, *, replace: bool = False) -> SavedRadialPassState:
         index = int(pass_index)
         if index in self.passes and not replace:
@@ -258,6 +298,10 @@ class SavedRadialStateStore:
         self.passes[index] = state
         return state
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Require pass for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual Chs. 5 and 14, per-shell state persistence across radial passes.
+    # XSTAR-FUNCTION-COMMENT-END
     def require_pass(self, pass_index: int) -> SavedRadialPassState:
         index = int(pass_index)
         if index not in self.passes:
@@ -300,6 +344,10 @@ class UnsavdResult:
     source_file: str = "xstar/xstarlib/src/unsavd.f90"
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Construct saved shell snapshot for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Chs. 5 and 14, per-shell state persistence across radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def make_saved_shell_snapshot(
     *,
     pass_index: int,
@@ -420,6 +468,10 @@ def make_saved_shell_snapshot(
     return snapshot
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Restore a persisted shell snapshot with source REAL(4)-round-trip semantics for subsequent radial passes/publication.
+# Reference context: XSTAR Manual Chs. 5 and 14, per-shell state persistence across radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def unsavd(
     snapshot: SavedShellSnapshot,
     *,
@@ -561,6 +613,10 @@ def unsavd(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Provide the direct-source reference for fortran unsavd reference cases for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Chs. 5 and 14, per-shell state persistence across radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def direct_fortran_unsavd_reference_cases() -> Mapping[str, object]:
     """Frozen output from unmodified ``unsavd.f90`` with deterministic stubs."""
     scalars = [
@@ -629,6 +685,10 @@ def direct_fortran_unsavd_reference_cases() -> Mapping[str, object]:
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Provide the direct-source reference for unsavd python result for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Chs. 5 and 14, per-shell state persistence across radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def _direct_unsavd_python_result(direction: int) -> UnsavdResult:
     ncn = 6
     ncn2 = 4
@@ -705,6 +765,10 @@ def _direct_unsavd_python_result(direction: int) -> UnsavdResult:
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Execute direct fortran unsavd validation for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Chs. 5 and 14, per-shell state persistence across radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def run_direct_fortran_unsavd_validation(
     *, rtol: float = 2.0e-15, atol: float = 0.0
 ) -> Mapping[str, bool]:
@@ -714,6 +778,10 @@ def run_direct_fortran_unsavd_validation(
     minus = _direct_unsavd_python_result(-1)
     plus = _direct_unsavd_python_result(1)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Close operation for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual Chs. 5 and 14, per-shell state persistence across radial passes.
+    # XSTAR-FUNCTION-COMMENT-END
     def close(actual: object, expected: object) -> bool:
         return bool(
             np.allclose(

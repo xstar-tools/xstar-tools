@@ -21,6 +21,10 @@ _ENV_CALL = "XSTAR_V82_PATCH5201734_PYTHON_CALL_INDEX"
 _DEFAULT_CALL = 2
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the target call operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _target_call() -> int:
     try:
         return max(1, int(os.environ.get(_ENV_CALL, str(_DEFAULT_CALL))))
@@ -28,6 +32,10 @@ def _target_call() -> int:
         return _DEFAULT_CALL
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the attribution dir operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def attribution_dir(context: Any) -> Path | None:
     raw = os.environ.get(_ENV_DIR, "").strip()
     if not raw:
@@ -40,10 +48,18 @@ def attribution_dir(context: Any) -> Path | None:
     return out
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Report whether this optional diagnostic/backend path is enabled by the current configuration.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def enabled(context: Any) -> bool:
     return attribution_dir(context) is not None
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Initialize call for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def initialize_call(context: Any) -> None:
     out = attribution_dir(context)
     if out is None:
@@ -62,6 +78,10 @@ def initialize_call(context: Any) -> None:
     setattr(context, "_patch5201734_line_record_order", 0)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Append csv for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _append_csv(path: Path, row: Mapping[str, Any]) -> None:
     exists = path.exists() and path.stat().st_size > 0
     with path.open("a", newline="", encoding="utf-8") as stream:
@@ -71,6 +91,10 @@ def _append_csv(path: Path, row: Mapping[str, Any]) -> None:
         writer.writerow(row)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Record line for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def record_line(
     context: Any,
     *,
@@ -137,6 +161,10 @@ def record_line(
     _append_csv(out / "python_selected_line_records.csv", row)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the checkpoint operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def checkpoint(context: Any, phase: str, values: Any, *, dump_name: str | None = None) -> None:
     out = attribution_dir(context)
     if out is None:

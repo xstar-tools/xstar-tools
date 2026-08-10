@@ -85,6 +85,10 @@ class CompleteFixedStateParityResult:
     max_relative_difference: float
     diagnostics: Mapping[str, Any] = field(default_factory=dict)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Report whether all prerequisites/results required by this stage are present and internally consistent.
+    # Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4, complete local-zone state.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def ready(self) -> bool:
         return bool(
@@ -105,6 +109,10 @@ class CompleteFixedStateParityResult:
         )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Resolve final probe for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4, complete local-zone state.
+# XSTAR-FUNCTION-COMMENT-END
 def _resolve_final_probe(path: str | Path) -> Path:
     target = Path(path)
     if target.is_dir():
@@ -114,6 +122,10 @@ def _resolve_final_probe(path: str | Path) -> Path:
     return target
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Load calc hmc all final state reference for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4, complete local-zone state.
+# XSTAR-FUNCTION-COMMENT-END
 def load_calc_hmc_all_final_state_reference(
     path: str | Path,
     *,
@@ -152,6 +164,10 @@ def load_calc_hmc_all_final_state_reference(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the row operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4, complete local-zone state.
+# XSTAR-FUNCTION-COMMENT-END
 def _row(
     category: str,
     quantity: str,
@@ -178,6 +194,10 @@ def _row(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Compare complete fixed state calc hmc all for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4, complete local-zone state.
+# XSTAR-FUNCTION-COMMENT-END
 def compare_complete_fixed_state_calc_hmc_all(
     result: FixedStateCalcHMCAllResult,
     reference: CalcHMCAllFinalStateReference,
@@ -273,6 +293,10 @@ def compare_complete_fixed_state_calc_hmc_all(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write complete fixed state parity products for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4, complete local-zone state.
+# XSTAR-FUNCTION-COMMENT-END
 def write_complete_fixed_state_parity_products(
     parity: CompleteFixedStateParityResult,
     out_dir: str | Path,

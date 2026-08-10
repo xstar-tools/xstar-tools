@@ -33,12 +33,20 @@ class PortLedgerEntry:
 class XSTARPortLedger:
     entries: List[PortLedgerEntry]
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the status counts operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     def status_counts(self) -> Dict[str, int]:
         counts: Dict[str, int] = {}
         for entry in self.entries:
             counts[entry.status.value] = counts.get(entry.status.value, 0) + 1
         return counts
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the upsert operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     def upsert(self, entry: PortLedgerEntry) -> None:
         for i, current in enumerate(self.entries):
             if (
@@ -49,6 +57,10 @@ class XSTARPortLedger:
                 return
         self.entries.append(entry)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Write operation for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     def write(self, out_dir: str) -> Dict[str, str]:
         output = Path(out_dir)
         output.mkdir(parents=True, exist_ok=True)
@@ -102,6 +114,10 @@ NEXT_COHERENT_SOURCE_PORT_TARGET = (
 )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Construct the default port ledger for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def default_port_ledger() -> XSTARPortLedger:
     """Return the source-port ledger through the bounded radial-shell release.
 

@@ -137,6 +137,10 @@ class CalcEmisWorkspace:
     fline: np.ndarray
     flinel: np.ndarray
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the allocate operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+    # XSTAR-FUNCTION-COMMENT-END
     @classmethod
     def allocate(
         cls,
@@ -159,6 +163,10 @@ class CalcEmisWorkspace:
             flinel=np.full(int(n_energy), float(flinel_fill), dtype=float),
         )
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Validate CalcEmisWorkspace invariants before the value is consumed downstream.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+    # XSTAR-FUNCTION-COMMENT-END
     def validate(self, *, n_lines: int, n_continua: int, n_energy: int) -> None:
         self.base.validate(n_lines=n_lines, n_continua=n_continua, n_energy=n_energy)
         if self.fline.shape != (2, int(n_lines) + 1):
@@ -210,16 +218,32 @@ class CalcEmisContext:
     progress_callback: Optional[Callable[[str, Mapping[str, Any]], None]] = None
     mg_line_kernel: str = "python"
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the temperature k operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def temperature_k(self) -> float:
         return float(self.temperature_1e4K) * 1.0e4
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the abundance operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+    # XSTAR-FUNCTION-COMMENT-END
     def abundance(self, z: int) -> float:
         return float(self.abundances_by_z.get(int(z), 0.0))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the min stage operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+    # XSTAR-FUNCTION-COMMENT-END
     def min_stage(self, z: int) -> int:
         return int(self.min_ion_stage_by_z.get(int(z), 1))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the max stage operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+    # XSTAR-FUNCTION-COMMENT-END
     def max_stage(self, z: int) -> int:
         return int(self.max_ion_stage_by_z.get(int(z), int(z) + 1))
 
@@ -305,6 +329,10 @@ class CalcEmisResult:
     active_feature_summary: Mapping[str, Any] = field(default_factory=dict)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the high resolution radiation operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def _high_resolution_radiation(radiation: Any) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     epi = np.asarray(getattr(radiation, "epi_eV", getattr(radiation, "epi", ())), dtype=float).reshape(-1)
     bremsa = np.asarray(getattr(radiation, "bremsa", ()), dtype=float).reshape(-1)
@@ -318,11 +346,19 @@ def _high_resolution_radiation(radiation: Any) -> tuple[np.ndarray, np.ndarray, 
     return epi, bremsa, bremsint
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Resolve calc emis density for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def resolve_calc_emis_density(*, xpx: float, pressure: float, t_1e4: float, xee: float, lcdd: int) -> float:
     """Translate the density overrides at the top of ``calc_emis_all``."""
     return resolve_calc_emisab_density(xpx=xpx, pressure=pressure, t_1e4=t_1e4, xee=xee, lcdd=lcdd)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Insert a spectral feature into the source-style ranked/bin workspace while preserving its identity and energy ordering.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def rlbin_insert(
     *,
     feature_kind: str,
@@ -378,6 +414,10 @@ def rlbin_insert(
     return FeatureRankTrace(feature_kind, jkk1, wave, energy, nb1, mm, True, "stored")
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the feature indices from context operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def _feature_indices_from_context(context: CalcEmisContext, kind: str) -> np.ndarray:
     """Return one-based feature indices for ranking.
 
@@ -401,6 +441,10 @@ def _feature_indices_from_context(context: CalcEmisContext, kind: str) -> np.nda
     return arr
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the cached rank table operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def _cached_rank_table(context: CalcEmisContext, key: str, shape: tuple[int, int]) -> np.ndarray:
     cache = getattr(context, "reusable_work_arrays", None)
     if isinstance(cache, MutableMapping):
@@ -414,6 +458,10 @@ def _cached_rank_table(context: CalcEmisContext, key: str, shape: tuple[int, int
     return np.zeros(shape, dtype=int)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build feature rank tables for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def build_feature_rank_tables(context: CalcEmisContext, epi: np.ndarray) -> tuple[np.ndarray, np.ndarray, tuple[FeatureRankTrace, ...], dict[str, Any]]:
     n = int(epi.size)
     nrank = int(context.rank_depth)
@@ -452,6 +500,10 @@ def build_feature_rank_tables(context: CalcEmisContext, epi: np.ndarray) -> tupl
     }
     return line_table, continuum_table, tuple(traces) if retain else tuple(), summary
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the feature is ranked operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def _feature_is_ranked(table: np.ndarray, feature_index: int, bin_one_based: int) -> bool:
     mm = 1
     nrank = int(table.shape[0] - 1)
@@ -463,11 +515,19 @@ def _feature_is_ranked(table: np.ndarray, feature_index: int, bin_one_based: int
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the parent element atomic mass operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def _parent_element_atomic_mass(master: Any, derived: Any, record: int, *, ion_index: int | None = None) -> float:
     """Return the accepted C++-parity Type-50 atomic mass (patch 5.20.17.3.5)."""
     return cpp_parity_atomic_mass_amu(master, derived, int(record), ion_index=ion_index)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the type50 natural width ev operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def _type50_natural_width_ev(
     master: Any, derived: Any, *, ion_index: int, upper_local: int, fallback_aij_s: float
 ) -> tuple[float, int, bool]:
@@ -478,6 +538,10 @@ def _type50_natural_width_ev(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the type50 profile scalars operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def _type50_profile_scalars(
     master: Any, derived: Any, *, record: int, ion_index: int, levels: UCalcLevelTable | None = None
 ) -> tuple[float, float, int, int, bool]:
@@ -506,6 +570,10 @@ def _type50_profile_scalars(
     return float(mass), float(width), int(source_upper), int(damping_record), bool(matched)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the source linopac into opakc operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def _source_linopac_into_opakc(
     *,
     optpp: float,
@@ -695,6 +763,10 @@ def _source_linopac_into_opakc(
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the patch5201734 replay selected line producers operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def _patch5201734_replay_selected_line_producers(
     context: CalcEmisContext,
     record_traces: Sequence[CalcEmisRecordTrace],
@@ -768,6 +840,10 @@ def _patch5201734_replay_selected_line_producers(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the source linopac center profile operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def _source_linopac_center_profile(
     *,
     line_energy_eV: float,
@@ -795,6 +871,10 @@ def _source_linopac_center_profile(
     )[0]
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the source linopac seed profiles operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def _source_linopac_seed_profiles(
     *,
     line_energy_eV: float,
@@ -824,6 +904,10 @@ def _source_linopac_seed_profiles(
     ncut = max(1, min(int(deleepi / dele), 2000))
     deleused = deleepi / float(np.float32(ncut))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Profile operation for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+    # XSTAR-FUNCTION-COMMENT-END
     def _profile(etptst: float, threshold: float) -> float:
         delet = (float(etptst) - e0) / dele
         if aasmall > threshold:
@@ -839,6 +923,10 @@ def _source_linopac_seed_profiles(
     return tuple(values)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the bin continuum opacity for step operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def _bin_continuum_opacity_for_step(context: CalcEmisContext, continuum_index: int, opakab: float, epi: np.ndarray) -> None:
     """Do not re-bin ``opakab`` into the continuum optical-depth grid.
 
@@ -860,6 +948,10 @@ def _bin_continuum_opacity_for_step(context: CalcEmisContext, continuum_index: i
     return
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the as emisab context operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def _as_emisab_context(context: CalcEmisContext) -> CalcEmisabContext:
     """Create a duck-compatible view for shared ``ucalc`` helpers."""
     return CalcEmisabContext(
@@ -895,6 +987,10 @@ def _as_emisab_context(context: CalcEmisContext) -> CalcEmisabContext:
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Calculate emis record sequence for ion for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def _calc_emis_record_sequence_for_ion(context: CalcEmisContext, ion: _IonDescriptor) -> list[tuple[int, int]]:
     """Return the source-ordered calc_emis_ion record sequence for one ion.
 
@@ -920,6 +1016,10 @@ def _calc_emis_record_sequence_for_ion(context: CalcEmisContext, ion: _IonDescri
     return list(seq)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the compact mg line emissivity table operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def _compact_mg_line_emissivity_table(
     context: CalcEmisContext,
     ion: _IonDescriptor,
@@ -1019,6 +1119,10 @@ def _compact_mg_line_emissivity_table(
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the emissivity cpp active for mg type4 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def _emissivity_cpp_active_for_mg_type4(context: CalcEmisContext) -> bool:
     requested = None
     control = getattr(context, "profile_control", None)
@@ -1033,6 +1137,10 @@ def _emissivity_cpp_active_for_mg_type4(context: CalcEmisContext) -> bool:
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the emissivity upstream type4 product enabled operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def _emissivity_upstream_type4_product_enabled() -> bool:
     """Opt-in product gate for the accepted/promoted Mg type-4/type-50 upstream C++ path.
 
@@ -1049,6 +1157,10 @@ def _emissivity_upstream_type4_product_enabled() -> bool:
             return True
     return False
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the emissivity upstream type4 shadow enabled operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def _emissivity_upstream_type4_shadow_enabled() -> bool:
     """Diagnostic-only Mg type-4 upstream emissivity C++ shadow gate.
 
@@ -1066,6 +1178,10 @@ def _emissivity_upstream_type4_shadow_enabled() -> bool:
     return False
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the safe int env operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def _safe_int_env(name: str, default: int) -> int:
     try:
         return int(os.environ.get(name, str(default)) or str(default))
@@ -1073,6 +1189,10 @@ def _safe_int_env(name: str, default: int) -> int:
         return int(default)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the add cpp counter totals operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def _add_cpp_counter_totals(total: dict[str, float], stats: Mapping[str, Any]) -> None:
     """Accumulate all numeric C++ backend statistics.
 
@@ -1088,6 +1208,10 @@ def _add_cpp_counter_totals(total: dict[str, float], stats: Mapping[str, Any]) -
             continue
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Record type76 rccemis checkpoint for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def _record_type76_rccemis_checkpoint(
     context: "CalcEmisContext",
     phase: str,
@@ -1154,6 +1278,10 @@ def _record_type76_rccemis_checkpoint(
             pass
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Project one ion's integrated processes onto the full continuum grid, including line profiles, RRC/continuum emission, and opacity.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def calc_emis_ion(
     context: CalcEmisContext,
     *,
@@ -1266,6 +1394,10 @@ def calc_emis_ion(
         type76_retained_rccemis = np.zeros_like(context.workspace.base.rccemis)
     type76_retained_records = 0
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Apply native spectral row for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+    # XSTAR-FUNCTION-COMMENT-END
     def _apply_native_spectral_row(row: Mapping[str, Any], target: CalcEmisWorkspace, *, status: str = "") -> None:
         # Queue one compact row and cross the FFI boundary once per ion.
         # ``target`` and ``status`` are retained at call sites for clarity;
@@ -1277,6 +1409,10 @@ def calc_emis_ion(
         packed["source_position"] = native_spectral_source_position
         pending_native_spectral_rows.append(packed)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the replay native spectral rows python operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+    # XSTAR-FUNCTION-COMMENT-END
     def _replay_native_spectral_rows_python(rows: Sequence[Mapping[str, Any]], target: CalcEmisWorkspace) -> None:
         for row in rows:
             kind = int(row.get("kind", 0))
@@ -1367,6 +1503,10 @@ def calc_emis_ion(
     _record_type_elapsed: dict[str, float] = {}
     _rate_type_elapsed: dict[int, float] = {}
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Evaluate operation for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+    # XSTAR-FUNCTION-COMMENT-END
     def evaluate(rec: int, ptmp1: float, ptmp2: float, abund1: float, abund2: float) -> UCalcResult:
         nonlocal calls, type76_retained_records
         result = _evaluate_ucalc(shared, rec, _ucalc_context(
@@ -1422,6 +1562,10 @@ def calc_emis_ion(
                     _accumulate_ucalc_continuum(shadow_workspace.base, result)
         return result
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the linopac cpp parity limit operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+    # XSTAR-FUNCTION-COMMENT-END
     def _linopac_cpp_parity_limit() -> int:
         value = None
         try:
@@ -1441,6 +1585,10 @@ def calc_emis_ion(
         "parity_limit": _linopac_cpp_parity_limit(),
     }
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Apply linopac with cpp gate for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+    # XSTAR-FUNCTION-COMMENT-END
     def _apply_linopac_with_cpp_gate(
         *,
         optpp: float,
@@ -1616,6 +1764,10 @@ def calc_emis_ion(
                 diagnostic_bins_one_based=XSTAR_LINE_OPACITY_DIAGNOSTIC_BINS,
             )
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the maybe probe upstream type4 shadow operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+    # XSTAR-FUNCTION-COMMENT-END
     def _maybe_probe_upstream_type4_shadow(
         *,
         rec: int,
@@ -1817,6 +1969,10 @@ def calc_emis_ion(
             upstream_type4_shadow_summary["last_error_type"] = type(exc).__name__
             upstream_type4_shadow_summary["last_error_message"] = str(exc)[:512]
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Apply python type4 line job for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+    # XSTAR-FUNCTION-COMMENT-END
     def _apply_python_type4_line_job(job: Mapping[str, Any]) -> None:
         """Replay one selected type-4 line record through the source Python path."""
         rec0 = int(job["record"])
@@ -1869,6 +2025,10 @@ def calc_emis_ion(
             result0.status.value, f"python_fallback_strong_line_rate_type_{rate_type0}",
         ))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Record type50 rejection sample for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+    # XSTAR-FUNCTION-COMMENT-END
     def _record_type50_rejection_sample(job: Mapping[str, Any], row: Mapping[str, Any] | None, reason: str) -> None:
         """Store compact examples of rejected Mg type-50 coarse records for summary JSON."""
         try:
@@ -1894,6 +2054,10 @@ def calc_emis_ion(
             item["center_bin_one_based"] = int(row.get("center_bin_one_based", 0))
         samples.append(item)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Append cpp type50 trace for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+    # XSTAR-FUNCTION-COMMENT-END
     def _append_cpp_type50_trace(job: Mapping[str, Any], row: Mapping[str, Any]) -> None:
         rec0 = int(job["record"])
         line_index_0 = int(job["line_index"])
@@ -1906,6 +2070,10 @@ def calc_emis_ion(
             "evaluated", "cpp_type50_ucalc_linopac_array_update",
         ))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the flush cpp mg type50 coarse batch operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+    # XSTAR-FUNCTION-COMMENT-END
     def _flush_cpp_mg_type50_coarse_batch() -> None:
         if not pending_cpp_mg_type50_coarse_records:
             return
@@ -1954,6 +2122,10 @@ def calc_emis_ion(
             pending_cpp_mg_type50_coarse_records.clear()
             pending_cpp_mg_type50_coarse_jobs.clear()
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Apply mg type4 line job for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+    # XSTAR-FUNCTION-COMMENT-END
     def _apply_mg_type4_line_job(job: Mapping[str, Any], cpp_row: Mapping[str, Any] | None) -> None:
         """Apply one source-ordered Mg line-emissivity side-effect bundle.
 
@@ -2016,6 +2188,10 @@ def calc_emis_ion(
             result0.status.value, f"batched_strong_line_rate_type_{rate_type0}",
         ))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the flush cpp mg type4 batch operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+    # XSTAR-FUNCTION-COMMENT-END
     def _flush_cpp_mg_type4_batch() -> None:
         if not pending_cpp_mg_type4_records:
             return
@@ -2687,6 +2863,10 @@ def calc_emis_ion(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Accumulate full-grid emergent emissivity/opacity for all selected ions of one element.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def calc_emis_element(
     context: CalcEmisContext,
     *,
@@ -2735,10 +2915,18 @@ def calc_emis_element(
 
 class _TraceSink(list):
     """List-like sink used in production runs to avoid retaining trace rows."""
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Append operation for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+    # XSTAR-FUNCTION-COMMENT-END
     def append(self, value: Any) -> None:  # type: ignore[override]
         return None
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build the complete full-grid continuum/line/RRC radiation and opacity fields after the local population solution.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def calc_emis_all(context: CalcEmisContext) -> CalcEmisResult:
     """Execute ``calc_emis_all.f90`` in literal source order."""
     epi, bremsa, _ = _high_resolution_radiation(context.radiation)
@@ -2968,6 +3156,10 @@ def calc_emis_all(context: CalcEmisContext) -> CalcEmisResult:
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Apply calc emis all to state for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def apply_calc_emis_all_to_state(state: XSTARPythonState) -> CalcEmisResult:
     context = state.control.get("calc_emis_context")
     if not isinstance(context, CalcEmisContext):
@@ -3010,6 +3202,10 @@ def apply_calc_emis_all_to_state(state: XSTARPythonState) -> CalcEmisResult:
     return result
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Register calc emis all source routine for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def register_calc_emis_all_source_routine(driver: XSTARPythonDriver) -> None:
     driver.register_source_routine(XSTARSourceRoutine.CALC_EMIS_ALL, apply_calc_emis_all_to_state)
 
@@ -3020,12 +3216,20 @@ def register_calc_emis_all_source_routine(driver: XSTARPythonDriver) -> None:
 # rate 42 retained-kkkl behavior, Thomson reset, freef, and bremem.
 
 class _SyntheticHeader:
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Initialize this object and establish the invariants required by later operations.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+    # XSTAR-FUNCTION-COMMENT-END
     def __init__(self, data_type: int, rate_type: int):
         self.data_type = data_type
         self.rate_type = rate_type
 
 
 class _SyntheticMaster:
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Initialize this object and establish the invariants required by later operations.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+    # XSTAR-FUNCTION-COMMENT-END
     def __init__(self) -> None:
         self._ints = {
             1: np.asarray([8, 0, 8]),
@@ -3061,20 +3265,40 @@ class _SyntheticMaster:
             25: np.asarray([15.0, 1.0, 0.0, 15.0]),
         }
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the header operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+    # XSTAR-FUNCTION-COMMENT-END
     def header(self, rec: int) -> _SyntheticHeader:
         return self._headers[int(rec)]
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Record integers for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+    # XSTAR-FUNCTION-COMMENT-END
     def record_integers(self, rec: int) -> np.ndarray:
         return self._ints.get(int(rec), np.asarray([], dtype=int))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Record reals for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+    # XSTAR-FUNCTION-COMMENT-END
     def record_reals(self, rec: int) -> np.ndarray:
         return self._reals.get(int(rec), np.asarray([], dtype=float))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Record chars for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+    # XSTAR-FUNCTION-COMMENT-END
     def record_chars(self, rec: int) -> bytes:
         return b"synthetic"
 
 
 class _SyntheticDerived:
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Initialize this object and establish the invariants required by later operations.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+    # XSTAR-FUNCTION-COMMENT-END
     def __init__(self) -> None:
         self.nlsvn = 3
         self.ncsvn = 3
@@ -3116,6 +3340,10 @@ class _SyntheticDerived:
         self.npilev[1:4, 2] = [3, 4, 5]
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the synthetic ucalc operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def _synthetic_ucalc(record: int, context: Any) -> UCalcResult:
     payload = {
         10: (1.0, 4.0, -4.0, 0.0, 0.25, {}),
@@ -3144,6 +3372,10 @@ def _synthetic_ucalc(record: int, context: Any) -> UCalcResult:
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Execute calc emis source order validation for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def run_calc_emis_source_order_validation(*, rtol: float = 2.0e-14, atol: float = 1.0e-30) -> Mapping[str, Any]:
     master = _SyntheticMaster()
     derived = _SyntheticDerived()
@@ -3295,6 +3527,10 @@ def run_calc_emis_source_order_validation(*, rtol: float = 2.0e-14, atol: float 
     return summary
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write calc emis validation products for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def write_calc_emis_validation_products(summary: Mapping[str, Any], out_dir: str | Path) -> Mapping[str, str]:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)

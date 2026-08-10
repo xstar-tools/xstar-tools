@@ -26,6 +26,10 @@
 
 namespace xstar_canonical_thermal {
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement fnv1a byte for deterministic, source-ordered reduction of per-record heating/cooling terms before the thermal-balance update.
+// Reference context: XSTAR Manual s11.4.4; Kallman & Bautista (2001). Ordering/rounding are implementation invariants of the qualified port.
+// XSTAR-FUNCTION-COMMENT-END
 inline void fnv1a_byte(std::uint64_t& hash, std::uint8_t value) {
     constexpr std::uint64_t prime = 1099511628211ULL;
     hash ^= static_cast<std::uint64_t>(value);
@@ -33,6 +37,10 @@ inline void fnv1a_byte(std::uint64_t& hash, std::uint8_t value) {
 }
 
 template <typename T>
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement fnv1a little endian for deterministic, source-ordered reduction of per-record heating/cooling terms before the thermal-balance update.
+// Reference context: XSTAR Manual s11.4.4; Kallman & Bautista (2001). Ordering/rounding are implementation invariants of the qualified port.
+// XSTAR-FUNCTION-COMMENT-END
 inline void fnv1a_little_endian(std::uint64_t& hash, T value) {
     static_assert(std::is_integral<T>::value, "integral fingerprint field required");
     using U = typename std::make_unsigned<T>::type;
@@ -42,6 +50,10 @@ inline void fnv1a_little_endian(std::uint64_t& hash, T value) {
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement fnv1a binary64 for deterministic, source-ordered reduction of per-record heating/cooling terms before the thermal-balance update.
+// Reference context: XSTAR Manual s11.4.4; Kallman & Bautista (2001). Ordering/rounding are implementation invariants of the qualified port.
+// XSTAR-FUNCTION-COMMENT-END
 inline void fnv1a_binary64(std::uint64_t& hash, double value) {
     std::uint64_t bits = 0;
     static_assert(sizeof(bits) == sizeof(value), "binary64 size mismatch");
@@ -49,6 +61,10 @@ inline void fnv1a_binary64(std::uint64_t& hash, double value) {
     fnv1a_little_endian(hash, bits);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement fingerprint for deterministic, source-ordered reduction of per-record heating/cooling terms before the thermal-balance update.
+// Reference context: XSTAR Manual s11.4.4; Kallman & Bautista (2001). Ordering/rounding are implementation invariants of the qualified port.
+// XSTAR-FUNCTION-COMMENT-END
 inline std::uint64_t fingerprint(
     const xstar_canonical_thermal_term_v1* terms,
     std::size_t count
@@ -81,10 +97,18 @@ inline std::uint64_t fingerprint(
     return hash;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement fingerprint for deterministic, source-ordered reduction of per-record heating/cooling terms before the thermal-balance update.
+// Reference context: XSTAR Manual s11.4.4; Kallman & Bautista (2001). Ordering/rounding are implementation invariants of the qualified port.
+// XSTAR-FUNCTION-COMMENT-END
 inline std::uint64_t fingerprint(const std::vector<xstar_canonical_thermal_term_v1>& terms) {
     return fingerprint(terms.data(), terms.size());
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement validate for deterministic, source-ordered reduction of per-record heating/cooling terms before the thermal-balance update.
+// Reference context: XSTAR Manual s11.4.4; Kallman & Bautista (2001). Ordering/rounding are implementation invariants of the qualified port.
+// XSTAR-FUNCTION-COMMENT-END
 inline void validate(
     const xstar_canonical_thermal_term_v1* terms,
     std::size_t count,
@@ -120,6 +144,10 @@ struct ReductionResult {
     std::size_t term_count = 0;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement reduce for deterministic, source-ordered reduction of per-record heating/cooling terms before the thermal-balance update.
+// Reference context: XSTAR Manual s11.4.4; Kallman & Bautista (2001). Ordering/rounding are implementation invariants of the qualified port.
+// XSTAR-FUNCTION-COMMENT-END
 inline ReductionResult reduce(
     const xstar_canonical_thermal_term_v1* terms,
     std::size_t count,
@@ -177,6 +205,10 @@ inline ReductionResult reduce(
     return result;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement reduce for deterministic, source-ordered reduction of per-record heating/cooling terms before the thermal-balance update.
+// Reference context: XSTAR Manual s11.4.4; Kallman & Bautista (2001). Ordering/rounding are implementation invariants of the qualified port.
+// XSTAR-FUNCTION-COMMENT-END
 inline ReductionResult reduce(
     const std::vector<xstar_canonical_thermal_term_v1>& terms,
     const std::vector<double>& populations,

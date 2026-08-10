@@ -75,6 +75,10 @@ class ParsedXSTARCommand:
     ordered_arguments: tuple[str, ...]
     parameters: Mapping[str, str]
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the argv operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     def argv(self, executable: str | None = None) -> list[str]:
         return [str(executable or self.executable), *self.ordered_arguments]
 
@@ -95,6 +99,10 @@ class OriginalXSTARBenchmarkCase:
     canonical_standard_case: bool
     duplicate_parameter_key: str
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Serialize the current state into a plain mapping for diagnostics, provenance, or machine-readable output.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     def as_dict(self) -> dict[str, Any]:
         data = asdict(self)
         data["command"] = {
@@ -130,14 +138,26 @@ class CasePhysicalBenchmarkResult:
     missing_python_products: tuple[str, ...]
     parity: PhysicalOutputParityResult
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the inputs available operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def inputs_available(self) -> bool:
         return self.parity.inputs_available
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the all files match operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def all_files_match(self) -> bool:
         return self.parity.all_files_ready
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Serialize the current state into a plain mapping for diagnostics, provenance, or machine-readable output.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     def as_dict(self) -> dict[str, Any]:
         return {
             "relative_case_dir": self.relative_case_dir,
@@ -167,28 +187,52 @@ class PhysicalBenchmarkSuiteResult:
     source_archive: str | None = None
     provenance: Mapping[str, Any] = field(default_factory=dict)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the scripts parsed ready operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def scripts_parsed_ready(self) -> bool:
         return bool(self.discovered_cases)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the original execution ready operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def original_execution_ready(self) -> bool:
         return bool(self.original_executions) and all(item.ready for item in self.original_executions)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the parity requested operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def parity_requested(self) -> bool:
         return self.python_run_root is not None
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the parity run count operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def parity_run_count(self) -> int:
         return sum(1 for item in self.case_results if item.parity.parity_run)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the all selected cases match operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def all_selected_cases_match(self) -> bool:
         return bool(self.case_results) and len(self.case_results) == len(self.selected_cases) and all(
             item.all_files_match for item in self.case_results
         )
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Serialize the current state into a plain mapping for diagnostics, provenance, or machine-readable output.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     def as_dict(self) -> dict[str, Any]:
         original_complete = 0
         for case in self.selected_cases:
@@ -233,6 +277,10 @@ class PhysicalBenchmarkSuiteResult:
         }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the sha256 file operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _sha256_file(path: str | Path) -> str:
     digest = sha256()
     with Path(path).open("rb") as handle:
@@ -241,6 +289,10 @@ def _sha256_file(path: str | Path) -> str:
     return digest.hexdigest()
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the float or none operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _float_or_none(value: str | None) -> float | None:
     if value is None:
         return None
@@ -250,6 +302,10 @@ def _float_or_none(value: str | None) -> float | None:
         return None
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the xstar command text operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _xstar_command_text(script_text: str) -> str:
     lines = script_text.splitlines()
     collecting = False
@@ -274,6 +330,10 @@ def _xstar_command_text(script_text: str) -> str:
     return " ".join(chunks)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Parse run xstar script for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def parse_run_xstar_script(path: str | Path) -> ParsedXSTARCommand:
     """Parse the simple ``xstar key=value ...`` command from one run script."""
     script = Path(path)
@@ -296,6 +356,10 @@ def parse_run_xstar_script(path: str | Path) -> ParsedXSTARCommand:
     return ParsedXSTARCommand(tokens[0], tuple(ordered), parameters)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the active elements operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _active_elements(parameters: Mapping[str, str]) -> tuple[str, ...]:
     active: list[str] = []
     for key, element in _ABUNDANCE_TO_ELEMENT.items():
@@ -305,6 +369,10 @@ def _active_elements(parameters: Mapping[str, str]) -> tuple[str, ...]:
     return tuple(active)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the parameter key operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _parameter_key(parameters: Mapping[str, str]) -> str:
     # Exclude modelname because the attached suite contains aliases that are
     # physically identical despite different directory/model labels.
@@ -314,10 +382,18 @@ def _parameter_key(parameters: Mapping[str, str]) -> str:
     return sha256(payload).hexdigest()
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the relative case dir operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _relative_case_dir(script: Path, suite_root: Path) -> str:
     return script.parent.relative_to(suite_root).as_posix()
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the discover original xstar cases operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def discover_original_xstar_cases(suite_root: str | Path) -> tuple[OriginalXSTARBenchmarkCase, ...]:
     """Discover and parse every ``run_xstar.sh`` below a suite root."""
     root = Path(suite_root).resolve()
@@ -353,6 +429,10 @@ def discover_original_xstar_cases(suite_root: str | Path) -> tuple[OriginalXSTAR
     return tuple(cases)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Select benchmark cases for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def select_benchmark_cases(
     cases: Sequence[OriginalXSTARBenchmarkCase],
     *,
@@ -377,6 +457,10 @@ def select_benchmark_cases(
     return tuple(selected)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the safe extract archive operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _safe_extract_archive(archive: Path, destination: Path) -> Path:
     destination.mkdir(parents=True, exist_ok=True)
     with tarfile.open(archive, "r:*") as tf:
@@ -413,6 +497,10 @@ def _safe_extract_archive(archive: Path, destination: Path) -> Path:
     return common
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Prepare original xstar suite for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def prepare_original_xstar_suite(
     *,
     suite_archive: str | Path | None = None,
@@ -450,6 +538,10 @@ def prepare_original_xstar_suite(
     return root, str(archive)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the products present operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def products_present(run_dir: str | Path) -> tuple[tuple[str, ...], tuple[str, ...]]:
     root = Path(run_dir)
     present = tuple(name for name in REQUIRED_XSTAR_PRODUCTS if (root / name).is_file())
@@ -457,6 +549,10 @@ def products_present(run_dir: str | Path) -> tuple[tuple[str, ...], tuple[str, .
     return present, missing
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the clean expected products operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def clean_expected_products(run_dir: str | Path) -> None:
     root = Path(run_dir)
     for name in REQUIRED_XSTAR_PRODUCTS:
@@ -465,6 +561,10 @@ def clean_expected_products(run_dir: str | Path) -> None:
             path.unlink()
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Execute original xstar case for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def run_original_xstar_case(
     case: OriginalXSTARBenchmarkCase,
     *,
@@ -525,6 +625,10 @@ def run_original_xstar_case(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Compare benchmark case for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def compare_benchmark_case(
     case: OriginalXSTARBenchmarkCase,
     *,
@@ -560,6 +664,10 @@ def compare_benchmark_case(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Execute physical benchmark suite for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def run_physical_benchmark_suite(
     *,
     suite_archive: str | Path | None = None,
@@ -647,6 +755,10 @@ def run_physical_benchmark_suite(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the case rows operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _case_rows(result: PhysicalBenchmarkSuiteResult) -> Iterable[dict[str, Any]]:
     selected = {case.relative_case_dir for case in result.selected_cases}
     duplicate_counts: dict[str, int] = {}
@@ -669,6 +781,10 @@ def _case_rows(result: PhysicalBenchmarkSuiteResult) -> Iterable[dict[str, Any]]
         }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write csv for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _write_csv(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
     if not rows:
         path.write_text("", encoding="utf-8")
@@ -680,6 +796,10 @@ def _write_csv(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
         writer.writerows(rows)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write physical benchmark products for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def write_physical_benchmark_products(
     result: PhysicalBenchmarkSuiteResult,
     out_dir: str | Path,

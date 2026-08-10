@@ -35,6 +35,10 @@ class EmissivityBackendStatus:
     cpp_abi_version: int | None = None
     cpp_feature_flags: int | None = None
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Serialize the current state into a plain mapping for diagnostics, provenance, or machine-readable output.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def as_dict(self) -> dict[str, object]:
         return dict(asdict(self))
 
@@ -44,6 +48,10 @@ _CPP_LOAD_ERROR: BaseException | None = None
 _CPP_LIBRARY_PATH: str | None = None
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the candidate library paths operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _candidate_library_paths() -> list[Path]:
     env_path = os.environ.get("XSTAR_ATOMIC_EMISSIVITY_LIB")
     paths: list[Path] = []
@@ -60,6 +68,10 @@ def _candidate_library_paths() -> list[Path]:
     return out
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Load cpp library for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _load_cpp_library() -> ctypes.CDLL | None:
     global _CPP_LIB, _CPP_LOAD_ERROR, _CPP_LIBRARY_PATH
     if _CPP_LIB is not None:
@@ -98,10 +110,18 @@ def _load_cpp_library() -> ctypes.CDLL | None:
         return None
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the cpp import error operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def cpp_import_error() -> str | None:
     return None if _CPP_LOAD_ERROR is None else repr(_CPP_LOAD_ERROR)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the emissivity backend status operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def emissivity_backend_status(requested: str = "auto") -> EmissivityBackendStatus:
     req = (requested or os.environ.get("XSTAR_ATOMIC_EMISSIVITY_BACKEND") or "python").strip().lower()
     if req not in {"python", "cpp", "auto"}:
@@ -126,6 +146,10 @@ def emissivity_backend_status(requested: str = "auto") -> EmissivityBackendStatu
     return EmissivityBackendStatus(requested=req, active=active, cpp_available=True, cpp_library_path=_CPP_LIBRARY_PATH, cpp_backend_name=name, cpp_abi_version=abi, cpp_feature_flags=flags)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build binemis profile cpp for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def build_binemis_profile_cpp(
     *,
     epi_eV: np.ndarray,

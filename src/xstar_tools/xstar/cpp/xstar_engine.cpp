@@ -20,6 +20,10 @@
 
 namespace {
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement is supported mg record as a local helper for the xstar engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 bool is_supported_mg_record(long long rate_type, long long data_type) {
     if (rate_type == 7 && (data_type == 49 || data_type == 53)) {
         return true;
@@ -34,11 +38,19 @@ bool is_supported_mg_record(long long rate_type, long long data_type) {
     return false;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement zero counters as a local helper for the xstar engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 void zero_counters(std::int64_t* counters, int counters_size) {
     if (counters == nullptr || counters_size <= 0) return;
     for (int i = 0; i < counters_size; ++i) counters[i] = 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate eval mg ion accumulator impl using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use.
+// XSTAR-FUNCTION-COMMENT-END
 int eval_mg_ion_accumulator_impl(
     int element_z,
     int ion_index,
@@ -136,10 +148,18 @@ int eval_mg_ion_accumulator_impl(
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement native expo as a local helper for the xstar engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 double native_expo(double x) {
     return std::exp(std::min(60.0, std::max(-60.0, x)));
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement native dfact log as a local helper for the xstar engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 double native_dfact_log(int n) {
     if (n <= 0) return 0.0;
     // Exact CPython math.lgamma(n + 1.0) binary64 results for n=0..256.
@@ -216,6 +236,10 @@ double native_dfact_log(int n) {
     return std::lgamma(static_cast<double>(n) + 1.0);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement native hgf int as a local helper for the xstar engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 double native_hgf_int(int ia, int ib, int ic, double x) {
     const int limit = std::min(-ia, -ib);
     double ser = 1.0;
@@ -230,6 +254,10 @@ double native_hgf_int(int ia, int ib, int ic, double x) {
     return hyp;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement native anl1 as a local helper for the xstar engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 void native_anl1(int ni, int nf, int lf, int iq, double& alm, double& alp) {
     alm = 0.0;
     alp = 0.0;
@@ -279,6 +307,10 @@ void native_anl1(int ni, int nf, int lf, int iq, double& alm, double& alp) {
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement native impcfn as a local helper for the xstar engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 void native_impcfn(double x, double& xsi, double& phi) {
     if (x <= 0.0) x = 1.0e-300;
     const double a[6] = {0.9947187, 0.6030883, -2.372843, 1.864266, -0.6305845, 8.1104480e-02};
@@ -303,6 +335,10 @@ void native_impcfn(double x, double& xsi, double& phi) {
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement native impactn as a local helper for the xstar engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 double native_impactn(int n, int m, double temp, int ic, double amn) {
     if (n <= 0 || m <= 0 || ic <= 0 || temp <= 0.0 || amn <= 0.0) return 0.0;
     const double xm = 157888.0 * static_cast<double>(ic * ic) / temp / static_cast<double>(m * m);
@@ -351,6 +387,10 @@ double native_impactn(int n, int m, double temp, int ic, double amn) {
     return std::max(0.0, cmm);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement native expint scaled as a local helper for the xstar engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 double native_expint_scaled(double x) {
     if (x > 1.0) {
         const double b1=9.5733223454,b2=25.6329561486,b3=21.0996530827,b4=3.9584969228;
@@ -365,6 +405,10 @@ double native_expint_scaled(double x) {
     return e1*x*native_expo(x);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement native eint as a local helper for the xstar engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 void native_eint(double t, double& e1, double& e2, double& e3) {
     if (t == 0.0) { e1=e2=e3=0.0; return; }
     const double ss = native_expint_scaled(t);
@@ -373,6 +417,10 @@ void native_eint(double t, double& e1, double& e2, double& e3) {
     e3 = 0.5 * (native_expo(-t) - t * e2);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement native szcoll as a local helper for the xstar engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 double native_szcoll(int ni, int nj, double tt, int ic) {
     if (ni <= 0 || nj <= ni || ic <= 0 || tt <= 0.0) return 0.0;
     const double abethe[11]={1.30,0.59,0.38,0.286,0.229,0.192,0.164,0.141,0.121,0.105,0.100};
@@ -410,6 +458,10 @@ double native_szcoll(int ni, int nj, double tt, int ic) {
     return std::max(0.0, rate);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement native erc as a local helper for the xstar engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 void native_erc(int n, int m, double temp, int ic, double asum, double& se, double& sd) {
     se=0.0; sd=0.0;
     if (n<=0 || m<=n || ic<=0 || temp<=0.0) return;
@@ -451,11 +503,19 @@ void native_erc(int n, int m, double temp, int ic, double asum, double& se, doub
     se=std::max(0.0,se);sd=std::max(0.0,sd);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement native e1 from scaled as a local helper for the xstar engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 double native_e1_from_scaled(double x) {
     if (x<=0.0) return std::numeric_limits<double>::infinity();
     return native_expint_scaled(x)/std::max(1.0e-300,x*native_expo(x));
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement native velimp as a local helper for the xstar engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 double native_velimp(int n,int l,double temp,int ic,double ne,double asum) {
     const double z1=1.0,rm=1800.0;
     if (n<=0||l<=0||l>=n||ic<=0||temp<=0.0||ne<=0.0||asum<=0.0) return 0.0;
@@ -484,6 +544,10 @@ double native_velimp(int n,int l,double temp,int ic,double ne,double asum) {
     return std::isfinite(cn)?std::max(0.0,cn):0.0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement native type63 scalars as a local helper for the xstar engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 bool native_type63_scalars(int ni,int li,int nf,int lf,int iq,double temp,double ne,double ei,double ef,double gi,double gf,double out[6]) {
     for (int q=0;q<6;++q) out[q]=0.0;
     if (ni<=0||nf<=0||li<0||lf<0||iq<=0||temp<=0.0||ne<0.0) return false;
@@ -526,6 +590,10 @@ bool native_type63_scalars(int ni,int li,int nf,int lf,int iq,double temp,double
     return std::isfinite(out[0])&&std::isfinite(out[1])&&std::isfinite(out[4])&&std::isfinite(out[5]);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement native lower bracket as a local helper for the xstar engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 int native_lower_bracket(double energy,const double* grid,int n) {
     if (n<=1||energy<=grid[0]) return 0;
     int lo=0,hi=n-1;
@@ -533,6 +601,10 @@ int native_lower_bracket(double energy,const double* grid,int n) {
     return grid[hi]<=energy?hi:lo;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate native type88 photo rate using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7, 12.1.1-12.1.2; Kallman et al. (2004), K-shell/Auger/fluorescence physics. Data type(s) 88 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 double native_type88_photo_rate(const double* raw,int raw_count,double threshold,const double* epi,const double* bremsa,int n_grid,int phextrap_limit) {
     const int n0=raw_count/2;
     if (n0<=0||threshold<=0.0||n_grid<3||phextrap_limit<3) return 0.0;
@@ -581,6 +653,10 @@ double native_type88_photo_rate(const double* raw,int raw_count,double threshold
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement native type50 scalars as a local helper for the xstar engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 bool native_type50_scalars(
     double wavelength_a, double aij, double ggup, double gglo,
     double ptmp1, double ptmp2, double cfrac, double bremsa_nb1,
@@ -631,14 +707,26 @@ bool native_type50_scalars(
 
 extern "C" {
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Return the ABI version for the engine interface so callers can reject incompatible binary layouts before execution.
+// Reference context: Implementation/compatibility helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_engine_abi_version() {
     return 10;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Report the compiled engine backend name capability metadata used by backend selection and provenance.
+// Reference context: Implementation/provenance helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 const char* xstar_engine_backend_name() {
     return "xstar_engine_h_he_mg_native_construction_boundary_v06451";
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Report the compiled engine feature flags capability metadata used by backend selection and provenance.
+// Reference context: Implementation/provenance helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_engine_feature_flags() {
     // bit 0: Mg-ion accumulator ABI present.
     // bit 1: coarse record traversal/classification implemented.
@@ -651,6 +739,10 @@ int xstar_engine_feature_flags() {
     return 1 | 2 | 4 | 8 | 16 | 32 | 64 | 128 | 256 | 512 | 1024 | 2048 | 4096;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate engine type63 rates using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 63 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_engine_type63_rates_v1(
     int ni, int li, int nf, int lf, int iq,
     double temperature_k, double electron_density_cm3,
@@ -665,12 +757,20 @@ int xstar_engine_type63_rates_v1(
     ) ? 0 : 2;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement engine anl1 as a local helper for the xstar engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_engine_anl1_v1(int ni, int nf, int lf, int iq, double* alm, double* alp) {
     if (!alm || !alp) return 1;
     native_anl1(ni, nf, lf, iq, *alm, *alp);
     return (std::isfinite(*alm) && std::isfinite(*alp)) ? 0 : 2;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement engine probe as a local helper for the xstar engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_engine_probe(int element_z, int ion_index, int n_records, char* message, std::size_t message_size) {
     if (!xstar_backend::valid_count(n_records)) {
         xstar_backend::write_message(message, message_size, "invalid negative n_records");
@@ -684,6 +784,10 @@ int xstar_engine_probe(int element_z, int ion_index, int n_records, char* messag
     return xstar_backend::XSTAR_BACKEND_OK;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute matrix eval mg ion accumulator as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_matrix_eval_mg_ion_accumulator_v1(
     int element_z,
     int ion_index,
@@ -708,6 +812,10 @@ int xstar_matrix_eval_mg_ion_accumulator_v1(
 
 // Backward-compatible v0.6.1 symbol.  It maps the shorter skeleton call onto
 // the v0.6.8 coarse ABI without product-active row generation.
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement engine eval mg ion accumulator as a local helper for the xstar engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_engine_eval_mg_ion_accumulator_v1(
     int element_z,
     int ion_index,

@@ -43,6 +43,10 @@ class CompactATDBExportResult:
     active_element_z: tuple[int, ...]
     schema_version: int = 2
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Serialize the current state into a plain mapping for diagnostics, provenance, or machine-readable output.
+    # Reference context: XSTAR Manual Ch. 12; Mendoza et al. (2021), atomic-record and pointer topology.
+    # XSTAR-FUNCTION-COMMENT-END
     def as_dict(self) -> dict[str, Any]:
         data = dict(asdict(self))
         data["path"] = str(self.path)
@@ -50,6 +54,10 @@ class CompactATDBExportResult:
         return data
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Record headers for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 12; Mendoza et al. (2021), atomic-record and pointer topology.
+# XSTAR-FUNCTION-COMMENT-END
 def _record_headers(master: Any, records: Sequence[int] | np.ndarray) -> np.ndarray:
     recs = np.asarray(records, dtype=np.int64).reshape(-1)
     out = np.zeros((recs.size, 11), dtype=np.int64)
@@ -64,6 +72,10 @@ def _record_headers(master: Any, records: Sequence[int] | np.ndarray) -> np.ndar
     return out
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the parent ion index operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 12; Mendoza et al. (2021), atomic-record and pointer topology.
+# XSTAR-FUNCTION-COMMENT-END
 def _parent_ion_index(derived: Any, subset: ActiveATDBSubset, recno: int) -> int:
     npar = np.asarray(getattr(derived, "npar", ()), dtype=np.int64).reshape(-1)
     if int(recno) <= 0 or int(recno) >= npar.size:
@@ -72,6 +84,10 @@ def _parent_ion_index(derived: Any, subset: ActiveATDBSubset, recno: int) -> int
     return int(subset.ion_record_to_index.get(ion_rec, 0))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the line rows operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 12; Mendoza et al. (2021), atomic-record and pointer topology.
+# XSTAR-FUNCTION-COMMENT-END
 def _line_rows(master: Any, derived: Any, subset: ActiveATDBSubset) -> tuple[np.ndarray, np.ndarray]:
     line_indices = np.asarray(subset.line_indices, dtype=np.int64).reshape(-1)
     nplin = np.asarray(getattr(derived, "nplin", ()), dtype=np.int64).reshape(-1)
@@ -97,6 +113,10 @@ def _line_rows(master: Any, derived: Any, subset: ActiveATDBSubset) -> tuple[np.
     return rows, int_preview
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the continuum rows operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 12; Mendoza et al. (2021), atomic-record and pointer topology.
+# XSTAR-FUNCTION-COMMENT-END
 def _continuum_rows(master: Any, derived: Any, subset: ActiveATDBSubset) -> tuple[np.ndarray, np.ndarray]:
     cont_indices = np.asarray(subset.continuum_indices, dtype=np.int64).reshape(-1)
     npcon = np.asarray(getattr(derived, "npcon", ()), dtype=np.int64).reshape(-1)
@@ -122,6 +142,10 @@ def _continuum_rows(master: Any, derived: Any, subset: ActiveATDBSubset) -> tupl
     return rows, int_preview
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the level rows operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 12; Mendoza et al. (2021), atomic-record and pointer topology.
+# XSTAR-FUNCTION-COMMENT-END
 def _level_rows(derived: Any, subset: ActiveATDBSubset) -> np.ndarray:
     ion_indices = np.asarray(subset.ion_indices, dtype=np.int64).reshape(-1)
     npilev = np.asarray(getattr(derived, "npilev", ()), dtype=np.int64)
@@ -150,6 +174,10 @@ def _level_rows(derived: Any, subset: ActiveATDBSubset) -> np.ndarray:
     return np.asarray(rows, dtype=np.int64).reshape((-1, 6)) if rows else np.zeros((0, 6), dtype=np.int64)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the rate record rows operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 12; Mendoza et al. (2021), atomic-record and pointer topology.
+# XSTAR-FUNCTION-COMMENT-END
 def _rate_record_rows(master: Any, derived: Any, subset: ActiveATDBSubset) -> np.ndarray:
     ion_indices = np.asarray(subset.ion_indices, dtype=np.int64).reshape(-1)
     npfi = np.asarray(getattr(derived, "npfi", ()), dtype=np.int64)
@@ -191,6 +219,10 @@ def _rate_record_rows(master: Any, derived: Any, subset: ActiveATDBSubset) -> np
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the mg type7 payload rows operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 12; Mendoza et al. (2021), atomic-record and pointer topology.
+# XSTAR-FUNCTION-COMMENT-END
 def _mg_type7_payload_rows(master: Any, rate_record_rows: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Return compact payload previews for Mg header rate_type=7 records."""
     if rate_record_rows.size == 0:
@@ -217,6 +249,10 @@ def _mg_type7_payload_rows(master: Any, rate_record_rows: np.ndarray) -> tuple[n
     return rows, int_preview, real_preview
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build compact active atdb for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 12; Mendoza et al. (2021), atomic-record and pointer topology.
+# XSTAR-FUNCTION-COMMENT-END
 def build_compact_active_atdb(
     master: Any,
     derived: Any,
@@ -298,6 +334,10 @@ def build_compact_active_atdb(
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the export compact active atdb operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 12; Mendoza et al. (2021), atomic-record and pointer topology.
+# XSTAR-FUNCTION-COMMENT-END
 def export_compact_active_atdb(
     master: Any,
     derived: Any,

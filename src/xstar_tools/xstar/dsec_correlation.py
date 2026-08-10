@@ -56,6 +56,10 @@ class DsecLevelTempSnapshot:
     nlpt: np.ndarray
     iltp: np.ndarray
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the n columns operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Qualification/diagnostic view of XSTAR dsec state; no separate paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def n_columns(self) -> int:
         return int(self.rlev.shape[1]) if self.rlev.ndim == 2 else 0
@@ -89,11 +93,19 @@ class DsecMatchingInputState:
     leveltemp_snapshot: Optional[DsecLevelTempSnapshot]
     source_dir: str
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the global xilevg is zero operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Qualification/diagnostic view of XSTAR dsec state; no separate paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def global_xilevg_is_zero(self) -> bool:
         return bool(np.count_nonzero(self.global_level_values_by_index) == 0)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Read rows for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Qualification/diagnostic view of XSTAR dsec state; no separate paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _read_rows(path: Path) -> list[dict[str, str]]:
     if not path.is_file():
         raise DsecPortError(f"missing XSTAR matching-state probe: {path}")
@@ -101,6 +113,10 @@ def _read_rows(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(handle))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Load calc hmc all call correlation for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Qualification/diagnostic view of XSTAR dsec state; no separate paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def load_calc_hmc_all_call_correlation(
     path: str | Path,
 ) -> Tuple[CalcHMCAllCallCorrelation, ...]:
@@ -128,6 +144,10 @@ def load_calc_hmc_all_call_correlation(
     return tuple(result)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Resolve dsec calc hmc all calls for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Qualification/diagnostic view of XSTAR dsec state; no separate paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def resolve_dsec_calc_hmc_all_calls(
     path: str | Path,
     *,
@@ -167,10 +187,18 @@ def resolve_dsec_calc_hmc_all_calls(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Select call for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Qualification/diagnostic view of XSTAR dsec state; no separate paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _select_call(rows: Iterable[Mapping[str, str]], call_id: int) -> list[Mapping[str, str]]:
     return [row for row in rows if int(row["calc_hmc_all_call_id"]) == int(call_id)]
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the dense pair operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Qualification/diagnostic view of XSTAR dsec state; no separate paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _dense_pair(
     rows: Sequence[Mapping[str, str]],
     *,
@@ -190,6 +218,10 @@ def _dense_pair(
     return first, second
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Load leveltemp for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Qualification/diagnostic view of XSTAR dsec state; no separate paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _load_leveltemp(rows: Sequence[Mapping[str, str]]) -> Optional[UCalcLevelTable]:
     if not rows:
         return None
@@ -227,6 +259,10 @@ def _load_leveltemp(rows: Sequence[Mapping[str, str]]) -> Optional[UCalcLevelTab
     return UCalcLevelTable(levels=levels, nlev=max(levels, default=0))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Load leveltemp snapshot for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Qualification/diagnostic view of XSTAR dsec state; no separate paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _load_leveltemp_snapshot(
     rows: Sequence[Mapping[str, str]],
 ) -> Optional[DsecLevelTempSnapshot]:
@@ -249,6 +285,10 @@ def _load_leveltemp_snapshot(
     return DsecLevelTempSnapshot(rlev=rlev, ilev=ilev, nlpt=nlpt, iltp=iltp)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Load dsec matching input state for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Qualification/diagnostic view of XSTAR dsec state; no separate paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def load_dsec_matching_input_state(
     probe_dir: str | Path,
     *,
@@ -409,6 +449,10 @@ _THERMAL_COMPARE_FIELDS = tuple(
 )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Load xstar dsec thermal decomposition for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Qualification/diagnostic view of XSTAR dsec state; no separate paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def load_xstar_dsec_thermal_decomposition(
     path: str | Path,
     *,
@@ -456,11 +500,19 @@ class DsecThermalParityResult:
     max_absolute_difference: float
     max_relative_difference: float
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Report whether all prerequisites/results required by this stage are present and internally consistent.
+    # Reference context: Qualification/diagnostic view of XSTAR dsec state; no separate paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def ready(self) -> bool:
         return bool(self.evaluation_count_ready and self.thermal_decomposition_ready)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the python thermal values operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Qualification/diagnostic view of XSTAR dsec state; no separate paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _python_thermal_values(evaluation: object) -> Mapping[str, float]:
     result = getattr(evaluation, "fixed_state_result", None)
     if result is None:
@@ -490,6 +542,10 @@ def _python_thermal_values(evaluation: object) -> Mapping[str, float]:
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Compare dsec thermal decomposition for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Qualification/diagnostic view of XSTAR dsec state; no separate paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def compare_dsec_thermal_decomposition(
     python_evaluations: Sequence[object],
     xstar_rows: Sequence[DsecThermalDecompositionRow],
@@ -535,6 +591,10 @@ def compare_dsec_thermal_decomposition(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write dsec thermal parity products for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Qualification/diagnostic view of XSTAR dsec state; no separate paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def write_dsec_thermal_parity_products(
     parity: DsecThermalParityResult,
     out_dir: str | Path,

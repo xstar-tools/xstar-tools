@@ -89,6 +89,10 @@ struct xstar_context_impl {
     mutable std::mutex mutex;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement plugin directories as a local helper for the xstar api module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<std::filesystem::path> plugin_directories(const xstar_config_v1& config) {
     std::vector<std::filesystem::path> result;
     const std::string configured = field_text(config.plugin_directory, XSTAR_PATH_SIZE);
@@ -116,6 +120,10 @@ std::vector<std::filesystem::path> plugin_directories(const xstar_config_v1& con
     return unique;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load plugin into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 std::unique_ptr<LoadedPlugin> load_plugin(
     const xstar_config_v1& config,
     const std::string& backend,
@@ -163,6 +171,10 @@ std::unique_ptr<LoadedPlugin> load_plugin(
     return nullptr;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement ensure element engine as a local helper for the xstar api module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 int ensure_element_engine(xstar_context_impl& context) {
     if (context.element_context != nullptr) return XSTAR_STATUS_OK;
     const std::string backend = field_text(context.config.backend, XSTAR_BACKEND_NAME_SIZE);
@@ -222,6 +234,10 @@ int ensure_element_engine(xstar_context_impl& context) {
     return XSTAR_STATUS_BACKEND_LOAD_FAILED;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute ensure spectral engine for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 int ensure_spectral_engine(xstar_context_impl& context) {
     if (context.spectral_context != nullptr) return XSTAR_STATUS_OK;
     const std::string backend = field_text(context.config.backend, XSTAR_BACKEND_NAME_SIZE);
@@ -277,6 +293,10 @@ int ensure_spectral_engine(xstar_context_impl& context) {
     return XSTAR_STATUS_BACKEND_LOAD_FAILED;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute ensure thermal engine as a contribution to, or control step in, the local thermal-equilibrium iteration.
+// Reference context: XSTAR Manual s11.4.4 and s11.6; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int ensure_thermal_engine(xstar_context_impl& context) {
     if (context.thermal_context != nullptr) return XSTAR_STATUS_OK;
     const std::string backend = field_text(context.config.backend, XSTAR_BACKEND_NAME_SIZE);
@@ -330,6 +350,10 @@ int ensure_thermal_engine(xstar_context_impl& context) {
     return XSTAR_STATUS_BACKEND_LOAD_FAILED;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Validate the invariants required by validate config; reject malformed dimensions, pointers, or state before scientific kernels are entered.
+// Reference context: Implementation/safety helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 int validate_config(const xstar_config_v1* config, std::string& error) {
     if (config == nullptr) {
         error = "config is null";
@@ -357,6 +381,10 @@ int validate_config(const xstar_config_v1* config, std::string& error) {
     return XSTAR_STATUS_OK;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Validate the invariants required by validate io; reject malformed dimensions, pointers, or state before scientific kernels are entered.
+// Reference context: Implementation/safety helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 int validate_io(const xstar_zone_input_v1* input, xstar_zone_output_v1* output, std::string& error) {
     if (input == nullptr || output == nullptr) {
         error = "zone input/output is null";
@@ -379,9 +407,17 @@ int validate_io(const xstar_zone_input_v1* input, xstar_zone_output_v1* output, 
     return XSTAR_STATUS_OK;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement impl as a local helper for the xstar api module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 xstar_context_impl* impl(xstar_context* context) {
     return reinterpret_cast<xstar_context_impl*>(context);
 }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement impl as a local helper for the xstar api module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 const xstar_context_impl* impl(const xstar_context* context) {
     return reinterpret_cast<const xstar_context_impl*>(context);
 }
@@ -390,15 +426,39 @@ const xstar_context_impl* impl(const xstar_context* context) {
 
 extern "C" {
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Return the ABI version for the api interface so callers can reject incompatible binary layouts before execution.
+// Reference context: Implementation/compatibility helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 uint32_t xstar_api_abi_version(void) { return XSTAR_API_ABI_VERSION; }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement api version string as a local helper for the xstar api module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 const char* xstar_api_version_string(void) { return XSTAR_API_VERSION_STRING; }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement backend count as a local helper for the xstar api module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 size_t xstar_backend_count(void) { return kBackends.size(); }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Report the compiled backend name capability metadata used by backend selection and provenance.
+// Reference context: Implementation/provenance helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 const char* xstar_backend_name(size_t index) {
     return index < kBackends.size() ? kBackends[index] : nullptr;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement api last error as a local helper for the xstar api module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 const char* xstar_api_last_error(void) { return g_api_last_error.c_str(); }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement status string as a local helper for the xstar api module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 const char* xstar_status_string(int status) {
     switch (status) {
         case XSTAR_STATUS_OK: return "ok";
@@ -414,6 +474,10 @@ const char* xstar_status_string(int status) {
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Initialize the config init structure to its ABI-safe defaults before the caller supplies model-specific values.
+// Reference context: Implementation/ABI helper; scientific meaning is defined by the consuming engine.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_config_init_v1(xstar_config_v1* config) {
     if (config == nullptr) return XSTAR_STATUS_INVALID_ARGUMENT;
     *config = {};
@@ -432,6 +496,10 @@ int xstar_config_init_v1(xstar_config_v1* config) {
     return XSTAR_STATUS_OK;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Initialize the zone input init structure to its ABI-safe defaults before the caller supplies model-specific values.
+// Reference context: Implementation/ABI helper; scientific meaning is defined by the consuming engine.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_zone_input_init_v1(xstar_zone_input_v1* input) {
     if (input == nullptr) return XSTAR_STATUS_INVALID_ARGUMENT;
     *input = {};
@@ -439,6 +507,10 @@ int xstar_zone_input_init_v1(xstar_zone_input_v1* input) {
     return XSTAR_STATUS_OK;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Initialize the zone output init structure to its ABI-safe defaults before the caller supplies model-specific values.
+// Reference context: Implementation/ABI helper; scientific meaning is defined by the consuming engine.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_zone_output_init_v1(xstar_zone_output_v1* output) {
     if (output == nullptr) return XSTAR_STATUS_INVALID_ARGUMENT;
     *output = {};
@@ -446,6 +518,10 @@ int xstar_zone_output_init_v1(xstar_zone_output_v1* output) {
     return XSTAR_STATUS_OK;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Initialize the context stats init structure to its ABI-safe defaults before the caller supplies model-specific values.
+// Reference context: Implementation/ABI helper; scientific meaning is defined by the consuming engine.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_context_stats_init_v1(xstar_context_stats_v1* stats) {
     if (stats == nullptr) return XSTAR_STATUS_INVALID_ARGUMENT;
     *stats = {};
@@ -453,6 +529,10 @@ int xstar_context_stats_init_v1(xstar_context_stats_v1* stats) {
     return XSTAR_STATUS_OK;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Initialize the component info init structure to its ABI-safe defaults before the caller supplies model-specific values.
+// Reference context: Implementation/ABI helper; scientific meaning is defined by the consuming engine.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_component_info_init_v1(xstar_component_info_v1* info) {
     if (info == nullptr) return XSTAR_STATUS_INVALID_ARGUMENT;
     *info = {};
@@ -460,6 +540,10 @@ int xstar_component_info_init_v1(xstar_component_info_v1* info) {
     return XSTAR_STATUS_OK;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Create and validate persistent runtime state for context create, loading only the data needed by subsequent calls.
+// Reference context: Implementation/lifetime helper; the scientific work is performed by the shared engine routines called from this context.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_context_create_v1(const xstar_config_v1* config, xstar_context** context) {
     if (context == nullptr) return XSTAR_STATUS_INVALID_ARGUMENT;
     *context = nullptr;
@@ -491,6 +575,10 @@ int xstar_context_create_v1(const xstar_config_v1* config, xstar_context** conte
     return XSTAR_STATUS_OK;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Destroy the persistent context destroy context and release its owned resources without changing external science state.
+// Reference context: Implementation/lifetime helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_context_destroy(xstar_context* context) {
     auto* value = impl(context);
     if (value == nullptr) return;
@@ -524,6 +612,10 @@ void xstar_context_destroy(xstar_context* context) {
     delete value;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Reset reusable context reset state between model evaluations while preserving immutable loaded data and ABI invariants.
+// Reference context: Implementation/lifetime helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_context_reset(xstar_context* context) {
     auto* value = impl(context);
     if (value == nullptr) return XSTAR_STATUS_INVALID_ARGUMENT;
@@ -563,17 +655,29 @@ int xstar_context_reset(xstar_context* context) {
     return status;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Report the compiled context backend name capability metadata used by backend selection and provenance.
+// Reference context: Implementation/provenance helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 const char* xstar_context_backend_name(const xstar_context* context) {
     const auto* value = impl(context);
     if (!value || !value->plugin || !value->plugin->descriptor) return nullptr;
     return value->plugin->descriptor->backend_name;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement context last error as a local helper for the xstar api module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 const char* xstar_context_last_error(const xstar_context* context) {
     const auto* value = impl(context);
     return value ? value->last_error.c_str() : "null context";
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement context get stats as a local helper for the xstar api module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_context_get_stats_v1(const xstar_context* context, xstar_context_stats_v1* stats) {
     const auto* value = impl(context);
     if (value == nullptr || stats == nullptr || stats->struct_size < sizeof(*stats)) {
@@ -588,6 +692,10 @@ int xstar_context_get_stats_v1(const xstar_context* context, xstar_context_stats
     return status;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement context get component info as a local helper for the xstar api module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_context_get_component_info_v1(
     const xstar_context* context,
     uint32_t component_id,
@@ -607,6 +715,10 @@ int xstar_context_get_component_info_v1(
     return status;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement context run zone as a local helper for the xstar api module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_context_run_zone_v1(
     xstar_context* context,
     const xstar_zone_input_v1* input,
@@ -629,6 +741,10 @@ int xstar_context_run_zone_v1(
     return status;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement context run batch as a local helper for the xstar api module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_context_run_batch_v1(
     xstar_context* context,
     const xstar_zone_input_v1* inputs,
@@ -656,6 +772,10 @@ int xstar_context_run_batch_v1(
     return status;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement context run element construction as a local helper for the xstar api module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_context_run_element_construction_v1(
     xstar_context* context,
     const xstar_element_input_v1* input,
@@ -674,6 +794,10 @@ int xstar_context_run_element_construction_v1(
     return rc == 0 ? XSTAR_STATUS_OK : XSTAR_STATUS_BACKEND_ERROR;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement context run element as a local helper for the xstar api module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_context_run_element_v1(
     xstar_context* context,
     const xstar_element_input_v1* input,
@@ -690,6 +814,10 @@ int xstar_context_run_element_v1(
     return rc == 0 ? XSTAR_STATUS_OK : XSTAR_STATUS_BACKEND_ERROR;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement context run construction evaluation as a local helper for the xstar api module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_context_run_construction_evaluation_v1(
     xstar_context* context,
     const xstar_element_input_v1* inputs,
@@ -709,6 +837,10 @@ int xstar_context_run_construction_evaluation_v1(
     return rc == 0 ? XSTAR_STATUS_OK : XSTAR_STATUS_BACKEND_ERROR;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement context run evaluation as a local helper for the xstar api module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_context_run_evaluation_v1(
     xstar_context* context,
     const xstar_element_input_v1* inputs,
@@ -726,6 +858,10 @@ int xstar_context_run_evaluation_v1(
     return rc == 0 ? XSTAR_STATUS_OK : XSTAR_STATUS_BACKEND_ERROR;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement context get element stats as a local helper for the xstar api module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_context_get_element_stats_v1(
     const xstar_context* context,
     xstar_element_engine_stats_v1* stats
@@ -741,6 +877,10 @@ int xstar_context_get_element_stats_v1(
     return rc == 0 ? XSTAR_STATUS_OK : XSTAR_STATUS_BACKEND_ERROR;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute context apply spectral contributions for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_context_apply_spectral_contributions_v1(
     xstar_context* context,
     const xstar_spectral_contribution_v1* contributions,
@@ -766,6 +906,10 @@ int xstar_context_apply_spectral_contributions_v1(
     return rc == 0 ? XSTAR_STATUS_OK : XSTAR_STATUS_BACKEND_ERROR;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute context apply heatt as a contribution to, or control step in, the local thermal-equilibrium iteration.
+// Reference context: XSTAR Manual s11.4.4 and s11.6; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_context_apply_heatt_v1(
     xstar_context* context,
     xstar_heatt_workspace_v1* workspace,
@@ -788,6 +932,10 @@ int xstar_context_apply_heatt_v1(
     return rc == 0 ? XSTAR_STATUS_OK : XSTAR_STATUS_BACKEND_ERROR;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute context run thermal evaluation loop as a contribution to, or control step in, the local thermal-equilibrium iteration.
+// Reference context: XSTAR Manual s11.4.4 and s11.6; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_context_run_thermal_evaluation_loop_v1(
     xstar_context* context,
     const xstar_dsec_config_v1* config,

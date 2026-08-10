@@ -68,18 +68,30 @@ const std::array<double,31> kAtomicMass = {{
     58.6934, 63.546, 65.38
 }};
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load file into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 std::string read_file(const std::filesystem::path& path) {
     std::ifstream in(path, std::ios::binary);
     if (!in) throw std::runtime_error("cannot open parameters file: " + path.string());
     return std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide json string as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 std::string json_string(const std::string& text, const std::string& key, const std::string& fallback = {}) {
     const std::regex pattern("\\\"" + key + "\\\"\\s*:\\s*\\\"([^\\\"]*)\\\"");
     std::smatch match;
     return std::regex_search(text, match, pattern) ? match[1].str() : fallback;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide json number as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 double json_number(const std::string& text, const std::string& key, double fallback) {
     const std::regex pattern("\\\"" + key + "\\\"\\s*:\\s*(?:\\\")?([-+0-9.eE]+)(?:\\\")?");
     std::smatch match;
@@ -90,10 +102,18 @@ double json_number(const std::string& text, const std::string& key, double fallb
 // XSTAR uclgsr8.f90 reads a user-facing REAL parameter through a REAL(4)
 // temporary (uclgsr) and only then promotes it to REAL(8).  Keep this helper
 // distinct from true DOUBLE PRECISION source constants.
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide source uclgsr8 as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 double source_uclgsr8_v0648123360(const std::string& text, const std::string& key, double fallback) {
     return static_cast<double>(static_cast<float>(json_number(text, key, fallback)));
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide source default real literal as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 double source_default_real_literal_v0648123360(double value) {
     return static_cast<double>(static_cast<float>(value));
 }
@@ -101,6 +121,10 @@ double source_default_real_literal_v0648123360(double value) {
 // Literal rread1.f90 initial-radius construction, independent of the Python
 // normalized initial_radius_cm payload.  This prevents a Python/C++ agreement
 // from masking a shared departure from the canonical FORTRAN source.
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide source rread1 initial radius cm as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 double source_rread1_initial_radius_cm_v0648123360(const std::string& text) {
     const int lcpres = static_cast<int>(json_number(text, "lcpres", 0.0));
     const int lcdd = lcpres <= 1 ? 1 - lcpres : lcpres;
@@ -129,6 +153,10 @@ double source_rread1_initial_radius_cm_v0648123360(const std::string& text) {
     return r19 * radius_scale;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide json number array as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<double> json_number_array(const std::string& text, const std::string& key) {
     const std::regex pattern("\\\"" + key + "\\\"\\s*:\\s*\\[([^\\]]*)\\]");
     std::smatch match;
@@ -142,6 +170,10 @@ std::vector<double> json_number_array(const std::string& text, const std::string
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide trim as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 std::string trim(std::string value) {
     const auto first = value.find_first_not_of(" \t\r\n\0", 0);
     if (first == std::string::npos) return {};
@@ -149,6 +181,10 @@ std::string trim(std::string value) {
     return value.substr(first, last - first + 1);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Append candidate from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 void append_candidate(std::vector<std::filesystem::path>& out, std::filesystem::path candidate) {
     if (candidate.empty()) return;
     std::error_code ec;
@@ -157,6 +193,10 @@ void append_candidate(std::vector<std::filesystem::path>& out, std::filesystem::
     if (std::find(out.begin(), out.end(), candidate) == out.end()) out.push_back(std::move(candidate));
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide first file as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 std::filesystem::path first_file(const std::vector<std::filesystem::path>& candidates) {
     for (const auto& p : candidates) {
         std::error_code ec;
@@ -168,12 +208,20 @@ std::filesystem::path first_file(const std::vector<std::filesystem::path>& candi
     return {};
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide fits error as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 std::string fits_error(int status) {
     char text[FLEN_STATUS]{};
     fits_get_errstatus(status, text);
     return text;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide fits check as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 void fits_check(int status, const std::string& context) {
     if (status) throw std::runtime_error(context + ": " + fits_error(status));
 }
@@ -466,6 +514,10 @@ struct Derived {
     std::vector<int> level_record_by_global, level_global_by_record;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Construct the runtime ATDB pointer/index relationships used to traverse records by ion, rate type, and data type without changing the original record ordering.
+// Reference context: XSTAR Manual ch12 and ch14 setptrs discussion; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 Derived build_pointers(AtdbReader& db) {
     Derived d;
     int max_local=1;
@@ -583,6 +635,10 @@ struct Layout {
     std::unordered_map<int,std::unordered_map<int,LevelValue>> snapshots;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide level table as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 std::unordered_map<int,LevelValue> level_table(AtdbReader& db,const Derived& d,int ion) {
     std::unordered_map<int,LevelValue> out;
     int rec=(13<=d.max_rate?d.npfi[13][ion]:0); if (!rec) return out;
@@ -599,6 +655,10 @@ std::unordered_map<int,LevelValue> level_table(AtdbReader& db,const Derived& d,i
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Build layout from the source-ordered inputs required by the next calculation stage.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 Layout build_layout(AtdbReader& db,const Derived& d,int z,int element_index) {
     Layout l; l.element_index=element_index; l.z=z;
     std::vector<int> ions; for (int i=1;i<=d.n_ions;++i) if (d.ion_element_z[i]==z) ions.push_back(i);
@@ -636,12 +696,24 @@ Layout build_layout(AtdbReader& db,const Derived& d,int z,int element_index) {
     return l;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide row for local as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 int row_for_local(const Layout& l,int ion,int local) {
     auto it=l.role_to_row.find({ion,local}); if (it==l.role_to_row.end()) throw std::runtime_error("ATDB endpoint has no compact row"); return it->second;
 }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide row for idest as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 int row_for_idest(const Layout& l,const Block& b,int idest) {
     int row=b.compact_start+idest-1; if (row<1 || row>l.n_rows) throw std::runtime_error("destination outside compact element basis"); return row;
 }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide row for source endpoint as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 int row_for_source_endpoint(const Layout& l,const Block& b,int local_or_idest) {
     // v0.6.48.11.2: several source branches (notably O VII Type-10)
     // carry an idest-style endpoint that can extend beyond the literal Type-13
@@ -653,26 +725,62 @@ int row_for_source_endpoint(const Layout& l,const Block& b,int local_or_idest) {
     if (local_or_idest>0) return row_for_idest(l,b,local_or_idest);
     throw std::runtime_error("ATDB source endpoint is non-positive");
 }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide block for as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 const Block& block_for(const Layout& l,int ion) {
     for (const auto& b : l.blocks) {
         if (b.ion_index == ion) return b;
     }
     throw std::runtime_error("missing layout ion block");
 }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide row level as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 const LevelValue& row_level(const Layout& l,int row) {
     if (row<=0 || row>l.n_rows) throw std::runtime_error("compact row outside layout");
     const auto& r=l.rows[static_cast<std::size_t>(row)]; auto ti=l.tables.find(r.ion_index); if (ti==l.tables.end()) throw std::runtime_error("missing level table");
     auto vi=ti->second.find(r.local_level); if (vi==ti->second.end()) throw std::runtime_error("missing level value"); return vi->second;
 }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide row energy as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 double row_energy(const Layout& l,int row) { return row_level(l,row).energy; }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide row weight as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 double row_weight(const Layout& l,int row) { return std::max(row_level(l,row).weight,1.0e-300); }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide row n as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 int row_n(const Layout& l,int row) { return row_level(l,row).principal_n; }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide row l as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 int row_l(const Layout& l,int row) { return row_level(l,row).orbital_l; }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide local pair as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 std::pair<int,int> local_pair(const Layout& l,int ion,int a,int b) {
     int ra=row_for_local(l,ion,a), rb=row_for_local(l,ion,b); return row_energy(l,ra)<=row_energy(l,rb)?std::make_pair(ra,rb):std::make_pair(rb,ra);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide mass for z as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 double mass_for_z(int z) { return z>0 && z<static_cast<int>(kAtomicMass.size()) ? kAtomicMass[static_cast<std::size_t>(z)] : std::max(1.0,2.0*z); }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide ion label as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 [[maybe_unused]] std::string ion_label(const Block& b) { return trim(b.label); }
 
 struct LoweredRecord {
@@ -681,9 +789,17 @@ struct LoweredRecord {
     std::vector<std::int64_t> ints;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide find level as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 const LevelValue* find_level(const Layout& l,int ion,int local) {
     auto ti=l.tables.find(ion); if (ti==l.tables.end()) return nullptr; auto vi=ti->second.find(local); return vi==ti->second.end()?nullptr:&vi->second;
 }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide find snapshot as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 const LevelValue* find_snapshot(const Layout& l,int ion,int column) {
     auto ti=l.snapshots.find(ion); if (ti==l.snapshots.end()) return nullptr; auto vi=ti->second.find(column); return vi==ti->second.end()?nullptr:&vi->second;
 }
@@ -696,6 +812,10 @@ const LevelValue* find_snapshot(const Layout& l,int ion,int column) {
 // factor before linopac computes its Voigt damping parameter.
 constexpr double kSourcePlanckEvSecondV82Patch5207 = 4.136e-15;
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide type50 natural width ev as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 double type50_natural_width_ev_v82_patch5207(
     AtdbReader& db, const Derived& d, int ion, int upper_local, double fallback_aij_s
 ) {
@@ -733,6 +853,10 @@ struct BinemisType86DampingV82Patch520154 {
     int source_record = 0;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide binemis type86 damping as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 BinemisType86DampingV82Patch520154 binemis_type86_damping_v82_patch520154(
     AtdbReader& db, const Derived& d, int ion, int upper_local
 ) {
@@ -761,6 +885,10 @@ BinemisType86DampingV82Patch520154 binemis_type86_damping_v82_patch520154(
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide lower record as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int rec,int element_index,
                            const std::unordered_map<int,int>& ion_record_to_index) {
     const auto& h=db.header(rec); const int dt=h.data_type, rt=h.rate_type;
@@ -989,16 +1117,28 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide symbol for z as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 std::string symbol_for_z(int z) {
     static const char* names[] = {"","h","he","li","be","b","c","n","o","f","ne","na","mg","al","si","p","s","cl","ar","k","ca","sc","ti","v","cr","mn","fe","co","ni","cu","zn"};
     return z>=1&&z<=30?names[z]:("z"+std::to_string(z));
 }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide normalized ion label as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 std::string normalized_ion_label(const Block& b) {
     auto value=trim(b.label); if(!value.empty())return value; return symbol_for_z(b.element_z)+"_"+std::to_string(b.ion_stage);
 }
 
 } // namespace
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide bundle as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 xstar_fixed_program_bundle_v1 ProgramStorage::bundle() const {
     xstar_fixed_program_bundle_v1 b{}; xstar_fixed_program_bundle_init_v1(&b);
     b.program_id=program_id.c_str(); b.active_atdb_lowered=1; b.topology_record_count=topology_record_count;
@@ -1010,6 +1150,10 @@ xstar_fixed_program_bundle_v1 ProgramStorage::bundle() const {
     return b;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load production parameters into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 ProductionParameters read_production_parameters(const std::filesystem::path& path) {
     ProductionParameters p; p.source_path=path; p.raw_json=read_file(path);
     p.density_cm3=json_number(p.raw_json,"density",p.density_cm3); p.pressure_dyn_cm2=json_number(p.raw_json,"pressure",p.pressure_dyn_cm2);
@@ -1047,6 +1191,10 @@ ProductionParameters read_production_parameters(const std::filesystem::path& pat
     return p;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute resolve atomic data as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 ResolvedAtomicData resolve_atomic_data(const std::filesystem::path& parameters_path,const std::string& json,const std::filesystem::path& executable_path) {
     ResolvedAtomicData r; const auto base=parameters_path.parent_path();
     auto add_json=[&](std::vector<std::filesystem::path>& out,const char* key){auto v=json_string(json,key,"");if(!v.empty()){std::filesystem::path p(v);append_candidate(out,p.is_relative()?base/p:p);}};
@@ -1065,6 +1213,10 @@ ResolvedAtomicData resolve_atomic_data(const std::filesystem::path& parameters_p
     append_candidate(r.coheat_candidates,"src/xstar_tools/xstar/data/coheat.dat"); append_candidate(r.coheat_candidates,"coheat.dat"); r.coheat=first_file(r.coheat_candidates); return r;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide lower atdb in memory as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 ProgramStorage lower_atdb_in_memory(const std::filesystem::path& atdb,const ProductionParameters& parameters) {
     AtdbReader db(atdb); Derived d=build_pointers(db); ProgramStorage out;
     out.program_id="v067_runtime_atdb_"+std::to_string(db.record_count()); out.topology_record_count=static_cast<std::uint64_t>(d.n_elements+d.n_ions+d.n_levels); out.native_line_count=d.n_lines; out.native_continuum_count=d.n_continua;
@@ -1305,6 +1457,10 @@ ProgramStorage lower_atdb_in_memory(const std::filesystem::path& atdb,const Prod
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Provide format search candidates as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 std::string format_search_candidates(const std::vector<std::filesystem::path>& candidates) { std::ostringstream out;for(std::size_t i=0;i<candidates.size();++i)out<<(i?";":"")<<candidates[i].string();return out.str(); }
 
 } // namespace xstar_atdb_runtime

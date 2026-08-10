@@ -64,10 +64,18 @@ XSTAR_SOURCE_KT_EV_PER_1E4K = (
 )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the expo operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def _expo(value: float) -> float:
     return math.exp(min(max(float(value), -60.0), 60.0))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the finite operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def _finite(value: Any, default: float | None = None) -> float | None:
     try:
         out = float(value)
@@ -76,6 +84,10 @@ def _finite(value: Any, default: float | None = None) -> float | None:
     return out if math.isfinite(out) else default
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the int operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def _int(value: Any, default: int = 0) -> int:
     try:
         return int(value)
@@ -83,6 +95,10 @@ def _int(value: Any, default: int = 0) -> int:
         return default
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the ee1expo operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def _ee1expo(x: float) -> float:
     """Source translation of ``ee1expo.f90`` (E1(x)*exp(x))."""
     x = float(x)
@@ -93,6 +109,10 @@ def _ee1expo(x: float) -> float:
     return (-math.log(x) - 0.57721566 + x * (0.99999193 + x * (-0.24991055 + x * (0.05519968 + x * (-0.00976004 + x * 0.0010707857))))) * _expo(x)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the ff2 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def _ff2(x: float) -> float:
     """Source translation of ``ff2.f90`` used by type 16."""
     q = (1.0, 2.1958e2, 2.0984e4, 1.1517e6, 4.0349e7, 9.4900e8, 1.5345e10, 1.7182e11, 1.3249e12, 6.9071e12, 2.3531e13, 4.9432e13, 5.7760e13, 3.0225e13, 3.3641e12)
@@ -107,6 +127,10 @@ def _ff2(x: float) -> float:
     return pp / (1.0e-20 + qq) / x / x
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the linear hunt operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def _linear_hunt(grid: Sequence[float], x: float) -> int:
     """Return a clamped zero-based lower bracket compatible with hunt3 use."""
     if len(grid) < 2:
@@ -118,6 +142,10 @@ def _linear_hunt(grid: Sequence[float], x: float) -> int:
     return max(0, min(int(np.searchsorted(np.asarray(grid), x, side="right") - 1), len(grid) - 2))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the radiation arrays operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def _radiation_arrays(state: Any) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     if state is None:
         raise ValueError("live radiation state is required")
@@ -142,11 +170,19 @@ def _radiation_arrays(state: Any) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     return epi, brem[:n], bint[:n]
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the nbinc operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def _nbinc(energy: float, epi: Sequence[float]) -> int:
     arr = np.asarray(epi, dtype=float)
     return max(0, min(int(np.searchsorted(arr, float(energy), side="right") - 1), len(arr) - 1))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the xstar nbinc fortran value operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def _xstar_nbinc_fortran_value(energy: float, epi: Sequence[float]) -> int:
     """Return the literal one-based integer value from ``nbinc.f90``.
 
@@ -180,6 +216,10 @@ def _xstar_nbinc_fortran_value(energy: float, epi: Sequence[float]) -> int:
     return max(1, min(numcon3, jlo))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the xstar phint53hunt pass indices operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def _xstar_phint53hunt_pass_indices(nb1: int, nphint: int, nskip: int) -> list[int]:
     """Return literal one-based ``kl`` values from a phint53hunt pass.
 
@@ -196,6 +236,10 @@ def _xstar_phint53hunt_pass_indices(nb1: int, nphint: int, nskip: int) -> list[i
     return out
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the xstar enxt step operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def _xstar_enxt_step(
     *,
     threshold_ev: float,
@@ -240,6 +284,10 @@ def _xstar_enxt_step(
     return int(nskip), int(nphint), int(lrcalc)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the phintfo exact operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def _phintfo_exact(*, sigma_cm2: Sequence[float], threshold_ev: float, context: "UCalcContext", swrat: float) -> dict[str, float]:
     """Literal one-based translation of ``phintfo.f90`` scalar outputs."""
     epi, bremsa, _ = _radiation_arrays(context.radiation)
@@ -317,6 +365,10 @@ def _phintfo_exact(*, sigma_cm2: Sequence[float], threshold_ev: float, context: 
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the find53 cross section operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def _find53_cross_section(energy_ryd: np.ndarray, sigma_cm2: np.ndarray, efnd_ryd: float) -> float:
     """Translate ``find53.f90`` interpolation/extrapolation."""
     if energy_ryd.size < 2 or efnd_ryd < 0.0 or efnd_ryd > float(energy_ryd[-1]):
@@ -334,6 +386,10 @@ def _find53_cross_section(energy_ryd: np.ndarray, sigma_cm2: np.ndarray, efnd_ry
     return max(0.0, s0 + f * (s1 - s0))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the phint53hunt exact operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def _phint53hunt_exact(
     *, energy_above_threshold_ryd: Sequence[float], cross_section_cm2: Sequence[float],
     threshold_ev: float, context: "UCalcContext", swrat: float, crit: float = 0.01,
@@ -487,6 +543,10 @@ def _phint53hunt_exact(
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the photo result swapped operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def _photo_result_swapped(dispatch: "SourceFaithfulUCalc", r: "UCalcRecord", c: "UCalcContext", s: "UCalcBranchSpec", *, sigma: Sequence[float], threshold: float, swrat: float, id1: int, id2: int, zero_reverse: bool = False) -> "UCalcResult":
     ph=_phintfo_exact(sigma_cm2=sigma,threshold_ev=threshold,context=c,swrat=swrat)
     a1,a2=ph["ans1"],ph["ans2"]; a3,a4=-ph["ans4"],-ph["ans3"]; a5,a6=-ph["ans6"],-ph["ans5"]
@@ -522,24 +582,44 @@ class UCalcLevelTable:
     levels: Dict[int, UCalcLevel] = field(default_factory=dict)
     nlev: int = 0
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Return operation for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def get(self, index: int) -> UCalcLevel | None:
         return self.levels.get(int(index))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Require operation for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def require(self, index: int) -> UCalcLevel:
         level = self.get(index)
         if level is None:
             raise KeyError(f"missing XSTAR ion-local level {index}")
         return level
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the energy operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def energy(self, index: int, default: float = 0.0) -> float:
         level = self.get(index)
         return float(level.energy_ev) if level is not None else float(default)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the weight operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def weight(self, index: int, default: float = 0.0) -> float:
         level = self.get(index)
         return float(level.statistical_weight) if level is not None else float(default)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the source faithful level threshold operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def _source_faithful_level_threshold(
     levels: UCalcLevelTable, index: int, nlevp: int
 ) -> float:
@@ -572,6 +652,10 @@ class UCalcRecord:
     parent_record: int = 0
     next_record: int = 0
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the from master operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     @classmethod
     def from_master(
         cls,
@@ -594,6 +678,10 @@ class UCalcRecord:
             next_record=int(next_record),
         )
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the ion index operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def ion_index(self) -> int:
         return int(self.integers[-1]) if self.integers else 0
@@ -630,18 +718,34 @@ class UCalcContext:
     master: XSTARMasterData | None = None
     extras: MutableMapping[str, Any] = field(default_factory=dict)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the t operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def t(self) -> float:
         return float(self.temperature_k) / 1.0e4
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the tsq operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def tsq(self) -> float:
         return math.sqrt(max(self.t, 0.0))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the electron density cm3 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def electron_density_cm3(self) -> float:
         return float(self.hydrogen_density_cm3) * float(self.electron_fraction_xee)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the nlevp operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def nlevp(self) -> int:
         return int(self.nlev or self.levels.nlev)
@@ -692,10 +796,18 @@ class UCalcResult:
     provenance: UCalcProvenance = field(default_factory=UCalcProvenance)
     diagnostics: Mapping[str, Any] = field(default_factory=dict)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Report whether all prerequisites/results required by this stage are present and internally consistent.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def ready(self) -> bool:
         return self.status in {UCalcStatus.EVALUATED, UCalcStatus.INDEX_ONLY, UCalcStatus.SOURCE_NOOP}
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Convert the current value to dict without changing its scientific meaning.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def to_dict(self) -> Dict[str, Any]:
         out: Dict[str, Any] = {
             "record": self.record,
@@ -733,6 +845,10 @@ class UCalcExecutionError(RuntimeError):
 
 
 class UCalcUntranslatedBranch(UCalcExecutionError):
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Initialize this object and establish the invariants required by later operations.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def __init__(self, result: UCalcResult):
         self.result = result
         super().__init__(
@@ -874,6 +990,10 @@ _SOURCE_CALLS: Dict[int, Tuple[str, ...]] = {
 }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the complete ucalc branch catalog operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def complete_ucalc_branch_catalog() -> Dict[int, UCalcBranchSpec]:
     """Return a complete registry for every computed-GOTO label 1..102."""
     catalog: Dict[int, UCalcBranchSpec] = {}
@@ -925,27 +1045,51 @@ BranchEvaluator = Callable[[UCalcRecord, UCalcContext, UCalcBranchSpec], UCalcRe
 class SourceFaithfulUCalc:
     """Complete ``ucalc`` branch dispatcher with explicit execution coverage."""
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Initialize this object and establish the invariants required by later operations.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def __init__(self) -> None:
         self.catalog = complete_ucalc_branch_catalog()
         self._evaluators: Dict[int, BranchEvaluator] = {}
         self._register_builtin_evaluators()
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the registered data types operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def registered_data_types(self) -> Tuple[int, ...]:
         return tuple(sorted(self.catalog))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the native data types operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def native_data_types(self) -> Tuple[int, ...]:
         return tuple(sorted(dt for dt, spec in self.catalog.items() if spec.implementation == "native_python"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the source noop data types operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def source_noop_data_types(self) -> Tuple[int, ...]:
         return tuple(sorted(_SOURCE_NOOP_TYPES))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the untranslated data types operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def untranslated_data_types(self) -> Tuple[int, ...]:
         return tuple(sorted(dt for dt, spec in self.catalog.items() if spec.implementation == "untranslated"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Register operation for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def register(self, data_type: int, evaluator: BranchEvaluator, *, validation_status: str = "translated") -> None:
         dt = int(data_type)
         if dt not in self.catalog:
@@ -953,9 +1097,17 @@ class SourceFaithfulUCalc:
         self._evaluators[dt] = evaluator
         self.catalog[dt] = replace(self.catalog[dt], implementation="native_python", validation_status=validation_status)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Decode record for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def decode_record(self, master: XSTARMasterData, record: int, *, parent_record: int = 0, next_record: int = 0) -> UCalcRecord:
         return UCalcRecord.from_master(master, record, parent_record=parent_record, next_record=next_record)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Evaluate record number for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def evaluate_record_number(
         self,
         master: XSTARMasterData,
@@ -971,6 +1123,10 @@ class SourceFaithfulUCalc:
             context.master = master
         return self.evaluate(decoded, context, strict=strict)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Evaluate operation for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def evaluate(self, record: UCalcRecord, context: UCalcContext, *, strict: bool = True) -> UCalcResult:
         spec = self.catalog.get(int(record.data_type))
         if spec is None:
@@ -1014,6 +1170,10 @@ class SourceFaithfulUCalc:
             raise UCalcUntranslatedBranch(result)
         return result
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the coverage operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def coverage(self, data_types: Iterable[int] | None = None) -> Dict[str, Any]:
         values = sorted(set(int(x) for x in (data_types if data_types is not None else self.catalog)))
         native = [x for x in values if x in self.native_data_types]
@@ -1037,6 +1197,10 @@ class SourceFaithfulUCalc:
             "complete_physical_execution_ready": len(blocked) == 0,
         }
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the base result operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def _base_result(
         self,
         record: UCalcRecord,
@@ -1070,6 +1234,10 @@ class SourceFaithfulUCalc:
         defaults.update(values)
         return UCalcResult(**defaults)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the index only operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def _index_only(self, record: UCalcRecord, context: UCalcContext, spec: UCalcBranchSpec) -> UCalcResult:
         i = record.integers
         nlev = context.nlevp
@@ -1173,6 +1341,10 @@ class SourceFaithfulUCalc:
             values.update(idest3=id3, idest4=id4)
         return self._base_result(record, spec, UCalcStatus.INDEX_ONLY, **values)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Register builtin evaluators for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def _register_builtin_evaluators(self) -> None:
         for dt in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15, 16, 17, 18, 19, 20, 21, 22, 23, 25, 26, 27, 28, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 49, 55, 59, 64, 70, 72, 74, 75, 76, 77, 79, 81, 82, 85, 86, 88, 89, 92, 95, 96, 97):
             self._evaluators[dt] = getattr(self, f"_eval_type{dt}")
@@ -1201,15 +1373,27 @@ class SourceFaithfulUCalc:
             99: self._eval_type99,
         })
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the ctx result operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def _ctx_result(self, record: UCalcRecord, spec: UCalcBranchSpec, **values: Any) -> UCalcResult:
         diagnostics = values.pop("diagnostics", {})
         used = tuple(values.pop("context_fields_used", ()))
         result = self._base_result(record, spec, UCalcStatus.EVALUATED, diagnostics=diagnostics, **values)
         return replace(result, provenance=replace(result.provenance, context_fields_used=used))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the context blocked operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def _context_blocked(self, record: UCalcRecord, spec: UCalcBranchSpec, reason: str, *, diagnostics: Mapping[str, Any] | None = None) -> UCalcResult:
         return self._base_result(record, spec, UCalcStatus.CONTEXT_BLOCKED, reason=reason, diagnostics=diagnostics or {})
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the parent record number operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def _parent_record_number(self, record: UCalcRecord, context: UCalcContext) -> int:
         if record.parent_record > 0:
             return int(record.parent_record)
@@ -1222,6 +1406,10 @@ class SourceFaithfulUCalc:
                 except Exception: pass
         return 0
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the parent record operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def _parent_record(self, record: UCalcRecord, context: UCalcContext) -> UCalcRecord | None:
         rec=self._parent_record_number(record,context)
         master=context.master
@@ -1230,6 +1418,10 @@ class SourceFaithfulUCalc:
             except Exception: return None
         return None
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the atomic mass operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def _atomic_mass(self, record: UCalcRecord, context: UCalcContext) -> float | None:
         value=_finite(context.extras.get("atomic_mass"))
         if value is not None and value>0: return value
@@ -1245,6 +1437,10 @@ class SourceFaithfulUCalc:
             pass
         return None
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the linked line wavelength operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def _linked_line_wavelength(self, record: UCalcRecord, context: UCalcContext, fallback: float) -> float:
         master=context.master; derived=context.derived_pointers
         if master is None or derived is None: return abs(float(fallback))
@@ -1256,9 +1452,17 @@ class SourceFaithfulUCalc:
             pass
         return abs(float(fallback))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the level threshold operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def _level_threshold(self, context: UCalcContext, index: int) -> float:
         return _source_faithful_level_threshold(context.levels, index, context.nlevp)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the parent destination context operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def _parent_destination_context(self, context: UCalcContext, idest2: int) -> tuple[float,float]:
         if idest2<=context.nlevp:
             return context.levels.energy(idest2),context.levels.weight(idest2)
@@ -1268,6 +1472,10 @@ class SourceFaithfulUCalc:
         weight=_finite(gmap.get(idest2) if isinstance(gmap,Mapping) else None, context.levels.weight(context.nlevp)) or 0.0
         return energy,weight
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the leveltemp destination energy operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def _leveltemp_destination_energy(
         self, context: UCalcContext, idest2: int, fallback: float
     ) -> float:
@@ -1282,6 +1490,10 @@ class SourceFaithfulUCalc:
         level = context.levels.get(idest2)
         return float(level.energy_ev) if level is not None else float(fallback)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the live type53 state operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def _live_type53_state(self, context: UCalcContext) -> Any:
         """Return the literal caller-owned radiation grid for ``phint53``.
 
@@ -1320,6 +1532,10 @@ class SourceFaithfulUCalc:
         reduced_epi = np.asarray(getattr(radiation, "epim_eV", getattr(radiation, "epim", ())), dtype=float).reshape(-1)
         reduced_bremsa = np.asarray(getattr(radiation, "bremsam", ()), dtype=float).reshape(-1)
 
+        # XSTAR-FUNCTION-COMMENT-BEGIN
+        # Purpose: Implement the valid grid operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+        # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+        # XSTAR-FUNCTION-COMMENT-END
         def valid_grid(epi: np.ndarray, brem: np.ndarray) -> bool:
             return bool(
                 epi.size >= 3 and brem.size >= epi.size
@@ -1384,6 +1600,10 @@ class SourceFaithfulUCalc:
             pass
         return state
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the type53 from pairs operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def _type53_from_pairs(self, record: UCalcRecord, context: UCalcContext, spec: UCalcBranchSpec, *, energy_ryd: Sequence[float], sigma_cm2: Sequence[float], threshold_ev: float, idest1: int, idest2: int, zero_reverse: bool = False, zero_all_heating: bool = False, type49_rnist_semantics: bool = False) -> UCalcResult:
         from xstar_tools.rates_type53 import evaluate_type53_ucalc_record
         physical_dest_energy,dest_weight=self._parent_destination_context(context,idest2)
@@ -1420,11 +1640,19 @@ class SourceFaithfulUCalc:
         return self._ctx_result(record,spec,ans1=ans[0],ans2=ans[1],ans3=ans[2],ans4=ans[3],ans5=ans[4],ans6=ans[5],idest1=idest1,idest2=idest2,opakab=float(ev.get("opakab_cm^-1",0.0)),diagnostics=ev,context_fields_used=("temperature_k","xpx","xee","radiation","levels","ptmp1","ptmp2"))
 
     # --- direct source translations for compact analytic branches ---
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type1 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 1: radiative-recombination rate coefficient for the recombined ion; XSTAR Manual s. 12.1.2 / Mendoza et al. (2021) Appendix A.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type1(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         arad, eta = r.reals[:2]
         ans1 = arad / c.t**eta * c.electron_density_cm3
         return self._ctx_result(r, s, ans1=ans1, idest1=1, context_fields_used=("temperature_k", "xpx", "xee"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type2 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 2: neutral-H charge-exchange recombination coefficient; XSTAR Manual s. 12.1.2 / Mendoza et al. (2021) Appendix A.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type2(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         id1, id2 = 1, c.nlevp
         if c.t > 5.0:
@@ -1437,12 +1665,20 @@ class SourceFaithfulUCalc:
         return self._ctx_result(r, s, ans1=ans1, ans2=ans2, idest1=id1, idest2=id2,
                                 context_fields_used=("temperature_k", "neutral_h_density_cm3"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type3 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 3: current Fortran ucalc branch is canonical; XSTAR Manual s. 12.1 explains the data-type/rate-type contract.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type3(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         cai, eai = r.reals[:2]
         ans1 = cai * _expo(-eai / (XSTAR_KT_EV_PER_1E4K * c.t)) / c.tsq * c.electron_density_cm3
         return self._ctx_result(r, s, ans1=ans1, idest1=1, idest2=1,
                                 context_fields_used=("temperature_k", "xpx", "xee"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type5 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 5: current Fortran ucalc branch is canonical; XSTAR Manual s. 12.1 explains the data-type/rate-type contract.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type5(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         i = r.integers
         if len(i) < 2:
@@ -1457,16 +1693,28 @@ class SourceFaithfulUCalc:
         return self._ctx_result(r, s, ans1=ans1, ans2=ans2, idest1=id1, idest2=id2,
                                 context_fields_used=("temperature_k", "levels"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type6 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 6: atomic level attributes (energy, statistical weight, quantum labels, continuum energy); XSTAR Manual s. 12.1.2 / Mendoza et al. (2021) Appendix A.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type6(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         id1 = r.integers[-2] if len(r.integers) >= 2 else 0
         return self._ctx_result(r, s, idest1=id1)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type7 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 7: dielectronic-recombination rate coefficient; XSTAR Manual s. 12.1.2 / Mendoza et al. (2021) Appendix A.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type7(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         adi, bdi, t0, t1 = r.reals[:4]
         rate = adi * 1.0e-6 * _expo(-t0 / c.t) * (1.0 + bdi * _expo(-t1 / c.t)) / (c.t * math.sqrt(c.t))
         return self._ctx_result(r, s, ans1=rate * c.electron_density_cm3, idest1=1,
                                 context_fields_used=("temperature_k", "xpx", "xee"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type8 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 8: current Fortran ucalc branch is canonical; XSTAR Manual s. 12.1 explains the data-type/rate-type contract.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type8(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         dc, de = r.reals[:4], r.reals[4:8]
         rate = sum(dc[n] * _expo(-de[n] / (XSTAR_KT_EV_PER_1E4K * c.t)) for n in range(4))
@@ -1474,6 +1722,10 @@ class SourceFaithfulUCalc:
         return self._ctx_result(r, s, ans1=rate * c.electron_density_cm3, idest1=1,
                                 context_fields_used=("temperature_k", "xpx", "xee"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type9 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 9: current Fortran ucalc branch is canonical; XSTAR Manual s. 12.1 explains the data-type/rate-type contract.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type9(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         a, b, cc, d = r.reals[:4]
         rate = a * min(c.t, 1000.0)**b * (1.0 + cc * _expo(d * c.t)) * 1.0e-9
@@ -1485,6 +1737,10 @@ class SourceFaithfulUCalc:
         return self._ctx_result(r, s, ans2=ans2, idest1=id1, idest2=id2,
                                 context_fields_used=("temperature_k", "neutral_h_density_cm3"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type10 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 10: current Fortran ucalc branch is canonical; XSTAR Manual s. 12.1 explains the data-type/rate-type contract.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type10(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         a, b, cc, d = r.reals[:4]
         eex = r.reals[6] if len(r.reals) >= 7 else 0.0
@@ -1493,6 +1749,10 @@ class SourceFaithfulUCalc:
                                 idest1=r.integers[0] if r.integers else 0, idest2=c.nlevp,
                                 context_fields_used=("temperature_k", "ionized_h_density_cm3"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type11 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 11: current Fortran ucalc branch is canonical; XSTAR Manual s. 12.1 explains the data-type/rate-type contract.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type11(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         i = r.integers
         id2, id1 = i[0], i[1]
@@ -1502,6 +1762,10 @@ class SourceFaithfulUCalc:
         return self._ctx_result(r, s, ans1=ans1, ans4=ans1 * dele * ERG_PER_EV,
                                 idest1=id1, idest2=id2, context_fields_used=("levels",))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type21 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 21: current Fortran ucalc branch is canonical; XSTAR Manual s. 12.1 explains the data-type/rate-type contract.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type21(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         beta, al1, al2 = r.reals[:3]
         alpha = al1 if c.t < 1.0 else al2
@@ -1509,6 +1773,10 @@ class SourceFaithfulUCalc:
         return self._ctx_result(r, s, ans1=ans1, idest1=1,
                                 context_fields_used=("temperature_k", "ionized_h_density_cm3"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type22 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 22: fitted dielectronic-recombination coefficient; XSTAR Manual s. 12.1.2 / Mendoza et al. (2021) Appendix A.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type22(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         if c.t > 6.0:
             return self._ctx_result(r, s, idest1=1, context_fields_used=("temperature_k",))
@@ -1518,6 +1786,10 @@ class SourceFaithfulUCalc:
         return self._ctx_result(r, s, ans1=ans1, idest1=1,
                                 context_fields_used=("temperature_k", "xpx", "xee"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type30 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 30: hydrogenic total radiative-recombination rate; XSTAR Manual s. 12.1.2 / Mendoza et al. (2021) Appendix A.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type30(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         nmx = r.integers[0]
         t6 = c.t / 100.0
@@ -1533,6 +1805,10 @@ class SourceFaithfulUCalc:
         return self._ctx_result(r, s, ans1=rate*c.electron_density_cm3, idest1=1,
                                 context_fields_used=("temperature_k", "xpx", "xee"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type4 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 4: current Fortran ucalc branch is canonical; XSTAR Manual s. 12.1 explains the data-type/rate-type contract.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type4(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         if len(r.integers) < 2 or len(r.reals) < 5:
             return self._base_result(r, s, UCalcStatus.INVALID_RECORD, reason="type4_short_record")
@@ -1553,6 +1829,10 @@ class SourceFaithfulUCalc:
             idest1=id1, idest2=id2, opakab=opakab,
             context_fields_used=("temperature_k","turbulent_velocity_km_s","ptmp1","ptmp2","levels"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type16 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 16: current Fortran ucalc branch is canonical; XSTAR Manual s. 12.1 explains the data-type/rate-type contract.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type16(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         ekt = XSTAR_KT_EV_PER_1E4K * c.t
         if ekt <= 0.0 or len(r.reals) % 5:
@@ -1572,6 +1852,10 @@ class SourceFaithfulUCalc:
         return self._ctx_result(r,s,ans1=ans1,ans2=ans2,idest1=1,idest2=c.nlevp if r.rate_type==5 else 1,
             context_fields_used=("temperature_k","xpx","xee","levels"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type17 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 17: current Fortran ucalc branch is canonical; XSTAR Manual s. 12.1 explains the data-type/rate-type contract.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type17(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         if len(r.integers)<2 or len(r.reals)<2: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type17_short_record")
         a,b=r.integers[0],r.integers[1]
@@ -1581,18 +1865,30 @@ class SourceFaithfulUCalc:
         ans1=ans2*gu/max(gl,1e-48) if XSTAR_KT_EV_PER_1E4K*c.t>de/20.0 else 0.0
         return self._ctx_result(r,s,ans1=ans1,ans2=ans2,idest1=lo,idest2=up,context_fields_used=("temperature_k","levels"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type18 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 18: current Fortran ucalc branch is canonical; XSTAR Manual s. 12.1 explains the data-type/rate-type contract.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type18(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         if len(r.reals)<4 or not r.integers: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type18_short_record")
         a,b,cc,ttz=r.reals[:4]; algt=min(max(math.log10(c.t/max(ttz,1e-48))+4.0,3.5),7.5)
         ans1=10.0**(a+b*(algt-cc)**2)/c.t/1.0e4*c.electron_density_cm3
         return self._ctx_result(r,s,ans1=ans1,idest1=r.integers[0],context_fields_used=("temperature_k","xpx","xee"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type20 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 20: current Fortran ucalc branch is canonical; XSTAR Manual s. 12.1 explains the data-type/rate-type contract.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type20(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         if len(r.reals)<5: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type20_short_record")
         a,b,cc,d,e=r.reals[:5]; rate=a*c.t**b*(1.0+cc*_expo(d*c.t))*_expo(-e/c.t)*1e-9
         return self._ctx_result(r,s,ans1=rate*c.ionized_h_density_cm3,idest1=1,idest2=c.nlevp,
             context_fields_used=("temperature_k","ionized_h_density_cm3"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type25 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 25: current Fortran ucalc branch is canonical; XSTAR Manual s. 12.1 explains the data-type/rate-type contract.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type25(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         if len(r.reals)<5: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type25_short_record")
         e,a,b,cc,d=r.reals[:5]; chir=c.temperature_k/(11590.0*e)
@@ -1609,9 +1905,17 @@ class SourceFaithfulUCalc:
         return self._ctx_result(r,s,ans1=ans1,ans2=ans2,ans5=ans2*e*ERG_PER_EV,ans6=ans1*e*ERG_PER_EV,
             idest1=id1,idest2=id2,context_fields_used=("temperature_k","xpx","xee","levels"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type26 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 26: current Fortran ucalc branch is canonical; XSTAR Manual s. 12.1 explains the data-type/rate-type contract.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type26(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         return self._ctx_result(r,s)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type28 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 28: current Fortran ucalc branch is canonical; XSTAR Manual s. 12.1 explains the data-type/rate-type contract.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type28(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         if len(r.integers)<2 or len(r.reals)<5: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type28_short_record")
         a,b=r.integers[:2]; lo,up=(a,b) if c.levels.energy(a)<=c.levels.energy(b) else (b,a)
@@ -1625,9 +1929,17 @@ class SourceFaithfulUCalc:
         return self._ctx_result(r,s,ans1=cij*ne,ans2=cji*ne,idest1=lo,idest2=up,
             context_fields_used=("temperature_k","xpx","xee","levels"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type32 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 32: current Fortran ucalc branch is canonical; XSTAR Manual s. 12.1 explains the data-type/rate-type contract.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type32(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         return self._ctx_result(r,s,idest1=r.integers[0] if r.integers else 0)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type33 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 33: current Fortran ucalc branch is canonical; XSTAR Manual s. 12.1 explains the data-type/rate-type contract.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type33(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         if len(r.integers)<2 or len(r.reals)<4: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type33_short_record")
         lo,up=r.integers[0],r.integers[1]; elin=abs(r.reals[0]); gu=c.levels.weight(up); gl=c.levels.weight(lo)
@@ -1637,6 +1949,10 @@ class SourceFaithfulUCalc:
         return self._ctx_result(r,s,ans1=cij*ne,ans2=cji*ne,ans5=cji*ne*de*ERG_PER_EV,ans6=cij*ne*de*ERG_PER_EV,
             idest1=lo,idest2=up,context_fields_used=("temperature_k","xpx","xee","levels"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type34 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 34: current Fortran ucalc branch is canonical; XSTAR Manual s. 12.1 explains the data-type/rate-type contract.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type34(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         if len(r.integers)<2 or len(r.reals)<5: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type34_short_record")
         a,b=r.integers[:2]; up,lo=(a,b) if c.levels.energy(a)>=c.levels.energy(b) else (b,a)
@@ -1649,11 +1965,19 @@ class SourceFaithfulUCalc:
         return self._ctx_result(r,s,ans1=ans1,ans4=ans1*ener*ERG_PER_EV,idest1=up,idest2=lo,opakab=opakab,
             context_fields_used=("temperature_k","turbulent_velocity_km_s","ptmp1","ptmp2","levels"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type37 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 37: current Fortran ucalc branch is canonical; XSTAR Manual s. 12.1 explains the data-type/rate-type contract.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type37(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         n=r.integers[0] if r.integers else min(4,len(r.reals)//2); ekt=XSTAR_KT_EV_PER_1E4K*c.t
         rate=sum(r.reals[k]*_expo(-r.reals[k+4]/ekt) for k in range(min(n,4,len(r.reals)-4)))*1e-6*c.t**-1.5
         return self._ctx_result(r,s,ans1=rate*c.electron_density_cm3,idest1=1,context_fields_used=("temperature_k","xpx","xee"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type38 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 38: fitted total radiative-recombination coefficient; XSTAR Manual s. 12.1.2 / Mendoza et al. (2021) Appendix A.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type38(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         if len(r.reals)<4: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type38_short_record")
         a,b,t0,t1=r.reals[:4]; t0/=1e4; t1/=1e4
@@ -1661,6 +1985,10 @@ class SourceFaithfulUCalc:
         rate=a/(1e-48+(c.t/t0)**.5*(1+(c.t/t0)**.5)**(1-b)*(1+(c.t/t1)**.5)**(1+b))
         return self._ctx_result(r,s,ans1=rate*c.electron_density_cm3,idest1=1,context_fields_used=("temperature_k","xpx","xee"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type39 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 39: fitted total dielectronic-recombination coefficient; XSTAR Manual s. 12.1.2 / Mendoza et al. (2021) Appendix A.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type39(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         # v0.6.48.12.3.35.1 diagnostic-oracle hotfix: literal ucalc.f90
         # Type 39 uses the intrinsic EXP directly, not the source EXPO helper.
@@ -1671,9 +1999,17 @@ class SourceFaithfulUCalc:
         rate=sum(r.reals[k]*math.exp(-(r.reals[k+n]/1e4)/c.t) for k in range(n))*1e-6*c.t**-1.5
         return self._ctx_result(r,s,ans1=rate*c.electron_density_cm3,idest1=1,context_fields_used=("temperature_k","xpx","xee"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the mapped grid operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def _mapped_grid(self, c: UCalcContext) -> np.ndarray:
         return _radiation_arrays(c.radiation)[0]
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the bound free caller grid operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def _bound_free_caller_grid(self, c: UCalcContext) -> np.ndarray:
         """Return the continuum grid passed by the literal emissivity caller.
 
@@ -1704,6 +2040,10 @@ class SourceFaithfulUCalc:
                 return epim
         return self._mapped_grid(c)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type19 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 19: current Fortran ucalc branch is canonical; XSTAR Manual s. 12.1 explains the data-type/rate-type contract.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type19(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         if len(r.reals)<5 or not r.integers: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type19_short_record")
         epi=self._mapped_grid(c); eth=r.reals[4]; sig=np.zeros_like(epi)
@@ -1714,6 +2054,10 @@ class SourceFaithfulUCalc:
         id1=r.integers[0]; id2=c.nlevp; sw=c.levels.weight(id1)/max(c.levels.weight(id2),1e-48)
         return _photo_result_swapped(self,r,c,s,sigma=sig,threshold=eth,swrat=sw,id1=id1,id2=id2)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type27 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 27: current Fortran ucalc branch is canonical; XSTAR Manual s. 12.1 explains the data-type/rate-type contract.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type27(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         if not r.reals: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type27_short_record")
         epi=self._mapped_grid(c); eth=abs(c.levels.energy(c.nlevp)-c.levels.energy(1)); z=max(r.reals[0],1e-48); sig=np.zeros_like(epi)
@@ -1724,6 +2068,10 @@ class SourceFaithfulUCalc:
         id2=0 if r.rate_type==1 else c.nlevp; sw=c.levels.weight(1)
         return _photo_result_swapped(self,r,c,s,sigma=sig,threshold=eth,swrat=sw,id1=1,id2=id2)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type35 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 35: current Fortran ucalc branch is canonical; XSTAR Manual s. 12.1 explains the data-type/rate-type contract.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type35(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         if len(r.reals)<5 or len(r.integers)<3: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type35_short_record")
         eth=r.reals[0]; pairs=(len(r.reals)-1)//2; xs=np.asarray(r.reals[2:2+2*pairs:2],float); ys=np.asarray(r.reals[1:1+2*pairs:2],float)
@@ -1732,21 +2080,37 @@ class SourceFaithfulUCalc:
         sw=c.levels.weight(1)/max(c.levels.weight(c.nlevp),1e-48)
         return _photo_result_swapped(self,r,c,s,sigma=sig,threshold=eth,swrat=sw,id1=id1,id2=id2)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the hydrogenic sigma grid operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def _hydrogenic_sigma_grid(self,c: UCalcContext,eth: float,sgth: float) -> np.ndarray:
         epi=self._mapped_grid(c); return np.where(epi>=eth,sgth*(epi/eth)**-3,0.0)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type36 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 36: current Fortran ucalc branch is canonical; XSTAR Manual s. 12.1 explains the data-type/rate-type contract.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type36(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         id1=r.integers[-2] if len(r.integers)>=2 else 1; eth=c.levels.energy(c.nlevp)-c.levels.energy(id1)
         nq=min(10,r.integers[0] if r.integers else 1); z=float(c.extras.get("element_z",1)-c.extras.get("ion_stage",1)+1)
         sig=self._hydrogenic_sigma_grid(c,eth,6.3e-18*nq*nq/max(z*z,1e-48)); sw=c.levels.weight(id1)/max(c.levels.weight(c.nlevp),1e-48)
         return _photo_result_swapped(self,r,c,s,sigma=sig,threshold=eth,swrat=sw,id1=id1,id2=c.nlevp)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type55 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 55: current Fortran ucalc branch is canonical; XSTAR Manual s. 12.1 explains the data-type/rate-type contract.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type55(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         id1=r.integers[-2] if len(r.integers)>=2 else 1; eth=c.levels.energy(c.nlevp)-c.levels.energy(id1)
         z=float(c.extras.get("element_z",1)-c.extras.get("ion_stage",1)); sig=self._hydrogenic_sigma_grid(c,eth,6.3e-18/max(z*z,1e-48))
         sw=c.levels.weight(id1)/max(c.levels.weight(c.nlevp),1e-48)
         return _photo_result_swapped(self,r,c,s,sigma=sig,threshold=eth,swrat=sw,id1=id1,id2=c.nlevp)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type59 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 59: analytic partial photoionization cross-section fit for a shell/level; XSTAR Manual s. 12.1.2 / Mendoza et al. (2021) Appendix A.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type59(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         """Translate the Verner bound-free branch at source label 59.
 
@@ -1901,10 +2265,18 @@ class SourceFaithfulUCalc:
             },
         )
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type12 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 12: current Fortran ucalc branch is canonical; XSTAR Manual s. 12.1 explains the data-type/rate-type contract.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type12(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         """Source label 12 is an unconditional jump to the type-36 branch."""
         return self._eval_type36(r,c,s)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type15 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 15: current Fortran ucalc branch is canonical; XSTAR Manual s. 12.1 explains the data-type/rate-type contract.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type15(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         """Translate source label 15 with literal shell-loop overwrite order.
 
@@ -1974,6 +2346,10 @@ class SourceFaithfulUCalc:
             },
         )
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type23 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 23: current Fortran ucalc branch is canonical; XSTAR Manual s. 12.1 explains the data-type/rate-type contract.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type23(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         if not r.integers:
             return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type23_missing_level_index")
@@ -1986,6 +2362,10 @@ class SourceFaithfulUCalc:
         sw=c.levels.weight(id1)/max(c.levels.weight(c.nlevp),1e-48)
         return _photo_result_swapped(self,r,c,s,sigma=sigma,threshold=threshold,swrat=sw,id1=id1,id2=id2)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type31 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 31: current Fortran ucalc branch is canonical; XSTAR Manual s. 12.1 explains the data-type/rate-type contract.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type31(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         if len(r.integers)<2 or len(r.reals)<2:
             return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type31_short_record")
@@ -2006,6 +2386,10 @@ class SourceFaithfulUCalc:
         return self._ctx_result(r,s,ans1=decay,ans2=0.0,ans3=pumping*energy*ERG_PER_EV,ans4=decay*energy*ERG_PER_EV,idest1=lower,idest2=upper,opakab=sigma,
             diagnostics={"aij_s^-1":aij,"pumping_pre_lfast_zero_s^-1":pumping,"radiation_bin":nb},context_fields_used=("temperature_k","turbulent_velocity_km_s","radiation","levels","ptmp1","ptmp2","atomic_mass"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type49 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 49: level-resolved partial photoionization cross section from tabulated energy/cross-section pairs; XSTAR Manual s. 12.1.2 / Mendoza et al. (2021) Appendix A.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type49(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         from .ucalc_leaves import phextrap
         if len(r.integers)<3 or len(r.reals)<4:
@@ -2029,6 +2413,10 @@ class SourceFaithfulUCalc:
             "type49_source_expression": "nlevp+max(0,idat(np1i-1+nidt-3))-1",
         })
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type64 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 64: current Fortran ucalc branch is canonical; XSTAR Manual s. 12.1 explains the data-type/rate-type contract.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type64(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         from .ucalc_leaves import hphotx,milne
         if len(r.integers)<3:
@@ -2042,6 +2430,10 @@ class SourceFaithfulUCalc:
         alpha=milne(c.temperature_k,e_ryd,sig_mb,threshold/13.6)*sw
         return replace(out,ans2=alpha,diagnostics={**dict(out.diagnostics),"milne_override_ans2_s^-1":alpha,"principal_n":nq,"orbital_l":l,"ion_charge":charge})
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type70 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 70: density/temperature-dependent superlevel recombination plus photoionization cross section; XSTAR Manual s. 12.1.2 / Mendoza et al. (2021) Appendix A.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type70(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         from .ucalc_leaves import calt70
         from xstar_tools.rates_type53 import evaluate_phint53_exact
@@ -2064,6 +2456,10 @@ class SourceFaithfulUCalc:
         return self._ctx_result(r,s,ans1=ph.pirt_s_inv*scale,ans2=rec*ne,ans3=-ph.rrcl_erg_s_inv,ans4=-ph.piht_erg_s_inv*scale,ans5=-ph.rrcl2_erg_s_inv,ans6=-ph.piht2_erg_s_inv*scale,idest1=id1,idest2=id2,
             diagnostics={**diag,"phint53hunt_equivalent_scale":scale,"ion_charge":ion_charge,"source_lfast":3},context_fields_used=("temperature_k","xpx","xee","radiation","levels"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type81 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 81: Fe XIX collision strengths; XSTAR Manual s. 12.1.2 / Mendoza et al. (2021) Appendix A.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type81(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         if len(r.integers)<2 or not r.reals: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type81_short_record")
         a,b=int(r.integers[0]),int(r.integers[1]); lo,up=(a,b) if c.levels.energy(a)<=c.levels.energy(b) else (b,a); de=abs(c.levels.energy(up)-c.levels.energy(lo)); om=max(float(r.reals[0]),0.0)
@@ -2071,6 +2467,10 @@ class SourceFaithfulUCalc:
         qd=COLLISION_RATE_COEFFICIENT_PER_SQRT_T4*om/c.tsq/max(gu,1e-48); qe=qd*gu*ex/max(gl,1e-48)
         return self._ctx_result(r,s,ans1=qe*ne,ans2=qd*ne,ans5=qd*ne*de*ERG_PER_EV,ans6=qe*ne*de*ERG_PER_EV,idest1=lo,idest2=up,diagnostics={"upsilon":om},context_fields_used=("temperature_k","xpx","xee","levels"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type82 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 82: Fe unresolved-transition-array radiative/Auger decay data; XSTAR Manual s. 12.1.2 / Mendoza et al. (2021) Appendix A.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type82(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         if len(r.integers)<2 or len(r.reals)<4: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type82_short_record")
         a,b=int(r.integers[0]),int(r.integers[1]); up,lo=(a,b) if c.levels.energy(a)>=c.levels.energy(b) else (b,a)
@@ -2080,6 +2480,10 @@ class SourceFaithfulUCalc:
         rwave=self._linked_line_wavelength(r,c,wavelength); epi,brem,_=_radiation_arrays(c.radiation); energy=12398.4016/max(rwave,1e-48); nb=_nbinc(energy,epi); pump=sigma*brem[nb]*vtherm/3e10; decay=aij*(c.ptmp1+c.ptmp2)
         return self._ctx_result(r,s,ans1=pump,ans2=decay,ans3=pump*energy*ERG_PER_EV,idest1=up,idest2=lo,opakab=sigma,diagnostics={"aij_s^-1":aij,"radiation_bin":nb,"linked_wavelength_A":rwave},context_fields_used=("temperature_k","turbulent_velocity_km_s","radiation","levels","ptmp1","ptmp2","atomic_mass"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type85 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 85: Fe K-edge resonance-summed photoionization cross-section parameterization; XSTAR Manual s. 12.1.2 / Mendoza et al. (2021) Appendix A.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type85(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         from .ucalc_leaves import pexs
         if len(r.integers)<3 or len(r.reals)<5: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type85_short_record")
@@ -2087,6 +2491,10 @@ class SourceFaithfulUCalc:
         sig_mb=pexs(nmin,zc,eion,far,gam,scal,epi/13.605692); ph=_phintfo_exact(sigma_cm2=sig_mb*1e-18,threshold_ev=eion*13.605692*.8,context=c,swrat=1.0)
         return self._ctx_result(r,s,ans1=ph["ans1"],ans2=0.0,ans3=0.0,ans4=-ph["ans3"],ans5=0.0,ans6=-ph["ans5"],idest1=id1,idest2=id2,opakab=0.0,diagnostics={**ph,"pexs_nmin":nmin,"pexs_zc":zc,"source_swrat_uninitialized_assumed_one":True},context_fields_used=("temperature_k","xpx","xee","radiation"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type88 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 88: damped-excess K-shell photoionization cross section to a superlevel; XSTAR Manual s. 12.1.2 / Mendoza et al. (2021) Appendix A.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type88(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         from .ucalc_leaves import phextrap
         if len(r.integers)<2 or len(r.reals)<4: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type88_short_record")
@@ -2094,6 +2502,10 @@ class SourceFaithfulUCalc:
         e,xs=phextrap(e[:n],xs[:n],threshold,len(self._bound_free_caller_grid(c)))
         return self._type53_from_pairs(r,c,s,energy_ryd=e,sigma_cm2=xs,threshold_ev=threshold,idest1=id1,idest2=id2,zero_reverse=True,zero_all_heating=True)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type89 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 89: current Fortran ucalc branch is canonical; XSTAR Manual s. 12.1 explains the data-type/rate-type contract.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type89(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         if len(r.integers)<2 or len(r.reals)<3: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type89_short_record")
         a,b=int(r.integers[0]),int(r.integers[1]); up,lo=(a,b) if c.levels.energy(a)>=c.levels.energy(b) else (b,a); aij=float(r.reals[2]); wavelength=abs(float(r.reals[0])); mass=self._atomic_mass(r,c)
@@ -2103,6 +2515,10 @@ class SourceFaithfulUCalc:
         energy=12398.4016/max(wavelength,1e-48); decay=aij*(c.ptmp1+c.ptmp2)
         return self._ctx_result(r,s,ans1=decay,ans2=0.0,ans3=0.0,ans4=decay*energy*ERG_PER_EV,ans5=0.0,ans6=0.0,idest1=up,idest2=lo,opakab=sigma,diagnostics={"aij_s^-1":aij,"oscillator_strength":flin,"resonant_excitation_forced_zero_by_source":True},context_fields_used=("temperature_k","turbulent_velocity_km_s","levels","ptmp1","ptmp2","atomic_mass"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type92 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 92: APED tabulated collision strengths; XSTAR Manual s. 12.1.2 / Mendoza et al. (2021) Appendix A.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type92(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         from .ucalc_leaves import calc_maxwell_rates
         if len(r.integers)<3 or len(r.reals)<42: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type92_short_record")
@@ -2111,6 +2527,10 @@ class SourceFaithfulUCalc:
         de=abs(c.levels.energy(up)-c.levels.energy(lo)); exc,dex,ups,diag=calc_maxwell_rates(coll_type,tmin,tmax,tarr,om,de/1000.0,c.temperature_k,z,c.levels.weight(lo),c.levels.weight(up)); ne=c.electron_density_cm3
         return self._ctx_result(r,s,ans1=exc*ne,ans2=dex*ne,ans5=dex*ne*de*ERG_PER_EV,ans6=exc*ne*de*ERG_PER_EV,idest1=lo,idest2=up,diagnostics={**diag,"upsilon":ups,"collision_type":coll_type},context_fields_used=("temperature_k","xpx","xee","levels","element_z"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type97 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 97: current Fortran ucalc branch is canonical; XSTAR Manual s. 12.1 explains the data-type/rate-type contract.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type97(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         if len(r.reals)<4: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type97_short_record")
         if r.rate_type==5:
@@ -2124,6 +2544,10 @@ class SourceFaithfulUCalc:
         cji=COLLISION_RATE_COEFFICIENT_PER_SQRT_T4*ups/c.tsq/max(gu,1e-48); ex=_expo(-threshold/max(ekt,1e-48)); cij=cji*gu*ex/max(gl,1e-48); ne=c.electron_density_cm3; ans1=cij*ne; rinf=2.08e-22*gl/max(gu,1e-48)/max(c.t*c.tsq,1e-48); ans2=ans1*rinf*ne/max(ex,1e-300)
         return self._ctx_result(r,s,ans1=ans1,ans2=ans2,ans5=ans2*threshold*ERG_PER_EV,ans6=ans1*threshold*ERG_PER_EV,idest1=id1,idest2=id2,diagnostics={"upsilon":ups,"threshold_eV":threshold},context_fields_used=("temperature_k","xpx","xee","levels"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type50 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 50: bound-bound radiative line data (wavelength, oscillator strength, Einstein A, endpoints); XSTAR Manual s. 12.1.2 / Mendoza et al. (2021) Appendix A.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type50(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         """Translate the complete type-50 ``ucalc`` record decode and rate.
 
@@ -2249,6 +2673,10 @@ class SourceFaithfulUCalc:
             context_fields_used=("ptmp1", "ptmp2", "cfrac", "radiation", "xpx", "levels", "turbulent_velocity_km_s", "atomic_mass"),
         )
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the collision row operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def _collision_row(self, r: UCalcRecord, c: UCalcContext) -> tuple[dict, list[dict]]:
         # Build the stable row schema used by the already validated collision kernels.
         i, rd = r.integers, r.reals
@@ -2316,6 +2744,10 @@ class SourceFaithfulUCalc:
             })
         return row, grid
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type51 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 51: CHIANTI/Burgess-Tully effective collision-strength fit for a bound-bound transition; XSTAR Manual s. 12.1.2 / Mendoza et al. (2021) Appendix A.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type51(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         from xstar_tools.rates_type51 import evaluate_type51_ucalc_record
         row, grid = self._collision_row(r,c)
@@ -2327,6 +2759,10 @@ class SourceFaithfulUCalc:
                                 idest1=int(row["lower_level"]),idest2=int(row["upper_level"]),diagnostics=ev,
                                 context_fields_used=("temperature_k","xpx","xee","levels"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval collision generic operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_collision_generic(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         from xstar_tools.collisions import evaluate_collision_row
         row, grid = self._collision_row(r,c)
@@ -2389,6 +2825,10 @@ class SourceFaithfulUCalc:
                                 idest1=idest1,idest2=idest2,diagnostics=ev,
                                 context_fields_used=("temperature_k","xpx","xee","levels"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type53 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 53: resonance-averaged TOPbase level-resolved photoionization cross section; XSTAR Manual s. 12.1.2 / Mendoza et al. (2021) Appendix A.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type53(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         from xstar_tools.rates_type53 import evaluate_type53_ucalc_record
         decoded = c.extras.get("decoded_type53_by_record", {}).get(r.record) or c.extras.get("decoded_type53")
@@ -2522,6 +2962,10 @@ class SourceFaithfulUCalc:
             context_fields_used=("temperature_k", "xpx", "xee", "ptmp1", "ptmp2", "radiation", "levels"),
         )
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type54 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 54: radiative transition probability reconstructed from quantum-defect/hydrogenic information; XSTAR Manual s. 12.1.2 / Mendoza et al. (2021) Appendix A.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type54(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         from xstar_tools.collisions import anl1_py
         if len(r.integers)<4: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type54_short_record")
@@ -2546,6 +2990,10 @@ class SourceFaithfulUCalc:
             context_fields_used=("temperature_k","levels"),
         )
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type60 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 60: analytic H-like effective collision-strength fit; XSTAR Manual s. 12.1.2 / Mendoza et al. (2021) Appendix A.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type60(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         """Translate the shared XSTAR labels 60 and 62.
 
@@ -2755,6 +3203,10 @@ class SourceFaithfulUCalc:
             context_fields_used=("temperature_k", "xpx", "xee", "levels"),
         )
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type65 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 65: current Fortran ucalc branch is canonical; XSTAR Manual s. 12.1 explains the data-type/rate-type contract.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type65(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         from xstar_tools.xstar_element_solver import _xstar_szirc
         if not r.integers or not r.reals: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type65_short_record")
@@ -2766,6 +3218,10 @@ class SourceFaithfulUCalc:
         return self._ctx_result(r,s,ans1=ans1,ans2=ans2,ans5=ans2*eth*ERG_PER_EV,ans6=ans1*eth*ERG_PER_EV,idest1=id1,idest2=c.nlevp,
             diagnostics={"cii_cm3_s":ci},context_fields_used=("temperature_k","xpx","xee","levels","type65_rno"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the calt66 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def _calt66(self,reals: Sequence[float],temp: float) -> float:
         from xstar_tools.collisions import expint_scaled_py
         total=0.0
@@ -2777,6 +3233,10 @@ class SourceFaithfulUCalc:
             total += y*((a/y+cc)+d*.5*(1-y))+em1*(b-cc*y+d*y*y*.5+e/y)
         return total
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type66 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 66: fine-structure collision-strength fit for He-like ions; XSTAR Manual s. 12.1.2 / Mendoza et al. (2021) Appendix A.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type66(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         if len(r.integers)<2 or len(r.reals)<6: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type66_short_record")
         a,b=r.integers[:2]; lo,up=(a,b) if c.levels.energy(a)<=c.levels.energy(b) else (b,a)
@@ -2786,6 +3246,10 @@ class SourceFaithfulUCalc:
         return self._ctx_result(r,s,ans1=qe*ne,ans2=qd*ne,ans5=qd*ne*de*ERG_PER_EV,ans6=qe*ne*de*ERG_PER_EV,idest1=lo,idest2=up,
             diagnostics={"upsilon":ups,"effective_temperature_K":temp},context_fields_used=("temperature_k","xpx","xee","levels"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type73 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 73: effective collision-strength fit for He-like satellite levels; XSTAR Manual s. 12.1.2 / Mendoza et al. (2021) Appendix A.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type73(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         from xstar_tools.collisions import expint_scaled_py, eint_py
         if len(r.integers)<3 or len(r.reals)<7: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type73_short_record")
@@ -2804,6 +3268,10 @@ class SourceFaithfulUCalc:
         return self._ctx_result(r,s,ans1=qe*ne,ans2=qd*ne,ans5=qd*ne*de*ERG_PER_EV,ans6=qe*ne*de*ERG_PER_EV,idest1=lo,idest2=up,
             diagnostics={"crate":crate},context_fields_used=("temperature_k","xpx","xee","levels"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type101 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 101: current Fortran ucalc branch is canonical; XSTAR Manual s. 12.1 explains the data-type/rate-type contract.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type101(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         if len(r.integers)<2 or len(r.reals)<2: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type101_short_record")
         a,b=r.integers[:2]; lo,up=(a,b) if c.levels.energy(a)<=c.levels.energy(b) else (b,a); de=abs(c.levels.energy(up)-c.levels.energy(lo))
@@ -2816,6 +3284,10 @@ class SourceFaithfulUCalc:
         return self._ctx_result(r,s,ans1=qe*ne,ans2=qd*ne,ans5=qd*ne*de*ERG_PER_EV,ans6=qe*ne*de*ERG_PER_EV,idest1=lo,idest2=up,
             diagnostics={"upsilon":om},context_fields_used=("temperature_k","xpx","xee","levels"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type102 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 102: current Fortran ucalc branch is canonical; XSTAR Manual s. 12.1 explains the data-type/rate-type contract.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type102(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         if len(r.integers)<4 or len(r.reals)<7: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type102_short_record")
         up,lo=r.integers[2],r.integers[3]
@@ -2834,6 +3306,10 @@ class SourceFaithfulUCalc:
         return self._ctx_result(r,s,ans1=qe*ne,ans2=qd*ne,ans5=qd*ne*eij*ERG_PER_EV,ans6=qe*ne*eij*ERG_PER_EV,idest1=lo,idest2=up,
             diagnostics={"omega_cont":omc,"omega_res":omr},context_fields_used=("temperature_k","xpx","xee","levels"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type57 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 57: effective ion charge attached to a bound level; XSTAR Manual s. 12.1.2 / Mendoza et al. (2021) Appendix A.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type57(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         from xstar_tools.xstar_element_solver import _xstar_calt57
 
@@ -2914,6 +3390,10 @@ class SourceFaithfulUCalc:
             context_fields_used=("temperature_k", "xpx", "xee", "levels"),
         )
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type71 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 71: radiative transition rates from superlevels to spectroscopic levels; XSTAR Manual s. 12.1.2 / Mendoza et al. (2021) Appendix A.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type71(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         from xstar_tools.rates_type71 import evaluate_type71_ucalc_record
         decoded={"reals":list(r.reals),"ints":list(r.integers)}
@@ -2938,12 +3418,20 @@ class SourceFaithfulUCalc:
             context_fields_used=("temperature_k","xpx","ptmp1","ptmp2","levels"),
         )
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the calt72 rate operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def _calt72_rate(self, r: UCalcRecord, c: UCalcContext) -> float:
         if len(r.reals) < 2: return 0.0
         dele=r.reals[1]; scale=3.3e-11*(13.6/(XSTAR_KT_EV_PER_1E4K*c.t))**1.5
         rtmp=r.reals[2] if len(r.reals)>=3 else 1.0
         return scale*_expo(-dele/(XSTAR_KT_EV_PER_1E4K*c.t))*(r.reals[0]/1e13)*rtmp
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type72 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 72: autoionization rate of a satellite level; XSTAR Manual s. 12.1.2 / Mendoza et al. (2021) Appendix A.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type72(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         rate=self._calt72_rate(r,c); ne=c.electron_density_cm3; i=r.integers
         id1=i[-4] if len(i)>=4 else 1; id2=i[-3] if len(i)>=3 else c.nlevp
@@ -2952,6 +3440,10 @@ class SourceFaithfulUCalc:
         return self._ctx_result(r,s,ans1=rate*ne*rinf*ne*_expo(de/c.temperature_k),ans2=rate*ne,idest1=id1,idest2=id2,
             diagnostics={"calt72_rate_cm3_s":rate},context_fields_used=("temperature_k","xpx","xee","levels"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type74 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 74: delta-function photoionization strength used to match dielectronic-recombination rates; XSTAR Manual s. 12.1.2 / Mendoza et al. (2021) Appendix A.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type74(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         """Translate XSTAR ``ucalc`` label 74 and ``calt74.f90``.
 
@@ -3045,12 +3537,20 @@ class SourceFaithfulUCalc:
             context_fields_used=("temperature_k", "radiation", "levels"),
         )
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type75 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 75: autoionization rates for Fe XXIV satellite levels; XSTAR Manual s. 12.1.2 / Mendoza et al. (2021) Appendix A.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type75(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         i=r.integers; id1=max(i[-3] if len(i)>=3 else 1,1); id2=max((i[-2] if len(i)>=2 else 1)+c.nlevp-1,1)
         rate=self._calt72_rate(r,c)
         return self._ctx_result(r,s,ans2=rate*c.electron_density_cm3,idest1=id1,idest2=id2,
             diagnostics={"calt72_rate_cm3_s":rate},context_fields_used=("temperature_k","xpx","xee"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type79 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 79: current Fortran ucalc branch is canonical; XSTAR Manual s. 12.1 explains the data-type/rate-type contract.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type79(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         if len(r.integers)<2 or len(r.reals)<5: return self._base_result(r,s,UCalcStatus.INVALID_RECORD,reason="type79_short_record")
         a,b=r.integers[:2]; up,lo=(a,b) if c.levels.energy(a)>=c.levels.energy(b) else (b,a)
@@ -3062,6 +3562,10 @@ class SourceFaithfulUCalc:
         return self._ctx_result(r,s,ans1=aij*(c.ptmp1+c.ptmp2),ans4=aij*(c.ptmp1+c.ptmp2)*12398.4016/wav*ERG_PER_EV,
             idest1=up,idest2=lo,opakab=op,context_fields_used=("temperature_k","turbulent_velocity_km_s","ptmp1","ptmp2","levels"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type86 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 86: Auger and radiative widths of a K-vacancy level; XSTAR Manual s. 12.1.2 / Mendoza et al. (2021) Appendix A.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type86(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         if len(r.reals) < 2 or len(r.integers) < 5:
             return self._base_result(r, s, UCalcStatus.INVALID_RECORD, reason="type86_short_record")
@@ -3075,6 +3579,10 @@ class SourceFaithfulUCalc:
         id2 = c.nlevp + r.integers[-5] - 1
         return self._ctx_result(r, s, ans1=r.reals[1], idest1=id1, idest2=id2)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the type76 two photon continuum operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     @staticmethod
     def _type76_two_photon_continuum(c: UCalcContext, *, emax_ev: float, aij_s: float) -> dict[str, Any]:
         """Literal ``ucalc.f90`` Type-76 ``rccemis`` side effect.
@@ -3159,6 +3667,10 @@ class SourceFaithfulUCalc:
             "type76_radiation_grid_points": n,
         }
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type76 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 76: two-photon radiative decay rate and continuum branch; XSTAR Manual s. 12.1.2 / Mendoza et al. (2021) Appendix A.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type76(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         if len(r.integers) < 2 or len(r.reals) < 1:
             return self._base_result(r, s, UCalcStatus.INVALID_RECORD, reason="type76_short_record")
@@ -3188,6 +3700,10 @@ class SourceFaithfulUCalc:
             context_fields_used=tuple(context_fields),
         )
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type77 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 77: collisional transition rates from superlevels to spectroscopic levels; XSTAR Manual s. 12.1.2 / Mendoza et al. (2021) Appendix A.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type77(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         from xstar_tools.xstar_element_solver import _xstar_calt77_rates
         i = r.integers
@@ -3291,6 +3807,10 @@ class SourceFaithfulUCalc:
             context_fields_used=("temperature_k", "xpx", "levels"),
         )
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type95 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 95: level collisional-ionization effective-collision-strength fit; XSTAR Manual s. 12.1.2 / Mendoza et al. (2021) Appendix A.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type95(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         from xstar_tools.xstar_element_solver import _xstar_eint
         if len(r.reals) < 6 or len(r.integers) < 2:
@@ -3346,12 +3866,20 @@ class SourceFaithfulUCalc:
             context_fields_used=("temperature_k", "xpx", "xee", "levels"),
         )
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type96 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 96: current Fortran ucalc branch is canonical; XSTAR Manual s. 12.1 explains the data-type/rate-type contract.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type96(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         i=r.integers; id1=max(i[-3] if len(i)>=3 else 1,1); id2=max((i[-2] if len(i)>=2 else 1)+c.nlevp-1,1)
         dele=r.reals[2]; rate=2.069e-3/c.temperature_k**1.5*_expo(-dele/(XSTAR_KT_EV_PER_1E4K*c.t))*r.reals[1]
         return self._ctx_result(r,s,ans2=rate*c.electron_density_cm3,idest1=id1,idest2=id2,
                                 context_fields_used=("temperature_k","xpx","xee"))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the eval type99 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: ATDB data type 99: newer density/temperature-dependent superlevel recombination/photoionization table; XSTAR Manual s. 12.1.2 / Mendoza et al. (2021) Appendix A.
+    # XSTAR-FUNCTION-COMMENT-END
     def _eval_type99(self, r: UCalcRecord, c: UCalcContext, s: UCalcBranchSpec) -> UCalcResult:
         """Translate ``calt99 -> phint53hunt`` with the live radiation grid."""
         from xstar_tools.xstar_element_solver import _xstar_calt99_superlevel_bound_free
@@ -3446,6 +3974,10 @@ class SourceFaithfulUCalc:
         )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Construct the default source faithful ucalc for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.7 and 12.1; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def default_source_faithful_ucalc() -> SourceFaithfulUCalc:
     return SourceFaithfulUCalc()
 

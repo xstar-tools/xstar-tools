@@ -20,6 +20,10 @@ _ENV_CALL = "XSTAR_V82_PATCH5201732_PYTHON_CALL_INDEX"
 _DEFAULT_CALL = 2
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the target call operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _target_call() -> int:
     try:
         return max(1, int(os.environ.get(_ENV_CALL, str(_DEFAULT_CALL))))
@@ -27,6 +31,10 @@ def _target_call() -> int:
         return _DEFAULT_CALL
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the attribution dir operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def attribution_dir(context: Any) -> Path | None:
     raw = os.environ.get(_ENV_DIR, "").strip()
     if not raw:
@@ -39,10 +47,18 @@ def attribution_dir(context: Any) -> Path | None:
     return out
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Report whether this optional diagnostic/backend path is enabled by the current configuration.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def enabled(context: Any) -> bool:
     return attribution_dir(context) is not None
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the binary64 fnv1a operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def binary64_fnv1a(values: Any) -> str:
     arr = np.asarray(values, dtype=np.float64).reshape(-1)
     # C++ binary64_sequence_fnv1a hashes little-endian bytes of each IEEE-754
@@ -59,6 +75,10 @@ def binary64_fnv1a(values: Any) -> str:
     return f"{h:016x}"
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the array stats operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def array_stats(values: Any) -> dict[str, Any]:
     arr = np.asarray(values, dtype=np.float64).reshape(-1)
     finite = np.isfinite(arr)
@@ -77,6 +97,10 @@ def array_stats(values: Any) -> dict[str, Any]:
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Append csv for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _append_csv(path: Path, row: Mapping[str, Any]) -> None:
     exists = path.exists() and path.stat().st_size > 0
     with path.open("a", newline="", encoding="utf-8") as stream:
@@ -86,6 +110,10 @@ def _append_csv(path: Path, row: Mapping[str, Any]) -> None:
         writer.writerow(row)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Initialize call for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def initialize_call(context: Any, opakc_before_reset: Any) -> None:
     out = attribution_dir(context)
     if out is None:
@@ -107,6 +135,10 @@ def initialize_call(context: Any, opakc_before_reset: Any) -> None:
     checkpoint(context, "calc_emis_all_pre_reset", opakc_before_reset)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the checkpoint operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def checkpoint(context: Any, phase: str, opakc: Any, *, dump_name: str | None = None) -> None:
     out = attribution_dir(context)
     if out is None:
@@ -124,6 +156,10 @@ def checkpoint(context: Any, phase: str, opakc: Any, *, dump_name: str | None = 
         np.asarray(opakc, dtype="<f8").reshape(-1).tofile(out / dump_name)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Record ucalc bound free for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def record_ucalc_bound_free(
     context: Any,
     *,
@@ -217,6 +253,10 @@ def record_ucalc_bound_free(
     _append_csv(out / "python_bound_free_records.csv", row)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Finalize bound free sum for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def finalize_bound_free_sum(context: Any) -> None:
     out = attribution_dir(context)
     if out is None:

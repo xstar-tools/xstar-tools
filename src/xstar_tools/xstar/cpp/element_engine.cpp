@@ -63,6 +63,10 @@ namespace {
 
 using clock_type = std::chrono::steady_clock;
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement copy text as a local helper for the element engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void copy_text(char* target, std::size_t capacity, const std::string& value) {
     if (!target || capacity == 0) return;
     const std::size_t n = std::min(capacity - 1, value.size());
@@ -70,6 +74,10 @@ void copy_text(char* target, std::size_t capacity, const std::string& value) {
     target[n] = '\0';
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement seconds since as a local helper for the element engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 double seconds_since(const clock_type::time_point& start) {
     return std::chrono::duration<double>(clock_type::now() - start).count();
 }
@@ -83,6 +91,10 @@ enum IterationTraceTerminationReason : int {
     ITERATION_TRACE_DENSE_RESCUE = 4
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute iteration trace reason text within the element/ion population workflow, preserving the source ion-stage ordering and active-stage semantics.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 const char* iteration_trace_reason_text(int reason) {
     switch (reason) {
         case ITERATION_TRACE_TOLERANCE: return "tolerance";
@@ -255,10 +267,18 @@ struct xstar_element_engine_context_impl {
     xstar_element_engine_stats_v1 stats{};
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement index2 as a local helper for the element engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 inline std::size_t index2(int row, int col, int ncols) {
     return static_cast<std::size_t>(row) * static_cast<std::size_t>(ncols) + static_cast<std::size_t>(col);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement trim text as a local helper for the element engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::string trim_text(std::string value) {
     const auto first = value.find_first_not_of(" \t\r\n");
     if (first == std::string::npos) return {};
@@ -266,6 +286,10 @@ std::string trim_text(std::string value) {
     return value.substr(first, last - first + 1);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement split simple csv as a local helper for the element engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<std::string> split_simple_csv(const std::string& line) {
     std::vector<std::string> out;
     std::string current;
@@ -277,6 +301,10 @@ std::vector<std::string> split_simple_csv(const std::string& line) {
     return out;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Validate the invariants required by required environment integer local; reject malformed dimensions, pointers, or state before scientific kernels are entered.
+// Reference context: Implementation/safety helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 int required_environment_integer_local(const char* name) {
     const char* value = std::getenv(name);
     if (!value || !*value) throw std::runtime_error(std::string("missing environment integer: ") + name);
@@ -288,11 +316,19 @@ int required_environment_integer_local(const char* name) {
     return static_cast<int>(parsed);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement environment flag local as a local helper for the element engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 bool environment_flag_local(const char* name) {
     const char* value = std::getenv(name);
     return value && std::string(value) == "1";
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute optional environment integer local within the element/ion population workflow, preserving the source ion-stage ordering and active-stage semantics.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int optional_environment_integer_local(const char* name, int fallback) {
     const char* value = std::getenv(name);
     if (!value || !*value) return fallback;
@@ -302,6 +338,10 @@ int optional_environment_integer_local(const char* name, int fallback) {
     return static_cast<int>(parsed);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement current source sequence local as a local helper for the element engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int current_source_sequence_local() {
     const char* value = std::getenv("XSTAR_NATIVE_SOURCE_SEQUENCE");
     if (!value || !*value) value = std::getenv("XSTAR_QUALIFICATION_SOURCE_SEQUENCE");
@@ -316,6 +356,10 @@ int current_source_sequence_local() {
     return static_cast<int>(parsed);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute maybe dump element input within the element/ion population workflow, preserving the source ion-stage ordering and active-stage semantics.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void maybe_dump_element_input_v70(const xstar_element_input_v1& input) {
     const char* root_value = std::getenv("XSTAR_V70_DUMP_ELEMENT_INPUT_DIR");
     if (!root_value || !*root_value) return;
@@ -369,6 +413,10 @@ void maybe_dump_element_input_v70(const xstar_element_input_v1& input) {
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute iteration trace target within the element/ion population workflow, preserving the source ion-stage ordering and active-stage semantics.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 bool iteration_trace_target(int sequence, int element_z) {
     const char* raw = std::getenv("XSTAR_QUALIFICATION_ITERATION_TRACE_TARGETS");
     const std::string targets = raw && *raw ? raw : "1:1,6:1,1:2,1:12";
@@ -396,6 +444,10 @@ bool iteration_trace_target(int sequence, int element_z) {
     return matches(token);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write iteration resolved trace from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void write_iteration_resolved_trace(
     const xstar_element_input_v1& input,
     const Workspace& w,
@@ -492,6 +544,10 @@ void write_iteration_resolved_trace(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Apply matrix construction dense closure to the current model state while preserving the source ordering and normalization expected by later stages.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void apply_matrix_construction_dense_closure(const xstar_element_input_v1& input, std::vector<double>& dense) {
     if (!environment_flag_local("XSTAR_QUALIFICATION_MATRIX_CONSTRUCTION_CLOSURE")) return;
     const char* root_value = std::getenv("XSTAR_QUALIFICATION_MATRIX_CONSTRUCTION_CLOSURE_DIR");
@@ -528,10 +584,18 @@ void apply_matrix_construction_dense_closure(const xstar_element_input_v1& input
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Validate the invariants required by require; reject malformed dimensions, pointers, or state before scientific kernels are entered.
+// Reference context: Implementation/safety helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 void require(bool condition, const std::string& message) {
     if (!condition) throw std::runtime_error(message);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Validate the invariants required by validate input; reject malformed dimensions, pointers, or state before scientific kernels are entered.
+// Reference context: Implementation/safety helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 void validate_input(const xstar_element_input_v1& input) {
     require(input.struct_size >= sizeof(xstar_element_input_v1), "element input struct_size is too small");
     require(input.abi_version == XSTAR_ELEMENT_ENGINE_ABI_VERSION, "element input ABI mismatch");
@@ -558,6 +622,10 @@ void validate_input(const xstar_element_input_v1& input) {
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Validate the invariants required by validate output; reject malformed dimensions, pointers, or state before scientific kernels are entered.
+// Reference context: Implementation/safety helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 void validate_output(const xstar_element_input_v1& input, xstar_element_output_v1& output) {
     require(output.struct_size >= sizeof(xstar_element_output_v1), "element output struct_size is too small");
     require(output.abi_version == XSTAR_ELEMENT_ENGINE_ABI_VERSION, "element output ABI mismatch");
@@ -599,6 +667,10 @@ void validate_output(const xstar_element_input_v1& input, xstar_element_output_v
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement verify source order as a local helper for the element engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 bool verify_source_order(const xstar_element_input_v1& input) {
     const char* qualification_order = std::getenv("XSTAR_QUALIFICATION_TYPE53_ROW46_COUPLED_REPLACEMENT");
     const char* promoted_order = std::getenv("XSTAR_QUALIFICATION_TYPE53_TWO_STATE_PROMOTION");
@@ -622,6 +694,10 @@ bool verify_source_order(const xstar_element_input_v1& input) {
     return true;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute solve normalized as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void solve_normalized(
     std::vector<double>& matrix,
     int dimension,
@@ -666,6 +742,10 @@ void solve_normalized(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source fixed difference as a local helper for the element engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 double source_fixed_difference(const std::vector<double>& previous, const std::vector<double>& current) {
     double diff2 = 0.0;
     double tst = 0.0;
@@ -680,6 +760,10 @@ double source_fixed_difference(const std::vector<double>& previous, const std::v
     return diff2;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source outer difference as a local helper for the element engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 double source_outer_difference(const std::vector<double>& previous, const std::vector<double>& current) {
     double diff = 0.0;
     std::size_t index = 0;
@@ -696,11 +780,19 @@ double source_outer_difference(const std::vector<double>& previous, const std::v
 }
 
 template <typename T>
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement copy vector as a local helper for the element engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void copy_vector(const std::vector<T>& source, T* target, std::size_t capacity, const char* label) {
     require(target != nullptr && capacity >= source.size(), std::string(label) + " output buffer too small");
     std::copy(source.begin(), source.end(), target);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Build terms from contributions from the source-ordered inputs required by the next calculation stage.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 std::vector<xstar_element_term_v1> construct_terms_from_contributions(
     const xstar_element_input_v1& input,
     const xstar_element_contribution_v1* contributions,
@@ -760,6 +852,10 @@ std::vector<xstar_element_term_v1> construct_terms_from_contributions(
     return terms;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute run element impl within the element/ion population workflow, preserving the source ion-stage ordering and active-stage semantics.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int run_element_impl(
     xstar_element_engine_context_impl& context,
     const xstar_element_input_v1& input,
@@ -1284,18 +1380,34 @@ struct xstar_element_engine_context {
 
 extern "C" {
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Return the ABI version for the element engine interface so callers can reject incompatible binary layouts before execution.
+// Reference context: Implementation/compatibility helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 uint32_t xstar_element_engine_abi_version(void) {
     return XSTAR_ELEMENT_ENGINE_ABI_VERSION;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Report the compiled element engine backend name capability metadata used by backend selection and provenance.
+// Reference context: Implementation/provenance helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 const char* xstar_element_engine_backend_name(void) {
     return "xstar_element_engine_h_he_mg_native_construction_v06451";
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Report the compiled element engine feature flags capability metadata used by backend selection and provenance.
+// Reference context: Implementation/provenance helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_element_engine_feature_flags(void) {
     return 0x3F;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Initialize the element input init structure to its ABI-safe defaults before the caller supplies model-specific values.
+// Reference context: Implementation/ABI helper; scientific meaning is defined by the consuming engine.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_element_input_init_v1(xstar_element_input_v1* input) {
     if (!input) return 1;
     std::memset(input, 0, sizeof(*input));
@@ -1309,6 +1421,10 @@ int xstar_element_input_init_v1(xstar_element_input_v1* input) {
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Initialize the element output init structure to its ABI-safe defaults before the caller supplies model-specific values.
+// Reference context: Implementation/ABI helper; scientific meaning is defined by the consuming engine.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_element_output_init_v1(xstar_element_output_v1* output) {
     if (!output) return 1;
     std::memset(output, 0, sizeof(*output));
@@ -1317,6 +1433,10 @@ int xstar_element_output_init_v1(xstar_element_output_v1* output) {
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Initialize the element engine stats init structure to its ABI-safe defaults before the caller supplies model-specific values.
+// Reference context: Implementation/ABI helper; scientific meaning is defined by the consuming engine.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_element_engine_stats_init_v1(xstar_element_engine_stats_v1* stats) {
     if (!stats) return 1;
     std::memset(stats, 0, sizeof(*stats));
@@ -1325,6 +1445,10 @@ int xstar_element_engine_stats_init_v1(xstar_element_engine_stats_v1* stats) {
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Initialize the element solve stage trace init structure to its ABI-safe defaults before the caller supplies model-specific values.
+// Reference context: Implementation/ABI helper; scientific meaning is defined by the consuming engine.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_element_solve_stage_trace_init_v1(
     xstar_element_solve_stage_trace_v1* trace
 ) {
@@ -1335,6 +1459,10 @@ int xstar_element_solve_stage_trace_init_v1(
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute element engine get last solve stage trace as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_element_engine_get_last_solve_stage_trace_v1(
     const xstar_element_engine_context* context,
     xstar_element_solve_stage_trace_v1* trace,
@@ -1435,6 +1563,10 @@ int xstar_element_engine_get_last_solve_stage_trace_v1(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Create and validate persistent runtime state for element engine context create, loading only the data needed by subsequent calls.
+// Reference context: Implementation/lifetime helper; the scientific work is performed by the shared engine routines called from this context.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_element_engine_context_create_v1(
     xstar_element_engine_context** context,
     char* message,
@@ -1453,10 +1585,18 @@ int xstar_element_engine_context_create_v1(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Destroy the persistent element engine context destroy context and release its owned resources without changing external science state.
+// Reference context: Implementation/lifetime helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_element_engine_context_destroy(xstar_element_engine_context* context) {
     delete context;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Reset reusable element engine context reset state between model evaluations while preserving immutable loaded data and ABI invariants.
+// Reference context: Implementation/lifetime helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_element_engine_context_reset_v1(
     xstar_element_engine_context* context,
     char* message,
@@ -1468,6 +1608,10 @@ int xstar_element_engine_context_reset_v1(
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute element engine get stats within the element/ion population workflow, preserving the source ion-stage ordering and active-stage semantics.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_element_engine_get_stats_v1(
     const xstar_element_engine_context* context,
     xstar_element_engine_stats_v1* stats,
@@ -1480,6 +1624,10 @@ int xstar_element_engine_get_stats_v1(
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute element engine run construction within the element/ion population workflow, preserving the source ion-stage ordering and active-stage semantics.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_element_engine_run_construction_v1(
     xstar_element_engine_context* context,
     const xstar_element_input_v1* input,
@@ -1527,6 +1675,10 @@ int xstar_element_engine_run_construction_v1(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute element engine run construction with thermal ledger as a contribution to, or control step in, the local thermal-equilibrium iteration.
+// Reference context: XSTAR Manual s11.4.4 and s11.6; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_element_engine_run_construction_with_thermal_ledger_v1(
     xstar_element_engine_context* context,
     const xstar_element_input_v1* input,
@@ -1581,6 +1733,10 @@ int xstar_element_engine_run_construction_with_thermal_ledger_v1(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute element engine run element within the element/ion population workflow, preserving the source ion-stage ordering and active-stage semantics.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_element_engine_run_element_v1(
     xstar_element_engine_context* context,
     const xstar_element_input_v1* input,
@@ -1604,6 +1760,10 @@ int xstar_element_engine_run_element_v1(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute element engine run construction evaluation within the element/ion population workflow, preserving the source ion-stage ordering and active-stage semantics.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_element_engine_run_construction_evaluation_v1(
     xstar_element_engine_context* context,
     const xstar_element_input_v1* inputs,
@@ -1635,6 +1795,10 @@ int xstar_element_engine_run_construction_evaluation_v1(
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute element engine run evaluation within the element/ion population workflow, preserving the source ion-stage ordering and active-stage semantics.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_element_engine_run_evaluation_v1(
     xstar_element_engine_context* context,
     const xstar_element_input_v1* inputs,

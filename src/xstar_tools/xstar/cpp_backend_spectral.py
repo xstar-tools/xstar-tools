@@ -105,10 +105,18 @@ class _Stats(ctypes.Structure):
     ]
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the p operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _p(array: np.ndarray) -> ctypes.POINTER(ctypes.c_double):
     return array.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Load operation for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _load() -> ctypes.CDLL:
     global _LIB, _LOAD_ERROR
     if _LIB is not None:
@@ -152,6 +160,10 @@ def _load() -> ctypes.CDLL:
     raise RuntimeError(_LOAD_ERROR or "libxstar_emissivity.so unavailable")
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the context operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _context() -> ctypes.c_void_p:
     value = getattr(_TLS, "context", None)
     if value:
@@ -166,6 +178,10 @@ def _context() -> ctypes.c_void_p:
     return out
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the spectral engine status operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def spectral_engine_status() -> dict[str, Any]:
     try:
         lib = _load()
@@ -187,10 +203,18 @@ def spectral_engine_status() -> dict[str, Any]:
         }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the as f64 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _as_f64(value: Any) -> np.ndarray:
     return np.ascontiguousarray(np.asarray(value, dtype=np.float64).reshape(-1))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the pack contributions operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _pack_contributions(
     values: Iterable[Mapping[str, Any]],
     *,
@@ -245,6 +269,10 @@ def _pack_contributions(
     return packed, np.ascontiguousarray(seeds.reshape(-1)), rows
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Apply spectral batch for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _apply_spectral_batch(
     rows: list[Mapping[str, Any]],
     *,
@@ -345,6 +373,10 @@ def _apply_spectral_batch(
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the merge metrics operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _merge_metrics(total: dict[str, Any], item: Mapping[str, Any]) -> None:
     for key in (
         "contributions", "calls", "contributions_attempted", "contributions_committed",
@@ -365,6 +397,10 @@ def _merge_metrics(total: dict[str, Any], item: Mapping[str, Any]) -> None:
         total["source_hunt_floor"] = float(item.get("source_hunt_floor", 0.0) or 0.0)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Apply spectral contributions cpp for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def apply_spectral_contributions_cpp(
     contributions: Iterable[Mapping[str, Any]],
     *,
@@ -426,6 +462,10 @@ def apply_spectral_contributions_cpp(
     }
     pending: list[Mapping[str, Any]] = []
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the flush pending operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def flush_pending() -> None:
         nonlocal pending
         if not pending:

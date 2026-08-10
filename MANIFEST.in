@@ -72,3 +72,7 @@ include .github/workflows/conda.yml
 include tools/qualification/check_conda_packaging.py
 include qualification/conda_packaging_0_6_72.json
 include tools/packaging/prepare_local_conda_recipe.py
+include tools/qualification/check_source_function_comments.py
+include tools/qualification/function_comment_overlay.py
+include qualification/source_function_comments_0_6_73.json
+

@@ -59,6 +59,10 @@ class FreeFreeContext:
     ncn2: Optional[int] = None
     source: str = "xstar_freef_same_call_probe"
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Validate FreeFreeContext invariants before the value is consumed downstream.
+    # Reference context: XSTAR Manual ss. 11.4.4 and 11.6; Kallman & Bautista (2001), free-free cooling/opacity.
+    # XSTAR-FUNCTION-COMMENT-END
     def validate(self) -> None:
         epi = np.asarray(self.epi_eV, dtype=float).reshape(-1)
         brem = np.asarray(self.bremsa, dtype=float).reshape(-1)
@@ -154,6 +158,10 @@ class FreeFreeParityResult:
     htfreef_relative_difference: float
     diagnostics: Mapping[str, Any] = field(default_factory=dict)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Report whether all prerequisites/results required by this stage are present and internally consistent.
+    # Reference context: XSTAR Manual ss. 11.4.4 and 11.6; Kallman & Bautista (2001), free-free cooling/opacity.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def ready(self) -> bool:
         return bool(
@@ -166,12 +174,20 @@ class FreeFreeParityResult:
         )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the relative difference operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6; Kallman & Bautista (2001), free-free cooling/opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def _relative_difference(a: np.ndarray | float, b: np.ndarray | float) -> np.ndarray:
     aa = np.asarray(a, dtype=float)
     bb = np.asarray(b, dtype=float)
     return np.abs(aa - bb) / np.maximum(np.maximum(np.abs(aa), np.abs(bb)), 1.0e-300)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Compute free-free thermal cooling/opacity contributions from the local electron/ion state.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6; Kallman & Bautista (2001), free-free cooling/opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def freef(
     epi_eV: Sequence[float],
     bremsa: Sequence[float],
@@ -272,6 +288,10 @@ def freef(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the freef continuum result operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6; Kallman & Bautista (2001), free-free cooling/opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def freef_continuum_result(
     context: FreeFreeContext,
     *,
@@ -302,6 +322,10 @@ def freef_continuum_result(
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Load freef probe reference for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6; Kallman & Bautista (2001), free-free cooling/opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def load_freef_probe_reference(
     probe_dir: str | Path,
     *,
@@ -357,6 +381,10 @@ def load_freef_probe_reference(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Compare freef probe for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6; Kallman & Bautista (2001), free-free cooling/opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def compare_freef_probe(
     reference: FreeFreeProbeReference,
     *,
@@ -432,6 +460,10 @@ def compare_freef_probe(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write freef parity products for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6; Kallman & Bautista (2001), free-free cooling/opacity.
+# XSTAR-FUNCTION-COMMENT-END
 def write_freef_parity_products(
     parity: FreeFreeParityResult,
     out_dir: str | Path,

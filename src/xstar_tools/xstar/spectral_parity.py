@@ -11,6 +11,10 @@ from typing import Any, Sequence
 import numpy as np
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the binary64 ordered bits operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def binary64_ordered_bits(values: np.ndarray) -> np.ndarray:
     """Return monotonic unsigned encodings for diagnostic ULP reporting."""
     bits = np.ascontiguousarray(np.asarray(values, dtype=np.float64)).view(np.uint64)
@@ -18,6 +22,10 @@ def binary64_ordered_bits(values: np.ndarray) -> np.ndarray:
     return np.where((bits & sign) != 0, ~bits, bits | sign)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the classify spectral shadow arrays operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def classify_spectral_shadow_arrays(
     pairs: Sequence[tuple[str, Any, Any]], *, phase: str
 ) -> tuple[str, dict[str, Any]]:

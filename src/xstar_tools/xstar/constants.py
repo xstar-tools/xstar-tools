@@ -25,6 +25,10 @@ _DEFINITION = re.compile(
 )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Load constants for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Source constant loading and Fortran-kind preservation; no independent paper algorithm.
+# XSTAR-FUNCTION-COMMENT-END
 def _load_constants() -> dict[str, float]:
     path = Path(__file__).with_name("cpp") / "constants.def"
     values: dict[str, float] = {}

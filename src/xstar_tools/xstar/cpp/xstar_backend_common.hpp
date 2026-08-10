@@ -17,6 +17,10 @@
 
 namespace xstar_backend {
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement write message as a small shared native helper used by the standalone/backend orchestration layer.
+// Reference context: Implementation helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 inline void write_message(char* message, std::size_t message_size, const std::string& text) {
     if (message == nullptr || message_size == 0) {
         return;
@@ -29,6 +33,10 @@ inline void write_message(char* message, std::size_t message_size, const std::st
     message[n] = '\0';
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement empty counters as a small shared native helper used by the standalone/backend orchestration layer.
+// Reference context: Implementation helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 inline MgIonAccumulatorCounters empty_counters() {
     MgIonAccumulatorCounters counters{};
     counters.records_seen = 0;
@@ -41,6 +49,10 @@ inline MgIonAccumulatorCounters empty_counters() {
     return counters;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement valid count as a small shared native helper used by the standalone/backend orchestration layer.
+// Reference context: Implementation helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 inline bool valid_count(int n) {
     return n >= 0;
 }

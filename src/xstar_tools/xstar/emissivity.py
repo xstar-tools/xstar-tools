@@ -64,10 +64,18 @@ XSTAR_CALC_EMISAB_ABUNDANCE_FLOOR = 1.0e-24
 XSTAR_CALC_EMISAB_LEVEL_ABUNDANCE_FLOOR = float(np.float32(1.0e-34))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the env true operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+# XSTAR-FUNCTION-COMMENT-END
 def _env_true(name: str) -> bool:
     return str(os.environ.get(name, "0")).strip().lower() in {"1", "true", "yes", "on"}
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the native spectral requested operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+# XSTAR-FUNCTION-COMMENT-END
 def _native_spectral_requested(*, product: bool = False, shadow: bool = False) -> bool:
     if not _env_true("XSTAR_ATOMIC_SPECTRAL_ENGINE_CPP"):
         return False
@@ -79,10 +87,18 @@ def _native_spectral_requested(*, product: bool = False, shadow: bool = False) -
 
 
 class _TraceSink(list):
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Append operation for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+    # XSTAR-FUNCTION-COMMENT-END
     def append(self, value: Any) -> None:  # type: ignore[override]
         return None
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the spectral summary bucket operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+# XSTAR-FUNCTION-COMMENT-END
 def _spectral_summary_bucket(context: CalcEmisabContext) -> MutableMapping[str, Any]:
     control = context.profile_control if isinstance(context.profile_control, MutableMapping) else {}
     summary = control.setdefault("native_spectral_engine_summary", {
@@ -112,6 +128,10 @@ def _spectral_summary_bucket(context: CalcEmisabContext) -> MutableMapping[str, 
     return summary
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Record spectral shadow result for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+# XSTAR-FUNCTION-COMMENT-END
 def _record_spectral_shadow_result(
     summary: MutableMapping[str, Any], status: str, detail: Optional[Mapping[str, Any]] = None
 ) -> None:
@@ -122,6 +142,10 @@ def _record_spectral_shadow_result(
             summary["first_mismatch"] = dict(detail)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the add spectral metrics operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+# XSTAR-FUNCTION-COMMENT-END
 def _add_spectral_metrics(summary: MutableMapping[str, Any], metrics: Mapping[str, Any], *, phase: str, status: str, mismatch: Optional[Mapping[str, Any]] = None) -> None:
     summary[f"{phase}_calls"] = int(summary.get(f"{phase}_calls", 0)) + 1
     for key in (
@@ -170,6 +194,10 @@ class CalcEmisabWorkspace:
     cabab: np.ndarray
     opakab: np.ndarray
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the allocate operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+    # XSTAR-FUNCTION-COMMENT-END
     @classmethod
     def allocate(
         cls,
@@ -191,6 +219,10 @@ class CalcEmisabWorkspace:
             opakab=np.zeros(int(n_continua) + 1, dtype=float),
         )
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Validate CalcEmisabWorkspace invariants before the value is consumed downstream.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+    # XSTAR-FUNCTION-COMMENT-END
     def validate(self, *, n_lines: int, n_continua: int, n_energy: int) -> None:
         # The continuum work arrays are dimensioned on the caller's full
         # ``ncn`` grid even when ``calc_emisab_all`` receives the reduced
@@ -214,6 +246,10 @@ class CalcEmisabWorkspace:
             if not np.all(np.isfinite(np.asarray(getattr(self, name), dtype=float))):
                 raise CalcEmisabPortError(f"{name} contains non-finite values")
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Clear source outputs for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+    # XSTAR-FUNCTION-COMMENT-END
     def clear_source_outputs(self) -> None:
         """Replay only the arrays cleared by ``calc_emisab_all.f90``."""
         self.cemab[:, :] = 0.0
@@ -260,16 +296,32 @@ class CalcEmisabContext:
     # carries both grids.
     ucalc_radiation_grid_role: str = "reduced"
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the temperature k operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def temperature_k(self) -> float:
         return float(self.temperature_1e4K) * 1.0e4
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the abundance operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+    # XSTAR-FUNCTION-COMMENT-END
     def abundance(self, z: int) -> float:
         return float(self.abundances_by_z.get(int(z), 0.0))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the min stage operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+    # XSTAR-FUNCTION-COMMENT-END
     def min_stage(self, z: int) -> int:
         return int(self.min_ion_stage_by_z.get(int(z), 1))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the max stage operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+    # XSTAR-FUNCTION-COMMENT-END
     def max_stage(self, z: int) -> int:
         return int(self.max_ion_stage_by_z.get(int(z), int(z) + 1))
 
@@ -345,6 +397,10 @@ class _IonDescriptor:
     nlev: int
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the one based array value operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+# XSTAR-FUNCTION-COMMENT-END
 def _one_based_array_value(values: np.ndarray, index: int, name: str) -> float:
     arr = np.asarray(values, dtype=float).reshape(-1)
     ii = int(index)
@@ -353,6 +409,10 @@ def _one_based_array_value(values: np.ndarray, index: int, name: str) -> float:
     return float(arr[ii])
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the radiation arrays operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+# XSTAR-FUNCTION-COMMENT-END
 def _radiation_arrays(radiation: Any) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     epi = np.asarray(getattr(radiation, "epim_eV", getattr(radiation, "epim", ())), dtype=float).reshape(-1)
     brem = np.asarray(getattr(radiation, "bremsam", ()), dtype=float).reshape(-1)
@@ -369,6 +429,10 @@ def _radiation_arrays(radiation: Any) -> tuple[np.ndarray, np.ndarray, np.ndarra
     return epi, brem[: epi.size], bint[: epi.size]
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Resolve calc emisab density for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+# XSTAR-FUNCTION-COMMENT-END
 def resolve_calc_emisab_density(*, xpx: float, pressure: float, t_1e4: float, xee: float, lcdd: int) -> float:
     """Translate the two density overrides at the top of ``calc_emisab_all``."""
     value = float(xpx)
@@ -379,6 +443,10 @@ def resolve_calc_emisab_density(*, xpx: float, pressure: float, t_1e4: float, xe
     return value
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the iter ion descriptors operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+# XSTAR-FUNCTION-COMMENT-END
 def _iter_ion_descriptors(context: CalcEmisabContext, element_record: int, element_z: int) -> list[_IonDescriptor]:
     out: list[_IonDescriptor] = []
     rec = int(context.derived.npfirst[12])
@@ -395,12 +463,20 @@ def _iter_ion_descriptors(context: CalcEmisabContext, element_record: int, eleme
     return out
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Copy or initialize leveltemp for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+# XSTAR-FUNCTION-COMMENT-END
 def _copy_or_initialize_leveltemp(initial: Optional[UCalcLevelTable]) -> UCalcLevelTable:
     if initial is None:
         return UCalcLevelTable(levels={}, nlev=0)
     return UCalcLevelTable(levels=dict(initial.levels), nlev=int(initial.nlev))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the overwrite leveltemp operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+# XSTAR-FUNCTION-COMMENT-END
 def _overwrite_leveltemp(workspace: UCalcLevelTable, current: UCalcLevelTable) -> UCalcLevelTable:
     for index in range(1, int(current.nlev) + 1):
         workspace.levels[index] = current.require(index)
@@ -408,6 +484,10 @@ def _overwrite_leveltemp(workspace: UCalcLevelTable, current: UCalcLevelTable) -
     return workspace
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the compact element populations operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+# XSTAR-FUNCTION-COMMENT-END
 def _compact_element_populations(
     context: CalcEmisabContext,
     ions: Sequence[_IonDescriptor],
@@ -428,6 +508,10 @@ def _compact_element_populations(
     return x, b, r
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Accumulate ucalc continuum for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+# XSTAR-FUNCTION-COMMENT-END
 def _accumulate_ucalc_continuum(workspace: CalcEmisabWorkspace, result: UCalcResult) -> None:
     diagnostics = result.diagnostics
     for key, target in (
@@ -456,6 +540,10 @@ def _accumulate_ucalc_continuum(workspace: CalcEmisabWorkspace, result: UCalcRes
         workspace.rccemis[1, : arr.size] += arr
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Evaluate ucalc for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+# XSTAR-FUNCTION-COMMENT-END
 def _evaluate_ucalc(context: CalcEmisabContext, record: int, ucontext: UCalcContext) -> UCalcResult:
     if context.ucalc_evaluator is not None:
         return context.ucalc_evaluator(int(record), ucontext)
@@ -470,6 +558,10 @@ def _evaluate_ucalc(context: CalcEmisabContext, record: int, ucontext: UCalcCont
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the next ion parent destination context operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+# XSTAR-FUNCTION-COMMENT-END
 def _next_ion_parent_destination_context(
     context: CalcEmisabContext, ion: _IonDescriptor
 ) -> tuple[dict[int, float], dict[int, float]]:
@@ -514,6 +606,10 @@ def _next_ion_parent_destination_context(
 _type53_parent_destination_context = _next_ion_parent_destination_context
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the ucalc context operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+# XSTAR-FUNCTION-COMMENT-END
 def _ucalc_context(
     context: CalcEmisabContext,
     *,
@@ -562,6 +658,10 @@ def _ucalc_context(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Accumulate integrated/reduced-grid line and recombination-continuum emission/absorption for one ion from solved level populations and current escape factors.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+# XSTAR-FUNCTION-COMMENT-END
 def calc_emisab_ion(
     context: CalcEmisabContext,
     *,
@@ -756,6 +856,10 @@ def calc_emisab_ion(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Apply calc_emisab_ion across one element's selected ion stages and merge integrated line/RRC products.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+# XSTAR-FUNCTION-COMMENT-END
 def calc_emisab_element(
     context: CalcEmisabContext,
     *,
@@ -812,6 +916,10 @@ def calc_emisab_element(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the begin source detail line publication shadow v064812345334 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+# XSTAR-FUNCTION-COMMENT-END
 def _begin_source_detail_line_publication_shadow_v064812345334(
     control: Optional[MutableMapping[str, Any]],
 ) -> None:
@@ -822,6 +930,10 @@ def _begin_source_detail_line_publication_shadow_v064812345334(
     control["source_detail_line_stale_opakb1_v064812345334"] = 0.0
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Update source detail line publication shadow v064812345334 for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+# XSTAR-FUNCTION-COMMENT-END
 def _update_source_detail_line_publication_shadow_v064812345334(
     control: Optional[MutableMapping[str, Any]], *, rate_type: int, data_type: int,
     line_index: int, abundance_lower: float, abundance_upper: float,
@@ -858,6 +970,10 @@ def _update_source_detail_line_publication_shadow_v064812345334(
     shadow[int(line_index)] = True
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Update source detail rrc record shadow v0648123453 for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+# XSTAR-FUNCTION-COMMENT-END
 def _update_source_detail_rrc_record_shadow_v0648123453(
     control: Optional[MutableMapping[str, Any]], *, source_record: int,
     continuum_index: int, ptmp1: float, ptmp2: float, abund1: float,
@@ -898,6 +1014,10 @@ def _update_source_detail_rrc_record_shadow_v0648123453(
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the source detail rrc lifetime trace targets v06481234532 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+# XSTAR-FUNCTION-COMMENT-END
 def _source_detail_rrc_lifetime_trace_targets_v06481234532() -> set[int]:
     raw = str(os.environ.get("XSTAR_V06481234532_RRC_TARGETS", "709,762"))
     out: set[int] = set()
@@ -911,6 +1031,10 @@ def _source_detail_rrc_lifetime_trace_targets_v06481234532() -> set[int]:
     return out
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Append source detail rrc lifetime trace v06481234532 for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+# XSTAR-FUNCTION-COMMENT-END
 def _append_source_detail_rrc_lifetime_trace_v06481234532(
     control: Optional[MutableMapping[str, Any]], event: Mapping[str, Any],
 ) -> None:
@@ -927,6 +1051,10 @@ def _append_source_detail_rrc_lifetime_trace_v06481234532(
         trace.append(dict(event))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the begin source detail rrc evaluation v06481234532 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+# XSTAR-FUNCTION-COMMENT-END
 def _begin_source_detail_rrc_evaluation_v06481234532(
     control: Optional[MutableMapping[str, Any]],
 ) -> int:
@@ -948,6 +1076,10 @@ def _begin_source_detail_rrc_evaluation_v06481234532(
     return seq
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Update source detail rrc slot absorption lifetime v06481234532 for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+# XSTAR-FUNCTION-COMMENT-END
 def _update_source_detail_rrc_slot_absorption_lifetime_v06481234532(
     control: Optional[MutableMapping[str, Any]], *, source_record: int,
     continuum_index: int, abund1: float, abund2: float, xpx: float, ans4: float,
@@ -1008,6 +1140,10 @@ def _update_source_detail_rrc_slot_absorption_lifetime_v06481234532(
     })
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Update source detail rrc publication shadow v0648123451 for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+# XSTAR-FUNCTION-COMMENT-END
 def _update_source_detail_rrc_publication_shadow_v0648123451(
     control: Optional[MutableMapping[str, Any]], *, continuum_index: int,
     ptmp1: float, ptmp2: float, abund1: float, abund2: float, xpx: float,
@@ -1045,6 +1181,10 @@ def _update_source_detail_rrc_publication_shadow_v0648123451(
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Append source detail rrc orphan trace v06481234533 for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+# XSTAR-FUNCTION-COMMENT-END
 def _append_source_detail_rrc_orphan_trace_v06481234533(
     control: Optional[MutableMapping[str, Any]], event: Mapping[str, Any],
 ) -> None:
@@ -1058,6 +1198,10 @@ def _append_source_detail_rrc_orphan_trace_v06481234533(
         trace.append(dict(event))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Evaluate canonical npcon orphan type7 absorption v06481234533 for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+# XSTAR-FUNCTION-COMMENT-END
 def _evaluate_canonical_npcon_orphan_type7_absorption_v06481234533(
     context: CalcEmisabContext, *, visited_type7_records: set[int],
     xpx: float, xh0: float, xh1: float,
@@ -1192,6 +1336,10 @@ def _evaluate_canonical_npcon_orphan_type7_absorption_v06481234533(
     })
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Evaluate canonical npcon non type7 detail3 absorption v064812345335 for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+# XSTAR-FUNCTION-COMMENT-END
 def _evaluate_canonical_npcon_non_type7_detail3_absorption_v064812345335(
     context: CalcEmisabContext, *, xpx: float, xh0: float, xh1: float,
 ) -> None:
@@ -1328,6 +1476,10 @@ def _evaluate_canonical_npcon_non_type7_detail3_absorption_v064812345335(
             handle.write(json.dumps(payload, sort_keys=True) + "\n")
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build the all-element integrated emissivity/opacity products that feed full-grid spectra and detail publication.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+# XSTAR-FUNCTION-COMMENT-END
 def calc_emisab_all(context: CalcEmisabContext) -> CalcEmisabResult:
     """Execute ``calc_emisab_all.f90`` in literal source order."""
     epi, _, _ = _radiation_arrays(context.radiation)
@@ -1406,6 +1558,10 @@ def calc_emisab_all(context: CalcEmisabContext) -> CalcEmisabResult:
         summary = _spectral_summary_bucket(context)
         summary["python_record_traces_materialized"] = int(summary.get("python_record_traces_materialized", 0)) + (len(record_traces) if retain_traces else 0)
 
+        # XSTAR-FUNCTION-COMMENT-BEGIN
+        # Purpose: Apply python fallback for this module while preserving the surrounding source/runtime invariants.
+        # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+        # XSTAR-FUNCTION-COMMENT-END
         def _apply_python_fallback(rows: Sequence[Mapping[str, Any]]) -> None:
             rcem_stride = context.workspace.rcem.shape[1]
             cemab_stride = context.workspace.cemab.shape[1]
@@ -1495,6 +1651,10 @@ def calc_emisab_all(context: CalcEmisabContext) -> CalcEmisabResult:
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Apply calc emisab all to state for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+# XSTAR-FUNCTION-COMMENT-END
 def apply_calc_emisab_all_to_state(state: XSTARPythonState) -> CalcEmisabResult:
     """Execute the translated routine using explicit state-owned context."""
     context = state.control.get("calc_emisab_context")
@@ -1512,6 +1672,10 @@ def apply_calc_emisab_all_to_state(state: XSTARPythonState) -> CalcEmisabResult:
     return result
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Register calc emisab all source routine for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+# XSTAR-FUNCTION-COMMENT-END
 def register_calc_emisab_all_source_routine(driver: XSTARPythonDriver) -> None:
     driver.register_source_routine(XSTARSourceRoutine.CALC_EMISAB_ALL, apply_calc_emisab_all_to_state)
 
@@ -1522,12 +1686,20 @@ def register_calc_emisab_all_source_routine(driver: XSTARPythonDriver) -> None:
 # semantics without requiring a production ATDB installation.
 
 class _SyntheticHeader:
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Initialize this object and establish the invariants required by later operations.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+    # XSTAR-FUNCTION-COMMENT-END
     def __init__(self, data_type: int, rate_type: int):
         self.data_type = data_type
         self.rate_type = rate_type
 
 
 class _SyntheticMaster:
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Initialize this object and establish the invariants required by later operations.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+    # XSTAR-FUNCTION-COMMENT-END
     def __init__(self) -> None:
         self._ints = {
             1: np.asarray([8, 0, 8]),
@@ -1563,20 +1735,40 @@ class _SyntheticMaster:
             25: np.asarray([15.0, 1.0, 0.0, 15.0]),
         }
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the header operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+    # XSTAR-FUNCTION-COMMENT-END
     def header(self, rec: int) -> _SyntheticHeader:
         return self._headers[int(rec)]
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Record integers for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+    # XSTAR-FUNCTION-COMMENT-END
     def record_integers(self, rec: int) -> np.ndarray:
         return self._ints.get(int(rec), np.asarray([], dtype=int))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Record reals for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+    # XSTAR-FUNCTION-COMMENT-END
     def record_reals(self, rec: int) -> np.ndarray:
         return self._reals.get(int(rec), np.asarray([], dtype=float))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Record chars for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+    # XSTAR-FUNCTION-COMMENT-END
     def record_chars(self, rec: int) -> bytes:
         return b"synthetic"
 
 
 class _SyntheticDerived:
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Initialize this object and establish the invariants required by later operations.
+    # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+    # XSTAR-FUNCTION-COMMENT-END
     def __init__(self) -> None:
         self.nlsvn = 1
         self.ncsvn = 3
@@ -1610,6 +1802,10 @@ class _SyntheticDerived:
         self.npilev[1:4,2]=[3,4,5]
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the synthetic ucalc operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+# XSTAR-FUNCTION-COMMENT-END
 def _synthetic_ucalc(record: int, context: UCalcContext) -> UCalcResult:
     data = {
         10: (-4.0, 0.0, 0.25, {}),
@@ -1633,6 +1829,10 @@ def _synthetic_ucalc(record: int, context: UCalcContext) -> UCalcResult:
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Execute source order validation for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+# XSTAR-FUNCTION-COMMENT-END
 def run_source_order_validation(*, rtol: float = 2.0e-14, atol: float = 1.0e-30) -> Mapping[str, Any]:
     master = _SyntheticMaster()
     derived = _SyntheticDerived()
@@ -1732,6 +1932,10 @@ def run_source_order_validation(*, rtol: float = 2.0e-14, atol: float = 1.0e-30)
     return summary
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write calc emisab validation products for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
+# XSTAR-FUNCTION-COMMENT-END
 def write_calc_emisab_validation_products(summary: Mapping[str, Any], out_dir: str | Path) -> Mapping[str, str]:
     out = Path(out_dir); out.mkdir(parents=True, exist_ok=True)
     json_path = out / "xstar_calc_emisab_all_source_validation_summary.json"

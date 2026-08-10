@@ -81,6 +81,10 @@ class FortranPackedVector:
     copying the complete REALS extension.
     """
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Initialize this object and establish the invariants required by later operations.
+    # Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def __init__(self, data: np.ndarray, *, name: str):
         self._data = np.asarray(data).reshape(-1)
         self.name = name
@@ -91,10 +95,18 @@ class FortranPackedVector:
         self._override_indices_cache: np.ndarray | None = None
         self._override_values_cache: np.ndarray | None = None
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the invalidate override cache operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def _invalidate_override_cache(self) -> None:
         self._override_indices_cache = None
         self._override_values_cache = None
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the sorted overrides operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def _sorted_overrides(self) -> tuple[np.ndarray, np.ndarray]:
         if self._override_indices_cache is None or self._override_values_cache is None:
             if not self._overrides:
@@ -112,13 +124,25 @@ class FortranPackedVector:
                 self._override_values_cache = values
         return self._override_indices_cache, self._override_values_cache
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Return the logical item count represented by this object.
+    # Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def __len__(self) -> int:
         return int(self._data.size)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Check operation for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def _check(self, index: int) -> None:
         if index < 1 or index > len(self):
             raise IndexError(f"{self.name} index {index} outside 1..{len(self)}")
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Return the requested logical item while preserving this object's indexing convention.
+    # Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def __getitem__(self, index: int) -> Any:
         if not isinstance(index, (int, np.integer)):
             raise TypeError(f"{self.name} requires a one-based integer index")
@@ -129,12 +153,20 @@ class FortranPackedVector:
         value = self._data[idx - 1]
         return value.item() if isinstance(value, np.generic) else value
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Update the requested logical item while preserving this object's indexing convention.
+    # Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def __setitem__(self, index: int, value: Any) -> None:
         idx = int(index)
         self._check(idx)
         self._overrides[idx] = value
         self._invalidate_override_cache()
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Set overrides for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def set_overrides(self, indices: Sequence[int] | np.ndarray, values: Sequence[Any] | np.ndarray) -> None:
         """Install multiple one-based sparse overrides with one cache invalidation."""
         idx = np.asarray(indices, dtype=np.int64).reshape(-1)
@@ -149,6 +181,10 @@ class FortranPackedVector:
             self._overrides[int(packed_index)] = value
         self._invalidate_override_cache()
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Gather operation for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def gather(self, indices: Sequence[int] | np.ndarray, *, dtype: Any = None) -> np.ndarray:
         """Vectorized one-based indexed read with sparse overrides applied."""
         idx = np.asarray(indices, dtype=np.int64)
@@ -172,6 +208,10 @@ class FortranPackedVector:
             out = out.astype(dtype, copy=False)
         return out.reshape(idx.shape)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Return a slice of operation for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def slice(self, start: int, count: int, *, dtype: Any = None) -> np.ndarray:
         """Return ``count`` values beginning at one-based ``start``.
 
@@ -198,6 +238,10 @@ class FortranPackedVector:
             out = out.astype(dtype, copy=False)
         return out
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the numpy operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def numpy(self, *, copy: bool = False) -> np.ndarray:
         """Return the zero-based packed vector, applying sparse overrides."""
         if not copy and not self._overrides:
@@ -208,6 +252,10 @@ class FortranPackedVector:
             out[indices - 1] = values
         return out
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the overrides operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def overrides(self) -> Mapping[int, Any]:
         return dict(self._overrides)
@@ -216,16 +264,28 @@ class FortranPackedVector:
 class FortranPointerTable:
     """One-based ``nptrs(field, record)`` view over a ``(records, 10)`` array."""
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Initialize this object and establish the invariants required by later operations.
+    # Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def __init__(self, pointers: np.ndarray):
         array = np.asarray(pointers)
         if array.ndim != 2 or array.shape[1] != 10:
             raise ValueError(f"POINTERS must have shape (n_records, 10), got {array.shape}")
         self._data = array
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the n records operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def n_records(self) -> int:
         return int(self._data.shape[0])
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Return the requested logical item while preserving this object's indexing convention.
+    # Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def __getitem__(self, key: Tuple[int, int]) -> int:
         field, recno = (int(key[0]), int(key[1]))
         if field < 1 or field > 10:
@@ -234,11 +294,19 @@ class FortranPointerTable:
             raise IndexError(f"nptrs record {recno} outside 1..{self.n_records}")
         return int(self._data[recno - 1, field - 1])
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Record operation for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def record(self, recno: int) -> np.ndarray:
         if recno < 1 or recno > self.n_records:
             raise IndexError(f"record {recno} outside 1..{self.n_records}")
         return np.asarray(self._data[recno - 1])
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the numpy operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def numpy(self, *, copy: bool = False) -> np.ndarray:
         return np.asarray(self._data).copy() if copy else np.asarray(self._data)
 
@@ -261,17 +329,33 @@ class XSTARMasterData:
     np1k: int = 0
     closed: bool = False
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Close operation for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def close(self) -> None:
         if not self.closed:
             self.hdul.close()
             self.closed = True
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Enter the managed-resource context and return the active object.
+    # Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def __enter__(self) -> "XSTARMasterData":
         return self
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Leave the managed-resource context and release/close owned resources.
+    # Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
         self.close()
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the header operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def header(self, recno: int) -> PackedRecordHeader:
         p = self.nptrs.record(recno)
         return PackedRecordHeader(
@@ -288,14 +372,26 @@ class XSTARMasterData:
             char_ptr=int(p[9]),
         )
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Record reals for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def record_reals(self, recno: int, *, dtype: Any = np.float64) -> np.ndarray:
         h = self.header(recno)
         return self.rdat1.slice(h.real_ptr, h.nreal, dtype=dtype) if h.nreal else np.asarray([], dtype=dtype)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Record integers for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def record_integers(self, recno: int, *, dtype: Any = np.int64) -> np.ndarray:
         h = self.header(recno)
         return self.idat1.slice(h.int_ptr, h.nint, dtype=dtype) if h.nint else np.asarray([], dtype=dtype)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Record chars for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def record_chars(self, recno: int) -> bytes:
         h = self.header(recno)
         if h.nchar <= 0:
@@ -307,6 +403,10 @@ class XSTARMasterData:
             return "".join(values.astype(str).tolist()).encode("latin-1", errors="replace")
         return bytes(np.asarray(values, dtype=np.uint8).tolist())
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the local level index operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def local_level_index(self, recno: int) -> int:
         """Return ``idat(nidt-1)`` used by ``setptrs.f90``."""
         h = self.header(recno)
@@ -317,6 +417,10 @@ class XSTARMasterData:
             )
         return int(self.idat1[h.int_ptr + h.nint - 2])
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Validate XSTARMasterData invariants before the value is consumed downstream.
+    # Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def validate_pointer_spans(self) -> None:
         """Check every packed record span before pointer construction."""
         for recno in range(1, self.np2 + 1):
@@ -373,6 +477,10 @@ class XSTARDerivedPointers:
     max_rate_type: int
     provenance: Dict[str, Any] = field(default_factory=dict)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Validate XSTARDerivedPointers invariants before the value is consumed downstream.
+    # Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def validate(self, master: XSTARMasterData) -> Dict[str, int]:
         """Validate source-level pointer invariants and return counts."""
         n_records = master.np2
@@ -450,6 +558,10 @@ class DBWK2Result:
     source_routine: str = "dbwk2.f90"
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Locate hdu for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def _find_hdu(hdul: fits.HDUList, name: str, fallback_index: int) -> fits.hdu.base.ExtensionHDU:
     try:
         return hdul[name]
@@ -460,6 +572,10 @@ def _find_hdu(hdul: fits.HDUList, name: str, fallback_index: int) -> fits.hdu.ba
             raise AtomicDatabaseError(f"atdb.fits is missing the {name} extension") from exc
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the packed column operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def _packed_column(hdu: fits.hdu.base.ExtensionHDU) -> np.ndarray:
     if hdu.data is None:
         raise AtomicDatabaseError(f"FITS extension {hdu.name!r} has no data")
@@ -475,6 +591,10 @@ def _packed_column(hdu: fits.hdu.base.ExtensionHDU) -> np.ndarray:
     return array.reshape(-1)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Read the FITS atomic database into one-based packed record vectors while preserving XSTAR record identity and packed-column semantics.
+# Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def readtbl(
     filename: str | Path,
     *,
@@ -561,6 +681,10 @@ def readtbl(
         raise
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the first integer operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def _first_integer(master: XSTARMasterData, recno: int, *, default: int = 0) -> int:
     h = master.header(recno)
     if h.nint <= 0:
@@ -568,6 +692,10 @@ def _first_integer(master: XSTARMasterData, recno: int, *, default: int = 0) -> 
     return int(master.idat1[h.int_ptr])
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the second integer operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def _second_integer(master: XSTARMasterData, recno: int, *, default: int = 0) -> int:
     h = master.header(recno)
     if h.nint < 2:
@@ -575,6 +703,10 @@ def _second_integer(master: XSTARMasterData, recno: int, *, default: int = 0) ->
     return int(master.idat1[h.int_ptr + 1])
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the prescan dimensions operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def _prescan_dimensions(master: XSTARMasterData) -> Dict[str, int]:
     rates = master.nptrs.numpy()[:, 2].astype(np.int64, copy=False)
     n_ions = int(np.count_nonzero(rates == 12))
@@ -600,6 +732,10 @@ def _prescan_dimensions(master: XSTARMasterData) -> Dict[str, int]:
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Apply line wavelength absolute values for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def _apply_line_wavelength_absolute_values(
     master: XSTARMasterData, derived: XSTARDerivedPointers
 ) -> int:
@@ -620,6 +756,10 @@ def _apply_line_wavelength_absolute_values(
     return int(np.count_nonzero(negative))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Rebuild the derived setptrs topology (record chains, ion/level/line/continuum attachments) that downstream physics and publication use as scientific identities.
+# Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def setptrs(
     master: XSTARMasterData,
     *,
@@ -677,11 +817,19 @@ def setptrs(
     iline = 1
     element_ordinal = 0
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the rate type operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def rate_type(recno: int) -> int:
         if recno < 1 or recno > n_records:
             return 0
         return master.nptrs[3, recno]
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the chain start operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def chain_start(rate: int, recno: int, ion_index: Optional[int] = None) -> None:
         if rate < 0 or rate > max_rate:
             raise AtomicDatabaseError(f"rate type {rate} outside allocated range")
@@ -869,6 +1017,10 @@ def setptrs(
     return derived
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Record inventory for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def _record_inventory(master: XSTARMasterData, derived: Optional[XSTARDerivedPointers]) -> List[Dict[str, int]]:
     rows: List[Dict[str, int]] = []
     for recno in range(1, master.np2 + 1):
@@ -887,6 +1039,10 @@ def _record_inventory(master: XSTARMasterData, derived: Optional[XSTARDerivedPoi
     return rows
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the records per ion operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def _records_per_ion(master: XSTARMasterData, derived: XSTARDerivedPointers) -> List[Dict[str, int]]:
     rows: List[Dict[str, int]] = []
     for ion_index in range(1, derived.n_ions + 1):
@@ -910,6 +1066,10 @@ def _records_per_ion(master: XSTARMasterData, derived: XSTARDerivedPointers) -> 
     return rows
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the dbwk2 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def dbwk2(
     instruction: int | DBWK2Instruction,
     master: XSTARMasterData,
@@ -959,12 +1119,20 @@ def dbwk2(
 POINTER_CACHE_FORMAT_VERSION = 2
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Construct the default derived pointer cache path for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def default_derived_pointer_cache_path(fitsfile: str | Path) -> Path:
     """Return the default vectorized source-port pointer-cache sidecar."""
     path = Path(fitsfile)
     return path.with_name(path.name + ".xstar_tools_source_port.npz")
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the atomic database fingerprint operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def atomic_database_fingerprint(master: XSTARMasterData) -> Dict[str, Any]:
     """Return a lightweight identity record for cache validation."""
     stat = master.path.stat()
@@ -981,6 +1149,10 @@ def atomic_database_fingerprint(master: XSTARMasterData) -> Dict[str, Any]:
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Persist derived pointer cache for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def save_derived_pointer_cache(
     master: XSTARMasterData,
     derived: XSTARDerivedPointers,
@@ -1044,6 +1216,10 @@ def save_derived_pointer_cache(
     return target
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Load derived pointer cache for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def load_derived_pointer_cache(
     master: XSTARMasterData,
     path: str | Path,
@@ -1094,6 +1270,10 @@ def load_derived_pointer_cache(
     return derived
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write atomic database products for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def write_atomic_database_products(
     master: XSTARMasterData,
     derived: XSTARDerivedPointers,
@@ -1184,6 +1364,10 @@ def write_atomic_database_products(
         "markdown": str(markdown_path),
     }
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Load master records plus derived pointer topology into the runtime state used by rate, matrix, and output routines.
+# Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def populate_atomic_state(
     atomic: XSTARAtomicState,
     master: XSTARMasterData,
@@ -1239,6 +1423,10 @@ def populate_atomic_state(
     return atomic
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Load atomic database state for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def load_atomic_database_state(
     filename: str | Path,
     *,
@@ -1316,6 +1504,10 @@ def load_atomic_database_state(
         raise
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Register atomic database stages for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+# XSTAR-FUNCTION-COMMENT-END
 def register_atomic_database_stages(
     driver: Any,
     *,
@@ -1332,11 +1524,19 @@ def register_atomic_database_stages(
 
     path = str(Path(atdb_path).expanduser().resolve())
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the setup handler operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def setup_handler(state: XSTARPythonState) -> None:
         state.control["atdb_path"] = path
         state.control["atomic_abundances"] = list(abundances) if abundances is not None else None
         state.control["llinabs"] = bool(llinabs)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Read handler for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def read_handler(state: XSTARPythonState) -> None:
         master = readtbl(path, memmap=memmap, validate=validate)
         state.atomic.atdb_path = path
@@ -1352,6 +1552,10 @@ def register_atomic_database_stages(
             }
         )
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the pointer handler operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual Ch. 12; Bautista & Kallman (2001); Mendoza et al. (2021).
+    # XSTAR-FUNCTION-COMMENT-END
     def pointer_handler(state: XSTARPythonState) -> None:
         master = state.atomic.master
         if master is None:

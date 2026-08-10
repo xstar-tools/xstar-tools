@@ -37,6 +37,10 @@ class SourceLinopacExactGrid:
     valid_points: int
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the voigte operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Implementation helper around the source-faithful XSTAR model; no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _voigte(vs: float, a: float) -> float:
     ak = (
         -1.12470432, -0.15516677, 3.28867591, -2.34357915, 0.42139162,
@@ -88,6 +92,10 @@ def _voigte(vs: float, a: float) -> float:
     return psi * (ex + aa * (h1p + aa * (h2p + aa * (h3p + aa * h4p))))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the source geometry operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Implementation helper around the source-faithful XSTAR model; no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _source_geometry(
     *,
     line_energy_eV: float,
@@ -119,6 +127,10 @@ def _source_geometry(
     return grid, ml1, dele, aasmall, deleused
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the source linopac profile samples operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Implementation helper around the source-faithful XSTAR model; no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def source_linopac_profile_samples(
     *,
     line_energy_eV: float,
@@ -150,6 +162,10 @@ def source_linopac_profile_samples(
     e0 = float(line_energy_eV)
     e00 = float(grid[ml1 - 1])
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Profile operation for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: Implementation helper around the source-faithful XSTAR model; no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     def profile(energy: float, threshold: float) -> float:
         delet = (float(energy) - e0) / dele
         if aasmall > threshold:
@@ -163,6 +179,10 @@ def source_linopac_profile_samples(
     return values
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the source linopac exact grid operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Implementation helper around the source-faithful XSTAR model; no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def source_linopac_exact_grid(
     *,
     optpp: float,
@@ -207,6 +227,10 @@ def source_linopac_exact_grid(
     ml2 = EXACT_GRID_POINTS // 2
     etpp[ml2 - 1] = e00
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Profile operation for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: Implementation helper around the source-faithful XSTAR model; no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     def profile(energy: float, threshold: float) -> float:
         delet = (float(energy) - e0) / dele
         if aasmall > threshold:

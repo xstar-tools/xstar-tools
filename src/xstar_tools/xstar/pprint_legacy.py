@@ -33,6 +33,10 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the install astropy numpy compatibility operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _install_astropy_numpy_compatibility() -> None:
     """Install narrow NumPy shims needed by older Astropy on new NumPy."""
     if not hasattr(np, "in1d"):
@@ -42,6 +46,10 @@ def _install_astropy_numpy_compatibility() -> None:
     except Exception:
         return
     if not hasattr(_np_function_base, "_check_interpolation_as_method"):
+        # XSTAR-FUNCTION-COMMENT-BEGIN
+        # Purpose: Check interpolation as method for this module while preserving the surrounding source/runtime invariants.
+        # Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+        # XSTAR-FUNCTION-COMMENT-END
         def _check_interpolation_as_method(method, interpolation, fname):
             if method != "linear":
                 raise TypeError(
@@ -91,6 +99,10 @@ ELEMENT_SYMBOL_TO_FULL_NAME = {
 }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the pprint element column name operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _pprint_element_column_name(item: PprintElementMetadata) -> str:
     """Return source ``pprint(11)`` elemental column names for heat/cool tables.
 
@@ -146,6 +158,10 @@ class LegacyPprintBuffers:
     source_file: str = "xstar/xstarlib/src/pprint.f90"
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the pprint metadata operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _pprint_metadata(state: XSTARPythonState) -> PprintAtomicMetadata:
     value = state.control.get("pprint_atomic_metadata")
     if not isinstance(value, PprintAtomicMetadata):
@@ -155,6 +171,10 @@ def _pprint_metadata(state: XSTARPythonState) -> PprintAtomicMetadata:
     return value
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the buffers operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _buffers(state: XSTARPythonState, *, create: bool = False) -> LegacyPprintBuffers:
     value = state.outputs.get("legacy_pprint_buffers")
     if value is None and create:
@@ -165,6 +185,10 @@ def _buffers(state: XSTARPythonState, *, create: bool = False) -> LegacyPprintBu
     return value
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the workspace operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _workspace(state: XSTARPythonState) -> Any:
     value = state.control.get("radial_transfer_workspace")
     if value is None:
@@ -172,6 +196,10 @@ def _workspace(state: XSTARPythonState) -> Any:
     return value
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the array value operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _array_value(state: XSTARPythonState, name: str, length: int) -> np.ndarray:
     candidates = (
         state.local_zone.source_arrays.get(name),
@@ -186,15 +214,27 @@ def _array_value(state: XSTARPythonState, name: str, length: int) -> np.ndarray:
     return np.zeros(length, dtype=float)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the fmt e operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _fmt_e(value: float, width: int = 11, precision: int = 3) -> str:
     return f"{float(value):{width}.{precision}E}"
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the fmt list integer operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _fmt_list_integer(value: int) -> str:
     # gfortran list-directed integers have a leading blank in these records.
     return f" {int(value)}"
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the fortran logical line 17 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _fortran_logical_line_17() -> tuple[str, str]:
     # Exact gfortran rendering of source formats 9979 and 9989.
     return (
@@ -203,6 +243,10 @@ def _fortran_logical_line_17() -> tuple[str, str]:
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the temperature t4 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _temperature_t4(state: XSTARPythonState) -> float:
     value = float(state.plasma.temperature)
     unit = str(state.control.get("plasma_temperature_unit", "legacy-auto")).strip().lower()
@@ -213,6 +257,10 @@ def _temperature_t4(state: XSTARPythonState) -> float:
     return value / 1.0e4 if value > 1.0e3 else value
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the active epi operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _active_epi(state: XSTARPythonState) -> np.ndarray:
     n = int(state.control["ncn2"])
     epi = np.asarray(state.radiation.epi, dtype=float).reshape(-1)
@@ -221,6 +269,10 @@ def _active_epi(state: XSTARPythonState) -> np.ndarray:
     return epi[:n]
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the option3 parameter capture operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _option3_parameter_capture(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
     metadata = _pprint_metadata(state)
     values = [
@@ -268,6 +320,10 @@ def _option3_parameter_capture(state: XSTARPythonState, buf: LegacyPprintBuffers
     buf.source_calls.append("pprint(3)")
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the option2 input lines operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _option2_input_lines(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
     metadata = _pprint_metadata(state)
     abel = np.asarray(state.control.get("abel", np.ones(len(metadata.element_labels))), dtype=float)
@@ -325,12 +381,20 @@ def _option2_input_lines(state: XSTARPythonState, buf: LegacyPprintBuffers) -> N
     buf.source_calls.append("pprint(2)")
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the option17 headings operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _option17_headings(buf: LegacyPprintBuffers) -> None:
     buf.log_lines.append(" print option:17")
     buf.log_lines.extend(_fortran_logical_line_17())
     buf.source_calls.append("pprint(17)")
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Initialize legacy pprint for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def initialize_legacy_pprint(state: XSTARPythonState) -> LegacyPprintBuffers:
     """Execute source initialization calls ``pprint(3)`` and ``pprint(2)``."""
     buf = _buffers(state, create=True)
@@ -355,6 +419,10 @@ def initialize_legacy_pprint(state: XSTARPythonState) -> LegacyPprintBuffers:
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the legacy pprint begin pass operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def legacy_pprint_begin_pass(state: XSTARPythonState) -> tuple[str, ...]:
     """Emit the source pass banner followed by ``pprint(17)`` headings."""
     if not bool(state.control.get("pprint_legacy_enabled", False)):
@@ -374,6 +442,10 @@ def legacy_pprint_begin_pass(state: XSTARPythonState) -> tuple[str, ...]:
     return ("pprint(17)",)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the option9 zone line operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _option9_zone_line(state: XSTARPythonState, buf: LegacyPprintBuffers) -> str:
     workspace = _workspace(state)
     epi = _active_epi(state)
@@ -434,6 +506,10 @@ def _option9_zone_line(state: XSTARPythonState, buf: LegacyPprintBuffers) -> str
     return line
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the option12 accumulate operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _option12_accumulate(state: XSTARPythonState, buf: LegacyPprintBuffers, *, zone_index: int) -> None:
     metadata = _pprint_metadata(state)
     j = int(zone_index)
@@ -468,6 +544,10 @@ def _option12_accumulate(state: XSTARPythonState, buf: LegacyPprintBuffers, *, z
     buf.source_calls.append("pprint(12)")
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the legacy pprint after heatt operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def legacy_pprint_after_heatt(state: XSTARPythonState, *, terminal_record: bool = False) -> tuple[str, ...]:
     """Execute source ``pprint(9)`` and final-pass ``pprint(12)``."""
     if not bool(state.control.get("pprint_legacy_enabled", False)):
@@ -490,6 +570,10 @@ def legacy_pprint_after_heatt(state: XSTARPythonState, *, terminal_record: bool 
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the line metadata rows operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _line_metadata_rows(state: XSTARPythonState) -> tuple[Any, ...]:
     """Return output line metadata without importing output_writers at module load."""
     meta = state.control.get("output_atomic_metadata")
@@ -497,6 +581,10 @@ def _line_metadata_rows(state: XSTARPythonState) -> tuple[Any, ...]:
     return tuple(rows) if rows is not None else ()
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the source fixed capacity line rank operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _source_fixed_capacity_line_rank(
     rows: Sequence[Any],
     values: np.ndarray,
@@ -567,6 +655,10 @@ def _source_fixed_capacity_line_rank(
     return out
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the numeric line rank operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _numeric_line_rank(
     rows: Sequence[Any], values: np.ndarray, *, depth_mode: bool, limit: int = 500
 ) -> list[Any]:
@@ -589,6 +681,10 @@ def _numeric_line_rank(
     return [row for _, _, row in ranked[: int(limit)]]
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the option1 emission line luminosities operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _option1_emission_line_luminosities(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
     """Emit source-ranked ``pprint(1)`` with independent numeric owner."""
     workspace = _workspace(state)
@@ -617,6 +713,10 @@ def _option1_emission_line_luminosities(state: XSTARPythonState, buf: LegacyPpri
     buf.source_calls.append("pprint(1)")
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the option23 line depths operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _option23_line_depths(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
     """Emit source-ranked ``pprint(23)`` with independent numeric owner."""
     workspace = _workspace(state)
@@ -645,6 +745,10 @@ def _option23_line_depths(state: XSTARPythonState, buf: LegacyPprintBuffers) -> 
     buf.source_calls.append("pprint(23)")
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the active element symbols operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _active_element_symbols(state: XSTARPythonState) -> set[str]:
     """Return lower-case element symbols with non-zero user abundance.
 
@@ -661,11 +765,19 @@ def _active_element_symbols(state: XSTARPythonState) -> set[str]:
     return symbols
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the row element symbol operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _row_element_symbol(row: Any) -> str:
     ion = str(getattr(row, "ion_label", "")).strip().lower()
     return ion.split("_")[0] if ion else ""
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the active line rows by index operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _active_line_rows_by_index(state: XSTARPythonState, rows: Sequence[Any]) -> list[Any]:
     active = _active_element_symbols(state)
     out = [
@@ -677,6 +789,10 @@ def _active_line_rows_by_index(state: XSTARPythonState, rows: Sequence[Any]) -> 
     return out
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the active rrc rows by index operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _active_rrc_rows_by_index(state: XSTARPythonState, rows: Sequence[Any]) -> list[Any]:
     active = _active_element_symbols(state)
     out = [
@@ -688,12 +804,20 @@ def _active_rrc_rows_by_index(state: XSTARPythonState, rows: Sequence[Any]) -> l
     return out
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the line rows by index operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _line_rows_by_index(rows: Sequence[Any]) -> list[Any]:
     out = [r for r in rows if int(getattr(r, "line_index", 0)) > 0]
     out.sort(key=lambda r: int(getattr(r, "line_index", 0)))
     return out
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the option15 line luminosities and depths operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _option15_line_luminosities_and_depths(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
     """Emit verbose ``pprint(15)``: line luminosities and depths.
 
@@ -730,6 +854,10 @@ def _option15_line_luminosities_and_depths(state: XSTARPythonState, buf: LegacyP
     buf.source_calls.append("pprint(15)")
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Compute ion column values for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _compute_ion_column_values(
     *,
     abundance_rows: Mapping[int, np.ndarray],
@@ -768,6 +896,10 @@ def _compute_ion_column_values(
     return columns
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the option27 ion column densities operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _option27_ion_column_densities(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
     """Emit verbose ``pprint(27)`` ion column densities from pprint rows."""
     metadata = _pprint_metadata(state)
@@ -798,12 +930,20 @@ def _option27_ion_column_densities(state: XSTARPythonState, buf: LegacyPprintBuf
     buf.source_calls.append("pprint(27)")
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the rrc metadata rows operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _rrc_metadata_rows(state: XSTARPythonState) -> tuple[Any, ...]:
     meta = state.control.get("output_atomic_metadata")
     rows = getattr(meta, "rrcs", ())
     return tuple(rows) if rows is not None else ()
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Publish STEP Option 24 absorption edges from clean RRC/continuum identities; do not reproduce the historical Fortran stale-local H I/He II text alias.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _option24_absorption_edge_depths(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
     """Emit verbose ``pprint(24)`` absorption edge depths from final RRC depths.
 
@@ -856,6 +996,10 @@ def _option24_absorption_edge_depths(state: XSTARPythonState, buf: LegacyPprintB
     buf.source_calls.append("pprint(24)")
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the option16 ucalc timing accounting operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _option16_ucalc_timing_accounting(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
     """Emit verbose ``pprint(16)`` in the source table shape.
 
@@ -907,6 +1051,10 @@ def _option16_ucalc_timing_accounting(state: XSTARPythonState, buf: LegacyPprint
     buf.source_calls.append("pprint(16)")
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the option19 recombination continuum luminosities operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _option19_recombination_continuum_luminosities(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
     """Emit bounded verbose ``pprint(19)`` RRC luminosities for active elements."""
     workspace = _workspace(state)
@@ -947,6 +1095,10 @@ def _option19_recombination_continuum_luminosities(state: XSTARPythonState, buf:
     buf.source_calls.append("pprint(19)")
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the option5 energy sums operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _option5_energy_sums(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
     """Emit source-positioned ``pprint(5)`` energy-sum footer.
 
@@ -990,6 +1142,10 @@ def _option5_energy_sums(state: XSTARPythonState, buf: LegacyPprintBuffers) -> N
     buf.source_calls.append("pprint(5)")
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the final zero thickness print operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _final_zero_thickness_print(state: XSTARPythonState, buf: LegacyPprintBuffers) -> None:
     """Emit xstar.f90's post-radial ``final print`` block.
 
@@ -1015,6 +1171,10 @@ def _final_zero_thickness_print(state: XSTARPythonState, buf: LegacyPprintBuffer
     buf.source_calls.append("xstar(final-zero-thickness-print)")
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the option22 final lines operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _option22_final_lines(state: XSTARPythonState, buf: LegacyPprintBuffers) -> tuple[str, str, str, str]:
     buf.log_lines.append(" print option:22")
     workspace = _workspace(state)
@@ -1069,12 +1229,20 @@ def _option22_final_lines(state: XSTARPythonState, buf: LegacyPprintBuffers) -> 
     return line1, line2, line3, blank
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the ascii table hdu operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _ascii_table_hdu(name: str, columns: Sequence[fits.Column]) -> fits.TableHDU:
     hdu = fits.TableHDU.from_columns(columns, name=name)
     hdu.header["EXTNAME"] = name
     return hdu
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the rows matrix operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _rows_matrix(rows: Mapping[int, np.ndarray], *, numrec: int, width: int) -> np.ndarray:
     matrix = np.zeros((numrec, width), dtype=np.float32)
     for index, values in rows.items():
@@ -1086,6 +1254,10 @@ def _rows_matrix(rows: Mapping[int, np.ndarray], *, numrec: int, width: int) -> 
     return matrix
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write xout abund1 for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def write_xout_abund1(
     state: XSTARPythonState,
     *,
@@ -1120,6 +1292,10 @@ def write_xout_abund1(
     ion_names = tuple(item.ion_label.strip().replace(" ", "_") for item in metadata.ions)
     element_names = tuple(_pprint_element_column_name(item) for item in metadata.thermal_elements)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the columns for operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+    # XSTAR-FUNCTION-COMMENT-END
     def columns_for(matrix: np.ndarray, names: Sequence[str], units: Sequence[str]) -> list[fits.Column]:
         return [
             fits.Column(name=str(name), format="E13.5", unit=(str(unit) or None), array=matrix[:, idx])
@@ -1172,6 +1348,10 @@ def write_xout_abund1(
     return str(output)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Emit terminal STEP print surfaces and xout_abund1 accumulation from the final qualified source state.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def finalize_legacy_pprint(
     state: XSTARPythonState,
     *,
@@ -1214,6 +1394,10 @@ def finalize_legacy_pprint(
     return tuple(buf.source_calls), paths
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Provide the direct-source reference for fortran pprint reference for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def direct_fortran_pprint_reference() -> Mapping[str, Any]:
     """Frozen values from literal source fragments compiled with gfortran."""
     return {
@@ -1227,6 +1411,10 @@ def direct_fortran_pprint_reference() -> Mapping[str, Any]:
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Execute direct fortran pprint validation for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 5 and source pprint print-option semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def run_direct_fortran_pprint_validation(*, rtol: float = 2.0e-7, atol: float = 0.0) -> dict[str, bool]:
     ref = direct_fortran_pprint_reference()
     h1, h2 = _fortran_logical_line_17()

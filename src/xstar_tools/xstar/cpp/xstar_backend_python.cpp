@@ -31,6 +31,10 @@ struct PythonBackendContext {
     PyObject* context = nullptr;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement python error text as a local helper for the xstar backend python module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 std::string python_error_text() {
     if (!PyErr_Occurred()) return "unknown Python error";
     PyObject *type = nullptr, *value = nullptr, *traceback = nullptr;
@@ -51,6 +55,10 @@ std::string python_error_text() {
     return result;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement ensure python as a local helper for the xstar backend python module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 bool ensure_python(const xstar_config_v1* config, std::string& error) {
     if (!Py_IsInitialized()) {
         if (config && config->python_home[0] != '\0') {
@@ -90,6 +98,10 @@ bool ensure_python(const xstar_config_v1* config, std::string& error) {
     return true;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement config dict as a local helper for the xstar backend python module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 PyObject* config_dict(const xstar_config_v1& config) {
     PyObject* result = PyDict_New();
     if (!result) return nullptr;
@@ -112,6 +124,10 @@ PyObject* config_dict(const xstar_config_v1& config) {
         return true;
     };
     if (!set_text("backend", config.backend) ||
+        // XSTAR-FUNCTION-COMMENT-BEGIN
+        // Purpose: Implement set text as a local helper for the xstar backend python module; inputs and outputs are kept in the source-compatible units expected by its caller.
+        // Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+        // XSTAR-FUNCTION-COMMENT-END
         !set_text("atomic_database_path", config.atomic_database_path) ||
         !set_text("cache_directory", config.cache_directory) ||
         !set_long("flags", config.flags) ||
@@ -122,6 +138,10 @@ PyObject* config_dict(const xstar_config_v1& config) {
     return result;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement double list as a local helper for the xstar backend python module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 PyObject* double_list(const double* values, std::size_t count) {
     PyObject* list = PyList_New(static_cast<Py_ssize_t>(count));
     if (!list) return nullptr;
@@ -133,6 +153,10 @@ PyObject* double_list(const double* values, std::size_t count) {
     return list;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement zone dict as a local helper for the xstar backend python module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 PyObject* zone_dict(const xstar_zone_input_v1& input) {
     PyObject* result = PyDict_New();
     if (!result) return nullptr;
@@ -143,6 +167,10 @@ PyObject* zone_dict(const xstar_zone_input_v1& input) {
         return status == 0;
     };
     if (!set_object("zone_id", PyLong_FromUnsignedLongLong(input.zone_id)) ||
+        // XSTAR-FUNCTION-COMMENT-BEGIN
+        // Purpose: Implement set object as a local helper for the xstar backend python module; inputs and outputs are kept in the source-compatible units expected by its caller.
+        // Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+        // XSTAR-FUNCTION-COMMENT-END
         !set_object("temperature", PyFloat_FromDouble(input.temperature)) ||
         !set_object("electron_density", PyFloat_FromDouble(input.electron_density)) ||
         !set_object("hydrogen_density", PyFloat_FromDouble(input.hydrogen_density)) ||
@@ -158,6 +186,10 @@ PyObject* zone_dict(const xstar_zone_input_v1& input) {
     return result;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement dict double as a local helper for the xstar backend python module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 bool dict_double(PyObject* dict, const char* key, double& output) {
     PyObject* value = PyDict_GetItemString(dict, key);
     if (!value) return false;
@@ -165,6 +197,10 @@ bool dict_double(PyObject* dict, const char* key, double& output) {
     return !PyErr_Occurred();
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement dict u64 as a local helper for the xstar backend python module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 bool dict_u64(PyObject* dict, const char* key, std::uint64_t& output) {
     PyObject* value = PyDict_GetItemString(dict, key);
     if (!value) return false;
@@ -172,6 +208,10 @@ bool dict_u64(PyObject* dict, const char* key, std::uint64_t& output) {
     return !PyErr_Occurred();
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement dict u32 as a local helper for the xstar backend python module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 bool dict_u32(PyObject* dict, const char* key, std::uint32_t& output) {
     std::uint64_t temp = 0;
     if (!dict_u64(dict, key, temp)) return false;
@@ -179,6 +219,10 @@ bool dict_u32(PyObject* dict, const char* key, std::uint32_t& output) {
     return true;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement copy sequence as a local helper for the xstar backend python module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 bool copy_sequence(PyObject* dict, const char* key, double* destination,
                    std::size_t capacity, std::size_t& count) {
     PyObject* value = PyDict_GetItemString(dict, key);
@@ -196,6 +240,10 @@ bool copy_sequence(PyObject* dict, const char* key, double* destination,
     return true;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement copy dict text as a local helper for the xstar backend python module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 bool copy_dict_text(PyObject* dict, const char* key, char* destination, std::size_t capacity) {
     PyObject* value = PyDict_GetItemString(dict, key);
     if (!value) return false;
@@ -205,6 +253,10 @@ bool copy_dict_text(PyObject* dict, const char* key, char* destination, std::siz
     return true;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement python create as a local helper for the xstar backend python module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 int python_create(const xstar_config_v1* config, void** output, char* message, std::size_t message_size) {
     if (!config || !output) return XSTAR_STATUS_INVALID_ARGUMENT;
     std::string error;
@@ -248,6 +300,10 @@ int python_create(const xstar_config_v1* config, void** output, char* message, s
     return XSTAR_STATUS_OK;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement python destroy as a local helper for the xstar backend python module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 void python_destroy(void* opaque) {
     auto* context = static_cast<PythonBackendContext*>(opaque);
     if (!context) return;
@@ -258,6 +314,10 @@ void python_destroy(void* opaque) {
     delete context;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement python reset as a local helper for the xstar backend python module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 int python_reset(void* opaque, char* message, std::size_t message_size) {
     auto* context = static_cast<PythonBackendContext*>(opaque);
     if (!context) return XSTAR_STATUS_INVALID_ARGUMENT;
@@ -277,6 +337,10 @@ int python_reset(void* opaque, char* message, std::size_t message_size) {
     return XSTAR_STATUS_OK;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement python run zone as a local helper for the xstar backend python module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 int python_run_zone(void* opaque, const xstar_zone_input_v1* input,
                     xstar_zone_output_v1* output, char* message, std::size_t message_size) {
     auto* context = static_cast<PythonBackendContext*>(opaque);
@@ -330,6 +394,10 @@ int python_run_zone(void* opaque, const xstar_zone_input_v1* input,
     return XSTAR_STATUS_OK;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement python run batch as a local helper for the xstar backend python module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 int python_run_batch(void* opaque, const xstar_zone_input_v1* inputs, std::size_t count,
                      xstar_zone_output_v1* outputs, char* message, std::size_t message_size) {
     auto* context = static_cast<PythonBackendContext*>(opaque);
@@ -362,6 +430,10 @@ int python_run_batch(void* opaque, const xstar_zone_input_v1* inputs, std::size_
     return XSTAR_STATUS_OK;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement python get stats as a local helper for the xstar backend python module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 int python_get_stats(const void* opaque, xstar_context_stats_v1* stats,
                      char* message, std::size_t message_size) {
     const auto* context = static_cast<const PythonBackendContext*>(opaque);
@@ -395,6 +467,10 @@ int python_get_stats(const void* opaque, xstar_context_stats_v1* stats,
     return XSTAR_STATUS_OK;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement python get component info as a local helper for the xstar backend python module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 int python_get_component_info(const void* opaque, std::uint32_t component_id,
                               xstar_component_info_v1* info,
                               char* message, std::size_t message_size) {
@@ -440,14 +516,26 @@ const xstar_backend_descriptor_v1 kDescriptor{
 
 } // namespace
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement backend get descriptor as a local helper for the xstar backend python module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 extern "C" const xstar_backend_descriptor_v1* xstar_backend_get_descriptor_v1(void) {
     return &kDescriptor;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Return the ABI version for the python bridge interface so callers can reject incompatible binary layouts before execution.
+// Reference context: Implementation/compatibility helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 extern "C" std::uint32_t xstar_python_bridge_abi_version(void) {
     return XSTAR_PYTHON_BRIDGE_ABI_VERSION;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement python call json as a local helper for the xstar backend python module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 extern "C" int xstar_python_call_json_v1(
     const char* module_name,
     const char* callable_name,

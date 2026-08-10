@@ -97,12 +97,20 @@ class RadialTransferPortError(RuntimeError):
     """Raised when a translated radial source contract is invalid."""
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Emit progress for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def _emit_progress(state: XSTARPythonState, event: str, **details: Any) -> None:
     callback = state.control.get("progress_callback")
     if callable(callback):
         callback(str(event), details)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the safe log10 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def _safe_log10(value: float, *, floor: float = 1.0e-10) -> float:
     try:
         val = float(value)
@@ -113,6 +121,10 @@ def _safe_log10(value: float, *, floor: float = 1.0e-10) -> float:
     return float(math.log10(max(val, float(floor))))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the max tau log10 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def _max_tau_log10(value: object) -> float:
     if value is None:
         return -10.0
@@ -128,6 +140,10 @@ def _max_tau_log10(value: object) -> float:
         return -10.0
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the radial zone summary details operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def _radial_zone_summary_details(
     state: XSTARPythonState,
     *,
@@ -279,6 +295,10 @@ class RadialTransferWorkspace:
     elum: np.ndarray
     elumo: np.ndarray
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Validate RadialTransferWorkspace invariants before the value is consumed downstream.
+    # Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+    # XSTAR-FUNCTION-COMMENT-END
     def validate(self, *, ncn2: int, n_lines: int, n_continua: int) -> None:
         n = int(ncn2)
         nl = int(n_lines)
@@ -317,34 +337,66 @@ class RadialTransferWorkspace:
             if not np.all(np.isfinite(arr)):
                 raise RadialTransferPortError(f"{name} contains non-finite values")
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the opakc operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def opakc(self) -> np.ndarray:
         return self.emissivity.base.opakc
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the opakcont operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def opakcont(self) -> np.ndarray:
         return self.emissivity.base.opakcont
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the rccemis operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def rccemis(self) -> np.ndarray:
         return self.emissivity.base.rccemis
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the oplin physical operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def oplin_physical(self) -> np.ndarray:
         return self.emissivity.base.oplin[1:]
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the opakab physical operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def opakab_physical(self) -> np.ndarray:
         return self.emissivity.base.opakab[1:]
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the fline physical operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def fline_physical(self) -> np.ndarray:
         return self.emissivity.fline[:, 1:]
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the rcem physical operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def rcem_physical(self) -> np.ndarray:
         return self.emissivity.base.rcem[:, 1:]
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the cemab physical operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def cemab_physical(self) -> np.ndarray:
         return self.emissivity.base.cemab[:, 1:]
@@ -395,6 +447,10 @@ class BoundedRadialMultipassResult:
     source_file: str = "xstar/src/xstar/xstar.f90"
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the vector operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def _vector(values: Sequence[float], *, name: str, minimum: int) -> np.ndarray:
     arr = np.asarray(values, dtype=float).reshape(-1)
     if arr.size < int(minimum):
@@ -404,6 +460,10 @@ def _vector(values: Sequence[float], *, name: str, minimum: int) -> np.ndarray:
     return arr
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the matrix operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def _matrix(
     values: Sequence[Sequence[float]],
     *,
@@ -421,6 +481,10 @@ def _matrix(
     return arr
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Choose the next shell thickness from XSTAR opacity/emission/line/column constraints; this is a source step limiter, not a generic adaptive ODE stepper.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def step(
     ectt_eV: float,
     emult: float,
@@ -553,6 +617,10 @@ def step(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Propagate continuum radiation through a shell in the source direction, applying absorption plus locally emitted diffuse radiation.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def trnfrc(
     *,
     direction: int,
@@ -629,6 +697,10 @@ def trnfrc(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Apply source radial stop/step-cut predicates for requested column, radius, and state limits and return the permitted shell increment/termination state.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def stpcut(
     *,
     direction: int,
@@ -706,6 +778,10 @@ def stpcut(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Complete the complementary shell transfer update used for the opposite/inward-outward radiation ownership.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def trnfrn(
     *,
     zrems: Sequence[Sequence[float]],
@@ -748,6 +824,10 @@ def trnfrn(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the workspace from state operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def _workspace_from_state(state: XSTARPythonState) -> RadialTransferWorkspace:
     workspace = state.control.get("radial_transfer_workspace")
     if not isinstance(workspace, RadialTransferWorkspace):
@@ -782,6 +862,10 @@ def _workspace_from_state(state: XSTARPythonState) -> RadialTransferWorkspace:
     return workspace
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Apply step to state for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def apply_step_to_state(state: XSTARPythonState) -> StepResult:
     workspace = _workspace_from_state(state)
     ncn2 = int(state.control["ncn2"])
@@ -813,6 +897,10 @@ def apply_step_to_state(state: XSTARPythonState) -> StepResult:
     return result
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Apply trnfrc to state for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def apply_trnfrc_to_state(state: XSTARPythonState) -> TrnfrcResult:
     workspace = _workspace_from_state(state)
     if state.radiation.epi is None or state.radiation.bremsa is None or state.radiation.bremsint is None:
@@ -847,6 +935,10 @@ def apply_trnfrc_to_state(state: XSTARPythonState) -> TrnfrcResult:
     return result
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Apply gsmooth to state for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def apply_gsmooth_to_state(state: XSTARPythonState) -> GSmoothResult:
     """Apply translated ``gsmooth.f90`` to the post-``xstarcalc`` arrays."""
     workspace = _workspace_from_state(state)
@@ -885,6 +977,10 @@ def apply_gsmooth_to_state(state: XSTARPythonState) -> GSmoothResult:
     return result
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Apply heatt to state for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def apply_heatt_to_state(state: XSTARPythonState) -> HeattResult:
     """Apply translated ``heatt.f90`` to the radial caller-owned state."""
     workspace = _workspace_from_state(state)
@@ -1009,6 +1105,10 @@ def apply_heatt_to_state(state: XSTARPythonState) -> HeattResult:
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the saved store from state operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def _saved_store_from_state(
     state: XSTARPythonState, *, create: bool = False
 ) -> SavedRadialStateStore:
@@ -1023,6 +1123,10 @@ def _saved_store_from_state(
     return store
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the level arrays from state operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def _level_arrays_from_state(state: XSTARPythonState) -> tuple[np.ndarray, np.ndarray]:
     xilev = state.local_zone.source_arrays.get("xilevg")
     if xilev is None:
@@ -1039,6 +1143,10 @@ def _level_arrays_from_state(state: XSTARPythonState) -> tuple[np.ndarray, np.nd
     return x, rn
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Capture saved shell snapshot from state for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def capture_saved_shell_snapshot_from_state(
     state: XSTARPythonState, *, terminal_record: bool = False
 ) -> SavedShellSnapshot:
@@ -1092,6 +1200,10 @@ def capture_saved_shell_snapshot_from_state(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Persist radial shell state for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def save_radial_shell_state(
     state: XSTARPythonState,
     *,
@@ -1147,6 +1259,10 @@ def save_radial_shell_state(
     return inserted_hdu
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Apply unsavd to state for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def apply_unsavd_to_state(state: XSTARPythonState) -> UnsavdResult:
     """Restore the previous pass's shell record through ``unsavd.f90``."""
     workspace = _workspace_from_state(state)
@@ -1241,6 +1357,10 @@ def apply_unsavd_to_state(state: XSTARPythonState) -> UnsavdResult:
     return result
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Initialize bounded radial pass state for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def initialize_bounded_radial_pass_state(state: XSTARPythonState) -> None:
     """Apply the radial subset of ``init`` and source-spectrum seeding.
 
@@ -1293,6 +1413,10 @@ def initialize_bounded_radial_pass_state(state: XSTARPythonState) -> None:
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Apply stpcut to state for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def apply_stpcut_to_state(state: XSTARPythonState) -> StpcutResult:
     workspace = _workspace_from_state(state)
     ncn2 = int(state.control["ncn2"])
@@ -1333,6 +1457,10 @@ def apply_stpcut_to_state(state: XSTARPythonState) -> StpcutResult:
     return result
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Apply trnfrn to state for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def apply_trnfrn_to_state(state: XSTARPythonState) -> TrnfrnResult:
     workspace = _workspace_from_state(state)
     ncn2 = int(state.control["ncn2"])
@@ -1365,6 +1493,10 @@ def apply_trnfrn_to_state(state: XSTARPythonState) -> TrnfrnResult:
     return result
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Register bounded radial source routines for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def register_bounded_radial_source_routines(driver: XSTARPythonDriver) -> None:
     """Register translated radial kernels, ``unsavd``, and local ``xstarcalc``."""
     register_complete_local_xstarcalc_source_routines(driver)
@@ -1377,6 +1509,10 @@ def register_bounded_radial_source_routines(driver: XSTARPythonDriver) -> None:
     driver.register_source_routine(XSTARSourceRoutine.UNSAVD, apply_unsavd_to_state)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Execute bounded radial shell for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def run_bounded_radial_shell(
     state: XSTARPythonState,
     *,
@@ -1454,6 +1590,10 @@ def run_bounded_radial_shell(
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the first pass stop reason operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def _first_pass_stop_reason(state: XSTARPythonState) -> str:
     if int(state.control.get("density_iostat", 0)) != 0:
         return "density_iostat_nonzero"
@@ -1471,6 +1611,10 @@ def _first_pass_stop_reason(state: XSTARPythonState) -> str:
     return "source_first_pass_condition_false"
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Execute bounded radial pass for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def run_bounded_radial_pass(
     state: XSTARPythonState,
     *,
@@ -1718,6 +1862,10 @@ def run_bounded_radial_pass(
     return result
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Iterate radial passes so inward/outward diffuse optical depths converge, mirroring XSTAR's escape-probability Lambda-iteration-like procedure.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def run_bounded_radial_multipass(
     state: XSTARPythonState,
     *,
@@ -1791,6 +1939,10 @@ def run_bounded_radial_multipass(
     return result
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Provide the direct-source reference for fortran radial reference cases for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def direct_fortran_radial_reference_cases() -> Mapping[str, Any]:
     """Frozen outputs from unmodified XSTAR kernels compiled with stubs."""
     return {
@@ -1854,6 +2006,10 @@ def direct_fortran_radial_reference_cases() -> Mapping[str, Any]:
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Provide the direct-source reference for reference inputs for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def _direct_reference_inputs() -> Mapping[str, Any]:
     epi = np.asarray([0.5, 1.0, 10.0, 100.0, 1000.0, 10000.0, 20000.0, 40000.0])
     opakc = np.asarray([1e-20, 1e-19, 2e-14, 5e-15, 1e-16, 1e-17, 9.0, 10.0])
@@ -1874,6 +2030,10 @@ def _direct_reference_inputs() -> Mapping[str, Any]:
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Execute direct fortran radial validation for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def run_direct_fortran_radial_validation(
     *, rtol: float = 2.0e-15, atol: float = 0.0
 ) -> Mapping[str, Any]:
@@ -2022,6 +2182,10 @@ def run_direct_fortran_radial_validation(
     return summary
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build radial validation state for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def _build_radial_validation_state(*, zone_index: int) -> XSTARPythonState:
     # Reuse the accepted complete-local fixture, while binding its emissivity
     # arrays to the outer radial caller before any source routine executes.
@@ -2086,6 +2250,10 @@ def _build_radial_validation_state(*, zone_index: int) -> XSTARPythonState:
     # workspace instead of allocating a new object.
     original_hmc = state.control["calc_hmc_all_source_handler"]
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the hmc with caller workspace operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+    # XSTAR-FUNCTION-COMMENT-END
     def hmc_with_caller_workspace(runtime: XSTARPythonState) -> Any:
         result = original_hmc(runtime)
         generated = runtime.control["shared_emissivity_workspace"]
@@ -2158,6 +2326,10 @@ def _build_radial_validation_state(*, zone_index: int) -> XSTARPythonState:
     return state
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Execute bounded radial shell validation for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def run_bounded_radial_shell_validation(
     *, rtol: float = 2.0e-14, atol: float = 1.0e-30
 ) -> Mapping[str, Any]:
@@ -2471,6 +2643,10 @@ def run_bounded_radial_shell_validation(
     return summary
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write bounded radial shell validation products for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.6.2-11.6.5 and Ch. 14, shell transfer and iterative radial passes.
+# XSTAR-FUNCTION-COMMENT-END
 def write_bounded_radial_shell_validation_products(
     summary: Mapping[str, Any], out_dir: str | Path
 ) -> Mapping[str, str]:

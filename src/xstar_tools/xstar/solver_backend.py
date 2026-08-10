@@ -39,6 +39,10 @@ class SolverBackendStatus:
     cpp_abi_version: int | None = None
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Normalize backend for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _normalize_backend(name: str | None) -> SolverBackendName:
     value = (name or os.environ.get("XSTAR_ATOMIC_SOLVER_BACKEND") or "python").strip().lower()
     if value not in _VALID_BACKENDS:
@@ -46,6 +50,10 @@ def _normalize_backend(name: str | None) -> SolverBackendName:
     return value  # type: ignore[return-value]
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Set solver backend for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def set_solver_backend(name: str | None) -> SolverBackendName:
     """Set the process-wide solver backend for source-port linear solves."""
     global _CURRENT_BACKEND
@@ -54,11 +62,19 @@ def set_solver_backend(name: str | None) -> SolverBackendName:
     return _CURRENT_BACKEND
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Return solver backend for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def get_solver_backend() -> SolverBackendName:
     """Return the configured backend, honoring the environment if it changed."""
     return _normalize_backend(os.environ.get("XSTAR_ATOMIC_SOLVER_BACKEND", _CURRENT_BACKEND))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the candidate library paths operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _candidate_library_paths() -> list[Path]:
     env_path = os.environ.get("XSTAR_ATOMIC_SOLVER_LIB")
     paths: list[Path] = []
@@ -96,6 +112,10 @@ def _candidate_library_paths() -> list[Path]:
     return unique
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Load cpp library for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _load_cpp_library() -> ctypes.CDLL | None:
     global _CPP_LIB, _CPP_LOAD_ERROR, _CPP_LIBRARY_PATH
     if _CPP_LIB is not None:
@@ -134,16 +154,28 @@ def _load_cpp_library() -> ctypes.CDLL | None:
         return None
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the cpp available operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def cpp_available() -> bool:
     return _load_cpp_library() is not None
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the cpp import error operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def cpp_import_error() -> str | None:
     if _CPP_LOAD_ERROR is None:
         return None
     return f"{type(_CPP_LOAD_ERROR).__name__}: {_CPP_LOAD_ERROR}"
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the cpp backend name operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _cpp_backend_name(lib: ctypes.CDLL | None) -> str | None:
     if lib is None:
         return None
@@ -154,6 +186,10 @@ def _cpp_backend_name(lib: ctypes.CDLL | None) -> str | None:
         return None
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the cpp abi version operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _cpp_abi_version(lib: ctypes.CDLL | None) -> int | None:
     if lib is None:
         return None
@@ -163,6 +199,10 @@ def _cpp_abi_version(lib: ctypes.CDLL | None) -> int | None:
         return None
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Resolve active backend for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def resolve_active_backend(requested: str | None = None) -> SolverBackendStatus:
     req = _normalize_backend(requested or get_solver_backend())
     lib = _load_cpp_library()
@@ -183,6 +223,10 @@ def resolve_active_backend(requested: str | None = None) -> SolverBackendStatus:
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the call cpp leqt2f operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def call_cpp_leqt2f(a, b, *, clamp_source_range: bool = True):
     """Run the optional C++ ``leqt2f`` kernel from a shared library.
 

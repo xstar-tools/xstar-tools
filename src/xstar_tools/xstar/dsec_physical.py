@@ -80,6 +80,10 @@ class PhysicalDsecContinuumTemplate:
     first_workspace_policy: str = "zero"
     carry_continuum_workspace: bool = True
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Validate/normalize dataclass state immediately after construction.
+    # Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec physical controller state.
+    # XSTAR-FUNCTION-COMMENT-END
     def __post_init__(self) -> None:
         epi = np.asarray(self.epi_eV, dtype=float).reshape(-1)
         bremsa = np.asarray(self.bremsa, dtype=float).reshape(-1)
@@ -124,6 +128,10 @@ class PhysicalDsecCalcKwargsFactory:
     template: PhysicalDsecContinuumTemplate
     build_count: int = 0
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the first workspace operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec physical controller state.
+    # XSTAR-FUNCTION-COMMENT-END
     def _first_workspace(self, name: str) -> np.ndarray:
         n = int(self.template.ncn2)
         if self.template.first_workspace_policy == "call73-probe":
@@ -135,6 +143,10 @@ class PhysicalDsecCalcKwargsFactory:
             return np.asarray(values, dtype=float)[:n].copy()
         return np.zeros(n, dtype=float)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the valid workspace operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec physical controller state.
+    # XSTAR-FUNCTION-COMMENT-END
     @staticmethod
     def _valid_workspace(value: Any, n: int) -> Optional[np.ndarray]:
         if value is None:
@@ -144,6 +156,10 @@ class PhysicalDsecCalcKwargsFactory:
             return None
         return array[:n].copy()
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Evaluate this object as a callable using its configured runtime/scientific state.
+    # Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec physical controller state.
+    # XSTAR-FUNCTION-COMMENT-END
     def __call__(self, state: DsecMutableRuntimeState) -> Mapping[str, Any]:
         self.build_count += 1
         n = int(self.template.ncn2)
@@ -229,6 +245,10 @@ class PhysicalDsecCalcKwargsFactory:
         }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the initial state from xstar trajectory operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec physical controller state.
+# XSTAR-FUNCTION-COMMENT-END
 def initial_state_from_xstar_trajectory(
     reference: DsecProbeTrajectory,
     *,
@@ -306,6 +326,10 @@ def initial_state_from_xstar_trajectory(
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Apply dsec matching input state for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec physical controller state.
+# XSTAR-FUNCTION-COMMENT-END
 def apply_dsec_matching_input_state(
     state: DsecMutableRuntimeState,
     matching_input: DsecMatchingInputState,
@@ -451,6 +475,10 @@ def apply_dsec_matching_input_state(
         "brcems_replayed": brcems_before is not None,
     }
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the clone physical dsec runtime state operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec physical controller state.
+# XSTAR-FUNCTION-COMMENT-END
 def clone_physical_dsec_runtime_state(
     state: DsecMutableRuntimeState,
 ) -> DsecMutableRuntimeState:
@@ -529,6 +557,10 @@ def clone_physical_dsec_runtime_state(
         },
     )
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build physical dsec runtime state for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec physical controller state.
+# XSTAR-FUNCTION-COMMENT-END
 def build_physical_dsec_runtime_state(
     plan: AllElementFixedStatePlan,
     *,

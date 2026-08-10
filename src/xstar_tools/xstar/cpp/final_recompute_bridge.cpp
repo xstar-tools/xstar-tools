@@ -24,24 +24,44 @@
 #include <vector>
 
 namespace {
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement copy message as a local helper for the final recompute bridge module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 void copy_message(char* dst, size_t n, const std::string& text) {
     if (!dst || n == 0u) return;
     const size_t k = std::min(n - 1u, text.size());
     std::memcpy(dst, text.data(), k);
     dst[k] = '\0';
 }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement copy output message as a local helper for the final recompute bridge module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 void copy_output_message(xstar_final_recompute_output_v1* out, const std::string& text) {
     if (!out) return;
     copy_message(out->message, sizeof(out->message), text);
 }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Validate the invariants required by require; reject malformed dimensions, pointers, or state before scientific kernels are entered.
+// Reference context: Implementation/safety helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 void require(bool value, const char* text) { if (!value) throw std::runtime_error(text); }
 
 class ScopedEnvironment {
 public:
+    // XSTAR-FUNCTION-COMMENT-BEGIN
+    // Purpose: Implement ScopedEnvironment as a local helper for the final recompute bridge module; inputs and outputs are kept in the source-compatible units expected by its caller.
+    // Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+    // XSTAR-FUNCTION-COMMENT-END
     ScopedEnvironment(const char* key, const char* value) : key_(key) {
         if (const char* current = std::getenv(key)) { had_value_ = true; old_value_ = current; }
         ::setenv(key, value, 1);
     }
+    // XSTAR-FUNCTION-COMMENT-BEGIN
+    // Purpose: Implement ~ScopedEnvironment as a local helper for the final recompute bridge module; inputs and outputs are kept in the source-compatible units expected by its caller.
+    // Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+    // XSTAR-FUNCTION-COMMENT-END
     ~ScopedEnvironment() {
         if (had_value_) ::setenv(key_.c_str(), old_value_.c_str(), 1);
         else ::unsetenv(key_.c_str());

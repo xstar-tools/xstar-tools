@@ -44,16 +44,52 @@ namespace {
 // workload.  Preserve the historical barriers automatically on targets that
 // evaluate expressions with excess precision.
 #if FLT_EVAL_METHOD == 0 && !defined(XSTAR_V064893_LEGACY_FP_BARRIERS)
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source add as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 static inline double source_add(double a, double b) { return a + b; }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source sub as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 static inline double source_sub(double a, double b) { return a - b; }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source mul as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 static inline double source_mul(double a, double b) { return a * b; }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source div as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 static inline double source_div(double a, double b) { return a / b; }
 #else
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source add as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 static inline double source_add(double a, double b) { volatile double x = a; volatile double y = b; volatile double z = x + y; return z; }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source sub as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 static inline double source_sub(double a, double b) { volatile double x = a; volatile double y = b; volatile double z = x - y; return z; }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source mul as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 static inline double source_mul(double a, double b) { volatile double x = a; volatile double y = b; volatile double z = x * y; return z; }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source div as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 static inline double source_div(double a, double b) { volatile double x = a; volatile double y = b; volatile double z = x / y; return z; }
 #endif
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source real literal as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 static inline double source_real_literal(double value) { return static_cast<double>(static_cast<float>(value)); }
 
 
@@ -141,12 +177,20 @@ thread_local std::uint64_t g_type50_tmpe_prep_profiles_v064812332 = 0u;
 thread_local std::uint64_t g_type50_tmpe_prep_blocks_v064812332 = 0u;
 thread_local std::uint64_t g_type50_tmpe_prep_points_v064812332 = 0u;
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement env truthy as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 static bool env_truthy_v064812324(const char* name) {
     const char* value = std::getenv(name);
     return value && *value && std::strcmp(value, "0") != 0 &&
         std::strcmp(value, "false") != 0 && std::strcmp(value, "FALSE") != 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement cpu avx2 available as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 static bool cpu_avx2_available_v064812324() {
 #if (defined(__x86_64__) || defined(__i386__)) && (defined(__GNUC__) || defined(__clang__))
     static const bool available = [] {
@@ -160,6 +204,10 @@ static bool cpu_avx2_available_v064812324() {
 }
 
 #if (defined(__x86_64__) || defined(__i386__)) && (defined(__GNUC__) || defined(__clang__))
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute voigte small a farwing4 for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 __attribute__((target("avx2")))
 static inline void voigte_small_a_farwing4_v064812324(
     const double* v, double aa, double* out) {
@@ -179,12 +227,20 @@ static inline void voigte_small_a_farwing4_v064812324(
 }
 #endif
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write message from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 static void write_message(char* message, std::size_t message_size, const char* text) {
     if (!message || message_size == 0) return;
     std::strncpy(message, text ? text : "", message_size - 1);
     message[message_size - 1] = '\0';
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute voigte for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 static double voigte(double vs, double a) {
     // Literal voigte.f90 declares all working values REAL(8), but its DATA,
     // PARAMETER, and branch literals are default REAL.  Preserve the
@@ -256,6 +312,10 @@ static double voigte(double vs, double a) {
 // damping regime 0 < a <= 0.2.  It is the identical branch of voigte.f90
 // with the invariant a-tests removed; arithmetic association is deliberately
 // unchanged so each returned binary64 value is bit-identical to voigte().
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute voigte small a positive for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 static inline double voigte_small_a_positive_v064896(double v, double aa) {
     static const double ak[15] = {
         source_real_literal(-1.12470432), source_real_literal(-0.15516677),
@@ -292,6 +352,10 @@ static inline double voigte_small_a_positive_v064896(double v, double aa) {
 
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement huntf as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 static int huntf(const double* xx, int n, double x) {
     if (!xx || n < 2) return 1;
     const double floor = source_real_literal(1.0e-34);
@@ -309,6 +373,10 @@ static int huntf(const double* xx, int n, double x) {
     return std::max(1, std::min(n, jlo));
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement nbinc as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 static int nbinc(double e, const double* epi, int ncn2) {
     const int numcon2 = std::max(2, ncn2 / 50);
     const int numcon3 = ncn2 - numcon2;
@@ -319,16 +387,32 @@ static int nbinc(double e, const double* epi, int ncn2) {
 
 extern "C" {
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Return the ABI version for the opacity interface so callers can reject incompatible binary layouts before execution.
+// Reference context: Implementation/compatibility helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_opacity_abi_version() { return 60460; }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Report the compiled opacity backend name capability metadata used by backend selection and provenance.
+// Reference context: Implementation/provenance helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 const char* xstar_opacity_backend_name() {
     return "xstar_opacity_exact_grid_qualification_v06472";
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Report the compiled opacity feature flags capability metadata used by backend selection and provenance.
+// Reference context: Implementation/provenance helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_opacity_feature_flags() {
     return 1 | 2 | 4;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement opacity probe as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_opacity_probe(int n_records, char* message, std::size_t message_size) {
     if (!xstar_backend::valid_count(n_records)) {
         xstar_backend::write_message(message, message_size, "invalid negative n_records");
@@ -340,6 +424,10 @@ int xstar_opacity_probe(int n_records, char* message, std::size_t message_size) 
     return xstar_backend::XSTAR_BACKEND_OK;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement opacity apply exact grid as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_opacity_apply_exact_grid_v1(
     const double* packed_grid,
     const double* epi,
@@ -419,6 +507,10 @@ int xstar_opacity_apply_exact_grid_v1(
     return 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute opacity apply line profile legacy for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 static int xstar_opacity_apply_line_profile_legacy_v0648951(
     double optpp,
     double line_energy_ev,
@@ -599,6 +691,10 @@ struct Type50ConsumeStateV064812328 {
     int ml1m = 0;
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement type50 consume no boundary as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 static inline void type50_consume_no_boundary_v064812328(
     double optpp, double current_energy, double profile,
     Type50ConsumeStateV064812328& state) {
@@ -613,6 +709,10 @@ static inline void type50_consume_no_boundary_v064812328(
     state.opsum = source_add(state.opsum, interval);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement type50 apply boundary as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 static inline void type50_apply_boundary_v064812328(
     double current_energy, const double* epi, int n, double* opakc,
     long long* updated_bins, Type50ConsumeStateV064812328& state) {
@@ -630,6 +730,10 @@ static inline void type50_apply_boundary_v064812328(
     }
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement type50 consume full as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 static inline void type50_consume_full_v064812328(
     double optpp, double current_energy, double profile,
     const double* epi, int n, double* opakc, long long* updated_bins,
@@ -638,6 +742,10 @@ static inline void type50_consume_full_v064812328(
     type50_apply_boundary_v064812328(current_energy, epi, n, opakc, updated_bins, state);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement small a core bounds as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 static std::pair<int,int> small_a_core_bounds_v064812328(
     int first_point, int last_point, double e00, double deleused,
     double line_energy_ev, double dele) {
@@ -666,6 +774,10 @@ static std::pair<int,int> small_a_core_bounds_v064812328(
 }
 
 #if (defined(__x86_64__) || defined(__i386__)) && (defined(__GNUC__) || defined(__clang__))
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute run inline farwing profile for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 __attribute__((target("avx2")))
 [[maybe_unused]] static int run_inline_farwing_profile_v064812328(
     double optpp, double line_energy_ev, double dele, double aasmall,
@@ -806,6 +918,10 @@ __attribute__((target("avx2")))
 #if (defined(__x86_64__) || defined(__i386__)) && (defined(__GNUC__) || defined(__clang__))
 template <bool RegisterConsumeV064812329, bool LikelyFalseHintV064812329,
           bool CountConsumeV064812329>
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute run inline farwing profile for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 __attribute__((target("avx2")))
 static int run_inline_farwing_profile_v064812329(
     double optpp, double line_energy_ev, double dele, double aasmall,
@@ -1025,6 +1141,10 @@ static int run_inline_farwing_profile_v064812329(
 
 template <bool CacheNextEpiV064812330, bool LocalUpdatedBinsV064812330,
           bool CursorAdvanceV064812330>
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute run inline farwing profile for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 __attribute__((target("avx2")))
 static int run_inline_farwing_profile_v064812330(
     double optpp, double line_energy_ev, double dele, double aasmall,
@@ -1204,6 +1324,10 @@ static int run_inline_farwing_profile_v064812330(
 template <bool CacheNextEpiV064812332, bool LocalUpdatedBinsV064812332,
           bool CursorAdvanceV064812332, bool PrepareTmpopV064812332,
           bool PrepareTmpeV064812332>
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute run inline farwing profile for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 __attribute__((target("avx2")))
 static int run_inline_farwing_profile_v064812332(
     double optpp, double line_energy_ev, double dele, double aasmall,
@@ -1438,6 +1562,10 @@ static int run_inline_farwing_profile_v064812332(
 // Diagnostic-only 12.3.28 profile materializer.  It uses the same far-wing
 // vector arithmetic as production, but stores results so profile arithmetic
 // can be timed separately from the scalar consume/rebin phase.
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute fill farwing profile blocks for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 __attribute__((target("avx2")))
 static std::uint64_t fill_farwing_profile_blocks_v064812328(
     int begin, int end, int first_point, int ml2, double e00, double deleused,
@@ -1498,6 +1626,10 @@ struct Type50DecompEventV064812331 {
 // It uses five coarse per-profile clocks and no per-point clocks/counters.  The
 // shadow passes never touch public opacity; the real cursor kernel runs after
 // this function and remains the sole science update path.
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute decompose cursor profile for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 __attribute__((target("avx2")))
 static void decompose_cursor_profile_v064812331(
     double optpp, double line_energy_ev, double dele, double aasmall,
@@ -1638,6 +1770,10 @@ static void decompose_cursor_profile_v064812331(
 // Voigt/Gaussian decision, trapezoid operation order, and public-bin update
 // order.  This removes the dead temporary-plane traffic without changing the
 // source arithmetic that reaches output.
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute opacity apply line profile optimized for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 static int xstar_opacity_apply_line_profile_optimized_v064896(
     double optpp,
     double line_energy_ev,
@@ -1964,6 +2100,10 @@ static int xstar_opacity_apply_line_profile_optimized_v064896(
 
 extern "C" {
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute opacity apply line profile for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_opacity_apply_line_profile_v1(
     double optpp,
     double line_energy_ev,
@@ -2016,6 +2156,10 @@ int xstar_opacity_apply_line_profile_v1(
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement opacity type50 vector perf reset as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_opacity_type50_vector_perf_reset_v064812324(void) {
     g_type50_vectorized_profiles_v064812324 = 0u;
     g_type50_scalar_profiles_v064812324 = 0u;
@@ -2024,6 +2168,10 @@ void xstar_opacity_type50_vector_perf_reset_v064812324(void) {
     g_last_profile_vectorized_v064812324 = 0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement opacity type50 vector perf snapshot as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_opacity_type50_vector_perf_snapshot_v064812324(
     std::uint64_t* vectorized_profiles,
     std::uint64_t* scalar_profiles,
@@ -2035,6 +2183,10 @@ void xstar_opacity_type50_vector_perf_snapshot_v064812324(
     if (bound_correction_steps) *bound_correction_steps = g_type50_bound_correction_steps_v064812324;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute opacity last profile vectorized for the line/emissivity/opacity path on the source or publication energy grid.
+// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_opacity_last_profile_vectorized_v064812324(void) {
     return g_last_profile_vectorized_v064812324;
 }
@@ -2042,7 +2194,15 @@ int xstar_opacity_last_profile_vectorized_v064812324(void) {
 // Retired 12.3.26/12.3.27 experiment telemetry remains ABI-callable as zero
 // so older timing reporters do not pull the retired experiment translation
 // unit back into the production opacity library.
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement opacity type50 phase perf reset as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_opacity_type50_phase_perf_reset_v064812326(void) {}
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement opacity type50 phase perf snapshot as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_opacity_type50_phase_perf_snapshot_v064812326(
     std::uint64_t* phase_profiles, std::uint64_t* span_events, std::uint64_t* span_bins,
     std::uint64_t* vectorizable_span_events, std::uint64_t* vectorizable_span_bins,
@@ -2065,7 +2225,15 @@ void xstar_opacity_type50_phase_perf_snapshot_v064812326(
     if (range_scalar_bins) *range_scalar_bins = 0u;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement opacity type50 perf reset as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_opacity_type50_perf_reset_v064812327(void) {}
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement opacity type50 perf snapshot as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_opacity_type50_perf_snapshot_v064812327(
     std::uint64_t* schedule_profiles, std::uint64_t* cache_hits,
     std::uint64_t* cache_misses, std::uint64_t* cache_uncached,
@@ -2095,6 +2263,10 @@ void xstar_opacity_type50_perf_snapshot_v064812327(
     if (inline_scalar_points) *inline_scalar_points = 0u;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement opacity type50 perf reset as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_opacity_type50_perf_reset_v064812328(void) {
     g_type50_prod_avx2_profiles_v064812328 = 0u;
     g_type50_prod_scalar_profiles_v064812328 = 0u;
@@ -2113,6 +2285,10 @@ void xstar_opacity_type50_perf_reset_v064812328(void) {
     g_type50_decomp_consume_seconds_v064812328 = 0.0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement opacity type50 perf snapshot as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_opacity_type50_perf_snapshot_v064812328(
     std::uint64_t* prod_avx2_profiles, std::uint64_t* prod_scalar_profiles,
     std::uint64_t* prod_avx2_blocks, std::uint64_t* prod_avx2_points,
@@ -2139,6 +2315,10 @@ void xstar_opacity_type50_perf_snapshot_v064812328(
     if (decomp_consume_seconds) *decomp_consume_seconds = g_type50_decomp_consume_seconds_v064812328;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement opacity type50 perf reset as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_opacity_type50_perf_reset_v064812329(void) {
     g_type50_register_profiles_v064812329 = 0u;
     g_type50_hint_profiles_v064812329 = 0u;
@@ -2150,6 +2330,10 @@ void xstar_opacity_type50_perf_reset_v064812329(void) {
     g_type50_max_bins_per_event_v064812329 = 0u;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement opacity type50 perf snapshot as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_opacity_type50_perf_snapshot_v064812329(
     std::uint64_t* register_profiles, std::uint64_t* hint_profiles,
     std::uint64_t* consumed_points, std::uint64_t* boundary_true_points,
@@ -2165,6 +2349,10 @@ void xstar_opacity_type50_perf_snapshot_v064812329(
     if (max_bins_per_event) *max_bins_per_event = g_type50_max_bins_per_event_v064812329;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement opacity type50 perf reset as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_opacity_type50_perf_reset_v064812330(void) {
     g_type50_prod_hint_profiles_v064812330 = 0u;
     g_type50_fallback_12328_profiles_v064812330 = 0u;
@@ -2173,6 +2361,10 @@ void xstar_opacity_type50_perf_reset_v064812330(void) {
     g_type50_cursor_profiles_v064812330 = 0u;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement opacity type50 perf snapshot as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_opacity_type50_perf_snapshot_v064812330(
     std::uint64_t* prod_hint_profiles, std::uint64_t* fallback_12328_profiles,
     std::uint64_t* next_epi_profiles, std::uint64_t* local_bins_profiles,
@@ -2184,6 +2376,10 @@ void xstar_opacity_type50_perf_snapshot_v064812330(
     if (cursor_profiles) *cursor_profiles = g_type50_cursor_profiles_v064812330;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement opacity type50 perf reset as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_opacity_type50_perf_reset_v064812331(void) {
     g_type50_prod_cursor_profiles_v064812331 = 0u;
     g_type50_fallback_hint_profiles_v064812331 = 0u;
@@ -2199,6 +2395,10 @@ void xstar_opacity_type50_perf_reset_v064812331(void) {
     g_type50_decomp_opakc_seconds_v064812331 = 0.0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement opacity type50 perf snapshot as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_opacity_type50_perf_snapshot_v064812331(
     std::uint64_t* prod_cursor_profiles, std::uint64_t* fallback_hint_profiles,
     std::uint64_t* decomp_profiles, std::uint64_t* decomp_avx2_points,
@@ -2220,6 +2420,10 @@ void xstar_opacity_type50_perf_snapshot_v064812331(
     if (decomp_opakc_seconds) *decomp_opakc_seconds = g_type50_decomp_opakc_seconds_v064812331;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement opacity type50 perf reset as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_opacity_type50_perf_reset_v064812332(void) {
     g_type50_tmpop_prep_profiles_v064812332 = 0u;
     g_type50_tmpop_prep_blocks_v064812332 = 0u;
@@ -2229,6 +2433,10 @@ void xstar_opacity_type50_perf_reset_v064812332(void) {
     g_type50_tmpe_prep_points_v064812332 = 0u;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement opacity type50 perf snapshot as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_opacity_type50_perf_snapshot_v064812332(
     std::uint64_t* tmpop_profiles, std::uint64_t* tmpop_blocks,
     std::uint64_t* tmpop_points, std::uint64_t* tmpe_profiles,

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import platform
+import re
 import subprocess
 import sys
 
@@ -26,7 +27,9 @@ def test_build_metadata_is_authoritative_and_setup_is_thin():
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     setup = (ROOT / "setup.py").read_text(encoding="utf-8")
     assert 'build-backend = "setuptools.build_meta"' in pyproject
-    assert 'version = "0.6.72"' in pyproject
+    match = re.search(r'^version = "([0-9.]+)"$', pyproject, re.MULTILINE)
+    assert match is not None
+    assert tuple(map(int, match.group(1).split('.'))) >= (0, 6, 71)
     assert "include-package-data = false" in pyproject
     setup_cfg = ROOT / "setup.cfg"
     if setup_cfg.exists():

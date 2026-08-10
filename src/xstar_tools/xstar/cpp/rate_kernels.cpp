@@ -32,6 +32,10 @@ constexpr int XSTAR_RATES_FEATURE_MG_TYPE4_LINE_EMISSIVITY = 4;
 constexpr int XSTAR_RATES_FEATURE_LINOPAC_PROFILE = 8;
 constexpr int XSTAR_RATES_FEATURE_MG_TYPE4_TYPE50_COARSE = 16;
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write message from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void write_message(char* errbuf, std::size_t errbuf_size, const char* message) {
     if (errbuf == nullptr || errbuf_size == 0) {
         return;
@@ -39,6 +43,10 @@ void write_message(char* errbuf, std::size_t errbuf_size, const char* message) {
     std::snprintf(errbuf, errbuf_size, "%s", message == nullptr ? "" : message);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement finite6 as a local helper for the rate kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 bool finite6(double a, double b, double c, double d, double e, double f) {
     return std::isfinite(a) && std::isfinite(b) && std::isfinite(c) &&
            std::isfinite(d) && std::isfinite(e) && std::isfinite(f);
@@ -48,6 +56,10 @@ bool finite6(double a, double b, double c, double d, double e, double f) {
 // real before assignment/use in REAL(8) expressions.  Mirror the Python
 // source-faithful _source_real policy by rounding those literals to float32
 // and promoting back to double.  Do not use this for D-suffixed literals.
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source real literal as a local helper for the rate kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 inline double source_real_literal(double value) {
     return static_cast<double>(static_cast<float>(value));
 }
@@ -55,18 +67,34 @@ inline double source_real_literal(double value) {
 
 extern "C" {
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Return the ABI version for the rates interface so callers can reject incompatible binary layouts before execution.
+// Reference context: Implementation/compatibility helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_rates_abi_version() {
     return XSTAR_RATES_ABI_VERSION;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Report the compiled rates backend name capability metadata used by backend selection and provenance.
+// Reference context: Implementation/provenance helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 const char* xstar_rates_backend_name() {
     return "xstar_rates_mg_type7_type4_linopac_type50_voigt_pow3_exact_v2";
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Report the compiled rates feature flags capability metadata used by backend selection and provenance.
+// Reference context: Implementation/provenance helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_rates_feature_flags() {
     return XSTAR_RATES_FEATURE_SKELETON | XSTAR_RATES_FEATURE_MG_TYPE7_MATRIX_TERMS | XSTAR_RATES_FEATURE_MG_TYPE4_LINE_EMISSIVITY | XSTAR_RATES_FEATURE_LINOPAC_PROFILE | XSTAR_RATES_FEATURE_MG_TYPE4_TYPE50_COARSE;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate rates eval mg using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_rates_eval_mg(
     int n_ions,
     int n_records,
@@ -99,6 +127,10 @@ int xstar_rates_eval_mg(
 //
 // role_code follows Python MatrixTerm construction:
 //   1 forward_offdiag, 2 reverse_offdiag, 3 forward_diag_loss, 4 reverse_diag_loss
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate rates build mg type7 terms using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 7 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_rates_build_mg_type7_terms(
     int n_records,
     int basis_n_rows,
@@ -217,6 +249,10 @@ int xstar_rates_build_mg_type7_terms(
 //   rcem1/rcem2 = max(net * energy_eV * erg_per_ev * escape_prob, 0)
 //   flinel_delta = (rcem1 + rcem2) * 2 / bin_width_eV / erg_per_ev
 // Output rows: 8 int64 columns and 5 double columns per input record.
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate rates build mg type4 line emissivity using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_rates_build_mg_type4_line_emissivity(
     int n_records,
     const long long* record,
@@ -299,6 +335,10 @@ int xstar_rates_build_mg_type4_line_emissivity(
 
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate rates voigte using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use.
+// XSTAR-FUNCTION-COMMENT-END
 static double xstar_rates_voigte(double vs, double a) {
     static const double ak[19] = {
         -1.12470432, -0.15516677, 3.28867591, -2.34357915, 0.42139162,
@@ -354,6 +394,10 @@ static double xstar_rates_voigte(double vs, double a) {
     return psi * (ex + aa * (h1p + aa * (h2p + aa * (h3p + aa * h4p))));
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate rates huntf using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use.
+// XSTAR-FUNCTION-COMMENT-END
 static int xstar_rates_huntf(const double* xx, int n, double x) {
     if (!xx || n < 2) return 1;
     const double floor = 1.0e-24;
@@ -375,6 +419,10 @@ static int xstar_rates_huntf(const double* xx, int n, double x) {
     return jlo;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate rates nbinc using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use.
+// XSTAR-FUNCTION-COMMENT-END
 static int xstar_rates_nbinc(double e, const double* epi, int ncn2) {
     const int n = static_cast<int>(ncn2);
     const int numcon2 = std::max(2, n / 50);
@@ -387,6 +435,10 @@ static int xstar_rates_nbinc(double e, const double* epi, int ncn2) {
 // v0.5.65 supports both the Gaussian branch and the source voigte.f90
 // natural-width/Voigt branch, so Mg type-4 data_type=50 can use the shared
 // library for the linopac side effect instead of returning a Python fallback.
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate and rebin a broadened line-opacity profile onto the continuum grid, preserving the accepted Type-50/linopac integration and cutoff semantics.
+// Reference context: XSTAR Manual ss11.5.1, 11.6.1 and ch12 data type 50; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_rates_apply_linopac_profile(
     double optpp,
     double rcem1,

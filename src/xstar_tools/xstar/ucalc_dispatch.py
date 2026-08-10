@@ -40,18 +40,34 @@ class UCalcBranch:
 class UCalcDispatcher:
     """Explicit registry retained for compatibility with the v0.4.0 API."""
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Initialize this object and establish the invariants required by later operations.
+    # Reference context: XSTAR Manual s. 12.1: data type selects the record formula; rate type selects downstream use.
+    # XSTAR-FUNCTION-COMMENT-END
     def __init__(self) -> None:
         self._branches: Dict[int, UCalcBranch] = {}
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Register operation for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual s. 12.1: data type selects the record formula; rate type selects downstream use.
+    # XSTAR-FUNCTION-COMMENT-END
     def register(self, branch: UCalcBranch) -> None:
         if branch.data_type in self._branches:
             raise ValueError(f"ucalc data type {branch.data_type} already registered")
         self._branches[branch.data_type] = branch
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the supported data types operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual s. 12.1: data type selects the record formula; rate type selects downstream use.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def supported_data_types(self) -> Tuple[int, ...]:
         return tuple(sorted(self._branches))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the branch operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual s. 12.1: data type selects the record formula; rate type selects downstream use.
+    # XSTAR-FUNCTION-COMMENT-END
     def branch(self, data_type: int) -> UCalcBranch:
         try:
             return self._branches[int(data_type)]
@@ -60,10 +76,18 @@ class UCalcDispatcher:
                 f"XSTAR ucalc data type {data_type} is outside the source range 1..102"
             ) from exc
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Evaluate operation for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual s. 12.1: data type selects the record formula; rate type selects downstream use.
+    # XSTAR-FUNCTION-COMMENT-END
     def evaluate(self, data_type: int, /, *args: Any, **kwargs: Any) -> Any:
         return self.branch(data_type).evaluator(*args, **kwargs)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Construct the default ucalc dispatcher for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual s. 12.1: data type selects the record formula; rate type selects downstream use.
+# XSTAR-FUNCTION-COMMENT-END
 def default_ucalc_dispatcher() -> UCalcDispatcher:
     """Return a legacy registry facade over all complete source branches.
 
@@ -79,6 +103,10 @@ def default_ucalc_dispatcher() -> UCalcDispatcher:
     for data_type in source.registered_data_types:
         spec = source.catalog[data_type]
 
+        # XSTAR-FUNCTION-COMMENT-BEGIN
+        # Purpose: Evaluate operation for this module while preserving the surrounding source/runtime invariants.
+        # Reference context: XSTAR Manual s. 12.1: data type selects the record formula; rate type selects downstream use.
+        # XSTAR-FUNCTION-COMMENT-END
         def evaluate(record: Any, context: Any, *, strict: bool = True, _source=source) -> Any:
             return _source.evaluate(record, context, strict=strict)
 

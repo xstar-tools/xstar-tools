@@ -97,6 +97,10 @@ class FixedStateElementRequest:
     strict_context: bool = True
     capture_lucy_trace: bool = False
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Validate FixedStateElementRequest invariants before the value is consumed downstream.
+    # Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4; Kallman & Bautista (2001), local ion/thermal balance.
+    # XSTAR-FUNCTION-COMMENT-END
     def validate(self) -> None:
         if self.element_z <= 0:
             raise CalcHMCAllError("element_z must be positive")
@@ -254,6 +258,10 @@ ElementSolver = Callable[..., ElementEquilibriumResult]
 PreMatrixSolver = Callable[..., Tuple[Dict[int, CalcIonRatesResult], IstrucResult, IonStageLimitResult]]
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Resolve calc hmc all density for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4; Kallman & Bautista (2001), local ion/thermal balance.
+# XSTAR-FUNCTION-COMMENT-END
 def resolve_calc_hmc_all_density(
     *,
     temperature_k: float,
@@ -276,6 +284,10 @@ def resolve_calc_hmc_all_density(
     return xpx
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the role key operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4; Kallman & Bautista (2001), local ion/thermal balance.
+# XSTAR-FUNCTION-COMMENT-END
 def _role_key(element_z: int, role: Mapping[str, Any]) -> Optional[Tuple[int, int, int]]:
     stage = int(role.get("ion_stage", 0))
     level = int(role.get("local_level", role.get("level", 0)))
@@ -284,6 +296,10 @@ def _role_key(element_z: int, role: Mapping[str, Any]) -> Optional[Tuple[int, in
     return int(element_z), stage, level
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: For one trial temperature/electron fraction, solve every active element, aggregate charge plus heating/cooling, then add Compton/free-free/bremsstrahlung continuum terms.
+# Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4; Kallman & Bautista (2001), local ion/thermal balance.
+# XSTAR-FUNCTION-COMMENT-END
 def calc_hmc_all(
     master: Any,
     derived: Any,
@@ -501,6 +517,10 @@ def calc_hmc_all(
         ]
     )
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the dense seed operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4; Kallman & Bautista (2001), local ion/thermal balance.
+    # XSTAR-FUNCTION-COMMENT-END
     def _dense_seed(values: Optional[Sequence[float]], *, name: str) -> np.ndarray:
         dense = np.zeros(n_global_levels, dtype=float)
         if values is None:
@@ -587,6 +607,10 @@ def calc_hmc_all(
         carbon_state_path["hydrogen"].append(dict(entry_row))
         carbon_state_path["hydrogen_history"].append(dict(entry_row))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the native element rows operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4; Kallman & Bautista (2001), local ion/thermal balance.
+    # XSTAR-FUNCTION-COMMENT-END
     def _native_element_rows(
         *, phase_code: int, phase: str, element_z: int, values: np.ndarray
     ) -> List[Dict[str, Any]]:
@@ -631,6 +655,10 @@ def calc_hmc_all(
             full_index_offset += max(0, nlev - 1)
         return rows
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the stage totals from native rows operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4; Kallman & Bautista (2001), local ion/thermal balance.
+    # XSTAR-FUNCTION-COMMENT-END
     def _stage_totals_from_native_rows(
         *, phase_code: int, phase: str, element_z: int, values: np.ndarray
     ) -> List[Dict[str, Any]]:
@@ -873,6 +901,10 @@ def calc_hmc_all(
             basis = equilibrium.assembly.basis
             initial = np.asarray(equilibrium.assembly.initial_populations, dtype=float)
 
+            # XSTAR-FUNCTION-COMMENT-BEGIN
+            # Purpose: Implement the hydrogen compact identity operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+            # Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4; Kallman & Bautista (2001), local ion/thermal balance.
+            # XSTAR-FUNCTION-COMMENT-END
             def _hydrogen_compact_identity(compact_index: int) -> Dict[str, int]:
                 basis_row = basis.row(int(compact_index))
                 ion_stage = int(basis.ion_stage[int(compact_index)])
@@ -896,6 +928,10 @@ def calc_hmc_all(
                     ),
                 }
 
+            # XSTAR-FUNCTION-COMMENT-BEGIN
+            # Purpose: Append hydrogen compact for this module while preserving the surrounding source/runtime invariants.
+            # Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4; Kallman & Bautista (2001), local ion/thermal balance.
+            # XSTAR-FUNCTION-COMMENT-END
             def _append_hydrogen_compact(
                 phase_code: int,
                 phase: str,
@@ -1039,6 +1075,10 @@ def calc_hmc_all(
             basis = equilibrium.assembly.basis
             initial = np.asarray(equilibrium.assembly.initial_populations, dtype=float)
 
+            # XSTAR-FUNCTION-COMMENT-BEGIN
+            # Purpose: Implement the compact identity operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+            # Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4; Kallman & Bautista (2001), local ion/thermal balance.
+            # XSTAR-FUNCTION-COMMENT-END
             def _compact_identity(compact_index: int) -> Dict[str, int]:
                 basis_row = basis.row(int(compact_index))
                 ion_stage = int(basis.ion_stage[int(compact_index)])
@@ -1062,6 +1102,10 @@ def calc_hmc_all(
                     ),
                 }
 
+            # XSTAR-FUNCTION-COMMENT-BEGIN
+            # Purpose: Append compact for this module while preserving the surrounding source/runtime invariants.
+            # Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4; Kallman & Bautista (2001), local ion/thermal balance.
+            # XSTAR-FUNCTION-COMMENT-END
             def _append_compact(
                 phase_code: int,
                 phase: str,
@@ -1959,6 +2003,10 @@ def calc_hmc_all(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Register fixed state calc hmc all for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4; Kallman & Bautista (2001), local ion/thermal balance.
+# XSTAR-FUNCTION-COMMENT-END
 def register_fixed_state_calc_hmc_all(
     driver: Any,
     *,
@@ -1979,6 +2027,10 @@ def register_fixed_state_calc_hmc_all(
     """Register fixed-state ``calc_hmc_all`` on the source-routine driver."""
     from .driver import XSTARSourceRoutine
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the handler operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4; Kallman & Bautista (2001), local ion/thermal balance.
+    # XSTAR-FUNCTION-COMMENT-END
     def _handler(state: Any) -> None:
         if state.atomic.master is None or state.atomic.derived is None:
             raise CalcHMCAllError("atomic database state must be initialized first")
@@ -2042,6 +2094,10 @@ def register_fixed_state_calc_hmc_all(
     driver.register_source_routine(XSTARSourceRoutine.CALC_HMC_ALL, _handler)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the type77 floor impact rows operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4; Kallman & Bautista (2001), local ion/thermal balance.
+# XSTAR-FUNCTION-COMMENT-END
 def _type77_floor_impact_rows(result: FixedStateCalcHMCAllResult) -> List[Dict[str, Any]]:
     """Build a fixed-population source-vs-legacy type-77 floor audit.
 
@@ -2051,6 +2107,10 @@ def _type77_floor_impact_rows(result: FixedStateCalcHMCAllResult) -> List[Dict[s
 
     rows: List[Dict[str, Any]] = []
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the as float operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4; Kallman & Bautista (2001), local ion/thermal balance.
+    # XSTAR-FUNCTION-COMMENT-END
     def as_float(value: Any) -> Optional[float]:
         try:
             out = float(value)
@@ -2126,6 +2186,10 @@ def _type77_floor_impact_rows(result: FixedStateCalcHMCAllResult) -> List[Dict[s
     return rows
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write fixed state calc hmc all products for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4; Kallman & Bautista (2001), local ion/thermal balance.
+# XSTAR-FUNCTION-COMMENT-END
 def write_fixed_state_calc_hmc_all_products(
     result: FixedStateCalcHMCAllResult,
     out_dir: str,

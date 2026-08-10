@@ -36,19 +36,35 @@ constexpr double kDefaultChargeTolerance = static_cast<double>(static_cast<float
 constexpr double kDefaultThermalTolerance = static_cast<double>(static_cast<float>(1.0e-4));
 constexpr double kDefaultStagnationTolerance = static_cast<double>(static_cast<float>(2.0e-9));
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement set error as a local helper for the thermal kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual s11.4.4; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void set_error(char *error, std::size_t error_size, const char *message) {
     if (!error || error_size == 0) return;
     std::snprintf(error, error_size, "%s", message ? message : "");
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement elapsed as a local helper for the thermal kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual s11.4.4; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 double elapsed(const clock_type::time_point &start) {
     return std::chrono::duration<double>(clock_type::now() - start).count();
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement source fac as a local helper for the thermal kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual s11.4.4; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 double source_fac(double tau) {
     return tau > kFacThreshold ? (1.0 - std::exp(-tau)) / tau : 1.0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement fortran divide as a local helper for the thermal kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual s11.4.4; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 double fortran_divide(double numerator, double denominator) {
     return numerator / denominator;
 }
@@ -58,6 +74,10 @@ double fortran_divide(double numerator, double denominator) {
 // the physical value is unchanged, the explicit K -> T4 round trip can move a
 // binary64 value by one ULP.  Preserve the two source operations and their
 // rounding points instead of algebraically cancelling the scale factors.
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute source temperature commit t4 as a contribution to, or control step in, the local thermal-equilibrium iteration.
+// Reference context: XSTAR Manual s11.4.4 and s11.6; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 double source_temperature_commit_t4(double temperature_t4) {
     volatile double temperature_k = temperature_t4 * 1.0e4;
     volatile double committed_t4 = temperature_k / 1.0e4;
@@ -67,6 +87,10 @@ double source_temperature_commit_t4(double temperature_t4) {
 // Preserve the source/Python evaluation order for the late temperature
 // secant.  Named volatile intermediates prohibit reassociation or accidental
 // fused multiply-subtract contraction under optimized builds.
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute source temperature secant as a contribution to, or control step in, the local thermal-equilibrium iteration.
+// Reference context: XSTAR Manual s11.4.4 and s11.6; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 double source_temperature_secant(double tl, double hmctth,
                                   double th, double hmcttl) {
     volatile double low_product = tl * hmctth;
@@ -77,6 +101,10 @@ double source_temperature_secant(double tl, double hmctth,
     return quotient;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement finite nonnegative as a local helper for the thermal kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual s11.4.4; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 bool finite_nonnegative(double value) {
     return std::isfinite(value) && value >= 0.0;
 }
@@ -86,6 +114,10 @@ struct TraceWriter {
     std::size_t capacity = 0;
     std::size_t count = 0;
 
+    // XSTAR-FUNCTION-COMMENT-BEGIN
+    // Purpose: Implement add as a local helper for the thermal kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+    // Reference context: XSTAR Manual s11.4.4; Kallman & Bautista (2001).
+    // XSTAR-FUNCTION-COMMENT-END
     void add(uint32_t event_code, uint32_t evaluation_index,
              int ntotit, int nnt, int nntt, int nnx, int nnxx, int lnerr,
              const xstar_thermal_state_v1 &state, double hmctot, double elcter,
@@ -121,8 +153,20 @@ struct xstar_thermal_context {
 
 extern "C" {
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Return the ABI version for the thermal engine interface so callers can reject incompatible binary layouts before execution.
+// Reference context: Implementation/compatibility helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 uint32_t xstar_thermal_engine_abi_version(void) { return XSTAR_THERMAL_ENGINE_ABI_VERSION; }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Report the compiled thermal engine backend name capability metadata used by backend selection and provenance.
+// Reference context: Implementation/provenance helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 const char *xstar_thermal_engine_backend_name(void) { return "xstar_thermal_heatt_dsec_state_commit_engine_v06471"; }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Report the compiled thermal engine feature flags capability metadata used by backend selection and provenance.
+// Reference context: Implementation/provenance helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 uint32_t xstar_thermal_engine_feature_flags(void) {
     return XSTAR_THERMAL_STATUS_NATIVE_HEATT |
            XSTAR_THERMAL_STATUS_NATIVE_DSEC |
@@ -132,18 +176,30 @@ uint32_t xstar_thermal_engine_feature_flags(void) {
            XSTAR_THERMAL_STATUS_CALLBACK_STATE_PROPAGATION;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Initialize the heatt workspace init structure to its ABI-safe defaults before the caller supplies model-specific values.
+// Reference context: Implementation/ABI helper; scientific meaning is defined by the consuming engine.
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_heatt_workspace_init_v1(xstar_heatt_workspace_v1 *workspace) {
     if (!workspace) return;
     std::memset(workspace, 0, sizeof(*workspace));
     workspace->struct_size = sizeof(*workspace);
     workspace->abi_version = XSTAR_THERMAL_ENGINE_ABI_VERSION;
 }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Initialize the heatt stats init structure to its ABI-safe defaults before the caller supplies model-specific values.
+// Reference context: Implementation/ABI helper; scientific meaning is defined by the consuming engine.
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_heatt_stats_init_v1(xstar_heatt_stats_v1 *stats) {
     if (!stats) return;
     std::memset(stats, 0, sizeof(*stats));
     stats->struct_size = sizeof(*stats);
     stats->abi_version = XSTAR_THERMAL_ENGINE_ABI_VERSION;
 }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Initialize the dsec config init structure to its ABI-safe defaults before the caller supplies model-specific values.
+// Reference context: Implementation/ABI helper; scientific meaning is defined by the consuming engine.
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_dsec_config_init_v1(xstar_dsec_config_v1 *config) {
     if (!config) return;
     std::memset(config, 0, sizeof(*config));
@@ -156,12 +212,20 @@ void xstar_dsec_config_init_v1(xstar_dsec_config_v1 *config) {
     config->thermal_tolerance = kDefaultThermalTolerance;
     config->temperature_stagnation_tolerance = kDefaultStagnationTolerance;
 }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Initialize the thermal state init structure to its ABI-safe defaults before the caller supplies model-specific values.
+// Reference context: Implementation/ABI helper; scientific meaning is defined by the consuming engine.
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_thermal_state_init_v1(xstar_thermal_state_v1 *state) {
     if (!state) return;
     std::memset(state, 0, sizeof(*state));
     state->struct_size = sizeof(*state);
     state->abi_version = XSTAR_THERMAL_ENGINE_ABI_VERSION;
 }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Initialize the thermal evaluation init structure to its ABI-safe defaults before the caller supplies model-specific values.
+// Reference context: Implementation/ABI helper; scientific meaning is defined by the consuming engine.
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_thermal_evaluation_init_v1(xstar_thermal_evaluation_v1 *evaluation) {
     if (!evaluation) return;
     std::memset(evaluation, 0, sizeof(*evaluation));
@@ -173,6 +237,10 @@ void xstar_thermal_evaluation_init_v1(xstar_thermal_evaluation_v1 *evaluation) {
     evaluation->electron_fraction_xee = std::numeric_limits<double>::quiet_NaN();
     evaluation->hydrogen_density_cm3 = std::numeric_limits<double>::quiet_NaN();
 }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Initialize the dsec stats init structure to its ABI-safe defaults before the caller supplies model-specific values.
+// Reference context: Implementation/ABI helper; scientific meaning is defined by the consuming engine.
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_dsec_stats_init_v1(xstar_dsec_stats_v1 *stats) {
     if (!stats) return;
     std::memset(stats, 0, sizeof(*stats));
@@ -180,6 +248,10 @@ void xstar_dsec_stats_init_v1(xstar_dsec_stats_v1 *stats) {
     stats->abi_version = XSTAR_THERMAL_ENGINE_ABI_VERSION;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Create and validate persistent runtime state for thermal context create, loading only the data needed by subsequent calls.
+// Reference context: Implementation/lifetime helper; the scientific work is performed by the shared engine routines called from this context.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_thermal_context_create_v1(xstar_thermal_context **out_context, char *error, size_t error_size) {
     if (!out_context) {
         set_error(error, error_size, "out_context is null");
@@ -196,8 +268,16 @@ int xstar_thermal_context_create_v1(xstar_thermal_context **out_context, char *e
     return XSTAR_THERMAL_OK;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Destroy the persistent thermal context destroy context and release its owned resources without changing external science state.
+// Reference context: Implementation/lifetime helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 void xstar_thermal_context_destroy(xstar_thermal_context *context) { delete context; }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Reset reusable thermal context reset state between model evaluations while preserving immutable loaded data and ABI invariants.
+// Reference context: Implementation/lifetime helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_thermal_context_reset_v1(xstar_thermal_context *context, char *error, size_t error_size) {
     if (!context) {
         set_error(error, error_size, "thermal context is null");
@@ -210,6 +290,10 @@ int xstar_thermal_context_reset_v1(xstar_thermal_context *context, char *error, 
     return XSTAR_THERMAL_OK;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Apply the HEATT-style temperature update from the net heating/cooling imbalance while preserving the source iteration safeguards and temperature-commit semantics.
+// Reference context: XSTAR Manual s11.4.4 (thermal equilibrium) and ch14; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_thermal_apply_heatt_v1(
     xstar_thermal_context *context,
     xstar_heatt_workspace_v1 *w,
@@ -360,6 +444,10 @@ int xstar_thermal_apply_heatt_v1(
     return XSTAR_THERMAL_OK;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute thermal run evaluation loop as a contribution to, or control step in, the local thermal-equilibrium iteration.
+// Reference context: XSTAR Manual s11.4.4 and s11.6; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_thermal_run_evaluation_loop_v1(
     xstar_thermal_context *context,
     const xstar_dsec_config_v1 *config,
@@ -575,9 +663,25 @@ int xstar_thermal_run_evaluation_loop_v1(
 }
 
 // Legacy probes retained for compatibility with pre-v0.6.47.1 component loading.
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute thermal probe as a contribution to, or control step in, the local thermal-equilibrium iteration.
+// Reference context: XSTAR Manual s11.4.4 and s11.6; Kallman & Bautista (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_thermal_probe() { return 1; }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Return the ABI version for the thermal interface so callers can reject incompatible binary layouts before execution.
+// Reference context: Implementation/compatibility helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_thermal_abi_version() { return static_cast<int>(XSTAR_THERMAL_ENGINE_ABI_VERSION); }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Report the compiled thermal backend name capability metadata used by backend selection and provenance.
+// Reference context: Implementation/provenance helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 const char *xstar_thermal_backend_name() { return xstar_thermal_engine_backend_name(); }
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Report the compiled thermal feature flags capability metadata used by backend selection and provenance.
+// Reference context: Implementation/provenance helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 uint32_t xstar_thermal_feature_flags() { return xstar_thermal_engine_feature_flags(); }
 
 }  // extern "C"

@@ -21,6 +21,10 @@ from .zone1_dsec_diagnostic import (
 )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the iter rows operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _iter_rows(path: Path) -> Iterator[dict[str, str]]:
     """Yield CSV rows without materializing the complete probe file.
 
@@ -35,6 +39,10 @@ def _iter_rows(path: Path) -> Iterator[dict[str, str]]:
         yield from csv.DictReader(handle)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Read operation for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _read(path: Path) -> list[dict[str, str]]:
     """Read a bounded analysis product into memory.
 
@@ -45,6 +53,10 @@ def _read(path: Path) -> list[dict[str, str]]:
     return list(_iter_rows(path))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Read optional for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _read_optional(path: Path) -> list[dict[str, str]]:
     """Read a bounded optional diagnostic product, returning an empty list."""
     if not path.is_file():
@@ -74,6 +86,10 @@ _STATE_PHASE_NAMES = {
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write operation for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _write(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if not rows:
@@ -90,6 +106,10 @@ def _write(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
         writer.writerows(rows)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the call map operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _call_map(root: Path) -> dict[int, int]:
     rows = _iter_rows(root / "xstar_dsec_calc_hmc_all_call_correlation.csv")
     return {
@@ -100,6 +120,10 @@ def _call_map(root: Path) -> dict[int, int]:
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the sha rows operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _sha_rows(rows: Iterable[tuple[int, float | int | str]]) -> str:
     sha = hashlib.sha256()
     for index, value in rows:
@@ -115,6 +139,10 @@ def _sha_rows(rows: Iterable[tuple[int, float | int | str]]) -> str:
     return sha.hexdigest()
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the fingerprint operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _fingerprint(
     *,
     call: int,
@@ -165,6 +193,10 @@ class _FingerprintAccumulator:
         "has_numeric",
     )
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Initialize this object and establish the invariants required by later operations.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     def __init__(self) -> None:
         self.count = 0
         self.nonzero_count = 0
@@ -180,6 +212,10 @@ class _FingerprintAccumulator:
         self.sha = hashlib.sha256()
         self.has_numeric = False
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the add operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     def add(self, index: int, value: float | int | str) -> None:
         if self.count == 0:
             self.first = value
@@ -212,6 +248,10 @@ class _FingerprintAccumulator:
         self.total_square += numeric * numeric
         self.weighted_total += int(index) * numeric
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the finish operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     def finish(self, *, call: int, evaluation: int, name: str) -> dict[str, Any]:
         return {
             "evaluation_index": int(evaluation),
@@ -232,6 +272,10 @@ class _FingerprintAccumulator:
         }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the numeric fingerprint rows operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _numeric_fingerprint_rows(
     root: Path,
     call_to_eval: Mapping[int, int],
@@ -407,6 +451,10 @@ def _numeric_fingerprint_rows(
         )
     return sorted(output, key=lambda row: (row["evaluation_index"], row["name"]))
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Load xstar target state for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def load_xstar_target_state(
     probe_dir: str | Path,
     *,
@@ -442,6 +490,10 @@ def load_xstar_target_state(
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Load xstar carbon cooling terms for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def load_xstar_carbon_cooling_terms(
     probe_dir: str | Path,
 ) -> list[dict[str, Any]]:
@@ -477,6 +529,10 @@ def load_xstar_carbon_cooling_terms(
     return output
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Construct carbon cooling gate for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def make_carbon_cooling_gate(
     probe_dir: str | Path,
     *,
@@ -489,6 +545,10 @@ def make_carbon_cooling_gate(
     for row in reference:
         by_evaluation.setdefault(int(row["evaluation_index"]), []).append(row)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the gate operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     def gate(evaluation_index: int, snapshot: Any, result: Any) -> None:
         xstar_rows = by_evaluation.get(int(evaluation_index), [])
         if not xstar_rows:
@@ -507,10 +567,18 @@ def make_carbon_cooling_gate(
     return gate
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the format float sequence operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _format_float_sequence(values: Sequence[float]) -> str:
     return ";".join(f"{float(value):.17e}" for value in values)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Parse float sequence for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _parse_float_sequence(value: str | None) -> tuple[float, ...]:
     text = str(value or "").strip()
     if not text:
@@ -518,6 +586,10 @@ def _parse_float_sequence(value: str | None) -> tuple[float, ...]:
     return tuple(parse_fortran_float(item) for item in text.split(";") if item.strip())
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the bool value operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _bool_value(value: Any) -> bool:
     if isinstance(value, bool):
         return value
@@ -526,6 +598,10 @@ def _bool_value(value: Any) -> bool:
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Load type15 probe rows for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _load_type15_probe_rows(
     root: Path,
     *,
@@ -585,6 +661,10 @@ def _load_type15_probe_rows(
     }
     return shells_by_record, effective_by_record_phase
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the analyze xstar zone1 probe operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def analyze_xstar_zone1_probe(
     probe_dir: str | Path,
     *,
@@ -993,10 +1073,18 @@ def analyze_xstar_zone1_probe(
     # Hydrogen, electron-fraction, and lightweight carbon-correlation rows are
     # retained across all DSEC evaluations so the next comparison can find the
     # first differing evaluation rather than only the final target call.
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the int field operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     def _int_field(row: Mapping[str, str], field: str, default: int = 0) -> int:
         value = row.get(field, "")
         return default if value in ("", None) else int(float(str(value)))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the float field operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     def _float_field(row: Mapping[str, str], field: str, default: float = 0.0) -> float:
         value = row.get(field, "")
         return default if value in ("", None) else parse_fortran_float(str(value))
@@ -1399,10 +1487,18 @@ def analyze_xstar_zone1_probe(
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the float operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _float(row: Mapping[str, str], field: str) -> float:
     return parse_fortran_float(row[field])
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the numeric comparison operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _numeric_comparison(
     python_rows: Sequence[Mapping[str, str]],
     xstar_rows: Sequence[Mapping[str, str]],
@@ -1412,9 +1508,17 @@ def _numeric_comparison(
     rtol: float,
     atol: float,
 ) -> list[dict[str, Any]]:
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the key operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     def key(row: Mapping[str, str]) -> tuple[str, ...]:
         return tuple(str(row.get(field, "")) for field in keys)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the number operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     def number(row: Mapping[str, str] | None, field: str) -> float:
         if row is None:
             return 0.0
@@ -1448,6 +1552,10 @@ def _numeric_comparison(
     return output
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the numeric comparison with presence operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _numeric_comparison_with_presence(
     python_rows: Sequence[Mapping[str, str]],
     xstar_rows: Sequence[Mapping[str, str]],
@@ -1466,9 +1574,17 @@ def _numeric_comparison_with_presence(
     rows.
     """
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the key operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     def key(row: Mapping[str, str]) -> tuple[str, ...]:
         return tuple(str(row.get(field, "")) for field in keys)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the number operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     def number(row: Mapping[str, str], field: str) -> float:
         value = row.get(field, "")
         if value in (None, ""):
@@ -1520,6 +1636,10 @@ def _numeric_comparison_with_presence(
     return output
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the canonical hydrogen phase operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _canonical_hydrogen_phase(row: Mapping[str, str]) -> dict[str, str]:
     """Return a row copy with the H mapping phase canonicalized.
 
@@ -1541,6 +1661,10 @@ def _canonical_hydrogen_phase(row: Mapping[str, str]) -> dict[str, str]:
     return out
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the first row operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _first_row(
     rows: Sequence[Mapping[str, Any]],
     *,
@@ -1550,6 +1674,10 @@ def _first_row(
     if not selected:
         return None
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the as int operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     def as_int(row: Mapping[str, Any], key: str) -> int:
         value = row.get(key, 0)
         if value in (None, ""):
@@ -1576,6 +1704,10 @@ def _first_row(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the row summary operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _row_summary(row: Mapping[str, Any] | None) -> dict[str, Any] | None:
     if row is None:
         return None
@@ -1592,6 +1724,10 @@ def _row_summary(row: Mapping[str, Any] | None) -> dict[str, Any] | None:
     return {key: row.get(key) for key in keys if key in row}
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the rows with fields operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _rows_with_fields(
     rows: Sequence[Mapping[str, str]],
     *,
@@ -1607,6 +1743,10 @@ def _rows_with_fields(
     ]
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Compare optional numeric groups for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _compare_optional_numeric_groups(
     groups: Sequence[tuple[Sequence[Mapping[str, str]], Sequence[Mapping[str, str]], Sequence[str], Sequence[str]]],
     *,
@@ -1627,6 +1767,10 @@ def _compare_optional_numeric_groups(
             )
     return rows
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Compare zone1 probe with python for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def compare_zone1_probe_with_python(
     *,
     xstar_analysis_dir: str | Path,
@@ -2078,6 +2222,10 @@ def compare_zone1_probe_with_python(
     xs_h_raw = _read_optional(xs / "xstar_zone1_hydrogen_state_path.csv")
     py_h = [_canonical_hydrogen_phase(row) for row in py_h_raw]
     xs_h = [_canonical_hydrogen_phase(row) for row in xs_h_raw]
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the phase rows operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     def _phase_rows(rows: Sequence[Mapping[str, str]], phases: set[int]) -> list[Mapping[str, str]]:
         return [
             row for row in rows
@@ -2211,6 +2359,10 @@ def compare_zone1_probe_with_python(
     carbon_corr_keys_xs = {tuple(str(row.get(key, "")) for key in carbon_corr_keys) for row in xs_carbon_corr}
     carbon_corr_ready = bool(carbon_corr_rows) and carbon_corr_keys_py == carbon_corr_keys_xs and all(bool(row["within_tolerance"]) for row in carbon_corr_rows)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the row keyed operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     def _row_keyed(rows, *, evaluation, phase_code, ion_stage):
         for row in rows:
             if (
@@ -2221,6 +2373,10 @@ def compare_zone1_probe_with_python(
                 return row
         return None
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the num operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     def _num(row, field):
         if row is None:
             return 0.0
@@ -2348,6 +2504,10 @@ def compare_zone1_probe_with_python(
 
     carbon_cii_ciii_solve_rows: list[dict[str, Any]] = []
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Append boundary row for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     def _append_boundary_row(row: Mapping[str, Any], *, locus: str, identity: str) -> None:
         carbon_cii_ciii_solve_rows.append({
             "evaluation_index": row.get("evaluation_index", ""),
@@ -2429,6 +2589,10 @@ def compare_zone1_probe_with_python(
     # v0.4.94: compare inner-Lucy rows with row-kind-specific keys.
     # v0.4.93 used one wide key containing many placeholder-zero columns;
     # that made physically identical Python/XSTAR rows fail to match.
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the kind operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     def _kind(rows: Sequence[Mapping[str, str]], name: str) -> list[Mapping[str, str]]:
         return [row for row in rows if str(row.get("row_kind", "")) == name]
 
@@ -2546,6 +2710,10 @@ def compare_zone1_probe_with_python(
         py_h and xs_h and py_electron and xs_electron
     )
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the failure candidate operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     def _failure_candidate(rows, phase_code: int | None = None):
         failed = [
             row for row in rows
@@ -2554,6 +2722,10 @@ def compare_zone1_probe_with_python(
         ]
         if not failed:
             return None
+        # XSTAR-FUNCTION-COMMENT-BEGIN
+        # Purpose: Implement the order operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+        # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+        # XSTAR-FUNCTION-COMMENT-END
         def _order(row):
             evaluation = row.get("evaluation_index", "")
             evaluation_order = 999999 if evaluation in (None, "") else int(evaluation)

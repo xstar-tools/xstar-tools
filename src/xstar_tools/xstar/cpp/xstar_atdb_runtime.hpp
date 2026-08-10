@@ -101,6 +101,10 @@ struct ProgramStorage {
 };
 
 ProductionParameters read_production_parameters(const std::filesystem::path& path);
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Resolve and validate the atomic-data location used by native ATDB readers without silently changing or downloading the scientific database.
+// Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
+// XSTAR-FUNCTION-COMMENT-END
 ResolvedAtomicData resolve_atomic_data(
     const std::filesystem::path& parameters_path,
     const std::string& parameters_json,

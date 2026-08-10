@@ -52,6 +52,10 @@ class BremsMapContext:
     ncn2: int
     ncn2m: int
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Validate BremsMapContext invariants before the value is consumed downstream.
+    # Reference context: XSTAR Manual ss. 11.3 and 11.6.5, source spectrum and continuum energy grid.
+    # XSTAR-FUNCTION-COMMENT-END
     def validate(self) -> None:
         n = int(self.ncn2)
         nm = int(self.ncn2m)
@@ -97,6 +101,10 @@ class BremsMapResult:
     source_file: str = "xstar/xstarlib/src/bremsmap.f90"
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the huntf operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.3 and 11.6.5, source spectrum and continuum energy grid.
+# XSTAR-FUNCTION-COMMENT-END
 def huntf(xx: Sequence[float], x: float, *, n: Optional[int] = None) -> int:
     """Translate ``huntf.f90`` and return the one-based selected index."""
     arr = np.asarray(xx, dtype=float).reshape(-1)
@@ -121,6 +129,10 @@ def huntf(xx: Sequence[float], x: float, *, n: Optional[int] = None) -> int:
     return max(1, min(nn, jlo))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the nbinc operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.3 and 11.6.5, source spectrum and continuum energy grid.
+# XSTAR-FUNCTION-COMMENT-END
 def nbinc(e: float, epi_eV: Sequence[float], ncn2: int) -> int:
     """Translate ``nbinc.f90`` and return its one-based bin index."""
     n = int(ncn2)
@@ -131,6 +143,10 @@ def nbinc(e: float, epi_eV: Sequence[float], ncn2: int) -> int:
     return huntf(epi_eV, float(e), n=numcon3)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Remap the incident/source continuum onto XSTAR's logarithmic working energy grid using the source hunt/bin interpolation conventions.
+# Reference context: XSTAR Manual ss. 11.3 and 11.6.5, source spectrum and continuum energy grid.
+# XSTAR-FUNCTION-COMMENT-END
 def bremsmap(
     bremsa: Sequence[float],
     bremsint_before: Sequence[float],
@@ -193,6 +209,10 @@ def bremsmap(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Apply bremsmap to state for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.3 and 11.6.5, source spectrum and continuum energy grid.
+# XSTAR-FUNCTION-COMMENT-END
 def apply_bremsmap_to_state(state: XSTARPythonState) -> BremsMapResult:
     """Apply ``bremsmap`` to caller-owned arrays in ``XSTARPythonState``."""
     rad = state.radiation
@@ -226,10 +246,18 @@ def apply_bremsmap_to_state(state: XSTARPythonState) -> BremsMapResult:
     return result
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Register bremsmap source routine for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.3 and 11.6.5, source spectrum and continuum energy grid.
+# XSTAR-FUNCTION-COMMENT-END
 def register_bremsmap_source_routine(driver: XSTARPythonDriver) -> None:
     driver.register_source_routine(XSTARSourceRoutine.BREMSMAP, apply_bremsmap_to_state)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Provide the direct-source reference for fortran reference cases for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.3 and 11.6.5, source spectrum and continuum energy grid.
+# XSTAR-FUNCTION-COMMENT-END
 def direct_fortran_reference_cases() -> Mapping[str, Mapping[str, Any]]:
     """Frozen outputs from the unmodified XSTAR routines compiled with stub modules."""
     return {
@@ -258,6 +286,10 @@ def direct_fortran_reference_cases() -> Mapping[str, Mapping[str, Any]]:
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Execute direct fortran reference validation for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.3 and 11.6.5, source spectrum and continuum energy grid.
+# XSTAR-FUNCTION-COMMENT-END
 def run_direct_fortran_reference_validation(*, rtol: float = 2.0e-15, atol: float = 0.0) -> Mapping[str, Any]:
     refs = direct_fortran_reference_cases()
 
@@ -295,6 +327,10 @@ def run_direct_fortran_reference_validation(*, rtol: float = 2.0e-15, atol: floa
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write bremsmap validation products for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.3 and 11.6.5, source spectrum and continuum energy grid.
+# XSTAR-FUNCTION-COMMENT-END
 def write_bremsmap_validation_products(summary: Mapping[str, Any], out_dir: str | Path) -> Mapping[str, str]:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)

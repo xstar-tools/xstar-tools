@@ -26,12 +26,20 @@
 
 namespace {
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Write message from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 void write_message(char* errbuf, std::size_t errbuf_size, const char* message) {
     if (!errbuf || errbuf_size == 0) return;
     std::strncpy(errbuf, message ? message : "", errbuf_size - 1);
     errbuf[errbuf_size - 1] = '\0';
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement finite6 as a local helper for the matrix kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 bool finite6(double a, double b, double c, double d, double e, double f) {
     return std::isfinite(a) && std::isfinite(b) && std::isfinite(c) &&
            std::isfinite(d) && std::isfinite(e) && std::isfinite(f);
@@ -42,19 +50,35 @@ bool finite6(double a, double b, double c, double d, double e, double f) {
 
 extern "C" {
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Return the ABI version for the matrix interface so callers can reject incompatible binary layouts before execution.
+// Reference context: Implementation/compatibility helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_matrix_abi_version() {
     return 1;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Report the compiled matrix backend name capability metadata used by backend selection and provenance.
+// Reference context: Implementation/provenance helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 const char* xstar_matrix_backend_name() {
     return "xstar_matrix_mg_ion_type49_auto_default_type53_optin_v18";
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Report the compiled matrix feature flags capability metadata used by backend selection and provenance.
+// Reference context: Implementation/provenance helper; no independent scientific formula.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_matrix_feature_flags() {
     // 1: skeleton/probe; 2: Mg record_type=7 matrix-term construction; 4: dense matrix fill; 8: selected simple ucalc branches; 16: data_type=51 ucalc; 32: Mg rates+matrix ABI; 2048: shadow-only element-batched simple-payload probe.
     return 1 | 2 | 4 | 8 | 16 | 32 | 64 | 128 | 256 | 512 | 1024 | 2048;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute matrix probe as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_matrix_probe(
     int n_records,
     int n_basis_rows,
@@ -80,6 +104,10 @@ int xstar_matrix_probe(
 //   raw_row, raw_col, source_ipmat_clamped
 // double output columns per emitted term, 4 columns:
 //   aj1, aj2, cj, cj2
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute matrix build mg type7 terms as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_matrix_build_mg_type7_terms(
     int n_records,
     int basis_n_rows,
@@ -209,6 +237,10 @@ int xstar_matrix_build_mg_type7_terms(
 //   5 fallback_unsupported_rate_data
 //   6 fallback_nonpositive_endpoint
 //   7 fallback_nonfinite_answer
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate matrix build mg rates and matrix using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_matrix_build_mg_rates_and_matrix(
     int n_records,
     int basis_n_rows,
@@ -349,6 +381,10 @@ int xstar_matrix_build_mg_rates_and_matrix(
 // Fill dense, heating, and secondary-heating matrices from emitted term arrays.
 // This is the first broader matrix-assembly loop moved into libxstar_matrix.so.
 // Rows/columns are one-based compact indices, matching MatrixTerm.row/column.
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Accumulate source-ordered rate contributions into the dense statistical-equilibrium matrix, including diagonal loss and off-diagonal population-transfer terms.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_matrix_dense_fill_terms(
     int n_terms,
     int n_rows,
@@ -403,6 +439,10 @@ int xstar_matrix_dense_fill_terms(
 // temperature and density.  It is a parity-gated building block for moving
 // larger rate-construction batches into libxstar_matrix.so.
 // Supported data_type values: 1, 2, 3, 7, 8, 20.
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute matrix eval simple ucalc as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_matrix_eval_simple_ucalc(
     int n_records,
     const long long* record,
@@ -511,12 +551,20 @@ int xstar_matrix_eval_simple_ucalc(
 // calc_hmc_ion matrix rows from those results.
 namespace {
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute matrix expo limited as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 double xstar_matrix_expo_limited(double x) {
     if (x < -60.0) x = -60.0;
     if (x > 60.0) x = 60.0;
     return std::exp(x);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute matrix splinem5 as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 double xstar_matrix_splinem5(const double* p, double x) {
     const double s = 1.0 / 30.0;
     const double s2 = 32.0 * s * (19.0*p[0] - 43.0*p[1] + 30.0*p[2] - 7.0*p[3] + p[4]);
@@ -536,6 +584,10 @@ double xstar_matrix_splinem5(const double* p, double x) {
 }
 
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute matrix spline9 natural as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 double xstar_matrix_spline9_natural(const double* y, double x) {
     const int n = 9;
     double xa[n];
@@ -566,6 +618,10 @@ double xstar_matrix_spline9_natural(const double* y, double x) {
     return a*y[klo] + b*y[khi] + ((a*a*a-a)*y2[klo] + (b*b*b-b)*y2[khi]) * h*h / 6.0;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate matrix type51 upsilon9 using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 51 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 bool xstar_matrix_type51_upsilon9(long long bt_type, double eij_ryd, double c_bt, const double* y, double temperature_k, double* out) {
     if (!out || eij_ryd <= 0.0 || c_bt <= 0.0 || temperature_k <= 0.0) return false;
     const double kte = temperature_k / eij_ryd / 1.57888e5;
@@ -592,6 +648,10 @@ bool xstar_matrix_type51_upsilon9(long long bt_type, double eij_ryd, double c_bt
     return true;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate matrix type51 upsilon5 using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 51 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 bool xstar_matrix_type51_upsilon5(long long bt_type, double eij_ryd, double c_bt, const double* y, double temperature_k, double* out) {
     if (!out || eij_ryd <= 0.0 || c_bt <= 0.0 || temperature_k <= 0.0) return false;
     const double e = std::fabs(temperature_k / (1.57888e5 * eij_ryd));
@@ -705,6 +765,10 @@ extern "C" int xstar_matrix_eval_type51_ucalc_batch(
 //   7 fallback_nonfinite_answer
 //   8 ucalc_cpp_applied
 //   9 ucalc_cpp_unsupported
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate matrix build mg type51 rates and matrix using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 51 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_matrix_build_mg_type51_rates_and_matrix(
     int n_records,
     int basis_n_rows,
@@ -910,6 +974,10 @@ int xstar_matrix_build_mg_type51_rates_and_matrix(
 //   9 ucalc_cpp_unsupported
 //  10 ion_cpp_calls
 //  11 ion_records_batched
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Evaluate matrix eval mg ion type51 rates and matrix using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
+// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 51 apply here.
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_matrix_eval_mg_ion_type51_rates_and_matrix(
     int n_records,
     int basis_n_rows,
@@ -977,6 +1045,10 @@ int xstar_matrix_eval_mg_ion_type51_rates_and_matrix(
 //   4: selected simple ucalc data_type group (1,2,3,7,8,20)
 // skip_mask bits:
 //   1: calc_hmc_ion source exclusion (rate_type=1,data_type=53 or rate_type 8/15)
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute matrix scan mg ion source records as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_matrix_scan_mg_ion_source_records(
     int n_data_types,
     int n_records,
@@ -1101,6 +1173,10 @@ int xstar_matrix_scan_mg_ion_source_records(
 //   11 skipped_source_exclusions
 //   12 unsupported_records
 //   13 loop_guard_hits
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute matrix eval mg ion source simple payloads as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_matrix_eval_mg_ion_source_simple_payloads(
     int n_data_types,
     int n_records,
@@ -1308,6 +1384,10 @@ int xstar_matrix_eval_mg_ion_source_simple_payloads(
 // out_stats: ions, seen, supported, emitted, cpp_calls, type1, type2, type3,
 //            type7, type8, type20, skipped, unsupported, guard_hits,
 //            overflow, compute_nanoseconds
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Compute matrix eval mg ion source simple payloads batch as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_matrix_eval_mg_ion_source_simple_payloads_batch(
     int n_ions,
     int n_data_types,
@@ -1497,6 +1577,10 @@ int xstar_matrix_eval_mg_ion_source_simple_payloads_batch(
 //   11 skipped_source_exclusions
 //   12 unsupported_records
 //   13 loop_guard_hits
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Apply accumulate mg ion source simple terms to the current model state while preserving the source ordering and normalization expected by later stages.
+// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
+// XSTAR-FUNCTION-COMMENT-END
 int xstar_matrix_accumulate_mg_ion_source_simple_terms(
     int n_data_types,
     int n_records,

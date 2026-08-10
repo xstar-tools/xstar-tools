@@ -66,6 +66,10 @@ class ComptonTableState:
     loaded: bool = True
     diagnostics: Mapping[str, Any] = field(default_factory=dict)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Validate ComptonTableState invariants before the value is consumed downstream.
+    # Reference context: XSTAR Manual s. 11.4.4; Kallman & Bautista (2001), Compton heating/cooling.
+    # XSTAR-FUNCTION-COMMENT-END
     def validate(self) -> None:
         n = int(self.ncomp)
         e = np.asarray(self.ecomp, dtype=float)
@@ -128,11 +132,19 @@ class Comp2Result:
     table_source_sha256: str
     source_file: str = "xstar/xstarlib/src/comp2.f90"
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the heating rate operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual s. 11.4.4; Kallman & Bautista (2001), Compton heating/cooling.
+    # XSTAR-FUNCTION-COMMENT-END
     def heating_rate(self, *, hydrogen_density_cm3: float, electron_fraction_xee: float) -> float:
         """Return ``heatf``'s Compton heating rate in erg cm^-3 s^-1."""
         xnx = float(hydrogen_density_cm3) * float(electron_fraction_xee)
         return float(self.cmp1) * xnx * XSTAR_ERG_PER_EV
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the cooling rate operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual s. 11.4.4; Kallman & Bautista (2001), Compton heating/cooling.
+    # XSTAR-FUNCTION-COMMENT-END
     def cooling_rate(self, *, hydrogen_density_cm3: float, electron_fraction_xee: float) -> float:
         """Return ``heatf``'s Compton cooling rate in erg cm^-3 s^-1."""
         xnx = float(hydrogen_density_cm3) * float(electron_fraction_xee)
@@ -149,6 +161,10 @@ class Comp2Context:
     ncn2: Optional[int] = None
     source: str = "xstar_comp2_same_call_probe"
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Validate Comp2Context invariants before the value is consumed downstream.
+    # Reference context: XSTAR Manual s. 11.4.4; Kallman & Bautista (2001), Compton heating/cooling.
+    # XSTAR-FUNCTION-COMMENT-END
     def validate(self) -> None:
         epi = np.asarray(self.epi_eV, dtype=float).reshape(-1)
         brem = np.asarray(self.bremsa, dtype=float).reshape(-1)
@@ -210,6 +226,10 @@ class Comp2ParityResult:
     continuum_grid_parity_ready: bool
     diagnostics: Mapping[str, Any] = field(default_factory=dict)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Report whether all prerequisites/results required by this stage are present and internally consistent.
+    # Reference context: XSTAR Manual s. 11.4.4; Kallman & Bautista (2001), Compton heating/cooling.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def ready(self) -> bool:
         return bool(
@@ -223,12 +243,20 @@ class Comp2ParityResult:
         )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the packaged coheat path operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual s. 11.4.4; Kallman & Bautista (2001), Compton heating/cooling.
+# XSTAR-FUNCTION-COMMENT-END
 def packaged_coheat_path() -> Path:
     """Return the packaged source copy of XSTAR ``coheat.dat``."""
     target = resources.files("xstar_tools.xstar").joinpath("data/coheat.dat")
     return Path(str(target))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Resolve coheat path for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual s. 11.4.4; Kallman & Bautista (2001), Compton heating/cooling.
+# XSTAR-FUNCTION-COMMENT-END
 def resolve_coheat_path(path: str | Path | None = None, *, atdb_path: str | Path | None = None) -> Path:
     """Resolve ``coheat.dat`` with explicit, XSTAR-data, then packaged precedence."""
     candidates: List[Path] = []
@@ -245,6 +273,10 @@ def resolve_coheat_path(path: str | Path | None = None, *, atdb_path: str | Path
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Load compton table for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual s. 11.4.4; Kallman & Bautista (2001), Compton heating/cooling.
+# XSTAR-FUNCTION-COMMENT-END
 def load_compton_table(path: str | Path | None = None, *, atdb_path: str | Path | None = None) -> ComptonTableState:
     """Translate the ``xstarsetup.f90`` global Compton-table initialization."""
     target = resolve_coheat_path(path, atdb_path=atdb_path)
@@ -305,6 +337,10 @@ def load_compton_table(path: str | Path | None = None, *, atdb_path: str | Path 
     return state
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the hunt3 one based operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual s. 11.4.4; Kallman & Bautista (2001), Compton heating/cooling.
+# XSTAR-FUNCTION-COMMENT-END
 def hunt3_one_based(grid: Sequence[float], x: float) -> int:
     """Return XSTAR ``hunt3``'s one-based bracket index for monotonic grids."""
     arr = np.asarray(grid, dtype=float).reshape(-1)
@@ -318,6 +354,10 @@ def hunt3_one_based(grid: Sequence[float], x: float) -> int:
     return max(1, min(int(arr.size), index))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the cmpfnc operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual s. 11.4.4; Kallman & Bautista (2001), Compton heating/cooling.
+# XSTAR-FUNCTION-COMMENT-END
 def cmpfnc(ee: float, sxx: float, table: ComptonTableState) -> CmpFncResult:
     """Translate ``cmpfnc.f90`` exactly for one photon/temperature pair."""
     ee = float(ee)
@@ -376,6 +416,10 @@ def cmpfnc(ee: float, sxx: float, table: ComptonTableState) -> CmpFncResult:
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Compute Compton energy exchange between the radiation field and thermal electrons, contributing both heating and cooling to local thermal balance.
+# Reference context: XSTAR Manual s. 11.4.4; Kallman & Bautista (2001), Compton heating/cooling.
+# XSTAR-FUNCTION-COMMENT-END
 def comp2(
     epi_eV: Sequence[float],
     bremsa: Sequence[float],
@@ -451,6 +495,10 @@ def comp2(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the comp2 continuum result operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual s. 11.4.4; Kallman & Bautista (2001), Compton heating/cooling.
+# XSTAR-FUNCTION-COMMENT-END
 def comp2_continuum_result(
     context: Comp2Context,
     *,
@@ -496,6 +544,10 @@ def comp2_continuum_result(
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Read csv for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual s. 11.4.4; Kallman & Bautista (2001), Compton heating/cooling.
+# XSTAR-FUNCTION-COMMENT-END
 def _read_csv(path: Path) -> List[Dict[str, str]]:
     if not path.is_file():
         return []
@@ -503,6 +555,10 @@ def _read_csv(path: Path) -> List[Dict[str, str]]:
         return list(csv.DictReader(handle))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Select call id for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual s. 11.4.4; Kallman & Bautista (2001), Compton heating/cooling.
+# XSTAR-FUNCTION-COMMENT-END
 def _select_call_id(rows: Iterable[Mapping[str, str]], requested: Optional[int]) -> int:
     ids = sorted({int(row["calc_hmc_all_call_id"]) for row in rows})
     if not ids:
@@ -513,6 +569,10 @@ def _select_call_id(rows: Iterable[Mapping[str, str]], requested: Optional[int])
     return selected
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Load comp2 probe reference for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual s. 11.4.4; Kallman & Bautista (2001), Compton heating/cooling.
+# XSTAR-FUNCTION-COMMENT-END
 def load_comp2_probe_reference(
     probe_dir: str | Path,
     *,
@@ -571,16 +631,28 @@ def load_comp2_probe_reference(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the difference operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual s. 11.4.4; Kallman & Bautista (2001), Compton heating/cooling.
+# XSTAR-FUNCTION-COMMENT-END
 def _difference(got: float, expected: float) -> Tuple[float, float]:
     absolute = abs(float(got) - float(expected))
     relative = absolute / max(abs(float(expected)), 1.0e-300)
     return absolute, relative
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the within operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual s. 11.4.4; Kallman & Bautista (2001), Compton heating/cooling.
+# XSTAR-FUNCTION-COMMENT-END
 def _within(got: float, expected: float, *, rtol: float, atol: float) -> bool:
     return abs(float(got) - float(expected)) <= float(atol) + float(rtol) * abs(float(expected))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Compare comp2 probe for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual s. 11.4.4; Kallman & Bautista (2001), Compton heating/cooling.
+# XSTAR-FUNCTION-COMMENT-END
 def compare_comp2_probe(
     reference: Comp2ProbeReference,
     *,
@@ -647,6 +719,10 @@ def compare_comp2_probe(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write comp2 parity products for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual s. 11.4.4; Kallman & Bautista (2001), Compton heating/cooling.
+# XSTAR-FUNCTION-COMMENT-END
 def write_comp2_parity_products(
     parity: Comp2ParityResult,
     out_dir: str | Path,

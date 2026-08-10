@@ -66,6 +66,10 @@ struct ComponentLibrary {
         }
         return *this;
     }
+    // XSTAR-FUNCTION-COMMENT-BEGIN
+    // Purpose: Implement ~ComponentLibrary as a local helper for the xstar backend cpp module; inputs and outputs are kept in the source-compatible units expected by its caller.
+    // Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+    // XSTAR-FUNCTION-COMMENT-END
     ~ComponentLibrary() { if (handle) dlclose(handle); }
 };
 
@@ -75,6 +79,10 @@ struct CppBackendContext {
     xstar_context_stats_v1 stats{};
 };
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement component directory as a local helper for the xstar backend cpp module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 std::filesystem::path component_directory(const xstar_config_v1& config) {
     const std::string configured = xstar_standalone::field_text(
         config.plugin_directory, XSTAR_PATH_SIZE);
@@ -83,6 +91,10 @@ std::filesystem::path component_directory(const xstar_config_v1& config) {
         reinterpret_cast<const void*>(&xstar_backend_get_descriptor_v1));
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Load component into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 ComponentLibrary load_component(
     std::uint32_t id,
     const char* logical_name,
@@ -122,6 +134,10 @@ ComponentLibrary load_component(
     return result;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement initialize components as a local helper for the xstar backend cpp module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 void initialize_components(CppBackendContext& context) {
     const auto directory = component_directory(context.config);
     context.components = {{
@@ -135,6 +151,10 @@ void initialize_components(CppBackendContext& context) {
     }};
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement cpp create as a local helper for the xstar backend cpp module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 int cpp_create(const xstar_config_v1* config, void** output, char* message, std::size_t message_size) {
     if (!config || !output) return XSTAR_STATUS_INVALID_ARGUMENT;
     auto context = std::make_unique<CppBackendContext>();
@@ -151,10 +171,18 @@ int cpp_create(const xstar_config_v1* config, void** output, char* message, std:
     return XSTAR_STATUS_OK;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement cpp destroy as a local helper for the xstar backend cpp module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 void cpp_destroy(void* opaque) {
     delete static_cast<CppBackendContext*>(opaque);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement cpp reset as a local helper for the xstar backend cpp module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 int cpp_reset(void* opaque, char* message, std::size_t message_size) {
     auto* context = static_cast<CppBackendContext*>(opaque);
     if (!context) return XSTAR_STATUS_INVALID_ARGUMENT;
@@ -163,6 +191,10 @@ int cpp_reset(void* opaque, char* message, std::size_t message_size) {
     return XSTAR_STATUS_OK;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement copy scaffold result as a local helper for the xstar backend cpp module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 int copy_scaffold_result(
     CppBackendContext& context,
     const xstar_zone_input_v1& input,
@@ -204,6 +236,10 @@ int copy_scaffold_result(
     return XSTAR_STATUS_OK;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement cpp run zone as a local helper for the xstar backend cpp module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 int cpp_run_zone(
     void* opaque,
     const xstar_zone_input_v1* input,
@@ -216,6 +252,10 @@ int cpp_run_zone(
     return copy_scaffold_result(*context, *input, *output, message, message_size);
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement cpp run batch as a local helper for the xstar backend cpp module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 int cpp_run_batch(
     void* opaque,
     const xstar_zone_input_v1* inputs,
@@ -238,6 +278,10 @@ int cpp_run_batch(
     return XSTAR_STATUS_OK;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement cpp get stats as a local helper for the xstar backend cpp module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 int cpp_get_stats(const void* opaque, xstar_context_stats_v1* stats, char* message, std::size_t message_size) {
     const auto* context = static_cast<const CppBackendContext*>(opaque);
     if (!context || !stats) return XSTAR_STATUS_INVALID_ARGUMENT;
@@ -247,6 +291,10 @@ int cpp_get_stats(const void* opaque, xstar_context_stats_v1* stats, char* messa
     return XSTAR_STATUS_OK;
 }
 
+// XSTAR-FUNCTION-COMMENT-BEGIN
+// Purpose: Implement cpp get component info as a local helper for the xstar backend cpp module; inputs and outputs are kept in the source-compatible units expected by its caller.
+// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// XSTAR-FUNCTION-COMMENT-END
 int cpp_get_component_info(
     const void* opaque,
     std::uint32_t component_id,

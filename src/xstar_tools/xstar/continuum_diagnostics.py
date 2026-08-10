@@ -39,6 +39,10 @@ PHASE_SNAPSHOT_KEY = "continuum_phase_snapshots_v0530"
 UCALC_SIDE_EFFECT_KEY = "ucalc_continuum_side_effects_v0530"
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the json safe operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _json_safe(value: Any) -> Any:
     """Return a JSON/CSV-friendly scalar or compact container."""
     if isinstance(value, np.generic):
@@ -64,6 +68,10 @@ def _json_safe(value: Any) -> Any:
     return str(out)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the finite float operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _finite_float(value: Any, default: float = 0.0) -> float:
     try:
         out = float(value)
@@ -72,6 +80,10 @@ def _finite_float(value: Any, default: float = 0.0) -> float:
     return out if math.isfinite(out) else float(default)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the finite int operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _finite_int(value: Any, default: int = 0) -> int:
     try:
         return int(value)
@@ -79,6 +91,10 @@ def _finite_int(value: Any, default: int = 0) -> int:
         return int(default)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the value at one based operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _value_at_one_based(arr: np.ndarray, bin_one_based: int) -> float:
     idx = int(bin_one_based) - 1
     if idx < 0 or idx >= arr.size:
@@ -86,6 +102,10 @@ def _value_at_one_based(arr: np.ndarray, bin_one_based: int) -> float:
     return _finite_float(arr[idx])
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the summarize array operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def summarize_array(values: Any, *, bins: Sequence[int] = DIAGNOSTIC_BINS_ONE_BASED) -> dict[str, Any]:
     """Summarize one continuum-grid vector with strict nonzero semantics."""
     arr = np.asarray(values, dtype=float).reshape(-1)
@@ -104,6 +124,10 @@ def summarize_array(values: Any, *, bins: Sequence[int] = DIAGNOSTIC_BINS_ONE_BA
     return out
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the phase array rows operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _phase_array_rows(state: Any, phase: str, *, note: str = "", phase_index: int = 0) -> list[dict[str, Any]]:
     workspace = state.control.get("radial_transfer_workspace")
     if workspace is None:
@@ -160,6 +184,10 @@ def _phase_array_rows(state: Any, phase: str, *, note: str = "", phase_index: in
     return rows
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Append phase snapshot for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def append_phase_snapshot(state: Any, phase: str, *, note: str = "") -> None:
     """Append compact per-array summaries for one source-order phase."""
     if not bool(state.control.get("continuum_phase_snapshot_enabled", True)):
@@ -171,16 +199,28 @@ def append_phase_snapshot(state: Any, phase: str, *, note: str = "") -> None:
         state.outputs.setdefault(PHASE_SNAPSHOT_KEY, []).extend(rows)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the diagnostics mapping operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _diagnostics_mapping(result: Any) -> Mapping[str, Any]:
     diagnostics = getattr(result, "diagnostics", {})
     return diagnostics if isinstance(diagnostics, Mapping) else {}
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the nested phint53 diagnostics operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _nested_phint53_diagnostics(diagnostics: Mapping[str, Any]) -> Mapping[str, Any]:
     nested = diagnostics.get("phint53_diagnostics", {})
     return nested if isinstance(nested, Mapping) else {}
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the array diag summary operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _array_diag_summary(diagnostics: Mapping[str, Any], key: str) -> dict[str, Any]:
     values = diagnostics.get(key)
     if values is None:
@@ -207,6 +247,10 @@ def _array_diag_summary(diagnostics: Mapping[str, Any], key: str) -> dict[str, A
     return out
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Append ucalc continuum side effect diagnostic for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def append_ucalc_continuum_side_effect_diagnostic(
     context: Any,
     result: Any,
@@ -296,6 +340,10 @@ def append_ucalc_continuum_side_effect_diagnostic(
     rows.append(row)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write csv for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _write_csv(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
     fields: list[str] = []
     seen: set[str] = set()
@@ -311,12 +359,20 @@ def _write_csv(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
             writer.writerow({key: _json_safe(row.get(key, "")) for key in fields})
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write jsonl for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _write_jsonl(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
     with path.open("w", encoding="utf-8") as handle:
         for row in rows:
             handle.write(json.dumps(_json_safe(dict(row)), sort_keys=True) + "\n")
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write continuum diagnostics for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def write_continuum_diagnostics(state: Any, out_dir: str | Path) -> dict[str, str]:
     """Write phase-snapshot and UCalc side-effect diagnostics, if present."""
     out = Path(out_dir)

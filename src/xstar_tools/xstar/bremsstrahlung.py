@@ -58,6 +58,10 @@ class BremsstrahlungContext:
     ncn2: Optional[int] = None
     source: str = "xstar_bremem_same_call_probe"
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Validate BremsstrahlungContext invariants before the value is consumed downstream.
+    # Reference context: XSTAR Manual ss. 11.4.4 and 11.6; Kallman & Bautista (2001), thermal bremsstrahlung.
+    # XSTAR-FUNCTION-COMMENT-END
     def validate(self) -> None:
         epi = np.asarray(self.epi_eV, dtype=float).reshape(-1)
         brc = np.asarray(self.brcems_before, dtype=float).reshape(-1)
@@ -157,6 +161,10 @@ class BremsstrahlungParityResult:
     max_opacity_relative_difference: float
     diagnostics: Mapping[str, Any] = field(default_factory=dict)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Report whether all prerequisites/results required by this stage are present and internally consistent.
+    # Reference context: XSTAR Manual ss. 11.4.4 and 11.6; Kallman & Bautista (2001), thermal bremsstrahlung.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def ready(self) -> bool:
         return bool(
@@ -169,6 +177,10 @@ class BremsstrahlungParityResult:
         )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the relative difference operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6; Kallman & Bautista (2001), thermal bremsstrahlung.
+# XSTAR-FUNCTION-COMMENT-END
 def _relative_difference(a: np.ndarray | float, b: np.ndarray | float) -> np.ndarray:
     aa = np.asarray(a, dtype=float)
     bb = np.asarray(b, dtype=float)
@@ -177,6 +189,10 @@ def _relative_difference(a: np.ndarray | float, b: np.ndarray | float) -> np.nda
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build thermal bremsstrahlung continuum emissivity on the working energy grid while retaining the source Gaunt-factor/grid conventions.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6; Kallman & Bautista (2001), thermal bremsstrahlung.
+# XSTAR-FUNCTION-COMMENT-END
 def bremem(
     epi_eV: Sequence[float],
     brcems_before: Sequence[float],
@@ -280,6 +296,10 @@ def bremem(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the bremem continuum result operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6; Kallman & Bautista (2001), thermal bremsstrahlung.
+# XSTAR-FUNCTION-COMMENT-END
 def bremem_continuum_result(
     context: BremsstrahlungContext,
     *,
@@ -312,6 +332,10 @@ def bremem_continuum_result(
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Load bremem probe reference for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6; Kallman & Bautista (2001), thermal bremsstrahlung.
+# XSTAR-FUNCTION-COMMENT-END
 def load_bremem_probe_reference(
     probe_dir: str | Path,
     *,
@@ -355,6 +379,10 @@ def load_bremem_probe_reference(
             f"found {len(grows)}"
         )
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the array operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.4 and 11.6; Kallman & Bautista (2001), thermal bremsstrahlung.
+    # XSTAR-FUNCTION-COMMENT-END
     def array(key: str) -> np.ndarray:
         return np.asarray(
             [parse_fortran_float(item[key]) for item in grows], dtype=float
@@ -387,6 +415,10 @@ def load_bremem_probe_reference(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Compare bremem probe for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6; Kallman & Bautista (2001), thermal bremsstrahlung.
+# XSTAR-FUNCTION-COMMENT-END
 def compare_bremem_probe(
     reference: BremsstrahlungProbeReference,
     *,
@@ -472,6 +504,10 @@ def compare_bremem_probe(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write bremem parity products for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.4 and 11.6; Kallman & Bautista (2001), thermal bremsstrahlung.
+# XSTAR-FUNCTION-COMMENT-END
 def write_bremem_parity_products(
     parity: BremsstrahlungParityResult,
     out_dir: str | Path,

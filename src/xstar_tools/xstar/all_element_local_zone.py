@@ -84,6 +84,10 @@ OXYGEN_CALL73_REQUIRED_TRUE_FIELDS: Tuple[str, ...] = (
 )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Locate parity summary for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4, all-element local balance.
+# XSTAR-FUNCTION-COMMENT-END
 def _find_parity_summary(path: str | Path) -> Path:
     root = Path(path)
     if root.is_file():
@@ -108,6 +112,10 @@ def _find_parity_summary(path: str | Path) -> Path:
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Validate the current state invariants before the value is consumed downstream.
+# Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4, all-element local balance.
+# XSTAR-FUNCTION-COMMENT-END
 def validate_oxygen_call73_regression(
     path: str | Path,
     *,
@@ -187,19 +195,35 @@ class AllElementFixedStatePlan:
     oxygen_regression: OxygenCall73RegressionGate
     abundance_floor: float = 1.0e-24
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the abundant element z operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4, all-element local balance.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def abundant_element_z(self) -> Tuple[int, ...]:
         return tuple(item.element_z for item in self.elements)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the initial population elements operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4, all-element local balance.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def initial_population_elements(self) -> Tuple[int, ...]:
         return tuple(sorted(int(z) for z in self.initial_population_references))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the missing initial population elements operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4, all-element local balance.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def missing_initial_population_elements(self) -> Tuple[int, ...]:
         have = set(self.initial_population_elements)
         return tuple(z for z in self.abundant_element_z if z not in have)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the full detailed probe coverage operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4, all-element local balance.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def full_detailed_probe_coverage(self) -> bool:
         required = set(self.abundant_element_z)
@@ -211,6 +235,10 @@ class AllElementFixedStatePlan:
         )
         return bool(required) and all(required <= family for family in families)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the execution scope ready operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4, all-element local balance.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def execution_scope_ready(self) -> bool:
         return bool(self.elements) and self.oxygen_regression.ready
@@ -224,6 +252,10 @@ class AllElementFixedStateRun:
     result: FixedStateCalcHMCAllResult
     initial_population_policy: str
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the all element execution ready operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4, all-element local balance.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def all_element_execution_ready(self) -> bool:
         return bool(
@@ -233,12 +265,20 @@ class AllElementFixedStateRun:
             and self.result.charge_closure_scope_complete
         )
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the all element detailed parity probe ready operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4, all-element local balance.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def all_element_detailed_parity_probe_ready(self) -> bool:
         return self.plan.full_detailed_probe_coverage
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Read csv optional for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4, all-element local balance.
+# XSTAR-FUNCTION-COMMENT-END
 def _read_csv_optional(path: Path) -> List[Dict[str, str]]:
     if not path.exists():
         return []
@@ -246,6 +286,10 @@ def _read_csv_optional(path: Path) -> List[Dict[str, str]]:
         return list(csv.DictReader(handle))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Resolve call id for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4, all-element local balance.
+# XSTAR-FUNCTION-COMMENT-END
 def _resolve_call_id(rows: Sequence[Mapping[str, str]], requested: Optional[int]) -> int:
     ids = sorted({int(row["calc_hmc_all_call_id"]) for row in rows})
     if not ids:
@@ -259,6 +303,10 @@ def _resolve_call_id(rows: Sequence[Mapping[str, str]], requested: Optional[int]
     return int(requested)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the elements in rows operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4, all-element local balance.
+# XSTAR-FUNCTION-COMMENT-END
 def _elements_in_rows(rows: Iterable[Mapping[str, str]], call_id: int) -> Tuple[int, ...]:
     result = {
         int(row["element_z"])
@@ -269,6 +317,10 @@ def _elements_in_rows(rows: Iterable[Mapping[str, str]], call_id: int) -> Tuple[
     return tuple(sorted(result))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Load all element fixed state plan for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4, all-element local balance.
+# XSTAR-FUNCTION-COMMENT-END
 def load_all_element_fixed_state_plan(
     probe_dir: str | Path,
     *,
@@ -371,6 +423,10 @@ def load_all_element_fixed_state_plan(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build all element fixed state requests for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4, all-element local balance.
+# XSTAR-FUNCTION-COMMENT-END
 def build_all_element_fixed_state_requests(
     plan: AllElementFixedStatePlan,
     *,
@@ -439,6 +495,10 @@ def build_all_element_fixed_state_requests(
     return tuple(requests)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Execute all element fixed state for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4, all-element local balance.
+# XSTAR-FUNCTION-COMMENT-END
 def run_all_element_fixed_state(
     master: Any,
     derived: Any,
@@ -512,6 +572,10 @@ def run_all_element_fixed_state(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write all element fixed state products for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual ss. 11.4.1 and 11.4.4, all-element local balance.
+# XSTAR-FUNCTION-COMMENT-END
 def write_all_element_fixed_state_products(
     run: AllElementFixedStateRun,
     out_dir: str | Path,

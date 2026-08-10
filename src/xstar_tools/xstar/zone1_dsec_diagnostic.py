@@ -133,6 +133,10 @@ class CoolingComparisonRow:
 
 
 class _Accumulator:
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Initialize this object and establish the invariants required by later operations.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     def __init__(self, name: str, dtype: str, call_id: int, evaluation_index: int) -> None:
         self.name = name
         self.dtype = dtype
@@ -151,6 +155,10 @@ class _Accumulator:
         self.last = math.nan
         self.sha = hashlib.sha256()
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the add operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     def add(self, value: float | int, *, logical_index: int) -> None:
         x = float(value)
         self.count += 1
@@ -173,6 +181,10 @@ class _Accumulator:
         else:
             self.sha.update(struct.pack("<d", x))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the finish operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     def finish(self, shape: Sequence[int]) -> NumericFingerprint:
         return NumericFingerprint(
             evaluation_index=self.evaluation_index,
@@ -195,6 +207,10 @@ class _Accumulator:
         )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the numeric fingerprint operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def numeric_fingerprint(
     values: Any,
     *,
@@ -213,6 +229,10 @@ def numeric_fingerprint(
     return acc.finish(array.shape)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the text fingerprint operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _text_fingerprint(
     value: Any, *, name: str, evaluation_index: int
 ) -> NumericFingerprint:
@@ -224,6 +244,10 @@ def _text_fingerprint(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the mapping values operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _mapping_values(mapping: Mapping[Any, Any] | None) -> np.ndarray:
     if not mapping:
         return np.zeros((0, 4), dtype=float)
@@ -235,6 +259,10 @@ def _mapping_values(mapping: Mapping[Any, Any] | None) -> np.ndarray:
     return np.asarray(rows, dtype=float)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the structural state operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _structural_state(value: Any) -> Any:
     """Return a bounded JSON-safe description of non-array mutable state."""
     if value is None or isinstance(value, (str, int, float, bool)):
@@ -282,6 +310,10 @@ def _structural_state(value: Any) -> Any:
     return {"class": value.__class__.__name__, "repr": repr(value)}
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the collect numeric leaves operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _collect_numeric_leaves(
     value: Any,
     *,
@@ -357,6 +389,10 @@ def _collect_numeric_leaves(
             )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the snapshot fingerprints operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def snapshot_fingerprints(
     snapshot: DsecCalcHMCAllInputSnapshot,
 ) -> Tuple[NumericFingerprint, ...]:
@@ -450,6 +486,10 @@ def snapshot_fingerprints(
     return tuple(sorted(rows, key=lambda row: row.name))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the result fingerprints operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def result_fingerprints(
     result: FixedStateCalcHMCAllResult, *, evaluation_index: int
 ) -> Mapping[str, Any]:
@@ -502,6 +542,10 @@ def result_fingerprints(
     return values
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the extract python all element fixed state operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def extract_python_all_element_fixed_state(
     result: FixedStateCalcHMCAllResult, *, evaluation_index: int
 ) -> list[dict[str, Any]]:
@@ -530,6 +574,10 @@ def extract_python_all_element_fixed_state(
     return rows
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the replay same entry state operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def replay_same_entry_state(
     master: Any,
     derived: Any,
@@ -541,6 +589,10 @@ def replay_same_entry_state(
             "snapshot lacks element_requests required for deterministic replay"
         )
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Execute once for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     def run_once() -> FixedStateCalcHMCAllResult:
         kwargs = {
             key: copy.deepcopy(value) for key, value in snapshot.calc_kwargs.items()
@@ -600,6 +652,10 @@ def replay_same_entry_state(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the extract python carbon rates operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def extract_python_carbon_rates(
     result: FixedStateCalcHMCAllResult,
     *,
@@ -641,10 +697,18 @@ def extract_python_carbon_rates(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the format float sequence operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _format_float_sequence(values: Sequence[float]) -> str:
     return ";".join(f"{float(value):.17e}" for value in values)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the extract python civ preliminary records operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def extract_python_civ_preliminary_records(
     result: FixedStateCalcHMCAllResult,
     *,
@@ -735,6 +799,10 @@ def extract_python_civ_preliminary_records(
     return tuple(output)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the extract python carbon topology operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def extract_python_carbon_topology(
     result: FixedStateCalcHMCAllResult,
     *,
@@ -765,6 +833,10 @@ def extract_python_carbon_topology(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the extract python carbon initial populations operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def extract_python_carbon_initial_populations(
     result: FixedStateCalcHMCAllResult,
     *,
@@ -790,6 +862,10 @@ def extract_python_carbon_initial_populations(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the extract python carbon state path operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def extract_python_carbon_state_path(
     result: FixedStateCalcHMCAllResult,
     *,
@@ -803,6 +879,10 @@ def extract_python_carbon_state_path(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the extract python carbon stage totals operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def extract_python_carbon_stage_totals(
     result: FixedStateCalcHMCAllResult,
     *,
@@ -817,6 +897,10 @@ def extract_python_carbon_stage_totals(
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the extract python carbon msolvelucy inner eval11 outer1 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def extract_python_carbon_msolvelucy_inner_eval11_outer1(
     result: FixedStateCalcHMCAllResult,
     *,
@@ -1059,6 +1143,10 @@ def extract_python_carbon_msolvelucy_inner_eval11_outer1(
     return tuple(rows)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the extract python carbon alias boundaries operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def extract_python_carbon_alias_boundaries(
     result: FixedStateCalcHMCAllResult,
     *,
@@ -1072,6 +1160,10 @@ def extract_python_carbon_alias_boundaries(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the extract python hydrogen state path operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def extract_python_hydrogen_state_path(
     result: FixedStateCalcHMCAllResult,
     *,
@@ -1108,6 +1200,10 @@ def extract_python_hydrogen_state_path(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the extract python electron fraction path operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def extract_python_electron_fraction_path(
     result: FixedStateCalcHMCAllResult,
     *,
@@ -1121,6 +1217,10 @@ def extract_python_electron_fraction_path(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the extract python carbon stage correlation operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def extract_python_carbon_stage_correlation(
     result: FixedStateCalcHMCAllResult,
     *,
@@ -1134,6 +1234,10 @@ def extract_python_carbon_stage_correlation(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the extract python carbon normalization row operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def extract_python_carbon_normalization_row(
     result: FixedStateCalcHMCAllResult,
     *,
@@ -1171,6 +1275,10 @@ def extract_python_carbon_normalization_row(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the extract python cv level populations operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def extract_python_cv_level_populations(
     result: FixedStateCalcHMCAllResult,
     *,
@@ -1212,6 +1320,10 @@ def extract_python_cv_level_populations(
     return tuple(output)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the carbon cooling logical rows operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def carbon_cooling_logical_rows(
     result: FixedStateCalcHMCAllResult, *, evaluation_index: int
 ) -> list[dict[str, Any]]:
@@ -1256,6 +1368,10 @@ def carbon_cooling_logical_rows(
     return rows
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the extract python cv matrix audit operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def extract_python_cv_matrix_audit(
     result: FixedStateCalcHMCAllResult,
     *,
@@ -1342,6 +1458,10 @@ def extract_python_cv_matrix_audit(
     return tuple(output)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the carbon cooling rows operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def carbon_cooling_rows(
     result: FixedStateCalcHMCAllResult, *, evaluation_index: int
 ) -> list[dict[str, Any]]:
@@ -1379,6 +1499,10 @@ def carbon_cooling_rows(
     return rows
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Compare cooling terms for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def compare_cooling_terms(
     python_rows: Sequence[Mapping[str, Any]],
     xstar_rows: Sequence[Mapping[str, Any]],
@@ -1386,6 +1510,10 @@ def compare_cooling_terms(
     rtol: float = 5.0e-5,
     atol: float = 1.0e-30,
 ) -> Tuple[CoolingComparisonRow, ...]:
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the key operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     def key(row: Mapping[str, Any]) -> tuple[int, int, int, int]:
         return (
             int(row["evaluation_index"]),
@@ -1418,6 +1546,10 @@ def compare_cooling_terms(
     return tuple(output)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the enforce cooling gate operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def enforce_cooling_gate(rows: Sequence[CoolingComparisonRow]) -> None:
     failed = [row for row in rows if not row.within_tolerance]
     if failed:
@@ -1431,6 +1563,10 @@ def enforce_cooling_gate(rows: Sequence[CoolingComparisonRow]) -> None:
         )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write rows for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _write_rows(path: Path, rows: Sequence[Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if not rows:
@@ -1451,6 +1587,10 @@ def _write_rows(path: Path, rows: Sequence[Any]) -> None:
         writer.writerows(dictionaries)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write zone1 python diagnostic products for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def write_zone1_python_diagnostic_products(
     *,
     snapshots: Sequence[DsecCalcHMCAllInputSnapshot],

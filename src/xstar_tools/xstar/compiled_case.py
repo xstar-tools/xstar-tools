@@ -41,6 +41,10 @@ class _Stats(ctypes.Structure):
     ]
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Load operation for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _load() -> ctypes.CDLL:
     global _LIB
     if _LIB is not None:
@@ -82,6 +86,10 @@ def _load() -> ctypes.CDLL:
     raise RuntimeError("; ".join(errors) or "libxstar_api.so unavailable")
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the bundled case path operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def bundled_case_path() -> Path:
     """Return the installed v0.6.48.3 deprecated compiled benchmark case directory."""
     item = resources.files("xstar_tools.benchmarks").joinpath(
@@ -90,6 +98,10 @@ def bundled_case_path() -> Path:
     return Path(str(item))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the compiled case status operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def compiled_case_status(case_dir: str | Path | None = None) -> dict[str, Any]:
     path = Path(case_dir) if case_dir is not None else bundled_case_path()
     manifest = path / "manifest.txt"
@@ -115,6 +127,10 @@ def compiled_case_status(case_dir: str | Path | None = None) -> dict[str, Any]:
         return {"available": False, "case_dir": str(path), "error": str(exc)}
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Execute compiled case for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def run_compiled_case(
     output_dir: str | Path,
     *,

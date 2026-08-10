@@ -36,6 +36,10 @@ import time
 import numpy as np
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the install astropy numpy compatibility operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _install_astropy_numpy_compatibility() -> None:
     """Install narrow NumPy shims needed by older Astropy on new NumPy.
 
@@ -51,6 +55,10 @@ def _install_astropy_numpy_compatibility() -> None:
     except Exception:
         return
     if not hasattr(_np_function_base, "_check_interpolation_as_method"):
+        # XSTAR-FUNCTION-COMMENT-BEGIN
+        # Purpose: Check interpolation as method for this module while preserving the surrounding source/runtime invariants.
+        # Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+        # XSTAR-FUNCTION-COMMENT-END
         def _check_interpolation_as_method(method, interpolation, fname):
             if method != "linear":
                 raise TypeError(
@@ -84,14 +92,26 @@ FINAL_RRC_ACTIVITY_FLOOR = 1.0e-36
 FINAL_LINE_LIMIT = 600
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the r4 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _r4(value: float) -> float:
     return float(R4(value))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the r4 array operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _r4_array(values: Any) -> np.ndarray:
     return np.asarray(values, dtype=R4)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the fixed operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _fixed(text: str, width: int) -> str:
     return str(text)[:width].ljust(width)
 
@@ -181,6 +201,10 @@ class ShellOutputHeader:
     logxi: float
     state_source: str = ""
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the real4 keywords operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+    # XSTAR-FUNCTION-COMMENT-END
     def real4_keywords(self) -> dict[str, float]:
         return {
             "RINNER": _r4(self.inner_radius_cm),
@@ -194,6 +218,10 @@ class ShellOutputHeader:
             "LOGXI": _r4(self.logxi),
         }
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the fits keywords operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+    # XSTAR-FUNCTION-COMMENT-END
     def fits_keywords(self) -> dict[str, object]:
         values = self.real4_keywords()
         comments = {
@@ -226,6 +254,10 @@ class OutputTable:
     header_keywords: Mapping[str, object] = field(default_factory=dict)
     source_file: str = ""
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the nrows operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def nrows(self) -> int:
         if not self.columns:
@@ -251,6 +283,10 @@ class DetailOutputStore:
     records: list[DetailShellOutput] = field(default_factory=list)
     inserted_after_hdus: list[int] = field(default_factory=list)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Insert after hdu for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+    # XSTAR-FUNCTION-COMMENT-END
     def insert_after_hdu(self, hdunum_one_based: int, record: DetailShellOutput) -> None:
         # Primary + PARAMETERS occupy HDUs 1 and 2.  savd passes jkstep and
         # every fstepr inserts after that HDU in its own file.
@@ -289,6 +325,10 @@ class OutputWriterSequenceResult:
     timing_breakdown: Mapping[str, float] | None = None
     source_file: str = "xstar/src/xstar/xstar.f90"
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the detail store operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def detail_store(self) -> DetailOutputStore:
         """Return the highest-pass detail store for compatibility."""
@@ -297,6 +337,10 @@ class OutputWriterSequenceResult:
         return self.detail_stores[max(self.detail_stores)]
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the metadata from control operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _metadata_from_control(state: XSTARPythonState) -> SourceOutputMetadata:
     value = state.control.get("output_atomic_metadata")
     if isinstance(value, SourceOutputMetadata):
@@ -307,6 +351,10 @@ def _metadata_from_control(state: XSTARPythonState) -> SourceOutputMetadata:
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build parameter table for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def build_parameter_table(parameters: Sequence[OutputParameter], *, model_name: str) -> OutputTable:
     n = len(parameters)
     return OutputTable(
@@ -327,6 +375,10 @@ def build_parameter_table(parameters: Sequence[OutputParameter], *, model_name: 
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build detail level table for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def build_detail_level_table(
     *,
     metadata: SourceOutputMetadata,
@@ -369,6 +421,10 @@ def build_detail_level_table(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build detail line table for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def build_detail_line_table(
     *,
     metadata: SourceOutputMetadata,
@@ -438,6 +494,10 @@ def build_detail_line_table(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build detail rrc table for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def build_detail_rrc_table(
     *,
     metadata: SourceOutputMetadata,
@@ -622,6 +682,10 @@ def build_detail_rrc_table(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build detail continuum table for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def build_detail_continuum_table(
     *,
     epi_eV: Sequence[float],
@@ -665,6 +729,10 @@ def build_detail_continuum_table(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Assemble the four per-shell detail products from the physical shell state without changing the producer science.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def build_detail_shell_output(
     *,
     metadata: SourceOutputMetadata,
@@ -719,11 +787,19 @@ def build_detail_shell_output(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the source real literal operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _source_real_literal(value: float) -> float:
     """Promote a FORTRAN default-REAL literal through binary32 to binary64."""
     return float(np.float32(value))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the voigte operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def voigte(vs: float, a: float) -> float:
     """Literal ``voigte.f90`` with default-REAL literal promotion.
 
@@ -777,6 +853,10 @@ def voigte(vs: float, a: float) -> float:
     psi = ak[15] + aa * (ak[16] + aa * (ak[17] + aa * ak[18]))
     return float(psi * (ex + aa * (h1p + aa * (h2p + aa * (h3p + aa * h4p)))))
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the voigte array operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _voigte_array(vs: np.ndarray, a: float) -> np.ndarray:
     """Vectorized source-REAL twin of :func:`voigte` for far wings."""
     sr = _source_real_literal
@@ -847,6 +927,10 @@ def _voigte_array(vs: np.ndarray, a: float) -> np.ndarray:
             out[remaining] = psi * (ex + aa * (h1p + aa * (h2p + aa * (h3p + aa * h4p))))
     return out
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the source real operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _source_real(value: float) -> float:
     """Return a source default-real literal promoted to Python float."""
     return float(np.float32(value))
@@ -856,6 +940,10 @@ _SOURCE_BINEMIS_POSITIVE_HALF_STEPS = 499999
 _SOURCE_BINEMIS_FAR_V = 50.0
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the source binemis far rebin operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _source_binemis_far_rebin(
     *,
     epi: np.ndarray,
@@ -949,6 +1037,10 @@ def _source_binemis_far_rebin(
     elif aa <= _source_real_literal(0.2):
         vf1 = v1[far]
         vf2 = v2[far]
+        # XSTAR-FUNCTION-COMMENT-BEGIN
+        # Purpose: Implement the primitive operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+        # Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+        # XSTAR-FUNCTION-COMMENT-END
         def primitive(v: np.ndarray) -> np.ndarray:
             v2x = v * v
             return -1.0 / v - 0.5 / (v * v2x) - 0.75 / (v * v2x * v2x)
@@ -998,6 +1090,10 @@ def _source_binemis_far_rebin(
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the rank binemis lines operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _rank_binemis_lines(
     *,
     metadata: SourceOutputMetadata,
@@ -1058,6 +1154,10 @@ def _rank_binemis_lines(
     return ranked
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build binemis spectrum for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def build_binemis_spectrum(
     *,
     metadata: SourceOutputMetadata,
@@ -1160,6 +1260,10 @@ def build_binemis_spectrum(
     # Python writer.  The force-Python switch is intentionally local to the
     # final binemis product so the same accelerated executable/process can be
     # used for exact A/B qualification without changing zone computation.
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the env true operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+    # XSTAR-FUNCTION-COMMENT-END
     def _env_true(name: str, default: str = "0") -> bool:
         return str(os.environ.get(name, default)).strip().lower() in {"1", "true", "yes", "on"}
 
@@ -1581,6 +1685,10 @@ def build_binemis_spectrum(
                         timing[f"{_prefix}_max_rel_signed_diff"] = float(_row_diff[_r_rel_bin]) if _row_rel.size else 0.0
                         timing[f"{_prefix}_bins_with_abs_diff"] = float(np.count_nonzero(_row_abs != 0.0)) if _row_abs.size else 0.0
 
+                        # XSTAR-FUNCTION-COMMENT-BEGIN
+                        # Purpose: Implement the window json operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+                        # Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+                        # XSTAR-FUNCTION-COMMENT-END
                         def _window_json(_center: int, _radius: int = 3) -> str:
                             _lo = max(0, int(_center) - _radius)
                             _hi = min(n, int(_center) + _radius + 1)
@@ -1631,6 +1739,10 @@ def build_binemis_spectrum(
                         try:
                             from .cpp_backend_emissivity import build_binemis_profile_cpp as _build_binemis_profile_cpp_probe
                             _probe_candidates = list(_slot_probe_records.values())
+                            # XSTAR-FUNCTION-COMMENT-BEGIN
+                            # Purpose: Implement the py probe strength operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+                            # Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+                            # XSTAR-FUNCTION-COMMENT-END
                             def _py_probe_strength(_rec: Mapping[str, Any]) -> float:
                                 _vals = as_map(_rec.get("python_emit_outward_by_bin")) if "as_map" in globals() else _rec.get("python_emit_outward_by_bin", {})
                                 if not isinstance(_vals, Mapping):
@@ -1755,6 +1867,10 @@ def build_binemis_spectrum(
                 timing["final_product_build.spectrum.binemis_shadow_compare_error_message"] = str(exc)[:2048]
     return out
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build final spectrum table for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def build_final_spectrum_table(
     *,
     metadata: SourceOutputMetadata,
@@ -1804,6 +1920,10 @@ def build_final_spectrum_table(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Select final line rows for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _select_final_line_rows(
     metadata: SourceOutputMetadata, elum: np.ndarray
 ) -> tuple[list[LineOutputMetadata], list[LineOutputMetadata]]:
@@ -1811,6 +1931,10 @@ def _select_final_line_rows(
     lum = np.asarray(elum, dtype=float)
     ordered = sorted(metadata.lines, key=lambda row: int(row.line_index))
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the qualifies operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+    # XSTAR-FUNCTION-COMMENT-END
     def qualifies(row: LineOutputMetadata) -> tuple[bool, float]:
         i = int(row.line_index) - 1
         if i < 0 or i >= lum.shape[1] or row.rate_type in (9, 14):
@@ -1869,6 +1993,10 @@ def _select_final_line_rows(
     return identity_rows, numeric_rows
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build final line table for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def build_final_line_table(*, metadata: SourceOutputMetadata, elum: np.ndarray, tau0: np.ndarray, timing: dict[str, float] | None = None) -> OutputTable:
     _t0 = time.perf_counter()
     lum = np.asarray(elum, dtype=float); depth = np.asarray(tau0, dtype=float)
@@ -1902,6 +2030,10 @@ def build_final_line_table(*, metadata: SourceOutputMetadata, elum: np.ndarray, 
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build final continuum table for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def build_final_continuum_table(*, epi_eV: Sequence[float], ncn2: int, dpthcont: np.ndarray, zrems: np.ndarray, zremsz: Sequence[float], timing: dict[str, float] | None = None) -> OutputTable:
     _t0 = time.perf_counter()
     n = int(ncn2); epi = np.asarray(epi_eV, dtype=float); dp = np.asarray(dpthcont, dtype=float); z = np.asarray(zrems, dtype=float); inc = np.asarray(zremsz, dtype=float)
@@ -1926,6 +2058,10 @@ def build_final_continuum_table(*, epi_eV: Sequence[float], ncn2: int, dpthcont:
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build final rrc table for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def build_final_rrc_table(*, metadata: SourceOutputMetadata, elumab: np.ndarray, tauc: np.ndarray, timing: dict[str, float] | None = None) -> OutputTable:
     _t0 = time.perf_counter()
     lum = np.asarray(elumab, dtype=float); depth = np.asarray(tauc, dtype=float)
@@ -1966,6 +2102,10 @@ def build_final_rrc_table(*, metadata: SourceOutputMetadata, elumab: np.ndarray,
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Assemble the final public abundance/line/RRC/continuum/spectrum tables from the terminal source state.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def build_final_output_products(
     *, metadata: SourceOutputMetadata, xlum: float, temperature_1e4K: float,
     turbulent_velocity_km_s: float, epi_eV: Sequence[float], ncn2: int,
@@ -1986,6 +2126,10 @@ def build_final_output_products(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the fits ascii width operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _fits_ascii_width(fmt: str) -> int | None:
     """Return the FITS ASCII/character width for an A-format column.
 
@@ -2004,6 +2148,10 @@ def _fits_ascii_width(fmt: str) -> int | None:
     return None
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the fits column operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _fits_column(name: str, fmt: str, unit: str, values: np.ndarray) -> fits.Column:
     # Astropy expects binary string widths as e.g. 8A and numeric source forms
     # without the Fortran leading repeat for scalar columns.  For A-format
@@ -2017,6 +2165,10 @@ def _fits_column(name: str, fmt: str, unit: str, values: np.ndarray) -> fits.Col
     width = _fits_ascii_width(f)
     if width is not None:
 
+        # XSTAR-FUNCTION-COMMENT-BEGIN
+        # Purpose: Implement the as text operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+        # Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+        # XSTAR-FUNCTION-COMMENT-END
         def _as_text(item: object) -> str:
             if isinstance(item, (bytes, bytearray, np.bytes_)):
                 return bytes(item).decode("ascii", "replace").replace("\x00", "")
@@ -2026,6 +2178,10 @@ def _fits_column(name: str, fmt: str, unit: str, values: np.ndarray) -> fits.Col
     return fits.Column(name=name, format=f, unit=(unit or None), array=arr)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the space pad ascii table columns operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _space_pad_ascii_table_columns(hdu: fits.hdu.base.ExtensionHDU, table: OutputTable) -> None:
     """Force FITS A-format table columns to use trailing spaces, not NULs.
 
@@ -2064,6 +2220,10 @@ def _space_pad_ascii_table_columns(hdu: fits.hdu.base.ExtensionHDU, table: Outpu
             raw[row_index, :width] = np.frombuffer(payload, dtype=np.uint8, count=width)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the table hdu operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _table_hdu(table: OutputTable) -> fits.hdu.base.ExtensionHDU:
     cols = [
         _fits_column(name, fmt, unit, np.asarray(table.values[name]))
@@ -2079,6 +2239,10 @@ def _table_hdu(table: OutputTable) -> fits.hdu.base.ExtensionHDU:
     return hdu
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the primary hdu operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _primary_hdu(*, model_name: str, atomic_data_date: str) -> fits.PrimaryHDU:
     hdu = fits.PrimaryHDU()
     apply_python_primary_fits_header(
@@ -2091,6 +2255,10 @@ def _primary_hdu(*, model_name: str, atomic_data_date: str) -> fits.PrimaryHDU:
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the fits tform binary width operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _fits_tform_binary_width(tform: str) -> int:
     """Byte width of a simple FITS binary-table TFORM value."""
     text = str(tform).strip().upper().replace(" ", "")
@@ -2112,6 +2280,10 @@ def _fits_tform_binary_width(tform: str) -> int:
     return repeat * scalar
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the rewrite fits ascii null padding operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _rewrite_fits_ascii_null_padding(path: str | Path) -> None:
     """Replace NUL bytes only inside binary-table A columns with blanks.
 
@@ -2143,6 +2315,10 @@ def _rewrite_fits_ascii_null_padding(path: str | Path) -> None:
         header_len = ((end_pos - header_start + 2879) // 2880) * 2880
         data_start = header_start + header_len
 
+        # XSTAR-FUNCTION-COMMENT-BEGIN
+        # Purpose: Implement the card value operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+        # Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+        # XSTAR-FUNCTION-COMMENT-END
         def _card_value(key: str) -> str | None:
             prefix = key.ljust(8) + "="
             for card in cards:
@@ -2179,6 +2355,10 @@ def _rewrite_fits_ascii_null_padding(path: str | Path) -> None:
         file_path.write_bytes(data)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the fits ascii table width operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _fits_ascii_table_width(tform: str) -> int:
     """Byte width for simple FITS ASCII TABLE TFORM values."""
     text = str(tform).strip().upper().replace(" ", "")
@@ -2198,6 +2378,10 @@ def _fits_ascii_table_width(tform: str) -> int:
     return 0
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the rewrite fits ascii table intercolumn gaps operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _rewrite_fits_ascii_table_intercolumn_gaps(path: str | Path) -> None:
     """Rewrite ASCII TABLE rows with source-like one-column gaps.
 
@@ -2218,6 +2402,10 @@ def _rewrite_fits_ascii_table_intercolumn_gaps(path: str | Path) -> None:
     changed = False
     total = len(raw)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the card value operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+    # XSTAR-FUNCTION-COMMENT-END
     def _card_value(cards: list[str], key: str) -> str | None:
         prefix = key.ljust(8) + "="
         for card in cards:
@@ -2225,6 +2413,10 @@ def _rewrite_fits_ascii_table_intercolumn_gaps(path: str | Path) -> None:
                 return card[10:80].split("/", 1)[0].strip().strip("'").strip()
         return None
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the replace or append operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+    # XSTAR-FUNCTION-COMMENT-END
     def _replace_or_append(cards: list[str], key: str, value: int) -> list[str]:
         prefix = key.ljust(8) + "="
         new = f"{key:<8}= {int(value):>20d}".ljust(80)
@@ -2321,6 +2513,10 @@ def _rewrite_fits_ascii_table_intercolumn_gaps(path: str | Path) -> None:
         file_path.write_bytes(bytes(out))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the refresh fits checksums operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _refresh_fits_checksums(path: str | Path) -> None:
     """Recompute CHECKSUM/DATASUM after all byte-level FITS edits."""
     with fits.open(path, mode="update", checksum=False, memmap=False) as hdul:
@@ -2333,6 +2529,10 @@ def _refresh_fits_checksums(path: str | Path) -> None:
         hdul.flush()
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write hdul with xstar string padding for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _write_hdul_with_xstar_string_padding(hdul: fits.HDUList, path: str | Path, *, overwrite: bool) -> None:
     """Write FITS, apply source-like padding, then checksum the final bytes."""
     hdul.writeto(path, overwrite=overwrite, checksum=False)
@@ -2341,6 +2541,10 @@ def _write_hdul_with_xstar_string_padding(hdul: fits.HDUList, path: str | Path, 
     _refresh_fits_checksums(path)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Record fits timing for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _record_fits_timing(
     timing: dict[str, float] | None,
     *,
@@ -2355,6 +2559,10 @@ def _record_fits_timing(
     timing[f"{phase}.{safe}"] = float(seconds)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write final XSTAR-compatible FITS products, preserving qualified table layout, metadata, and publication ordering.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def write_final_output_files(
     products: FinalOutputProducts,
     *, out_dir: str | Path,
@@ -2405,6 +2613,10 @@ def write_final_output_files(
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the fnappend detail filename operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _fnappend_detail_filename(name: str, pass_index: int) -> str:
     """Translate ``fnappend.f90`` for the pass-specific detail files."""
     kk = int(pass_index)
@@ -2415,6 +2627,10 @@ def _fnappend_detail_filename(name: str, pass_index: int) -> str:
         raise OutputWriterPortError("detail filename is shorter than four characters")
     return text[:2] + f"{kk:02d}" + text[4:]
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write detail output files for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def write_detail_output_files(
     store: DetailOutputStore,
     *, out_dir: str | Path,
@@ -2461,6 +2677,10 @@ def write_detail_output_files(
     return paths
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the state temperature t4 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _state_temperature_t4(state: XSTARPythonState) -> float:
     """Return source ``t`` in 10^4 K using explicit state ownership when set."""
     value = float(state.plasma.temperature)
@@ -2473,6 +2693,10 @@ def _state_temperature_t4(state: XSTARPythonState) -> float:
     return value / 1.0e4 if value > 1.0e3 else value
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the shell header from state operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _shell_header_from_state(state: XSTARPythonState) -> ShellOutputHeader:
     t4 = _state_temperature_t4(state)
     radius = float(state.transfer.radius)
@@ -2491,6 +2715,10 @@ def _shell_header_from_state(state: XSTARPythonState) -> ShellOutputHeader:
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the detail level vector operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _detail_level_vector(values: Sequence[float], metadata: SourceOutputMetadata) -> np.ndarray:
     """Return the zero-based vector expected by the FITS detail builders.
 
@@ -2513,6 +2741,10 @@ def _detail_level_vector(values: Sequence[float], metadata: SourceOutputMetadata
     return arr.copy()
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the zero like table operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _zero_like_table(table: OutputTable) -> OutputTable:
     values: dict[str, np.ndarray] = {}
     for name in table.columns:
@@ -2532,6 +2764,10 @@ def _zero_like_table(table: OutputTable) -> OutputTable:
         source_file=table.source_file,
     )
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the zero detail shell output operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _zero_detail_shell_output(record: DetailShellOutput) -> DetailShellOutput:
     return DetailShellOutput(
         levels=_zero_like_table(record.levels),
@@ -2543,11 +2779,19 @@ def _zero_detail_shell_output(record: DetailShellOutput) -> DetailShellOutput:
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the array sha256 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _array_sha256(array: np.ndarray) -> str:
     arr = np.ascontiguousarray(array)
     return hashlib.sha256(arr.tobytes()).hexdigest()
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the binary64 fnv1a hex operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _binary64_fnv1a_hex(values: Sequence[float] | np.ndarray) -> str:
     """Match the standalone C++ binary64_sequence_fnv1a diagnostic hash."""
     arr = np.ascontiguousarray(np.asarray(values, dtype="<f8").reshape(-1))
@@ -2560,6 +2804,10 @@ def _binary64_fnv1a_hex(values: Sequence[float] | np.ndarray) -> str:
     return f"{value:016x}"
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write f8 for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _write_f8(path: Path, values: np.ndarray) -> dict[str, Any]:
     arr = np.ascontiguousarray(np.asarray(values, dtype='<f8'))
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -2579,6 +2827,10 @@ def _write_f8(path: Path, values: np.ndarray) -> dict[str, Any]:
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the maybe export detail continuum product write state operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _maybe_export_detail_continuum_product_write_state(
     state: XSTARPythonState,
     *,
@@ -2692,6 +2944,10 @@ def _maybe_export_detail_continuum_product_write_state(
         except Exception:
             pass
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the source detail line activity shadow operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _source_detail_line_activity_shadow(
     state: XSTARPythonState,
     metadata: SourceOutputMetadata,
@@ -2799,6 +3055,10 @@ def _source_detail_line_activity_shadow(
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Select fixed state detail3 publication v064812345338 for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _select_fixed_state_detail3_publication_v064812345338(
     control: Mapping[str, Any], *, terminal_record: bool
 ) -> Mapping[int, Mapping[str, Any]]:
@@ -2812,6 +3072,10 @@ def _select_fixed_state_detail3_publication_v064812345338(
     return {}
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Commit fixed state detail3 terminal replay v064812345338 for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _commit_fixed_state_detail3_terminal_replay_v064812345338(
     control: MutableMapping[str, Any],
     *,
@@ -2828,6 +3092,10 @@ def _commit_fixed_state_detail3_terminal_replay_v064812345338(
         if isinstance(row, Mapping)
     }
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Append detail output from state for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int, terminal_record: bool = False) -> DetailShellOutput:
     from .radial_transfer import _workspace_from_state, _level_arrays_from_state
 
@@ -2994,6 +3262,10 @@ def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int, ter
     return record
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build final output from state for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def build_final_output_from_state(state: XSTARPythonState, *, lwri: int = 0, timing: dict[str, float] | None = None) -> FinalOutputProducts:
     from .radial_transfer import _workspace_from_state
 
@@ -3023,6 +3295,10 @@ def build_final_output_from_state(state: XSTARPythonState, *, lwri: int = 0, tim
     return products
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the pprint final source state handler operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _pprint_final_source_state_handler(state: XSTARPythonState) -> tuple[str, ...]:
     """Record the legacy ``pprint`` boundary without fabricating its files."""
     lpri = int(state.control.get("lpri", 0))
@@ -3037,6 +3313,10 @@ def _pprint_final_source_state_handler(state: XSTARPythonState) -> tuple[str, ..
     return calls
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Execute output writer sequence for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def run_output_writer_sequence(
     state: XSTARPythonState,
     *,
@@ -3060,6 +3340,10 @@ def run_output_writer_sequence(
     source_order: list[str] = []
     timing_breakdown: dict[str, float] = {}
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Emit operation for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+    # XSTAR-FUNCTION-COMMENT-END
     def _emit(event: str, **details: Any) -> None:
         if progress_callback is not None:
             progress_callback(event, dict(details))
@@ -3085,6 +3369,10 @@ def run_output_writer_sequence(
         # fixed-state engine.  Reuse it for the source post-loop zero-thickness
         # xstarcalc instead of replaying the expensive Python orchestration.
         # Pure Python and explicit diagnostics retain the historical path.
+        # XSTAR-FUNCTION-COMMENT-BEGIN
+        # Purpose: Implement the v0648101 env true operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+        # Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+        # XSTAR-FUNCTION-COMMENT-END
         def _v0648101_env_true(name: str) -> bool:
             return str(os.environ.get(name, "0")).strip().lower() in {"1", "true", "yes", "on"}
 
@@ -3100,6 +3388,10 @@ def run_output_writer_sequence(
         timing_breakdown["final_local_recompute.v0648101_force_python"] = 1.0 if _v0648101_force_python else 0.0
         timing_breakdown["final_local_recompute.v0648101_python_fallback_allowed"] = 1.0 if _v0648101_allow_fallback else 0.0
 
+        # XSTAR-FUNCTION-COMMENT-BEGIN
+        # Purpose: Execute python final xstarcalc for this module while preserving the surrounding source/runtime invariants.
+        # Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+        # XSTAR-FUNCTION-COMMENT-END
         def _run_python_final_xstarcalc() -> None:
             runner.run_xstarcalc(state, fixed_state=False)
             append_phase_snapshot(state, "final xstarcalc")
@@ -3199,6 +3491,10 @@ def run_output_writer_sequence(
             bremsa_full = np.asarray(state.radiation.bremsa, dtype=float).reshape(-1)
             tau_in_full = np.asarray(state.transfer.tau_in if state.transfer.tau_in is not None else (), dtype=float).reshape(-1)
             tau_out_full = np.asarray(state.transfer.tau_out if state.transfer.tau_out is not None else (), dtype=float).reshape(-1)
+            # XSTAR-FUNCTION-COMMENT-BEGIN
+            # Purpose: Implement the element operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+            # Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+            # XSTAR-FUNCTION-COMMENT-END
             def _element(mapping: Mapping[int, float], z: int) -> float:
                 return float(mapping.get(z, 0.0))
             diagnostic = {
@@ -3349,6 +3645,10 @@ def run_output_writer_sequence(
         timing_breakdown=dict(timing_breakdown),
     )
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Provide the direct-source reference for fortran output reference for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def direct_fortran_output_reference() -> dict[str, Any]:
     """Frozen reference from literal original-Fortran writer loops.
 
@@ -3386,6 +3686,10 @@ def direct_fortran_output_reference() -> dict[str, Any]:
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the validation fixture operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _validation_fixture() -> tuple[SourceOutputMetadata, dict[str, Any]]:
     metadata = SourceOutputMetadata(
         levels=(
@@ -3432,6 +3736,10 @@ def _validation_fixture() -> tuple[SourceOutputMetadata, dict[str, Any]]:
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the binemis validation fixture operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def _binemis_validation_fixture() -> tuple[SourceOutputMetadata, dict[str, Any]]:
     ngrid = 1000
     ncn2 = 200
@@ -3474,6 +3782,10 @@ def _binemis_validation_fixture() -> tuple[SourceOutputMetadata, dict[str, Any]]
         "zremsz": zremsz,
     }
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Execute direct fortran output writer validation for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def run_direct_fortran_output_writer_validation(*, rtol: float = 2e-7, atol: float = 0.0) -> dict[str, bool]:
     ref = direct_fortran_output_reference(); metadata, a = _validation_fixture()
     header = ShellOutputHeader(1e18, 2e16, 3e16, 100.0, 1e-2, 2e22, 1.2, 1e8, 2.5)
@@ -3553,6 +3865,10 @@ def run_direct_fortran_output_writer_validation(*, rtol: float = 2e-7, atol: flo
     summary["output_writers_direct_original_fortran_reference_ready"] = bool(all(summary.values()))
     return summary
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Execute output writer validation for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def run_output_writer_validation(
     *,
     out_dir: str | Path | None = None,
@@ -3669,6 +3985,10 @@ def run_output_writer_validation(
             for record in store.records
         )
     )
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the numeric header value operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+    # XSTAR-FUNCTION-COMMENT-END
     def _numeric_header_value(value: object) -> float | None:
         raw = value[0] if isinstance(value, tuple) and value else value
         if isinstance(raw, (int, float, np.integer, np.floating)):
@@ -3922,6 +4242,10 @@ def run_output_writer_validation(
     return summary
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write output writer validation products for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
+# XSTAR-FUNCTION-COMMENT-END
 def write_output_writer_validation_products(
     summary: Mapping[str, Any], out_dir: str | Path
 ) -> Mapping[str, str]:

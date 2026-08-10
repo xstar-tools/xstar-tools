@@ -61,15 +61,27 @@ class _ZoneResult(ctypes.Structure):
     ]
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the cpp dir operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _cpp_dir() -> Path:
     return Path(__file__).resolve().parent / "cpp"
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the library path operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _library_path() -> Path:
     override = os.environ.get("XSTAR_PRODUCTION_ZONE_LIBRARY")
     return Path(override).expanduser().resolve() if override else (_cpp_dir() / "libxstar_production_zone.so")
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Load library for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _load_library() -> ctypes.CDLL:
     path = _library_path()
     if not path.is_file():
@@ -114,6 +126,10 @@ def _load_library() -> ctypes.CDLL:
     return lib
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the backend status operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def backend_status(requested: str = "cpp-all") -> dict[str, Any]:
     try:
         lib = _load_library()
@@ -131,6 +147,10 @@ def backend_status(requested: str = "cpp-all") -> dict[str, Any]:
         }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the native parameter payload operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _native_parameter_payload(run_script: str | Path, *, atdb_path: str | Path, coheat_path: str | Path):
     from .physical_runner import normalize_xstar_parameters, parse_run_xstar_script
     parsed = parse_run_xstar_script(Path(run_script))
@@ -146,6 +166,10 @@ def _native_parameter_payload(run_script: str | Path, *, atdb_path: str | Path, 
     return payload, normalized
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Prepare inputs for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _prepare_inputs(run_script, atdb_path, coheat_path, output_dir, overwrite):
     if atdb_path is None:
         raise SharedProductionZoneError("native zone backend requires explicit --atdb")
@@ -169,6 +193,10 @@ def _prepare_inputs(run_script, atdb_path, coheat_path, output_dir, overwrite):
     return out, payload, normalized
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the rewrite python cpp headers operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _rewrite_python_cpp_headers(output_dir: Path, version: str, mode: str) -> None:
     from astropy.io import fits
     creator = f"xstar_tools python with cpp backend {version}"
@@ -192,6 +220,10 @@ def _rewrite_python_cpp_headers(output_dir: Path, version: str, mode: str) -> No
             hdul.flush(output_verify="fix")
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the validate products operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _validate_products(out: Path) -> dict[str, Path]:
     missing = [name for name in _PRODUCT_NAMES if not (out / name).is_file()]
     if missing:
@@ -202,6 +234,10 @@ def _validate_products(out: Path) -> dict[str, Path]:
 class PersistentProductionZoneContext:
     """Persistent exact-production context used by ``--zone-backend cpp-zone``."""
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Initialize this object and establish the invariants required by later operations.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def __init__(self, *, run_script, atdb_path, coheat_path, output_dir, overwrite=True, version="0.6.48.11.0"):
         self.out, payload, self.normalized = _prepare_inputs(run_script, atdb_path, coheat_path, output_dir, overwrite)
         self.version = version
@@ -227,6 +263,10 @@ class PersistentProductionZoneContext:
         self.finalized = False
         self.started = time.perf_counter()
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the done operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def done(self) -> bool:
         if self.finalized:
             return True
@@ -240,10 +280,18 @@ class PersistentProductionZoneContext:
             raise SharedProductionZoneError(f"cpp-zone done query failed rc={rc}: {message.value.decode(errors='replace')}")
         return bool(done_value.value)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the completed zones operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def completed_zones(self) -> int:
         return len(self.zone_results)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Execute next zone for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def run_next_zone(self) -> dict[str, Any]:
         if self.finalized:
             raise SharedProductionZoneError("cpp-zone context is already finalized")
@@ -287,12 +335,20 @@ class PersistentProductionZoneContext:
         return row
 
     # Compatibility with callers that still explicitly pass the next ordinal.
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Execute zone for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def run_zone(self, zone_index: int) -> dict[str, Any]:
         expected = len(self.zone_results) + 1
         if int(zone_index) != expected:
             raise SharedProductionZoneError(f"cpp-zone calls must be sequential; expected zone {expected}")
         return self.run_next_zone()
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Finalize operation for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def finalize(self) -> dict[str, Any]:
         if self.finalized:
             raise SharedProductionZoneError("cpp-zone context is already finalized")
@@ -309,6 +365,10 @@ class PersistentProductionZoneContext:
         elapsed = time.perf_counter() - self.started
         return _summary(self.out, self.normalized, products, "cpp-zone", self.zone_results, elapsed)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Close operation for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def close(self) -> None:
         if getattr(self, "_context", None):
             self.lib.xstar_production_zone_context_destroy_v0648110(self._context)
@@ -317,12 +377,24 @@ class PersistentProductionZoneContext:
             self._tmp.cleanup()
             self._tmp = None
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Enter the managed-resource context and return the active object.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def __enter__(self):
         return self
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Leave the managed-resource context and release/close owned resources.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def __exit__(self, exc_type, exc, tb):
         self.close()
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the del operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+    # XSTAR-FUNCTION-COMMENT-END
     def __del__(self):
         try:
             self.close()
@@ -330,6 +402,10 @@ class PersistentProductionZoneContext:
             pass
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the summary operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _summary(out, normalized, products, mode, zone_results, elapsed):
     status = backend_status(mode)
     return {
@@ -369,6 +445,10 @@ def _summary(out, normalized, products, mode, zone_results, elapsed):
     }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the infer zone count from step log operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def _infer_zone_count_from_step_log(path: Path) -> int:
     """Count physical first-pass controller rows, excluding terminal pprint."""
     if not path.is_file():
@@ -395,6 +475,10 @@ def _infer_zone_count_from_step_log(path: Path) -> int:
     return max(0, rows - 1)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Execute shared production zone backend for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
+# XSTAR-FUNCTION-COMMENT-END
 def run_shared_production_zone_backend(
     *, mode, run_script, atdb_path, coheat_path, output_dir, overwrite=True, version="0.6.48.11.0"
 ):

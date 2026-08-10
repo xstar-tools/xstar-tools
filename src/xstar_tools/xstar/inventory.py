@@ -47,18 +47,34 @@ class XSTARSourceInventory:
     source_label: str
     files: Sequence[FortranSourceFile]
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the n files operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def n_files(self) -> int:
         return len(self.files)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the routines operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def routines(self) -> List[FortranRoutine]:
         return [routine for file in self.files for routine in file.routines]
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the n routines operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def n_routines(self) -> int:
         return len(self.routines)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the routine to file operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+    # XSTAR-FUNCTION-COMMENT-END
     def routine_to_file(self) -> Dict[str, str]:
         result: Dict[str, str] = {}
         for routine in self.routines:
@@ -66,12 +82,20 @@ class XSTARSourceInventory:
         return result
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the strip inline comment operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _strip_inline_comment(line: str) -> str:
     # XSTAR source uses ordinary Fortran comments heavily.  This intentionally
     # conservative parser is an inventory tool, not a compiler.
     return line.split("!", 1)[0]
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the classify stage operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _classify_stage(path: str, routines: Sequence[FortranRoutine]) -> str:
     names = {r.name.lower() for r in routines}
     filename = Path(path).name.lower()
@@ -94,6 +118,10 @@ def _classify_stage(path: str, routines: Sequence[FortranRoutine]) -> str:
     return "support"
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Parse source for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def _parse_source(path: str, text: str) -> FortranSourceFile:
     routines: List[FortranRoutine] = []
     calls = set()
@@ -128,6 +156,10 @@ def _parse_source(path: str, text: str) -> FortranSourceFile:
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build source inventory for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def build_source_inventory(
     *,
     source_root: Optional[str] = None,
@@ -166,6 +198,10 @@ def build_source_inventory(
     return XSTARSourceInventory(source_label=label, files=tuple(parsed))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Write source inventory for this module while preserving the surrounding source/runtime invariants.
+# Reference context: Diagnostic/qualification helper; observes qualified runtime state and has no independent paper equation.
+# XSTAR-FUNCTION-COMMENT-END
 def write_source_inventory(inventory: XSTARSourceInventory, out_dir: str) -> Dict[str, str]:
     """Write file, routine, call-edge, and JSON inventory products."""
     output = Path(out_dir)

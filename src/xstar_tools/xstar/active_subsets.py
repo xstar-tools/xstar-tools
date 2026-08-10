@@ -46,6 +46,10 @@ class ActiveATDBSubset:
     line_indices: np.ndarray = field(repr=False)
     provenance: Mapping[str, Any] = field(default_factory=dict)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the as summary operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual Ch. 12; source setptrs/record-topology semantics.
+    # XSTAR-FUNCTION-COMMENT-END
     def as_summary(self) -> dict[str, Any]:
         return {
             "active_element_z": list(self.active_element_z),
@@ -60,10 +64,18 @@ class ActiveATDBSubset:
         }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the one based indices operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Ch. 12; source setptrs/record-topology semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def _one_based_indices(mask: np.ndarray) -> np.ndarray:
     return np.nonzero(np.asarray(mask, dtype=bool))[0].astype(np.int64)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build active atdb subset for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Ch. 12; source setptrs/record-topology semantics.
+# XSTAR-FUNCTION-COMMENT-END
 def build_active_atdb_subset(master: Any, derived: Any, active_element_z: Sequence[int]) -> ActiveATDBSubset:
     """Precompute active element/ion/level/continuum lookup structures.
 

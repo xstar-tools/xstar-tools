@@ -122,6 +122,10 @@ class XSTARPythonAcceptanceError(XSTARPythonRunnerError):
 ProgressCallback = Callable[[str, Mapping[str, Any]], None]
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Emit progress for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def _emit_progress(
     callback: ProgressCallback | None,
     event: str,
@@ -131,6 +135,10 @@ def _emit_progress(
         callback(str(event), details)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the remove optional diagnostic products operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def _remove_optional_diagnostic_products(out: Path) -> None:
     """Remove optional diagnostic products so reruns cannot retain stale files."""
     for dirname in (
@@ -154,6 +162,10 @@ def _remove_optional_diagnostic_products(out: Path) -> None:
 
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Append xout step timing footer for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def _append_xout_step_timing_footer(
     out: Path,
     *,
@@ -194,6 +206,10 @@ def _append_xout_step_timing_footer(
     with path.open("a", encoding="utf-8") as handle:
         handle.write("\n".join(lines) + "\n")
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the prepend xout step startup provenance operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def _prepend_xout_step_startup_provenance(
     out: Path,
     *,
@@ -245,6 +261,10 @@ def _prepend_xout_step_startup_provenance(
     ]
     path.write_text("\n".join(lines) + existing, encoding="utf-8")
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Normalize diagnostics mode for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def _normalize_diagnostics_mode(value: str | None) -> str:
     """Return the supported optional-diagnostic mode.
 
@@ -380,9 +400,17 @@ class NormalizedXSTARParameters:
     rmax_cm: float
     source: str | None = None
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Return operation for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+    # XSTAR-FUNCTION-COMMENT-END
     def get(self, name: str, default: Any = None) -> Any:
         return self.values.get(str(name).strip().lower(), default)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Serialize the current state into a plain mapping for diagnostics, provenance, or machine-readable output.
+    # Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+    # XSTAR-FUNCTION-COMMENT-END
     def as_dict(self) -> dict[str, Any]:
         result = dict(self.values)
         result.update(
@@ -411,9 +439,17 @@ class XSTARPythonRunResult:
     warnings: tuple[str, ...] = ()
     provenance: Mapping[str, Any] = field(default_factory=dict)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Close operation for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+    # XSTAR-FUNCTION-COMMENT-END
     def close(self) -> None:
         self.final_state.atomic.close()
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Serialize the current state into a plain mapping for diagnostics, provenance, or machine-readable output.
+    # Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+    # XSTAR-FUNCTION-COMMENT-END
     def as_dict(self) -> dict[str, Any]:
         return {
             "ready": self.ready,
@@ -437,6 +473,10 @@ class C5NE1AcceptanceResult:
     all_ten_python_products_ready: bool
     all_files_match: bool
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Report whether all prerequisites/results required by this stage are present and internally consistent.
+    # Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+    # XSTAR-FUNCTION-COMMENT-END
     @property
     def ready(self) -> bool:
         return bool(
@@ -448,15 +488,31 @@ class C5NE1AcceptanceResult:
             and self.all_files_match
         )
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Close operation for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+    # XSTAR-FUNCTION-COMMENT-END
     def close(self) -> None:
         self.python_run.close()
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Enter the managed-resource context and return the active object.
+    # Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+    # XSTAR-FUNCTION-COMMENT-END
     def __enter__(self) -> "C5NE1AcceptanceResult":
         return self
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Leave the managed-resource context and release/close owned resources.
+    # Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+    # XSTAR-FUNCTION-COMMENT-END
     def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
         self.close()
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Serialize the current state into a plain mapping for diagnostics, provenance, or machine-readable output.
+    # Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+    # XSTAR-FUNCTION-COMMENT-END
     def as_dict(self) -> dict[str, Any]:
         return {
             "python_run": self.python_run.as_dict(),
@@ -486,6 +542,10 @@ class XSTARPythonCacheResult:
     n_continua: int
     elapsed_seconds: float
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Serialize the current state into a plain mapping for diagnostics, provenance, or machine-readable output.
+    # Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+    # XSTAR-FUNCTION-COMMENT-END
     def as_dict(self) -> dict[str, Any]:
         return {
             "ready": self.ready,
@@ -503,6 +563,10 @@ class XSTARPythonCacheResult:
         }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the sha256 file operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def _sha256_file(path: str | Path) -> str:
     digest = sha256()
     with Path(path).open("rb") as handle:
@@ -511,6 +575,10 @@ def _sha256_file(path: str | Path) -> str:
     return digest.hexdigest()
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the value map operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def _value_map(parameters: XSTARInputParameters | ParsedXSTARCommand | Mapping[str, Any]) -> tuple[dict[str, Any], str | None]:
     if isinstance(parameters, XSTARInputParameters):
         return parameters.as_dict(), parameters.source
@@ -519,6 +587,10 @@ def _value_map(parameters: XSTARInputParameters | ParsedXSTARCommand | Mapping[s
     return {str(k).strip().lower(): v for k, v in parameters.items()}, None
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Normalize user/XPI-style inputs while preserving source units, defaults, switches, and literal-sensitive semantics used by rread1.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def normalize_xstar_parameters(
     parameters: XSTARInputParameters | ParsedXSTARCommand | Mapping[str, Any],
     *,
@@ -638,6 +710,10 @@ def normalize_xstar_parameters(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Construct the source-compatible logarithmic continuum energy grid used by rates, opacity, transfer, and spectra.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def ener_grid(ncn2: int) -> np.ndarray:
     """Literal arithmetic-kind translation of ``ener.f90``."""
     try:
@@ -646,6 +722,10 @@ def ener_grid(ncn2: int) -> np.ndarray:
         raise XSTARPythonRunnerError(str(exc)) from exc
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the powerlaw spectrum operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def powerlaw_spectrum(*, index: float, luminosity_1e38: float, epi_eV: Sequence[float]) -> np.ndarray:
     """Translate ``ispec4 -> ispecgg`` for a built-in power law."""
     epi = np.asarray(epi_eV, dtype=float).reshape(-1)
@@ -673,6 +753,10 @@ def powerlaw_spectrum(*, index: float, luminosity_1e38: float, epi_eV: Sequence[
     return z
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the source spectrum ispcg2 diagnostics operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def source_spectrum_ispcg2_diagnostics(
     zremsz: Sequence[float], epi_eV: Sequence[float]
 ) -> tuple[float, float, float, float]:
@@ -707,6 +791,10 @@ def source_spectrum_ispcg2_diagnostics(
     return float(sum2), float(sum3), float(sum4), float(sum5 * ergsev_source)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the photon number luminosity operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def photon_number_luminosity(zremsz: Sequence[float], epi_eV: Sequence[float]) -> float:
     """Translate the ``sum2`` result of ``ispcg2.f90``."""
     return source_spectrum_ispcg2_diagnostics(zremsz, epi_eV)[0]
@@ -715,12 +803,20 @@ def photon_number_luminosity(zremsz: Sequence[float], epi_eV: Sequence[float]) -
 OUTPUT_METADATA_CACHE_FORMAT_VERSION = 13
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Construct the default output metadata cache path for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def default_output_metadata_cache_path(fitsfile: str | Path) -> Path:
     """Return the default vectorized output-metadata NPZ sidecar."""
     path = Path(fitsfile)
     return path.with_name(path.name + ".xstar_tools_output_metadata.npz")
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the cache paths operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def _cache_paths(atdb_path: str | Path, cache_dir: str | Path | None) -> tuple[Path, Path]:
     atdb = Path(atdb_path).resolve()
     if cache_dir is None:
@@ -732,12 +828,20 @@ def _cache_paths(atdb_path: str | Path, cache_dir: str | Path | None) -> tuple[P
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the string array operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def _string_array(values: Sequence[str]) -> np.ndarray:
     text = [str(value) for value in values]
     width = max((len(value) for value in text), default=1)
     return np.asarray(text, dtype=f"U{max(1, width)}")
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Persist source output metadata cache for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def save_source_output_metadata_cache(
     master: Any,
     metadata: SourceOutputMetadata,
@@ -814,6 +918,10 @@ def save_source_output_metadata_cache(
     return target
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Load source output metadata cache for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def load_source_output_metadata_cache(master: Any, path: str | Path) -> SourceOutputMetadata:
     """Load and validate vectorized writer metadata from an NPZ sidecar."""
     source = Path(path)
@@ -883,6 +991,10 @@ def load_source_output_metadata_cache(master: Any, path: str | Path) -> SourceOu
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the clean label operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def _clean_label(raw: bytes | str, fallback: str) -> str:
     if isinstance(raw, bytes):
         text = raw.decode("latin-1", errors="replace")
@@ -892,6 +1004,10 @@ def _clean_label(raw: bytes | str, fallback: str) -> str:
     return text or fallback
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Record to ion index for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def _record_to_ion_index(derived: Any) -> np.ndarray:
     """Build an O(1) record-to-ion map from source parent pointers."""
     n_records = int(np.asarray(derived.npar).size - 1)
@@ -908,6 +1024,10 @@ def _record_to_ion_index(derived: Any) -> np.ndarray:
     return result
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build binemis type86 damping map for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def _build_binemis_type86_damping_map(
     master: Any, derived: Any
 ) -> dict[tuple[int, int], tuple[float, float, int]]:
@@ -946,6 +1066,10 @@ def _build_binemis_type86_damping_map(
     return out
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build source output metadata for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetadata:
     """Resolve packed ATDB pointers into writer metadata with vectorized reads.
 
@@ -1236,6 +1360,10 @@ def build_source_output_metadata(master: Any, derived: Any) -> SourceOutputMetad
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Load or build source output metadata for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def _load_or_build_source_output_metadata(
     master: Any,
     derived: Any,
@@ -1282,6 +1410,10 @@ def _load_or_build_source_output_metadata(
     return metadata
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build pprint atomic metadata for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def build_pprint_atomic_metadata(derived: Any, output_metadata: SourceOutputMetadata, abundances: np.ndarray) -> PprintAtomicMetadata:
     labels = tuple(ELEMENT_SYMBOLS)
     ion_label_by_index: dict[int, str] = {}
@@ -1310,11 +1442,19 @@ def build_pprint_atomic_metadata(derived: Any, output_metadata: SourceOutputMeta
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the guard operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def _guard(values: Sequence[float]) -> np.ndarray:
     arr = np.asarray(values, dtype=float).reshape(-1)
     return np.concatenate((np.zeros(1, dtype=float), arr))
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the radiation namespace operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def _radiation_namespace(state: XSTARPythonState) -> Any:
     return SimpleNamespace(
         epi=state.radiation.epi,
@@ -1326,6 +1466,10 @@ def _radiation_namespace(state: XSTARPythonState) -> Any:
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the escape context operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def _escape_context(workspace: RadialTransferWorkspace) -> EscapeProbabilityContext:
     return EscapeProbabilityContext(
         line_tau_in=workspace.tau0[0],
@@ -1336,6 +1480,10 @@ def _escape_context(workspace: RadialTransferWorkspace) -> EscapeProbabilityCont
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the element requests operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def _element_requests(state: XSTARPythonState, parameters: NormalizedXSTARParameters) -> tuple[FixedStateElementRequest, ...]:
     workspace: RadialTransferWorkspace = state.control["radial_transfer_workspace"]
     radiation = _radiation_namespace(state)
@@ -1374,7 +1522,15 @@ def _element_requests(state: XSTARPythonState, parameters: NormalizedXSTARParame
     return tuple(requests)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Calculate kwargs factory for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def _calc_kwargs_factory(state: XSTARPythonState, compton_table: Any) -> Callable[[DsecMutableRuntimeState], Mapping[str, Any]]:
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the factory operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+    # XSTAR-FUNCTION-COMMENT-END
     def factory(runtime: DsecMutableRuntimeState) -> Mapping[str, Any]:
         epi = np.asarray(state.radiation.epim, dtype=float)
         brem = np.asarray(state.radiation.bremsam, dtype=float)[: epi.size]
@@ -1480,6 +1636,10 @@ def _calc_kwargs_factory(state: XSTARPythonState, compton_table: Any) -> Callabl
     return factory
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the guard full global level array operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def _guard_full_global_level_array(values: Sequence[float], derived: Any) -> np.ndarray:
     """Return the source-owned one-based ``nnml`` vector.
 
@@ -1502,6 +1662,10 @@ def _guard_full_global_level_array(values: Sequence[float], derived: Any) -> np.
     return guarded
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Commit fixed state for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def _commit_fixed_state(state: XSTARPythonState, runtime: DsecMutableRuntimeState, result: FixedStateCalcHMCAllResult) -> None:
     state.plasma.temperature = float(result.temperature_k)
     state.plasma.xpx = float(result.hydrogen_density_cm3)
@@ -1556,6 +1720,10 @@ def _commit_fixed_state(state: XSTARPythonState, runtime: DsecMutableRuntimeStat
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the ion fraction array operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def _ion_fraction_array(derived: Any, result: FixedStateCalcHMCAllResult) -> np.ndarray:
     values = np.zeros(int(derived.n_ions), dtype=float)
     for (z, stage), fraction in result.ion_fractions.items():
@@ -1565,6 +1733,10 @@ def _ion_fraction_array(derived: Any, result: FixedStateCalcHMCAllResult) -> np.
     return values
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the element array operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def _element_array(values: Mapping[int, float]) -> np.ndarray:
     out = np.zeros(30, dtype=float)
     for z, value in values.items():
@@ -1573,6 +1745,10 @@ def _element_array(values: Mapping[int, float]) -> np.ndarray:
     return out
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the bind emissivity contexts operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def _bind_emissivity_contexts(state: XSTARPythonState, parameters: NormalizedXSTARParameters, result: FixedStateCalcHMCAllResult) -> None:
     workspace: RadialTransferWorkspace = state.control["radial_transfer_workspace"]
     radiation = _radiation_namespace(state)
@@ -1657,6 +1833,10 @@ def _bind_emissivity_contexts(state: XSTARPythonState, parameters: NormalizedXST
     state.control["shared_emissivity_workspace"] = workspace.emissivity
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the source rrc threshold eV operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def _source_rrc_threshold_eV(
     level: LevelOutputMetadata | None,
     ionization_potential_eV: float | None,
@@ -1672,6 +1852,10 @@ def _source_rrc_threshold_eV(
     return float(ionization_potential_eV) - float(level.excitation_eV)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the compact dsec diagnostics operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def _compact_dsec_diagnostics(
     runtime_state: XSTARPythonState,
     evaluator: CalcHMCAllDsecEvaluator,
@@ -1804,6 +1988,10 @@ def _compact_dsec_diagnostics(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the install physical handlers operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXSTARParameters, compton_table: Any) -> None:
     master = state.atomic.master
     derived = state.atomic.derived
@@ -1820,6 +2008,10 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
         state.provenance["active_atdb_subset"] = active_subset.as_summary()
     calc_kwargs_factory = _calc_kwargs_factory(state, compton_table)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Build runtime for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+    # XSTAR-FUNCTION-COMMENT-END
     def build_runtime() -> DsecMutableRuntimeState:
         prior: DsecMutableRuntimeState | None = state.control.get("physical_dsec_runtime")
         return DsecMutableRuntimeState(
@@ -1842,9 +2034,17 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
             retain_source_arrays=(str(state.control.get("diagnostics_mode", "full")).lower() != "none"),
         )
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Implement the dsec handler operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+    # Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+    # XSTAR-FUNCTION-COMMENT-END
     def dsec_handler(runtime_state: XSTARPythonState) -> Any:
         runtime = build_runtime()
 
+        # XSTAR-FUNCTION-COMMENT-BEGIN
+        # Purpose: Implement the dsec progress operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+        # Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+        # XSTAR-FUNCTION-COMMENT-END
         def dsec_progress(
             evaluation_index: int,
             mutable: DsecMutableRuntimeState,
@@ -2067,6 +2267,10 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
             runtime_state.control.setdefault("dsec_trace_capture_errors", []).append(str(exc))
         return result
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Calculate hmc all handler for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+    # XSTAR-FUNCTION-COMMENT-END
     def calc_hmc_all_handler(runtime_state: XSTARPythonState) -> FixedStateCalcHMCAllResult:
         runtime: DsecMutableRuntimeState | None = runtime_state.control.get("physical_dsec_runtime")
         if runtime is None:
@@ -2100,11 +2304,19 @@ def _install_physical_handlers(state: XSTARPythonState, parameters: NormalizedXS
     state.control["calc_hmc_all_source_handler"] = calc_hmc_all_handler
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Resolve runner atdb path for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def _resolve_runner_atdb_path(atdb_path: str | Path | None) -> Path:
     """Resolve the production ATDB using the package-wide path policy."""
     return Path(resolve_atdb_path(atdb_path, prompt=False)).resolve()
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build initial state for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def _build_initial_state(
     parameters: NormalizedXSTARParameters,
     *,
@@ -2298,6 +2510,10 @@ def _build_initial_state(
     return state, built
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Prepare xstar python cache for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def prepare_xstar_python_cache(
     *,
     atdb_path: str | Path | None = None,
@@ -2353,6 +2569,10 @@ def prepare_xstar_python_cache(
         built.atomic_state.close()
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Implement the output parameters operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def _output_parameters(parameters: NormalizedXSTARParameters) -> tuple[OutputParameter, ...]:
     """Build the literal 56-row xstar.f90/fparmlist parameter table."""
     rows: list[OutputParameter] = []
@@ -2367,6 +2587,10 @@ def _output_parameters(parameters: NormalizedXSTARParameters) -> tuple[OutputPar
     return tuple(rows)
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Build the physical runtime state from normalized parameters and execute the registered source-faithful controller to produce XSTAR products.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def run_xstar_from_parameters(
     parameters: XSTARInputParameters | ParsedXSTARCommand | Mapping[str, Any],
     *,
@@ -2728,6 +2952,10 @@ def run_xstar_from_parameters(
         raise
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Execute xstar python for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def run_xstar_python(
     *,
     atdb_path: str | Path | None = None,
@@ -2801,6 +3029,10 @@ def run_xstar_python(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Parse literal xstar command for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def _parse_literal_xstar_command(command: str) -> XSTARInputParameters:
     parsed = parse_xstar_command(command)
     if not parsed.parameters:
@@ -2808,6 +3040,10 @@ def _parse_literal_xstar_command(command: str) -> XSTARInputParameters:
     return parsed
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Execute xstar python command for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def run_xstar_python_command(
     command: str,
     *,
@@ -2864,6 +3100,10 @@ def run_xstar_python_command(
     )
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Execute xstar python script for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def run_xstar_python_script(
     script: str | Path,
     *,
@@ -2935,15 +3175,31 @@ class Zone1DsecDiagnosticRun:
     products: Mapping[str, Path]
     atomic_build: AtomicDatabaseBuildResult = field(repr=False)
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Close operation for this module while preserving the surrounding source/runtime invariants.
+    # Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+    # XSTAR-FUNCTION-COMMENT-END
     def close(self) -> None:
         self.atomic_build.atomic_state.close()
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Enter the managed-resource context and return the active object.
+    # Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+    # XSTAR-FUNCTION-COMMENT-END
     def __enter__(self) -> "Zone1DsecDiagnosticRun":
         return self
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Leave the managed-resource context and release/close owned resources.
+    # Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+    # XSTAR-FUNCTION-COMMENT-END
     def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
         self.close()
 
+    # XSTAR-FUNCTION-COMMENT-BEGIN
+    # Purpose: Serialize the current state into a plain mapping for diagnostics, provenance, or machine-readable output.
+    # Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+    # XSTAR-FUNCTION-COMMENT-END
     def as_dict(self) -> dict[str, Any]:
         return {
             "ready": bool(self.ready),
@@ -2971,6 +3227,10 @@ class Zone1DsecDiagnosticRun:
         }
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Execute zone1 dsec diagnostic from parameters for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def run_zone1_dsec_diagnostic_from_parameters(
     parameters: XSTARInputParameters | ParsedXSTARCommand | Mapping[str, Any],
     *,
@@ -3069,6 +3329,10 @@ def run_zone1_dsec_diagnostic_from_parameters(
         raise
 
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Execute zone1 dsec diagnostic script for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def run_zone1_dsec_diagnostic_script(
     run_script: str | Path,
     **kwargs: Any,
@@ -3078,6 +3342,10 @@ def run_zone1_dsec_diagnostic_script(
         parse_run_xstar_script(run_script), **kwargs
     )
 
+# XSTAR-FUNCTION-COMMENT-BEGIN
+# Purpose: Execute c5 ne1 acceptance for this module while preserving the surrounding source/runtime invariants.
+# Reference context: XSTAR Manual Chs. 4 and 14, parameter normalization, initialization, and physical run orchestration.
+# XSTAR-FUNCTION-COMMENT-END
 def run_c5_ne1_acceptance(
     *,
     run_script: str | Path,
