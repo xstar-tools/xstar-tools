@@ -1,6 +1,6 @@
+include LICENSE
 include README.md
 include CHANGELOG.md
-include XSTAR_PYTHON_PORT.md
 include pyproject.toml
 include setup.py
 include build_support.py
@@ -66,3 +66,9 @@ include tools/qualification/check_packaging_milestone.py
 include qualification/packaging_milestone_0_6_71.json
 include src/xstar_tools/xstar/cpp/README.md
 include src/xstar_tools/xstar/cpp/build_lib.sh
+
+include LICENSE
+include .github/workflows/conda.yml
+include tools/qualification/check_conda_packaging.py
+include qualification/conda_packaging_0_6_72.json
+include tools/packaging/prepare_local_conda_recipe.py

@@ -26,7 +26,7 @@ def test_build_metadata_is_authoritative_and_setup_is_thin():
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     setup = (ROOT / "setup.py").read_text(encoding="utf-8")
     assert 'build-backend = "setuptools.build_meta"' in pyproject
-    assert 'version = "0.6.71"' in pyproject
+    assert 'version = "0.6.72"' in pyproject
     assert "include-package-data = false" in pyproject
     setup_cfg = ROOT / "setup.cfg"
     if setup_cfg.exists():
@@ -53,7 +53,7 @@ def test_python_only_build_hook_writes_explicit_metadata(tmp_path, monkeypatch):
         import build_support
         from setuptools import Distribution
         monkeypatch.setenv("XSTAR_TOOLS_NATIVE", "off")
-        dist = Distribution({"name": "xstar-tools", "version": "0.6.71", "packages": []})
+        dist = Distribution({"name": "xstar-tools", "version": "0.6.72", "packages": []})
         cmd = build_support.XStarBuildPy(dist)
         cmd.build_lib = str(tmp_path / "build")
         # Call only the native stage; ordinary build_py file copying is covered by wheel verification.

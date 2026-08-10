@@ -2,7 +2,7 @@
 
 `xstar-tools` is a source-faithful Python/C++ productization of XSTAR photoionization calculations. It preserves an accepted scientific baseline tied to XSTAR Fortran 2.59g while providing a stable Python API, one primary CLI, accelerated/shared C++ modes, and a native standalone `xstar-cpp` executable.
 
-**Distribution:** `0.6.71`  
+**Distribution:** `0.6.72`  
 **Accepted science revision:** `0.6.48.12.3.45.3.3.8`  
 **Frozen C++ all-62 baseline:** `0.6.48.12.3.44`  
 **C API ABI:** `60487`  
@@ -50,13 +50,23 @@ For a Python-only installation:
 XSTAR_TOOLS_NATIVE=off python -m pip install .
 ```
 
+A conda-forge-ready recipe is also maintained under `conda/recipe/`. After the
+feedstock is accepted and published, installation is:
+
+```bash
+conda install -c conda-forge xstar-tools
+```
+
+The conda recipe follows the same Linux-native / macOS-Windows Python-only
+capability policy and keeps `atdb.fits` external.
+
 For development:
 
 ```bash
 python -m pip install -e '.[dev]'
 ```
 
-The native wheel build retains the qualified Makefile/compiler defaults and stages only runtime artifacts; it does not package C++ source/object/cache debris. Native packaging is Linux-first in 0.6.71; macOS and Windows use the explicit Python-only capability path.
+The native wheel build retains the qualified Makefile/compiler defaults and stages only runtime artifacts; it does not package C++ source/object/cache debris. Native packaging is Linux-first in 0.6.72; macOS and Windows use the explicit Python-only capability path.
 
 Check the installation:
 

@@ -2,7 +2,7 @@
 
 `xstar-tools` tracks several independent identities:
 
-- **package version** — product/API/docs/packaging evolution (`0.6.70` here);
+- **package version** — product/API/docs/packaging evolution (`0.6.72` here);
 - **science revision** — accepted Python scientific behavior (`0.6.48.12.3.45.3.3.8`);
 - **frozen C++ baseline** — accepted all-62 native baseline (`0.6.48.12.3.44`);
 - **C API ABI** — `60487`;

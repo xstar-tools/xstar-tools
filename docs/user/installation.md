@@ -58,7 +58,7 @@ then fails the build instead of silently falling back.
 `XSTAR_TOOLS_NATIVE_JOBS=N` controls the Make parallelism used by the wheel
 build. The default is `2`.
 
-## Platform support in 0.6.71
+## Platform support in 0.6.72
 
 | Platform | Wheel/runtime policy |
 |---|---|
@@ -101,6 +101,22 @@ xstar-tools doctor --require zone-cpp
 
 `xstar-tools backends` includes native-build metadata when the runtime came from
 a wheel build.
+
+
+## Conda / conda-forge
+
+Milestone 9 adds a conda-forge-ready recipe under `conda/recipe/`. Until the
+feedstock is accepted and published, build it locally from the source checkout
+with conda-build; after publication the normal user command will be:
+
+```bash
+conda install -c conda-forge xstar-tools
+```
+
+The conda package follows the same capability policy as pip packaging: Linux
+builds carry the qualified native runtime, while macOS and Windows remain
+explicit Python-only builds for this milestone. `atdb.fits` remains external.
+See the [conda packaging guide](../developer/conda_packaging.md).
 
 ## Atomic data is separate
 

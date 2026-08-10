@@ -98,3 +98,8 @@ fingerprint changes. This allows long qualified translation units to be built
 incrementally without ever consuming unchecked object files from the source
 checkout. Normal builds do not set this variable and use a temporary clean
 stage.
+
+
+## Conda packaging
+
+The conda-forge recipe reuses this same build hook and native capability policy; see [Conda and conda-forge packaging](conda_packaging.md).

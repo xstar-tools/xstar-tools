@@ -18,5 +18,6 @@ qualification
 performance_rules
 versioning_and_freeze
 packaging
+conda_packaging
 documentation_policy
 ```

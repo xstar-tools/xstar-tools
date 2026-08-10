@@ -1,5 +1,17 @@
 # CHANGELOG
 
+# 0.6.72 — Milestone 9: conda/conda-forge packaging - 2026-08-09
+
+- Add a conda-forge-ready single-package recipe/feedstock seed under `conda/`, using the mature conda-build `meta.yaml` format.
+- Linux conda builds reuse the retained qualified native Makefile through the Milestone-8 setuptools hook with conda-forge compiler/stdlib activation and CFITSIO; macOS/Windows remain explicit Python-only capability builds.
+- Declare Python/NumPy/Astropy runtime requirements and optional `h5py`/`scipy` compatibility constraints without forcing optional features on all users.
+- Add import/CLI/ABI tests plus a deterministic offline bremsstrahlung scientific smoke fixture that does not require `atdb.fits`.
+- Add conda project CI, feedstock documentation, and a dependency-free conda packaging qualification gate.
+- Retire root `XSTAR_PYTHON_PORT.md` from the active/source-distribution surface and preserve it under `historical/documentation/pre_milestone9_root/`; it had no active consumer beyond `MANIFEST.in`.
+- Add an explicit MIT `LICENSE` file for wheel/sdist/conda license metadata.
+- Keep one `xstar-tools` package; do not split `xstar-cpp` or `xstar-data` until their dependency/update lifecycles justify it.
+- No file under `src/xstar_tools/xstar/` changes; science revision and ABIs remain frozen.
+
 # 0.6.71 — Milestone 8: stabilized pip/native packaging - 2026-08-09
 
 - Made `pyproject.toml` authoritative for package metadata/configuration; removed active `setup.cfg` and reduced `setup.py` to a thin custom-build hook.
