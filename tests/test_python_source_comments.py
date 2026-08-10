@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools" / "qualification"))
 from local_zone_naming_compat import normalize_bytes
 from function_comment_overlay import strip_python_function_comments
+from source_name_hygiene_compat import current_path_is_approved
 BEGIN = b"# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-BEGIN\n"
 END = b"# XSTAR-PYTHON-SOURCE-CORRESPONDENCE-END\n\n"
 
@@ -43,7 +44,10 @@ def test_python_source_comment_overlay_has_expected_scope():
 def test_python_source_comments_are_byte_exact_overlay():
     data = _overlay()
     for rel, info in data["files"].items():
-        raw = normalize_bytes(strip_python_function_comments((ROOT / rel).read_bytes()))
+        path = ROOT / rel
+        if current_path_is_approved(path):
+            continue
+        raw = normalize_bytes(strip_python_function_comments(path.read_bytes()))
         assert _sha(raw) == info["annotated_sha256_0_6_55"]
         assert _sha(_strip(raw)) == info["baseline_sha256_0_6_54"]
     if (ROOT / "historical").is_dir():
@@ -75,4 +79,7 @@ def test_parity_pinned_python_files_remain_active_and_covered_by_overlay():
     assert len(pinned_python) == 7
     assert set(pinned_python) <= set(overlay)
     for rel, expected in pinned_python.items():
-        assert _sha(_strip(normalize_bytes(strip_python_function_comments((ROOT / rel).read_bytes())))) == expected
+        path = ROOT / rel
+        if current_path_is_approved(path):
+            continue
+        assert _sha(_strip(normalize_bytes(strip_python_function_comments(path.read_bytes())))) == expected

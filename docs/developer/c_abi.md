@@ -49,7 +49,7 @@ The production-zone surface exports:
 - persistent context create/run-next/done/finalize/destroy functions
   (`zone-cpp`).
 
-Both call the same `command_run_standalone_production_v67()` scientific
+Both call the same `command_run_standalone_production()` scientific
 implementation used by standalone `xstar_cpp run-production`.
 
 ## Compatibility rules

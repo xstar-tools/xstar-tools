@@ -181,7 +181,7 @@ thread_local std::uint64_t g_type50_tmpe_prep_points_v064812332 = 0u;
 // Purpose: Implement env truthy as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
 // Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-static bool env_truthy_v064812324(const char* name) {
+static bool env_truthy(const char* name) {
     const char* value = std::getenv(name);
     return value && *value && std::strcmp(value, "0") != 0 &&
         std::strcmp(value, "false") != 0 && std::strcmp(value, "FALSE") != 0;
@@ -191,7 +191,7 @@ static bool env_truthy_v064812324(const char* name) {
 // Purpose: Implement cpu avx2 available as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
 // Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-static bool cpu_avx2_available_v064812324() {
+static bool cpu_avx2_available() {
 #if (defined(__x86_64__) || defined(__i386__)) && (defined(__GNUC__) || defined(__clang__))
     static const bool available = [] {
         __builtin_cpu_init();
@@ -209,7 +209,7 @@ static bool cpu_avx2_available_v064812324() {
 // Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
 // XSTAR-FUNCTION-COMMENT-END
 __attribute__((target("avx2")))
-static inline void voigte_small_a_farwing4_v064812324(
+static inline void voigte_small_a_farwing4(
     const double* v, double aa, double* out) {
     const __m256d vv = _mm256_loadu_pd(v);
     const __m256d v2 = _mm256_mul_pd(vv, vv);
@@ -316,7 +316,7 @@ static double voigte(double vs, double a) {
 // Purpose: Compute voigte small a positive for the line/emissivity/opacity path on the source or publication energy grid.
 // Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
 // XSTAR-FUNCTION-COMMENT-END
-static inline double voigte_small_a_positive_v064896(double v, double aa) {
+static inline double voigte_small_a_positive(double v, double aa) {
     static const double ak[15] = {
         source_real_literal(-1.12470432), source_real_literal(-0.15516677),
         source_real_literal(3.28867591), source_real_literal(-2.34357915),
@@ -511,7 +511,7 @@ int xstar_opacity_apply_exact_grid_v1(
 // Purpose: Compute opacity apply line profile legacy for the line/emissivity/opacity path on the source or publication energy grid.
 // Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
 // XSTAR-FUNCTION-COMMENT-END
-static int xstar_opacity_apply_line_profile_legacy_v0648951(
+static int apply_line_profile_legacy(
     double optpp,
     double line_energy_ev,
     double vturb_km_s,
@@ -695,7 +695,7 @@ struct Type50ConsumeStateV064812328 {
 // Purpose: Implement type50 consume no boundary as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
 // Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-static inline void type50_consume_no_boundary_v064812328(
+static inline void type50_consume_no_boundary(
     double optpp, double current_energy, double profile,
     Type50ConsumeStateV064812328& state) {
     const double tmpopo = state.tmpop;
@@ -713,7 +713,7 @@ static inline void type50_consume_no_boundary_v064812328(
 // Purpose: Implement type50 apply boundary as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
 // Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-static inline void type50_apply_boundary_v064812328(
+static inline void type50_apply_boundary(
     double current_energy, const double* epi, int n, double* opakc,
     long long* updated_bins, Type50ConsumeStateV064812328& state) {
     if (current_energy > epi[state.ml1m - 1]) {
@@ -734,19 +734,19 @@ static inline void type50_apply_boundary_v064812328(
 // Purpose: Implement type50 consume full as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
 // Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-static inline void type50_consume_full_v064812328(
+static inline void type50_consume_full(
     double optpp, double current_energy, double profile,
     const double* epi, int n, double* opakc, long long* updated_bins,
     Type50ConsumeStateV064812328& state) {
-    type50_consume_no_boundary_v064812328(optpp, current_energy, profile, state);
-    type50_apply_boundary_v064812328(current_energy, epi, n, opakc, updated_bins, state);
+    type50_consume_no_boundary(optpp, current_energy, profile, state);
+    type50_apply_boundary(current_energy, epi, n, opakc, updated_bins, state);
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Implement small a core bounds as a local helper for the opacity kernels module; inputs and outputs are kept in the source-compatible units expected by its caller.
 // Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-static std::pair<int,int> small_a_core_bounds_v064812328(
+static std::pair<int,int> small_a_core_bounds(
     int first_point, int last_point, double e00, double deleused,
     double line_energy_ev, double dele) {
     constexpr int ml2 = 10000;
@@ -773,146 +773,6 @@ static std::pair<int,int> small_a_core_bounds_v064812328(
     return {first_core, last_core};
 }
 
-#if (defined(__x86_64__) || defined(__i386__)) && (defined(__GNUC__) || defined(__clang__))
-// XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Compute run inline farwing profile for the line/emissivity/opacity path on the source or publication energy grid.
-// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
-// XSTAR-FUNCTION-COMMENT-END
-__attribute__((target("avx2")))
-[[maybe_unused]] static int run_inline_farwing_profile_v064812328(
-    double optpp, double line_energy_ev, double dele, double aasmall,
-    double e00, double deleused, const double* epi, int n,
-    int mlmin, int mlmax, int ml1min, int first_core, int last_core,
-    bool ncut4_fast_enabled, double* opakc, long long* updated_bins) {
-    constexpr int ml2 = 10000;
-    auto energy_for = [=](int point) {
-        return source_add(e00, source_mul(static_cast<double>(point - ml2), deleused));
-    };
-    Type50ConsumeStateV064812328 state;
-    state.previous_energy = energy_for(mlmin);
-    state.ml1m = ml1min;
-
-    auto scalar_point = [&](int point) {
-        const double current_energy = energy_for(point);
-        const double delet = source_div(source_sub(current_energy, line_energy_ev), dele);
-        double profile;
-        if (point == ml2 && aasmall <= xstar_constants::kLegacyLinopacCenterVoigtThreshold) {
-            profile = source_div(std::exp(-delet * delet),
-                xstar_constants::kLegacyLinopacProfileNormalization);
-        } else {
-            const double raw = voigte_small_a_positive_v064896(std::abs(delet), aasmall);
-            profile = source_div(raw, xstar_constants::kLegacyLinopacProfileNormalization);
-        }
-        type50_consume_full_v064812328(
-            optpp, current_energy, profile, epi, n, opakc, updated_bins, state);
-        ++g_type50_prod_scalar_profile_points_v064812328;
-    };
-
-    const __m256d deleused4 = _mm256_set1_pd(deleused);
-    const __m256d e004 = _mm256_set1_pd(e00);
-    const __m256d line4 = _mm256_set1_pd(line_energy_ev);
-    const __m256d dele4 = _mm256_set1_pd(dele);
-    const __m256d aa4 = _mm256_set1_pd(aasmall);
-    const __m256d six4 = _mm256_set1_pd(source_real_literal(6.0));
-    const __m256d four4 = _mm256_set1_pd(source_real_literal(4.0));
-    const __m256d fifteen4 = _mm256_set1_pd(source_real_literal(15.0));
-    const __m256d sqp4 = _mm256_set1_pd(source_real_literal(1.772453851));
-    const __m256d norm4 = _mm256_set1_pd(xstar_constants::kLegacyLinopacProfileNormalization);
-    const __m256d sign = _mm256_set1_pd(-0.0);
-
-#define XSTAR_V064812328_EXTRACT4(VEC, A0, A1, A2, A3) do { \
-        const __m128d lo_v064812328 = _mm256_castpd256_pd128((VEC)); \
-        const __m128d hi_v064812328 = _mm256_extractf128_pd((VEC), 1); \
-        (A0) = _mm_cvtsd_f64(lo_v064812328); \
-        (A1) = _mm_cvtsd_f64(_mm_unpackhi_pd(lo_v064812328, lo_v064812328)); \
-        (A2) = _mm_cvtsd_f64(hi_v064812328); \
-        (A3) = _mm_cvtsd_f64(_mm_unpackhi_pd(hi_v064812328, hi_v064812328)); \
-    } while (0)
-
-#define XSTAR_V064812328_PROCESS_FAR_RANGE(BEGIN_VALUE, END_VALUE) do { \
-        int point_v064812328 = (BEGIN_VALUE); \
-        const int end_v064812328 = (END_VALUE); \
-        while (point_v064812328 + 3 <= end_v064812328) { \
-            const double o0 = static_cast<double>(point_v064812328 - ml2); \
-            const double o1 = static_cast<double>(point_v064812328 + 1 - ml2); \
-            const double o2 = static_cast<double>(point_v064812328 + 2 - ml2); \
-            const double o3 = static_cast<double>(point_v064812328 + 3 - ml2); \
-            const __m256d offsets = _mm256_set_pd(o3, o2, o1, o0); \
-            const __m256d energies = _mm256_add_pd(e004, _mm256_mul_pd(offsets, deleused4)); \
-            const __m256d signed_v = _mm256_div_pd(_mm256_sub_pd(energies, line4), dele4); \
-            const __m256d v = _mm256_andnot_pd(sign, signed_v); \
-            const __m256d v2 = _mm256_mul_pd(v, v); \
-            const __m256d v4 = _mm256_mul_pd(v2, v2); \
-            const __m256d n1 = _mm256_mul_pd(six4, v2); \
-            const __m256d n2 = _mm256_mul_pd(four4, v4); \
-            const __m256d num = _mm256_add_pd(_mm256_add_pd(fifteen4, n1), n2); \
-            const __m256d scaled = _mm256_mul_pd(aa4, num); \
-            const __m256d d0 = _mm256_mul_pd(four4, v2); \
-            const __m256d d1 = _mm256_mul_pd(d0, v2); \
-            const __m256d d2 = _mm256_mul_pd(d1, v2); \
-            const __m256d raw = _mm256_div_pd(scaled, _mm256_mul_pd(d2, sqp4)); \
-            const __m256d profiles = _mm256_div_pd(raw, norm4); \
-            double e0, e1, e2, e3, p0, p1, p2, p3; \
-            XSTAR_V064812328_EXTRACT4(energies, e0, e1, e2, e3); \
-            XSTAR_V064812328_EXTRACT4(profiles, p0, p1, p2, p3); \
-            if (ncut4_fast_enabled && e3 <= epi[state.ml1m - 1]) { \
-                type50_consume_no_boundary_v064812328(optpp, e0, p0, state); \
-                type50_consume_no_boundary_v064812328(optpp, e1, p1, state); \
-                type50_consume_no_boundary_v064812328(optpp, e2, p2, state); \
-                type50_consume_no_boundary_v064812328(optpp, e3, p3, state); \
-                ++g_type50_ncut4_fast_blocks_v064812328; \
-                g_type50_ncut4_fast_points_v064812328 += 4u; \
-            } else { \
-                type50_consume_full_v064812328(optpp, e0, p0, epi, n, opakc, updated_bins, state); \
-                type50_consume_full_v064812328(optpp, e1, p1, epi, n, opakc, updated_bins, state); \
-                type50_consume_full_v064812328(optpp, e2, p2, epi, n, opakc, updated_bins, state); \
-                type50_consume_full_v064812328(optpp, e3, p3, epi, n, opakc, updated_bins, state); \
-                if (ncut4_fast_enabled) ++g_type50_ncut4_boundary_fallback_blocks_v064812328; \
-            } \
-            ++g_type50_prod_avx2_blocks_v064812328; \
-            g_type50_prod_avx2_points_v064812328 += 4u; \
-            point_v064812328 += 4; \
-        } \
-        while (point_v064812328 <= end_v064812328) { \
-            scalar_point(point_v064812328); \
-            ++point_v064812328; \
-        } \
-    } while (0)
-
-    const int first_point = mlmin + 1;
-    const int last_point = mlmax;
-    const int left_begin = first_point;
-    const int left_end = std::min(last_point, first_core - 1);
-    if (left_begin <= left_end) {
-        if (aasmall <= xstar_constants::kLegacyLinopacCenterVoigtThreshold &&
-            left_begin <= ml2 && ml2 <= left_end) {
-            XSTAR_V064812328_PROCESS_FAR_RANGE(left_begin, ml2 - 1);
-            scalar_point(ml2);
-            XSTAR_V064812328_PROCESS_FAR_RANGE(ml2 + 1, left_end);
-        } else {
-            XSTAR_V064812328_PROCESS_FAR_RANGE(left_begin, left_end);
-        }
-    }
-    for (int point = std::max(first_point, first_core);
-         point <= std::min(last_point, last_core); ++point) scalar_point(point);
-    const int right_begin = std::max(first_point, last_core + 1);
-    const int right_end = last_point;
-    if (right_begin <= right_end) {
-        if (aasmall <= xstar_constants::kLegacyLinopacCenterVoigtThreshold &&
-            right_begin <= ml2 && ml2 <= right_end) {
-            XSTAR_V064812328_PROCESS_FAR_RANGE(right_begin, ml2 - 1);
-            scalar_point(ml2);
-            XSTAR_V064812328_PROCESS_FAR_RANGE(ml2 + 1, right_end);
-        } else {
-            XSTAR_V064812328_PROCESS_FAR_RANGE(right_begin, right_end);
-        }
-    }
-#undef XSTAR_V064812328_PROCESS_FAR_RANGE
-#undef XSTAR_V064812328_EXTRACT4
-    return 0;
-}
-#endif
-
 } // extern "C" -- v064812329 C++ template helpers
 
 #if (defined(__x86_64__) || defined(__i386__)) && (defined(__GNUC__) || defined(__clang__))
@@ -923,7 +783,7 @@ template <bool RegisterConsumeV064812329, bool LikelyFalseHintV064812329,
 // Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
 // XSTAR-FUNCTION-COMMENT-END
 __attribute__((target("avx2")))
-static int run_inline_farwing_profile_v064812329(
+static int run_inline_farwing_profile_hinted_consume(
     double optpp, double line_energy_ev, double dele, double aasmall,
     double e00, double deleused, const double* epi, int n,
     int mlmin, int mlmax, int ml1min, int first_core, int last_core,
@@ -993,7 +853,7 @@ static int run_inline_farwing_profile_v064812329(
                 reg_sume = 0.0;
             }
         } else {
-            type50_consume_no_boundary_v064812328(optpp, current_energy, profile, state);
+            type50_consume_no_boundary(optpp, current_energy, profile, state);
             bool crosses = current_energy > epi[state.ml1m - 1];
             if constexpr (LikelyFalseHintV064812329) {
                 crosses = __builtin_expect(crosses, 0);
@@ -1034,7 +894,7 @@ static int run_inline_farwing_profile_v064812329(
             profile = source_div(std::exp(-delet * delet),
                 xstar_constants::kLegacyLinopacProfileNormalization);
         } else {
-            const double raw = voigte_small_a_positive_v064896(std::abs(delet), aasmall);
+            const double raw = voigte_small_a_positive(std::abs(delet), aasmall);
             profile = source_div(raw, xstar_constants::kLegacyLinopacProfileNormalization);
         }
         consume_point(current_energy, profile);
@@ -1146,7 +1006,7 @@ template <bool CacheNextEpiV064812330, bool LocalUpdatedBinsV064812330,
 // Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
 // XSTAR-FUNCTION-COMMENT-END
 __attribute__((target("avx2")))
-static int run_inline_farwing_profile_v064812330(
+static int run_inline_farwing_profile_cursor_advance(
     double optpp, double line_energy_ev, double dele, double aasmall,
     double e00, double deleused, const double* epi, int n,
     int mlmin, int mlmax, int ml1min, int first_core, int last_core,
@@ -1174,7 +1034,7 @@ static int run_inline_farwing_profile_v064812330(
     };
 
     auto consume_point = [&](double current_energy, double profile) {
-        type50_consume_no_boundary_v064812328(optpp, current_energy, profile, state);
+        type50_consume_no_boundary(optpp, current_energy, profile, state);
         bool crosses;
         if constexpr (CursorAdvanceV064812330) crosses = current_energy > *epi_cursor;
         else if constexpr (CacheNextEpiV064812330) crosses = current_energy > next_epi;
@@ -1219,7 +1079,7 @@ static int run_inline_farwing_profile_v064812330(
             profile = source_div(std::exp(-delet * delet),
                 xstar_constants::kLegacyLinopacProfileNormalization);
         } else {
-            const double raw = voigte_small_a_positive_v064896(std::abs(delet), aasmall);
+            const double raw = voigte_small_a_positive(std::abs(delet), aasmall);
             profile = source_div(raw, xstar_constants::kLegacyLinopacProfileNormalization);
         }
         consume_point(current_energy, profile);
@@ -1329,7 +1189,7 @@ template <bool CacheNextEpiV064812332, bool LocalUpdatedBinsV064812332,
 // Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
 // XSTAR-FUNCTION-COMMENT-END
 __attribute__((target("avx2")))
-static int run_inline_farwing_profile_v064812332(
+static int run_inline_farwing_profile_prepared_consume(
     double optpp, double line_energy_ev, double dele, double aasmall,
     double e00, double deleused, const double* epi, int n,
     int mlmin, int mlmax, int ml1min, int first_core, int last_core,
@@ -1433,7 +1293,7 @@ static int run_inline_farwing_profile_v064812332(
             profile = source_div(std::exp(-delet * delet),
                 xstar_constants::kLegacyLinopacProfileNormalization);
         } else {
-            const double raw = voigte_small_a_positive_v064896(std::abs(delet), aasmall);
+            const double raw = voigte_small_a_positive(std::abs(delet), aasmall);
             profile = source_div(raw, xstar_constants::kLegacyLinopacProfileNormalization);
         }
         consume_scalar_point(current_energy, profile);
@@ -1567,7 +1427,7 @@ static int run_inline_farwing_profile_v064812332(
 // Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
 // XSTAR-FUNCTION-COMMENT-END
 __attribute__((target("avx2")))
-static std::uint64_t fill_farwing_profile_blocks_v064812328(
+static std::uint64_t fill_farwing_profile_blocks(
     int begin, int end, int first_point, int ml2, double e00, double deleused,
     double line_energy_ev, double dele, double aasmall, double* profiles) {
     if (begin > end) return 0u;
@@ -1631,7 +1491,7 @@ struct Type50DecompEventV064812331 {
 // Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
 // XSTAR-FUNCTION-COMMENT-END
 __attribute__((target("avx2")))
-static void decompose_cursor_profile_v064812331(
+static void decompose_cursor_profile(
     double optpp, double line_energy_ev, double dele, double aasmall,
     double e00, double deleused, const double* epi, int n,
     int mlmin, int mlmax, int ml1min, int first_core, int last_core,
@@ -1654,10 +1514,10 @@ static void decompose_cursor_profile_v064812331(
 
     std::uint64_t avx_points = 0u;
     const auto avx_started = std::chrono::steady_clock::now();
-    avx_points += fill_farwing_profile_blocks_v064812328(
+    avx_points += fill_farwing_profile_blocks(
         first_point, std::min(last_point, first_core - 1), first_point, ml2,
         e00, deleused, line_energy_ev, dele, aasmall, profiles.data());
-    avx_points += fill_farwing_profile_blocks_v064812328(
+    avx_points += fill_farwing_profile_blocks(
         std::max(first_point, last_core + 1), last_point, first_point, ml2,
         e00, deleused, line_energy_ev, dele, aasmall, profiles.data());
     g_type50_decomp_avx2_seconds_v064812331 += std::chrono::duration<double>(
@@ -1674,7 +1534,7 @@ static void decompose_cursor_profile_v064812331(
             profile = source_div(std::exp(-delet * delet),
                 xstar_constants::kLegacyLinopacProfileNormalization);
         } else {
-            const double raw = voigte_small_a_positive_v064896(std::abs(delet), aasmall);
+            const double raw = voigte_small_a_positive(std::abs(delet), aasmall);
             profile = source_div(raw, xstar_constants::kLegacyLinopacProfileNormalization);
         }
         ++scalar_points;
@@ -1774,7 +1634,7 @@ static void decompose_cursor_profile_v064812331(
 // Purpose: Compute opacity apply line profile optimized for the line/emissivity/opacity path on the source or publication energy grid.
 // Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
 // XSTAR-FUNCTION-COMMENT-END
-static int xstar_opacity_apply_line_profile_optimized_v064896(
+static int apply_line_profile_optimized(
     double optpp,
     double line_energy_ev,
     double vturb_km_s,
@@ -1889,7 +1749,7 @@ static int xstar_opacity_apply_line_profile_optimized_v064896(
     // implementation so edge-grid semantics remain exact.
     if (raw_mlmin >= ml2 || raw_mlmax <= ml2) {
         ++g_type50_scalar_profiles_v064812324;
-        return xstar_opacity_apply_line_profile_legacy_v0648951(
+        return apply_line_profile_legacy(
             optpp, line_energy_ev, vturb_km_s, temperature_1e4k, atomic_mass_amu,
             natural_width_ev, seed_profiles, seed_radius, epi, ncn2, opakc,
             rccemis, updated_bins, opacity_seconds, errbuf, errbuf_size);
@@ -1905,36 +1765,36 @@ static int xstar_opacity_apply_line_profile_optimized_v064896(
     double previous_energy = temporary_energy(mlmin);
 
     static const bool force_scalar_v064812328 =
-        env_truthy_v064812324("XSTAR_V064812328_FORCE_SCALAR_TYPE50") ||
-        env_truthy_v064812324("XSTAR_V064812324_FORCE_SCALAR_TYPE50");
+        env_truthy("XSTAR_V064812328_FORCE_SCALAR_TYPE50") ||
+        env_truthy("XSTAR_V064812324_FORCE_SCALAR_TYPE50");
     const bool production_inline_avx2_v064812328 = use_small_a_voigt &&
-        cpu_avx2_available_v064812324() && !force_scalar_v064812328;
+        cpu_avx2_available() && !force_scalar_v064812328;
     static const bool decompose_v064812328 =
-        env_truthy_v064812324("XSTAR_V064812328_TYPE50_DECOMPOSE");
+        env_truthy("XSTAR_V064812328_TYPE50_DECOMPOSE");
     static const bool force_12330_hint_consume_v064812331 =
-        env_truthy_v064812324("XSTAR_V064812331_FORCE_12330_HINT_CONSUME");
+        env_truthy("XSTAR_V064812331_FORCE_12330_HINT_CONSUME");
     static const bool decompose_cursor_v064812331 =
-        env_truthy_v064812324("XSTAR_V064812331_TYPE50_DECOMPOSE");
+        env_truthy("XSTAR_V064812331_TYPE50_DECOMPOSE");
     static const bool enable_tmpop_prep_v064812332 =
-        env_truthy_v064812324("XSTAR_V064812332_ENABLE_AVX2_TMPOP_PREP");
+        env_truthy("XSTAR_V064812332_ENABLE_AVX2_TMPOP_PREP");
     static const bool enable_tmpe_prep_v064812332 =
-        env_truthy_v064812324("XSTAR_V064812332_ENABLE_AVX2_TMPE_PREP");
+        env_truthy("XSTAR_V064812332_ENABLE_AVX2_TMPE_PREP");
 
 #if (defined(__x86_64__) || defined(__i386__)) && (defined(__GNUC__) || defined(__clang__))
     if (production_inline_avx2_v064812328 && decompose_v064812328) {
         const int first_point = mlmin + 1;
         const int last_point = mlmax;
-        const auto core = small_a_core_bounds_v064812328(
+        const auto core = small_a_core_bounds(
             first_point, last_point, e00, deleused, line_energy_ev, dele);
         const std::size_t count = static_cast<std::size_t>(std::max(0, last_point - first_point + 1));
         std::vector<double> profiles(count, std::numeric_limits<double>::quiet_NaN());
         std::uint64_t avx_points = 0u;
 
         const auto avx_started = std::chrono::steady_clock::now();
-        avx_points += fill_farwing_profile_blocks_v064812328(
+        avx_points += fill_farwing_profile_blocks(
             first_point, std::min(last_point, core.first - 1), first_point, ml2,
             e00, deleused, line_energy_ev, dele, aasmall, profiles.data());
-        avx_points += fill_farwing_profile_blocks_v064812328(
+        avx_points += fill_farwing_profile_blocks(
             std::max(first_point, core.second + 1), last_point, first_point, ml2,
             e00, deleused, line_energy_ev, dele, aasmall, profiles.data());
         g_type50_decomp_avx2_profile_seconds_v064812328 += std::chrono::duration<double>(
@@ -1951,7 +1811,7 @@ static int xstar_opacity_apply_line_profile_optimized_v064896(
                 profile = source_div(std::exp(-delet * delet),
                     xstar_constants::kLegacyLinopacProfileNormalization);
             } else {
-                const double raw = voigte_small_a_positive_v064896(std::abs(delet), aasmall);
+                const double raw = voigte_small_a_positive(std::abs(delet), aasmall);
                 profile = source_div(raw, xstar_constants::kLegacyLinopacProfileNormalization);
             }
             ++scalar_points;
@@ -1966,7 +1826,7 @@ static int xstar_opacity_apply_line_profile_optimized_v064896(
         for (int point = first_point; point <= last_point; ++point) {
             const double current_energy = temporary_energy(point);
             const double profile = profiles[static_cast<std::size_t>(point - first_point)];
-            type50_consume_full_v064812328(
+            type50_consume_full(
                 optpp, current_energy, profile, epi, n, opakc, updated_bins, state);
         }
         g_type50_decomp_consume_seconds_v064812328 += std::chrono::duration<double>(
@@ -1986,34 +1846,34 @@ static int xstar_opacity_apply_line_profile_optimized_v064896(
     if (production_inline_avx2_v064812328) {
         const int first_point = mlmin + 1;
         const int last_point = mlmax;
-        const auto core = small_a_core_bounds_v064812328(
+        const auto core = small_a_core_bounds(
             first_point, last_point, e00, deleused, line_energy_ev, dele);
         if (force_12330_hint_consume_v064812331) {
             // Explicit science-safe fallback: exact 12.3.30 production path.
             ++g_type50_fallback_hint_profiles_v064812331;
             ++g_type50_hint_profiles_v064812329;
-            run_inline_farwing_profile_v064812329<false,true,false>(
+            run_inline_farwing_profile_hinted_consume<false,true,false>(
                 optpp,line_energy_ev,dele,aasmall,e00,deleused,epi,n,mlmin,mlmax,ml1min,core.first,core.second,opakc,updated_bins);
         } else if (enable_tmpop_prep_v064812332 && !enable_tmpe_prep_v064812332) {
             ++g_type50_tmpop_prep_profiles_v064812332;
-            run_inline_farwing_profile_v064812332<false,false,true,true,false>(
+            run_inline_farwing_profile_prepared_consume<false,false,true,true,false>(
                 optpp,line_energy_ev,dele,aasmall,e00,deleused,epi,n,mlmin,mlmax,ml1min,core.first,core.second,opakc,updated_bins);
         } else if (enable_tmpe_prep_v064812332 && !enable_tmpop_prep_v064812332) {
             ++g_type50_tmpe_prep_profiles_v064812332;
-            run_inline_farwing_profile_v064812332<false,false,true,false,true>(
+            run_inline_farwing_profile_prepared_consume<false,false,true,false,true>(
                 optpp,line_energy_ev,dele,aasmall,e00,deleused,epi,n,mlmin,mlmax,ml1min,core.first,core.second,opakc,updated_bins);
         } else {
             // 12.3.31 production remains frozen in 12.3.32.  If both experiment
             // flags are accidentally set, deliberately run production rather
             // than combining the two candidates.
             if (decompose_cursor_v064812331) {
-                decompose_cursor_profile_v064812331(
+                decompose_cursor_profile(
                     optpp,line_energy_ev,dele,aasmall,e00,deleused,epi,n,
                     mlmin,mlmax,ml1min,core.first,core.second,opakc);
             }
             ++g_type50_prod_cursor_profiles_v064812331;
             ++g_type50_cursor_profiles_v064812330;
-            run_inline_farwing_profile_v064812330<false,false,true>(
+            run_inline_farwing_profile_cursor_advance<false,false,true>(
                 optpp,line_energy_ev,dele,aasmall,e00,deleused,epi,n,mlmin,mlmax,ml1min,core.first,core.second,opakc,updated_bins);
         }
         ++g_type50_prod_avx2_profiles_v064812328;
@@ -2040,7 +1900,7 @@ static int xstar_opacity_apply_line_profile_optimized_v064896(
     ++g_type50_prod_scalar_profiles_v064812328;
     ++g_type50_scalar_profiles_v064812324;
     g_last_profile_vectorized_v064812324 = 0;
-    auto consume_profile_point_v064812328 = [&](double current_energy, double profile) {
+    auto consume_profile_point = [&](double current_energy, double profile) {
         const double tmpopo = tmpop;
         tmpop = optpp * profile;
         const double tmpe = std::abs(source_sub(current_energy, previous_energy));
@@ -2072,7 +1932,7 @@ static int xstar_opacity_apply_line_profile_optimized_v064896(
             if (aasmall > xstar_constants::kLegacyLinopacCenterVoigtThreshold) {
                 const double av = std::abs(delet);
                 const double raw = use_small_a_voigt
-                    ? voigte_small_a_positive_v064896(av, aasmall)
+                    ? voigte_small_a_positive(av, aasmall)
                     : voigte(av, aasmall);
                 profile = source_div(raw, xstar_constants::kLegacyLinopacProfileNormalization);
             } else {
@@ -2082,14 +1942,14 @@ static int xstar_opacity_apply_line_profile_optimized_v064896(
         } else if (use_voigt) {
             const double av = std::abs(delet);
             const double raw = use_small_a_voigt
-                ? voigte_small_a_positive_v064896(av, aasmall)
+                ? voigte_small_a_positive(av, aasmall)
                 : voigte(av, aasmall);
             profile = source_div(raw, xstar_constants::kLegacyLinopacProfileNormalization);
         } else {
             profile = source_div(std::exp(-delet * delet),
                 xstar_constants::kLegacyLinopacProfileNormalization);
         }
-        consume_profile_point_v064812328(current_energy, profile);
+        consume_profile_point(current_energy, profile);
         ++g_type50_prod_scalar_profile_points_v064812328;
     }
     const auto ended = std::chrono::steady_clock::now();
@@ -2144,12 +2004,12 @@ int xstar_opacity_apply_line_profile_v1(
         return standalone_native;
     }();
     if (!use_optimized_standalone_v064896) {
-        return xstar_opacity_apply_line_profile_legacy_v0648951(
+        return apply_line_profile_legacy(
             optpp, line_energy_ev, vturb_km_s, temperature_1e4k, atomic_mass_amu,
             natural_width_ev, seed_profiles, seed_radius, epi, ncn2, opakc,
             rccemis, updated_bins, opacity_seconds, errbuf, errbuf_size);
     }
-    return xstar_opacity_apply_line_profile_optimized_v064896(
+    return apply_line_profile_optimized(
         optpp, line_energy_ev, vturb_km_s, temperature_1e4k, atomic_mass_amu,
         natural_width_ev, seed_profiles, seed_radius, epi, ncn2, opakc,
         rccemis, updated_bins, opacity_seconds, errbuf, errbuf_size);

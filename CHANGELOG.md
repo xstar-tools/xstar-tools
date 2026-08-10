@@ -1,5 +1,17 @@
 # CHANGELOG
 
+# 0.6.76 — source-name hygiene and retired diagnostic cleanup - 2026-08-10
+
+- Rename 401 active private C++ helpers and 21 private Python helpers from development-version/patch labels to stable semantic names.
+- Remove 32 demonstrably unreachable private C++ functions rather than carrying historical development names in active production source.
+- Keep a strict allowlist of 147 genuine C-linkage ABI/compatibility/telemetry callables whose version suffixes remain part of their external symbol contracts.
+- Generalize the preferred element-general rate-payload exports to `xstar_engine_eval_rate_payload_shadow_v1` and `xstar_engine_eval_rate_payload_native_scalars_v1`, while retaining the two former Mg-labelled spellings as ABI-60487 forwarding aliases.
+- Retire the obsolete Mg-only coarse accumulator from Python/environment/production use while retaining `xstar_matrix_eval_mg_ion_accumulator_v1` and `xstar_engine_eval_mg_ion_accumulator_v1` as compatibility-only C exports preserving their historical diagnostic behavior.
+- Retire the remaining six obsolete Mg accumulator Python/private data-surface symbols from active runtime architecture.
+- Add `qualification/source_name_hygiene_0_6_76.json` and strict characterization tests that pin every touched source file, the 0.6.75→0.6.76 rename/removal map, the exact versioned-callable allowlist, and the compatibility exports.
+- Make historical qualification checkers recognize only exact hashes from the 0.6.76 hygiene overlay while leaving historical milestone manifests unchanged.
+- Preserve accepted science revision `0.6.48.12.3.45.3.3.8`, frozen C++ baseline `0.6.48.12.3.44`, C API ABI `60487`, and production-zone ABI `6048110`.
+
 ## 0.6.75 - benchmark unified-CLI adapter hotfix - 2026-08-10
 
 - Fix public benchmark `pure-python`/`zone-python` subprocesses to use the Milestone-5 stable `xstar-tools run` contract: positional input plus `--data-dir`, instead of retired source-port flags.

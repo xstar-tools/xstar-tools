@@ -109,10 +109,10 @@ def test_makefile_links_frontend_to_runtime_abi_libraries():
 
 def test_all_three_native_modes_share_one_scientific_production_operator():
     source=(CPP/'xstar_standalone.cpp').read_text(encoding='utf-8')
-    assert source.count('command_run_standalone_production_v67') >= 5
+    assert source.count('command_run_standalone_production') >= 5
     assert 'xstar_production_zone_run_all_v0648110' in source
     assert 'xstar_production_zone_context_create_v0648110' in source
-    assert 'if (options.command == "run-production") return command_run_standalone_production_v67' in source
+    assert 'if (options.command == "run-production") return command_run_standalone_production' in source
 
 
 def test_package_version_is_productization_only():

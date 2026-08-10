@@ -44,7 +44,7 @@ The frontend delegates to the sibling compatibility executable:
 ```text
 xstar-cpp
   -> xstar_cpp run-production
-       -> command_run_standalone_production_v67()
+       -> command_run_standalone_production()
 ```
 
 The two Python-facing shared production modes use the same frozen operator:
@@ -52,11 +52,11 @@ The two Python-facing shared production modes use the same frozen operator:
 ```text
 zone-all
   -> xstar_production_zone_run_all_v0648110()
-       -> command_run_standalone_production_v67()
+       -> command_run_standalone_production()
 
 zone-cpp
   -> xstar_production_zone_context_create_v0648110()
-       -> worker -> command_run_standalone_production_v67()
+       -> worker -> command_run_standalone_production()
 ```
 
 Thus the frontend, `zone-all`, and `zone-cpp` do not carry independent scientific

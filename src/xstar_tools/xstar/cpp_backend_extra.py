@@ -13,11 +13,10 @@
 
 """Load optional flat-layout C++ backend libraries.
 
-v0.6.3 keeps every C++ source and shared object directly in
-``src/xstar_tools/xstar/cpp``.  The engine library now exposes a coarse
-Mg-ion accumulator ABI that can traverse/classify compact per-ion record
-packets and report fallback counters.  Product-active matrix/rate row
-generation remains disabled until a later parity-gated release.
+C++ sources and shared objects live directly in ``src/xstar_tools/xstar/cpp``.
+This module exposes optional low-level backend status and retained generic
+rate-payload verification helpers.  Obsolete Mg-only accumulator diagnostics
+were retired after the production engine became element-general.
 """
 from __future__ import annotations
 
@@ -48,64 +47,6 @@ class ExtraBackendStatus:
     def as_dict(self) -> dict[str, object]:
         return dict(asdict(self))
 
-
-_COUNTER_NAMES = (
-    "records_seen",
-    "cpp_supported",
-    "python_fallback",
-    "matrix_terms_emitted",
-    "rate_terms_emitted",
-    "heat_terms_emitted",
-    "cool_terms_emitted",
-    "rate_type7_records",
-    "type49_records",
-    "type53_records",
-    "type50_records",
-    "type51_records",
-    "type49_supported",
-    "type53_supported",
-    "type50_topology_supported",
-    "type51_topology_supported",
-    "unsupported_rate_type_records",
-    "unsupported_data_type_records",
-    "source_order_records",
-    "product_active",
-)
-
-
-@dataclass(frozen=True)
-class MgIonAccumulatorProbe:
-    enabled: bool
-    library_available: bool
-    records_seen: int
-    cpp_supported: int
-    python_fallback: int
-    matrix_terms_emitted: int
-    rate_terms_emitted: int
-    heat_terms_emitted: int
-    cool_terms_emitted: int
-    message: str
-    error: str | None = None
-    rate_type7_records: int = 0
-    type49_records: int = 0
-    type53_records: int = 0
-    type50_records: int = 0
-    type51_records: int = 0
-    type49_supported: int = 0
-    type53_supported: int = 0
-    type50_topology_supported: int = 0
-    type51_topology_supported: int = 0
-    unsupported_rate_type_records: int = 0
-    unsupported_data_type_records: int = 0
-    source_order_records: int = 0
-    product_active: int = 0
-
-    # XSTAR-FUNCTION-COMMENT-BEGIN
-    # Purpose: Serialize the current state into a plain mapping for diagnostics, provenance, or machine-readable output.
-    # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
-    # XSTAR-FUNCTION-COMMENT-END
-    def as_dict(self) -> dict[str, object]:
-        return dict(asdict(self))
 
 
 _LIBS: dict[str, ctypes.CDLL | None] = {}
@@ -190,40 +131,24 @@ def _load_library(kind: str) -> ctypes.CDLL | None:
                 lib.xstar_engine_probe.restype = ctypes.c_int
                 i64p = np.ctypeslib.ndpointer(dtype=np.int64, ndim=1, flags="C_CONTIGUOUS")
                 try:
-                    lib.xstar_matrix_eval_mg_ion_accumulator_v1.argtypes = [
-                        ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
-                        i64p, i64p, i64p, i64p,
-                        i64p, ctypes.c_int,
-                        ctypes.c_char_p, ctypes.c_size_t,
-                    ]
-                    lib.xstar_matrix_eval_mg_ion_accumulator_v1.restype = ctypes.c_int
-                except AttributeError:
-                    pass
-                lib.xstar_engine_eval_mg_ion_accumulator_v1.argtypes = [
-                    ctypes.c_int, ctypes.c_int, ctypes.c_int,
-                    i64p, i64p, i64p, ctypes.c_int,
-                    ctypes.c_char_p, ctypes.c_size_t,
-                ]
-                lib.xstar_engine_eval_mg_ion_accumulator_v1.restype = ctypes.c_int
-                try:
                     f64p = np.ctypeslib.ndpointer(dtype=np.float64, ndim=1, flags="C_CONTIGUOUS")
-                    lib.xstar_engine_eval_mg_rate_payload_shadow_v1.argtypes = [
+                    lib.xstar_engine_eval_rate_payload_shadow_v1.argtypes = [
                         ctypes.c_int, i64p, ctypes.c_int, f64p, ctypes.c_int,
                         ctypes.c_int, i64p, ctypes.c_int, f64p, ctypes.c_int,
                         f64p, ctypes.c_int, i64p, ctypes.c_int, ctypes.c_char_p, ctypes.c_size_t,
                     ]
-                    lib.xstar_engine_eval_mg_rate_payload_shadow_v1.restype = ctypes.c_int
+                    lib.xstar_engine_eval_rate_payload_shadow_v1.restype = ctypes.c_int
                 except AttributeError:
                     pass
                 try:
                     f64p = np.ctypeslib.ndpointer(dtype=np.float64, ndim=1, flags="C_CONTIGUOUS")
-                    lib.xstar_engine_eval_mg_rate_payload_native_scalars_v1.argtypes = [
+                    lib.xstar_engine_eval_rate_payload_native_scalars_v1.argtypes = [
                         ctypes.c_int, i64p, ctypes.c_int, f64p, ctypes.c_int,
                         f64p, ctypes.c_int, f64p, f64p, ctypes.c_int,
                         f64p, ctypes.c_int, f64p, ctypes.c_int, i64p, ctypes.c_int,
                         ctypes.c_char_p, ctypes.c_size_t,
                     ]
-                    lib.xstar_engine_eval_mg_rate_payload_native_scalars_v1.restype = ctypes.c_int
+                    lib.xstar_engine_eval_rate_payload_native_scalars_v1.restype = ctypes.c_int
                 except AttributeError:
                     pass
             _LIBS[kind] = lib
@@ -316,111 +241,12 @@ def engine_backend_status(requested: str | None = None) -> ExtraBackendStatus:
     return backend_status("engine", requested)
 
 
-# XSTAR-FUNCTION-COMMENT-BEGIN
-# Purpose: Implement the enabled from env operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
-# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
-# XSTAR-FUNCTION-COMMENT-END
-def _enabled_from_env(name: str, default: str = "0") -> bool:
-    return str(os.environ.get(name, default)).strip().lower() in {"1", "true", "yes", "on"}
 
 
-# XSTAR-FUNCTION-COMMENT-BEGIN
-# Purpose: Construct probe for this module while preserving the surrounding source/runtime invariants.
-# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
-# XSTAR-FUNCTION-COMMENT-END
-def _make_probe(enabled: bool, lib_available: bool, counters: np.ndarray | None, message: str, error: str | None = None) -> MgIonAccumulatorProbe:
-    vals = {name: 0 for name in _COUNTER_NAMES}
-    if counters is not None:
-        for i, name in enumerate(_COUNTER_NAMES):
-            if i < int(counters.shape[0]):
-                vals[name] = int(counters[i])
-    return MgIonAccumulatorProbe(
-        enabled=enabled,
-        library_available=lib_available,
-        message=message,
-        error=error,
-        **vals,
-    )
 
 
-# XSTAR-FUNCTION-COMMENT-BEGIN
-# Purpose: Implement the eval mg ion accumulator cpp operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
-# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
-# XSTAR-FUNCTION-COMMENT-END
-def eval_mg_ion_accumulator_cpp(
-    *,
-    element_z: int = 12,
-    ion_index: int = 0,
-    ion_stage: int = 0,
-    n_levels: int = 0,
-    n_parent_levels: int = 0,
-    record_number: np.ndarray | None = None,
-    record_rate_type: np.ndarray | None = None,
-    record_data_type: np.ndarray | None = None,
-    record_source_index: np.ndarray | None = None,
-    enabled: bool | None = None,
-) -> MgIonAccumulatorProbe:
-    """Call the v0.6.3 coarse Mg-ion accumulator ABI.
-
-    This is a coarse per-ion packet call: C++ receives source-order record
-    arrays, traverses/classifies supported groups, and returns fallback
-    counters.  Product-active matrix/rate emission remains disabled.
-    """
-    enabled_value = bool(enabled) if enabled is not None else _enabled_from_env("XSTAR_ATOMIC_ENGINE_MG_ION_ACCUMULATOR_CPP", "0")
-    lib = _load_library("engine")
-    if not enabled_value:
-        return _make_probe(False, lib is not None, None, "Mg-ion accumulator disabled by default")
-    if lib is None:
-        return _make_probe(True, False, None, "engine library unavailable", cpp_import_error("engine"))
-
-    rn = np.ascontiguousarray(np.asarray(record_number if record_number is not None else np.zeros(0, dtype=np.int64), dtype=np.int64))
-    rt = np.ascontiguousarray(np.asarray(record_rate_type if record_rate_type is not None else np.zeros(rn.shape[0], dtype=np.int64), dtype=np.int64))
-    dt = np.ascontiguousarray(np.asarray(record_data_type if record_data_type is not None else np.zeros(rn.shape[0], dtype=np.int64), dtype=np.int64))
-    si = np.ascontiguousarray(np.asarray(record_source_index if record_source_index is not None else rn, dtype=np.int64))
-    if not (rn.shape[0] == rt.shape[0] == dt.shape[0] == si.shape[0]):
-        raise ValueError("record_number, record_rate_type, record_data_type, and record_source_index must have the same length")
-    counters = np.zeros(len(_COUNTER_NAMES), dtype=np.int64)
-    buf = ctypes.create_string_buffer(768)
-    try:
-        fn = lib.xstar_matrix_eval_mg_ion_accumulator_v1
-        rc = fn(
-            int(element_z), int(ion_index), int(ion_stage), int(n_levels), int(n_parent_levels), int(rn.shape[0]),
-            rn, rt, dt, si,
-            counters, int(counters.shape[0]), buf, ctypes.sizeof(buf),
-        )
-    except AttributeError:
-        rc = lib.xstar_engine_eval_mg_ion_accumulator_v1(
-            int(element_z), int(ion_index), int(rn.shape[0]), rt, dt, counters, int(counters.shape[0]), buf, ctypes.sizeof(buf)
-        )
-    msg = buf.value.decode("utf-8", "replace")
-    if rc != 0:
-        return _make_probe(True, True, counters, msg or f"accumulator returned {rc}", f"return_code={rc}")
-    return _make_probe(True, True, counters, msg)
 
 
-# XSTAR-FUNCTION-COMMENT-BEGIN
-# Purpose: Implement the probe mg ion accumulator skeleton operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
-# Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
-# XSTAR-FUNCTION-COMMENT-END
-def probe_mg_ion_accumulator_skeleton(
-    *,
-    element_z: int = 12,
-    ion_index: int = 0,
-    record_rate_type: np.ndarray | None = None,
-    record_data_type: np.ndarray | None = None,
-    enabled: bool | None = None,
-) -> MgIonAccumulatorProbe:
-    """Backward-compatible probe wrapper for older checkers."""
-    n = 0 if record_rate_type is None else int(np.asarray(record_rate_type).shape[0])
-    record_number = np.arange(1, n + 1, dtype=np.int64)
-    return eval_mg_ion_accumulator_cpp(
-        element_z=element_z,
-        ion_index=ion_index,
-        record_number=record_number,
-        record_rate_type=record_rate_type,
-        record_data_type=record_data_type,
-        enabled=enabled,
-    )
 
 
 _RATE_PAYLOAD_SHADOW_ROLE = {1: "forward_offdiag", 2: "reverse_offdiag", 3: "forward_diag_loss", 4: "reverse_diag_loss"}
@@ -429,7 +255,7 @@ _RATE_PAYLOAD_SHADOW_ROLE = {1: "forward_offdiag", 2: "reverse_offdiag", 3: "for
 # Purpose: Implement the eval mg rate payload batched orchestration shadow cpp operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
 # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
 # XSTAR-FUNCTION-COMMENT-END
-def eval_mg_rate_payload_batched_orchestration_shadow_cpp(
+def eval_rate_payload_batched_orchestration_shadow_cpp(
     records: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], str, dict[str, float]]:
     """Reconstruct supported Mg matrix rows in one diagnostic C++ call.
@@ -439,7 +265,7 @@ def eval_mg_rate_payload_batched_orchestration_shadow_cpp(
     orchestration.  Returned rows are shadow-only and never enter live matrices.
     """
     lib = _load_library("engine")
-    if lib is None or not hasattr(lib, "xstar_engine_eval_mg_rate_payload_shadow_v1"):
+    if lib is None or not hasattr(lib, "xstar_engine_eval_rate_payload_shadow_v1"):
         raise RuntimeError("C++ rate-payload batched orchestration shadow is unavailable" + (f": {cpp_import_error('engine')}" if cpp_import_error('engine') else ""))
     _time = __import__('time')
     packing_t0 = _time.perf_counter()
@@ -464,7 +290,7 @@ def eval_mg_rate_payload_batched_orchestration_shadow_cpp(
     buf = ctypes.create_string_buffer(512)
     packing_seconds = _time.perf_counter() - packing_t0
     t0 = _time.perf_counter()
-    rc = lib.xstar_engine_eval_mg_rate_payload_shadow_v1(
+    rc = lib.xstar_engine_eval_rate_payload_shadow_v1(
         n, meta_flat, 12, rates_flat, 7, max_terms,
         out_i64, 16, out_f64, 4, timing_f64, int(timing_f64.size), stats_i64, int(stats_i64.size),
         buf, ctypes.sizeof(buf),
@@ -472,7 +298,7 @@ def eval_mg_rate_payload_batched_orchestration_shadow_cpp(
     elapsed = _time.perf_counter() - t0
     message = buf.value.decode("utf-8", errors="replace")
     if rc != 0:
-        raise RuntimeError(message or f"xstar_engine_eval_mg_rate_payload_shadow_v1 failed with code {rc}")
+        raise RuntimeError(message or f"xstar_engine_eval_rate_payload_shadow_v1 failed with code {rc}")
     emitted = int(stats_i64[2])
     oi = out_i64[: emitted * 16].reshape((emitted, 16)) if emitted else np.zeros((0,16),dtype=np.int64)
     of = out_f64[: emitted * 4].reshape((emitted, 4)) if emitted else np.zeros((0,4),dtype=np.float64)
@@ -510,7 +336,7 @@ def eval_mg_rate_payload_batched_orchestration_shadow_cpp(
 # Purpose: Implement the eval mg rate payload native scalar shadow cpp operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
 # Reference context: Backend adapter/provenance helper; the underlying scientific routine is documented in the corresponding XSTAR Manual section.
 # XSTAR-FUNCTION-COMMENT-END
-def eval_mg_rate_payload_native_scalar_shadow_cpp(
+def eval_rate_payload_native_scalar_shadow_cpp(
     records: list[dict[str, Any]],
     *,
     epi_eV: Any,
@@ -524,7 +350,7 @@ def eval_mg_rate_payload_native_scalar_shadow_cpp(
     radiation grid.  No returned scalar can enter a live matrix in v0.6.33. Type-88 callers must supply the full high-resolution radiation grid.
     """
     lib = _load_library("engine")
-    symbol = "xstar_engine_eval_mg_rate_payload_native_scalars_v1"
+    symbol = "xstar_engine_eval_rate_payload_native_scalars_v1"
     if lib is None or not hasattr(lib, symbol):
         raise RuntimeError("C++ native scalar shadow is unavailable" + (f": {cpp_import_error('engine')}" if cpp_import_error('engine') else ""))
     _time = __import__("time")
@@ -583,7 +409,7 @@ def eval_mg_rate_payload_native_scalar_shadow_cpp(
     buf = ctypes.create_string_buffer(512)
     packing_seconds = _time.perf_counter() - packing_t0
     t0 = _time.perf_counter()
-    rc = lib.xstar_engine_eval_mg_rate_payload_native_scalars_v1(
+    rc = lib.xstar_engine_eval_rate_payload_native_scalars_v1(
         n, meta_flat, 14, context_flat, 27,
         payload_flat, int(payload_flat.size), epi, brem, int(epi.size),
         out, 7, timing, int(timing.size), stats_i64, int(stats_i64.size),

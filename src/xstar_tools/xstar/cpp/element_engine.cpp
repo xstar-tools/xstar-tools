@@ -360,7 +360,7 @@ int current_source_sequence_local() {
 // Purpose: Compute maybe dump element input within the element/ion population workflow, preserving the source ion-stage ordering and active-stage semantics.
 // Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-void maybe_dump_element_input_v70(const xstar_element_input_v1& input) {
+void maybe_dump_element_input(const xstar_element_input_v1& input) {
     const char* root_value = std::getenv("XSTAR_V70_DUMP_ELEMENT_INPUT_DIR");
     if (!root_value || !*root_value) return;
     const char* sequence_value = std::getenv("XSTAR_NATIVE_SOURCE_SEQUENCE");
@@ -903,7 +903,7 @@ int run_element_impl(
     context.stats.matrix_assembly_seconds += output.matrix_assembly_seconds;
     context.stats.terms_committed += input.term_count;
 
-    maybe_dump_element_input_v70(input);
+    maybe_dump_element_input(input);
 
     const auto solver_t0 = clock_type::now();
     std::copy(input.initial_populations, input.initial_populations + n, w.x.begin());

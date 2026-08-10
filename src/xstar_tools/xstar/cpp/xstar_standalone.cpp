@@ -89,7 +89,7 @@ private:
 // Purpose: Implement verbose controller diagnostics in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-bool verbose_controller_diagnostics_v064897() {
+bool verbose_controller_diagnostics() {
     const char* value = std::getenv("XSTAR_V064897_VERBOSE_CONTROLLER_DIAGNOSTICS");
     return value && std::string(value) == "1";
 }
@@ -98,7 +98,7 @@ bool verbose_controller_diagnostics_v064897() {
 // Purpose: Implement compact step diagnostics in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-bool compact_step_diagnostics_v0648115() {
+bool compact_step_diagnostics() {
     const char* value = std::getenv("XSTAR_V0648117_STEP_DIAGNOSTICS");
     return value && std::string(value) == "1";
 }
@@ -150,7 +150,7 @@ thread_local ProductionZoneSessionV0648110* g_production_zone_session_v0648110 =
 // Purpose: Implement production zone wait before call in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-void production_zone_wait_before_call_v0648110(std::size_t call) {
+void production_zone_wait_before_call(std::size_t call) {
     auto* session = g_production_zone_session_v0648110;
     if (!session) return;
     std::unique_lock<std::mutex> lock(session->mutex);
@@ -158,7 +158,7 @@ void production_zone_wait_before_call_v0648110(std::size_t call) {
     if (session->cancel) throw std::runtime_error("cpp-zone session cancelled");
 }
 
-void production_zone_mark_complete_v0648110(
+void production_zone_mark_complete(
     std::size_t call,
     const FixedDsecSnapshot& snapshot,
     std::size_t dsec_evaluations,
@@ -167,7 +167,7 @@ void production_zone_mark_complete_v0648110(
 
 // 0.6.48.9.5: a production run owns a single fixed-state context. Snapshot
 // the prepared Type49/53 workload immediately before that context is
-// destroyed so command_run_standalone_production_v67 can publish the
+// destroyed so command_run_standalone_production can publish the
 // measurement-only counters after the product has been built.
 xstar_bound_free_perf_v064895 g_bound_free_perf_v064895_last{};
 bool g_bound_free_perf_v064895_valid = false;
@@ -176,7 +176,7 @@ bool g_bound_free_perf_v064895_valid = false;
 // Purpose: Compute diff spectral perf for the line/emissivity/opacity path on the source or publication energy grid.
 // Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
 // XSTAR-FUNCTION-COMMENT-END
-xstar_spectral_perf_v064892 diff_spectral_perf_v064892(
+xstar_spectral_perf_v064892 diff_spectral_perf(
     const xstar_spectral_perf_v064892& after,
     const xstar_spectral_perf_v064892& before) {
     xstar_spectral_perf_v064892 out{};
@@ -245,7 +245,7 @@ thread_local PerformanceInstrumentationV064890* g_performance_v064890 = nullptr;
 // Purpose: Implement elapsed seconds in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-inline double elapsed_seconds_v064890(const std::chrono::steady_clock::time_point& started) {
+inline double performance_elapsed_seconds(const std::chrono::steady_clock::time_point& started) {
     return std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
 }
 
@@ -257,7 +257,7 @@ inline double elapsed_seconds_v064890(const std::chrono::steady_clock::time_poin
 // Purpose: Write patch5201738 gsmooth rccemis edge from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-void write_patch5201738_gsmooth_rccemis_edge(
+void write_gsmooth_rccemis_edge(
     std::size_t source_sequence,
     std::size_t call_index,
     std::size_t evaluation_index,
@@ -288,7 +288,7 @@ void write_patch5201738_gsmooth_rccemis_edge(
 // Purpose: Write patch5201738 radial zone rccemis edge from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-void write_patch5201738_radial_zone_rccemis_edge(
+void write_radial_zone_rccemis_edge(
     const xstar_run_state::WholeRunAccumulatedState& whole) {
     const char* raw = std::getenv("XSTAR_V82_PATCH5201738_RCCEMIS_ATTRIBUTION_DIR");
     if (!raw || !*raw) return;
@@ -2562,7 +2562,7 @@ int command_run_fixed_evaluation(const Options& options) {
 // Purpose: Implement capture source ion stage fractions in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-void capture_source_ion_stage_fractions_v064812316(
+void capture_source_ion_stage_fractions(
     const xstar_fixed_state_context* context,
     std::map<int, std::vector<double>>& out) {
     out.clear();
@@ -2597,7 +2597,7 @@ void capture_source_ion_stage_fractions_v064812316(
 // Purpose: Implement capture source detail publication state in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-void capture_source_detail_publication_state_v064812318(
+void capture_source_detail_publication_state(
     const xstar_fixed_state_context* context,
     std::vector<double>& populations,
     std::map<int, std::array<int,4>>& windows) {
@@ -2739,7 +2739,7 @@ struct FixedDsecSnapshot {
 // Purpose: Implement production zone mark complete in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-void production_zone_mark_complete_v0648110(
+void production_zone_mark_complete(
     std::size_t call,
     const FixedDsecSnapshot& snapshot,
     std::size_t dsec_evaluations,
@@ -2768,10 +2768,10 @@ void production_zone_mark_complete_v0648110(
 }
 
 
-void attach_native_thermal_components_v70(
+void attach_native_thermal_components(
     xstar_fixed_state_context* context,
     FixedDsecSnapshot& snapshot);
-void attach_native_product_diagnostics_v70(
+void attach_native_product_diagnostics(
     xstar_fixed_state_context* context,
     FixedDsecSnapshot& snapshot);
 
@@ -2780,7 +2780,7 @@ void attach_native_product_diagnostics_v70(
 // Purpose: Implement lightweight snapshot in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-FixedDsecSnapshot lightweight_snapshot_v65(const FixedDsecSnapshot& source) {
+FixedDsecSnapshot lightweight_snapshot(const FixedDsecSnapshot& source) {
     FixedDsecSnapshot out;
     out.kind = source.kind;
     out.sequence = source.sequence;
@@ -2939,7 +2939,7 @@ using SourcePopulationGlobalV1724 = std::map<std::size_t,std::map<int,std::strin
 using SourcePopulationCompactV1724 = std::map<std::size_t,std::map<std::pair<int,int>,std::string>>;
 static const SourcePopulationGlobalV1724* g_source_population_global_v1724 = nullptr;
 static const SourcePopulationCompactV1724* g_source_population_compact_v1724 = nullptr;
-std::optional<std::string> source_canonical_population_e7_v1724(
+std::optional<std::string> source_canonical_population_e7(
     std::size_t sequence, int element_z, int row, bool compact_row);
 
 struct PerEvaluationGateResultV1724 {
@@ -3258,18 +3258,18 @@ struct FixedDsecEvaluatorData {
     std::string first_failure_reason_v1724;
 };
 
-PerEvaluationGateResultV1724 evaluate_per_sequence_gate_v1724(
+PerEvaluationGateResultV1724 evaluate_per_sequence_gate(
     FixedDsecEvaluatorData& data,
     const FixedDsecSnapshot& snapshot);
-void write_accepted_checkpoint_v1724(
+void write_accepted_checkpoint(
     FixedDsecEvaluatorData& data,
     const FixedDsecSnapshot& snapshot,
     const PerEvaluationGateResultV1724& gate);
-void write_first_failure_v1724(
+void write_first_failure(
     FixedDsecEvaluatorData& data,
     const FixedDsecSnapshot& snapshot,
     const PerEvaluationGateResultV1724& gate);
-void append_gate_manifest_v1724(
+void append_gate_manifest(
     FixedDsecEvaluatorData& data,
     const FixedDsecSnapshot& snapshot,
     const PerEvaluationGateResultV1724& gate);
@@ -3280,7 +3280,7 @@ constexpr double kCanonicalComparisonZeroFloorV048746226 = 1.0e-30;
 // Purpose: Implement canonical numeric in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-double canonical_numeric_v048746226(double value) {
+double canonical_numeric(double value) {
     if (std::isfinite(value) && std::abs(value) < kCanonicalComparisonZeroFloorV048746226) return 0.0;
     return value;
 }
@@ -3291,7 +3291,7 @@ double canonical_numeric_v048746226(double value) {
 // XSTAR-FUNCTION-COMMENT-END
 std::string canonical_e7(double value) {
     std::ostringstream stream;
-    stream << std::scientific << std::setprecision(7) << canonical_numeric_v048746226(value);
+    stream << std::scientific << std::setprecision(7) << canonical_numeric(value);
     return stream.str();
 }
 
@@ -3307,7 +3307,7 @@ bool canonical_e7_equal(double left, double right) {
 // Purpose: Implement source trajectory roundoff close in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-bool source_trajectory_roundoff_close_v172517(
+bool source_trajectory_roundoff_close(
     double proposed,
     double expected,
     double relative_limit,
@@ -3323,18 +3323,18 @@ bool source_trajectory_roundoff_close_v172517(
 // Purpose: Compute source trajectory temperature ok as a contribution to, or control step in, the local thermal-equilibrium iteration.
 // Reference context: XSTAR Manual s11.4.4 and s11.6; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-bool source_trajectory_temperature_ok_v172517(double proposed, double expected) {
+bool source_trajectory_temperature_ok(double proposed, double expected) {
     return canonical_e7_equal(proposed, expected) ||
-        source_trajectory_roundoff_close_v172517(proposed, expected, 1.0e-8, 1.0e-12);
+        source_trajectory_roundoff_close(proposed, expected, 1.0e-8, 1.0e-12);
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Implement source trajectory electron fraction ok in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-bool source_trajectory_electron_fraction_ok_v172517(double proposed, double expected) {
+bool source_trajectory_electron_fraction_ok(double proposed, double expected) {
     return canonical_e7_equal(proposed, expected) ||
-        source_trajectory_roundoff_close_v172517(proposed, expected, 1.0e-12, 1.0e-12);
+        source_trajectory_roundoff_close(proposed, expected, 1.0e-12, 1.0e-12);
 }
 
 // v0.6.48.7.46.25.5.17.25.19: keep the post-evaluation
@@ -3347,13 +3347,13 @@ bool source_trajectory_electron_fraction_ok_v172517(double proposed, double expe
 // Purpose: Implement controller state ok in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-bool controller_state_ok_v172518(
+bool controller_state_ok(
     const FixedDsecSnapshot& snapshot,
     const SequenceContractV1724& contract) {
     const bool temperature_ok = canonical_e7_equal(snapshot.temperature_t4, contract.temperature_t4) ||
-        source_trajectory_temperature_ok_v172517(snapshot.temperature_t4, contract.temperature_t4);
+        source_trajectory_temperature_ok(snapshot.temperature_t4, contract.temperature_t4);
     const bool electron_fraction_ok = canonical_e7_equal(snapshot.electron_fraction_input, contract.electron_fraction) ||
-        source_trajectory_electron_fraction_ok_v172517(snapshot.electron_fraction_input, contract.electron_fraction);
+        source_trajectory_electron_fraction_ok(snapshot.electron_fraction_input, contract.electron_fraction);
     return temperature_ok && electron_fraction_ok;
 }
 
@@ -3361,7 +3361,7 @@ bool controller_state_ok_v172518(
 // Purpose: Validate the invariants required by required continuum tau capacity; reject malformed dimensions, pointers, or state before scientific kernels are entered.
 // Reference context: Implementation/safety helper; no independent scientific formula.
 // XSTAR-FUNCTION-COMMENT-END
-std::size_t required_continuum_tau_capacity_v73(
+std::size_t required_continuum_tau_capacity(
     std::size_t maximum_record_continuum_index_one_based,
     std::size_t native_continuum_count,
     std::size_t continuum_grid_bins) {
@@ -3386,7 +3386,7 @@ std::size_t required_continuum_tau_capacity_v73(
 // Purpose: Validate the invariants required by required runtime continuum tau capacity; reject malformed dimensions, pointers, or state before scientific kernels are entered.
 // Reference context: Implementation/safety helper; no independent scientific formula.
 // XSTAR-FUNCTION-COMMENT-END
-std::size_t required_runtime_continuum_tau_capacity_v82_patch4(
+std::size_t required_runtime_continuum_tau_capacity(
     std::size_t maximum_record_continuum_index_one_based,
     std::size_t native_continuum_count) {
     return std::max(maximum_record_continuum_index_one_based, native_continuum_count);
@@ -3400,7 +3400,7 @@ constexpr double kTrajectoryAbsoluteToleranceV82 = 1.0e-12;
 // Purpose: Implement scientific close in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-bool scientific_close_v82(double source, double native) {
+bool scientific_close(double source, double native) {
     if (!std::isfinite(source) || !std::isfinite(native)) return false;
     if (std::abs(source) <= kTrajectoryZeroFloorV82 &&
         std::abs(native) <= kTrajectoryZeroFloorV82) return true;
@@ -3465,11 +3465,11 @@ int command_controller_canonical_e7_self_test(const Options&) {
     const bool rejected_boundary = !canonical_e7_equal(rejected_source, rejected_native);
     const bool zero_floor = canonical_e7_equal(zero_left, zero_right);
     const std::size_t grid_dominant_capacity =
-        required_continuum_tau_capacity_v73(37u, 4096u, 9999u);
+        required_continuum_tau_capacity(37u, 4096u, 9999u);
     const std::size_t record_dominant_capacity =
-        required_continuum_tau_capacity_v73(12000u, 4096u, 9999u);
+        required_continuum_tau_capacity(12000u, 4096u, 9999u);
     const std::size_t declared_domain_capacity =
-        required_continuum_tau_capacity_v73(37u, 12000u, 9999u);
+        required_continuum_tau_capacity(37u, 12000u, 9999u);
     const bool continuum_domain_capacity =
         grid_dominant_capacity == 9999u &&
         record_dominant_capacity == 12001u &&
@@ -3574,9 +3574,9 @@ int fixed_dsec_evaluator(
         const double expected_t4 = data->source_temperature_t4[slot];
         const double expected_xee = data->source_electron_fraction[slot];
         const bool temperature_state_ok_v172517 =
-            source_trajectory_temperature_ok_v172517(proposed_temperature_t4, expected_t4);
+            source_trajectory_temperature_ok(proposed_temperature_t4, expected_t4);
         const bool electron_fraction_state_ok_v172517 =
-            source_trajectory_electron_fraction_ok_v172517(proposed_electron_fraction, expected_xee);
+            source_trajectory_electron_fraction_ok(proposed_electron_fraction, expected_xee);
         if (!temperature_state_ok_v172517 || !electron_fraction_state_ok_v172517) {
             data->source_trajectory_diverged = true;
             data->divergence_sequence = snapshot.sequence;
@@ -3624,8 +3624,8 @@ int fixed_dsec_evaluator(
                 "MISSING_SEQUENCE_CONTRACT" : "UNCLASSIFIED_TOPOLOGY_CONTRACT_PRE_SOLVE";
             snapshot.temperature_t4 = effective_temperature_t4;
             snapshot.electron_fraction_input = effective_electron_fraction;
-            append_gate_manifest_v1724(*data, snapshot, gate);
-            write_first_failure_v1724(*data, snapshot, gate);
+            append_gate_manifest(*data, snapshot, gate);
+            write_first_failure(*data, snapshot, gate);
             data->gate_failed_v1724 = true;
             data->first_failed_sequence_v1724 = snapshot.sequence;
             data->first_failure_reason_v1724 = gate.failure_reason;
@@ -4054,8 +4054,8 @@ int fixed_dsec_evaluator(
 
     if (snapshot.kind == "final") {
         try {
-            attach_native_thermal_components_v70(data->fixed_context, snapshot);
-            attach_native_product_diagnostics_v70(data->fixed_context, snapshot);
+            attach_native_thermal_components(data->fixed_context, snapshot);
+            attach_native_product_diagnostics(data->fixed_context, snapshot);
         } catch (const std::exception& exc) {
             set_callback_error(error, error_size,
                 std::string("cannot retain native final product diagnostics: ") + exc.what());
@@ -4066,7 +4066,7 @@ int fixed_dsec_evaluator(
     PerEvaluationGateResultV1724 per_sequence_gate;
     if (data->per_evaluation_gate_enabled && !data->true_production_v65) {
         try {
-            per_sequence_gate = evaluate_per_sequence_gate_v1724(*data, snapshot);
+            per_sequence_gate = evaluate_per_sequence_gate(*data, snapshot);
         } catch (const std::exception& exc) {
             per_sequence_gate.accepted = false;
             per_sequence_gate.failure_reason = std::string("gate exception: ") + exc.what();
@@ -4093,7 +4093,7 @@ int fixed_dsec_evaluator(
             return 20;
         }
         try {
-            write_accepted_checkpoint_v1724(*data, snapshot, per_sequence_gate);
+            write_accepted_checkpoint(*data, snapshot, per_sequence_gate);
         } catch (const std::exception& exc) {
             set_callback_error(error, error_size,
                 std::string("cannot write accepted checkpoint: ") + exc.what());
@@ -4121,7 +4121,7 @@ int fixed_dsec_evaluator(
     // radial boundaries. Non-boundary evaluations retain scalar controller
     // state only; public products never consume their large transport arrays.
     if (data->true_production_v65 && snapshot.kind != "final") {
-        snapshot = lightweight_snapshot_v65(snapshot);
+        snapshot = lightweight_snapshot(snapshot);
     }
     data->snapshots->push_back(std::move(snapshot));
     if (data->per_evaluation_gate_enabled) {
@@ -5274,7 +5274,7 @@ xstar_run_state::ParameterRowState parameter_row(std::uint16_t index, const std:
 // Purpose: Implement public parameter row in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-xstar_run_state::ParameterRowState public_parameter_row_v172534(
+xstar_run_state::ParameterRowState public_parameter_row(
     std::uint16_t index,
     const std::string& name,
     double value,
@@ -5293,7 +5293,7 @@ xstar_run_state::ParameterRowState public_parameter_row_v172534(
 // Purpose: Implement native public parameter rows from json in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-std::vector<xstar_run_state::ParameterRowState> native_public_parameter_rows_from_json_v172534(
+std::vector<xstar_run_state::ParameterRowState> native_public_parameter_rows_from_json(
     const std::filesystem::path& parameters_path) {
     const std::string json = read_text_file(parameters_path);
     std::vector<xstar_run_state::ParameterRowState> rows;
@@ -5301,13 +5301,13 @@ std::vector<xstar_run_state::ParameterRowState> native_public_parameter_rows_fro
     const auto num = [&](const char* key, double fallback) { return json_number_value(json, key, fallback); };
     const auto str = [&](const char* key, const char* fallback) { return json_string_value(json, key, fallback); };
     const auto add_real = [&](const char* key, double fallback, const char* comment = "") {
-        rows.push_back(public_parameter_row_v172534(static_cast<std::uint16_t>(rows.size() + 1), key, num(key, fallback), "real", comment));
+        rows.push_back(public_parameter_row(static_cast<std::uint16_t>(rows.size() + 1), key, num(key, fallback), "real", comment));
     };
     const auto add_integer = [&](const char* key, double fallback, const char* comment = "") {
-        rows.push_back(public_parameter_row_v172534(static_cast<std::uint16_t>(rows.size() + 1), key, num(key, fallback), "integer", comment));
+        rows.push_back(public_parameter_row(static_cast<std::uint16_t>(rows.size() + 1), key, num(key, fallback), "integer", comment));
     };
     const auto add_string = [&](const char* key, const char* fallback) {
-        rows.push_back(public_parameter_row_v172534(static_cast<std::uint16_t>(rows.size() + 1), key, 0.0, "string", str(key, fallback)));
+        rows.push_back(public_parameter_row(static_cast<std::uint16_t>(rows.size() + 1), key, 0.0, "string", str(key, fallback)));
     };
 
     add_real("cfrac", 1.0);
@@ -5400,288 +5400,6 @@ std::vector<StandaloneElementSpec> active_elements_from_parameters(const std::st
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Write native standalone case metadata from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
-// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
-// XSTAR-FUNCTION-COMMENT-END
-[[maybe_unused]] void write_native_standalone_case_metadata(const std::filesystem::path& dir, const std::vector<StandaloneElementSpec>& elements) {
-    std::filesystem::create_directories(dir);
-    {
-        std::ofstream out(dir / "elements.csv");
-        out << "element_index,element_z,abundance,n_rows,n_superlevels,n_ions,normalization_row,record_head,record_count\n";
-        for (const auto& e : elements) {
-            out << e.element_index << "," << e.z << "," << std::setprecision(17) << e.abundance << "," << e.z << "," << e.z << "," << e.z << "," << e.z << ",0,0\n";
-        }
-    }
-    {
-        std::ofstream out(dir / "rows.csv");
-        out << "element_index,row,superlevel,ion,ion_charge,initial_population,energy_ev,statistical_weight,principal_n,orbital_l,global_level_index\n";
-        int global = 1;
-        for (const auto& e : elements) {
-            const double frac = e.z > 0 ? 1.0 / static_cast<double>(e.z) : 1.0;
-            for (int stage = 1; stage <= e.z; ++stage, ++global) {
-                out << e.element_index << "," << stage << "," << stage << "," << stage << "," << (stage - 1)
-                    << "," << std::setprecision(17) << frac << "," << (10.0 * (stage - 1)) << "," << (2.0 * stage)
-                    << ",1,0," << global << "\n";
-            }
-        }
-    }
-}
-
-// XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Build standalone native product state from the source-ordered inputs required by the next calculation stage.
-// Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
-// XSTAR-FUNCTION-COMMENT-END
-[[maybe_unused]] xstar_run_state::ProductWritingState build_standalone_native_product_state(
-    const Options& options,
-    const std::filesystem::path& case_dir,
-    const std::filesystem::path& metadata_dir,
-    const std::filesystem::path& diagnostics_dir) {
-    const std::string json = read_text_file(options.parameters_path);
-    const auto elements = active_elements_from_parameters(json);
-    const int nsteps_raw = static_cast<int>(json_number_value(json, "nsteps", 5.0));
-    const std::size_t zone_count = static_cast<std::size_t>(std::max(1, std::min(nsteps_raw > 0 ? nsteps_raw : 5, 10)));
-    const std::size_t n_energy = 9999u;
-    const std::size_t n_rrc_plane = 301301u;
-    const double density = json_number_value(json, "density", 1.0e8);
-    const double pressure = json_number_value(json, "pressure", 0.03);
-    const double temperature_k = json_number_value(json, "temperature", 100.0);
-    const double column = json_number_value(json, "column", 1.0e20);
-    const double rlogxi = json_number_value(json, "rlogxi", 1.5);
-    const double rlrad38 = json_number_value(json, "rlrad38", 1.0e6);
-    const double vturbi = json_number_value(json, "vturbi", 100.0);
-
-    xstar_run_state::WholeRunAccumulatedState whole;
-    whole.release = XSTAR_API_VERSION_STRING;
-    whole.backend = "cpp";
-    whole.parameters_path = options.parameters_path;
-    whole.atomic_database_path = options.atomic_db_path;
-    whole.native_case_path = case_dir;
-    whole.product_metadata_path = metadata_dir;
-    whole.native_diagnostics_path = diagnostics_dir;
-    whole.native_run_id = std::string("standalone-native-product-retention-") + XSTAR_API_VERSION_STRING;
-
-    std::uint16_t pi = 1;
-    const std::vector<std::pair<std::string,double>> params = {
-        {"density", density}, {"pressure", pressure}, {"temperature", temperature_k}, {"column", column},
-        {"rlogxi", rlogxi}, {"rlrad38", rlrad38}, {"vturbi", vturbi}, {"nsteps", static_cast<double>(zone_count)}
-    };
-    for (const auto& item : params) whole.parameter_rows.push_back(parameter_row(pi++, item.first, item.second));
-    for (const auto& e : elements) whole.parameter_rows.push_back(parameter_row(pi++, e.symbol + "abund", e.abundance));
-
-    int global_level = 1;
-    for (const auto& e : elements) {
-        for (int stage = 1; stage <= e.z; ++stage, ++global_level) {
-            xstar_run_state::LevelIdentityState lev;
-            lev.global_index = global_level;
-            lev.ion_index = stage;
-            lev.excitation_ev = 10.0 * (stage - 1);
-            lev.ion_label = e.symbol + std::string("_") + kStandaloneRoman[static_cast<std::size_t>(std::min(stage, 30))];
-            lev.atomic_number = static_cast<std::int16_t>(e.z);
-            lev.level_label = stage == e.z ? "continuum" : "ground";
-            lev.upper_index = static_cast<std::int16_t>(std::min(stage + 1, e.z));
-            whole.level_identities.push_back(lev);
-        }
-    }
-    int line_index = 1;
-    for (const auto& e : elements) {
-        for (int stage = 1; stage < e.z; ++stage, ++line_index) {
-            xstar_run_state::LineIdentityState line;
-            line.line_index = line_index;
-            line.wavelength_angstrom = 10.0 + 2.0 * line_index;
-            line.ion_label = e.symbol + std::string("_") + kStandaloneRoman[static_cast<std::size_t>(std::min(stage, 30))];
-            line.lower_level = "ground";
-            line.upper_level = "excited";
-            line.atomic_mass = static_cast<double>(e.z);
-            whole.line_identities.push_back(line);
-        }
-    }
-    int rrc_index = 1;
-    for (const auto& e : elements) {
-        for (int stage = 1; stage <= e.z; ++stage, ++rrc_index) {
-            xstar_run_state::RrcIdentityState rrc;
-            rrc.continuum_index = rrc_index;
-            rrc.level_global_index = rrc_index;
-            rrc.threshold_ev = 13.6 * stage * stage;
-            rrc.ion_label = e.symbol + std::string("_") + kStandaloneRoman[static_cast<std::size_t>(std::min(stage, 30))];
-            rrc.lower_level = "continuum";
-            rrc.upper_level = "ground";
-            rrc.lower_local_index = stage;
-            rrc.upper_local_index = std::max(1, stage - 1);
-            whole.rrc_identities.push_back(rrc);
-        }
-    }
-
-    const std::size_t n_levels = whole.level_identities.size();
-    const std::size_t n_lines = std::max<std::size_t>(whole.line_identities.size(), 1u);
-    for (std::size_t z = 0; z < zone_count; ++z) {
-        const double frac = zone_count > 1 ? static_cast<double>(z) / static_cast<double>(zone_count - 1) : 0.0;
-        xstar_run_state::FixedEvaluationState eval;
-        eval.kind = "native_standalone_product_state";
-        eval.sequence = z + 1;
-        eval.call_index = 1;
-        eval.evaluation_index = z + 1;
-        eval.temperature_t4 = temperature_k / 1.0e4;
-        eval.electron_fraction_input = 1.0;
-        eval.computed_electron_fraction = 1.0;
-        eval.charge_residual = 0.0;
-        eval.hmctot = 0.0;
-        eval.total_heating = 1.0e-20;
-        eval.total_cooling = 1.0e-20;
-        eval.hydrogen_heating = 3.0e-21; eval.helium_heating = 2.0e-21; eval.magnesium_heating = 1.0e-21;
-        eval.hydrogen_cooling = 3.0e-21; eval.helium_cooling = 2.0e-21; eval.magnesium_cooling = 1.0e-21;
-        eval.compton_heating = 1.0e-22; eval.compton_cooling = 1.0e-22; eval.brems_cooling = 1.0e-22;
-        eval.populations.assign(n_levels, 0.0);
-        eval.source_global_rnisg.assign(n_levels, 0.0);
-        for (std::size_t i = 0; i < n_levels; ++i) {
-            const double v = (1.0 + frac) / static_cast<double>(n_levels == 0 ? 1 : n_levels);
-            eval.populations[i] = v;
-            eval.source_global_rnisg[i] = v * 1.0e-3;
-        }
-        eval.radiation_energy_ev.resize(n_energy);
-        eval.radiation_flux.resize(n_energy);
-        eval.continuum_spectrum.resize(n_energy);
-        eval.spectrum.resize(n_energy);
-        for (std::size_t i = 0; i < n_energy; ++i) {
-            const double t = static_cast<double>(i) / static_cast<double>(n_energy - 1);
-            const double eev = std::exp(std::log(0.1) + t * (std::log(1.0e5) - std::log(0.1)));
-            const double incident = std::pow(std::max(eev, 1.0) / 1000.0, -1.0);
-            const double tau = 1.0e-3 * (1.0 + frac) * std::sqrt(t + 1.0e-6);
-            eval.radiation_energy_ev[i] = eev;
-            eval.radiation_flux[i] = incident;
-            eval.continuum_spectrum[i] = incident * std::exp(-tau);
-            eval.spectrum[i] = 1.0e-6 * incident * (1.0 + frac);
-        }
-        auto& ws = eval.source_workspace;
-        ws.native_line_count = n_lines;
-        ws.native_continuum_count = n_rrc_plane;
-        ws.lte_populations = eval.source_global_rnisg;
-        ws.rcem.assign(2 * n_lines, 0.0);
-        ws.elum.assign(n_lines, 0.0);
-        ws.oplin.assign(n_lines, 0.0);
-        ws.tau0.assign(2 * n_lines, 0.0);
-        for (std::size_t i = 0; i < n_lines; ++i) {
-            ws.rcem[i] = 1.0e-30 * (i + 1) * (1.0 + frac);
-            ws.rcem[n_lines + i] = 2.0e-30 * (i + 1) * (1.0 + frac);
-            ws.elum[i] = 1.0e-8 * (i + 1) * (1.0 + frac);
-            ws.oplin[i] = 1.0e-25 * (i + 1);
-            ws.tau0[i] = 1.0e-8 * (i + 1);
-            ws.tau0[n_lines + i] = 2.0e-8 * (i + 1);
-        }
-        ws.cemab.assign(2 * std::max<std::size_t>(whole.rrc_identities.size(), 1u), 0.0);
-        ws.cabab.assign(std::max<std::size_t>(whole.rrc_identities.size(), 1u), 0.0);
-        ws.opakab.assign(std::max<std::size_t>(whole.rrc_identities.size(), 1u), 0.0);
-        for (std::size_t i = 0; i < whole.rrc_identities.size(); ++i) {
-            ws.cemab[i] = 1.0e-30 * (i + 1);
-            ws.cemab[whole.rrc_identities.size() + i] = 2.0e-30 * (i + 1);
-            ws.cabab[i] = 1.0e-20 * (i + 1);
-            ws.opakab[i] = 1.0e-28 * (i + 1);
-        }
-        ws.elumab.assign(2 * n_rrc_plane, 0.0);
-        ws.tauc.assign(2 * n_rrc_plane, 0.0);
-        for (std::size_t i = 0; i < whole.rrc_identities.size() && i < n_rrc_plane; ++i) {
-            ws.elumab[i] = 1.0e-30 * (i + 1);
-            ws.elumab[n_rrc_plane + i] = 2.0e-30 * (i + 1);
-            ws.tauc[i] = 1.0e-8 * (i + 1);
-            ws.tauc[n_rrc_plane + i] = 2.0e-8 * (i + 1);
-        }
-        ws.zrems.assign(5 * n_energy, 0.0);
-        ws.zremsz = eval.radiation_flux;
-        ws.dpthcont.assign(2 * n_energy, 0.0);
-        ws.dpthc.assign(2 * n_energy, 0.0);
-        ws.opakc.assign(n_energy, 0.0);
-        ws.rccemis.assign(2 * n_energy, 0.0);
-        for (std::size_t i = 0; i < n_energy; ++i) {
-            ws.zrems[i] = 0.0;
-            ws.zrems[2 * n_energy + i] = eval.spectrum[i];
-            ws.zrems[4 * n_energy + i] = eval.spectrum[i];
-            ws.dpthcont[i] = 1.0e-3 * (1.0 + frac);
-            ws.dpthcont[n_energy + i] = 1.0e-3 * (1.0 + frac);
-            ws.dpthc[i] = ws.dpthcont[i];
-            ws.dpthc[n_energy + i] = ws.dpthcont[n_energy + i];
-            ws.opakc[i] = 1.0e-30 * (i + 1);
-            ws.rccemis[i] = 1.0e-40 * (i + 1);
-            ws.rccemis[n_energy + i] = 2.0e-40 * (i + 1);
-        }
-        ws.level_identity_exact = true;
-        ws.lte_populations_exact = true;
-        ws.line_workspace_exact = true;
-        ws.line_tau_workspace_exact = true;
-        ws.rrc_workspace_exact = true;
-        ws.rrc_tau_workspace_exact = true;
-        ws.continuum_workspace_exact = true;
-        ws.accumulated_output_workspace_exact = true;
-        ws.line_profile_workspace_exact = true;
-
-        xstar_run_state::AcceptedControllerState accepted;
-        accepted.call_index = 1;
-        accepted.accepted_sequence = z + 1;
-        accepted.acceptance_reason = "bridge_free_native_product_retention";
-        accepted.evaluation = eval;
-        whole.fixed_evaluations.push_back(eval);
-        whole.accepted_controller_states.push_back(accepted);
-
-        xstar_run_state::RadialZoneState zone;
-        zone.zone_index = z + 1;
-        zone.pass_index = 1;
-        zone.radius_cm = 1.0e11 + static_cast<double>(z) * 1.0e10;
-        zone.delta_radius_cm = column / std::max(density, 1.0) / static_cast<double>(zone_count);
-        zone.outer_radius_cm = zone.radius_cm + zone.delta_radius_cm;
-        zone.density_cm3 = density;
-        zone.pressure_dyn_cm2 = pressure;
-        zone.ionization_parameter = std::pow(10.0, rlogxi);
-        zone.log_ionization_parameter = rlogxi;
-        zone.column_density_cm2 = column * (frac + 1.0 / static_cast<double>(zone_count));
-        zone.temperature_t4 = temperature_k / 1.0e4;
-        zone.electron_fraction = 1.0;
-        zone.provisional_from_controller = false;
-        zone.accepted_boundary_exact = true;
-        zone.boundary_provenance = "native standalone ProductWritingState retention";
-        zone.accepted_controller = accepted;
-        whole.radial_zones.push_back(zone);
-
-        xstar_run_state::AbundanceRadialRowState ab;
-        ab.row_index = z + 1;
-        ab.radius_cm = zone.radius_cm;
-        ab.delta_radius_cm = zone.delta_radius_cm;
-        ab.log_ionization_parameter = rlogxi;
-        ab.electron_fraction = 1.0;
-        ab.density_cm3 = density;
-        ab.pressure_dyn_cm2 = pressure;
-        ab.temperature_t4 = temperature_k / 1.0e4;
-        ab.fractional_heat_error = 0.0;
-        ab.terminal_row = (z + 1 == zone_count);
-        whole.abundance_radial_rows.push_back(ab);
-    }
-    whole.embedded_public_fits_payloads_absent = true;
-    whole.embedded_full_xout_step_payload_absent = true;
-    whole.python_callbacks = 0;
-    whole.controller_trajectory_qualified = false;
-    whole.product_schema_complete = true;
-    whole.radial_state_complete = true;
-    whole.native_product_inputs_complete = true;
-    whole.native_detail_state_retained = true;
-    whole.continuum_depths_derived_from_native_opacity = true;
-    whole.exact_source_metadata_retained = true;
-    whole.exact_source_workspaces_retained = std::all_of(
-        whole.radial_zones.begin(), whole.radial_zones.end(),
-        [](const xstar_run_state::RadialZoneState& zone) {
-            const auto& ws = zone.accepted_controller.evaluation.source_workspace;
-            return ws.line_workspace_exact && ws.rrc_workspace_exact && ws.continuum_workspace_exact;
-        });
-    whole.exact_accepted_radial_boundaries_retained = true;
-    whole.exact_legacy_pprint_state_retained = false;
-    whole.legacy_pprint.initialized_from_native_controller = true;
-    whole.legacy_pprint.option_sequence_exact = false;
-    whole.legacy_pprint.finalized_from_native_controller = true;
-
-    auto product = xstar_run_state::build_product_writing_state(whole);
-    product.product_state_complete = true;
-    product.product_parity_qualified = false;
-    return product;
-}
-
-
-// XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Implement csv columns local in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
@@ -5758,7 +5476,7 @@ RadiationField read_standalone_radiation_field(const Options& options) {
 // Purpose: Implement source energy grid in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-std::vector<double> source_energy_grid_v67(std::size_t n) {
+std::vector<double> production_source_energy_grid(std::size_t n) {
     return xstar_source_real_energy_grid::build(n);
 }
 
@@ -5766,7 +5484,7 @@ std::vector<double> source_energy_grid_v67(std::size_t n) {
 // Purpose: Implement source nbinc in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-std::size_t source_nbinc_v67(double energy, const std::vector<double>& grid) {
+std::size_t production_source_nbinc(double energy, const std::vector<double>& grid) {
     const std::size_t extent = grid.size() - std::max<std::size_t>(2, grid.size() / 50);
     if (extent < 2) throw std::runtime_error("standalone source nbinc extent is too small");
     auto begin = grid.begin();
@@ -5785,16 +5503,16 @@ std::size_t source_nbinc_v67(double energy, const std::vector<double>& grid) {
 // Purpose: Implement source powerlaw radiation in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-RadiationField source_powerlaw_radiation_v67(const xstar_atdb_runtime::ProductionParameters& params) {
+RadiationField source_powerlaw_radiation(const xstar_atdb_runtime::ProductionParameters& params) {
     RadiationField field;
-    field.energy_ev = source_energy_grid_v67(static_cast<std::size_t>(params.ncn2));
+    field.energy_ev = production_source_energy_grid(static_cast<std::size_t>(params.ncn2));
     field.incident.resize(field.energy_ev.size(), 0.0);
     std::vector<double> raw(field.energy_ev.size(), 0.0);
     for (std::size_t i = 0; i < raw.size(); ++i) {
         raw[i] = field.energy_ev[i] > 0.01 ? std::pow(field.energy_ev[i], params.spectral_index) : 1.0e-24;
     }
-    const std::size_t nb1 = source_nbinc_v67(13.6, field.energy_ev);
-    const std::size_t nb2 = source_nbinc_v67(1.36e4, field.energy_ev);
+    const std::size_t nb1 = production_source_nbinc(13.6, field.energy_ev);
+    const std::size_t nb2 = production_source_nbinc(1.36e4, field.energy_ev);
     double total = 0.0;
     for (std::size_t one = std::max<std::size_t>(2, nb1); one <= std::min(field.energy_ev.size(), nb2); ++one) {
         const std::size_t i = one - 1;
@@ -5823,13 +5541,13 @@ RadiationField source_powerlaw_radiation_v67(const xstar_atdb_runtime::Productio
 // Purpose: Load general standalone radiation into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-RadiationField read_general_standalone_radiation_v67(
+RadiationField read_general_standalone_radiation(
     const Options& options,
     const xstar_atdb_runtime::ProductionParameters& params) {
     std::string mode = params.spectrum;
     std::transform(mode.begin(), mode.end(), mode.begin(), [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
     if (mode == "pow" || mode == "powerlaw" || mode == "power-law") {
-        return source_powerlaw_radiation_v67(params);
+        return source_powerlaw_radiation(params);
     }
     std::filesystem::path spectrum_path(params.spectrum_file);
     if (spectrum_path.is_relative()) spectrum_path = std::filesystem::path(options.parameters_path).parent_path() / spectrum_path;
@@ -6389,25 +6107,6 @@ double two_plane_or_scalar(const std::vector<double>& values, std::size_t plane_
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Compute line plane values for the line/emissivity/opacity path on the source or publication energy grid.
-// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
-// XSTAR-FUNCTION-COMMENT-END
-[[maybe_unused]] std::vector<double> line_plane_values(const std::vector<double>& primary,
-                                      const std::vector<double>& fallback,
-                                      std::size_t count,
-                                      std::size_t plane) {
-    std::vector<double> out(count, 0.0);
-    const std::size_t primary_plane_count = (primary.size() >= 2 * count) ? count : 0;
-    const std::size_t fallback_plane_count = (fallback.size() >= 2 * count) ? count : 0;
-    for (std::size_t i = 0; i < count; ++i) {
-        double value = two_plane_or_scalar(primary, primary_plane_count, i, i, plane);
-        if (value == 0.0) value = two_plane_or_scalar(fallback, fallback_plane_count, i, i, plane);
-        out[i] = value;
-    }
-    return out;
-}
-
-// XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Compute rrc plane values for the bound-free/photoionization/recombination-continuum path using the current radiation field and level populations.
 // Reference context: XSTAR Manual ss11.5, 11.6.1, 11.7; Kallman & Bautista (2001); ATDB ch12.
 // XSTAR-FUNCTION-COMMENT-END
@@ -6709,7 +6408,7 @@ const std::array<long long,600> kV82PublicLineInventory = {
 // Purpose: Compute native line plane stride for the line/emissivity/opacity path on the source or publication energy grid.
 // Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
 // XSTAR-FUNCTION-COMMENT-END
-std::size_t native_line_plane_stride_v82(
+std::size_t native_line_plane_stride(
     const xstar_run_state::ExactSourceWorkspaceState& ws) {
     std::size_t stride = ws.oplin.size();
     if (ws.rcem.size() >= 2u) stride = std::max(stride, ws.rcem.size() / 2u);
@@ -6722,7 +6421,7 @@ std::size_t native_line_plane_stride_v82(
 // Purpose: Compute native line scalar for the line/emissivity/opacity path on the source or publication energy grid.
 // Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
 // XSTAR-FUNCTION-COMMENT-END
-double native_line_scalar_v82(const std::vector<double>& values, long long line_index) {
+double native_line_scalar(const std::vector<double>& values, long long line_index) {
     if (line_index <= 0) return 0.0;
     const auto slot = static_cast<std::size_t>(line_index);
     return slot < values.size() && std::isfinite(values[slot]) ? values[slot] : 0.0;
@@ -6732,7 +6431,7 @@ double native_line_scalar_v82(const std::vector<double>& values, long long line_
 // Purpose: Compute native line plane for the line/emissivity/opacity path on the source or publication energy grid.
 // Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
 // XSTAR-FUNCTION-COMMENT-END
-double native_line_plane_v82(const std::vector<double>& values,
+double native_line_plane(const std::vector<double>& values,
                              std::size_t stride,
                              std::size_t plane,
                              long long line_index) {
@@ -6746,12 +6445,12 @@ double native_line_plane_v82(const std::vector<double>& values,
 // Purpose: Compute gather native line scalar for the line/emissivity/opacity path on the source or publication energy grid.
 // Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
 // XSTAR-FUNCTION-COMMENT-END
-std::vector<double> gather_native_line_scalar_v82(
+std::vector<double> gather_native_line_scalar(
     const std::vector<double>& values,
     const std::vector<double>& line_indices) {
     std::vector<double> out(line_indices.size(), 0.0);
     for (std::size_t i = 0; i < line_indices.size(); ++i) {
-        out[i] = native_line_scalar_v82(values, static_cast<long long>(std::llround(line_indices[i])));
+        out[i] = native_line_scalar(values, static_cast<long long>(std::llround(line_indices[i])));
     }
     return out;
 }
@@ -6760,7 +6459,7 @@ std::vector<double> gather_native_line_scalar_v82(
 // Purpose: Compute gather native line plane for the line/emissivity/opacity path on the source or publication energy grid.
 // Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
 // XSTAR-FUNCTION-COMMENT-END
-std::vector<double> gather_native_line_plane_v82(
+std::vector<double> gather_native_line_plane(
     const std::vector<double>& primary,
     const std::vector<double>& fallback,
     std::size_t stride,
@@ -6769,30 +6468,18 @@ std::vector<double> gather_native_line_plane_v82(
     std::vector<double> out(line_indices.size(), 0.0);
     for (std::size_t i = 0; i < line_indices.size(); ++i) {
         const auto line_index = static_cast<long long>(std::llround(line_indices[i]));
-        double value = native_line_plane_v82(primary, stride, plane, line_index);
-        if (value == 0.0) value = native_line_plane_v82(fallback, stride, plane, line_index);
+        double value = native_line_plane(primary, stride, plane, line_index);
+        if (value == 0.0) value = native_line_plane(fallback, stride, plane, line_index);
         out[i] = value;
     }
     return out;
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Compute public line indices for the line/emissivity/opacity path on the source or publication energy grid.
-// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
-// XSTAR-FUNCTION-COMMENT-END
-[[maybe_unused]] std::vector<double> public_line_indices_v82() {
-    std::vector<double> out;
-    out.reserve(kV82PublicLineInventory.size());
-    for (const auto index : kV82PublicLineInventory) out.push_back(static_cast<double>(index));
-    return out;
-}
-
-
-// XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Compute reconstruct public line luminosity for the line/emissivity/opacity path on the source or publication energy grid.
 // Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
 // XSTAR-FUNCTION-COMMENT-END
-std::vector<double> reconstruct_public_line_luminosity_v82_patch52071(
+std::vector<double> reconstruct_public_line_luminosity(
     const xstar_run_state::ProductWritingState& product,
     const std::vector<double>& line_indices,
     std::size_t plane) {
@@ -6846,7 +6533,7 @@ std::vector<double> reconstruct_public_line_luminosity_v82_patch52071(
 // Purpose: Compute source zero based continuum planes for the bound-free/photoionization/recombination-continuum path using the current radiation field and level populations.
 // Reference context: XSTAR Manual ss11.5, 11.6.1, 11.7; Kallman & Bautista (2001); ATDB ch12.
 // XSTAR-FUNCTION-COMMENT-END
-std::vector<double> source_zero_based_continuum_planes_v82(
+std::vector<double> source_zero_based_continuum_planes(
     const std::vector<double>& native_values,
     std::size_t source_count) {
     std::vector<double> out(2u * source_count, 0.0);
@@ -6876,7 +6563,7 @@ std::vector<double> source_zero_based_continuum_planes_v82(
 // Purpose: Implement source real literal in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-double source_real_literal_v82_patch520142(double value) {
+double standalone_source_real_literal(double value) {
     return static_cast<double>(static_cast<float>(value));
 }
 
@@ -6896,7 +6583,7 @@ struct PublicLineSelectionV82Patch520164 {
 // Purpose: Compute select public lines for the line/emissivity/opacity path on the source or publication energy grid.
 // Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
 // XSTAR-FUNCTION-COMMENT-END
-PublicLineSelectionV82Patch520164 select_public_lines_v82_patch520164(
+PublicLineSelectionV82Patch520164 select_public_lines(
     const xstar_run_state::ProductWritingState& product) {
     constexpr std::size_t kMaxPublicLines = 600u;
     PublicLineSelectionV82Patch520164 out;
@@ -6913,21 +6600,21 @@ PublicLineSelectionV82Patch520164 select_public_lines_v82_patch520164(
     for (std::size_t i = 0; i < order.size(); ++i) {
         all_indices[i] = static_cast<double>(product.line_identities[order[i]].line_index);
     }
-    const auto all_in = reconstruct_public_line_luminosity_v82_patch52071(product, all_indices, 0u);
-    const auto all_out = reconstruct_public_line_luminosity_v82_patch52071(product, all_indices, 1u);
+    const auto all_in = reconstruct_public_line_luminosity(product, all_indices, 0u);
+    const auto all_out = reconstruct_public_line_luminosity(product, all_indices, 1u);
     if (all_in.size() != order.size() || all_out.size() != order.size()) return out;
 
-    const double eliml = source_real_literal_v82_patch520142(0.1);
-    const double elimh = source_real_literal_v82_patch520142(1.0e10);
-    const double hard_elimh = source_real_literal_v82_patch520142(8.9e6);
-    const double activity_floor = source_real_literal_v82_patch520142(1.0e-36);
+    const double eliml = standalone_source_real_literal(0.1);
+    const double elimh = standalone_source_real_literal(1.0e10);
+    const double hard_elimh = standalone_source_real_literal(8.9e6);
+    const double activity_floor = standalone_source_real_literal(1.0e-36);
 
     auto qualifies = [&](std::size_t si, double& mean) {
         const auto& id = product.line_identities[order[si]];
         if (id.line_index <= 0 || id.rate_type == 9 || id.rate_type == 14) return false;
         const double wavelength = std::abs(id.wavelength_angstrom);
         if (!(wavelength >= eliml && wavelength <= elimh && wavelength <= hard_elimh)) return false;
-        mean = (all_out[si] + all_in[si]) / source_real_literal_v82_patch520142(2.0);
+        mean = (all_out[si] + all_in[si]) / standalone_source_real_literal(2.0);
         return std::isfinite(mean) && mean > activity_floor;
     };
 
@@ -6961,7 +6648,7 @@ PublicLineSelectionV82Patch520164 select_public_lines_v82_patch520164(
         source_mean[si] = mean;
         source_valid[si] = 1u;
         std::size_t lmm = 0u;
-        double elcomp = source_real_literal_v82_patch520142(1.0e10);
+        double elcomp = standalone_source_real_literal(1.0e10);
         while (lmm < nlpl && mean < elcomp) {
             ++lmm;
             const std::size_t kl2 = kltmp[lmm - 1u];
@@ -7010,7 +6697,7 @@ PublicLineSelectionV82Patch520164 select_public_lines_v82_patch520164(
 // Purpose: Implement public parameter real in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-double public_parameter_real_v82_patch520142(
+double public_parameter_real(
     const xstar_run_state::ProductWritingState& product,
     const std::string& name,
     double fallback) {
@@ -7029,7 +6716,7 @@ double public_parameter_real_v82_patch520142(
 // Purpose: Compute rank writer binemis lines for the line/emissivity/opacity path on the source or publication energy grid.
 // Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
 // XSTAR-FUNCTION-COMMENT-END
-std::vector<long long> rank_writer_binemis_lines_v82_patch520142(
+std::vector<long long> rank_writer_binemis_lines(
     const xstar_run_state::ProductWritingState& product,
     const std::vector<double>& compact_elum,
     const std::vector<double>& epi,
@@ -7037,10 +6724,10 @@ std::vector<long long> rank_writer_binemis_lines_v82_patch520142(
     constexpr int nrank = 10;
     const std::size_t line_count = product.line_identities.size();
     if (line_count == 0 || compact_elum.size() != 2u * line_count || epi.size() < 3u) return {};
-    const double gate = source_real_literal_v82_patch520142(1.0e-15) * xlum;
-    const double activity_floor = source_real_literal_v82_patch520142(1.0e-37);
-    const double conv = source_real_literal_v82_patch520142(12398.4016);
-    const double tiny = source_real_literal_v82_patch520142(1.0e-34);
+    const double gate = standalone_source_real_literal(1.0e-15) * xlum;
+    const double activity_floor = standalone_source_real_literal(1.0e-37);
+    const double conv = standalone_source_real_literal(12398.4016);
+    const double tiny = standalone_source_real_literal(1.0e-34);
     const double emaxa = conv / epi.front();
     const double emina = conv / epi.back();
     std::vector<std::array<int,nrank>> ranked(epi.size());
@@ -7061,7 +6748,7 @@ std::vector<long long> rank_writer_binemis_lines_v82_patch520142(
         const double wavelength = std::abs(id.wavelength_angstrom);
         if (wavelength > emaxa || wavelength < emina) continue;
         const double energy = conv / (tiny + wavelength);
-        const std::size_t nb1 = source_nbinc_v67(energy, epi);
+        const std::size_t nb1 = production_source_nbinc(energy, epi);
         if (nb1 < 1u || nb1 > epi.size()) continue;
         auto& bin = ranked[nb1 - 1u];
         int mm = 0;
@@ -7102,7 +6789,7 @@ std::vector<long long> rank_writer_binemis_lines_v82_patch520142(
 // Purpose: Build writer time binemis from the source-ordered inputs required by the next calculation stage.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-bool build_writer_time_binemis_v82_patch520142(
+bool build_writer_time_binemis(
     const xstar_run_state::ProductWritingState& product,
     const xstar_run_state::FixedEvaluationState& final_eval,
     std::vector<double>& spectrum_rows) {
@@ -7112,7 +6799,7 @@ bool build_writer_time_binemis_v82_patch520142(
     const std::size_t line_count = product.line_identities.size();
     if (n < 3u || line_count == 0u || ws.zrems.size() < 5u * n ||
         ws.dpthc.size() < 2u * n) return false;
-    const std::size_t native_stride = native_line_plane_stride_v82(ws);
+    const std::size_t native_stride = native_line_plane_stride(ws);
     if (native_stride == 0u) return false;
 
     std::vector<double> compact_elum(2u * line_count, 0.0);
@@ -7120,9 +6807,9 @@ bool build_writer_time_binemis_v82_patch520142(
     for (std::size_t j = 0; j < line_count; ++j) {
         all_line_indices[j] = static_cast<double>(product.line_identities[j].line_index);
     }
-    const auto reconstructed_elum_in = reconstruct_public_line_luminosity_v82_patch52071(
+    const auto reconstructed_elum_in = reconstruct_public_line_luminosity(
         product, all_line_indices, 0u);
-    const auto reconstructed_elum_out = reconstruct_public_line_luminosity_v82_patch52071(
+    const auto reconstructed_elum_out = reconstruct_public_line_luminosity(
         product, all_line_indices, 1u);
     const bool reconstructed_elum_ready =
         vector_has_nonzero(reconstructed_elum_in) || vector_has_nonzero(reconstructed_elum_out);
@@ -7133,10 +6820,10 @@ bool build_writer_time_binemis_v82_patch520142(
         const auto& id = product.line_identities[j];
         compact_elum[j] = reconstructed_elum_ready
             ? reconstructed_elum_in[j]
-            : native_line_plane_v82(ws.elum, native_stride, 0u, id.line_index);
+            : native_line_plane(ws.elum, native_stride, 0u, id.line_index);
         compact_elum[line_count + j] = reconstructed_elum_ready
             ? reconstructed_elum_out[j]
-            : native_line_plane_v82(ws.elum, native_stride, 1u, id.line_index);
+            : native_line_plane(ws.elum, native_stride, 1u, id.line_index);
         wavelength[j] = std::abs(id.wavelength_angstrom);
         dtype[j] = static_cast<long long>(id.data_type);
         mass[j] = std::max(id.atomic_mass, std::numeric_limits<double>::min());
@@ -7144,9 +6831,9 @@ bool build_writer_time_binemis_v82_patch520142(
         auger_width[j] = id.auger_width_ev;
         auger_rate[j] = id.auger_rate_s;
     }
-    const double xlum = public_parameter_real_v82_patch520142(product, "rlrad38", 1.0e6);
-    const double vturbi = public_parameter_real_v82_patch520142(product, "vturbi", 100.0);
-    const auto slots = rank_writer_binemis_lines_v82_patch520142(
+    const double xlum = public_parameter_real(product, "rlrad38", 1.0e6);
+    const double vturbi = public_parameter_real(product, "vturbi", 100.0);
+    const auto slots = rank_writer_binemis_lines(
         product, compact_elum, final_eval.radiation_energy_ev, xlum);
     if (slots.empty()) return false;
     const std::vector<double> incident = ws.zremsz.size() == n
@@ -7172,7 +6859,7 @@ bool build_writer_time_binemis_v82_patch520142(
         return false;
     }
     if (g_performance_v064890) {
-        g_performance_v064890->writer_binemis_seconds += elapsed_seconds_v064890(perf_started_v064890);
+        g_performance_v064890->writer_binemis_seconds += performance_elapsed_seconds(perf_started_v064890);
         g_performance_v064890->writer_binemis_far_event_writes += static_cast<std::uint64_t>(stats[3]);
         g_performance_v064890->writer_binemis_ranked_slots += static_cast<std::uint64_t>(slots.size());
     }
@@ -7266,22 +6953,22 @@ void create_native_retained_productwrite_schema(xstar_run_state::ProductWritingS
         append_native_array(inventory, product, hdu, "zremsz", resize_or_zero(ws.zremsz.empty() ? eval.radiation_flux : ws.zremsz, n));
         const std::size_t source_continuum_count = std::max<std::size_t>(n, ws.native_continuum_count);
         append_native_array(inventory, product, hdu, "tauc",
-            source_zero_based_continuum_planes_v82(ws.tauc, source_continuum_count));
+            source_zero_based_continuum_planes(ws.tauc, source_continuum_count));
         append_native_array(inventory, product, hdu, "elumab",
-            source_zero_based_continuum_planes_v82(ws.elumab.empty() ? ws.rccemis : ws.elumab, source_continuum_count));
+            source_zero_based_continuum_planes(ws.elumab.empty() ? ws.rccemis : ws.elumab, source_continuum_count));
 
         const std::size_t line_count = line_indices_all.size();
-        const std::size_t native_line_stride = native_line_plane_stride_v82(ws);
+        const std::size_t native_line_stride = native_line_plane_stride(ws);
         append_native_array(inventory, product, hdu, "line_indices", line_indices_all);
         append_native_array(inventory, product, hdu, "product_write_detail_line_index", line_indices_all);
         // rcem is the local volumetric detailed-line emissivity.  elum is the
         // radially accumulated public luminosity and must not replace rcem in
         // xo01_detal2.fits.
-        const auto line_emit_in = gather_native_line_plane_v82(ws.rcem, {}, native_line_stride, line_indices_all, 0);
-        const auto line_emit_out = gather_native_line_plane_v82(ws.rcem, {}, native_line_stride, line_indices_all, 1);
-        const auto line_opacity = gather_native_line_scalar_v82(ws.oplin, line_indices_all);
-        const auto line_tau_in = gather_native_line_plane_v82(ws.tau0, {}, native_line_stride, line_indices_all, 0);
-        const auto line_tau_out = gather_native_line_plane_v82(ws.tau0, {}, native_line_stride, line_indices_all, 1);
+        const auto line_emit_in = gather_native_line_plane(ws.rcem, {}, native_line_stride, line_indices_all, 0);
+        const auto line_emit_out = gather_native_line_plane(ws.rcem, {}, native_line_stride, line_indices_all, 1);
+        const auto line_opacity = gather_native_line_scalar(ws.oplin, line_indices_all);
+        const auto line_tau_in = gather_native_line_plane(ws.tau0, {}, native_line_stride, line_indices_all, 0);
+        const auto line_tau_out = gather_native_line_plane(ws.tau0, {}, native_line_stride, line_indices_all, 1);
         std::vector<double> compact_rcem(2u * line_count, 0.0), compact_tau0(2u * line_count, 0.0);
         for (std::size_t li = 0; li < line_count; ++li) {
             compact_rcem[li] = line_emit_in[li];
@@ -7334,10 +7021,10 @@ void create_native_retained_productwrite_schema(xstar_run_state::ProductWritingS
     // inventory.  It scans all source lines and ranks the strongest 600 from
     // the final cumulative elum state.  Build that selection literally and
     // retain its physical one-based indices together with matching elum/tau0.
-    const auto public_selection = select_public_lines_v82_patch520164(product);
+    const auto public_selection = select_public_lines(product);
     const auto& public_line_index = public_selection.indices;
     const auto& public_line_numeric_index = public_selection.numeric_indices;
-    const std::size_t public_native_line_stride = native_line_plane_stride_v82(ws);
+    const std::size_t public_native_line_stride = native_line_plane_stride(ws);
     std::vector<double> public_line_emit_in = public_selection.emit_inward;
     std::vector<double> public_line_emit_out = public_selection.emit_outward;
     if (public_line_index.size() > 600u ||
@@ -7349,9 +7036,9 @@ void create_native_retained_productwrite_schema(xstar_run_state::ProductWritingS
     std::cout << "V048746255172582_PATCH520164_PUBLIC_LINE_COUNT=" << public_line_index.size() << "\n";
     // Identity attachment changes in 12.3.41; rank-position numerical arrays
     // remain owned by the frozen 12.3.40 selection.
-    std::vector<double> public_line_depth_in = gather_native_line_plane_v82(
+    std::vector<double> public_line_depth_in = gather_native_line_plane(
         ws.tau0, {}, public_native_line_stride, public_line_numeric_index, 0);
-    std::vector<double> public_line_depth_out = gather_native_line_plane_v82(
+    std::vector<double> public_line_depth_out = gather_native_line_plane(
         ws.tau0, {}, public_native_line_stride, public_line_numeric_index, 1);
     std::cout << "V048746255172582_PATCH520164_PUBLIC_LINE_DEPTH_OWNER=FINAL_WRITER_TERMINAL_CUMULATIVE_TAU0\n";
     append_native_array(inventory, product, hdu, "product_write_public_line_index", public_line_index);
@@ -7370,7 +7057,7 @@ void create_native_retained_productwrite_schema(xstar_run_state::ProductWritingS
     std::vector<double> continuum_emit_in(n, 0.0), continuum_emit_out(n, 0.0);
     std::vector<double> spectrum_emit_in(n, 0.0), spectrum_emit_out(n, 0.0);
     std::vector<double> writer_binemis;
-    const bool writer_binemis_ready = build_writer_time_binemis_v82_patch520142(
+    const bool writer_binemis_ready = build_writer_time_binemis(
         product, final_eval, writer_binemis);
     for (std::size_t i = 0; i < n; ++i) {
         const double incident = vector_at_or_zero(incident_surface, i);
@@ -7539,9 +7226,9 @@ void validate_real_native_product_state(const xstar_run_state::ProductWritingSta
     if (rrc_states == 0) throw std::runtime_error("real native ProductWritingState has no nonzero RRC surface");
 }
 
-std::map<std::size_t,SequenceContractV1724> read_sequence_contracts_v1724(
+std::map<std::size_t,SequenceContractV1724> read_sequence_contracts(
     const std::filesystem::path& path);
-void read_source_populations_v1724(
+void read_source_populations(
     const std::filesystem::path& path,
     SourcePopulationGlobalV1724& global,
     SourcePopulationCompactV1724& compact);
@@ -7550,7 +7237,7 @@ void read_source_populations_v1724(
 // Purpose: Build real native product state from fixed engine from the source-ordered inputs required by the next calculation stage.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-[[maybe_unused]] xstar_run_state::ProductWritingState build_real_native_product_state_from_fixed_engine(
+xstar_run_state::ProductWritingState build_real_native_product_state_from_fixed_engine(
     Options& options,
     const std::filesystem::path& output,
     double& measured_run_seconds,
@@ -7605,8 +7292,8 @@ void read_source_populations_v1724(
     evaluator_data.thermal_budget_csv = (output / "native_thermal_budget.csv").string();
     if (!options.qualification_contract_dir.empty()) {
         const auto contract_dir = std::filesystem::path(options.qualification_contract_dir);
-        evaluator_data.sequence_contracts_v1724 = read_sequence_contracts_v1724(contract_dir / "sequence_contracts.csv");
-        read_source_populations_v1724(contract_dir / "population_e7.csv",
+        evaluator_data.sequence_contracts_v1724 = read_sequence_contracts(contract_dir / "sequence_contracts.csv");
+        read_source_populations(contract_dir / "population_e7.csv",
             evaluator_data.source_population_global_v1724,
             evaluator_data.source_population_compact_v1724);
         g_source_population_global_v1724 = &evaluator_data.source_population_global_v1724;
@@ -7774,7 +7461,7 @@ void read_source_populations_v1724(
 // Purpose: Implement command run native reconstructed products in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-int command_run_native_reconstructed_products_v172526(Options) {
+int command_run_native_reconstructed_products(Options) {
     std::cerr << "run-native-reconstructed-products is disabled in v17.25.29: "
               << "native product publication must use retained full-61 ProductWritingState artifacts "
               << "from the primary controller run, not a fixed-state evaluator reconstruction path\n";
@@ -7796,7 +7483,7 @@ struct NativeControllerOracleRow {
 // Purpose: Implement native controller acceptance oracle in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-const std::array<NativeControllerOracleRow,61>& native_controller_acceptance_oracle_v15926() {
+const std::array<NativeControllerOracleRow,61>& native_controller_acceptance_oracle() {
     // Qualification-only oracle.  These values never drive a controller
     // state transition.  Trial temperatures and electron fractions are
     // generated exclusively by xstar_thermal_run_evaluation_loop_v1.
@@ -7872,7 +7559,7 @@ constexpr double kNativeControllerZeroFloorV1710 = 1.0e-30;
 // Purpose: Implement zero aware controller equal in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-bool zero_aware_controller_equal_v1711(double actual, double expected) {
+bool zero_aware_controller_equal(double actual, double expected) {
     if (!std::isfinite(actual) || !std::isfinite(expected)) return false;
     if (std::abs(actual) < kNativeControllerZeroFloorV1710 &&
         std::abs(expected) < kNativeControllerZeroFloorV1710) return true;
@@ -7883,7 +7570,7 @@ bool zero_aware_controller_equal_v1711(double actual, double expected) {
 // Purpose: Implement zero aware relative error in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-double zero_aware_relative_error_v1711(double actual, double expected) {
+double zero_aware_relative_error(double actual, double expected) {
     if (!std::isfinite(actual) || !std::isfinite(expected)) {
         return std::numeric_limits<double>::infinity();
     }
@@ -7898,7 +7585,7 @@ double zero_aware_relative_error_v1711(double actual, double expected) {
 // Purpose: Implement source energy grid in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-std::vector<double> source_energy_grid_v1711(std::size_t n) {
+std::vector<double> qualification_source_energy_grid(std::size_t n) {
     return xstar_source_real_energy_grid::build(n);
 }
 
@@ -7906,7 +7593,7 @@ std::vector<double> source_energy_grid_v1711(std::size_t n) {
 // Purpose: Implement source huntf in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-std::size_t source_huntf_v1711(const std::vector<double>& grid, double x, std::size_t n) {
+std::size_t source_huntf(const std::vector<double>& grid, double x, std::size_t n) {
     if (n < 2 || grid.size() < n) throw std::runtime_error("sequence-1 huntf grid is invalid");
     constexpr double floor = 1.0e-36;
     const double xx1 = grid[0];
@@ -7929,16 +7616,16 @@ std::size_t source_huntf_v1711(const std::vector<double>& grid, double x, std::s
 // Purpose: Implement source nbinc in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-std::size_t source_nbinc_v1711(double energy, const std::vector<double>& grid) {
+std::size_t qualification_source_nbinc(double energy, const std::vector<double>& grid) {
     const std::size_t n2 = std::max<std::size_t>(2, grid.size() / 50);
-    return source_huntf_v1711(grid, energy, grid.size() - n2);
+    return source_huntf(grid, energy, grid.size() - n2);
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Implement source powerlaw in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-std::vector<double> source_powerlaw_v1711(
+std::vector<double> source_powerlaw(
     double index, double luminosity_1e38, const std::vector<double>& energy) {
     constexpr double erg_per_ev = 1.602197e-12;
     std::vector<double> raw(energy.size(), 0.0);
@@ -7955,8 +7642,8 @@ std::vector<double> source_powerlaw_v1711(
             raw[i] = std::pow(energy[i], index);
         }
     }
-    const std::size_t nb1 = source_nbinc_v1711(13.6, energy);
-    const std::size_t nb2 = source_nbinc_v1711(1.36e4, energy);
+    const std::size_t nb1 = qualification_source_nbinc(13.6, energy);
+    const std::size_t nb2 = qualification_source_nbinc(1.36e4, energy);
     double total = 0.0;
     const std::size_t first = std::max<std::size_t>(2, nb1);
     const std::size_t last = std::min(energy.size(), nb2);
@@ -7985,7 +7672,7 @@ std::vector<double> source_powerlaw_v1711(
 // Purpose: Load single csv row into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-std::map<std::string,std::string> read_single_csv_row_v1711(const std::filesystem::path& path) {
+std::map<std::string,std::string> read_single_csv_row(const std::filesystem::path& path) {
     std::ifstream input(path);
     if (!input) throw std::runtime_error("cannot open sequence-1 thermal budget: " + path.string());
     std::string header_line, value_line;
@@ -8004,7 +7691,7 @@ std::map<std::string,std::string> read_single_csv_row_v1711(const std::filesyste
 // Purpose: Implement relative one percent in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-bool relative_one_percent_v1711(double actual, double expected) {
+bool relative_one_percent(double actual, double expected) {
     if (!std::isfinite(actual) || !std::isfinite(expected)) return false;
     if (std::abs(expected) < 1.0e-30) return std::abs(actual) < 1.0e-30;
     return std::abs(actual - expected) / std::abs(expected) <= 0.01;
@@ -8014,7 +7701,7 @@ bool relative_one_percent_v1711(double actual, double expected) {
 // Purpose: Compute fnv1a lines for the line/emissivity/opacity path on the source or publication energy grid.
 // Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
 // XSTAR-FUNCTION-COMMENT-END
-std::uint64_t fnv1a_lines_v1712(const std::vector<std::string>& lines) {
+std::uint64_t fnv1a_lines(const std::vector<std::string>& lines) {
     std::uint64_t hash = UINT64_C(14695981039346656037);
     for (const auto& line : lines) {
         for (const unsigned char byte : line) {
@@ -8031,7 +7718,7 @@ std::uint64_t fnv1a_lines_v1712(const std::vector<std::string>& lines) {
 // Purpose: Implement hex64 in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-std::string hex64_v1712(std::uint64_t value) {
+std::string hex64(std::uint64_t value) {
     std::ostringstream out;
     out << std::hex << std::setfill('0') << std::setw(16) << value;
     return out.str();
@@ -8041,7 +7728,7 @@ std::string hex64_v1712(std::uint64_t value) {
 // Purpose: Parse thermal binary64 from its external text/argument representation into validated native values.
 // Reference context: Implementation/input helper; XSTAR Manual ch4 describes parameter inputs, but this parser has no independent scientific formula.
 // XSTAR-FUNCTION-COMMENT-END
-double parse_thermal_binary64_v79(const std::string& text) {
+double parse_thermal_binary64(const std::string& text) {
     char* end = nullptr;
     errno = 0;
     const double value = std::strtod(text.c_str(), &end);
@@ -8058,7 +7745,7 @@ double parse_thermal_binary64_v79(const std::string& text) {
 // Purpose: Implement canonical zero aware e7 in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-std::string canonical_zero_aware_e7_v1712(const std::string& text) {
+std::string canonical_zero_aware_e7(const std::string& text) {
     char* end = nullptr;
     const double value = std::strtod(text.c_str(), &end);
     if (end == text.c_str() || (end && *end != '\0')) {
@@ -8075,7 +7762,7 @@ std::string canonical_zero_aware_e7_v1712(const std::string& text) {
 // Purpose: Implement canonical zero aware e7 value in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-std::string canonical_zero_aware_e7_value_v1715(double value) {
+std::string canonical_zero_aware_e7_value(double value) {
     if (!std::isfinite(value)) {
         std::ostringstream out;
         out << value;
@@ -8092,7 +7779,7 @@ std::string canonical_zero_aware_e7_value_v1715(double value) {
 // Purpose: Compute source canonical helium population e7 as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
 // Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
 // XSTAR-FUNCTION-COMMENT-END
-std::optional<std::string> source_canonical_helium_population_e7_v1718(
+std::optional<std::string> source_canonical_helium_population_e7(
     int source_sequence,
     int compact_row) {
     if (source_sequence == 2 && compact_row == 18) {
@@ -8144,7 +7831,7 @@ std::optional<std::string> source_canonical_helium_population_e7_v1718(
 // Purpose: Compute source canonical sequence5 population e7 as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
 // Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
 // XSTAR-FUNCTION-COMMENT-END
-std::optional<std::string> source_canonical_sequence5_population_e7_v1720(
+std::optional<std::string> source_canonical_sequence5_population_e7(
     int element_z,
     int row,
     bool compact_row) {
@@ -8197,7 +7884,7 @@ std::optional<std::string> source_canonical_sequence5_population_e7_v1720(
 // Purpose: Compute source canonical sequence6 population e7 as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
 // Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
 // XSTAR-FUNCTION-COMMENT-END
-std::optional<std::string> source_canonical_sequence6_population_e7_v1721(
+std::optional<std::string> source_canonical_sequence6_population_e7(
     int element_z,
     int row,
     bool compact_row) {
@@ -8253,7 +7940,7 @@ std::optional<std::string> source_canonical_sequence6_population_e7_v1721(
 // Purpose: Compute source canonical sequence7 population e7 as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
 // Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
 // XSTAR-FUNCTION-COMMENT-END
-std::optional<std::string> source_canonical_sequence7_population_e7_v1722(
+std::optional<std::string> source_canonical_sequence7_population_e7(
     int element_z,
     int row,
     bool compact_row) {
@@ -8321,7 +8008,7 @@ std::optional<std::string> source_canonical_sequence7_population_e7_v1722(
 // Purpose: Compute source canonical sequence8 population e7 as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
 // Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
 // XSTAR-FUNCTION-COMMENT-END
-std::optional<std::string> source_canonical_sequence8_population_e7_v1723(
+std::optional<std::string> source_canonical_sequence8_population_e7(
     int element_z,
     int row,
     bool compact_row) {
@@ -8378,7 +8065,7 @@ std::optional<std::string> source_canonical_sequence8_population_e7_v1723(
 // Purpose: Implement canonical ledger value in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-std::string canonical_ledger_value_v1715(
+std::string canonical_ledger_value(
     const std::vector<std::string>& fields,
     const std::map<std::string,std::size_t>& columns,
     const std::string& name,
@@ -8392,31 +8079,31 @@ std::string canonical_ledger_value_v1715(
     const int element_z = std::stoi(fields.at(columns.at("element_z")));
     const int compact_row = std::stoi(fields.at(columns.at("compact_row")));
     auto source_canonical_population = element_z == 2
-        ? source_canonical_helium_population_e7_v1718(
+        ? source_canonical_helium_population_e7(
             source_canonical_sequence, compact_row)
         : std::optional<std::string>{};
     if (source_canonical_sequence == 5) {
-        const auto sequence5_value = source_canonical_sequence5_population_e7_v1720(
+        const auto sequence5_value = source_canonical_sequence5_population_e7(
             element_z, compact_row, true);
         if (sequence5_value.has_value()) source_canonical_population = sequence5_value;
     }
     if (source_canonical_sequence == 6) {
-        const auto sequence6_value = source_canonical_sequence6_population_e7_v1721(
+        const auto sequence6_value = source_canonical_sequence6_population_e7(
             element_z, compact_row, true);
         if (sequence6_value.has_value()) source_canonical_population = sequence6_value;
     }
     if (source_canonical_sequence == 7) {
-        const auto sequence7_value = source_canonical_sequence7_population_e7_v1722(
+        const auto sequence7_value = source_canonical_sequence7_population_e7(
             element_z, compact_row, true);
         if (sequence7_value.has_value()) source_canonical_population = sequence7_value;
     }
     if (source_canonical_sequence == 8) {
-        const auto sequence8_value = source_canonical_sequence8_population_e7_v1723(
+        const auto sequence8_value = source_canonical_sequence8_population_e7(
             element_z, compact_row, true);
         if (sequence8_value.has_value()) source_canonical_population = sequence8_value;
     }
     if (source_canonical_sequence >= 9) {
-        const auto generic_value = source_canonical_population_e7_v1724(
+        const auto generic_value = source_canonical_population_e7(
             static_cast<std::size_t>(source_canonical_sequence), element_z, compact_row, true);
         if (generic_value.has_value()) source_canonical_population = generic_value;
     }
@@ -8426,14 +8113,14 @@ std::string canonical_ledger_value_v1715(
             return *source_canonical_population;
         }
         if (source_canonical_helium_row && name == "weighted_population") {
-            const double weighted = parse_thermal_binary64_v79(*source_canonical_population) *
-                parse_thermal_binary64_v79(fields.at(columns.at("abundance")));
-            return canonical_zero_aware_e7_value_v1715(weighted);
+            const double weighted = parse_thermal_binary64(*source_canonical_population) *
+                parse_thermal_binary64(fields.at(columns.at("abundance")));
+            return canonical_zero_aware_e7_value(weighted);
         }
-        return canonical_zero_aware_e7_v1712(fields.at(columns.at(name)));
+        return canonical_zero_aware_e7(fields.at(columns.at(name)));
     }
 
-    const double original = parse_thermal_binary64_v79(fields.at(columns.at(name)));
+    const double original = parse_thermal_binary64(fields.at(columns.at(name)));
     if (std::abs(original) < kNativeControllerZeroFloorV1710) return "0";
 
     // The contribution columns are derived values.  Recompute their gate
@@ -8443,24 +8130,24 @@ std::string canonical_ledger_value_v1715(
     // multiplication.  This changes only qualification canonicalization; the
     // raw solver, ledger, family totals, and controller state remain untouched.
     const std::string canonical_population = source_canonical_helium_row ?
-        *source_canonical_population : canonical_zero_aware_e7_v1712(
+        *source_canonical_population : canonical_zero_aware_e7(
             fields.at(columns.at("compact_population")));
-    const double population = canonical_population == "0" ? 0.0 : parse_thermal_binary64_v79(canonical_population);
+    const double population = canonical_population == "0" ? 0.0 : parse_thermal_binary64(canonical_population);
     const bool secondary = name.find("heating2") != std::string::npos ||
         name.find("cooling2") != std::string::npos;
-    const double coefficient = parse_thermal_binary64_v79(fields.at(columns.at(secondary ? "cj2" : "cj")));
+    const double coefficient = parse_thermal_binary64(fields.at(columns.at(secondary ? "cj2" : "cj")));
     double value = population * std::abs(coefficient);
     if (name.rfind("unweighted_", 0) != 0) {
-        value *= parse_thermal_binary64_v79(fields.at(columns.at("abundance")));
+        value *= parse_thermal_binary64(fields.at(columns.at("abundance")));
     }
-    return canonical_zero_aware_e7_value_v1715(value);
+    return canonical_zero_aware_e7_value(value);
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Load case abundances into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-std::map<int,double> read_case_abundances_v1712(const std::filesystem::path& case_dir) {
+std::map<int,double> read_case_abundances(const std::filesystem::path& case_dir) {
     const auto path = case_dir / "elements.csv";
     std::ifstream input(path);
     if (!input) throw std::runtime_error("cannot open native element abundance table: " + path.string());
@@ -8513,7 +8200,7 @@ struct Sequence1PopulationGateV1714 {
 // Purpose: Compute compare sequence1 populations as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
 // Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
 // XSTAR-FUNCTION-COMMENT-END
-Sequence1PopulationGateV1714 compare_sequence1_populations_v1714(
+Sequence1PopulationGateV1714 compare_sequence1_populations(
     const std::filesystem::path& path) {
     std::ifstream input(path);
     if (!input) throw std::runtime_error("cannot open sequence-1 population diagnostic: " + path.string());
@@ -8535,15 +8222,15 @@ Sequence1PopulationGateV1714 compare_sequence1_populations_v1714(
         if (fields.size() != header.size()) throw std::runtime_error("population diagnostic row width mismatch");
         const std::string& row = fields.at(columns.at("global_population_row"));
         const std::string& z = fields.at(columns.at("element_z"));
-        const std::string initial = canonical_zero_aware_e7_v1712(fields.at(columns.at("initial_population")));
-        const std::string final_value = canonical_zero_aware_e7_v1712(fields.at(columns.at("final_population")));
+        const std::string initial = canonical_zero_aware_e7(fields.at(columns.at("initial_population")));
+        const std::string final_value = canonical_zero_aware_e7(fields.at(columns.at("final_population")));
         initial_lines.push_back(row + "|" + z + "|" + initial);
         final_lines.push_back(row + "|" + z + "|" + final_value);
     }
     Sequence1PopulationGateV1714 result;
     result.row_count = initial_lines.size();
-    result.initial_hash = hex64_v1712(fnv1a_lines_v1712(initial_lines));
-    result.final_hash = hex64_v1712(fnv1a_lines_v1712(final_lines));
+    result.initial_hash = hex64(fnv1a_lines(initial_lines));
+    result.final_hash = hex64(fnv1a_lines(final_lines));
     // Count and verify nonzero seeds in a second pass to keep the hash stream simple.
     input.clear(); input.seekg(0); std::getline(input, header_line);
     while (std::getline(input, line)) {
@@ -8569,7 +8256,7 @@ Sequence1PopulationGateV1714 compare_sequence1_populations_v1714(
 // Purpose: Compute compare sequence1 thermal ledger as a contribution to, or control step in, the local thermal-equilibrium iteration.
 // Reference context: XSTAR Manual s11.4.4 and s11.6; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-ThermalLedgerGateV1712 compare_sequence1_thermal_ledger_v1712(
+ThermalLedgerGateV1712 compare_sequence1_thermal_ledger(
     const std::filesystem::path& path,
     int source_canonical_sequence = 0) {
     std::ifstream input(path);
@@ -8615,7 +8302,7 @@ ThermalLedgerGateV1712 compare_sequence1_thermal_ledger_v1712(
         ordered_identities.push_back(key);
         const int element_z = std::stoi(fields.at(columns.at("element_z")));
         const int data_type = std::stoi(fields.at(columns.at("data_type")));
-        const double cj_value = parse_thermal_binary64_v79(fields.at(columns.at("cj")));
+        const double cj_value = parse_thermal_binary64(fields.at(columns.at("cj")));
         const int primary_applied = std::stoi(fields.at(columns.at("magnesium_primary_cooling_source_order_applied")));
         const std::int64_t primary_index = std::stoll(fields.at(columns.at("magnesium_primary_cooling_source_order_index")));
         const int type99_applied = std::stoi(fields.at(columns.at("magnesium_type99_primary_cooling_reduction_applied")));
@@ -8634,13 +8321,13 @@ ThermalLedgerGateV1712 compare_sequence1_thermal_ledger_v1712(
             ++magnesium_type99_rows;
             magnesium_type99_metadata_ok = magnesium_type99_metadata_ok && element_z == 12 && data_type == 99 &&
                 cj_value > 0.0 && primary_applied != 0 &&
-                canonical_zero_aware_e7_v1712(fields.at(columns.at("cj"))) ==
-                canonical_zero_aware_e7_v1712(fields.at(columns.at("source_cj")));
+                canonical_zero_aware_e7(fields.at(columns.at("cj"))) ==
+                canonical_zero_aware_e7(fields.at(columns.at("source_cj")));
         }
         std::ostringstream values;
         values << key;
         for (const auto& name : value_columns) {
-            values << '|' << canonical_ledger_value_v1715(
+            values << '|' << canonical_ledger_value(
                 fields, columns, name, source_canonical_sequence);
         }
         identity_values.push_back(values.str());
@@ -8654,9 +8341,9 @@ ThermalLedgerGateV1712 compare_sequence1_thermal_ledger_v1712(
     result.row_count = ordered_identities.size();
     result.magnesium_primary_source_order_rows = magnesium_primary_rows;
     result.magnesium_type99_reduction_rows = magnesium_type99_rows;
-    result.identity_hash = hex64_v1712(fnv1a_lines_v1712(sorted_identities));
-    result.order_hash = hex64_v1712(fnv1a_lines_v1712(ordered_identities));
-    result.values_hash = hex64_v1712(fnv1a_lines_v1712(sorted_values));
+    result.identity_hash = hex64(fnv1a_lines(sorted_identities));
+    result.order_hash = hex64(fnv1a_lines(ordered_identities));
+    result.values_hash = hex64(fnv1a_lines(sorted_values));
     result.count_ok = result.row_count == 16400u;
     result.magnesium_primary_source_order_ok = magnesium_primary_metadata_ok &&
         result.magnesium_primary_source_order_rows == 3998u;
@@ -8673,7 +8360,7 @@ ThermalLedgerGateV1712 compare_sequence1_thermal_ledger_v1712(
 // Purpose: Load csv rows into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-std::vector<std::map<std::string,std::string>> read_csv_rows_v1716(
+std::vector<std::map<std::string,std::string>> read_csv_rows(
     const std::filesystem::path& path) {
     std::ifstream input(path);
     if (!input) throw std::runtime_error("cannot open CSV: " + path.string());
@@ -8698,7 +8385,7 @@ std::vector<std::map<std::string,std::string>> read_csv_rows_v1716(
 // Purpose: Implement binary64 equal in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-bool binary64_equal_v79(double left, double right) {
+bool sequence_ledger_binary64_equal(double left, double right) {
     std::uint64_t a = 0, b = 0;
     static_assert(sizeof(a) == sizeof(left), "binary64 width mismatch");
     std::memcpy(&a, &left, sizeof(a));
@@ -8710,7 +8397,7 @@ bool binary64_equal_v79(double left, double right) {
 // Purpose: Implement binary64 hex in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-std::string binary64_hex_v79(double value) {
+std::string binary64_hex(double value) {
     std::uint64_t bits = 0;
     std::memcpy(&bits, &value, sizeof(bits));
     std::ostringstream out;
@@ -8731,18 +8418,18 @@ struct Sequence16MgSourceTargetsV79 {
 // Purpose: Load sequence16 mg source targets into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-Sequence16MgSourceTargetsV79 read_sequence16_mg_source_targets_v79(
+Sequence16MgSourceTargetsV79 read_sequence16_mg_source_targets(
     const std::filesystem::path& path) {
-    const auto rows = read_csv_rows_v1716(path);
+    const auto rows = read_csv_rows(path);
     for (const auto& row : rows) {
         if (std::stoull(row.at("global_evaluation_ordinal")) != 16u) continue;
         Sequence16MgSourceTargetsV79 out;
-        out.heating = parse_thermal_binary64_v79(row.at("mg_heating"));
-        out.cooling = parse_thermal_binary64_v79(row.at("mg_cooling"));
-        out.heating2 = parse_thermal_binary64_v79(row.at("mg_heating2"));
-        out.cooling2 = parse_thermal_binary64_v79(row.at("mg_cooling2"));
-        out.hmctot = parse_thermal_binary64_v79(row.at("hmctot"));
-        out.elcter = parse_thermal_binary64_v79(row.at("elcter"));
+        out.heating = parse_thermal_binary64(row.at("mg_heating"));
+        out.cooling = parse_thermal_binary64(row.at("mg_cooling"));
+        out.heating2 = parse_thermal_binary64(row.at("mg_heating2"));
+        out.cooling2 = parse_thermal_binary64(row.at("mg_cooling2"));
+        out.hmctot = parse_thermal_binary64(row.at("hmctot"));
+        out.elcter = parse_thermal_binary64(row.at("elcter"));
         return out;
     }
     throw std::runtime_error("sequence-16 source thermal budget row is missing");
@@ -8765,9 +8452,9 @@ struct Sequence16MgSolveRowV80 {
 // Purpose: Load sequence16 source solve rows into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-std::map<int,Sequence16MgSolveRowV80> read_sequence16_source_solve_rows_v80(
+std::map<int,Sequence16MgSolveRowV80> read_sequence16_source_solve_rows(
     const std::filesystem::path& path) {
-    const auto rows = read_csv_rows_v1716(path);
+    const auto rows = read_csv_rows(path);
     std::map<int,Sequence16MgSolveRowV80> out;
     for (const auto& row : rows) {
         if (std::stoi(row.at("sequence")) != 16 || std::stoi(row.at("element_z")) != 12) continue;
@@ -8776,12 +8463,12 @@ std::map<int,Sequence16MgSolveRowV80> read_sequence16_source_solve_rows_v80(
         item.ion = std::stoi(row.at("ion"));
         item.ion_charge = std::stoi(row.at("ion_charge"));
         item.normalization = std::stoi(row.at("is_normalization_row")) != 0;
-        item.initial = parse_thermal_binary64_v79(row.at("transformed_initial_population"));
-        item.outer = parse_thermal_binary64_v79(row.at("final_outer_start_population"));
-        item.after_condensed = parse_thermal_binary64_v79(row.at("population_after_condensed"));
-        item.fixed_before = parse_thermal_binary64_v79(row.at("final_fixed_point_population_before"));
-        item.fixed_after = parse_thermal_binary64_v79(row.at("final_fixed_point_population_after"));
-        item.final_population = parse_thermal_binary64_v79(row.at("final_population"));
+        item.initial = parse_thermal_binary64(row.at("transformed_initial_population"));
+        item.outer = parse_thermal_binary64(row.at("final_outer_start_population"));
+        item.after_condensed = parse_thermal_binary64(row.at("population_after_condensed"));
+        item.fixed_before = parse_thermal_binary64(row.at("final_fixed_point_population_before"));
+        item.fixed_after = parse_thermal_binary64(row.at("final_fixed_point_population_after"));
+        item.final_population = parse_thermal_binary64(row.at("final_population"));
         if (!out.emplace(item.compact_row, item).second) {
             throw std::runtime_error("duplicate sequence-16 source Mg compact row");
         }
@@ -8796,9 +8483,9 @@ std::map<int,Sequence16MgSolveRowV80> read_sequence16_source_solve_rows_v80(
 // Purpose: Load sequence16 native solve rows into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-std::map<int,Sequence16MgSolveRowV80> read_sequence16_native_solve_rows_v80(
+std::map<int,Sequence16MgSolveRowV80> read_sequence16_native_solve_rows(
     const std::filesystem::path& path) {
-    const auto rows = read_csv_rows_v1716(path);
+    const auto rows = read_csv_rows(path);
     std::map<int,Sequence16MgSolveRowV80> out;
     for (const auto& row : rows) {
         if (std::stoi(row.at("element_z")) != 12) continue;
@@ -8807,9 +8494,9 @@ std::map<int,Sequence16MgSolveRowV80> read_sequence16_native_solve_rows_v80(
         item.ion = std::stoi(row.at("ion"));
         item.ion_charge = std::stoi(row.at("ion_charge"));
         item.normalization = std::stoi(row.at("is_normalization_row")) != 0;
-        item.initial = parse_thermal_binary64_v79(row.at("initial_population"));
-        item.outer = parse_thermal_binary64_v79(row.at("final_outer_start_population"));
-        item.final_population = parse_thermal_binary64_v79(row.at("final_population"));
+        item.initial = parse_thermal_binary64(row.at("initial_population"));
+        item.outer = parse_thermal_binary64(row.at("final_outer_start_population"));
+        item.final_population = parse_thermal_binary64(row.at("final_population"));
         if (!out.emplace(item.compact_row, item).second) {
             throw std::runtime_error("duplicate sequence-16 native Mg compact row");
         }
@@ -8882,7 +8569,7 @@ struct MgLedgerEntryV80 {
 // Purpose: Compute thermal role as a contribution to, or control step in, the local thermal-equilibrium iteration.
 // Reference context: XSTAR Manual s11.4.4 and s11.6; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-std::string thermal_role_v80(bool primary, double coefficient) {
+std::string thermal_role(bool primary, double coefficient) {
     if (coefficient > 0.0) return primary ? "primary_cooling" : "secondary_cooling";
     if (coefficient < 0.0) return primary ? "primary_heating" : "secondary_heating";
     return primary ? "primary_zero" : "secondary_zero";
@@ -8892,7 +8579,7 @@ std::string thermal_role_v80(bool primary, double coefficient) {
 // Purpose: Implement channel index in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-std::size_t channel_index_v80(const std::string& role) {
+std::size_t channel_index(const std::string& role) {
     if (role == "primary_heating") return 0u;
     if (role == "primary_cooling") return 1u;
     if (role == "secondary_heating") return 2u;
@@ -8904,16 +8591,16 @@ std::size_t channel_index_v80(const std::string& role) {
 // Purpose: Build sequence16 mg ledger from the source-ordered inputs required by the next calculation stage.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-Sequence16MgLedgerGateV80 build_sequence16_mg_ledger_v80(
+Sequence16MgLedgerGateV80 build_sequence16_mg_ledger(
     const std::filesystem::path& thermal_ledger_path,
     const std::filesystem::path& native_solve_rows_path,
     const std::filesystem::path& source_solve_stage_rows_path,
     const std::filesystem::path& output_path,
     std::size_t expected_full_rows) {
-    const auto full_gate = compare_sequence1_thermal_ledger_v1712(thermal_ledger_path, 16);
-    const auto native_solve = read_sequence16_native_solve_rows_v80(native_solve_rows_path);
-    const auto source_solve = read_sequence16_source_solve_rows_v80(source_solve_stage_rows_path);
-    const auto rows = read_csv_rows_v1716(thermal_ledger_path);
+    const auto full_gate = compare_sequence1_thermal_ledger(thermal_ledger_path, 16);
+    const auto native_solve = read_sequence16_native_solve_rows(native_solve_rows_path);
+    const auto source_solve = read_sequence16_source_solve_rows(source_solve_stage_rows_path);
+    const auto rows = read_csv_rows(thermal_ledger_path);
     std::vector<MgLedgerEntryV80> immediate;
     std::vector<MgLedgerEntryV80> deferred;
     immediate.reserve(rows.size());
@@ -8936,10 +8623,10 @@ Sequence16MgLedgerGateV80 build_sequence16_mg_ledger_v80(
         const int ion_stage = std::stoi(row.at("ion_stage"));
         const std::int64_t primary_index = std::stoll(row.at("magnesium_primary_cooling_source_order_index"));
         const bool primary_ordered = std::stoi(row.at("magnesium_primary_cooling_source_order_applied")) != 0;
-        const double abundance = parse_thermal_binary64_v79(row.at("abundance"));
-        const double native_primary = parse_thermal_binary64_v79(row.at("native_cj"));
-        const double source_primary = parse_thermal_binary64_v79(row.at("source_cj"));
-        const double secondary = parse_thermal_binary64_v79(row.at("cj2"));
+        const double abundance = parse_thermal_binary64(row.at("abundance"));
+        const double native_primary = parse_thermal_binary64(row.at("native_cj"));
+        const double source_primary = parse_thermal_binary64(row.at("source_cj"));
+        const double secondary = parse_thermal_binary64(row.at("cj2"));
 
         MgLedgerEntryV80 primary;
         primary.source_order_index = source_order_index;
@@ -8950,8 +8637,8 @@ Sequence16MgLedgerGateV80 build_sequence16_mg_ledger_v80(
         primary.ion_stage = ion_stage;
         primary.compact_row = compact_row;
         primary.primary_source_order_index = primary_index;
-        primary.native_role = thermal_role_v80(true, native_primary);
-        primary.source_role = thermal_role_v80(true, source_primary);
+        primary.native_role = thermal_role(true, native_primary);
+        primary.source_role = thermal_role(true, source_primary);
         primary.native_coefficient = native_primary;
         primary.source_coefficient = source_primary;
         primary.native_population = nfind->second.final_population;
@@ -8965,8 +8652,8 @@ Sequence16MgLedgerGateV80 build_sequence16_mg_ledger_v80(
         MgLedgerEntryV80 second = primary;
         second.primary = false;
         second.deferred_primary = false;
-        second.native_role = thermal_role_v80(false, secondary);
-        second.source_role = thermal_role_v80(false, secondary);
+        second.native_role = thermal_role(false, secondary);
+        second.source_role = thermal_role(false, secondary);
         second.native_coefficient = secondary;
         second.source_coefficient = secondary;
         immediate.push_back(second);
@@ -8999,8 +8686,8 @@ Sequence16MgLedgerGateV80 build_sequence16_mg_ledger_v80(
     std::size_t ordinal = 0;
     for (const auto& entry : ordered) {
         ++ordinal;
-        const std::size_t nchan = channel_index_v80(entry.native_role);
-        const std::size_t schan = channel_index_v80(entry.source_role);
+        const std::size_t nchan = channel_index(entry.native_role);
+        const std::size_t schan = channel_index(entry.source_role);
         const double native_unweighted = entry.native_population * std::abs(entry.native_coefficient);
         const double source_unweighted = entry.source_population * std::abs(entry.source_coefficient);
         if (nchan < 4u) native_running[nchan] += native_unweighted;
@@ -9009,10 +8696,10 @@ Sequence16MgLedgerGateV80 build_sequence16_mg_ledger_v80(
         const double source_run = schan < 4u ? source_running[schan] : 0.0;
         const double native_weighted = native_unweighted * entry.abundance;
         const double source_weighted = source_unweighted * entry.abundance;
-        gate.operand_population_bit_mismatches += !binary64_equal_v79(entry.native_population, entry.source_population);
-        gate.unweighted_bit_mismatches += !binary64_equal_v79(native_unweighted, source_unweighted);
-        gate.running_sum_bit_mismatches += !binary64_equal_v79(native_run, source_run);
-        gate.weighted_bit_mismatches += !binary64_equal_v79(native_weighted, source_weighted);
+        gate.operand_population_bit_mismatches += !sequence_ledger_binary64_equal(entry.native_population, entry.source_population);
+        gate.unweighted_bit_mismatches += !sequence_ledger_binary64_equal(native_unweighted, source_unweighted);
+        gate.running_sum_bit_mismatches += !sequence_ledger_binary64_equal(native_run, source_run);
+        gate.weighted_bit_mismatches += !sequence_ledger_binary64_equal(native_weighted, source_weighted);
         out << ordinal << ',' << entry.source_order_index << ',' << entry.source_position << ','
             << entry.record << ',' << entry.rate_type << ',' << entry.data_type << ',' << entry.ion_stage << ','
             << entry.compact_row << ',' << entry.source_role << ',' << entry.native_role << ',' << entry.source_role << ','
@@ -9020,7 +8707,7 @@ Sequence16MgLedgerGateV80 build_sequence16_mg_ledger_v80(
             << entry.native_population << ',' << entry.source_population << ','
             << native_unweighted << ',' << native_run << ',' << native_weighted << ','
             << source_unweighted << ',' << source_run << ',' << source_weighted << ',' << entry.abundance << ','
-            << binary64_hex_v79(entry.native_population) << ',' << binary64_hex_v79(entry.source_population) << '\n';
+            << binary64_hex(entry.native_population) << ',' << binary64_hex(entry.source_population) << '\n';
 
         std::ostringstream ni, si, no, so, nv, sv;
         ni << entry.source_position << '|' << entry.record << '|' << entry.rate_type << '|' << entry.data_type << '|'
@@ -9029,12 +8716,12 @@ Sequence16MgLedgerGateV80 build_sequence16_mg_ledger_v80(
            << entry.ion_stage << '|' << entry.compact_row << '|' << entry.source_role;
         no << ordinal << '|' << entry.source_order_index << '|' << entry.primary_source_order_index << '|' << ni.str();
         so << ordinal << '|' << entry.source_order_index << '|' << entry.primary_source_order_index << '|' << si.str();
-        nv << no.str() << '|' << binary64_hex_v79(entry.native_coefficient) << '|'
-           << binary64_hex_v79(entry.native_population) << '|' << binary64_hex_v79(native_unweighted) << '|'
-           << binary64_hex_v79(native_run) << '|' << binary64_hex_v79(native_weighted);
-        sv << so.str() << '|' << binary64_hex_v79(entry.source_coefficient) << '|'
-           << binary64_hex_v79(entry.source_population) << '|' << binary64_hex_v79(source_unweighted) << '|'
-           << binary64_hex_v79(source_run) << '|' << binary64_hex_v79(source_weighted);
+        nv << no.str() << '|' << binary64_hex(entry.native_coefficient) << '|'
+           << binary64_hex(entry.native_population) << '|' << binary64_hex(native_unweighted) << '|'
+           << binary64_hex(native_run) << '|' << binary64_hex(native_weighted);
+        sv << so.str() << '|' << binary64_hex(entry.source_coefficient) << '|'
+           << binary64_hex(entry.source_population) << '|' << binary64_hex(source_unweighted) << '|'
+           << binary64_hex(source_run) << '|' << binary64_hex(source_weighted);
         native_identity.push_back(ni.str()); source_identity.push_back(si.str());
         native_order.push_back(no.str()); source_order.push_back(so.str());
         native_values.push_back(nv.str()); source_values.push_back(sv.str());
@@ -9047,12 +8734,12 @@ Sequence16MgLedgerGateV80 build_sequence16_mg_ledger_v80(
     gate.full_identity_hash = full_gate.identity_hash;
     gate.full_order_hash = full_gate.order_hash;
     gate.full_values_hash = full_gate.values_hash;
-    gate.native_identity_hash = hex64_v1712(fnv1a_lines_v1712(native_identity));
-    gate.source_identity_hash = hex64_v1712(fnv1a_lines_v1712(source_identity));
-    gate.native_order_hash = hex64_v1712(fnv1a_lines_v1712(native_order));
-    gate.source_order_hash = hex64_v1712(fnv1a_lines_v1712(source_order));
-    gate.native_value_hash = hex64_v1712(fnv1a_lines_v1712(native_values));
-    gate.source_value_hash = hex64_v1712(fnv1a_lines_v1712(source_values));
+    gate.native_identity_hash = hex64(fnv1a_lines(native_identity));
+    gate.source_identity_hash = hex64(fnv1a_lines(source_identity));
+    gate.native_order_hash = hex64(fnv1a_lines(native_order));
+    gate.source_order_hash = hex64(fnv1a_lines(source_order));
+    gate.native_value_hash = hex64(fnv1a_lines(native_values));
+    gate.source_value_hash = hex64(fnv1a_lines(source_values));
     const double mg_abundance = ordered.empty() ? 0.0 : ordered.front().abundance;
     for (std::size_t i = 0; i < 4u; ++i) {
         gate.native_reconstructed[i] = native_running[i] * mg_abundance;
@@ -9066,18 +8753,18 @@ Sequence16MgLedgerGateV80 build_sequence16_mg_ledger_v80(
             ++gate.population_e7_mismatches;
             if (gate.first_population_mismatch_row == 0) gate.first_population_mismatch_row = compact_row;
         }
-        if (!binary64_equal_v79(n.final_population, src.final_population)) ++gate.population_bit_mismatches;
-        if (!binary64_equal_v79(n.initial, src.initial)) {
+        if (!sequence_ledger_binary64_equal(n.final_population, src.final_population)) ++gate.population_bit_mismatches;
+        if (!sequence_ledger_binary64_equal(n.initial, src.initial)) {
             ++gate.transformed_initial_population_bit_mismatches;
         }
         if (gate.first_solve_phase_mismatch.empty()) {
-            if (!binary64_equal_v79(n.initial, src.initial)) {
+            if (!sequence_ledger_binary64_equal(n.initial, src.initial)) {
                 gate.first_solve_phase_mismatch = "transformed_initial_population";
                 gate.first_solve_phase_mismatch_row = compact_row;
-            } else if (!binary64_equal_v79(n.outer, src.outer)) {
+            } else if (!sequence_ledger_binary64_equal(n.outer, src.outer)) {
                 gate.first_solve_phase_mismatch = "final_outer_start_population";
                 gate.first_solve_phase_mismatch_row = compact_row;
-            } else if (!binary64_equal_v79(n.final_population, src.final_population)) {
+            } else if (!sequence_ledger_binary64_equal(n.final_population, src.final_population)) {
                 gate.first_solve_phase_mismatch = "final_population";
                 gate.first_solve_phase_mismatch_row = compact_row;
             }
@@ -9119,7 +8806,7 @@ struct SequencePopulationHashGateV1716 {
 // Purpose: Compute compare sequence population hashes as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
 // Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
 // XSTAR-FUNCTION-COMMENT-END
-SequencePopulationHashGateV1716 compare_sequence_population_hashes_v1716(
+SequencePopulationHashGateV1716 compare_sequence_population_hashes(
     const std::filesystem::path& path,
     const std::string& expected_initial_hash,
     const std::string& expected_final_hash,
@@ -9142,32 +8829,32 @@ SequencePopulationHashGateV1716 compare_sequence_population_hashes_v1716(
         if (fields.size() != header.size()) throw std::runtime_error("population diagnostic row width mismatch");
         const std::string& row = fields.at(columns.at("global_population_row"));
         const std::string& z = fields.at(columns.at("element_z"));
-        initial_lines.push_back(row + "|" + z + "|" + canonical_zero_aware_e7_v1712(fields.at(columns.at("initial_population"))));
-        std::string final_value = canonical_zero_aware_e7_v1712(
+        initial_lines.push_back(row + "|" + z + "|" + canonical_zero_aware_e7(fields.at(columns.at("initial_population"))));
+        std::string final_value = canonical_zero_aware_e7(
             fields.at(columns.at("final_population")));
         if (z == "2") {
             const int compact_row = std::stoi(row) - 33;
-            const auto source_value = source_canonical_helium_population_e7_v1718(
+            const auto source_value = source_canonical_helium_population_e7(
                 source_canonical_sequence, compact_row);
             if (source_value.has_value()) final_value = *source_value;
         }
         if (source_canonical_sequence == 5) {
-            const auto source_value = source_canonical_sequence5_population_e7_v1720(
+            const auto source_value = source_canonical_sequence5_population_e7(
                 std::stoi(z), std::stoi(row), false);
             if (source_value.has_value()) final_value = *source_value;
         }
         if (source_canonical_sequence == 6) {
-            const auto source_value = source_canonical_sequence6_population_e7_v1721(
+            const auto source_value = source_canonical_sequence6_population_e7(
                 std::stoi(z), std::stoi(row), false);
             if (source_value.has_value()) final_value = *source_value;
         }
         if (source_canonical_sequence == 7) {
-            const auto source_value = source_canonical_sequence7_population_e7_v1722(
+            const auto source_value = source_canonical_sequence7_population_e7(
                 std::stoi(z), std::stoi(row), false);
             if (source_value.has_value()) final_value = *source_value;
         }
         if (source_canonical_sequence == 8) {
-            const auto source_value = source_canonical_sequence8_population_e7_v1723(
+            const auto source_value = source_canonical_sequence8_population_e7(
                 std::stoi(z), std::stoi(row), false);
             if (source_value.has_value()) final_value = *source_value;
         }
@@ -9175,8 +8862,8 @@ SequencePopulationHashGateV1716 compare_sequence_population_hashes_v1716(
     }
     SequencePopulationHashGateV1716 result;
     result.row_count = initial_lines.size();
-    result.initial_hash = hex64_v1712(fnv1a_lines_v1712(initial_lines));
-    result.final_hash = hex64_v1712(fnv1a_lines_v1712(final_lines));
+    result.initial_hash = hex64(fnv1a_lines(initial_lines));
+    result.final_hash = hex64(fnv1a_lines(final_lines));
     result.initial_ok = result.row_count == 688u && result.initial_hash == expected_initial_hash;
     result.final_ok = result.row_count == 688u && result.final_hash == expected_final_hash;
     return result;
@@ -9186,14 +8873,14 @@ SequencePopulationHashGateV1716 compare_sequence_population_hashes_v1716(
 // Purpose: Compute compare sequence thermal ledger as a contribution to, or control step in, the local thermal-equilibrium iteration.
 // Reference context: XSTAR Manual s11.4.4 and s11.6; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-ThermalLedgerGateV1712 compare_sequence_thermal_ledger_v1716(
+ThermalLedgerGateV1712 compare_sequence_thermal_ledger(
     const std::filesystem::path& path,
     const std::string& expected_identity_hash,
     const std::string& expected_order_hash,
     const std::string& expected_values_hash,
     int source_canonical_sequence = 0,
     std::size_t expected_row_count = 16400u) {
-    auto result = compare_sequence1_thermal_ledger_v1712(
+    auto result = compare_sequence1_thermal_ledger(
         path, source_canonical_sequence);
     result.identities_ok = result.identity_hash == expected_identity_hash;
     result.order_ok = result.order_hash == expected_order_hash;
@@ -9203,264 +8890,10 @@ ThermalLedgerGateV1712 compare_sequence_thermal_ledger_v1716(
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Implement command run native sequence1 in the standalone controller/front-end workflow without duplicating the scientific kernels.
-// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
-// XSTAR-FUNCTION-COMMENT-END
-[[maybe_unused]] int command_run_native_sequence1_v1715(Options options) {
-    const auto output = std::filesystem::path(options.output_dir);
-    std::filesystem::create_directories(output);
-    for (const char* name : {"xo01_detail.fits", "xo01_detal2.fits", "xo01_detal3.fits", "xo01_detal4.fits",
-             "xout_abund1.fits", "xout_cont1.fits", "xout_lines1.fits", "xout_rrc1.fits", "xout_spect1.fits", "xout_step.log"}) {
-        std::error_code ec; std::filesystem::remove(output / name, ec);
-    }
-    if (options.case_dir.empty() || !std::filesystem::is_regular_file(std::filesystem::path(options.case_dir) / "manifest.txt")) {
-        std::cerr << "v25.5.17.15 requires --case-dir pointing to a lowered native ATDB program\n";
-        return 66;
-    }
-    if (options.parameters_path.empty() || !std::filesystem::is_regular_file(options.parameters_path)) {
-        std::cerr << "v25.5.17.15 requires --parameters\n";
-        return 66;
-    }
-
-    const std::string parameter_json = read_text_file(options.parameters_path);
-    const double density = json_number_value(parameter_json, "density", 1.0e8);
-    const double temperature_k = json_number_value(parameter_json, "temperature_k", 1.0e6);
-    const double initial_xee = json_number_value(parameter_json, "initial_electron_fraction", 1.0);
-    const double luminosity = json_number_value(parameter_json, "rlrad38", 1.0e6);
-    const double spectral_index = json_number_value(parameter_json, "trad", -1.0);
-    const double radius = json_number_value(parameter_json, "initial_radius_cm", 1.778279410038923e17);
-    const std::size_t ncn2 = static_cast<std::size_t>(json_number_value(parameter_json, "ncn2", 9999));
-
-    const auto energy = source_energy_grid_v1711(ncn2);
-    const auto incident = source_powerlaw_v1711(spectral_index, luminosity, energy);
-    std::vector<double> bremsa(ncn2, 0.0);
-    // Source trnfrc.f90 semantics: both the 1e19 radius scale and the
-    // 12.56 geometry factor are single-precision constants promoted to
-    // binary64 before the division.  Using binary64 literals introduces a
-    // uniform 1.00000003730768 scale in every bound-free integration path.
-    const double source_radius_scale = static_cast<double>(static_cast<float>(1.0e19));
-    const double source_geometry_factor = static_cast<double>(static_cast<float>(12.56));
-    const double radius_19 = radius / source_radius_scale;
-    const double source_fpr2 = source_geometry_factor * radius_19 * radius_19;
-    for (std::size_t i = 0; i < ncn2; ++i) bremsa[i] = incident[i] / source_fpr2;
-    // trnfrc clears Fortran bins ncn2 and ncn2-1 before its descending loop.
-    if (!bremsa.empty()) bremsa.back() = 0.0;
-    std::filesystem::create_directories(output / "sequence1_diagnostics");
-    {
-        std::ofstream stream(output / "sequence1_diagnostics" / "call_start_incident.bin", std::ios::binary);
-        stream.write(reinterpret_cast<const char*>(incident.data()),
-            static_cast<std::streamsize>(incident.size() * sizeof(double)));
-    }
-    {
-        std::ofstream stream(output / "sequence1_diagnostics" / "call_start_bremsa.bin", std::ios::binary);
-        stream.write(reinterpret_cast<const char*>(bremsa.data()),
-            static_cast<std::streamsize>(bremsa.size() * sizeof(double)));
-    }
-    std::vector<double> tau_in(301301, 0.0), tau_out(301301, 0.0);
-
-    xstar_fixed_state_context* fixed_context = nullptr;
-    std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> message{};
-    int rc = xstar_fixed_state_context_create_v1(options.case_dir.c_str(), &fixed_context, message.data(), message.size());
-    if (rc != 0) { std::cerr << "fixed-state context creation failed: " << message.data() << "\n"; return rc; }
-    xstar_fixed_state_program_info_v1 info{}; xstar_fixed_state_program_info_init_v1(&info);
-    rc = xstar_fixed_state_context_get_program_info_v1(fixed_context, &info, message.data(), message.size());
-    if (rc != 0) { xstar_fixed_state_context_destroy(fixed_context); std::cerr << message.data() << "\n"; return rc; }
-
-    xstar_fixed_state_stats_v1 cumulative{}; xstar_fixed_state_stats_init_v1(&cumulative);
-    std::vector<FixedDsecSnapshot> snapshots;
-    FixedDsecEvaluatorData data;
-    data.fixed_context = fixed_context;
-    data.program_info = info;
-    data.cumulative_stats = &cumulative;
-    data.snapshots = &snapshots;
-    data.energy = energy;
-    data.flux = incident;
-    data.radiation_mode = "native_source_powerlaw_9999";
-    data.autonomous_controller = true;
-    data.next_native_sequence = 1;
-    data.call_index = 1;
-    data.evaluation_index = 0;
-    data.dsec_covering_fraction = 1.0;
-    data.has_dsec_covering_fraction = true;
-    data.diagnostics_dir = (output / "sequence1_diagnostics").string();
-    data.thermal_budget_csv = (output / "native_thermal_budget.csv").string();
-    CallStartWorkspace workspace;
-    workspace.radiation_energy = energy;
-    workspace.bremsa = bremsa;
-    workspace.continuum_tau_in = tau_in;
-    workspace.continuum_tau_out = tau_out;
-    data.call_start_workspaces.push_back(std::move(workspace));
-
-    xstar_thermal_state_v1 state{}; xstar_thermal_state_init_v1(&state);
-    state.temperature_t4 = temperature_k / 1.0e4;
-    state.electron_fraction_xee = initial_xee;
-    state.hydrogen_density_cm3 = density;
-    xstar_thermal_evaluation_v1 evaluation{}; xstar_thermal_evaluation_init_v1(&evaluation);
-    rc = fixed_dsec_evaluator(&data, &state, &evaluation, message.data(), message.size());
-    xstar_fixed_state_context_destroy(fixed_context);
-    if (rc != 0) {
-        std::cerr << "sequence-1 native fixed-state evaluation failed: " << message.data() << "\n";
-        return rc;
-    }
-    if (snapshots.size() != 1 || snapshots.front().sequence != 1 || snapshots.front().call_index != 1 || snapshots.front().evaluation_index != 1) {
-        std::cerr << "sequence-1 native identity was not retained\n";
-        return 20;
-    }
-
-    const auto row = read_single_csv_row_v1711(output / "native_thermal_budget.csv");
-    const auto number = [&](const char* key) { auto it=row.find(key); if(it==row.end()) throw std::runtime_error(std::string("thermal budget missing ")+key); return std::stod(it->second); };
-    const auto integer = [&](const char* key) { return static_cast<std::size_t>(number(key)); };
-
-    const bool radiation_ok = integer("input_radiation_count") == 9999 && integer("input_dsec_radiation_count") == 9999 &&
-        integer("input_bremsa_count") == 9999 && relative_one_percent_v1711(number("covering_fraction"), 1.0);
-    const bool tau_ok = integer("input_tau_count") == 301301;
-    const bool continuum_workspace_ok = integer("continuum_workspace_source_faithful") == 1 &&
-        integer("continuum_epim_count") == 999 && integer("continuum_bremsam_count") == 999 && integer("continuum_bremsmap_count") == 999;
-    const auto case_abundances = read_case_abundances_v1712(std::filesystem::path(options.case_dir));
-    const auto abundance_value = [&](int z) {
-        const auto found = case_abundances.find(z);
-        return found == case_abundances.end() ? 0.0 : found->second;
-    };
-    const double h_abundance = abundance_value(1);
-    const double he_abundance = abundance_value(2);
-    const double mg_abundance = abundance_value(12);
-    const bool physical_abundances_ok =
-        zero_aware_controller_equal_v1711(h_abundance, 1.0) &&
-        zero_aware_controller_equal_v1711(he_abundance, 0.1) &&
-        zero_aware_controller_equal_v1711(mg_abundance, 3.5e-5);
-    const auto population_gate = compare_sequence1_populations_v1714(
-        output / "sequence1_diagnostics" / "evaluation_0001_populations.csv");
-    const bool initial_population_ok = population_gate.initial_ok;
-    const bool final_population_ok = population_gate.final_zero_aware_ok;
-    const bool population_ok = integer("thermal_population_count") == 612 &&
-        integer("committed_population_count") == 688 && initial_population_ok && final_population_ok;
-    const bool diagonal_shape_ok = integer("thermal_diagonal_source_domain_applied") == 1 &&
-        integer("thermal_diagonal_rows_included") == 16400 && integer("thermal_diagonal_terms_included") == 16400 &&
-        integer("thermal_diagonal_normalization_terms_included") == 192;
-    const auto ledger_gate = compare_sequence1_thermal_ledger_v1712(
-        output / "sequence1_diagnostics" / "evaluation_0001_thermal_diagonal_ledger.csv");
-    const bool diagonal_count_ok = diagonal_shape_ok && ledger_gate.count_ok;
-    const bool diagonal_ok = diagonal_count_ok && ledger_gate.magnesium_primary_source_order_ok &&
-        ledger_gate.magnesium_type99_reduction_ok && ledger_gate.identities_ok &&
-        ledger_gate.order_ok && ledger_gate.values_ok;
-
-    const std::map<std::string,double> element_expected = {
-        {"h_heating",1.0661152718937405e-09},{"h_cooling",7.7385578978308929e-09},
-        {"h_heating2",2.7934639119829103e-10},{"h_cooling2",6.0347666401500648e-09},
-        {"he_heating",3.3174053012374417e-09},{"he_cooling",1.3842159447032272e-08},
-        {"he_heating2",8.702859955806584e-10},{"he_cooling2",1.105088733342408e-08},
-        {"computed_he_type53_heating",3.3172737151121832e-09},{"computed_he_type53_cooling",8.158696228330896e-09},
-        {"computed_he_type53_heating2",8.702041934424820e-10},{"computed_he_type53_cooling2",4.546876827041832e-09},
-        {"computed_he_non_type53_heating",1.3158612525790721e-13},{"computed_he_non_type53_cooling",5.683463218701370e-09},
-        {"computed_he_non_type53_heating2",8.180213817620914e-14},{"computed_he_non_type53_cooling2",6.504010506382249e-09},
-        {"mg_heating",3.830127253925318e-09},{"mg_cooling",1.047442386981398e-08},
-        {"mg_heating2",1.3274129274500862e-09},{"mg_cooling2",7.779746106703428e-09}
-    };
-    bool element_ok = true;
-    for (const auto& expected : element_expected) element_ok = element_ok && relative_one_percent_v1711(number(expected.first.c_str()), expected.second);
-
-    const std::map<std::string,double> continuum_expected = {
-        {"cmp1",4.6905545032708282e-05},{"cmp2",4.4763443016579042e-07},
-        {"htcomp",7.515096742171611e-09},{"clcomp",6.180071206332716e-09},
-        {"htfreef",7.733137581002089e-15},{"clbrems",1.992467303810696e-08},
-        {"continuum_heating",7.515104475309191e-09},{"continuum_cooling",2.610474424443968e-08}
-    };
-    bool continuum_ok = integer("continuum_secondary_ledger_corrected") == 1;
-    for (const auto& expected : continuum_expected) continuum_ok = continuum_ok && relative_one_percent_v1711(number(expected.first.c_str()), expected.second);
-
-    const auto& snapshot = snapshots.front();
-    constexpr double expected_hmctot = -1.1485157783994253;
-    constexpr double expected_elcter = -0.20036716199692539;
-    const bool hmctot_ok = relative_one_percent_v1711(snapshot.hmctot, expected_hmctot);
-    const bool elcter_ok = relative_one_percent_v1711(snapshot.charge_residual, expected_elcter);
-    const bool all_ok = physical_abundances_ok && radiation_ok && tau_ok && continuum_workspace_ok && population_ok &&
-        diagonal_ok && element_ok && continuum_ok && hmctot_ok && elcter_ok;
-
-
-    std::ofstream trajectory(output / "native_controller_trajectory.csv");
-    trajectory << "sequence,kind,call_index,evaluation_index,temperature_t4,electron_fraction,hmctot,elcter\n";
-    trajectory << std::setprecision(17) << "1,dsec,1,1," << snapshot.temperature_t4 << ',' << snapshot.electron_fraction_input
-               << ',' << snapshot.hmctot << ',' << snapshot.charge_residual << "\n";
-    std::ofstream summary(output / "native_sequence1_run_summary.json");
-    summary << std::setprecision(17)
-        << "{\n  \"schema\": \"xstar-tools-v0487462551715-sequence1-exact-integration-scalar-low-ion-type88-closure-v1\",\n"
-        << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
-        << "  \"sequence1_physical_abundances\": " << (physical_abundances_ok?"true":"false") << ",\n"
-        << "  \"h_abundance\": " << h_abundance << ",\n"
-        << "  \"he_abundance\": " << he_abundance << ",\n"
-        << "  \"mg_abundance\": " << mg_abundance << ",\n"
-        << "  \"sequence1_radiation_workspace\": " << (radiation_ok?"true":"false") << ",\n"
-        << "  \"sequence1_tau_workspace\": " << (tau_ok?"true":"false") << ",\n"
-        << "  \"sequence1_continuum_workspace\": " << (continuum_workspace_ok?"true":"false") << ",\n"
-        << "  \"sequence1_initial_population_state\": " << (initial_population_ok?"true":"false") << ",\n"
-        << "  \"sequence1_final_population_state_zero_aware\": " << (final_population_ok?"true":"false") << ",\n"
-        << "  \"sequence1_initial_population_hash\": \"" << population_gate.initial_hash << "\",\n"
-        << "  \"sequence1_final_population_hash\": \"" << population_gate.final_hash << "\",\n"
-        << "  \"sequence1_population_state\": " << (population_ok?"true":"false") << ",\n"
-        << "  \"sequence1_thermal_ledger_count\": " << (diagonal_count_ok?"true":"false") << ",\n"
-        << "  \"sequence1_thermal_ledger_identities\": " << (ledger_gate.identities_ok?"true":"false") << ",\n"
-        << "  \"sequence1_thermal_ledger_order\": " << (ledger_gate.order_ok?"true":"false") << ",\n"
-        << "  \"sequence1_thermal_ledger_values_zero_aware\": " << (ledger_gate.values_ok?"true":"false") << ",\n"
-        << "  \"sequence1_thermal_ledger_derived_contribution_normalization\": \"source_canonical_population_e7\",\n"
-        << "  \"sequence1_thermal_ledger_identity_hash\": \"" << ledger_gate.identity_hash << "\",\n"
-        << "  \"sequence1_thermal_ledger_order_hash\": \"" << ledger_gate.order_hash << "\",\n"
-        << "  \"sequence1_thermal_ledger_values_hash\": \"" << ledger_gate.values_hash << "\",\n"
-        << "  \"sequence1_thermal_diagonal_ledger\": " << (diagonal_ok?"true":"false") << ",\n"
-        << "  \"sequence1_element_family_totals\": " << (element_ok?"true":"false") << ",\n"
-        << "  \"sequence1_continuum_totals\": " << (continuum_ok?"true":"false") << ",\n"
-        << "  \"sequence1_hmctot_zero_aware\": " << (hmctot_ok?"true":"false") << ",\n"
-        << "  \"sequence1_elcter_zero_aware\": " << (elcter_ok?"true":"false") << ",\n"
-        << "  \"sequence2_allowed\": " << (all_ok?"true":"false") << ",\n"
-        << "  \"bridge_runtime_input_used\": false,\n  \"product_state_retention_enabled\": false,\n"
-        << "  \"product_publication_enabled\": false,\n  \"result\": \"" << (all_ok?"ACCEPT":"REJECT") << "\"\n}\n";
-
-    std::cout << std::defaultfloat << std::setprecision(8)
-              << "V0487462551715_SEQUENCE1_PHYSICAL_ABUNDANCES=" << (physical_abundances_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551715_SEQUENCE1_H_ABUNDANCE=" << h_abundance << "\n"
-              << "V0487462551715_SEQUENCE1_HE_ABUNDANCE=" << he_abundance << "\n"
-              << "V0487462551715_SEQUENCE1_MG_ABUNDANCE=" << mg_abundance << "\n"
-              << "V0487462551715_SEQUENCE1_RADIATION_WORKSPACE=" << (radiation_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551715_SEQUENCE1_TAU_WORKSPACE=" << (tau_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551715_SEQUENCE1_CONTINUUM_WORKSPACE=" << (continuum_workspace_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551715_SEQUENCE1_INITIAL_POPULATION_STATE=" << (initial_population_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551715_SEQUENCE1_FINAL_POPULATION_STATE_ZERO_AWARE=" << (final_population_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551715_SEQUENCE1_INITIAL_POPULATION_HASH=" << population_gate.initial_hash << "\n"
-              << "V0487462551715_SEQUENCE1_FINAL_POPULATION_HASH=" << population_gate.final_hash << "\n"
-              << "V0487462551715_SEQUENCE1_POPULATION_STATE=" << (population_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551715_SEQUENCE1_THERMAL_LEDGER_COUNT=" << (diagonal_count_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551715_SEQUENCE1_MG_PRIMARY_COOLING_SOURCE_ORDER=" << (ledger_gate.magnesium_primary_source_order_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551715_SEQUENCE1_MG_PRIMARY_COOLING_SOURCE_ORDER_ROWS=" << ledger_gate.magnesium_primary_source_order_rows << "\n"
-              << "V0487462551715_SEQUENCE1_MG_TYPE99_PRIMARY_COOLING_REDUCTION=" << (ledger_gate.magnesium_type99_reduction_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551715_SEQUENCE1_MG_TYPE99_PRIMARY_COOLING_REDUCTION_ROWS=" << ledger_gate.magnesium_type99_reduction_rows << "\n"
-              << "V0487462551715_SEQUENCE1_THERMAL_LEDGER_IDENTITIES=" << (ledger_gate.identities_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551715_SEQUENCE1_THERMAL_LEDGER_ORDER=" << (ledger_gate.order_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551715_SEQUENCE1_THERMAL_LEDGER_VALUES_ZERO_AWARE=" << (ledger_gate.values_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551715_SEQUENCE1_THERMAL_LEDGER_DERIVED_CONTRIBUTION_NORMALIZATION=SOURCE_CANONICAL_POPULATION_E7\n"
-              << "V0487462551715_SEQUENCE1_THERMAL_LEDGER_IDENTITY_HASH=" << ledger_gate.identity_hash << "\n"
-              << "V0487462551715_SEQUENCE1_THERMAL_LEDGER_ORDER_HASH=" << ledger_gate.order_hash << "\n"
-              << "V0487462551715_SEQUENCE1_THERMAL_LEDGER_VALUES_HASH=" << ledger_gate.values_hash << "\n"
-              << "V0487462551715_SEQUENCE1_THERMAL_DIAGONAL_LEDGER=" << (diagonal_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551715_SEQUENCE1_ELEMENT_FAMILY_TOTALS_WITHIN_1_PERCENT=" << (element_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551715_SEQUENCE1_CONTINUUM_TOTALS=" << (continuum_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551715_SEQUENCE1_HMCTOT_WITHIN_1_PERCENT=" << (hmctot_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551715_SEQUENCE1_ELCTER_WITHIN_1_PERCENT=" << (elcter_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551715_SEQUENCE2_ALLOWED=" << (all_ok?"YES":"NO") << "\n"
-              << "V0487462551715_BRIDGE_RUNTIME_INPUT_USED=NO\n"
-              << "V0487462551715_PRODUCT_STATE_RETENTION_ENABLED=NO\n"
-              << "V0487462551715_PRODUCT_PUBLICATION_ENABLED=NO\n"
-              << "V0487462551715_FITS_PRODUCTS_WRITTEN=0\n"
-              << "V0487462551715_XOUT_STEP_LOG_WRITTEN=0\n"
-              << "V0487462551715_RESULT=" << (all_ok?"ACCEPT_SEQUENCE1_EXACT_INTEGRATION_TYPE88_CLOSURE":"REJECT_SEQUENCE1_COMPONENT_PARITY") << "\n";
-    return all_ok ? 0 : 20;
-}
-
-
-
-// XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Load population global level map into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-std::pair<std::vector<int>,std::size_t> read_population_global_level_map_v1716(
+std::pair<std::vector<int>,std::size_t> read_population_global_level_map(
     const std::filesystem::path& case_dir) {
     const auto path = case_dir / "rows.csv";
     std::ifstream input(path);
@@ -9531,16 +8964,16 @@ struct Sequence2HydrogenGateV1717 {
 // Purpose: Implement compare sequence2 hydrogen state in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-Sequence2HydrogenGateV1717 compare_sequence2_hydrogen_state_v1717(
+Sequence2HydrogenGateV1717 compare_sequence2_hydrogen_state(
     const std::filesystem::path& evaluation1_populations,
     const std::filesystem::path& evaluation2_populations,
     const std::filesystem::path& evaluation2_solve_rows,
     const FixedDsecSnapshot& sequence2_snapshot,
     double hydrogen_density,
     double hydrogen_abundance) {
-    const auto p1 = read_csv_rows_v1716(evaluation1_populations);
-    const auto p2 = read_csv_rows_v1716(evaluation2_populations);
-    const auto solve = read_csv_rows_v1716(evaluation2_solve_rows);
+    const auto p1 = read_csv_rows(evaluation1_populations);
+    const auto p2 = read_csv_rows(evaluation2_populations);
+    const auto solve = read_csv_rows(evaluation2_solve_rows);
     std::map<int,double> sequence1_h_final;
     std::vector<std::string> sequence2_h_final_lines;
     for (const auto& row : p1) {
@@ -9552,7 +8985,7 @@ Sequence2HydrogenGateV1717 compare_sequence2_hydrogen_state_v1717(
         if (std::stoi(row.at("element_z")) != 1) continue;
         sequence2_h_final_lines.push_back(
             row.at("global_population_row") + "|1|" +
-            canonical_zero_aware_e7_v1712(row.at("final_population")));
+            canonical_zero_aware_e7(row.at("final_population")));
     }
     bool continuity = sequence1_h_final.size() == 33u;
     bool terminal = false;
@@ -9561,7 +8994,7 @@ Sequence2HydrogenGateV1717 compare_sequence2_hydrogen_state_v1717(
         const int global = std::stoi(row.at("raw_global_level_index"));
         const auto expected = sequence1_h_final.find(global);
         if (expected == sequence1_h_final.end() ||
-            !zero_aware_controller_equal_v1711(
+            !zero_aware_controller_equal(
                 std::stod(row.at("raw_call_start_xilevg")), expected->second)) {
             continuity = false;
         }
@@ -9579,15 +9012,15 @@ Sequence2HydrogenGateV1717 compare_sequence2_hydrogen_state_v1717(
     result.expected_xh0 = hydrogen_density * ground * hydrogen_abundance;
     result.expected_xh1 = hydrogen_density * (1.0 - ground) * hydrogen_abundance;
     result.entry_xh0_xh1_ok = sequence2_snapshot.repeated_hydrogen_source_state &&
-        zero_aware_controller_equal_v1711(
+        zero_aware_controller_equal(
             sequence2_snapshot.entry_hydrogen_ground_fraction, ground) &&
-        zero_aware_controller_equal_v1711(
+        zero_aware_controller_equal(
             sequence2_snapshot.entry_neutral_h_density_cm3, result.expected_xh0) &&
-        zero_aware_controller_equal_v1711(
+        zero_aware_controller_equal(
             sequence2_snapshot.entry_ionized_h_density_cm3, result.expected_xh1);
     result.compact_terminal_zero_ok = terminal;
     result.final_population_hash =
-        hex64_v1712(fnv1a_lines_v1712(sequence2_h_final_lines));
+        hex64(fnv1a_lines(sequence2_h_final_lines));
     result.final_population_ok = sequence2_h_final_lines.size() == 33u &&
         result.final_population_hash == "8628e532f73dd01b";
     return result;
@@ -9607,7 +9040,7 @@ struct RepeatedHydrogenGateV1718 {
 // Purpose: Implement compare repeated hydrogen state in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-RepeatedHydrogenGateV1718 compare_repeated_hydrogen_state_v1718(
+RepeatedHydrogenGateV1718 compare_repeated_hydrogen_state(
     const std::filesystem::path& previous_populations,
     const std::filesystem::path& current_populations,
     const std::filesystem::path& current_solve_rows,
@@ -9615,9 +9048,9 @@ RepeatedHydrogenGateV1718 compare_repeated_hydrogen_state_v1718(
     double hydrogen_density,
     double hydrogen_abundance,
     const std::string& expected_final_hash) {
-    const auto previous = read_csv_rows_v1716(previous_populations);
-    const auto current = read_csv_rows_v1716(current_populations);
-    const auto solve = read_csv_rows_v1716(current_solve_rows);
+    const auto previous = read_csv_rows(previous_populations);
+    const auto current = read_csv_rows(current_populations);
+    const auto solve = read_csv_rows(current_solve_rows);
     std::map<int,double> previous_h_final;
     std::vector<std::string> current_h_final_lines;
     for (const auto& row : previous) {
@@ -9629,7 +9062,7 @@ RepeatedHydrogenGateV1718 compare_repeated_hydrogen_state_v1718(
         if (std::stoi(row.at("element_z")) != 1) continue;
         current_h_final_lines.push_back(
             row.at("global_population_row") + "|1|" +
-            canonical_zero_aware_e7_v1712(row.at("final_population")));
+            canonical_zero_aware_e7(row.at("final_population")));
     }
     bool continuity = previous_h_final.size() == 33u;
     bool terminal = false;
@@ -9638,7 +9071,7 @@ RepeatedHydrogenGateV1718 compare_repeated_hydrogen_state_v1718(
         const int global = std::stoi(row.at("raw_global_level_index"));
         const auto expected = previous_h_final.find(global);
         if (expected == previous_h_final.end() ||
-            !zero_aware_controller_equal_v1711(
+            !zero_aware_controller_equal(
                 std::stod(row.at("raw_call_start_xilevg")), expected->second)) {
             continuity = false;
         }
@@ -9656,15 +9089,15 @@ RepeatedHydrogenGateV1718 compare_repeated_hydrogen_state_v1718(
     result.expected_xh0 = hydrogen_density * ground * hydrogen_abundance;
     result.expected_xh1 = hydrogen_density * (1.0 - ground) * hydrogen_abundance;
     result.entry_xh0_xh1_ok = current_snapshot.repeated_hydrogen_source_state &&
-        zero_aware_controller_equal_v1711(
+        zero_aware_controller_equal(
             current_snapshot.entry_hydrogen_ground_fraction, ground) &&
-        zero_aware_controller_equal_v1711(
+        zero_aware_controller_equal(
             current_snapshot.entry_neutral_h_density_cm3, result.expected_xh0) &&
-        zero_aware_controller_equal_v1711(
+        zero_aware_controller_equal(
             current_snapshot.entry_ionized_h_density_cm3, result.expected_xh1);
     result.compact_terminal_zero_ok = terminal;
     result.final_population_hash =
-        hex64_v1712(fnv1a_lines_v1712(current_h_final_lines));
+        hex64(fnv1a_lines(current_h_final_lines));
     result.final_population_ok = current_h_final_lines.size() == 33u &&
         result.final_population_hash == expected_final_hash;
 
@@ -9685,7 +9118,7 @@ struct HydrogenFinalContractQualificationV17258 {
 // Purpose: Implement hydrogen contract roundoff row ok in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-bool hydrogen_contract_roundoff_row_ok_v17258(
+bool hydrogen_contract_roundoff_row_ok(
     double raw_value,
     const std::string& expected_e7,
     double* relative_error_out = nullptr,
@@ -9702,11 +9135,11 @@ bool hydrogen_contract_roundoff_row_ok_v17258(
 // Purpose: Implement hydrogen final contract qualification in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-HydrogenFinalContractQualificationV17258 hydrogen_final_contract_qualification_v17258(
+HydrogenFinalContractQualificationV17258 hydrogen_final_contract_qualification(
     const std::filesystem::path& current_populations,
     const std::map<int,std::string>& expected_sequence,
     double relative_error_limit = 1.0e-7) {
-    const auto current = read_csv_rows_v1716(current_populations);
+    const auto current = read_csv_rows(current_populations);
     HydrogenFinalContractQualificationV17258 result;
     std::vector<std::string> raw_lines;
     std::vector<std::string> qualified_lines;
@@ -9714,7 +9147,7 @@ HydrogenFinalContractQualificationV17258 hydrogen_final_contract_qualification_v
         if (std::stoi(row.at("element_z")) != 1) continue;
         const int global_row = std::stoi(row.at("global_population_row"));
         const auto expected_it = expected_sequence.find(global_row);
-        const std::string raw_final = canonical_zero_aware_e7_v1712(row.at("final_population"));
+        const std::string raw_final = canonical_zero_aware_e7(row.at("final_population"));
         raw_lines.push_back(std::to_string(global_row) + "|1|" + raw_final);
         ++result.rows;
         if (expected_it == expected_sequence.end()) {
@@ -9728,7 +9161,7 @@ HydrogenFinalContractQualificationV17258 hydrogen_final_contract_qualification_v
             continue;
         }
         double rel = 0.0;
-        const bool roundoff_ok = hydrogen_contract_roundoff_row_ok_v17258(
+        const bool roundoff_ok = hydrogen_contract_roundoff_row_ok(
             std::stod(row.at("final_population")), expected, &rel, relative_error_limit);
         result.max_relative_error = std::max(result.max_relative_error, rel);
         if (roundoff_ok) {
@@ -9739,8 +9172,8 @@ HydrogenFinalContractQualificationV17258 hydrogen_final_contract_qualification_v
             qualified_lines.push_back(std::to_string(global_row) + "|1|" + raw_final);
         }
     }
-    result.raw_hash = hex64_v1712(fnv1a_lines_v1712(raw_lines));
-    result.qualified_hash = hex64_v1712(fnv1a_lines_v1712(qualified_lines));
+    result.raw_hash = hex64(fnv1a_lines(raw_lines));
+    result.qualified_hash = hex64(fnv1a_lines(qualified_lines));
     result.ok = result.rows == 33u && result.rejected_rows == 0;
     return result;
 }
@@ -9750,7 +9183,7 @@ HydrogenFinalContractQualificationV17258 hydrogen_final_contract_qualification_v
 // Purpose: Compute source canonical population e7 as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
 // Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
 // XSTAR-FUNCTION-COMMENT-END
-std::optional<std::string> source_canonical_population_e7_v1724(
+std::optional<std::string> source_canonical_population_e7(
     std::size_t sequence, int element_z, int row, bool compact_row) {
     if (compact_row) {
         if (!g_source_population_compact_v1724) return std::nullopt;
@@ -9772,9 +9205,9 @@ std::optional<std::string> source_canonical_population_e7_v1724(
 // Purpose: Load sequence contracts into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-std::map<std::size_t,SequenceContractV1724> read_sequence_contracts_v1724(
+std::map<std::size_t,SequenceContractV1724> read_sequence_contracts(
     const std::filesystem::path& path) {
-    const auto rows = read_csv_rows_v1716(path);
+    const auto rows = read_csv_rows(path);
     std::map<std::size_t,SequenceContractV1724> contracts;
     const std::vector<std::string> thermal_names = {
         "h_heating","h_cooling","h_heating2","h_cooling2",
@@ -9815,11 +9248,11 @@ std::map<std::size_t,SequenceContractV1724> read_sequence_contracts_v1724(
 // Purpose: Load source populations into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-void read_source_populations_v1724(
+void read_source_populations(
     const std::filesystem::path& path,
     SourcePopulationGlobalV1724& global,
     SourcePopulationCompactV1724& compact) {
-    const auto rows = read_csv_rows_v1716(path);
+    const auto rows = read_csv_rows(path);
     for (const auto& row : rows) {
         const std::size_t sequence = static_cast<std::size_t>(std::stoull(row.at("sequence")));
         const int global_row = std::stoi(row.at("global_population_row"));
@@ -9839,9 +9272,9 @@ void read_source_populations_v1724(
 // Purpose: Compute thermal budget row as a contribution to, or control step in, the local thermal-equilibrium iteration.
 // Reference context: XSTAR Manual s11.4.4 and s11.6; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-std::map<std::string,std::string> thermal_budget_row_v1724(
+std::map<std::string,std::string> thermal_budget_row(
     const std::filesystem::path& path, std::size_t sequence) {
-    const auto rows = read_csv_rows_v1716(path);
+    const auto rows = read_csv_rows(path);
     for (const auto& row : rows) {
         if (static_cast<std::size_t>(std::stoull(row.at("sequence"))) == sequence) return row;
     }
@@ -9852,7 +9285,7 @@ std::map<std::string,std::string> thermal_budget_row_v1724(
 // Purpose: Implement frozen initial hash in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-std::string frozen_initial_hash_v1724(std::size_t sequence) {
+std::string frozen_initial_hash(std::size_t sequence) {
     static const std::map<std::size_t,std::string> values = {
         {1,"6ca95ec3f58eb4ce"},{2,"1c4fd4b9e0449c1c"},{3,"678993d55301ca6f"},
         {4,"891f085a2069fb28"},{5,"4c90c1c46b112c2d"},{6,"ce848b4b9d5919c9"},
@@ -9865,7 +9298,7 @@ std::string frozen_initial_hash_v1724(std::size_t sequence) {
 // Purpose: Implement frozen final hash in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-std::string frozen_final_hash_v1724(std::size_t sequence) {
+std::string frozen_final_hash(std::size_t sequence) {
     static const std::map<std::size_t,std::string> values = {
         {1,"e58dafeeb80ec929"},{2,"62e2e6a285b579c5"},{3,"4d9949f5d0067afd"},
         {4,"84108ed2f024dab2"},{5,"ef4d18ecafb0af62"},{6,"453d4878d96fe408"},
@@ -9878,7 +9311,7 @@ std::string frozen_final_hash_v1724(std::size_t sequence) {
 // Purpose: Implement frozen hydrogen hash in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-std::string frozen_hydrogen_hash_v1724(std::size_t sequence) {
+std::string frozen_hydrogen_hash(std::size_t sequence) {
     static const std::map<std::size_t,std::string> values = {
         {2,"8628e532f73dd01b"},{3,"92d0c9f560bcd078"},{4,"b1f0735be972aeb0"},
         {5,"ccf2a38dd06ee1f0"},{6,"993010ebe0515f33"},{7,"eecb4f058524143c"},
@@ -9891,11 +9324,11 @@ std::string frozen_hydrogen_hash_v1724(std::size_t sequence) {
 // Purpose: Implement committed state continuity in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-bool committed_state_continuity_v1724(
+bool committed_state_continuity(
     const std::filesystem::path& previous_populations,
     const std::filesystem::path& current_solve_rows) {
-    const auto previous = read_csv_rows_v1716(previous_populations);
-    const auto solve = read_csv_rows_v1716(current_solve_rows);
+    const auto previous = read_csv_rows(previous_populations);
+    const auto solve = read_csv_rows(current_solve_rows);
     std::map<std::pair<int,int>,double> expected;
     for (const auto& row : previous) {
         expected[{std::stoi(row.at("element_z")), std::stoi(row.at("element_row"))}] =
@@ -9909,7 +9342,7 @@ bool committed_state_continuity_v1724(
         const auto found = expected.find(key);
         if (found == expected.end()) return false;
         compared = true;
-        if (!zero_aware_controller_equal_v1711(
+        if (!zero_aware_controller_equal(
                 std::stod(row.at("loaded_call_start_xilevg")), found->second)) return false;
     }
     return compared;
@@ -9919,7 +9352,7 @@ bool committed_state_continuity_v1724(
 // Purpose: Write first failure from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-void write_first_failure_v1724(
+void write_first_failure(
     FixedDsecEvaluatorData& data,
     const FixedDsecSnapshot& snapshot,
     const PerEvaluationGateResultV1724& gate) {
@@ -9967,7 +9400,7 @@ void write_first_failure_v1724(
 // Purpose: Append gate manifest from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-void append_gate_manifest_v1724(
+void append_gate_manifest(
     FixedDsecEvaluatorData& data,
     const FixedDsecSnapshot& snapshot,
     const PerEvaluationGateResultV1724& gate) {
@@ -10003,22 +9436,22 @@ void append_gate_manifest_v1724(
 // Purpose: Evaluate evaluate per sequence gate using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
 // Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use.
 // XSTAR-FUNCTION-COMMENT-END
-PerEvaluationGateResultV1724 evaluate_per_sequence_gate_v1724(
+PerEvaluationGateResultV1724 evaluate_per_sequence_gate(
     FixedDsecEvaluatorData& data,
     const FixedDsecSnapshot& snapshot) {
     PerEvaluationGateResultV1724 gate;
     const auto contract_it = data.sequence_contracts_v1724.find(snapshot.sequence);
     if (contract_it == data.sequence_contracts_v1724.end()) {
         gate.failure_reason = "MISSING_SEQUENCE_CONTRACT";
-        write_first_failure_v1724(data, snapshot, gate);
-        append_gate_manifest_v1724(data, snapshot, gate);
+        write_first_failure(data, snapshot, gate);
+        append_gate_manifest(data, snapshot, gate);
         return gate;
     }
     const auto& contract = contract_it->second;
     gate.topology_classified = contract.topology_classified;
     gate.identity_ok = snapshot.kind == contract.kind && snapshot.call_index == contract.call_index &&
         snapshot.evaluation_index == contract.evaluation_index;
-    gate.controller_state_ok = controller_state_ok_v172518(snapshot, contract);
+    gate.controller_state_ok = controller_state_ok(snapshot, contract);
 
     const auto diagnostics = std::filesystem::path(data.diagnostics_dir);
     std::ostringstream prefix_stream; prefix_stream << "evaluation_" << std::setw(4) << std::setfill('0') << snapshot.sequence;
@@ -10027,7 +9460,7 @@ PerEvaluationGateResultV1724 evaluate_per_sequence_gate_v1724(
     const auto solve_path = diagnostics / (prefix + "_all_element_solve_rows.csv");
     const auto stage_path = diagnostics / (prefix + "_all_element_solve_stage_manifest.csv");
     const auto ledger_path = diagnostics / (prefix + "_thermal_diagonal_ledger.csv");
-    const auto budget = thermal_budget_row_v1724(data.thermal_budget_csv, snapshot.sequence);
+    const auto budget = thermal_budget_row(data.thermal_budget_csv, snapshot.sequence);
     auto budget_i = [&](const char* name) { return static_cast<std::size_t>(std::stoull(budget.at(name))); };
     auto budget_d = [&](const std::string& name) { return std::stod(budget.at(name)); };
 
@@ -10039,7 +9472,7 @@ PerEvaluationGateResultV1724 evaluate_per_sequence_gate_v1724(
 
     gate.active_window_ok = budget_i("thermal_population_count") == contract.thermal_population_count &&
         budget_i("committed_population_count") == contract.committed_population_count;
-    const auto stage_rows = read_csv_rows_v1716(stage_path);
+    const auto stage_rows = read_csv_rows(stage_path);
     bool found_h = false, found_he = false, found_mg = false;
     for (const auto& row : stage_rows) {
         const int z = std::stoi(row.at("element_z"));
@@ -10061,35 +9494,35 @@ PerEvaluationGateResultV1724 evaluate_per_sequence_gate_v1724(
     if (!data.snapshots->empty()) {
         const auto previous_sequence = data.snapshots->back().sequence;
         std::ostringstream previous_prefix; previous_prefix << "evaluation_" << std::setw(4) << std::setfill('0') << previous_sequence;
-        gate.committed_state_ok = committed_state_continuity_v1724(
+        gate.committed_state_ok = committed_state_continuity(
             diagnostics / (previous_prefix.str() + "_populations.csv"), solve_path);
     }
 
     // Population gates preserve the frozen sequence-1..8 contracts exactly.
     if (snapshot.sequence == 1) {
-        const auto result = compare_sequence1_populations_v1714(population_path);
+        const auto result = compare_sequence1_populations(population_path);
         gate.initial_population_hash = result.initial_hash;
         gate.final_population_hash = result.final_hash;
         gate.population_ok = result.initial_ok && result.final_zero_aware_ok;
         gate.hydrogen_ok = true;
     } else if (snapshot.sequence <= 8) {
-        const auto result = compare_sequence_population_hashes_v1716(
-            population_path, frozen_initial_hash_v1724(snapshot.sequence),
-            frozen_final_hash_v1724(snapshot.sequence), static_cast<int>(snapshot.sequence));
+        const auto result = compare_sequence_population_hashes(
+            population_path, frozen_initial_hash(snapshot.sequence),
+            frozen_final_hash(snapshot.sequence), static_cast<int>(snapshot.sequence));
         gate.initial_population_hash = result.initial_hash;
         gate.final_population_hash = result.final_hash;
         gate.population_ok = result.initial_ok && result.final_ok;
         const auto previous_sequence = data.snapshots->back().sequence;
         std::ostringstream previous_prefix; previous_prefix << "evaluation_" << std::setw(4) << std::setfill('0') << previous_sequence;
-        const auto hydrogen = compare_repeated_hydrogen_state_v1718(
+        const auto hydrogen = compare_repeated_hydrogen_state(
             diagnostics / (previous_prefix.str() + "_populations.csv"), population_path, solve_path,
             snapshot, std::stod(budget.at("hydrogen_density_cm3")), data.hydrogen_abundance,
-            frozen_hydrogen_hash_v1724(snapshot.sequence));
+            frozen_hydrogen_hash(snapshot.sequence));
         gate.hydrogen_hash = hydrogen.final_population_hash;
         gate.hydrogen_ok = hydrogen.global_continuity_ok && hydrogen.entry_xh0_xh1_ok &&
             hydrogen.compact_terminal_zero_ok && hydrogen.final_population_ok;
     } else {
-        const auto rows = read_csv_rows_v1716(population_path);
+        const auto rows = read_csv_rows(population_path);
         std::vector<std::string> initial_lines, final_lines, hydrogen_lines;
         const auto expected_sequence = data.source_population_global_v1724.find(snapshot.sequence);
         if (expected_sequence == data.source_population_global_v1724.end()) {
@@ -10137,8 +9570,8 @@ PerEvaluationGateResultV1724 evaluate_per_sequence_gate_v1724(
         for (const auto& row : rows) {
             const int global_row = std::stoi(row.at("global_population_row"));
             const int z = std::stoi(row.at("element_z"));
-            const std::string initial = canonical_zero_aware_e7_v1712(row.at("initial_population"));
-            const std::string raw_final = canonical_zero_aware_e7_v1712(row.at("final_population"));
+            const std::string initial = canonical_zero_aware_e7(row.at("initial_population"));
+            const std::string raw_final = canonical_zero_aware_e7(row.at("final_population"));
             initial_lines.push_back(std::to_string(global_row) + "|" + std::to_string(z) + "|" + initial);
             const auto expected_it = expected_sequence->second.find(global_row);
             if (expected_it == expected_sequence->second.end()) {
@@ -10155,7 +9588,7 @@ PerEvaluationGateResultV1724 evaluate_per_sequence_gate_v1724(
                       (call3plus_branch_dsec_hydrogen_v172516 ? 1.0e-2 : 1.0e-7)));
                 const double raw_value = std::stod(row.at("final_population"));
                 const double expected_value = expected == "0" ? 0.0 : std::stod(expected);
-                row_ok = hydrogen_contract_roundoff_row_ok_v17258(
+                row_ok = hydrogen_contract_roundoff_row_ok(
                     raw_value, expected, nullptr, hydrogen_relerr_limit_v172512);
                 if (!row_ok && (call3plus_branch_dsec_hydrogen_v172516 || call3plus_final_hydrogen_v172516)) {
                     // Call-3/4 branch H excited rows can have large row-relative
@@ -10177,7 +9610,7 @@ PerEvaluationGateResultV1724 evaluate_per_sequence_gate_v1724(
             if (!row_ok && z != 1) {
                 const double raw_value = std::stod(row.at("final_population"));
                 const double expected_value = expected == "0" ? 0.0 : std::stod(expected);
-                row_ok = relative_one_percent_v1711(raw_value, expected_value);
+                row_ok = relative_one_percent(raw_value, expected_value);
                 if (!row_ok) {
                     const int ion = std::stoi(row.at("ion"));
                     const auto budget_it = ion_population_budgets.find({z, ion});
@@ -10210,14 +9643,14 @@ PerEvaluationGateResultV1724 evaluate_per_sequence_gate_v1724(
             final_lines.push_back(std::to_string(global_row) + "|" + std::to_string(z) + "|" + expected);
             if (z == 1) hydrogen_lines.push_back(std::to_string(global_row) + "|1|" + raw_final);
         }
-        gate.initial_population_hash = hex64_v1712(fnv1a_lines_v1712(initial_lines));
-        gate.final_population_hash = hex64_v1712(fnv1a_lines_v1712(final_lines));
-        gate.hydrogen_hash = hex64_v1712(fnv1a_lines_v1712(hydrogen_lines));
+        gate.initial_population_hash = hex64(fnv1a_lines(initial_lines));
+        gate.final_population_hash = hex64(fnv1a_lines(final_lines));
+        gate.hydrogen_hash = hex64(fnv1a_lines(hydrogen_lines));
         gate.population_ok = rows.size() == contract.committed_population_count &&
             gate.population_rejected_rows == 0 && gate.final_population_hash == contract.population_hash;
         const auto previous_sequence = data.snapshots->back().sequence;
         std::ostringstream previous_prefix; previous_prefix << "evaluation_" << std::setw(4) << std::setfill('0') << previous_sequence;
-        const auto hydrogen = compare_repeated_hydrogen_state_v1718(
+        const auto hydrogen = compare_repeated_hydrogen_state(
             diagnostics / (previous_prefix.str() + "_populations.csv"), population_path, solve_path,
             snapshot, std::stod(budget.at("hydrogen_density_cm3")), data.hydrogen_abundance,
             contract.hydrogen_hash);
@@ -10226,19 +9659,19 @@ PerEvaluationGateResultV1724 evaluate_per_sequence_gate_v1724(
             (call_boundary_dsec_hydrogen_v172511 && contract.call_index >= 3u ? 1.0e-1 :
              (call_boundary_dsec_hydrogen_v172511 ? 2.0e-4 :
               (call3plus_branch_dsec_hydrogen_v172516 ? 1.0e-2 : 1.0e-7)));
-        auto hydrogen_contract = hydrogen_final_contract_qualification_v17258(
+        auto hydrogen_contract = hydrogen_final_contract_qualification(
             population_path, expected_sequence->second, hydrogen_final_relerr_limit_v172512);
         if (!hydrogen_contract.ok && (call3plus_branch_dsec_hydrogen_v172516 || call3plus_final_hydrogen_v172516)) {
             // Re-evaluate call-3+ branch H final qualification with the same
             // excited-row absolute-negligibility rule used by the all-population gate.
-            const auto current_h_rows_v172516 = read_csv_rows_v1716(population_path);
+            const auto current_h_rows_v172516 = read_csv_rows(population_path);
             std::vector<std::string> qualified_h_lines_v172516;
             HydrogenFinalContractQualificationV17258 hq_v172516;
             for (const auto& hrow_v172516 : current_h_rows_v172516) {
                 if (std::stoi(hrow_v172516.at("element_z")) != 1) continue;
                 const int global_row_v172516 = std::stoi(hrow_v172516.at("global_population_row"));
                 const auto expected_it_v172516 = expected_sequence->second.find(global_row_v172516);
-                const std::string raw_final_v172516 = canonical_zero_aware_e7_v1712(hrow_v172516.at("final_population"));
+                const std::string raw_final_v172516 = canonical_zero_aware_e7(hrow_v172516.at("final_population"));
                 ++hq_v172516.rows;
                 if (expected_it_v172516 == expected_sequence->second.end()) {
                     ++hq_v172516.rejected_rows;
@@ -10266,7 +9699,7 @@ PerEvaluationGateResultV1724 evaluate_per_sequence_gate_v1724(
                     qualified_h_lines_v172516.push_back(std::to_string(global_row_v172516) + "|1|" + raw_final_v172516);
                 }
             }
-            hq_v172516.qualified_hash = hex64_v1712(fnv1a_lines_v1712(qualified_h_lines_v172516));
+            hq_v172516.qualified_hash = hex64(fnv1a_lines(qualified_h_lines_v172516));
             hq_v172516.ok = hq_v172516.rows == 33u && hq_v172516.rejected_rows == 0;
             hydrogen_contract = hq_v172516;
         }
@@ -10298,7 +9731,7 @@ PerEvaluationGateResultV1724 evaluate_per_sequence_gate_v1724(
         }
     }
 
-    const auto ledger = compare_sequence1_thermal_ledger_v1712(
+    const auto ledger = compare_sequence1_thermal_ledger(
         ledger_path, static_cast<int>(snapshot.sequence));
     gate.ledger_rows = ledger.row_count;
     gate.ledger_identity_hash = ledger.identity_hash;
@@ -10328,15 +9761,15 @@ PerEvaluationGateResultV1724 evaluate_per_sequence_gate_v1724(
     gate.family_totals_ok = true;
     gate.continuum_totals_ok = budget_i("continuum_secondary_ledger_corrected") == 1;
     for (const auto& expected : contract.thermal_values) {
-        const bool ok = relative_one_percent_v1711(budget_d(expected.first), expected.second);
+        const bool ok = relative_one_percent(budget_d(expected.first), expected.second);
         const bool continuum = expected.first == "cmp1" || expected.first == "cmp2" ||
             expected.first == "htcomp" || expected.first == "clcomp" || expected.first == "htfreef" ||
             expected.first == "clbrems" || expected.first.rfind("continuum_", 0) == 0;
         if (continuum) gate.continuum_totals_ok = gate.continuum_totals_ok && ok;
         else gate.family_totals_ok = gate.family_totals_ok && ok;
     }
-    gate.hmctot_ok = relative_one_percent_v1711(snapshot.hmctot, contract.hmctot);
-    gate.elcter_ok = relative_one_percent_v1711(snapshot.charge_residual, contract.elcter);
+    gate.hmctot_ok = relative_one_percent(snapshot.hmctot, contract.hmctot);
+    gate.elcter_ok = relative_one_percent(snapshot.charge_residual, contract.elcter);
 
     gate.accepted = gate.identity_ok && gate.controller_state_ok && gate.workspace_ok && gate.active_window_ok &&
         gate.committed_state_ok && gate.hydrogen_ok && gate.population_ok && gate.ledger_count_ok &&
@@ -10358,8 +9791,8 @@ PerEvaluationGateResultV1724 evaluate_per_sequence_gate_v1724(
     else if (!gate.continuum_totals_ok) gate.failure_reason = "CONTINUUM_TOTAL_MISMATCH";
     else if (!gate.hmctot_ok) gate.failure_reason = "HMCTOT_MISMATCH";
     else if (!gate.elcter_ok) gate.failure_reason = "ELCTER_MISMATCH";
-    append_gate_manifest_v1724(data, snapshot, gate);
-    if (!gate.accepted) write_first_failure_v1724(data, snapshot, gate);
+    append_gate_manifest(data, snapshot, gate);
+    if (!gate.accepted) write_first_failure(data, snapshot, gate);
     return gate;
 }
 
@@ -10367,7 +9800,7 @@ PerEvaluationGateResultV1724 evaluate_per_sequence_gate_v1724(
 // Purpose: Write accepted checkpoint from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-void write_accepted_checkpoint_v1724(
+void write_accepted_checkpoint(
     FixedDsecEvaluatorData& data,
     const FixedDsecSnapshot& snapshot,
     const PerEvaluationGateResultV1724& gate) {
@@ -10433,7 +9866,7 @@ void write_accepted_checkpoint_v1724(
 // Purpose: Implement regular file size or zero in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-std::uintmax_t regular_file_size_or_zero_v172521(const std::filesystem::path& path) {
+std::uintmax_t regular_file_size_or_zero(const std::filesystem::path& path) {
     std::error_code ec;
     if (!std::filesystem::is_regular_file(path, ec)) return 0;
     const auto size = std::filesystem::file_size(path, ec);
@@ -10444,7 +9877,7 @@ std::uintmax_t regular_file_size_or_zero_v172521(const std::filesystem::path& pa
 // Purpose: Implement copy fixed evaluation state in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-xstar_run_state::FixedEvaluationState copy_fixed_evaluation_state_v172524(const FixedDsecSnapshot& source) {
+xstar_run_state::FixedEvaluationState copy_fixed_evaluation_state(const FixedDsecSnapshot& source) {
     xstar_run_state::FixedEvaluationState target;
     target.kind = source.kind;
     target.sequence = source.sequence;
@@ -10529,13 +9962,13 @@ xstar_run_state::FixedEvaluationState copy_fixed_evaluation_state_v172524(const 
 
 
 
-bool diagnostic_attribution_enabled_v82_patch52017();
+bool diagnostic_attribution_enabled();
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Implement retain controller owned product workspaces in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-void retain_controller_owned_product_workspaces_v63(
+void retain_controller_owned_product_workspaces(
     xstar_run_state::WholeRunAccumulatedState& whole,
     const std::filesystem::path& parameters_path) {
     if (whole.radial_zones.empty()) return;
@@ -10576,7 +10009,7 @@ void retain_controller_owned_product_workspaces_v63(
         transfer_depth[i] = depth;
         previous_live_depth = depth;
     }
-    const bool patch52017_diagnostic_fallback = diagnostic_attribution_enabled_v82_patch52017();
+    const bool patch52017_diagnostic_fallback = diagnostic_attribution_enabled();
     if (!exact_live_geometry && !patch52017_diagnostic_fallback) {
         throw std::runtime_error("5.20.17 production requires exact live STEP-owned radial geometry");
     }
@@ -10634,7 +10067,7 @@ void retain_controller_owned_product_workspaces_v63(
         zone.delta_radius_cm = source_rdel[i];
         zone.density_cm3 = density;
         zone.pressure_dyn_cm2 = pressure;
-        // v0.6.48.12.3: retain_controller_owned_product_workspaces_v63 used
+        // v0.6.48.12.3: retain_controller_owned_product_workspaces used
         // to overwrite the live radial xi with the input rlogxi.  That made
         // xout_abund1 and pprint option 17 publish 2.00 even at the outer
         // 1.1e21-cm boundary where source XSTAR/Python recompute ~1.92.
@@ -10769,7 +10202,7 @@ struct ProductPublicationResultV172524 {
 // Purpose: Implement remove native products in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-void remove_native_products_v172524(const std::filesystem::path& output) {
+void remove_native_products(const std::filesystem::path& output) {
     for (const char* name : {"xo01_detail.fits", "xo01_detal2.fits", "xo01_detal3.fits", "xo01_detal4.fits",
              "xout_abund1.fits", "xout_cont1.fits", "xout_lines1.fits", "xout_rrc1.fits", "xout_spect1.fits", "xout_step.log"}) {
         std::error_code ec;
@@ -10781,7 +10214,7 @@ void remove_native_products_v172524(const std::filesystem::path& output) {
 // Purpose: Implement count native fits products in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-std::size_t count_native_fits_products_v172524(const std::filesystem::path& output) {
+std::size_t count_native_fits_products(const std::filesystem::path& output) {
     std::size_t count = 0;
     for (const char* name : {"xo01_detail.fits", "xo01_detal2.fits", "xo01_detal3.fits", "xo01_detal4.fits",
              "xout_abund1.fits", "xout_cont1.fits", "xout_lines1.fits", "xout_rrc1.fits", "xout_spect1.fits"}) {
@@ -10797,7 +10230,7 @@ std::size_t count_native_fits_products_v172524(const std::filesystem::path& outp
 // Purpose: Implement fill retained product surface arrays in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-void fill_retained_product_surface_arrays_v172530(
+void fill_retained_product_surface_arrays(
     xstar_run_state::FixedEvaluationState& evaluation,
     std::size_t fallback_energy_count) {
     (void)fallback_energy_count;
@@ -10838,7 +10271,7 @@ void fill_retained_product_surface_arrays_v172530(
 // Purpose: Implement ensure retained native public metadata in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-void ensure_retained_native_public_metadata_v172530(xstar_run_state::WholeRunAccumulatedState& whole) {
+void ensure_retained_native_public_metadata(xstar_run_state::WholeRunAccumulatedState& whole) {
     // v17.25.33: refresh level identities from the retained native ATDB case
     // whenever the fallback metadata loader left identity columns blank.  The
     // xo01_detail XSTAR_RADIAL identity columns must be native H/He/Mg rows,
@@ -10897,7 +10330,7 @@ void ensure_retained_native_public_metadata_v172530(xstar_run_state::WholeRunAcc
     const xstar_run_state::ExactSourceWorkspaceState empty_ws;
     const auto& ws = representative_ws ? *representative_ws : empty_ws;
 
-    auto native_parameter_rows = native_public_parameter_rows_from_json_v172534(whole.parameters_path);
+    auto native_parameter_rows = native_public_parameter_rows_from_json(whole.parameters_path);
     if (native_parameter_rows.size() == 56u &&
         (whole.parameter_rows.size() != 56u || whole.parameter_rows.empty() ||
          whole.parameter_rows.front().parameter != "cfrac")) {
@@ -10957,7 +10390,7 @@ void ensure_retained_native_public_metadata_v172530(xstar_run_state::WholeRunAcc
 // Purpose: Implement promote retained native product surface in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-void promote_retained_native_product_surface_v172530(xstar_run_state::WholeRunAccumulatedState& whole) {
+void promote_retained_native_product_surface(xstar_run_state::WholeRunAccumulatedState& whole) {
     std::size_t fallback_energy_count = 0;
     for (const auto& evaluation : whole.fixed_evaluations) {
         if (!evaluation.radiation_energy_ev.empty()) {
@@ -10966,16 +10399,16 @@ void promote_retained_native_product_surface_v172530(xstar_run_state::WholeRunAc
         }
     }
     for (auto& evaluation : whole.fixed_evaluations) {
-        fill_retained_product_surface_arrays_v172530(evaluation, fallback_energy_count);
+        fill_retained_product_surface_arrays(evaluation, fallback_energy_count);
     }
     for (auto& accepted : whole.accepted_controller_states) {
-        fill_retained_product_surface_arrays_v172530(accepted.evaluation, fallback_energy_count);
+        fill_retained_product_surface_arrays(accepted.evaluation, fallback_energy_count);
     }
     for (auto& zone : whole.radial_zones) {
         zone.provisional_from_controller = false;
         zone.accepted_boundary_exact = true;
         zone.boundary_provenance = "native retained full-61 controller checkpoint surface";
-        fill_retained_product_surface_arrays_v172530(zone.accepted_controller.evaluation, fallback_energy_count);
+        fill_retained_product_surface_arrays(zone.accepted_controller.evaluation, fallback_energy_count);
         if (zone.temperature_t4 == 0.0) zone.temperature_t4 = zone.accepted_controller.evaluation.temperature_t4;
         if (zone.electron_fraction == 0.0) zone.electron_fraction = zone.accepted_controller.evaluation.computed_electron_fraction;
     }
@@ -10984,7 +10417,7 @@ void promote_retained_native_product_surface_v172530(xstar_run_state::WholeRunAc
     whole.legacy_pprint.finalized_from_native_controller = true;
     whole.legacy_pprint.buffered_lines.clear();
 
-    ensure_retained_native_public_metadata_v172530(whole);
+    ensure_retained_native_public_metadata(whole);
 
     whole.product_schema_complete = whole.parameter_rows.size() >= 56u &&
         !whole.level_identities.empty() && whole.line_identities.size() >= 2644u &&
@@ -11020,7 +10453,7 @@ void promote_retained_native_product_surface_v172530(xstar_run_state::WholeRunAc
 // Purpose: Implement retained native product surface complete in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-bool retained_native_product_surface_complete_v172530(const xstar_run_state::ProductWritingState& product) {
+bool retained_native_product_surface_complete(const xstar_run_state::ProductWritingState& product) {
     if (!product.product_state_complete || !product.native_detail_state_retained ||
         !product.exact_source_metadata_retained || !product.exact_source_workspaces_retained ||
         !product.exact_accepted_radial_boundaries_retained ||
@@ -11042,7 +10475,7 @@ bool retained_native_product_surface_complete_v172530(const xstar_run_state::Pro
 // Purpose: Implement publish full61 products in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-ProductPublicationResultV172524 publish_full61_products_v172524(
+ProductPublicationResultV172524 publish_full61_products(
     const Options& options,
     const std::filesystem::path& output,
     const FixedDsecEvaluatorData& data,
@@ -11060,7 +10493,7 @@ ProductPublicationResultV172524 publish_full61_products_v172524(
     const auto root = output / "_native_product_state_retention";
     const auto publication_manifest = root / "product_publication_manifest.json";
     try {
-        remove_native_products_v172524(output);
+        remove_native_products(output);
         xstar_run_state::WholeRunAccumulatedState whole;
         whole.release = XSTAR_API_VERSION_STRING;
         whole.backend = "cpp-native-retained-product-surface";
@@ -11073,14 +10506,14 @@ ProductPublicationResultV172524 publish_full61_products_v172524(
         whole.controller_trajectory_qualified = true;
         whole.fixed_evaluations.reserve(snapshots.size());
         for (const auto& snapshot : snapshots) {
-            whole.fixed_evaluations.push_back(copy_fixed_evaluation_state_v172524(snapshot));
+            whole.fixed_evaluations.push_back(copy_fixed_evaluation_state(snapshot));
         }
         auto append_zone = [&](const FixedDsecSnapshot& snapshot, const std::string& reason) {
             xstar_run_state::AcceptedControllerState accepted;
             accepted.call_index = snapshot.call_index;
             accepted.accepted_sequence = snapshot.sequence;
             accepted.acceptance_reason = reason;
-            accepted.evaluation = copy_fixed_evaluation_state_v172524(snapshot);
+            accepted.evaluation = copy_fixed_evaluation_state(snapshot);
             whole.accepted_controller_states.push_back(accepted);
             xstar_run_state::RadialZoneState zone;
             zone.zone_index = whole.radial_zones.size() + 1;
@@ -11124,8 +10557,8 @@ ProductPublicationResultV172524 publish_full61_products_v172524(
                 throw;
             }
         }
-        promote_retained_native_product_surface_v172530(whole);
-        retain_controller_owned_product_workspaces_v63(whole, options.parameters_path);
+        promote_retained_native_product_surface(whole);
+        retain_controller_owned_product_workspaces(whole, options.parameters_path);
         // v17.25.38: prepare_native_product_state writes its retention report
         // under _native_product_state_retention/publication_diagnostics, but
         // the Type-50/line product records used by xo01_detal2 are retained in
@@ -11138,7 +10571,7 @@ ProductPublicationResultV172524 publish_full61_products_v172524(
         product.backend = "cpp-native-retained-product-surface";
         product.measured_run_seconds = std::max(0.0, controller_elapsed_seconds);
         product.product_parity_qualified = false;
-        const bool native_surface_complete = retained_native_product_surface_complete_v172530(product);
+        const bool native_surface_complete = retained_native_product_surface_complete(product);
         // v17.25.30 intentionally writes partial native products after the full-61
         // controller/retention/comparison/row-selection gates.  Completeness is
         // reported separately and no longer suppresses CFITSIO output.
@@ -11156,9 +10589,9 @@ ProductPublicationResultV172524 publish_full61_products_v172524(
             std::chrono::duration<double>(std::chrono::steady_clock::now() - publication_started).count();
         auto step = xstar_step_log::write_native_step_log(output, product);
         xstar_run_state::write_run_state_manifest(output / "native_physical_run_state.json", whole, product);
-        result.fits_count = count_native_fits_products_v172524(output);
+        result.fits_count = count_native_fits_products(output);
         result.step_log_written = std::filesystem::is_regular_file(output / "xout_step.log") &&
-            regular_file_size_or_zero_v172521(output / "xout_step.log") > 0;
+            regular_file_size_or_zero(output / "xout_step.log") > 0;
         result.step_log_lines = step.lines_written;
         result.ok = result.fits_count == 9 && result.step_log_written;
         std::ofstream manifest(publication_manifest);
@@ -11187,13 +10620,13 @@ ProductPublicationResultV172524 publish_full61_products_v172524(
                  << "  \"result\": \"" << (result.ok ? "ACCEPT_PARTIAL_NATIVE_PRODUCT_PUBLICATION" : "REJECT_NATIVE_PRODUCT_WRITE_FAILURE") << "\"\n"
                  << "}\n";
         if (!result.ok) {
-            remove_native_products_v172524(output);
+            remove_native_products(output);
             result.fits_count = 0;
             result.step_log_written = false;
         }
     } catch (const std::exception& exc) {
         result.error = exc.what();
-        remove_native_products_v172524(output);
+        remove_native_products(output);
         result.fits_count = 0;
         result.step_log_written = false;
         std::ofstream manifest(publication_manifest);
@@ -11218,7 +10651,7 @@ ProductPublicationResultV172524 publish_full61_products_v172524(
 // Purpose: Write full61 retention staging from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-bool write_full61_retention_staging_v172521(
+bool write_full61_retention_staging(
     const std::filesystem::path& output,
     const FixedDsecEvaluatorData& data,
     const std::vector<FixedDsecSnapshot>& snapshots,
@@ -11242,7 +10675,7 @@ bool write_full61_retention_staging_v172521(
             std::sort(files.begin(), files.end());
             for (const auto& file : files) {
                 const std::string name = file.filename().string();
-                const auto bytes = regular_file_size_or_zero_v172521(file);
+                const auto bytes = regular_file_size_or_zero(file);
                 std::string kind = "other";
                 if (name.size() >= 5 && name.substr(name.size() - 5) == ".json") {
                     kind = "controller_state_json"; ++json_count; json_bytes += bytes;
@@ -11256,8 +10689,8 @@ bool write_full61_retention_staging_v172521(
         }
         const bool checkpoint_complete = json_count == 61 && population_count == 61 && lte_count == 61;
         const bool trajectory_complete = data.accepted_runtime_ordinal_v1724 == 61 && !data.gate_failed_v1724 && snapshots.size() == 61;
-        const std::uintmax_t trajectory_bytes = regular_file_size_or_zero_v172521(output / "native_controller_trajectory.csv");
-        const std::uintmax_t acceptance_bytes = regular_file_size_or_zero_v172521(output / "per_evaluation_acceptance.csv");
+        const std::uintmax_t trajectory_bytes = regular_file_size_or_zero(output / "native_controller_trajectory.csv");
+        const std::uintmax_t acceptance_bytes = regular_file_size_or_zero(output / "per_evaluation_acceptance.csv");
         std::size_t final_snapshot_count = 0;
         std::size_t population_width_ok_count = 0;
         std::size_t lte_width_ok_count = 0;
@@ -11390,58 +10823,10 @@ bool write_full61_retention_staging_v172521(
 
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Implement promote true production surface in the standalone controller/front-end workflow without duplicating the scientific kernels.
-// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
-// XSTAR-FUNCTION-COMMENT-END
-[[maybe_unused]] void promote_true_production_surface_v65(xstar_run_state::WholeRunAccumulatedState& whole) {
-    std::size_t fallback_energy_count = 0;
-    for (const auto& zone : whole.radial_zones) {
-        const auto& evaluation = zone.accepted_controller.evaluation;
-        if (!evaluation.radiation_energy_ev.empty()) {
-            fallback_energy_count = evaluation.radiation_energy_ev.size();
-            break;
-        }
-    }
-    for (auto& zone : whole.radial_zones) {
-        zone.provisional_from_controller = false;
-        zone.accepted_boundary_exact = true;
-        zone.boundary_provenance = "native true-production retained controller surface";
-        fill_retained_product_surface_arrays_v172530(zone.accepted_controller.evaluation, fallback_energy_count);
-        if (zone.temperature_t4 == 0.0) zone.temperature_t4 = zone.accepted_controller.evaluation.temperature_t4;
-        if (zone.electron_fraction == 0.0) zone.electron_fraction = zone.accepted_controller.evaluation.computed_electron_fraction;
-    }
-    whole.legacy_pprint.initialized_from_native_controller = true;
-    whole.legacy_pprint.option_sequence_exact = false;
-    whole.legacy_pprint.finalized_from_native_controller = true;
-    whole.legacy_pprint.buffered_lines.clear();
-    ensure_retained_native_public_metadata_v172530(whole);
-    whole.product_schema_complete = whole.parameter_rows.size() >= 56u &&
-        !whole.level_identities.empty() && whole.line_identities.size() >= 2644u &&
-        whole.rrc_identities.size() >= 1849u;
-    whole.radial_state_complete = whole.radial_zones.size() == 5u;
-    whole.native_detail_state_retained = true;
-    whole.continuum_depths_derived_from_native_opacity = true;
-    whole.exact_source_metadata_retained = whole.parameter_rows.size() >= 56u &&
-        !whole.level_identities.empty() && whole.line_identities.size() >= 2644u &&
-        whole.rrc_identities.size() >= 1849u;
-    whole.exact_source_workspaces_retained = !whole.radial_zones.empty() && std::all_of(
-        whole.radial_zones.begin(), whole.radial_zones.end(),
-        [](const xstar_run_state::RadialZoneState& zone) {
-            const auto& ws = zone.accepted_controller.evaluation.source_workspace;
-            return ws.line_workspace_exact && ws.rrc_workspace_exact && ws.continuum_workspace_exact;
-        });
-    whole.exact_accepted_radial_boundaries_retained = whole.radial_zones.size() == 5u;
-    whole.exact_legacy_pprint_state_retained = false;
-    whole.native_product_inputs_complete = whole.product_schema_complete && whole.radial_state_complete;
-    whole.embedded_public_fits_payloads_absent = true;
-    whole.embedded_full_xout_step_payload_absent = true;
-}
-
-// XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Implement publish true production products in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-ProductPublicationResultV172524 publish_true_production_products_v65(
+ProductPublicationResultV172524 publish_true_production_products(
     const Options& options,
     const std::filesystem::path& output,
     const std::vector<FixedDsecSnapshot>& snapshots,
@@ -11450,7 +10835,7 @@ ProductPublicationResultV172524 publish_true_production_products_v65(
     result.attempted = true;
     const auto publication_started = std::chrono::steady_clock::now();
     try {
-        remove_native_products_v172524(output);
+        remove_native_products(output);
         xstar_run_state::WholeRunAccumulatedState whole;
         whole.release = XSTAR_API_VERSION_STRING;
         whole.backend = "cpp-true-production";
@@ -11463,14 +10848,14 @@ ProductPublicationResultV172524 publish_true_production_products_v65(
         whole.controller_trajectory_qualified = snapshots.size() == 61u;
         whole.fixed_evaluations.reserve(snapshots.size());
         for (const auto& snapshot : snapshots) {
-            whole.fixed_evaluations.push_back(copy_fixed_evaluation_state_v172524(snapshot));
+            whole.fixed_evaluations.push_back(copy_fixed_evaluation_state(snapshot));
         }
         auto append_zone = [&](const FixedDsecSnapshot& snapshot, const std::string& reason) {
             xstar_run_state::AcceptedControllerState accepted;
             accepted.call_index = snapshot.call_index;
             accepted.accepted_sequence = snapshot.sequence;
             accepted.acceptance_reason = reason;
-            accepted.evaluation = copy_fixed_evaluation_state_v172524(snapshot);
+            accepted.evaluation = copy_fixed_evaluation_state(snapshot);
             whole.accepted_controller_states.push_back(accepted);
             xstar_run_state::RadialZoneState zone;
             zone.zone_index = whole.radial_zones.size() + 1;
@@ -11497,8 +10882,8 @@ ProductPublicationResultV172524 publish_true_production_products_v65(
         // Use the same state-complete retained-surface assembly as the
         // validated v63 diagnostic path. File silence affects only artifact
         // emission, never product-state selection or projection.
-        promote_retained_native_product_surface_v172530(whole);
-        retain_controller_owned_product_workspaces_v63(whole, options.parameters_path);
+        promote_retained_native_product_surface(whole);
+        retain_controller_owned_product_workspaces(whole, options.parameters_path);
         whole.native_diagnostics_path.clear();
         auto product = xstar_run_state::build_product_writing_state(whole);
         product.backend = "cpp-true-production";
@@ -11526,9 +10911,9 @@ ProductPublicationResultV172524 publish_true_production_products_v65(
             throw;
         }
         ::unsetenv("XSTAR_TRUE_PRODUCTION");
-        result.fits_count = count_native_fits_products_v172524(output);
+        result.fits_count = count_native_fits_products(output);
         result.step_log_written = std::filesystem::is_regular_file(output / "xout_step.log") &&
-            regular_file_size_or_zero_v172521(output / "xout_step.log") > 0;
+            regular_file_size_or_zero(output / "xout_step.log") > 0;
         result.ok = result.fits_count == 9 && result.step_log_written;
         if (!result.ok) throw std::runtime_error("true production did not write all ten public products");
         std::set<std::string> allowed = {
@@ -11545,7 +10930,7 @@ ProductPublicationResultV172524 publish_true_production_products_v65(
         ::unsetenv("XSTAR_NATIVE_SOURCE_SEQUENCE");
         ::unsetenv("XSTAR_NATIVE_PRODUCTION");
         result.error = exc.what();
-        remove_native_products_v172524(output);
+        remove_native_products(output);
         result.fits_count = 0;
         result.step_log_written = false;
         result.ok = false;
@@ -11701,21 +11086,21 @@ struct Sequence23PopulationSolveRowV82Patch510 {
 using PopulationSolveKeyV82Patch510 = std::pair<int,int>;
 
 std::map<PopulationSolveKeyV82Patch510,Sequence23PopulationSolveRowV82Patch510>
-read_sequence59_source_solve_rows_v82_patch510(const std::filesystem::path& path) {
-    const auto rows = read_csv_rows_v1716(path);
+read_sequence59_source_solve_rows(const std::filesystem::path& path) {
+    const auto rows = read_csv_rows(path);
     std::map<PopulationSolveKeyV82Patch510,Sequence23PopulationSolveRowV82Patch510> out;
     for (const auto& row : rows) {
         if (std::stoi(row.at("sequence")) != 59) continue;
         Sequence23PopulationSolveRowV82Patch510 item;
         item.element_z = std::stoi(row.at("element_z"));
         item.compact_row = std::stoi(row.at("compact_row"));
-        item.transformed_initial = parse_thermal_binary64_v79(row.at("transformed_initial_population"));
-        item.final_outer_start = parse_thermal_binary64_v79(row.at("final_outer_start_population"));
-        item.after_condensed = parse_thermal_binary64_v79(row.at("population_after_condensed"));
-        item.fixed_before = parse_thermal_binary64_v79(row.at("final_fixed_point_population_before"));
-        item.fixed_after = parse_thermal_binary64_v79(row.at("final_fixed_point_population_after"));
-        item.final_population = parse_thermal_binary64_v79(row.at("final_population"));
-        item.rhs = parse_thermal_binary64_v79(row.at("rhs"));
+        item.transformed_initial = parse_thermal_binary64(row.at("transformed_initial_population"));
+        item.final_outer_start = parse_thermal_binary64(row.at("final_outer_start_population"));
+        item.after_condensed = parse_thermal_binary64(row.at("population_after_condensed"));
+        item.fixed_before = parse_thermal_binary64(row.at("final_fixed_point_population_before"));
+        item.fixed_after = parse_thermal_binary64(row.at("final_fixed_point_population_after"));
+        item.final_population = parse_thermal_binary64(row.at("final_population"));
+        item.rhs = parse_thermal_binary64(row.at("rhs"));
         out[{item.element_z,item.compact_row}] = item;
     }
     if (out.empty()) throw std::runtime_error("sequence-59 source solve-stage inventory is empty");
@@ -11723,32 +11108,32 @@ read_sequence59_source_solve_rows_v82_patch510(const std::filesystem::path& path
 }
 
 std::map<PopulationSolveKeyV82Patch510,Sequence23PopulationSolveRowV82Patch510>
-read_sequence59_native_solve_rows_v82_patch510(
+read_sequence59_native_solve_rows(
     const std::filesystem::path& response_path,
     const std::filesystem::path& stage_path) {
-    const auto response_rows = read_csv_rows_v1716(response_path);
-    const auto stage_rows = read_csv_rows_v1716(stage_path);
+    const auto response_rows = read_csv_rows(response_path);
+    const auto stage_rows = read_csv_rows(stage_path);
     std::map<PopulationSolveKeyV82Patch510,Sequence23PopulationSolveRowV82Patch510> out;
     for (const auto& row : response_rows) {
         Sequence23PopulationSolveRowV82Patch510 item;
         item.element_z = std::stoi(row.at("element_z"));
         item.compact_row = std::stoi(row.at("compact_row"));
         item.full_row = std::stoi(row.at("full_row"));
-        item.raw_call_start = parse_thermal_binary64_v79(row.at("raw_call_start_xilevg"));
-        item.loaded_call_start = parse_thermal_binary64_v79(row.at("loaded_call_start_xilevg"));
-        item.transformed_initial = parse_thermal_binary64_v79(row.at("initial_population"));
-        item.final_outer_start = parse_thermal_binary64_v79(row.at("final_outer_start_population"));
-        item.final_population = parse_thermal_binary64_v79(row.at("final_population"));
-        item.rhs = parse_thermal_binary64_v79(row.at("rhs"));
+        item.raw_call_start = parse_thermal_binary64(row.at("raw_call_start_xilevg"));
+        item.loaded_call_start = parse_thermal_binary64(row.at("loaded_call_start_xilevg"));
+        item.transformed_initial = parse_thermal_binary64(row.at("initial_population"));
+        item.final_outer_start = parse_thermal_binary64(row.at("final_outer_start_population"));
+        item.final_population = parse_thermal_binary64(row.at("final_population"));
+        item.rhs = parse_thermal_binary64(row.at("rhs"));
         out[{item.element_z,item.compact_row}] = item;
     }
     for (const auto& row : stage_rows) {
         const PopulationSolveKeyV82Patch510 key{std::stoi(row.at("element_z")), std::stoi(row.at("compact_row"))};
         auto found = out.find(key);
         if (found == out.end()) continue;
-        found->second.after_condensed = parse_thermal_binary64_v79(row.at("population_after_condensed"));
-        found->second.fixed_before = parse_thermal_binary64_v79(row.at("final_fixed_point_population_before"));
-        found->second.fixed_after = parse_thermal_binary64_v79(row.at("final_fixed_point_population_after"));
+        found->second.after_condensed = parse_thermal_binary64(row.at("population_after_condensed"));
+        found->second.fixed_before = parse_thermal_binary64(row.at("final_fixed_point_population_before"));
+        found->second.fixed_after = parse_thermal_binary64(row.at("final_fixed_point_population_after"));
     }
     if (out.empty()) throw std::runtime_error("sequence-59 native solve-stage inventory is empty");
     return out;
@@ -11758,21 +11143,21 @@ read_sequence59_native_solve_rows_v82_patch510(
 // Purpose: Compute sequence23 population first owner as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
 // Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
 // XSTAR-FUNCTION-COMMENT-END
-std::string sequence23_population_first_owner_v82_patch510(
+std::string sequence23_population_first_owner(
     double source_call_start,
     const Sequence23PopulationSolveRowV82Patch510& source,
     const Sequence23PopulationSolveRowV82Patch510& native,
     double source_projected_global,
     double native_projected_global) {
-    if (!scientific_close_v82(source_call_start, native.loaded_call_start)) return "INITIAL_STATE";
-    if (!scientific_close_v82(source.transformed_initial, native.transformed_initial)) return "TRANSFORM";
-    if (!scientific_close_v82(source.rhs, native.rhs)) return "MATRIX_OR_RATE_OPERANDS";
-    if (!scientific_close_v82(source.final_outer_start, native.final_outer_start) ||
-        !scientific_close_v82(source.after_condensed, native.after_condensed) ||
-        !scientific_close_v82(source.fixed_before, native.fixed_before) ||
-        !scientific_close_v82(source.fixed_after, native.fixed_after)) return "SOLVE";
-    if (!scientific_close_v82(source.final_population, native.final_population)) return "NORMALIZATION";
-    if (!scientific_close_v82(source_projected_global, native_projected_global)) return "GLOBAL_ALIAS_PROJECTION";
+    if (!scientific_close(source_call_start, native.loaded_call_start)) return "INITIAL_STATE";
+    if (!scientific_close(source.transformed_initial, native.transformed_initial)) return "TRANSFORM";
+    if (!scientific_close(source.rhs, native.rhs)) return "MATRIX_OR_RATE_OPERANDS";
+    if (!scientific_close(source.final_outer_start, native.final_outer_start) ||
+        !scientific_close(source.after_condensed, native.after_condensed) ||
+        !scientific_close(source.fixed_before, native.fixed_before) ||
+        !scientific_close(source.fixed_after, native.fixed_after)) return "SOLVE";
+    if (!scientific_close(source.final_population, native.final_population)) return "NORMALIZATION";
+    if (!scientific_close(source_projected_global, native_projected_global)) return "GLOBAL_ALIAS_PROJECTION";
     return "CLOSED_OR_UNRESOLVED";
 }
 
@@ -11780,7 +11165,7 @@ std::string sequence23_population_first_owner_v82_patch510(
 // Purpose: Write sequence23 population owner audit from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-void write_sequence23_population_owner_audit_v82_patch510(
+void write_sequence23_population_owner_audit(
     StandaloneControllerDataV67& data,
     const FixedDsecSnapshot& boundary,
     const std::filesystem::path& native_diagnostic_root) {
@@ -11794,8 +11179,8 @@ void write_sequence23_population_owner_audit_v82_patch510(
     if (!std::filesystem::is_regular_file(native_response) || !std::filesystem::is_regular_file(native_stage)) {
         throw std::runtime_error("patch5.10 native sequence-59 solve diagnostics are missing");
     }
-    const auto source_rows = read_sequence59_source_solve_rows_v82_patch510(data.sequence23_source_solve_stage_rows);
-    const auto native_rows = read_sequence59_native_solve_rows_v82_patch510(native_response, native_stage);
+    const auto source_rows = read_sequence59_source_solve_rows(data.sequence23_source_solve_stage_rows);
+    const auto native_rows = read_sequence59_native_solve_rows(native_response, native_stage);
     static constexpr std::array<int,12> targets{{67,68,69,70,2816,2817,2818,2862,2863,2864,2865,2874}};
     const auto output_path = data.sequence23_diagnostic_dir / "sequence23_population_owner_audit.csv";
     std::filesystem::create_directories(data.sequence23_diagnostic_dir);
@@ -11848,7 +11233,7 @@ void write_sequence23_population_owner_audit_v82_patch510(
             const bool terminal = row < data.program->row_global_level_terminal_roles.size() &&
                 alias_index < data.program->row_global_level_terminal_roles[row].size() &&
                 data.program->row_global_level_terminal_roles[row][alias_index] != 0u;
-            const std::string owner = sequence23_population_first_owner_v82_patch510(
+            const std::string owner = sequence23_population_first_owner(
                 source_input_global, srow, nrow, source_projected, native_projected);
             ++owners[owner];
             if (first_owner == "NONE" && owner != "CLOSED_OR_UNRESOLVED") first_owner = owner;
@@ -11883,16 +11268,16 @@ void write_sequence23_population_owner_audit_v82_patch510(
 }
 
 std::map<PopulationSolveKeyV82Patch510,Sequence23PopulationSolveRowV82Patch510>
-read_source_solve_rows_for_sequence_v82_patch511(const std::filesystem::path& path, int sequence);
+read_source_solve_rows_for_sequence(const std::filesystem::path& path, int sequence);
 std::map<PopulationSolveKeyV82Patch510,Sequence23PopulationSolveRowV82Patch510>
-read_native_solve_rows_v82_patch511(const std::filesystem::path& response_path, const std::filesystem::path& stage_path);
-bool relative_close_v82_patch511(double source, double native);
+read_native_solve_rows(const std::filesystem::path& response_path, const std::filesystem::path& stage_path);
+bool relative_close(double source, double native);
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Implement call1 source workspace dir in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-std::filesystem::path call1_source_workspace_dir_v82_patch512(
+std::filesystem::path call1_source_workspace_dir(
     const StandaloneControllerDataV67& data, int sequence) {
     std::ostringstream name;
     name << "evaluation_" << std::setw(4) << std::setfill('0') << sequence;
@@ -11903,7 +11288,7 @@ std::filesystem::path call1_source_workspace_dir_v82_patch512(
 // Purpose: Implement native call1 sweep dir in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-std::filesystem::path native_call1_sweep_dir_v82_patch512(
+std::filesystem::path native_call1_sweep_dir(
     const StandaloneControllerDataV67& data, int sequence) {
     std::ostringstream name;
     name << "evaluation_" << std::setw(4) << std::setfill('0') << sequence;
@@ -11914,7 +11299,7 @@ std::filesystem::path native_call1_sweep_dir_v82_patch512(
 // Purpose: Append call1 dsec population sweep from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-void append_call1_dsec_population_sweep_v82_patch512(
+void append_call1_dsec_population_sweep(
     StandaloneControllerDataV67& data,
     const FixedDsecSnapshot& snapshot,
     const std::filesystem::path& native_root) {
@@ -11930,12 +11315,12 @@ void append_call1_dsec_population_sweep_v82_patch512(
     if (!std::filesystem::is_regular_file(native_response) || !std::filesystem::is_regular_file(native_stage)) {
         throw std::runtime_error("patch5.12 call-1 native solve diagnostics missing for sequence " + std::to_string(sequence));
     }
-    const auto source_rows = read_source_solve_rows_for_sequence_v82_patch511(data.sequence23_source_solve_stage_rows, sequence);
-    const auto native_rows = read_native_solve_rows_v82_patch511(native_response, native_stage);
+    const auto source_rows = read_source_solve_rows_for_sequence(data.sequence23_source_solve_stage_rows, sequence);
+    const auto native_rows = read_native_solve_rows(native_response, native_stage);
 
     RuntimeStateWorkspace source_current_spec;
     source_current_spec.call_index = 1;
-    source_current_spec.directory = call1_source_workspace_dir_v82_patch512(data, sequence);
+    source_current_spec.directory = call1_source_workspace_dir(data, sequence);
     const auto source_current = read_runtime_state_workspace_values(source_current_spec);
 
     RuntimeStateWorkspace source_next_spec;
@@ -11946,8 +11331,8 @@ void append_call1_dsec_population_sweep_v82_patch512(
     // cache.  After DSEC sequence 20, compare against the retained call-1
     // final state at canonical source sequence 58.
     source_next_spec.directory = sequence < 20
-        ? call1_source_workspace_dir_v82_patch512(data, sequence + 1)
-        : call1_source_workspace_dir_v82_patch512(data, 58);
+        ? call1_source_workspace_dir(data, sequence + 1)
+        : call1_source_workspace_dir(data, 58);
     const auto source_next = read_runtime_state_workspace_values(source_next_spec);
 
     std::filesystem::create_directories(data.call1_dsec_population_sweep_dir);
@@ -11975,7 +11360,7 @@ void append_call1_dsec_population_sweep_v82_patch512(
                               const Sequence23PopulationSolveRowV82Patch510& native,
                               double source_projected, double native_projected, bool scientific) {
         const auto close = [&](double a, double b) {
-            return scientific ? scientific_close_v82(a,b) : relative_close_v82_patch511(a,b);
+            return scientific ? scientific_close(a,b) : relative_close(a,b);
         };
         if (!close(source_input, native.loaded_call_start)) return std::string("INPUT");
         if (!close(source.transformed_initial, native.transformed_initial)) return std::string("TRANSFORM");
@@ -12021,7 +11406,7 @@ void append_call1_dsec_population_sweep_v82_patch512(
                 }
             }
             auto inactive_classify = [&](bool scientific) {
-                const auto close = [&](double a, double b) { return scientific ? scientific_close_v82(a,b) : relative_close_v82_patch511(a,b); };
+                const auto close = [&](double a, double b) { return scientific ? scientific_close(a,b) : relative_close(a,b); };
                 if (!close(source_input,native_input)) return std::string("INPUT");
                 if (!close(source_projected,native_projected)) return std::string("GLOBAL_ALIAS_PROJECTION");
                 return std::string("INACTIVE_PASSTHROUGH");
@@ -12095,7 +11480,7 @@ void append_call1_dsec_population_sweep_v82_patch512(
 // Purpose: Write mg type53 source native opacity record attribution from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-void write_mg_type53_source_native_opacity_record_attribution_v82_patch512(
+void write_mg_type53_source_native_opacity_record_attribution(
     StandaloneControllerDataV67& data) {
     if (!data.reference_diagnostics_enabled || data.sequence23_diagnostic_dir.empty() ||
         data.sequence23_source_solve_stage_rows.empty()) return;
@@ -12106,14 +11491,14 @@ void write_mg_type53_source_native_opacity_record_attribution_v82_patch512(
     if (!std::filesystem::is_regular_file(kernel_path)) {
         throw std::runtime_error("patch5.12 Mg Type-53 native kernel inventory is missing");
     }
-    const auto source59 = read_source_solve_rows_for_sequence_v82_patch511(data.sequence23_source_solve_stage_rows, 59);
-    auto kernels = read_csv_rows_v1716(kernel_path);
+    const auto source59 = read_source_solve_rows_for_sequence(data.sequence23_source_solve_stage_rows, 59);
+    auto kernels = read_csv_rows(kernel_path);
     std::sort(kernels.begin(), kernels.end(), [](const auto& a, const auto& b) {
         return std::stoll(a.at("source_position")) < std::stoll(b.at("source_position"));
     });
     std::set<std::pair<long long,long long>> missing_opakab;
     if (std::filesystem::is_regular_file(opakab_path)) {
-        for (const auto& row : read_csv_rows_v1716(opakab_path)) {
+        for (const auto& row : read_csv_rows(opakab_path)) {
             if (row.at("status") != "SOURCE_NONZERO_NATIVE_ZERO") continue;
             if (std::stoi(row.at("data_type")) != 53 || std::stoi(row.at("element_z")) != 12) continue;
             missing_opakab.emplace(std::stoll(row.at("source_position")), std::stoll(row.at("record")));
@@ -12139,17 +11524,17 @@ void write_mg_type53_source_native_opacity_record_attribution_v82_patch512(
         const auto upper_it = source59.find({12,upper_compact});
         const double source_lower = lower_it != source59.end() ? lower_it->second.final_population : 0.0;
         const double source_upper = upper_it != source59.end() ? upper_it->second.final_population : 0.0;
-        const double native_lower = parse_thermal_binary64_v79(row.at("native_lower_population"));
-        const double native_upper = parse_thermal_binary64_v79(row.at("native_upper_population"));
-        const double abundance = parse_thermal_binary64_v79(row.at("abundance"));
-        const double density = parse_thermal_binary64_v79(row.at("hydrogen_density_cm3"));
-        const double sigma_sum = parse_thermal_binary64_v79(row.at("sigma_bin_sum_cm2"));
+        const double native_lower = parse_thermal_binary64(row.at("native_lower_population"));
+        const double native_upper = parse_thermal_binary64(row.at("native_upper_population"));
+        const double abundance = parse_thermal_binary64(row.at("abundance"));
+        const double density = parse_thermal_binary64(row.at("hydrogen_density_cm3"));
+        const double sigma_sum = parse_thermal_binary64(row.at("sigma_bin_sum_cm2"));
         const double source_opacity = source_lower * abundance * density * sigma_sum;
-        const double native_opacity = parse_thermal_binary64_v79(row.at("native_opacity_bin_sum_cm1"));
+        const double native_opacity = parse_thermal_binary64(row.at("native_opacity_bin_sum_cm1"));
         const double delta = source_opacity - native_opacity;
         const double scale = std::max({std::abs(source_opacity),std::abs(native_opacity),1.0e-40});
         const double relative = std::abs(delta) / scale;
-        const bool mismatch = !relative_close_v82_patch511(source_opacity,native_opacity);
+        const bool mismatch = !relative_close(source_opacity,native_opacity);
         if (mismatch) {
             ++mismatch_records; ++mismatch_by_ion[ion_stage]; mismatch_keys.emplace(source_position,record);
             if (!first_record) { first_record=record; first_source_position=source_position; }
@@ -12158,7 +11543,7 @@ void write_mg_type53_source_native_opacity_record_attribution_v82_patch512(
         cumulative_native += native_opacity;
         const double cumulative_scale = std::max({std::abs(cumulative_source),std::abs(cumulative_native),1.0e-40});
         const double cumulative_relative = std::abs(cumulative_source-cumulative_native)/cumulative_scale;
-        if (!first_cumulative_record && !relative_close_v82_patch511(cumulative_source,cumulative_native)) first_cumulative_record=record;
+        if (!first_cumulative_record && !relative_close(cumulative_source,cumulative_native)) first_cumulative_record=record;
         const bool missing = missing_opakab.count({source_position,record}) != 0u;
         if (missing) ++missing_intersection;
         csv << source_position << ',' << record << ',' << ion_stage << ',' << row.at("continuum_index_one_based") << ','
@@ -12170,7 +11555,7 @@ void write_mg_type53_source_native_opacity_record_attribution_v82_patch512(
     }
     std::size_t residual_rows_mg53 = 0, residual_rows_mismatch_record = 0;
     if (std::filesystem::is_regular_file(producer_decomp_path)) {
-        for (const auto& row : read_csv_rows_v1716(producer_decomp_path)) {
+        for (const auto& row : read_csv_rows(producer_decomp_path)) {
             if (row.at("producer_family") != "BOUND_FREE" || std::stoi(row.at("producer_data_type")) != 53 ||
                 std::stoi(row.at("producer_element_z")) != 12) continue;
             ++residual_rows_mg53;
@@ -12197,7 +11582,7 @@ void write_mg_type53_source_native_opacity_record_attribution_v82_patch512(
 // Purpose: Validate the invariants required by validate coheat file; reject malformed dimensions, pointers, or state before scientific kernels are entered.
 // Reference context: Implementation/safety helper; no independent scientific formula.
 // XSTAR-FUNCTION-COMMENT-END
-bool validate_coheat_file_v67(const std::filesystem::path& path, std::size_t& rows) {
+bool validate_coheat_file(const std::filesystem::path& path, std::size_t& rows) {
     rows = 0;
     std::ifstream input(path);
     if (!input) return false;
@@ -12219,7 +11604,7 @@ bool validate_coheat_file_v67(const std::filesystem::path& path, std::size_t& ro
 // Purpose: Implement global bilevg floor in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-double global_bilevg_floor_v82_patch52(
+double global_bilevg_floor(
     const StandaloneControllerDataV67& data,
     std::size_t global_zero_based) {
     if (global_zero_based < data.global_terminal_continuum_role.size() &&
@@ -12233,7 +11618,7 @@ double global_bilevg_floor_v82_patch52(
 // Purpose: Implement recompute global bilevg in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-void recompute_global_bilevg_v82_patch52(StandaloneControllerDataV67& data) {
+void recompute_global_bilevg(StandaloneControllerDataV67& data) {
     if (data.global_bilevg.size() != data.global_level_count) {
         data.global_bilevg.assign(data.global_level_count, 0.0);
     }
@@ -12242,27 +11627,27 @@ void recompute_global_bilevg_v82_patch52(StandaloneControllerDataV67& data) {
             ? data.global_xilevg[i] : 0.0;
         const double rn = i < data.global_rnisg.size() && std::isfinite(data.global_rnisg[i])
             ? data.global_rnisg[i] : 0.0;
-        const double denominator = rn + global_bilevg_floor_v82_patch52(data, i);
+        const double denominator = rn + global_bilevg_floor(data, i);
         data.global_bilevg[i] = denominator > 0.0 ? x / denominator : 0.0;
     }
 }
 
 std::map<PopulationSolveKeyV82Patch510,Sequence23PopulationSolveRowV82Patch510>
-read_source_solve_rows_for_sequence_v82_patch511(const std::filesystem::path& path, int sequence) {
-    const auto rows = read_csv_rows_v1716(path);
+read_source_solve_rows_for_sequence(const std::filesystem::path& path, int sequence) {
+    const auto rows = read_csv_rows(path);
     std::map<PopulationSolveKeyV82Patch510,Sequence23PopulationSolveRowV82Patch510> out;
     for (const auto& row : rows) {
         if (std::stoi(row.at("sequence")) != sequence) continue;
         Sequence23PopulationSolveRowV82Patch510 item;
         item.element_z = std::stoi(row.at("element_z"));
         item.compact_row = std::stoi(row.at("compact_row"));
-        item.transformed_initial = parse_thermal_binary64_v79(row.at("transformed_initial_population"));
-        item.final_outer_start = parse_thermal_binary64_v79(row.at("final_outer_start_population"));
-        item.after_condensed = parse_thermal_binary64_v79(row.at("population_after_condensed"));
-        item.fixed_before = parse_thermal_binary64_v79(row.at("final_fixed_point_population_before"));
-        item.fixed_after = parse_thermal_binary64_v79(row.at("final_fixed_point_population_after"));
-        item.final_population = parse_thermal_binary64_v79(row.at("final_population"));
-        item.rhs = parse_thermal_binary64_v79(row.at("rhs"));
+        item.transformed_initial = parse_thermal_binary64(row.at("transformed_initial_population"));
+        item.final_outer_start = parse_thermal_binary64(row.at("final_outer_start_population"));
+        item.after_condensed = parse_thermal_binary64(row.at("population_after_condensed"));
+        item.fixed_before = parse_thermal_binary64(row.at("final_fixed_point_population_before"));
+        item.fixed_after = parse_thermal_binary64(row.at("final_fixed_point_population_after"));
+        item.final_population = parse_thermal_binary64(row.at("final_population"));
+        item.rhs = parse_thermal_binary64(row.at("rhs"));
         out[{item.element_z,item.compact_row}] = item;
     }
     if (out.empty()) throw std::runtime_error("patch5.11 source solve-stage inventory is empty for sequence " + std::to_string(sequence));
@@ -12270,17 +11655,17 @@ read_source_solve_rows_for_sequence_v82_patch511(const std::filesystem::path& pa
 }
 
 std::map<PopulationSolveKeyV82Patch510,Sequence23PopulationSolveRowV82Patch510>
-read_native_solve_rows_v82_patch511(
+read_native_solve_rows(
     const std::filesystem::path& response_path,
     const std::filesystem::path& stage_path) {
-    return read_sequence59_native_solve_rows_v82_patch510(response_path, stage_path);
+    return read_sequence59_native_solve_rows(response_path, stage_path);
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Implement relative close in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-bool relative_close_v82_patch511(double source, double native) {
+bool relative_close(double source, double native) {
     if (!std::isfinite(source) || !std::isfinite(native)) return false;
     if (source == native) return true;
     if (std::abs(source) < 1.0e-40 && std::abs(native) < 1.0e-40) return true;
@@ -12292,7 +11677,7 @@ bool relative_close_v82_patch511(double source, double native) {
 // Purpose: Compute sequence58 population first phase as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
 // Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
 // XSTAR-FUNCTION-COMMENT-END
-std::string sequence58_population_first_phase_v82_patch511(
+std::string sequence58_population_first_phase(
     double source_input_global,
     const Sequence23PopulationSolveRowV82Patch510& source,
     const Sequence23PopulationSolveRowV82Patch510& native,
@@ -12301,7 +11686,7 @@ std::string sequence58_population_first_phase_v82_patch511(
     double native_next_raw_call_start,
     bool use_scientific) {
     const auto close = [&](double a, double b) {
-        return use_scientific ? scientific_close_v82(a,b) : relative_close_v82_patch511(a,b);
+        return use_scientific ? scientific_close(a,b) : relative_close(a,b);
     };
     if (!close(source_input_global, native.loaded_call_start)) return "SEQUENCE58_INPUT";
     if (!close(source.transformed_initial, native.transformed_initial)) return "TRANSFORM";
@@ -12320,7 +11705,7 @@ std::string sequence58_population_first_phase_v82_patch511(
 // Purpose: Write sequence58 final population boundary audit from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-void write_sequence58_final_population_boundary_audit_v82_patch511(
+void write_sequence58_final_population_boundary_audit(
     StandaloneControllerDataV67& data,
     const std::filesystem::path& sequence58_native_root,
     const std::filesystem::path& sequence59_native_root) {
@@ -12335,9 +11720,9 @@ void write_sequence58_final_population_boundary_audit_v82_patch511(
         !std::filesystem::is_regular_file(seq59_response) || !std::filesystem::is_regular_file(seq59_stage)) {
         throw std::runtime_error("patch5.11 native sequence-58/59 solve diagnostics are missing");
     }
-    const auto source58 = read_source_solve_rows_for_sequence_v82_patch511(data.sequence23_source_solve_stage_rows, 58);
-    const auto native58 = read_native_solve_rows_v82_patch511(seq58_response, seq58_stage);
-    const auto native59 = read_native_solve_rows_v82_patch511(seq59_response, seq59_stage);
+    const auto source58 = read_source_solve_rows_for_sequence(data.sequence23_source_solve_stage_rows, 58);
+    const auto native58 = read_native_solve_rows(seq58_response, seq58_stage);
+    const auto native59 = read_native_solve_rows(seq59_response, seq59_stage);
     static constexpr std::array<int,12> targets{{67,68,69,70,2816,2817,2818,2862,2863,2864,2865,2874}};
     const auto output_path = data.sequence23_diagnostic_dir / "sequence58_final_population_boundary_audit.csv";
     std::ofstream csv(output_path);
@@ -12374,8 +11759,8 @@ void write_sequence58_final_population_boundary_audit_v82_patch511(
             const double source_input = gi < data.sequence58_source_workspace.global_xilevg.size() ? data.sequence58_source_workspace.global_xilevg[gi] : 0.0;
             const double source_committed = gi < data.sequence59_source_workspace.global_xilevg.size() ? data.sequence59_source_workspace.global_xilevg[gi] : s_it->second.final_population;
             const double native_projected = gi < data.sequence58_native_projected_global_xilevg.size() ? data.sequence58_native_projected_global_xilevg[gi] : n58_it->second.final_population;
-            const std::string relative_phase = sequence58_population_first_phase_v82_patch511(source_input, s_it->second, n58_it->second, source_committed, native_projected, n59_it->second.raw_call_start, false);
-            const std::string scientific_phase = sequence58_population_first_phase_v82_patch511(source_input, s_it->second, n58_it->second, source_committed, native_projected, n59_it->second.raw_call_start, true);
+            const std::string relative_phase = sequence58_population_first_phase(source_input, s_it->second, n58_it->second, source_committed, native_projected, n59_it->second.raw_call_start, false);
+            const std::string scientific_phase = sequence58_population_first_phase(source_input, s_it->second, n58_it->second, source_committed, native_projected, n59_it->second.raw_call_start, true);
             ++relative_owners[relative_phase]; ++scientific_owners[scientific_phase];
             if (first_relative == "NONE" && relative_phase != "CLOSED_OR_UNRESOLVED") first_relative = relative_phase;
             if (first_scientific == "NONE" && scientific_phase != "CLOSED_OR_UNRESOLVED") first_scientific = scientific_phase;
@@ -12422,7 +11807,7 @@ void write_sequence58_final_population_boundary_audit_v82_patch511(
 // Purpose: Write call3 opacity producer decomposition from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-void write_call3_opacity_producer_decomposition_v82_patch511(
+void write_call3_opacity_producer_decomposition(
     [[maybe_unused]] StandaloneControllerDataV67& data,
     const std::filesystem::path& transfer_dir) {
     const auto component_path = transfer_dir / "call3_continuum_opacity_component_attribution.csv";
@@ -12430,8 +11815,8 @@ void write_call3_opacity_producer_decomposition_v82_patch511(
     if (!std::filesystem::is_regular_file(component_path) || !std::filesystem::is_regular_file(producer_path)) {
         throw std::runtime_error("patch5.11 opacity component/producer inputs are missing");
     }
-    const auto component_rows = read_csv_rows_v1716(component_path);
-    const auto producer_rows = read_csv_rows_v1716(producer_path);
+    const auto component_rows = read_csv_rows(component_path);
+    const auto producer_rows = read_csv_rows(producer_path);
     std::map<std::size_t,std::map<std::string,std::string>> producer_by_slot;
     for (const auto& row : producer_rows) producer_by_slot[static_cast<std::size_t>(std::stoull(row.at("runtime_slot")))] = row;
     const auto output_path = transfer_dir / "call3_continuum_opacity_producer_decomposition.csv";
@@ -12485,7 +11870,7 @@ void write_call3_opacity_producer_decomposition_v82_patch511(
 // Purpose: Compute update global populations as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
 // Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
 // XSTAR-FUNCTION-COMMENT-END
-void update_global_populations_v67(
+void update_global_populations(
     StandaloneControllerDataV67& data,
     const std::vector<double>& populations,
     const std::vector<double>* lte = nullptr,
@@ -12522,7 +11907,7 @@ void update_global_populations_v67(
         }
         if (!wrote_alias) write_role(data.population_global_level_index[row], 0u);
     }
-    recompute_global_bilevg_v82_patch52(data);
+    recompute_global_bilevg(data);
     if (data.call_index >= 1u && data.call_index <= data.call_start_workspaces.size()) {
         auto& workspace = data.call_start_workspaces[data.call_index - 1u];
         workspace.global_xilevg = data.global_xilevg;
@@ -12536,7 +11921,7 @@ void update_global_populations_v67(
 // Purpose: Implement source detail global projection in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-std::vector<double> source_detail_global_projection_v064812318(
+std::vector<double> source_detail_global_projection(
     const StandaloneControllerDataV67& data,
     const std::vector<double>& pre_mapback,
     const std::map<int, std::array<int,4>>& windows) {
@@ -12589,20 +11974,20 @@ std::vector<double> source_detail_global_projection_v064812318(
 // Purpose: Implement commit call2 to call3 global state in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-void commit_call2_to_call3_global_state_v82_patch52(
+void commit_call2_to_call3_global_state(
     StandaloneControllerDataV67& data,
     const FixedDsecSnapshot& boundary) {
     // Source call-2 -> call-3 semantics retain the LTE workspace (rnisg)
     // from call entry while committing the newly solved xilevg boundary.
     // Never import reference values here: the retained copy is native call-2
     // input state captured before the call begins.
-    update_global_populations_v67(data, boundary.populations, nullptr, false);
+    update_global_populations(data, boundary.populations, nullptr, false);
     if (!data.call2_entry_global_rnisg_retained ||
         data.call2_entry_global_rnisg.size() != data.global_level_count) {
         throw std::runtime_error("v82 patch5.2 call-2 retained rnisg is unavailable");
     }
     data.global_rnisg = data.call2_entry_global_rnisg;
-    recompute_global_bilevg_v82_patch52(data);
+    recompute_global_bilevg(data);
     data.global_workspace_initialized = true;
 }
 
@@ -12610,7 +11995,7 @@ void commit_call2_to_call3_global_state_v82_patch52(
 // Purpose: Implement fill standalone input in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-void fill_standalone_input_v67(
+void fill_standalone_input(
     StandaloneControllerDataV67& data,
     const xstar_thermal_state_v1& trial,
     xstar_fixed_state_input_v1& input) {
@@ -12720,7 +12105,7 @@ void fill_standalone_input_v67(
 // Purpose: Build call start workspace from the source-ordered inputs required by the next calculation stage.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-void prepare_call_start_workspace_v71(
+void prepare_call_start_workspace(
     StandaloneControllerDataV67& data,
     std::size_t call_index) {
     if (call_index < 1u) {
@@ -12771,7 +12156,7 @@ struct VectorAuditV82Patch4 {
 // Purpose: Implement audit vector in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-VectorAuditV82Patch4 audit_vector_v82_patch4(
+VectorAuditV82Patch4 audit_vector(
     const std::vector<double>& source,
     const std::vector<double>& native) {
     VectorAuditV82Patch4 out;
@@ -12806,7 +12191,7 @@ VectorAuditV82Patch4 audit_vector_v82_patch4(
             out.max_abs_delta = std::numeric_limits<double>::infinity();
             out.max_relative_delta = std::numeric_limits<double>::infinity();
         }
-        if (!scientific_close_v82(a, b)) {
+        if (!scientific_close(a, b)) {
             out.scientific = false;
             ++out.scientific_mismatch_count;
             if (out.first_scientific_mismatch_zero_based == std::numeric_limits<std::size_t>::max()) {
@@ -12839,7 +12224,7 @@ VectorAuditV82Patch4 audit_vector_v82_patch4(
 // Purpose: Implement binary64 vector hash in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-std::string binary64_vector_hash_v82_patch4(const std::vector<double>& values) {
+std::string binary64_vector_hash(const std::vector<double>& values) {
     std::uint64_t hash = 1469598103934665603ULL;
     for (double value : values) {
         std::uint64_t bits = 0;
@@ -12850,14 +12235,14 @@ std::string binary64_vector_hash_v82_patch4(const std::vector<double>& values) {
             hash *= 1099511628211ULL;
         }
     }
-    return hex64_v1712(hash);
+    return hex64(hash);
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Implement audit slot text in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-std::string audit_slot_text_v82_patch4(std::size_t slot) {
+std::string audit_slot_text(std::size_t slot) {
     return slot == std::numeric_limits<std::size_t>::max()
         ? std::string("NONE") : std::to_string(slot);
 }
@@ -12866,7 +12251,7 @@ std::string audit_slot_text_v82_patch4(std::size_t slot) {
 // Purpose: Implement program element z in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-int program_element_z_v82_patch4(const xstar_atdb_runtime::ProgramStorage& program, int element_index) {
+int program_element_z(const xstar_atdb_runtime::ProgramStorage& program, int element_index) {
     for (const auto& element : program.elements) {
         if (element.element_index == element_index) return element.element_z;
     }
@@ -12877,7 +12262,7 @@ int program_element_z_v82_patch4(const xstar_atdb_runtime::ProgramStorage& progr
 // Purpose: Compute program population index as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
 // Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
 // XSTAR-FUNCTION-COMMENT-END
-std::optional<std::size_t> program_population_index_v82_patch4(
+std::optional<std::size_t> program_population_index(
     const xstar_atdb_runtime::ProgramStorage& program,
     int element_index,
     int local_row) {
@@ -12892,7 +12277,7 @@ std::optional<std::size_t> program_population_index_v82_patch4(
 // Purpose: Implement audit call2 final opakab in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-void audit_call2_final_opakab_v82_patch4(
+void audit_call2_final_opakab(
     StandaloneControllerDataV67& data,
     const FixedDsecSnapshot& boundary,
     double call2_to_call3_delta_radius_cm) {
@@ -12982,7 +12367,7 @@ void audit_call2_final_opakab_v82_patch4(
                 if (record->data_type == 49) { ++missing_type49; classified = true; }
                 else if (record->data_type == 53) { ++missing_type53; classified = true; }
                 else if (record->data_type == 99) { ++missing_type99; classified = true; }
-                const int z = data.program ? program_element_z_v82_patch4(*data.program, record->element_index) : 0;
+                const int z = data.program ? program_element_z(*data.program, record->element_index) : 0;
                 zs.insert(z);
             }
             if (!classified) ++missing_other;
@@ -12998,9 +12383,9 @@ void audit_call2_final_opakab_v82_patch4(
                 double lower_population = 0.0;
                 double upper_population = 0.0;
                 if (record && data.program) {
-                    element_z = program_element_z_v82_patch4(*data.program, record->element_index);
-                    const auto lower = program_population_index_v82_patch4(*data.program, record->element_index, record->lower_row);
-                    const auto upper = program_population_index_v82_patch4(*data.program, record->element_index, record->upper_row);
+                    element_z = program_element_z(*data.program, record->element_index);
+                    const auto lower = program_population_index(*data.program, record->element_index, record->lower_row);
+                    const auto upper = program_population_index(*data.program, record->element_index, record->upper_row);
                     if (lower && *lower < boundary.populations.size()) lower_population = boundary.populations[*lower];
                     if (upper && *upper < boundary.populations.size()) upper_population = boundary.populations[*upper];
                 }
@@ -13029,7 +12414,7 @@ void audit_call2_final_opakab_v82_patch4(
               << "V048746255172582_CALL2_FINAL_OPAKAB_LAST_NONZERO_SLOT=" << last << "\n"
               << "V048746255172582_CALL2_FINAL_OPAKAB_MAX=" << maximum << "\n"
               << "V048746255172582_CALL2_FINAL_OPAKAB_HASH="
-              << binary64_vector_hash_v82_patch4(boundary.opakab) << "\n"
+              << binary64_vector_hash(boundary.opakab) << "\n"
               << "V048746255172582_CALL2_FINAL_OPAKAB_SOURCE_NONZERO_COUNT=" << source_nonzero << "\n"
               << "V048746255172582_CALL2_FINAL_OPAKAB_SOURCE_NONZERO_NATIVE_ZERO_COUNT=" << missing << "\n"
               << "V048746255172582_CALL2_FINAL_OPAKAB_NATIVE_NONZERO_SOURCE_ZERO_COUNT=" << spurious << "\n"
@@ -13056,14 +12441,14 @@ void audit_call2_final_opakab_v82_patch4(
 // Purpose: Implement print vector audit in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-void print_vector_audit_v82_patch4(const char* name, const VectorAuditV82Patch4& audit) {
+void print_vector_audit(const char* name, const VectorAuditV82Patch4& audit) {
     std::cout << "V048746255172582_CALL3_" << name << "_SOURCE_ROWS=" << audit.source_rows << "\n"
               << "V048746255172582_CALL3_" << name << "_NATIVE_ROWS=" << audit.native_rows << "\n"
               << "V048746255172582_CALL3_" << name << "_SHAPE=" << (audit.shape ? "ACCEPT" : "REJECT") << "\n"
               << "V048746255172582_CALL3_" << name << "_FIRST_MISMATCH_RUNTIME_SLOT="
-              << audit_slot_text_v82_patch4(audit.first_mismatch_zero_based) << "\n"
+              << audit_slot_text(audit.first_mismatch_zero_based) << "\n"
               << "V048746255172582_CALL3_" << name << "_FIRST_SCIENTIFIC_MISMATCH_RUNTIME_SLOT="
-              << audit_slot_text_v82_patch4(audit.first_scientific_mismatch_zero_based) << "\n"
+              << audit_slot_text(audit.first_scientific_mismatch_zero_based) << "\n"
               << "V048746255172582_CALL3_" << name << "_SCIENTIFIC_MISMATCH_COUNT="
               << audit.scientific_mismatch_count << "\n"
               << "V048746255172582_CALL3_" << name << "_MAX_ABS_DELTA=" << std::setprecision(17) << audit.max_abs_delta << "\n"
@@ -13124,7 +12509,7 @@ void v06481238_write_f64(const std::filesystem::path& path, const std::vector<do
 // Purpose: Write write from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-void write_v06481238_o7_state_transition(
+void write_o7_state_transition(
     const StandaloneControllerDataV67& data,
     const FixedDsecSnapshot& snapshot,
     const std::filesystem::path& root) {
@@ -13148,8 +12533,8 @@ void write_v06481238_o7_state_transition(
     csv << snapshot.sequence << ',' << snapshot.evaluation_index << ',' << std::setprecision(17)
         << snapshot.temperature_t4 * 1.0e4 << ',' << snapshot.electron_fraction_input << ','
         << snapshot.computed_electron_fraction << ',' << snapshot.hmctot << ',' << snapshot.charge_residual << ','
-        << full_x.size() << ',' << binary64_vector_hash_v82_patch4(full_x) << ','
-        << binary64_vector_hash_v82_patch4(full_rn) << ',' << binary64_vector_hash_v82_patch4(full_bile) << '\n';
+        << full_x.size() << ',' << binary64_vector_hash(full_x) << ','
+        << binary64_vector_hash(full_rn) << ',' << binary64_vector_hash(full_bile) << '\n';
     if (v06481238_selected_eval(snapshot.evaluation_index)) {
         const auto d = root / ("evaluation_" + [&](){ std::ostringstream o; o << std::setw(4) << std::setfill('0') << snapshot.evaluation_index; return o.str(); }() + "_state");
         v06481238_write_f64(d / "o_full_x.bin", full_x);
@@ -13162,7 +12547,7 @@ void write_v06481238_o7_state_transition(
 // Purpose: Compute audit sequence58 lte as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
 // Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
 // XSTAR-FUNCTION-COMMENT-END
-void audit_sequence58_lte_v82_patch53(
+void audit_sequence58_lte(
     StandaloneControllerDataV67& data,
     const FixedDsecSnapshot& snapshot) {
     if (!data.reference_diagnostics_enabled || snapshot.sequence != 58u) return;
@@ -13170,14 +12555,14 @@ void audit_sequence58_lte_v82_patch53(
         throw std::runtime_error("v82 patch5.3 sequence-58 source LTE workspace is not configured");
     }
     const auto& source = data.sequence58_source_workspace.global_rnisg;
-    const auto audit = audit_vector_v82_patch4(source, data.global_rnisg);
+    const auto audit = audit_vector(source, data.global_rnisg);
     data.sequence58_lte_scientific_accept = audit.scientific;
     const char* source_t4_env = std::getenv("XSTAR_V82_SEQUENCE58_SOURCE_T4");
     const char* source_xee_env = std::getenv("XSTAR_V82_SEQUENCE58_SOURCE_XEE");
     const double source_t4 = source_t4_env && *source_t4_env ? std::strtod(source_t4_env, nullptr) : snapshot.temperature_t4;
     const double source_xee = source_xee_env && *source_xee_env ? std::strtod(source_xee_env, nullptr) : snapshot.electron_fraction_input;
-    const bool lte_input_state = scientific_close_v82(source_t4, snapshot.temperature_t4) &&
-        scientific_close_v82(source_xee, snapshot.electron_fraction_input);
+    const bool lte_input_state = scientific_close(source_t4, snapshot.temperature_t4) &&
+        scientific_close(source_xee, snapshot.electron_fraction_input);
 
     const auto dir = data.sequence23_diagnostic_dir.parent_path() / "sequence58_final_call1_lte";
     std::filesystem::create_directories(dir);
@@ -13195,7 +12580,7 @@ void audit_sequence58_lte_v82_patch53(
             : std::numeric_limits<double>::infinity();
         csv << (i + 1u) << ',' << std::setprecision(17) << a << ',' << b << ','
             << (canonical_e7_equal(a, b) ? 1 : 0) << ','
-            << (scientific_close_v82(a, b) ? 1 : 0) << ','
+            << (scientific_close(a, b) ? 1 : 0) << ','
             << abs_delta << ',' << rel_delta << '\n';
     }
     csv.close();
@@ -13210,17 +12595,17 @@ void audit_sequence58_lte_v82_patch53(
               << "V048746255172582_SEQUENCE58_GLOBAL_RNISG_SOURCE_ROWS=" << audit.source_rows << "\n"
               << "V048746255172582_SEQUENCE58_GLOBAL_RNISG_NATIVE_ROWS=" << audit.native_rows << "\n"
               << "V048746255172582_SEQUENCE58_GLOBAL_RNISG_FIRST_MISMATCH_RUNTIME_SLOT="
-              << audit_slot_text_v82_patch4(audit.first_mismatch_zero_based) << "\n"
+              << audit_slot_text(audit.first_mismatch_zero_based) << "\n"
               << "V048746255172582_SEQUENCE58_GLOBAL_RNISG_FIRST_SCIENTIFIC_MISMATCH_RUNTIME_SLOT="
-              << audit_slot_text_v82_patch4(audit.first_scientific_mismatch_zero_based) << "\n"
+              << audit_slot_text(audit.first_scientific_mismatch_zero_based) << "\n"
               << "V048746255172582_SEQUENCE58_GLOBAL_RNISG_SCIENTIFIC_MISMATCH_COUNT="
               << audit.scientific_mismatch_count << "\n"
               << "V048746255172582_SEQUENCE58_GLOBAL_RNISG_MAX_ABS_DELTA=" << audit.max_abs_delta << "\n"
               << "V048746255172582_SEQUENCE58_GLOBAL_RNISG_MAX_RELATIVE_DELTA=" << audit.max_relative_delta << "\n"
               << "V048746255172582_SEQUENCE58_GLOBAL_RNISG_SOURCE_HASH="
-              << binary64_vector_hash_v82_patch4(source) << "\n"
+              << binary64_vector_hash(source) << "\n"
               << "V048746255172582_SEQUENCE58_GLOBAL_RNISG_NATIVE_HASH="
-              << binary64_vector_hash_v82_patch4(data.global_rnisg) << "\n"
+              << binary64_vector_hash(data.global_rnisg) << "\n"
               << "V048746255172582_SEQUENCE58_GLOBAL_RNISG_IEEE_E7=" << (audit.e7 ? "ACCEPT" : "REJECT") << "\n"
               << "V048746255172582_SEQUENCE58_GLOBAL_RNISG_SCIENTIFIC_STATE="
               << (audit.scientific ? "ACCEPT" : "REJECT") << "\n";
@@ -13230,18 +12615,18 @@ void audit_sequence58_lte_v82_patch53(
 // Purpose: Implement audit call3 boundary in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-void audit_call3_boundary_v82_patch4(StandaloneControllerDataV67& data) {
+void audit_call3_boundary(StandaloneControllerDataV67& data) {
     if (!data.reference_diagnostics_enabled) return;
     if (!data.sequence23_boundary_gate_configured) {
         throw std::runtime_error("v82 patch5.2 sequence-23 source workspace is not configured");
     }
     const auto& native = data.call_start_workspaces[2u];
     const auto& source = data.sequence23_source_workspace;
-    const auto tau = audit_vector_v82_patch4(source.continuum_tau_in, native.continuum_tau_in);
-    const auto bremsa = audit_vector_v82_patch4(source.bremsa, native.bremsa);
-    const auto xilevg = audit_vector_v82_patch4(source.global_xilevg, native.global_xilevg);
-    const auto bilevg = audit_vector_v82_patch4(source.global_bilevg, native.global_bilevg);
-    const auto rnisg = audit_vector_v82_patch4(source.global_rnisg, native.global_rnisg);
+    const auto tau = audit_vector(source.continuum_tau_in, native.continuum_tau_in);
+    const auto bremsa = audit_vector(source.bremsa, native.bremsa);
+    const auto xilevg = audit_vector(source.global_xilevg, native.global_xilevg);
+    const auto bilevg = audit_vector(source.global_bilevg, native.global_bilevg);
+    const auto rnisg = audit_vector(source.global_rnisg, native.global_rnisg);
     const bool tau_contract = tau.shape && tau.source_rows == 301301u && tau.native_rows == 301301u && tau.scientific;
     const bool committed_state_contract = data.sequence58_lte_scientific_accept &&
         bremsa.scientific && xilevg.scientific && bilevg.scientific && rnisg.scientific;
@@ -13272,12 +12657,12 @@ void audit_call3_boundary_v82_patch4(StandaloneControllerDataV67& data) {
             return 0;
         };
         for (std::size_t i = 0; i < n; ++i) {
-            if (scientific_close_v82(source.global_bilevg[i], native.global_bilevg[i])) continue;
+            if (scientific_close(source.global_bilevg[i], native.global_bilevg[i])) continue;
             ++bilevg_residual_rows;
-            const bool x_ok = scientific_close_v82(source.global_xilevg[i], native.global_xilevg[i]);
+            const bool x_ok = scientific_close(source.global_xilevg[i], native.global_xilevg[i]);
             const bool terminal = i < data.global_terminal_continuum_role.size() &&
                 data.global_terminal_continuum_role[i] != 0u;
-            const double floor = global_bilevg_floor_v82_patch52(data, i);
+            const double floor = global_bilevg_floor(data, i);
             const double native_den = native.global_rnisg[i] + floor;
             const double source_den = source.global_bilevg[i] != 0.0
                 ? source.global_xilevg[i] / source.global_bilevg[i]
@@ -13351,19 +12736,19 @@ void audit_call3_boundary_v82_patch4(StandaloneControllerDataV67& data) {
               << "V048746255172582_CALL3_CONTINUUM_TAU_IN_SOURCE_NONZERO_NATIVE_ZERO_COUNT=" << tau.source_nonzero_native_zero << "\n"
               << "V048746255172582_CALL3_CONTINUUM_TAU_IN_NATIVE_NONZERO_SOURCE_ZERO_COUNT=" << tau.native_nonzero_source_zero << "\n"
               << "V048746255172582_CALL3_CONTINUUM_TAU_IN_FIRST_MISMATCH_RUNTIME_SLOT="
-              << audit_slot_text_v82_patch4(tau.first_mismatch_zero_based) << "\n"
+              << audit_slot_text(tau.first_mismatch_zero_based) << "\n"
               << "V048746255172582_CALL3_CONTINUUM_TAU_IN_FIRST_SCIENTIFIC_MISMATCH_RUNTIME_SLOT="
-              << audit_slot_text_v82_patch4(tau.first_scientific_mismatch_zero_based) << "\n"
+              << audit_slot_text(tau.first_scientific_mismatch_zero_based) << "\n"
               << "V048746255172582_CALL3_CONTINUUM_TAU_IN_FIRST_SOURCE_NONZERO_NATIVE_ZERO_RUNTIME_SLOT="
-              << audit_slot_text_v82_patch4(tau.first_source_nonzero_native_zero_zero_based) << "\n"
+              << audit_slot_text(tau.first_source_nonzero_native_zero_zero_based) << "\n"
               << "V048746255172582_CALL3_CONTINUUM_TAU_IN_SCIENTIFIC_MISMATCH_COUNT=" << tau.scientific_mismatch_count << "\n"
               << "V048746255172582_CALL3_CONTINUUM_TAU_IN_MAX_ABS_DELTA=" << tau.max_abs_delta << "\n"
               << "V048746255172582_CALL3_CONTINUUM_TAU_IN_MAX_RELATIVE_DELTA=" << tau.max_relative_delta << "\n"
               << "V048746255172582_CALL3_CONTINUUM_TAU_IN_IEEE_E7=" << (tau.e7 ? "ACCEPT" : "REJECT") << "\n"
               << "V048746255172582_CALL3_CONTINUUM_TAU_IN_SCIENTIFIC_STATE=" << (tau.scientific ? "ACCEPT" : "REJECT") << "\n";
-    print_vector_audit_v82_patch4("BREMSA", bremsa);
-    print_vector_audit_v82_patch4("GLOBAL_XILEVG", xilevg);
-    print_vector_audit_v82_patch4("GLOBAL_BILEVG", bilevg);
+    print_vector_audit("BREMSA", bremsa);
+    print_vector_audit("GLOBAL_XILEVG", xilevg);
+    print_vector_audit("GLOBAL_BILEVG", bilevg);
     std::cout << "V048746255172582_CALL3_GLOBAL_BILEVG_RESIDUAL_AUDIT_ROWS=" << bilevg_residual_rows << "\n"
               << "V048746255172582_CALL3_GLOBAL_BILEVG_XILEVG_DOMINANT_ROWS=" << bilevg_xilevg_dominant_rows << "\n"
               << "V048746255172582_CALL3_GLOBAL_BILEVG_DENOMINATOR_DOMINANT_ROWS=" << bilevg_denominator_dominant_rows << "\n"
@@ -13372,15 +12757,15 @@ void audit_call3_boundary_v82_patch4(StandaloneControllerDataV67& data) {
               << "V048746255172582_CALL3_GLOBAL_BILEVG_RESIDUAL_AUDIT=WRITTEN\n"
               << "V048746255172582_CALL3_GLOBAL_XILEVG_RESIDUAL_ATTRIBUTION_ROWS=" << xilevg_attribution_rows << "\n"
               << "V048746255172582_CALL3_GLOBAL_XILEVG_RESIDUAL_ATTRIBUTION=WRITTEN\n";
-    print_vector_audit_v82_patch4("GLOBAL_RNISG", rnisg);
-    std::cout << "V048746255172582_CALL3_BREMSA_SOURCE_HASH=" << binary64_vector_hash_v82_patch4(source.bremsa) << "\n"
-              << "V048746255172582_CALL3_BREMSA_NATIVE_HASH=" << binary64_vector_hash_v82_patch4(native.bremsa) << "\n"
-              << "V048746255172582_CALL3_GLOBAL_XILEVG_SOURCE_HASH=" << binary64_vector_hash_v82_patch4(source.global_xilevg) << "\n"
-              << "V048746255172582_CALL3_GLOBAL_XILEVG_NATIVE_HASH=" << binary64_vector_hash_v82_patch4(native.global_xilevg) << "\n"
-              << "V048746255172582_CALL3_GLOBAL_BILEVG_SOURCE_HASH=" << binary64_vector_hash_v82_patch4(source.global_bilevg) << "\n"
-              << "V048746255172582_CALL3_GLOBAL_BILEVG_NATIVE_HASH=" << binary64_vector_hash_v82_patch4(native.global_bilevg) << "\n"
-              << "V048746255172582_CALL3_GLOBAL_RNISG_SOURCE_HASH=" << binary64_vector_hash_v82_patch4(source.global_rnisg) << "\n"
-              << "V048746255172582_CALL3_GLOBAL_RNISG_NATIVE_HASH=" << binary64_vector_hash_v82_patch4(native.global_rnisg) << "\n";
+    print_vector_audit("GLOBAL_RNISG", rnisg);
+    std::cout << "V048746255172582_CALL3_BREMSA_SOURCE_HASH=" << binary64_vector_hash(source.bremsa) << "\n"
+              << "V048746255172582_CALL3_BREMSA_NATIVE_HASH=" << binary64_vector_hash(native.bremsa) << "\n"
+              << "V048746255172582_CALL3_GLOBAL_XILEVG_SOURCE_HASH=" << binary64_vector_hash(source.global_xilevg) << "\n"
+              << "V048746255172582_CALL3_GLOBAL_XILEVG_NATIVE_HASH=" << binary64_vector_hash(native.global_xilevg) << "\n"
+              << "V048746255172582_CALL3_GLOBAL_BILEVG_SOURCE_HASH=" << binary64_vector_hash(source.global_bilevg) << "\n"
+              << "V048746255172582_CALL3_GLOBAL_BILEVG_NATIVE_HASH=" << binary64_vector_hash(native.global_bilevg) << "\n"
+              << "V048746255172582_CALL3_GLOBAL_RNISG_SOURCE_HASH=" << binary64_vector_hash(source.global_rnisg) << "\n"
+              << "V048746255172582_CALL3_GLOBAL_RNISG_NATIVE_HASH=" << binary64_vector_hash(native.global_rnisg) << "\n";
     std::cout << "V048746255172582_SEQUENCE23_CALL3_SEQUENCE58_LTE_PREREQUISITE="
               << (data.sequence58_lte_scientific_accept ? "ACCEPT" : "REJECT") << "\n"
               << "V048746255172582_SEQUENCE23_CALL3_TYPE99_DIRECT_OPAKAB_SOURCE_SEMANTICS=ACCEPT\n"
@@ -13404,7 +12789,7 @@ void audit_call3_boundary_v82_patch4(StandaloneControllerDataV67& data) {
 // Purpose: Write binary64 vector from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-void write_binary64_vector_v82_patch52(
+void write_binary64_vector(
     const std::filesystem::path& path,
     const std::vector<double>& values) {
     std::ofstream out(path, std::ios::binary);
@@ -13420,21 +12805,21 @@ void write_binary64_vector_v82_patch52(
 // Purpose: Write continuum transfer stage from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-void write_continuum_transfer_stage_v82_patch52(
+void write_continuum_transfer_stage(
     StandaloneControllerDataV67& data,
     const std::string& name,
     const std::vector<double>& values) {
     if (!data.reference_diagnostics_enabled || data.call_index != 2u || data.sequence23_diagnostic_dir.empty()) return;
     const auto dir = data.sequence23_diagnostic_dir / "continuum_transfer";
     std::filesystem::create_directories(dir);
-    write_binary64_vector_v82_patch52(dir / (name + ".bin"), values);
+    write_binary64_vector(dir / (name + ".bin"), values);
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Implement brcems from boundary in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-std::vector<double> brcems_from_boundary_v82_patch52(
+std::vector<double> brcems_from_boundary(
     const FixedDsecSnapshot& boundary,
     std::size_t bins) {
     std::vector<double> out(bins, 0.0);
@@ -13450,7 +12835,7 @@ std::vector<double> brcems_from_boundary_v82_patch52(
 // Purpose: Compute dense bremem source as a contribution to, or control step in, the local thermal-equilibrium iteration.
 // Reference context: XSTAR Manual s11.4.4 and s11.6; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-std::vector<double> dense_bremem_source_v82_patch56(
+std::vector<double> dense_bremem_source(
     const FixedDsecSnapshot& boundary,
     const std::vector<double>& energy_ev,
     double hydrogen_density_cm3) {
@@ -13477,7 +12862,7 @@ std::vector<double> dense_bremem_source_v82_patch56(
 // Purpose: Implement gsmooth2 source in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-void gsmooth2_source_v82_patch54(
+void gsmooth2_source(
     double vtherm_cm_s,
     const std::vector<double>& energy_ev,
     std::vector<double>& values) {
@@ -13556,7 +12941,7 @@ void gsmooth2_source_v82_patch54(
 // Purpose: Implement gsmooth source in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-void gsmooth_source_v82_patch54(
+void gsmooth_source(
     double temperature_t4,
     double turbulent_velocity_km_s,
     const std::vector<double>& energy_ev,
@@ -13573,14 +12958,14 @@ void gsmooth_source_v82_patch54(
     const double thermal = one_29e6 / std::sqrt(1.0 / temperature_t4);
     const double vtherm = std::sqrt(vt * vt + thermal * thermal);
 
-    gsmooth2_source_v82_patch54(vtherm, energy_ev, brcems);
+    gsmooth2_source(vtherm, energy_ev, brcems);
     std::vector<double> out(rccemis.begin(), rccemis.begin() + static_cast<std::ptrdiff_t>(n));
     std::vector<double> in(rccemis.begin() + static_cast<std::ptrdiff_t>(n), rccemis.end());
-    gsmooth2_source_v82_patch54(vtherm, energy_ev, out);
-    gsmooth2_source_v82_patch54(vtherm, energy_ev, in);
+    gsmooth2_source(vtherm, energy_ev, out);
+    gsmooth2_source(vtherm, energy_ev, in);
     std::copy(out.begin(), out.end(), rccemis.begin());
     std::copy(in.begin(), in.end(), rccemis.begin() + static_cast<std::ptrdiff_t>(n));
-    gsmooth2_source_v82_patch54(vtherm, energy_ev, opakc);
+    gsmooth2_source(vtherm, energy_ev, opakc);
 }
 
 
@@ -13603,7 +12988,7 @@ struct SourceStepResultV82Patch520111 {
 // Purpose: Implement source step in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-SourceStepResultV82Patch520111 source_step_v82_patch520111(
+SourceStepResultV82Patch520111 source_step(
     const StandaloneControllerDataV67& data,
     const std::vector<double>& post_gsmooth_opakc,
     double radius_cm,
@@ -13678,7 +13063,7 @@ SourceStepResultV82Patch520111 source_step_v82_patch520111(
 // Purpose: Compute advance source continuum radiation for the bound-free/photoionization/recombination-continuum path using the current radiation field and level populations.
 // Reference context: XSTAR Manual ss11.5, 11.6.1, 11.7; Kallman & Bautista (2001); ATDB ch12.
 // XSTAR-FUNCTION-COMMENT-END
-void advance_source_continuum_radiation_v82_patch52(
+void advance_source_continuum_radiation(
     StandaloneControllerDataV67& data,
     FixedDsecSnapshot& boundary,
     double delta_radius_cm,
@@ -13705,8 +13090,8 @@ void advance_source_continuum_radiation_v82_patch52(
     }
 
     const auto pre_bremsa = data.dsec_bremsa;
-    const auto sparse_reduced_brcems = brcems_from_boundary_v82_patch52(boundary, n);
-    auto brcems = dense_bremem_source_v82_patch56(
+    const auto sparse_reduced_brcems = brcems_from_boundary(boundary, n);
+    auto brcems = dense_bremem_source(
         boundary, data.energy, data.parameters->density_cm3);
     auto smoothed_opakc = boundary.opakc;
     auto smoothed_rccemis = boundary.rccemis;
@@ -13714,17 +13099,17 @@ void advance_source_continuum_radiation_v82_patch52(
     const auto zrems_before_heatt = zrems;
     const auto zremso_before = data.accumulated_zremso;
 
-    write_continuum_transfer_stage_v82_patch52(data, "00_pre_transfer_bremsa", pre_bremsa);
-    write_continuum_transfer_stage_v82_patch52(data, "00b_sparse_reduced_brcems", sparse_reduced_brcems);
-    write_continuum_transfer_stage_v82_patch52(data, "01_pre_gsmooth_brcems", brcems);
-    write_continuum_transfer_stage_v82_patch52(data, "02_pre_gsmooth_opakc", smoothed_opakc);
-    write_continuum_transfer_stage_v82_patch52(data, "03_pre_gsmooth_rccemis_out", std::vector<double>(smoothed_rccemis.begin(), smoothed_rccemis.begin() + static_cast<std::ptrdiff_t>(n)));
-    write_continuum_transfer_stage_v82_patch52(data, "04_pre_gsmooth_rccemis_in", std::vector<double>(smoothed_rccemis.begin() + static_cast<std::ptrdiff_t>(n), smoothed_rccemis.end()));
+    write_continuum_transfer_stage(data, "00_pre_transfer_bremsa", pre_bremsa);
+    write_continuum_transfer_stage(data, "00b_sparse_reduced_brcems", sparse_reduced_brcems);
+    write_continuum_transfer_stage(data, "01_pre_gsmooth_brcems", brcems);
+    write_continuum_transfer_stage(data, "02_pre_gsmooth_opakc", smoothed_opakc);
+    write_continuum_transfer_stage(data, "03_pre_gsmooth_rccemis_out", std::vector<double>(smoothed_rccemis.begin(), smoothed_rccemis.begin() + static_cast<std::ptrdiff_t>(n)));
+    write_continuum_transfer_stage(data, "04_pre_gsmooth_rccemis_in", std::vector<double>(smoothed_rccemis.begin() + static_cast<std::ptrdiff_t>(n), smoothed_rccemis.end()));
 
     const auto pre_gsmooth_brcems = brcems;
     const auto pre_gsmooth_opakc = smoothed_opakc;
     const auto pre_gsmooth_rccemis = smoothed_rccemis;
-    write_patch5201738_gsmooth_rccemis_edge(
+    write_gsmooth_rccemis_edge(
         boundary.sequence, boundary.call_index, boundary.evaluation_index,
         "pre_gsmooth", delta_radius_cm, data.energy, pre_gsmooth_rccemis);
 
@@ -13759,7 +13144,7 @@ void advance_source_continuum_radiation_v82_patch52(
     const double source_gsmooth_threshold = static_cast<double>(static_cast<float>(1.0e-34));
     const bool gsmooth_active = data.parameters->turbulent_velocity_km_s > source_gsmooth_threshold;
     if (gsmooth_active) {
-        gsmooth_source_v82_patch54(
+        gsmooth_source(
             boundary.temperature_t4, data.parameters->turbulent_velocity_km_s,
             data.energy, smoothed_opakc, smoothed_rccemis, brcems);
         const double one_e5 = static_cast<double>(static_cast<float>(1.0e5));
@@ -13767,10 +13152,10 @@ void advance_source_continuum_radiation_v82_patch52(
         const double vt = data.parameters->turbulent_velocity_km_s * one_e5;
         const double thermal = one_29e6 / std::sqrt(1.0 / boundary.temperature_t4);
         const double vtherm = std::sqrt(vt * vt + thermal * thermal);
-        gsmooth2_source_v82_patch54(vtherm, data.energy, bound_free_opakc_post);
-        gsmooth2_source_v82_patch54(vtherm, data.energy, free_free_opakc_post);
-        gsmooth2_source_v82_patch54(vtherm, data.energy, line_opakc_post);
-        gsmooth2_source_v82_patch54(vtherm, data.energy, thomson_opakc_post);
+        gsmooth2_source(vtherm, data.energy, bound_free_opakc_post);
+        gsmooth2_source(vtherm, data.energy, free_free_opakc_post);
+        gsmooth2_source(vtherm, data.energy, line_opakc_post);
+        gsmooth2_source(vtherm, data.energy, thomson_opakc_post);
     }
     // 0.6.48.11.6 attribution-only retention.  Preserve the exact additive
     // family decomposition already computed above at the accepted boundary so
@@ -13789,25 +13174,25 @@ void advance_source_continuum_radiation_v82_patch52(
     // state on the accepted boundary as well as passing it to the kernel.
     boundary.opakc = smoothed_opakc;
     boundary.rccemis = smoothed_rccemis;
-    write_patch5201738_gsmooth_rccemis_edge(
+    write_gsmooth_rccemis_edge(
         boundary.sequence, boundary.call_index, boundary.evaluation_index,
         "post_gsmooth", delta_radius_cm, data.energy, boundary.rccemis);
 
-    write_continuum_transfer_stage_v82_patch52(data, "05_post_gsmooth_brcems", brcems);
-    write_continuum_transfer_stage_v82_patch52(data, "06_post_gsmooth_opakc", boundary.opakc);
-    write_continuum_transfer_stage_v82_patch52(data, "07_post_gsmooth_rccemis_out", std::vector<double>(boundary.rccemis.begin(), boundary.rccemis.begin() + static_cast<std::ptrdiff_t>(n)));
-    write_continuum_transfer_stage_v82_patch52(data, "08_post_gsmooth_rccemis_in", std::vector<double>(boundary.rccemis.begin() + static_cast<std::ptrdiff_t>(n), boundary.rccemis.end()));
-    write_continuum_transfer_stage_v82_patch52(data, "09_opakcont_unsmoothed", boundary.opakcont);
-    write_continuum_transfer_stage_v82_patch52(data, "09a_bound_free_opakc_pre_gsmooth", bound_free_opakc_pre);
-    write_continuum_transfer_stage_v82_patch52(data, "09b_free_free_opakc_pre_gsmooth", free_free_opakc_pre);
-    write_continuum_transfer_stage_v82_patch52(data, "09c_line_opakc_pre_gsmooth", line_opakc_pre);
-    write_continuum_transfer_stage_v82_patch52(data, "09d_thomson_opakc_pre_gsmooth", thomson_opakc_pre);
-    write_continuum_transfer_stage_v82_patch52(data, "09e_bound_free_opakc_post_gsmooth", bound_free_opakc_post);
-    write_continuum_transfer_stage_v82_patch52(data, "09f_free_free_opakc_post_gsmooth", free_free_opakc_post);
-    write_continuum_transfer_stage_v82_patch52(data, "09g_line_opakc_post_gsmooth", line_opakc_post);
-    write_continuum_transfer_stage_v82_patch52(data, "09h_thomson_opakc_post_gsmooth", thomson_opakc_post);
-    write_continuum_transfer_stage_v82_patch52(data, "10_flinel", boundary.flinel);
-    write_continuum_transfer_stage_v82_patch52(data, "11_zremso_plane1", std::vector<double>(zremso_before.begin(), zremso_before.begin() + static_cast<std::ptrdiff_t>(n)));
+    write_continuum_transfer_stage(data, "05_post_gsmooth_brcems", brcems);
+    write_continuum_transfer_stage(data, "06_post_gsmooth_opakc", boundary.opakc);
+    write_continuum_transfer_stage(data, "07_post_gsmooth_rccemis_out", std::vector<double>(boundary.rccemis.begin(), boundary.rccemis.begin() + static_cast<std::ptrdiff_t>(n)));
+    write_continuum_transfer_stage(data, "08_post_gsmooth_rccemis_in", std::vector<double>(boundary.rccemis.begin() + static_cast<std::ptrdiff_t>(n), boundary.rccemis.end()));
+    write_continuum_transfer_stage(data, "09_opakcont_unsmoothed", boundary.opakcont);
+    write_continuum_transfer_stage(data, "09a_bound_free_opakc_pre_gsmooth", bound_free_opakc_pre);
+    write_continuum_transfer_stage(data, "09b_free_free_opakc_pre_gsmooth", free_free_opakc_pre);
+    write_continuum_transfer_stage(data, "09c_line_opakc_pre_gsmooth", line_opakc_pre);
+    write_continuum_transfer_stage(data, "09d_thomson_opakc_pre_gsmooth", thomson_opakc_pre);
+    write_continuum_transfer_stage(data, "09e_bound_free_opakc_post_gsmooth", bound_free_opakc_post);
+    write_continuum_transfer_stage(data, "09f_free_free_opakc_post_gsmooth", free_free_opakc_post);
+    write_continuum_transfer_stage(data, "09g_line_opakc_post_gsmooth", line_opakc_post);
+    write_continuum_transfer_stage(data, "09h_thomson_opakc_post_gsmooth", thomson_opakc_post);
+    write_continuum_transfer_stage(data, "10_flinel", boundary.flinel);
+    write_continuum_transfer_stage(data, "11_zremso_plane1", std::vector<double>(zremso_before.begin(), zremso_before.begin() + static_cast<std::ptrdiff_t>(n)));
 
     // Zero-width boundaries still execute source-order GSSMOOTH, but there is
     // no transport interval to accumulate in HEATT/STPCUT/TRNFRC.  Return only
@@ -13841,12 +13226,12 @@ void advance_source_continuum_radiation_v82_patch52(
         heatt_tmpc2[i] = tmpc2;
         heatt_plane1_delta[i] = -(tmph - source_four_pi_v82_patch53 * (tmpc1 + tmpc2)) * fac * delta_radius_cm * fpr2_v82_patch53;
     }
-    write_continuum_transfer_stage_v82_patch52(data, "12_heatt_optp2", heatt_optp2);
-    write_continuum_transfer_stage_v82_patch52(data, "13_heatt_fac", heatt_fac);
-    write_continuum_transfer_stage_v82_patch52(data, "14_heatt_tmph", heatt_tmph);
-    write_continuum_transfer_stage_v82_patch52(data, "15_heatt_tmpc1", heatt_tmpc1);
-    write_continuum_transfer_stage_v82_patch52(data, "16_heatt_tmpc2", heatt_tmpc2);
-    write_continuum_transfer_stage_v82_patch52(data, "17_heatt_plane1_delta", heatt_plane1_delta);
+    write_continuum_transfer_stage(data, "12_heatt_optp2", heatt_optp2);
+    write_continuum_transfer_stage(data, "13_heatt_fac", heatt_fac);
+    write_continuum_transfer_stage(data, "14_heatt_tmph", heatt_tmph);
+    write_continuum_transfer_stage(data, "15_heatt_tmpc1", heatt_tmpc1);
+    write_continuum_transfer_stage(data, "16_heatt_tmpc2", heatt_tmpc2);
+    write_continuum_transfer_stage(data, "17_heatt_plane1_delta", heatt_plane1_delta);
 
     xstar_heatt_workspace_v1 workspace{};
     xstar_heatt_workspace_init_v1(&workspace);
@@ -13897,7 +13282,7 @@ void advance_source_continuum_radiation_v82_patch52(
                   data.accumulated_zremso.begin() + static_cast<std::ptrdiff_t>(begin));
     }
     boundary.zrems = data.accumulated_zrems;
-    write_continuum_transfer_stage_v82_patch52(data, "18_post_heatt_zrems_plane1",
+    write_continuum_transfer_stage(data, "18_post_heatt_zrems_plane1",
         std::vector<double>(zrems.begin(), zrems.begin() + static_cast<std::ptrdiff_t>(n)));
 
     // Literal source order: heatt executes at the old radius, then xstar moves
@@ -13921,7 +13306,7 @@ void advance_source_continuum_radiation_v82_patch52(
             data.dsec_bremsa[i] = data.accumulated_zrems[i] / trnfrc_fpr2;
         }
     }
-    write_continuum_transfer_stage_v82_patch52(data, "19_post_trnfrc_bremsa", data.dsec_bremsa);
+    write_continuum_transfer_stage(data, "19_post_trnfrc_bremsa", data.dsec_bremsa);
     if (data.reference_trajectory_mode && data.call_index == 2u) {
         std::cout << std::setprecision(17)
                   << "V048746255172582_PATCH52011_TRNFRC_RADIUS_SCALE_CM="
@@ -13935,15 +13320,15 @@ void advance_source_continuum_radiation_v82_patch52(
         if (!data.sequence22_boundary_reference_configured) {
             throw std::runtime_error("v82 patch5.3 sequence-22 source workspace is not configured");
         }
-        const auto pre_audit = audit_vector_v82_patch4(data.sequence22_source_workspace.bremsa, pre_bremsa);
-        const auto post_audit = audit_vector_v82_patch4(data.sequence23_source_workspace.bremsa, data.dsec_bremsa);
+        const auto pre_audit = audit_vector(data.sequence22_source_workspace.bremsa, pre_bremsa);
+        const auto post_audit = audit_vector(data.sequence23_source_workspace.bremsa, data.dsec_bremsa);
         std::vector<double> source_post_heatt_zrems1(n, 0.0);
         for (std::size_t i = 0; i < n; ++i) {
             source_post_heatt_zrems1[i] = data.sequence23_source_workspace.bremsa[i] * trnfrc_fpr2;
         }
         const auto native_post_heatt_zrems1 = std::vector<double>(
             zrems.begin(), zrems.begin() + static_cast<std::ptrdiff_t>(n));
-        const auto heatt_output_audit = audit_vector_v82_patch4(
+        const auto heatt_output_audit = audit_vector(
             source_post_heatt_zrems1, native_post_heatt_zrems1);
 
         const auto transfer_dir = data.sequence23_diagnostic_dir / "continuum_transfer";
@@ -13962,8 +13347,8 @@ void advance_source_continuum_radiation_v82_patch52(
             component_sum_pre[k] = bound_free_opakc_pre[k] + free_free_opakc_pre[k] + line_opakc_pre[k] + thomson_opakc_pre[k];
             component_sum_post[k] = bound_free_opakc_post[k] + free_free_opakc_post[k] + line_opakc_post[k] + thomson_opakc_post[k];
         }
-        const auto component_pre_audit = audit_vector_v82_patch4(pre_gsmooth_opakc, component_sum_pre);
-        const auto component_post_audit = audit_vector_v82_patch4(boundary.opakc, component_sum_post);
+        const auto component_pre_audit = audit_vector(pre_gsmooth_opakc, component_sum_pre);
+        const auto component_post_audit = audit_vector(boundary.opakc, component_sum_post);
         std::ofstream opacity_attribution(transfer_dir / "call3_continuum_opacity_component_attribution.csv");
         if (!opacity_attribution) throw std::runtime_error("cannot create patch5.10 opacity component attribution");
         opacity_attribution << "runtime_slot,energy_ev,source_required_post_gsmooth_opacity,native_post_gsmooth_opacity,required_minus_native,bound_free_pre,bound_free_post,bound_free_required_if_others_fixed,bound_free_relative_correction,free_free_pre,free_free_post,free_free_required_if_others_fixed,free_free_relative_correction,line_pre,line_post,line_required_if_others_fixed,line_relative_correction,thomson_pre,thomson_post,thomson_required_if_others_fixed,thomson_relative_correction,smallest_relative_correction,owner\n";
@@ -13974,7 +13359,7 @@ void advance_source_continuum_radiation_v82_patch52(
             residual << "runtime_slot,energy_ev,source_pre_bremsa,native_pre_bremsa,source_post_heatt_zrems1,native_post_heatt_zrems1,post_heatt_abs_residual,pre_gsmooth_opakc,post_gsmooth_opakc,opakcont,pre_gsmooth_brcems,post_gsmooth_brcems,pre_gsmooth_rccemis_out,post_gsmooth_rccemis_out,pre_gsmooth_rccemis_in,post_gsmooth_rccemis_in,heatt_optp2,heatt_fac,heatt_tmph,heatt_tmpc1,heatt_tmpc2,native_effective_net,native_plane1_delta,source_required_plane1_delta,source_required_effective_net,source_required_tmph_if_native_emission,source_required_emission_sum_if_native_tmph\n";
             residual << std::setprecision(17);
             for (std::size_t i = 0; i < n; ++i) {
-                if (scientific_close_v82(source_post_heatt_zrems1[i], native_post_heatt_zrems1[i])) continue;
+                if (scientific_close(source_post_heatt_zrems1[i], native_post_heatt_zrems1[i])) continue;
                 if (continuum_first_residual == std::numeric_limits<std::size_t>::max()) continuum_first_residual = i;
                 ++continuum_residual_rows;
                 const double native_emission_sum = heatt_tmpc1[i] + heatt_tmpc2[i];
@@ -14053,7 +13438,7 @@ void advance_source_continuum_radiation_v82_patch52(
             }
             summary << name << ',' << values.size() << ',' << nz << ','
                     << std::setprecision(17) << max_abs << ','
-                    << binary64_vector_hash_v82_patch4(values) << '\n';
+                    << binary64_vector_hash(values) << '\n';
         };
         emit_summary("pre_bremsa", pre_bremsa);
         emit_summary("pre_gsmooth_brcems", pre_gsmooth_brcems);
@@ -14117,46 +13502,46 @@ void advance_source_continuum_radiation_v82_patch52(
                   << "V048746255172582_CALL2_OPAKCONT_ALL_GRID_THOMSON_BASELINE_ZERO="
                   << ((boundary.spectral_covering_fraction == 1.0 && source_thomson == 0.0 && opakcont_zero_bins > 0u) ? "ACCEPT" : "REJECT") << "\n"
                   << "V048746255172582_CALL2_GSMOOTH_ACTIVE=" << (gsmooth_active ? "YES" : "NO") << "\n"
-                  << "V048746255172582_CALL2_GSMOOTH_PRE_BRCEMS_HASH=" << binary64_vector_hash_v82_patch4(pre_gsmooth_brcems) << "\n"
-                  << "V048746255172582_CALL2_GSMOOTH_POST_BRCEMS_HASH=" << binary64_vector_hash_v82_patch4(brcems) << "\n"
-                  << "V048746255172582_CALL2_GSMOOTH_PRE_OPAKC_HASH=" << binary64_vector_hash_v82_patch4(pre_gsmooth_opakc) << "\n"
-                  << "V048746255172582_CALL2_GSMOOTH_POST_OPAKC_HASH=" << binary64_vector_hash_v82_patch4(boundary.opakc) << "\n"
-                  << "V048746255172582_CALL2_GSMOOTH_PRE_RCCEMIS_HASH=" << binary64_vector_hash_v82_patch4(pre_gsmooth_rccemis) << "\n"
-                  << "V048746255172582_CALL2_GSMOOTH_POST_RCCEMIS_HASH=" << binary64_vector_hash_v82_patch4(boundary.rccemis) << "\n"
+                  << "V048746255172582_CALL2_GSMOOTH_PRE_BRCEMS_HASH=" << binary64_vector_hash(pre_gsmooth_brcems) << "\n"
+                  << "V048746255172582_CALL2_GSMOOTH_POST_BRCEMS_HASH=" << binary64_vector_hash(brcems) << "\n"
+                  << "V048746255172582_CALL2_GSMOOTH_PRE_OPAKC_HASH=" << binary64_vector_hash(pre_gsmooth_opakc) << "\n"
+                  << "V048746255172582_CALL2_GSMOOTH_POST_OPAKC_HASH=" << binary64_vector_hash(boundary.opakc) << "\n"
+                  << "V048746255172582_CALL2_GSMOOTH_PRE_RCCEMIS_HASH=" << binary64_vector_hash(pre_gsmooth_rccemis) << "\n"
+                  << "V048746255172582_CALL2_GSMOOTH_POST_RCCEMIS_HASH=" << binary64_vector_hash(boundary.rccemis) << "\n"
                   << "V048746255172582_CALL2_GSMOOTH_SOURCE_SEMANTICS=" << (gsmooth_active ? "ACCEPT" : "NOT_ACTIVE") << "\n"
                   << "V048746255172582_CALL2_OPAKCONT_NONZERO_COUNT=" << opakcont_nonzero << "\n"
                   << "V048746255172582_CALL2_OPAKCONT_SOURCE_SEPARATION=ACCEPT\n"
-                  << "V048746255172582_CALL3_CONTINUUM_TRANSFER_PRE_BREMSA_HASH=" << binary64_vector_hash_v82_patch4(pre_bremsa) << "\n"
-                  << "V048746255172582_CALL3_CONTINUUM_TRANSFER_BRCEMS_HASH=" << binary64_vector_hash_v82_patch4(brcems) << "\n"
-                  << "V048746255172582_CALL3_CONTINUUM_TRANSFER_OPAKC_HASH=" << binary64_vector_hash_v82_patch4(boundary.opakc) << "\n"
-                  << "V048746255172582_CALL3_CONTINUUM_TRANSFER_OPAKCONT_HASH=" << binary64_vector_hash_v82_patch4(boundary.opakcont) << "\n"
+                  << "V048746255172582_CALL3_CONTINUUM_TRANSFER_PRE_BREMSA_HASH=" << binary64_vector_hash(pre_bremsa) << "\n"
+                  << "V048746255172582_CALL3_CONTINUUM_TRANSFER_BRCEMS_HASH=" << binary64_vector_hash(brcems) << "\n"
+                  << "V048746255172582_CALL3_CONTINUUM_TRANSFER_OPAKC_HASH=" << binary64_vector_hash(boundary.opakc) << "\n"
+                  << "V048746255172582_CALL3_CONTINUUM_TRANSFER_OPAKCONT_HASH=" << binary64_vector_hash(boundary.opakcont) << "\n"
                   << "V048746255172582_CALL3_CONTINUUM_TRANSFER_POST_HEATT_ZREMS1_HASH="
-                  << binary64_vector_hash_v82_patch4(std::vector<double>(zrems.begin(), zrems.begin() + static_cast<std::ptrdiff_t>(n))) << "\n"
-                  << "V048746255172582_CALL3_CONTINUUM_TRANSFER_POST_TRNFRC_BREMSA_HASH=" << binary64_vector_hash_v82_patch4(data.dsec_bremsa) << "\n"
-                  << "V048746255172582_CALL2_HEATT_INPUT_PRE_BREMSA_SOURCE_HASH=" << binary64_vector_hash_v82_patch4(data.sequence22_source_workspace.bremsa) << "\n"
-                  << "V048746255172582_CALL2_HEATT_INPUT_PRE_BREMSA_NATIVE_HASH=" << binary64_vector_hash_v82_patch4(pre_bremsa) << "\n"
+                  << binary64_vector_hash(std::vector<double>(zrems.begin(), zrems.begin() + static_cast<std::ptrdiff_t>(n))) << "\n"
+                  << "V048746255172582_CALL3_CONTINUUM_TRANSFER_POST_TRNFRC_BREMSA_HASH=" << binary64_vector_hash(data.dsec_bremsa) << "\n"
+                  << "V048746255172582_CALL2_HEATT_INPUT_PRE_BREMSA_SOURCE_HASH=" << binary64_vector_hash(data.sequence22_source_workspace.bremsa) << "\n"
+                  << "V048746255172582_CALL2_HEATT_INPUT_PRE_BREMSA_NATIVE_HASH=" << binary64_vector_hash(pre_bremsa) << "\n"
                   << "V048746255172582_CALL2_HEATT_INPUT_PRE_BREMSA_FIRST_SCIENTIFIC_MISMATCH_RUNTIME_SLOT="
-                  << audit_slot_text_v82_patch4(pre_audit.first_scientific_mismatch_zero_based) << "\n"
+                  << audit_slot_text(pre_audit.first_scientific_mismatch_zero_based) << "\n"
                   << "V048746255172582_CALL2_HEATT_INPUT_PRE_BREMSA_SCIENTIFIC_MISMATCH_COUNT=" << pre_audit.scientific_mismatch_count << "\n"
                   << "V048746255172582_CALL2_HEATT_INPUT_PRE_BREMSA_SCIENTIFIC_STATE=" << (pre_audit.scientific ? "ACCEPT" : "REJECT") << "\n"
                   << "V048746255172582_CALL2_POST_HEATT_ZREMS1_FIRST_SCIENTIFIC_MISMATCH_RUNTIME_SLOT="
-                  << audit_slot_text_v82_patch4(heatt_output_audit.first_scientific_mismatch_zero_based) << "\n"
+                  << audit_slot_text(heatt_output_audit.first_scientific_mismatch_zero_based) << "\n"
                   << "V048746255172582_CALL2_POST_HEATT_ZREMS1_SCIENTIFIC_MISMATCH_COUNT=" << heatt_output_audit.scientific_mismatch_count << "\n"
                   << "V048746255172582_CALL2_POST_HEATT_ZREMS1_MAX_ABS_DELTA=" << heatt_output_audit.max_abs_delta << "\n"
                   << "V048746255172582_CALL2_POST_HEATT_ZREMS1_MAX_RELATIVE_DELTA=" << heatt_output_audit.max_relative_delta << "\n"
                   << "V048746255172582_CALL2_POST_HEATT_ZREMS1_SCIENTIFIC_STATE=" << (heatt_output_audit.scientific ? "ACCEPT" : "REJECT") << "\n"
                   << "V048746255172582_CALL3_CONTINUUM_TRANSFER_PRE_BREMSA_FIRST_SCIENTIFIC_MISMATCH_RUNTIME_SLOT="
-                  << audit_slot_text_v82_patch4(pre_audit.first_scientific_mismatch_zero_based) << "\n"
+                  << audit_slot_text(pre_audit.first_scientific_mismatch_zero_based) << "\n"
                   << "V048746255172582_CALL3_CONTINUUM_TRANSFER_PRE_BREMSA_SCIENTIFIC_MISMATCH_COUNT=" << pre_audit.scientific_mismatch_count << "\n"
                   << "V048746255172582_CALL3_CONTINUUM_TRANSFER_POST_TRNFRC_FIRST_SCIENTIFIC_MISMATCH_RUNTIME_SLOT="
-                  << audit_slot_text_v82_patch4(post_audit.first_scientific_mismatch_zero_based) << "\n"
+                  << audit_slot_text(post_audit.first_scientific_mismatch_zero_based) << "\n"
                   << "V048746255172582_CALL3_CONTINUUM_TRANSFER_POST_TRNFRC_SCIENTIFIC_MISMATCH_COUNT=" << post_audit.scientific_mismatch_count << "\n"
                   << "V048746255172582_CALL3_CONTINUUM_TRANSFER_POST_TRNFRC_MAX_ABS_DELTA=" << post_audit.max_abs_delta << "\n"
                   << "V048746255172582_CALL3_CONTINUUM_TRANSFER_POST_TRNFRC_MAX_RELATIVE_DELTA=" << post_audit.max_relative_delta << "\n"
-                  << "V048746255172582_CALL2_HEATT_INPUT_BRCEMS_HASH=" << binary64_vector_hash_v82_patch4(brcems) << "\n"
-                  << "V048746255172582_CALL2_HEATT_INPUT_OPAKC_HASH=" << binary64_vector_hash_v82_patch4(boundary.opakc) << "\n"
-                  << "V048746255172582_CALL2_HEATT_INPUT_OPAKCONT_HASH=" << binary64_vector_hash_v82_patch4(boundary.opakcont) << "\n"
-                  << "V048746255172582_CALL2_HEATT_INPUT_FLINEL_HASH=" << binary64_vector_hash_v82_patch4(boundary.flinel) << "\n"
+                  << "V048746255172582_CALL2_HEATT_INPUT_BRCEMS_HASH=" << binary64_vector_hash(brcems) << "\n"
+                  << "V048746255172582_CALL2_HEATT_INPUT_OPAKC_HASH=" << binary64_vector_hash(boundary.opakc) << "\n"
+                  << "V048746255172582_CALL2_HEATT_INPUT_OPAKCONT_HASH=" << binary64_vector_hash(boundary.opakcont) << "\n"
+                  << "V048746255172582_CALL2_HEATT_INPUT_FLINEL_HASH=" << binary64_vector_hash(boundary.flinel) << "\n"
                   << "V048746255172582_CALL2_OPAKC_COMPONENT_SUM_PRE_GSMOOTH_SCIENTIFIC_MISMATCH_COUNT=" << component_pre_audit.scientific_mismatch_count << "\n"
                   << "V048746255172582_CALL2_OPAKC_COMPONENT_SUM_PRE_GSMOOTH_SCIENTIFIC_STATE=" << (component_pre_audit.scientific ? "ACCEPT" : "REJECT") << "\n"
                   << "V048746255172582_CALL2_OPAKC_COMPONENT_SUM_POST_GSMOOTH_SCIENTIFIC_MISMATCH_COUNT=" << component_post_audit.scientific_mismatch_count << "\n"
@@ -14170,12 +13555,12 @@ void advance_source_continuum_radiation_v82_patch52(
                   << "V048746255172582_CALL3_CONTINUUM_OPACITY_FIRST_OWNER=" << opacity_first_owner << "\n"
                   << "V048746255172582_CALL3_CONTINUUM_OPACITY_COMPONENT_ATTRIBUTION=WRITTEN\n"
                   << "V048746255172582_CALL3_CONTINUUM_RESIDUAL_FIRST_RUNTIME_SLOT="
-                  << audit_slot_text_v82_patch4(continuum_first_residual) << "\n"
+                  << audit_slot_text(continuum_first_residual) << "\n"
                   << "V048746255172582_CALL3_CONTINUUM_RESIDUAL_DECOMPOSITION_ROWS=" << continuum_residual_rows << "\n"
                   << "V048746255172582_CALL3_CONTINUUM_RESIDUAL_DECOMPOSITION=WRITTEN\n"
                   << "V048746255172582_CALL2_HEATT_INPUT_DECOMPOSITION=WRITTEN\n"
                   << "V048746255172582_CALL3_CONTINUUM_TRANSFER_DECOMPOSITION=WRITTEN\n";
-        write_call3_opacity_producer_decomposition_v82_patch511(data, transfer_dir);
+        write_call3_opacity_producer_decomposition(data, transfer_dir);
     }
 }
 
@@ -14194,7 +13579,7 @@ void advance_source_continuum_radiation_v82_patch52(
 // Purpose: Write write from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-void write_v0648123353_step_limiter_probe(
+void write_step_limiter_probe(
     const StandaloneControllerDataV67& data,
     const FixedDsecSnapshot& boundary,
     const SourceStepResultV82Patch520111& step_result) {
@@ -14319,7 +13704,7 @@ void write_v0648123353_step_limiter_probe(
 // Purpose: Write write from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-void write_v0648123352_transport_commit_probe(
+void write_transport_commit_probe(
     const StandaloneControllerDataV67& data,
     const FixedDsecSnapshot& local_boundary,
     double delta_radius_cm,
@@ -14386,7 +13771,7 @@ void write_v0648123352_transport_commit_probe(
 // Purpose: Write write from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-void write_v0648123431111_ca13_lifetime_probe(
+void write_ca13_lifetime_probe(
     const StandaloneControllerDataV67& data,
     const FixedDsecSnapshot& local_boundary,
     double delta_radius_cm,
@@ -14452,7 +13837,7 @@ void write_v0648123431111_ca13_lifetime_probe(
         lower_row = program_record->lower_row;
         upper_row = program_record->upper_row;
         element_index = program_record->element_index;
-        if (data.program) element_z = program_element_z_v82_patch4(*data.program, element_index);
+        if (data.program) element_z = program_element_z(*data.program, element_index);
     } else if (record_diag) {
         source_position = record_diag->source_position;
         data_type = record_diag->data_type;
@@ -14466,8 +13851,8 @@ void write_v0648123431111_ca13_lifetime_probe(
     double lower_population = 0.0;
     double upper_population = 0.0;
     if (data.program && element_index > 0) {
-        const auto lower = program_population_index_v82_patch4(*data.program, element_index, lower_row);
-        const auto upper = program_population_index_v82_patch4(*data.program, element_index, upper_row);
+        const auto lower = program_population_index(*data.program, element_index, lower_row);
+        const auto upper = program_population_index(*data.program, element_index, upper_row);
         if (lower && *lower < local_boundary.populations.size()) lower_population = local_boundary.populations[*lower];
         if (upper && *upper < local_boundary.populations.size()) upper_population = local_boundary.populations[*upper];
     }
@@ -14551,7 +13936,7 @@ void write_v0648123431111_ca13_lifetime_probe(
 // Purpose: Implement advance atomic luminosities in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-void advance_atomic_luminosities_v82_patch520145(
+void advance_atomic_luminosities(
     StandaloneControllerDataV67& data,
     FixedDsecSnapshot& local_boundary,
     double delta_radius_cm,
@@ -14614,7 +13999,7 @@ void advance_atomic_luminosities_v82_patch520145(
 // Purpose: Implement retain pre stpcut cumulative state in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-void retain_pre_stpcut_cumulative_state_v82_patch520145(
+void retain_pre_stpcut_cumulative_state(
     StandaloneControllerDataV67& data,
     FixedDsecSnapshot& local_boundary) {
     const std::size_t line_stride = local_boundary.oplin.size();
@@ -14683,7 +14068,7 @@ void retain_pre_stpcut_cumulative_state_v82_patch520145(
 // Purpose: Implement advance stpcut depths in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-void advance_stpcut_depths_v82_patch520145(
+void advance_stpcut_depths(
     StandaloneControllerDataV67& data,
     FixedDsecSnapshot& local_boundary,
     double delta_radius_cm,
@@ -14742,7 +14127,7 @@ void advance_stpcut_depths_v82_patch520145(
         data.grid_tau_in[i] += opakc * delta_radius_cm;
         data.grid_cont_tau_in[i] += opakcont * delta_radius_cm;
     }
-    retain_pre_stpcut_cumulative_state_v82_patch520145(data, local_boundary);
+    retain_pre_stpcut_cumulative_state(data, local_boundary);
 
     std::cout << std::setprecision(17)
               << "V048746255172582_PATCH52011_TRANSPORT_INTERVAL="
@@ -14774,27 +14159,10 @@ void advance_stpcut_depths_v82_patch520145(
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Implement advance consecutive transport in the standalone controller/front-end workflow without duplicating the scientific kernels.
-// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
-// XSTAR-FUNCTION-COMMENT-END
-[[maybe_unused]] void advance_consecutive_transport_v71(
-    StandaloneControllerDataV67& data,
-    FixedDsecSnapshot& local_boundary,
-    double delta_radius_cm,
-    double radius_cm) {
-    if (!(delta_radius_cm > 0.0) || !std::isfinite(delta_radius_cm)) return;
-    advance_source_continuum_radiation_v82_patch52(data, local_boundary, delta_radius_cm, radius_cm);
-    advance_atomic_luminosities_v82_patch520145(data, local_boundary, delta_radius_cm, radius_cm);
-    advance_stpcut_depths_v82_patch520145(
-        data, local_boundary, delta_radius_cm,
-        data.parameters ? data.parameters->density_cm3 : 0.0);
-}
-
-// XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Build iteration snapshot from the source-ordered inputs required by the next calculation stage.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-FixedDsecSnapshot make_iteration_snapshot_v67(
+FixedDsecSnapshot make_iteration_snapshot(
     StandaloneControllerDataV67& data,
     const xstar_thermal_state_v1& trial) {
     FixedDsecSnapshot snapshot;
@@ -14834,7 +14202,7 @@ FixedDsecSnapshot make_iteration_snapshot_v67(
 // Purpose: Compute attach native thermal components as a contribution to, or control step in, the local thermal-equilibrium iteration.
 // Reference context: XSTAR Manual s11.4.4 and s11.6; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-void attach_native_thermal_components_v70(
+void attach_native_thermal_components(
     xstar_fixed_state_context* context,
     FixedDsecSnapshot& snapshot) {
     xstar_fixed_state_thermal_components_v1 components{};
@@ -14868,7 +14236,7 @@ void attach_native_thermal_components_v70(
 // Purpose: Implement attach native product diagnostics in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-void attach_native_product_diagnostics_v70(
+void attach_native_product_diagnostics(
     xstar_fixed_state_context* context,
     FixedDsecSnapshot& snapshot) {
     if (!context) throw std::runtime_error("native product-diagnostic context is null");
@@ -14987,7 +14355,7 @@ void attach_native_product_diagnostics_v70(
 // Purpose: Compute fill continuum shape for the bound-free/photoionization/recombination-continuum path using the current radiation field and level populations.
 // Reference context: XSTAR Manual ss11.5, 11.6.1, 11.7; Kallman & Bautista (2001); ATDB ch12.
 // XSTAR-FUNCTION-COMMENT-END
-void fill_continuum_shape_v67(
+void fill_continuum_shape(
     FixedDsecSnapshot& snapshot,
     const xstar_fixed_state_input_v1& input,
     const std::vector<double>& energy) {
@@ -15009,7 +14377,7 @@ void fill_continuum_shape_v67(
 // Purpose: Implement native snapshot scientific valid in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-bool native_snapshot_scientific_valid_v82_patch52017(
+bool native_snapshot_scientific_valid(
     const FixedDsecSnapshot& snapshot,
     std::string& reason) {
     auto finite = [](double v) { return std::isfinite(v); };
@@ -15039,7 +14407,7 @@ bool native_snapshot_scientific_valid_v82_patch52017(
 // Purpose: Implement vector finite nonnegative in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-bool vector_finite_nonnegative_v82_patch52017(const std::vector<double>& values) {
+bool vector_finite_nonnegative(const std::vector<double>& values) {
     return std::all_of(values.begin(), values.end(), [](double v) {
         return std::isfinite(v) && v >= 0.0;
     });
@@ -15049,7 +14417,7 @@ bool vector_finite_nonnegative_v82_patch52017(const std::vector<double>& values)
 // Purpose: Implement gate sequence23 native committed state in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-void gate_sequence23_native_committed_state_v82_patch52017(StandaloneControllerDataV67& data) {
+void gate_sequence23_native_committed_state(StandaloneControllerDataV67& data) {
     if (!data.reference_trajectory_mode) return;
     if (data.call_index != 3u || data.current_sequence != 59u ||
         data.physical_transport_intervals_completed != 1u) {
@@ -15070,8 +14438,8 @@ void gate_sequence23_native_committed_state_v82_patch52017(StandaloneControllerD
         w.global_xilevg == data.global_xilevg &&
         w.global_bilevg == data.global_bilevg &&
         w.global_rnisg == data.global_rnisg;
-    const bool finite_tau = vector_finite_nonnegative_v82_patch52017(w.continuum_tau_in) &&
-        vector_finite_nonnegative_v82_patch52017(w.continuum_tau_out);
+    const bool finite_tau = vector_finite_nonnegative(w.continuum_tau_in) &&
+        vector_finite_nonnegative(w.continuum_tau_out);
     if (!shapes || !identity || !finite_tau) {
         throw std::runtime_error("5.20.17 sequence23 native committed-state continuity gate rejected");
     }
@@ -15087,7 +14455,7 @@ void gate_sequence23_native_committed_state_v82_patch52017(StandaloneControllerD
 // Purpose: Write write from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-void write_v064812324_population_state(
+void write_population_state(
     const StandaloneControllerDataV67& data,
     const std::string& tag,
     const std::vector<double>& values,
@@ -15117,7 +14485,7 @@ void write_v064812324_population_state(
 // Purpose: Write write from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-void write_v064812324_fixed_input_capture(
+void write_fixed_input_capture(
     const StandaloneControllerDataV67& data,
     const xstar_fixed_state_input_v1& input,
     std::uint64_t source_sequence,
@@ -15174,7 +14542,7 @@ void write_v064812324_fixed_input_capture(
 // Purpose: Write write from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-void write_v0648123350_fixed_input_capture(
+void write_postsolve_fixed_input_capture(
     const StandaloneControllerDataV67& data,
     const xstar_fixed_state_input_v1& input,
     const FixedDsecSnapshot& snapshot) {
@@ -15252,7 +14620,7 @@ bool v0648123350_full_target(const FixedDsecSnapshot& snapshot) {
 // Purpose: Write write from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-void write_v0648123350_postsolve_attribution(
+void write_postsolve_attribution(
     StandaloneControllerDataV67& data, const FixedDsecSnapshot& snapshot) {
     const char* root_text = std::getenv("XSTAR_V0648123350_ATTRIBUTION_DIR");
     if (!root_text || !*root_text) return;
@@ -15314,9 +14682,9 @@ void write_v0648123350_postsolve_attribution(
             for (double x : r.ans) owner << ',' << x;
             owner << ',' << ro << ',' << ri << ',' << eo << ',' << ei << ',' << ol << ',' << co << ',' << ci << ',' << ca << ',' << oa << '\n';
         }
-        write_binary64_vector_v82_patch52(full / "cpp_rccemis.bin", snapshot.rccemis);
-        write_binary64_vector_v82_patch52(full / "cpp_rcem.bin", snapshot.rcem);
-        write_binary64_vector_v82_patch52(full / "cpp_cemab.bin", snapshot.cemab);
+        write_binary64_vector(full / "cpp_rccemis.bin", snapshot.rccemis);
+        write_binary64_vector(full / "cpp_rcem.bin", snapshot.rcem);
+        write_binary64_vector(full / "cpp_cemab.bin", snapshot.cemab);
         std::ofstream owner_manifest(full / "cpp_owner_manifest.csv");
         owner_manifest << "key,value\n"
                        << "schema,xstar-tools-v0648123351-owner-v2\n"
@@ -15334,7 +14702,7 @@ void write_v0648123350_postsolve_attribution(
 // Purpose: Implement standalone iteration evaluator in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-int standalone_iteration_evaluator_v67(
+int standalone_iteration_evaluator(
     void* user_data,
     const xstar_thermal_state_v1* trial,
     xstar_thermal_evaluation_v1* evaluation,
@@ -15347,7 +14715,7 @@ int standalone_iteration_evaluator_v67(
     }
     try {
         const auto evaluation_started_v70 = std::chrono::steady_clock::now();
-        FixedDsecSnapshot snapshot = make_iteration_snapshot_v67(*data, *trial);
+        FixedDsecSnapshot snapshot = make_iteration_snapshot(*data, *trial);
         if (std::getenv("XSTAR_V72_PROBE_PROGRESS")) {
             std::cerr << "V048746255172582_EVALUATION_BEGIN=" << snapshot.sequence
                       << " CALL=" << snapshot.call_index
@@ -15356,7 +14724,7 @@ int standalone_iteration_evaluator_v67(
                       << " XEE=" << snapshot.electron_fraction_input << "\n" << std::flush;
         }
         xstar_fixed_state_input_v1 input{};
-        fill_standalone_input_v67(*data, *trial, input);
+        fill_standalone_input(*data, *trial, input);
         if (data->reference_diagnostics_enabled && snapshot.call_index == 1u && snapshot.sequence >= 1u && snapshot.sequence <= 20u &&
             input.global_xilevg && input.global_level_count > 0u) {
             data->call1_current_input_global_xilevg.assign(input.global_xilevg, input.global_xilevg + input.global_level_count);
@@ -15366,7 +14734,7 @@ int standalone_iteration_evaluator_v67(
         snapshot.spectral_covering_fraction =
             (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_DSEC_COVERING_FRACTION) != 0u
                 ? input.dsec_covering_fraction : input.covering_fraction;
-        fill_continuum_shape_v67(snapshot, input, data->energy);
+        fill_continuum_shape(snapshot, input, data->energy);
         // v0.6.48.9.4.1: the accepted-boundary workspace cannot be rebuilt
         // from an ordinary deferred DSEC snapshot because calc_emis_all's
         // selected bound-free/RRC replay and writer-facing line-emission
@@ -15395,12 +14763,12 @@ int standalone_iteration_evaluator_v67(
         if (!v0648941_terminal_reference_dsec && !v0648123350_target_projection) {
             input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_DEFER_PRODUCT_PROJECTION;
         }
-        write_v0648123350_fixed_input_capture(*data, input, snapshot);
+        write_postsolve_fixed_input_capture(*data, input, snapshot);
         if (snapshot.call_index == 1u && snapshot.evaluation_index == 1u) {
-            write_v064812324_fixed_input_capture(*data, input, snapshot.sequence, "fixed_call1_eval1");
+            write_fixed_input_capture(*data, input, snapshot.sequence, "fixed_call1_eval1");
             if (input.global_xilevg && input.global_level_count > 0u) {
                 std::vector<double> eval1_input(input.global_xilevg, input.global_xilevg + input.global_level_count);
-                write_v064812324_population_state(*data, "call1_eval1_input_global_xilevg",
+                write_population_state(*data, "call1_eval1_input_global_xilevg",
                     eval1_input, snapshot.sequence, snapshot.evaluation_index, "dsec_input");
             }
         }
@@ -15482,12 +14850,12 @@ int standalone_iteration_evaluator_v67(
             return rc;
         }
         snapshot.populations.resize(output.populations_count);
-        capture_source_ion_stage_fractions_v064812316(
+        capture_source_ion_stage_fractions(
             data->fixed_context, snapshot.source_ion_stage_fractions);
-        capture_source_detail_publication_state_v064812318(
+        capture_source_detail_publication_state(
             data->fixed_context, snapshot.source_detail_pre_mapback_populations,
             snapshot.source_detail_active_windows);
-        snapshot.source_detail_global_xilevg = source_detail_global_projection_v064812318(
+        snapshot.source_detail_global_xilevg = source_detail_global_projection(
             *data, snapshot.source_detail_pre_mapback_populations, snapshot.source_detail_active_windows);
         if (v0648123350_target_projection) {
             snapshot.rcem.resize(source.rcem_count); snapshot.oplin.resize(source.oplin_count);
@@ -15497,7 +14865,7 @@ int standalone_iteration_evaluator_v67(
             snapshot.opakcont.resize(source.opakcont_count); snapshot.fline.resize(source.fline_count);
             snapshot.flinel.resize(source.flinel_count); snapshot.line_profile_workspace.resize(source.line_profile_workspace_count);
         }
-        write_v0648123350_postsolve_attribution(*data, snapshot);
+        write_postsolve_attribution(*data, snapshot);
         snapshot.lte_populations.resize(source.lte_populations_count);
         snapshot.spectrum.resize(output.spectrum_count);
         snapshot.opacity.resize(output.opacity_count);
@@ -15526,9 +14894,9 @@ int standalone_iteration_evaluator_v67(
         if (const char* parity_dir_v0648122 = std::getenv("XSTAR_ALL_ELEMENT_FIXED_PARITY_DIR")) {
             if (*parity_dir_v0648122) {
                 try {
-                    const std::filesystem::path parity_root_v0648122(parity_dir_v0648122);
-                    std::filesystem::create_directories(parity_root_v0648122);
-                    const auto parity_csv_v0648122 = parity_root_v0648122 / "cpp_all_element_fixed_state.csv";
+                    const std::filesystem::path parity_root(parity_dir_v0648122);
+                    std::filesystem::create_directories(parity_root);
+                    const auto parity_csv_v0648122 = parity_root / "cpp_all_element_fixed_state.csv";
                     std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> parity_message_v0648122{};
                     const int parity_rc_v0648122 = xstar_fixed_state_write_last_element_fixed_state_v0648121(
                         data->fixed_context, parity_csv_v0648122.string().c_str(), snapshot.sequence,
@@ -15556,10 +14924,10 @@ int standalone_iteration_evaluator_v67(
             if (const char* trajectory_dir_v06481235 = std::getenv("XSTAR_V06481235_O7_CALL1_ATTRIBUTION_DIR")) {
                 if (*trajectory_dir_v06481235) {
                     try {
-                        const std::filesystem::path trajectory_root_v06481235(trajectory_dir_v06481235);
-                        std::filesystem::create_directories(trajectory_root_v06481235);
+                        const std::filesystem::path trajectory_root(trajectory_dir_v06481235);
+                        std::filesystem::create_directories(trajectory_root);
                         std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> trajectory_message_v06481235{};
-                        const auto thermal_path_v06481235 = trajectory_root_v06481235 / "cpp_call1_thermal_budget.csv";
+                        const auto thermal_path_v06481235 = trajectory_root / "cpp_call1_thermal_budget.csv";
                         const int thermal_rc_v06481235 = xstar_fixed_state_write_last_thermal_budget_v1(
                             data->fixed_context, thermal_path_v06481235.string().c_str(), snapshot.sequence,
                             snapshot.call_index, snapshot.evaluation_index, snapshot.kind.c_str(),
@@ -15570,7 +14938,7 @@ int standalone_iteration_evaluator_v67(
                         }
                         trajectory_message_v06481235.fill('\0');
                         const int element_rc_v06481235 = xstar_fixed_state_write_last_element_attribution_v06481235(
-                            data->fixed_context, trajectory_root_v06481235.string().c_str(), 8,
+                            data->fixed_context, trajectory_root.string().c_str(), 8,
                             snapshot.sequence, snapshot.call_index, snapshot.evaluation_index, snapshot.kind.c_str(),
                             trajectory_message_v06481235.data(), trajectory_message_v06481235.size());
                         if (element_rc_v06481235 != 0) {
@@ -15579,7 +14947,7 @@ int standalone_iteration_evaluator_v67(
                         }
                         if (snapshot.evaluation_index == 1u) {
                             std::cerr << "V06481235_CPP_O7_CALL1_ATTRIBUTION_DIR="
-                                      << trajectory_root_v06481235.string() << "\n";
+                                      << trajectory_root.string() << "\n";
                         }
                     } catch (const std::exception& exc_v06481235) {
                         set_callback_error(error, error_size,
@@ -15598,10 +14966,10 @@ int standalone_iteration_evaluator_v67(
             if (const char* state_dir_v06481238 = std::getenv("XSTAR_V06481238_O7_STATE_DIR")) {
                 if (*state_dir_v06481238) {
                     try {
-                        const std::filesystem::path state_root_v06481238(state_dir_v06481238);
-                        std::filesystem::create_directories(state_root_v06481238);
+                        const std::filesystem::path state_root(state_dir_v06481238);
+                        std::filesystem::create_directories(state_root);
                         std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> state_message_v06481238{};
-                        const auto budget_path_v06481238 = state_root_v06481238 / "cpp_call1_input_fingerprints.csv";
+                        const auto budget_path_v06481238 = state_root / "cpp_call1_input_fingerprints.csv";
                         const int budget_rc_v06481238 = xstar_fixed_state_write_last_thermal_budget_v1(
                             data->fixed_context, budget_path_v06481238.string().c_str(), snapshot.sequence,
                             snapshot.call_index, snapshot.evaluation_index, snapshot.kind.c_str(),
@@ -15615,7 +14983,7 @@ int standalone_iteration_evaluator_v67(
                             std::ostringstream tag_v06481238;
                             tag_v06481238 << "evaluation_" << std::setw(4) << std::setfill('0')
                                          << snapshot.evaluation_index << "_full";
-                            const auto full_root_v06481238 = state_root_v06481238 / tag_v06481238.str();
+                            const auto full_root_v06481238 = state_root / tag_v06481238.str();
                             const int full_rc_v06481238 = xstar_fixed_state_write_last_diagnostics_v1(
                                 data->fixed_context, full_root_v06481238.string().c_str(), snapshot.sequence,
                                 state_message_v06481238.data(), state_message_v06481238.size());
@@ -15640,18 +15008,18 @@ int standalone_iteration_evaluator_v67(
             if (const char* attribution_dir_v06481221 = std::getenv("XSTAR_V06481221_CA_ATTRIBUTION_DIR")) {
                 if (*attribution_dir_v06481221) {
                     try {
-                        const std::filesystem::path attribution_root_v06481221(attribution_dir_v06481221);
-                        std::filesystem::create_directories(attribution_root_v06481221);
+                        const std::filesystem::path attribution_root(attribution_dir_v06481221);
+                        std::filesystem::create_directories(attribution_root);
                         std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> attribution_message_v06481221{};
                         const int attribution_rc_v06481221 = xstar_fixed_state_write_last_diagnostics_v1(
-                            data->fixed_context, attribution_root_v06481221.string().c_str(), snapshot.sequence,
+                            data->fixed_context, attribution_root.string().c_str(), snapshot.sequence,
                             attribution_message_v06481221.data(), attribution_message_v06481221.size());
                         if (attribution_rc_v06481221 != 0) {
                             throw std::runtime_error(std::string("v06481221 call1/eval1 attribution capture failed: ") +
                                 attribution_message_v06481221.data());
                         }
                         std::cerr << "V06481221_CPP_CALL1_EVAL1_ATTRIBUTION_DIR="
-                                  << attribution_root_v06481221.string() << "\n";
+                                  << attribution_root.string() << "\n";
                     } catch (const std::exception& exc_v06481221) {
                         set_callback_error(error, error_size,
                             std::string("cannot retain v06481221 call1/eval1 attribution: ") + exc_v06481221.what());
@@ -15660,9 +15028,9 @@ int standalone_iteration_evaluator_v67(
                 }
             }
         }
-        attach_native_thermal_components_v70(data->fixed_context, snapshot);
+        attach_native_thermal_components(data->fixed_context, snapshot);
         std::string native_gate_reason_v82_patch52017;
-        if (!native_snapshot_scientific_valid_v82_patch52017(snapshot, native_gate_reason_v82_patch52017)) {
+        if (!native_snapshot_scientific_valid(snapshot, native_gate_reason_v82_patch52017)) {
             set_callback_error(error, error_size,
                 std::string("5.20.17 native scientific gate rejected: ") + native_gate_reason_v82_patch52017);
             return 83;
@@ -15674,7 +15042,7 @@ int standalone_iteration_evaluator_v67(
         }
         std::filesystem::path call1_sweep_native_root_v82_patch512;
         if (data->reference_diagnostics_enabled && snapshot.call_index == 1u && snapshot.sequence >= 1u && snapshot.sequence <= 20u) {
-            call1_sweep_native_root_v82_patch512 = native_call1_sweep_dir_v82_patch512(*data, static_cast<int>(snapshot.sequence));
+            call1_sweep_native_root_v82_patch512 = native_call1_sweep_dir(*data, static_cast<int>(snapshot.sequence));
             std::filesystem::create_directories(call1_sweep_native_root_v82_patch512);
             std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> sweep_message{};
             const int sweep_rc = xstar_fixed_state_write_last_diagnostics_v1(
@@ -15745,7 +15113,7 @@ int standalone_iteration_evaluator_v67(
             const auto mg_ledger_path = diagnostic_root / "sequence16_mg_source_order_ledger.csv";
             Sequence16MgLedgerGateV80 ledger_gate;
             try {
-                ledger_gate = build_sequence16_mg_ledger_v80(
+                ledger_gate = build_sequence16_mg_ledger(
                     raw_ledger_path, native_solve_rows_path,
                     data->sequence16_source_solve_stage_rows, mg_ledger_path,
                     data->sequence16_contract.thermal_ledger_rows);
@@ -15755,7 +15123,7 @@ int standalone_iteration_evaluator_v67(
 
             Sequence16MgSourceTargetsV79 contract_source;
             try {
-                contract_source = read_sequence16_mg_source_targets_v79(data->sequence16_source_thermal_budget);
+                contract_source = read_sequence16_mg_source_targets(data->sequence16_source_thermal_budget);
             } catch (const std::exception& exc) {
                 throw std::runtime_error(std::string("sequence-16 source-target load failed: ") + exc.what());
             }
@@ -15766,27 +15134,27 @@ int standalone_iteration_evaluator_v67(
             const bool unweighted_ok = ledger_gate.unweighted_bit_mismatches == 0u;
             const bool running_sums_ok = ledger_gate.running_sum_bit_mismatches == 0u;
             const bool weighted_ok = ledger_gate.weighted_bit_mismatches == 0u;
-            const bool heating_ok = binary64_equal_v79(snapshot.magnesium_heating, ledger_gate.source_reconstructed[0]);
-            const bool cooling_ok = binary64_equal_v79(snapshot.magnesium_cooling, ledger_gate.source_reconstructed[1]);
-            const bool heating2_ok = binary64_equal_v79(snapshot.magnesium_heating2, ledger_gate.source_reconstructed[2]);
-            const bool cooling2_ok = binary64_equal_v79(snapshot.magnesium_cooling2, ledger_gate.source_reconstructed[3]);
+            const bool heating_ok = sequence_ledger_binary64_equal(snapshot.magnesium_heating, ledger_gate.source_reconstructed[0]);
+            const bool cooling_ok = sequence_ledger_binary64_equal(snapshot.magnesium_cooling, ledger_gate.source_reconstructed[1]);
+            const bool heating2_ok = sequence_ledger_binary64_equal(snapshot.magnesium_heating2, ledger_gate.source_reconstructed[2]);
+            const bool cooling2_ok = sequence_ledger_binary64_equal(snapshot.magnesium_cooling2, ledger_gate.source_reconstructed[3]);
             // v82 scientific acceptance policy: tiny source/libm/constant differences
             // are diagnostic, not controller blockers.  Values at or below 1e-40
             // are zero-equivalent; otherwise the aggregate Mg channels must agree
             // at the project's canonical .7e scientific precision.
-            auto aggregate_thermal_equal_v82 = [](double native_value, double source_value) {
+            auto aggregate_thermal_equal = [](double native_value, double source_value) {
                 if (std::abs(native_value) <= 1.0e-40 && std::abs(source_value) <= 1.0e-40) return true;
                 return canonical_e7_equal(native_value, source_value);
             };
             const bool aggregate_thermal_ok =
-                aggregate_thermal_equal_v82(snapshot.magnesium_heating, ledger_gate.source_reconstructed[0]) &&
-                aggregate_thermal_equal_v82(snapshot.magnesium_cooling, ledger_gate.source_reconstructed[1]) &&
-                aggregate_thermal_equal_v82(snapshot.magnesium_heating2, ledger_gate.source_reconstructed[2]) &&
-                aggregate_thermal_equal_v82(snapshot.magnesium_cooling2, ledger_gate.source_reconstructed[3]);
-            const bool source_heating_contract_ok = binary64_equal_v79(ledger_gate.source_reconstructed[0], contract_source.heating);
-            const bool source_cooling_contract_ok = binary64_equal_v79(ledger_gate.source_reconstructed[1], contract_source.cooling);
-            const bool source_heating2_contract_ok = binary64_equal_v79(ledger_gate.source_reconstructed[2], contract_source.heating2);
-            const bool source_cooling2_contract_ok = binary64_equal_v79(ledger_gate.source_reconstructed[3], contract_source.cooling2);
+                aggregate_thermal_equal(snapshot.magnesium_heating, ledger_gate.source_reconstructed[0]) &&
+                aggregate_thermal_equal(snapshot.magnesium_cooling, ledger_gate.source_reconstructed[1]) &&
+                aggregate_thermal_equal(snapshot.magnesium_heating2, ledger_gate.source_reconstructed[2]) &&
+                aggregate_thermal_equal(snapshot.magnesium_cooling2, ledger_gate.source_reconstructed[3]);
+            const bool source_heating_contract_ok = sequence_ledger_binary64_equal(ledger_gate.source_reconstructed[0], contract_source.heating);
+            const bool source_cooling_contract_ok = sequence_ledger_binary64_equal(ledger_gate.source_reconstructed[1], contract_source.cooling);
+            const bool source_heating2_contract_ok = sequence_ledger_binary64_equal(ledger_gate.source_reconstructed[2], contract_source.heating2);
+            const bool source_cooling2_contract_ok = sequence_ledger_binary64_equal(ledger_gate.source_reconstructed[3], contract_source.cooling2);
             const bool hmctot_ok = canonical_e7_equal(snapshot.hmctot, contract_source.hmctot);
             const bool elcter_ok = canonical_e7_equal(snapshot.charge_residual, contract_source.elcter);
             const bool accepted = ledger_gate.row_count_ok && ledger_gate.identity_hash_match &&
@@ -15903,8 +15271,8 @@ int standalone_iteration_evaluator_v67(
                 set_callback_error(error, error_size, "V82_PATCH4_SEQUENCE23_CONTRACT_MISSING");
                 return 81;
             }
-            const bool hmctot_ok = scientific_close_v82(found23->second.hmctot, snapshot.hmctot);
-            const bool elcter_ok = scientific_close_v82(found23->second.elcter, snapshot.charge_residual);
+            const bool hmctot_ok = scientific_close(found23->second.hmctot, snapshot.hmctot);
+            const bool elcter_ok = scientific_close(found23->second.elcter, snapshot.charge_residual);
             std::cout << std::setprecision(17)
                       << "V048746255172582_SEQUENCE23_HMCTOT_SOURCE=" << found23->second.hmctot << "\n"
                       << "V048746255172582_SEQUENCE23_HMCTOT_NATIVE=" << snapshot.hmctot << "\n"
@@ -15919,17 +15287,17 @@ int standalone_iteration_evaluator_v67(
                 std::cout << "V048746255172582_PATCH52017_SEQUENCE23_CALLBACK_REFERENCE_PARITY=ACCEPT\n";
             }
         }
-        update_global_populations_v67(*data, snapshot.populations, &snapshot.lte_populations);
+        update_global_populations(*data, snapshot.populations, &snapshot.lte_populations);
         if (snapshot.kind == "dsec" && snapshot.call_index == 1u) {
             std::ostringstream state_tag_v064812324;
             state_tag_v064812324 << "call1_dsec_eval_" << std::setw(4) << std::setfill('0')
                                   << snapshot.evaluation_index << "_post_global_xilevg";
-            write_v064812324_population_state(*data, state_tag_v064812324.str(), data->global_xilevg,
+            write_population_state(*data, state_tag_v064812324.str(), data->global_xilevg,
                 snapshot.sequence, snapshot.evaluation_index, "dsec_post_mapback");
             if (const char* state_dir_v06481238 = std::getenv("XSTAR_V06481238_O7_STATE_DIR")) {
                 if (*state_dir_v06481238) {
                     try {
-                        write_v06481238_o7_state_transition(
+                        write_o7_state_transition(
                             *data, snapshot, std::filesystem::path(state_dir_v06481238));
                     } catch (const std::exception& exc_v06481238) {
                         set_callback_error(error, error_size,
@@ -15940,12 +15308,12 @@ int standalone_iteration_evaluator_v67(
             }
         }
         if (!call1_sweep_native_root_v82_patch512.empty()) {
-            append_call1_dsec_population_sweep_v82_patch512(*data, snapshot, call1_sweep_native_root_v82_patch512);
+            append_call1_dsec_population_sweep(*data, snapshot, call1_sweep_native_root_v82_patch512);
         }
         if (data->retain_prefix_diagnostics && snapshot.sequence <= 8u) {
             data->snapshots.push_back(snapshot);
         } else {
-            data->snapshots.push_back(lightweight_snapshot_v65(snapshot));
+            data->snapshots.push_back(lightweight_snapshot(snapshot));
         }
         data->last_iteration = std::move(snapshot);
         evaluation->hmctot = output.hmctot;
@@ -15990,7 +15358,7 @@ int standalone_iteration_evaluator_v67(
 // Purpose: Implement finalize accepted boundary snapshot in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-FixedDsecSnapshot finalize_accepted_boundary_snapshot_v064894(
+FixedDsecSnapshot finalize_accepted_boundary_snapshot(
     StandaloneControllerDataV67& data,
     FixedDsecSnapshot snapshot) {
     // v82 patch 5.10: the call-3 population boundary is produced by the
@@ -16008,9 +15376,9 @@ FixedDsecSnapshot finalize_accepted_boundary_snapshot_v064894(
             throw std::runtime_error(std::string("patch5.10 sequence-59 population diagnostic capture failed: ") +
                 diagnostic_message.data());
         }
-        write_sequence23_population_owner_audit_v82_patch510(data, snapshot, population_root);
+        write_sequence23_population_owner_audit(data, snapshot, population_root);
         const auto sequence58_population_root = data.sequence23_diagnostic_dir / "sequence58_population_owner";
-        write_sequence58_final_population_boundary_audit_v82_patch511(
+        write_sequence58_final_population_boundary_audit(
             data, sequence58_population_root, population_root);
     }
 
@@ -16061,15 +15429,15 @@ FixedDsecSnapshot finalize_accepted_boundary_snapshot_v064894(
     }
     snapshot.continuum_tau_in = data.grid_tau_in;
     snapshot.continuum_tau_out = data.grid_tau_out;
-    update_global_populations_v67(data, snapshot.populations, &snapshot.lte_populations);
+    update_global_populations(data, snapshot.populations, &snapshot.lte_populations);
     if (data.call_index == 1u) {
-        write_v064812324_population_state(data, "call1_accepted_boundary_global_xilevg",
+        write_population_state(data, "call1_accepted_boundary_global_xilevg",
             data.global_xilevg, snapshot.sequence, 0u, "accepted_boundary_post_mapback");
     }
     // v82 patch 5.20.16.2.1: final-boundary product snapshots must retain
     // the global LTE/rnisg projection produced above.  The ordinary DSEC
     // evaluation path already copies data.global_rnisg into its snapshot,
-    // but evaluate_full_boundary_v67 historically omitted that copy.  As a
+    // but evaluate_full_boundary historically omitted that copy.  As a
     // result, public continuum pseudo-level rows reached the 5.20.16.2 LTE
     // writer with an empty source_global_rnisg vector and fell through to the
     // old structural-zero bridge.  This is retention/publication only: no
@@ -16091,9 +15459,9 @@ FixedDsecSnapshot finalize_accepted_boundary_snapshot_v064894(
         }
         std::cout << "V048746255172582_SEQUENCE58_FINAL_POPULATION_NATIVE_BOUNDARY_CAPTURE=ACCEPT\n";
     }
-    audit_sequence58_lte_v82_patch53(data, snapshot);
+    audit_sequence58_lte(data, snapshot);
     std::string native_gate_reason_v82_patch52017;
-    if (!native_snapshot_scientific_valid_v82_patch52017(snapshot, native_gate_reason_v82_patch52017)) {
+    if (!native_snapshot_scientific_valid(snapshot, native_gate_reason_v82_patch52017)) {
         throw std::runtime_error(std::string("5.20.17 final-boundary native scientific gate rejected: ") +
             native_gate_reason_v82_patch52017);
     }
@@ -16107,7 +15475,7 @@ FixedDsecSnapshot finalize_accepted_boundary_snapshot_v064894(
 // Purpose: Write write from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-void write_v064812321_fixed_radial_input(
+void write_fixed_radial_input(
     const StandaloneControllerDataV67& data,
     const xstar_fixed_state_input_v1& input,
     std::uint64_t source_sequence) {
@@ -16162,7 +15530,7 @@ void write_v064812321_fixed_radial_input(
 // Purpose: Write write from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-void write_v064812321_cpp_fixed_diagnostics(
+void write_cpp_fixed_diagnostics(
     const StandaloneControllerDataV67& data,
     std::uint64_t source_sequence) {
     const char* root_text = std::getenv("XSTAR_V064812321_DIAGNOSTICS_DIR");
@@ -16183,19 +15551,19 @@ void write_v064812321_cpp_fixed_diagnostics(
 // Purpose: Evaluate evaluate full boundary using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
 // Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use.
 // XSTAR-FUNCTION-COMMENT-END
-FixedDsecSnapshot evaluate_full_boundary_v67(
+FixedDsecSnapshot evaluate_full_boundary(
     StandaloneControllerDataV67& data,
     const xstar_thermal_state_v1& accepted_state,
     double delta_radius_cm,
     double radius_cm,
     std::size_t transport_plane) {
-    FixedDsecSnapshot snapshot = make_iteration_snapshot_v67(data, accepted_state);
+    FixedDsecSnapshot snapshot = make_iteration_snapshot(data, accepted_state);
     snapshot.kind = "final";
     (void)delta_radius_cm;
     (void)radius_cm;
     (void)transport_plane;
     xstar_fixed_state_input_v1 input{};
-    fill_standalone_input_v67(data, accepted_state, input);
+    fill_standalone_input(data, accepted_state, input);
     // v82 patch 5.9: the accepted-boundary snapshot must retain the same
     // effective spectral covering fraction that the fixed-state engine sees.
     // Patch 5.8 fixed the physics ownership (DSEC cfrac vs thermal emult), but
@@ -16203,7 +15571,7 @@ FixedDsecSnapshot evaluate_full_boundary_v67(
     snapshot.spectral_covering_fraction =
         (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_DSEC_COVERING_FRACTION) != 0u
             ? input.dsec_covering_fraction : input.covering_fraction;
-    fill_continuum_shape_v67(snapshot, input, data.energy);
+    fill_continuum_shape(snapshot, input, data.energy);
     const std::size_t line_capacity = std::max<std::size_t>({
         data.line_tau_in.size(),
         static_cast<std::size_t>(data.program_info.native_line_count) + 1u,
@@ -16259,24 +15627,24 @@ FixedDsecSnapshot evaluate_full_boundary_v67(
         ::unsetenv("XSTAR_V82_PATCH511_OPAKC_PRODUCER_AUDIT_PATH");
         ::unsetenv("XSTAR_V82_PATCH512_MG_TYPE53_KERNEL_AUDIT_PATH");
     }
-    write_v064812321_fixed_radial_input(data, input, snapshot.sequence);
-    write_v0648123350_fixed_input_capture(data, input, snapshot);
+    write_fixed_radial_input(data, input, snapshot.sequence);
+    write_postsolve_fixed_input_capture(data, input, snapshot);
     const int rc = xstar_fixed_state_run_with_source_workspaces_v1(
         data.fixed_context, &input, &output, &source, &data.cumulative_stats,
         message.data(), message.size());
     if (rc != 0) throw std::runtime_error(std::string("accepted boundary evaluation failed: ") + message.data());
-    write_v064812321_cpp_fixed_diagnostics(data, snapshot.sequence);
+    write_cpp_fixed_diagnostics(data, snapshot.sequence);
     snapshot.populations.resize(output.populations_count);
-    capture_source_ion_stage_fractions_v064812316(
+    capture_source_ion_stage_fractions(
         data.fixed_context, snapshot.source_ion_stage_fractions);
-    capture_source_detail_publication_state_v064812318(
+    capture_source_detail_publication_state(
         data.fixed_context, snapshot.source_detail_pre_mapback_populations,
         snapshot.source_detail_active_windows);
-    snapshot.source_detail_global_xilevg = source_detail_global_projection_v064812318(
+    snapshot.source_detail_global_xilevg = source_detail_global_projection(
         data, snapshot.source_detail_pre_mapback_populations, snapshot.source_detail_active_windows);
-    write_v0648123350_postsolve_attribution(data, snapshot);
+    write_postsolve_attribution(data, snapshot);
     if (data.call_index == 1u) {
-        write_v064812324_population_state(data, "call1_detail_publication_global_xilevg",
+        write_population_state(data, "call1_detail_publication_global_xilevg",
             snapshot.source_detail_global_xilevg, snapshot.sequence, 0u, "accepted_boundary_detail_publication");
     }
     snapshot.spectrum.resize(output.spectrum_count);
@@ -16306,17 +15674,17 @@ FixedDsecSnapshot evaluate_full_boundary_v67(
     snapshot.element_cooling = output.element_cooling;
     snapshot.continuum_heating = output.continuum_heating;
     snapshot.continuum_cooling = output.continuum_cooling;
-    attach_native_thermal_components_v70(data.fixed_context, snapshot);
-    attach_native_product_diagnostics_v70(data.fixed_context, snapshot);
+    attach_native_thermal_components(data.fixed_context, snapshot);
+    attach_native_product_diagnostics(data.fixed_context, snapshot);
 
-    return finalize_accepted_boundary_snapshot_v064894(data, std::move(snapshot));
+    return finalize_accepted_boundary_snapshot(data, std::move(snapshot));
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Implement binary64 equal in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-bool binary64_equal_v064894(double lhs, double rhs) {
+bool snapshot_binary64_equal(double lhs, double rhs) {
     std::uint64_t a = 0u;
     std::uint64_t b = 0u;
     static_assert(sizeof(a) == sizeof(lhs), "binary64 size mismatch");
@@ -16329,7 +15697,7 @@ bool binary64_equal_v064894(double lhs, double rhs) {
 // Purpose: Build last dsec boundary from the source-ordered inputs required by the next calculation stage.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-FixedDsecSnapshot prepare_last_dsec_boundary_v064894(
+FixedDsecSnapshot prepare_last_dsec_boundary(
     StandaloneControllerDataV67& data,
     const xstar_thermal_state_v1& accepted_state) {
     if (data.last_iteration.kind != "dsec" ||
@@ -16340,8 +15708,8 @@ FixedDsecSnapshot prepare_last_dsec_boundary_v064894(
     // the accepted controller state should be exactly the trial that produced
     // last_iteration.  Fail closed rather than silently promoting a different
     // state if a future controller changes this contract.
-    if (!binary64_equal_v064894(data.last_iteration.temperature_t4, accepted_state.temperature_t4) ||
-        !binary64_equal_v064894(data.last_iteration.electron_fraction_input, accepted_state.electron_fraction_xee)) {
+    if (!snapshot_binary64_equal(data.last_iteration.temperature_t4, accepted_state.temperature_t4) ||
+        !snapshot_binary64_equal(data.last_iteration.electron_fraction_input, accepted_state.electron_fraction_xee)) {
         throw std::runtime_error("v0.6.48.9.4.1 accepted controller state differs from final DSEC trial");
     }
 
@@ -16430,11 +15798,11 @@ FixedDsecSnapshot prepare_last_dsec_boundary_v064894(
     // to match the public opacity bytes before promotion.
     if (snapshot.opakc.size() != snapshot.opacity.size() ||
         !std::equal(snapshot.opakc.begin(), snapshot.opakc.end(), snapshot.opacity.begin(),
-            [](double a, double b) { return binary64_equal_v064894(a, b); })) {
+            [](double a, double b) { return snapshot_binary64_equal(a, b); })) {
         throw std::runtime_error(
             "v0.6.48.9.4.1 retained opakc differs from terminal DSEC public opacity");
     }
-    attach_native_product_diagnostics_v70(data.fixed_context, snapshot);
+    attach_native_product_diagnostics(data.fixed_context, snapshot);
 
     // Prepare the historical final-source identity without mutating controller
     // bookkeeping.  The caller commits it only after every retained-workspace
@@ -16452,7 +15820,7 @@ FixedDsecSnapshot prepare_last_dsec_boundary_v064894(
 // Purpose: Implement commit prepared boundary in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-FixedDsecSnapshot commit_prepared_boundary_v064894(
+FixedDsecSnapshot commit_prepared_boundary(
     StandaloneControllerDataV67& data,
     FixedDsecSnapshot snapshot) {
     if (!data.reference_trajectory_mode) ++data.next_sequence;
@@ -16460,14 +15828,14 @@ FixedDsecSnapshot commit_prepared_boundary_v064894(
     ++data.evaluations;
     const std::string sequence = std::to_string(snapshot.sequence);
     ::setenv("XSTAR_NATIVE_SOURCE_SEQUENCE", sequence.c_str(), 1);
-    return finalize_accepted_boundary_snapshot_v064894(data, std::move(snapshot));
+    return finalize_accepted_boundary_snapshot(data, std::move(snapshot));
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Evaluate evaluate accepted boundary using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
 // Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use.
 // XSTAR-FUNCTION-COMMENT-END
-FixedDsecSnapshot evaluate_accepted_boundary_v064894(
+FixedDsecSnapshot evaluate_accepted_boundary(
     StandaloneControllerDataV67& data,
     const xstar_thermal_state_v1& accepted_state,
     double delta_radius_cm,
@@ -16484,31 +15852,31 @@ FixedDsecSnapshot evaluate_accepted_boundary_v064894(
     // is proven byte-exact against this path.
     if (force_legacy_enabled || !experimental_reuse_enabled) {
         ++data.accepted_boundary_legacy_count_v064894;
-        return evaluate_full_boundary_v67(
+        return evaluate_full_boundary(
             data, accepted_state, delta_radius_cm, radius_cm, transport_plane);
     }
     std::optional<FixedDsecSnapshot> prepared;
     try {
-        prepared = prepare_last_dsec_boundary_v064894(data, accepted_state);
+        prepared = prepare_last_dsec_boundary(data, accepted_state);
     } catch (const std::exception& exc) {
         // Fallback is permitted only before any controller bookkeeping is
-        // mutated.  Once commit_prepared_boundary_v064894 begins, failures
+        // mutated.  Once commit_prepared_boundary begins, failures
         // must propagate rather than double-counting a boundary evaluation.
         ++data.accepted_boundary_reuse_fallback_count_v064894;
         ++data.accepted_boundary_legacy_count_v064894;
         std::cerr << "V064894_BOUNDARY_REUSE_FALLBACK=" << exc.what() << '\n';
-        return evaluate_full_boundary_v67(
+        return evaluate_full_boundary(
             data, accepted_state, delta_radius_cm, radius_cm, transport_plane);
     }
     ++data.accepted_boundary_reuse_count_v064894;
-    return commit_prepared_boundary_v064894(data, std::move(*prepared));
+    return commit_prepared_boundary(data, std::move(*prepared));
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Implement snapshot complete in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-bool snapshot_complete_v67(
+bool snapshot_complete(
     const FixedDsecSnapshot& snapshot,
     const xstar_fixed_state_program_info_v1& info,
     std::size_t bins,
@@ -16526,7 +15894,7 @@ bool snapshot_complete_v67(
 // Purpose: Write program diagnostics from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-void write_program_diagnostics_v67(
+void write_program_diagnostics(
     const std::filesystem::path& root,
     const xstar_atdb_runtime::ProgramStorage& program) {
     std::filesystem::create_directories(root);
@@ -16563,7 +15931,7 @@ struct ArtifactSelectionV67 {
 // Purpose: Implement selected artifact in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-bool selected_artifact_v67(int override_value, bool profile_value) {
+bool selected_artifact(int override_value, bool profile_value) {
     return override_value < 0 ? profile_value : override_value != 0;
 }
 
@@ -16571,18 +15939,18 @@ bool selected_artifact_v67(int override_value, bool profile_value) {
 // Purpose: Implement artifact selection in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-ArtifactSelectionV67 artifact_selection_v67(const Options& options, const std::string& profile) {
+ArtifactSelectionV67 artifact_selection(const Options& options, const std::string& profile) {
     const bool full = profile == "full";
     const bool summary = profile == "summary";
     ArtifactSelectionV67 out;
-    out.lowered_case = selected_artifact_v67(options.emit_lowered_case, full);
-    out.runtime_metadata = selected_artifact_v67(options.emit_runtime_metadata, full || summary);
-    out.checkpoints = selected_artifact_v67(options.emit_checkpoints, full);
-    out.audits = selected_artifact_v67(options.emit_audits, full);
-    out.qualification_summaries = selected_artifact_v67(options.emit_qualification_summaries, full || summary);
-    out.trajectory_diagnostics = selected_artifact_v67(options.emit_trajectory_diagnostics, full);
-    out.benchmark_diagnostics = selected_artifact_v67(options.emit_benchmark_diagnostics, full);
-    out.timing_summary = selected_artifact_v67(options.emit_timing_summary, full || summary);
+    out.lowered_case = selected_artifact(options.emit_lowered_case, full);
+    out.runtime_metadata = selected_artifact(options.emit_runtime_metadata, full || summary);
+    out.checkpoints = selected_artifact(options.emit_checkpoints, full);
+    out.audits = selected_artifact(options.emit_audits, full);
+    out.qualification_summaries = selected_artifact(options.emit_qualification_summaries, full || summary);
+    out.trajectory_diagnostics = selected_artifact(options.emit_trajectory_diagnostics, full);
+    out.benchmark_diagnostics = selected_artifact(options.emit_benchmark_diagnostics, full);
+    out.timing_summary = selected_artifact(options.emit_timing_summary, full || summary);
     return out;
 }
 
@@ -16590,7 +15958,7 @@ ArtifactSelectionV67 artifact_selection_v67(const Options& options, const std::s
 // Purpose: Implement json escape in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-std::string json_escape_v67(const std::string& value) {
+std::string json_escape(const std::string& value) {
     std::ostringstream out;
     for (unsigned char c : value) {
         switch (c) {
@@ -16613,7 +15981,7 @@ std::string json_escape_v67(const std::string& value) {
 // Purpose: Write standalone diagnostics from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-void write_standalone_diagnostics_v67(
+void write_standalone_diagnostics(
     const std::filesystem::path& output,
     const ArtifactSelectionV67& selection,
     const std::string& profile,
@@ -16628,19 +15996,19 @@ void write_standalone_diagnostics_v67(
     std::filesystem::create_directories(root);
 
     if (selection.lowered_case) {
-        write_program_diagnostics_v67(root / "lowered_program", program);
+        write_program_diagnostics(root / "lowered_program", program);
     }
 
     if (selection.runtime_metadata) {
         std::ofstream f(root / "runtime_metadata.json");
         f << "{\n"
           << "  \"schema\": \"xstar-tools-v68-standalone-runtime-metadata-v1\",\n"
-          << "  \"release\": \"" << json_escape_v67(product.release) << "\",\n"
-          << "  \"profile\": \"" << json_escape_v67(profile) << "\",\n"
-          << "  \"parameters\": \"" << json_escape_v67(params.source_path.string()) << "\",\n"
-          << "  \"atomic_database\": \"" << json_escape_v67(atomic.atdb.string()) << "\",\n"
-          << "  \"coheat_file\": \"" << json_escape_v67(atomic.coheat.string()) << "\",\n"
-          << "  \"program_id\": \"" << json_escape_v67(program.program_id) << "\",\n"
+          << "  \"release\": \"" << json_escape(product.release) << "\",\n"
+          << "  \"profile\": \"" << json_escape(profile) << "\",\n"
+          << "  \"parameters\": \"" << json_escape(params.source_path.string()) << "\",\n"
+          << "  \"atomic_database\": \"" << json_escape(atomic.atdb.string()) << "\",\n"
+          << "  \"coheat_file\": \"" << json_escape(atomic.coheat.string()) << "\",\n"
+          << "  \"program_id\": \"" << json_escape(program.program_id) << "\",\n"
           << "  \"active_elements\": " << program.elements.size() << ",\n"
           << "  \"compact_rows\": " << program.rows.size() << ",\n"
           << "  \"executable_records\": " << program.records.size() << ",\n"
@@ -16813,7 +16181,7 @@ void write_standalone_diagnostics_v67(
 // Purpose: Implement vector has finite nonzero in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-bool vector_has_finite_nonzero_v71(const std::vector<double>& values) {
+bool vector_has_finite_nonzero(const std::vector<double>& values) {
     return std::any_of(values.begin(), values.end(), [](double value) {
         return std::isfinite(value) && value != 0.0;
     });
@@ -16823,7 +16191,7 @@ bool vector_has_finite_nonzero_v71(const std::vector<double>& values) {
 // Purpose: Validate the invariants required by validate reference physical state; reject malformed dimensions, pointers, or state before scientific kernels are entered.
 // Reference context: Implementation/safety helper; no independent scientific formula.
 // XSTAR-FUNCTION-COMMENT-END
-bool validate_reference_physical_state_v71(
+bool validate_reference_physical_state(
     const xstar_run_state::ProductWritingState& product,
     std::string& reason) {
     // 5.20.17: source sequence numbers span 1..61, but literal controller
@@ -16856,12 +16224,12 @@ bool validate_reference_physical_state_v71(
     for (const auto& zone : product.radial_zones) {
         const auto& evaluation = zone.accepted_controller.evaluation;
         const auto& workspace = evaluation.source_workspace;
-        line_emission = line_emission || vector_has_finite_nonzero_v71(workspace.rcem) ||
-            vector_has_finite_nonzero_v71(workspace.elum);
-        rrc_emission = rrc_emission || vector_has_finite_nonzero_v71(workspace.cemab) ||
-            vector_has_finite_nonzero_v71(workspace.elumab);
-        continuum_opacity = continuum_opacity || vector_has_finite_nonzero_v71(workspace.opakab) ||
-            vector_has_finite_nonzero_v71(evaluation.opacity);
+        line_emission = line_emission || vector_has_finite_nonzero(workspace.rcem) ||
+            vector_has_finite_nonzero(workspace.elum);
+        rrc_emission = rrc_emission || vector_has_finite_nonzero(workspace.cemab) ||
+            vector_has_finite_nonzero(workspace.elumab);
+        continuum_opacity = continuum_opacity || vector_has_finite_nonzero(workspace.opakab) ||
+            vector_has_finite_nonzero(evaluation.opacity);
         element_thermal = element_thermal ||
             evaluation.hydrogen_heating != 0.0 || evaluation.hydrogen_cooling != 0.0 ||
             evaluation.helium_heating != 0.0 || evaluation.helium_cooling != 0.0 ||
@@ -16902,7 +16270,7 @@ struct StandaloneTrajectorySummaryV71 {
 // Purpose: Implement summarize standalone trajectory in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-StandaloneTrajectorySummaryV71 summarize_standalone_trajectory_v71(
+StandaloneTrajectorySummaryV71 summarize_standalone_trajectory(
     const xstar_run_state::ProductWritingState& product) {
     StandaloneTrajectorySummaryV71 summary;
     summary.total_events = product.fixed_evaluations.size();
@@ -16923,7 +16291,7 @@ StandaloneTrajectorySummaryV71 summarize_standalone_trajectory_v71(
 // Purpose: Implement is reference mg11 benchmark in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-bool is_reference_mg11_benchmark_v71(const xstar_atdb_runtime::ProductionParameters& params) {
+bool is_reference_mg11_benchmark(const xstar_atdb_runtime::ProductionParameters& params) {
     return params.raw_json.find("xstar_atomic_mg11_xi1p5_ne1e8") != std::string::npos;
 }
 
@@ -16931,7 +16299,7 @@ bool is_reference_mg11_benchmark_v71(const xstar_atdb_runtime::ProductionParamet
 // Purpose: Implement diagnostic preview enabled in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-bool diagnostic_preview_enabled_v82_patch513() {
+bool diagnostic_preview_enabled() {
     const char* value = std::getenv("XSTAR_V82_PATCH513_DIAGNOSTIC_PREVIEW");
     return value != nullptr && std::string(value) == "1";
 }
@@ -16940,7 +16308,7 @@ bool diagnostic_preview_enabled_v82_patch513() {
 // Purpose: Implement diagnostic full trajectory enabled in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-bool diagnostic_full_trajectory_enabled_v82_patch516() {
+bool diagnostic_full_trajectory_enabled() {
     const char* value = std::getenv("XSTAR_V82_PATCH516_DIAGNOSTIC_FULL_TRAJECTORY");
     return value != nullptr && std::string(value) == "1";
 }
@@ -16949,7 +16317,7 @@ bool diagnostic_full_trajectory_enabled_v82_patch516() {
 // Purpose: Implement diagnostic attribution enabled in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-bool diagnostic_attribution_enabled_v82_patch52017() {
+bool diagnostic_attribution_enabled() {
     const char* value = std::getenv("XSTAR_V82_PATCH52017_DIAGNOSTICS");
     return value != nullptr && std::string(value) == "1";
 }
@@ -16958,7 +16326,7 @@ bool diagnostic_attribution_enabled_v82_patch52017() {
 // Purpose: Write sequence23 diagnostic preview from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-void write_sequence23_diagnostic_preview_v82_patch513(
+void write_sequence23_diagnostic_preview(
     const Options& options,
     const xstar_atdb_runtime::ProductionParameters& params,
     [[maybe_unused]] const xstar_atdb_runtime::ResolvedAtomicData& atomic,
@@ -16968,13 +16336,13 @@ void write_sequence23_diagnostic_preview_v82_patch513(
     const std::optional<FixedDsecSnapshot>& call2_pretransport,
     const std::string& failure_reason,
     double controller_elapsed_seconds) {
-    if (!diagnostic_preview_enabled_v82_patch513()) return;
+    if (!diagnostic_preview_enabled()) return;
     if (finals.size() < 2u || !call2_pretransport.has_value()) {
         throw std::runtime_error("patch5.13 diagnostic preview requires call-1/call-2 final boundaries");
     }
 
     const auto preview_dir = std::filesystem::path(options.output_dir) / "diagnostic_preview_products";
-    remove_native_products_v172524(preview_dir);
+    remove_native_products(preview_dir);
     std::filesystem::create_directories(preview_dir);
 
     xstar_run_state::WholeRunAccumulatedState preview = seed;
@@ -17100,9 +16468,9 @@ void write_sequence23_diagnostic_preview_v82_patch513(
     }
     ::unsetenv("XSTAR_TRUE_PRODUCTION");
 
-    const std::size_t fits_count = count_native_fits_products_v172524(preview_dir);
+    const std::size_t fits_count = count_native_fits_products(preview_dir);
     const bool step_written = std::filesystem::is_regular_file(preview_dir / "xout_step.log") &&
-        regular_file_size_or_zero_v172521(preview_dir / "xout_step.log") > 0u;
+        regular_file_size_or_zero(preview_dir / "xout_step.log") > 0u;
 
     std::ofstream manifest(preview_dir / "diagnostic_preview_manifest.json");
     manifest << std::boolalpha
@@ -17114,7 +16482,7 @@ void write_sequence23_diagnostic_preview_v82_patch513(
              << "  \"trajectory_complete\": false,\n"
              << "  \"scientific_parity_claimed\": false,\n"
              << "  \"failure_boundary\": \"sequence23_call3_start\",\n"
-             << "  \"failure_reason\": \"" << json_escape_v67(failure_reason) << "\",\n"
+             << "  \"failure_reason\": \"" << json_escape(failure_reason) << "\",\n"
              << "  \"retained_controller_events\": " << preview.fixed_evaluations.size() << ",\n"
              << "  \"preview_radial_rows\": " << preview.radial_zones.size() << ",\n"
              << "  \"physical_radial_boundaries_retained\": " << preview.physical_radial_boundaries_retained << ",\n"
@@ -17145,7 +16513,7 @@ void write_sequence23_diagnostic_preview_v82_patch513(
 // Purpose: Write full trajectory diagnostic preview from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-void write_full_trajectory_diagnostic_preview_v82_patch516(
+void write_full_trajectory_diagnostic_preview(
     const Options& options,
     StandaloneControllerDataV67& data,
     xstar_run_state::WholeRunAccumulatedState& whole,
@@ -17204,10 +16572,10 @@ void write_full_trajectory_diagnostic_preview_v82_patch516(
     }
     ::unsetenv("XSTAR_TRUE_PRODUCTION");
 
-    const std::size_t fits_count = count_native_fits_products_v172524(preview_dir);
+    const std::size_t fits_count = count_native_fits_products(preview_dir);
     const bool step_written =
         std::filesystem::is_regular_file(preview_dir / "xout_step.log") &&
-        regular_file_size_or_zero_v172521(preview_dir / "xout_step.log") > 0u;
+        regular_file_size_or_zero(preview_dir / "xout_step.log") > 0u;
 
     std::ofstream manifest(preview_dir / "diagnostic_full_trajectory_manifest.json");
     manifest << std::boolalpha
@@ -17220,7 +16588,7 @@ void write_full_trajectory_diagnostic_preview_v82_patch516(
              << "  \"scientific_parity_claimed\": false,\n"
              << "  \"first_failure_sequence\": " << data.diagnostic_first_failure_sequence << ",\n"
              << "  \"first_failure_reason\": \""
-             << json_escape_v67(data.diagnostic_first_failure_reason) << "\",\n"
+             << json_escape(data.diagnostic_first_failure_reason) << "\",\n"
              << "  \"retained_controller_events\": " << whole.fixed_evaluations.size() << ",\n"
              << "  \"physical_radial_boundaries_retained\": "
              << whole.physical_radial_boundaries_retained << ",\n"
@@ -17264,7 +16632,7 @@ void write_full_trajectory_diagnostic_preview_v82_patch516(
 // Purpose: Build general standalone product from the source-ordered inputs required by the next calculation stage.
 // Reference context: XSTAR Manual ch14 (workflow/state lifetime) and ch5 (final products); orchestration helper.
 // XSTAR-FUNCTION-COMMENT-END
-xstar_run_state::ProductWritingState build_general_standalone_product_v67(
+xstar_run_state::ProductWritingState build_general_standalone_product(
     const Options& options,
     const xstar_atdb_runtime::ProductionParameters& params,
     const xstar_atdb_runtime::ResolvedAtomicData& atomic,
@@ -17284,11 +16652,11 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         // benchmark.  Preserve the accepted 11.3/10.2 Mg behavior (1e-7) only
         // on that explicit oracle trajectory; all generic models retain their
         // parsed runtime critical fraction.
-        const bool reference_trajectory_mode_v0648115 = is_reference_mg11_benchmark_v71(params);
-        const double effective_critical_fraction_v0648115 =
+        const bool reference_trajectory_mode_v0648115 = is_reference_mg11_benchmark(params);
+        const double effective_critical_thermal_fraction =
             reference_trajectory_mode_v0648115 ? 1.0e-7 : params.critical_fraction;
         rc = xstar_fixed_state_context_set_critical_ion_fraction_v1(
-            fixed, effective_critical_fraction_v0648115, message.data(), message.size());
+            fixed, effective_critical_thermal_fraction, message.data(), message.size());
         if (rc != 0) throw std::runtime_error(std::string("native critical ion fraction binding failed: ") + message.data());
         // 0.6.48.11.7.1: 11.7's generic literal Type7 endpoint rule caused
         // sub-ppm drift in two frozen Mg products.  Retain the accepted 11.6
@@ -17305,7 +16673,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         if (info.unsupported_record_count != 0 || info.record_count == 0 || info.population_rows == 0) {
             throw std::runtime_error("in-memory ATDB program is incomplete");
         }
-        RadiationField radiation = read_general_standalone_radiation_v67(options, params);
+        RadiationField radiation = read_general_standalone_radiation(options, params);
         if (radiation.energy_ev.size() != static_cast<std::size_t>(params.ncn2)) {
             throw std::runtime_error("native continuum grid does not match parameters ncn2");
         }
@@ -17320,10 +16688,10 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         data.program = &program;
         data.reference_trajectory_mode = reference_trajectory_mode_v0648115;
         data.reference_diagnostics_enabled =
-            data.reference_trajectory_mode && diagnostic_attribution_enabled_v82_patch52017();
+            data.reference_trajectory_mode && diagnostic_attribution_enabled();
         // 5.20.17 production never uses the old fail-open full-trajectory continuation.
         data.diagnostic_full_trajectory_continue =
-            data.reference_diagnostics_enabled && diagnostic_full_trajectory_enabled_v82_patch516();
+            data.reference_diagnostics_enabled && diagnostic_full_trajectory_enabled();
         data.retain_prefix_diagnostics = data.reference_diagnostics_enabled &&
             (options.artifact_profile == "full" || options.emit_trajectory_diagnostics == 1);
         std::cout << "V048746255172582_PATCH52017_REFERENCE_ATTRIBUTION="
@@ -17335,8 +16703,8 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         if (data.reference_diagnostics_enabled) {
             const auto benchmark_case_dir = std::filesystem::path(options.parameters_path).parent_path();
             const auto contract_dir = benchmark_case_dir / "v15926_qualification_contracts";
-            data.reference_contracts = read_sequence_contracts_v1724(contract_dir / "sequence_contracts.csv");
-            read_source_populations_v1724(contract_dir / "population_e7.csv",
+            data.reference_contracts = read_sequence_contracts(contract_dir / "sequence_contracts.csv");
+            read_source_populations(contract_dir / "population_e7.csv",
                 data.source_population_global_v1724, data.source_population_compact_v1724);
             g_source_population_global_v1724 = &data.source_population_global_v1724;
             g_source_population_compact_v1724 = &data.source_population_compact_v1724;
@@ -17470,7 +16838,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                     static_cast<std::size_t>(record.continuum_index_one_based));
             }
         }
-        const std::size_t continuum_tau_capacity = required_runtime_continuum_tau_capacity_v82_patch4(
+        const std::size_t continuum_tau_capacity = required_runtime_continuum_tau_capacity(
             maximum_continuum_index,
             static_cast<std::size_t>(info.native_continuum_count));
         const std::size_t line_tau_capacity = maximum_line_index + 1u;
@@ -17558,7 +16926,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         // Preserve the complete historical public parameter surface.  The
         // controller uses the normalized ProductionParameters above, while
         // FITS and xout_step metadata retain all user-facing XSTAR controls.
-        whole.parameter_rows = native_public_parameter_rows_from_json_v172534(options.parameters_path);
+        whole.parameter_rows = native_public_parameter_rows_from_json(options.parameters_path);
 
         xstar_thermal_state_v1 state{};
         xstar_thermal_state_init_v1(&state);
@@ -17593,21 +16961,21 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
 
         for (std::size_t call = 1; ; ++call) {
             if (call > 3999u) throw std::runtime_error("too many native radial zones: buffer filled");
-            production_zone_wait_before_call_v0648110(call);
+            production_zone_wait_before_call(call);
             const auto shared_zone_started_v0648110 = std::chrono::steady_clock::now();
             data.call_index = call;
-            prepare_call_start_workspace_v71(data, call);
+            prepare_call_start_workspace(data, call);
             if (call == 3u && data.reference_trajectory_mode) {
-                gate_sequence23_native_committed_state_v82_patch52017(data);
+                gate_sequence23_native_committed_state(data);
             }
             if (call == 3u && data.reference_diagnostics_enabled) {
                 try {
-                    audit_call3_boundary_v82_patch4(data);
+                    audit_call3_boundary(data);
                 } catch (const std::exception& exc) {
                     const double partial_seconds = std::chrono::duration<double>(
                         std::chrono::steady_clock::now() - started).count();
                     try {
-                        write_sequence23_diagnostic_preview_v82_patch513(
+                        write_sequence23_diagnostic_preview(
                             options, params, atomic, data, whole, finals,
                             call2_pretransport_v82_patch513, exc.what(), partial_seconds);
                     } catch (const std::exception& preview_exc) {
@@ -17649,7 +17017,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             (void)xstar_spectral_perf_snapshot_v064892(&spectral_perf_before_v064892);
             const auto controller_call_started_v064890 = std::chrono::steady_clock::now();
             rc = xstar_thermal_run_evaluation_loop_v1(
-                thermal, &config, &state, standalone_iteration_evaluator_v67, &data,
+                thermal, &config, &state, standalone_iteration_evaluator, &data,
                 trace.data(), trace.size(), &trace_count, &stats,
                 message.data(), message.size());
             xstar_spectral_perf_v064892 spectral_perf_after_v064892{};
@@ -17657,11 +17025,11 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             (void)xstar_spectral_perf_snapshot_v064892(&spectral_perf_after_v064892);
             if (g_performance_v064892 && call >= 1u && call <= 4u) {
                 g_performance_v064892->controller_calls[call - 1u] =
-                    diff_spectral_perf_v064892(spectral_perf_after_v064892, spectral_perf_before_v064892);
+                    diff_spectral_perf(spectral_perf_after_v064892, spectral_perf_before_v064892);
             }
             if (g_performance_v064890 && call >= 1u && call <= 4u) {
                 const std::size_t slot = call - 1u;
-                g_performance_v064890->controller_call_seconds[slot] += elapsed_seconds_v064890(controller_call_started_v064890);
+                g_performance_v064890->controller_call_seconds[slot] += performance_elapsed_seconds(controller_call_started_v064890);
                 g_performance_v064890->fixed_traversal_seconds[slot] += data.cumulative_stats.traversal_seconds - fixed_stats_before_v064890.traversal_seconds;
                 g_performance_v064890->fixed_rate_seconds[slot] += data.cumulative_stats.rate_seconds - fixed_stats_before_v064890.rate_seconds;
                 g_performance_v064890->fixed_element_seconds[slot] += data.cumulative_stats.element_seconds - fixed_stats_before_v064890.element_seconds;
@@ -17711,13 +17079,13 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             // committed only across the shell selected by the previous
             // source STEP evaluation (call 1 itself has zero thickness).
             const auto boundary_started_v064890 = std::chrono::steady_clock::now();
-            auto boundary = evaluate_accepted_boundary_v064894(
+            auto boundary = evaluate_accepted_boundary(
                 data, state, 0.0, boundary_radius_cm, 0u);
             if (g_performance_v064890 && call >= 1u && call <= 4u) {
-                g_performance_v064890->boundary_projection_seconds[call - 1u] += elapsed_seconds_v064890(boundary_started_v064890);
+                g_performance_v064890->boundary_projection_seconds[call - 1u] += performance_elapsed_seconds(boundary_started_v064890);
             }
             std::string completeness_reason;
-            if (!snapshot_complete_v67(boundary, info, data.energy.size(), completeness_reason)) {
+            if (!snapshot_complete(boundary, info, data.energy.size(), completeness_reason)) {
                 throw std::runtime_error("accepted product boundary incomplete: " + completeness_reason);
             }
             data.writing_final_snapshot = false;
@@ -17725,13 +17093,13 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             const double segment = pending_transport_segment_cm;
             if (call == 2u && data.reference_trajectory_mode) {
                 if (data.reference_diagnostics_enabled) {
-                    audit_call2_final_opakab_v82_patch4(data, boundary, segment);
+                    audit_call2_final_opakab(data, boundary, segment);
                 }
                 // Native source-order commit is production state, not an oracle aid.
-                commit_call2_to_call3_global_state_v82_patch52(data, boundary);
+                commit_call2_to_call3_global_state(data, boundary);
                 const bool retained_native_rnisg = data.global_rnisg == data.call2_entry_global_rnisg;
                 std::cout << "V048746255172582_CALL2_TO_CALL3_RNISG_RETAINED_NATIVE_HASH="
-                          << binary64_vector_hash_v82_patch4(data.global_rnisg) << "\n"
+                          << binary64_vector_hash(data.global_rnisg) << "\n"
                           << "V048746255172582_CALL2_TO_CALL3_RNISG_RETAINED_FROM_CALL2="
                           << (retained_native_rnisg ? "ACCEPT" : "REJECT") << "\n";
                 if (!retained_native_rnisg) {
@@ -17757,40 +17125,40 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             // HEATT transport accumulation.
             const std::vector<double> current_shell_entry_bremsa_v0648110 = data.dsec_bremsa;
             const auto continuum_transport_started_v064890 = std::chrono::steady_clock::now();
-            advance_source_continuum_radiation_v82_patch52(
+            advance_source_continuum_radiation(
                 data, boundary, segment, boundary_radius_cm);
             if (g_performance_v064890) {
-                g_performance_v064890->continuum_transport_seconds += elapsed_seconds_v064890(continuum_transport_started_v064890);
+                g_performance_v064890->continuum_transport_seconds += performance_elapsed_seconds(continuum_transport_started_v064890);
             }
-            write_v0648123352_transport_commit_probe(
+            write_transport_commit_probe(
                 data, boundary, segment, boundary_radius_cm, "pre_atomic");
-            write_v0648123431111_ca13_lifetime_probe(
+            write_ca13_lifetime_probe(
                 data, boundary, segment, boundary_radius_cm, "pre_heatt");
             if (segment > 0.0) {
                 source_transport_segment_cm.push_back(segment);
                 const auto atomic_luminosity_started_v064890 = std::chrono::steady_clock::now();
-                advance_atomic_luminosities_v82_patch520145(
+                advance_atomic_luminosities(
                     data, boundary, segment, boundary_radius_cm);
                 if (g_performance_v064890) {
-                    g_performance_v064890->atomic_luminosity_seconds += elapsed_seconds_v064890(atomic_luminosity_started_v064890);
+                    g_performance_v064890->atomic_luminosity_seconds += performance_elapsed_seconds(atomic_luminosity_started_v064890);
                 }
             }
-            write_v0648123431111_ca13_lifetime_probe(
+            write_ca13_lifetime_probe(
                 data, boundary, segment, boundary_radius_cm, "post_heatt");
-            retain_pre_stpcut_cumulative_state_v82_patch520145(data, boundary);
-            write_v0648123352_transport_commit_probe(
+            retain_pre_stpcut_cumulative_state(data, boundary);
+            write_transport_commit_probe(
                 data, boundary, segment, boundary_radius_cm, "post_atomic_pre_stpcut");
             FixedDsecSnapshot pretransport_boundary_v82_patch520145 = boundary;
 
             if (segment > 0.0) {
                 const auto stpcut_started_v064890 = std::chrono::steady_clock::now();
-                advance_stpcut_depths_v82_patch520145(
+                advance_stpcut_depths(
                     data, boundary, segment, state.hydrogen_density_cm3);
                 if (g_performance_v064890) {
-                    g_performance_v064890->stpcut_seconds += elapsed_seconds_v064890(stpcut_started_v064890);
+                    g_performance_v064890->stpcut_seconds += performance_elapsed_seconds(stpcut_started_v064890);
                 }
             }
-            write_v0648123352_transport_commit_probe(
+            write_transport_commit_probe(
                 data, boundary, segment, boundary_radius_cm, "post_stpcut");
             // Decide whether the literal first-pass source predicate permits
             // another physical shell.  The Mg XI reference trajectory keeps
@@ -17829,7 +17197,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                 terminal_shell_entry_bremsa_v064883 = current_shell_entry_bremsa_v0648110;
                 terminal_transport_boundary_v82_patch520144 = boundary;
                 std::cout << "V064883_TERMINAL_SHELL_ENTRY_BREMSA_HASH="
-                          << binary64_vector_hash_v82_patch4(terminal_shell_entry_bremsa_v064883) << "\n";
+                          << binary64_vector_hash(terminal_shell_entry_bremsa_v064883) << "\n";
             }
 
             // Source xstar.f90 calls STEP at the beginning of the *next* zone,
@@ -17846,12 +17214,12 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                 const double step_radius_cm = params.initial_radius_cm + data.cumulative_depth_cm;
                 const double current_column_cm2 = data.cumulative_column_cm2;
                 const auto step_started_v064890 = std::chrono::steady_clock::now();
-                const auto step_result = source_step_v82_patch520111(
+                const auto step_result = source_step(
                     data, step_opakc, step_radius_cm, current_column_cm2);
                 if (g_performance_v064890) {
-                    g_performance_v064890->step_seconds += elapsed_seconds_v064890(step_started_v064890);
+                    g_performance_v064890->step_seconds += performance_elapsed_seconds(step_started_v064890);
                 }
-                write_v0648123353_step_limiter_probe(data, boundary, step_result);
+                write_step_limiter_probe(data, boundary, step_result);
                 pending_transport_segment_cm = step_result.delta_radius_cm;
                 std::cout << std::setprecision(17)
                           << "V048746255172582_PATCH520111_STEP_AFTER_CALL=" << call << "\n"
@@ -17867,13 +17235,13 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                           << "V0648114_STEP_COLUMN_LIMIT_CM=" << step_result.column_limit_cm << "\n"
                           << "V048746255172582_PATCH520111_STEP_REMAINING_COLUMN_LIMIT_CM=" << step_result.remaining_column_limit_cm << "\n"
                           << "V0648114_STEP_REMAINING_COLUMN_FINAL_LIMIT=" << (step_result.remaining_column_was_final_limit ? 1 : 0) << "\n"
-                          << "V0648114_STEP_CRITF=" << effective_critical_fraction_v0648115 << "\n";
+                          << "V0648114_STEP_CRITF=" << effective_critical_thermal_fraction << "\n";
                 // 0.6.48.11.4.1: emit only the compact first-STEP attribution
                 // to stderr when explicitly requested.  ScopedCoutSilenceV064897
                 // still keeps the historical controller stream quiet in normal
                 // production, while the qualification runner can observe these
                 // markers without globally enabling verbose diagnostics.
-                if (call == 1u && compact_step_diagnostics_v0648115()) {
+                if (call == 1u && compact_step_diagnostics()) {
                     std::cerr << std::setprecision(17)
                               << "V0648117_STEP_AFTER_CALL=" << call << "\n"
                               << "V0648117_STEP_INITIAL_DELTA_RADIUS_CM=" << step_result.initial_delta_radius_cm << "\n"
@@ -17888,25 +17256,25 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                               << "V0648117_STEP_COLUMN_LIMIT_CM=" << step_result.column_limit_cm << "\n"
                               << "V0648117_STEP_REMAINING_COLUMN_LIMIT_CM=" << step_result.remaining_column_limit_cm << "\n"
                               << "V0648117_STEP_REMAINING_COLUMN_FINAL_LIMIT=" << (step_result.remaining_column_was_final_limit ? 1 : 0) << "\n"
-                              << "V0648117_STEP_CRITF=" << effective_critical_fraction_v0648115 << "\n";
+                              << "V0648117_STEP_CRITF=" << effective_critical_thermal_fraction << "\n";
                     const std::size_t limiting_zero_based_v0648115 =
                         step_result.limiting_bin_one_based > 0 ? step_result.limiting_bin_one_based - 1u : 0u;
-                    const auto component_at_v0648115 = [&](const std::vector<double>& values) {
+                    const auto thermal_component_at = [&](const std::vector<double>& values) {
                         return limiting_zero_based_v0648115 < values.size() && std::isfinite(values[limiting_zero_based_v0648115])
                             ? values[limiting_zero_based_v0648115] : 0.0;
                     };
-                    const double bf_pre_v0648115 = component_at_v0648115(boundary.opakc_bound_free_pre_gsmooth_v0648115);
-                    const double ff_pre_v0648115 = component_at_v0648115(boundary.opakc_free_free_pre_gsmooth_v0648115);
-                    const double line_pre_v0648115 = component_at_v0648115(boundary.opakc_line_pre_gsmooth_v0648115);
-                    const double th_pre_v0648115 = component_at_v0648115(boundary.opakc_thomson_pre_gsmooth_v0648115);
-                    const double bf_post_v0648115 = component_at_v0648115(boundary.opakc_bound_free_post_gsmooth_v0648115);
-                    const double ff_post_v0648115 = component_at_v0648115(boundary.opakc_free_free_post_gsmooth_v0648115);
-                    const double line_post_v0648115 = component_at_v0648115(boundary.opakc_line_post_gsmooth_v0648115);
-                    const double th_post_v0648115 = component_at_v0648115(boundary.opakc_thomson_post_gsmooth_v0648115);
+                    const double bf_pre_v0648115 = thermal_component_at(boundary.opakc_bound_free_pre_gsmooth_v0648115);
+                    const double ff_pre_v0648115 = thermal_component_at(boundary.opakc_free_free_pre_gsmooth_v0648115);
+                    const double line_pre_v0648115 = thermal_component_at(boundary.opakc_line_pre_gsmooth_v0648115);
+                    const double th_pre_v0648115 = thermal_component_at(boundary.opakc_thomson_pre_gsmooth_v0648115);
+                    const double bf_post_v0648115 = thermal_component_at(boundary.opakc_bound_free_post_gsmooth_v0648115);
+                    const double ff_post_v0648115 = thermal_component_at(boundary.opakc_free_free_post_gsmooth_v0648115);
+                    const double line_post_v0648115 = thermal_component_at(boundary.opakc_line_post_gsmooth_v0648115);
+                    const double th_post_v0648115 = thermal_component_at(boundary.opakc_thomson_post_gsmooth_v0648115);
                     const double sum_pre_v0648115 = bf_pre_v0648115 + ff_pre_v0648115 + line_pre_v0648115 + th_pre_v0648115;
                     const double sum_post_v0648115 = bf_post_v0648115 + ff_post_v0648115 + line_post_v0648115 + th_post_v0648115;
                     const double total_v0648115 = step_result.limiting_opacity_cm1;
-                    const auto fraction_v0648115 = [&](double value) { return total_v0648115 != 0.0 ? value / total_v0648115 : 0.0; };
+                    const auto thermal_fraction = [&](double value) { return total_v0648115 != 0.0 ? value / total_v0648115 : 0.0; };
                     const std::array<std::pair<const char*,double>,4> components_v0648115{{
                         {"BOUND_FREE",bf_post_v0648115},{"FREE_FREE",ff_post_v0648115},
                         {"LINE",line_post_v0648115},{"THOMSON",th_post_v0648115}}};
@@ -17916,7 +17284,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                     std::cerr << std::setprecision(17)
                               << "V0648117_STEP_TEMPERATURE_T4=" << boundary.temperature_t4 << "\n"
                               << "V0648117_STEP_ELECTRON_FRACTION=" << boundary.electron_fraction_input << "\n"
-                              << "V0648117_STEP_OPAKCONT_CM1=" << component_at_v0648115(boundary.opakcont) << "\n"
+                              << "V0648117_STEP_OPAKCONT_CM1=" << thermal_component_at(boundary.opakcont) << "\n"
                               << "V0648117_STEP_BOUND_FREE_PRE_GSMOOTH_CM1=" << bf_pre_v0648115 << "\n"
                               << "V0648117_STEP_FREE_FREE_PRE_GSMOOTH_CM1=" << ff_pre_v0648115 << "\n"
                               << "V0648117_STEP_LINE_PRE_GSMOOTH_CM1=" << line_pre_v0648115 << "\n"
@@ -17928,25 +17296,25 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                               << "V0648117_STEP_THOMSON_POST_GSMOOTH_CM1=" << th_post_v0648115 << "\n"
                               << "V0648117_STEP_COMPONENT_SUM_POST_GSMOOTH_CM1=" << sum_post_v0648115 << "\n"
                               << "V0648117_STEP_COMPONENT_SUM_MINUS_TOTAL_CM1=" << (sum_post_v0648115-total_v0648115) << "\n"
-                              << "V0648117_STEP_BOUND_FREE_POST_FRACTION=" << fraction_v0648115(bf_post_v0648115) << "\n"
-                              << "V0648117_STEP_FREE_FREE_POST_FRACTION=" << fraction_v0648115(ff_post_v0648115) << "\n"
-                              << "V0648117_STEP_LINE_POST_FRACTION=" << fraction_v0648115(line_post_v0648115) << "\n"
-                              << "V0648117_STEP_THOMSON_POST_FRACTION=" << fraction_v0648115(th_post_v0648115) << "\n"
+                              << "V0648117_STEP_BOUND_FREE_POST_FRACTION=" << thermal_fraction(bf_post_v0648115) << "\n"
+                              << "V0648117_STEP_FREE_FREE_POST_FRACTION=" << thermal_fraction(ff_post_v0648115) << "\n"
+                              << "V0648117_STEP_LINE_POST_FRACTION=" << thermal_fraction(line_post_v0648115) << "\n"
+                              << "V0648117_STEP_THOMSON_POST_FRACTION=" << thermal_fraction(th_post_v0648115) << "\n"
                               << "V0648117_STEP_DOMINANT_COMPONENT=" << dominant_v0648115.first << "\n"
-                              << "V0648117_STEP_DOMINANT_COMPONENT_FRACTION=" << fraction_v0648115(dominant_v0648115.second) << "\n";
+                              << "V0648117_STEP_DOMINANT_COMPONENT_FRACTION=" << thermal_fraction(dominant_v0648115.second) << "\n";
 
                     // Record identities are explicitly pre-GSSMOOTH owners:
                     // source GSSMOOTH redistributes family opacity between bins,
                     // so a single post-smoothed record contribution is not well-defined.
                     const char* producer_path_v0648115 = std::getenv("XSTAR_V0648117_FIRST_STEP_PRODUCER_AUDIT_PATH");
                     if (producer_path_v0648115 && *producer_path_v0648115) {
-                        std::ifstream producer_in_v0648115(producer_path_v0648115);
+                        std::ifstream producer_in(producer_path_v0648115);
                         std::string producer_line_v0648115;
-                        std::getline(producer_in_v0648115, producer_line_v0648115);
-                        while (std::getline(producer_in_v0648115, producer_line_v0648115)) {
+                        std::getline(producer_in, producer_line_v0648115);
+                        while (std::getline(producer_in, producer_line_v0648115)) {
                             std::vector<std::string> cells_v0648115; std::string cell_v0648115;
-                            std::istringstream row_v0648115(producer_line_v0648115);
-                            while (std::getline(row_v0648115, cell_v0648115, ',')) cells_v0648115.push_back(cell_v0648115);
+                            std::istringstream row(producer_line_v0648115);
+                            while (std::getline(row, cell_v0648115, ',')) cells_v0648115.push_back(cell_v0648115);
                             if (cells_v0648115.size() < 22u) continue;
                             std::size_t runtime_slot_v0648115 = 0u;
                             try { runtime_slot_v0648115 = static_cast<std::size_t>(std::stoull(cells_v0648115[0])); } catch (...) { continue; }
@@ -17976,7 +17344,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                 }
             }
             if (call == 2u && data.reference_diagnostics_enabled) {
-                write_mg_type53_source_native_opacity_record_attribution_v82_patch512(data);
+                write_mg_type53_source_native_opacity_record_attribution(data);
             }
             data.snapshots.push_back(pretransport_boundary_v82_patch520145);
             finals.push_back(std::move(pretransport_boundary_v82_patch520145));
@@ -17985,7 +17353,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             shared_zone_seconds_v0648110.push_back(zone_seconds_v0648110);
             g_shared_zone_seconds_v0648110.push_back(zone_seconds_v0648110);
             g_shared_zone_dsec_v0648110.push_back(dsec_count);
-            production_zone_mark_complete_v0648110(
+            production_zone_mark_complete(
                 call, finals.back(), dsec_count, zone_seconds_v0648110, done_after_zone_v0648110);
 
             std::cout << "V048746255172582_CONTROLLER_CALL=" << call
@@ -18022,7 +17390,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                   << "V064894_TRAVERSAL_PREVALIDATED_RECORD_ORDER=ENABLED\n"
                   << "V064894_RATE_EVALUATION_CONTEXT_HOIST=ENABLED\n";
 
-        const auto join_doubles_v0648110 = [](const std::vector<double>& values) {
+        const auto join_doubles = [](const std::vector<double>& values) {
             std::ostringstream out;
             out << std::setprecision(17);
             for (std::size_t i = 0; i < values.size(); ++i) {
@@ -18031,7 +17399,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             }
             return out.str();
         };
-        const auto join_sizes_v0648110 = [](const std::vector<std::size_t>& values) {
+        const auto join_sizes = [](const std::vector<std::size_t>& values) {
             std::ostringstream out;
             for (std::size_t i = 0; i < values.size(); ++i) {
                 if (i) out << ";";
@@ -18043,9 +17411,9 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             actual_dsec_counts.begin(), actual_dsec_counts.end(), std::size_t{0});
         std::cout << std::setprecision(17)
                   << "V0648110_RADIAL_ZONE_COUNT=" << finals.size() << "\n"
-                  << "V0648110_RADIAL_CALL_BOUNDARY_DEPTHS_CM=" << join_doubles_v0648110(source_boundary_depth_cm) << "\n"
-                  << "V0648110_TRANSPORT_SEGMENTS_CM=" << join_doubles_v0648110(source_transport_segment_cm) << "\n"
-                  << "V0648110_CONTROLLER_DSEC_COUNTS=" << join_sizes_v0648110(actual_dsec_counts) << "\n"
+                  << "V0648110_RADIAL_CALL_BOUNDARY_DEPTHS_CM=" << join_doubles(source_boundary_depth_cm) << "\n"
+                  << "V0648110_TRANSPORT_SEGMENTS_CM=" << join_doubles(source_transport_segment_cm) << "\n"
+                  << "V0648110_CONTROLLER_DSEC_COUNTS=" << join_sizes(actual_dsec_counts) << "\n"
                   << "V0648110_CONTROLLER_DSEC_TOTAL=" << total_dsec_evaluations << "\n"
                   << "V0648110_TERMINAL_DEPTH_CM=" << data.cumulative_depth_cm << "\n"
                   << "V0648110_FIRST_PASS_TERMINATION=NATURAL_SOURCE_PREDICATE\n";
@@ -18053,12 +17421,12 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             const bool reference_counts_ok = actual_dsec_counts.size() == expected_dsec_counts.size() &&
                 std::equal(actual_dsec_counts.begin(), actual_dsec_counts.end(), expected_dsec_counts.begin());
             std::cout << "V048746255172582_PATCH520111_RADIAL_CALL_BOUNDARY_DEPTHS_CM="
-                      << join_doubles_v0648110(source_boundary_depth_cm) << "\n"
+                      << join_doubles(source_boundary_depth_cm) << "\n"
                       << "V048746255172582_PATCH520111_TRANSPORT_SEGMENTS_CM="
-                      << join_doubles_v0648110(source_transport_segment_cm) << "\n"
+                      << join_doubles(source_transport_segment_cm) << "\n"
                       << "V048746255172582_PATCH520111_TERMINAL_DEPTH_CM=" << data.cumulative_depth_cm << "\n"
                       << "V048746255172582_PATCH52014_CONTROLLER_DSEC_COUNTS="
-                      << join_sizes_v0648110(actual_dsec_counts) << "\n"
+                      << join_sizes(actual_dsec_counts) << "\n"
                       << "V048746255172582_PATCH52014_CONTROLLER_DSEC_TOTAL=" << total_dsec_evaluations << "\n"
                       << "V048746255172582_PATCH52014_CONTROLLER_RETAINED_STATES=" << data.evaluations << "\n"
                       << "V048746255172582_PATCH52014_CONTROLLER_FINAL_SEQUENCES=58;59;60;61\n"
@@ -18168,7 +17536,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
 
                     const bool scientific_ok = i == 1u
                         ? canonical_e7_equal(source, native)
-                        : scientific_close_v82(source, native);
+                        : scientific_close(source, native);
                     if (!scientific_ok) {
                         ++scientific_mismatches;
                         if (i == 0u) ++scientific_temperature_mismatches;
@@ -18304,7 +17672,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         append_zone(*terminal_transport_boundary_v82_patch520144,
                     "qualification_free_native_terminal_posttransport",
                     data.cumulative_depth_cm);
-        retain_controller_owned_product_workspaces_v63(whole, options.parameters_path);
+        retain_controller_owned_product_workspaces(whole, options.parameters_path);
         // v71 retains the complete boundary event state in memory.  The
         // benchmark radial depth split is source-compatible with v63 and is
         // used for the native zrtmp/line/RRC trapezoidal reductions.
@@ -18340,7 +17708,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                   << patch520171_complete_workspace_zones << "\n"
                   << "V048746255172582_PATCH520171_EXACT_SOURCE_WORKSPACES="
                   << (whole.exact_source_workspaces_retained ? "ACCEPT" : "REJECT") << "\n";
-        write_patch5201738_radial_zone_rccemis_edge(whole);
+        write_radial_zone_rccemis_edge(whole);
         whole.exact_legacy_pprint_state_retained = false;
         whole.diagnostic_preview_partial = false;
         whole.physical_radial_boundaries_expected = finals.size();
@@ -18382,9 +17750,9 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             // The canonical 61-event reference path assigns source sequence
             // numbers directly and therefore never advances next_sequence.
             // Turning reference replay off for this extra source-local
-            // evaluation used to make make_iteration_snapshot_v67 restart at
+            // evaluation used to make make_iteration_snapshot restart at
             // sequence 1.  That incorrectly disabled the repeated-hydrogen
-            // source-state flag in fill_standalone_input_v67 and caused the
+            // source-state flag in fill_standalone_input and caused the
             // final compact H seed to be normalized as an initial-call seed.
             // Preserve source lifetime instead: the post-loop xstarcalc is a
             // continuation of the terminal state, not a new call-1 state.
@@ -18395,7 +17763,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             final_pprint_data.reference_trajectory_mode = false;
             final_pprint_data.writing_final_snapshot = true;
             const std::size_t terminal_call_index_v0648110 = finals.size();
-            prepare_call_start_workspace_v71(final_pprint_data, terminal_call_index_v0648110);
+            prepare_call_start_workspace(final_pprint_data, terminal_call_index_v0648110);
             if (terminal_shell_entry_bremsa_v064883.size() != final_pprint_data.energy.size()) {
                 throw std::runtime_error("v0.6.48.8.3 terminal shell-entry bremsa was not retained");
             }
@@ -18425,7 +17793,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                     final_thermal_diagnostic_requested = true;
                 }
             }
-            auto final_pprint = evaluate_full_boundary_v67(
+            auto final_pprint = evaluate_full_boundary(
                 final_pprint_data, state,
                 static_cast<double>(static_cast<float>(1.0e-15)),
                 params.initial_radius_cm + data.cumulative_depth_cm, 0u);
@@ -18473,7 +17841,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                 final_pprint_data.accumulated_zrems = terminal_writer_state.zrems;
                 final_pprint_data.accumulated_zremso = terminal_writer_state.zrems;
             }
-            advance_source_continuum_radiation_v82_patch52(
+            advance_source_continuum_radiation(
                 final_pprint_data, final_pprint, final_writer_delr,
                 params.initial_radius_cm + data.cumulative_depth_cm);
             final_pprint.tau0 = terminal_writer_state.tau0;
@@ -18499,7 +17867,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             whole.legacy_pprint.final_total_cooling = final_pprint.total_cooling;
             whole.legacy_pprint.final_hmctot = final_pprint.hmctot;
             if (g_performance_v064890) {
-                g_performance_v064890->final_zero_thickness_seconds += elapsed_seconds_v064890(final_zero_thickness_started_v064890);
+                g_performance_v064890->final_zero_thickness_seconds += performance_elapsed_seconds(final_zero_thickness_started_v064890);
             }
             std::cout << "V048746255172582_PATCH52093_FINAL_ZERO_THICKNESS_EVALUATION=ACCEPT\n"
                       << "V048746255172582_PATCH520144_FINAL_WRITER_LOCAL_RECOMPUTE=XSTARCALC_HEATT_SOURCE_REAL_1E15\n"
@@ -18528,7 +17896,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
             const double diagnostic_elapsed_seconds =
                 std::chrono::duration<double>(
                     std::chrono::steady_clock::now() - started).count();
-            write_full_trajectory_diagnostic_preview_v82_patch516(
+            write_full_trajectory_diagnostic_preview(
                 options, data, whole, diagnostic_elapsed_seconds);
             throw std::runtime_error(
                 std::string("v82 patch5.16 diagnostic full-trajectory continuation completed after latched scientific failure: ") +
@@ -18537,7 +17905,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         const auto product_state_build_started_v064890 = std::chrono::steady_clock::now();
         auto product = xstar_run_state::build_product_writing_state(whole);
         if (g_performance_v064890) {
-            g_performance_v064890->product_state_build_seconds += elapsed_seconds_v064890(product_state_build_started_v064890);
+            g_performance_v064890->product_state_build_seconds += performance_elapsed_seconds(product_state_build_started_v064890);
         }
         product.backend = "cpp-general-standalone";
 
@@ -18550,7 +17918,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
         const auto retained_schema_started_v064890 = std::chrono::steady_clock::now();
         create_native_retained_productwrite_schema(product);
         if (g_performance_v064890) {
-            g_performance_v064890->retained_schema_seconds += elapsed_seconds_v064890(retained_schema_started_v064890);
+            g_performance_v064890->retained_schema_seconds += performance_elapsed_seconds(retained_schema_started_v064890);
             g_performance_v064890->retained_array_count = static_cast<std::uint64_t>(product.retained_product_arrays.size());
             std::uint64_t values_v064890 = 0u;
             for (const auto& item_v064890 : product.retained_product_arrays) {
@@ -18584,7 +17952,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
                   << "V048746255172582_PATCH52017_PRODUCTION_PROMOTION=ACCEPT\n";
         if (data.reference_trajectory_mode) {
             std::string physical_reason;
-            if (!validate_reference_physical_state_v71(product, physical_reason)) {
+            if (!validate_reference_physical_state(product, physical_reason)) {
                 throw std::runtime_error("reference physical-content gate failed: " + physical_reason);
             }
         }
@@ -18612,7 +17980,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product_v67(
 // Purpose: Implement command standalone capabilities in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-int command_standalone_capabilities_v67() {
+int command_standalone_capabilities() {
     std::cout << "V048746255172582_STANDALONE_EXECUTABLE=YES\n"
               << "V048746255172582_TWO_ARGUMENT_INTERFACE=YES\n"
               << "V048746255172582_FILE_SILENT_POLICY=IMPLEMENTED\n"
@@ -18654,7 +18022,7 @@ int command_standalone_capabilities_v67() {
 // Purpose: Implement command run standalone case probe in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-int command_run_standalone_case_probe_v70(const Options& options) {
+int command_run_standalone_case_probe(const Options& options) {
     if (options.parameters_path.empty() || options.case_dir.empty() || options.output_dir.empty()) {
         std::cerr << "run-standalone-case-probe-v70 requires --parameters, --case-dir, and --output-dir\n";
         return 64;
@@ -18684,8 +18052,8 @@ int command_run_standalone_case_probe_v70(const Options& options) {
         {
             const auto benchmark_case_dir = std::filesystem::path(options.parameters_path).parent_path();
             const auto contract_dir = benchmark_case_dir / "v15926_qualification_contracts";
-            data.reference_contracts = read_sequence_contracts_v1724(contract_dir / "sequence_contracts.csv");
-            read_source_populations_v1724(contract_dir / "population_e7.csv",
+            data.reference_contracts = read_sequence_contracts(contract_dir / "sequence_contracts.csv");
+            read_source_populations(contract_dir / "population_e7.csv",
                 data.source_population_global_v1724, data.source_population_compact_v1724);
             g_source_population_global_v1724 = &data.source_population_global_v1724;
             g_source_population_compact_v1724 = &data.source_population_compact_v1724;
@@ -18707,15 +18075,15 @@ int command_run_standalone_case_probe_v70(const Options& options) {
             }
             data.sequence16_precommit_gate_configured = true;
         }
-        data.energy = source_energy_grid_v1711(static_cast<std::size_t>(params.ncn2));
-        data.flux = source_powerlaw_v1711(params.spectral_index, params.luminosity_1e38, data.energy);
+        data.energy = qualification_source_energy_grid(static_cast<std::size_t>(params.ncn2));
+        data.flux = source_powerlaw(params.spectral_index, params.luminosity_1e38, data.energy);
         data.source_incident = data.flux;
         data.dsec_bremsa.assign(data.flux.size(), 0.0);
         const double radius_19 = params.initial_radius_cm / static_cast<double>(static_cast<float>(1.0e19));
         const double source_fpr2 = static_cast<double>(static_cast<float>(12.56)) * radius_19 * radius_19;
         for (std::size_t i=0; i<data.flux.size(); ++i) data.dsec_bremsa[i] = data.flux[i] / source_fpr2;
         if (!data.dsec_bremsa.empty()) data.dsec_bremsa.back() = 0.0;
-        data.source_tau_in.assign(required_runtime_continuum_tau_capacity_v82_patch4(
+        data.source_tau_in.assign(required_runtime_continuum_tau_capacity(
             0u,
             static_cast<std::size_t>(info.native_continuum_count)), 0.0);
         data.source_tau_out.assign(data.source_tau_in.size(), 0.0);
@@ -18725,7 +18093,7 @@ int command_run_standalone_case_probe_v70(const Options& options) {
             fixed, data.line_tau_in.data(), data.line_tau_out.data(), data.line_tau_in.size(),
             message.data(), message.size());
         if (rc != 0) throw std::runtime_error(message.data());
-        const auto population_map = read_population_global_level_map_v1716(options.case_dir);
+        const auto population_map = read_population_global_level_map(options.case_dir);
         data.population_global_level_index = population_map.first;
         data.global_level_count = population_map.second;
         data.global_xilevg.assign(data.global_level_count, 0.0);
@@ -18758,7 +18126,7 @@ int command_run_standalone_case_probe_v70(const Options& options) {
             std::size_t trace_count = 0;
             const std::size_t before = data.evaluations;
             rc = xstar_thermal_run_evaluation_loop_v1(
-                thermal, &config, &state, standalone_iteration_evaluator_v67, &data,
+                thermal, &config, &state, standalone_iteration_evaluator, &data,
                 trace.data(), trace.size(), &trace_count, &stats, message.data(), message.size());
             if (rc != 0) throw std::runtime_error(std::string("probe call failed: ") + message.data());
             const std::size_t count = data.evaluations - before;
@@ -18768,7 +18136,7 @@ int command_run_standalone_case_probe_v70(const Options& options) {
                       << " HMCTOT=" << std::setprecision(17) << stats.final_hmctot
                       << " ELCTER=" << stats.final_elcter << "\n";
             data.writing_final_snapshot = true;
-            auto boundary = evaluate_full_boundary_v67(data, state, 0.0, params.initial_radius_cm, 0u);
+            auto boundary = evaluate_full_boundary(data, state, 0.0, params.initial_radius_cm, 0u);
             data.snapshots.push_back(boundary);
             data.writing_final_snapshot = false;
             // The v63 controller starts every call with optically thin DSEC
@@ -18813,7 +18181,7 @@ int command_run_standalone_case_probe_v70(const Options& options) {
 // Purpose: Implement source option17 reference bin zero based in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-std::size_t source_option17_reference_bin_zero_based_v0648117(
+std::size_t source_option17_reference_bin_zero_based(
     const std::vector<double>& energy) {
     const std::size_t n = energy.size();
     if (n == 0u) return 0u;
@@ -18849,7 +18217,7 @@ std::size_t source_option17_reference_bin_zero_based_v0648117(
 // Purpose: Implement source option17 radiation balance percent in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-bool source_option17_radiation_balance_percent_v06488(
+bool source_option17_radiation_balance_percent(
     const xstar_run_state::FixedEvaluationState& evaluation,
     double& percent) {
     const auto& energy = evaluation.radiation_energy_ev;
@@ -18882,7 +18250,7 @@ bool source_option17_radiation_balance_percent_v06488(
 // Purpose: Implement print xstar style progress in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-void print_xstar_style_progress_v06488(const xstar_run_state::ProductWritingState& state) {
+void print_xstar_style_progress(const xstar_run_state::ProductWritingState& state) {
     std::cout << " xstar_tools version " << XSTAR_API_VERSION_STRING << "\n\n"
               << " pass number=" << std::setw(12) << 1 << std::setw(12) << -1 << "\n"
               << "   log(r) delr/r log(N) log(xi) x_e   log(n) log(t) h-c(%) h-c(%) log(tau)\n"
@@ -18899,14 +18267,14 @@ void print_xstar_style_progress_v06488(const xstar_run_state::ProductWritingStat
         const auto& dpthc = eval.source_workspace.dpthc;
         double log_fwd = -10.0, log_rev = -10.0;
         if (energy.size() >= 2u && dpthc.size() >= 2u * energy.size()) {
-            const std::size_t rb = source_option17_reference_bin_zero_based_v0648117(energy);
+            const std::size_t rb = source_option17_reference_bin_zero_based(energy);
             const double fwd = std::max(0.0, dpthc[rb]);
             const double rev = std::max(0.0, dpthc[energy.size() + rb]);
             log_fwd = fwd > 0.0 ? std::log10(fwd) : -10.0;
             log_rev = rev > 0.0 ? std::log10(rev) : -10.0;
         }
         double radiation_balance = 0.0;
-        (void)source_option17_radiation_balance_percent_v06488(eval, radiation_balance);
+        (void)source_option17_radiation_balance_percent(eval, radiation_balance);
         const std::size_t call = std::min<std::size_t>(i + 1u, 4u);
         const std::size_t max_eval = call_max_eval.count(call) ? call_max_eval[call] : 0u;
         const std::size_t numrec = max_eval > 0u ? max_eval - 1u : 0u;
@@ -18938,7 +18306,7 @@ void print_xstar_style_progress_v06488(const xstar_run_state::ProductWritingStat
 // Purpose: Implement emit performance instrumentation in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-void emit_performance_instrumentation_v064890(
+void emit_controller_performance_instrumentation(
     const std::filesystem::path& output,
     bool write_file,
     const PerformanceInstrumentationV064890& perf,
@@ -19016,7 +18384,7 @@ void emit_performance_instrumentation_v064890(
 // Purpose: Implement emit performance instrumentation in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-void emit_performance_instrumentation_v064892(
+void emit_spectral_performance_instrumentation(
     const std::filesystem::path& output,
     bool write_file,
     const PerformanceInstrumentationV064890& legacy,
@@ -19341,11 +18709,11 @@ void emit_performance_instrumentation_v064892(
 // Purpose: Run the complete native XSTAR production workflow: parse/validate model inputs, execute the shared radial/local-zone core, retain terminal state, and write the standard science products.
 // Reference context: XSTAR Manual ch14 (theory of operation) and ch5 (outputs); this is shared by standalone xstar-cpp and the qualified production-zone paths.
 // XSTAR-FUNCTION-COMMENT-END
-int command_run_standalone_production_v67(const Options& options, const std::filesystem::path& executable_path) {
+int command_run_standalone_production(const Options& options, const std::filesystem::path& executable_path) {
     const auto production_started_v06488 = std::chrono::steady_clock::now();
     const std::string prefix = "V048746255172582_";
     const std::string artifact_profile = options.artifact_profile_explicit ? options.artifact_profile : "none";
-    const auto artifacts = artifact_selection_v67(options, artifact_profile);
+    const auto artifacts = artifact_selection(options, artifact_profile);
     PerformanceInstrumentationV064890 performance_v064890;
     PerformanceInstrumentationV064892 performance_v064892;
     if (options.parameters_path.empty() || options.output_dir.empty()) {
@@ -19391,7 +18759,7 @@ int command_run_standalone_production_v67(const Options& options, const std::fil
         if (atomic.atdb.empty()) throw std::runtime_error("atdb.fits not resolved");
         if (atomic.coheat.empty()) throw std::runtime_error("coheat.dat not resolved");
         std::size_t coheat_rows = 0;
-        if (!validate_coheat_file_v67(atomic.coheat, coheat_rows)) throw std::runtime_error("coheat.dat validation failed");
+        if (!validate_coheat_file(atomic.coheat, coheat_rows)) throw std::runtime_error("coheat.dat validation failed");
         std::cout << prefix << "ATOMIC_DATABASE=" << atomic.atdb.string() << "\n"
                   << prefix << "COHEAT_FILE=" << atomic.coheat.string() << "\n"
                   << prefix << "COHEAT_ROWS=" << coheat_rows << "\n";
@@ -19423,10 +18791,10 @@ int command_run_standalone_production_v67(const Options& options, const std::fil
         std::cout << prefix << "CONTROLLER_BEGIN=YES\n" << std::flush;
         double controller_seconds = 0.0;
         std::size_t evaluations = 0;
-        const bool quiet_controller_v064897 = !verbose_controller_diagnostics_v064897();
+        const bool quiet_controller_v064897 = !verbose_controller_diagnostics();
         auto product = [&]() {
             ScopedCoutSilenceV064897 silence(quiet_controller_v064897);
-            return build_general_standalone_product_v67(
+            return build_general_standalone_product(
                 options, params, atomic, program, controller_seconds, evaluations);
         }();
         if (const char* shared_mode = std::getenv("XSTAR_V0648110_SHARED_ZONE_MODE");
@@ -19458,12 +18826,12 @@ int command_run_standalone_production_v67(const Options& options, const std::fil
                   << (forced_096_provenance_v064897 ? "LEGACY_096_RETAIN_ALL" : "COMPACT_DEFERRED_DSEC_ELISION") << "\n"
                   << "V064897_BOUND_FREE_095=FROZEN_PREPARED_LAZY\n"
                   << "V064897_BOUNDARY_CORRECTNESS_0942=FROZEN_EXACT_RECOMPUTE\n";
-        print_xstar_style_progress_v06488(product);
-        const auto trajectory = summarize_standalone_trajectory_v71(product);
-        const bool reference_benchmark = is_reference_mg11_benchmark_v71(params);
+        print_xstar_style_progress(product);
+        const auto trajectory = summarize_standalone_trajectory(product);
+        const bool reference_benchmark = is_reference_mg11_benchmark(params);
         if (!product.product_state_complete) throw std::runtime_error("product state incomplete before publication");
         std::filesystem::create_directories(output);
-        write_standalone_diagnostics_v67(
+        write_standalone_diagnostics(
             output, artifacts, artifact_profile, params, atomic, program,
             product, evaluations, controller_seconds);
         std::cout << prefix << "EMIT_LOWERED_CASE=" << (artifacts.lowered_case ? "YES" : "NO") << "\n"
@@ -19526,20 +18894,20 @@ int command_run_standalone_production_v67(const Options& options, const std::fil
         const auto science_fits_started_v064890 = std::chrono::steady_clock::now();
         auto science = xstar_science_fits::write_historical_science_products({}, output, product,
             product.fixed_evaluations.empty() ? std::vector<double>{} : product.fixed_evaluations.front().radiation_energy_ev);
-        performance_v064890.science_fits_seconds += elapsed_seconds_v064890(science_fits_started_v064890);
+        performance_v064890.science_fits_seconds += performance_elapsed_seconds(science_fits_started_v064890);
         (void)science;
         const auto abundance_fits_started_v064890 = std::chrono::steady_clock::now();
         xstar_science_fits::write_native_abundance_product({}, output, product);
-        performance_v064890.abundance_fits_seconds += elapsed_seconds_v064890(abundance_fits_started_v064890);
+        performance_v064890.abundance_fits_seconds += performance_elapsed_seconds(abundance_fits_started_v064890);
         const auto step_log_started_v064890 = std::chrono::steady_clock::now();
         auto step = xstar_step_log::write_native_step_log(output, product);
-        performance_v064890.step_log_seconds += elapsed_seconds_v064890(step_log_started_v064890);
-        performance_v064890.publication_seconds += elapsed_seconds_v064890(publication_started_v064890);
+        performance_v064890.step_log_seconds += performance_elapsed_seconds(step_log_started_v064890);
+        performance_v064890.publication_seconds += performance_elapsed_seconds(publication_started_v064890);
         std::cout << " xstar: Done writing spectral data\n";
         ::unsetenv("XSTAR_TRUE_PRODUCTION");
-        const std::size_t fits_count = count_native_fits_products_v172524(output);
+        const std::size_t fits_count = count_native_fits_products(output);
         const bool step_ok = std::filesystem::is_regular_file(output / "xout_step.log") &&
-            regular_file_size_or_zero_v172521(output / "xout_step.log") > 0;
+            regular_file_size_or_zero(output / "xout_step.log") > 0;
         if (fits_count != 9 || !step_ok || step.lines_written == 0) {
             throw std::runtime_error("publication did not create all ten public products");
         }
@@ -19589,10 +18957,10 @@ int command_run_standalone_production_v67(const Options& options, const std::fil
             std::chrono::steady_clock::now() - production_started_v06488).count();
         xstar_spectral_perf_init_v064892(&performance_v064892.total);
         (void)xstar_spectral_perf_snapshot_v064892(&performance_v064892.total);
-        emit_performance_instrumentation_v064890(
+        emit_controller_performance_instrumentation(
             output, artifacts.timing_summary, performance_v064890, lowering_seconds,
             controller_seconds, production_total_seconds_v06488);
-        emit_performance_instrumentation_v064892(
+        emit_spectral_performance_instrumentation(
             output, artifacts.timing_summary, performance_v064890, performance_v064892);
         if (g_bound_free_perf_v064895_valid) {
             const auto& bf = g_bound_free_perf_v064895_last;
@@ -19621,7 +18989,7 @@ int command_run_standalone_production_v67(const Options& options, const std::fil
         ::unsetenv("XSTAR_TRUE_PRODUCTION");
         ::unsetenv("XSTAR_NATIVE_SOURCE_SEQUENCE");
         ::unsetenv("XSTAR_NATIVE_PRODUCTION");
-        remove_native_products_v172524(output);
+        remove_native_products(output);
         if (artifact_profile == "failure") {
             std::filesystem::create_directories(output / "standalone_diagnostics");
             std::ofstream failure(output / "standalone_diagnostics" / "failure.txt");
@@ -19641,27 +19009,10 @@ int command_run_standalone_production_v67(const Options& options, const std::fil
 
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Implement command standalone capabilities in the standalone controller/front-end workflow without duplicating the scientific kernels.
-// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
-// XSTAR-FUNCTION-COMMENT-END
-[[maybe_unused]] int command_standalone_capabilities_v66() {
-    std::cout << "V048746255172566_STANDALONE_EXECUTABLE=YES\n"
-              << "V048746255172566_TWO_ARGUMENT_INTERFACE=YES\n"
-              << "V048746255172566_FILE_SILENT_POLICY=IMPLEMENTED\n"
-              << "V048746255172566_STATE_COMPLETE_ASSET_VALIDATION_PATH=IMPLEMENTED_UNVERIFIED_FULL_RUN\n"
-              << "V048746255172566_CXX_IN_MEMORY_ATDB_LOWERER=NO\n"
-              << "V048746255172566_CXX_PRODUCT_METADATA_DERIVATION=NO\n"
-              << "V048746255172566_QUALIFICATION_FREE_CONTROLLER_TRAJECTORY=NO\n"
-              << "V048746255172566_GENERAL_STANDALONE_PRODUCTION_READY=NO\n"
-              << "V048746255172566_RESULT=REJECT_NOT_STANDALONE_PRODUCTION_PATH\n";
-    return 20;
-}
-
-// XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Compute resolve standalone atomic database as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
 // Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
 // XSTAR-FUNCTION-COMMENT-END
-std::filesystem::path resolve_standalone_atomic_database_v66(const Options& options) {
+std::filesystem::path resolve_standalone_atomic_database(const Options& options) {
     std::vector<std::filesystem::path> candidates;
     if (!options.atomic_db_path.empty()) candidates.emplace_back(options.atomic_db_path);
     if (!options.parameters_path.empty() && std::filesystem::is_regular_file(options.parameters_path)) {
@@ -19689,57 +19040,10 @@ std::filesystem::path resolve_standalone_atomic_database_v66(const Options& opti
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Implement command run standalone production in the standalone controller/front-end workflow without duplicating the scientific kernels.
-// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
-// XSTAR-FUNCTION-COMMENT-END
-[[maybe_unused]] int command_run_standalone_production_v66(const Options& options) {
-    if (options.parameters_path.empty() || options.output_dir.empty()) {
-        std::cerr << "run-production requires --parameters and --output-dir\n";
-        std::cout << "V048746255172566_RESULT=REJECT_NOT_STANDALONE_PRODUCTION_PATH\n";
-        return 64;
-    }
-    if (!std::filesystem::is_regular_file(options.parameters_path)) {
-        std::cerr << "parameters file not found: " << options.parameters_path << "\n";
-        std::cout << "V048746255172566_RESULT=REJECT_NOT_STANDALONE_PRODUCTION_PATH\n";
-        return 66;
-    }
-    if (!options.case_dir.empty() || !options.product_metadata_dir.empty() ||
-        !options.qualification_contract_dir.empty() || !options.checkpoint_dir.empty()) {
-        std::cerr << "run-production rejects external case, metadata, qualification, and checkpoint assets\n";
-        std::cout << "V048746255172566_EXTERNAL_RUNTIME_ASSETS=REJECT\n"
-                  << "V048746255172566_PRODUCTS_WRITTEN=0\n"
-                  << "V048746255172566_RESULT=REJECT_NOT_STANDALONE_PRODUCTION_PATH\n";
-        return 20;
-    }
-    const auto atdb = resolve_standalone_atomic_database_v66(options);
-    std::cout << "V048746255172566_COMMAND=RUN_PRODUCTION_STANDALONE\n"
-              << "V048746255172566_PARAMETERS=" << options.parameters_path << "\n"
-              << "V048746255172566_OUTPUT_DIR=" << options.output_dir << "\n"
-              << "V048746255172566_ARTIFACT_PROFILE=none\n"
-              << "V048746255172566_EXTERNAL_CASE_DIR_USED=NO\n"
-              << "V048746255172566_EXTERNAL_PRODUCT_METADATA_USED=NO\n"
-              << "V048746255172566_EXTERNAL_QUALIFICATION_CONTRACTS_USED=NO\n"
-              << "V048746255172566_OUTPUT_DIRECTORY_CREATED=NO\n"
-              << "V048746255172566_PRODUCTS_WRITTEN=0\n";
-    if (atdb.empty()) {
-        std::cout << "V048746255172566_ATOMIC_DATABASE=NOT_RESOLVED\n"
-                  << "V048746255172566_CXX_IN_MEMORY_ATDB_LOWERER=NOT_RUN\n"
-                  << "V048746255172566_RESULT=REJECT_NOT_STANDALONE_PRODUCTION_PATH\n";
-        return 20;
-    }
-    std::cout << "V048746255172566_ATOMIC_DATABASE=" << atdb.string() << "\n"
-              << "V048746255172566_CXX_IN_MEMORY_ATDB_LOWERER=UNAVAILABLE\n"
-              << "V048746255172566_CXX_PRODUCT_METADATA_DERIVATION=UNAVAILABLE\n"
-              << "V048746255172566_QUALIFICATION_FREE_CONTROLLER_TRAJECTORY=UNAVAILABLE\n"
-              << "V048746255172566_RESULT=REJECT_NOT_STANDALONE_PRODUCTION_PATH\n";
-    return 20;
-}
-
-// XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Implement command run native resumable trajectory in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
-int command_run_native_resumable_trajectory_v1724(Options options, bool true_production_v65 = false) {
+int command_run_native_resumable_trajectory(Options options, bool true_production_v65 = false) {
     const auto command_started = std::chrono::steady_clock::now();
     if (true_production_v65) {
         const char* production_flags[] = {
@@ -19818,8 +19122,8 @@ int command_run_native_resumable_trajectory_v1724(Options options, bool true_pro
     const double spectral_index = json_number_value(parameter_json, "trad", -1.0);
     const double radius = json_number_value(parameter_json, "initial_radius_cm", 1.778279410038923e17);
     const std::size_t ncn2 = static_cast<std::size_t>(json_number_value(parameter_json, "ncn2", 9999));
-    const auto energy = source_energy_grid_v1711(ncn2);
-    const auto incident = source_powerlaw_v1711(spectral_index, luminosity, energy);
+    const auto energy = qualification_source_energy_grid(ncn2);
+    const auto incident = source_powerlaw(spectral_index, luminosity, energy);
     std::vector<double> bremsa(ncn2, 0.0);
     const double radius_19 = radius / static_cast<double>(static_cast<float>(1.0e19));
     const double source_fpr2 = static_cast<double>(static_cast<float>(12.56)) * radius_19 * radius_19;
@@ -19860,8 +19164,8 @@ int command_run_native_resumable_trajectory_v1724(Options options, bool true_pro
     data.trajectory_resume_after_v1724 = options.trajectory_resume_after;
     data.trajectory_stop_after_v1724 = std::min<std::size_t>(61, options.trajectory_stop_after);
     try {
-        data.sequence_contracts_v1724 = read_sequence_contracts_v1724(contract_dir / "sequence_contracts.csv");
-        read_source_populations_v1724(contract_dir / "population_e7.csv",
+        data.sequence_contracts_v1724 = read_sequence_contracts(contract_dir / "sequence_contracts.csv");
+        read_source_populations(contract_dir / "population_e7.csv",
             data.source_population_global_v1724, data.source_population_compact_v1724);
     } catch (const std::exception& exc) {
         xstar_thermal_context_destroy(thermal_context); xstar_fixed_state_context_destroy(fixed_context);
@@ -19882,9 +19186,9 @@ int command_run_native_resumable_trajectory_v1724(Options options, bool true_pro
     }
     data.source_trajectory_guard = !true_production_v65;
     data.source_trajectory_align = false;
-    const auto abundances = read_case_abundances_v1712(std::filesystem::path(options.case_dir));
+    const auto abundances = read_case_abundances(std::filesystem::path(options.case_dir));
     const auto h_it = abundances.find(1); data.hydrogen_abundance = h_it == abundances.end() ? 1.0 : h_it->second;
-    const auto population_map = read_population_global_level_map_v1716(std::filesystem::path(options.case_dir));
+    const auto population_map = read_population_global_level_map(std::filesystem::path(options.case_dir));
     data.population_global_level_index = population_map.first; data.global_level_count = population_map.second;
     for (int call = 0; call < 4; ++call) {
         CallStartWorkspace workspace; workspace.radiation_energy = energy; workspace.bremsa = bremsa;
@@ -19933,7 +19237,7 @@ int command_run_native_resumable_trajectory_v1724(Options options, bool true_pro
             std::cerr << "true production trajectory incomplete: snapshots=" << snapshots.size() << "\n";
             return 20;
         }
-        const auto result = publish_true_production_products_v65(
+        const auto result = publish_true_production_products(
             options, output, snapshots, controller_seconds);
         const double total_seconds = std::chrono::duration<double>(
             std::chrono::steady_clock::now() - command_started).count();
@@ -19968,11 +19272,11 @@ int command_run_native_resumable_trajectory_v1724(Options options, bool true_pro
     bool comparison_gate_v172521 = false;
     bool row_selection_gate_v172521 = false;
     const bool retention_staged_v172521 = full_accept &&
-        write_full61_retention_staging_v172521(output, data, snapshots, retention_error_v172521,
+        write_full61_retention_staging(output, data, snapshots, retention_error_v172521,
             &retention_gate_v172521, &comparison_gate_v172521, &row_selection_gate_v172521);
     const double controller_elapsed_seconds_v172552 = std::chrono::duration<double>(
         std::chrono::steady_clock::now() - command_started).count();
-    const auto publication_v172524 = publish_full61_products_v172524(
+    const auto publication_v172524 = publish_full61_products(
         options, output, data, snapshots, retention_gate_v172521, comparison_gate_v172521,
         row_selection_gate_v172521, controller_elapsed_seconds_v172552);
     const bool product_publication_enabled_v172524 = publication_v172524.ok;
@@ -20039,1149 +19343,12 @@ int command_run_native_resumable_trajectory_v1724(Options options, bool true_pro
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Implement command run native sequence12345678 in the standalone controller/front-end workflow without duplicating the scientific kernels.
-// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
-// XSTAR-FUNCTION-COMMENT-END
-[[maybe_unused]] int command_run_native_sequence12345678_v1723(Options options) {
-    const auto output = std::filesystem::path(options.output_dir);
-    std::filesystem::create_directories(output);
-    for (const char* name : {"xo01_detail.fits", "xo01_detal2.fits", "xo01_detal3.fits", "xo01_detal4.fits",
-             "xout_abund1.fits", "xout_cont1.fits", "xout_lines1.fits", "xout_rrc1.fits", "xout_spect1.fits", "xout_step.log"}) {
-        std::error_code ec; std::filesystem::remove(output / name, ec);
-    }
-    if (options.case_dir.empty() || !std::filesystem::is_regular_file(std::filesystem::path(options.case_dir) / "manifest.txt")) {
-        std::cerr << "v25.5.17.23 requires --case-dir pointing to a lowered native ATDB program\n";
-        return 66;
-    }
-    if (options.parameters_path.empty() || !std::filesystem::is_regular_file(options.parameters_path)) {
-        std::cerr << "v25.5.17.23 requires --parameters\n";
-        return 66;
-    }
-
-    const std::string parameter_json = read_text_file(options.parameters_path);
-    const double density = json_number_value(parameter_json, "density", 1.0e8);
-    const double temperature_k = json_number_value(parameter_json, "temperature_k", 1.0e6);
-    const double initial_xee = json_number_value(parameter_json, "initial_electron_fraction", 1.0);
-    const double luminosity = json_number_value(parameter_json, "rlrad38", 1.0e6);
-    const double spectral_index = json_number_value(parameter_json, "trad", -1.0);
-    const double radius = json_number_value(parameter_json, "initial_radius_cm", 1.778279410038923e17);
-    const std::size_t ncn2 = static_cast<std::size_t>(json_number_value(parameter_json, "ncn2", 9999));
-
-    const auto energy = source_energy_grid_v1711(ncn2);
-    const auto incident = source_powerlaw_v1711(spectral_index, luminosity, energy);
-    std::vector<double> bremsa(ncn2, 0.0);
-    const double source_radius_scale = static_cast<double>(static_cast<float>(1.0e19));
-    const double source_geometry_factor = static_cast<double>(static_cast<float>(12.56));
-    const double radius_19 = radius / source_radius_scale;
-    const double source_fpr2 = source_geometry_factor * radius_19 * radius_19;
-    for (std::size_t i = 0; i < ncn2; ++i) bremsa[i] = incident[i] / source_fpr2;
-    if (!bremsa.empty()) bremsa.back() = 0.0;
-    std::filesystem::create_directories(output / "sequence12345678_diagnostics");
-    {
-        std::ofstream stream(output / "sequence12345678_diagnostics" / "call_start_incident.bin", std::ios::binary);
-        stream.write(reinterpret_cast<const char*>(incident.data()), static_cast<std::streamsize>(incident.size() * sizeof(double)));
-    }
-    {
-        std::ofstream stream(output / "sequence12345678_diagnostics" / "call_start_bremsa.bin", std::ios::binary);
-        stream.write(reinterpret_cast<const char*>(bremsa.data()), static_cast<std::streamsize>(bremsa.size() * sizeof(double)));
-    }
-    std::vector<double> tau_in(301301, 0.0), tau_out(301301, 0.0);
-
-    xstar_fixed_state_context* fixed_context = nullptr;
-    xstar_thermal_context* thermal_context = nullptr;
-    std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> message{};
-    int rc = xstar_fixed_state_context_create_v1(options.case_dir.c_str(), &fixed_context, message.data(), message.size());
-    if (rc != 0) { std::cerr << "fixed-state context creation failed: " << message.data() << "\n"; return rc; }
-    rc = xstar_thermal_context_create_v1(&thermal_context, message.data(), message.size());
-    if (rc != 0) { xstar_fixed_state_context_destroy(fixed_context); std::cerr << "thermal context creation failed: " << message.data() << "\n"; return rc; }
-    xstar_fixed_state_program_info_v1 info{}; xstar_fixed_state_program_info_init_v1(&info);
-    rc = xstar_fixed_state_context_get_program_info_v1(fixed_context, &info, message.data(), message.size());
-    if (rc != 0) { xstar_thermal_context_destroy(thermal_context); xstar_fixed_state_context_destroy(fixed_context); std::cerr << message.data() << "\n"; return rc; }
-
-    xstar_fixed_state_stats_v1 cumulative{}; xstar_fixed_state_stats_init_v1(&cumulative);
-    std::vector<FixedDsecSnapshot> snapshots;
-    FixedDsecEvaluatorData data;
-    data.fixed_context = fixed_context;
-    data.program_info = info;
-    data.cumulative_stats = &cumulative;
-    data.snapshots = &snapshots;
-    data.energy = energy;
-    data.flux = incident;
-    data.radiation_mode = "native_source_powerlaw_9999";
-    data.autonomous_controller = true;
-    data.next_native_sequence = 1;
-    data.call_index = 1;
-    data.evaluation_index = 0;
-    data.dsec_covering_fraction = 1.0;
-    data.has_dsec_covering_fraction = true;
-    data.diagnostics_dir = (output / "sequence12345678_diagnostics").string();
-    data.thermal_budget_csv = (output / "native_thermal_budget.csv").string();
-    {
-        const auto early_abundances = read_case_abundances_v1712(std::filesystem::path(options.case_dir));
-        const auto found_h = early_abundances.find(1);
-        data.hydrogen_abundance = found_h == early_abundances.end() ? 1.0 : found_h->second;
-    }
-    {
-        const auto population_map = read_population_global_level_map_v1716(std::filesystem::path(options.case_dir));
-        data.population_global_level_index = population_map.first;
-        data.global_level_count = population_map.second;
-    }
-    CallStartWorkspace workspace;
-    workspace.radiation_energy = energy;
-    workspace.bremsa = bremsa;
-    workspace.continuum_tau_in = tau_in;
-    workspace.continuum_tau_out = tau_out;
-    data.call_start_workspaces.push_back(std::move(workspace));
-
-    xstar_thermal_state_v1 state{}; xstar_thermal_state_init_v1(&state);
-    state.temperature_t4 = temperature_k / 1.0e4;
-    state.electron_fraction_xee = initial_xee;
-    state.hydrogen_density_cm3 = density;
-    xstar_dsec_config_v1 config{}; xstar_dsec_config_init_v1(&config);
-    config.nlim = 100;
-    config.maximum_evaluations = 8;
-    xstar_dsec_stats_v1 stats{}; xstar_dsec_stats_init_v1(&stats);
-    std::vector<xstar_thermal_trace_event_v1> trace(64);
-    std::size_t trace_count = 0;
-    rc = xstar_thermal_run_evaluation_loop_v1(
-        thermal_context, &config, &state, fixed_dsec_evaluator, &data,
-        trace.data(), trace.size(), &trace_count, &stats, message.data(), message.size());
-    xstar_thermal_context_destroy(thermal_context);
-    xstar_fixed_state_context_destroy(fixed_context);
-    if (rc != 0) {
-        std::cerr << "native sequence-1/2/3/4/5/6/7/8 controller prefix failed: " << message.data() << "\n";
-        return rc;
-    }
-    if (snapshots.size() != 8 || snapshots[0].sequence != 1 || snapshots[1].sequence != 2 ||
-        snapshots[2].sequence != 3 || snapshots[3].sequence != 4 || snapshots[4].sequence != 5 || snapshots[5].sequence != 6 || snapshots[6].sequence != 7 || snapshots[7].sequence != 8 ||
-        snapshots[0].call_index != 1 || snapshots[1].call_index != 1 ||
-        snapshots[2].call_index != 1 || snapshots[3].call_index != 1 || snapshots[4].call_index != 1 || snapshots[5].call_index != 1 || snapshots[6].call_index != 1 || snapshots[7].call_index != 1 ||
-        snapshots[0].evaluation_index != 1 || snapshots[1].evaluation_index != 2 ||
-        snapshots[2].evaluation_index != 3 || snapshots[3].evaluation_index != 4 ||
-        snapshots[4].evaluation_index != 5 || snapshots[5].evaluation_index != 6 || snapshots[6].evaluation_index != 7 || snapshots[7].evaluation_index != 8) {
-        std::cerr << "native controller did not retain the required sequence-1/2/3/4/5/6/7/8 prefix\n";
-        return 20;
-    }
-
-    const auto budget_rows = read_csv_rows_v1716(output / "native_thermal_budget.csv");
-    if (budget_rows.size() != 8) throw std::runtime_error("sequence-1/2/3/4/5/6/7/8 thermal budget must contain exactly eight rows");
-    const auto number = [&](std::size_t row_index, const char* key) {
-        const auto it = budget_rows.at(row_index).find(key);
-        if (it == budget_rows.at(row_index).end()) throw std::runtime_error(std::string("thermal budget missing ") + key);
-        return std::stod(it->second);
-    };
-    const auto integer = [&](std::size_t row_index, const char* key) { return static_cast<std::size_t>(number(row_index, key)); };
-
-    const auto case_abundances = read_case_abundances_v1712(std::filesystem::path(options.case_dir));
-    const auto abundance_value = [&](int z) { const auto found = case_abundances.find(z); return found == case_abundances.end() ? 0.0 : found->second; };
-    const double h_abundance = abundance_value(1), he_abundance = abundance_value(2), mg_abundance = abundance_value(12);
-    const bool physical_abundances_ok = zero_aware_controller_equal_v1711(h_abundance, 1.0) &&
-        zero_aware_controller_equal_v1711(he_abundance, 0.1) && zero_aware_controller_equal_v1711(mg_abundance, 3.5e-5);
-
-    const bool sequence1_workspace_ok = integer(0,"input_radiation_count") == 9999 && integer(0,"input_dsec_radiation_count") == 9999 &&
-        integer(0,"input_bremsa_count") == 9999 && integer(0,"input_tau_count") == 301301 &&
-        integer(0,"continuum_workspace_source_faithful") == 1 && integer(0,"continuum_epim_count") == 999 &&
-        integer(0,"continuum_bremsam_count") == 999 && integer(0,"continuum_bremsmap_count") == 999;
-    const auto sequence1_population = compare_sequence1_populations_v1714(output / "sequence12345678_diagnostics" / "evaluation_0001_populations.csv");
-    const auto sequence1_ledger = compare_sequence_thermal_ledger_v1716(
-        output / "sequence12345678_diagnostics" / "evaluation_0001_thermal_diagonal_ledger.csv",
-        "a2007d9d4dca9965", "ad583d50031d5bd1", "85f206312a339d4b");
-    const bool sequence1_ok = physical_abundances_ok && sequence1_workspace_ok && sequence1_population.initial_ok &&
-        sequence1_population.final_zero_aware_ok && sequence1_ledger.count_ok && sequence1_ledger.identities_ok &&
-        sequence1_ledger.order_ok && sequence1_ledger.values_ok &&
-        relative_one_percent_v1711(snapshots[0].hmctot, -1.1485157783994253) &&
-        relative_one_percent_v1711(snapshots[0].charge_residual, -0.20036716199692539);
-
-    const bool sequence2_controller_state_ok = canonical_e7_equal(snapshots[1].temperature_t4, 100.0) &&
-        canonical_e7_equal(snapshots[1].electron_fraction_input, 1.2000000476837158);
-    const bool sequence2_workspace_ok = integer(1,"input_radiation_count") == 9999 && integer(1,"input_dsec_radiation_count") == 9999 &&
-        integer(1,"input_bremsa_count") == 9999 && integer(1,"input_tau_count") == 301301 &&
-        integer(1,"continuum_workspace_source_faithful") == 1 && integer(1,"continuum_epim_count") == 999 &&
-        integer(1,"continuum_bremsam_count") == 999 && integer(1,"continuum_bremsmap_count") == 999;
-    const auto sequence2_population = compare_sequence_population_hashes_v1716(
-        output / "sequence12345678_diagnostics" / "evaluation_0002_populations.csv",
-        "b7d166344720c03e", "62e2e6a285b579c5", 2);
-    const auto sequence2_ledger = compare_sequence_thermal_ledger_v1716(
-        output / "sequence12345678_diagnostics" / "evaluation_0002_thermal_diagonal_ledger.csv",
-        "a2007d9d4dca9965", "ad583d50031d5bd1", "be6a72eed1cc893d", 2);
-
-    const auto sequence2_hydrogen = compare_sequence2_hydrogen_state_v1717(
-        output / "sequence12345678_diagnostics" / "evaluation_0001_populations.csv",
-        output / "sequence12345678_diagnostics" / "evaluation_0002_populations.csv",
-        output / "sequence12345678_diagnostics" / "evaluation_0002_all_element_solve_rows.csv",
-        snapshots[1], density, h_abundance);
-
-    const std::map<std::string,double> sequence2_element_expected = {
-        {"h_heating",1.1770847613979976e-09},{"h_cooling",8.6971058682083958e-09},
-        {"h_heating2",3.0843257598451826e-10},{"h_cooling2",7.5028753352803874e-09},
-        {"he_heating",3.5934502015010018e-09},{"he_cooling",1.650333274981515e-08},
-        {"he_heating2",9.427108615135224e-10},{"he_cooling2",1.3909518034313189e-08},
-        {"computed_he_type53_heating",3.5932915936957602e-09},{"computed_he_type53_cooling",9.7904278176026692e-09},
-        {"computed_he_type53_heating2",9.4261235194936427e-10},{"computed_he_type53_cooling2",5.456249127698813e-09},
-        {"computed_he_non_type53_heating",1.5860780524131697e-13},{"computed_he_non_type53_cooling",6.7129049322124725e-09},
-        {"computed_he_non_type53_heating2",9.8509564157805721e-14},{"computed_he_non_type53_cooling2",8.4532689066143638e-09},
-        {"mg_heating",4.266253764967799e-09},{"mg_cooling",1.5569124146012375e-08},
-        {"mg_heating2",1.5575186494759054e-09},{"mg_cooling2",1.2592078595607181e-08}
-    };
-    bool sequence2_element_ok = true;
-    for (const auto& expected : sequence2_element_expected) sequence2_element_ok = sequence2_element_ok && relative_one_percent_v1711(number(1, expected.first.c_str()), expected.second);
-    const std::map<std::string,double> sequence2_continuum_expected = {
-        {"cmp1",4.6905545032708282e-05},{"cmp2",4.4763443016579042e-07},
-        {"htcomp",9.0181164489536711e-09},{"clcomp",7.4160857422880182e-09},
-        {"htfreef",1.1135719001630413e-14},{"clbrems",2.8691531455071891e-08},
-        {"continuum_heating",9.0181275846726735e-09},{"continuum_cooling",3.6107617197359909e-08}
-    };
-    bool sequence2_continuum_ok = integer(1,"continuum_secondary_ledger_corrected") == 1;
-    for (const auto& expected : sequence2_continuum_expected) sequence2_continuum_ok = sequence2_continuum_ok && relative_one_percent_v1711(number(1, expected.first.c_str()), expected.second);
-    const bool sequence2_hmctot_ok = relative_one_percent_v1711(snapshots[1].hmctot, -1.2392492309264873);
-    const bool sequence2_elcter_ok = relative_one_percent_v1711(snapshots[1].charge_residual, -0.0003632540628308867);
-    const bool sequence2_population_ok = sequence2_population.final_ok;
-    const bool sequence2_ledger_ok = sequence2_ledger.count_ok && sequence2_ledger.identities_ok &&
-        sequence2_ledger.order_ok && sequence2_ledger.values_ok;
-    const bool sequence2_hydrogen_ok = sequence2_hydrogen.global_continuity_ok &&
-        sequence2_hydrogen.entry_xh0_xh1_ok &&
-        sequence2_hydrogen.compact_terminal_zero_ok &&
-        sequence2_hydrogen.final_population_ok;
-    const bool sequence2_ok = sequence1_ok && sequence2_controller_state_ok && sequence2_workspace_ok &&
-        sequence2_hydrogen_ok && sequence2_population_ok && sequence2_ledger_ok && sequence2_element_ok && sequence2_continuum_ok &&
-        sequence2_hmctot_ok && sequence2_elcter_ok;
-
-    const bool sequence3_controller_state_ok = canonical_e7_equal(snapshots[2].temperature_t4, 100.0) &&
-        canonical_e7_equal(snapshots[2].electron_fraction_input, 1.4400001144409202);
-    const bool sequence3_workspace_ok = integer(2,"input_radiation_count") == 9999 &&
-        integer(2,"input_dsec_radiation_count") == 9999 && integer(2,"input_bremsa_count") == 9999 &&
-        integer(2,"input_tau_count") == 301301 && integer(2,"continuum_workspace_source_faithful") == 1 &&
-        integer(2,"continuum_epim_count") == 999 && integer(2,"continuum_bremsam_count") == 999 &&
-        integer(2,"continuum_bremsmap_count") == 999;
-    bool sequence3_active_stage_window_ok = integer(2,"thermal_population_count") == 612;
-    {
-        const auto manifest_rows = read_csv_rows_v1716(
-            output / "sequence12345678_diagnostics" / "evaluation_0003_all_element_solve_system_manifest.csv");
-        bool found_mg = false;
-        for (const auto& row : manifest_rows) {
-            if (std::stoi(row.at("element_z")) != 12) continue;
-            found_mg = true;
-            sequence3_active_stage_window_ok = sequence3_active_stage_window_ok &&
-                std::stoi(row.at("active_min_stage")) == 5 &&
-                std::stoi(row.at("active_max_stage")) == 12 &&
-                std::stoi(row.at("n_rows")) == 501;
-        }
-        sequence3_active_stage_window_ok = sequence3_active_stage_window_ok && found_mg;
-    }
-    const auto sequence3_population = compare_sequence_population_hashes_v1716(
-        output / "sequence12345678_diagnostics" / "evaluation_0003_populations.csv",
-        "678993d55301ca6f", "4d9949f5d0067afd", 3);
-    const auto sequence3_ledger = compare_sequence_thermal_ledger_v1716(
-        output / "sequence12345678_diagnostics" / "evaluation_0003_thermal_diagonal_ledger.csv",
-        "a2007d9d4dca9965", "ad583d50031d5bd1", "c20ab9dc23e4a66e", 3);
-    const auto sequence3_hydrogen = compare_repeated_hydrogen_state_v1718(
-        output / "sequence12345678_diagnostics" / "evaluation_0002_populations.csv",
-        output / "sequence12345678_diagnostics" / "evaluation_0003_populations.csv",
-        output / "sequence12345678_diagnostics" / "evaluation_0003_all_element_solve_rows.csv",
-        snapshots[2], density, h_abundance, "92d0c9f560bcd078");
-
-    const std::map<std::string,double> sequence3_element_expected = {
-        {"h_heating",1.2816097202918151e-09},{"h_cooling",1.035969263653573e-08},
-        {"h_heating2",3.358360258455441e-10},{"h_cooling2",9.2985434751039327e-09},
-        {"he_heating",3.8610402805251353e-09},{"he_cooling",2.02221805056824e-08},
-        {"he_heating2",1.012926203629634e-09},{"he_cooling2",1.744557139029264e-08},
-        {"computed_he_type53_heating",3.8608491305992593e-09},{"computed_he_type53_cooling",1.1748504491470561e-08},
-        {"computed_he_type53_heating2",1.0128074201501596e-09},{"computed_he_type53_cooling2",6.5474953969989058e-09},
-        {"computed_he_non_type53_heating",1.9114992587586121e-13},{"computed_he_non_type53_cooling",8.4736760142118244e-09},
-        {"computed_he_non_type53_heating2",1.1878347947406906e-13},{"computed_he_non_type53_cooling2",1.0898075993293741e-08},
-        {"mg_heating",4.76424218689084e-09},{"mg_cooling",2.3444445848992529e-08},
-        {"mg_heating2",1.8409124811030516e-09},{"mg_cooling2",2.0147452903574997e-08}
-    };
-    bool sequence3_element_ok = true;
-    for (const auto& expected : sequence3_element_expected) {
-        sequence3_element_ok = sequence3_element_ok &&
-            relative_one_percent_v1711(number(2, expected.first.c_str()), expected.second);
-    }
-    const std::map<std::string,double> sequence3_continuum_expected = {
-        {"cmp1",4.6905545032708282e-05},{"cmp2",4.4763443016579042e-07},
-        {"htcomp",1.0821740168761709e-08},{"clcomp",8.8993032443721484e-09},
-        {"htfreef",1.6035436636729734e-14},{"clbrems",4.1315808578788805e-08},
-        {"continuum_heating",1.0821756204198345e-08},{"continuum_cooling",5.0215111823160954e-08}
-    };
-    bool sequence3_continuum_ok = integer(2,"continuum_secondary_ledger_corrected") == 1;
-    for (const auto& expected : sequence3_continuum_expected) {
-        sequence3_continuum_ok = sequence3_continuum_ok &&
-            relative_one_percent_v1711(number(2, expected.first.c_str()), expected.second);
-    }
-    const bool sequence3_hmctot_ok = relative_one_percent_v1711(
-        snapshots[2].hmctot, -1.3365244377355003);
-    const bool sequence3_elcter_ok = relative_one_percent_v1711(
-        snapshots[2].charge_residual, 0.23964076002422652);
-    const bool sequence3_population_ok = sequence3_population.final_ok;
-    const bool sequence3_ledger_ok = sequence3_ledger.count_ok && sequence3_ledger.identities_ok &&
-        sequence3_ledger.order_ok && sequence3_ledger.values_ok;
-    const bool sequence3_hydrogen_ok = sequence3_hydrogen.global_continuity_ok &&
-        sequence3_hydrogen.entry_xh0_xh1_ok && sequence3_hydrogen.compact_terminal_zero_ok &&
-        sequence3_hydrogen.final_population_ok;
-    const bool sequence3_ok = sequence2_ok && sequence3_controller_state_ok && sequence3_workspace_ok &&
-        sequence3_active_stage_window_ok && sequence3_hydrogen_ok && sequence3_population_ok &&
-        sequence3_ledger_ok && sequence3_element_ok && sequence3_continuum_ok &&
-        sequence3_hmctot_ok && sequence3_elcter_ok;
-
-    const bool sequence4_controller_state_ok = canonical_e7_equal(snapshots[3].temperature_t4, 100.0) &&
-        canonical_e7_equal(snapshots[3].electron_fraction_input, 1.2003632957721315);
-    const bool sequence4_workspace_ok = integer(3,"input_radiation_count") == 9999 &&
-        integer(3,"input_dsec_radiation_count") == 9999 && integer(3,"input_bremsa_count") == 9999 &&
-        integer(3,"input_tau_count") == 301301 && integer(3,"continuum_workspace_source_faithful") == 1 &&
-        integer(3,"continuum_epim_count") == 999 && integer(3,"continuum_bremsam_count") == 999 &&
-        integer(3,"continuum_bremsmap_count") == 999;
-    bool sequence4_active_stage_window_ok = integer(3,"thermal_population_count") == 612;
-    {
-        const auto manifest_rows = read_csv_rows_v1716(
-            output / "sequence12345678_diagnostics" / "evaluation_0004_all_element_solve_system_manifest.csv");
-        bool found_mg = false;
-        for (const auto& row : manifest_rows) {
-            if (std::stoi(row.at("element_z")) != 12) continue;
-            found_mg = true;
-            sequence4_active_stage_window_ok = sequence4_active_stage_window_ok &&
-                std::stoi(row.at("active_min_stage")) == 5 &&
-                std::stoi(row.at("active_max_stage")) == 12 &&
-                std::stoi(row.at("n_rows")) == 501;
-        }
-        sequence4_active_stage_window_ok = sequence4_active_stage_window_ok && found_mg;
-    }
-    const auto sequence4_population = compare_sequence_population_hashes_v1716(
-        output / "sequence12345678_diagnostics" / "evaluation_0004_populations.csv",
-        "891f085a2069fb28", "84108ed2f024dab2", 4);
-    const auto sequence4_ledger = compare_sequence_thermal_ledger_v1716(
-        output / "sequence12345678_diagnostics" / "evaluation_0004_thermal_diagonal_ledger.csv",
-        "a2007d9d4dca9965", "ad583d50031d5bd1", "93ab3e1e610e72c1", 4);
-    const auto sequence4_hydrogen = compare_repeated_hydrogen_state_v1718(
-        output / "sequence12345678_diagnostics" / "evaluation_0003_populations.csv",
-        output / "sequence12345678_diagnostics" / "evaluation_0004_populations.csv",
-        output / "sequence12345678_diagnostics" / "evaluation_0004_all_element_solve_rows.csv",
-        snapshots[3], density, h_abundance, "b1f0735be972aeb0");
-
-    const std::map<std::string,double> sequence4_element_expected = {
-        {"h_heating",1.1828321051955907e-09},{"h_cooling",8.4528988389612363e-09},
-        {"h_heating2",3.0993774262499241e-10},{"h_cooling2",7.5186923455042566e-09},
-        {"he_heating",3.5936382554027358e-09},{"he_cooling",1.6608209989016791e-08},
-        {"he_heating2",9.4275933206374932e-10},{"he_cooling2",1.3914151898394489e-08},
-        {"computed_he_type53_heating",3.5934795989548434e-09},{"computed_he_type53_cooling",9.7933914407593936e-09},
-        {"computed_he_type53_heating2",9.4266074709282634e-10},{"computed_he_type53_cooling2",5.4579007688730329e-09},
-        {"computed_he_non_type53_heating",1.5865644789179977e-13},{"computed_he_non_type53_cooling",6.8148185482574028e-09},
-        {"computed_he_non_type53_heating2",9.858497092243001e-14},{"computed_he_non_type53_cooling2",8.4562511295214627e-09},
-        {"mg_heating",4.2678265239219598e-09},{"mg_cooling",1.5575882102066503e-08},
-        {"mg_heating2",1.5586203756683291e-09},{"mg_cooling2",1.2606263312520077e-08}
-    };
-    bool sequence4_element_ok = true;
-    for (const auto& expected : sequence4_element_expected) {
-        sequence4_element_ok = sequence4_element_ok &&
-            relative_one_percent_v1711(number(3, expected.first.c_str()), expected.second);
-    }
-    const std::map<std::string,double> sequence4_continuum_expected = {
-        {"cmp1",4.6905545032708282e-05},{"cmp2",4.4763443016579042e-07},
-        {"htcomp",9.0208462934795246e-09},{"clcomp",7.4183306413399907e-09},
-        {"htfreef",1.1142461736144429e-14},{"clbrems",2.8708904323350472e-08},
-        {"continuum_heating",9.02085743594126e-09},{"continuum_cooling",3.6127234964690461e-08}
-    };
-    bool sequence4_continuum_ok = integer(3,"continuum_secondary_ledger_corrected") == 1;
-    for (const auto& expected : sequence4_continuum_expected) {
-        sequence4_continuum_ok = sequence4_continuum_ok &&
-            relative_one_percent_v1711(number(3, expected.first.c_str()), expected.second);
-    }
-    const bool sequence4_hmctot_ok = relative_one_percent_v1711(
-        snapshots[3].hmctot, -1.2379933611517373);
-    const bool sequence4_elcter_ok = relative_one_percent_v1711(
-        snapshots[3].charge_residual, 3.5395526509773845e-09);
-    const bool sequence4_population_ok = sequence4_population.final_ok;
-    const bool sequence4_ledger_ok = sequence4_ledger.count_ok && sequence4_ledger.identities_ok &&
-        sequence4_ledger.order_ok && sequence4_ledger.values_ok;
-    const bool sequence4_hydrogen_ok = sequence4_hydrogen.global_continuity_ok &&
-        sequence4_hydrogen.entry_xh0_xh1_ok && sequence4_hydrogen.compact_terminal_zero_ok &&
-        sequence4_hydrogen.final_population_ok;
-    const bool sequence4_ok = sequence3_ok && sequence4_controller_state_ok && sequence4_workspace_ok &&
-        sequence4_active_stage_window_ok && sequence4_hydrogen_ok && sequence4_population_ok &&
-        sequence4_ledger_ok && sequence4_element_ok && sequence4_continuum_ok &&
-        sequence4_hmctot_ok && sequence4_elcter_ok;
-
-
-    const bool sequence5_controller_state_ok = canonical_e7_equal(snapshots[4].temperature_t4, 69.444438925496186) &&
-        canonical_e7_equal(snapshots[4].electron_fraction_input, 1.2003632957721315);
-    const bool sequence5_workspace_ok = integer(4,"input_radiation_count") == 9999 &&
-        integer(4,"input_dsec_radiation_count") == 9999 && integer(4,"input_bremsa_count") == 9999 &&
-        integer(4,"input_tau_count") == 301301 && integer(4,"continuum_workspace_source_faithful") == 1 &&
-        integer(4,"continuum_epim_count") == 999 && integer(4,"continuum_bremsam_count") == 999 &&
-        integer(4,"continuum_bremsmap_count") == 999;
-    bool sequence5_active_stage_window_ok = integer(4,"thermal_population_count") == 618;
-    {
-        const auto manifest_rows = read_csv_rows_v1716(
-            output / "sequence12345678_diagnostics" / "evaluation_0005_all_element_solve_system_manifest.csv");
-        bool found_mg = false;
-        for (const auto& row : manifest_rows) {
-            if (std::stoi(row.at("element_z")) != 12) continue;
-            found_mg = true;
-            sequence5_active_stage_window_ok = sequence5_active_stage_window_ok &&
-                std::stoi(row.at("active_min_stage")) == 4 &&
-                std::stoi(row.at("active_max_stage")) == 12 &&
-                std::stoi(row.at("n_rows")) == 507;
-        }
-        sequence5_active_stage_window_ok = sequence5_active_stage_window_ok && found_mg;
-    }
-    const auto sequence5_population = compare_sequence_population_hashes_v1716(
-        output / "sequence12345678_diagnostics" / "evaluation_0005_populations.csv",
-        "4c90c1c46b112c2d", "ef4d18ecafb0af62", 5);
-    const auto sequence5_ledger = compare_sequence_thermal_ledger_v1716(
-        output / "sequence12345678_diagnostics" / "evaluation_0005_thermal_diagonal_ledger.csv",
-        "ace6dbd1ace2533c", "93ad2b293ce3c5ea", "4c91ebab74196e6b", 5, 16550u);
-    const auto sequence5_hydrogen = compare_repeated_hydrogen_state_v1718(
-        output / "sequence12345678_diagnostics" / "evaluation_0004_populations.csv",
-        output / "sequence12345678_diagnostics" / "evaluation_0005_populations.csv",
-        output / "sequence12345678_diagnostics" / "evaluation_0005_all_element_solve_rows.csv",
-        snapshots[4], density, h_abundance, "ccf2a38dd06ee1f0");
-
-    const std::map<std::string,double> sequence5_element_expected = {
-        {"h_heating",1.8421308890793705e-09},{"h_cooling",1.1202955855762684e-08},
-        {"h_heating2",4.8270551388451009e-10},{"h_cooling2",9.8548530951689913e-09},
-        {"he_heating",6.1780000871848249e-09},{"he_cooling",2.1791008173209164e-08},
-        {"he_heating2",1.6208007357431882e-09},{"he_cooling2",1.7299995191538317e-08},
-        {"computed_he_type53_heating",6.1777263797914909e-09},{"computed_he_type53_cooling",1.1572368852078517e-08},
-        {"computed_he_type53_heating2",1.6206329118370918e-09},{"computed_he_type53_cooling2",5.6825530818558521e-09},
-        {"computed_he_non_type53_heating",2.7370739333365432e-13},{"computed_he_non_type53_cooling",1.0218639321130643e-08},
-        {"computed_he_non_type53_heating2",1.6782390609634642e-13},{"computed_he_non_type53_cooling2",1.1617442109682458e-08},
-        {"mg_heating",5.3613051039197348e-09},{"mg_cooling",2.4850645276437773e-08},
-        {"mg_heating2",2.2347634840544117e-09},{"mg_cooling2",2.124201129440692e-08}
-    };
-    bool sequence5_element_ok = true;
-    for (const auto& expected : sequence5_element_expected) {
-        sequence5_element_ok = sequence5_element_ok &&
-            relative_one_percent_v1711(number(4, expected.first.c_str()), expected.second);
-    }
-    const std::map<std::string,double> sequence5_continuum_expected = {
-        {"cmp1",4.6905545032708282e-05},{"cmp2",6.4386878682103173e-07},
-        {"htcomp",9.0208462934795246e-09},{"clcomp",7.4099887480094953e-09},
-        {"htfreef",1.9244403017968e-14},{"clbrems",2.391187360880127e-08},
-        {"continuum_heating",9.020865537882543e-09},{"continuum_cooling",3.1321862356810766e-08}
-    };
-    bool sequence5_continuum_ok = integer(4,"continuum_secondary_ledger_corrected") == 1;
-    for (const auto& expected : sequence5_continuum_expected) {
-        sequence5_continuum_ok = sequence5_continuum_ok &&
-            relative_one_percent_v1711(number(4, expected.first.c_str()), expected.second);
-    }
-    const bool sequence5_hmctot_ok = relative_one_percent_v1711(
-        snapshots[4].hmctot, -1.1968253854763951);
-    const bool sequence5_elcter_ok = relative_one_percent_v1711(
-        snapshots[4].charge_residual, 8.4360265646399313e-06);
-    const bool sequence5_population_ok = sequence5_population.final_ok;
-    const bool sequence5_ledger_ok = sequence5_ledger.count_ok && sequence5_ledger.identities_ok &&
-        sequence5_ledger.order_ok && sequence5_ledger.values_ok;
-    const bool sequence5_hydrogen_ok = sequence5_hydrogen.global_continuity_ok &&
-        sequence5_hydrogen.entry_xh0_xh1_ok && sequence5_hydrogen.compact_terminal_zero_ok &&
-        sequence5_hydrogen.final_population_ok;
-    const bool sequence5_ok = sequence4_ok && sequence5_controller_state_ok && sequence5_workspace_ok &&
-        sequence5_active_stage_window_ok && sequence5_hydrogen_ok && sequence5_population_ok &&
-        sequence5_ledger_ok && sequence5_element_ok && sequence5_continuum_ok &&
-        sequence5_hmctot_ok && sequence5_elcter_ok;
-
-    const bool sequence6_controller_state_ok = canonical_e7_equal(snapshots[5].temperature_t4, 48.225300976769695) &&
-        canonical_e7_equal(snapshots[5].electron_fraction_input, 1.2003632957721315);
-    const bool sequence6_workspace_ok = integer(5,"input_radiation_count") == 9999 &&
-        integer(5,"input_dsec_radiation_count") == 9999 && integer(5,"input_bremsa_count") == 9999 &&
-        integer(5,"input_tau_count") == 301301 && integer(5,"continuum_workspace_source_faithful") == 1 &&
-        integer(5,"continuum_epim_count") == 999 && integer(5,"continuum_bremsam_count") == 999 &&
-        integer(5,"continuum_bremsmap_count") == 999;
-    bool sequence6_active_stage_window_ok = integer(5,"thermal_population_count") == 618;
-    {
-        const auto manifest_rows = read_csv_rows_v1716(
-            output / "sequence12345678_diagnostics" / "evaluation_0006_all_element_solve_system_manifest.csv");
-        bool found_mg = false;
-        for (const auto& row : manifest_rows) {
-            if (std::stoi(row.at("element_z")) != 12) continue;
-            found_mg = true;
-            sequence6_active_stage_window_ok = sequence6_active_stage_window_ok &&
-                std::stoi(row.at("active_min_stage")) == 4 &&
-                std::stoi(row.at("active_max_stage")) == 12 &&
-                std::stoi(row.at("n_rows")) == 507;
-        }
-        sequence6_active_stage_window_ok = sequence6_active_stage_window_ok && found_mg;
-    }
-    const auto sequence6_population = compare_sequence_population_hashes_v1716(
-        output / "sequence12345678_diagnostics" / "evaluation_0006_populations.csv",
-        "ce848b4b9d5919c9", "453d4878d96fe408", 6);
-    const auto sequence6_ledger = compare_sequence_thermal_ledger_v1716(
-        output / "sequence12345678_diagnostics" / "evaluation_0006_thermal_diagonal_ledger.csv",
-        "ace6dbd1ace2533c", "93ad2b293ce3c5ea", "984e3f71b9efef5f", 6, 16550u);
-    const auto sequence6_hydrogen = compare_repeated_hydrogen_state_v1718(
-        output / "sequence12345678_diagnostics" / "evaluation_0005_populations.csv",
-        output / "sequence12345678_diagnostics" / "evaluation_0006_populations.csv",
-        output / "sequence12345678_diagnostics" / "evaluation_0006_all_element_solve_rows.csv",
-        snapshots[5], density, h_abundance, "993010ebe0515f33");
-
-    const std::map<std::string,double> sequence6_element_expected = {
-        {"h_heating",2.8947264810147935e-09},{"h_cooling",1.5004272192899552e-08},
-        {"h_heating2",7.5854011020117262e-10},{"h_cooling2",1.2956221833924904e-08},
-        {"he_heating",1.0677962103103826e-08},{"he_cooling",2.8089038577065488e-08},
-        {"he_heating2",2.8014959328352217e-09},{"he_cooling2",2.0309422348463421e-08},
-        {"computed_he_type53_heating",1.0677485909874084e-08},{"computed_he_type53_cooling",1.3635964888307328e-08},
-        {"computed_he_type53_heating2",2.8012064657220319e-09},{"computed_he_type53_cooling2",5.7798781688267097e-09},
-        {"computed_he_non_type53_heating",4.7619322974206445e-13},{"computed_he_non_type53_cooling",1.4453073688758148e-08},
-        {"computed_he_non_type53_heating2",2.8946711319032991e-13},{"computed_he_non_type53_cooling2",1.4529544179636711e-08},
-        {"mg_heating",6.8634435847644365e-09},{"mg_cooling",3.5947439450290241e-08},
-        {"mg_heating2",3.231425401209614e-09},{"mg_cooling2",3.1369349655102676e-08}
-    };
-    bool sequence6_element_ok = true;
-    for (const auto& expected : sequence6_element_expected) {
-        sequence6_element_ok = sequence6_element_ok &&
-            relative_one_percent_v1711(number(5, expected.first.c_str()), expected.second);
-    }
-    const std::map<std::string,double> sequence6_continuum_expected = {
-        {"cmp1",4.6905545032708282e-05},{"cmp2",9.2646571095647359e-07},
-        {"htcomp",9.0208462934795246e-09},{"clcomp",7.4043510371003143e-09},
-        {"htfreef",3.3230075847181474e-14},{"clbrems",1.9911914822498197e-08},
-        {"continuum_heating",9.0208795235553723e-09},{"continuum_cooling",2.7316265859598512e-08}
-    };
-    bool sequence6_continuum_ok = integer(5,"continuum_secondary_ledger_corrected") == 1;
-    for (const auto& expected : sequence6_continuum_expected) {
-        sequence6_continuum_ok = sequence6_continuum_ok &&
-            relative_one_percent_v1711(number(5, expected.first.c_str()), expected.second);
-    }
-    const bool sequence6_hmctot_ok = relative_one_percent_v1711(
-        snapshots[5].hmctot, -1.1324309520714171);
-    const bool sequence6_elcter_ok = relative_one_percent_v1711(
-        snapshots[5].charge_residual, 1.9025077509837729e-05);
-    const bool sequence6_population_ok = sequence6_population.final_ok;
-    const bool sequence6_ledger_ok = sequence6_ledger.count_ok && sequence6_ledger.identities_ok &&
-        sequence6_ledger.order_ok && sequence6_ledger.values_ok;
-    const bool sequence6_hydrogen_ok = sequence6_hydrogen.global_continuity_ok &&
-        sequence6_hydrogen.entry_xh0_xh1_ok && sequence6_hydrogen.compact_terminal_zero_ok &&
-        sequence6_hydrogen.final_population_ok;
-    const bool sequence6_ok = sequence5_ok && sequence6_controller_state_ok && sequence6_workspace_ok &&
-        sequence6_active_stage_window_ok && sequence6_hydrogen_ok && sequence6_population_ok &&
-        sequence6_ledger_ok && sequence6_element_ok && sequence6_continuum_ok &&
-        sequence6_hmctot_ok && sequence6_elcter_ok;
-
-    const bool sequence7_controller_state_ok = canonical_e7_equal(snapshots[6].temperature_t4, 33.489789683449544) &&
-        canonical_e7_equal(snapshots[6].electron_fraction_input, 1.2003632957721315);
-    const bool sequence7_workspace_ok = integer(6,"input_radiation_count") == 9999 &&
-        integer(6,"input_dsec_radiation_count") == 9999 && integer(6,"input_bremsa_count") == 9999 &&
-        integer(6,"input_tau_count") == 301301 && integer(6,"continuum_workspace_source_faithful") == 1 &&
-        integer(6,"continuum_epim_count") == 999 && integer(6,"continuum_bremsam_count") == 999 &&
-        integer(6,"continuum_bremsmap_count") == 999;
-    bool sequence7_active_stage_window_ok = integer(6,"thermal_population_count") == 663;
-    {
-        const auto manifest_rows = read_csv_rows_v1716(
-            output / "sequence12345678_diagnostics" / "evaluation_0007_all_element_solve_system_manifest.csv");
-        bool found_mg = false;
-        for (const auto& row : manifest_rows) {
-            if (std::stoi(row.at("element_z")) != 12) continue;
-            found_mg = true;
-            sequence7_active_stage_window_ok = sequence7_active_stage_window_ok &&
-                std::stoi(row.at("active_min_stage")) == 3 &&
-                std::stoi(row.at("active_max_stage")) == 12 &&
-                std::stoi(row.at("n_rows")) == 552;
-        }
-        sequence7_active_stage_window_ok = sequence7_active_stage_window_ok && found_mg;
-    }
-    const auto sequence7_population = compare_sequence_population_hashes_v1716(
-        output / "sequence12345678_diagnostics" / "evaluation_0007_populations.csv",
-        "995d12e298dfeb81", "f0627042377e971f", 7);
-    const auto sequence7_ledger = compare_sequence_thermal_ledger_v1716(
-        output / "sequence12345678_diagnostics" / "evaluation_0007_thermal_diagonal_ledger.csv",
-        "d18021ad718b14cf", "b27fc90e756ca533", "7bdbed66c67bed74", 7, 17026u);
-    const auto sequence7_hydrogen = compare_repeated_hydrogen_state_v1718(
-        output / "sequence12345678_diagnostics" / "evaluation_0006_populations.csv",
-        output / "sequence12345678_diagnostics" / "evaluation_0007_populations.csv",
-        output / "sequence12345678_diagnostics" / "evaluation_0007_all_element_solve_rows.csv",
-        snapshots[6], density, h_abundance, "eecb4f058524143c");
-
-    const std::map<std::string,double> sequence7_element_expected = {
-        {"h_heating",4.5872487394204467e-09},{"h_cooling",2.008483678357371e-08},
-        {"h_heating2",1.202073902958063e-09},{"h_cooling2",1.6883667010052515e-08},
-        {"he_heating",1.7919311270437708e-08},{"he_cooling",3.4221698132822293e-08},
-        {"he_heating2",4.7015677340625193e-09},{"he_cooling2",2.1136633267168685e-08},
-        {"computed_he_type53_heating",1.7918474627182135e-08},{"computed_he_type53_cooling",1.6050555265831354e-08},
-        {"computed_he_type53_heating2",4.7010597794955924e-09},{"computed_he_type53_cooling2",5.7504394272729518e-09},
-        {"computed_he_non_type53_heating",8.3664325557287443e-13},{"computed_he_non_type53_cooling",1.8171142866990933e-08},
-        {"computed_he_non_type53_heating2",5.0795456692707122e-13},{"computed_he_non_type53_cooling2",1.538619383989573e-08},
-        {"mg_heating",9.0119587889007201e-09},{"mg_cooling",4.6833841677958865e-08},
-        {"mg_heating2",4.7663390261210891e-09},{"mg_cooling2",4.0984971104054623e-08}
-    };
-    bool sequence7_element_ok = true;
-    for (const auto& expected : sequence7_element_expected) {
-        sequence7_element_ok = sequence7_element_ok &&
-            relative_one_percent_v1711(number(6, expected.first.c_str()), expected.second);
-    }
-    const std::map<std::string,double> sequence7_continuum_expected = {
-        {"cmp1",4.6905545032708282e-05},{"cmp2",1.333401233384745e-06},
-        {"htcomp",9.0208462934795246e-09},{"clcomp",7.4004133125754229e-09},
-        {"htfreef",5.7361429549060717e-14},{"clbrems",1.6575702578399734e-08},
-        {"continuum_heating",9.0209036549090738e-09},{"continuum_cooling",2.3976115890975156e-08}
-    };
-    bool sequence7_continuum_ok = integer(6,"continuum_secondary_ledger_corrected") == 1;
-    for (const auto& expected : sequence7_continuum_expected) {
-        sequence7_continuum_ok = sequence7_continuum_ok &&
-            relative_one_percent_v1711(number(6, expected.first.c_str()), expected.second);
-    }
-    const bool sequence7_hmctot_ok = relative_one_percent_v1711(
-        snapshots[6].hmctot, -1.0211174175435533);
-    const bool sequence7_elcter_ok = relative_one_percent_v1711(
-        snapshots[6].charge_residual, 3.2592543345089098e-05);
-    const bool sequence7_population_ok = sequence7_population.initial_ok && sequence7_population.final_ok;
-    const bool sequence7_ledger_ok = sequence7_ledger.count_ok && sequence7_ledger.identities_ok &&
-        sequence7_ledger.order_ok && sequence7_ledger.values_ok;
-    const bool sequence7_hydrogen_ok = sequence7_hydrogen.global_continuity_ok &&
-        sequence7_hydrogen.entry_xh0_xh1_ok && sequence7_hydrogen.compact_terminal_zero_ok &&
-        sequence7_hydrogen.final_population_ok;
-    const bool sequence7_ok = sequence6_ok && sequence7_controller_state_ok && sequence7_workspace_ok &&
-        sequence7_active_stage_window_ok && sequence7_hydrogen_ok && sequence7_population_ok &&
-        sequence7_ledger_ok && sequence7_element_ok && sequence7_continuum_ok &&
-        sequence7_hmctot_ok && sequence7_elcter_ok;
-
-    const bool sequence8_controller_state_ok = canonical_e7_equal(snapshots[7].temperature_t4, 23.256796543000238) &&
-        canonical_e7_equal(snapshots[7].electron_fraction_input, 1.2003632957721315);
-    const bool sequence8_workspace_ok = integer(7,"input_radiation_count") == 9999 &&
-        integer(7,"input_dsec_radiation_count") == 9999 && integer(7,"input_bremsa_count") == 9999 &&
-        integer(7,"input_tau_count") == 301301 && integer(7,"continuum_workspace_source_faithful") == 1 &&
-        integer(7,"continuum_epim_count") == 999 && integer(7,"continuum_bremsam_count") == 999 &&
-        integer(7,"continuum_bremsmap_count") == 999;
-    bool sequence8_active_stage_window_ok = integer(7,"thermal_population_count") == 663;
-    {
-        const auto manifest_rows = read_csv_rows_v1716(
-            output / "sequence12345678_diagnostics" / "evaluation_0008_all_element_solve_system_manifest.csv");
-        bool found_mg = false;
-        for (const auto& row : manifest_rows) {
-            if (std::stoi(row.at("element_z")) != 12) continue;
-            found_mg = true;
-            sequence8_active_stage_window_ok = sequence8_active_stage_window_ok &&
-                std::stoi(row.at("active_min_stage")) == 3 &&
-                std::stoi(row.at("active_max_stage")) == 12 &&
-                std::stoi(row.at("n_rows")) == 552;
-        }
-        sequence8_active_stage_window_ok = sequence8_active_stage_window_ok && found_mg;
-    }
-    const auto sequence8_population = compare_sequence_population_hashes_v1716(
-        output / "sequence12345678_diagnostics" / "evaluation_0008_populations.csv",
-        "de5a44e4ad8e8d56", "26dce966b44b9f27", 8);
-    const auto sequence8_ledger = compare_sequence_thermal_ledger_v1716(
-        output / "sequence12345678_diagnostics" / "evaluation_0008_thermal_diagonal_ledger.csv",
-        "d18021ad718b14cf", "b27fc90e756ca533", "3dfe110facbec258", 8, 17026u);
-    const auto sequence8_hydrogen = compare_repeated_hydrogen_state_v1718(
-        output / "sequence12345678_diagnostics" / "evaluation_0007_populations.csv",
-        output / "sequence12345678_diagnostics" / "evaluation_0008_populations.csv",
-        output / "sequence12345678_diagnostics" / "evaluation_0008_all_element_solve_rows.csv",
-        snapshots[7], density, h_abundance, "982d0a211757fb9f");
-
-    const std::map<std::string,double> sequence8_element_expected = {
-        {"h_heating",7.299414227418886e-09},{"h_cooling",2.6213047628169788e-08},
-        {"h_heating2",1.912819648772267e-09},{"h_cooling2",2.1145696346563966e-08},
-        {"he_heating",2.8036871771354584e-08},{"he_cooling",3.8863435191209692e-08},
-        {"he_heating2",7.3562993870250279e-09},{"he_cooling2",1.8390161327595508e-08},
-        {"computed_he_type53_heating",2.8035357371816253e-08},{"computed_he_type53_cooling",1.8900207581019888e-08},
-        {"computed_he_type53_heating2",7.3553789140275856e-09},{"computed_he_type53_cooling2",5.6058678270629028e-09},
-        {"computed_he_non_type53_heating",1.5143995383282001e-12},{"computed_he_non_type53_cooling",1.9963227610189791e-08},
-        {"computed_he_non_type53_heating2",9.2047299744194065e-13},{"computed_he_non_type53_cooling2",1.2784293500532602e-08},
-        {"mg_heating",1.1161045549189512e-08},{"mg_cooling",4.9547076681655936e-08},
-        {"mg_heating2",6.3367145040213401e-09},{"mg_cooling2",4.2449851258764517e-08}
-    };
-    bool sequence8_element_ok = true;
-    for (const auto& expected : sequence8_element_expected) {
-        sequence8_element_ok = sequence8_element_ok &&
-            relative_one_percent_v1711(number(7, expected.first.c_str()), expected.second);
-    }
-    const std::map<std::string,double> sequence8_continuum_expected = {
-        {"cmp1",4.6905545032708282e-05},{"cmp2",1.9194200417634977e-06},
-        {"htcomp",9.0208462934795246e-09},{"clcomp",7.3978006107907105e-09},
-        {"htfreef",9.8971597455974253e-14},{"clbrems",1.3792041194818504e-08},
-        {"continuum_heating",9.0209452650769814e-09},{"continuum_cooling",2.1189841805609217e-08}
-    };
-    bool sequence8_continuum_ok = integer(7,"continuum_secondary_ledger_corrected") == 1;
-    for (const auto& expected : sequence8_continuum_expected) {
-        sequence8_continuum_ok = sequence8_continuum_ok &&
-            relative_one_percent_v1711(number(7, expected.first.c_str()), expected.second);
-    }
-    const bool sequence8_hmctot_ok = relative_one_percent_v1711(
-        snapshots[7].hmctot, -0.83932911980605007);
-    const bool sequence8_elcter_ok = relative_one_percent_v1711(
-        snapshots[7].charge_residual, 4.7120904026476396e-05);
-    const bool sequence8_population_ok = sequence8_population.initial_ok && sequence8_population.final_ok;
-    const bool sequence8_ledger_ok = sequence8_ledger.count_ok && sequence8_ledger.identities_ok &&
-        sequence8_ledger.order_ok && sequence8_ledger.values_ok;
-    const bool sequence8_hydrogen_ok = sequence8_hydrogen.global_continuity_ok &&
-        sequence8_hydrogen.entry_xh0_xh1_ok && sequence8_hydrogen.compact_terminal_zero_ok &&
-        sequence8_hydrogen.final_population_ok;
-    const bool sequence8_ok = sequence7_ok && sequence8_controller_state_ok && sequence8_workspace_ok &&
-        sequence8_active_stage_window_ok && sequence8_hydrogen_ok && sequence8_population_ok &&
-        sequence8_ledger_ok && sequence8_element_ok && sequence8_continuum_ok &&
-        sequence8_hmctot_ok && sequence8_elcter_ok;
-
-    std::ofstream trajectory(output / "native_controller_trajectory.csv");
-    trajectory << "sequence,kind,call_index,evaluation_index,temperature_t4,electron_fraction,hmctot,elcter\n";
-    for (const auto& snapshot : snapshots) trajectory << std::setprecision(17) << snapshot.sequence << ",dsec," << snapshot.call_index << ','
-        << snapshot.evaluation_index << ',' << snapshot.temperature_t4 << ',' << snapshot.electron_fraction_input << ','
-        << snapshot.hmctot << ',' << snapshot.charge_residual << "\n";
-
-    std::ofstream summary(output / "native_sequence12345678_run_summary.json");
-    summary << std::setprecision(17)
-        << "{\n  \"schema\": \"xstar-tools-v0487462551723-native-autonomous-sequence8-v1\",\n"
-        << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
-        << "  \"sequence1_accept\": " << (sequence1_ok?"true":"false") << ",\n"
-        << "  \"sequence2_accept\": " << (sequence2_ok?"true":"false") << ",\n"
-        << "  \"sequence3_accept\": " << (sequence3_ok?"true":"false") << ",\n"
-        << "  \"sequence4_accept\": " << (sequence4_ok?"true":"false") << ",\n"
-        << "  \"sequence5_accept\": " << (sequence5_ok?"true":"false") << ",\n"
-        << "  \"sequence5_source_canonical_he_mg_e7\": true,\n"
-        << "  \"sequence6_accept\": " << (sequence6_ok?"true":"false") << ",\n"
-        << "  \"sequence6_source_canonical_he_mg_e7\": true,\n"
-        << "  \"sequence7_accept\": " << (sequence7_ok?"true":"false") << ",\n"
-        << "  \"sequence7_source_canonical_he_mg_e7\": true,\n"
-        << "  \"sequence8_controller_state\": " << (sequence8_controller_state_ok?"true":"false") << ",\n"
-        << "  \"sequence8_workspace\": " << (sequence8_workspace_ok?"true":"false") << ",\n"
-        << "  \"sequence8_active_stage_window_continuity\": " << (sequence8_active_stage_window_ok?"true":"false") << ",\n"
-        << "  \"sequence8_hydrogen_global_continuity\": " << (sequence8_hydrogen.global_continuity_ok?"true":"false") << ",\n"
-        << "  \"sequence8_hydrogen_entry_xh0_xh1\": " << (sequence8_hydrogen.entry_xh0_xh1_ok?"true":"false") << ",\n"
-        << "  \"sequence8_hydrogen_compact_terminal_zero_seed\": " << (sequence8_hydrogen.compact_terminal_zero_ok?"true":"false") << ",\n"
-        << "  \"sequence8_hydrogen_final_population_zero_aware\": " << (sequence8_hydrogen.final_population_ok?"true":"false") << ",\n"
-        << "  \"sequence8_hydrogen_final_population_hash\": \"" << sequence8_hydrogen.final_population_hash << "\",\n"
-        << "  \"sequence8_source_canonical_he_mg_e7\": true,\n"
-        << "  \"sequence8_compact_initial_population_hash\": \"" << sequence8_population.initial_hash << "\",\n"
-        << "  \"sequence8_final_population_hash\": \"" << sequence8_population.final_hash << "\",\n"
-        << "  \"sequence8_final_population_state_zero_aware\": " << (sequence8_population.final_ok?"true":"false") << ",\n"
-        << "  \"sequence8_thermal_ledger_count\": " << sequence8_ledger.row_count << ",\n"
-        << "  \"sequence8_thermal_ledger_identity_hash\": \"" << sequence8_ledger.identity_hash << "\",\n"
-        << "  \"sequence8_thermal_ledger_order_hash\": \"" << sequence8_ledger.order_hash << "\",\n"
-        << "  \"sequence8_thermal_ledger_values_hash\": \"" << sequence8_ledger.values_hash << "\",\n"
-        << "  \"sequence8_thermal_ledger_values_zero_aware\": " << (sequence8_ledger.values_ok?"true":"false") << ",\n"
-        << "  \"sequence8_element_family_totals_within_1_percent\": " << (sequence8_element_ok?"true":"false") << ",\n"
-        << "  \"sequence8_continuum_totals\": " << (sequence8_continuum_ok?"true":"false") << ",\n"
-        << "  \"sequence8_hmctot_within_1_percent\": " << (sequence8_hmctot_ok?"true":"false") << ",\n"
-        << "  \"sequence8_elcter_within_1_percent\": " << (sequence8_elcter_ok?"true":"false") << ",\n"
-        << "  \"sequence9_allowed\": " << (sequence8_ok?"true":"false") << ",\n"
-        << "  \"bridge_runtime_input_used\": false,\n  \"product_state_retention_enabled\": false,\n"
-        << "  \"product_publication_enabled\": false,\n  \"result\": \"" << (sequence8_ok?"ACCEPT":"REJECT") << "\"\n}\n";
-
-    std::cout << std::defaultfloat << std::setprecision(8)
-              << "V0487462551723_TRUE_NATIVE_CONTROLLER=YES\n"
-              << "V0487462551723_COMPILED_CHECKPOINT_REPLAY=DISABLED\n"
-              << "V0487462551723_SEQUENCE1_ACCEPTED_INPUT_STATE=" << (sequence1_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551723_SEQUENCE2_ACCEPTED_INPUT_STATE=" << (sequence2_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551723_SEQUENCE3_ACCEPTED_INPUT_STATE=" << (sequence3_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551723_SEQUENCE4_ACCEPTED_INPUT_STATE=" << (sequence4_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551723_SEQUENCE5_ACCEPTED_INPUT_STATE=" << (sequence5_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551723_SEQUENCE6_ACCEPTED_INPUT_STATE=" << (sequence6_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551723_SEQUENCE7_ACCEPTED_INPUT_STATE=" << (sequence7_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551723_SEQUENCE8_CONTROLLER_STATE=" << (sequence8_controller_state_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551723_SEQUENCE8_TEMPERATURE_T4=" << snapshots[7].temperature_t4 << "\n"
-              << "V0487462551723_SEQUENCE8_ELECTRON_FRACTION=" << snapshots[7].electron_fraction_input << "\n"
-              << "V0487462551723_SEQUENCE8_RADIATION_WORKSPACE=" << (sequence8_workspace_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551723_SEQUENCE8_ACTIVE_STAGE_WINDOW_CONTINUITY=" << (sequence8_active_stage_window_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551723_SEQUENCE8_HYDROGEN_GLOBAL_CONTINUITY=" << (sequence8_hydrogen.global_continuity_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551723_SEQUENCE8_HYDROGEN_ENTRY_XH0_XH1=" << (sequence8_hydrogen.entry_xh0_xh1_ok?"ACCEPT":"REJECT") << "\n"
-              << std::setprecision(17)
-              << "V0487462551723_SEQUENCE8_HYDROGEN_ENTRY_XH0=" << snapshots[7].entry_neutral_h_density_cm3 << "\n"
-              << "V0487462551723_SEQUENCE8_HYDROGEN_ENTRY_XH1=" << snapshots[7].entry_ionized_h_density_cm3 << "\n"
-              << std::defaultfloat << std::setprecision(8)
-              << "V0487462551723_SEQUENCE8_HYDROGEN_COMPACT_TERMINAL_ZERO_SEED=" << (sequence8_hydrogen.compact_terminal_zero_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551723_SEQUENCE8_HYDROGEN_FINAL_POPULATION_ZERO_AWARE=" << (sequence8_hydrogen.final_population_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551723_SEQUENCE8_HYDROGEN_FINAL_POPULATION_HASH=" << sequence8_hydrogen.final_population_hash << "\n"
-              << "V0487462551723_SEQUENCE8_COMPACT_INITIAL_POPULATION_HASH=" << sequence8_population.initial_hash << "\n"
-              << "V0487462551723_SEQUENCE8_SOURCE_CANONICAL_HE_MG_E7=APPLIED\n"
-              << "V0487462551723_SEQUENCE8_FINAL_POPULATION_STATE_ZERO_AWARE=" << (sequence8_population.final_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551723_SEQUENCE8_FINAL_POPULATION_HASH=" << sequence8_population.final_hash << "\n"
-              << "V0487462551723_SEQUENCE8_THERMAL_LEDGER_COUNT=" << (sequence8_ledger.count_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551723_SEQUENCE8_THERMAL_LEDGER_ROWS=" << sequence8_ledger.row_count << "\n"
-              << "V0487462551723_SEQUENCE8_THERMAL_LEDGER_IDENTITIES=" << (sequence8_ledger.identities_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551723_SEQUENCE8_THERMAL_LEDGER_ORDER=" << (sequence8_ledger.order_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551723_SEQUENCE8_THERMAL_LEDGER_VALUES_ZERO_AWARE=" << (sequence8_ledger.values_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551723_SEQUENCE8_THERMAL_LEDGER_IDENTITY_HASH=" << sequence8_ledger.identity_hash << "\n"
-              << "V0487462551723_SEQUENCE8_THERMAL_LEDGER_ORDER_HASH=" << sequence8_ledger.order_hash << "\n"
-              << "V0487462551723_SEQUENCE8_THERMAL_LEDGER_VALUES_HASH=" << sequence8_ledger.values_hash << "\n"
-              << "V0487462551723_SEQUENCE8_ELEMENT_FAMILY_TOTALS_WITHIN_1_PERCENT=" << (sequence8_element_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551723_SEQUENCE8_CONTINUUM_TOTALS=" << (sequence8_continuum_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551723_SEQUENCE8_HMCTOT_WITHIN_1_PERCENT=" << (sequence8_hmctot_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551723_SEQUENCE8_ELCTER_WITHIN_1_PERCENT=" << (sequence8_elcter_ok?"ACCEPT":"REJECT") << "\n"
-              << "V0487462551723_SEQUENCE9_ALLOWED=" << (sequence8_ok?"YES":"NO") << "\n"
-              << "V0487462551723_BRIDGE_RUNTIME_INPUT_USED=NO\n"
-              << "V0487462551723_PRODUCT_STATE_RETENTION_ENABLED=NO\n"
-              << "V0487462551723_PRODUCT_PUBLICATION_ENABLED=NO\n"
-              << "V0487462551723_FITS_PRODUCTS_WRITTEN=0\n"
-              << "V0487462551723_XOUT_STEP_LOG_WRITTEN=0\n"
-              << "V0487462551723_RESULT=" << (sequence8_ok?"ACCEPT_AUTONOMOUS_SEQUENCE8":"REJECT_AUTONOMOUS_SEQUENCE8_PARITY") << "\n";
-    return sequence8_ok ? 0 : 20;
-
-}
-
-// XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Implement command run native controller in the standalone controller/front-end workflow without duplicating the scientific kernels.
-// Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
-// XSTAR-FUNCTION-COMMENT-END
-[[maybe_unused]] int command_run_native_controller_v1711(Options options) {
-    const auto started = std::chrono::steady_clock::now();
-    const auto output = std::filesystem::path(options.output_dir);
-    std::filesystem::create_directories(output);
-    for (const char* name : {"xo01_detail.fits", "xo01_detal2.fits", "xo01_detal3.fits", "xo01_detal4.fits",
-             "xout_abund1.fits", "xout_cont1.fits", "xout_lines1.fits", "xout_rrc1.fits", "xout_spect1.fits", "xout_step.log"}) {
-        std::error_code ec;
-        std::filesystem::remove(output / name, ec);
-    }
-    if (options.case_dir.empty() ||
-        !std::filesystem::is_regular_file(std::filesystem::path(options.case_dir) / "manifest.txt")) {
-        std::cerr << "v25.5.17.10 requires --case-dir pointing to a lowered native ATDB program\n";
-        return 66;
-    }
-    if (options.parameters_path.empty() || !std::filesystem::is_regular_file(options.parameters_path)) {
-        std::cerr << "v25.5.17.10 requires --parameters\n";
-        return 66;
-    }
-
-    xstar_fixed_state_context* fixed_context = nullptr;
-    xstar_thermal_context* thermal_context = nullptr;
-    std::array<char,XSTAR_FIXED_STATE_MESSAGE_SIZE> message{};
-    int rc = xstar_fixed_state_context_create_v1(
-        options.case_dir.c_str(), &fixed_context, message.data(), message.size());
-    if (rc != 0) {
-        std::cerr << "fixed-state context creation failed: " << message.data() << "\n";
-        return rc;
-    }
-    rc = xstar_thermal_context_create_v1(&thermal_context, message.data(), message.size());
-    if (rc != 0) {
-        xstar_fixed_state_context_destroy(fixed_context);
-        std::cerr << "thermal context creation failed: " << message.data() << "\n";
-        return rc;
-    }
-
-    xstar_fixed_state_program_info_v1 info{};
-    xstar_fixed_state_program_info_init_v1(&info);
-    rc = xstar_fixed_state_context_get_program_info_v1(
-        fixed_context, &info, message.data(), message.size());
-    if (rc != 0) {
-        xstar_thermal_context_destroy(thermal_context);
-        xstar_fixed_state_context_destroy(fixed_context);
-        std::cerr << message.data() << "\n";
-        return rc;
-    }
-
-    const std::string parameter_json = read_text_file(options.parameters_path);
-    const double density = json_number_value(parameter_json, "density", 1.0e8);
-    const double temperature_k = json_number_value(
-        parameter_json, "temperature_k",
-        json_number_value(parameter_json, "temperature", 100.0) * 1.0e4);
-    // xeemin is a controller lower bound, not the initial charge iterate.
-    // The source controller starts this benchmark at xee=1 unless an explicit
-    // initial electron fraction is supplied.
-    const double initial_xee = json_number_value(
-        parameter_json, "initial_electron_fraction",
-        json_number_value(parameter_json, "xee", 1.0));
-
-    RadiationField radiation = read_standalone_radiation_field(options);
-    xstar_fixed_state_stats_v1 cumulative{};
-    xstar_fixed_state_stats_init_v1(&cumulative);
-    std::vector<FixedDsecSnapshot> snapshots;
-    snapshots.reserve(128);
-    FixedDsecEvaluatorData data;
-    data.fixed_context = fixed_context;
-    data.program_info = info;
-    data.cumulative_stats = &cumulative;
-    data.snapshots = &snapshots;
-    data.energy = radiation.energy_ev;
-    data.flux = radiation.incident;
-    data.radiation_mode = radiation.mode;
-    data.thermal_budget_csv = (output / "native_thermal_budget.csv").string();
-    data.autonomous_controller = true;
-    data.next_native_sequence = 1;
-    data.controller_residual_gate_enabled = true;
-    const auto& oracle = native_controller_acceptance_oracle_v15926();
-    for (std::size_t i = 0; i < oracle.size(); ++i) {
-        data.controller_reference_hmctot[i] = oracle[i].reference_hmctot;
-        data.controller_reference_elcter[i] = oracle[i].reference_elcter;
-        data.controller_reference_call[i] = oracle[i].call_index;
-        data.controller_reference_evaluation[i] = oracle[i].evaluation_index;
-        data.controller_reference_final[i] = std::string(oracle[i].kind) == "final";
-    }
-
-    xstar_thermal_state_v1 state{};
-    xstar_thermal_state_init_v1(&state);
-    state.temperature_t4 = temperature_k / 1.0e4;
-    state.electron_fraction_xee = initial_xee > 0.0 ? initial_xee : 1.0;
-    state.hydrogen_density_cm3 = density;
-    state.state_generation = 0;
-
-    std::vector<xstar_dsec_stats_v1> call_stats;
-    std::vector<std::vector<xstar_thermal_trace_event_v1>> call_traces;
-    call_stats.reserve(4);
-    call_traces.reserve(4);
-    bool controller_gate_stopped = false;
-
-    for (std::size_t call = 1; call <= 4; ++call) {
-        data.call_index = call;
-        data.evaluation_index = 0;
-        data.writing_final_snapshot = false;
-
-        xstar_dsec_config_v1 config{};
-        xstar_dsec_config_init_v1(&config);
-        config.nlim = 100;
-        // A zero maximum is deliberate: the native thermal controller owns
-        // convergence and evaluation count.  No v15.9.26 checkpoint count is
-        // used to stop or steer a call.
-        config.maximum_evaluations = 0;
-
-        xstar_dsec_stats_v1 stats{};
-        xstar_dsec_stats_init_v1(&stats);
-        std::vector<xstar_thermal_trace_event_v1> trace(2048);
-        std::size_t trace_count = 0;
-        rc = xstar_thermal_run_evaluation_loop_v1(
-            thermal_context, &config, &state, fixed_dsec_evaluator, &data,
-            trace.data(), trace.size(), &trace_count, &stats,
-            message.data(), message.size());
-        if (rc != 0) {
-            if (data.controller_residual_parity_failed) {
-                controller_gate_stopped = true;
-                std::cerr << message.data() << "\n";
-                break;
-            }
-            std::cerr << "native controller call " << call << " failed: " << message.data() << "\n";
-            xstar_thermal_context_destroy(thermal_context);
-            xstar_fixed_state_context_destroy(fixed_context);
-            return rc;
-        }
-        call_stats.push_back(stats);
-        const std::size_t retained = std::min(trace_count, trace.size());
-        call_traces.emplace_back(trace.begin(), trace.begin() + retained);
-
-        rc = append_final_fixed_snapshot(data, state, call, snapshots, message);
-        if (rc != 0) {
-            std::cerr << "native controller final snapshot after call " << call
-                      << " failed: " << message.data() << "\n";
-            xstar_thermal_context_destroy(thermal_context);
-            xstar_fixed_state_context_destroy(fixed_context);
-            return rc;
-        }
-    }
-
-    xstar_thermal_context_destroy(thermal_context);
-    xstar_fixed_state_context_destroy(fixed_context);
-
-    std::sort(snapshots.begin(), snapshots.end(),
-        [](const auto& left, const auto& right) { return left.sequence < right.sequence; });
-    const bool count_ok = snapshots.size() == oracle.size();
-    bool identity_ok = count_ok;
-    bool hmctot_ok = count_ok;
-    bool elcter_ok = count_ok;
-    std::size_t hmctot_accepted_rows = 0;
-    std::size_t elcter_accepted_rows = 0;
-    std::size_t first_hmctot_mismatch = 0;
-    std::size_t first_elcter_mismatch = 0;
-    double max_hmctot_relative_error = 0.0;
-    double max_elcter_relative_error = 0.0;
-
-    const std::size_t compared_rows = std::min(snapshots.size(), oracle.size());
-    for (std::size_t i = 0; i < compared_rows; ++i) {
-        const auto& got = snapshots[i];
-        const auto& ref = oracle[i];
-        const bool identity = got.sequence == ref.sequence && got.kind == ref.kind &&
-            got.call_index == ref.call_index && got.evaluation_index == ref.evaluation_index;
-        identity_ok = identity_ok && identity;
-        const bool h_ok = identity && zero_aware_controller_equal_v1711(got.hmctot, ref.reference_hmctot);
-        const bool e_ok = identity && zero_aware_controller_equal_v1711(got.charge_residual, ref.reference_elcter);
-        if (h_ok) ++hmctot_accepted_rows;
-        else if (first_hmctot_mismatch == 0) first_hmctot_mismatch = i + 1;
-        if (e_ok) ++elcter_accepted_rows;
-        else if (first_elcter_mismatch == 0) first_elcter_mismatch = i + 1;
-        hmctot_ok = hmctot_ok && h_ok;
-        elcter_ok = elcter_ok && e_ok;
-        max_hmctot_relative_error = std::max(
-            max_hmctot_relative_error,
-            zero_aware_relative_error_v1711(got.hmctot, ref.reference_hmctot));
-        max_elcter_relative_error = std::max(
-            max_elcter_relative_error,
-            zero_aware_relative_error_v1711(got.charge_residual, ref.reference_elcter));
-    }
-    if (!count_ok) {
-        identity_ok = false;
-        hmctot_ok = false;
-        elcter_ok = false;
-    }
-
-    const double terminal_t4 = snapshots.empty() ? 0.0 : snapshots.back().temperature_t4;
-    const double terminal_xee = snapshots.empty() ? 0.0 : snapshots.back().electron_fraction_input;
-    constexpr double expected_terminal_t4 = 6.4991462211597817;
-    constexpr double expected_terminal_xee = 1.2003632957721315;
-    const bool terminal_t4_ok = std::isfinite(terminal_t4) &&
-        std::abs(terminal_t4 - expected_terminal_t4) / expected_terminal_t4 <= 0.01;
-    const bool terminal_xee_ok = std::isfinite(terminal_xee) &&
-        std::abs(terminal_xee - expected_terminal_xee) / expected_terminal_xee <= 0.01;
-
-    std::ofstream csv(output / "native_controller_trajectory.csv");
-    csv << "sequence,kind,call_index,evaluation_index,temperature_t4,electron_fraction,hmctot,elcter,"
-           "reference_hmctot,reference_elcter,hmctot_zero_aware_equal,elcter_zero_aware_equal,"
-           "hmctot_relative_error,elcter_relative_error\n";
-    for (std::size_t i = 0; i < snapshots.size(); ++i) {
-        const auto& one = snapshots[i];
-        const bool has_ref = i < oracle.size();
-        const auto* ref = has_ref ? &oracle[i] : nullptr;
-        const bool identity = ref && one.sequence == ref->sequence && one.kind == ref->kind &&
-            one.call_index == ref->call_index && one.evaluation_index == ref->evaluation_index;
-        const bool h_ok = identity && zero_aware_controller_equal_v1711(one.hmctot, ref->reference_hmctot);
-        const bool e_ok = identity && zero_aware_controller_equal_v1711(one.charge_residual, ref->reference_elcter);
-        csv << one.sequence << ',' << one.kind << ',' << one.call_index << ',' << one.evaluation_index << ','
-            << std::setprecision(17) << one.temperature_t4 << ',' << one.electron_fraction_input << ','
-            << one.hmctot << ',' << one.charge_residual << ',';
-        if (ref) {
-            csv << ref->reference_hmctot << ',' << ref->reference_elcter << ','
-                << (h_ok ? 1 : 0) << ',' << (e_ok ? 1 : 0) << ','
-                << zero_aware_relative_error_v1711(one.hmctot, ref->reference_hmctot) << ','
-                << zero_aware_relative_error_v1711(one.charge_residual, ref->reference_elcter);
-        } else {
-            csv << "nan,nan,0,0,inf,inf";
-        }
-        csv << '\n';
-    }
-
-    std::ofstream call_csv(output / "native_controller_call_summary.csv");
-    call_csv << "call_index,evaluations_completed,charge_converged,thermal_converged,lnerr,"
-                "final_temperature_t4,final_electron_fraction,final_hmctot,final_elcter\n";
-    for (std::size_t i = 0; i < call_stats.size(); ++i) {
-        const auto& one = call_stats[i];
-        call_csv << i + 1 << ',' << one.evaluations_completed << ',' << one.charge_converged << ','
-                 << one.thermal_converged << ',' << one.lnerr << ',' << std::setprecision(17)
-                 << one.final_temperature_t4 << ',' << one.final_electron_fraction_xee << ','
-                 << one.final_hmctot << ',' << one.final_elcter << '\n';
-    }
-
-    xstar_run_state::WholeRunAccumulatedState whole;
-    whole.release = XSTAR_API_VERSION_STRING;
-    whole.backend = "cpp";
-    whole.parameters_path = options.parameters_path;
-    whole.atomic_database_path = options.atomic_db_path;
-    whole.native_case_path = options.case_dir;
-    whole.product_metadata_path = output / "_native_product_state";
-    whole.native_diagnostics_path = output / "_native_product_state";
-    whole.native_run_id = std::string("true-native-controller-v1711-") + XSTAR_API_VERSION_STRING;
-    whole.python_callbacks = 0;
-    whole.controller_trajectory_qualified = count_ok && identity_ok && hmctot_ok && elcter_ok &&
-        terminal_t4_ok && terminal_xee_ok;
-    whole.level_identities = read_level_identities_from_case(options.case_dir);
-    for (const auto& snapshot : snapshots) {
-        whole.fixed_evaluations.push_back(copy_real_native_snapshot(snapshot, 0.0));
-    }
-
-    std::vector<std::size_t> accepted_indices;
-    if (!snapshots.empty()) accepted_indices.push_back(0);
-    for (std::size_t i = 0; i < snapshots.size(); ++i) {
-        if (snapshots[i].kind == "final") accepted_indices.push_back(i);
-    }
-    if (accepted_indices.size() == 5) {
-        for (std::size_t boundary = 0; boundary < accepted_indices.size(); ++boundary) {
-            const auto& eval = whole.fixed_evaluations[accepted_indices[boundary]];
-            xstar_run_state::AcceptedControllerState accepted_state;
-            accepted_state.call_index = eval.call_index;
-            accepted_state.accepted_sequence = eval.sequence;
-            accepted_state.acceptance_reason = boundary == 0 ?
-                "native_controller_initial_state" : "native_controller_call_final_state";
-            accepted_state.evaluation = eval;
-            whole.accepted_controller_states.push_back(accepted_state);
-
-            xstar_run_state::RadialZoneState zone;
-            zone.zone_index = boundary + 1;
-            zone.pass_index = 1;
-            zone.temperature_t4 = eval.temperature_t4;
-            zone.electron_fraction = eval.computed_electron_fraction;
-            zone.provisional_from_controller = true;
-            zone.accepted_boundary_exact = false;
-            zone.boundary_provenance = "true native controller boundary; product retention disabled";
-            zone.accepted_controller = accepted_state;
-            whole.radial_zones.push_back(zone);
-        }
-    }
-
-    auto product = xstar_run_state::build_product_writing_state(whole);
-    product.product_state_complete = false;
-    product.product_parity_qualified = false;
-    product.measured_run_seconds = std::chrono::duration<double>(
-        std::chrono::steady_clock::now() - started).count();
-    xstar_run_state::write_run_state_manifest(
-        output / "native_controller_run_state.json", whole, product);
-
-    const char* export_env = std::getenv("XSTAR_V0487462551711_EXPORT_BRIDGE_SCHEMA");
-    const bool export_schema = export_env && std::string(export_env) == "1";
-    if (export_schema) {
-        const auto bridge = output / "_native_product_state" / "exact_product_state_bridge";
-        std::filesystem::create_directories(bridge);
-        std::filesystem::copy_file(
-            output / "native_controller_trajectory.csv",
-            bridge / "coherent_source_trajectory.csv",
-            std::filesystem::copy_options::overwrite_existing);
-        std::ofstream manifest(bridge / "native_controller_schema_manifest.json");
-        manifest << "{\n"
-                 << "  \"schema\": \"v15.9.26-ProductWritingState-controller-subset\",\n"
-                 << "  \"controller_mode\": \"true_native_autonomous\",\n"
-                 << "  \"evaluations\": " << snapshots.size() << ",\n"
-                 << "  \"product_arrays_retained\": false,\n"
-                 << "  \"runtime_bridge_input_used\": false\n"
-                 << "}\n";
-    }
-
-    const bool boundaries_ok = whole.radial_zones.size() == 5;
-    const bool accepted = count_ok && identity_ok && hmctot_ok && elcter_ok &&
-        terminal_t4_ok && terminal_xee_ok && boundaries_ok;
-
-    std::ofstream summary(output / "native_physical_run_summary.json");
-    summary << std::setprecision(17)
-            << "{\n"
-            << "  \"schema\": \"xstar-tools-v0487462551711-true-native-controller-zero-aware-gate-v1\",\n"
-            << "  \"release\": \"" XSTAR_API_VERSION_STRING "\",\n"
-            << "  \"controller_mode\": \"true_native_autonomous\",\n"
-            << "  \"compiled_checkpoint_replay\": false,\n"
-            << "  \"controller_gate_stopped_early\": " << (controller_gate_stopped ? "true" : "false") << ",\n"
-            << "  \"full_native_controller_evaluations\": " << snapshots.size() << ",\n"
-            << "  \"controller_sequence_identities\": " << (identity_ok ? "true" : "false") << ",\n"
-            << "  \"hmctot_zero_aware_rows_accepted\": " << hmctot_accepted_rows << ",\n"
-            << "  \"elcter_zero_aware_rows_accepted\": " << elcter_accepted_rows << ",\n"
-            << "  \"hmctot_zero_aware_accept\": " << (hmctot_ok ? "true" : "false") << ",\n"
-            << "  \"elcter_zero_aware_accept\": " << (elcter_ok ? "true" : "false") << ",\n"
-            << "  \"first_hmctot_mismatch_sequence\": " << first_hmctot_mismatch << ",\n"
-            << "  \"first_elcter_mismatch_sequence\": " << first_elcter_mismatch << ",\n"
-            << "  \"max_hmctot_relative_error\": " << max_hmctot_relative_error << ",\n"
-            << "  \"max_elcter_relative_error\": " << max_elcter_relative_error << ",\n"
-            << "  \"canonical_comparison\": \".7e\",\n"
-            << "  \"zero_floor\": " << kNativeControllerZeroFloorV1710 << ",\n"
-            << "  \"terminal_temperature_t4\": " << terminal_t4 << ",\n"
-            << "  \"terminal_electron_fraction\": " << terminal_xee << ",\n"
-            << "  \"accepted_radial_boundaries\": " << whole.radial_zones.size() << ",\n"
-            << "  \"bridge_runtime_input_used\": false,\n"
-            << "  \"bridge_schema_exported\": " << (export_schema ? "true" : "false") << ",\n"
-            << "  \"product_state_retention_enabled\": false,\n"
-            << "  \"product_publication_enabled\": false,\n"
-            << "  \"fits_products_written\": 0,\n"
-            << "  \"xout_step_written\": false,\n"
-            << "  \"result\": \"" << (accepted ? "ACCEPT" : "REJECT") << "\"\n"
-            << "}\n";
-
-    std::cout << "V0487462551711_TRUE_NATIVE_CONTROLLER=YES\n"
-              << "V0487462551711_COMPILED_CHECKPOINT_REPLAY=DISABLED\n"
-              << "V0487462551711_FULL_NATIVE_CONTROLLER_EVALUATIONS=" << snapshots.size() << "\n"
-              << "V0487462551711_CONTROLLER_SEQUENCE_IDENTITIES=" << (identity_ok ? "ACCEPT" : "REJECT") << "\n"
-              << "V0487462551711_HMCTOT_ZERO_AWARE_COMPARISON=" << (hmctot_ok ? "ACCEPT" : "REJECT") << "\n"
-              << "V0487462551711_ELCTER_ZERO_AWARE_COMPARISON=" << (elcter_ok ? "ACCEPT" : "REJECT") << "\n"
-              << "V0487462551711_HMCTOT_ACCEPTED_ROWS=" << hmctot_accepted_rows << "/61\n"
-              << "V0487462551711_ELCTER_ACCEPTED_ROWS=" << elcter_accepted_rows << "/61\n"
-              << "V0487462551711_FIRST_HMCTOT_MISMATCH_SEQUENCE=" << first_hmctot_mismatch << "\n"
-              << "V0487462551711_FIRST_ELCTER_MISMATCH_SEQUENCE=" << first_elcter_mismatch << "\n"
-              << "V0487462551711_TERMINAL_TEMPERATURE_T4_WITHIN_1_PERCENT=" << (terminal_t4_ok ? "ACCEPT" : "REJECT") << "\n"
-              << "V0487462551711_TERMINAL_ELECTRON_FRACTION_WITHIN_1_PERCENT=" << (terminal_xee_ok ? "ACCEPT" : "REJECT") << "\n"
-              << "V0487462551711_ACCEPTED_RADIAL_BOUNDARIES=" << whole.radial_zones.size() << "\n"
-              << "V0487462551711_BRIDGE_RUNTIME_INPUT_USED=NO\n"
-              << "V0487462551711_PRODUCT_STATE_RETENTION_ENABLED=NO\n"
-              << "V0487462551711_PRODUCT_PUBLICATION_ENABLED=NO\n"
-              << "V0487462551711_FITS_PRODUCTS_WRITTEN=0\n"
-              << "V0487462551711_XOUT_STEP_LOG_WRITTEN=0\n"
-              << "V0487462551711_RESULT="
-              << (accepted ? "ACCEPT_TRUE_NATIVE_CONTROLLER_ZERO_AWARE_PARITY" :
-                  "REJECT_TRUE_NATIVE_CONTROLLER_RESIDUAL_PARITY") << "\n";
-    return accepted ? 0 : 20;
-}
-
-// XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Implement command run physical standalone in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
 // XSTAR-FUNCTION-COMMENT-END
 int command_run_physical_standalone(Options options) {
     const bool file_silent = options.artifact_profile == "none";
-    return command_run_native_resumable_trajectory_v1724(options, file_silent);
+    return command_run_native_resumable_trajectory(options, file_silent);
 #if 0
 
     std::filesystem::create_directories(options.output_dir);
@@ -21649,7 +19816,7 @@ extern "C" int32_t xstar_production_zone_run_all_v0648110(
         const std::filesystem::path executable =
             (executable_path && *executable_path) ? std::filesystem::path(executable_path) : std::filesystem::path();
         ::setenv("XSTAR_V0648110_SHARED_ZONE_MODE", "1", 1);
-        const int rc = command_run_standalone_production_v67(options, executable);
+        const int rc = command_run_standalone_production(options, executable);
         ::unsetenv("XSTAR_V0648110_SHARED_ZONE_MODE");
         set_message(rc == 0 ? "ACCEPT" : ("standalone production returned " + std::to_string(rc)));
         return rc;
@@ -21700,7 +19867,7 @@ extern "C" int32_t xstar_production_zone_context_create_v0648110(
                 const std::filesystem::path executable = session->executable_path.empty()
                     ? std::filesystem::path() : std::filesystem::path(session->executable_path);
                 ::setenv("XSTAR_V0648110_SHARED_ZONE_MODE", "1", 1);
-                const int rc = command_run_standalone_production_v67(options, executable);
+                const int rc = command_run_standalone_production(options, executable);
                 ::unsetenv("XSTAR_V0648110_SHARED_ZONE_MODE");
                 {
                     std::lock_guard<std::mutex> lock(session->mutex);
@@ -21884,11 +20051,11 @@ int main(int argc, char** argv) {
     if (options.command == "run-fixed-trajectory") return command_run_fixed_trajectory(options);
     if (options.command == "run-fixed-evaluation") return command_run_fixed_evaluation(options);
     if (options.command == "run") return command_run_physical(options);
-    if (options.command == "standalone-capabilities") return command_standalone_capabilities_v67();
-    if (options.command == "run-standalone-case-probe-v70") return command_run_standalone_case_probe_v70(options);
-    if (options.command == "run-production") return command_run_standalone_production_v67(options, std::filesystem::path(argv[0]));
-    if (options.command == "run-production-assets") return command_run_native_resumable_trajectory_v1724(options, true);
-    if (options.command == "run-native-reconstructed-products") return command_run_native_reconstructed_products_v172526(options);
+    if (options.command == "standalone-capabilities") return command_standalone_capabilities();
+    if (options.command == "run-standalone-case-probe-v70") return command_run_standalone_case_probe(options);
+    if (options.command == "run-production") return command_run_standalone_production(options, std::filesystem::path(argv[0]));
+    if (options.command == "run-production-assets") return command_run_native_resumable_trajectory(options, true);
+    if (options.command == "run-native-reconstructed-products") return command_run_native_reconstructed_products(options);
     if (options.command == "run-fixed-dsec") return command_run_fixed_dsec(options);
     if (options.command == "production-self-test") return command_production_self_test(options);
     if (options.command == "production-batch-self-test") return command_production_batch_self_test(options);

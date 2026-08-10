@@ -52,7 +52,7 @@ from .linear_algebra import XSTARLinearAlgebraError, leqt2f
 from .performance import profile_component, profile_level_at_least, record_profile_event
 from .cpp_backend_rates import build_mg_type7_terms_cpp_detailed, rates_backend_status
 from .cpp_backend_matrix import build_mg_type7_terms_matrix_cpp_detailed, build_mg_rates_and_matrix_cpp_detailed, build_mg_type51_rates_and_matrix_cpp_detailed, eval_mg_ion_type51_rates_and_matrix_cpp_detailed, scan_mg_ion_source_records_cpp_detailed, eval_mg_ion_source_simple_payloads_cpp_detailed, eval_mg_element_simple_payloads_batch_shadow_cpp_detailed, accumulate_mg_ion_source_simple_terms_cpp_detailed, accumulate_mg_ion_rate7_type49_terms_cpp_detailed, accumulate_mg_ion_rate7_type53_terms_cpp_detailed, dense_fill_terms_matrix_cpp, eval_type51_ucalc_matrix_cpp, matrix_backend_status
-from .cpp_backend_extra import eval_mg_ion_accumulator_cpp, eval_mg_rate_payload_batched_orchestration_shadow_cpp, eval_mg_rate_payload_native_scalar_shadow_cpp
+from .cpp_backend_extra import eval_rate_payload_batched_orchestration_shadow_cpp, eval_rate_payload_native_scalar_shadow_cpp
 from .ucalc import (
     SourceFaithfulUCalc,
     UCalcContext,
@@ -3114,7 +3114,7 @@ def _run_rate_payload_batched_orchestration_shadow(
                     epi_eV = full_epi
                     bremsa = full_bremsa[: full_epi.size]
                 native_call_t0 = time.perf_counter()
-                native_rows, native_message, native_stats = eval_mg_rate_payload_native_scalar_shadow_cpp(
+                native_rows, native_message, native_stats = eval_rate_payload_native_scalar_shadow_cpp(
                     native_packet, epi_eV=epi_eV, bremsa=bremsa
                 )
                 summary["native_scalar_call_wall_seconds"] = time.perf_counter() - native_call_t0
@@ -3167,7 +3167,7 @@ def _run_rate_payload_batched_orchestration_shadow(
                 summary["native_scalar_status"] = "NO_NATIVE_RECORDS"
 
         call_t0 = time.perf_counter()
-        cpp_rows, message, stats = eval_mg_rate_payload_batched_orchestration_shadow_cpp(packet)
+        cpp_rows, message, stats = eval_rate_payload_batched_orchestration_shadow_cpp(packet)
         call_wall = time.perf_counter() - call_t0
         summary["message"] = str(message)
         summary["cpp_stats"] = dict(stats)
@@ -3763,7 +3763,7 @@ def _run_rate_payload_four_family_product_candidate(
         summary["native_scalar_records_expected"] = len(native_packet)
 
         nt0 = time.perf_counter()
-        native_rows, native_message, native_stats = eval_mg_rate_payload_native_scalar_shadow_cpp(
+        native_rows, native_message, native_stats = eval_rate_payload_native_scalar_shadow_cpp(
             native_packet, epi_eV=full_epi, bremsa=full_bremsa[:full_epi.size]
         )
         summary["native_scalar_call_seconds"] = time.perf_counter() - nt0
@@ -3789,7 +3789,7 @@ def _run_rate_payload_four_family_product_candidate(
         summary["native_scalar_records_completed"] = len(native_rows)
 
         rt0 = time.perf_counter()
-        cpp_rows, row_message, row_stats = eval_mg_rate_payload_batched_orchestration_shadow_cpp(packet)
+        cpp_rows, row_message, row_stats = eval_rate_payload_batched_orchestration_shadow_cpp(packet)
         summary["row_cpp_call_seconds"] = time.perf_counter() - rt0
         summary["row_message"] = str(row_message)
         summary["row_cpp_stats"] = dict(row_stats)
@@ -4684,8 +4684,6 @@ def _assemble_element_matrix_impl(
                     "transition_topology_cache": _env_enabled("XSTAR_ATOMIC_MATRIX_TRANSITION_TOPOLOGY_CACHE", "1"),
                     "transition_family_cache": _env_enabled("XSTAR_ATOMIC_MATRIX_TRANSITION_FAMILY_CACHE", "1"),
                     "transition_family_cache_product": _env_enabled("XSTAR_ATOMIC_MATRIX_TRANSITION_FAMILY_CACHE_PRODUCT", "1"),
-                    "engine_mg_ion_accumulator_cpp": _env_enabled("XSTAR_ATOMIC_ENGINE_MG_ION_ACCUMULATOR_CPP", "0"),
-                    "engine_mg_ion_accumulator_product": _env_enabled("XSTAR_ATOMIC_ENGINE_MG_ION_ACCUMULATOR_PRODUCT", "0"),
                     "emissivity_binemis_cpp": _env_enabled("XSTAR_ATOMIC_EMISSIVITY_BINEMIS_CPP", os.environ.get("EMISSIVITY_BINEMIS_CPP", "0")),
                     "emissivity_binemis_shadow_cpp": _env_enabled("XSTAR_ATOMIC_EMISSIVITY_BINEMIS_SHADOW_CPP", "0"),
                     "emissivity_binemis_product_cpp": _env_enabled("XSTAR_ATOMIC_EMISSIVITY_BINEMIS_PRODUCT_CPP", os.environ.get("XSTAR_ATOMIC_EMISSIVITY_BINEMIS_CPP", "0")),
@@ -6721,7 +6719,7 @@ def _assemble_element_matrix_impl(
                         if _has_type88 and (_reduced_epi.size < 3 or not np.all(np.isfinite(_reduced_epi)) or not np.all(np.diff(_reduced_epi) > 0.0)):
                             raise RuntimeError("Type-88 reduced phextrap grid unavailable")
                         _native_t0 = time.perf_counter()
-                        _native_rows, _native_message, _native_stats = eval_mg_rate_payload_native_scalar_shadow_cpp(
+                        _native_rows, _native_message, _native_stats = eval_rate_payload_native_scalar_shadow_cpp(
                             _native_packet, epi_eV=_full_epi, bremsa=_full_bremsa[:_full_epi.size]
                         )
                         if _four_family_product_summary is not None:
@@ -6762,7 +6760,7 @@ def _assemble_element_matrix_impl(
                         })
                     if _row_packet:
                         _row_t0 = time.perf_counter()
-                        _cpp_rows, _row_message, _row_stats = eval_mg_rate_payload_batched_orchestration_shadow_cpp(_row_packet)
+                        _cpp_rows, _row_message, _row_stats = eval_rate_payload_batched_orchestration_shadow_cpp(_row_packet)
                         if _four_family_product_summary is not None:
                             _four_family_product_summary["row_cpp_call_seconds"] += time.perf_counter() - _row_t0
                         for _row in _cpp_rows:
@@ -6782,86 +6780,6 @@ def _assemble_element_matrix_impl(
                         _four_family_product_summary["status"] = "FALLBACK_ACCEPTED_PATH"
                     raise _FourFamilyProductFallback(str(_exc)) from _exc
 
-            if int(element_z) == 12 and _env_enabled("XSTAR_ATOMIC_ENGINE_MG_ION_ACCUMULATOR_CPP", "0"):
-                _acc_t0 = time.perf_counter()
-                try:
-                    _acc_records = np.ascontiguousarray(np.asarray([int(_r) for _r, _rt, _dt in source_record_iter], dtype=np.int64))
-                    _acc_rate_types = np.ascontiguousarray(np.asarray([int(_rt) for _r, _rt, _dt in source_record_iter], dtype=np.int64))
-                    _acc_data_types = np.ascontiguousarray(np.asarray([int(_dt) for _r, _rt, _dt in source_record_iter], dtype=np.int64))
-                    _acc_source_index = np.ascontiguousarray(np.arange(1, int(_acc_records.shape[0]) + 1, dtype=np.int64))
-                    _acc = eval_mg_ion_accumulator_cpp(
-                        element_z=int(element_z),
-                        ion_index=int(block.ion_index),
-                        ion_stage=int(block.ion_stage),
-                        n_levels=int(block.nlev),
-                        n_parent_levels=int(current_levels.nlev),
-                        record_number=_acc_records,
-                        record_rate_type=_acc_rate_types,
-                        record_data_type=_acc_data_types,
-                        record_source_index=_acc_source_index,
-                        enabled=True,
-                    )
-                    _speed_kernel_update(
-                        "mg_ion_accumulator",
-                        cpp_calls=1.0,
-                        records_seen=float(_acc.records_seen),
-                        cpp_supported=float(_acc.cpp_supported),
-                        python_fallback=float(_acc.python_fallback),
-                        fallback_count=float(_acc.python_fallback),
-                        matrix_terms_emitted=float(_acc.matrix_terms_emitted),
-                        rate_terms_emitted=float(_acc.rate_terms_emitted),
-                        heat_terms_emitted=float(_acc.heat_terms_emitted),
-                        cool_terms_emitted=float(_acc.cool_terms_emitted),
-                        rate_type7_records=float(_acc.rate_type7_records),
-                        type49_records=float(_acc.type49_records),
-                        type53_records=float(_acc.type53_records),
-                        type50_records=float(_acc.type50_records),
-                        type51_records=float(_acc.type51_records),
-                        type49_supported=float(_acc.type49_supported),
-                        type53_supported=float(_acc.type53_supported),
-                        type50_topology_supported=float(_acc.type50_topology_supported),
-                        type51_topology_supported=float(_acc.type51_topology_supported),
-                        unsupported_rate_type_records=float(_acc.unsupported_rate_type_records),
-                        unsupported_data_type_records=float(_acc.unsupported_data_type_records),
-                        source_order_records=float(_acc.source_order_records),
-                        product_active=float(_acc.product_active),
-                        status="cpp" if _acc.error is None else "fallback",
-                        message=str(_acc.message)[:240],
-                    )
-                    record_profile_event(
-                        profile_control,
-                        "calc_hmc_all.element_solver.mg_ion_accumulator_cpp_kernel",
-                        time.perf_counter() - _acc_t0,
-                        element_z=int(element_z),
-                        ion_stage=int(block.ion_stage),
-                        ion_index=int(block.ion_index),
-                        emit_progress=bool(profile_control.get("profile_backend_calls", False)),
-                        source_routine="libxstar_engine.so:xstar_matrix_eval_mg_ion_accumulator_v1",
-                        status="cpp" if _acc.error is None else "fallback",
-                        records_seen=float(_acc.records_seen),
-                        records_batched=float(_acc.records_seen),
-                        cpp_calls=1.0,
-                        cpp_supported=float(_acc.cpp_supported),
-                        fallback_count=float(_acc.python_fallback),
-                        matrix_terms_emitted=float(_acc.matrix_terms_emitted),
-                        rate_terms_emitted=float(_acc.rate_terms_emitted),
-                        product_active=float(_acc.product_active),
-                    )
-                except Exception as exc:
-                    _speed_kernel_update("mg_ion_accumulator", cpp_calls=0.0, fallback_count=1.0, status="exception", error=str(exc))
-                    record_profile_event(
-                        profile_control,
-                        "calc_hmc_all.element_solver.mg_ion_accumulator_cpp_kernel",
-                        0.0,
-                        element_z=int(element_z),
-                        ion_stage=int(block.ion_stage),
-                        ion_index=int(block.ion_index),
-                        emit_progress=bool(profile_control.get("profile_backend_calls", False)),
-                        source_routine="libxstar_engine.so:xstar_matrix_eval_mg_ion_accumulator_v1",
-                        status="fallback",
-                        records_seen=0.0, records_batched=0.0, cpp_calls=0.0, fallback_count=1.0,
-                        error=str(exc),
-                    )
 
             if _rate_payload_probe:
                 _rate_probe_source_wall = time.perf_counter() - _rate_probe_source_t0
@@ -7371,7 +7289,7 @@ def _assemble_element_matrix_impl(
                         strict=False,
                     )
                 if isinstance(profile_control, MutableMapping):
-                    _capture_fixed_state_detail3_candidate_v064812345338(
+                    _capture_fixed_state_detail3_candidate(
                         profile_control=profile_control, derived=derived, block=block,
                         basis=basis, levels=levels, result=result, context=context,
                         ucontext=ucontext, ptmp1=ptmp1, ptmp2=ptmp2,
@@ -9226,7 +9144,7 @@ _V064812345338_RATE1_BOUND_FREE_DATA_TYPES = frozenset({
 # Purpose: Implement the reset fixed state detail3 candidates v064812345338 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
 # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
 # XSTAR-FUNCTION-COMMENT-END
-def _reset_fixed_state_detail3_candidates_v064812345338(
+def _reset_fixed_state_detail3_candidates(
     profile_control: MutableMapping[str, Any], element_z: int
 ) -> None:
     bucket = profile_control.setdefault(
@@ -9250,7 +9168,7 @@ def _reset_fixed_state_detail3_candidates_v064812345338(
 # Purpose: Capture fixed state detail3 candidate v064812345338 for this module while preserving the surrounding source/runtime invariants.
 # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
 # XSTAR-FUNCTION-COMMENT-END
-def _capture_fixed_state_detail3_candidate_v064812345338(
+def _capture_fixed_state_detail3_candidate(
     *,
     profile_control: MutableMapping[str, Any],
     derived: XSTARDerivedPointers,
@@ -9332,7 +9250,7 @@ def _capture_fixed_state_detail3_candidate_v064812345338(
 # Purpose: Finalize fixed state detail3 publication v064812345338 for this module while preserving the surrounding source/runtime invariants.
 # Reference context: XSTAR Manual ss. 11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
 # XSTAR-FUNCTION-COMMENT-END
-def _finalize_fixed_state_detail3_publication_v064812345338(
+def _finalize_fixed_state_detail3_publication(
     *,
     profile_control: MutableMapping[str, Any],
     master: XSTARMasterData,
@@ -9488,7 +9406,7 @@ def solve_element_statistical_equilibrium(
     """Run the complete translated element source sequence."""
     profile_control = context.profile_control or {}
     if isinstance(profile_control, MutableMapping):
-        _reset_fixed_state_detail3_candidates_v064812345338(profile_control, int(element_z))
+        _reset_fixed_state_detail3_candidates(profile_control, int(element_z))
     if int(element_z) == 12:
         _matrix_assembly_t0 = time.perf_counter()
         with profile_component(
@@ -9645,7 +9563,7 @@ def solve_element_statistical_equilibrium(
         and assembly.basis.n_rows > 0
     )
     if isinstance(profile_control, MutableMapping):
-        _finalize_fixed_state_detail3_publication_v064812345338(
+        _finalize_fixed_state_detail3_publication(
             profile_control=profile_control, master=master, derived=derived,
             element_z=int(element_z), context=context, solve=solve, dispatcher=dispatcher,
         )

@@ -81,3 +81,7 @@ include tools/qualification/host_compat_overlay.py
 include tools/qualification/check_cpp_tree_consolidation_0_6_74.py
 include tools/qualification/cpp_tree_consolidation_compat.py
 include tools/qualification/check_benchmark_cli_adapter_0_6_75.py
+
+include tools/qualification/check_source_name_hygiene_0_6_76.py
+include tools/qualification/source_name_hygiene_compat.py
+include qualification/source_name_hygiene_0_6_76.json

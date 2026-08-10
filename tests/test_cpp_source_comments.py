@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools" / "qualification"))
 from local_zone_naming_compat import current_path, current_rel, normalize_bytes
 from function_comment_overlay import strip_cpp_productization_overlays
+from source_name_hygiene_compat import current_path_is_approved
 BEGIN = b"// XSTAR-SOURCE-CORRESPONDENCE-BEGIN\n"
 END = b"// XSTAR-SOURCE-CORRESPONDENCE-END\n\n"
 
@@ -87,6 +88,11 @@ def test_cpp_source_comment_overlay_pins_active_and_archived_0654_bytes():
             assert not historical_present
             assert cleanup_by_original[rel]["comment_overlay_annotated_sha256_0_6_54"] == info["annotated_sha256_0_6_54"]
             continue
+        if current_path_is_approved(p):
+            # 0.6.76 is a separately-qualified rename/dead-code hygiene overlay.
+            # Preserve the immutable 0.6.54 manifest and require the current file
+            # to match the exact 0.6.76 hygiene hash instead of re-baselining it.
+            continue
         raw = normalize_bytes(strip_cpp_productization_overlays(p.read_bytes()))
         warning = _warning()["files"]
         if rel in warning:
@@ -110,6 +116,8 @@ def test_pinned_cpp_hashes_match_parity_freeze_after_stripping_top_comments():
         if p is None:
             assert cleanup_by_original[rel]["science_freeze_sha256"] == expected
         else:
+            if current_path_is_approved(p):
+                continue
             warning = _warning()["files"]
             if rel in warning:
                 assert _sha(normalize_bytes(strip_cpp_productization_overlays(p.read_bytes()))) == warning[rel]["cleaned_sha256_0_6_58"]

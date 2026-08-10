@@ -38,7 +38,7 @@ namespace {
 // Purpose: Provide true production mode for final science-product publication from already-committed run state.
 // Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
 // XSTAR-FUNCTION-COMMENT-END
-bool true_production_mode_v65() {
+bool true_production_mode() {
     const char* value = std::getenv("XSTAR_TRUE_PRODUCTION");
     return value && std::string(value) == "1";
 }
@@ -836,7 +836,7 @@ struct SourceRankIdentityV064812341 {
 // Purpose: Compute source pprint line identity rank for the line/emissivity/opacity path on the source or publication energy grid.
 // Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
 // XSTAR-FUNCTION-COMMENT-END
-std::vector<SourceRankIdentityV064812341> source_pprint_line_identity_rank_v064812341(
+std::vector<SourceRankIdentityV064812341> source_pprint_line_identity_rank(
     const xstar_run_state::ProductWritingState& state,
     bool depth_mode,
     std::size_t maximum_rows) {
@@ -937,7 +937,7 @@ void append_native_public_line_sections(std::ofstream& out,
     auto luminosity_rows=rows;
     std::stable_sort(luminosity_rows.begin(),luminosity_rows.end(),[](const auto&a,const auto&b){return (a.emit_in+a.emit_out)>(b.emit_in+b.emit_out);});
     const std::size_t luminosity_count=std::min<std::size_t>(500,luminosity_rows.size());
-    const auto luminosity_identities = source_pprint_line_identity_rank_v064812341(state, false, 500u);
+    const auto luminosity_identities = source_pprint_line_identity_rank(state, false, 500u);
     for(std::size_t k=0;k<luminosity_count;++k){
         const auto& numeric=luminosity_rows[k];
         const auto* id = k < luminosity_identities.size() ? luminosity_identities[k].identity : nullptr;
@@ -972,7 +972,7 @@ void append_native_public_line_sections(std::ofstream& out,
     if(depth_rows.empty()) depth_rows=rows;
     std::stable_sort(depth_rows.begin(),depth_rows.end(),[](const auto&a,const auto&b){return a.depth_in>b.depth_in;});
     const std::size_t depth_count=std::min<std::size_t>(500,depth_rows.size());
-    const auto depth_identities = source_pprint_line_identity_rank_v064812341(state, true, 500u);
+    const auto depth_identities = source_pprint_line_identity_rank(state, true, 500u);
     for(std::size_t k=0;k<depth_count;++k){
         const auto& numeric=depth_rows[k];
         const auto* id = k < depth_identities.size() ? depth_identities[k].identity : nullptr;
@@ -1123,78 +1123,8 @@ std::map<std::pair<long long,long long>,long long> load_native_ion_row_minima(
     return minima;
 }
 
-// XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Load rrc source records into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
-// Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
-// XSTAR-FUNCTION-COMMENT-END
-[[maybe_unused]] std::vector<RrcSourceRecord> load_rrc_source_records(
-    const std::filesystem::path& output_dir,
-    const xstar_run_state::ProductWritingState& state) {
-    std::vector<RrcSourceRecord> out;
-    std::size_t sequence = 0;
-    for (const auto& fixed : state.fixed_evaluations) sequence = std::max(sequence, fixed.sequence);
-    if (sequence == 0) return out;
-    std::ostringstream name;
-    name << "evaluation_" << std::setw(4) << std::setfill('0') << sequence << "_records.csv";
-    std::ifstream input(state.native_diagnostics_path / name.str());
-    if (!input) return out;
-    std::string line;
-    if (!std::getline(input, line)) return out;
-    const auto header = split_simple_csv(line);
-    std::map<std::string,std::size_t> column;
-    for (std::size_t i=0; i<header.size(); ++i) column[header[i]] = i;
-    const auto at = [&](const char* key) -> std::size_t {
-        const auto found = column.find(key);
-        return found == column.end() ? header.size() : found->second;
-    };
-    const std::size_t ctype=at("data_type"), crate=at("rate_type"),
-        celement=at("element_index"), cz=at("element_z"), cion=at("ion_index"),
-        clower=at("lower_row"), cupper=at("upper_row"),
-        c53=at("type53_continuum_index_one_based"),
-        c49=at("type49_continuum_index_one_based"),
-        ct53=at("type53_shadow_threshold_ev"),
-        ct49=at("type49_threshold_ev"), ct99=at("type99_threshold_ev");
-    const auto minima = load_native_ion_row_minima(output_dir, state);
-    long long source_index = 0;
-    while (std::getline(input, line)) {
-        const auto fields = split_simple_csv(line);
-        if (csv_integer(fields, crate) != 7) continue;
-        ++source_index; // pprint's kkkl/npconi2 ordering includes every type-7 record.
-        const long long type = csv_integer(fields, ctype);
-        if (type != 49 && type != 53 && type != 99) continue;
-        RrcSourceRecord record;
-        record.source_index = source_index;
-        record.data_type = type;
-        record.element_index = csv_integer(fields, celement);
-        record.element_z = csv_integer(fields, cz);
-        record.ion_index = csv_integer(fields, cion);
-        record.lower_row = csv_integer(fields, clower);
-        record.upper_row = csv_integer(fields, cupper);
-        if (type == 53) {
-            record.continuum_index = csv_integer(fields, c53);
-            record.threshold_ev = csv_double(fields, ct53);
-        } else if (type == 49) {
-            record.continuum_index = csv_integer(fields, c49);
-            record.threshold_ev = csv_double(fields, ct49);
-        } else {
-            record.threshold_ev = csv_double(fields, ct99);
-        }
-        const auto key = std::make_pair(record.element_index, record.ion_index);
-        const auto found = minima.find(key);
-        const long long first = found == minima.end() ? 1 : found->second;
-        record.lower_local = record.lower_row > 0 ? record.lower_row - first + 1 : 0;
-        record.upper_local = record.upper_row > 0 ? record.upper_row - first + 1 : 0;
-        record.ion_label = source_ion_label(record.element_z, record.ion_index);
-        out.push_back(std::move(record));
-    }
-    return out;
-}
-
 struct ShellGeometry { double radius_cm = 0.0; double delta_cm = 0.0; };
 std::vector<int> named_hdu_numbers(fitsfile* fptr, const std::string& extname);
-[[maybe_unused]] std::vector<ShellGeometry> native_shell_geometry(
-    const std::filesystem::path& output_dir,
-    const xstar_run_state::ProductWritingState& state);
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Publish Option-24 recombination-edge rows from clean per-ion Type-7 identities and current continuum optical depths; do not reproduce the known Fortran pprint(24) stale-local H I/He II alias.
@@ -1316,49 +1246,6 @@ std::vector<int> named_hdu_numbers(fitsfile* fptr, const std::string& extname) {
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Provide native shell geometry for final science-product publication from already-committed run state.
-// Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
-// XSTAR-FUNCTION-COMMENT-END
-std::vector<ShellGeometry> native_shell_geometry(
-    const std::filesystem::path& output_dir,
-    const xstar_run_state::ProductWritingState& state) {
-    std::vector<double> radius, delta;
-    fitsfile* f = nullptr;
-    int status = 0;
-    fits_open_file(&f, (output_dir / "xout_abund1.fits").c_str(), READONLY, &status);
-    if (status == 0) {
-        status = 0;
-        fits_movnam_hdu(f, ANY_HDU, const_cast<char*>("ABUNDANCES"), 0, &status);
-        if (status == 0) {
-            const int cr = column_number(f, "radius");
-            const int cd = column_number(f, "delta_r");
-            for (long long row = 1; row <= table_rows(f); ++row) {
-                radius.push_back(read_double_cell(f, cr, row));
-                delta.push_back(read_double_cell(f, cd, row));
-            }
-        }
-        int cs = 0; fits_close_file(f, &cs);
-    }
-    double base_radius = 0.0;
-    for (double value : radius) if (value > 0.0) { base_radius = value; break; }
-    if (!(base_radius > 0.0)) base_radius = std::pow(10.0, 17.25);
-    double first = delta.size() > 2 ? delta[2] : 0.0;
-    double total = delta.size() > 3 ? delta[3] : 0.0;
-    if (!(total > 0.0)) {
-        const double density = parameter_number(state, "density", 0.0);
-        const double column = parameter_number(state, "column", 0.0);
-        if (density > 0.0 && column > 0.0) total = column / density;
-    }
-    if (!(first > 0.0) && total > 0.0) first = total / 3.0;
-    double second = first;
-    double third = total - first - second;
-    if (!(third > 0.0)) third = first;
-    return {{base_radius, first}, {base_radius + first, second},
-            {base_radius + first + second, third}};
-}
-
-
-// XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Append native detail line section from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
 // XSTAR-FUNCTION-COMMENT-END
@@ -1442,7 +1329,7 @@ void append_native_detail_line_section(
         ws.line_workspace_exact && ws.line_tau_workspace_exact &&
         elum_stride > max_slot;
     std::ofstream audit;
-    if (!true_production_mode_v65()) audit.open(output_dir / "v048746255172565_full_line_channels_audit.json");
+    if (!true_production_mode()) audit.open(output_dir / "v048746255172565_full_line_channels_audit.json");
     if (audit) {
         audit << "{\n"
               << "  \"schema\": \"xstar-tools-v048746255172563-full-line-channels-v3\",\n"

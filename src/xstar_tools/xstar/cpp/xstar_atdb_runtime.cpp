@@ -106,7 +106,7 @@ double json_number(const std::string& text, const std::string& key, double fallb
 // Purpose: Provide source uclgsr8 as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
 // Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
 // XSTAR-FUNCTION-COMMENT-END
-double source_uclgsr8_v0648123360(const std::string& text, const std::string& key, double fallback) {
+double source_uclgsr8(const std::string& text, const std::string& key, double fallback) {
     return static_cast<double>(static_cast<float>(json_number(text, key, fallback)));
 }
 
@@ -114,7 +114,7 @@ double source_uclgsr8_v0648123360(const std::string& text, const std::string& ke
 // Purpose: Provide source default real literal as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
 // Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
 // XSTAR-FUNCTION-COMMENT-END
-double source_default_real_literal_v0648123360(double value) {
+double source_default_real_literal(double value) {
     return static_cast<double>(static_cast<float>(value));
 }
 
@@ -125,31 +125,31 @@ double source_default_real_literal_v0648123360(double value) {
 // Purpose: Provide source rread1 initial radius cm as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
 // Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
 // XSTAR-FUNCTION-COMMENT-END
-double source_rread1_initial_radius_cm_v0648123360(const std::string& text) {
+double source_rread1_initial_radius_cm(const std::string& text) {
     const int lcpres = static_cast<int>(json_number(text, "lcpres", 0.0));
     const int lcdd = lcpres <= 1 ? 1 - lcpres : lcpres;
-    const double t4 = source_uclgsr8_v0648123360(text, "temperature", 100.0);
-    const double pressure = source_uclgsr8_v0648123360(text, "pressure", 0.03);
-    double density = source_uclgsr8_v0648123360(text, "density", 1.0e4);
-    const double xlum = source_uclgsr8_v0648123360(text, "rlrad38", 1.0e-6);
-    const double zeta = source_uclgsr8_v0648123360(text, "rlogxi", 5.0);
-    const double xi = std::pow(source_default_real_literal_v0648123360(10.0), zeta);
+    const double t4 = source_uclgsr8(text, "temperature", 100.0);
+    const double pressure = source_uclgsr8(text, "pressure", 0.03);
+    double density = source_uclgsr8(text, "density", 1.0e4);
+    const double xlum = source_uclgsr8(text, "rlrad38", 1.0e-6);
+    const double zeta = source_uclgsr8(text, "rlogxi", 5.0);
+    const double xi = std::pow(source_default_real_literal(10.0), zeta);
     double r19 = 0.0;
     if (lcdd == 0) {
         density = pressure / 1.38e-12 / std::max(t4, 1.0e-49);
-        const double four_pi = source_default_real_literal_v0648123360(12.56);
-        const double ccc = source_default_real_literal_v0648123360(2.99792458e10);
+        const double four_pi = source_default_real_literal(12.56);
+        const double ccc = source_default_real_literal(2.99792458e10);
         r19 = std::sqrt(xlum / four_pi / ccc / std::max(1.0e-49, pressure * xi));
     } else if (lcdd == 2) {
-        const double xee = source_default_real_literal_v0648123360(1.2);
-        density = pressure / (xee + source_default_real_literal_v0648123360(1.0e-34));
+        const double xee = source_default_real_literal(1.2);
+        density = pressure / (xee + source_default_real_literal(1.0e-34));
         r19 = std::sqrt(xlum / std::max(1.0e-49, pressure * xi));
     } else if (lcdd == 1) {
         r19 = std::sqrt(xlum / std::max(1.0e-49, density * xi));
     } else {
         throw std::runtime_error("unsupported rread1 lcdd branch");
     }
-    const double radius_scale = source_default_real_literal_v0648123360(1.0e19);
+    const double radius_scale = source_default_real_literal(1.0e19);
     return r19 * radius_scale;
 }
 
@@ -816,7 +816,7 @@ constexpr double kSourcePlanckEvSecondV82Patch5207 = 4.136e-15;
 // Purpose: Provide type50 natural width ev as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
 // Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
 // XSTAR-FUNCTION-COMMENT-END
-double type50_natural_width_ev_v82_patch5207(
+double type50_natural_width_ev(
     AtdbReader& db, const Derived& d, int ion, int upper_local, double fallback_aij_s
 ) {
     if (ion > 0 && upper_local > 0 && 41 <= d.max_rate &&
@@ -857,7 +857,7 @@ struct BinemisType86DampingV82Patch520154 {
 // Purpose: Provide binemis type86 damping as part of the runtime atomic-database representation or source-compatible pointer/metadata lookup.
 // Reference context: XSTAR Manual ch12; Bautista & Kallman (2001); Mendoza et al. (2021).
 // XSTAR-FUNCTION-COMMENT-END
-BinemisType86DampingV82Patch520154 binemis_type86_damping_v82_patch520154(
+BinemisType86DampingV82Patch520154 binemis_type86_damping(
     AtdbReader& db, const Derived& d, int ion, int upper_local
 ) {
     BinemisType86DampingV82Patch520154 out;
@@ -921,7 +921,7 @@ LoweredRecord lower_record(AtdbReader& db,const Derived& d,const Layout& l,int r
         // Literal ucalc swaps idest1/idest2 only when the first endpoint energy
         // is lower, then passes that source upper local level to deleafnd.
         const int source_upper_local = e1 < e2 ? id2 : id1;
-        width=type50_natural_width_ev_v82_patch5207(db,d,ion,source_upper_local,aij);
+        width=type50_natural_width_ev(db,d,ion,source_upper_local,aij);
         out.reals={aij,oscillator,wavelength,energy,e1,e2}; out.ints={id1,id2};
     }
     // Type 51 stores CHIANTI/Burgess-Tully effective collision-strength
@@ -1161,8 +1161,8 @@ ProductionParameters read_production_parameters(const std::filesystem::path& pat
     // Source input parameters are read by uclgsr8 through REAL(4) and then
     // promoted.  Column was already normalized that way by Python, but enforce
     // it here independently as well.
-    p.column_cm2=source_uclgsr8_v0648123360(p.raw_json,"column",p.column_cm2); p.log_xi=json_number(p.raw_json,"rlogxi",p.log_xi);
-    p.initial_radius_cm=source_rread1_initial_radius_cm_v0648123360(p.raw_json); p.covering_fraction=json_number(p.raw_json,"cfrac",p.covering_fraction);
+    p.column_cm2=source_uclgsr8(p.raw_json,"column",p.column_cm2); p.log_xi=json_number(p.raw_json,"rlogxi",p.log_xi);
+    p.initial_radius_cm=source_rread1_initial_radius_cm(p.raw_json); p.covering_fraction=json_number(p.raw_json,"cfrac",p.covering_fraction);
     p.emission_multiplier=json_number(p.raw_json,"emult",p.emission_multiplier);
     p.maximum_optical_depth=json_number(p.raw_json,"taumax",p.maximum_optical_depth);
     p.turbulent_velocity_km_s=json_number(p.raw_json,"vturbi",p.turbulent_velocity_km_s);
@@ -1400,7 +1400,7 @@ ProgramStorage lower_atdb_in_memory(const std::filesystem::path& atdb,const Prod
         row_offset+=l.n_rows;
         for(std::size_t li=0;li<rit->second.size();++li){int rec=rit->second[li];auto lr=lower_record(db,d,l,rec,ei,ion_record_to_index);lr.record.source_position=4*static_cast<std::int64_t>(global_record+1);lr.record.next_index=(li+1<rit->second.size())?static_cast<int>(global_record+1):-1;lr.record.real_offset=out.reals.size();lr.record.real_count=lr.reals.size();lr.record.int_offset=out.ints.size();lr.record.int_count=lr.ints.size();out.reals.insert(out.reals.end(),lr.reals.begin(),lr.reals.end());out.ints.insert(out.ints.end(),lr.ints.begin(),lr.ints.end());out.records.push_back(lr.record);++global_record;
             const auto& h=db.header(rec);const int parent=d.npar[rec];const int ion=ion_record_to_index[parent];const auto& b=block_for(l,ion);auto iv=db.ints(rec);auto rv=db.reals(rec);
-            if(d.nplini[rec]>0){xstar_run_state::LineIdentityState id;id.line_index=d.nplini[rec];id.wavelength_angstrom=!rv.empty()?std::abs(rv[0]):(lr.record.line_energy_ev>0?kEvAngstrom/lr.record.line_energy_ev:0.0);id.ion_label=normalized_ion_label(b);int a=iv.size()>=2?iv[0]:1,c=iv.size()>=2?iv[1]:b.nlev;const auto* la=find_level(l,ion,a);const auto* lc=find_level(l,ion,c);id.lower_level=la?la->label:"";id.upper_level=lc?lc->label:"";id.rate_type=h.rate_type;id.data_type=h.data_type;id.atomic_mass=mass_for_z(z);id.natural_rate_s=rv.size()>=3?rv[2]:0.0;const auto type86=binemis_type86_damping_v82_patch520154(db,d,ion,c);if(type86.matched){id.auger_rate_s=type86.auger_rate_s;id.natural_rate_s=type86.radiative_rate_s;}id.source_record=rec;id.lower_local_index=a;id.upper_local_index=c;out.line_identities.push_back(id);}
+            if(d.nplini[rec]>0){xstar_run_state::LineIdentityState id;id.line_index=d.nplini[rec];id.wavelength_angstrom=!rv.empty()?std::abs(rv[0]):(lr.record.line_energy_ev>0?kEvAngstrom/lr.record.line_energy_ev:0.0);id.ion_label=normalized_ion_label(b);int a=iv.size()>=2?iv[0]:1,c=iv.size()>=2?iv[1]:b.nlev;const auto* la=find_level(l,ion,a);const auto* lc=find_level(l,ion,c);id.lower_level=la?la->label:"";id.upper_level=lc?lc->label:"";id.rate_type=h.rate_type;id.data_type=h.data_type;id.atomic_mass=mass_for_z(z);id.natural_rate_s=rv.size()>=3?rv[2]:0.0;const auto type86=binemis_type86_damping(db,d,ion,c);if(type86.matched){id.auger_rate_s=type86.auger_rate_s;id.natural_rate_s=type86.radiative_rate_s;}id.source_record=rec;id.lower_local_index=a;id.upper_local_index=c;out.line_identities.push_back(id);}
             if(d.npconi2[rec]>0){
                 // Literal pprint.f90/writespectra4.f90 identity metadata is
                 // distinct from the UCalc physical threshold used by the

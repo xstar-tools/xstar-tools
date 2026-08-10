@@ -725,16 +725,16 @@ def calc_emisab_ion(
                     denom = ptmp1 + ptmp2
                     if denom == 0.0:
                         raise CalcEmisabPortError("zero continuum escape denominator")
-                    _update_source_detail_rrc_slot_absorption_lifetime_v06481234532(
+                    _update_source_detail_rrc_slot_absorption_lifetime(
                         context.profile_control, source_record=rec, continuum_index=continuum_index,
                         abund1=abund1, abund2=abund2, xpx=xpx, ans4=result.ans4,
                     )
-                    _update_source_detail_rrc_record_shadow_v0648123453(
+                    _update_source_detail_rrc_record_shadow(
                         context.profile_control, source_record=rec, continuum_index=continuum_index,
                         ptmp1=ptmp1, ptmp2=ptmp2, abund1=abund1, abund2=abund2,
                         xpx=xpx, ans3=result.ans3, ans4=result.ans4, opakab=result.opakab,
                     )
-                    _update_source_detail_rrc_publication_shadow_v0648123451(
+                    _update_source_detail_rrc_publication_shadow(
                         context.profile_control, continuum_index=continuum_index,
                         ptmp1=ptmp1, ptmp2=ptmp2, abund1=abund1, abund2=abund2,
                         xpx=xpx, ans3=result.ans3, ans4=result.ans4, opakab=result.opakab,
@@ -803,7 +803,7 @@ def calc_emisab_ion(
                             evaluated += 1
                             _accumulate_ucalc_continuum(context.workspace, result)
                     source_line_index = int(context.derived.nplini[rec]) if rec < len(context.derived.nplini) else int(line_index)
-                    _update_source_detail_line_publication_shadow_v064812345334(
+                    _update_source_detail_line_publication_shadow(
                         context.profile_control, rate_type=rate_type, data_type=header.data_type,
                         line_index=source_line_index, abundance_lower=abund1,
                         abundance_upper=abund2, opak_local=result.opakab,
@@ -920,7 +920,7 @@ def calc_emisab_element(
 # Purpose: Implement the begin source detail line publication shadow v064812345334 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
 # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
 # XSTAR-FUNCTION-COMMENT-END
-def _begin_source_detail_line_publication_shadow_v064812345334(
+def _begin_source_detail_line_publication_shadow(
     control: Optional[MutableMapping[str, Any]],
 ) -> None:
     """Reset the evaluation-local Type-50 stale-opakb1 publication replay."""
@@ -934,7 +934,7 @@ def _begin_source_detail_line_publication_shadow_v064812345334(
 # Purpose: Update source detail line publication shadow v064812345334 for this module while preserving the surrounding source/runtime invariants.
 # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
 # XSTAR-FUNCTION-COMMENT-END
-def _update_source_detail_line_publication_shadow_v064812345334(
+def _update_source_detail_line_publication_shadow(
     control: Optional[MutableMapping[str, Any]], *, rate_type: int, data_type: int,
     line_index: int, abundance_lower: float, abundance_upper: float,
     opak_local: float,
@@ -974,7 +974,7 @@ def _update_source_detail_line_publication_shadow_v064812345334(
 # Purpose: Update source detail rrc record shadow v0648123453 for this module while preserving the surrounding source/runtime invariants.
 # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
 # XSTAR-FUNCTION-COMMENT-END
-def _update_source_detail_rrc_record_shadow_v0648123453(
+def _update_source_detail_rrc_record_shadow(
     control: Optional[MutableMapping[str, Any]], *, source_record: int,
     continuum_index: int, ptmp1: float, ptmp2: float, abund1: float,
     abund2: float, xpx: float, ans3: float, ans4: float, opakab: float,
@@ -1018,7 +1018,7 @@ def _update_source_detail_rrc_record_shadow_v0648123453(
 # Purpose: Implement the source detail rrc lifetime trace targets v06481234532 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
 # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
 # XSTAR-FUNCTION-COMMENT-END
-def _source_detail_rrc_lifetime_trace_targets_v06481234532() -> set[int]:
+def _source_detail_rrc_lifetime_trace_targets() -> set[int]:
     raw = str(os.environ.get("XSTAR_V06481234532_RRC_TARGETS", "709,762"))
     out: set[int] = set()
     for token in raw.replace(";", ",").split(","):
@@ -1035,13 +1035,13 @@ def _source_detail_rrc_lifetime_trace_targets_v06481234532() -> set[int]:
 # Purpose: Append source detail rrc lifetime trace v06481234532 for this module while preserving the surrounding source/runtime invariants.
 # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
 # XSTAR-FUNCTION-COMMENT-END
-def _append_source_detail_rrc_lifetime_trace_v06481234532(
+def _append_source_detail_rrc_lifetime_trace(
     control: Optional[MutableMapping[str, Any]], event: Mapping[str, Any],
 ) -> None:
     if not isinstance(control, MutableMapping):
         return
     ci = int(event.get("continuum_index", 0) or 0)
-    if ci > 0 and ci not in _source_detail_rrc_lifetime_trace_targets_v06481234532():
+    if ci > 0 and ci not in _source_detail_rrc_lifetime_trace_targets():
         return
     trace = control.setdefault("source_detail_rrc_lifetime_trace_v06481234532", [])
     if not isinstance(trace, list):
@@ -1055,7 +1055,7 @@ def _append_source_detail_rrc_lifetime_trace_v06481234532(
 # Purpose: Implement the begin source detail rrc evaluation v06481234532 operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
 # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
 # XSTAR-FUNCTION-COMMENT-END
-def _begin_source_detail_rrc_evaluation_v06481234532(
+def _begin_source_detail_rrc_evaluation(
     control: Optional[MutableMapping[str, Any]],
 ) -> int:
     """Advance the shell-local calc_emisab evaluation sequence.
@@ -1070,7 +1070,7 @@ def _begin_source_detail_rrc_evaluation_v06481234532(
         return 0
     seq = int(control.get("source_detail_rrc_eval_sequence_v06481234532", 0) or 0) + 1
     control["source_detail_rrc_eval_sequence_v06481234532"] = seq
-    _append_source_detail_rrc_lifetime_trace_v06481234532(control, {
+    _append_source_detail_rrc_lifetime_trace(control, {
         "phase": "calc_emisab_begin", "eval_sequence": seq, "continuum_index": 0,
     })
     return seq
@@ -1080,7 +1080,7 @@ def _begin_source_detail_rrc_evaluation_v06481234532(
 # Purpose: Update source detail rrc slot absorption lifetime v06481234532 for this module while preserving the surrounding source/runtime invariants.
 # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
 # XSTAR-FUNCTION-COMMENT-END
-def _update_source_detail_rrc_slot_absorption_lifetime_v06481234532(
+def _update_source_detail_rrc_slot_absorption_lifetime(
     control: Optional[MutableMapping[str, Any]], *, source_record: int,
     continuum_index: int, abund1: float, abund2: float, xpx: float, ans4: float,
 ) -> None:
@@ -1114,7 +1114,7 @@ def _update_source_detail_rrc_slot_absorption_lifetime_v06481234532(
         return
     seq = int(control.get("source_detail_rrc_eval_sequence_v06481234532", 0) or 0)
     if seq <= 0:
-        seq = _begin_source_detail_rrc_evaluation_v06481234532(control)
+        seq = _begin_source_detail_rrc_evaluation(control)
     history = control.setdefault("source_detail_rrc_slot_absorption_lifetime_v06481234532", {})
     if not isinstance(history, MutableMapping):
         history = {}
@@ -1135,7 +1135,7 @@ def _update_source_detail_rrc_slot_absorption_lifetime_v06481234532(
         "abundance_upper": float(abund2),
     }
     slot["latest"] = entry
-    _append_source_detail_rrc_lifetime_trace_v06481234532(control, {
+    _append_source_detail_rrc_lifetime_trace(control, {
         "phase": "type7_absorption_update", **entry,
     })
 
@@ -1144,7 +1144,7 @@ def _update_source_detail_rrc_slot_absorption_lifetime_v06481234532(
 # Purpose: Update source detail rrc publication shadow v0648123451 for this module while preserving the surrounding source/runtime invariants.
 # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
 # XSTAR-FUNCTION-COMMENT-END
-def _update_source_detail_rrc_publication_shadow_v0648123451(
+def _update_source_detail_rrc_publication_shadow(
     control: Optional[MutableMapping[str, Any]], *, continuum_index: int,
     ptmp1: float, ptmp2: float, abund1: float, abund2: float, xpx: float,
     ans3: float, ans4: float, opakab: float,
@@ -1185,7 +1185,7 @@ def _update_source_detail_rrc_publication_shadow_v0648123451(
 # Purpose: Append source detail rrc orphan trace v06481234533 for this module while preserving the surrounding source/runtime invariants.
 # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
 # XSTAR-FUNCTION-COMMENT-END
-def _append_source_detail_rrc_orphan_trace_v06481234533(
+def _append_source_detail_rrc_orphan_trace(
     control: Optional[MutableMapping[str, Any]], event: Mapping[str, Any],
 ) -> None:
     if not isinstance(control, MutableMapping):
@@ -1202,7 +1202,7 @@ def _append_source_detail_rrc_orphan_trace_v06481234533(
 # Purpose: Evaluate canonical npcon orphan type7 absorption v06481234533 for this module while preserving the surrounding source/runtime invariants.
 # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
 # XSTAR-FUNCTION-COMMENT-END
-def _evaluate_canonical_npcon_orphan_type7_absorption_v06481234533(
+def _evaluate_canonical_npcon_orphan_type7_absorption(
     context: CalcEmisabContext, *, visited_type7_records: set[int],
     xpx: float, xh0: float, xh1: float,
 ) -> None:
@@ -1259,13 +1259,13 @@ def _evaluate_canonical_npcon_orphan_type7_absorption_v06481234533(
             "visited": False, "status": "unresolved",
         }
         if ion_index <= 0:
-            _append_source_detail_rrc_orphan_trace_v06481234533(control, event); continue
+            _append_source_detail_rrc_orphan_trace(control, event); continue
         z = int(context.derived.ion_element_z[ion_index])
         stage = int(context.derived.ion_stage[ion_index])
         event.update(element_z=z, ion_stage=stage, runtime_stage_active=bool(context.min_stage(z) <= stage <= context.max_stage(z)))
         elem_ab = float(context.abundance(z))
         if not (elem_ab > XSTAR_CALC_EMISAB_ABUNDANCE_FLOOR):
-            event["status"] = "element_below_floor"; _append_source_detail_rrc_orphan_trace_v06481234533(control,event); continue
+            event["status"] = "element_below_floor"; _append_source_detail_rrc_orphan_trace(control,event); continue
         element_record = int(context.derived.npar[parent_ion_record]) if 0 < parent_ion_record < len(context.derived.npar) else 0
         if element_record not in element_cache:
             ions = _iter_ion_descriptors(context, element_record, z)
@@ -1279,22 +1279,22 @@ def _evaluate_canonical_npcon_orphan_type7_absorption_v06481234533(
         ions, compact_x, offsets = element_cache[element_record]
         ion = next((x for x in ions if int(x.ion_index) == ion_index), None)
         if ion is None:
-            event["status"] = "ion_not_in_element_chain"; _append_source_detail_rrc_orphan_trace_v06481234533(control,event); continue
+            event["status"] = "ion_not_in_element_chain"; _append_source_detail_rrc_orphan_trace(control,event); continue
         ints = context.master.record_integers(rec)
         if len(ints) < 4:
-            event["status"] = "short_record"; _append_source_detail_rrc_orphan_trace_v06481234533(control,event); continue
+            event["status"] = "short_record"; _append_source_detail_rrc_orphan_trace(control,event); continue
         idest1 = int(ints[-2]); idest2 = int(ion.nlev) + int(ints[-4]) - 1
         off = int(offsets.get(ion_index, 0)); lower = idest1 + off; upper = idest2 + off
         if lower <= 0 or upper <= 0 or lower >= compact_x.size or upper >= compact_x.size:
-            event.update(status="compact_index_out_of_range", idest1=idest1, idest2=idest2, compact_offset=off); _append_source_detail_rrc_orphan_trace_v06481234533(control,event); continue
+            event.update(status="compact_index_out_of_range", idest1=idest1, idest2=idest2, compact_offset=off); _append_source_detail_rrc_orphan_trace(control,event); continue
         abund1 = float(compact_x[lower]) * elem_ab; abund2 = float(compact_x[upper]) * elem_ab
         event.update(idest1=idest1, idest2=idest2, compact_offset=off, abundance_lower=abund1, abundance_upper=abund2)
         if not (abund1 > XSTAR_CALC_EMISAB_LEVEL_ABUNDANCE_FLOOR or abund2 > XSTAR_CALC_EMISAB_LEVEL_ABUNDANCE_FLOOR):
-            event["status"] = "endpoints_below_floor"; _append_source_detail_rrc_orphan_trace_v06481234533(control,event); continue
+            event["status"] = "endpoints_below_floor"; _append_source_detail_rrc_orphan_trace(control,event); continue
         tau1, tau2 = context.escape.continuum_taus(ci)
         if tau1 is None or tau2 is None:
             if not context.escape.allow_missing_as_zero:
-                event["status"] = "missing_tau"; _append_source_detail_rrc_orphan_trace_v06481234533(control,event); continue
+                event["status"] = "missing_tau"; _append_source_detail_rrc_orphan_trace(control,event); continue
             tau1 = 0.0 if tau1 is None else tau1; tau2 = 0.0 if tau2 is None else tau2
         ptmp1 = pescv(tau1) * (1.0 - context.covering_fraction)
         ptmp2 = pescv(tau2) * (1.0 - context.covering_fraction) + 2.0 * pescv(tau1 + tau2) * context.covering_fraction
@@ -1308,7 +1308,7 @@ def _evaluate_canonical_npcon_orphan_type7_absorption_v06481234533(
                 ptmp1=ptmp1, ptmp2=ptmp2, abund1=abund1, abund2=abund2,
             ))
         except Exception as exc:
-            event.update(status="ucalc_error", error=str(exc)); _append_source_detail_rrc_orphan_trace_v06481234533(control,event); continue
+            event.update(status="ucalc_error", error=str(exc)); _append_source_detail_rrc_orphan_trace(control,event); continue
         absorption = abs(float(result.ans4)) * abund1 * float(xpx)
         event.update(status=str(result.status.value), ans4=float(result.ans4), integrated_absn=float(absorption))
         if result.ready and np.isfinite(absorption) and absorption > activity_floor:
@@ -1319,7 +1319,7 @@ def _evaluate_canonical_npcon_orphan_type7_absorption_v06481234533(
                 "runtime_stage_active": bool(context.min_stage(z) <= stage <= context.max_stage(z)),
             }
             active_count += 1
-        _append_source_detail_rrc_orphan_trace_v06481234533(control,event)
+        _append_source_detail_rrc_orphan_trace(control,event)
     control["source_detail_rrc_orphan_absorption_v06481234533"] = orphan_map
     control["source_detail_rrc_orphan_summary_v06481234533"] = {
         "canonical_type7_count": len(canonical),
@@ -1331,7 +1331,7 @@ def _evaluate_canonical_npcon_orphan_type7_absorption_v06481234533(
         "orphan_709_absorption": float(orphan_map.get(709, {}).get("integrated_absn", 0.0)),
         "orphan_762_absorption": float(orphan_map.get(762, {}).get("integrated_absn", 0.0)),
     }
-    _append_source_detail_rrc_orphan_trace_v06481234533(control, {
+    _append_source_detail_rrc_orphan_trace(control, {
         "phase": "orphan_type7_summary", **control["source_detail_rrc_orphan_summary_v06481234533"]
     })
 
@@ -1340,7 +1340,7 @@ def _evaluate_canonical_npcon_orphan_type7_absorption_v06481234533(
 # Purpose: Evaluate canonical npcon non type7 detail3 absorption v064812345335 for this module while preserving the surrounding source/runtime invariants.
 # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), integrated line/RRC emission and escape.
 # XSTAR-FUNCTION-COMMENT-END
-def _evaluate_canonical_npcon_non_type7_detail3_absorption_v064812345335(
+def _evaluate_canonical_npcon_non_type7_detail3_absorption(
     context: CalcEmisabContext, *, xpx: float, xh0: float, xh1: float,
 ) -> None:
     """Produce output-only detail3 absorption for canonical rate-1 Type49/53 rows.
@@ -1489,8 +1489,8 @@ def calc_emisab_all(context: CalcEmisabContext) -> CalcEmisabResult:
         n_energy=len(epi),
     )
     context.workspace.clear_source_outputs()
-    _begin_source_detail_line_publication_shadow_v064812345334(context.profile_control)
-    _begin_source_detail_rrc_evaluation_v06481234532(context.profile_control)
+    _begin_source_detail_line_publication_shadow(context.profile_control)
+    _begin_source_detail_rrc_evaluation(context.profile_control)
     if isinstance(context.profile_control, MutableMapping):
         context.profile_control["source_detail_rrc_publication_shadow_v0648123451"] = {}
     native_product = _native_spectral_requested(product=True)
@@ -1546,10 +1546,10 @@ def calc_emisab_all(context: CalcEmisabContext) -> CalcEmisabResult:
             ))
         element_record = int(context.derived.npnxt[element_record])
 
-    _evaluate_canonical_npcon_orphan_type7_absorption_v06481234533(
+    _evaluate_canonical_npcon_orphan_type7_absorption(
         context, visited_type7_records=visited_type7_records, xpx=xpx, xh0=xh0, xh1=xh1
     )
-    _evaluate_canonical_npcon_non_type7_detail3_absorption_v064812345335(
+    _evaluate_canonical_npcon_non_type7_detail3_absorption(
         context, xpx=xpx, xh0=xh0, xh1=xh1
     )
 

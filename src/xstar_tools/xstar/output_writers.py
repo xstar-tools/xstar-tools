@@ -3059,7 +3059,7 @@ def _source_detail_line_activity_shadow(
 # Purpose: Select fixed state detail3 publication v064812345338 for this module while preserving the surrounding source/runtime invariants.
 # Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
 # XSTAR-FUNCTION-COMMENT-END
-def _select_fixed_state_detail3_publication_v064812345338(
+def _select_fixed_state_detail3_publication(
     control: Mapping[str, Any], *, terminal_record: bool
 ) -> Mapping[int, Mapping[str, Any]]:
     current = control.get("source_detail_rrc_fixed_state_publication_v064812345338", {})
@@ -3076,7 +3076,7 @@ def _select_fixed_state_detail3_publication_v064812345338(
 # Purpose: Commit fixed state detail3 terminal replay v064812345338 for this module while preserving the surrounding source/runtime invariants.
 # Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
 # XSTAR-FUNCTION-COMMENT-END
-def _commit_fixed_state_detail3_terminal_replay_v064812345338(
+def _commit_fixed_state_detail3_terminal_replay(
     control: MutableMapping[str, Any],
     *,
     current_fixed_state_map: Mapping[int, Mapping[str, Any]] | None,
@@ -3131,7 +3131,7 @@ def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int, ter
         "source_detail_rrc_fixed_state_absorption_v064812345336", {}
     )
     source_detail_rrc_fixed_state_publication = (
-        _select_fixed_state_detail3_publication_v064812345338(
+        _select_fixed_state_detail3_publication(
             state.control, terminal_record=bool(terminal_record)
         )
     )
@@ -3213,7 +3213,7 @@ def append_detail_output_from_state(state: XSTARPythonState, *, hdunum: int, ter
         current_fixed = state.control.get(
             "source_detail_rrc_fixed_state_publication_v064812345338", {}
         )
-        _commit_fixed_state_detail3_terminal_replay_v064812345338(
+        _commit_fixed_state_detail3_terminal_replay(
             state.control,
             current_fixed_state_map=current_fixed if isinstance(current_fixed, Mapping) else {},
             terminal_record=bool(terminal_record),
@@ -3373,14 +3373,14 @@ def run_output_writer_sequence(
         # Purpose: Implement the v0648101 env true operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
         # Reference context: XSTAR Manual Ch. 5 plus ss. 11.5-11.6, shell/detail/final spectral products.
         # XSTAR-FUNCTION-COMMENT-END
-        def _v0648101_env_true(name: str) -> bool:
+        def _final_recompute_env_true(name: str) -> bool:
             return str(os.environ.get(name, "0")).strip().lower() in {"1", "true", "yes", "on"}
 
         _v0648101_global_backend = str(os.environ.get("XSTAR_ATOMIC_BACKEND", "")).strip().lower()
         _v0648101_engine_backend = str(os.environ.get("XSTAR_ATOMIC_ENGINE_BACKEND", "")).strip().lower()
         _v0648101_accelerated_cpp = _v0648101_global_backend == "cpp" or _v0648101_engine_backend == "cpp"
-        _v0648101_force_python = _v0648101_env_true("XSTAR_V0648101_FORCE_PYTHON_FINAL_RECOMPUTE")
-        _v0648101_allow_fallback = _v0648101_env_true("XSTAR_V0648101_ALLOW_PYTHON_FINAL_RECOMPUTE_FALLBACK")
+        _v0648101_force_python = _final_recompute_env_true("XSTAR_V0648101_FORCE_PYTHON_FINAL_RECOMPUTE")
+        _v0648101_allow_fallback = _final_recompute_env_true("XSTAR_V0648101_ALLOW_PYTHON_FINAL_RECOMPUTE_FALLBACK")
         _v0648101_diagnostic_requested = bool(os.environ.get("XSTAR_V064882_FINAL_THERMAL_DIAGNOSTICS", "").strip())
         _v0648101_use_cpp = _v0648101_accelerated_cpp and not _v0648101_force_python and not _v0648101_diagnostic_requested
         timing_breakdown["final_local_recompute.v0648101_accelerated_cpp_selected"] = 1.0 if _v0648101_accelerated_cpp else 0.0

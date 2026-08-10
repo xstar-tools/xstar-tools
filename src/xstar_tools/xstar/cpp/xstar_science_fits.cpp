@@ -42,7 +42,7 @@ namespace {
 // Purpose: Provide true production mode for final science-product publication from already-committed run state.
 // Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
 // XSTAR-FUNCTION-COMMENT-END
-bool true_production_mode_v65() {
+bool true_production_mode() {
     const char* value = std::getenv("XSTAR_TRUE_PRODUCTION");
     return value && std::string(value) == "1";
 }
@@ -55,7 +55,7 @@ bool true_production_mode_v65() {
 // Purpose: Write patch52017381 detal4 writer projection from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
 // XSTAR-FUNCTION-COMMENT-END
-void write_patch52017381_detal4_writer_projection(
+void write_detal4_writer_projection(
     std::size_t output_zone_index,
     std::size_t source_zone_index_value,
     std::size_t hdu_number,
@@ -129,7 +129,7 @@ std::filesystem::path v0648123431_publication_attribution_dir() {
 // Purpose: Write write from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
 // XSTAR-FUNCTION-COMMENT-END
-void write_v0648123431_detal2_activity_trace(
+void write_detal2_activity_trace(
     std::size_t hdu_number,
     const xstar_run_state::LineIdentityState& id,
     double local_emis_in,
@@ -172,7 +172,7 @@ void write_v0648123431_detal2_activity_trace(
 // Purpose: Write write from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
 // XSTAR-FUNCTION-COMMENT-END
-void write_v0648123431_abundance_thermal_trace(
+void write_abundance_thermal_trace(
     const char* surface,
     std::size_t output_zone_index,
     std::size_t source_zone_index_value,
@@ -202,7 +202,7 @@ void write_v0648123431_abundance_thermal_trace(
 // Purpose: Provide source pescv for final science-product publication from already-committed run state.
 // Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
 // XSTAR-FUNCTION-COMMENT-END
-double source_pescv_v0648123431(double tau) {
+double source_pescv(double tau) {
     double value = std::exp(-tau);
     const double eps = static_cast<double>(static_cast<float>(1.0e-12));
     value = std::max(value, eps);
@@ -213,7 +213,7 @@ double source_pescv_v0648123431(double tau) {
 // Purpose: Compute source rrc directional projection for the bound-free/photoionization/recombination-continuum path using the current radiation field and level populations.
 // Reference context: XSTAR Manual ss11.5, 11.6.1, 11.7; Kallman & Bautista (2001); ATDB ch12.
 // XSTAR-FUNCTION-COMMENT-END
-std::pair<double,double> source_rrc_directional_projection_v0648123431(
+std::pair<double,double> source_rrc_directional_projection(
     double retained_in,
     double retained_out,
     double tau_in,
@@ -222,9 +222,9 @@ std::pair<double,double> source_rrc_directional_projection_v0648123431(
     const double total = (std::isfinite(retained_in) ? retained_in : 0.0) +
                          (std::isfinite(retained_out) ? retained_out : 0.0);
     const double cf = std::clamp(cfrac, 0.0, 1.0);
-    const double ptmp1 = source_pescv_v0648123431(tau_in) * (1.0 - cf);
-    const double ptmp2 = source_pescv_v0648123431(tau_out) * (1.0 - cf) +
-                         2.0 * source_pescv_v0648123431(tau_in + tau_out) * cf;
+    const double ptmp1 = source_pescv(tau_in) * (1.0 - cf);
+    const double ptmp2 = source_pescv(tau_out) * (1.0 - cf) +
+                         2.0 * source_pescv(tau_in + tau_out) * cf;
     const double denom = ptmp1 + ptmp2;
     if (!(std::isfinite(total) && std::isfinite(denom) && denom > 0.0)) {
         return {std::isfinite(retained_in) ? retained_in : 0.0,
@@ -1344,14 +1344,6 @@ double boundary_temperature_t4(const BridgeBoundaryRow& row) {
 
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Provide positive finite or for final science-product publication from already-committed run state.
-// Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
-// XSTAR-FUNCTION-COMMENT-END
-[[maybe_unused]] double positive_finite_or(double value, double fallback = 0.0) {
-    return (std::isfinite(value) && value > 0.0) ? value : fallback;
-}
-
-// XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Provide finite or for final science-product publication from already-committed run state.
 // Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
 // XSTAR-FUNCTION-COMMENT-END
@@ -1464,109 +1456,6 @@ void write_radial_keywords(fitsfile* fptr,
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Build line rows from the source-ordered inputs required by the next calculation stage.
-// Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
-// XSTAR-FUNCTION-COMMENT-END
-[[maybe_unused]] std::vector<LineRow> build_line_rows(const xstar_run_state::ProductWritingState& state,
-                                     const std::vector<ElementMeta>& elements,
-                                     const std::vector<RowMeta>& rows,
-                                     std::size_t zone_index) {
-    (void)rows;
-    const auto& zone = state.radial_zones.at(zone_index);
-    const auto& evaluation = zone.accepted_controller.evaluation;
-    const auto records = read_record_diagnostics(state, zone.accepted_controller.accepted_sequence);
-    std::vector<LineRow> out;
-    for (const auto& r : records) {
-        if (!r.spectral || !r.type50_valid || r.data_type != 50 || r.type50_line_index_one_based <= 0) continue;
-        const auto* element = element_ptr_for(elements, r.element_index);
-        if (!element || !active_product_element_stage(state, elements, rows, r.element_z, r.ion_stage, element->abundance)) continue;
-        const double lower = population_for(evaluation, elements, r.element_index, r.lower_row);
-        const double upper = population_for(evaluation, elements, r.element_index, r.upper_row);
-        const double abundance_scale = zone.density_cm3 * element->abundance;
-        const double net = r.ans[1] * upper - r.ans[0] * lower;
-        const double total_emissivity = std::max(net * r.line_energy_ev * kErgPerEv * abundance_scale, 0.0);
-        const double ptmp1 = std::max(r.type50_ptmp1, 0.0);
-        const double ptmp2 = std::max(r.type50_ptmp2, 0.0);
-        const double escape_sum = ptmp1 + ptmp2 > 0.0 ? ptmp1 + ptmp2 : 2.0;
-        LineRow row;
-        row.record = r.type50_line_index_one_based;
-        row.z = r.element_z;
-        row.stage = r.ion_stage;
-        row.lower_row = r.lower_row;
-        row.upper_row = r.upper_row;
-        row.wavelength_a = r.type50_wavelength_a > 0.0 ? r.type50_wavelength_a : 12398.419843320026 / r.line_energy_ev;
-        row.emis_in = total_emissivity * ptmp1 / escape_sum;
-        row.emis_out = total_emissivity * ptmp2 / escape_sum;
-        row.opacity = r.opakab * lower * abundance_scale;
-        row.tau_in = std::isfinite(r.type50_tau_in) ? r.type50_tau_in : 0.0;
-        row.tau_out = std::isfinite(r.type50_tau_out) ? r.type50_tau_out : 0.0;
-        const double signal = std::abs(row.emis_in) + std::abs(row.emis_out) + std::abs(row.opacity) + std::abs(row.tau_in) + std::abs(row.tau_out);
-        if (signal > 0.0) out.push_back(row);
-    }
-    std::stable_sort(out.begin(), out.end(), [](const LineRow& a, const LineRow& b){ return a.record < b.record; });
-    return out;
-}
-
-// XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Build rrc rows from the source-ordered inputs required by the next calculation stage.
-// Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
-// XSTAR-FUNCTION-COMMENT-END
-[[maybe_unused]] std::vector<RrcRow> build_rrc_rows(const xstar_run_state::ProductWritingState& state,
-                                   const std::vector<ElementMeta>& elements,
-                                   const std::vector<RowMeta>& rows,
-                                   std::size_t zone_index) {
-    const auto& zone = state.radial_zones.at(zone_index);
-    const auto& evaluation = zone.accepted_controller.evaluation;
-    const auto records = read_record_diagnostics(state, zone.accepted_controller.accepted_sequence);
-    std::vector<RrcRow> out;
-    for (const auto& r : records) {
-        if (r.continuum_index_one_based <= 0) continue;
-        if (!(r.type49_valid || r.type53_valid || r.type99_valid || r.data_type == 49 || r.data_type == 53 || r.data_type == 59 || r.data_type == 99)) continue;
-        const auto* element = element_ptr_for(elements, r.element_index);
-        if (!element || !active_product_element_stage(state, elements, rows, r.element_z, r.ion_stage, element->abundance)) continue;
-        double threshold = r.type49_valid ? r.type49_threshold_ev : r.type53_valid ? r.type53_threshold_ev : r.type99_threshold_ev;
-        if (!(threshold > 0.0)) threshold = r.line_energy_ev;
-        if (!(threshold > 0.0) || r.lower_row <= 0 || r.upper_row <= 0) continue;
-        const double lower = population_for(evaluation, elements, r.element_index, r.lower_row);
-        const double parent = population_for(evaluation, elements, r.element_index, r.upper_row);
-        const double abundance_scale = zone.density_cm3 * element->abundance;
-        double p1 = r.type53_valid ? std::max(r.type53_ptmp1, 0.0) : 0.0;
-        double p2 = r.type53_valid ? std::max(r.type53_ptmp2, 0.0) : 1.0;
-        const double denom = p1 + p2 > 0.0 ? p1 + p2 : 1.0;
-        const double total_emis = std::max(-r.ans[2] * parent * abundance_scale, 0.0);
-        RrcRow row;
-        row.record = r.continuum_index_one_based;
-        row.z = r.element_z;
-        row.stage = r.ion_stage;
-        row.lower_row = r.lower_row;
-        row.upper_row = r.upper_row;
-        row.energy_ev = threshold;
-        row.emis_in = total_emis * p1 / denom;
-        row.emis_out = total_emis * p2 / denom;
-        row.absorption = std::abs(r.ans[3]) * lower * abundance_scale;
-        // fstepr3/phint53 threshold opacity is
-        // max(lower*xeltp*xpx*sgtp - parent*xeltp*xpx*rnist*exp*sgtp*psum, 0).
-        // Type-99 does not publish a phint53 threshold-opacity row.
-        // Type 99 contributes the same threshold absorption/stimulated
-        // difference to opakab as Types 49/53.  v52 forced these rows to zero,
-        // leaving the Mg Type-99 support missing.
-        if (r.data_type == 59) {
-            row.opacity = lower * abundance_scale * std::max(0.0, r.opakab);
-        } else {
-            row.opacity = std::max(0.0,
-                lower * abundance_scale * std::max(0.0, r.threshold_abs_sigma_cm2) -
-                parent * abundance_scale * std::max(0.0, r.threshold_stimulated_sigma_cm2));
-        }
-        if (r.type53_valid) { row.tau_in = r.type53_tau_in; row.tau_out = r.type53_tau_out; }
-        else { row.tau_in = 0.0; row.tau_out = 0.0; }
-        const double signal = std::abs(row.emis_in) + std::abs(row.emis_out) + std::abs(row.absorption) + std::abs(row.opacity) + std::abs(row.tau_in) + std::abs(row.tau_out);
-        if (signal > 0.0) out.push_back(row);
-    }
-    std::stable_sort(out.begin(), out.end(), [](const RrcRow& a, const RrcRow& b){ return a.record < b.record; });
-    return out;
-}
-
-// XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Provide ion fractions for final science-product publication from already-committed run state.
 // Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
 // XSTAR-FUNCTION-COMMENT-END
@@ -1600,25 +1489,6 @@ std::map<std::pair<int,int>,double> ion_fractions(
     for (auto& [key, values] : grouped) {
         if (values.size() > 1) values.pop_back();
         out[key] = std::accumulate(values.begin(), values.end(), 0.0);
-    }
-    return out;
-}
-
-// XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Compute oracle detail population rows as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
-// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
-// XSTAR-FUNCTION-COMMENT-END
-[[maybe_unused]] std::vector<RowMeta> oracle_detail_population_rows(const std::vector<RowMeta>& rows) {
-    // Oracle product detail rows exclude terminal normalization/fully stripped
-    // rows. For the H/He/Mg qualification case this restores the expected
-    // per-zone detail table length: H 32 + He 77 + Mg 507 = 616.
-    std::vector<RowMeta> out;
-    out.reserve(rows.size());
-    for (const auto& row : rows) {
-        if (row.element_index == 0 && row.row > 32) continue;
-        if (row.element_index == 1 && row.row > 77) continue;
-        if (row.element_index == 2 && row.row > 507) continue;
-        out.push_back(row);
     }
     return out;
 }
@@ -1728,14 +1598,6 @@ bool oracle_detail_rrc_inventory(long long index) {
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Compute oracle public rrc inventory for the bound-free/photoionization/recombination-continuum path using the current radiation field and level populations.
-// Reference context: XSTAR Manual ss11.5, 11.6.1, 11.7; Kallman & Bautista (2001); ATDB ch12.
-// XSTAR-FUNCTION-COMMENT-END
-[[maybe_unused]] bool oracle_public_rrc_inventory(long long index) {
-    return in_oracle_segments(index, kOraclePublicRrcSegments);
-}
-
-// XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Provide bridge payload present for final science-product publication from already-committed run state.
 // Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
 // XSTAR-FUNCTION-COMMENT-END
@@ -1767,7 +1629,7 @@ struct DetailLevelTemplateRow { int index; int ion_index; double excitation_ev; 
 // Purpose: Provide oracle detail level template for final science-product publication from already-committed run state.
 // Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
 // XSTAR-FUNCTION-COMMENT-END
-const std::vector<DetailLevelTemplateRow>& oracle_detail_level_template_v172534() {
+const std::vector<DetailLevelTemplateRow>& oracle_detail_level_template() {
     static const std::vector<DetailLevelTemplateRow> rows = {
         {1, 1, 0, "h_i", 1, "1s1.2S_1/2", 1},
         {2, 1, 10.1988087, "h_i", 1, "1s0.2p1.2P_1/2", 2},
@@ -2393,7 +2255,7 @@ const std::vector<DetailLevelTemplateRow>& oracle_detail_level_template_v172534(
 // Purpose: Compute oracle detail lte template as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
 // Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
 // XSTAR-FUNCTION-COMMENT-END
-const std::vector<double>& oracle_detail_lte_template_v172537() {
+const std::vector<double>& oracle_detail_lte_template() {
     static const std::vector<double> values = {
         3.40032838583130548e-14, 5.50335728797721711e-15, 1.10068661948519927e-14, 5.50335135874658633e-15,
         3.92793572190699991e-15, 7.85585280908916023e-15, 3.92793529839052628e-15, 7.85585280908916023e-15,
@@ -2564,7 +2426,7 @@ std::vector<xstar_run_state::LevelIdentityState> public_detail_levels(
     // Preserve the fully-qualified Mg XI public identity surface bit-for-bit.
     if (reference_mg11_product_state(state)) {
         std::vector<xstar_run_state::LevelIdentityState> out;
-        const auto& tmpl = oracle_detail_level_template_v172534();
+        const auto& tmpl = oracle_detail_level_template();
         out.reserve(tmpl.size());
         for (const auto& row : tmpl) {
             xstar_run_state::LevelIdentityState lev;
@@ -2590,19 +2452,6 @@ std::vector<xstar_run_state::LevelIdentityState> public_detail_levels(
     return source_levels;
 }
 
-// XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Provide level by global for final science-product publication from already-committed run state.
-// Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
-// XSTAR-FUNCTION-COMMENT-END
-[[maybe_unused]] const xstar_run_state::LevelIdentityState* level_by_global(
-    const std::vector<xstar_run_state::LevelIdentityState>& levels,
-    std::int32_t global_index) {
-    for (const auto& level : levels) if (level.global_index == global_index) return &level;
-    return nullptr;
-}
-
-
-
 struct LineLabelTemplateRow { int index; double wavelength_angstrom; const char* ion; const char* lower_level; const char* upper_level; };
 struct RrcLabelTemplateRow { int index; int level_index; double energy_ev; const char* ion; const char* lower_level; const char* upper_level; };
 
@@ -2610,7 +2459,7 @@ struct RrcLabelTemplateRow { int index; int level_index; double energy_ev; const
 // Purpose: Compute oracle detail line label template for the line/emissivity/opacity path on the source or publication energy grid.
 // Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
 // XSTAR-FUNCTION-COMMENT-END
-const std::vector<LineLabelTemplateRow>& oracle_detail_line_label_template_v172537() {
+const std::vector<LineLabelTemplateRow>& oracle_detail_line_label_template() {
     static const std::vector<LineLabelTemplateRow> rows = {
         {1, 10944.916, "h_i", "1s0.3p1.2P_1/2", "1s0.6s1.2S"},
         {2, 10945.0449, "h_i", "1s0.3p1.2P_3/2", "1s0.6s1.2S"},
@@ -5261,620 +5110,10 @@ const std::vector<LineLabelTemplateRow>& oracle_detail_line_label_template_v1725
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Compute oracle public line label template for the line/emissivity/opacity path on the source or publication energy grid.
-// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
-// XSTAR-FUNCTION-COMMENT-END
-[[maybe_unused]] const std::vector<LineLabelTemplateRow>& oracle_public_line_label_template_v172537() {
-    static const std::vector<LineLabelTemplateRow> rows = {
-        {411, 303.78, "he_ii", "1s1.2S_1/2", "1s0.2p1.2P_3/2"},
-        {410, 303.786, "he_ii", "1s1.2S_1/2", "1s0.2p1.2P_1/2"},
-        {120, 1215.68, "h_i", "1s1.2S_1/2", "1s0.2p1.2P_3/2"},
-        {119, 1215.67, "h_i", "1s1.2S_1/2", "1s0.2p1.2P_1/2"},
-        {420, 256.317, "he_ii", "1s1.2S_1/2", "1s0.3p1.2P_3/2"},
-        {16176, 609.793, "mg_x", "2s1.2S_1/2", "2s0.2p1.2P_3/2"},
-        {419, 256.318, "he_ii", "1s1.2S_1/2", "1s0.3p1.2P_1/2"},
-        {16184, 624.941, "mg_x", "2s1.2S_1/2", "2s0.2p1.2P_1/2"},
-        {116, 1025.72, "h_i", "1s1.2S_1/2", "1s0.3p1.2P_3/2"},
-        {445, 243.026, "he_ii", "1s1.2S_1/2", "1s0.4p1.2P_3/2"},
-        {16312, 9.316, "mg_xi", "1s2.1S_0", "1s1.2s1.3S_1"},
-        {16016, 368.07, "mg_ix", "2s2.1S_0", "2s1.2p1.1P_1"},
-        {115, 1025.72, "h_i", "1s1.2S_1/2", "1s0.3p1.2P_1/2"},
-        {444, 243.027, "he_ii", "1s1.2S_1/2", "1s0.4p1.2P_1/2"},
-        {106, 972.537, "h_i", "1s1.2S_1/2", "1s0.4p1.2P_3/2"},
-        {96, 6564.29, "h_i", "1s0.2p1.2P_3/2", "1s0.3s1.2S_1/2"},
-        {95, 6564.56, "h_i", "1s0.2p1.2P_1/2", "1s0.3s1.2S_1/2"},
-        {499, 237.331, "he_ii", "1s1.2S_1/2", "1s0.5p1.2P_3/2"},
-        {418, 234.459, "he_ii", "1s1.2S_1/2", "1s0.6p1.2P"},
-        {16056, 706.06, "mg_ix", "2s2.1S_0", "2s1.2p1.3P_1"},
-        {16325, 7.4738, "mg_xi", "1s2.1S_0", "1s1.4p1.1P_1"},
-        {69, 949.743, "h_i", "1s1.2S_1/2", "1s0.5p1.2P_3/2"},
-        {105, 972.537, "h_i", "1s1.2S_1/2", "1s0.4p1.2P_1/2"},
-        {498, 237.331, "he_ii", "1s1.2S_1/2", "1s0.5p1.2P_1/2"},
-        {437, 1640.32, "he_ii", "1s0.2p1.2P_1/2", "1s0.3d1.2D_5/2"},
-        {439, 1640.47, "he_ii", "1s0.2p1.2P_3/2", "1s0.3d1.2D_5/2"},
-        {436, 1640.33, "he_ii", "1s0.2p1.2P_1/2", "1s0.3d1.2D_3/2"},
-        {438, 1640.49, "he_ii", "1s0.2p1.2P_3/2", "1s0.3d1.2D_3/2"},
-        {15205, 436.735, "mg_viii", "2p1.2P_3/2", "2s1.2p2.2D_5/2"},
-        {15329, 772.26, "mg_viii", "2p1.2P_3/2", "2s1.2p2.4P_5/2"},
-        {68, 949.743, "h_i", "1s1.2S_1/2", "1s0.5p1.2P_1/2"},
-        {16283, 9.1689, "mg_xi", "1s2.1S_0", "1s1.2p1.1P_1"},
-        {23, 937.832, "h_i", "1s1.2S_1/2", "1s0.6p1.2P"},
-        {15328, 430.465, "mg_viii", "2p1.2P_1/2", "2s1.2p2.2D_3/2"},
-        {15659, 782.338, "mg_viii", "2p1.2P_3/2", "2s1.2p2.4P_3/2"},
-        {426, 1215.08, "he_ii", "1s0.2p1.2P_1/2", "1s0.4d1.2D_5/2"},
-        {428, 1215.17, "he_ii", "1s0.2p1.2P_3/2", "1s0.4d1.2D_5/2"},
-        {431, 1640.38, "he_ii", "1s0.2p1.2P_1/2", "1s0.3s1.2S_1/2"},
-        {432, 1640.53, "he_ii", "1s0.2p1.2P_3/2", "1s0.3s1.2S_1/2"},
-        {16277, 9.231, "mg_xi", "1s2.1S_0", "1s1.2p1.3P_1"},
-        {425, 1215.09, "he_ii", "1s0.2p1.2P_1/2", "1s0.4d1.2D_3/2"},
-        {427, 1215.17, "he_ii", "1s0.2p1.2P_3/2", "1s0.4d1.2D_3/2"},
-        {413, 1640.34, "he_ii", "1s0.2s1.2S_1/2", "1s0.3p1.2P_3/2"},
-        {15892, 30284.7, "mg_viii", "2p1.2P_1/2", "2p1.2P_3/2"},
-        {16091, 694.005, "mg_ix", "2s2.1S_0", "2s1.2p1.3P_2"},
-        {104, 6564.23, "h_i", "1s0.2p1.2P_3/2", "1s0.3d1.2D_5/2"},
-        {102, 6564.51, "h_i", "1s0.2p1.2P_1/2", "1s0.3d1.2D_5/2"},
-        {415, 1084.91, "he_ii", "1s0.2p1.2P_1/2", "1s0.5d1.2D_5/2"},
-        {417, 1084.97, "he_ii", "1s0.2p1.2P_3/2", "1s0.5d1.2D_5/2"},
-        {16224, 63.295, "mg_x", "2s0.2p1.2P_3/2", "2s0.3d1.2D_5/2"},
-        {15300, 315.039, "mg_viii", "2p1.2P_3/2", "2s1.2p2.2P_3/2"},
-        {16177, 57.876, "mg_x", "2s1.2S_1/2", "2s0.3p1.2P_3/2"},
-        {486, 1027.38, "he_ii", "1s0.2p1.2P_1/2", "1s0.6d1.2D"},
-        {487, 1027.44, "he_ii", "1s0.2p1.2P_3/2", "1s0.6d1.2D"},
-        {103, 6564.25, "h_i", "1s0.2p1.2P_3/2", "1s0.3d1.2D_3/2"},
-        {101, 6564.52, "h_i", "1s0.2p1.2P_1/2", "1s0.3d1.2D_3/2"},
-        {14676, 2629.92, "mg_vii", "2p2.3P_2", "2p2.1D_2"},
-        {412, 1640.39, "he_ii", "1s0.2s1.2S_1/2", "1s0.3p1.2P_1/2"},
-        {414, 1084.91, "he_ii", "1s0.2p1.2P_1/2", "1s0.5d1.2D_3/2"},
-        {416, 1084.98, "he_ii", "1s0.2p1.2P_3/2", "1s0.5d1.2D_3/2"},
-        {15421, 769.343, "mg_viii", "2p1.2P_1/2", "2s1.2p2.4P_1/2"},
-        {461, 4686.99, "he_ii", "1s0.3d1.2D_3/2", "1s0.4f1.2F_7/2"},
-        {463, 4687.12, "he_ii", "1s0.3d1.2D_5/2", "1s0.4f1.2F_7/2"},
-        {429, 1215.1, "he_ii", "1s0.2p1.2P_1/2", "1s0.4s1.2S_1/2"},
-        {430, 1215.18, "he_ii", "1s0.2p1.2P_3/2", "1s0.4s1.2S_1/2"},
-        {460, 4687.02, "he_ii", "1s0.3d1.2D_3/2", "1s0.4f1.2F_5/2"},
-        {462, 4687.14, "he_ii", "1s0.3d1.2D_5/2", "1s0.4f1.2F_5/2"},
-        {435, 1215.09, "he_ii", "1s0.2s1.2S_1/2", "1s0.4p1.2P_3/2"},
-        {133, 6564.54, "h_i", "1s0.2s1.2S_1/2", "1s0.3p1.2P_3/2"},
-        {15451, 789.391, "mg_viii", "2p1.2P_3/2", "2s1.2p2.4P_1/2"},
-        {31, 4862.48, "h_i", "1s0.2p1.2P_3/2", "1s0.4d1.2D_5/2"},
-        {29, 4862.63, "h_i", "1s0.2p1.2P_1/2", "1s0.4d1.2D_5/2"},
-        {16215, 63.152, "mg_x", "2s0.2p1.2P_1/2", "2s0.3d1.2D_3/2"},
-        {16278, 9.2282, "mg_xi", "1s2.1S_0", "1s1.2p1.3P_2"},
-        {16193, 57.92, "mg_x", "2s1.2S_1/2", "2s0.3p1.2P_1/2"},
-        {16042, 9.3856, "mg_ix", "2s2.1S_0", "1s1.2s2.2p1.1P_1"},
-        {15541, 436.672, "mg_viii", "2p1.2P_3/2", "2s1.2p2.2D_3/2"},
-        {65, 4862.5, "h_i", "1s0.2p1.2P_3/2", "1s0.4s1.2S_1/2"},
-        {64, 4862.65, "h_i", "1s0.2p1.2P_1/2", "1s0.4s1.2S_1/2"},
-        {16470, 54.714, "mg_xi", "1s1.2p1.1P_1", "1s1.3d1.1D_2"},
-        {30, 4862.49, "h_i", "1s0.2p1.2P_3/2", "1s0.4d1.2D_3/2"},
-        {28, 4862.64, "h_i", "1s0.2p1.2P_1/2", "1s0.4d1.2D_3/2"},
-        {15518, 313.754, "mg_viii", "2p1.2P_1/2", "2s1.2p2.2P_1/2"},
-        {434, 1215.11, "he_ii", "1s0.2s1.2S_1/2", "1s0.4p1.2P_1/2"},
-        {100, 4862.65, "h_i", "1s0.2s1.2S_1/2", "1s0.4p1.2P_3/2"},
-        {422, 1084.91, "he_ii", "1s0.2s1.2S_1/2", "1s0.5p1.2P_3/2"},
-        {469, 3204.03, "he_ii", "1s0.3d1.2D_3/2", "1s0.5f1.2F_7/2"},
-        {471, 3204.09, "he_ii", "1s0.3d1.2D_5/2", "1s0.5f1.2F_7/2"},
-        {14944, 2509.97, "mg_vii", "2p2.3P_1", "2p2.1D_2"},
-        {22, 4341.53, "h_i", "1s0.2p1.2P_3/2", "1s0.5d1.2D_5/2"},
-        {20, 4341.65, "h_i", "1s0.2p1.2P_1/2", "1s0.5d1.2D_5/2"},
-        {132, 6564.58, "h_i", "1s0.2s1.2S_1/2", "1s0.3p1.2P_1/2"},
-        {16203, 47.31, "mg_x", "2s0.2p1.2P_3/2", "2s0.4d1.2D_5/2"},
-        {423, 1084.91, "he_ii", "1s0.2p1.2P_1/2", "1s0.5s1.2S_1/2"},
-        {424, 1084.98, "he_ii", "1s0.2p1.2P_3/2", "1s0.5s1.2S_1/2"},
-        {15424, 339.006, "mg_viii", "2p1.2P_3/2", "2s1.2p2.2S_1/2"},
-        {468, 3204.04, "he_ii", "1s0.3d1.2D_3/2", "1s0.5f1.2F_5/2"},
-        {470, 3204.1, "he_ii", "1s0.3d1.2D_5/2", "1s0.5f1.2F_5/2"},
-        {433, 1027.38, "he_ii", "1s0.2s1.2S_1/2", "1s0.6p1.2P"},
-        {15682, 317.039, "mg_viii", "2p1.2P_3/2", "2s1.2p2.2P_1/2"},
-        {494, 2749.36, "he_ii", "1s0.3d1.2D_3/2", "1s0.6f1.2F"},
-        {495, 2749.4, "he_ii", "1s0.3d1.2D_5/2", "1s0.6f1.2F"},
-        {16190, 65.845, "mg_x", "2s0.2p1.2P_3/2", "2s0.3s1.2S_1/2"},
-        {16276, 9.23191, "mg_xi", "1s2.1S_0", "1s1.2p1.3P_0"},
-        {15071, 434.917, "mg_vii", "2p2.3P_2", "2s1.2p3.3D_3"},
-        {15448, 762.643, "mg_viii", "2p1.2P_1/2", "2s1.2p2.4P_3/2"},
-        {16181, 44.05, "mg_x", "2s1.2S_1/2", "2s0.4p1.2P_3/2"},
-        {15513, 335.253, "mg_viii", "2p1.2P_1/2", "2s1.2p2.2S_1/2"},
-        {15954, 67.239, "mg_ix", "2s1.2p1.3P_2", "2s1.3d1.3D_3"},
-        {21, 4341.53, "h_i", "1s0.2p1.2P_3/2", "1s0.5d1.2D_3/2"},
-        {19, 4341.65, "h_i", "1s0.2p1.2P_1/2", "1s0.5d1.2D_3/2"},
-        {4, 4341.65, "h_i", "1s0.2s1.2S_1/2", "1s0.5p1.2P_3/2"},
-        {16320, 7.8509, "mg_xi", "1s2.1S_0", "1s1.3p1.1P_1"},
-        {45, 4103.31, "h_i", "1s0.2p1.2P_3/2", "1s0.6d1.2D"},
-        {44, 4103.41, "h_i", "1s0.2p1.2P_1/2", "1s0.6d1.2D"},
-        {16669, 8.4192, "mg_xii", "1s1.2S_1/2", "1s0.2p1.2P_3/2"},
-        {16058, 443.973, "mg_ix", "2s1.2p1.3P_2", "2s0.2p2.3P_2"},
-        {15390, 311.796, "mg_viii", "2p1.2P_1/2", "2s1.2p2.2P_3/2"},
-        {16668, 8.42461, "mg_xii", "1s1.2S_1/2", "1s0.2p1.2P_1/2"},
-        {421, 1084.92, "he_ii", "1s0.2s1.2S_1/2", "1s0.5p1.2P_1/2"},
-        {507, 4686.63, "he_ii", "1s0.3p1.2P_1/2", "1s0.4d1.2D_5/2"},
-        {509, 4687.02, "he_ii", "1s0.3p1.2P_3/2", "1s0.4d1.2D_5/2"},
-        {99, 4862.66, "h_i", "1s0.2s1.2S_1/2", "1s0.4p1.2P_1/2"},
-        {442, 1027.38, "he_ii", "1s0.2p1.2P_1/2", "1s0.6s1.2S"},
-        {443, 1027.44, "he_ii", "1s0.2p1.2P_3/2", "1s0.6s1.2S"},
-        {14631, 431.313, "mg_vii", "2p2.3P_1", "2s1.2p3.3D_2"},
-        {14716, 1189.82, "mg_vii", "2p2.3P_1", "2p2.1S_0"},
-        {14753, 868.236, "mg_vii", "2p2.3P_2", "2s1.2p3.5S_2"},
-        {506, 4686.69, "he_ii", "1s0.3p1.2P_1/2", "1s0.4d1.2D_3/2"},
-        {508, 4687.07, "he_ii", "1s0.3p1.2P_3/2", "1s0.4d1.2D_3/2"},
-        {15, 4341.53, "h_i", "1s0.2p1.2P_3/2", "1s0.5s1.2S_1/2"},
-        {14, 4341.65, "h_i", "1s0.2p1.2P_1/2", "1s0.5s1.2S_1/2"},
-        {16083, 88.817, "mg_ix", "2s0.2p2.3P_2", "2s1.3p1.3P_2"},
-        {16147, 62.751, "mg_ix", "2s2.1S_0", "2s1.3p1.1P_1"},
-        {16191, 42.362, "mg_x", "2s0.2p1.2P_3/2", "2s0.5d1.2D_5/2"},
-        {16230, 65.673, "mg_x", "2s0.2p1.2P_1/2", "2s0.3s1.2S_1/2"},
-        {16001, 63.46, "mg_ix", "2s2.1S_0", "2s1.3p1.3P_1"},
-        {16046, 72.312, "mg_ix", "2s1.2p1.1P_1", "2s1.3d1.1D_2"},
-        {491, 3203.86, "he_ii", "1s0.3p1.2P_1/2", "1s0.5d1.2D_5/2"},
-        {493, 3204.04, "he_ii", "1s0.3p1.2P_3/2", "1s0.5d1.2D_5/2"},
-        {457, 10126.4, "he_ii", "1s0.4f1.2F_5/2", "1s0.5g1.2G_9/2"},
-        {459, 10126.5, "he_ii", "1s0.4f1.2F_7/2", "1s0.5g1.2G_9/2"},
-        {446, 4686.84, "he_ii", "1s0.3p1.2P_1/2", "1s0.4s1.2S_1/2"},
-        {447, 4687.22, "he_ii", "1s0.3p1.2P_3/2", "1s0.4s1.2S_1/2"},
-        {454, 2749.23, "he_ii", "1s0.3p1.2P_1/2", "1s0.6d1.2D"},
-        {455, 2749.36, "he_ii", "1s0.3p1.2P_3/2", "1s0.6d1.2D"},
-        {15987, 67.135, "mg_ix", "2s1.2p1.3P_1", "2s1.3d1.3D_2"},
-        {456, 10126.4, "he_ii", "1s0.4f1.2F_5/2", "1s0.5g1.2G_7/2"},
-        {458, 10126.6, "he_ii", "1s0.4f1.2F_7/2", "1s0.5g1.2G_7/2"},
-        {15013, 367.674, "mg_vii", "2p2.3P_2", "2s1.2p3.3P_2"},
-        {16222, 9.5803, "mg_x", "2s0.2p1.2P_3/2", "1s1.2s2.2S_1/2"},
-        {16208, 44.05, "mg_x", "2s1.2S_1/2", "2s0.4p1.2P_1/2"},
-        {16178, 47.229, "mg_x", "2s0.2p1.2P_1/2", "2s0.4d1.2D_3/2"},
-        {3, 4341.66, "h_i", "1s0.2s1.2S_1/2", "1s0.5p1.2P_1/2"},
-        {16198, 187.178, "mg_x", "2s0.3d1.2D_5/2", "2s0.4f1.2F_7/2"},
-        {516, 6650.44, "he_ii", "1s0.4f1.2F_5/2", "1s0.6g1.2G"},
-        {517, 6650.49, "he_ii", "1s0.4f1.2F_7/2", "1s0.6g1.2G"},
-        {16225, 39.668, "mg_x", "2s1.2S_1/2", "2s0.5p1.2P_3/2"},
-        {490, 3203.87, "he_ii", "1s0.3p1.2P_1/2", "1s0.5d1.2D_3/2"},
-        {492, 3204.05, "he_ii", "1s0.3p1.2P_3/2", "1s0.5d1.2D_3/2"},
-        {18, 4103.42, "h_i", "1s0.2s1.2S_1/2", "1s0.6p1.2P"},
-        {16180, 63.311, "mg_x", "2s0.2p1.2P_3/2", "2s0.3d1.2D_3/2"},
-        {16328, 39.3316, "mg_xi", "1s1.2s1.1S_0", "1s1.4p1.1P_1"},
-        {49, 4103.31, "h_i", "1s0.2p1.2P_3/2", "1s0.6s1.2S"},
-        {48, 4103.41, "h_i", "1s0.2p1.2P_1/2", "1s0.6s1.2S"},
-        {39, 18756.1, "h_i", "1s0.3d1.2D_3/2", "1s0.4f1.2F_7/2"},
-        {41, 18756.2, "h_i", "1s0.3d1.2D_5/2", "1s0.4f1.2F_7/2"},
-        {15292, 82.823, "mg_viii", "2p1.2P_3/2", "2p0.3s1.2S_1/2"},
-        {14836, 429.14, "mg_vii", "2p2.3P_0", "2s1.2p3.3D_1"},
-        {36, 18755.9, "h_i", "1s0.3p1.2P_1/2", "1s0.4s1.2S_1/2"},
-        {37, 18756.3, "h_i", "1s0.3p1.2P_3/2", "1s0.4s1.2S_1/2"},
-        {16163, 439.176, "mg_ix", "2s1.2p1.3P_1", "2s0.2p2.3P_2"},
-        {504, 3203.91, "he_ii", "1s0.3p1.2P_1/2", "1s0.5s1.2S_1/2"},
-        {505, 3204.09, "he_ii", "1s0.3p1.2P_3/2", "1s0.5s1.2S_1/2"},
-        {514, 6650.33, "he_ii", "1s0.4d1.2D_3/2", "1s0.6f1.2F"},
-        {515, 6650.44, "he_ii", "1s0.4d1.2D_5/2", "1s0.6f1.2F"},
-        {38, 18756.1, "h_i", "1s0.3d1.2D_3/2", "1s0.4f1.2F_5/2"},
-        {40, 18756.3, "h_i", "1s0.3d1.2D_5/2", "1s0.4f1.2F_5/2"},
-        {16036, 72.027, "mg_ix", "2s1.2p1.3P_2", "2s1.3s1.3S_1"},
-        {16202, 187.07, "mg_x", "2s0.3d1.2D_3/2", "2s0.4f1.2F_5/2"},
-        {465, 10126.2, "he_ii", "1s0.4d1.2D_3/2", "1s0.5f1.2F_7/2"},
-        {467, 10126.4, "he_ii", "1s0.4d1.2D_5/2", "1s0.5f1.2F_7/2"},
-        {16183, 9.5767, "mg_x", "2s0.2p1.2P_1/2", "1s1.2s2.2S_1/2"},
-        {15690, 9.5024, "mg_viii", "2p1.2P_3/2", "1s1.2s2.2p2.2P_3/2"},
-        {14857, 854.752, "mg_vii", "2p2.3P_1", "2s1.2p3.5S_2"},
-        {14859, 95.423, "mg_vii", "2p2.3P_2", "2p1.3s1.3P_2"},
-        {16299, 50.4375, "mg_xi", "1s1.2s1.3S_1", "1s1.3p1.3P_2"},
-        {15979, 67.09, "mg_ix", "2s1.2p1.3P_0", "2s1.3d1.3D_1"},
-        {464, 10126.2, "he_ii", "1s0.4d1.2D_3/2", "1s0.5f1.2F_5/2"},
-        {466, 10126.5, "he_ii", "1s0.4d1.2D_5/2", "1s0.5f1.2F_5/2"},
-        {441, 4686.72, "he_ii", "1s0.3s1.2S_1/2", "1s0.4p1.2P_3/2"},
-        {24, 12821.6, "h_i", "1s0.3d1.2D_3/2", "1s0.5f1.2F_7/2"},
-        {26, 12821.7, "h_i", "1s0.3d1.2D_5/2", "1s0.5f1.2F_7/2"},
-        {16187, 42.294, "mg_x", "2s0.2p1.2P_1/2", "2s0.5d1.2D_3/2"},
-        {16061, 448.293, "mg_ix", "2s1.2p1.3P_2", "2s0.2p2.3P_1"},
-        {16123, 88.519, "mg_ix", "2s0.2p2.3P_1", "2s1.3p1.3P_2"},
-        {14771, 431.188, "mg_vii", "2p2.3P_1", "2s1.2p3.3D_1"},
-        {55, 18755.8, "h_i", "1s0.3p1.2P_1/2", "1s0.4d1.2D_5/2"},
-        {57, 18756.1, "h_i", "1s0.3p1.2P_3/2", "1s0.4d1.2D_5/2"},
-        {16175, 39.668, "mg_x", "2s1.2S_1/2", "2s0.5p1.2P_1/2"},
-        {14819, 84.025, "mg_vii", "2p2.3P_2", "2p1.3d1.3D_3"},
-        {8, 10945, "h_i", "1s0.3d1.2D_3/2", "1s0.6f1.2F"},
-        {9, 10945.1, "h_i", "1s0.3d1.2D_5/2", "1s0.6f1.2F"},
-        {16333, 7.3102, "mg_xi", "1s2.1S_0", "1s1.5p1.1P_1"},
-        {539, 19374.4, "he_ii", "1s0.5g1.2G_7/2", "1s0.6h1.2H"},
-        {540, 19374.5, "he_ii", "1s0.5g1.2G_9/2", "1s0.6h1.2H"},
-        {478, 2749.23, "he_ii", "1s0.3p1.2P_1/2", "1s0.6s1.2S"},
-        {479, 2749.36, "he_ii", "1s0.3p1.2P_3/2", "1s0.6s1.2S"},
-        {16037, 441.199, "mg_ix", "2s1.2p1.3P_0", "2s0.2p2.3P_1"},
-        {14853, 117.038, "mg_vii", "2s1.2p3.3P_2", "2p1.3p1.3D_3"},
-        {16006, 67.141, "mg_ix", "2s1.2p1.3P_1", "2s1.3d1.3D_1"},
-        {16119, 67.246, "mg_ix", "2s1.2p1.3P_2", "2s1.3d1.3D_2"},
-        {11, 12821.4, "h_i", "1s0.3p1.2P_1/2", "1s0.5d1.2D_5/2"},
-        {13, 12821.6, "h_i", "1s0.3p1.2P_3/2", "1s0.5d1.2D_5/2"},
-        {14993, 434.72, "mg_vii", "2p2.3P_2", "2s1.2p3.3D_2"},
-        {25, 12821.6, "h_i", "1s0.3d1.2D_3/2", "1s0.5f1.2F_5/2"},
-        {27, 12821.7, "h_i", "1s0.3d1.2D_5/2", "1s0.5f1.2F_5/2"},
-        {16000, 71.9, "mg_ix", "2s1.2p1.3P_1", "2s1.3s1.3S_1"},
-        {15383, 82.598, "mg_viii", "2p1.2P_1/2", "2p0.3s1.2S_1/2"},
-        {16298, 50.4645, "mg_xi", "1s1.2s1.3S_1", "1s1.3p1.3P_1"},
-        {16209, 47.879, "mg_x", "2s0.2p1.2P_3/2", "2s0.4s1.2S_1/2"},
-        {16087, 88.656, "mg_ix", "2s0.2p2.3P_1", "2s1.3p1.3P_0"},
-        {14611, 367.683, "mg_vii", "2p2.3P_2", "2s1.2p3.3P_1"},
-        {449, 3203.89, "he_ii", "1s0.3s1.2S_1/2", "1s0.5p1.2P_3/2"},
-        {14890, 87.722, "mg_vii", "2p2.1D_2", "2p1.3d1.1D_2"},
-        {473, 2749.24, "he_ii", "1s0.3s1.2S_1/2", "1s0.6p1.2P"},
-        {14614, 365.234, "mg_vii", "2p2.3P_1", "2s1.2p3.3P_2"},
-        {16596, 7.10577, "mg_xii", "1s1.2S_1/2", "1s0.3p1.2P_3/2"},
-        {54, 18755.8, "h_i", "1s0.3p1.2P_1/2", "1s0.4d1.2D_3/2"},
-        {56, 18756.2, "h_i", "1s0.3p1.2P_3/2", "1s0.4d1.2D_3/2"},
-        {58, 12821.5, "h_i", "1s0.3p1.2P_1/2", "1s0.5s1.2S_1/2"},
-        {59, 12821.6, "h_i", "1s0.3p1.2P_3/2", "1s0.5s1.2S_1/2"},
-        {14680, 83.764, "mg_vii", "2p2.3P_2", "2p1.3d1.3P_2"},
-        {14780, 83.747, "mg_vii", "2p2.3P_2", "2p1.3d1.3F_3"},
-        {14604, 87.889, "mg_vii", "2p2.1D_2", "2p1.3d1.3F_2"},
-        {14696, 365.176, "mg_vii", "2p2.3P_1", "2s1.2p3.3P_0"},
-        {16003, 443.403, "mg_ix", "2s1.2p1.3P_1", "2s0.2p2.3P_1"},
-        {14994, 363.772, "mg_vii", "2p2.3P_0", "2s1.2p3.3P_1"},
-        {16134, 77.737, "mg_ix", "2s1.2p1.1P_1", "2s1.3s1.1S_0"},
-        {16043, 40648.9, "mg_ix", "2s1.2p1.3P_1", "2s1.2p1.3P_2"},
-        {440, 4686.88, "he_ii", "1s0.3s1.2S_1/2", "1s0.4p1.2P_1/2"},
-        {15002, 85.407, "mg_vii", "2p2.1D_2", "2p1.3d1.1F_3"},
-        {15077, 83.959, "mg_vii", "2p2.3P_1", "2p1.3d1.3D_2"},
-        {5, 10944.9, "h_i", "1s0.3p1.2P_1/2", "1s0.6d1.2D"},
-        {6, 10945, "h_i", "1s0.3p1.2P_3/2", "1s0.6d1.2D"},
-        {14658, 98.031, "mg_vii", "2p2.1D_2", "2p1.3s1.1P_1"},
-        {15134, 9.5023, "mg_viii", "2p1.2P_1/2", "1s1.2s2.2p2.2P_1/2"},
-        {35, 18755.8, "h_i", "1s0.3s1.2S_1/2", "1s0.4p1.2P_3/2"},
-        {541, 19374.1, "he_ii", "1s0.5f1.2F_5/2", "1s0.6g1.2G"},
-        {542, 19374.4, "he_ii", "1s0.5f1.2F_7/2", "1s0.6g1.2G"},
-        {10, 12821.4, "h_i", "1s0.3p1.2P_1/2", "1s0.5d1.2D_3/2"},
-        {12, 12821.6, "h_i", "1s0.3p1.2P_3/2", "1s0.5d1.2D_3/2"},
-        {14961, 111.622, "mg_vii", "2s1.2p3.3D_3", "2p1.3p1.3D_3"},
-        {15017, 365.243, "mg_vii", "2p2.3P_1", "2s1.2p3.3P_1"},
-        {16595, 7.10691, "mg_xii", "1s1.2S_1/2", "1s0.3p1.2P_1/2"},
-        {16305, 1034.32, "mg_xi", "1s1.2s1.3S_1", "1s1.2p1.3P_1"},
-        {16301, 55.197, "mg_xi", "1s1.2p1.1P_1", "1s1.3s1.1S_0"},
-        {43, 12821.4, "h_i", "1s0.3s1.2S_1/2", "1s0.5p1.2P_3/2"},
-        {16129, 9.7626, "mg_ix", "2s0.2p2.1D_2", "1s1.2s2.2p1.1P_1"},
-        {510, 6650.01, "he_ii", "1s0.4p1.2P_1/2", "1s0.6d1.2D"},
-        {511, 6650.33, "he_ii", "1s0.4p1.2P_3/2", "1s0.6d1.2D"},
-        {16194, 9.215, "mg_x", "2s0.2p1.2P_3/2", "1s1.2p2.2S_1/2"},
-        {16311, 37.9184, "mg_xi", "1s1.2s1.3S_1", "1s1.4p1.3P_2"},
-        {15089, 278.402, "mg_vii", "2p2.3P_2", "2s1.2p3.3S_1"},
-        {16211, 47.317, "mg_x", "2s0.2p1.2P_3/2", "2s0.4d1.2D_3/2"},
-        {210, 522.213, "he_i", "1s2.1S_0", "1s1.4p1.1P_1"},
-        {448, 3203.93, "he_ii", "1s0.3s1.2S_1/2", "1s0.5p1.2P_1/2"},
-        {16461, 52.5869, "mg_xi", "1s1.2p1.3P_0", "1s1.3d1.3D_3"},
-        {16464, 52.6098, "mg_xi", "1s1.2p1.3P_1", "1s1.3d1.3D_3"},
-        {16467, 52.7088, "mg_xi", "1s1.2p1.3P_2", "1s1.3d1.3D_3"},
-        {1, 10944.9, "h_i", "1s0.3p1.2P_1/2", "1s0.6s1.2S"},
-        {2, 10945, "h_i", "1s0.3p1.2P_3/2", "1s0.6s1.2S"},
-        {16473, 40.4332, "mg_xi", "1s1.2p1.1P_1", "1s1.4d1.1D_2"},
-        {16297, 50.4712, "mg_xi", "1s1.2s1.3S_1", "1s1.3p1.3P_0"},
-        {16189, 47.788, "mg_x", "2s0.2p1.2P_1/2", "2s0.4s1.2S_1/2"},
-        {14792, 55035, "mg_vii", "2p2.3P_1", "2p2.3P_2"},
-        {14752, 95.258, "mg_vii", "2p2.3P_1", "2p1.3s1.3P_2"},
-        {16460, 52.5974, "mg_xi", "1s1.2p1.3P_0", "1s1.3d1.3D_2"},
-        {16463, 52.6204, "mg_xi", "1s1.2p1.3P_1", "1s1.3d1.3D_2"},
-        {16466, 52.7194, "mg_xi", "1s1.2p1.3P_2", "1s1.3d1.3D_2"},
-        {481, 10125.5, "he_ii", "1s0.4p1.2P_1/2", "1s0.5d1.2D_5/2"},
-        {483, 10126.3, "he_ii", "1s0.4p1.2P_3/2", "1s0.5d1.2D_5/2"},
-        {496, 10126, "he_ii", "1s0.4p1.2P_1/2", "1s0.5s1.2S_1/2"},
-        {497, 10126.7, "he_ii", "1s0.4p1.2P_3/2", "1s0.5s1.2S_1/2"},
-        {14916, 319.027, "mg_vii", "2p2.1D_2", "2s1.2p3.1D_2"},
-        {14823, 111.984, "mg_vii", "2s1.2p3.3D_3", "2p1.3p1.3P_2"},
-        {14632, 95.65, "mg_vii", "2p2.3P_2", "2p1.3s1.3P_1"},
-        {15078, 88.68, "mg_vii", "2p2.1S_0", "2p1.3d1.1P_1"},
-        {15969, 445.98, "mg_ix", "2s1.2p1.3P_1", "2s0.2p2.3P_0"},
-        {14656, 132.644, "mg_vii", "2s1.2p3.1D_2", "2p1.3p1.1P_1"},
-        {34, 18756, "h_i", "1s0.3s1.2S_1/2", "1s0.4p1.2P_1/2"},
-        {16459, 52.5985, "mg_xi", "1s1.2p1.3P_0", "1s1.3d1.3D_1"},
-        {16462, 52.6215, "mg_xi", "1s1.2p1.3P_1", "1s1.3d1.3D_1"},
-        {16465, 52.7205, "mg_xi", "1s1.2p1.3P_2", "1s1.3d1.3D_1"},
-        {16115, 749.551, "mg_ix", "2s1.2p1.1P_1", "2s0.2p2.1D_2"},
-        {16310, 37.9248, "mg_xi", "1s1.2s1.3S_1", "1s1.4p1.3P_1"},
-        {480, 10125.6, "he_ii", "1s0.4p1.2P_1/2", "1s0.5d1.2D_3/2"},
-        {482, 10126.4, "he_ii", "1s0.4p1.2P_3/2", "1s0.5d1.2D_3/2"},
-        {15072, 277, "mg_vii", "2p2.3P_1", "2s1.2p3.3S_1"},
-        {535, 19373.7, "he_ii", "1s0.5d1.2D_3/2", "1s0.6f1.2F"},
-        {536, 19374.1, "he_ii", "1s0.5d1.2D_5/2", "1s0.6f1.2F"},
-        {16196, 42.597, "mg_x", "2s0.2p1.2P_3/2", "2s0.5s1.2S_1/2"},
-        {15985, 71.842, "mg_ix", "2s1.2p1.3P_0", "2s1.3s1.3S_1"},
-        {14699, 83.91, "mg_vii", "2p2.3P_0", "2p1.3d1.3D_1"},
-        {16590, 6.73775, "mg_xii", "1s1.2S_1/2", "1s0.4p1.2P_3/2"},
-        {14852, 117.3, "mg_vii", "2s1.2p3.3P_1", "2p1.3p1.3D_2"},
-        {523, 6650.01, "he_ii", "1s0.4p1.2P_1/2", "1s0.6s1.2S"},
-        {524, 6650.33, "he_ii", "1s0.4p1.2P_3/2", "1s0.6s1.2S"},
-        {16214, 9.2829, "mg_x", "2s1.2S_1/2", "1s1.2s1.2p1.2P_3/2"},
-        {14832, 95.383, "mg_vii", "2p2.3P_0", "2p1.3s1.3P_1"},
-        {42, 12821.5, "h_i", "1s0.3s1.2S_1/2", "1s0.5p1.2P_1/2"},
-        {14834, 95.556, "mg_vii", "2p2.3P_1", "2p1.3s1.3P_0"},
-        {16287, 53.7871, "mg_xi", "1s1.2p1.3P_0", "1s1.3s1.3S_1"},
-        {16288, 53.8111, "mg_xi", "1s1.2p1.3P_1", "1s1.3s1.3S_1"},
-        {16289, 53.9147, "mg_xi", "1s1.2p1.3P_2", "1s1.3s1.3S_1"},
-        {7, 10944.9, "h_i", "1s0.3s1.2S_1/2", "1s0.6p1.2P"},
-        {15476, 9.5053, "mg_viii", "2p1.2P_3/2", "1s1.2s2.2p2.2P_1/2"},
-        {16599, 45.3754, "mg_xii", "1s0.2p1.2P_1/2", "1s0.3d1.2D_5/2"},
-        {15946, 9.7859, "mg_ix", "2s0.2p2.3P_2", "1s1.2s2.2p1.3P_2"},
-        {16601, 45.533, "mg_xii", "1s0.2p1.2P_3/2", "1s0.3d1.2D_5/2"},
-        {16381, 34.0224, "mg_xi", "1s1.2s1.3S_1", "1s1.5p1.3P_2"},
-        {87, 26281.4, "h_i", "1s0.4d1.2D_3/2", "1s0.6f1.2F"},
-        {88, 26281.5, "h_i", "1s0.4d1.2D_5/2", "1s0.6f1.2F"},
-        {16598, 45.3909, "mg_xii", "1s0.2p1.2P_1/2", "1s0.3d1.2D_3/2"},
-        {16600, 45.5486, "mg_xii", "1s0.2p1.2P_3/2", "1s0.3d1.2D_3/2"},
-        {225, 584.334, "he_i", "1s2.1S_0", "1s1.2p1.1P_1"},
-        {16220, 187, "mg_x", "2s0.3d1.2D_5/2", "2s0.5f1.2F_7/2"},
-        {75, 40522.6, "h_i", "1s0.4f1.2F_5/2", "1s0.5g1.2G_9/2"},
-        {77, 40522.8, "h_i", "1s0.4f1.2F_7/2", "1s0.5g1.2G_9/2"},
-        {16300, 36.0742, "mg_xi", "1s1.2p1.1P_1", "1s1.5d1.1D_2"},
-        {14476, 1190.07, "mg_vi", "2p3.4S_3/2", "2p3.2P_3/2"},
-        {16210, 42.366, "mg_x", "2s0.2p1.2P_3/2", "2s0.5d1.2D_3/2"},
-        {126, 26281.5, "h_i", "1s0.4f1.2F_5/2", "1s0.6g1.2G"},
-        {127, 26281.5, "h_i", "1s0.4f1.2F_7/2", "1s0.6g1.2G"},
-        {16357, 39.253, "mg_xi", "1s1.2p1.3P_0", "1s1.4d1.3D_3"},
-        {16360, 39.2658, "mg_xi", "1s1.2p1.3P_1", "1s1.4d1.3D_3"},
-        {16363, 39.3209, "mg_xi", "1s1.2p1.3P_2", "1s1.4d1.3D_3"},
-        {14736, 132.56, "mg_vii", "2s1.2p3.1P_1", "2p1.3p1.1D_2"},
-        {14627, 116.092, "mg_vii", "2s1.2p3.3P_2", "2p1.3p1.3S_1"},
-        {14903, 83.715, "mg_vii", "2p2.3P_2", "2p1.3d1.3P_1"},
-        {16174, 9.2117, "mg_x", "2s0.2p1.2P_1/2", "1s1.2p2.2S_1/2"},
-        {14873, 95.484, "mg_vii", "2p2.3P_1", "2p1.3s1.3P_1"},
-        {107, 40522.4, "h_i", "1s0.4d1.2D_3/2", "1s0.5f1.2F_7/2"},
-        {109, 40522.7, "h_i", "1s0.4d1.2D_5/2", "1s0.5f1.2F_7/2"},
-        {14758, 83.588, "mg_vii", "2p2.3P_1", "2p1.3d1.3P_1"},
-        {74, 40522.7, "h_i", "1s0.4f1.2F_5/2", "1s0.5g1.2G_7/2"},
-        {76, 40522.8, "h_i", "1s0.4f1.2F_7/2", "1s0.5g1.2G_7/2"},
-        {14666, 111.856, "mg_vii", "2s1.2p3.3D_2", "2p1.3p1.3D_2"},
-        {16589, 6.73818, "mg_xii", "1s1.2S_1/2", "1s0.4p1.2P_1/2"},
-        {15472, 9.4994, "mg_viii", "2p1.2P_1/2", "1s1.2s2.2p2.2P_3/2"},
-        {15043, 112.11, "mg_vii", "2s1.2p3.3D_2", "2p1.3p1.3P_1"},
-        {14577, 86.691, "mg_vii", "2p2.1D_2", "2p1.3d1.3F_3"},
-        {80, 40522.2, "h_i", "1s0.4p1.2P_1/2", "1s0.5s1.2S_1/2"},
-        {81, 40523, "h_i", "1s0.4p1.2P_3/2", "1s0.5s1.2S_1/2"},
-        {16356, 39.2555, "mg_xi", "1s1.2p1.3P_0", "1s1.4d1.3D_2"},
-        {16359, 39.2683, "mg_xi", "1s1.2p1.3P_1", "1s1.4d1.3D_2"},
-        {16362, 39.3234, "mg_xi", "1s1.2p1.3P_2", "1s1.4d1.3D_2"},
-        {14601, 102.472, "mg_vii", "2p2.1S_0", "2p1.3s1.1P_1"},
-        {14904, 83.56, "mg_vii", "2p2.3P_1", "2p1.3d1.3P_0"},
-        {16212, 187, "mg_x", "2s0.3d1.2D_3/2", "2s0.5f1.2F_7/2"},
-        {108, 40522.5, "h_i", "1s0.4d1.2D_3/2", "1s0.5f1.2F_5/2"},
-        {110, 40522.7, "h_i", "1s0.4d1.2D_5/2", "1s0.5f1.2F_5/2"},
-        {16306, 997.486, "mg_xi", "1s1.2s1.3S_1", "1s1.2p1.3P_2"},
-        {472, 6650.04, "he_ii", "1s0.4s1.2S_1/2", "1s0.6p1.2P"},
-        {16380, 34.025, "mg_xi", "1s1.2s1.3S_1", "1s1.5p1.3P_1"},
-        {16275, 150.838, "mg_xi", "1s1.3s1.1S_0", "1s1.4p1.1P_1"},
-        {15015, 280.737, "mg_vii", "2p2.1D_2", "2s1.2p3.1P_1"},
-        {16592, 6.58001, "mg_xii", "1s1.2S_1/2", "1s0.5p1.2P_3/2"},
-        {14923, 83.988, "mg_vii", "2p2.3P_1", "2p1.3d1.3D_1"},
-        {16201, 42.525, "mg_x", "2s0.2p1.2P_1/2", "2s0.5s1.2S_1/2"},
-        {82, 26281, "h_i", "1s0.4p1.2P_1/2", "1s0.6s1.2S"},
-        {83, 26281.4, "h_i", "1s0.4p1.2P_3/2", "1s0.6s1.2S"},
-        {14940, 116.085, "mg_vii", "2s1.2p3.3P_1", "2p1.3p1.3S_1"},
-        {451, 4687.07, "he_ii", "1s0.3d1.2D_3/2", "1s0.4p1.2P_3/2"},
-        {453, 4687.2, "he_ii", "1s0.3d1.2D_5/2", "1s0.4p1.2P_3/2"},
-        {16229, 9.2848, "mg_x", "2s1.2S_1/2", "1s1.2s1.2p1.2P_1/2"},
-        {16309, 37.9264, "mg_xi", "1s1.2s1.3S_1", "1s1.4p1.3P_0"},
-        {66, 26281, "h_i", "1s0.4p1.2P_1/2", "1s0.6d1.2D"},
-        {67, 26281.4, "h_i", "1s0.4p1.2P_3/2", "1s0.6d1.2D"},
-        {61, 40521.7, "h_i", "1s0.4p1.2P_1/2", "1s0.5d1.2D_5/2"},
-        {63, 40522.5, "h_i", "1s0.4p1.2P_3/2", "1s0.5d1.2D_5/2"},
-        {489, 10125.7, "he_ii", "1s0.4s1.2S_1/2", "1s0.5p1.2P_3/2"},
-        {16443, 35.1306, "mg_xi", "1s1.2p1.3P_0", "1s1.5d1.3D_3"},
-        {16446, 35.1408, "mg_xi", "1s1.2p1.3P_1", "1s1.5d1.3D_3"},
-        {16449, 35.1849, "mg_xi", "1s1.2p1.3P_2", "1s1.5d1.3D_3"},
-        {16597, 6.51273, "mg_xii", "1s1.2S_1/2", "1s0.6p1.2P"},
-        {16355, 39.2558, "mg_xi", "1s1.2p1.3P_0", "1s1.4d1.3D_1"},
-        {16358, 39.2686, "mg_xi", "1s1.2p1.3P_1", "1s1.4d1.3D_1"},
-        {16361, 39.3237, "mg_xi", "1s1.2p1.3P_2", "1s1.4d1.3D_1"},
-        {14431, 403.31, "mg_vi", "2p3.4S_3/2", "2s1.2p4.4P_5/2"},
-        {16111, 9.7889, "mg_ix", "2s0.2p2.3P_2", "1s1.2s2.2p1.3P_1"},
-        {14522, 1191.61, "mg_vi", "2p3.4S_3/2", "2p3.2P_1/2"},
-        {16205, 187, "mg_x", "2s0.3d1.2D_5/2", "2s0.5f1.2F_5/2"},
-        {14651, 117.421, "mg_vii", "2s1.2p3.3P_0", "2p1.3p1.3D_1"},
-        {14915, 276.154, "mg_vii", "2p2.3P_0", "2s1.2p3.3S_1"},
-        {14599, 2262.19, "mg_vii", "2p2.1D_2", "2p2.1S_0"},
-        {16185, 187.206, "mg_x", "2s0.3d1.2D_5/2", "2s0.4f1.2F_5/2"},
-        {14593, 111.972, "mg_vii", "2s1.2p3.3D_1", "2p1.3p1.3D_1"},
-        {520, 19372.3, "he_ii", "1s0.5p1.2P_1/2", "1s0.6d1.2D"},
-        {521, 19373.7, "he_ii", "1s0.5p1.2P_3/2", "1s0.6d1.2D"},
-        {16165, 9.7881, "mg_ix", "2s0.2p2.3P_1", "1s1.2s2.2p1.3P_0"},
-        {16008, 9.3948, "mg_ix", "2s1.2p1.1P_1", "1s1.2s1.2p2.1P_1"},
-        {16038, 84.14, "mg_ix", "2s0.2p2.1D_2", "2s1.3p1.1P_1"},
-        {16304, 1043.26, "mg_xi", "1s1.2s1.3S_1", "1s1.2p1.3P_0"},
-        {16039, 438.7, "mg_ix", "2s1.2p1.1P_1", "2s0.2p2.1S_0"},
-        {16591, 6.58022, "mg_xii", "1s1.2S_1/2", "1s0.5p1.2P_1/2"},
-        {16113, 9.7855, "mg_ix", "2s0.2p2.3P_0", "1s1.2s2.2p1.3P_1"},
-        {16076, 9.7837, "mg_ix", "2s0.2p2.3P_1", "1s1.2s2.2p1.3P_2"},
-        {60, 40521.9, "h_i", "1s0.4p1.2P_1/2", "1s0.5d1.2D_3/2"},
-        {62, 40522.6, "h_i", "1s0.4p1.2P_3/2", "1s0.5d1.2D_3/2"},
-        {15047, 112.269, "mg_vii", "2s1.2p3.3D_1", "2p1.3p1.3P_0"},
-        {15062, 1452.04, "mg_vii", "2p1.3p1.3D_3", "2p1.3d1.3F_4"},
-        {16442, 35.1316, "mg_xi", "1s1.2p1.3P_0", "1s1.5d1.3D_2"},
-        {16445, 35.1418, "mg_xi", "1s1.2p1.3P_1", "1s1.5d1.3D_2"},
-        {16448, 35.186, "mg_xi", "1s1.2p1.3P_2", "1s1.5d1.3D_2"},
-        {14598, 128.901, "mg_vii", "2s1.2p3.1P_1", "2p1.3p1.1S_0"},
-        {14880, 117.307, "mg_vii", "2s1.2p3.3P_2", "2p1.3p1.3D_2"},
-        {17, 40521.9, "h_i", "1s0.4s1.2S_1/2", "1s0.5p1.2P_3/2"},
-        {450, 4687.23, "he_ii", "1s0.3d1.2D_3/2", "1s0.4p1.2P_1/2"},
-        {452, 4687.36, "he_ii", "1s0.3d1.2D_5/2", "1s0.4p1.2P_1/2"},
-        {501, 3204.05, "he_ii", "1s0.3d1.2D_3/2", "1s0.5p1.2P_3/2"},
-        {503, 3204.11, "he_ii", "1s0.3d1.2D_5/2", "1s0.5p1.2P_3/2"},
-        {16294, 39.5257, "mg_xi", "1s1.2p1.3P_0", "1s1.4s1.3S_1"},
-        {16295, 39.5386, "mg_xi", "1s1.2p1.3P_1", "1s1.4s1.3S_1"},
-        {16296, 39.5945, "mg_xi", "1s1.2p1.3P_2", "1s1.4s1.3S_1"},
-        {15870, 428.319, "mg_viii", "2s1.2p2.2D_5/2", "2s0.2p3.2D_5/2"},
-        {531, 19372.3, "he_ii", "1s0.5p1.2P_1/2", "1s0.6s1.2S"},
-        {532, 19373.7, "he_ii", "1s0.5p1.2P_3/2", "1s0.6s1.2S"},
-        {15101, 111.997, "mg_vii", "2s1.2p3.3D_2", "2p1.3p1.3P_2"},
-        {129, 18756.2, "h_i", "1s0.3d1.2D_3/2", "1s0.4p1.2P_3/2"},
-        {131, 18756.3, "h_i", "1s0.3d1.2D_5/2", "1s0.4p1.2P_3/2"},
-        {15543, 355.999, "mg_viii", "2s1.2p2.4P_5/2", "2s0.2p3.4S_3/2"},
-        {16173, 187, "mg_x", "2s0.3d1.2D_3/2", "2s0.5f1.2F_5/2"},
-        {14806, 125.642, "mg_vii", "2s1.2p3.1D_2", "2p1.3p1.1D_2"},
-        {14534, 400.666, "mg_vi", "2p3.4S_3/2", "2s1.2p4.4P_3/2"},
-        {488, 10126.1, "he_ii", "1s0.4s1.2S_1/2", "1s0.5p1.2P_1/2"},
-        {14747, 112.118, "mg_vii", "2s1.2p3.3D_1", "2p1.3p1.3P_1"},
-        {484, 2749.36, "he_ii", "1s0.3d1.2D_3/2", "1s0.6p1.2P"},
-        {485, 2749.4, "he_ii", "1s0.3d1.2D_5/2", "1s0.6p1.2P"},
-        {16332, 40.5455, "mg_xi", "1s1.2p1.1P_1", "1s1.4s1.1S_0"},
-        {16096, 9.7867, "mg_ix", "2s0.2p2.3P_1", "1s1.2s2.2p1.3P_1"},
-        {16609, 33.6465, "mg_xii", "1s0.2p1.2P_1/2", "1s0.4d1.2D_5/2"},
-        {16611, 33.7331, "mg_xii", "1s0.2p1.2P_3/2", "1s0.4d1.2D_5/2"},
-        {112, 74782.4, "h_i", "1s0.5f1.2F_5/2", "1s0.6g1.2G"},
-        {111, 74782.6, "h_i", "1s0.5f1.2F_7/2", "1s0.6g1.2G"},
-        {14740, 83.511, "mg_vii", "2p2.3P_0", "2p1.3d1.3P_1"},
-        {16132, 93.364, "mg_ix", "2s0.2p2.1D_2", "2s1.3p1.3P_1"},
-        {321, 10833.3, "he_i", "1s1.2s1.3S_1", "1s1.2p1.3P_2"},
-        {16045, 67.252, "mg_ix", "2s1.2p1.3P_2", "2s1.3d1.3D_1"},
-        {14602, 84.087, "mg_vii", "2p2.3P_2", "2p1.3d1.3D_2"},
-        {14936, 111.866, "mg_vii", "2s1.2p3.3D_3", "2p1.3p1.3D_2"},
-        {15090, 90332, "mg_vii", "2p2.3P_0", "2p2.3P_1"},
-        {14626, 117.425, "mg_vii", "2s1.2p3.3P_1", "2p1.3p1.3D_1"},
-        {16608, 33.6501, "mg_xii", "1s0.2p1.2P_1/2", "1s0.4d1.2D_3/2"},
-        {16610, 33.7367, "mg_xii", "1s0.2p1.2P_3/2", "1s0.4d1.2D_3/2"},
-        {14545, 1805.94, "mg_vi", "2p3.4S_3/2", "2p3.2D_3/2"},
-        {16217, 585, "mg_x", "2s0.4f1.2F_7/2", "2s0.5g1.2G_9/2"},
-        {14835, 434.593, "mg_vii", "2p2.3P_2", "2s1.2p3.3D_1"},
-        {16717, 130.014, "mg_xii", "1s0.3d1.2D_3/2", "1s0.4f1.2F_7/2"},
-        {16719, 130.141, "mg_xii", "1s0.3d1.2D_5/2", "1s0.4f1.2F_7/2"},
-        {14929, 111.612, "mg_vii", "2s1.2p3.3D_2", "2p1.3p1.3D_3"},
-        {16716, 130.041, "mg_xii", "1s0.3d1.2D_3/2", "1s0.4f1.2F_5/2"},
-        {16718, 130.168, "mg_xii", "1s0.3d1.2D_5/2", "1s0.4f1.2F_5/2"},
-        {15965, 88.892, "mg_ix", "2s0.2p2.3P_2", "2s1.3p1.3P_1"},
-        {86, 26281.1, "h_i", "1s0.4s1.2S_1/2", "1s0.6p1.2P"},
-        {51, 12821.6, "h_i", "1s0.3d1.2D_3/2", "1s0.5p1.2P_3/2"},
-        {53, 12821.7, "h_i", "1s0.3d1.2D_5/2", "1s0.5p1.2P_3/2"},
-        {16379, 34.0257, "mg_xi", "1s1.2s1.3S_1", "1s1.5p1.3P_0"},
-        {97, 74781.9, "h_i", "1s0.5d1.2D_3/2", "1s0.6f1.2F"},
-        {98, 74782.4, "h_i", "1s0.5d1.2D_5/2", "1s0.6f1.2F"},
-        {16441, 35.1317, "mg_xi", "1s1.2p1.3P_0", "1s1.5d1.3D_1"},
-        {16444, 35.1419, "mg_xi", "1s1.2p1.3P_1", "1s1.5d1.3D_1"},
-        {16447, 35.1861, "mg_xi", "1s1.2p1.3P_2", "1s1.5d1.3D_1"},
-        {16084, 88.433, "mg_ix", "2s0.2p2.3P_0", "2s1.3p1.3P_1"},
-        {15204, 353.882, "mg_viii", "2s1.2p2.4P_3/2", "2s0.2p3.4S_3/2"},
-        {16192, 9.2296, "mg_x", "2s1.2S_1/2", "1s1.2s1.2p1.2P_3/2#2"},
-        {14868, 1653.39, "mg_vii", "2p1.3s1.3P_2", "2p1.3p1.3D_3"},
-        {15305, 428.245, "mg_viii", "2s1.2p2.2D_3/2", "2s0.2p3.2D_3/2"},
-        {500, 3204.09, "he_ii", "1s0.3d1.2D_3/2", "1s0.5p1.2P_1/2"},
-        {502, 3204.15, "he_ii", "1s0.3d1.2D_5/2", "1s0.5p1.2P_1/2"},
-        {14875, 116.081, "mg_vii", "2s1.2p3.3P_0", "2p1.3p1.3S_1"},
-        {16330, 52.653, "mg_xi", "1s1.2s1.1S_0", "1s1.3p1.1P_1"},
-        {16171, 585, "mg_x", "2s0.4d1.2D_5/2", "2s0.5f1.2F_7/2"},
-        {14982, 111.97, "mg_vii", "2s1.2p3.3D_2", "2p1.3p1.3D_1"},
-        {16303, 155.806, "mg_xi", "1s1.3p1.1P_1", "1s1.4d1.1D_2"},
-        {113, 74782.6, "h_i", "1s0.5g1.2G_7/2", "1s0.6h1.2H"},
-        {114, 74782.7, "h_i", "1s0.5g1.2G_9/2", "1s0.6h1.2H"},
-        {16206, 585, "mg_x", "2s0.4f1.2F_5/2", "2s0.5g1.2G_9/2"},
-        {16, 40522.3, "h_i", "1s0.4s1.2S_1/2", "1s0.5p1.2P_1/2"},
-        {322, 10833.2, "he_i", "1s1.2s1.3S_1", "1s1.2p1.3P_1"},
-        {16125, 9.4137, "mg_ix", "2s1.2p1.3P_2", "1s1.2s1.2p2.3P_2"},
-        {14882, 131.891, "mg_vii", "2s1.2p3.1D_2", "2p1.3p1.3D_1"},
-        {16366, 146.583, "mg_xi", "1s1.3s1.3S_1", "1s1.4p1.3P_2"},
-        {128, 18756.3, "h_i", "1s0.3d1.2D_3/2", "1s0.4p1.2P_1/2"},
-        {130, 18756.5, "h_i", "1s0.3d1.2D_5/2", "1s0.4p1.2P_1/2"},
-        {14615, 1184.41, "mg_vii", "2p1.3s1.1P_1", "2p1.3p1.1D_2"},
-        {14570, 399.281, "mg_vi", "2p3.4S_3/2", "2s1.2p4.4P_1/2"},
-        {84, 74780.6, "h_i", "1s0.5p1.2P_1/2", "1s0.6s1.2S"},
-        {85, 74781.9, "h_i", "1s0.5p1.2P_3/2", "1s0.6s1.2S"},
-        {16011, 88.594, "mg_ix", "2s0.2p2.3P_1", "2s1.3p1.3P_1"},
-        {14829, 111.858, "mg_vii", "2s1.2p3.3D_1", "2p1.3p1.3D_2"},
-        {16216, 9.2308, "mg_x", "2s1.2S_1/2", "1s1.2s1.2p1.2P_1/2#2"},
-        {529, 6650.33, "he_ii", "1s0.4d1.2D_3/2", "1s0.6p1.2P"},
-        {530, 6650.44, "he_ii", "1s0.4d1.2D_5/2", "1s0.6p1.2P"},
-        {16291, 35.2407, "mg_xi", "1s1.2p1.3P_0", "1s1.5s1.3S_1"},
-        {16292, 35.251, "mg_xi", "1s1.2p1.3P_1", "1s1.5s1.3S_1"},
-        {16293, 35.2954, "mg_xi", "1s1.2p1.3P_2", "1s1.5s1.3S_1"},
-        {16327, 36.1203, "mg_xi", "1s1.2p1.1P_1", "1s1.5s1.1S_0"},
-        {16020, 9.8567, "mg_ix", "2s0.2p2.1S_0", "1s1.2s2.2p1.1P_1"},
-        {475, 10126.4, "he_ii", "1s0.4d1.2D_3/2", "1s0.5p1.2P_3/2"},
-        {477, 10126.6, "he_ii", "1s0.4d1.2D_5/2", "1s0.5p1.2P_3/2"},
-        {522, 19372.4, "he_ii", "1s0.5s1.2S_1/2", "1s0.6p1.2P"},
-        {16281, 106.307, "mg_xi", "1s1.3p1.1P_1", "1s1.5d1.1D_2"},
-        {14697, 320.512, "mg_vii", "2p2.1S_0", "2s1.2p3.1P_1"},
-        {16213, 585, "mg_x", "2s0.4d1.2D_3/2", "2s0.5f1.2F_7/2"},
-        {15706, 9.9455, "mg_viii", "2s0.2p3.2D_5/2", "1s1.2s2.2p2.2P_3/2"},
-        {16188, 585, "mg_x", "2s0.4f1.2F_7/2", "2s0.5g1.2G_7/2"},
-        {16644, 30.0506, "mg_xii", "1s0.2p1.2P_1/2", "1s0.5d1.2D_5/2"},
-        {16339, 101.605, "mg_xi", "1s1.3s1.3S_1", "1s1.5p1.3P_2"},
-        {16646, 30.1197, "mg_xii", "1s0.2p1.2P_3/2", "1s0.5d1.2D_5/2"},
-        {50, 12821.6, "h_i", "1s0.3d1.2D_3/2", "1s0.5p1.2P_1/2"},
-        {52, 12821.7, "h_i", "1s0.3d1.2D_5/2", "1s0.5p1.2P_1/2"},
-        {16365, 146.678, "mg_xi", "1s1.3s1.3S_1", "1s1.4p1.3P_1"},
-        {15178, 352.46, "mg_viii", "2s1.2p2.4P_1/2", "2s0.2p3.4S_3/2"},
-        {124, 74780.6, "h_i", "1s0.5p1.2P_1/2", "1s0.6d1.2D"},
-        {125, 74781.9, "h_i", "1s0.5p1.2P_3/2", "1s0.6d1.2D"},
-        {14575, 85.047, "mg_vii", "2p2.3P_2", "2p1.3d1.3F_2"},
-        {16643, 30.0521, "mg_xii", "1s0.2p1.2P_1/2", "1s0.5d1.2D_3/2"},
-        {16645, 30.1211, "mg_xii", "1s0.2p1.2P_3/2", "1s0.5d1.2D_3/2"},
-        {32, 10945, "h_i", "1s0.3d1.2D_3/2", "1s0.6p1.2P"},
-        {33, 10945.1, "h_i", "1s0.3d1.2D_5/2", "1s0.6p1.2P"},
-        {15189, 341.802, "mg_viii", "2s1.2p2.2D_5/2", "2s0.2p3.2P_3/2"},
-        {16606, 45.4355, "mg_xii", "1s0.2p1.2P_1/2", "1s0.3s1.2S_1/2"},
-        {16607, 45.5935, "mg_xii", "1s0.2p1.2P_3/2", "1s0.3s1.2S_1/2"},
-        {71, 40522.6, "h_i", "1s0.4d1.2D_3/2", "1s0.5p1.2P_3/2"},
-        {73, 40522.9, "h_i", "1s0.4d1.2D_5/2", "1s0.5p1.2P_3/2"},
-        {16197, 585, "mg_x", "2s0.4f1.2F_5/2", "2s0.5g1.2G_7/2"},
-        {16693, 28.6982, "mg_xii", "1s0.2p1.2P_1/2", "1s0.6d1.2D"},
-        {16694, 28.7611, "mg_xii", "1s0.2p1.2P_3/2", "1s0.6d1.2D"},
-        {15725, 9.9486, "mg_viii", "2s0.2p3.2D_3/2", "1s1.2s2.2p2.2P_1/2"},
-        {14433, 3489.73, "mg_vi", "2p3.2D_3/2", "2p3.2P_3/2"},
-        {16182, 585, "mg_x", "2s0.4d1.2D_5/2", "2s0.5f1.2F_5/2"},
-        {15951, 9.3652, "mg_ix", "2s0.2p2.1D_2", "1s1.2p3.1P_1"},
-        {16088, 9.4154, "mg_ix", "2s1.2p1.3P_1", "1s1.2s1.2p2.3P_0"},
-        {14509, 349.168, "mg_vi", "2p3.2D_5/2", "2s1.2p4.2D_5/2"},
-        {16388, 151.035, "mg_xi", "1s1.3p1.3P_0", "1s1.4d1.3D_3"},
-        {16391, 151.096, "mg_xi", "1s1.3p1.3P_1", "1s1.4d1.3D_3"},
-        {16394, 151.337, "mg_xi", "1s1.3p1.3P_2", "1s1.4d1.3D_3"},
-        {16648, 88.9117, "mg_xii", "1s0.3d1.2D_3/2", "1s0.5f1.2F_7/2"},
-        {16650, 88.9711, "mg_xii", "1s0.3d1.2D_5/2", "1s0.5f1.2F_7/2"},
-        {474, 10126.8, "he_ii", "1s0.4d1.2D_3/2", "1s0.5p1.2P_1/2"},
-        {476, 10127, "he_ii", "1s0.4d1.2D_5/2", "1s0.5p1.2P_1/2"},
-        {211, 537.03, "he_i", "1s2.1S_0", "1s1.3p1.1P_1"},
-        {14950, 1334.22, "mg_vii", "2p1.3s1.3P_2", "2p1.3p1.3P_2"},
-        {16647, 88.9181, "mg_xii", "1s0.3d1.2D_3/2", "1s0.5f1.2F_5/2"},
-        {16649, 88.9775, "mg_xii", "1s0.3d1.2D_5/2", "1s0.5f1.2F_5/2"},
-        {16605, 45.3972, "mg_xii", "1s0.2s1.2S_1/2", "1s0.3p1.2P_3/2"},
-        {15820, 9.5183, "mg_viii", "2p1.2P_3/2", "1s1.2s2.2p2.2D_5/2"},
-        {323, 10832.1, "he_i", "1s1.2s1.3S_1", "1s1.2p1.3P_0"},
-        {16207, 9.2952, "mg_x", "2s0.2p1.2P_3/2", "1s1.2p2.2P_3/2"},
-        {14713, 117.642, "mg_vii", "2s1.2p3.3P_2", "2p1.3p1.3P_1"},
-        {16338, 101.628, "mg_xi", "1s1.3s1.3S_1", "1s1.5p1.3P_1"},
-        {16060, 9.4518, "mg_ix", "2s0.2p2.1S_0", "1s1.2p3.1P_1"},
-        {16054, 9.4505, "mg_ix", "2s1.2p1.1P_1", "1s1.2s1.2p2.1D_2"},
-        {15119, 130.937, "mg_vii", "2s1.2p3.3S_1", "2p1.3p1.3P_2"},
-        {14779, 1645.77, "mg_vii", "2p1.3s1.3P_1", "2p1.3p1.3D_2"},
-        {172, 6680, "he_i", "1s1.2p1.1P_1", "1s1.3d1.1D_2"},
-        {16047, 9.4144, "mg_ix", "2s1.2p1.3P_1", "1s1.2s1.2p2.3D_2"},
-        {15020, 84.76, "mg_vii", "2p2.3P_1", "2p1.3d1.1D_2"},
-        {16631, 281.081, "mg_xii", "1s0.4f1.2F_5/2", "1s0.5g1.2G_9/2"},
-        {16633, 281.206, "mg_xii", "1s0.4f1.2F_7/2", "1s0.5g1.2G_9/2"},
-        {16630, 281.119, "mg_xii", "1s0.4f1.2F_5/2", "1s0.5g1.2G_7/2"},
-        {16632, 281.244, "mg_xii", "1s0.4f1.2F_7/2", "1s0.5g1.2G_7/2"},
-        {16144, 9.3518, "mg_ix", "2s1.2p1.3P_2", "1s1.2s1.2p2.3S_1"},
-        {16387, 151.072, "mg_xi", "1s1.3p1.3P_0", "1s1.4d1.3D_2"},
-        {16390, 151.133, "mg_xi", "1s1.3p1.3P_1", "1s1.4d1.3D_2"},
-        {16393, 151.374, "mg_xi", "1s1.3p1.3P_2", "1s1.4d1.3D_2"},
-        {15565, 9.5156, "mg_viii", "2p1.2P_1/2", "1s1.2s2.2p2.2D_3/2"},
-        {14537, 3502.98, "mg_vi", "2p3.2D_3/2", "2p3.2P_1/2"},
-        {16313, 155.153, "mg_xi", "1s1.3p1.3P_0", "1s1.4s1.3S_1"},
-        {16314, 155.216, "mg_xi", "1s1.3p1.3P_1", "1s1.4s1.3S_1"},
-        {526, 10126.5, "he_ii", "1s0.4f1.2F_5/2", "1s0.5d1.2D_5/2"},
-        {528, 10126.6, "he_ii", "1s0.4f1.2F_7/2", "1s0.5d1.2D_5/2"},
-        {16315, 155.471, "mg_xi", "1s1.3p1.3P_2", "1s1.4s1.3S_1"},
-        {16146, 9.3835, "mg_ix", "2s0.2p2.3P_1", "1s1.2p3.3P_0"},
-        {15185, 342.062, "mg_viii", "2s1.2p2.2D_3/2", "2s0.2p3.2P_1/2"},
-        {16415, 104.053, "mg_xi", "1s1.3p1.3P_0", "1s1.5d1.3D_3"},
-        {16418, 104.082, "mg_xi", "1s1.3p1.3P_1", "1s1.5d1.3D_3"},
-        {16421, 104.196, "mg_xi", "1s1.3p1.3P_2", "1s1.5d1.3D_3"},
-        {16484, 35.204, "mg_xi", "1s1.2s1.1S_0", "1s1.5p1.1P_1"},
-        {14548, 349.137, "mg_vi", "2p3.2D_3/2", "2s1.2p4.2D_3/2"},
-        {512, 6650.44, "he_ii", "1s0.4f1.2F_5/2", "1s0.6d1.2D"},
-        {513, 6650.49, "he_ii", "1s0.4f1.2F_7/2", "1s0.6d1.2D"},
-        {16007, 9.4139, "mg_ix", "2s1.2p1.3P_0", "1s1.2s1.2p2.3P_1"},
-        {16172, 585, "mg_x", "2s0.4d1.2D_3/2", "2s0.5f1.2F_5/2"},
-        {16604, 45.4438, "mg_xii", "1s0.2s1.2S_1/2", "1s0.3p1.2P_1/2"},
-        {15849, 9.9789, "mg_viii", "2s0.2p3.4S_3/2", "1s1.2s2.2p2.4P_5/2"},
-        {16331, 157.488, "mg_xi", "1s1.3p1.1P_1", "1s1.4s1.1S_0"},
-        {537, 19373.7, "he_ii", "1s0.5d1.2D_3/2", "1s0.6p1.2P"},
-        {538, 19374.1, "he_ii", "1s0.5d1.2D_5/2", "1s0.6p1.2P"}
-    };
-    return rows;
-}
-
-// XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Compute oracle detail rrc label template for the bound-free/photoionization/recombination-continuum path using the current radiation field and level populations.
 // Reference context: XSTAR Manual ss11.5, 11.6.1, 11.7; Kallman & Bautista (2001); ATDB ch12.
 // XSTAR-FUNCTION-COMMENT-END
-const std::vector<RrcLabelTemplateRow>& oracle_detail_rrc_label_template_v172537() {
+const std::vector<RrcLabelTemplateRow>& oracle_detail_rrc_label_template() {
     static const std::vector<RrcLabelTemplateRow> rows = {
         {1, 29, 0.377699852, "h_i", "1s0.6f1.2F", "continuum"},
         {2, 22, 0.545493126, "h_i", "1s0.5f1.2F_7/2", "continuum"},
@@ -7730,1010 +6969,6 @@ const std::vector<RrcLabelTemplateRow>& oracle_detail_rrc_label_template_v172537
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Compute oracle public rrc label template for the bound-free/photoionization/recombination-continuum path using the current radiation field and level populations.
-// Reference context: XSTAR Manual ss11.5, 11.6.1, 11.7; Kallman & Bautista (2001); ATDB ch12.
-// XSTAR-FUNCTION-COMMENT-END
-[[maybe_unused]] const std::vector<RrcLabelTemplateRow>& oracle_public_rrc_label_template_v172537() {
-    static const std::vector<RrcLabelTemplateRow> rows = {
-        {1, 0, 0.3777, "h_i", "1s0.6f1.2F", "continuum"},
-        {2, 0, 0.545493, "h_i", "1s0.5f1.2F_7/2", "continuum"},
-        {3, 0, 0.545494, "h_i", "1s0.5f1.2F_5/2", "continuum"},
-        {4, 0, 0.3777, "h_i", "1s0.6h1.2H", "continuum"},
-        {5, 0, 0.3777, "h_i", "1s0.6g1.2G", "continuum"},
-        {6, 0, 0.545497, "h_i", "1s0.5s1.2S_1/2", "continuum"},
-        {7, 0, 3.40119, "h_i", "1s0.2p1.2P_1/2", "continuum"},
-        {8, 0, 3.40127, "h_i", "1s0.2p1.2P_3/2", "continuum"},
-        {9, 0, 0.3777, "h_i", "1s0.6p1.2P", "continuum"},
-        {10, 0, 0.3777, "h_i", "1s0.6s1.2S", "continuum"},
-        {11, 0, 0.3777, "h_i", "1s0.6d1.2D", "continuum"},
-        {12, 0, 13.6, "h_i", "1s1.2S_1/2", "continuum"},
-        {13, 0, 3.40119, "h_i", "1s0.2s1.2S_1/2", "continuum"},
-        {14, 0, 0.851463, "h_i", "1s0.4p1.2P_1/2", "continuum"},
-        {15, 0, 0.851459, "h_i", "1s0.4p1.2P_3/2", "continuum"},
-        {16, 0, 0.545499, "h_i", "1s0.5p1.2P_1/2", "continuum"},
-        {17, 0, 0.545495, "h_i", "1s0.5p1.2P_3/2", "continuum"},
-        {18, 0, 0.851457, "h_i", "1s0.4f1.2F_5/2", "continuum"},
-        {19, 0, 0.851456, "h_i", "1s0.4f1.2F_7/2", "continuum"},
-        {20, 0, 0.851459, "h_i", "1s0.4d1.2D_3/2", "continuum"},
-        {21, 0, 0.851457, "h_i", "1s0.4d1.2D_5/2", "continuum"},
-        {22, 0, 1.5125, "h_i", "1s0.3p1.2P_1/2", "continuum"},
-        {23, 0, 1.51249, "h_i", "1s0.3p1.2P_3/2", "continuum"},
-        {24, 0, 1.5125, "h_i", "1s0.3s1.2S_1/2", "continuum"},
-        {25, 0, 1.51249, "h_i", "1s0.3d1.2D_3/2", "continuum"},
-        {26, 0, 1.51249, "h_i", "1s0.3d1.2D_5/2", "continuum"},
-        {27, 0, 0.545495, "h_i", "1s0.5d1.2D_3/2", "continuum"},
-        {28, 0, 0.545494, "h_i", "1s0.5d1.2D_5/2", "continuum"},
-        {29, 0, 0.545493, "h_i", "1s0.5g1.2G_7/2", "continuum"},
-        {30, 0, 0.545493, "h_i", "1s0.5g1.2G_9/2", "continuum"},
-        {31, 0, 0.851463, "h_i", "1s0.4s1.2S_1/2", "continuum"},
-        {32, 0, 0.0943995, "h_i", "superlev", "continuum"},
-        {33, 0, 0.996033, "he_i", "1s1.4s1.3S_1", "continuum"},
-        {34, 0, 0.852982, "he_i", "1s1.4f1.1F_3", "continuum"},
-        {35, 0, 0.578777, "he_i", "1s1.5s1.1S_0", "continuum"},
-        {36, 0, 3.37197, "he_i", "1s1.2p1.1P_1", "continuum"},
-        {37, 0, 1.66968, "he_i", "1s1.3s1.1S_0", "continuum"},
-        {38, 0, 0.916422, "he_i", "1s1.4s1.1S_0", "continuum"},
-        {39, 0, 1.87153, "he_i", "1s1.3s1.3S_1", "continuum"},
-        {40, 0, 1.50297, "he_i", "1s1.3p1.1P_1", "continuum"},
-        {41, 0, 0.852985, "he_i", "1s1.4f1.3F_3", "continuum"},
-        {42, 0, 0.852983, "he_i", "1s1.4f1.3F_4", "continuum"},
-        {43, 0, 0.852983, "he_i", "1s1.4f1.3F_2", "continuum"},
-        {44, 0, 1.50297, "he_i", "1s1.3p1.1P_1", "continuum"},
-        {45, 0, 0.5569, "he_i", "1s1.5f1.3F", "continuum"},
-        {46, 0, 0.5574, "he_i", "1s1.5d1.3D", "continuum"},
-        {47, 0, 0.5564, "he_i", "1s1.5g1.3G", "continuum"},
-        {48, 0, 4.77038, "he_i", "1s1.2s1.3S_1", "continuum"},
-        {49, 0, 0.882101, "he_i", "1s1.4p1.3P_2", "continuum"},
-        {50, 0, 0.882101, "he_i", "1s1.4p1.3P_1", "continuum"},
-        {51, 0, 0.882086, "he_i", "1s1.4p1.3P_0", "continuum"},
-        {52, 0, 0.578777, "he_i", "1s1.5s1.1S_0", "continuum"},
-        {53, 0, 0.5569, "he_i", "1s1.5f1.1F", "continuum"},
-        {54, 0, 0.916422, "he_i", "1s1.4s1.1S_0", "continuum"},
-        {55, 0, 0.557199, "he_i", "1s1.5d1.1D", "continuum"},
-        {56, 0, 1.51592, "he_i", "1s1.3d1.1D_2", "continuum"},
-        {57, 0, 0.5541, "he_i", "1s1.5p1.1P", "continuum"},
-        {58, 0, 0.847921, "he_i", "1s1.4p1.1P_1", "continuum"},
-        {59, 0, 1.51592, "he_i", "1s1.3d1.1D_2", "continuum"},
-        {60, 0, 4.77038, "he_i", "1s1.2s1.3S_1", "continuum"},
-        {61, 0, 0.853657, "he_i", "1s1.4d1.1D_2", "continuum"},
-        {62, 0, 1.87153, "he_i", "1s1.3s1.3S_1", "continuum"},
-        {63, 0, 0.557199, "he_i", "1s1.5d1.1D", "continuum"},
-        {64, 0, 1.66968, "he_i", "1s1.3s1.1S_0", "continuum"},
-        {65, 0, 0.853657, "he_i", "1s1.4d1.1D_2", "continuum"},
-        {66, 0, 24.59, "he_i", "1s2.1S_0", "continuum"},
-        {67, 0, 3.37197, "he_i", "1s1.2p1.1P_1", "continuum"},
-        {68, 0, 3.97422, "he_i", "1s1.2s1.1S_0", "continuum"},
-        {69, 0, 3.97422, "he_i", "1s1.2s1.1S_0", "continuum"},
-        {70, 0, 0.561768, "he_i", "1s1.5p1.3P_2", "continuum"},
-        {71, 0, 0.561766, "he_i", "1s1.5p1.3P_1", "continuum"},
-        {72, 0, 0.56176, "he_i", "1s1.5p1.3P_0", "continuum"},
-        {73, 0, 0.847921, "he_i", "1s1.4p1.1P_1", "continuum"},
-        {74, 0, 0.556601, "he_i", "1s1.5g1.1G", "continuum"},
-        {75, 0, 1.51592, "he_i", "1s1.3d1.1D_2", "continuum"},
-        {76, 0, 0.557199, "he_i", "1s1.5d1.1D", "continuum"},
-        {77, 0, 1.50297, "he_i", "1s1.3p1.1P_1", "continuum"},
-        {78, 0, 24.59, "he_i", "1s2.1S_0", "continuum"},
-        {79, 0, 0.847921, "he_i", "1s1.4p1.1P_1", "continuum"},
-        {80, 0, 0.853903, "he_i", "1s1.4d1.3D_3", "continuum"},
-        {81, 0, 0.853903, "he_i", "1s1.4d1.3D_2", "continuum"},
-        {82, 0, 0.853899, "he_i", "1s1.4d1.3D_1", "continuum"},
-        {83, 0, 3.37197, "he_i", "1s1.2p1.1P_1", "continuum"},
-        {84, 0, 0.916422, "he_i", "1s1.4s1.1S_0", "continuum"},
-        {85, 0, 0.853657, "he_i", "1s1.4d1.1D_2", "continuum"},
-        {86, 0, 3.97422, "he_i", "1s1.2s1.1S_0", "continuum"},
-        {87, 0, 0.5541, "he_i", "1s1.5p1.1P", "continuum"},
-        {88, 0, 1.87153, "he_i", "1s1.3s1.3S_1", "continuum"},
-        {89, 0, 0.996033, "he_i", "1s1.4s1.3S_1", "continuum"},
-        {90, 0, 0.618021, "he_i", "1s1.5s1.3S_1", "continuum"},
-        {91, 0, 3.62591, "he_i", "1s1.2p1.3P_2", "continuum"},
-        {92, 0, 3.6259, "he_i", "1s1.2p1.3P_1", "continuum"},
-        {93, 0, 3.62577, "he_i", "1s1.2p1.3P_0", "continuum"},
-        {94, 0, 1.66968, "he_i", "1s1.3s1.1S_0", "continuum"},
-        {95, 0, 1.58292, "he_i", "1s1.3p1.3P_2", "continuum"},
-        {96, 0, 1.58292, "he_i", "1s1.3p1.3P_1", "continuum"},
-        {97, 0, 1.58288, "he_i", "1s1.3p1.3P_0", "continuum"},
-        {98, 0, 0.578777, "he_i", "1s1.5s1.1S_0", "continuum"},
-        {99, 0, 0.853903, "he_i", "1s1.4d1.3D_3", "continuum"},
-        {100, 0, 0.853903, "he_i", "1s1.4d1.3D_2", "continuum"},
-        {101, 0, 0.853899, "he_i", "1s1.4d1.3D_1", "continuum"},
-        {102, 0, 1.51634, "he_i", "1s1.3d1.3D_3", "continuum"},
-        {103, 0, 1.51634, "he_i", "1s1.3d1.3D_2", "continuum"},
-        {104, 0, 1.51634, "he_i", "1s1.3d1.3D_1", "continuum"},
-        {105, 0, 0.996033, "he_i", "1s1.4s1.3S_1", "continuum"},
-        {106, 0, 0.618021, "he_i", "1s1.5s1.3S_1", "continuum"},
-        {107, 0, 0.618021, "he_i", "1s1.5s1.3S_1", "continuum"},
-        {108, 0, 0.5574, "he_i", "1s1.5d1.3D", "continuum"},
-        {109, 0, 3.62591, "he_i", "1s1.2p1.3P_2", "continuum"},
-        {110, 0, 3.6259, "he_i", "1s1.2p1.3P_1", "continuum"},
-        {111, 0, 3.62577, "he_i", "1s1.2p1.3P_0", "continuum"},
-        {112, 0, 0.853903, "he_i", "1s1.4d1.3D_3", "continuum"},
-        {113, 0, 0.853903, "he_i", "1s1.4d1.3D_2", "continuum"},
-        {114, 0, 0.853899, "he_i", "1s1.4d1.3D_1", "continuum"},
-        {115, 0, 1.58292, "he_i", "1s1.3p1.3P_2", "continuum"},
-        {116, 0, 1.58292, "he_i", "1s1.3p1.3P_1", "continuum"},
-        {117, 0, 1.58288, "he_i", "1s1.3p1.3P_0", "continuum"},
-        {118, 0, 24.59, "he_i", "1s2.1S_0", "continuum"},
-        {119, 0, 1.51634, "he_i", "1s1.3d1.3D_3", "continuum"},
-        {120, 0, 1.51634, "he_i", "1s1.3d1.3D_2", "continuum"},
-        {121, 0, 1.51634, "he_i", "1s1.3d1.3D_1", "continuum"},
-        {122, 0, 3.62591, "he_i", "1s1.2p1.3P_2", "continuum"},
-        {123, 0, 3.6259, "he_i", "1s1.2p1.3P_1", "continuum"},
-        {124, 0, 3.62577, "he_i", "1s1.2p1.3P_0", "continuum"},
-        {125, 0, 1.58292, "he_i", "1s1.3p1.3P_2", "continuum"},
-        {126, 0, 1.58292, "he_i", "1s1.3p1.3P_1", "continuum"},
-        {127, 0, 1.58288, "he_i", "1s1.3p1.3P_0", "continuum"},
-        {128, 0, 0.5574, "he_i", "1s1.5d1.3D", "continuum"},
-        {129, 0, 1.51634, "he_i", "1s1.3d1.3D_3", "continuum"},
-        {130, 0, 1.51634, "he_i", "1s1.3d1.3D_2", "continuum"},
-        {131, 0, 1.51634, "he_i", "1s1.3d1.3D_1", "continuum"},
-        {132, 0, 0.5541, "he_i", "1s1.5p1.1P", "continuum"},
-        {133, 0, 4.77038, "he_i", "1s1.2s1.3S_1", "continuum"},
-        {176, 0, 0.852982, "he_i", "1s1.4f1.1F_3", "continuum"},
-        {177, 0, 0.847921, "he_i", "1s1.4p1.1P_1", "continuum"},
-        {178, 0, 1.5109, "he_ii", "1s0.6s1.2S", "continuum"},
-        {179, 0, 1.5109, "he_ii", "1s0.6f1.2F", "continuum"},
-        {180, 0, 3.40331, "he_ii", "1s0.4s1.2S_1/2", "continuum"},
-        {181, 0, 3.40323, "he_ii", "1s0.4d1.2D_3/2", "continuum"},
-        {182, 0, 3.4032, "he_ii", "1s0.4d1.2D_5/2", "continuum"},
-        {183, 0, 6.04847, "he_ii", "1s0.3d1.2D_3/2", "continuum"},
-        {184, 0, 6.0484, "he_ii", "1s0.3d1.2D_5/2", "continuum"},
-        {185, 0, 2.1789, "he_ii", "1s0.5s1.2S_1/2", "continuum"},
-        {186, 0, 6.04867, "he_ii", "1s0.3s1.2S_1/2", "continuum"},
-        {187, 0, 3.40332, "he_ii", "1s0.4p1.2P_1/2", "continuum"},
-        {188, 0, 3.40323, "he_ii", "1s0.4p1.2P_3/2", "continuum"},
-        {189, 0, 1.5109, "he_ii", "1s0.6g1.2G", "continuum"},
-        {190, 0, 1.5109, "he_ii", "1s0.6d1.2D", "continuum"},
-        {191, 0, 3.4032, "he_ii", "1s0.4f1.2F_5/2", "continuum"},
-        {192, 0, 3.40318, "he_ii", "1s0.4f1.2F_7/2", "continuum"},
-        {193, 0, 2.17884, "he_ii", "1s0.5f1.2F_5/2", "continuum"},
-        {194, 0, 2.17884, "he_ii", "1s0.5f1.2F_7/2", "continuum"},
-        {195, 0, 2.17891, "he_ii", "1s0.5p1.2P_1/2", "continuum"},
-        {196, 0, 2.17886, "he_ii", "1s0.5p1.2P_3/2", "continuum"},
-        {197, 0, 1.5109, "he_ii", "1s0.6h1.2H", "continuum"},
-        {198, 0, 2.17884, "he_ii", "1s0.5g1.2G_7/2", "continuum"},
-        {199, 0, 2.17883, "he_ii", "1s0.5g1.2G_9/2", "continuum"},
-        {200, 0, 1.5109, "he_ii", "1s0.6p1.2P", "continuum"},
-        {201, 0, 2.17886, "he_ii", "1s0.5d1.2D_3/2", "continuum"},
-        {202, 0, 2.17884, "he_ii", "1s0.5d1.2D_5/2", "continuum"},
-        {203, 0, 13.6069, "he_ii", "1s0.2s1.2S_1/2", "continuum"},
-        {204, 0, 13.607, "he_ii", "1s0.2p1.2P_1/2", "continuum"},
-        {205, 0, 13.6062, "he_ii", "1s0.2p1.2P_3/2", "continuum"},
-        {206, 0, 6.04869, "he_ii", "1s0.3p1.2P_1/2", "continuum"},
-        {207, 0, 6.04847, "he_ii", "1s0.3p1.2P_3/2", "continuum"},
-        {208, 0, 54.42, "he_ii", "1s1.2S_1/2", "continuum"},
-        {209, 0, 0.377697, "he_ii", "superlev", "continuum"},
-        {7066, 0, 80.1, "mg_iii", "2p6.1S_0", "continuum"},
-        {7067, 0, 80.1, "mg_iii", "2p6.1S_0", "continuum"},
-        {7068, 0, 80.1, "mg_iii", "2p6.1S_0", "continuum"},
-        {7069, 0, 0.556198, "mg_iii", "superlevel", "continuum"},
-        {7102, 0, 109, "mg_iv", "2p5.2P_3/2", "continuum"},
-        {7103, 0, 109, "mg_iv", "2p5.2P_3/2", "continuum"},
-        {7104, 0, 109, "mg_iv", "2p5.2P_3/2", "continuum"},
-        {7105, 0, 109, "mg_iv", "2p5.2P_3/2", "continuum"},
-        {7106, 0, 109, "mg_iv", "2p5.2P_3/2", "continuum"},
-        {7107, 0, 109, "mg_iv", "2p5.2P_3/2", "continuum"},
-        {7108, 0, 109, "mg_iv", "2p5.2P_3/2", "continuum"},
-        {7109, 0, 109, "mg_iv", "2p5.2P_3/2", "continuum"},
-        {7110, 0, 109, "mg_iv", "2p5.2P_3/2", "continuum"},
-        {7111, 0, 109, "mg_iv", "2p5.2P_3/2", "continuum"},
-        {7112, 0, 108.724, "mg_iv", "2p5.2P_1/2", "continuum"},
-        {7113, 0, 108.724, "mg_iv", "2p5.2P_1/2", "continuum"},
-        {7114, 0, 108.724, "mg_iv", "2p5.2P_1/2", "continuum"},
-        {7115, 0, 108.724, "mg_iv", "2p5.2P_1/2", "continuum"},
-        {7116, 0, 108.724, "mg_iv", "2p5.2P_1/2", "continuum"},
-        {7117, 0, 108.724, "mg_iv", "2p5.2P_1/2", "continuum"},
-        {7118, 0, 108.724, "mg_iv", "2p5.2P_1/2", "continuum"},
-        {7119, 0, 108.724, "mg_iv", "2p5.2P_1/2", "continuum"},
-        {7120, 0, 108.724, "mg_iv", "2p5.2P_1/2", "continuum"},
-        {7121, 0, 108.724, "mg_iv", "2p5.2P_1/2", "continuum"},
-        {7122, 0, 70.3911, "mg_iv", "2s1.2p6.2S_1/2", "continuum"},
-        {7123, 0, 70.3911, "mg_iv", "2s1.2p6.2S_1/2", "continuum"},
-        {7124, 0, 70.3911, "mg_iv", "2s1.2p6.2S_1/2", "continuum"},
-        {7125, 0, 0.757004, "mg_iv", "superlevel", "continuum"},
-        {7281, 0, 141, "mg_v", "2p4.3P_2", "continuum"},
-        {7282, 0, 141, "mg_v", "2p4.3P_2", "continuum"},
-        {7283, 0, 141, "mg_v", "2p4.3P_2", "continuum"},
-        {7284, 0, 141, "mg_v", "2p4.3P_2", "continuum"},
-        {7285, 0, 141, "mg_v", "2p4.3P_2", "continuum"},
-        {7286, 0, 141, "mg_v", "2p4.3P_2", "continuum"},
-        {7287, 0, 141, "mg_v", "2p4.3P_2", "continuum"},
-        {7288, 0, 141, "mg_v", "2p4.3P_2", "continuum"},
-        {7289, 0, 141, "mg_v", "2p4.3P_2", "continuum"},
-        {7290, 0, 141, "mg_v", "2p4.3P_2", "continuum"},
-        {7291, 0, 141, "mg_v", "2p4.3P_2", "continuum"},
-        {7292, 0, 141, "mg_v", "2p4.3P_2", "continuum"},
-        {7293, 0, 141, "mg_v", "2p4.3P_2", "continuum"},
-        {7294, 0, 141, "mg_v", "2p4.3P_2", "continuum"},
-        {7295, 0, 141, "mg_v", "2p4.3P_2", "continuum"},
-        {7296, 0, 140.779, "mg_v", "2p4.3P_1", "continuum"},
-        {7297, 0, 140.779, "mg_v", "2p4.3P_1", "continuum"},
-        {7298, 0, 140.779, "mg_v", "2p4.3P_1", "continuum"},
-        {7299, 0, 140.779, "mg_v", "2p4.3P_1", "continuum"},
-        {7300, 0, 140.779, "mg_v", "2p4.3P_1", "continuum"},
-        {7301, 0, 140.779, "mg_v", "2p4.3P_1", "continuum"},
-        {7302, 0, 140.779, "mg_v", "2p4.3P_1", "continuum"},
-        {7303, 0, 140.779, "mg_v", "2p4.3P_1", "continuum"},
-        {7304, 0, 140.779, "mg_v", "2p4.3P_1", "continuum"},
-        {7305, 0, 140.779, "mg_v", "2p4.3P_1", "continuum"},
-        {7306, 0, 140.779, "mg_v", "2p4.3P_1", "continuum"},
-        {7307, 0, 140.779, "mg_v", "2p4.3P_1", "continuum"},
-        {7308, 0, 140.779, "mg_v", "2p4.3P_1", "continuum"},
-        {7309, 0, 140.779, "mg_v", "2p4.3P_1", "continuum"},
-        {7310, 0, 140.779, "mg_v", "2p4.3P_1", "continuum"},
-        {7311, 0, 140.687, "mg_v", "2p4.3P_0", "continuum"},
-        {7312, 0, 140.687, "mg_v", "2p4.3P_0", "continuum"},
-        {7313, 0, 140.687, "mg_v", "2p4.3P_0", "continuum"},
-        {7314, 0, 140.687, "mg_v", "2p4.3P_0", "continuum"},
-        {7315, 0, 140.687, "mg_v", "2p4.3P_0", "continuum"},
-        {7316, 0, 140.687, "mg_v", "2p4.3P_0", "continuum"},
-        {7317, 0, 140.687, "mg_v", "2p4.3P_0", "continuum"},
-        {7318, 0, 140.687, "mg_v", "2p4.3P_0", "continuum"},
-        {7319, 0, 140.687, "mg_v", "2p4.3P_0", "continuum"},
-        {7320, 0, 140.687, "mg_v", "2p4.3P_0", "continuum"},
-        {7321, 0, 140.687, "mg_v", "2p4.3P_0", "continuum"},
-        {7322, 0, 140.687, "mg_v", "2p4.3P_0", "continuum"},
-        {7323, 0, 140.687, "mg_v", "2p4.3P_0", "continuum"},
-        {7324, 0, 140.687, "mg_v", "2p4.3P_0", "continuum"},
-        {7325, 0, 140.687, "mg_v", "2p4.3P_0", "continuum"},
-        {7326, 0, 136.548, "mg_v", "2p4.1D_2", "continuum"},
-        {7327, 0, 136.548, "mg_v", "2p4.1D_2", "continuum"},
-        {7328, 0, 136.548, "mg_v", "2p4.1D_2", "continuum"},
-        {7329, 0, 136.548, "mg_v", "2p4.1D_2", "continuum"},
-        {7330, 0, 136.548, "mg_v", "2p4.1D_2", "continuum"},
-        {7331, 0, 136.548, "mg_v", "2p4.1D_2", "continuum"},
-        {7332, 0, 136.548, "mg_v", "2p4.1D_2", "continuum"},
-        {7333, 0, 136.548, "mg_v", "2p4.1D_2", "continuum"},
-        {7334, 0, 136.548, "mg_v", "2p4.1D_2", "continuum"},
-        {7335, 0, 136.548, "mg_v", "2p4.1D_2", "continuum"},
-        {7336, 0, 136.548, "mg_v", "2p4.1D_2", "continuum"},
-        {7337, 0, 136.548, "mg_v", "2p4.1D_2", "continuum"},
-        {7338, 0, 136.548, "mg_v", "2p4.1D_2", "continuum"},
-        {7339, 0, 136.548, "mg_v", "2p4.1D_2", "continuum"},
-        {7340, 0, 136.548, "mg_v", "2p4.1D_2", "continuum"},
-        {7341, 0, 131.423, "mg_v", "2p4.1S_0", "continuum"},
-        {7342, 0, 131.423, "mg_v", "2p4.1S_0", "continuum"},
-        {7343, 0, 131.423, "mg_v", "2p4.1S_0", "continuum"},
-        {7344, 0, 131.423, "mg_v", "2p4.1S_0", "continuum"},
-        {7345, 0, 131.423, "mg_v", "2p4.1S_0", "continuum"},
-        {7346, 0, 131.423, "mg_v", "2p4.1S_0", "continuum"},
-        {7347, 0, 131.423, "mg_v", "2p4.1S_0", "continuum"},
-        {7348, 0, 131.423, "mg_v", "2p4.1S_0", "continuum"},
-        {7349, 0, 131.423, "mg_v", "2p4.1S_0", "continuum"},
-        {7350, 0, 131.423, "mg_v", "2p4.1S_0", "continuum"},
-        {7351, 0, 131.423, "mg_v", "2p4.1S_0", "continuum"},
-        {7352, 0, 131.423, "mg_v", "2p4.1S_0", "continuum"},
-        {7353, 0, 131.423, "mg_v", "2p4.1S_0", "continuum"},
-        {7354, 0, 131.423, "mg_v", "2p4.1S_0", "continuum"},
-        {7355, 0, 131.423, "mg_v", "2p4.1S_0", "continuum"},
-        {7356, 0, 105.901, "mg_v", "2s1.2p5.3P_2", "continuum"},
-        {7357, 0, 105.901, "mg_v", "2s1.2p5.3P_2", "continuum"},
-        {7358, 0, 105.701, "mg_v", "2s1.2p5.3P_1", "continuum"},
-        {7359, 0, 105.701, "mg_v", "2s1.2p5.3P_1", "continuum"},
-        {7360, 0, 105.591, "mg_v", "2s1.2p5.3P_0", "continuum"},
-        {7361, 0, 105.591, "mg_v", "2s1.2p5.3P_0", "continuum"},
-        {7362, 0, 91.7391, "mg_v", "2s1.2p5.1P_1", "continuum"},
-        {7363, 0, 91.7391, "mg_v", "2s1.2p5.1P_1", "continuum"},
-        {7364, 0, 58.8366, "mg_v", "2s0.2p6.1S_0", "continuum"},
-        {7365, 0, 58.8366, "mg_v", "2s0.2p6.1S_0", "continuum"},
-        {7366, 0, 0.979004, "mg_v", "superlevel", "continuum"},
-        {7617, 0, 187, "mg_vi", "2p3.4S_3/2", "continuum"},
-        {7618, 0, 187, "mg_vi", "2p3.4S_3/2", "continuum"},
-        {7619, 0, 187, "mg_vi", "2p3.4S_3/2", "continuum"},
-        {7620, 0, 187, "mg_vi", "2p3.4S_3/2", "continuum"},
-        {7621, 0, 187, "mg_vi", "2p3.4S_3/2", "continuum"},
-        {7622, 0, 187, "mg_vi", "2p3.4S_3/2", "continuum"},
-        {7623, 0, 187, "mg_vi", "2p3.4S_3/2", "continuum"},
-        {7624, 0, 187, "mg_vi", "2p3.4S_3/2", "continuum"},
-        {7625, 0, 187, "mg_vi", "2p3.4S_3/2", "continuum"},
-        {7627, 0, 187, "mg_vi", "2p3.4S_3/2", "continuum"},
-        {7628, 0, 187, "mg_vi", "2p3.4S_3/2", "continuum"},
-        {7630, 0, 187, "mg_vi", "2p3.4S_3/2", "continuum"},
-        {7631, 0, 187, "mg_vi", "2p3.4S_3/2", "continuum"},
-        {7637, 0, 180.138, "mg_vi", "2p3.2D_3/2", "continuum"},
-        {7638, 0, 180.138, "mg_vi", "2p3.2D_3/2", "continuum"},
-        {7639, 0, 180.138, "mg_vi", "2p3.2D_3/2", "continuum"},
-        {7640, 0, 180.138, "mg_vi", "2p3.2D_3/2", "continuum"},
-        {7641, 0, 180.138, "mg_vi", "2p3.2D_3/2", "continuum"},
-        {7642, 0, 180.138, "mg_vi", "2p3.2D_3/2", "continuum"},
-        {7643, 0, 180.138, "mg_vi", "2p3.2D_3/2", "continuum"},
-        {7644, 0, 180.138, "mg_vi", "2p3.2D_3/2", "continuum"},
-        {7645, 0, 180.138, "mg_vi", "2p3.2D_3/2", "continuum"},
-        {7646, 0, 180.138, "mg_vi", "2p3.2D_3/2", "continuum"},
-        {7647, 0, 180.138, "mg_vi", "2p3.2D_3/2", "continuum"},
-        {7648, 0, 180.138, "mg_vi", "2p3.2D_3/2", "continuum"},
-        {7649, 0, 180.138, "mg_vi", "2p3.2D_3/2", "continuum"},
-        {7650, 0, 180.138, "mg_vi", "2p3.2D_3/2", "continuum"},
-        {7651, 0, 180.138, "mg_vi", "2p3.2D_3/2", "continuum"},
-        {7652, 0, 180.138, "mg_vi", "2p3.2D_3/2", "continuum"},
-        {7653, 0, 180.138, "mg_vi", "2p3.2D_3/2", "continuum"},
-        {7654, 0, 180.138, "mg_vi", "2p3.2D_3/2", "continuum"},
-        {7655, 0, 180.138, "mg_vi", "2p3.2D_3/2", "continuum"},
-        {7657, 0, 180.14, "mg_vi", "2p3.2D_5/2", "continuum"},
-        {7658, 0, 180.14, "mg_vi", "2p3.2D_5/2", "continuum"},
-        {7659, 0, 180.14, "mg_vi", "2p3.2D_5/2", "continuum"},
-        {7660, 0, 180.14, "mg_vi", "2p3.2D_5/2", "continuum"},
-        {7661, 0, 180.14, "mg_vi", "2p3.2D_5/2", "continuum"},
-        {7662, 0, 180.14, "mg_vi", "2p3.2D_5/2", "continuum"},
-        {7663, 0, 180.14, "mg_vi", "2p3.2D_5/2", "continuum"},
-        {7664, 0, 180.14, "mg_vi", "2p3.2D_5/2", "continuum"},
-        {7665, 0, 180.14, "mg_vi", "2p3.2D_5/2", "continuum"},
-        {7666, 0, 180.14, "mg_vi", "2p3.2D_5/2", "continuum"},
-        {7667, 0, 180.14, "mg_vi", "2p3.2D_5/2", "continuum"},
-        {7668, 0, 180.14, "mg_vi", "2p3.2D_5/2", "continuum"},
-        {7669, 0, 180.14, "mg_vi", "2p3.2D_5/2", "continuum"},
-        {7670, 0, 180.14, "mg_vi", "2p3.2D_5/2", "continuum"},
-        {7671, 0, 180.14, "mg_vi", "2p3.2D_5/2", "continuum"},
-        {7672, 0, 180.14, "mg_vi", "2p3.2D_5/2", "continuum"},
-        {7673, 0, 180.14, "mg_vi", "2p3.2D_5/2", "continuum"},
-        {7675, 0, 180.14, "mg_vi", "2p3.2D_5/2", "continuum"},
-        {7677, 0, 176.6, "mg_vi", "2p3.2P_1/2", "continuum"},
-        {7678, 0, 176.6, "mg_vi", "2p3.2P_1/2", "continuum"},
-        {7679, 0, 176.6, "mg_vi", "2p3.2P_1/2", "continuum"},
-        {7680, 0, 176.6, "mg_vi", "2p3.2P_1/2", "continuum"},
-        {7681, 0, 176.6, "mg_vi", "2p3.2P_1/2", "continuum"},
-        {7682, 0, 176.6, "mg_vi", "2p3.2P_1/2", "continuum"},
-        {7683, 0, 176.6, "mg_vi", "2p3.2P_1/2", "continuum"},
-        {7684, 0, 176.6, "mg_vi", "2p3.2P_1/2", "continuum"},
-        {7685, 0, 176.6, "mg_vi", "2p3.2P_1/2", "continuum"},
-        {7686, 0, 176.6, "mg_vi", "2p3.2P_1/2", "continuum"},
-        {7687, 0, 176.6, "mg_vi", "2p3.2P_1/2", "continuum"},
-        {7688, 0, 176.6, "mg_vi", "2p3.2P_1/2", "continuum"},
-        {7689, 0, 176.6, "mg_vi", "2p3.2P_1/2", "continuum"},
-        {7690, 0, 176.6, "mg_vi", "2p3.2P_1/2", "continuum"},
-        {7691, 0, 176.6, "mg_vi", "2p3.2P_1/2", "continuum"},
-        {7697, 0, 176.586, "mg_vi", "2p3.2P_3/2", "continuum"},
-        {7698, 0, 176.586, "mg_vi", "2p3.2P_3/2", "continuum"},
-        {7699, 0, 176.586, "mg_vi", "2p3.2P_3/2", "continuum"},
-        {7700, 0, 176.586, "mg_vi", "2p3.2P_3/2", "continuum"},
-        {7701, 0, 176.586, "mg_vi", "2p3.2P_3/2", "continuum"},
-        {7702, 0, 176.586, "mg_vi", "2p3.2P_3/2", "continuum"},
-        {7703, 0, 176.586, "mg_vi", "2p3.2P_3/2", "continuum"},
-        {7704, 0, 176.586, "mg_vi", "2p3.2P_3/2", "continuum"},
-        {7705, 0, 176.586, "mg_vi", "2p3.2P_3/2", "continuum"},
-        {7707, 0, 176.586, "mg_vi", "2p3.2P_3/2", "continuum"},
-        {7708, 0, 176.586, "mg_vi", "2p3.2P_3/2", "continuum"},
-        {7709, 0, 176.586, "mg_vi", "2p3.2P_3/2", "continuum"},
-        {7710, 0, 176.586, "mg_vi", "2p3.2P_3/2", "continuum"},
-        {7711, 0, 176.586, "mg_vi", "2p3.2P_3/2", "continuum"},
-        {7717, 0, 156.271, "mg_vi", "2s1.2p4.4P_5/2", "continuum"},
-        {7718, 0, 156.068, "mg_vi", "2s1.2p4.4P_3/2", "continuum"},
-        {7719, 0, 155.961, "mg_vi", "2s1.2p4.4P_1/2", "continuum"},
-        {7720, 0, 144.641, "mg_vi", "2s1.2p4.2D_3/2", "continuum"},
-        {7721, 0, 144.646, "mg_vi", "2s1.2p4.2D_5/2", "continuum"},
-        {7722, 0, 137.201, "mg_vi", "2s1.2p4.2S_1/2", "continuum"},
-        {7723, 0, 134.305, "mg_vi", "2s1.2p4.2P_3/2", "continuum"},
-        {7724, 0, 134.064, "mg_vi", "2s1.2p4.2P_1/2", "continuum"},
-        {7725, 0, 1.299, "mg_vi", "superlevel", "continuum"},
-        {7976, 0, 225, "mg_vii", "2p2.3P_0", "continuum"},
-        {7977, 0, 225, "mg_vii", "2p2.3P_0", "continuum"},
-        {7978, 0, 225, "mg_vii", "2p2.3P_0", "continuum"},
-        {7979, 0, 225, "mg_vii", "2p2.3P_0", "continuum"},
-        {7980, 0, 225, "mg_vii", "2p2.3P_0", "continuum"},
-        {7984, 0, 225, "mg_vii", "2p2.3P_0", "continuum"},
-        {7991, 0, 224.863, "mg_vii", "2p2.3P_1", "continuum"},
-        {7992, 0, 224.863, "mg_vii", "2p2.3P_1", "continuum"},
-        {7993, 0, 224.863, "mg_vii", "2p2.3P_1", "continuum"},
-        {7994, 0, 224.863, "mg_vii", "2p2.3P_1", "continuum"},
-        {7995, 0, 224.863, "mg_vii", "2p2.3P_1", "continuum"},
-        {7999, 0, 224.863, "mg_vii", "2p2.3P_1", "continuum"},
-        {8000, 0, 224.863, "mg_vii", "2p2.3P_1", "continuum"},
-        {8001, 0, 224.863, "mg_vii", "2p2.3P_1", "continuum"},
-        {8002, 0, 224.863, "mg_vii", "2p2.3P_1", "continuum"},
-        {8003, 0, 224.863, "mg_vii", "2p2.3P_1", "continuum"},
-        {8006, 0, 224.638, "mg_vii", "2p2.3P_2", "continuum"},
-        {8007, 0, 224.638, "mg_vii", "2p2.3P_2", "continuum"},
-        {8008, 0, 224.638, "mg_vii", "2p2.3P_2", "continuum"},
-        {8009, 0, 224.638, "mg_vii", "2p2.3P_2", "continuum"},
-        {8010, 0, 224.638, "mg_vii", "2p2.3P_2", "continuum"},
-        {8015, 0, 224.638, "mg_vii", "2p2.3P_2", "continuum"},
-        {8016, 0, 224.638, "mg_vii", "2p2.3P_2", "continuum"},
-        {8017, 0, 224.638, "mg_vii", "2p2.3P_2", "continuum"},
-        {8018, 0, 224.638, "mg_vii", "2p2.3P_2", "continuum"},
-        {8021, 0, 219.925, "mg_vii", "2p2.1D_2", "continuum"},
-        {8022, 0, 219.925, "mg_vii", "2p2.1D_2", "continuum"},
-        {8023, 0, 219.925, "mg_vii", "2p2.1D_2", "continuum"},
-        {8024, 0, 219.925, "mg_vii", "2p2.1D_2", "continuum"},
-        {8025, 0, 219.925, "mg_vii", "2p2.1D_2", "continuum"},
-        {8026, 0, 219.925, "mg_vii", "2p2.1D_2", "continuum"},
-        {8027, 0, 219.925, "mg_vii", "2p2.1D_2", "continuum"},
-        {8028, 0, 219.925, "mg_vii", "2p2.1D_2", "continuum"},
-        {8032, 0, 219.925, "mg_vii", "2p2.1D_2", "continuum"},
-        {8033, 0, 219.925, "mg_vii", "2p2.1D_2", "continuum"},
-        {8035, 0, 219.925, "mg_vii", "2p2.1D_2", "continuum"},
-        {8036, 0, 214.447, "mg_vii", "2p2.1S_0", "continuum"},
-        {8037, 0, 214.447, "mg_vii", "2p2.1S_0", "continuum"},
-        {8038, 0, 214.447, "mg_vii", "2p2.1S_0", "continuum"},
-        {8039, 0, 214.447, "mg_vii", "2p2.1S_0", "continuum"},
-        {8040, 0, 214.447, "mg_vii", "2p2.1S_0", "continuum"},
-        {8041, 0, 214.447, "mg_vii", "2p2.1S_0", "continuum"},
-        {8042, 0, 214.447, "mg_vii", "2p2.1S_0", "continuum"},
-        {8043, 0, 214.447, "mg_vii", "2p2.1S_0", "continuum"},
-        {8044, 0, 214.447, "mg_vii", "2p2.1S_0", "continuum"},
-        {8045, 0, 214.447, "mg_vii", "2p2.1S_0", "continuum"},
-        {8051, 0, 210.364, "mg_vii", "2s1.2p3.5S_2", "continuum"},
-        {8052, 0, 210.364, "mg_vii", "2s1.2p3.5S_2", "continuum"},
-        {8053, 0, 210.364, "mg_vii", "2s1.2p3.5S_2", "continuum"},
-        {8054, 0, 196.129, "mg_vii", "2s1.2p3.3D_2", "continuum"},
-        {8055, 0, 196.129, "mg_vii", "2s1.2p3.3D_2", "continuum"},
-        {8056, 0, 196.129, "mg_vii", "2s1.2p3.3D_2", "continuum"},
-        {8057, 0, 196.121, "mg_vii", "2s1.2p3.3D_1", "continuum"},
-        {8058, 0, 196.121, "mg_vii", "2s1.2p3.3D_1", "continuum"},
-        {8059, 0, 196.121, "mg_vii", "2s1.2p3.3D_1", "continuum"},
-        {8060, 0, 196.142, "mg_vii", "2s1.2p3.3D_3", "continuum"},
-        {8061, 0, 196.142, "mg_vii", "2s1.2p3.3D_3", "continuum"},
-        {8062, 0, 196.142, "mg_vii", "2s1.2p3.3D_3", "continuum"},
-        {8063, 0, 190.925, "mg_vii", "2s1.2p3.3P_0", "continuum"},
-        {8064, 0, 190.925, "mg_vii", "2s1.2p3.3P_0", "continuum"},
-        {8065, 0, 190.925, "mg_vii", "2s1.2p3.3P_0", "continuum"},
-        {8066, 0, 190.931, "mg_vii", "2s1.2p3.3P_1", "continuum"},
-        {8067, 0, 190.931, "mg_vii", "2s1.2p3.3P_1", "continuum"},
-        {8068, 0, 190.931, "mg_vii", "2s1.2p3.3P_1", "continuum"},
-        {8069, 0, 190.93, "mg_vii", "2s1.2p3.3P_2", "continuum"},
-        {8070, 0, 190.93, "mg_vii", "2s1.2p3.3P_2", "continuum"},
-        {8071, 0, 190.93, "mg_vii", "2s1.2p3.3P_2", "continuum"},
-        {8072, 0, 181.078, "mg_vii", "2s1.2p3.1D_2", "continuum"},
-        {8073, 0, 181.078, "mg_vii", "2s1.2p3.1D_2", "continuum"},
-        {8074, 0, 181.078, "mg_vii", "2s1.2p3.1D_2", "continuum"},
-        {8075, 0, 180.122, "mg_vii", "2s1.2p3.3S_1", "continuum"},
-        {8076, 0, 180.122, "mg_vii", "2s1.2p3.3S_1", "continuum"},
-        {8077, 0, 180.122, "mg_vii", "2s1.2p3.3S_1", "continuum"},
-        {8078, 0, 175.78, "mg_vii", "2s1.2p3.1P_1", "continuum"},
-        {8079, 0, 175.78, "mg_vii", "2s1.2p3.1P_1", "continuum"},
-        {8080, 0, 175.78, "mg_vii", "2s1.2p3.1P_1", "continuum"},
-        {8081, 0, 157.789, "mg_vii", "2s0.2p4.3P_2", "continuum"},
-        {8082, 0, 157.532, "mg_vii", "2s0.2p4.3P_1", "continuum"},
-        {8083, 0, 157.424, "mg_vii", "2s0.2p4.3P_0", "continuum"},
-        {8084, 0, 153.58, "mg_vii", "2s0.2p4.1D_2", "continuum"},
-        {8085, 0, 143.398, "mg_vii", "2s0.2p4.1S_0", "continuum"},
-        {8086, 0, 95.167, "mg_vii", "2p1.3s1.3P_0", "continuum"},
-        {8087, 0, 95.167, "mg_vii", "2p1.3s1.3P_0", "continuum"},
-        {8088, 0, 95.069, "mg_vii", "2p1.3s1.3P_1", "continuum"},
-        {8089, 0, 95.069, "mg_vii", "2p1.3s1.3P_1", "continuum"},
-        {8090, 0, 94.761, "mg_vii", "2p1.3s1.3P_2", "continuum"},
-        {8091, 0, 94.761, "mg_vii", "2p1.3s1.3P_2", "continuum"},
-        {8092, 0, 93.504, "mg_vii", "2p1.3s1.1P_1", "continuum"},
-        {8093, 0, 93.504, "mg_vii", "2p1.3s1.1P_1", "continuum"},
-        {8094, 0, 85.879, "mg_vii", "2p1.3p1.1P_1", "continuum"},
-        {8095, 0, 85.879, "mg_vii", "2p1.3p1.1P_1", "continuum"},
-        {8096, 0, 85.345, "mg_vii", "2p1.3p1.3D_1", "continuum"},
-        {8097, 0, 85.345, "mg_vii", "2p1.3p1.3D_1", "continuum"},
-        {8098, 0, 85.233, "mg_vii", "2p1.3p1.3D_2", "continuum"},
-        {8099, 0, 85.233, "mg_vii", "2p1.3p1.3D_2", "continuum"},
-        {8100, 0, 84.99, "mg_vii", "2p1.3p1.3D_3", "continuum"},
-        {8101, 0, 84.99, "mg_vii", "2p1.3p1.3D_3", "continuum"},
-        {8102, 0, 84.128, "mg_vii", "2p1.3p1.3S_1", "continuum"},
-        {8103, 0, 84.128, "mg_vii", "2p1.3p1.3S_1", "continuum"},
-        {8104, 0, 85.732, "mg_vii", "2p1.3p1.3P_0", "continuum"},
-        {8105, 0, 85.732, "mg_vii", "2p1.3p1.3P_0", "continuum"},
-        {8106, 0, 85.584, "mg_vii", "2p1.3p1.3P_1", "continuum"},
-        {8107, 0, 85.584, "mg_vii", "2p1.3p1.3P_1", "continuum"},
-        {8108, 0, 85.472, "mg_vii", "2p1.3p1.3P_2", "continuum"},
-        {8109, 0, 85.472, "mg_vii", "2p1.3p1.3P_2", "continuum"},
-        {8110, 0, 80.672, "mg_vii", "2p1.3p1.1D_2", "continuum"},
-        {8111, 0, 80.672, "mg_vii", "2p1.3p1.1D_2", "continuum"},
-        {8112, 0, 78.018, "mg_vii", "2p1.3p1.1S_0", "continuum"},
-        {8113, 0, 78.018, "mg_vii", "2p1.3p1.1S_0", "continuum"},
-        {8114, 0, 78.915, "mg_vii", "2p1.3d1.3F_2", "continuum"},
-        {8115, 0, 78.915, "mg_vii", "2p1.3d1.3F_2", "continuum"},
-        {8116, 0, 76.65, "mg_vii", "2p1.3d1.3F_3", "continuum"},
-        {8117, 0, 76.65, "mg_vii", "2p1.3d1.3F_3", "continuum"},
-        {8118, 0, 78.647, "mg_vii", "2p1.3d1.1D_2", "continuum"},
-        {8119, 0, 78.647, "mg_vii", "2p1.3d1.1D_2", "continuum"},
-        {8120, 0, 76.455, "mg_vii", "2p1.3d1.3F_4", "continuum"},
-        {8121, 0, 76.455, "mg_vii", "2p1.3d1.3F_4", "continuum"},
-        {8122, 0, 77.304, "mg_vii", "2p1.3d1.3D_1", "continuum"},
-        {8123, 0, 77.304, "mg_vii", "2p1.3d1.3D_1", "continuum"},
-        {8124, 0, 77.252, "mg_vii", "2p1.3d1.3D_2", "continuum"},
-        {8125, 0, 77.252, "mg_vii", "2p1.3d1.3D_2", "continuum"},
-        {8126, 0, 77.143, "mg_vii", "2p1.3d1.3D_3", "continuum"},
-        {8127, 0, 77.143, "mg_vii", "2p1.3d1.3D_3", "continuum"},
-        {8128, 0, 76.684, "mg_vii", "2p1.3d1.3P_2", "continuum"},
-        {8129, 0, 76.684, "mg_vii", "2p1.3d1.3P_2", "continuum"},
-        {8130, 0, 76.597, "mg_vii", "2p1.3d1.3P_1", "continuum"},
-        {8131, 0, 76.597, "mg_vii", "2p1.3d1.3P_1", "continuum"},
-        {8132, 0, 76.548, "mg_vii", "2p1.3d1.3P_0", "continuum"},
-        {8133, 0, 76.548, "mg_vii", "2p1.3d1.3P_0", "continuum"},
-        {8134, 0, 74.695, "mg_vii", "2p1.3d1.1P_1", "continuum"},
-        {8135, 0, 74.695, "mg_vii", "2p1.3d1.1P_1", "continuum"},
-        {8136, 0, 74.818, "mg_vii", "2p1.3d1.1F_3", "continuum"},
-        {8137, 0, 74.818, "mg_vii", "2p1.3d1.1F_3", "continuum"},
-        {8138, 0, 1.562, "mg_vii", "superlevel", "continuum"},
-        {8219, 0, 266, "mg_viii", "2p1.2P_1/2", "continuum"},
-        {8220, 0, 266, "mg_viii", "2p1.2P_1/2", "continuum"},
-        {8221, 0, 266, "mg_viii", "2p1.2P_1/2", "continuum"},
-        {8222, 0, 266, "mg_viii", "2p1.2P_1/2", "continuum"},
-        {8223, 0, 266, "mg_viii", "2p1.2P_1/2", "continuum"},
-        {8229, 0, 265.591, "mg_viii", "2p1.2P_3/2", "continuum"},
-        {8231, 0, 265.591, "mg_viii", "2p1.2P_3/2", "continuum"},
-        {8232, 0, 265.591, "mg_viii", "2p1.2P_3/2", "continuum"},
-        {8233, 0, 265.591, "mg_viii", "2p1.2P_3/2", "continuum"},
-        {8236, 0, 265.591, "mg_viii", "2p1.2P_3/2", "continuum"},
-        {8239, 0, 249.891, "mg_viii", "2s1.2p2.4P_1/2", "continuum"},
-        {8240, 0, 249.891, "mg_viii", "2s1.2p2.4P_1/2", "continuum"},
-        {8241, 0, 249.891, "mg_viii", "2s1.2p2.4P_1/2", "continuum"},
-        {8242, 0, 249.75, "mg_viii", "2s1.2p2.4P_3/2", "continuum"},
-        {8243, 0, 249.75, "mg_viii", "2s1.2p2.4P_3/2", "continuum"},
-        {8244, 0, 249.75, "mg_viii", "2s1.2p2.4P_3/2", "continuum"},
-        {8245, 0, 249.543, "mg_viii", "2s1.2p2.4P_5/2", "continuum"},
-        {8246, 0, 249.543, "mg_viii", "2s1.2p2.4P_5/2", "continuum"},
-        {8247, 0, 249.543, "mg_viii", "2s1.2p2.4P_5/2", "continuum"},
-        {8248, 0, 237.21, "mg_viii", "2s1.2p2.2D_3/2", "continuum"},
-        {8249, 0, 237.21, "mg_viii", "2s1.2p2.2D_3/2", "continuum"},
-        {8250, 0, 237.21, "mg_viii", "2s1.2p2.2D_3/2", "continuum"},
-        {8251, 0, 237.214, "mg_viii", "2s1.2p2.2D_5/2", "continuum"},
-        {8252, 0, 237.214, "mg_viii", "2s1.2p2.2D_5/2", "continuum"},
-        {8253, 0, 237.214, "mg_viii", "2s1.2p2.2D_5/2", "continuum"},
-        {8254, 0, 229.033, "mg_viii", "2s1.2p2.2S_1/2", "continuum"},
-        {8255, 0, 229.033, "mg_viii", "2s1.2p2.2S_1/2", "continuum"},
-        {8256, 0, 229.033, "mg_viii", "2s1.2p2.2S_1/2", "continuum"},
-        {8257, 0, 226.5, "mg_viii", "2s1.2p2.2P_1/2", "continuum"},
-        {8258, 0, 226.5, "mg_viii", "2s1.2p2.2P_1/2", "continuum"},
-        {8259, 0, 226.5, "mg_viii", "2s1.2p2.2P_1/2", "continuum"},
-        {8260, 0, 226.252, "mg_viii", "2s1.2p2.2P_3/2", "continuum"},
-        {8261, 0, 226.252, "mg_viii", "2s1.2p2.2P_3/2", "continuum"},
-        {8262, 0, 226.252, "mg_viii", "2s1.2p2.2P_3/2", "continuum"},
-        {8263, 0, 214.74, "mg_viii", "2s0.2p3.4S_3/2", "continuum"},
-        {8264, 0, 214.74, "mg_viii", "2s0.2p3.4S_3/2", "continuum"},
-        {8265, 0, 214.74, "mg_viii", "2s0.2p3.4S_3/2", "continuum"},
-        {8266, 0, 208.27, "mg_viii", "2s0.2p3.2D_3/2", "continuum"},
-        {8267, 0, 208.27, "mg_viii", "2s0.2p3.2D_3/2", "continuum"},
-        {8268, 0, 208.27, "mg_viii", "2s0.2p3.2D_3/2", "continuum"},
-        {8269, 0, 208.279, "mg_viii", "2s0.2p3.2D_5/2", "continuum"},
-        {8270, 0, 208.279, "mg_viii", "2s0.2p3.2D_5/2", "continuum"},
-        {8271, 0, 208.279, "mg_viii", "2s0.2p3.2D_5/2", "continuum"},
-        {8272, 0, 200.979, "mg_viii", "2s0.2p3.2P_1/2", "continuum"},
-        {8273, 0, 200.979, "mg_viii", "2s0.2p3.2P_1/2", "continuum"},
-        {8274, 0, 200.979, "mg_viii", "2s0.2p3.2P_1/2", "continuum"},
-        {8275, 0, 200.955, "mg_viii", "2s0.2p3.2P_3/2", "continuum"},
-        {8276, 0, 200.955, "mg_viii", "2s0.2p3.2P_3/2", "continuum"},
-        {8277, 0, 200.955, "mg_viii", "2s0.2p3.2P_3/2", "continuum"},
-        {8278, 0, 115.956, "mg_viii", "2p0.3s1.2S_1/2", "continuum"},
-        {8279, 0, 91.457, "mg_viii", "2s1.2p1.3p1.2P_1/2", "continuum"},
-        {8280, 0, 91.457, "mg_viii", "2s1.2p1.3p1.2P_1/2", "continuum"},
-        {8281, 0, 91.457, "mg_viii", "2s1.2p1.3p1.2P_1/2", "continuum"},
-        {8282, 0, 92.397, "mg_viii", "2s1.2p1.3p1.4D_1/2", "continuum"},
-        {8283, 0, 92.397, "mg_viii", "2s1.2p1.3p1.4D_1/2", "continuum"},
-        {8284, 0, 92.397, "mg_viii", "2s1.2p1.3p1.4D_1/2", "continuum"},
-        {8285, 0, 89.929, "mg_viii", "2s1.2p1.3p1.4P_1/2", "continuum"},
-        {8286, 0, 89.929, "mg_viii", "2s1.2p1.3p1.4P_1/2", "continuum"},
-        {8287, 0, 89.929, "mg_viii", "2s1.2p1.3p1.4P_1/2", "continuum"},
-        {8288, 0, 84.946, "mg_viii", "2s1.2p1.3p1.2S_1/2", "continuum"},
-        {8289, 0, 84.946, "mg_viii", "2s1.2p1.3p1.2S_1/2", "continuum"},
-        {8290, 0, 84.946, "mg_viii", "2s1.2p1.3p1.2S_1/2", "continuum"},
-        {8291, 0, 73.906, "mg_viii", "2s1.2p1.3p1.2P_1/2#2", "continuum"},
-        {8292, 0, 73.088, "mg_viii", "2s1.2p1.3p1.2S_1/2#2", "continuum"},
-        {8293, 0, 69.199, "mg_viii", "2s0.2p2.3s1.4P_1/2", "continuum"},
-        {8294, 0, 69.199, "mg_viii", "2s0.2p2.3s1.4P_1/2", "continuum"},
-        {8295, 0, 69.199, "mg_viii", "2s0.2p2.3s1.4P_1/2", "continuum"},
-        {8296, 0, 65.748, "mg_viii", "2s0.2p2.3s1.2P_1/2", "continuum"},
-        {8297, 0, 65.748, "mg_viii", "2s0.2p2.3s1.2P_1/2", "continuum"},
-        {8298, 0, 65.748, "mg_viii", "2s0.2p2.3s1.2P_1/2", "continuum"},
-        {8299, 0, 55.983, "mg_viii", "2s0.2p2.3d1.4D_1/2", "continuum"},
-        {8300, 0, 55.983, "mg_viii", "2s0.2p2.3d1.4D_1/2", "continuum"},
-        {8301, 0, 55.983, "mg_viii", "2s0.2p2.3d1.4D_1/2", "continuum"},
-        {8302, 0, 55.713, "mg_viii", "2s0.2p2.3d1.2P_1/2", "continuum"},
-        {8303, 0, 55.713, "mg_viii", "2s0.2p2.3d1.2P_1/2", "continuum"},
-        {8304, 0, 55.713, "mg_viii", "2s0.2p2.3d1.2P_1/2", "continuum"},
-        {8305, 0, 53.19, "mg_viii", "2s0.2p2.3d1.4P_1/2", "continuum"},
-        {8306, 0, 53.19, "mg_viii", "2s0.2p2.3d1.4P_1/2", "continuum"},
-        {8307, 0, 53.19, "mg_viii", "2s0.2p2.3d1.4P_1/2", "continuum"},
-        {8308, 0, 51.46, "mg_viii", "2s0.2p2.3s1.2S_1/2", "continuum"},
-        {8309, 0, 48.667, "mg_viii", "2s0.2p2.3d1.2P_1/2#2", "continuum"},
-        {8310, 0, 45.298, "mg_viii", "2s0.2p2.3d1.2S_1/2", "continuum"},
-        {8311, 0, 100.444, "mg_viii", "2p0.3d1.2D_3/2", "continuum"},
-        {8312, 0, 100.444, "mg_viii", "2p0.3d1.2D_3/2", "continuum"},
-        {8313, 0, 100.444, "mg_viii", "2p0.3d1.2D_3/2", "continuum"},
-        {8314, 0, 91.33, "mg_viii", "2s1.2p1.3p1.2P_3/2", "continuum"},
-        {8315, 0, 91.33, "mg_viii", "2s1.2p1.3p1.2P_3/2", "continuum"},
-        {8316, 0, 91.33, "mg_viii", "2s1.2p1.3p1.2P_3/2", "continuum"},
-        {8317, 0, 92.333, "mg_viii", "2s1.2p1.3p1.4D_3/2", "continuum"},
-        {8318, 0, 92.333, "mg_viii", "2s1.2p1.3p1.4D_3/2", "continuum"},
-        {8319, 0, 92.333, "mg_viii", "2s1.2p1.3p1.4D_3/2", "continuum"},
-        {8320, 0, 90.848, "mg_viii", "2s1.2p1.3p1.4S_3/2", "continuum"},
-        {8321, 0, 90.848, "mg_viii", "2s1.2p1.3p1.4S_3/2", "continuum"},
-        {8322, 0, 90.848, "mg_viii", "2s1.2p1.3p1.4S_3/2", "continuum"},
-        {8323, 0, 89.82, "mg_viii", "2s1.2p1.3p1.4P_3/2", "continuum"},
-        {8324, 0, 89.82, "mg_viii", "2s1.2p1.3p1.4P_3/2", "continuum"},
-        {8325, 0, 89.82, "mg_viii", "2s1.2p1.3p1.4P_3/2", "continuum"},
-        {8326, 0, 87.462, "mg_viii", "2s1.2p1.3p1.2D_3/2", "continuum"},
-        {8327, 0, 87.462, "mg_viii", "2s1.2p1.3p1.2D_3/2", "continuum"},
-        {8328, 0, 87.462, "mg_viii", "2s1.2p1.3p1.2D_3/2", "continuum"},
-        {8329, 0, 73.835, "mg_viii", "2s1.2p1.3p1.2P_3/2#2", "continuum"},
-        {8330, 0, 73.858, "mg_viii", "2s1.2p1.3p1.2D_3/2#2", "continuum"},
-        {8331, 0, 69.047, "mg_viii", "2s0.2p2.3s1.4P_3/2", "continuum"},
-        {8332, 0, 69.047, "mg_viii", "2s0.2p2.3s1.4P_3/2", "continuum"},
-        {8333, 0, 69.047, "mg_viii", "2s0.2p2.3s1.4P_3/2", "continuum"},
-        {8334, 0, 65.497, "mg_viii", "2s0.2p2.3s1.2P_3/2", "continuum"},
-        {8335, 0, 65.497, "mg_viii", "2s0.2p2.3s1.2P_3/2", "continuum"},
-        {8336, 0, 65.497, "mg_viii", "2s0.2p2.3s1.2P_3/2", "continuum"},
-        {8337, 0, 62.901, "mg_viii", "2s0.2p2.3s1.2D_3/2", "continuum"},
-        {8338, 0, 57.417, "mg_viii", "2s0.2p2.3d1.4F_3/2", "continuum"},
-        {8339, 0, 57.417, "mg_viii", "2s0.2p2.3d1.4F_3/2", "continuum"},
-        {8340, 0, 57.417, "mg_viii", "2s0.2p2.3d1.4F_3/2", "continuum"},
-        {8341, 0, 56.072, "mg_viii", "2s0.2p2.3d1.2P_3/2", "continuum"},
-        {8342, 0, 56.072, "mg_viii", "2s0.2p2.3d1.2P_3/2", "continuum"},
-        {8343, 0, 56.072, "mg_viii", "2s0.2p2.3d1.2P_3/2", "continuum"},
-        {8344, 0, 55.842, "mg_viii", "2s0.2p2.3d1.4D_3/2", "continuum"},
-        {8345, 0, 55.842, "mg_viii", "2s0.2p2.3d1.4D_3/2", "continuum"},
-        {8346, 0, 55.842, "mg_viii", "2s0.2p2.3d1.4D_3/2", "continuum"},
-        {8347, 0, 53.244, "mg_viii", "2s0.2p2.3d1.4P_3/2", "continuum"},
-        {8348, 0, 53.244, "mg_viii", "2s0.2p2.3d1.4P_3/2", "continuum"},
-        {8349, 0, 53.244, "mg_viii", "2s0.2p2.3d1.4P_3/2", "continuum"},
-        {8350, 0, 50.821, "mg_viii", "2s0.2p2.3d1.2D_3/2", "continuum"},
-        {8351, 0, 50.821, "mg_viii", "2s0.2p2.3d1.2D_3/2", "continuum"},
-        {8352, 0, 50.821, "mg_viii", "2s0.2p2.3d1.2D_3/2", "continuum"},
-        {8353, 0, 48.698, "mg_viii", "2s0.2p2.3d1.2D_3/2#2", "continuum"},
-        {8354, 0, 48.525, "mg_viii", "2s0.2p2.3d1.2P_3/2#2", "continuum"},
-        {8355, 0, 36.871, "mg_viii", "2s0.2p2.3d1.2D_3/2#3", "continuum"},
-        {8356, 0, 100.423, "mg_viii", "2p0.3d1.2D_5/2", "continuum"},
-        {8357, 0, 100.423, "mg_viii", "2p0.3d1.2D_5/2", "continuum"},
-        {8358, 0, 100.423, "mg_viii", "2p0.3d1.2D_5/2", "continuum"},
-        {8359, 0, 92.23, "mg_viii", "2s1.2p1.3p1.4D_5/2", "continuum"},
-        {8360, 0, 92.23, "mg_viii", "2s1.2p1.3p1.4D_5/2", "continuum"},
-        {8361, 0, 92.23, "mg_viii", "2s1.2p1.3p1.4D_5/2", "continuum"},
-        {8362, 0, 89.696, "mg_viii", "2s1.2p1.3p1.4P_5/2", "continuum"},
-        {8363, 0, 89.696, "mg_viii", "2s1.2p1.3p1.4P_5/2", "continuum"},
-        {8364, 0, 89.696, "mg_viii", "2s1.2p1.3p1.4P_5/2", "continuum"},
-        {8365, 0, 87.187, "mg_viii", "2s1.2p1.3p1.2D_5/2", "continuum"},
-        {8366, 0, 87.187, "mg_viii", "2s1.2p1.3p1.2D_5/2", "continuum"},
-        {8367, 0, 87.187, "mg_viii", "2s1.2p1.3p1.2D_5/2", "continuum"},
-        {8368, 0, 74.047, "mg_viii", "2s1.2p1.3p1.2D_5/2#2", "continuum"},
-        {8369, 0, 68.799, "mg_viii", "2s0.2p2.3s1.4P_5/2", "continuum"},
-        {8370, 0, 68.799, "mg_viii", "2s0.2p2.3s1.4P_5/2", "continuum"},
-        {8371, 0, 68.799, "mg_viii", "2s0.2p2.3s1.4P_5/2", "continuum"},
-        {8372, 0, 62.787, "mg_viii", "2s0.2p2.3s1.2D_5/2", "continuum"},
-        {8373, 0, 57.332, "mg_viii", "2s0.2p2.3d1.4F_5/2", "continuum"},
-        {8374, 0, 57.332, "mg_viii", "2s0.2p2.3d1.4F_5/2", "continuum"},
-        {8375, 0, 57.332, "mg_viii", "2s0.2p2.3d1.4F_5/2", "continuum"},
-        {8376, 0, 55.851, "mg_viii", "2s0.2p2.3d1.4D_5/2", "continuum"},
-        {8377, 0, 55.851, "mg_viii", "2s0.2p2.3d1.4D_5/2", "continuum"},
-        {8378, 0, 55.851, "mg_viii", "2s0.2p2.3d1.4D_5/2", "continuum"},
-        {8379, 0, 54.962, "mg_viii", "2s0.2p2.3d1.2F_5/2", "continuum"},
-        {8380, 0, 54.962, "mg_viii", "2s0.2p2.3d1.2F_5/2", "continuum"},
-        {8381, 0, 54.962, "mg_viii", "2s0.2p2.3d1.2F_5/2", "continuum"},
-        {8382, 0, 53.344, "mg_viii", "2s0.2p2.3d1.4P_5/2", "continuum"},
-        {8383, 0, 53.344, "mg_viii", "2s0.2p2.3d1.4P_5/2", "continuum"},
-        {8384, 0, 53.344, "mg_viii", "2s0.2p2.3d1.4P_5/2", "continuum"},
-        {8385, 0, 54.909, "mg_viii", "2s0.2p2.3d1.2D_5/2", "continuum"},
-        {8386, 0, 54.909, "mg_viii", "2s0.2p2.3d1.2D_5/2", "continuum"},
-        {8387, 0, 54.909, "mg_viii", "2s0.2p2.3d1.2D_5/2", "continuum"},
-        {8388, 0, 51.114, "mg_viii", "2s0.2p2.3d1.2D_5/2#2", "continuum"},
-        {8389, 0, 48.205, "mg_viii", "2s0.2p2.3d1.2F_5/2#2", "continuum"},
-        {8390, 0, 36.92, "mg_viii", "2s0.2p2.3d1.2D_5/2#3", "continuum"},
-        {8391, 0, 92, "mg_viii", "2s1.2p1.3p1.4D_7/2", "continuum"},
-        {8392, 0, 92, "mg_viii", "2s1.2p1.3p1.4D_7/2", "continuum"},
-        {8393, 0, 92, "mg_viii", "2s1.2p1.3p1.4D_7/2", "continuum"},
-        {8394, 0, 57.211, "mg_viii", "2s0.2p2.3d1.4F_7/2", "continuum"},
-        {8395, 0, 57.211, "mg_viii", "2s0.2p2.3d1.4F_7/2", "continuum"},
-        {8396, 0, 57.211, "mg_viii", "2s0.2p2.3d1.4F_7/2", "continuum"},
-        {8397, 0, 55.783, "mg_viii", "2s0.2p2.3d1.4D_7/2", "continuum"},
-        {8398, 0, 55.783, "mg_viii", "2s0.2p2.3d1.4D_7/2", "continuum"},
-        {8399, 0, 55.783, "mg_viii", "2s0.2p2.3d1.4D_7/2", "continuum"},
-        {8400, 0, 55.066, "mg_viii", "2s0.2p2.3d1.2F_7/2", "continuum"},
-        {8401, 0, 55.066, "mg_viii", "2s0.2p2.3d1.2F_7/2", "continuum"},
-        {8402, 0, 55.066, "mg_viii", "2s0.2p2.3d1.2F_7/2", "continuum"},
-        {8403, 0, 48.854, "mg_viii", "2s0.2p2.3d1.2F_7/2#2", "continuum"},
-        {8404, 0, 57.055, "mg_viii", "2s0.2p2.3d1.4F_9/2", "continuum"},
-        {8405, 0, 57.055, "mg_viii", "2s0.2p2.3d1.4F_9/2", "continuum"},
-        {8406, 0, 57.055, "mg_viii", "2s0.2p2.3d1.4F_9/2", "continuum"},
-        {8407, 0, 109.337, "mg_viii", "2p0.3p1.2P_1/2", "continuum"},
-        {8408, 0, 109.337, "mg_viii", "2p0.3p1.2P_1/2", "continuum"},
-        {8409, 0, 109.337, "mg_viii", "2p0.3p1.2P_1/2", "continuum"},
-        {8410, 0, 98.519, "mg_viii", "2s1.2p1.3s1.4P_1/2", "continuum"},
-        {8411, 0, 98.519, "mg_viii", "2s1.2p1.3s1.4P_1/2", "continuum"},
-        {8412, 0, 98.519, "mg_viii", "2s1.2p1.3s1.4P_1/2", "continuum"},
-        {8413, 0, 94.794, "mg_viii", "2s1.2p1.3s1.2P_1/2", "continuum"},
-        {8414, 0, 94.794, "mg_viii", "2s1.2p1.3s1.2P_1/2", "continuum"},
-        {8415, 0, 94.794, "mg_viii", "2s1.2p1.3s1.2P_1/2", "continuum"},
-        {8416, 0, 84.309, "mg_viii", "2s1.2p1.3d1.4D_1/2", "continuum"},
-        {8417, 0, 84.309, "mg_viii", "2s1.2p1.3d1.4D_1/2", "continuum"},
-        {8418, 0, 84.309, "mg_viii", "2s1.2p1.3d1.4D_1/2", "continuum"},
-        {8419, 0, 81.972, "mg_viii", "2s1.2p1.3d1.4P_1/2", "continuum"},
-        {8420, 0, 81.972, "mg_viii", "2s1.2p1.3d1.4P_1/2", "continuum"},
-        {8421, 0, 81.972, "mg_viii", "2s1.2p1.3d1.4P_1/2", "continuum"},
-        {8422, 0, 81.716, "mg_viii", "2s1.2p1.3s1.2P_1/2#2", "continuum"},
-        {8423, 0, 78.334, "mg_viii", "2s1.2p1.3d1.2P_1/2", "continuum"},
-        {8424, 0, 78.334, "mg_viii", "2s1.2p1.3d1.2P_1/2", "continuum"},
-        {8425, 0, 78.334, "mg_viii", "2s1.2p1.3d1.2P_1/2", "continuum"},
-        {8426, 0, 66.386, "mg_viii", "2s1.2p1.3d1.2P_1/2#2", "continuum"},
-        {8427, 0, 64.666, "mg_viii", "2s0.2p2.3p1.2S_1/2", "continuum"},
-        {8428, 0, 64.666, "mg_viii", "2s0.2p2.3p1.2S_1/2", "continuum"},
-        {8429, 0, 64.666, "mg_viii", "2s0.2p2.3p1.2S_1/2", "continuum"},
-        {8430, 0, 63.457, "mg_viii", "2s0.2p2.3p1.4D_1/2", "continuum"},
-        {8431, 0, 63.457, "mg_viii", "2s0.2p2.3p1.4D_1/2", "continuum"},
-        {8432, 0, 63.457, "mg_viii", "2s0.2p2.3p1.4D_1/2", "continuum"},
-        {8433, 0, 62.397, "mg_viii", "2s0.2p2.3p1.4P_1/2", "continuum"},
-        {8434, 0, 62.397, "mg_viii", "2s0.2p2.3p1.4P_1/2", "continuum"},
-        {8435, 0, 62.397, "mg_viii", "2s0.2p2.3p1.4P_1/2", "continuum"},
-        {8436, 0, 59.292, "mg_viii", "2s0.2p2.3p1.2P_1/2", "continuum"},
-        {8437, 0, 59.292, "mg_viii", "2s0.2p2.3p1.2P_1/2", "continuum"},
-        {8438, 0, 59.292, "mg_viii", "2s0.2p2.3p1.2P_1/2", "continuum"},
-        {8439, 0, 52.368, "mg_viii", "2s0.2p2.3p1.2P_1/2#2", "continuum"},
-        {8440, 0, 43.3, "mg_viii", "2s0.2p2.3p1.2P_1/2#3", "continuum"},
-        {8441, 0, 109.218, "mg_viii", "2p0.3p1.2P_3/2", "continuum"},
-        {8442, 0, 109.218, "mg_viii", "2p0.3p1.2P_3/2", "continuum"},
-        {8443, 0, 109.218, "mg_viii", "2p0.3p1.2P_3/2", "continuum"},
-        {8444, 0, 98.378, "mg_viii", "2s1.2p1.3s1.4P_3/2", "continuum"},
-        {8445, 0, 98.378, "mg_viii", "2s1.2p1.3s1.4P_3/2", "continuum"},
-        {8446, 0, 98.378, "mg_viii", "2s1.2p1.3s1.4P_3/2", "continuum"},
-        {8447, 0, 94.507, "mg_viii", "2s1.2p1.3s1.2P_3/2", "continuum"},
-        {8448, 0, 94.507, "mg_viii", "2s1.2p1.3s1.2P_3/2", "continuum"},
-        {8449, 0, 94.507, "mg_viii", "2s1.2p1.3s1.2P_3/2", "continuum"},
-        {8450, 0, 85.909, "mg_viii", "2s1.2p1.3d1.4F_3/2", "continuum"},
-        {8451, 0, 85.909, "mg_viii", "2s1.2p1.3d1.4F_3/2", "continuum"},
-        {8452, 0, 85.909, "mg_viii", "2s1.2p1.3d1.4F_3/2", "continuum"},
-        {8453, 0, 83.044, "mg_viii", "2s1.2p1.3d1.4D_3/2", "continuum"},
-        {8454, 0, 83.044, "mg_viii", "2s1.2p1.3d1.4D_3/2", "continuum"},
-        {8455, 0, 83.044, "mg_viii", "2s1.2p1.3d1.4D_3/2", "continuum"},
-        {8456, 0, 82.786, "mg_viii", "2s1.2p1.3d1.2D_3/2", "continuum"},
-        {8457, 0, 82.786, "mg_viii", "2s1.2p1.3d1.2D_3/2", "continuum"},
-        {8458, 0, 82.786, "mg_viii", "2s1.2p1.3d1.2D_3/2", "continuum"},
-        {8459, 0, 82.032, "mg_viii", "2s1.2p1.3d1.4P_3/2", "continuum"},
-        {8460, 0, 82.032, "mg_viii", "2s1.2p1.3d1.4P_3/2", "continuum"},
-        {8461, 0, 82.032, "mg_viii", "2s1.2p1.3d1.4P_3/2", "continuum"},
-        {8462, 0, 81.695, "mg_viii", "2s1.2p1.3s1.2P_3/2#2", "continuum"},
-        {8463, 0, 78.478, "mg_viii", "2s1.2p1.3d1.2P_3/2", "continuum"},
-        {8464, 0, 78.478, "mg_viii", "2s1.2p1.3d1.2P_3/2", "continuum"},
-        {8465, 0, 78.478, "mg_viii", "2s1.2p1.3d1.2P_3/2", "continuum"},
-        {8466, 0, 66.735, "mg_viii", "2s1.2p1.3d1.2D_3/2#2", "continuum"},
-        {8467, 0, 64.878, "mg_viii", "2s1.2p1.3d1.2P_3/2#2", "continuum"},
-        {8468, 0, 63.365, "mg_viii", "2s0.2p2.3p1.4D_3/2", "continuum"},
-        {8469, 0, 63.365, "mg_viii", "2s0.2p2.3p1.4D_3/2", "continuum"},
-        {8470, 0, 63.365, "mg_viii", "2s0.2p2.3p1.4D_3/2", "continuum"},
-        {8471, 0, 62.332, "mg_viii", "2s0.2p2.3p1.4P_3/2", "continuum"},
-        {8472, 0, 62.332, "mg_viii", "2s0.2p2.3p1.4P_3/2", "continuum"},
-        {8473, 0, 62.332, "mg_viii", "2s0.2p2.3p1.4P_3/2", "continuum"},
-        {8474, 0, 61.252, "mg_viii", "2s0.2p2.3p1.2D_3/2", "continuum"},
-        {8475, 0, 61.252, "mg_viii", "2s0.2p2.3p1.2D_3/2", "continuum"},
-        {8476, 0, 61.252, "mg_viii", "2s0.2p2.3p1.2D_3/2", "continuum"},
-        {8477, 0, 58.535, "mg_viii", "2s0.2p2.3p1.4S_3/2", "continuum"},
-        {8478, 0, 58.535, "mg_viii", "2s0.2p2.3p1.4S_3/2", "continuum"},
-        {8479, 0, 58.535, "mg_viii", "2s0.2p2.3p1.4S_3/2", "continuum"},
-        {8480, 0, 59.31, "mg_viii", "2s0.2p2.3p1.2P_3/2", "continuum"},
-        {8481, 0, 59.31, "mg_viii", "2s0.2p2.3p1.2P_3/2", "continuum"},
-        {8482, 0, 59.31, "mg_viii", "2s0.2p2.3p1.2P_3/2", "continuum"},
-        {8483, 0, 54.37, "mg_viii", "2s0.2p2.3p1.2D_3/2#2", "continuum"},
-        {8484, 0, 52.212, "mg_viii", "2s0.2p2.3p1.2P_3/2#2", "continuum"},
-        {8485, 0, 43.259, "mg_viii", "2s0.2p2.3p1.2P_3/2#3", "continuum"},
-        {8486, 0, 98.127, "mg_viii", "2s1.2p1.3s1.4P_5/2", "continuum"},
-        {8487, 0, 98.127, "mg_viii", "2s1.2p1.3s1.4P_5/2", "continuum"},
-        {8488, 0, 98.127, "mg_viii", "2s1.2p1.3s1.4P_5/2", "continuum"},
-        {8489, 0, 85.822, "mg_viii", "2s1.2p1.3d1.4F_5/2", "continuum"},
-        {8490, 0, 85.822, "mg_viii", "2s1.2p1.3d1.4F_5/2", "continuum"},
-        {8491, 0, 85.822, "mg_viii", "2s1.2p1.3d1.4F_5/2", "continuum"},
-        {8492, 0, 83.003, "mg_viii", "2s1.2p1.3d1.4D_5/2", "continuum"},
-        {8493, 0, 83.003, "mg_viii", "2s1.2p1.3d1.4D_5/2", "continuum"},
-        {8494, 0, 83.003, "mg_viii", "2s1.2p1.3d1.4D_5/2", "continuum"},
-        {8495, 0, 82.742, "mg_viii", "2s1.2p1.3d1.2D_5/2", "continuum"},
-        {8496, 0, 82.742, "mg_viii", "2s1.2p1.3d1.2D_5/2", "continuum"},
-        {8497, 0, 82.742, "mg_viii", "2s1.2p1.3d1.2D_5/2", "continuum"},
-        {8498, 0, 82.123, "mg_viii", "2s1.2p1.3d1.4P_5/2", "continuum"},
-        {8499, 0, 82.123, "mg_viii", "2s1.2p1.3d1.4P_5/2", "continuum"},
-        {8500, 0, 82.123, "mg_viii", "2s1.2p1.3d1.4P_5/2", "continuum"},
-        {8501, 0, 79.483, "mg_viii", "2s1.2p1.3d1.2F_5/2", "continuum"},
-        {8502, 0, 79.483, "mg_viii", "2s1.2p1.3d1.2F_5/2", "continuum"},
-        {8503, 0, 79.483, "mg_viii", "2s1.2p1.3d1.2F_5/2", "continuum"},
-        {8504, 0, 68.021, "mg_viii", "2s1.2p1.3d1.2F_5/2#2", "continuum"},
-        {8505, 0, 66.691, "mg_viii", "2s1.2p1.3d1.2D_5/2#2", "continuum"},
-        {8506, 0, 63.214, "mg_viii", "2s0.2p2.3p1.4D_5/2", "continuum"},
-        {8507, 0, 63.214, "mg_viii", "2s0.2p2.3p1.4D_5/2", "continuum"},
-        {8508, 0, 63.214, "mg_viii", "2s0.2p2.3p1.4D_5/2", "continuum"},
-        {8509, 0, 61.225, "mg_viii", "2s0.2p2.3p1.4P_5/2", "continuum"},
-        {8510, 0, 61.225, "mg_viii", "2s0.2p2.3p1.4P_5/2", "continuum"},
-        {8511, 0, 61.225, "mg_viii", "2s0.2p2.3p1.4P_5/2", "continuum"},
-        {8512, 0, 60.972, "mg_viii", "2s0.2p2.3p1.2D_5/2", "continuum"},
-        {8513, 0, 60.972, "mg_viii", "2s0.2p2.3p1.2D_5/2", "continuum"},
-        {8514, 0, 60.972, "mg_viii", "2s0.2p2.3p1.2D_5/2", "continuum"},
-        {8515, 0, 56.497, "mg_viii", "2s0.2p2.3p1.2F_5/2", "continuum"},
-        {8516, 0, 54.402, "mg_viii", "2s0.2p2.3p1.2D_5/2#2", "continuum"},
-        {8517, 0, 85.691, "mg_viii", "2s1.2p1.3d1.4F_7/2", "continuum"},
-        {8518, 0, 85.691, "mg_viii", "2s1.2p1.3d1.4F_7/2", "continuum"},
-        {8519, 0, 85.691, "mg_viii", "2s1.2p1.3d1.4F_7/2", "continuum"},
-        {8520, 0, 82.901, "mg_viii", "2s1.2p1.3d1.4D_7/2", "continuum"},
-        {8521, 0, 82.901, "mg_viii", "2s1.2p1.3d1.4D_7/2", "continuum"},
-        {8522, 0, 82.901, "mg_viii", "2s1.2p1.3d1.4D_7/2", "continuum"},
-        {8523, 0, 79.229, "mg_viii", "2s1.2p1.3d1.2F_7/2", "continuum"},
-        {8524, 0, 79.229, "mg_viii", "2s1.2p1.3d1.2F_7/2", "continuum"},
-        {8525, 0, 79.229, "mg_viii", "2s1.2p1.3d1.2F_7/2", "continuum"},
-        {8526, 0, 67.107, "mg_viii", "2s1.2p1.3d1.2F_7/2#2", "continuum"},
-        {8527, 0, 61.973, "mg_viii", "2s0.2p2.3p1.4D_7/2", "continuum"},
-        {8528, 0, 61.973, "mg_viii", "2s0.2p2.3p1.4D_7/2", "continuum"},
-        {8529, 0, 61.973, "mg_viii", "2s0.2p2.3p1.4D_7/2", "continuum"},
-        {8530, 0, 56.423, "mg_viii", "2s0.2p2.3p1.2F_7/2", "continuum"},
-        {8531, 0, 85.512, "mg_viii", "2s1.2p1.3d1.4F_9/2", "continuum"},
-        {8532, 0, 85.512, "mg_viii", "2s1.2p1.3d1.4F_9/2", "continuum"},
-        {8533, 0, 85.512, "mg_viii", "2s1.2p1.3d1.4F_9/2", "continuum"},
-        {8534, 0, 1.84698, "mg_viii", "superlevel", "continuum"},
-        {8554, 0, 328, "mg_ix", "2s2.1S_0", "continuum"},
-        {8557, 0, 310.587, "mg_ix", "2s1.2p1.3P_0", "continuum"},
-        {8558, 0, 310.447, "mg_ix", "2s1.2p1.3P_1", "continuum"},
-        {8559, 0, 310.142, "mg_ix", "2s1.2p1.3P_2", "continuum"},
-        {8560, 0, 294.329, "mg_ix", "2s1.2p1.1P_1", "continuum"},
-        {8562, 0, 282.659, "mg_ix", "2s0.2p2.3P_0", "continuum"},
-        {8563, 0, 282.497, "mg_ix", "2s0.2p2.3P_1", "continuum"},
-        {8564, 0, 282.497, "mg_ix", "2s0.2p2.3P_1", "continuum"},
-        {8565, 0, 282.228, "mg_ix", "2s0.2p2.3P_2", "continuum"},
-        {8566, 0, 282.228, "mg_ix", "2s0.2p2.3P_2", "continuum"},
-        {8567, 0, 277.795, "mg_ix", "2s0.2p2.1D_2", "continuum"},
-        {8568, 0, 277.795, "mg_ix", "2s0.2p2.1D_2", "continuum"},
-        {8569, 0, 266.079, "mg_ix", "2s0.2p2.1S_0", "continuum"},
-        {8570, 0, 266.079, "mg_ix", "2s0.2p2.1S_0", "continuum"},
-        {8571, 0, 138.08, "mg_ix", "2s1.3s1.3S_1", "continuum"},
-        {8572, 0, 134.904, "mg_ix", "2s1.3s1.1S_0", "continuum"},
-        {8573, 0, 130.501, "mg_ix", "2s1.3p1.1P_1", "continuum"},
-        {8574, 0, 132.806, "mg_ix", "2s1.3p1.3P_0", "continuum"},
-        {8575, 0, 132.708, "mg_ix", "2s1.3p1.3P_1", "continuum"},
-        {8576, 0, 132.591, "mg_ix", "2s1.3p1.3P_2", "continuum"},
-        {8577, 0, 125.861, "mg_ix", "2s1.3d1.3D_1", "continuum"},
-        {8578, 0, 125.845, "mg_ix", "2s1.3d1.3D_2", "continuum"},
-        {8579, 0, 125.827, "mg_ix", "2s1.3d1.3D_3", "continuum"},
-        {8580, 0, 122.944, "mg_ix", "2s1.3d1.1D_2", "continuum"},
-        {8581, 0, 105.917, "mg_ix", "2s0.2p1.3p1.3P_0", "continuum"},
-        {8582, 0, 105.917, "mg_ix", "2s0.2p1.3p1.3P_0", "continuum"},
-        {8583, 0, 96.713, "mg_ix", "2s0.2p1.3p1.1S_0", "continuum"},
-        {8584, 0, 96.713, "mg_ix", "2s0.2p1.3p1.1S_0", "continuum"},
-        {8585, 0, 110.007, "mg_ix", "2s0.2p1.3p1.3D_3", "continuum"},
-        {8586, 0, 110.007, "mg_ix", "2s0.2p1.3p1.3D_3", "continuum"},
-        {8587, 0, 116.058, "mg_ix", "2s0.2p1.3s1.3P_0", "continuum"},
-        {8588, 0, 116.058, "mg_ix", "2s0.2p1.3s1.3P_0", "continuum"},
-        {8589, 0, 102.848, "mg_ix", "2s0.2p1.3d1.3P_0", "continuum"},
-        {8590, 0, 102.848, "mg_ix", "2s0.2p1.3d1.3P_0", "continuum"},
-        {8591, 0, 103.176, "mg_ix", "2s0.2p1.3d1.3F_4", "continuum"},
-        {8592, 0, 103.176, "mg_ix", "2s0.2p1.3d1.3F_4", "continuum"},
-        {8593, 0, 111.351, "mg_ix", "2s0.2p1.3p1.1P_1", "continuum"},
-        {8594, 0, 111.351, "mg_ix", "2s0.2p1.3p1.1P_1", "continuum"},
-        {8595, 0, 110.44, "mg_ix", "2s0.2p1.3p1.3D_1", "continuum"},
-        {8596, 0, 110.44, "mg_ix", "2s0.2p1.3p1.3D_1", "continuum"},
-        {8597, 0, 108.593, "mg_ix", "2s0.2p1.3p1.3S_1", "continuum"},
-        {8598, 0, 108.593, "mg_ix", "2s0.2p1.3p1.3S_1", "continuum"},
-        {8599, 0, 107.563, "mg_ix", "2s0.2p1.3p1.3P_1", "continuum"},
-        {8600, 0, 107.563, "mg_ix", "2s0.2p1.3p1.3P_1", "continuum"},
-        {8601, 0, 110.317, "mg_ix", "2s0.2p1.3p1.3D_2", "continuum"},
-        {8602, 0, 110.317, "mg_ix", "2s0.2p1.3p1.3D_2", "continuum"},
-        {8603, 0, 107.402, "mg_ix", "2s0.2p1.3p1.3P_2", "continuum"},
-        {8604, 0, 107.402, "mg_ix", "2s0.2p1.3p1.3P_2", "continuum"},
-        {8605, 0, 105.434, "mg_ix", "2s0.2p1.3p1.1D_2", "continuum"},
-        {8606, 0, 105.434, "mg_ix", "2s0.2p1.3p1.1D_2", "continuum"},
-        {8607, 0, 115.921, "mg_ix", "2s0.2p1.3s1.3P_1", "continuum"},
-        {8608, 0, 115.921, "mg_ix", "2s0.2p1.3s1.3P_1", "continuum"},
-        {8609, 0, 111.981, "mg_ix", "2s0.2p1.3s1.1P_1", "continuum"},
-        {8610, 0, 111.981, "mg_ix", "2s0.2p1.3s1.1P_1", "continuum"},
-        {8611, 0, 104.015, "mg_ix", "2s0.2p1.3d1.3D_1", "continuum"},
-        {8612, 0, 104.015, "mg_ix", "2s0.2p1.3d1.3D_1", "continuum"},
-        {8613, 0, 102.913, "mg_ix", "2s0.2p1.3d1.3P_1", "continuum"},
-        {8614, 0, 102.913, "mg_ix", "2s0.2p1.3d1.3P_1", "continuum"},
-        {8615, 0, 99.771, "mg_ix", "2s0.2p1.3d1.1P_1", "continuum"},
-        {8616, 0, 99.771, "mg_ix", "2s0.2p1.3d1.1P_1", "continuum"},
-        {8617, 0, 115.592, "mg_ix", "2s0.2p1.3s1.3P_2", "continuum"},
-        {8618, 0, 115.592, "mg_ix", "2s0.2p1.3s1.3P_2", "continuum"},
-        {8619, 0, 103.959, "mg_ix", "2s0.2p1.3d1.3F_2", "continuum"},
-        {8620, 0, 103.959, "mg_ix", "2s0.2p1.3d1.3F_2", "continuum"},
-        {8621, 0, 106.206, "mg_ix", "2s0.2p1.3d1.1D_2", "continuum"},
-        {8622, 0, 106.206, "mg_ix", "2s0.2p1.3d1.1D_2", "continuum"},
-        {8623, 0, 103.948, "mg_ix", "2s0.2p1.3d1.3D_2", "continuum"},
-        {8624, 0, 103.948, "mg_ix", "2s0.2p1.3d1.3D_2", "continuum"},
-        {8625, 0, 103.036, "mg_ix", "2s0.2p1.3d1.3P_2", "continuum"},
-        {8626, 0, 103.036, "mg_ix", "2s0.2p1.3d1.3P_2", "continuum"},
-        {8627, 0, 103.567, "mg_ix", "2s0.2p1.3d1.3F_3", "continuum"},
-        {8628, 0, 103.567, "mg_ix", "2s0.2p1.3d1.3F_3", "continuum"},
-        {8629, 0, 103.824, "mg_ix", "2s0.2p1.3d1.3D_3", "continuum"},
-        {8630, 0, 103.824, "mg_ix", "2s0.2p1.3d1.3D_3", "continuum"},
-        {8631, 0, 100.623, "mg_ix", "2s0.2p1.3d1.1F_3", "continuum"},
-        {8632, 0, 100.623, "mg_ix", "2s0.2p1.3d1.1F_3", "continuum"},
-        {8633, 0, 2.27802, "mg_ix", "superlevel", "continuum"},
-        {8639, 0, 367, "mg_x", "2s1.2S_1/2", "continuum"},
-        {8640, 0, 347.169, "mg_x", "2s0.2p1.2P_1/2", "continuum"},
-        {8641, 0, 346.676, "mg_x", "2s0.2p1.2P_3/2", "continuum"},
-        {8642, 0, 158.459, "mg_x", "2s0.3s1.2S_1/2", "continuum"},
-        {8643, 0, 153.028, "mg_x", "2s0.3p1.2P_1/2", "continuum"},
-        {8644, 0, 152.866, "mg_x", "2s0.3p1.2P_3/2", "continuum"},
-        {8645, 0, 150.924, "mg_x", "2s0.3d1.2D_3/2", "continuum"},
-        {8646, 0, 150.876, "mg_x", "2s0.3d1.2D_5/2", "continuum"},
-        {8647, 0, 87.83, "mg_x", "2s0.4s1.2S_1/2", "continuum"},
-        {8648, 0, 85.655, "mg_x", "2s0.4p1.2P_1/2", "continuum"},
-        {8649, 0, 85.655, "mg_x", "2s0.4p1.2P_3/2", "continuum"},
-        {8650, 0, 84.759, "mg_x", "2s0.4d1.2D_3/2", "continuum"},
-        {8651, 0, 84.719, "mg_x", "2s0.4d1.2D_5/2", "continuum"},
-        {8652, 0, 84.675, "mg_x", "2s0.4f1.2F_5/2", "continuum"},
-        {8653, 0, 84.665, "mg_x", "2s0.4f1.2F_7/2", "continuum"},
-        {8654, 0, 55.732, "mg_x", "2s0.5s1.2S_1/2", "continuum"},
-        {8655, 0, 54.579, "mg_x", "2s0.5p1.2P_1/2", "continuum"},
-        {8656, 0, 54.579, "mg_x", "2s0.5p1.2P_3/2", "continuum"},
-        {8657, 0, 54.145, "mg_x", "2s0.5d1.2D_3/2", "continuum"},
-        {8658, 0, 54.12, "mg_x", "2s0.5d1.2D_5/2", "continuum"},
-        {8659, 0, 54.005, "mg_x", "2s0.5f1.2F_5/2", "continuum"},
-        {8660, 0, 53.995, "mg_x", "2s0.5f1.2F_7/2", "continuum"},
-        {8661, 0, 53.945, "mg_x", "2s0.5g1.2G_7/2", "continuum"},
-        {8662, 0, 53.935, "mg_x", "2s0.5g1.2G_9/2", "continuum"},
-        {8663, 0, 2.54901, "mg_x", "superlevel", "continuum"},
-        {8664, 0, 1762, "mg_xi", "1s2.1S_0", "continuum"},
-        {8665, 0, 102.934, "mg_xi", "1s1.4p1.1P_1", "continuum"},
-        {8666, 0, 103.104, "mg_xi", "1s1.4f1.3F_4", "continuum"},
-        {8667, 0, 103.104, "mg_xi", "1s1.4f1.3F_3", "continuum"},
-        {8668, 0, 103.104, "mg_xi", "1s1.4f1.3F_2", "continuum"},
-        {8669, 0, 66.0593, "mg_xi", "1s1.5d1.1D_2", "continuum"},
-        {8670, 0, 430.888, "mg_xi", "1s1.2s1.3S_1", "continuum"},
-        {8671, 0, 182.688, "mg_xi", "1s1.3p1.1P_1", "continuum"},
-        {8672, 0, 103.104, "mg_xi", "1s1.4f1.1F_3", "continuum"},
-        {8673, 0, 183.148, "mg_xi", "1s1.3d1.1D_2", "continuum"},
-        {8674, 0, 105.324, "mg_xi", "1s1.4s1.3S_1", "continuum"},
-        {8675, 0, 418.162, "mg_xi", "1s1.2s1.1S_0", "continuum"},
-        {8676, 0, 66.0516, "mg_xi", "1s1.5g1.1G_4", "continuum"},
-        {8677, 0, 185.131, "mg_xi", "1s1.3s1.1S_0", "continuum"},
-        {8678, 0, 66.0516, "mg_xi", "1s1.5g1.3G_5", "continuum"},
-        {8679, 0, 66.0516, "mg_xi", "1s1.5g1.3G_4", "continuum"},
-        {8680, 0, 66.0516, "mg_xi", "1s1.5g1.3G_3", "continuum"},
-        {8681, 0, 185.235, "mg_xi", "1s1.3p1.3P_0", "continuum"},
-        {8682, 0, 185.202, "mg_xi", "1s1.3p1.3P_1", "continuum"},
-        {8683, 0, 185.071, "mg_xi", "1s1.3p1.3P_2", "continuum"},
-        {8684, 0, 66.0577, "mg_xi", "1s1.5f1.3F_4", "continuum"},
-        {8685, 0, 66.0577, "mg_xi", "1s1.5f1.3F_3", "continuum"},
-        {8686, 0, 66.0577, "mg_xi", "1s1.5f1.3F_2", "continuum"},
-        {8687, 0, 66.5043, "mg_xi", "1s1.5p1.3P_0", "continuum"},
-        {8688, 0, 66.4971, "mg_xi", "1s1.5p1.3P_1", "continuum"},
-        {8689, 0, 66.4688, "mg_xi", "1s1.5p1.3P_2", "continuum"},
-        {8690, 0, 66.0577, "mg_xi", "1s1.5f1.1F_3", "continuum"},
-        {8691, 0, 103.962, "mg_xi", "1s1.4s1.1S_0", "continuum"},
-        {8692, 0, 66.4987, "mg_xi", "1s1.5s1.1S_0", "continuum"},
-        {8693, 0, 103.112, "mg_xi", "1s1.4d1.1D_2", "continuum"},
-        {8694, 0, 65.9746, "mg_xi", "1s1.5p1.1P_1", "continuum"},
-        {8695, 0, 188.495, "mg_xi", "1s1.3s1.3S_1", "continuum"},
-        {8696, 0, 103.981, "mg_xi", "1s1.4p1.3P_0", "continuum"},
-        {8697, 0, 103.967, "mg_xi", "1s1.4p1.3P_1", "continuum"},
-        {8698, 0, 103.912, "mg_xi", "1s1.4p1.3P_2", "continuum"},
-        {8699, 0, 103.167, "mg_xi", "1s1.4d1.3D_1", "continuum"},
-        {8700, 0, 103.165, "mg_xi", "1s1.4d1.3D_2", "continuum"},
-        {8701, 0, 103.145, "mg_xi", "1s1.4d1.3D_3", "continuum"},
-        {8702, 0, 67.1827, "mg_xi", "1s1.5s1.3S_1", "continuum"},
-        {8703, 0, 183.286, "mg_xi", "1s1.3d1.3D_1", "continuum"},
-        {8704, 0, 183.281, "mg_xi", "1s1.3d1.3D_2", "continuum"},
-        {8705, 0, 183.234, "mg_xi", "1s1.3d1.3D_3", "continuum"},
-        {8706, 0, 409.752, "mg_xi", "1s1.2p1.1P_1", "continuum"},
-        {8707, 0, 419.004, "mg_xi", "1s1.2p1.3P_0", "continuum"},
-        {8708, 0, 418.901, "mg_xi", "1s1.2p1.3P_1", "continuum"},
-        {8709, 0, 418.459, "mg_xi", "1s1.2p1.3P_2", "continuum"},
-        {8710, 0, 66.0913, "mg_xi", "1s1.5d1.3D_1", "continuum"},
-        {8711, 0, 66.0903, "mg_xi", "1s1.5d1.3D_2", "continuum"},
-        {8712, 0, 66.08, "mg_xi", "1s1.5d1.3D_3", "continuum"},
-        {8761, 0, 103.104, "mg_xi", "1s1.4f1.1F_3", "continuum"},
-        {8762, 0, 102.934, "mg_xi", "1s1.4p1.1P_1", "continuum"},
-        {8763, 0, 54.39, "mg_xii", "1s0.6h1.2H", "continuum"},
-        {8764, 0, 54.39, "mg_xii", "1s0.6p1.2P", "continuum"},
-        {8765, 0, 218.429, "mg_xii", "1s0.3s1.2S_1/2", "continuum"},
-        {8766, 0, 218.161, "mg_xii", "1s0.3d1.2D_3/2", "continuum"},
-        {8767, 0, 218.068, "mg_xii", "1s0.3d1.2D_5/2", "continuum"},
-        {8768, 0, 78.7241, "mg_xii", "1s0.5f1.2F_5/2", "continuum"},
-        {8769, 0, 78.7141, "mg_xii", "1s0.5f1.2F_7/2", "continuum"},
-        {8770, 0, 78.7441, "mg_xii", "1s0.5d1.2D_3/2", "continuum"},
-        {8771, 0, 78.7241, "mg_xii", "1s0.5d1.2D_5/2", "continuum"},
-        {8772, 0, 54.39, "mg_xii", "1s0.6f1.2F", "continuum"},
-        {8773, 0, 54.39, "mg_xii", "1s0.6s1.2S", "continuum"},
-        {8774, 0, 122.97, "mg_xii", "1s0.4s1.2S_1/2", "continuum"},
-        {8775, 0, 54.39, "mg_xii", "1s0.6d1.2D", "continuum"},
-        {8776, 0, 491.27, "mg_xii", "1s0.2s1.2S_1/2", "continuum"},
-        {8777, 0, 54.39, "mg_xii", "1s0.6g1.2G", "continuum"},
-        {8778, 0, 78.7141, "mg_xii", "1s0.5g1.2G_7/2", "continuum"},
-        {8779, 0, 78.7081, "mg_xii", "1s0.5g1.2G_9/2", "continuum"},
-        {8780, 0, 122.818, "mg_xii", "1s0.4f1.2F_5/2", "continuum"},
-        {8781, 0, 122.798, "mg_xii", "1s0.4f1.2F_7/2", "continuum"},
-        {8782, 0, 122.975, "mg_xii", "1s0.4p1.2P_1/2", "continuum"},
-        {8783, 0, 122.857, "mg_xii", "1s0.4p1.2P_3/2", "continuum"},
-        {8784, 0, 1963, "mg_xii", "1s1.2S_1/2", "continuum"},
-        {8785, 0, 491.308, "mg_xii", "1s0.2p1.2P_1/2", "continuum"},
-        {8786, 0, 490.363, "mg_xii", "1s0.2p1.2P_3/2", "continuum"},
-        {8787, 0, 122.857, "mg_xii", "1s0.4d1.2D_3/2", "continuum"},
-        {8788, 0, 122.818, "mg_xii", "1s0.4d1.2D_5/2", "continuum"},
-        {8789, 0, 78.8046, "mg_xii", "1s0.5p1.2P_1/2", "continuum"},
-        {8790, 0, 78.7441, "mg_xii", "1s0.5p1.2P_3/2", "continuum"},
-        {8791, 0, 218.44, "mg_xii", "1s0.3p1.2P_1/2", "continuum"},
-        {8792, 0, 218.16, "mg_xii", "1s0.3p1.2P_3/2", "continuum"},
-        {8793, 0, 78.8021, "mg_xii", "1s0.5s1.2S_1/2", "continuum"},
-        {8794, 0, 13.6, "mg_xii", "superlev", "continuum"}
-    };
-    return rows;
-}
-
-// XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Compute line identity by index for the line/emissivity/opacity path on the source or publication energy grid.
 // Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
 // XSTAR-FUNCTION-COMMENT-END
@@ -8822,7 +7057,7 @@ bool has_finite_monotonic_energy(const std::vector<double>& values) {
 // Purpose: Provide retained product array memory key for final science-product publication from already-committed run state.
 // Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
 // XSTAR-FUNCTION-COMMENT-END
-std::string retained_product_array_memory_key_v82_patch520172(
+std::string retained_product_array_memory_key(
     std::size_t hdu_number, const std::string& name) {
     return std::to_string(hdu_number) + ":" + name;
 }
@@ -8831,13 +7066,13 @@ std::string retained_product_array_memory_key_v82_patch520172(
 // Purpose: Provide in memory product array for hdu for final science-product publication from already-committed run state.
 // Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
 // XSTAR-FUNCTION-COMMENT-END
-std::vector<double> in_memory_product_array_for_hdu_v82_patch520172(
+std::vector<double> in_memory_product_array_for_hdu(
     const xstar_run_state::ProductWritingState& state,
     const std::string& name,
     std::size_t hdu_number,
     std::size_t expected_count = 0) {
     const auto it = state.retained_product_arrays.find(
-        retained_product_array_memory_key_v82_patch520172(hdu_number, name));
+        retained_product_array_memory_key(hdu_number, name));
     if (it == state.retained_product_arrays.end()) return {};
     if (expected_count != 0u && it->second.size() != expected_count) return {};
     return it->second;
@@ -8896,36 +7131,6 @@ std::filesystem::path bridge_array_path(
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Provide bridge array for final science-product publication from already-committed run state.
-// Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
-// XSTAR-FUNCTION-COMMENT-END
-[[maybe_unused]] std::vector<double> bridge_array(
-    const xstar_run_state::ProductWritingState& state,
-    const std::string& name,
-    std::size_t expected_count) {
-    for (int hdu = 7; hdu >= 3; --hdu) {
-        auto live = in_memory_product_array_for_hdu_v82_patch520172(
-            state, name, static_cast<std::size_t>(hdu), expected_count);
-        if (!live.empty()) return live;
-    }
-    try {
-        auto values = read_binary_double_array(bridge_array_path(state, name));
-        if (values.size() != expected_count) {
-            std::ostringstream msg;
-            msg << "native product bridge array " << name << " size mismatch: "
-                << values.size() << " != " << expected_count;
-            throw std::runtime_error(msg.str());
-        }
-        return values;
-    } catch (...) {
-        auto native_values = native_workspace_array_for_hdu(state, name, 6, expected_count);
-        if (native_values.size() == expected_count) return native_values;
-        throw;
-    }
-}
-
-
-// XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Provide bridge array path for hdu for final science-product publication from already-committed run state.
 // Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
 // XSTAR-FUNCTION-COMMENT-END
@@ -8950,7 +7155,7 @@ std::vector<double> bridge_array_for_hdu(
     const std::string& name,
     std::size_t hdu_number,
     std::size_t expected_count) {
-    auto live = in_memory_product_array_for_hdu_v82_patch520172(
+    auto live = in_memory_product_array_for_hdu(
         state, name, hdu_number, expected_count);
     if (!live.empty() || expected_count == 0u) {
         if (!live.empty()) return live;
@@ -8980,7 +7185,7 @@ std::vector<double> optional_bridge_array_for_hdu(
     const std::string& name,
     std::size_t hdu_number,
     std::size_t expected_count = 0) {
-    auto live = in_memory_product_array_for_hdu_v82_patch520172(
+    auto live = in_memory_product_array_for_hdu(
         state, name, hdu_number, expected_count);
     if (!live.empty()) return live;
     try {
@@ -9273,7 +7478,7 @@ void write_population_detail(const std::filesystem::path& path,
         const bool have_product_write_detail_levels = !native_standalone_product_state(state) && pw_level_population.size() == detail_levels.size();
         const bool have_product_write_detail_lte = !native_standalone_product_state(state) && pw_level_lte.size() == detail_levels.size();
         const auto solve_rows = read_solve_rows_by_global(state, zone.accepted_controller.accepted_sequence);
-        const auto& oracle_lte_surface = oracle_detail_lte_template_v172537();
+        const auto& oracle_lte_surface = oracle_detail_lte_template();
         const bool have_oracle_detail_lte_surface = oracle_lte_surface.size() == detail_levels.size();
         auto solve_value_for_level = [&](const xstar_run_state::LevelIdentityState& level) -> const SolveRowValue* {
             // Fresh source-product comparison confirms that public He II rows
@@ -9329,7 +7534,6 @@ void write_population_detail(const std::filesystem::path& path,
     close_fits(fptr);
 }
 
-int element_index_for_z(const std::vector<ElementMeta>& elements, int z);
 
 struct LegacyLineLogValue {
     bool has_emission = false;
@@ -9371,7 +7575,7 @@ int parse_print_option_number(const std::string& line) {
 // Purpose: Provide pprint value patch enabled for final science-product publication from already-committed run state.
 // Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
 // XSTAR-FUNCTION-COMMENT-END
-bool pprint_value_patch_enabled() {
+bool pprint_value() {
     // v25.5.15.9.8: public FITS products must not borrow values from the
     // retained legacy pprint/xout_step surface.  Keep the parser available only
     // for standalone forensic experiments, but production and hydro-safe FITS
@@ -9486,14 +7690,6 @@ std::map<long long,std::size_t> line_workspace_index_by_line_index(
         if (ordered[i]) out[ordered[i]->line_index] = i;
     }
     return out;
-}
-
-// XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Provide safe workspace index for final science-product publication from already-committed run state.
-// Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
-// XSTAR-FUNCTION-COMMENT-END
-[[maybe_unused]] std::size_t safe_workspace_index(long long one_based, std::size_t fallback) {
-    return one_based > 0 ? static_cast<std::size_t>(one_based - 1) : fallback;
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
@@ -9763,7 +7959,7 @@ LineRow merged_line_row(const LineRow& base, const LineRow* diagnostic) {
 // Purpose: Compute source detail line activity shadow for the line/emissivity/opacity path on the source or publication energy grid.
 // Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
 // XSTAR-FUNCTION-COMMENT-END
-std::vector<bool> source_detail_line_activity_shadow_v064812320(
+std::vector<bool> source_detail_line_activity_shadow(
     const xstar_run_state::ProductWritingState& state,
     const xstar_run_state::FixedEvaluationState& evaluation,
     const std::vector<ElementMeta>& elements,
@@ -9908,7 +8104,7 @@ std::vector<LineRow> source_line_rows_from_identities(
     const auto workspace_index = line_workspace_index_by_line_index(state);
     const auto line_bridge = load_line_bridge_arrays(state, hdu_number);
     const auto detail_activity_shadow = detail_order
-        ? source_detail_line_activity_shadow_v064812320(state, evaluation, elements, density_cm3)
+        ? source_detail_line_activity_shadow(state, evaluation, elements, density_cm3)
         : std::vector<bool>{};
     if (reference_mg11_product_state(state)) {
         out.reserve(detail_order ? 2644u : kOraclePublicLineInventory.size());
@@ -9970,7 +8166,7 @@ std::vector<LineRow> source_line_rows_from_identities(
             const bool signal = physical_signal || publication_shadow;
             const bool source_eligible = signal && id.rate_type != 14 && id.rate_type != 9 &&
                 wavelength > 0.1 && wavelength < 9.0e9;
-            write_v0648123431_detal2_activity_trace(
+            write_detal2_activity_trace(
                 hdu_number, id, local_emis_in, local_emis_out, local_opacity,
                 physical_signal, publication_shadow, source_eligible);
             if (!source_eligible) continue;
@@ -10009,7 +8205,7 @@ std::map<long long,LineRow> diagnostic_line_rows_by_index(
     // wavelengths.  This makes xo01_detal2 consume the native Type-50 values
     // instead of treating the product state as empty and writing zeros.
     const bool mg_anchor = reference_mg11_product_state(state);
-    const auto& detail_labels = oracle_detail_line_label_template_v172537();
+    const auto& detail_labels = oracle_detail_line_label_template();
     std::vector<bool> consumed_oracle(detail_labels.size(), false);
     std::vector<bool> consumed_live(state.line_identities.size(), false);
     auto resolve_detail_line_index = [&](const RecordDiag& r) -> long long {
@@ -10088,72 +8284,6 @@ std::map<long long,LineRow> diagnostic_line_rows_by_index(
 
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Compute resolve detail rrc index for diag as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
-// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
-// XSTAR-FUNCTION-COMMENT-END
-[[maybe_unused]] long long resolve_detail_rrc_index_for_diag(
-    const RecordDiag& r,
-    const std::vector<ElementMeta>& elements,
-    const std::vector<RowMeta>& rows) {
-    const auto& labels = oracle_detail_rrc_label_template_v172537();
-    const auto* element = element_ptr_for(elements, r.element_index);
-    const auto* lower_meta = row_for(rows, r.element_index, r.lower_row);
-    const int global_level = lower_meta ? lower_meta->global_level_index :
-        (element ? element->row_offset + r.lower_row : r.lower_row);
-    double threshold = 0.0;
-    if (r.type49_valid && r.type49_threshold_ev > 0.0) threshold = r.type49_threshold_ev;
-    else if (r.type53_valid && r.type53_threshold_ev > 0.0) threshold = r.type53_threshold_ev;
-    else if (r.type99_valid && r.type99_threshold_ev > 0.0) threshold = r.type99_threshold_ev;
-    else threshold = r.line_energy_ev;
-    auto label_matches_record = [&](const RrcLabelTemplateRow& label) {
-        if (element_z_from_ion_label(label.ion) != r.element_z) return false;
-        if (roman_stage_from_ion_label(label.ion) != r.ion_stage) return false;
-        return true;
-    };
-    auto energy_close = [&](double a, double b) {
-        const double tol = std::max(1.0e-5, std::max(std::abs(a), std::abs(b)) * 2.0e-6);
-        return std::abs(a - b) <= tol;
-    };
-    // Type-53 diagnostics already carry the public RRC/detail index for the
-    // inserted detail surface. Preserve it first to keep duplicated public rows
-    // in their oracle order.
-    if ((r.type53_valid || r.data_type == 53) && r.continuum_index_one_based > 0 &&
-        oracle_detail_rrc_inventory(r.continuum_index_one_based)) {
-        const std::size_t i = static_cast<std::size_t>(r.continuum_index_one_based - 1);
-        if (i < labels.size() && label_matches_record(labels[i])) return r.continuum_index_one_based;
-    }
-    // Type-99 uses nbinc/continuum-bin numbering, not the public detail row.
-    // Resolve it by the bound/global level and threshold so the H superlevel
-    // recombination row goes to public row 32 instead of being accumulated into
-    // public row 1.
-    if (global_level > 0 && threshold > 0.0) {
-        std::size_t best = labels.size();
-        double best_delta = std::numeric_limits<double>::infinity();
-        for (std::size_t i = 0; i < labels.size(); ++i) {
-            const auto& label = labels[i];
-            if (!label_matches_record(label)) continue;
-            if (label.level_index != global_level) continue;
-            const double delta = std::abs(label.energy_ev - threshold);
-            if (energy_close(label.energy_ev, threshold) && delta < best_delta) {
-                best = i;
-                best_delta = delta;
-            }
-        }
-        if (best != labels.size()) return labels[best].index;
-        for (std::size_t i = 0; i < labels.size(); ++i) {
-            const auto& label = labels[i];
-            if (!label_matches_record(label)) continue;
-            if (label.level_index == global_level) return label.index;
-        }
-    }
-    if (r.continuum_index_one_based > 0 && oracle_detail_rrc_inventory(r.continuum_index_one_based)) {
-        const std::size_t i = static_cast<std::size_t>(r.continuum_index_one_based - 1);
-        if (i < labels.size() && label_matches_record(labels[i])) return r.continuum_index_one_based;
-    }
-    return 0;
-}
-
-// XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Compute diagnostic rrc rows by index for the bound-free/photoionization/recombination-continuum path using the current radiation field and level populations.
 // Reference context: XSTAR Manual ss11.5, 11.6.1, 11.7; Kallman & Bautista (2001); ATDB ch12.
 // XSTAR-FUNCTION-COMMENT-END
@@ -10169,7 +8299,7 @@ std::map<long long,RrcRow> diagnostic_rrc_rows_by_index(
     std::stable_sort(records.begin(), records.end(), [](const RecordDiag& a, const RecordDiag& b) {
         return a.source_position < b.source_position;
     });
-    const auto& labels = oracle_detail_rrc_label_template_v172537();
+    const auto& labels = oracle_detail_rrc_label_template();
     std::vector<bool> consumed(labels.size(), false);
 
     auto label_matches_ion = [](const RrcLabelTemplateRow& label, const RecordDiag& r) {
@@ -10278,16 +8408,6 @@ std::map<long long,RrcRow> diagnostic_rrc_rows_by_index(
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Compute rrc row has signal for the bound-free/photoionization/recombination-continuum path using the current radiation field and level populations.
-// Reference context: XSTAR Manual ss11.5, 11.6.1, 11.7; Kallman & Bautista (2001); ATDB ch12.
-// XSTAR-FUNCTION-COMMENT-END
-[[maybe_unused]] bool rrc_row_has_signal(const RrcRow& row) {
-    return row.emis_in != 0.0 || row.emis_out != 0.0 || row.absorption != 0.0 || row.opacity != 0.0 ||
-        (std::isfinite(row.tau_in) && row.tau_in != 0.0) ||
-        (std::isfinite(row.tau_out) && row.tau_out != 0.0);
-}
-
-// XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Compute merged rrc row for the bound-free/photoionization/recombination-continuum path using the current radiation field and level populations.
 // Reference context: XSTAR Manual ss11.5, 11.6.1, 11.7; Kallman & Bautista (2001); ATDB ch12.
 // XSTAR-FUNCTION-COMMENT-END
@@ -10308,16 +8428,6 @@ RrcRow merged_rrc_row(const RrcRow& base, const RrcRow* diagnostic) {
     return out;
 }
 
-
-// XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Compute line identity by row record for the line/emissivity/opacity path on the source or publication energy grid.
-// Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
-// XSTAR-FUNCTION-COMMENT-END
-[[maybe_unused]] const xstar_run_state::LineIdentityState* line_identity_by_row_record(
-    const xstar_run_state::ProductWritingState& state,
-    const LineRow& row) {
-    return line_identity_by_index(state, row.record);
-}
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Write line detail from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
@@ -10374,7 +8484,7 @@ void write_line_detail(const std::filesystem::path& path,
                 {"1J","1E","8A","20A","20A","1E","1E","1E","1E","1E"},
                 {"","A","","","","erg/cm^3/s","erg/cm^3/s","/cm","",""});
             write_radial_keywords(fptr, state, z, state.radial_zones[sz]);
-            const auto& detail_line_labels = oracle_detail_line_label_template_v172537();
+            const auto& detail_line_labels = oracle_detail_line_label_template();
             for (std::size_t i = 0; i < pw_line_index.size(); ++i) {
                 const long long line_index = static_cast<long long>(std::llround(pw_line_index[i]));
                 const auto* label = i < detail_line_labels.size() ? &detail_line_labels[i] : nullptr;
@@ -10440,7 +8550,7 @@ void write_line_detail(const std::filesystem::path& path,
             continue;
         }
 
-        const auto& detail_line_labels = oracle_detail_line_label_template_v172537();
+        const auto& detail_line_labels = oracle_detail_line_label_template();
 
         create_table(fptr, BINARY_TBL, static_cast<long>(detail_line_labels.size()), "XSTAR_RADIAL",
             {"index","wavelength","ion","lower_level","upper_level","emis_inward","emis_outward","opacity","tau_in","tau_out"},
@@ -10532,7 +8642,7 @@ void write_line_detail(const std::filesystem::path& path,
             write_real4(fptr, 10, row, r.tau_out);
         }
         detal2_audit.push_back(audit);
-        if (!true_production_mode_v65()) {
+        if (!true_production_mode()) {
             std::cout << "V048746255172542_DETAL2_HDU" << audit.hdu << "_ROWS=" << audit.rows << "\n"
                       << "V048746255172542_DETAL2_HDU" << audit.hdu << "_DIAGNOSTIC_ROWS=" << audit.diagnostic_rows << "\n"
                       << "V048746255172542_DETAL2_HDU" << audit.hdu << "_EMIS_OUTWARD_NONZERO=" << audit.emis_outward_nonzero << "\n"
@@ -10543,7 +8653,7 @@ void write_line_detail(const std::filesystem::path& path,
         }
     }
     close_fits(fptr);
-    if (true_production_mode_v65()) return;
+    if (true_production_mode()) return;
     std::ofstream audit_json(path.parent_path() / "v048746255172542_xo01_detal2_radial_value_null_audit.json");
     audit_json << "{\n"
                << "  \"schema\": \"xstar-tools-v048746255172542-xo01-detal2-radial-value-null-audit-v1\",\n"
@@ -10565,26 +8675,6 @@ void write_line_detail(const std::filesystem::path& path,
                    << "}" << (i + 1 == detal2_audit.size() ? "\n" : ",\n");
     }
     audit_json << "  ]\n}\n";
-}
-
-// XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Provide element index for z for final science-product publication from already-committed run state.
-// Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
-// XSTAR-FUNCTION-COMMENT-END
-[[maybe_unused]] int element_index_for_z(const std::vector<ElementMeta>& elements, int z) {
-    for (const auto& e : elements) if (e.element_z == z) return e.element_index;
-    return 0;
-}
-
-// XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Compute continuum plane count for the bound-free/photoionization/recombination-continuum path using the current radiation field and level populations.
-// Reference context: XSTAR Manual ss11.5, 11.6.1, 11.7; Kallman & Bautista (2001); ATDB ch12.
-// XSTAR-FUNCTION-COMMENT-END
-[[maybe_unused]] std::size_t continuum_plane_count(const xstar_run_state::ExactSourceWorkspaceState& ws) {
-    if (ws.native_continuum_count > 0) return ws.native_continuum_count;
-    if (!ws.elumab.empty() && ws.elumab.size() % 2 == 0) return ws.elumab.size() / 2;
-    if (!ws.tauc.empty() && ws.tauc.size() % 2 == 0) return ws.tauc.size() / 2;
-    return 0;
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
@@ -10854,7 +8944,7 @@ void write_rrc_detail(const std::filesystem::path& path,
                 {"1J","1J","1E","8A","20A","20A","1E","1E","1E","1E","1E","1E"},
                 {"","","eV","","","","erg/cm^3/s","erg/cm^3/s","erg/cm^3/s","/cm","",""});
             write_radial_keywords(fptr, state, z, zone);
-            const auto& detail_rrc_labels = oracle_detail_rrc_label_template_v172537();
+            const auto& detail_rrc_labels = oracle_detail_rrc_label_template();
             for (std::size_t i = 0; i < pw_rrc_index.size(); ++i) {
                 const long long rrc_index = static_cast<long long>(std::llround(pw_rrc_index[i]));
                 const auto* label = i < detail_rrc_labels.size() ? &detail_rrc_labels[i] : nullptr;
@@ -10914,7 +9004,7 @@ void write_rrc_detail(const std::filesystem::path& path,
                 // populations, opacity, tau, and controller state are frozen.
                 if (native_standalone_product_state(state)) {
                     const double cfrac = parameter_value(state, "cfrac", 1.0);
-                    const auto directional = source_rrc_directional_projection_v0648123431(
+                    const auto directional = source_rrc_directional_projection(
                         r.emis_in, r.emis_out, r.tau_in, r.tau_out, cfrac);
                     r.emis_in = directional.first;
                     r.emis_out = directional.second;
@@ -10933,7 +9023,7 @@ void write_rrc_detail(const std::filesystem::path& path,
             continue;
         }
 
-        const auto& detail_rrc_labels = oracle_detail_rrc_label_template_v172537();
+        const auto& detail_rrc_labels = oracle_detail_rrc_label_template();
 
         create_table(fptr, BINARY_TBL, static_cast<long>(detail_rrc_labels.size()), "XSTAR_RADIAL",
             {"rrc index","level index","energy","ion","lower_level","upper_level","emis_inward","emis_outward","integrated absn","opacity","tau_in","tau_out"},
@@ -11046,7 +9136,7 @@ void write_rrc_detail(const std::filesystem::path& path,
             // publication-only re-split of the accepted total emissivity.
             if (native_standalone_product_state(state)) {
                 const double cfrac = parameter_value(state, "cfrac", 1.0);
-                const auto directional = source_rrc_directional_projection_v0648123431(
+                const auto directional = source_rrc_directional_projection(
                     r.emis_in, r.emis_out, r.tau_in, r.tau_out, cfrac);
                 r.emis_in = directional.first;
                 r.emis_out = directional.second;
@@ -11074,7 +9164,7 @@ void write_rrc_detail(const std::filesystem::path& path,
             if (tau_in != 0.0) ++audit.tau_in_nonzero;
         }
         detal3_audit.push_back(audit);
-        if (!true_production_mode_v65()) std::cout << "V048746255172556_DETAL3_HDU" << audit.hdu << "_ROWS=" << audit.rows << "\n"
+        if (!true_production_mode()) std::cout << "V048746255172556_DETAL3_HDU" << audit.hdu << "_ROWS=" << audit.rows << "\n"
                   << "V048746255172556_DETAL3_HDU" << audit.hdu << "_DIAGNOSTIC_ROWS=" << audit.diagnostic_rows << "\n"
                   << "V048746255172556_DETAL3_HDU" << audit.hdu << "_EMIS_OUTWARD_NONZERO=" << audit.emis_outward_nonzero << "\n"
                   << "V048746255172556_DETAL3_HDU" << audit.hdu << "_INTEGRATED_ABSN_NONZERO=" << audit.absorption_nonzero << "\n"
@@ -11085,7 +9175,7 @@ void write_rrc_detail(const std::filesystem::path& path,
                   << "V048746255172556_DETAL3_HDU" << audit.hdu << "_TAU_OUT_NULLS=0\n";
     }
     close_fits(fptr);
-    if (true_production_mode_v65()) return;
+    if (true_production_mode()) return;
     std::ofstream audit_json(path.parent_path() / "v048746255172556_xo01_detal3_rrc_native_surface_audit.json");
     audit_json << "{\n"
                << "  \"schema\": \"xstar-tools-v048746255172556-xo01-detal3-rrc-native-surface-audit-v1\",\n"
@@ -11166,23 +9256,6 @@ std::vector<ContinuumDiagRow> read_continuum_diagnostics(
         row.free_free_opacity_increment = number_or(f, columns, "free_free_opacity_increment", std::numeric_limits<double>::quiet_NaN());
         row.brcems = number_or(f, columns, "brcems", std::numeric_limits<double>::quiet_NaN());
         out.push_back(row);
-    }
-    return out;
-}
-
-// XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Load continuum diagnostics by full bin into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
-// Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
-// XSTAR-FUNCTION-COMMENT-END
-[[maybe_unused]] std::vector<ContinuumDiagRow> read_continuum_diagnostics_by_full_bin(
-    const xstar_run_state::ProductWritingState& state,
-    std::size_t sequence,
-    std::size_t full_count) {
-    std::vector<ContinuumDiagRow> out(full_count);
-    for (const auto& row : read_continuum_diagnostics(state, sequence)) {
-        if (row.full_bin_one_based <= 0) continue;
-        const std::size_t idx = static_cast<std::size_t>(row.full_bin_one_based - 1);
-        if (idx < out.size()) out[idx] = row;
     }
     return out;
 }
@@ -11374,38 +9447,6 @@ double source_continuum_opacity_for_bin(
     return std::isfinite(value) ? value : 0.0;
 }
 // XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Compute source continuum emis in for bin for the bound-free/photoionization/recombination-continuum path using the current radiation field and level populations.
-// Reference context: XSTAR Manual ss11.5, 11.6.1, 11.7; Kallman & Bautista (2001); ATDB ch12.
-// XSTAR-FUNCTION-COMMENT-END
-[[maybe_unused]] double source_continuum_emis_in_for_bin(
-    const xstar_run_state::FixedEvaluationState& evaluation,
-    const std::vector<ContinuumDiagRow>& diagnostics_by_bin,
-    const std::vector<double>& retained_rccemis,
-    std::size_t continuum_count,
-    std::size_t index) {
-    const auto& ws = evaluation.source_workspace;
-    const auto valid_positive = [](double value) { return std::isfinite(value) && value > 0.0; };
-    if (retained_rccemis.size() >= 2 * continuum_count && index < continuum_count &&
-        valid_positive(retained_rccemis[continuum_count + index])) {
-        return retained_rccemis[continuum_count + index];
-    }
-    if (ws.native_continuum_count > 0 && ws.native_continuum_count + index < ws.rccemis.size() &&
-        valid_positive(ws.rccemis[ws.native_continuum_count + index])) {
-        return ws.rccemis[ws.native_continuum_count + index];
-    }
-    if (index < ws.rccemis.size() && valid_positive(ws.rccemis[index])) return ws.rccemis[index];
-    // Do not fall back to the public continuum/spectrum fluxes for rccemis.
-    // Those are flux-like product planes, not the fstepr4 inward continuum
-    // emissivity plane, and caused visible nonzero `emis in` rows where the
-    // oracle has exact zeros.  Only use retained/source rccemis; missing cells
-    // remain numeric zero.
-    if (index < diagnostics_by_bin.size() && valid_positive(diagnostics_by_bin[index].brcems)) {
-        return diagnostics_by_bin[index].brcems;
-    }
-    return 0.0;
-}
-
-// XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Write spectrum detail from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ch5 and ss11.5-11.6; publication helper, not a new physical rate.
 // XSTAR-FUNCTION-COMMENT-END
@@ -11460,7 +9501,7 @@ void write_spectrum_detail(const std::filesystem::path& path,
             const bool have_retained_accumulated_zrems =
                 native_standalone_product_state(state) && ws.zrems.size() == 5u * n;
             if (have_retained_accumulated_zrems) {
-                // advance_source_continuum_radiation_v82_patch52 runs the same
+                // advance_source_continuum_radiation runs the same
                 // dense bremem + gsmooth + heatt + trnfrn path as the native
                 // controller and stores the cumulative five-plane zrems state
                 // on every accepted boundary.  Publish that state directly.
@@ -11556,7 +9597,7 @@ void write_spectrum_detail(const std::filesystem::path& path,
                 write_real4(fptr, 7, row, out_z5);
                 write_real4(fptr, 8, row, out_opacity);
                 write_real4(fptr, 9, row, out_emis);
-                write_patch52017381_detal4_writer_projection(
+                write_detal4_writer_projection(
                     oz + 1u, src + 1u, oz + 3u, e.sequence, e.call_index, i + 1u,
                     e.radiation_energy_ev[i], exact_fstepr4, n, ws.rccemis.size(),
                     (n + i < ws.rccemis.size() ? ws.rccemis[n + i] : 0.0),
@@ -11733,31 +9774,6 @@ void write_abundance_base(fitsfile* fptr, long row, const xstar_run_state::Abund
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Provide abundance base row for zone for final science-product publication from already-committed run state.
-// Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
-// XSTAR-FUNCTION-COMMENT-END
-[[maybe_unused]] xstar_run_state::AbundanceRadialRowState abundance_base_row_for_zone(
-    const xstar_run_state::ProductWritingState& state, std::size_t zone_index) {
-    if (zone_index < state.abundance_radial_rows.size()) return state.abundance_radial_rows[zone_index];
-    if (zone_index >= state.radial_zones.size()) return {};
-    const auto& zone = state.radial_zones[zone_index];
-    xstar_run_state::AbundanceRadialRowState row;
-    row.row_index = zone_index + 1;
-    row.radius_cm = zone.radius_cm;
-    row.delta_radius_cm = zone.delta_radius_cm;
-    row.log_ionization_parameter = zone.log_ionization_parameter;
-    row.electron_fraction = zone.electron_fraction;
-    row.density_cm3 = zone.density_cm3;
-    row.pressure_dyn_cm2 = zone.pressure_dyn_cm2;
-    row.temperature_t4 = zone.temperature_t4;
-    row.fractional_heat_error = 0.0;
-    row.terminal_row = zone_index + 1 == state.radial_zones.size();
-    return row;
-}
-
-
-
-// XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Provide abundance output base row for zone for final science-product publication from already-committed run state.
 // Reference context: XSTAR Manual ch5 plus ss11.5-11.6 for the published physical quantities.
 // XSTAR-FUNCTION-COMMENT-END
@@ -11930,7 +9946,7 @@ void write_abundances(const std::filesystem::path& path,
     const auto names = abundance_columns(elements);
     const auto formats = ascii_e_formats(names.size());
     const auto units = abundance_units(names);
-    const auto legacy_values = pprint_value_patch_enabled() ? parse_legacy_pprint_product_values(state) : LegacyPprintProductValues{};
+    const auto legacy_values = pprint_value() ? parse_legacy_pprint_product_values(state) : LegacyPprintProductValues{};
     fitsfile* fptr = create_fits(path, state);
     create_table(fptr, ASCII_TBL, static_cast<long>(state.radial_zones.size()), "ABUNDANCES", names, formats, units);
     std::vector<std::map<std::pair<int,int>,double>> fractions;
@@ -12015,7 +10031,7 @@ void write_abundances(const std::filesystem::path& path,
         }
     }
 
-    if (!true_production_mode_v65()) {
+    if (!true_production_mode()) {
         std::ofstream audit(path.parent_path() / "v048746255172565_zrtmp_trapezoidal_audit.json");
         if (audit) {
             std::size_t positive_intervals = 0;
@@ -12074,7 +10090,7 @@ void write_abundances(const std::filesystem::path& path,
             if (!std::isfinite(value)) value = 0.0;
             element_sum += value;
             write_real4(fptr, 8 + element, row, value);
-            write_v0648123431_abundance_thermal_trace(
+            write_abundance_thermal_trace(
                 "HEATING", z, source_zone_index(state, z), seq, element,
                 retained_present, retained_value, value, st.total_heating);
         }
@@ -12112,7 +10128,7 @@ void write_abundances(const std::filesystem::path& path,
             if (!std::isfinite(value)) value = 0.0;
             element_sum += value;
             write_real4(fptr, 8 + element, row, value);
-            write_v0648123431_abundance_thermal_trace(
+            write_abundance_thermal_trace(
                 "COOLING", z, source_zone_index(state, z), seq, element,
                 retained_present, retained_value, value, st.total_cooling);
         }
@@ -12383,7 +10399,7 @@ void write_public_rrc(const std::filesystem::path& path,
     //   tauc(2,kkkl)   -> depth_inward
     //
     // Older native writers selected rows from the frozen 994-row
-    // oracle_public_rrc_label_template_v172537().  That was only a snapshot of
+    // a frozen oracle RRC label template.  That was only a snapshot of
     // an older Python product and suppressed 58 legitimate Mg VI-IX rows in the
     // current source-faithful trajectory.  Derive both the public row set and
     // its metadata from the live native RRC identity/workspace instead.

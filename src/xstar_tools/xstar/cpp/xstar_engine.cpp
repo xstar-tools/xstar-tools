@@ -20,38 +20,40 @@
 
 namespace {
 
-// XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Implement is supported mg record as a local helper for the xstar engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
-// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
-// XSTAR-FUNCTION-COMMENT-END
-bool is_supported_mg_record(long long rate_type, long long data_type) {
-    if (rate_type == 7 && (data_type == 49 || data_type == 53)) {
-        return true;
-    }
-    // Type 50/51 are not product-active in v0.6.8, but the coarse ABI can
-    // identify their topology and count them as C++-supported classification
-    // work.  Matrix/rate row generation remains disabled until a later parity
-    // package owns the full row application boundary.
-    if (data_type == 50 || data_type == 51) {
-        return true;
-    }
-    return false;
+// ABI-compatibility-only implementation for the retired Mg accumulator
+// diagnostics.  No in-repository production or Python path calls this helper;
+// it exists solely so C API ABI 60487 keeps the symbol behavior exported by
+// 0.6.75 and earlier releases.
+enum LegacyMgAccumulatorCounterIndex {
+    LEGACY_MG_ACC_RECORDS_SEEN = 0,
+    LEGACY_MG_ACC_CPP_SUPPORTED = 1,
+    LEGACY_MG_ACC_PYTHON_FALLBACK = 2,
+    LEGACY_MG_ACC_MATRIX_TERMS_EMITTED = 3,
+    LEGACY_MG_ACC_RATE_TERMS_EMITTED = 4,
+    LEGACY_MG_ACC_HEAT_TERMS_EMITTED = 5,
+    LEGACY_MG_ACC_COOL_TERMS_EMITTED = 6,
+    LEGACY_MG_ACC_RATE_TYPE7_RECORDS = 7,
+    LEGACY_MG_ACC_TYPE49_RECORDS = 8,
+    LEGACY_MG_ACC_TYPE53_RECORDS = 9,
+    LEGACY_MG_ACC_TYPE50_RECORDS = 10,
+    LEGACY_MG_ACC_TYPE51_RECORDS = 11,
+    LEGACY_MG_ACC_TYPE49_SUPPORTED = 12,
+    LEGACY_MG_ACC_TYPE53_SUPPORTED = 13,
+    LEGACY_MG_ACC_TYPE50_TOPOLOGY_SUPPORTED = 14,
+    LEGACY_MG_ACC_TYPE51_TOPOLOGY_SUPPORTED = 15,
+    LEGACY_MG_ACC_UNSUPPORTED_RATE_TYPE_RECORDS = 16,
+    LEGACY_MG_ACC_UNSUPPORTED_DATA_TYPE_RECORDS = 17,
+    LEGACY_MG_ACC_SOURCE_ORDER_RECORDS = 18,
+    LEGACY_MG_ACC_PRODUCT_ACTIVE = 19,
+    LEGACY_MG_ACC_COUNTER_COUNT = 20,
+};
+
+bool legacy_mg_accumulator_supported_record(long long rate_type, long long data_type) {
+    if (rate_type == 7 && (data_type == 49 || data_type == 53)) return true;
+    return data_type == 50 || data_type == 51;
 }
 
-// XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Implement zero counters as a local helper for the xstar engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
-// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
-// XSTAR-FUNCTION-COMMENT-END
-void zero_counters(std::int64_t* counters, int counters_size) {
-    if (counters == nullptr || counters_size <= 0) return;
-    for (int i = 0; i < counters_size; ++i) counters[i] = 0;
-}
-
-// XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Evaluate eval mg ion accumulator impl using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
-// Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use.
-// XSTAR-FUNCTION-COMMENT-END
-int eval_mg_ion_accumulator_impl(
+int legacy_mg_ion_accumulator_compat(
     int element_z,
     int ion_index,
     int ion_stage,
@@ -68,7 +70,7 @@ int eval_mg_ion_accumulator_impl(
     std::size_t message_size
 ) {
     using namespace xstar_backend;
-    if (!valid_count(n_records) || counters == nullptr || counters_size < MG_ACC_COUNTER_COUNT) {
+    if (!valid_count(n_records) || counters == nullptr || counters_size < LEGACY_MG_ACC_COUNTER_COUNT) {
         write_message(message, message_size, "invalid Mg-ion accumulator arguments");
         return XSTAR_BACKEND_ERR_INVALID_ARGUMENT;
     }
@@ -76,7 +78,7 @@ int eval_mg_ion_accumulator_impl(
         write_message(message, message_size, "record rate/data arrays are required when n_records > 0");
         return XSTAR_BACKEND_ERR_INVALID_ARGUMENT;
     }
-    zero_counters(counters, counters_size);
+    for (int i = 0; i < counters_size; ++i) counters[i] = 0;
 
     std::int64_t cpp_supported = 0;
     std::int64_t python_fallback = 0;
@@ -88,32 +90,28 @@ int eval_mg_ion_accumulator_impl(
     for (int i = 0; i < n_records; ++i) {
         const std::int64_t rt = record_rate_type[i];
         const std::int64_t dt = record_data_type[i];
-        counters[MG_ACC_RECORDS_SEEN] += 1;
+        counters[LEGACY_MG_ACC_RECORDS_SEEN] += 1;
         if (record_source_index != nullptr) {
             const std::int64_t src = record_source_index[i];
-            if (i == 0 || src >= previous_source_index) {
-                source_order_records += 1;
-            }
+            if (i == 0 || src >= previous_source_index) source_order_records += 1;
             previous_source_index = src;
         } else if (record_number != nullptr) {
             const std::int64_t src = record_number[i];
-            if (i == 0 || src >= previous_source_index) {
-                source_order_records += 1;
-            }
+            if (i == 0 || src >= previous_source_index) source_order_records += 1;
             previous_source_index = src;
         }
-        if (rt == 7) counters[MG_ACC_RATE_TYPE7_RECORDS] += 1;
-        if (dt == 49) counters[MG_ACC_TYPE49_RECORDS] += 1;
-        if (dt == 53) counters[MG_ACC_TYPE53_RECORDS] += 1;
-        if (dt == 50) counters[MG_ACC_TYPE50_RECORDS] += 1;
-        if (dt == 51) counters[MG_ACC_TYPE51_RECORDS] += 1;
+        if (rt == 7) counters[LEGACY_MG_ACC_RATE_TYPE7_RECORDS] += 1;
+        if (dt == 49) counters[LEGACY_MG_ACC_TYPE49_RECORDS] += 1;
+        if (dt == 53) counters[LEGACY_MG_ACC_TYPE53_RECORDS] += 1;
+        if (dt == 50) counters[LEGACY_MG_ACC_TYPE50_RECORDS] += 1;
+        if (dt == 51) counters[LEGACY_MG_ACC_TYPE51_RECORDS] += 1;
 
-        if (element_z == 12 && is_supported_mg_record(rt, dt)) {
+        if (element_z == 12 && legacy_mg_accumulator_supported_record(rt, dt)) {
             cpp_supported += 1;
-            if (rt == 7 && dt == 49) counters[MG_ACC_TYPE49_SUPPORTED] += 1;
-            if (rt == 7 && dt == 53) counters[MG_ACC_TYPE53_SUPPORTED] += 1;
-            if (dt == 50) counters[MG_ACC_TYPE50_TOPOLOGY_SUPPORTED] += 1;
-            if (dt == 51) counters[MG_ACC_TYPE51_TOPOLOGY_SUPPORTED] += 1;
+            if (rt == 7 && dt == 49) counters[LEGACY_MG_ACC_TYPE49_SUPPORTED] += 1;
+            if (rt == 7 && dt == 53) counters[LEGACY_MG_ACC_TYPE53_SUPPORTED] += 1;
+            if (dt == 50) counters[LEGACY_MG_ACC_TYPE50_TOPOLOGY_SUPPORTED] += 1;
+            if (dt == 51) counters[LEGACY_MG_ACC_TYPE51_TOPOLOGY_SUPPORTED] += 1;
         } else {
             python_fallback += 1;
             if (rt != 7 && dt != 50 && dt != 51) unsupported_rate += 1;
@@ -121,17 +119,16 @@ int eval_mg_ion_accumulator_impl(
         }
     }
 
-    counters[MG_ACC_CPP_SUPPORTED] = cpp_supported;
-    counters[MG_ACC_PYTHON_FALLBACK] = python_fallback;
-    counters[MG_ACC_UNSUPPORTED_RATE_TYPE_RECORDS] = unsupported_rate;
-    counters[MG_ACC_UNSUPPORTED_DATA_TYPE_RECORDS] = unsupported_data;
-    counters[MG_ACC_SOURCE_ORDER_RECORDS] = source_order_records;
-    counters[MG_ACC_PRODUCT_ACTIVE] = 0;
-    // Product-active row generation remains off in v0.6.8.
-    counters[MG_ACC_MATRIX_TERMS_EMITTED] = 0;
-    counters[MG_ACC_RATE_TERMS_EMITTED] = 0;
-    counters[MG_ACC_HEAT_TERMS_EMITTED] = 0;
-    counters[MG_ACC_COOL_TERMS_EMITTED] = 0;
+    counters[LEGACY_MG_ACC_CPP_SUPPORTED] = cpp_supported;
+    counters[LEGACY_MG_ACC_PYTHON_FALLBACK] = python_fallback;
+    counters[LEGACY_MG_ACC_UNSUPPORTED_RATE_TYPE_RECORDS] = unsupported_rate;
+    counters[LEGACY_MG_ACC_UNSUPPORTED_DATA_TYPE_RECORDS] = unsupported_data;
+    counters[LEGACY_MG_ACC_SOURCE_ORDER_RECORDS] = source_order_records;
+    counters[LEGACY_MG_ACC_PRODUCT_ACTIVE] = 0;
+    counters[LEGACY_MG_ACC_MATRIX_TERMS_EMITTED] = 0;
+    counters[LEGACY_MG_ACC_RATE_TERMS_EMITTED] = 0;
+    counters[LEGACY_MG_ACC_HEAT_TERMS_EMITTED] = 0;
+    counters[LEGACY_MG_ACC_COOL_TERMS_EMITTED] = 0;
 
     std::ostringstream out;
     out << "Mg-ion accumulator v0.6.8 coarse ABI: element_z=" << element_z
@@ -139,14 +136,13 @@ int eval_mg_ion_accumulator_impl(
         << "; ion_stage=" << ion_stage
         << "; n_levels=" << n_levels
         << "; n_parent_levels=" << n_parent_levels
-        << "; records_seen=" << counters[MG_ACC_RECORDS_SEEN]
+        << "; records_seen=" << counters[LEGACY_MG_ACC_RECORDS_SEEN]
         << "; cpp_supported=" << cpp_supported
         << "; python_fallback=" << python_fallback
         << "; product_active=0";
     write_message(message, message_size, out.str());
     return XSTAR_BACKEND_OK;
 }
-
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Implement native expo as a local helper for the xstar engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
@@ -720,7 +716,7 @@ int xstar_engine_abi_version() {
 // Reference context: Implementation/provenance helper; no independent scientific formula.
 // XSTAR-FUNCTION-COMMENT-END
 const char* xstar_engine_backend_name() {
-    return "xstar_engine_h_he_mg_native_construction_boundary_v06451";
+    return "xstar_engine_native_construction_boundary";
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
@@ -728,15 +724,14 @@ const char* xstar_engine_backend_name() {
 // Reference context: Implementation/provenance helper; no independent scientific formula.
 // XSTAR-FUNCTION-COMMENT-END
 int xstar_engine_feature_flags() {
-    // bit 0: Mg-ion accumulator ABI present.
     // bit 1: coarse record traversal/classification implemented.
     // bit 2: compact packet counters implemented.
-    // bit 3: evaluation-level Mg rate-payload orchestration shadow.
-    // bit 4: native Type-63/Type-88 scalar shadow.
+    // bit 3: evaluation-level rate-payload orchestration shadow.
+    // bit 4: native Type-63/Type-88 scalar verification.
     // bit 5: Type-88 mixed-grid full-integration semantics.
     // bit 6: Type-63 Python-operation-order exactness refinement.
     // bit 9: native Type-50 line-center opakab result channel.
-    return 1 | 2 | 4 | 8 | 16 | 32 | 64 | 128 | 256 | 512 | 1024 | 2048 | 4096;
+    return 2 | 4 | 8 | 16 | 32 | 64 | 128 | 256 | 512 | 1024 | 2048 | 4096;
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
@@ -777,65 +772,18 @@ int xstar_engine_probe(int element_z, int ion_index, int n_records, char* messag
         return xstar_backend::XSTAR_BACKEND_ERR_INVALID_ARGUMENT;
     }
     std::ostringstream out;
-    out << "libxstar_engine.so v0.6.48.7.26 native H/He/Mg contribution-construction ABI available; element_z=" << element_z
+    out << "libxstar_engine.so native contribution-construction ABI available; element_z=" << element_z
         << "; ion_index=" << ion_index << "; n_records=" << n_records
         << "; product-active matrix/rate emission disabled";
     xstar_backend::write_message(message, message_size, out.str());
     return xstar_backend::XSTAR_BACKEND_OK;
 }
 
-// XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Compute matrix eval mg ion accumulator as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
-// Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
-// XSTAR-FUNCTION-COMMENT-END
-int xstar_matrix_eval_mg_ion_accumulator_v1(
-    int element_z,
-    int ion_index,
-    int ion_stage,
-    int n_levels,
-    int n_parent_levels,
-    int n_records,
-    const std::int64_t* record_number,
-    const std::int64_t* record_rate_type,
-    const std::int64_t* record_data_type,
-    const std::int64_t* record_source_index,
-    std::int64_t* counters,
-    int counters_size,
-    char* message,
-    std::size_t message_size
-) {
-    return eval_mg_ion_accumulator_impl(
-        element_z, ion_index, ion_stage, n_levels, n_parent_levels, n_records,
-        record_number, record_rate_type, record_data_type, record_source_index,
-        counters, counters_size, message, message_size);
-}
-
 // Backward-compatible v0.6.1 symbol.  It maps the shorter skeleton call onto
 // the v0.6.8 coarse ABI without product-active row generation.
-// XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Implement engine eval mg ion accumulator as a local helper for the xstar engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
-// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
-// XSTAR-FUNCTION-COMMENT-END
-int xstar_engine_eval_mg_ion_accumulator_v1(
-    int element_z,
-    int ion_index,
-    int n_records,
-    const std::int64_t* record_rate_type,
-    const std::int64_t* record_data_type,
-    std::int64_t* counters,
-    int counters_size,
-    char* message,
-    std::size_t message_size
-) {
-    return eval_mg_ion_accumulator_impl(
-        element_z, ion_index, 0, 0, 0, n_records,
-        nullptr, record_rate_type, record_data_type, nullptr,
-        counters, counters_size, message, message_size);
 }
 
-}
-
-extern "C" int xstar_engine_eval_mg_rate_payload_shadow_v1(
+extern "C" int xstar_engine_eval_rate_payload_shadow_v1(
     int n_records,
     const std::int64_t* meta_i64,
     int meta_stride,
@@ -941,7 +889,7 @@ extern "C" int xstar_engine_eval_mg_rate_payload_shadow_v1(
 }
 
 
-extern "C" int xstar_engine_eval_mg_rate_payload_native_scalars_v1(
+extern "C" int xstar_engine_eval_rate_payload_native_scalars_v1(
     int n_records,
     const std::int64_t* meta_i64,
     int meta_stride,
@@ -1017,3 +965,99 @@ extern "C" int xstar_engine_eval_mg_rate_payload_native_scalars_v1(
     write_message(message,message_size,out.str());
     return XSTAR_BACKEND_OK;
 }
+
+// ---------------------------------------------------------------------------
+// C ABI 60487 compatibility exports retained after the 0.6.76 source-name
+// cleanup.  These names are not used by current in-repository production code.
+// ---------------------------------------------------------------------------
+
+extern "C" int xstar_matrix_eval_mg_ion_accumulator_v1(
+    int element_z,
+    int ion_index,
+    int ion_stage,
+    int n_levels,
+    int n_parent_levels,
+    int n_records,
+    const std::int64_t* record_number,
+    const std::int64_t* record_rate_type,
+    const std::int64_t* record_data_type,
+    const std::int64_t* record_source_index,
+    std::int64_t* counters,
+    int counters_size,
+    char* message,
+    std::size_t message_size
+) {
+    return legacy_mg_ion_accumulator_compat(
+        element_z, ion_index, ion_stage, n_levels, n_parent_levels, n_records,
+        record_number, record_rate_type, record_data_type, record_source_index,
+        counters, counters_size, message, message_size);
+}
+
+extern "C" int xstar_engine_eval_mg_ion_accumulator_v1(
+    int element_z,
+    int ion_index,
+    int n_records,
+    const std::int64_t* record_rate_type,
+    const std::int64_t* record_data_type,
+    std::int64_t* counters,
+    int counters_size,
+    char* message,
+    std::size_t message_size
+) {
+    return legacy_mg_ion_accumulator_compat(
+        element_z, ion_index, 0, 0, 0, n_records,
+        nullptr, record_rate_type, record_data_type, nullptr,
+        counters, counters_size, message, message_size);
+}
+
+extern "C" int xstar_engine_eval_mg_rate_payload_shadow_v1(
+    int n_records,
+    const std::int64_t* meta_i64,
+    int meta_stride,
+    const double* rates_f64,
+    int rates_stride,
+    int max_terms,
+    std::int64_t* out_i64,
+    int out_i64_stride,
+    double* out_f64,
+    int out_f64_stride,
+    double* timing_f64,
+    int timing_size,
+    std::int64_t* stats,
+    int stats_size,
+    char* message,
+    std::size_t message_size
+) {
+    return xstar_engine_eval_rate_payload_shadow_v1(
+        n_records, meta_i64, meta_stride, rates_f64, rates_stride, max_terms,
+        out_i64, out_i64_stride, out_f64, out_f64_stride,
+        timing_f64, timing_size, stats, stats_size, message, message_size);
+}
+
+extern "C" int xstar_engine_eval_mg_rate_payload_native_scalars_v1(
+    int n_records,
+    const std::int64_t* meta_i64,
+    int meta_stride,
+    const double* context_f64,
+    int context_stride,
+    const double* payload_f64,
+    int payload_size,
+    const double* epi_f64,
+    const double* bremsa_f64,
+    int n_grid,
+    double* out_ans_f64,
+    int out_stride,
+    double* timing_f64,
+    int timing_size,
+    std::int64_t* stats,
+    int stats_size,
+    char* message,
+    std::size_t message_size
+) {
+    return xstar_engine_eval_rate_payload_native_scalars_v1(
+        n_records, meta_i64, meta_stride, context_f64, context_stride,
+        payload_f64, payload_size, epi_f64, bremsa_f64, n_grid,
+        out_ans_f64, out_stride, timing_f64, timing_size,
+        stats, stats_size, message, message_size);
+}
+

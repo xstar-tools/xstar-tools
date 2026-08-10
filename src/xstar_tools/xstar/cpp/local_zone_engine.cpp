@@ -126,7 +126,7 @@ double elapsed(const clock_type::time_point& start) {
 // Purpose: Write patch5201738 fixed rccemis edge from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-void write_patch5201738_fixed_rccemis_edge(
+void write_fixed_rccemis_edge(
     std::size_t source_sequence,
     const char* stage,
     const double* energy_ev,
@@ -160,7 +160,7 @@ void write_patch5201738_fixed_rccemis_edge(
 // Purpose: Write patch52017381 selected rrc bin1 record from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-void write_patch52017381_selected_rrc_bin1_record(
+void write_selected_rrc_bin1_record(
     std::size_t source_sequence,
     std::size_t selected_order,
     std::uint64_t source_position,
@@ -341,7 +341,7 @@ bool environment_flag(const char* name) {
 // Purpose: Write c type53 promotion audit from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 53 apply here.
 // XSTAR-FUNCTION-COMMENT-END
-void write_c_type53_promotion_audit_v0648119(
+void write_c_type53_promotion_audit(
     std::uint64_t source_position,
     std::int64_t record_number,
     int data_type,
@@ -575,7 +575,7 @@ struct HydrogenType50EscapeStateV04874618 {
 // Purpose: Load binary64 payload into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
 // Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-std::vector<double> read_binary64_payload_v04874618(const std::filesystem::path& path) {
+std::vector<double> read_binary64_thermal_payload(const std::filesystem::path& path) {
     std::ifstream input(path, std::ios::binary | std::ios::ate);
     if (!input) throw std::runtime_error("cannot open hydrogen Type-50 line-tau payload: " + path.string());
     const auto bytes = input.tellg();
@@ -596,7 +596,7 @@ std::vector<double> read_binary64_payload_v04874618(const std::filesystem::path&
 // Purpose: Validate the invariants required by required environment path; reject malformed dimensions, pointers, or state before scientific kernels are entered.
 // Reference context: Implementation/safety helper; no independent scientific formula.
 // XSTAR-FUNCTION-COMMENT-END
-std::string required_environment_path_v04874618(const char* name) {
+std::string required_environment_path(const char* name) {
     const char* value = std::getenv(name);
     if (!value || !*value) throw std::runtime_error(std::string("missing required environment path: ") + name);
     return value;
@@ -606,15 +606,15 @@ std::string required_environment_path_v04874618(const char* name) {
 // Purpose: Load hydrogen type50 escape state into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
 // Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 50 apply here.
 // XSTAR-FUNCTION-COMMENT-END
-HydrogenType50EscapeStateV04874618 load_hydrogen_type50_escape_state_v04874618() {
+HydrogenType50EscapeStateV04874618 load_hydrogen_type50_escape_state() {
     HydrogenType50EscapeStateV04874618 state;
     state.enabled = environment_flag("XSTAR_QUALIFICATION_HYDROGEN_TYPE50_ESCAPE_STATE");
     if (!state.enabled) return state;
-    const auto map_path = std::filesystem::path(required_environment_path_v04874618(
+    const auto map_path = std::filesystem::path(required_environment_path(
         "XSTAR_QUALIFICATION_HYDROGEN_TYPE50_LINE_MAP_CSV"));
-    const auto tau_in_path = std::filesystem::path(required_environment_path_v04874618(
+    const auto tau_in_path = std::filesystem::path(required_environment_path(
         "XSTAR_QUALIFICATION_HYDROGEN_TYPE50_LINE_TAU_IN_BIN"));
-    const auto tau_out_path = std::filesystem::path(required_environment_path_v04874618(
+    const auto tau_out_path = std::filesystem::path(required_environment_path(
         "XSTAR_QUALIFICATION_HYDROGEN_TYPE50_LINE_TAU_OUT_BIN"));
     std::ifstream mapping(map_path);
     if (!mapping) throw std::runtime_error("cannot open hydrogen Type-50 line-index map: " + map_path.string());
@@ -640,8 +640,8 @@ HydrogenType50EscapeStateV04874618 load_hydrogen_type50_escape_state_v04874618()
     if (state.line_index_by_record.size() != 133) {
         throw std::runtime_error("hydrogen Type-50 line-index map must contain exactly 133 records");
     }
-    state.tau_in = read_binary64_payload_v04874618(tau_in_path);
-    state.tau_out = read_binary64_payload_v04874618(tau_out_path);
+    state.tau_in = read_binary64_thermal_payload(tau_in_path);
+    state.tau_out = read_binary64_thermal_payload(tau_out_path);
     if (state.tau_in.size() != state.tau_out.size() || state.tau_in.empty()) {
         throw std::runtime_error("hydrogen Type-50 line-tau payload inventory mismatch");
     }
@@ -657,7 +657,7 @@ HydrogenType50EscapeStateV04874618 load_hydrogen_type50_escape_state_v04874618()
 // Purpose: Implement hydrogen type50 escape state as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
 // Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 50 apply here.
 // XSTAR-FUNCTION-COMMENT-END
-const HydrogenType50EscapeStateV04874618& hydrogen_type50_escape_state_v04874618() {
+const HydrogenType50EscapeStateV04874618& hydrogen_type50_escape_state() {
     // The standalone all-61 controller transports a different line optical-depth
     // workspace before each fixed-state callback.  Cache only the currently
     // bound payload; the historical one-process-per-evaluation path still hits
@@ -667,17 +667,17 @@ const HydrogenType50EscapeStateV04874618& hydrogen_type50_escape_state_v04874618
     const bool enabled = environment_flag("XSTAR_QUALIFICATION_HYDROGEN_TYPE50_ESCAPE_STATE");
     std::string key = enabled ? "1" : "0";
     if (enabled) {
-        key += "|" + required_environment_path_v04874618(
+        key += "|" + required_environment_path(
             "XSTAR_QUALIFICATION_HYDROGEN_TYPE50_LINE_MAP_CSV");
-        key += "|" + required_environment_path_v04874618(
+        key += "|" + required_environment_path(
             "XSTAR_QUALIFICATION_HYDROGEN_TYPE50_LINE_TAU_IN_BIN");
-        key += "|" + required_environment_path_v04874618(
+        key += "|" + required_environment_path(
             "XSTAR_QUALIFICATION_HYDROGEN_TYPE50_LINE_TAU_OUT_BIN");
     }
     static thread_local std::string cached_key;
     static thread_local HydrogenType50EscapeStateV04874618 state;
     if (cached_key != key) {
-        state = load_hydrogen_type50_escape_state_v04874618();
+        state = load_hydrogen_type50_escape_state();
         cached_key = key;
     }
     return state;
@@ -706,7 +706,7 @@ struct MagnesiumType50EscapeStateV04874619 {
 // Purpose: Load binary64 payload into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
 // Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-std::vector<double> read_binary64_payload_v04874619(const std::filesystem::path& path) {
+std::vector<double> read_binary64_population_payload(const std::filesystem::path& path) {
     std::ifstream input(path, std::ios::binary | std::ios::ate);
     if (!input) throw std::runtime_error("cannot open magnesium Type-50 line-tau payload: " + path.string());
     const auto bytes = input.tellg();
@@ -727,23 +727,23 @@ std::vector<double> read_binary64_payload_v04874619(const std::filesystem::path&
 // Purpose: Load magnesium type50 escape state into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
 // Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 50 apply here.
 // XSTAR-FUNCTION-COMMENT-END
-MagnesiumType50EscapeStateV04874619 load_magnesium_type50_escape_state_v04874619() {
+MagnesiumType50EscapeStateV04874619 load_magnesium_type50_escape_state() {
     MagnesiumType50EscapeStateV04874619 state;
     state.enabled = environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_ESCAPE_STATE");
     if (!state.enabled) return state;
     state.endpoint_energy_transport =
         environment_flag("XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_ENDPOINT_ENERGY_TRANSPORT");
-    const auto map_path = std::filesystem::path(required_environment_path_v04874618(
+    const auto map_path = std::filesystem::path(required_environment_path(
         "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_LINE_MAP_CSV"));
-    const auto tau_in_path = std::filesystem::path(required_environment_path_v04874618(
+    const auto tau_in_path = std::filesystem::path(required_environment_path(
         "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_LINE_TAU_IN_BIN"));
-    const auto tau_out_path = std::filesystem::path(required_environment_path_v04874618(
+    const auto tau_out_path = std::filesystem::path(required_environment_path(
         "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_LINE_TAU_OUT_BIN"));
-    const auto active_path = std::filesystem::path(required_environment_path_v04874618(
+    const auto active_path = std::filesystem::path(required_environment_path(
         "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_ACTIVE_RECORDS_CSV"));
     std::filesystem::path endpoint_path;
     if (state.endpoint_energy_transport) {
-        endpoint_path = std::filesystem::path(required_environment_path_v04874618(
+        endpoint_path = std::filesystem::path(required_environment_path(
             "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_ENDPOINT_MAP_CSV"));
     }
     state.source_sequence = environment_data_type("XSTAR_QUALIFICATION_SOURCE_SEQUENCE");
@@ -878,8 +878,8 @@ MagnesiumType50EscapeStateV04874619 load_magnesium_type50_escape_state_v04874619
             throw std::runtime_error("active magnesium Type-50 record is missing from source line-index map");
         }
     }
-    state.tau_in = read_binary64_payload_v04874619(tau_in_path);
-    state.tau_out = read_binary64_payload_v04874619(tau_out_path);
+    state.tau_in = read_binary64_population_payload(tau_in_path);
+    state.tau_out = read_binary64_population_payload(tau_out_path);
     if (state.tau_in.size() != state.tau_out.size() || state.tau_in.empty()) {
         throw std::runtime_error("magnesium Type-50 line-tau payload inventory mismatch");
     }
@@ -895,7 +895,7 @@ MagnesiumType50EscapeStateV04874619 load_magnesium_type50_escape_state_v04874619
 // Purpose: Implement magnesium type50 escape state as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
 // Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 50 apply here.
 // XSTAR-FUNCTION-COMMENT-END
-const MagnesiumType50EscapeStateV04874619& magnesium_type50_escape_state_v04874619() {
+const MagnesiumType50EscapeStateV04874619& magnesium_type50_escape_state() {
     // Mg Type-50 activity and line optical depths are sequence-dependent.  The
     // persistent controller binds the sequence and workspace paths before each
     // callback, so reload the single current state whenever that identity
@@ -910,18 +910,18 @@ const MagnesiumType50EscapeStateV04874619& magnesium_type50_escape_state_v048746
                  "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_LINE_TAU_IN_BIN",
                  "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_LINE_TAU_OUT_BIN",
                  "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_ACTIVE_RECORDS_CSV"}) {
-            key += "|" + required_environment_path_v04874618(name);
+            key += "|" + required_environment_path(name);
         }
         if (environment_flag(
                 "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_ENDPOINT_ENERGY_TRANSPORT")) {
-            key += "|" + required_environment_path_v04874618(
+            key += "|" + required_environment_path(
                 "XSTAR_QUALIFICATION_MAGNESIUM_TYPE50_ENDPOINT_MAP_CSV");
         }
     }
     static thread_local std::string cached_key;
     static thread_local MagnesiumType50EscapeStateV04874619 state;
     if (cached_key != key) {
-        state = load_magnesium_type50_escape_state_v04874619();
+        state = load_magnesium_type50_escape_state();
         cached_key = key;
     }
     return state;
@@ -959,7 +959,7 @@ struct MagnesiumType99PrimaryCoolingStateV04874620 {
 // Purpose: Load magnesium type99 primary cooling state into the typed runtime representation, validating the fields needed by downstream source-faithful calculations.
 // Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 99 apply here.
 // XSTAR-FUNCTION-COMMENT-END
-MagnesiumType99PrimaryCoolingStateV04874620 load_magnesium_type99_primary_cooling_state_v04874620() {
+MagnesiumType99PrimaryCoolingStateV04874620 load_magnesium_type99_primary_cooling_state() {
     MagnesiumType99PrimaryCoolingStateV04874620 state;
     state.enabled = environment_flag(kMagnesiumType99PrimaryCoolingReductionEnv);
     if (!state.enabled) return state;
@@ -967,7 +967,7 @@ MagnesiumType99PrimaryCoolingStateV04874620 load_magnesium_type99_primary_coolin
     if (state.source_sequence < 1 || state.source_sequence > 61) {
         throw std::runtime_error("magnesium Type-99 source sequence must be in 1..61");
     }
-    const auto ledger_path = std::filesystem::path(required_environment_path_v04874618(
+    const auto ledger_path = std::filesystem::path(required_environment_path(
         kMagnesiumType99PrimaryCoolingLedgerEnv));
     std::ifstream input(ledger_path);
     if (!input) {
@@ -1050,14 +1050,14 @@ MagnesiumType99PrimaryCoolingStateV04874620 load_magnesium_type99_primary_coolin
 }
 
 const MagnesiumType99PrimaryCoolingStateV04874620&
-magnesium_type99_primary_cooling_state_v04874620() {
+magnesium_type99_primary_cooling_state() {
     const bool enabled = environment_flag(kMagnesiumType99PrimaryCoolingReductionEnv);
     if (!enabled) {
         static const MagnesiumType99PrimaryCoolingStateV04874620 disabled{};
         return disabled;
     }
     const int sequence = environment_data_type("XSTAR_QUALIFICATION_SOURCE_SEQUENCE");
-    const std::string ledger = required_environment_path_v04874618(
+    const std::string ledger = required_environment_path(
         kMagnesiumType99PrimaryCoolingLedgerEnv);
     // These ledgers are compact.  Cache one validated state per sequence so the
     // controller does not rescan the all-61 CSV for every element callback.
@@ -1070,7 +1070,7 @@ magnesium_type99_primary_cooling_state_v04874620() {
     auto found = states.find(sequence);
     if (found == states.end()) {
         found = states.emplace(
-            sequence, load_magnesium_type99_primary_cooling_state_v04874620()).first;
+            sequence, load_magnesium_type99_primary_cooling_state()).first;
     }
     return found->second;
 }
@@ -1092,7 +1092,7 @@ struct MagnesiumPrimaryCoolingOrderStateV048746202 {
 };
 
 MagnesiumPrimaryCoolingOrderStateV048746202
-load_magnesium_primary_cooling_order_state_v048746202() {
+load_magnesium_primary_cooling_order_state() {
     MagnesiumPrimaryCoolingOrderStateV048746202 state;
     state.enabled = environment_flag(kMagnesiumPrimaryCoolingSourceOrderReductionEnv);
     if (!state.enabled) return state;
@@ -1100,7 +1100,7 @@ load_magnesium_primary_cooling_order_state_v048746202() {
     if (state.source_sequence < 1 || state.source_sequence > 61) {
         throw std::runtime_error("magnesium primary-cooling source sequence must be in 1..61");
     }
-    const auto ledger_path = std::filesystem::path(required_environment_path_v04874618(
+    const auto ledger_path = std::filesystem::path(required_environment_path(
         kMagnesiumPrimaryCoolingSourceOrderLedgerEnv));
     std::ifstream input(ledger_path);
     if (!input) {
@@ -1180,14 +1180,14 @@ load_magnesium_primary_cooling_order_state_v048746202() {
 }
 
 const MagnesiumPrimaryCoolingOrderStateV048746202&
-magnesium_primary_cooling_order_state_v048746202() {
+magnesium_primary_cooling_order_state() {
     const bool enabled = environment_flag(kMagnesiumPrimaryCoolingSourceOrderReductionEnv);
     if (!enabled) {
         static const MagnesiumPrimaryCoolingOrderStateV048746202 disabled{};
         return disabled;
     }
     const int sequence = environment_data_type("XSTAR_QUALIFICATION_SOURCE_SEQUENCE");
-    const std::string ledger = required_environment_path_v04874618(
+    const std::string ledger = required_environment_path(
         kMagnesiumPrimaryCoolingSourceOrderLedgerEnv);
     static thread_local std::string cached_ledger;
     static thread_local std::map<int, MagnesiumPrimaryCoolingOrderStateV048746202> states;
@@ -1198,7 +1198,7 @@ magnesium_primary_cooling_order_state_v048746202() {
     auto found = states.find(sequence);
     if (found == states.end()) {
         found = states.emplace(
-            sequence, load_magnesium_primary_cooling_order_state_v048746202()).first;
+            sequence, load_magnesium_primary_cooling_order_state()).first;
     }
     return found->second;
 }
@@ -1209,7 +1209,7 @@ magnesium_primary_cooling_order_state_v048746202() {
 // Purpose: Implement pescl as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
 // Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-double pescl_v0472_binary64(double tau) {
+double pescl(double tau) {
     double value = 0.0;
     if (tau < 1.0) {
         if (tau < 1.0e-5) {
@@ -1697,7 +1697,7 @@ struct SparsePreliminaryCacheAuditV064812337 {
 // Purpose: Write sparse preliminary cache audit from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-void write_sparse_preliminary_cache_audit_v064812337(
+void write_sparse_preliminary_cache_audit(
     const SparsePreliminaryCacheAuditV064812337& row) {
     const char* path = std::getenv("XSTAR_V064812337_SPARSE_CACHE_AUDIT_PATH");
     if (!path || !*path) return;
@@ -1767,7 +1767,7 @@ struct ResidualScalingAuditV064812339 {
 // Purpose: Write residual scaling audit from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-void write_residual_scaling_audit_v064812339(const ResidualScalingAuditV064812339& row) {
+void write_residual_scaling_audit(const ResidualScalingAuditV064812339& row) {
     const char* path = std::getenv("XSTAR_V064812339_RESIDUAL_SCALING_AUDIT_PATH");
     if (!path || !*path) return;
     const std::filesystem::path output(path);
@@ -1830,7 +1830,7 @@ struct TraversalSelectionAuditV064812340 {
 // Purpose: Write traversal selection audit from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-void write_traversal_selection_audit_v064812340(const TraversalSelectionAuditV064812340& row) {
+void write_traversal_selection_audit(const TraversalSelectionAuditV064812340& row) {
     const char* path = std::getenv("XSTAR_V064812340_TRAVERSAL_SELECTION_AUDIT_PATH");
     if (!path || !*path) return;
     const std::filesystem::path output(path);
@@ -1936,7 +1936,7 @@ double active_population_for_full_row(
 // Purpose: Compute source post mapback population for full row as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
 // Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
 // XSTAR-FUNCTION-COMMENT-END
-double source_post_mapback_population_for_full_row_v064812317(
+double source_post_mapback_population_for_full_row(
     const ActiveElementView& active,
     const std::vector<double>& populations,
     int full_row
@@ -1961,8 +1961,8 @@ public:
         const ElementProgram& element,
         const ActiveElementView& active
     ) : element_(element), active_(active),
-        type99_state_(magnesium_type99_primary_cooling_state_v04874620()),
-        primary_order_state_(magnesium_primary_cooling_order_state_v048746202()) {}
+        type99_state_(magnesium_type99_primary_cooling_state()),
+        primary_order_state_(magnesium_primary_cooling_order_state()) {}
 
     void append_matrix_committed(const xstar_element_contribution_v1& contribution) {
         const Identity identity = identity_of(contribution);
@@ -2742,7 +2742,7 @@ void apply_matrix_closure_contribution_corrections(
         // matrix-only replacement rates.
         if (magnesium_type50_primary_cooling_reduction &&
             element_z == 12 && contribution.data_type == 50 &&
-            magnesium_type50_escape_state_v04874619().active_records.count(contribution.record) != 0) {
+            magnesium_type50_escape_state().active_records.count(contribution.record) != 0) {
             if (magnesium_type50_thermal_channel_preservation) {
                 contribution.ans3 = pre_closure_ans3;
                 contribution.ans4 = pre_closure_ans4;
@@ -2753,7 +2753,7 @@ void apply_matrix_closure_contribution_corrections(
                     throw std::runtime_error("magnesium Type-50 closure endpoint is outside the active basis");
                 }
                 double endpoint_energy_ev = 0.0;
-                const auto& magnesium_state = magnesium_type50_escape_state_v04874619();
+                const auto& magnesium_state = magnesium_type50_escape_state();
                 if (magnesium_state.endpoint_energy_transport) {
                     const auto endpoint = magnesium_state.endpoint_by_record.find(contribution.record);
                     if (endpoint == magnesium_state.endpoint_by_record.end()) {
@@ -2951,7 +2951,7 @@ struct NativeElementDiagnostic {
 // Purpose: Write c call1 compact solve attribution from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-void write_c_call1_compact_solve_attribution_v0648118(
+void write_c_call1_compact_solve_attribution(
     const Program& program,
     const NativeElementDiagnostic& diagnostic) {
     if (environment_data_type("XSTAR_NATIVE_CALL_INDEX") != 1 || diagnostic.element_z != 6) return;
@@ -5013,8 +5013,8 @@ SourceLineEscapeGeneric source_line_escape_generic(const Program& program,const 
     if((input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_LINE_TAU_ACTIVE)!=0u && record.line_index_one_based>0 &&
        program.runtime_line_tau_in.size()==program.runtime_line_tau_out.size() && static_cast<std::size_t>(record.line_index_one_based)<=program.runtime_line_tau_in.size()){
         const std::size_t k=static_cast<std::size_t>(record.line_index_one_based-1); const double ti=program.runtime_line_tau_in[k],to=program.runtime_line_tau_out[k];
-        out.ptmp1=pescl_v0472_binary64(ti)*(1.0-cf);
-        out.ptmp2=pescl_v0472_binary64(to)*(1.0-cf)+2.0*pescl_v0472_binary64(ti+to)*cf;
+        out.ptmp1=pescl(ti)*(1.0-cf);
+        out.ptmp2=pescl(to)*(1.0-cf)+2.0*pescl(ti+to)*cf;
     }
     return out;
 }
@@ -5540,7 +5540,7 @@ Type99PhintResult evaluate_type99_phint53hunt(
 // Purpose: Parse type99 persistent leveltemp context from its external text/argument representation into validated native values.
 // Reference context: Implementation/input helper; XSTAR Manual ch4 describes parameter inputs, but this parser has no independent scientific formula.
 // XSTAR-FUNCTION-COMMENT-END
-Type99PersistentLeveltempContextV048746223 parse_type99_persistent_leveltemp_context_v048746223(
+Type99PersistentLeveltempContextV048746223 parse_type99_persistent_leveltemp_context(
     const ProgramRecord& record,
     const double* payload,
     const std::int64_t* ints,
@@ -5943,7 +5943,7 @@ double sequence1_type88_photo_rate(const double* raw,int raw_count,double thresh
 // Purpose: Build bound free geometry from the source-ordered inputs required by the next calculation stage.
 // Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-BoundFreePreparedGeometryV064895 prepare_bound_free_geometry_v064895(
+BoundFreePreparedGeometryV064895 prepare_bound_free_geometry(
     const double* payload,
     std::size_t real_count,
     const double* source_energy_ev,
@@ -6199,7 +6199,7 @@ bool evaluate_type53_source_integral(
             return false;
         }
     } else {
-        local_geometry = prepare_bound_free_geometry_v064895(
+        local_geometry = prepare_bound_free_geometry(
             payload, real_count, source_energy_ev, source_bin_count, threshold_ev,
             type49_semantics, phextrap_pairs, record_context);
         if (!local_geometry.valid) return false;
@@ -6502,7 +6502,7 @@ struct RateEvaluationContextV064894 {
 // Purpose: Build rate evaluation context from the source-ordered inputs required by the next calculation stage.
 // Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use.
 // XSTAR-FUNCTION-COMMENT-END
-RateEvaluationContextV064894 make_rate_evaluation_context_v064894(
+RateEvaluationContextV064894 make_rate_evaluation_context(
     const xstar_fixed_state_input_v1& input,
     const SourceContinuumWorkspace* calc_emisab_workspace) {
     RateEvaluationContextV064894 context;
@@ -6556,7 +6556,7 @@ RateEvaluationContextV064894 make_rate_evaluation_context_v064894(
 // Purpose: Compute prepared bound free geometry for the bound-free/photoionization/recombination-continuum path using the current radiation field and level populations.
 // Reference context: XSTAR Manual ss11.5, 11.6.1, 11.7; Kallman & Bautista (2001); ATDB ch12.
 // XSTAR-FUNCTION-COMMENT-END
-const BoundFreePreparedGeometryV064895* prepared_bound_free_geometry_v064895(
+const BoundFreePreparedGeometryV064895* prepared_bound_free_geometry(
     const Program& program,
     const ProgramRecord& record,
     const xstar_fixed_state_input_v1& eval_input,
@@ -6588,7 +6588,7 @@ const BoundFreePreparedGeometryV064895* prepared_bound_free_geometry_v064895(
         geometry.type49_semantics == type49_semantics && geometry.phextrap_pairs == phextrap_pairs &&
         geometry.phextrap_max_points == expected_phextrap_max;
     if (!reusable) {
-        geometry = prepare_bound_free_geometry_v064895(
+        geometry = prepare_bound_free_geometry(
             program.reals.data() + record.real_offset,
             record_context && record_context->valid ? record_context->pair_real_count : record.real_count,
             energy, count, threshold_ev, type49_semantics, phextrap_pairs, record_context);
@@ -7102,7 +7102,7 @@ EvaluatedRecord evaluate_record(
             out.bound_free_type49_v064895 = false;
             out.bound_free_row46_contract_v064895 = row46_contract != nullptr;
             const BoundFreePreparedGeometryV064895* prepared_reduced_v064895 =
-                prepared_bound_free_geometry_v064895(
+                prepared_bound_free_geometry(
                     program, record, calc_hmc_input, source_threshold, false, false,
                     record_context.valid ? &record_context : nullptr, false, rate_context);
             xstar_element_contribution_v1 source_shadow{};
@@ -7177,7 +7177,7 @@ EvaluatedRecord evaluate_record(
             // (1,0), moving RRC emissivity from outward to inward in detal3.
             // Stamp all three Type-53 caller lifetimes; this is metadata/state
             // retention only and does not alter the already-accepted Milne rate.
-            const auto stamp_type53_escape_state_v064812319 = [&](Type53SourceShadow& shadow) {
+            const auto stamp_type53_escape_state = [&](Type53SourceShadow& shadow) {
                 if (!shadow.valid) return;
                 shadow.tau_in = contract_tau_in;
                 shadow.tau_out = contract_tau_out;
@@ -7188,9 +7188,9 @@ EvaluatedRecord evaluate_record(
                 shadow.dsec_radiation_bin_count = calc_hmc_input.dsec_radiation_bin_count;
                 shadow.continuum_tau_count = input.continuum_tau_count;
             };
-            stamp_type53_escape_state_v064812319(out.type53_shadow);
-            stamp_type53_escape_state_v064812319(out.type53_calc_emisab_shadow);
-            stamp_type53_escape_state_v064812319(out.type53_calc_emis_shadow);
+            stamp_type53_escape_state(out.type53_shadow);
+            stamp_type53_escape_state(out.type53_calc_emisab_shadow);
+            stamp_type53_escape_state(out.type53_calc_emis_shadow);
             out.type53_shadow.helium_live_escape_state_applied = helium_live_escape_applied;
             if (row46_contract) {
                 if (!source_exact) throw std::runtime_error("type53 row46 source-faithful evaluator did not produce a result");
@@ -7299,7 +7299,7 @@ EvaluatedRecord evaluate_record(
                     throw std::runtime_error("carbon Type-53 source-faithful Milne rate remained nonfinite or implausibly large");
                 }
                 if (carbon_source_faithful) {
-                    write_c_type53_promotion_audit_v0648119(
+                    write_c_type53_promotion_audit(
                         record.source_position, record.record, record.data_type, record.rate_type,
                         record.ion_stage, record.lower_row, record.upper_row,
                         legacy_type53_ans, source_shadow, c, source_exact, source_exact);
@@ -7550,7 +7550,7 @@ EvaluatedRecord evaluate_record(
                 out.bound_free_type49_v064895 = true;
                 out.bound_free_row46_contract_v064895 = false;
                 const BoundFreePreparedGeometryV064895* prepared_reduced_v064895 =
-                    prepared_bound_free_geometry_v064895(
+                    prepared_bound_free_geometry(
                         program, record, calc_hmc_input, source_threshold, true, true,
                         record_context.valid ? &record_context : nullptr, false, rate_context);
                 source_exact = evaluate_type53_source_integral(
@@ -7775,13 +7775,13 @@ EvaluatedRecord evaluate_record(
                 const std::size_t line_index = static_cast<std::size_t>(line_index_one_based - 1);
                 line_tau_in = program.runtime_line_tau_in[line_index];
                 line_tau_out = program.runtime_line_tau_out[line_index];
-                ptmp1 = pescl_v0472_binary64(line_tau_in) * (1.0 - cfrac);
-                ptmp2 = pescl_v0472_binary64(line_tau_out) * (1.0 - cfrac) +
-                    2.0 * pescl_v0472_binary64(line_tau_in + line_tau_out) * cfrac;
+                ptmp1 = pescl(line_tau_in) * (1.0 - cfrac);
+                ptmp2 = pescl(line_tau_out) * (1.0 - cfrac) +
+                    2.0 * pescl(line_tau_in + line_tau_out) * cfrac;
                 hydrogen_escape_state_applied = element.element_z == 1;
                 magnesium_escape_state_applied = element.element_z == 12;
             }
-            const auto& hydrogen_escape = hydrogen_type50_escape_state_v04874618();
+            const auto& hydrogen_escape = hydrogen_type50_escape_state();
             if (!native_runtime_escape && hydrogen_escape.enabled && element.element_z == 1) {
                 const auto found = hydrogen_escape.line_index_by_record.find(record.record);
                 if (found == hydrogen_escape.line_index_by_record.end()) {
@@ -7791,12 +7791,12 @@ EvaluatedRecord evaluate_record(
                 const std::size_t line_index = static_cast<std::size_t>(line_index_one_based - 1);
                 line_tau_in = hydrogen_escape.tau_in.at(line_index);
                 line_tau_out = hydrogen_escape.tau_out.at(line_index);
-                ptmp1 = pescl_v0472_binary64(line_tau_in) * (1.0 - cfrac);
-                ptmp2 = pescl_v0472_binary64(line_tau_out) * (1.0 - cfrac) +
-                    2.0 * pescl_v0472_binary64(line_tau_in + line_tau_out) * cfrac;
+                ptmp1 = pescl(line_tau_in) * (1.0 - cfrac);
+                ptmp2 = pescl(line_tau_out) * (1.0 - cfrac) +
+                    2.0 * pescl(line_tau_in + line_tau_out) * cfrac;
                 hydrogen_escape_state_applied = true;
             }
-            const auto& magnesium_escape = magnesium_type50_escape_state_v04874619();
+            const auto& magnesium_escape = magnesium_type50_escape_state();
             if (!native_runtime_escape && magnesium_escape.enabled && element.element_z == 12 &&
                 magnesium_escape.active_records.count(record.record) != 0) {
                 const auto found = magnesium_escape.line_index_by_record.find(record.record);
@@ -7807,9 +7807,9 @@ EvaluatedRecord evaluate_record(
                 const std::size_t line_index = static_cast<std::size_t>(line_index_one_based - 1);
                 line_tau_in = magnesium_escape.tau_in.at(line_index);
                 line_tau_out = magnesium_escape.tau_out.at(line_index);
-                ptmp1 = pescl_v0472_binary64(line_tau_in) * (1.0 - cfrac);
-                ptmp2 = pescl_v0472_binary64(line_tau_out) * (1.0 - cfrac) +
-                    2.0 * pescl_v0472_binary64(line_tau_in + line_tau_out) * cfrac;
+                ptmp1 = pescl(line_tau_in) * (1.0 - cfrac);
+                ptmp2 = pescl(line_tau_out) * (1.0 - cfrac) +
+                    2.0 * pescl(line_tau_in + line_tau_out) * cfrac;
                 magnesium_escape_state_applied = true;
                 if (magnesium_escape.endpoint_energy_transport) {
                     const auto endpoint =
@@ -8682,7 +8682,7 @@ EvaluatedRecord evaluate_record(
 // Purpose: Write write from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 49 apply here.
 // XSTAR-FUNCTION-COMMENT-END
-void write_v0648123431113_type49_identical_state_probe(
+void write_type49_identical_state_probe(
     xstar_fixed_state_context_impl& ctx,
     const xstar_fixed_state_input_v1& input,
     const SourceContinuumWorkspace* calc_emisab_workspace) {
@@ -8731,7 +8731,7 @@ void write_v0648123431113_type49_identical_state_probe(
         xstar_fixed_state_input_v1 probe_input = input;
         probe_input.temperature_k = temperature_k;
         RateEvaluationContextV064894 probe_context =
-            make_rate_evaluation_context_v064894(probe_input, calc_emisab_workspace);
+            make_rate_evaluation_context(probe_input, calc_emisab_workspace);
         // Keep the proof independent of performance/cache mutation.  Local
         // geometry is rebuilt from the same immutable payload/grid.
         probe_context.bound_free_cache = nullptr;
@@ -8766,7 +8766,7 @@ void write_v0648123431113_type49_identical_state_probe(
 // Purpose: Evaluate evaluate selected fullgrid bound free using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
 // Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use.
 // XSTAR-FUNCTION-COMMENT-END
-Type53SourceShadow evaluate_selected_fullgrid_bound_free_v064895(
+Type53SourceShadow evaluate_selected_fullgrid_bound_free(
     const Program& program,
     const ElementProgram& element,
     const ProgramRecord& record,
@@ -8803,7 +8803,7 @@ Type53SourceShadow evaluate_selected_fullgrid_bound_free_v064895(
     full_input.dsec_radiation_energy_ev = nullptr;
     full_input.dsec_bremsa = nullptr;
     full_input.dsec_radiation_bin_count = 0;
-    const BoundFreePreparedGeometryV064895* prepared = prepared_bound_free_geometry_v064895(
+    const BoundFreePreparedGeometryV064895* prepared = prepared_bound_free_geometry(
         program, record, full_input, evaluated.bound_free_threshold_ev_v064895,
         type49, type49, record_context.valid ? &record_context : nullptr,
         true, rate_context);
@@ -8842,7 +8842,7 @@ int ground_row_for_stage(const ElementProgram& element, int stage) {
 // Purpose: Compute source persistent leveltemp destination energy z1 z30 as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
 // Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
 // XSTAR-FUNCTION-COMMENT-END
-double source_persistent_leveltemp_destination_energy_z1_z30_v06481231(
+double source_persistent_leveltemp_destination_energy_z1_z30(
     const ActiveElementView& active,
     const xstar_element_contribution_v1& contribution,
     const Type53SourceShadow& shadow,
@@ -8911,7 +8911,7 @@ double source_persistent_leveltemp_destination_energy_z1_z30_v06481231(
 // Purpose: Compute advance source leveltemp first pass z1 z30 as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
 // Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
 // XSTAR-FUNCTION-COMMENT-END
-void advance_source_leveltemp_first_pass_z1_z30_v06481231(
+void advance_source_leveltemp_first_pass_z1_z30(
     const Program& program,
     const ElementProgram& element,
     const ActiveElementView& active,
@@ -8946,7 +8946,7 @@ void advance_source_leveltemp_first_pass_z1_z30_v06481231(
 // Purpose: Apply type53 persistent leveltemp z1 z30 to the current model state while preserving the source ordering and normalization expected by later stages.
 // Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 53 apply here.
 // XSTAR-FUNCTION-COMMENT-END
-void apply_type53_persistent_leveltemp_z1_z30_v06481231(
+void apply_type53_persistent_leveltemp_z1_z30(
     const ElementProgram& element,
     const ActiveElementView& active,
     const std::vector<double>& incoming_leveltemp_energy_workspace,
@@ -8959,7 +8959,7 @@ void apply_type53_persistent_leveltemp_z1_z30_v06481231(
             contribution.ion_stage < active.min_stage || contribution.ion_stage > active.max_stage) {
             continue;
         }
-        const double destination_energy = source_persistent_leveltemp_destination_energy_z1_z30_v06481231(
+        const double destination_energy = source_persistent_leveltemp_destination_energy_z1_z30(
             active, contribution, shadow, incoming_leveltemp_energy_workspace);
         if (!std::isfinite(destination_energy)) {
             continue;
@@ -8998,7 +8998,7 @@ void apply_type53_persistent_leveltemp_z1_z30_v06481231(
 // Purpose: Apply type49 persistent leveltemp z1 z30 to the current model state while preserving the source ordering and normalization expected by later stages.
 // Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 49 apply here.
 // XSTAR-FUNCTION-COMMENT-END
-void apply_type49_persistent_leveltemp_z1_z30_v06481231(
+void apply_type49_persistent_leveltemp_z1_z30(
     const ElementProgram& element,
     const ActiveElementView& active,
     const std::vector<double>& incoming_leveltemp_energy_workspace,
@@ -9011,7 +9011,7 @@ void apply_type49_persistent_leveltemp_z1_z30_v06481231(
             contribution.ion_stage < active.min_stage || contribution.ion_stage > active.max_stage) {
             continue;
         }
-        const double destination_energy = source_persistent_leveltemp_destination_energy_z1_z30_v06481231(
+        const double destination_energy = source_persistent_leveltemp_destination_energy_z1_z30(
             active, contribution, shadow, incoming_leveltemp_energy_workspace);
         if (!std::isfinite(destination_energy)) {
             continue;
@@ -9057,7 +9057,7 @@ struct Type99ResolvedValueV048746223 {
 // Purpose: Compute resolve type99 leveltemp value as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
 // Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
 // XSTAR-FUNCTION-COMMENT-END
-Type99ResolvedValueV048746223 resolve_type99_leveltemp_value_v048746223(
+Type99ResolvedValueV048746223 resolve_type99_leveltemp_value(
     const ActiveElementView& active,
     const xstar_element_contribution_v1& contribution,
     int column,
@@ -9104,7 +9104,7 @@ Type99ResolvedValueV048746223 resolve_type99_leveltemp_value_v048746223(
 // Purpose: Apply magnesium type99 persistent leveltemp to the current model state while preserving the source ordering and normalization expected by later stages.
 // Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use. Data type(s) 99 apply here.
 // XSTAR-FUNCTION-COMMENT-END
-void apply_magnesium_type99_persistent_leveltemp_v048746223(
+void apply_magnesium_type99_persistent_leveltemp(
     const Program& program,
     const ElementProgram& element,
     const ActiveElementView& active,
@@ -9141,25 +9141,25 @@ void apply_magnesium_type99_persistent_leveltemp_v048746223(
             }
             const std::size_t core_real_count = static_cast<std::size_t>(
                 nden + ntem + nden * ntem + 2 * nxs);
-            const auto context = parse_type99_persistent_leveltemp_context_v048746223(
+            const auto context = parse_type99_persistent_leveltemp_context(
                 record, payload, ints, core_real_count);
             if (!context.valid) {
                 throw std::runtime_error(
                     "source-faithful Mg Type-99 requires v21.13 persistent leveltemp context");
             }
-            const auto bound = resolve_type99_leveltemp_value_v048746223(
+            const auto bound = resolve_type99_leveltemp_value(
                 active, contribution, context.bound_column, context.bound_mask,
                 context.bound_candidate_energy_ev,
                 context.bound_candidate_statistical_weight,
                 context.incoming_bound_energy_ev,
                 context.incoming_bound_statistical_weight);
-            const auto parent = resolve_type99_leveltemp_value_v048746223(
+            const auto parent = resolve_type99_leveltemp_value(
                 active, contribution, context.parent_column, context.parent_mask,
                 context.parent_candidate_energy_ev,
                 context.parent_candidate_statistical_weight,
                 context.incoming_parent_energy_ev,
                 context.incoming_parent_statistical_weight);
-            const auto destination = resolve_type99_leveltemp_value_v048746223(
+            const auto destination = resolve_type99_leveltemp_value(
                 active, contribution, context.destination_column, context.destination_mask,
                 context.destination_candidate_energy_ev,
                 context.destination_candidate_statistical_weight,
@@ -9208,7 +9208,7 @@ void apply_magnesium_type99_persistent_leveltemp_v048746223(
 // Purpose: Compute source nlev for stage within the element/ion population workflow, preserving the source ion-stage ordering and active-stage semantics.
 // Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-int source_nlev_for_stage_v0648117(
+int source_nlev_for_stage(
     const Program& program,
     const ElementProgram& element,
     int stage) {
@@ -9230,14 +9230,14 @@ int source_nlev_for_stage_v0648117(
 // Purpose: Implement source idest for full row as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
 // Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-int source_idest_for_full_row_v0648117(
+int source_idest_for_full_row(
     const Program& program,
     const ElementProgram& element,
     int stage,
     int full_row) {
     if (full_row <= 0) return 0;
     const int ground = ground_row_for_stage(element, stage);
-    const int nlev = source_nlev_for_stage_v0648117(program, element, stage);
+    const int nlev = source_nlev_for_stage(program, element, stage);
     if (ground <= 0 || nlev <= 0) return 0;
     if (stage < element.element_z) {
         const int next_ground = ground_row_for_stage(element, stage + 1);
@@ -9254,7 +9254,7 @@ int source_idest_for_full_row_v0648117(
 // Purpose: Evaluate source preliminary rate record using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
 // Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use.
 // XSTAR-FUNCTION-COMMENT-END
-bool source_preliminary_rate_record_v064812315(
+bool source_preliminary_rate_record(
     const Program& program,
     const ElementProgram& element,
     const ProgramRecord& record,
@@ -9263,7 +9263,7 @@ bool source_preliminary_rate_record_v064812315(
     if (record.rate_type == 1 || record.rate_type == 15 ||
         record.rate_type == 8 || record.rate_type == 6) return true;
     if (record.rate_type != 7) return false;
-    const int idest1 = source_idest_for_full_row_v0648117(
+    const int idest1 = source_idest_for_full_row(
         program, element, record.ion_stage, record.lower_row);
     if (idest1 == 1) return true;
     if (preliminary_type7_legacy_compat_v06481171) {
@@ -9303,9 +9303,9 @@ PreliminaryIonBalance build_preliminary_ion_balance(
         const int stage = c.ion_stage;
         if (stage < 1 || stage > z) continue;
         const double rate = std::max(0.0, c.ans1);
-        const int nlev = source_nlev_for_stage_v0648117(program, element, stage);
-        const int idest1 = source_idest_for_full_row_v0648117(program, element, stage, pr->lower_row);
-        const int idest2 = source_idest_for_full_row_v0648117(program, element, stage, pr->upper_row);
+        const int nlev = source_nlev_for_stage(program, element, stage);
+        const int idest1 = source_idest_for_full_row(program, element, stage, pr->lower_row);
+        const int idest2 = source_idest_for_full_row(program, element, stage, pr->upper_row);
 
         // Pre-11.7 native predicate retained only for attribution.
         const bool old_native_ionization =
@@ -9443,7 +9443,7 @@ PreliminaryIonBalance build_preliminary_ion_balance(
 // Purpose: Write preliminary ion balance audit from already-computed state; this routine owns serialization/diagnostics rather than the underlying physical calculation.
 // Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-void write_preliminary_ion_balance_audit_v0648117(
+void write_preliminary_ion_balance_audit(
     const ElementProgram& element,
     const PreliminaryIonBalance& balance,
     double critical_ion_fraction) {
@@ -9796,7 +9796,7 @@ void bind_output(xstar_element_output_v1& out, ElementBuffers& b, int element_z)
 // Purpose: Compute lte topology for element as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
 // Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
 // XSTAR-FUNCTION-COMMENT-END
-std::vector<LteIonTopology> lte_topology_for_element_v82_patch54(
+std::vector<LteIonTopology> lte_topology_for_element(
     const Program& program,
     const ElementProgram& element
 ) {
@@ -9841,7 +9841,7 @@ std::vector<LteIonTopology> lte_topology_for_element_v82_patch54(
 // Purpose: Compute lte leveltemp row as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
 // Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
 // XSTAR-FUNCTION-COMMENT-END
-const LteLevelData* lte_leveltemp_row_v82_patch56(
+const LteLevelData* lte_leveltemp_row(
     const Program& program, int element_index, int ion_stage, int local_level) {
     for (const auto& level : program.lte_levels) {
         if (level.element_index == element_index && level.ion_stage == ion_stage &&
@@ -9854,7 +9854,7 @@ const LteLevelData* lte_leveltemp_row_v82_patch56(
 // Purpose: Compute compute element lte populations as part of the multilevel statistical-equilibrium system and its normalization/detailed-balance constraints.
 // Reference context: XSTAR Manual ss11.4.1-11.4.3; Kallman & Bautista (2001); Bautista & Kallman (2001).
 // XSTAR-FUNCTION-COMMENT-END
-std::vector<double> compute_element_lte_populations_v82_patch54(
+std::vector<double> compute_element_lte_populations(
     const Program& program,
     const ElementProgram& element,
     const xstar_fixed_state_input_v1& input,
@@ -9865,7 +9865,7 @@ std::vector<double> compute_element_lte_populations_v82_patch54(
     if (element.rows.empty() || element.n_rows <= 0) {
         throw std::runtime_error("LTE population construction requires element rows");
     }
-    const auto topology = lte_topology_for_element_v82_patch54(program, element);
+    const auto topology = lte_topology_for_element(program, element);
     if (topology.empty()) throw std::runtime_error("LTE source ion topology is empty");
     const bool exact_topology = std::any_of(
         program.lte_ion_topology.begin(), program.lte_ion_topology.end(),
@@ -9920,7 +9920,7 @@ std::vector<double> compute_element_lte_populations_v82_patch54(
         const bool active = topo.ion_stage >= active_min_stage && topo.ion_stage <= active_max_stage;
         if (active) {
             const LteLevelData* terminal_level = exact_leveltemp
-                ? lte_leveltemp_row_v82_patch56(program, element.element_index, topo.ion_stage, nlev)
+                ? lte_leveltemp_row(program, element.element_index, topo.ion_stage, nlev)
                 : nullptr;
             if (exact_leveltemp && !terminal_level) {
                 throw std::runtime_error("complete Type-13 LTE leveltemp terminal row missing");
@@ -9935,7 +9935,7 @@ std::vector<double> compute_element_lte_populations_v82_patch54(
                 const int compact_row = topo.start_row + local - 1;
                 const auto& compact_level = element.rows.at(static_cast<std::size_t>(compact_row - 1));
                 const LteLevelData* source_level = exact_leveltemp
-                    ? lte_leveltemp_row_v82_patch56(program, element.element_index, topo.ion_stage, local)
+                    ? lte_leveltemp_row(program, element.element_index, topo.ion_stage, local)
                     : nullptr;
                 if (exact_leveltemp && !source_level) {
                     throw std::runtime_error("complete Type-13 LTE leveltemp bound row missing");
@@ -9969,14 +9969,14 @@ std::vector<double> compute_element_lte_populations_v82_patch54(
                 }
             }
             const LteLevelData* terminal_level_for_audit = exact_leveltemp
-                ? lte_leveltemp_row_v82_patch56(program, element.element_index, topo.ion_stage, nlev) : nullptr;
+                ? lte_leveltemp_row(program, element.element_index, topo.ion_stage, nlev) : nullptr;
             const double terminal_energy_for_audit = terminal_level_for_audit ? terminal_level_for_audit->energy_ev : topo.terminal_energy_ev;
             const double terminal_weight_for_audit = terminal_level_for_audit ? terminal_level_for_audit->statistical_weight : topo.terminal_statistical_weight;
             for (int local = 1; local <= nlev; ++local) {
                 const int compact_row = topo.start_row + local - 1;
                 const auto& compact_level = element.rows.at(static_cast<std::size_t>(compact_row - 1));
                 const LteLevelData* source_level = exact_leveltemp
-                    ? lte_leveltemp_row_v82_patch56(program, element.element_index, topo.ion_stage, local) : nullptr;
+                    ? lte_leveltemp_row(program, element.element_index, topo.ion_stage, local) : nullptr;
                 RnisiAuditRowV82Patch56 row;
                 row.stage = topo.ion_stage; row.local = local; row.compact_row = compact_row; row.active = true;
                 row.global_level_index = compact_level.global_level_index;
@@ -10089,11 +10089,11 @@ std::vector<double> compute_exact_lte_populations(
             active_max_stage = retained->second.second;
         }
         bool exact_topology = false;
-        auto full_lte = compute_element_lte_populations_v82_patch54(
+        auto full_lte = compute_element_lte_populations(
             program, element, input, active_min_stage, active_max_stage, &exact_topology);
 
         if (source_sequence == 58 && element.element_z == 12) {
-            const auto topology = lte_topology_for_element_v82_patch54(program, element);
+            const auto topology = lte_topology_for_element(program, element);
             int active_rows = 1;
             std::ostringstream nlev_stream;
             bool stage_order_ok = topology.size() == 12u;
@@ -10204,7 +10204,7 @@ struct Phint53GridMapV82Patch57 {
 // Purpose: Implement phint53 nbinc one based as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
 // Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-int phint53_nbinc_one_based_v82_patch57(double energy_ev, const double* epi, int ncn2) {
+int phint53_nbinc_one_based(double energy_ev, const double* epi, int ncn2) {
     if (!epi || ncn2 < 3) return 1;
     const int numcon2 = std::max(2, ncn2 / 50);
     const int n = std::max(1, ncn2 - numcon2);
@@ -10230,7 +10230,7 @@ int phint53_nbinc_one_based_v82_patch57(double energy_ev, const double* epi, int
 // Purpose: Implement phextrap source as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
 // Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-void phextrap_source_v82_patch57(const NativeBoundFreeCurve& curve,
+void phextrap_source(const NativeBoundFreeCurve& curve,
                                  int ncn2,
                                  std::vector<double>& energy_ryd,
                                  std::vector<double>& sigma_cm2) {
@@ -10270,7 +10270,7 @@ void phextrap_source_v82_patch57(const NativeBoundFreeCurve& curve,
 // Purpose: Implement phint53 grid map as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
 // Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-Phint53GridMapV82Patch57 phint53_grid_map_v82_patch57(
+Phint53GridMapV82Patch57 phint53_grid_map(
     const NativeBoundFreeCurve& curve, const double* epi, int ncn2) {
     Phint53GridMapV82Patch57 out;
     if (!epi || ncn2 < 3 || curve.offset_ryd.size() < 2 ||
@@ -10278,7 +10278,7 @@ Phint53GridMapV82Patch57 phint53_grid_map_v82_patch57(
     std::vector<double> energy_ryd = curve.offset_ryd;
     std::vector<double> sigma_cm2 = curve.sigma_cm2;
     const std::size_t before = energy_ryd.size();
-    phextrap_source_v82_patch57(curve, ncn2, energy_ryd, sigma_cm2);
+    phextrap_source(curve, ncn2, energy_ryd, sigma_cm2);
     out.phextrap_applied = curve.apply_source_phextrap && energy_ryd.size() != before;
     const int ntmp = static_cast<int>(std::min(energy_ryd.size(), sigma_cm2.size()));
     if (ntmp < 2) return out;
@@ -10296,7 +10296,7 @@ Phint53GridMapV82Patch57 phint53_grid_map_v82_patch57(
     }
 
     const double ener = xs[0];
-    int nb1 = phint53_nbinc_one_based_v82_patch57(ener, epi, ncn2);
+    int nb1 = phint53_nbinc_one_based(ener, epi, ncn2);
     while (nb1 >= 1 && nb1 <= ncn2 && epi[nb1 - 1] < ener && nb1 < nphint) ++nb1;
     --nb1;
     nb1 = std::max(nb1, 1);
@@ -10472,7 +10472,7 @@ bool native_bound_free_curve(const Program& program,
     return false;
 }
 
-double effective_spectral_covering_fraction_v82_patch58(const xstar_fixed_state_input_v1& input);
+double effective_spectral_covering_fraction(const xstar_fixed_state_input_v1& input);
 
 struct DeferredRrcRecordV82Patch520 {
     std::uint64_t source_position = 0u;
@@ -10507,7 +10507,7 @@ struct Type88StaleOpakabV82Patch52010 {
 // Purpose: Implement source type88 stale opakab as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
 // Reference context: XSTAR Manual ss11.7, 12.1.1-12.1.2; Kallman et al. (2004), K-shell/Auger/fluorescence physics. Data type(s) 88 apply here.
 // XSTAR-FUNCTION-COMMENT-END
-Type88StaleOpakabV82Patch52010 source_type88_stale_opakab_v82_patch52010(
+Type88StaleOpakabV82Patch52010 source_type88_stale_opakab(
     const NativeBoundFreeCurve& curve,
     double rnist,
     double lower_abundance,
@@ -10517,7 +10517,7 @@ Type88StaleOpakabV82Patch52010 source_type88_stale_opakab_v82_patch52010(
     Type88StaleOpakabV82Patch52010 out;
     const std::size_t n = input.radiation_bin_count;
     if (n < 4 || !input.radiation_energy_ev || !(curve.threshold_ev > 0.0) || !(rnist > 0.0)) return out;
-    const auto mapped = phint53_grid_map_v82_patch57(
+    const auto mapped = phint53_grid_map(
         curve, input.radiation_energy_ev, static_cast<int>(n));
     if (!mapped.valid) return out;
     out.mapped = true;
@@ -10559,7 +10559,7 @@ Type88StaleOpakabV82Patch52010 source_type88_stale_opakab_v82_patch52010(
 // Purpose: Apply native bound free rrc from abundances to the current model state while preserving the source ordering and normalization expected by later stages.
 // Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-void accumulate_native_bound_free_rrc_from_abundances_v82_patch520(
+void accumulate_native_bound_free_rrc_from_abundances(
     const NativeBoundFreeCurve& curve,
     const EvaluatedRecord& evaluated,
     const ProgramRecord& record,
@@ -10574,12 +10574,12 @@ void accumulate_native_bound_free_rrc_from_abundances_v82_patch520(
     const bool type49_or_53 = record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE ||
         record.opcode == XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE;
     if (record.opcode == XSTAR_FIXED_OPCODE_TYPE88_SUPERLEVEL_BOUND_FREE) {
-        const auto mapped = phint53_grid_map_v82_patch57(
+        const auto mapped = phint53_grid_map(
             curve, input.radiation_energy_ev, static_cast<int>(n));
         if (!mapped.valid || !(evaluated.type53_shadow.rnist > 0.0)) return;
         const double bktm = xstar_constants::kBoltzmannErgPerK * input.temperature_k /
             xstar_constants::kModernErgPerEv;
-        const double covering = effective_spectral_covering_fraction_v82_patch58(input);
+        const double covering = effective_spectral_covering_fraction(input);
         const double ptmp1 = 0.5 * (1.0 - covering);
         const double ptmp2 = 0.5 * (1.0 + covering);
         double exptst = (input.radiation_energy_ev[mapped.nb1_zero_based] - curve.threshold_ev) /
@@ -10603,7 +10603,7 @@ void accumulate_native_bound_free_rrc_from_abundances_v82_patch520(
         return;
     }
     if (type49_or_53) {
-        const auto mapped = phint53_grid_map_v82_patch57(
+        const auto mapped = phint53_grid_map(
             curve, input.radiation_energy_ev, static_cast<int>(n));
         if (!mapped.valid) return;
         // v82 patch 5.20.15.1: the output-metadata cache now preserves the
@@ -10619,7 +10619,7 @@ void accumulate_native_bound_free_rrc_from_abundances_v82_patch520(
             ? &evaluated.type49_shadow : &evaluated.type53_shadow;
         const double bktm = xstar_constants::kBoltzmannErgPerK * input.temperature_k /
             xstar_constants::kModernErgPerEv;
-        const double covering = effective_spectral_covering_fraction_v82_patch58(input);
+        const double covering = effective_spectral_covering_fraction(input);
         const int continuum_index = record.continuum_index_one_based;
         const bool live_tau_available = continuum_index > 0 &&
             static_cast<std::size_t>(continuum_index) <= input.continuum_tau_count &&
@@ -10675,7 +10675,7 @@ void accumulate_native_bound_free_rrc_from_abundances_v82_patch520(
 // Purpose: Apply native bound free opacity from abundances to the current model state while preserving the source ordering and normalization expected by later stages.
 // Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-void accumulate_native_bound_free_opacity_from_abundances_v82_patch5206(
+void accumulate_native_bound_free_opacity_from_abundances(
     const NativeBoundFreeCurve& curve,
     const ProgramRecord& record,
     double lower_abundance,
@@ -10688,7 +10688,7 @@ void accumulate_native_bound_free_opacity_from_abundances_v82_patch5206(
         record.opcode == XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE ||
         record.opcode == XSTAR_FIXED_OPCODE_TYPE88_SUPERLEVEL_BOUND_FREE;
     if (!source_phint53_opacity) return;
-    const auto mapped = phint53_grid_map_v82_patch57(
+    const auto mapped = phint53_grid_map(
         curve, input.radiation_energy_ev, static_cast<int>(n));
     if (!mapped.valid) return;
     const double density = std::max(0.0, input.hydrogen_density_cm3);
@@ -10705,7 +10705,7 @@ void accumulate_native_bound_free_opacity_from_abundances_v82_patch5206(
 // Purpose: Compute effective spectral covering fraction for the line/emissivity/opacity path on the source or publication energy grid.
 // Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
 // XSTAR-FUNCTION-COMMENT-END
-double effective_spectral_covering_fraction_v82_patch58(
+double effective_spectral_covering_fraction(
     const xstar_fixed_state_input_v1& input) {
     const bool has_dsec_covering =
         (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_DSEC_COVERING_FRACTION) != 0u;
@@ -10719,7 +10719,7 @@ double effective_spectral_covering_fraction_v82_patch58(
 // Purpose: Evaluate source generic bound free sigma cm2 using the source-equivalent atomic/rate convention and return it in the units/normalization expected by its caller.
 // Reference context: XSTAR Manual ss11.7 and 12.1.1-12.1.2; Bautista & Kallman (2001); Mendoza et al. (2021). Data type defines record interpretation; rate type defines downstream use.
 // XSTAR-FUNCTION-COMMENT-END
-double source_generic_bound_free_sigma_cm2_v0648120(const NativeBoundFreeCurve& curve,double energy_ev) {
+double source_generic_bound_free_sigma_cm2(const NativeBoundFreeCurve& curve,double energy_ev) {
     const int dt=curve.generic_data_type;const auto& r=curve.generic_reals;const auto& ii=curve.generic_ints;const double th=curve.threshold_ev;
     if(!(energy_ev>=th)||!(th>0.0))return 0.0;
     if(dt==19&&r.size()>=5){double z=std::log(energy_ev/std::max(th,1e-48));double alp=r[0]+z*(r[1]+z*(z*r[2]+z*r[3]));return std::max(0.0,1e-18*limited_exp(alp)*13.606/std::max(th,1e-48));}
@@ -10751,9 +10751,9 @@ void accumulate_native_bound_free_surface(const NativeBoundFreeCurve& curve,
     if (n < 2 || opacity_cm1.size() != n || rccemis.size() != 2 * n ||
         record.lower_row < 1 || record.upper_row < 1) return;
     const double lower_abundance =
-        source_post_mapback_population_for_full_row_v064812317(active, populations, record.lower_row) * active.element.abundance;
+        source_post_mapback_population_for_full_row(active, populations, record.lower_row) * active.element.abundance;
     const double upper_abundance =
-        source_post_mapback_population_for_full_row_v064812317(active, populations, record.upper_row) * active.element.abundance;
+        source_post_mapback_population_for_full_row(active, populations, record.upper_row) * active.element.abundance;
     const double density = std::max(0.0, input.hydrogen_density_cm3);
     const bool type49_or_53 = record.opcode == XSTAR_FIXED_OPCODE_TYPE49_BOUND_FREE ||
         record.opcode == XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE;
@@ -10765,13 +10765,13 @@ void accumulate_native_bound_free_surface(const NativeBoundFreeCurve& curve,
     else if (record.opcode == XSTAR_FIXED_OPCODE_TYPE53_BOUND_FREE) shadow = &evaluated.type53_shadow;
 
     if (type49_or_53) {
-        const auto mapped = phint53_grid_map_v82_patch57(
+        const auto mapped = phint53_grid_map(
             curve, input.radiation_energy_ev, static_cast<int>(n));
         if (!mapped.valid) return;
         if (phint53_records_mapped) ++*phint53_records_mapped;
         const double bktm = xstar_constants::kBoltzmannErgPerK * input.temperature_k /
             xstar_constants::kModernErgPerEv;
-        const double covering = effective_spectral_covering_fraction_v82_patch58(input);
+        const double covering = effective_spectral_covering_fraction(input);
         const double ptmp1 = covering >= 1.0 - 1.0e-15 ? 0.0 :
             (shadow && shadow->valid ? std::max(0.0, shadow->ptmp1) : 0.5 * (1.0 - covering));
         const double ptmp2 = covering >= 1.0 - 1.0e-15 ? 1.0 :
@@ -10805,7 +10805,7 @@ void accumulate_native_bound_free_surface(const NativeBoundFreeCurve& curve,
     }
 
     if (source_generic && curve.generic_data_type == 70 && curve.offset_ryd.size() >= 2u) {
-        const auto mapped = phint53_grid_map_v82_patch57(curve,input.radiation_energy_ev,static_cast<int>(n));if(!mapped.valid)return;if(phint53_records_mapped)++*phint53_records_mapped;
+        const auto mapped = phint53_grid_map(curve,input.radiation_energy_ev,static_cast<int>(n));if(!mapped.valid)return;if(phint53_records_mapped)++*phint53_records_mapped;
         for(int kl=mapped.nb1_zero_based;kl<mapped.klmax_zero_based&&kl<static_cast<int>(n);++kl){double sg=std::max(0.0,mapped.sgbar[static_cast<std::size_t>(kl)]);if(sg>0.0&&lower_abundance>0.0&&density>0.0){opacity_cm1[static_cast<std::size_t>(kl)]+=lower_abundance*density*sg;if(phint53_bins_accumulated)++*phint53_bins_accumulated;}}
         // Type70 uses phint53 for scalar detailed balance.  Its source caller
         // does not share the Type49/53 public RRC owner path here; retain the
@@ -10814,7 +10814,7 @@ void accumulate_native_bound_free_surface(const NativeBoundFreeCurve& curve,
     }
     if (source_generic) {
         const int nb1=type99_nbinc_fortran_value(curve.threshold_ev,input.radiation_energy_ev,n);const int numcon2=std::max(2,static_cast<int>(n/50u));const int nphint=std::max(static_cast<int>(n)-numcon2,nb1+1);
-        for(int kl=nb1;kl<=nphint&&kl<=static_cast<int>(n);++kl){std::size_t k=static_cast<std::size_t>(kl-1);double sigma=source_generic_bound_free_sigma_cm2_v0648120(curve,input.radiation_energy_ev[k]);if(sigma>0.0&&lower_abundance>0.0&&density>0.0){opacity_cm1[k]+=lower_abundance*density*sigma;if(phint53_bins_accumulated)++*phint53_bins_accumulated;}}
+        for(int kl=nb1;kl<=nphint&&kl<=static_cast<int>(n);++kl){std::size_t k=static_cast<std::size_t>(kl-1);double sigma=source_generic_bound_free_sigma_cm2(curve,input.radiation_energy_ev[k]);if(sigma>0.0&&lower_abundance>0.0&&density>0.0){opacity_cm1[k]+=lower_abundance*density*sigma;if(phint53_bins_accumulated)++*phint53_bins_accumulated;}}
         if (phint53_records_mapped) ++*phint53_records_mapped;
         return;
     }
@@ -10879,7 +10879,7 @@ struct SourceRlbinAuditResultV82Patch5171 {
 // Purpose: Implement source rlbin exact audit as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
 // Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-SourceRlbinAuditResultV82Patch5171 source_rlbin_exact_audit_v82_patch5171(
+SourceRlbinAuditResultV82Patch5171 source_rlbin_exact_audit(
     const std::vector<SourceFeatureAuditCandidateV82Patch5171>& raw,
     const double* energy_grid_ev,
     std::size_t energy_count,
@@ -10909,7 +10909,7 @@ SourceRlbinAuditResultV82Patch5171 source_rlbin_exact_audit_v82_patch5171(
         if ((c.opacity < source_rank_floor) && (c.emission_sum < source_rank_floor)) continue;
         if (!(c.wavelength_a >= emina && c.wavelength_a <= emaxa)) continue;
         const double ener = source_hc / (source_wavelength_floor + c.wavelength_a);
-        const int nb1 = phint53_nbinc_one_based_v82_patch57(
+        const int nb1 = phint53_nbinc_one_based(
             ener, energy_grid_ev, static_cast<int>(energy_count));
         if (nb1 <= 0 || static_cast<std::size_t>(nb1) > out.table.size()) continue;
         out.bin_one_based[c.slot_one_based] = nb1;
@@ -10969,7 +10969,7 @@ struct SourceConsumerDecisionV82Patch5208 {
 // Purpose: Implement source real literal as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
 // Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-inline double source_real_literal_v82_patch5208(double value) {
+inline double local_zone_source_real_literal(double value) {
     return static_cast<double>(static_cast<float>(value));
 }
 
@@ -10977,7 +10977,7 @@ inline double source_real_literal_v82_patch5208(double value) {
 // Purpose: Implement source calc emis consumer as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
 // Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-SourceConsumerDecisionV82Patch5208 source_calc_emis_consumer_v82_patch5208(
+SourceConsumerDecisionV82Patch5208 source_calc_emis_consumer(
     int slot_one_based,
     double wavelength_a,
     bool rrc_rate7,
@@ -11020,9 +11020,9 @@ SourceConsumerDecisionV82Patch5208 source_calc_emis_consumer_v82_patch5208(
     }
 
     const double feature_energy_ev =
-        source_real_literal_v82_patch5208(12398.4016) /
+        local_zone_source_real_literal(12398.4016) /
         (wavelength_a + (rrc_rate7 ? 0.0 : 1.0e-36));
-    out.nb1_one_based = phint53_nbinc_one_based_v82_patch57(
+    out.nb1_one_based = phint53_nbinc_one_based(
         feature_energy_ev, energy_grid_ev, static_cast<int>(energy_count));
     if (out.nb1_one_based <= 0 ||
         static_cast<std::size_t>(out.nb1_one_based) > rank_table.table.size()) {
@@ -11054,7 +11054,7 @@ SourceConsumerDecisionV82Patch5208 source_calc_emis_consumer_v82_patch5208(
 // Purpose: Implement source feature consumer as a local helper for the local zone engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
 // Reference context: XSTAR Manual ss11.4-11.7 and ch12/ch14; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-std::string source_feature_consumer_v82_patch5171(const std::string& family, int data_type) {
+std::string source_feature_consumer(const std::string& family, int data_type) {
     if (family == "RRC") {
         if (data_type == 49 || data_type == 53 || data_type == 99) return "RATE7_NCBIN_GATED";
         if (data_type == 88) return "RATE42_UNCONDITIONAL";
@@ -11452,7 +11452,7 @@ int run_impl(
     std::map<int,double> source_errc_rank_energy_by_slot_v82_patch5209;
     std::map<int,std::tuple<std::uint64_t,std::int64_t,int>>
         source_errc_owner_by_slot_v82_patch5209;
-    const auto source_errc_rank_energy_for_slot_v82_patch5209 =
+    const auto source_errc_rank_energy_for_slot =
         [&](int slot_one_based, std::uint64_t source_position, std::int64_t record, double fallback) {
             const auto slot_it = source_errc_rank_energy_by_slot_v82_patch5209.find(slot_one_based);
             if (slot_it != source_errc_rank_energy_by_slot_v82_patch5209.end()) return slot_it->second;
@@ -11532,7 +11532,7 @@ int run_impl(
             << "runtime_slot,energy_ev,producer_family,source_position,record,data_type,rate_type,element_z,ion_stage,lower_row,upper_row,contribution_cm_inv\n";
         exact_absorption_csv_v82_patch5203 << std::setprecision(17);
     }
-    auto write_exact_absorption_v82_patch5203 = [&](std::size_t runtime_slot, const char* family,
+    auto write_exact_absorption = [&](std::size_t runtime_slot, const char* family,
             std::int64_t source_position, std::int64_t record, int data_type, int rate_type,
             int element_z, int ion_stage, int lower_row, int upper_row, double contribution) {
         if (!exact_absorption_audit_v82_patch5203 || !target_bins_v82_patch5203.count(runtime_slot) ||
@@ -11546,10 +11546,10 @@ int run_impl(
     const bool mg_type53_kernel_audit_v82_patch512 = !defer_product_projection &&
         source_sequence_v82_patch511 == 59 && mg_type53_kernel_path_v82_patch512 && *mg_type53_kernel_path_v82_patch512;
     std::vector<MgType53OpacityKernelRowV82Patch512> mg_type53_kernel_rows_v82_patch512;
-    std::vector<OpacityProducerTopV82Patch511> bound_free_top_v82_patch511(input.radiation_bin_count);
-    std::vector<OpacityProducerTopV82Patch511> line_top_v82_patch511(input.radiation_bin_count);
-    std::vector<double> producer_temp_opacity_v82_patch511(input.radiation_bin_count, 0.0);
-    std::vector<double> producer_temp_rrc_v82_patch511(2 * input.radiation_bin_count, 0.0);
+    std::vector<OpacityProducerTopV82Patch511> bound_free_top(input.radiation_bin_count);
+    std::vector<OpacityProducerTopV82Patch511> line_top(input.radiation_bin_count);
+    std::vector<double> producer_temp_opacity(input.radiation_bin_count, 0.0);
+    std::vector<double> producer_temp_rrc(2 * input.radiation_bin_count, 0.0);
     std::size_t phint53_records_mapped_v82_patch57 = 0;
     std::size_t phint53_bins_accumulated_v82_patch57 = 0;
     std::optional<SourceCompactOracle> source_compact_oracle;
@@ -11579,14 +11579,14 @@ int run_impl(
         }
     }
     RateEvaluationContextV064894 rate_context_v064894 =
-        make_rate_evaluation_context_v064894(
+        make_rate_evaluation_context(
             input,
             type53_calc_emisab_workspace_v82_patch5181
                 ? &*type53_calc_emisab_workspace_v82_patch5181 : nullptr);
     rate_context_v064894.bound_free_cache = &ctx.bound_free_prepared_v064895;
     rate_context_v064894.bound_free_perf = &ctx.bound_free_perf_v064895;
 
-    write_v0648123431113_type49_identical_state_probe(
+    write_type49_identical_state_probe(
         ctx, input,
         type53_calc_emisab_workspace_v82_patch5181
             ? &*type53_calc_emisab_workspace_v82_patch5181 : nullptr);
@@ -11632,7 +11632,7 @@ int run_impl(
         double sparse_cache_allocation_seconds_v064812337 = 0.0;
         std::vector<PreliminaryCachedRecordV064812337> preliminary_cache_v064812337;
 
-        const auto evaluate_source_record_v064812315 = [&](const ProgramRecord& record) {
+        const auto evaluate_source_record = [&](const ProgramRecord& record) {
             const auto rate_start = clock_type::now();
             try {
                 EvaluatedRecord item = evaluate_record(
@@ -11668,7 +11668,7 @@ int run_impl(
             const int index = traversal_order_v064894[ordinal];
             const auto& record = ctx.program.records[static_cast<std::size_t>(index)];
             EvaluatedRecord preliminary_item_v064812337 =
-                evaluate_source_record_v064812315(record);
+                evaluate_source_record(record);
             const std::size_t capacity_before_v064812337 =
                 preliminary_cache_v064812337.capacity();
             const auto allocation_started_v064812337 = clock_type::now();
@@ -11705,7 +11705,7 @@ int run_impl(
             preliminary_records_v064812315, ctx.critical_ion_fraction,
             ctx.preliminary_type7_legacy_compat_v06481171, helium_preliminary_ablation_type);
         residual_audit_v064812339.preliminary_balance_seconds = elapsed(preliminary_balance_started_v064812339);
-        write_preliminary_ion_balance_audit_v0648117(
+        write_preliminary_ion_balance_audit(
             element, preliminary, ctx.critical_ion_fraction);
         PreliminaryIonBalance active_balance = preliminary;
         const bool retain_active_stage_window =
@@ -11818,7 +11818,7 @@ int run_impl(
             sparse_cache_allocation_seconds_v064812337 += elapsed(allocation_started_v064812337);
         }
         std::size_t preliminary_cursor_v064812337 = 0u;
-        const auto evaluate_pass2_ordinal_v064812340 = [&](std::size_t ordinal) {
+        const auto evaluate_pass2_ordinal = [&](std::size_t ordinal) {
             const int index = traversal_order_v064894[ordinal];
             const auto& record = ctx.program.records[static_cast<std::size_t>(index)];
             while (preliminary_cursor_v064812337 < preliminary_cache_v064812337.size() &&
@@ -11832,7 +11832,7 @@ int run_impl(
                     preliminary_cache_v064812337[preliminary_cursor_v064812337].evaluated);
                 ++preliminary_cursor_v064812337;
             } else {
-                item = evaluate_source_record_v064812315(record);
+                item = evaluate_source_record(record);
             }
             if (record.data_type == 53 && record.rate_type == 7) {
                 type53_revisit_evaluated_v82_patch5181[std::make_pair(
@@ -11848,11 +11848,11 @@ int run_impl(
         };
         if (force_full_record_traversal_v064812315) {
             for (std::size_t ordinal = 0; ordinal < traversal_order_v064894.size(); ++ordinal) {
-                evaluate_pass2_ordinal_v064812340(ordinal);
+                evaluate_pass2_ordinal(ordinal);
             }
         } else {
             for (const std::size_t ordinal : *active_pass2_ordinals_v064812340) {
-                evaluate_pass2_ordinal_v064812340(ordinal);
+                evaluate_pass2_ordinal(ordinal);
             }
         }
         SparsePreliminaryCacheAuditV064812337 sparse_cache_audit_v064812337;
@@ -11884,7 +11884,7 @@ int run_impl(
             elapsed(sparse_cache_pass12_started_v064812337);
         sparse_cache_audit_v064812337.rate_seconds =
             stats.rate_seconds - sparse_cache_rate_before_v064812337;
-        write_sparse_preliminary_cache_audit_v064812337(sparse_cache_audit_v064812337);
+        write_sparse_preliminary_cache_audit(sparse_cache_audit_v064812337);
         residual_audit_v064812339.preliminary_record_count = preliminary_cache_v064812337.size();
         residual_audit_v064812339.active_pass2_count = active_pass2_count_v064812337;
         residual_audit_v064812339.pass12_seconds = sparse_cache_audit_v064812337.pass12_seconds;
@@ -11896,7 +11896,7 @@ int run_impl(
         traversal_audit_v064812340.pass12_nonrate_seconds = residual_audit_v064812339.pass12_nonrate_seconds;
         const auto post_pass2_prebuffer_started_v064812339 = clock_type::now();
 
-        apply_magnesium_type99_persistent_leveltemp_v048746223(
+        apply_magnesium_type99_persistent_leveltemp(
             ctx.program, element, active, input, evaluated, evaluated_records);
         // v0.6.48.12.3.1: source leveltemp is shared across elements and
         // evaluations.  Capture the incoming workspace above, reproduce the
@@ -11904,11 +11904,11 @@ int run_impl(
         // that final workspace for the next element/evaluation, and evaluate
         // Type49/53 against the incoming value when no active ion owns the
         // requested destination column.
-        advance_source_leveltemp_first_pass_z1_z30_v06481231(
+        advance_source_leveltemp_first_pass_z1_z30(
             ctx.program, element, active, ctx.source_leveltemp_energy_workspace_v06481231);
-        apply_type49_persistent_leveltemp_z1_z30_v06481231(
+        apply_type49_persistent_leveltemp_z1_z30(
             element, active, incoming_source_leveltemp_energy_v06481231, evaluated);
-        apply_type53_persistent_leveltemp_z1_z30_v06481231(
+        apply_type53_persistent_leveltemp_z1_z30(
             element, active, incoming_source_leveltemp_energy_v06481231, evaluated);
 
         // v82 patch 5.20.9: reproduce xstarsetup's slot-owned errc lifetime
@@ -12563,8 +12563,8 @@ int run_impl(
         residual_audit_v064812339.type53_revisit_entries = type53_revisit_evaluated_v82_patch5181.size();
         residual_audit_v064812339.type49_revisit_entries = type49_revisit_evaluated_v82_patch52082.size();
         residual_audit_v064812339.element_to_mapback_seconds = elapsed(residual_element_started_v064812339);
-        write_residual_scaling_audit_v064812339(residual_audit_v064812339);
-        write_traversal_selection_audit_v064812340(traversal_audit_v064812340);
+        write_residual_scaling_audit(residual_audit_v064812339);
+        write_traversal_selection_audit(traversal_audit_v064812340);
 
         // Match local_zone.py exactly: accumulate explicit ion fractions
         // using (stage - 1), then add the fully stripped fraction at charge Z.
@@ -12709,7 +12709,7 @@ int run_impl(
             element_diagnostic.outer_iterations = eout.outer_iterations;
             element_diagnostic.fixed_point_iterations = eout.fixed_point_iterations;
         }
-        write_c_call1_compact_solve_attribution_v0648118(ctx.program, element_diagnostic);
+        write_c_call1_compact_solve_attribution(ctx.program, element_diagnostic);
         ctx.last_element_diagnostics.push_back(std::move(element_diagnostic));
 
         // Reconstruct the complete native bound-free continuum surface from
@@ -12746,12 +12746,12 @@ int run_impl(
                         rcemsum += (ansar2 + ansar2o) *
                             (energy - input.radiation_energy_ev[ll - 2u]) / 2.0;
                     }
-                    const double upper_population = source_post_mapback_population_for_full_row_v064812317(
+                    const double upper_population = source_post_mapback_population_for_full_row(
                         active, buffers.populations, source_record.upper_row);
                     const double abund2 = upper_population * element.abundance *
                         input.hydrogen_density_cm3;
                     const double aij = std::max(0.0, evaluated[k].contribution.ans2);
-                    const double cfrac = effective_spectral_covering_fraction_v82_patch58(input);
+                    const double cfrac = effective_spectral_covering_fraction(input);
                     // Literal calc_emis_ion rate-type 9 prepass sets tau1=tau2=0
                     // before the unconditional UCalc call. Type-76 is not an
                     // nlbin-ranked line in the active inventory, so this is
@@ -12820,7 +12820,7 @@ int run_impl(
                         deferred.opacity_curve = type88_curve;
                         deferred.emission_curve = std::move(type88_curve);
                         deferred.evaluated = std::move(type88_eval);
-                        deferred.lower_abundance = source_post_mapback_population_for_full_row_v064812317(
+                        deferred.lower_abundance = source_post_mapback_population_for_full_row(
                             active, buffers.populations, source_record.lower_row) * active.element.abundance;
                         // calc_emis_ion computes rate-42 abund2 from the raw
                         // caller idest2 before UCalc label 88 resets idest2 to
@@ -12832,7 +12832,7 @@ int run_impl(
                             calc_emis_upper_row_v82_patch52010 =
                                 source_record.lower_row - static_cast<int>(ii[2]) + static_cast<int>(ii[3]);
                         }
-                        deferred.upper_abundance = source_post_mapback_population_for_full_row_v064812317(
+                        deferred.upper_abundance = source_post_mapback_population_for_full_row(
                             active, buffers.populations, calc_emis_upper_row_v82_patch52010) * active.element.abundance;
                         deferred_rrc_records_v82_patch520.push_back(std::move(deferred));
                     }
@@ -12862,9 +12862,9 @@ int run_impl(
                     emission_curve_v82_patch520149 = curve;
                 deferred.emission_curve = std::move(emission_curve_v82_patch520149);
                 deferred.evaluated = evaluated[k];
-                deferred.lower_abundance = source_post_mapback_population_for_full_row_v064812317(
+                deferred.lower_abundance = source_post_mapback_population_for_full_row(
                     active, buffers.populations, source_record.lower_row) * active.element.abundance;
-                deferred.upper_abundance = source_post_mapback_population_for_full_row_v064812317(
+                deferred.upper_abundance = source_post_mapback_population_for_full_row(
                     active, buffers.populations, source_record.upper_row) * active.element.abundance;
                 deferred_rrc_records_v82_patch520.push_back(std::move(deferred));
             }
@@ -12886,11 +12886,11 @@ int run_impl(
                 if (source_record.upper_row > 0 && static_cast<std::size_t>(source_record.upper_row) <= element.rows.size())
                     row.upper_global_level_index = element.rows[static_cast<std::size_t>(source_record.upper_row - 1)].global_level_index;
                 row.threshold_ev = curve.threshold_ev;
-                row.native_lower_population = source_post_mapback_population_for_full_row_v064812317(active, buffers.populations, source_record.lower_row);
-                row.native_upper_population = source_post_mapback_population_for_full_row_v064812317(active, buffers.populations, source_record.upper_row);
+                row.native_lower_population = source_post_mapback_population_for_full_row(active, buffers.populations, source_record.lower_row);
+                row.native_upper_population = source_post_mapback_population_for_full_row(active, buffers.populations, source_record.upper_row);
                 row.abundance = element.abundance;
                 row.hydrogen_density_cm3 = std::max(0.0, input.hydrogen_density_cm3);
-                const auto mapped = phint53_grid_map_v82_patch57(curve, input.radiation_energy_ev, static_cast<int>(input.radiation_bin_count));
+                const auto mapped = phint53_grid_map(curve, input.radiation_energy_ev, static_cast<int>(input.radiation_bin_count));
                 if (mapped.valid) {
                     for (int kl = mapped.nb1_zero_based; kl < mapped.klmax_zero_based && kl + 1 < static_cast<int>(input.radiation_bin_count); ++kl) {
                         const double sigma = std::max(0.0, mapped.sgbar[static_cast<std::size_t>(kl)]);
@@ -12908,19 +12908,19 @@ int run_impl(
                 mg_type53_kernel_rows_v82_patch512.push_back(row);
             }
             if (opacity_producer_audit_v82_patch511 || exact_absorption_audit_v82_patch5203) {
-                std::fill(producer_temp_opacity_v82_patch511.begin(), producer_temp_opacity_v82_patch511.end(), 0.0);
-                std::fill(producer_temp_rrc_v82_patch511.begin(), producer_temp_rrc_v82_patch511.end(), 0.0);
+                std::fill(producer_temp_opacity.begin(), producer_temp_opacity.end(), 0.0);
+                std::fill(producer_temp_rrc.begin(), producer_temp_rrc.end(), 0.0);
                 accumulate_native_bound_free_surface(
                     curve, evaluated[k], source_record, active, buffers.populations, input,
-                    producer_temp_opacity_v82_patch511, producer_temp_rrc_v82_patch511, nullptr, nullptr);
-                for (std::size_t bin = 0; bin < producer_temp_opacity_v82_patch511.size(); ++bin) {
-                    const double value = producer_temp_opacity_v82_patch511[bin];
-                    write_exact_absorption_v82_patch5203(bin, "BOUND_FREE", source_record.source_position,
+                    producer_temp_opacity, producer_temp_rrc, nullptr, nullptr);
+                for (std::size_t bin = 0; bin < producer_temp_opacity.size(); ++bin) {
+                    const double value = producer_temp_opacity[bin];
+                    write_exact_absorption(bin, "BOUND_FREE", source_record.source_position,
                         source_record.record, source_record.data_type, source_record.rate_type, element.element_z,
                         source_record.ion_stage, source_record.lower_row, source_record.upper_row, value);
                     if (!opacity_producer_audit_v82_patch511 ||
-                        !(std::isfinite(value) && std::abs(value) > std::abs(bound_free_top_v82_patch511[bin].contribution))) continue;
-                    auto& top = bound_free_top_v82_patch511[bin];
+                        !(std::isfinite(value) && std::abs(value) > std::abs(bound_free_top[bin].contribution))) continue;
+                    auto& top = bound_free_top[bin];
                     top.contribution = value;
                     top.source_position = source_record.source_position;
                     top.record = source_record.record;
@@ -12978,7 +12978,7 @@ int run_impl(
             }
             if (!evaluated[k].bound_free_spectral && spectral_feature_energy_ev_v82_patch5206 > 0.0) {
                 double source_line_wavelength_v82_patch5208 =
-                    source_real_literal_v82_patch5208(12398.4016) / spectral_feature_energy_ev_v82_patch5206;
+                    local_zone_source_real_literal(12398.4016) / spectral_feature_energy_ev_v82_patch5206;
                 if (evaluated[k].type50_shadow.valid &&
                     evaluated[k].type50_shadow.stored_wavelength_a > 0.0) {
                     source_line_wavelength_v82_patch5208 = evaluated[k].type50_shadow.stored_wavelength_a;
@@ -12998,10 +12998,10 @@ int run_impl(
                     static_cast<std::size_t>(it - input.radiation_energy_ev) + 1));
             }
             sc.abundance_lower =
-                source_post_mapback_population_for_full_row_v064812317(active, buffers.populations, rec.lower_row) *
+                source_post_mapback_population_for_full_row(active, buffers.populations, rec.lower_row) *
                 element.abundance;
             sc.abundance_upper =
-                source_post_mapback_population_for_full_row_v064812317(active, buffers.populations, rec.upper_row) *
+                source_post_mapback_population_for_full_row(active, buffers.populations, rec.upper_row) *
                 element.abundance;
             // v0.6.48.12.3.14: literal calc_emisab_ion caller-side line gate.
             // FORTRAN forms abund1/abund2 as xileve*xpx*xeltp and does not call
@@ -13012,7 +13012,7 @@ int run_impl(
             // for rate/matrix ownership; gate only this broad publication path.
             if (!evaluated[k].bound_free_spectral &&
                 (rec.rate_type == 4 || rec.rate_type == 9 || rec.rate_type == 14)) {
-                const double floor_v064812314 = source_real_literal_v82_patch5208(1.0e-34);
+                const double floor_v064812314 = local_zone_source_real_literal(1.0e-34);
                 const double abund1_cm3_v064812314 = sc.abundance_lower * input.hydrogen_density_cm3;
                 const double abund2_cm3_v064812314 = sc.abundance_upper * input.hydrogen_density_cm3;
                 if (rec.data_type == 50 && rec.rate_type == 4) {
@@ -13077,7 +13077,7 @@ int run_impl(
                     sc.opakab = 0.0;
                 }
             }
-            const double cfrac = effective_spectral_covering_fraction_v82_patch58(input);
+            const double cfrac = effective_spectral_covering_fraction(input);
             sc.ptmp1 = 1.0 - cfrac;
             sc.ptmp2 = 1.0 + cfrac;
             if (!evaluated[k].bound_free_spectral && evaluated[k].type50_shadow.valid) {
@@ -13145,9 +13145,9 @@ int run_impl(
                                "runtime_seed_renormalized,runtime_seed_sum_before_policy,runtime_seed_sum_after_policy\n";
                     }
                     const int call_index = environment_data_type("XSTAR_NATIVE_CALL_INDEX");
-                    const double lower_population = source_post_mapback_population_for_full_row_v064812317(
+                    const double lower_population = source_post_mapback_population_for_full_row(
                         active, buffers.populations, rec.lower_row);
-                    const double upper_population = source_post_mapback_population_for_full_row_v064812317(
+                    const double upper_population = source_post_mapback_population_for_full_row(
                         active, buffers.populations, rec.upper_row);
                     const double abund1 = lower_population * element.abundance * input.hydrogen_density_cm3;
                     const double abund2 = upper_population * element.abundance * input.hydrogen_density_cm3;
@@ -13329,7 +13329,7 @@ int run_impl(
             const double freef_opacity_v82_patch5203 = freef_cc * xnx * enz2 /
                 std::sqrt(temperature_t4) / e_cube * stim;
             output.opacity[k] += freef_opacity_v82_patch5203;
-            write_exact_absorption_v82_patch5203(k, "FREE_FREE", 0, 0, 0, 0, 0, 0, 0, 0,
+            write_exact_absorption(k, "FREE_FREE", 0, 0, 0, 0, 0, 0, 0, 0,
                 freef_opacity_v82_patch5203);
         }
         if (shape_sum > 0.0) for (std::size_t k=0;k<input.radiation_bin_count;++k) output.spectrum[k] += clbrems * shape[k] / shape_sum;
@@ -13366,11 +13366,11 @@ int run_impl(
         // to opakc after the continuum contributions are complete.
         std::vector<double> line_profile_opacity(continuum_capacity, 0.0);
         const double source_thomson = input.hydrogen_density_cm3 * input.electron_fraction_xee *
-            kSigmaT * std::max(0.0, 1.0 - effective_spectral_covering_fraction_v82_patch58(input));
+            kSigmaT * std::max(0.0, 1.0 - effective_spectral_covering_fraction(input));
         std::vector<double> opakcont(continuum_capacity, source_thomson);
         for (std::size_t k = 0; k < continuum_capacity; ++k) {
             output.opacity[k] += source_thomson;
-            write_exact_absorption_v82_patch5203(k, "THOMSON", 0, 0, 0, 0, 0, 0, 0, 0, source_thomson);
+            write_exact_absorption(k, "THOMSON", 0, 0, 0, 0, 0, 0, 0, 0, source_thomson);
         }
         std::vector<double> fline(2 * line_capacity, 0.0);
         std::vector<double> flinel(continuum_capacity, 0.0);
@@ -13405,16 +13405,16 @@ int run_impl(
             const std::filesystem::path diag_path_v064812321 =
                 std::filesystem::path(diag_root_v064812321) / "type50_outer_gate_summary.csv";
             const bool write_header_v064812321 = !std::filesystem::exists(diag_path_v064812321);
-            std::ofstream diag_v064812321(diag_path_v064812321, std::ios::app);
-            if (!diag_v064812321) throw std::runtime_error("cannot create v064812321 Type50 gate summary");
+            std::ofstream diag(diag_path_v064812321, std::ios::app);
+            if (!diag) throw std::runtime_error("cannot create v064812321 Type50 gate summary");
             if (write_header_v064812321)
-                diag_v064812321 << "source_sequence,phase,candidates,accepts,rejects,source_real_floor\n";
+                diag << "source_sequence,phase,candidates,accepts,rejects,source_real_floor\n";
             const char* seq_v064812321 = std::getenv("XSTAR_NATIVE_SOURCE_SEQUENCE");
-            diag_v064812321 << (seq_v064812321 ? seq_v064812321 : "0")
+            diag << (seq_v064812321 ? seq_v064812321 : "0")
                 << ",calc_emisab," << type50_outer_candidates_v064812321
                 << ',' << type50_outer_accepts_v064812321
                 << ',' << type50_outer_rejects_v064812321
-                << ',' << std::setprecision(17) << source_real_literal_v82_patch5208(1.0e-34) << '\n';
+                << ',' << std::setprecision(17) << local_zone_source_real_literal(1.0e-34) << '\n';
             ::setenv("XSTAR_V064812321_TYPE50_PHASE", "calc_emisab", 1);
         }
         const int rc = xstar_spectral_apply_contributions_v1(ctx.spectral_context, spectral.data(), spectral.size(), seeds.data(), seed_stride, &sw, &ss, error.data(), error.size());
@@ -13497,7 +13497,7 @@ int run_impl(
                 const std::size_t slot = static_cast<std::size_t>(slot_one_based);
                 if (slot >= opakab.size()) throw std::runtime_error("Type-88 retained kkkl exceeds opakab workspace");
                 const auto& deferred = *dit->second;
-                const auto scalar = source_type88_stale_opakab_v82_patch52010(
+                const auto scalar = source_type88_stale_opakab(
                     deferred.opacity_curve, deferred.type88_rnist,
                     deferred.lower_abundance, deferred.upper_abundance, input);
 
@@ -13511,7 +13511,7 @@ int run_impl(
                 audit.retained_rate7_record = rit->second.record;
                 audit.retained_rate7_source_position = rit->second.source_position;
                 audit.retained_slot_one_based = slot_one_based;
-                audit.stale_errc_rank_energy_ev = source_errc_rank_energy_for_slot_v82_patch5209(
+                audit.stale_errc_rank_energy_ev = source_errc_rank_energy_for_slot(
                     slot_one_based, rit->second.source_position, rit->second.record, 0.0);
                 if (input.continuum_tau_in && slot > 0u && slot - 1u < input.continuum_tau_count)
                     audit.stale_tau_in = input.continuum_tau_in[slot - 1u];
@@ -13608,13 +13608,13 @@ int run_impl(
                 m.slot_one_based = c.output_index;
                 double feature_energy = c.line_energy_eV;
                 if (is_rrc) {
-                    feature_energy = source_errc_rank_energy_for_slot_v82_patch5209(
+                    feature_energy = source_errc_rank_energy_for_slot(
                         c.output_index, static_cast<std::uint64_t>(c.source_position),
                         static_cast<std::int64_t>(c.record), c.line_energy_eV);
                 }
                 if (!(feature_energy > 0.0) || !std::isfinite(feature_energy)) continue;
                 m.energy_ev = feature_energy;
-                m.wavelength_a = source_real_literal_v82_patch5208(12398.4016) /
+                m.wavelength_a = local_zone_source_real_literal(12398.4016) /
                     std::max(1.0e-34, feature_energy);
                 m.source_position = c.source_position;
                 m.record = c.record;
@@ -13629,7 +13629,7 @@ int run_impl(
                     if (legacy_it !=
                         source_errc_rank_energy_by_identity_patch52082_audit_v82_patch5209.end()) {
                         legacy.energy_ev = legacy_it->second;
-                        legacy.wavelength_a = source_real_literal_v82_patch5208(12398.4016) /
+                        legacy.wavelength_a = local_zone_source_real_literal(12398.4016) /
                             std::max(1.0e-34, legacy.energy_ev);
                     }
                     legacy.source_position = c.source_position;
@@ -13662,7 +13662,7 @@ int run_impl(
                     line_candidates_v82_patch5206.push_back(c);
                 }
             }
-            source_calc_emis_ncbin_v82_patch5208 = source_rlbin_exact_audit_v82_patch5171(
+            source_calc_emis_ncbin_v82_patch5208 = source_rlbin_exact_audit(
                 rrc_candidates_v82_patch5206, input.radiation_energy_ev, continuum_capacity, true);
             std::vector<SourceFeatureAuditCandidateV82Patch5171>
                 legacy_rrc_candidates_v82_patch5209;
@@ -13680,10 +13680,10 @@ int run_impl(
                 legacy_rrc_candidates_v82_patch5209.push_back(c);
             }
             source_calc_emis_ncbin_patch52082_audit_v82_patch5209 =
-                source_rlbin_exact_audit_v82_patch5171(
+                source_rlbin_exact_audit(
                     legacy_rrc_candidates_v82_patch5209, input.radiation_energy_ev,
                     continuum_capacity, true);
-            source_calc_emis_nlbin_v82_patch5208 = source_rlbin_exact_audit_v82_patch5171(
+            source_calc_emis_nlbin_v82_patch5208 = source_rlbin_exact_audit(
                 line_candidates_v82_patch5206, input.radiation_energy_ev, continuum_capacity, false);
             source_calc_emis_selected_rrc_slots_v82_patch5206 = source_calc_emis_ncbin_v82_patch5208.selected_slots;
             source_calc_emis_selected_line_slots_v82_patch5206 = source_calc_emis_nlbin_v82_patch5208.selected_slots;
@@ -13718,11 +13718,11 @@ int run_impl(
                 m.family = "RRC";
                 m.slot_one_based = c.output_index;
                 const double errc_energy_v82_patch5209 =
-                    source_errc_rank_energy_for_slot_v82_patch5209(
+                    source_errc_rank_energy_for_slot(
                         c.output_index, static_cast<std::uint64_t>(c.source_position),
                         static_cast<std::int64_t>(c.record), c.line_energy_eV);
                 m.energy_ev = errc_energy_v82_patch5209;
-                m.wavelength_a = source_real_literal_v82_patch5208(12398.4016) /
+                m.wavelength_a = local_zone_source_real_literal(12398.4016) /
                     std::max(1.0e-34, errc_energy_v82_patch5209);
                 m.source_position = c.source_position;
                 m.record = c.record;
@@ -13743,7 +13743,7 @@ int run_impl(
                 c.emission_sum = e1 + e2;
                 seed_rrc_candidates.push_back(c);
             }
-            const auto source_ncbin = source_rlbin_exact_audit_v82_patch5171(
+            const auto source_ncbin = source_rlbin_exact_audit(
                 seed_rrc_candidates, input.radiation_energy_ev, continuum_capacity, true);
 
             const char* revisit_path_text = std::getenv("XSTAR_V82_PATCH5181_TYPE53_REVISIT_AUDIT_PATH");
@@ -13762,7 +13762,7 @@ int run_impl(
             for (const auto& c : seed_rrc_candidates) {
                 if (c.data_type != 53) continue;
                 ++type53_candidates;
-                const auto consumer_decision_v82_patch5208 = source_calc_emis_consumer_v82_patch5208(
+                const auto consumer_decision_v82_patch5208 = source_calc_emis_consumer(
                     c.slot_one_based, c.wavelength_a, true, true, source_ncbin,
                     input.radiation_energy_ev, continuum_capacity);
                 const bool selected = consumer_decision_v82_patch5208.actual_consumer;
@@ -13791,7 +13791,7 @@ int run_impl(
                         });
                     if (element_it_v064895 == ctx.program.elements.end())
                         throw std::runtime_error("9.5 selected Type53 element missing");
-                    lazy_revisit_shadow_v064895 = evaluate_selected_fullgrid_bound_free_v064895(
+                    lazy_revisit_shadow_v064895 = evaluate_selected_fullgrid_bound_free(
                         ctx.program, *element_it_v064895, selected_record_v064895, input,
                         item, rate_context_v064894);
                     revisit_shadow_ptr_v064895 = &lazy_revisit_shadow_v064895;
@@ -13879,10 +13879,10 @@ int run_impl(
                 std::getenv("XSTAR_V82_PATCH52082_TYPE49_REVISIT_AUDIT_PATH");
             std::ofstream type49_revisit_csv_v82_patch52082;
             if (patch520144_call2_audit && type49_revisit_path_v82_patch52082 && *type49_revisit_path_v82_patch52082) {
-                const std::filesystem::path type49_path_v82_patch52082(type49_revisit_path_v82_patch52082);
-                if (!type49_path_v82_patch52082.parent_path().empty())
-                    std::filesystem::create_directories(type49_path_v82_patch52082.parent_path());
-                type49_revisit_csv_v82_patch52082.open(type49_path_v82_patch52082);
+                const std::filesystem::path type49_path(type49_revisit_path_v82_patch52082);
+                if (!type49_path.parent_path().empty())
+                    std::filesystem::create_directories(type49_path.parent_path());
+                type49_revisit_csv_v82_patch52082.open(type49_path);
                 if (!type49_revisit_csv_v82_patch52082)
                     throw std::runtime_error("cannot create patch5.20.8.2 Type-49 three-stage audit");
                 type49_revisit_csv_v82_patch52082
@@ -13933,7 +13933,7 @@ int run_impl(
                 const bool destination_valid_v82_patch52082 =
                     prit_v82_patch52082 != type49_record_by_position_v82_patch52082.end() &&
                     prit_v82_patch52082->second && prit_v82_patch52082->second->lower_row > 0;
-                const auto consumer_v82_patch52082 = source_calc_emis_consumer_v82_patch5208(
+                const auto consumer_v82_patch52082 = source_calc_emis_consumer(
                     c.slot_one_based, c.wavelength_a, true, destination_valid_v82_patch52082, source_ncbin,
                     input.radiation_energy_ev, continuum_capacity);
                 const bool selected_v82_patch52082 = consumer_v82_patch52082.actual_consumer;
@@ -13956,7 +13956,7 @@ int run_impl(
                         });
                     if (element_it_v064895 == ctx.program.elements.end())
                         throw std::runtime_error("9.5 selected Type49 element missing");
-                    lazy_full_shadow_v064895 = evaluate_selected_fullgrid_bound_free_v064895(
+                    lazy_full_shadow_v064895 = evaluate_selected_fullgrid_bound_free(
                         ctx.program, *element_it_v064895, selected_record_v064895, input,
                         item_v82_patch52082, rate_context_v064894);
                     full_shadow_ptr_v064895 = &lazy_full_shadow_v064895;
@@ -13971,7 +13971,7 @@ int run_impl(
                 const double lower_v82_patch52082 = spectral_item_v82_patch52082->abundance_lower;
                 const double upper_v82_patch52082 = spectral_item_v82_patch52082->abundance_upper;
                 const double density_v82_patch52082 = spectral_item_v82_patch52082->hydrogen_density;
-                auto published_opakab_v82_patch52082 = [&](const Type53SourceShadow& shadow) {
+                auto published_opakab = [&](const Type53SourceShadow& shadow) {
                     if (!shadow.valid || !shadow.threshold_publication_reached ||
                         !(lower_v82_patch52082 > 0.0)) return 0.0;
                     const double ratio_v82_patch52082 = upper_v82_patch52082 / lower_v82_patch52082;
@@ -13981,9 +13981,9 @@ int run_impl(
                     return coefficient_v82_patch52082 * lower_v82_patch52082 * density_v82_patch52082;
                 };
                 const double reduced_hypothetical_v82_patch52082 =
-                    published_opakab_v82_patch52082(reduced_shadow_v82_patch52082);
+                    published_opakab(reduced_shadow_v82_patch52082);
                 const double full_revisit_v82_patch52082 =
-                    published_opakab_v82_patch52082(full_shadow_v82_patch52082);
+                    published_opakab(full_shadow_v82_patch52082);
                 if (reduced_hypothetical_v82_patch52082 != full_revisit_v82_patch52082)
                     ++type49_reduced_full_different_v82_patch52082;
 
@@ -14073,12 +14073,12 @@ int run_impl(
                     m.slot_one_based = c.output_index;
                     double feature_energy_v82_patch5209 = c.line_energy_eV;
                     if (is_rrc) {
-                        feature_energy_v82_patch5209 = source_errc_rank_energy_for_slot_v82_patch5209(
+                        feature_energy_v82_patch5209 = source_errc_rank_energy_for_slot(
                             c.output_index, static_cast<std::uint64_t>(c.source_position),
                             static_cast<std::int64_t>(c.record), c.line_energy_eV);
                     }
                     m.energy_ev = feature_energy_v82_patch5209;
-                    m.wavelength_a = source_real_literal_v82_patch5208(12398.4016) /
+                    m.wavelength_a = local_zone_source_real_literal(12398.4016) /
                         std::max(1.0e-34, feature_energy_v82_patch5209);
                     m.source_position = c.source_position;
                     m.record = c.record;
@@ -14122,9 +14122,9 @@ int run_impl(
                     }
                 }
 
-                const auto ncbin = source_rlbin_exact_audit_v82_patch5171(
+                const auto ncbin = source_rlbin_exact_audit(
                     rrc_candidates, input.radiation_energy_ev, continuum_capacity, true);
-                const auto nlbin = source_rlbin_exact_audit_v82_patch5171(
+                const auto nlbin = source_rlbin_exact_audit(
                     line_candidates, input.radiation_energy_ev, continuum_capacity, false);
                 std::map<int,SourceFeatureAuditCandidateV82Patch5171> rrc_by_slot, line_by_slot;
                 for (const auto& c : rrc_candidates) rrc_by_slot[c.slot_one_based] = c;
@@ -14142,7 +14142,7 @@ int run_impl(
                     const auto bit = result.bin_one_based.find(c.slot_one_based);
                     const auto rit = result.final_rank.find(c.slot_one_based);
                     const bool selected = result.selected_slots.count(c.slot_one_based) != 0u;
-                    const std::string consumer = source_feature_consumer_v82_patch5171(c.family, c.data_type);
+                    const std::string consumer = source_feature_consumer(c.family, c.data_type);
                     const bool revisit = c.family == "RRC" && c.data_type == 49 ? true : selected;
                     feature_csv << c.family << ',' << c.slot_one_based << ',' << c.wavelength_a << ','
                         << c.energy_ev << ',' << c.emission_sum << ',' << c.opacity << ','
@@ -14178,7 +14178,7 @@ int run_impl(
                                 << c.wavelength_a << ',' << c.energy_ev << ',' << c.emission_sum << ','
                                 << c.opacity << ',' << (rank_by_opacity ? c.opacity : c.emission_sum) << ','
                                 << c.source_position << ',' << c.record << ',' << c.data_type << ','
-                                << source_feature_consumer_v82_patch5171(family, c.data_type) << '\n';
+                                << source_feature_consumer(family, c.data_type) << '\n';
                         }
                     }
                 };
@@ -14226,9 +14226,9 @@ int run_impl(
                     wavelength_it_v82_patch5208 != source_line_wavelength_by_identity_v82_patch5208.end()
                         ? wavelength_it_v82_patch5208->second
                         : (original_c.line_energy_eV > 0.0
-                            ? source_real_literal_v82_patch5208(12398.4016) / original_c.line_energy_eV
+                            ? local_zone_source_real_literal(12398.4016) / original_c.line_energy_eV
                             : 0.0);
-                const auto line_consumer_v82_patch5208 = source_calc_emis_consumer_v82_patch5208(
+                const auto line_consumer_v82_patch5208 = source_calc_emis_consumer(
                     original_c.output_index, source_line_wavelength_v82_patch5208, false, true,
                     source_calc_emis_nlbin_v82_patch5208, input.radiation_energy_ev, continuum_capacity);
                 if (!line_consumer_v82_patch5208.actual_consumer) continue;
@@ -14295,31 +14295,31 @@ int run_impl(
             // attribution.  Replay each already-selected line into a private
             // zero opacity plane with the same linopac kernel/seeds used above.
             // No diagnostic value is ever fed back into production state.
-            const char* line_attr_dir_v82_patch5201734 =
+            const char* line_attribution_dir_env =
                 std::getenv("XSTAR_V82_PATCH5201734_CPP_ATTRIBUTION_DIR");
-            if (source_sequence_v82_patch511 == 59 && line_attr_dir_v82_patch5201734 && *line_attr_dir_v82_patch5201734) {
-                const std::filesystem::path dir_v82_patch5201734(line_attr_dir_v82_patch5201734);
-                std::filesystem::create_directories(dir_v82_patch5201734);
-                std::ofstream records_v82_patch5201734(dir_v82_patch5201734 / "cpp_selected_line_records.csv");
-                if (!records_v82_patch5201734)
+            if (source_sequence_v82_patch511 == 59 && line_attribution_dir_env && *line_attribution_dir_env) {
+                const std::filesystem::path line_attribution_dir(line_attribution_dir_env);
+                std::filesystem::create_directories(line_attribution_dir);
+                std::ofstream records(line_attribution_dir / "cpp_selected_line_records.csv");
+                if (!records)
                     throw std::runtime_error("cannot create patch5.20.17.3.4 C++ selected-line records");
-                records_v82_patch5201734
+                records
                     << "source_sequence,record_order,source_position,record,data_type,rate_type,element_z,ion_stage,line_index_one_based,line_energy_ev,optpp_cm1,abundance_lower_cm3,abundance_upper_cm3,hydrogen_density_cm3,atomic_mass_amu,natural_width_ev,contribution_nonzero_bins,contribution_first_nonzero_one_based,contribution_last_nonzero_one_based,contribution_sum,contribution_abs_sum,contribution_max,contribution_hash,shape_nonzero_bins,shape_sum,shape_max,shape_hash\n";
-                records_v82_patch5201734 << std::setprecision(17);
+                records << std::setprecision(17);
                 std::unordered_map<std::int64_t,const ProgramRecord*> record_by_position_v82_patch5201734;
                 for (const auto& record : ctx.program.records)
                     record_by_position_v82_patch5201734[static_cast<std::int64_t>(record.source_position)] = &record;
                 std::unordered_map<int,int> element_z_by_index_v82_patch5201734;
                 for (const auto& element : ctx.program.elements)
                     element_z_by_index_v82_patch5201734[element.element_index] = element.element_z;
-                std::vector<double> temp_opacity_v82_patch5201734(continuum_capacity, 0.0);
-                std::vector<double> temp_rcc_v82_patch5201734(2 * continuum_capacity, 0.0);
-                std::vector<double> temp_shape_v82_patch5201734(continuum_capacity, 0.0);
-                std::vector<double> replayed_sum_v82_patch5201734(continuum_capacity, 0.0);
+                std::vector<double> temp_opacity(continuum_capacity, 0.0);
+                std::vector<double> temp_rcc(2 * continuum_capacity, 0.0);
+                std::vector<double> temp_shape(continuum_capacity, 0.0);
+                std::vector<double> replayed_sum(continuum_capacity, 0.0);
                 for (std::size_t j = 0; j < selected_lines_v82_patch5206.size(); ++j) {
                     const auto& c = selected_lines_v82_patch5206[j];
-                    std::fill(temp_opacity_v82_patch5201734.begin(), temp_opacity_v82_patch5201734.end(), 0.0);
-                    std::fill(temp_rcc_v82_patch5201734.begin(), temp_rcc_v82_patch5201734.end(), 0.0);
+                    std::fill(temp_opacity.begin(), temp_opacity.end(), 0.0);
+                    std::fill(temp_rcc.begin(), temp_rcc.end(), 0.0);
                     const double optpp = c.opakab * c.abundance_lower * c.hydrogen_density;
                     long long updated = 0;
                     double elapsed_profile = 0.0;
@@ -14329,14 +14329,14 @@ int run_impl(
                         optpp, c.line_energy_eV, c.turbulent_velocity_km_s,
                         c.temperature_1e4K, c.atomic_mass_amu, c.natural_width_eV,
                         seed, 10, input.radiation_energy_ev, static_cast<int>(continuum_capacity),
-                        temp_opacity_v82_patch5201734.data(), temp_rcc_v82_patch5201734.data(),
+                        temp_opacity.data(), temp_rcc.data(),
                         &updated, &elapsed_profile, profile_error.data(), profile_error.size());
                     if (profile_rc != 0)
                         throw std::runtime_error(std::string("patch5.20.17.3.4 C++ line producer replay failed: ") + profile_error.data());
                     std::size_t nz = 0u, first = 0u, last = 0u;
                     double sum = 0.0, abs_sum = 0.0, vmax = 0.0;
-                    for (std::size_t k = 0; k < temp_opacity_v82_patch5201734.size(); ++k) {
-                        const double value = temp_opacity_v82_patch5201734[k];
+                    for (std::size_t k = 0; k < temp_opacity.size(); ++k) {
+                        const double value = temp_opacity[k];
                         if (std::isfinite(value)) {
                             sum += value; abs_sum += std::abs(value); vmax = std::max(vmax, value);
                         }
@@ -14344,12 +14344,12 @@ int run_impl(
                             if (nz == 0u) first = k + 1u;
                             last = k + 1u; ++nz;
                         }
-                        temp_shape_v82_patch5201734[k] = optpp > 0.0 ? value / optpp : 0.0;
-                        replayed_sum_v82_patch5201734[k] += value;
+                        temp_shape[k] = optpp > 0.0 ? value / optpp : 0.0;
+                        replayed_sum[k] += value;
                     }
                     std::size_t shape_nz = 0u;
                     double shape_sum = 0.0, shape_max = 0.0;
-                    for (double value : temp_shape_v82_patch5201734) {
+                    for (double value : temp_shape) {
                         if (std::isfinite(value)) {
                             shape_sum += value; shape_max = std::max(shape_max, value);
                         }
@@ -14363,27 +14363,27 @@ int run_impl(
                         if (ez != element_z_by_index_v82_patch5201734.end()) element_z = ez->second;
                         ion_stage = source_record->ion_stage;
                     }
-                    records_v82_patch5201734
+                    records
                         << source_sequence_v82_patch511 << ',' << (j + 1u) << ',' << c.source_position << ',' << c.record << ','
                         << c.data_type << ',' << c.rate_type << ',' << element_z << ',' << ion_stage << ',' << c.output_index << ','
                         << c.line_energy_eV << ',' << optpp << ',' << (c.abundance_lower * c.hydrogen_density) << ','
                         << (c.abundance_upper * c.hydrogen_density) << ',' << c.hydrogen_density << ',' << c.atomic_mass_amu << ','
                         << c.natural_width_eV << ',' << nz << ',' << first << ',' << last << ',' << sum << ',' << abs_sum << ','
-                        << vmax << ',' << hex_u64(binary64_sequence_fnv1a(temp_opacity_v82_patch5201734)) << ',' << shape_nz << ','
-                        << shape_sum << ',' << shape_max << ',' << hex_u64(binary64_sequence_fnv1a(temp_shape_v82_patch5201734)) << '\n';
+                        << vmax << ',' << hex_u64(binary64_sequence_fnv1a(temp_opacity)) << ',' << shape_nz << ','
+                        << shape_sum << ',' << shape_max << ',' << hex_u64(binary64_sequence_fnv1a(temp_shape)) << '\n';
                 }
-                std::ofstream line_sum_v82_patch5201734(dir_v82_patch5201734 / "cpp_selected_line_sum.csv");
-                if (!line_sum_v82_patch5201734)
+                std::ofstream line_sum(line_attribution_dir / "cpp_selected_line_sum.csv");
+                if (!line_sum)
                     throw std::runtime_error("cannot create patch5.20.17.3.4 C++ selected-line sum");
-                line_sum_v82_patch5201734 << "bin_one_based,energy_ev,opacity_cm1\n" << std::setprecision(17);
+                line_sum << "bin_one_based,energy_ev,opacity_cm1\n" << std::setprecision(17);
                 for (std::size_t k = 0; k < line_profile_opacity.size(); ++k)
-                    line_sum_v82_patch5201734 << (k + 1u) << ',' << input.radiation_energy_ev[k] << ',' << line_profile_opacity[k] << '\n';
-                std::ofstream replayed_sum_file_v82_patch5201734(dir_v82_patch5201734 / "cpp_selected_line_replayed_sum.csv");
-                if (!replayed_sum_file_v82_patch5201734)
+                    line_sum << (k + 1u) << ',' << input.radiation_energy_ev[k] << ',' << line_profile_opacity[k] << '\n';
+                std::ofstream replayed_sum_file(line_attribution_dir / "cpp_selected_line_replayed_sum.csv");
+                if (!replayed_sum_file)
                     throw std::runtime_error("cannot create patch5.20.17.3.4 C++ replayed selected-line sum");
-                replayed_sum_file_v82_patch5201734 << "bin_one_based,energy_ev,opacity_cm1\n" << std::setprecision(17);
-                for (std::size_t k = 0; k < replayed_sum_v82_patch5201734.size(); ++k)
-                    replayed_sum_file_v82_patch5201734 << (k + 1u) << ',' << input.radiation_energy_ev[k] << ',' << replayed_sum_v82_patch5201734[k] << '\n';
+                replayed_sum_file << "bin_one_based,energy_ev,opacity_cm1\n" << std::setprecision(17);
+                for (std::size_t k = 0; k < replayed_sum.size(); ++k)
+                    replayed_sum_file << (k + 1u) << ',' << input.radiation_energy_ev[k] << ',' << replayed_sum[k] << '\n';
                 std::cout << "V048746255172582_PATCH5201734_CPP_SELECTED_LINE_ATTRIBUTION=WRITTEN\n"
                           << "V048746255172582_PATCH5201734_CPP_SELECTED_LINE_RECORDS=" << selected_lines_v82_patch5206.size() << "\n";
             }
@@ -14437,8 +14437,8 @@ int run_impl(
         // rate-42 follows its separate ungated branch.  Rebuild both heatt-facing
         // opacity and RRC emission from those exact native-derived consumers.
         // Broad calc_emisab opakab/cemab and diagnostic surfaces remain intact.
-        std::vector<double> heatt_bound_free_opacity_v82_patch5206(continuum_capacity, 0.0);
-        std::vector<double> heatt_rrc_continuum_emission_v82_patch520(2 * continuum_capacity, 0.0);
+        std::vector<double> heatt_bound_free_opacity(continuum_capacity, 0.0);
+        std::vector<double> heatt_rrc_continuum_emission(2 * continuum_capacity, 0.0);
         std::size_t selected_rrc_records_v82_patch520 = 0u;
         std::size_t type99_source_zero_rrc_records_v82_patch5201739 = 0u;
         std::size_t rate42_rrc_records_v82_patch520 = 0u;
@@ -14453,16 +14453,16 @@ int run_impl(
             record_by_source_position_v82_patch520.reserve(ctx.program.records.size());
             for (const auto& source_record : ctx.program.records)
                 record_by_source_position_v82_patch520[static_cast<std::int64_t>(source_record.source_position)] = &source_record;
-            const char* attribution_dir_v82_patch5201732 =
+            const char* opacity_attribution_dir_env =
                 std::getenv("XSTAR_V82_PATCH5201732_CPP_ATTRIBUTION_DIR");
             const bool attribution_v82_patch5201732 =
-                source_sequence_v82_patch511 == 59 && attribution_dir_v82_patch5201732 && *attribution_dir_v82_patch5201732;
+                source_sequence_v82_patch511 == 59 && opacity_attribution_dir_env && *opacity_attribution_dir_env;
             std::ofstream attribution_records_v82_patch5201732;
             std::size_t attribution_record_order_v82_patch5201732 = 0u;
             if (attribution_v82_patch5201732) {
-                const std::filesystem::path dir_v82_patch5201732(attribution_dir_v82_patch5201732);
-                std::filesystem::create_directories(dir_v82_patch5201732);
-                attribution_records_v82_patch5201732.open(dir_v82_patch5201732 / "cpp_bound_free_records.csv");
+                const std::filesystem::path opacity_attribution_dir(opacity_attribution_dir_env);
+                std::filesystem::create_directories(opacity_attribution_dir);
+                attribution_records_v82_patch5201732.open(opacity_attribution_dir / "cpp_bound_free_records.csv");
                 if (!attribution_records_v82_patch5201732)
                     throw std::runtime_error("cannot create patch5.20.17.3.2 C++ bound-free record ledger");
                 attribution_records_v82_patch5201732
@@ -14473,7 +14473,7 @@ int run_impl(
                     << "contribution_abs_sum,contribution_max,contribution_hash,shape_nonzero_bins,shape_sum_cm2,shape_max_cm2,shape_hash\n";
                 attribution_records_v82_patch5201732 << std::setprecision(17);
             }
-            const auto element_z_for_index_v82_patch5201732 = [&](int element_index) {
+            const auto element_z_for_index = [&](int element_index) {
                 for (const auto& em : ctx.program.elements)
                     if (em.element_index == element_index) return em.element_z;
                 return 0;
@@ -14492,24 +14492,24 @@ int run_impl(
                     const auto it = rrc_slot_by_identity_v82_patch520.find({deferred.source_position, deferred.record});
                     if (it == rrc_slot_by_identity_v82_patch520.end()) continue;
                     const double rank_energy_ev_v82_patch5209 =
-                        source_errc_rank_energy_for_slot_v82_patch5209(
+                        source_errc_rank_energy_for_slot(
                             it->second, deferred.source_position, deferred.record, deferred.opacity_curve.threshold_ev);
                     const double errc_wavelength_a_v82_patch5209 = rank_energy_ev_v82_patch5209 > 0.0
-                        ? source_real_literal_v82_patch5208(12398.4016) /
+                        ? local_zone_source_real_literal(12398.4016) /
                             std::max(1.0e-34, rank_energy_ev_v82_patch5209)
                         : 0.0;
                     const bool destination_valid_v82_patch5208 = rit->second->lower_row > 0;
-                    const auto consumer_v82_patch5208 = source_calc_emis_consumer_v82_patch5208(
+                    const auto consumer_v82_patch5208 = source_calc_emis_consumer(
                         it->second, errc_wavelength_a_v82_patch5209, true, destination_valid_v82_patch5208,
                         source_calc_emis_ncbin_v82_patch5208, input.radiation_energy_ev, continuum_capacity);
                     if (!consumer_v82_patch5208.actual_consumer) continue;
                 }
                 if (attribution_v82_patch5201732) {
-                    std::vector<double> contribution_v82_patch5201732(continuum_capacity, 0.0);
-                    accumulate_native_bound_free_opacity_from_abundances_v82_patch5206(
+                    std::vector<double> contribution(continuum_capacity, 0.0);
+                    accumulate_native_bound_free_opacity_from_abundances(
                         deferred.opacity_curve, *rit->second, deferred.lower_abundance, input,
-                        contribution_v82_patch5201732);
-                    const auto mapped_v82_patch5201732 = phint53_grid_map_v82_patch57(
+                        contribution);
+                    const auto mapped_v82_patch5201732 = phint53_grid_map(
                         deferred.opacity_curve, input.radiation_energy_ev, static_cast<int>(continuum_capacity));
                     std::size_t nz_v82_patch5201732 = 0u;
                     std::size_t first_v82_patch5201732 = 0u;
@@ -14517,8 +14517,8 @@ int run_impl(
                     double sum_v82_patch5201732 = 0.0;
                     double abs_sum_v82_patch5201732 = 0.0;
                     double max_v82_patch5201732 = 0.0;
-                    for (std::size_t kk = 0; kk < contribution_v82_patch5201732.size(); ++kk) {
-                        const double value = contribution_v82_patch5201732[kk];
+                    for (std::size_t kk = 0; kk < contribution.size(); ++kk) {
+                        const double value = contribution[kk];
                         if (std::isfinite(value)) {
                             sum_v82_patch5201732 += value;
                             abs_sum_v82_patch5201732 += std::abs(value);
@@ -14532,15 +14532,15 @@ int run_impl(
                     }
                     const double density_v82_patch5201732 = std::max(0.0, input.hydrogen_density_cm3);
                     const double scale_v82_patch5201732 = deferred.lower_abundance * density_v82_patch5201732;
-                    std::vector<double> shape_v82_patch5201732(contribution_v82_patch5201732.size(), 0.0);
+                    std::vector<double> shape(contribution.size(), 0.0);
                     if (scale_v82_patch5201732 > 0.0) {
-                        for (std::size_t kk = 0; kk < contribution_v82_patch5201732.size(); ++kk)
-                            shape_v82_patch5201732[kk] = contribution_v82_patch5201732[kk] / scale_v82_patch5201732;
+                        for (std::size_t kk = 0; kk < contribution.size(); ++kk)
+                            shape[kk] = contribution[kk] / scale_v82_patch5201732;
                     }
                     std::size_t shape_nz_v82_patch5201732 = 0u;
                     double shape_sum_v82_patch5201732 = 0.0;
                     double shape_max_v82_patch5201732 = 0.0;
-                    for (double value : shape_v82_patch5201732) {
+                    for (double value : shape) {
                         if (std::isfinite(value)) {
                             shape_sum_v82_patch5201732 += value;
                             shape_max_v82_patch5201732 = std::max(shape_max_v82_patch5201732, value);
@@ -14553,7 +14553,7 @@ int run_impl(
                         << attribution_record_order_v82_patch5201732 << ','
                         << deferred.source_position << ',' << deferred.record << ','
                         << rit->second->data_type << ',' << rit->second->rate_type << ','
-                        << element_z_for_index_v82_patch5201732(rit->second->element_index) << ','
+                        << element_z_for_index(rit->second->element_index) << ','
                         << rit->second->ion_stage << ',' << rit->second->continuum_index_one_based << ','
                         << deferred.opacity_curve.threshold_ev << ',' << deferred.lower_abundance << ','
                         << deferred.upper_abundance << ',' << density_v82_patch5201732 << ','
@@ -14565,14 +14565,14 @@ int run_impl(
                         << first_v82_patch5201732 << ',' << last_v82_patch5201732 << ','
                         << sum_v82_patch5201732 << ',' << abs_sum_v82_patch5201732 << ','
                         << max_v82_patch5201732 << ','
-                        << hex_u64(binary64_sequence_fnv1a(contribution_v82_patch5201732)) << ','
+                        << hex_u64(binary64_sequence_fnv1a(contribution)) << ','
                         << shape_nz_v82_patch5201732 << ',' << shape_sum_v82_patch5201732 << ','
                         << shape_max_v82_patch5201732 << ','
-                        << hex_u64(binary64_sequence_fnv1a(shape_v82_patch5201732)) << "\n";
+                        << hex_u64(binary64_sequence_fnv1a(shape)) << "\n";
                 }
-                accumulate_native_bound_free_opacity_from_abundances_v82_patch5206(
+                accumulate_native_bound_free_opacity_from_abundances(
                     deferred.opacity_curve, *rit->second, deferred.lower_abundance, input,
-                    heatt_bound_free_opacity_v82_patch5206);
+                    heatt_bound_free_opacity);
 
                 // v82 patch 5.20.17.3.8.1 diagnostic-only: capture the exact
                 // selected record that changes rccemis(2,1).  We measure the
@@ -14580,11 +14580,11 @@ int run_impl(
                 // no second evaluator call and no production mutation is added.
                 ++selected_order_v82_patch52017381;
                 const double bin1_before_out_v82_patch52017381 =
-                    heatt_rrc_continuum_emission_v82_patch520.empty()
-                        ? 0.0 : heatt_rrc_continuum_emission_v82_patch520[0];
+                    heatt_rrc_continuum_emission.empty()
+                        ? 0.0 : heatt_rrc_continuum_emission[0];
                 const double bin1_before_in_v82_patch52017381 =
-                    heatt_rrc_continuum_emission_v82_patch520.size() <= continuum_capacity
-                        ? 0.0 : heatt_rrc_continuum_emission_v82_patch520[continuum_capacity];
+                    heatt_rrc_continuum_emission.size() <= continuum_capacity
+                        ? 0.0 : heatt_rrc_continuum_emission[continuum_capacity];
                 // v82 patch 5.20.17.3.9: ucalc.f90 label 99 executes
                 // calt99 -> phint53hunt for scalar rate/thermal answers, but
                 // unlike Type49/53 phint53 it does not write rccemis.  The
@@ -14599,18 +14599,18 @@ int run_impl(
                 if (type99_source_zero_rccemis_v82_patch5201739) {
                     ++type99_source_zero_rrc_records_v82_patch5201739;
                 } else {
-                    accumulate_native_bound_free_rrc_from_abundances_v82_patch520(
+                    accumulate_native_bound_free_rrc_from_abundances(
                         deferred.emission_curve, deferred.evaluated, *rit->second, deferred.lower_abundance,
-                        deferred.upper_abundance, input, heatt_rrc_continuum_emission_v82_patch520);
+                        deferred.upper_abundance, input, heatt_rrc_continuum_emission);
                 }
                 const double bin1_after_out_v82_patch52017381 =
-                    heatt_rrc_continuum_emission_v82_patch520.empty()
-                        ? 0.0 : heatt_rrc_continuum_emission_v82_patch520[0];
+                    heatt_rrc_continuum_emission.empty()
+                        ? 0.0 : heatt_rrc_continuum_emission[0];
                 const double bin1_after_in_v82_patch52017381 =
-                    heatt_rrc_continuum_emission_v82_patch520.size() <= continuum_capacity
-                        ? 0.0 : heatt_rrc_continuum_emission_v82_patch520[continuum_capacity];
+                    heatt_rrc_continuum_emission.size() <= continuum_capacity
+                        ? 0.0 : heatt_rrc_continuum_emission[continuum_capacity];
 
-                const auto emission_map_v82_patch52017381 = phint53_grid_map_v82_patch57(
+                const auto emission_map_v82_patch52017381 = phint53_grid_map(
                     deferred.emission_curve, input.radiation_energy_ev,
                     static_cast<int>(continuum_capacity));
                 const int emission_nb1_v82_patch52017381 = emission_map_v82_patch52017381.valid
@@ -14618,7 +14618,7 @@ int run_impl(
                 const int emission_klmax_v82_patch52017381 = emission_map_v82_patch52017381.valid
                     ? emission_map_v82_patch52017381.klmax_zero_based + 1 : 0;
                 const double covering_v82_patch52017381 =
-                    effective_spectral_covering_fraction_v82_patch58(input);
+                    effective_spectral_covering_fraction(input);
                 double rnist_v82_patch52017381 = 0.0;
                 double ptmp1_v82_patch52017381 = 0.0;
                 double ptmp2_v82_patch52017381 = 0.0;
@@ -14650,25 +14650,25 @@ int run_impl(
                             input.continuum_tau_in[static_cast<std::size_t>(ci_v82_patch52017381 - 1)];
                         tau_out_v82_patch52017381 =
                             input.continuum_tau_out[static_cast<std::size_t>(ci_v82_patch52017381 - 1)];
-                        const auto pescv_source_v82_patch52017381 = [](double tau) {
+                        const auto source_escape_probability = [](double tau) {
                             return std::max(std::exp(-tau), 1.0e-12) / 2.0;
                         };
                         ptmp1_v82_patch52017381 =
-                            pescv_source_v82_patch52017381(tau_in_v82_patch52017381) *
+                            source_escape_probability(tau_in_v82_patch52017381) *
                             (1.0 - covering_v82_patch52017381);
                         ptmp2_v82_patch52017381 =
-                            pescv_source_v82_patch52017381(tau_out_v82_patch52017381) *
+                            source_escape_probability(tau_out_v82_patch52017381) *
                                 (1.0 - covering_v82_patch52017381) +
-                            2.0 * pescv_source_v82_patch52017381(
+                            2.0 * source_escape_probability(
                                 tau_in_v82_patch52017381 + tau_out_v82_patch52017381) *
                                 covering_v82_patch52017381;
                     }
                 }
-                write_patch52017381_selected_rrc_bin1_record(
+                write_selected_rrc_bin1_record(
                     source_sequence_v82_patch511, selected_order_v82_patch52017381,
                     deferred.source_position, deferred.record, rit->second->data_type,
                     rit->second->rate_type,
-                    element_z_for_index_v82_patch5201732(rit->second->element_index),
+                    element_z_for_index(rit->second->element_index),
                     rit->second->ion_stage, rit->second->lower_row, rit->second->upper_row,
                     rit->second->continuum_index_one_based, deferred.source_rate42_type88,
                     deferred.emission_curve.threshold_ev, emission_nb1_v82_patch52017381,
@@ -14690,18 +14690,18 @@ int run_impl(
             std::getenv("XSTAR_V82_PATCH5208_CONSUMER_LEDGER_PATH");
         if (!defer_product_projection && source_sequence_v82_patch511 == 59 &&
             consumer_ledger_path_v82_patch5208 && *consumer_ledger_path_v82_patch5208) {
-            const std::filesystem::path ledger_path_v82_patch5208(consumer_ledger_path_v82_patch5208);
-            if (!ledger_path_v82_patch5208.parent_path().empty())
-                std::filesystem::create_directories(ledger_path_v82_patch5208.parent_path());
-            std::ofstream ledger_v82_patch5208(ledger_path_v82_patch5208);
-            if (!ledger_v82_patch5208)
+            const std::filesystem::path ledger_path(consumer_ledger_path_v82_patch5208);
+            if (!ledger_path.parent_path().empty())
+                std::filesystem::create_directories(ledger_path.parent_path());
+            std::ofstream ledger(ledger_path);
+            if (!ledger)
                 throw std::runtime_error("cannot create patch5.20.8 calc_emis consumer ledger");
-            ledger_v82_patch5208
+            ledger
                 << "family,source_position,record,data_type,rate_type,element_z,ion_stage,slot_one_based,"
                 << "feature_wavelength_a,feature_energy_ev,nb1_one_based,rank_in_bin,rank_selected_anywhere,"
                 << "rank_selected_in_nb1,source_range_pass,pointer_valid,destination_valid,actual_consumer,"
                 << "opacity_owner,emission_owner,rejection_reason\n";
-            ledger_v82_patch5208 << std::setprecision(17);
+            ledger << std::setprecision(17);
 
             std::unordered_map<std::int64_t,const ProgramRecord*> record_by_position_v82_patch5208;
             std::unordered_map<int,int> element_z_by_index_v82_patch5208;
@@ -14728,10 +14728,10 @@ int run_impl(
                 int slot_one_based = 0;
                 auto sit = rrc_slot_by_identity_v82_patch5208.find({deferred.source_position,deferred.record});
                 if (sit != rrc_slot_by_identity_v82_patch5208.end()) slot_one_based = sit->second;
-                const double feature_energy = source_errc_rank_energy_for_slot_v82_patch5209(
+                const double feature_energy = source_errc_rank_energy_for_slot(
                     slot_one_based, deferred.source_position, deferred.record, deferred.opacity_curve.threshold_ev);
                 const double wavelength = feature_energy > 0.0
-                    ? source_real_literal_v82_patch5208(12398.4016) / feature_energy : 0.0;
+                    ? local_zone_source_real_literal(12398.4016) / feature_energy : 0.0;
                 SourceConsumerDecisionV82Patch5208 decision;
                 std::string opacity_owner = "NONE";
                 std::string emission_owner = "NONE";
@@ -14744,7 +14744,7 @@ int run_impl(
                     opacity_owner = decision.actual_consumer ? "TYPE88_RATE42_PHINT53" : "NONE";
                     emission_owner = decision.actual_consumer ? "TYPE88_RATE42_RRC" : "NONE";
                 } else if (deferred.rate_type == 7) {
-                    decision = source_calc_emis_consumer_v82_patch5208(
+                    decision = source_calc_emis_consumer(
                         slot_one_based, wavelength, true, pr && pr->lower_row > 0,
                         source_calc_emis_ncbin_v82_patch5208, input.radiation_energy_ev, continuum_capacity);
                     if (decision.rejection_reason == "SELECTED_IN_DIFFERENT_BIN")
@@ -14757,7 +14757,7 @@ int run_impl(
                     decision.rejection_reason = "NOT_RATE7_OR_RATE42";
                 }
                 if (decision.actual_consumer) ++ledger_rrc_consumers_v82_patch5208;
-                ledger_v82_patch5208 << "RRC," << deferred.source_position << ',' << deferred.record << ','
+                ledger << "RRC," << deferred.source_position << ',' << deferred.record << ','
                     << (pr ? pr->data_type : 0) << ',' << deferred.rate_type << ',' << element_z << ',' << ion_stage << ','
                     << slot_one_based << ',' << wavelength << ',' << feature_energy << ',' << decision.nb1_one_based << ','
                     << decision.rank_in_bin << ',' << (decision.selected_anywhere ? 1 : 0) << ','
@@ -14777,16 +14777,16 @@ int run_impl(
                     {static_cast<std::uint64_t>(c.source_position), static_cast<std::int64_t>(c.record)});
                 const double wavelength = wit != source_line_wavelength_by_identity_v82_patch5208.end()
                     ? wit->second : (c.line_energy_eV > 0.0
-                        ? source_real_literal_v82_patch5208(12398.4016) / c.line_energy_eV : 0.0);
+                        ? local_zone_source_real_literal(12398.4016) / c.line_energy_eV : 0.0);
                 const double feature_energy = wavelength > 0.0
-                    ? source_real_literal_v82_patch5208(12398.4016) / (wavelength + 1.0e-36) : 0.0;
-                const auto decision = source_calc_emis_consumer_v82_patch5208(
+                    ? local_zone_source_real_literal(12398.4016) / (wavelength + 1.0e-36) : 0.0;
+                const auto decision = source_calc_emis_consumer(
                     c.output_index, wavelength, false, pr && pr->lower_row > 0,
                     source_calc_emis_nlbin_v82_patch5208, input.radiation_energy_ev, continuum_capacity);
                 if (decision.actual_consumer) ++ledger_line_consumers_v82_patch5208;
                 if (decision.rejection_reason == "SELECTED_IN_DIFFERENT_BIN")
                     ++ledger_cross_bin_rejects_v82_patch5208;
-                ledger_v82_patch5208 << "LINE," << c.source_position << ',' << c.record << ',' << c.data_type << ','
+                ledger << "LINE," << c.source_position << ',' << c.record << ',' << c.data_type << ','
                     << c.rate_type << ',' << element_z << ',' << (pr ? pr->ion_stage : 0) << ',' << c.output_index << ','
                     << wavelength << ',' << feature_energy << ',' << decision.nb1_one_based << ',' << decision.rank_in_bin << ','
                     << (decision.selected_anywhere ? 1 : 0) << ',' << (decision.selected_in_nb1 ? 1 : 0) << ','
@@ -14796,7 +14796,7 @@ int run_impl(
                     << (decision.actual_consumer ? "NLBIN_LINE_EMISSION" : "NONE") << ','
                     << decision.rejection_reason << '\n';
             }
-            if (!ledger_v82_patch5208)
+            if (!ledger)
                 throw std::runtime_error("cannot write patch5.20.8 calc_emis consumer ledger");
             std::cout
                 << "V048746255172582_PATCH5208_ACTUAL_RRC_CONSUMERS=" << ledger_rrc_consumers_v82_patch5208 << "\n"
@@ -14813,20 +14813,20 @@ int run_impl(
             std::getenv("XSTAR_V82_PATCH5209_BOUND_FREE_OWNERSHIP_LEDGER_PATH");
         if (!defer_product_projection && source_sequence_v82_patch511 == 59 &&
             ownership_ledger_path_v82_patch5209 && *ownership_ledger_path_v82_patch5209) {
-            const std::filesystem::path ownership_path_v82_patch5209(
+            const std::filesystem::path ownership_path(
                 ownership_ledger_path_v82_patch5209);
-            if (!ownership_path_v82_patch5209.parent_path().empty())
-                std::filesystem::create_directories(ownership_path_v82_patch5209.parent_path());
-            std::ofstream ownership_v82_patch5209(ownership_path_v82_patch5209);
-            if (!ownership_v82_patch5209)
+            if (!ownership_path.parent_path().empty())
+                std::filesystem::create_directories(ownership_path.parent_path());
+            std::ofstream ownership(ownership_path);
+            if (!ownership)
                 throw std::runtime_error("cannot create patch5.20.9 bound-free ownership ledger");
-            ownership_v82_patch5209
+            ownership
                 << "source_position,record,data_type,rate_type,element_z,ion_stage,slot_one_based,"
                 << "identity_rank_energy_ev,slot_rank_energy_ev,slot_owner_source_position,"
                 << "slot_owner_record,slot_owner_data_type,identity_nb1_one_based,slot_nb1_one_based,"
                 << "patch52082_identity_consumer,literal_slot_consumer,ownership_delta,"
                 << "identity_rejection_reason,slot_rejection_reason,kernel_available\n";
-            ownership_v82_patch5209 << std::setprecision(17);
+            ownership << std::setprecision(17);
 
             std::unordered_map<std::int64_t,const ProgramRecord*> record_by_position_v82_patch5209;
             std::unordered_map<int,int> element_z_by_index_v82_patch5209;
@@ -14861,22 +14861,22 @@ int run_impl(
                     source_errc_rank_energy_by_identity_patch52082_audit_v82_patch5209.end())
                     identity_energy_v82_patch5209 = legacy_energy_it_v82_patch5209->second;
                 const double slot_energy_v82_patch5209 =
-                    source_errc_rank_energy_for_slot_v82_patch5209(
+                    source_errc_rank_energy_for_slot(
                         slot_one_based, deferred.source_position, deferred.record,
                         deferred.opacity_curve.threshold_ev);
                 const double identity_wavelength_v82_patch5209 = identity_energy_v82_patch5209 > 0.0
-                    ? source_real_literal_v82_patch5208(12398.4016) /
+                    ? local_zone_source_real_literal(12398.4016) /
                         std::max(1.0e-34, identity_energy_v82_patch5209) : 0.0;
                 const double slot_wavelength_v82_patch5209 = slot_energy_v82_patch5209 > 0.0
-                    ? source_real_literal_v82_patch5208(12398.4016) /
+                    ? local_zone_source_real_literal(12398.4016) /
                         std::max(1.0e-34, slot_energy_v82_patch5209) : 0.0;
                 const bool destination_valid_v82_patch5209 = pr.lower_row > 0;
-                const auto legacy_decision_v82_patch5209 = source_calc_emis_consumer_v82_patch5208(
+                const auto legacy_decision_v82_patch5209 = source_calc_emis_consumer(
                     slot_one_based, identity_wavelength_v82_patch5209, true,
                     destination_valid_v82_patch5209,
                     source_calc_emis_ncbin_patch52082_audit_v82_patch5209,
                     input.radiation_energy_ev, continuum_capacity);
-                const auto source_decision_v82_patch5209 = source_calc_emis_consumer_v82_patch5208(
+                const auto source_decision_v82_patch5209 = source_calc_emis_consumer(
                     slot_one_based, slot_wavelength_v82_patch5209, true,
                     destination_valid_v82_patch5209,
                     source_calc_emis_ncbin_v82_patch5208,
@@ -14913,7 +14913,7 @@ int run_impl(
                 const int element_z_v82_patch5209 =
                     element_z_by_index_v82_patch5209.count(pr.element_index)
                         ? element_z_by_index_v82_patch5209[pr.element_index] : 0;
-                ownership_v82_patch5209
+                ownership
                     << pr.source_position << ',' << pr.record << ',' << pr.data_type << ','
                     << pr.rate_type << ',' << element_z_v82_patch5209 << ',' << pr.ion_stage << ','
                     << slot_one_based << ',' << identity_energy_v82_patch5209 << ','
@@ -14927,7 +14927,7 @@ int run_impl(
                     << legacy_decision_v82_patch5209.rejection_reason << ','
                     << source_decision_v82_patch5209.rejection_reason << ",1\n";
             }
-            if (!ownership_v82_patch5209)
+            if (!ownership)
                 throw std::runtime_error("cannot write patch5.20.9 bound-free ownership ledger");
             std::cout
                 << "V048746255172582_PATCH5209_TYPE49_CONSUMER_CANDIDATES=" << total_v82_patch5209[0] << "\n"
@@ -14970,34 +14970,34 @@ int run_impl(
                 throw std::runtime_error(
                     "v82 patch5.20.17.3.7 Type76 rccemis shape mismatch");
             }
-            write_patch5201738_fixed_rccemis_edge(
+            write_fixed_rccemis_edge(
                 source_sequence_v82_patch511, "broad_before_selected_rebuild",
                 input.radiation_energy_ev, continuum_capacity, rccemis);
-            write_patch5201738_fixed_rccemis_edge(
+            write_fixed_rccemis_edge(
                 source_sequence_v82_patch511, "selected_rrc_component",
-                input.radiation_energy_ev, continuum_capacity, heatt_rrc_continuum_emission_v82_patch520);
-            write_patch5201738_fixed_rccemis_edge(
+                input.radiation_energy_ev, continuum_capacity, heatt_rrc_continuum_emission);
+            write_fixed_rccemis_edge(
                 source_sequence_v82_patch511, "type76_component",
                 input.radiation_energy_ev, continuum_capacity, native_type76_continuum_emission);
             for (std::size_t k = 0; k < continuum_capacity; ++k) {
-                output.opacity[k] += heatt_bound_free_opacity_v82_patch5206[k];
-                opakcont[k] += heatt_bound_free_opacity_v82_patch5206[k];
-                rccemis[k] = heatt_rrc_continuum_emission_v82_patch520[k] +
+                output.opacity[k] += heatt_bound_free_opacity[k];
+                opakcont[k] += heatt_bound_free_opacity[k];
+                rccemis[k] = heatt_rrc_continuum_emission[k] +
                     native_type76_continuum_emission[k];
                 rccemis[continuum_capacity + k] =
-                    heatt_rrc_continuum_emission_v82_patch520[continuum_capacity + k] +
+                    heatt_rrc_continuum_emission[continuum_capacity + k] +
                     native_type76_continuum_emission[continuum_capacity + k];
             }
-            write_patch5201738_fixed_rccemis_edge(
+            write_fixed_rccemis_edge(
                 source_sequence_v82_patch511, "rebuilt_pre_gsmooth",
                 input.radiation_energy_ev, continuum_capacity, rccemis);
-            const char* line_attr_commit_dir_v82_patch5201734 =
+            const char* line_attribution_commit_dir_env =
                 std::getenv("XSTAR_V82_PATCH5201734_CPP_ATTRIBUTION_DIR");
-            if (source_sequence_v82_patch511 == 59 && line_attr_commit_dir_v82_patch5201734 && *line_attr_commit_dir_v82_patch5201734) {
-                const std::filesystem::path dir_v82_patch5201734(line_attr_commit_dir_v82_patch5201734);
-                std::filesystem::create_directories(dir_v82_patch5201734);
-                auto write_plane_v82_patch5201734 = [&](const char* name, bool combine_line) {
-                    std::ofstream plane(dir_v82_patch5201734 / name);
+            if (source_sequence_v82_patch511 == 59 && line_attribution_commit_dir_env && *line_attribution_commit_dir_env) {
+                const std::filesystem::path line_attribution_dir(line_attribution_commit_dir_env);
+                std::filesystem::create_directories(line_attribution_dir);
+                auto write_opacity_plane = [&](const char* name, bool combine_line) {
+                    std::ofstream plane(line_attribution_dir / name);
                     if (!plane) throw std::runtime_error(std::string("cannot create patch5.20.17.3.4 C++ plane: ") + name);
                     plane << "bin_one_based,energy_ev,opacity_cm1\n" << std::setprecision(17);
                     for (std::size_t k = 0; k < continuum_capacity; ++k) {
@@ -15005,14 +15005,14 @@ int run_impl(
                         plane << (k + 1u) << ',' << input.radiation_energy_ev[k] << ',' << value << '\n';
                     }
                 };
-                write_plane_v82_patch5201734("cpp_continuum_pre_line.csv", false);
-                write_plane_v82_patch5201734("cpp_combined_opacity.csv", true);
+                write_opacity_plane("cpp_continuum_pre_line.csv", false);
+                write_opacity_plane("cpp_combined_opacity.csv", true);
                 std::cout << "V048746255172582_PATCH5201734_CPP_OPACITY_PLANES=WRITTEN\n";
             }
             if (attribution_commit_v82_patch5201732) {
-                const std::filesystem::path dir_v82_patch5201732(attribution_dir_commit_v82_patch5201732);
-                std::filesystem::create_directories(dir_v82_patch5201732);
-                const auto write_stats_v82_patch5201732 = [&](std::ofstream& stream, const char* phase, const std::vector<double>& values) {
+                const std::filesystem::path opacity_attribution_dir(attribution_dir_commit_v82_patch5201732);
+                std::filesystem::create_directories(opacity_attribution_dir);
+                const auto write_opacity_stats = [&](std::ofstream& stream, const char* phase, const std::vector<double>& values) {
                     std::size_t nz = 0u, first = 0u, last = 0u;
                     double sum = 0.0, abs_sum = 0.0, vmax = 0.0, vmin = 0.0;
                     bool have = false;
@@ -15035,31 +15035,31 @@ int run_impl(
                            << nz << ',' << first << ',' << last << ',' << sum << ',' << abs_sum << ','
                            << vmax << ',' << vmin << ',' << hex_u64(binary64_sequence_fnv1a(values)) << "\n";
                 };
-                std::ofstream checkpoints_v82_patch5201732(dir_v82_patch5201732 / "cpp_opacity_checkpoints.csv");
-                if (!checkpoints_v82_patch5201732)
+                std::ofstream checkpoints(opacity_attribution_dir / "cpp_opacity_checkpoints.csv");
+                if (!checkpoints)
                     throw std::runtime_error("cannot create patch5.20.17.3.2 C++ opacity checkpoints");
-                checkpoints_v82_patch5201732 << "source_sequence,phase,count,nonzero_bins,first_nonzero_one_based,last_nonzero_one_based,sum,abs_sum,max,min,hash\n";
-                checkpoints_v82_patch5201732 << std::setprecision(17);
-                write_stats_v82_patch5201732(checkpoints_v82_patch5201732, "bound_free_accumulator_complete", heatt_bound_free_opacity_v82_patch5206);
-                write_stats_v82_patch5201732(checkpoints_v82_patch5201732, "output_before_bound_free_commit", output_opacity_before_v82_patch5201732);
-                std::vector<double> output_opacity_after_v82_patch5201732(output.opacity, output.opacity + continuum_capacity);
-                write_stats_v82_patch5201732(checkpoints_v82_patch5201732, "output_after_bound_free_commit", output_opacity_after_v82_patch5201732);
-                std::ofstream bins_v82_patch5201732(dir_v82_patch5201732 / "cpp_bound_free_sum.csv");
-                if (!bins_v82_patch5201732)
+                checkpoints << "source_sequence,phase,count,nonzero_bins,first_nonzero_one_based,last_nonzero_one_based,sum,abs_sum,max,min,hash\n";
+                checkpoints << std::setprecision(17);
+                write_opacity_stats(checkpoints, "bound_free_accumulator_complete", heatt_bound_free_opacity);
+                write_opacity_stats(checkpoints, "output_before_bound_free_commit", output_opacity_before_v82_patch5201732);
+                std::vector<double> output_opacity_after(output.opacity, output.opacity + continuum_capacity);
+                write_opacity_stats(checkpoints, "output_after_bound_free_commit", output_opacity_after);
+                std::ofstream bins(opacity_attribution_dir / "cpp_bound_free_sum.csv");
+                if (!bins)
                     throw std::runtime_error("cannot create patch5.20.17.3.2 C++ bound-free sum");
-                bins_v82_patch5201732 << "bin_one_based,energy_ev,opacity_cm1\n" << std::setprecision(17);
-                for (std::size_t i = 0; i < heatt_bound_free_opacity_v82_patch5206.size(); ++i)
-                    bins_v82_patch5201732 << i + 1u << ',' << input.radiation_energy_ev[i] << ',' << heatt_bound_free_opacity_v82_patch5206[i] << "\n";
+                bins << "bin_one_based,energy_ev,opacity_cm1\n" << std::setprecision(17);
+                for (std::size_t i = 0; i < heatt_bound_free_opacity.size(); ++i)
+                    bins << i + 1u << ',' << input.radiation_energy_ev[i] << ',' << heatt_bound_free_opacity[i] << "\n";
                 std::cout << "V048746255172582_PATCH5201732_CPP_ATTRIBUTION=WRITTEN\n"
                           << "V048746255172582_PATCH5201732_CPP_ATTRIBUTION_RECORDS="
                           << (selected_rrc_records_v82_patch520 + rate42_rrc_records_v82_patch520) << "\n";
             }
             if (source_sequence_v82_patch511 == 59) {
                 std::size_t rrc_nonzero_v82_patch520 = 0u;
-                for (double value : heatt_rrc_continuum_emission_v82_patch520)
+                for (double value : heatt_rrc_continuum_emission)
                     if (std::isfinite(value) && value != 0.0) ++rrc_nonzero_v82_patch520;
                 std::size_t bf_nonzero_v82_patch5206 = 0u;
-                for (double value : heatt_bound_free_opacity_v82_patch5206)
+                for (double value : heatt_bound_free_opacity)
                     if (std::isfinite(value) && value != 0.0) ++bf_nonzero_v82_patch5206;
                 std::cout << "V048746255172582_V82_PATCH5206_HEATT_BOUND_FREE_NONZERO_BINS="
                           << bf_nonzero_v82_patch5206 << "\n"
@@ -15126,18 +15126,18 @@ int run_impl(
                             slot_one_based = c.output_index; break;
                         }
                     }
-                    const double rank_energy_v82_patch5209 = source_errc_rank_energy_for_slot_v82_patch5209(
+                    const double rank_energy_v82_patch5209 = source_errc_rank_energy_for_slot(
                         slot_one_based, deferred.source_position, deferred.record, deferred.opacity_curve.threshold_ev);
                     const double errc_wavelength_v82_patch5209 = rank_energy_v82_patch5209 > 0.0
-                        ? source_real_literal_v82_patch5208(12398.4016) /
+                        ? local_zone_source_real_literal(12398.4016) /
                             std::max(1.0e-34, rank_energy_v82_patch5209) : 0.0;
-                    const auto consumer_v82_patch5208 = source_calc_emis_consumer_v82_patch5208(
+                    const auto consumer_v82_patch5208 = source_calc_emis_consumer(
                         slot_one_based, errc_wavelength_v82_patch5209, true, rit->second->lower_row > 0,
                         source_calc_emis_ncbin_v82_patch5208, input.radiation_energy_ev, continuum_capacity);
                     if (!consumer_v82_patch5208.actual_consumer) continue;
                 }
                 std::vector<double> one(continuum_capacity, 0.0);
-                accumulate_native_bound_free_opacity_from_abundances_v82_patch5206(
+                accumulate_native_bound_free_opacity_from_abundances(
                     deferred.opacity_curve, *rit->second, deferred.lower_abundance, input, one);
                 const ProgramRecord& pr = *rit->second;
                 const int ez = element_z_by_index_v82_patch5206.count(pr.element_index)
@@ -15225,8 +15225,8 @@ int run_impl(
                     if (!(c.kind == XSTAR_SPECTRAL_KIND_EMIS_LINE || c.kind == XSTAR_SPECTRAL_KIND_FULL_LINE)) continue;
                     const double optpp = c.opakab * c.abundance_lower * c.hydrogen_density;
                     if (!(std::isfinite(optpp) && optpp > 0.0)) continue;
-                    std::fill(producer_temp_opacity_v82_patch511.begin(), producer_temp_opacity_v82_patch511.end(), 0.0);
-                    std::fill(producer_temp_rrc_v82_patch511.begin(), producer_temp_rrc_v82_patch511.end(), 0.0);
+                    std::fill(producer_temp_opacity.begin(), producer_temp_opacity.end(), 0.0);
+                    std::fill(producer_temp_rrc.begin(), producer_temp_rrc.end(), 0.0);
                     long long updated = 0;
                     double opacity_elapsed = 0.0;
                     std::array<char,512> opacity_error{};
@@ -15235,23 +15235,23 @@ int run_impl(
                         optpp, c.line_energy_eV, c.turbulent_velocity_km_s,
                         c.temperature_1e4K, c.atomic_mass_amu, c.natural_width_eV,
                         seed, 10, input.radiation_energy_ev, static_cast<int>(continuum_capacity),
-                        producer_temp_opacity_v82_patch511.data(), producer_temp_rrc_v82_patch511.data(),
+                        producer_temp_opacity.data(), producer_temp_rrc.data(),
                         &updated, &opacity_elapsed, opacity_error.data(), opacity_error.size());
                     if (profile_rc != 0) {
                         throw std::runtime_error(std::string("patch5.11 line producer diagnostic failed: ") + opacity_error.data());
                     }
                     const auto found_record = record_by_source_position.find(static_cast<std::int64_t>(c.source_position));
                     const ProgramRecord* source_record = found_record != record_by_source_position.end() ? found_record->second : nullptr;
-                    for (std::size_t bin = 0; bin < producer_temp_opacity_v82_patch511.size(); ++bin) {
-                        const double value = producer_temp_opacity_v82_patch511[bin];
-                        write_exact_absorption_v82_patch5203(bin, "LINE", static_cast<std::int64_t>(c.source_position),
+                    for (std::size_t bin = 0; bin < producer_temp_opacity.size(); ++bin) {
+                        const double value = producer_temp_opacity[bin];
+                        write_exact_absorption(bin, "LINE", static_cast<std::int64_t>(c.source_position),
                             c.record, c.data_type, source_record ? source_record->rate_type : 0,
                             source_record ? (element_z_by_index.count(source_record->element_index) ? element_z_by_index[source_record->element_index] : 0) : 0,
                             source_record ? source_record->ion_stage : 0, source_record ? source_record->lower_row : 0,
                             source_record ? source_record->upper_row : 0, value);
                         if (!opacity_producer_audit_v82_patch511 ||
-                            !(std::isfinite(value) && std::abs(value) > std::abs(line_top_v82_patch511[bin].contribution))) continue;
-                        auto& top = line_top_v82_patch511[bin];
+                            !(std::isfinite(value) && std::abs(value) > std::abs(line_top[bin].contribution))) continue;
+                        auto& top = line_top[bin];
                         top.contribution = value;
                         top.source_position = static_cast<std::int64_t>(c.source_position);
                         top.record = c.record;
@@ -15279,8 +15279,8 @@ int run_impl(
                 for (std::size_t bin = 0; bin < continuum_capacity; ++bin) {
                     const double bf_total = native_bound_free_opacity[bin];
                     const double line_total = line_profile_opacity[bin];
-                    const auto& bf = bound_free_top_v82_patch511[bin];
-                    const auto& ln = line_top_v82_patch511[bin];
+                    const auto& bf = bound_free_top[bin];
+                    const auto& ln = line_top[bin];
                     if (bf.contribution != 0.0) ++bf_top_nonzero;
                     if (ln.contribution != 0.0) ++line_top_nonzero;
                     const double bf_fraction = bf_total != 0.0 ? bf.contribution / bf_total : 0.0;
@@ -15622,11 +15622,11 @@ static std::unique_ptr<xstar_fixed_state_context> create_context_from_program(Pr
             const auto& record_v064812340 =
                 ptr->program.records[static_cast<std::size_t>(order[ordinal_v064812340])];
             ++selection_v064812340.data_type_counts[record_v064812340.data_type];
-            if (source_preliminary_rate_record_v064812315(
+            if (source_preliminary_rate_record(
                     ptr->program, element, record_v064812340, false)) {
                 selection_v064812340.preliminary_ordinals_source.push_back(ordinal_v064812340);
             }
-            if (source_preliminary_rate_record_v064812315(
+            if (source_preliminary_rate_record(
                     ptr->program, element, record_v064812340, true)) {
                 selection_v064812340.preliminary_ordinals_legacy.push_back(ordinal_v064812340);
             }

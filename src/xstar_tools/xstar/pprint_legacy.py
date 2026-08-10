@@ -596,7 +596,7 @@ def _source_fixed_capacity_line_rank(
     """Literal ``pprint.f90`` fixed-capacity ``kltmp`` identity rank.
 
     This is the Python publication counterpart of the accepted C++
-    ``source_pprint_line_identity_rank_v064812341`` implementation. Equal
+    ``source_pprint_line_identity_rank`` implementation. Equal
     keys insert ahead of existing equal-key rows, and the source terminal-slot
     retention is preserved after the fixed list reaches capacity.
     """

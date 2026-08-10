@@ -658,7 +658,7 @@ thread_local std::uint64_t g_type50_scalar_profiles_v064812324 = 0u;
 // Purpose: Apply line profile dispatch to the current model state while preserving the source ordering and normalization expected by later stages.
 // Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-static int apply_line_profile_dispatch_v064812326(
+static int apply_line_profile_dispatch(
     double optpp, double line_energy_ev, double vturb_km_s, double temperature_1e4k,
     double atomic_mass_amu, double natural_width_ev, const double* seed_profiles,
     int seed_radius, const double* epi, int ncn2, double* opakc, double* rccemis,
@@ -676,7 +676,7 @@ static int apply_line_profile_dispatch_v064812326(
 // Purpose: Compute spectral family slot for the line/emissivity/opacity path on the source or publication energy grid.
 // Reference context: XSTAR Manual ss11.5.1, 11.6-11.6.1; Kallman & Bautista (2001); data type 50 where applicable.
 // XSTAR-FUNCTION-COMMENT-END
-std::size_t spectral_family_slot_v064892(int data_type) {
+std::size_t spectral_family_slot(int data_type) {
     switch (data_type) {
         case 49: return 0u;
         case 50: return 1u;
@@ -693,7 +693,7 @@ std::size_t spectral_family_slot_v064892(int data_type) {
 // Purpose: Implement add perf as a local helper for the line emissivity module; inputs and outputs are kept in the source-compatible units expected by its caller.
 // Reference context: XSTAR Manual ss11.5-11.6.1; Kallman & Bautista (2001).
 // XSTAR-FUNCTION-COMMENT-END
-void add_perf_v064892(xstar_spectral_perf_v064892& dst, const xstar_spectral_perf_v064892& src) {
+void add_perf(xstar_spectral_perf_v064892& dst, const xstar_spectral_perf_v064892& src) {
     dst.apply_calls += src.apply_calls;
     dst.contributions += src.contributions;
     dst.line_profiles += src.line_profiles;
@@ -1155,7 +1155,7 @@ int xstar_spectral_apply_contributions_v1(
         const xstar_spectral_contribution_v1& c = contributions[i];
         ++stats->contributions_attempted;
         ++perf_v064892.contributions;
-        const std::size_t family_slot_v064892 = spectral_family_slot_v064892(c.data_type);
+        const std::size_t family_slot_v064892 = spectral_family_slot(c.data_type);
         ++perf_v064892.family_contributions[family_slot_v064892];
         switch (c.kind) {
             case XSTAR_SPECTRAL_KIND_EMISAB_BOUND_FREE: ++perf_v064892.kind_bound_free; break;
@@ -1279,7 +1279,7 @@ int xstar_spectral_apply_contributions_v1(
                             seed, workspace->epi_eV, static_cast<int>(workspace->energy_count),
                             workspace->opakc, workspace->rccemis, &updated, &opacity_elapsed,
                             opacity_error, sizeof(opacity_error))
-                        : apply_line_profile_dispatch_v064812326(
+                        : apply_line_profile_dispatch(
                             c.opakab * c.abundance_lower * c.hydrogen_density,
                             c.line_energy_eV, c.turbulent_velocity_km_s,
                             c.temperature_1e4K, c.atomic_mass_amu, c.natural_width_eV,
@@ -1387,7 +1387,7 @@ int xstar_spectral_apply_contributions_v1(
                     seed, workspace->epi_eV, static_cast<int>(workspace->energy_count),
                     workspace->opakc, workspace->rccemis, &updated, &opacity_elapsed,
                     opacity_error, sizeof(opacity_error))
-                : apply_line_profile_dispatch_v064812326(
+                : apply_line_profile_dispatch(
                     opakb1, c.line_energy_eV, c.turbulent_velocity_km_s,
                     c.temperature_1e4K, c.atomic_mass_amu, c.natural_width_eV,
                     seed, seed_radius, workspace->epi_eV, static_cast<int>(workspace->energy_count),
@@ -1439,15 +1439,15 @@ int xstar_spectral_apply_contributions_v1(
         const std::filesystem::path path_v064812321 =
             std::filesystem::path(type50_diag_root_v064812321) / "type50_linopac_apply_summary.csv";
         const bool header_v064812321 = !std::filesystem::exists(path_v064812321);
-        std::ofstream diag_v064812321(path_v064812321, std::ios::app);
-        if (!diag_v064812321) {
+        std::ofstream diag(path_v064812321, std::ios::app);
+        if (!diag) {
             write_message(error, error_size, "cannot create v064812321 Type50 apply summary");
             return 11;
         }
         if (header_v064812321) {
-            diag_v064812321 << "source_sequence,phase,type50_rows,source_inner_accepts,actual_profile_calls,source_rejected_but_called,updated_bins,rejected_call_updated_bins,profile_seconds,rejected_call_seconds,source_real_floor\n";
+            diag << "source_sequence,phase,type50_rows,source_inner_accepts,actual_profile_calls,source_rejected_but_called,updated_bins,rejected_call_updated_bins,profile_seconds,rejected_call_seconds,source_real_floor\n";
         }
-        diag_v064812321 << std::setprecision(17)
+        diag << std::setprecision(17)
             << type50_sequence_v064812321 << ',' << type50_phase_v064812321 << ','
             << type50_rows_v064812321 << ',' << type50_source_inner_accepts_v064812321 << ','
             << type50_actual_profile_calls_v064812321 << ',' << type50_source_rejected_but_called_v064812321 << ','
@@ -1458,7 +1458,7 @@ int xstar_spectral_apply_contributions_v1(
     const auto call_ended = std::chrono::steady_clock::now();
     stats->commit_seconds = std::chrono::duration<double>(call_ended - call_started).count();
     perf_v064892.apply_seconds = stats->commit_seconds;
-    add_perf_v064892(g_spectral_perf_v064892, perf_v064892);
+    add_perf(g_spectral_perf_v064892, perf_v064892);
     add_stats(context->cumulative, *stats);
     write_message(error, error_size, "native spectral contributions applied");
     return 0;

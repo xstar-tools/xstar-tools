@@ -2162,7 +2162,7 @@ _V0444_REQUIRED_TRUE = (
 # Purpose: Validate the current state invariants before the value is consumed downstream.
 # Reference context: XSTAR Manual ss. 11.4.4 and 11.6.5; source dsec nonlinear charge/thermal controller.
 # XSTAR-FUNCTION-COMMENT-END
-def validate_v0444_complete_fixed_state_regression(
+def validate_complete_fixed_state_regression(
     path: Optional[str | Path] = None,
 ) -> V0444CompleteFixedStateRegressionGate:
     if path is None:
@@ -2231,7 +2231,7 @@ def build_dsec_acceptance(
     frozen_v0444: Optional[V0444CompleteFixedStateRegressionGate] = None,
     final_fixed_state_parity_ready: bool = True,
 ) -> DsecAcceptanceResult:
-    frozen = frozen_v0444 or validate_v0444_complete_fixed_state_regression()
+    frozen = frozen_v0444 or validate_complete_fixed_state_regression()
     state = parity.python_result.state
     final = state.last_calc_hmc_all
     mutable_ready = bool(
@@ -2318,7 +2318,7 @@ __all__ = [
     "compare_dsec_trajectory",
     "write_dsec_trajectory_parity_products",
     "V0444CompleteFixedStateRegressionGate",
-    "validate_v0444_complete_fixed_state_regression",
+    "validate_complete_fixed_state_regression",
     "DsecAcceptanceResult",
     "build_dsec_acceptance",
     "write_dsec_acceptance_products",

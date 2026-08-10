@@ -37,17 +37,6 @@ inline void write_message(char* message, std::size_t message_size, const std::st
 // Purpose: Implement empty counters as a small shared native helper used by the standalone/backend orchestration layer.
 // Reference context: Implementation helper; no independent scientific formula.
 // XSTAR-FUNCTION-COMMENT-END
-inline MgIonAccumulatorCounters empty_counters() {
-    MgIonAccumulatorCounters counters{};
-    counters.records_seen = 0;
-    counters.cpp_supported = 0;
-    counters.python_fallback = 0;
-    counters.matrix_terms_emitted = 0;
-    counters.rate_terms_emitted = 0;
-    counters.heat_terms_emitted = 0;
-    counters.cool_terms_emitted = 0;
-    return counters;
-}
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Implement valid count as a small shared native helper used by the standalone/backend orchestration layer.

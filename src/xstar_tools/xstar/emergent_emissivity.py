@@ -767,7 +767,7 @@ def _source_linopac_into_opakc(
 # Purpose: Implement the patch5201734 replay selected line producers operation used by this module; inputs/outputs follow the surrounding source-faithful data model.
 # Reference context: XSTAR Manual ss. 11.5-11.6; Kallman & Bautista (2001), full-grid line/continuum emission and opacity.
 # XSTAR-FUNCTION-COMMENT-END
-def _patch5201734_replay_selected_line_producers(
+def _replay_selected_line_producers(
     context: CalcEmisContext,
     record_traces: Sequence[CalcEmisRecordTrace],
     epi: np.ndarray,
@@ -3051,7 +3051,7 @@ def calc_emis_all(context: CalcEmisContext) -> CalcEmisResult:
         element_record = int(context.derived.npnxt[element_record])
 
     _patch5201732_finalize_bound_free_sum(context)
-    _patch5201734_replay_selected_line_producers(context, record_traces, epi, line_profile_opacity)
+    _replay_selected_line_producers(context, record_traces, epi, line_profile_opacity)
     _patch5201732_attribution_checkpoint(
         context, "calc_emis_all_post_elements", context.workspace.base.opakc[:n],
         dump_name="python_live_opakc_post_elements.bin",
