@@ -2,7 +2,7 @@
 
 `xstar-tools` is a source-faithful Python/C++ productization of XSTAR photoionization calculations. It preserves an accepted scientific baseline tied to XSTAR Fortran 2.59g while providing a stable Python API, one primary CLI, accelerated/shared C++ modes, and a native standalone `xstar-cpp` executable.
 
-**Distribution:** `0.6.70`  
+**Distribution:** `0.6.71`  
 **Accepted science revision:** `0.6.48.12.3.45.3.3.8`  
 **Frozen C++ all-62 baseline:** `0.6.48.12.3.44`  
 **C API ABI:** `60487`  
@@ -32,10 +32,22 @@ The accepted parity boundary is documented in [`PARITY_FREEZE.md`](PARITY_FREEZE
 
 ## 3. Installation
 
-Milestone 8 will formalize binary wheels/native packaging. For the current source release, install from the extracted source tree:
+`pyproject.toml` is the authoritative build configuration. Install a release normally with:
 
 ```bash
-python -m pip install .
+python -m pip install xstar-tools
+```
+
+Linux builds compile and bundle the qualified native runtime when the C++17/Make/CFITSIO prerequisites are available. To require native support explicitly:
+
+```bash
+XSTAR_TOOLS_NATIVE=required python -m pip install .
+```
+
+For a Python-only installation:
+
+```bash
+XSTAR_TOOLS_NATIVE=off python -m pip install .
 ```
 
 For development:
@@ -44,13 +56,7 @@ For development:
 python -m pip install -e '.[dev]'
 ```
 
-`pure-python` needs no C++ runtime. To build the native libraries and `xstar-cpp` used by the C++ modes:
-
-```bash
-make -C src/xstar_tools/xstar/cpp -j2
-```
-
-The native build requires a C++17 compiler and CFITSIO. GNU/libstdc++ builds use `FILESYSTEM_LIBS` (default `-lstdc++fs`) for compatibility with older toolchains.
+The native wheel build retains the qualified Makefile/compiler defaults and stages only runtime artifacts; it does not package C++ source/object/cache debris. Native packaging is Linux-first in 0.6.71; macOS and Windows use the explicit Python-only capability path.
 
 Check the installation:
 
@@ -152,14 +158,16 @@ See [choosing a backend](docs/user/backends.md) for selection guidance and compa
 
 ## 8. `xstar-cpp` example
 
-After building the native target:
+After a native Linux wheel install, `xstar-cpp` is available directly:
 
 ```bash
-src/xstar_tools/xstar/cpp/xstar-cpp \
+xstar-cpp \
   --input xstar.par \
   --data-dir /path/to/xstar/data \
   --output run-native
 ```
+
+A source checkout can still run `src/xstar_tools/xstar/cpp/xstar-cpp` after `make`.
 
 XSTAR-style `name=value` inputs are also accepted. Optional `xstar-cpp` extensions include `--json-summary`, `--provenance`, `--progress`, `--threads`, `--profile`, `--deterministic`, `--print-option`, and `--abi`.
 

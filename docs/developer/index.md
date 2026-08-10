@@ -17,5 +17,6 @@ adding_atomic_data
 qualification
 performance_rules
 versioning_and_freeze
+packaging
 documentation_policy
 ```

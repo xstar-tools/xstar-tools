@@ -1,5 +1,35 @@
 # CHANGELOG
 
+# 0.6.71 — Milestone 8: stabilized pip/native packaging - 2026-08-09
+
+- Made `pyproject.toml` authoritative for package metadata/configuration; removed active `setup.cfg` and reduced `setup.py` to a thin custom-build hook.
+- Formalized Linux native wheel builds around the retained qualified Makefile without changing frozen compiler/scientific semantics.
+- Added explicit `XSTAR_TOOLS_NATIVE=auto|required|off` policy and isolated temporary native builds so source-tree artifacts cannot leak into wheels.
+- Added installed `xstar-cpp` launcher, native build metadata, runtime payload whitelisting, and clear Python-only behavior on unsupported platforms.
+- Moved installed data configuration/default downloads out of site-packages into user-owned XDG-style locations; `atdb.fits` remains external and never downloads during normal runs.
+- Added packaging qualification, wheel-content tests, and cross-platform packaging CI with native Linux and Python-only macOS/Windows jobs.
+- No `src/xstar_tools/xstar/` scientific/native source changed; science revision and ABIs remain frozen.
+
+# Changelog
+
+## 0.6.70 — Milestone 7 user-centered documentation
+
+- Rewrite the primary README around the 13 user-facing roadmap sections: purpose/XSTAR relationship, installation/data, five-minute Python/CLI examples, backend modes, native `xstar-cpp`, outputs, provenance, docs, development/qualification, and citation/license.
+- Replace the obsolete `xstar-atomic` Sphinx site with a productized `xstar-tools` site rooted at `docs/` and organized into user, API, C++/CLI, developer, science, and historical layers.
+- Standardize authored documentation on MyST Markdown while retaining reStructuredText for Sphinx autodoc/autosummary API generation.
+- Add release-strict HTML and link-check builds (`-W --keep-going`), documentation CI, and GitHub Pages deployment on `main`.
+- Move the pre-Milestone-7 Sphinx source and old top-level guides/diagnostic pages into the historical documentation archive.
+- Add `qualification/documentation_milestone_0_6_70.json`, a dependency-free documentation checker, and characterization tests.
+- No `src/xstar_tools/xstar/` scientific implementation changes; accepted science revision remains `0.6.48.12.3.45.3.3.8`, frozen C++ baseline remains `0.6.48.12.3.44`, C API ABI remains `60487`, and production-zone ABI remains `6048110`.
+
+## 0.6.69 — Milestone 6 first-class `xstar-cpp`
+
+- Promoted `xstar-cpp` from a thin stable alias to a first-class Python-free native frontend.
+- Added `--input` for HEASoft/IRAF-style `.par` files, `--data-dir`, `--output`, structured summary/provenance/profile outputs, progress modes, threads, deterministic-run provenance, and read-only `--print-option` extraction.
+- Added runtime C API / production-zone ABI queries and fail-fast compatibility checks while keeping C API ABI `60487` and production-zone ABI `6048110` unchanged.
+- Linked the public frontend to the same frozen shared native core used by Python `zone-cpp` / `zone-all`; the compatibility `xstar_cpp run-production` executable remains the single standalone scientific control implementation.
+- Added native ABI/user documentation and qualification coverage. No Python or C++ scientific implementation changed.
+
 ## 0.6.70 — Milestone 7 user-centered documentation - 2026-08-09
 
 - Rewrite the primary README around the 13 user-facing roadmap sections: purpose/XSTAR relationship, installation/data, five-minute Python/CLI examples, backend modes, native `xstar-cpp`, outputs, provenance, docs, development/qualification, and citation/license.

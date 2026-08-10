@@ -3,7 +3,7 @@ include CHANGELOG.md
 include XSTAR_PYTHON_PORT.md
 include pyproject.toml
 include setup.py
-include setup.cfg
+include build_support.py
 recursive-include docs *
 recursive-include examples *
 recursive-include tests *.py
@@ -60,3 +60,9 @@ include qualification/xstar_cpp_first_class_0_6_69.json
 include .github/workflows/docs.yml
 include tools/qualification/check_documentation_milestone.py
 include qualification/documentation_milestone_0_6_70.json
+
+include .github/workflows/packaging.yml
+include tools/qualification/check_packaging_milestone.py
+include qualification/packaging_milestone_0_6_71.json
+include src/xstar_tools/xstar/cpp/README.md
+include src/xstar_tools/xstar/cpp/build_lib.sh

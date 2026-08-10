@@ -1,38 +1,90 @@
 # Installation
 
-## Python package
+## pip installation
 
-Milestone 8 will formalize wheel/native packaging. For the current source release:
+`pyproject.toml` is the authoritative package metadata/build configuration. The
+small `setup.py` file exists only to register the native setuptools build hook;
+`setup.cfg` is no longer part of the active build configuration.
+
+Install a released wheel in the normal way:
+
+```bash
+python -m pip install xstar-tools
+```
+
+For a source archive or checkout:
 
 ```bash
 python -m pip install .
 ```
 
-For an editable development checkout:
+On **Linux**, the default build policy compiles the qualified native runtime and
+bundles the shared libraries plus the native `xstar-cpp` executable in the
+wheel. Native builds require:
+
+- a C++17 compiler;
+- `make`;
+- `python3-config`;
+- CFITSIO development headers/libraries with `pkg-config` metadata.
+
+For Debian/Ubuntu systems, the system dependency is normally provided by
+`libcfitsio-dev`.
+
+The build deliberately retains the qualified Makefile/compiler defaults rather
+than migrating the scientific code to a new build system in this milestone.
+
+### Python-only installation
+
+A Python-only build is explicit:
+
+```bash
+XSTAR_TOOLS_NATIVE=off python -m pip install .
+```
+
+This produces a pure Python wheel. `pure-python` remains available; C++ modes
+and the `xstar-cpp` command report that the native runtime is unavailable.
+
+### Require native compilation
+
+Release/native builders can make native support mandatory:
+
+```bash
+XSTAR_TOOLS_NATIVE=required python -m pip install .
+```
+
+A missing compiler, CFITSIO development package, or other native prerequisite
+then fails the build instead of silently falling back.
+
+`XSTAR_TOOLS_NATIVE_JOBS=N` controls the Make parallelism used by the wheel
+build. The default is `2`.
+
+## Platform support in 0.6.71
+
+| Platform | Wheel/runtime policy |
+|---|---|
+| Linux x86_64 | Native wheel target; release CI enforces the build/install contract |
+| Linux aarch64 | Native build contract and CI target |
+| macOS arm64/x86_64 | Python-only wheel for this milestone |
+| Windows | Python-only wheel for this milestone |
+
+The native Makefile still has Linux-specific linker assumptions (`-ldl`, ELF
+RPATH, `.so` naming). macOS/Windows native support should be added as a
+separate portability qualification rather than hidden behind an untested build
+translation.
+
+## Editable development checkout
 
 ```bash
 python -m pip install -e '.[dev]'
 ```
 
-Python dependencies are declared in `pyproject.toml` and include NumPy and Astropy.
-
-## Documentation dependencies
+For documentation:
 
 ```bash
 python -m pip install -e '.[docs]'
 ```
 
-## Native C++ runtime
-
-`pure-python` needs no C++ runtime. Build the native libraries and standalone executable for the C++ modes:
-
-```bash
-make -C src/xstar_tools/xstar/cpp -j2
-```
-
-The build requires C++17 and CFITSIO. On GNU/libstdc++ systems, `FILESYSTEM_LIBS` defaults to `-lstdc++fs` for compatibility with toolchains that still need a separate filesystem compatibility library.
-
-## Verify the environment
+## Verify the installed package
 
 ```bash
 xstar-tools version
@@ -40,8 +92,17 @@ xstar-tools backends
 xstar-tools doctor
 ```
 
-For a specific mode:
+On a native Linux installation:
 
 ```bash
+xstar-cpp --abi
 xstar-tools doctor --require zone-cpp
 ```
+
+`xstar-tools backends` includes native-build metadata when the runtime came from
+a wheel build.
+
+## Atomic data is separate
+
+`atdb.fits` is intentionally **not bundled** in wheels or sdists. Normal runs do
+not download it as a side effect. See [Atomic-data setup](atomic_data.md).

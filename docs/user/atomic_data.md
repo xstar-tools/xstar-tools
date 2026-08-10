@@ -26,3 +26,7 @@ xstar-tools run xstar.par --mode pure-python --data-dir /path/to/xstar/data
 The legacy/configuration helper behind `xstar-tools data` can show or set a configured `atdb.fits` path and can perform an explicit download when the user requests it. Normal scientific execution does not trigger that download helper automatically.
 
 Because `atdb.fits` is a large external scientific input, release archives do not bundle it.
+
+## Installed-package locations
+
+Installed wheels do not write configuration or the large atomic database into `site-packages`. By default, configured data paths are stored at `~/.config/xstar-tools/datapath` and explicit downloads default to `~/.local/share/xstar-tools` (or the corresponding `XDG_CONFIG_HOME` / `XDG_DATA_HOME` locations). Source-tree development keeps the existing repository-level `datapath` / `data/` behavior.

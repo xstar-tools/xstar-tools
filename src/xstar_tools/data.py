@@ -122,7 +122,7 @@ def _project_root_from_source_tree() -> Optional[Path]:
     ``xstar_tools/src/xstar_tools/datapath``).
 
     For installed wheels, where the package is not under a ``src`` directory,
-    the fallback remains the package directory itself.
+    user configuration/data directories are used instead of site-packages.
     """
     src_dir = PACKAGE_DIR.parent
     root = src_dir.parent
@@ -132,8 +132,28 @@ def _project_root_from_source_tree() -> Optional[Path]:
 
 
 PROJECT_ROOT = _project_root_from_source_tree()
-DEFAULT_DATA_DIR = (PROJECT_ROOT / "data") if PROJECT_ROOT is not None else (PACKAGE_DIR / "data")
-DATAPATH_FILE = (PROJECT_ROOT / "datapath") if PROJECT_ROOT is not None else (PACKAGE_DIR / "datapath")
+
+
+def _user_config_home() -> Path:
+    if os.environ.get("XDG_CONFIG_HOME"):
+        return Path(os.environ["XDG_CONFIG_HOME"]).expanduser().resolve()
+    return (Path.home() / ".config").resolve()
+
+
+def _user_data_home() -> Path:
+    if os.environ.get("XDG_DATA_HOME"):
+        return Path(os.environ["XDG_DATA_HOME"]).expanduser().resolve()
+    return (Path.home() / ".local" / "share").resolve()
+
+
+if PROJECT_ROOT is not None:
+    DEFAULT_DATA_DIR = PROJECT_ROOT / "data"
+    DATAPATH_FILE = PROJECT_ROOT / "datapath"
+else:
+    # Installed packages must not write configuration or the ~830 MB atomic
+    # database into site-packages.  Use standard user-owned locations instead.
+    DEFAULT_DATA_DIR = _user_data_home() / "xstar-tools"
+    DATAPATH_FILE = _user_config_home() / "xstar-tools" / "datapath"
 
 
 def _format_bytes(n: Optional[int]) -> str:
@@ -172,6 +192,7 @@ def set_data_path(path: Union[str, Path]) -> Path:
     to ``atdb.fits``.  The stored value is always the data directory.
     """
     data_dir = _normalize_data_dir(path)
+    DATAPATH_FILE.parent.mkdir(parents=True, exist_ok=True)
     DATAPATH_FILE.write_text(str(data_dir) + "\n", encoding="utf-8")
     return data_dir
 
@@ -384,8 +405,8 @@ def download_data(
     destination:
         Destination directory, or full destination filename.  The default is
         ``data`` at the source-tree root when running from ``PYTHONPATH=src``
-        (for example ``/path/to/xstar_tools/data``), or ``xstar_tools/data``
-        inside the installed package otherwise.
+        (for example ``/path/to/xstar_tools/data``), or the user data directory
+        (normally ``~/.local/share/xstar-tools``) for an installed package.
     prompt:
         If true, ask before downloading and allow the user to enter an existing
         local ``atdb.fits`` path instead.
@@ -485,7 +506,7 @@ def resolve_atdb_path(
 def main(argv: Optional[list[str]] = None) -> None:
     import argparse
 
-    parser = argparse.ArgumentParser(description="Download or configure XSTAR atdb.fits for xstar-atomic")
+    parser = argparse.ArgumentParser(description="Download or configure XSTAR atdb.fits for xstar-tools")
     parser.add_argument("--url", default=DEFAULT_ATDB_URL, help="URL to atdb.fits")
     parser.add_argument("--destination", help="Destination directory or full atdb.fits filename")
     parser.add_argument("--set-path", help="Use an existing atdb.fits path and save its directory to datapath")

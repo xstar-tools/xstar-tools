@@ -10,13 +10,14 @@ xstar-tools doctor --data-dir /path/to/xstar/data
 
 ## A C++ mode is unavailable
 
-Build the native targets and inspect capabilities:
+Inspect the installed native-build metadata and capabilities:
 
 ```bash
-make -C src/xstar_tools/xstar/cpp -j2
 xstar-tools backends
 xstar-tools doctor --require zone-cpp
 ```
+
+For a source checkout, build with `make -C src/xstar_tools/xstar/cpp -j2`. For a Linux source/wheel installation that must contain native support, reinstall with `XSTAR_TOOLS_NATIVE=required`. Python-only installations intentionally expose only `pure-python`.
 
 ## Output directory already exists
 

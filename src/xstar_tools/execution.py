@@ -333,17 +333,30 @@ def native_executable_path() -> Path | None:
     return None
 
 
+def native_build_info() -> dict[str, Any]:
+    path = _cpp_dir() / "native_build.json"
+    if not path.is_file():
+        return {"metadata_available": False, "path": str(path)}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        return {"metadata_available": True, "path": str(path), **dict(payload)}
+    except Exception as exc:
+        return {"metadata_available": False, "path": str(path), "error": str(exc)}
+
+
 def native_executable_info() -> dict[str, Any]:
     path = native_executable_path()
+    build = native_build_info()
     if path is None:
-        return {"available": False, "path": None, "version": None, "error": "xstar-cpp executable not found"}
+        return {"available": False, "path": None, "version": None, "build": build,
+                "error": "xstar-cpp executable not found"}
     try:
         proc = subprocess.run([str(path), "--version"], text=True, capture_output=True, timeout=5, check=False)
         version = proc.stdout.strip() if proc.returncode == 0 else None
         return {"available": proc.returncode == 0, "path": str(path), "version": version, "returncode": proc.returncode,
-                "error": proc.stderr.strip() or None}
+                "build": build, "error": proc.stderr.strip() or None}
     except Exception as exc:
-        return {"available": False, "path": str(path), "version": None, "error": str(exc)}
+        return {"available": False, "path": str(path), "version": None, "build": build, "error": str(exc)}
 
 
 @contextmanager
