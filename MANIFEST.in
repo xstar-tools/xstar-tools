@@ -227,3 +227,11 @@ include tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_10.py
 include qualification/type53_all_element_live_escape_0_6_82_10.json
 include docs/developer/type53_all_element_live_escape_0_6_82_10.md
 include tests/test_type53_all_element_live_escape_0_6_82_10.py
+
+# 0.6.82.11 all-element Type-49 source-faithful bound-free promotion.
+include qualification/type49_all_element_source_faithful_0_6_82_11.json
+include tools/qualification/check_type49_all_element_source_faithful_0_6_82_11.py
+include tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_11.py
+include tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_11.py
+include docs/developer/type49_all_element_source_faithful_0_6_82_11.md
+include tests/test_type49_all_element_source_faithful_0_6_82_11.py

@@ -1,5 +1,13 @@
 # CHANGELOG
 
+# 0.6.82.11 — all-element Type-49 source-faithful bound-free promotion - 2026-08-11
+
+- Generalize canonical Type-49 `phint53`/Milne rate commitment to every active element. Earlier production preserved H/He/C/Mg compatibility answers while only Mg and other elements committed the already-computed source-faithful result; canonical `ucalc.f90` has no element split for Type-49.
+- In native production, fail closed unless each Type-49 record has lowered source context, the live continuum `tauc` workspace, and a successful source-faithful integral. Historical compact unit fixtures that intentionally lack lowered context retain the legacy fallback outside native production.
+- Preserve the 0.6.82.10 all-element Type-53 live `tauc/cfrac` escape-state correction and the 0.6.82.9 `msolvelucy` fixed-loop repair unchanged. Type-49 uses the same live covering-fraction/continuum state already carried by the source-faithful shadow.
+- Target the remaining H+He+C `cfrac=1` low-ionization failures: `rlogxi=-3` first diverges at the first finite radial zone and `rlogxi=-2` diverges only deep in the slab; `rlogxi=-5` is already material-acceptable with two small `ntotit` mismatches. Host FORTRAN qualification remains required before claiming these points closed.
+- Keep the accepted historical science revision and public ABIs unchanged during the open broad all-element campaign.
+
 # 0.6.82.10 — all-element Type-53 live escape-state generalization - 2026-08-10
 
 - Promote the source-faithful Type-53/RRC escape-state calculation to every active element. Canonical `calc_hmc_ion.f90` computes the Type-53 `ptmp1`/`ptmp2` factors from each record's live continuum optical depths and `cfrac`; the native path no longer relies on Carbon-only/default `0.5/0.5` ownership.

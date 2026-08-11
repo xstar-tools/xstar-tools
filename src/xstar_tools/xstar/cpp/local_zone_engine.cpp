@@ -7693,38 +7693,33 @@ EvaluatedRecord evaluate_record(
                     out.type49_calc_emis_shadow.phextrap_applied = true;
                 }
             }
-            const bool magnesium_finite_state = element.element_z == 12 &&
-                environment_flag("XSTAR_QUALIFICATION_MG_BOUND_FREE_FINITE_STATE");
-            const bool magnesium_source_faithful = element.element_z == 12 &&
-                (environment_flag("XSTAR_QUALIFICATION_MG_BOUND_FREE_SOURCE_FAITHFUL") ||
-                 environment_flag("XSTAR_QUALIFICATION_MG_MILNE_EXCITED_THRESHOLD") ||
-                 environment_flag("XSTAR_QUALIFICATION_TYPE49_EXTRAPOLATED_GRID_PARITY"));
-            const bool magnesium_replacement = magnesium_finite_state || magnesium_source_faithful;
-            // v0.6.48.12.3: generic elements commit the source-faithful
-            // Type-49 phint53/Milne shadow.  H/He/C/Mg keep their frozen
-            // compatibility behavior; there is no Ca-specific branch.
-            const bool generic_source_faithful_bound_free =
-                element.element_z != 1 &&
-                element.element_z != 2 &&
-                element.element_z != 6 &&
-                element.element_z != 12;
-            if (magnesium_replacement && !environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
-                throw std::runtime_error(
-                    "Mg Type-49 finite-state replacement requires XSTAR_QUALIFICATION_REPLACEMENT=1");
+            // v0.6.82.11: canonical ucalc Type-49 is element-independent.
+            // Earlier native releases promoted the already-computed phint53/
+            // Milne result only for Mg and for elements outside the historical
+            // H/He/C/Mg compatibility set.  That preserved an early
+            // H+He+Mg development boundary inside production science and left
+            // H/He/C on the approximate legacy evaluator.  Commit the same
+            // source-faithful Type-49 result for every element whenever the
+            // lowered source context is available.  Native production fails
+            // closed if the canonical continuum context/tauc workspace is
+            // missing; compact historical unit fixtures may still use the
+            // legacy fallback when they intentionally lack lowered context.
+            const bool all_element_source_faithful_type49 = source_exact;
+            if (native_production_mode()) {
+                if (!record_context.valid) {
+                    throw std::runtime_error(
+                        "all-element Type-49 source-faithful evaluation requires lowered source context");
+                }
+                if (!has_continuum_workspace) {
+                    throw std::runtime_error(
+                        "all-element Type-49 source-faithful evaluation requires canonical live continuum optical depths");
+                }
+                if (!source_exact) {
+                    throw std::runtime_error(
+                        "all-element Type-49 source-faithful Milne evaluator did not produce a result");
+                }
             }
-            if (magnesium_replacement && !record_context.valid) {
-                throw std::runtime_error("Mg Type-49 finite-state replacement requires lowered source context");
-            }
-            if (magnesium_replacement && !has_continuum_workspace) {
-                throw std::runtime_error("Mg Type-49 finite-state replacement requires canonical live continuum state");
-            }
-            if (magnesium_replacement && !source_exact) {
-                throw std::runtime_error("Mg Type-49 finite-state shadow did not produce a result");
-            }
-            if (generic_source_faithful_bound_free && !source_exact) {
-                throw std::runtime_error("generic Type-49 source-faithful Milne evaluator did not produce a result");
-            }
-            if ((magnesium_replacement || generic_source_faithful_bound_free) && source_exact) {
+            if (all_element_source_faithful_type49) {
                 c.ans1 = source_shadow.ans1;
                 c.ans2 = source_shadow.ans2;
                 c.ans3 = source_shadow.ans3;
@@ -7747,10 +7742,8 @@ EvaluatedRecord evaluate_record(
             constexpr double kImplausibleBoundFreeRate = 1.0e40;
             out.type49_shadow.legacy_implausible = out.type49_shadow.legacy_max_abs > kImplausibleBoundFreeRate;
             out.type49_shadow.committed_implausible = out.type49_shadow.committed_max_abs > kImplausibleBoundFreeRate;
-            out.type49_shadow.source_faithful_mode =
-                magnesium_source_faithful || generic_source_faithful_bound_free;
-            out.type49_shadow.replacement_applied =
-                (magnesium_replacement || generic_source_faithful_bound_free) && source_exact;
+            out.type49_shadow.source_faithful_mode = all_element_source_faithful_type49;
+            out.type49_shadow.replacement_applied = all_element_source_faithful_type49;
             out.type49_shadow.tau_in = tau_in;
             out.type49_shadow.tau_out = tau_out;
             out.type49_shadow.ptmp1 = ptmp1;
@@ -7773,9 +7766,10 @@ EvaluatedRecord evaluate_record(
                 (r && pair_real_count >= 2)
                     ? std::max(1.0e-34, r[0] * source_type49_rydberg_ev_v82_patch5209)
                     : std::max(1.0e-34, out.type49_shadow.base_threshold_ev);
-            if (magnesium_replacement &&
+            if (all_element_source_faithful_type49 &&
                 (out.type49_shadow.committed_nonfinite || out.type49_shadow.committed_implausible)) {
-                throw std::runtime_error("Mg Type-49 finite-state replacement remained nonfinite or implausibly large");
+                throw std::runtime_error(
+                    "all-element Type-49 source-faithful result remained nonfinite or implausibly large");
             }
             // Native product-state retention: Type-49 records share the
             // phint53/Milne bound-free reduction path and must be committed to

@@ -62,6 +62,7 @@ docs/developer/reference_data_and_release_candidate.md
 docs/developer/source_name_hygiene.md
 docs/developer/source_root_namespace_cleanup.md
 docs/developer/test_namespace_cleanup.md
+docs/developer/type49_all_element_source_faithful_0_6_82_11.md
 docs/developer/type51_broad_element_closure_0_6_82_2.md
 docs/developer/type53_all_element_live_escape_0_6_82_10.md
 docs/developer/type63_source_cutoff_0_6_82_7.md
@@ -203,6 +204,7 @@ qualification/source_function_comments_0_6_73.json
 qualification/source_name_hygiene_0_6_76.json
 qualification/source_root_history_cleanup_0_6_64.json
 qualification/test_history_cleanup_0_6_62.json
+qualification/type49_all_element_source_faithful_0_6_82_11.json
 qualification/type51_broad_element_closure_0_6_82_2.json
 qualification/type53_all_element_live_escape_0_6_82_10.json
 qualification/type63_source_cutoff_0_6_82_7.json
@@ -507,6 +509,7 @@ tests/test_source_function_comments_0_6_73.py
 tests/test_source_name_hygiene_0_6_76.py
 tests/test_source_root_history_cleanup.py
 tests/test_test_history_cleanup.py
+tests/test_type49_all_element_source_faithful_0_6_82_11.py
 tests/test_type50_profile_provenance.py
 tests/test_type51_broad_element_closure_0_6_82_2.py
 tests/test_type53_all_element_live_escape_0_6_82_10.py
@@ -600,6 +603,7 @@ tools/qualification/check_source_function_comments.py
 tools/qualification/check_source_name_hygiene_0_6_76.py
 tools/qualification/check_source_root_history_cleanup.py
 tools/qualification/check_test_history_cleanup.py
+tools/qualification/check_type49_all_element_source_faithful_0_6_82_11.py
 tools/qualification/check_type51_broad_element_closure_0_6_82_2.py
 tools/qualification/check_type53_all_element_live_escape_0_6_82_10.py
 tools/qualification/check_type63_source_cutoff_0_6_82_7.py
@@ -615,11 +619,13 @@ tools/qualification/host_compat_overlay.py
 tools/qualification/local_zone_naming_compat.py
 tools/qualification/run_c5_rlogxi_host_smoke_0_6_82_7.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_10.py
+tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_11.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_6.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_7.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_8.py
 tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_9.py
 tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_10.py
+tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_11.py
 tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_8.py
 tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_9.py
 tools/qualification/run_multi_element_host_smoke_0_6_82_1.py

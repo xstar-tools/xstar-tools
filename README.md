@@ -2,23 +2,24 @@
 
 `xstar-tools` is a source-faithful Python/C++ productization of XSTAR photoionization calculations. It preserves an accepted scientific baseline tied to XSTAR Fortran 2.59g while providing a stable Python API, one primary CLI, accelerated/shared C++ modes, and a native standalone `xstar-cpp` executable.
 
-**Distribution:** `0.6.82.10`  
+**Distribution:** `0.6.82.11`  
 
-**0.6.82.10 all-element Type-53 live escape closure:** the source-faithful
-Type-53/RRC escape factors now use each record's live continuum optical depths
-and `cfrac` for every active element, rather than relying on element-specific
-H/He/Mg/Carbon compatibility ownership. Together with the 0.6.82.9 Lucy-loop
-repair, this makes the full displayed H+He+C `rlogxi=0`, `cfrac=1` STEP/`ntotit`
-trajectory match canonical FORTRAN. `rlogxi=-3,-2` remain open, `-5` retains two
-`ntotit` mismatches, and `cfrac<1` has not yet been qualified. The accepted
-science revision and public ABIs remain intentionally frozen until broad
-all-element concordance closes.
+**0.6.82.11 all-element Type-49 source-faithful bound-free promotion:**
+canonical Type-49 `phint53`/Milne rate commitment now applies to every active
+element in native production, removing the remaining historical H/He/C/Mg
+compatibility split for this rate family. This release preserves the 0.6.82.10
+all-element Type-53 live `tauc/cfrac` escape-state correction and the 0.6.82.9
+Lucy-loop repair. H+He+C `cfrac=1` host qualification remains open at
+`rlogxi=-3,-2` and technically at `-5` until the exact `ntotit` sequence closes;
+`cfrac<1` has not yet been qualified. The accepted science revision and public
+ABIs remain intentionally frozen until broad all-element concordance closes.
 **Accepted science revision:** `0.6.48.12.3.45.3.3.8`  
 **Frozen C++ all-62 baseline:** `0.6.48.12.3.44`  
 **C API ABI:** `60487`  
 **Production-zone ABI:** `6048110`
 
 Product/package versions can advance without changing the frozen science revision. Use `xstar-tools version` to see both.
+
 
 ## 1. What `xstar-tools` is
 
