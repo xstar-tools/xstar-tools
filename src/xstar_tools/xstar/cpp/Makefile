@@ -58,7 +58,7 @@ FILESYSTEM_LIBS ?= -lstdc++fs
 # Keep the default local to this directory so `make all` is self-contained: no
 # source/header/build input is read from a parent directory. Packaging may
 # override PACKAGE_VERSION on the make command line.
-PACKAGE_VERSION ?= 0.6.82.1
+PACKAGE_VERSION ?= 0.6.82.10
 
 SOLVER_TARGET := libxstar_solver.so
 RATES_TARGET := libxstar_rates.so

@@ -2735,6 +2735,138 @@ struct FixedDsecSnapshot {
     std::vector<xstar_run_state::ElementThermalProductState> element_thermal_products;
 };
 
+
+// 0.6.82.3 live textual progress.  This is an observability-only surface:
+// it reads an already accepted boundary and never feeds controller, transport,
+// publication, or convergence state.  std::cerr is intentional because normal
+// production redirects std::cout while suppressing legacy diagnostic chatter.
+thread_local std::size_t g_live_zone_rows = 0u;
+
+bool live_text_zone_progress_enabled() {
+    const char* mode = std::getenv("XSTAR_CPP_PROGRESS_MODE");
+    return mode && std::string(mode) == "text";
+}
+
+std::size_t live_option17_reference_bin_zero_based(
+    const std::vector<double>& energy) {
+    const std::size_t n = energy.size();
+    if (n == 0u) return 0u;
+    const std::size_t numcon2 = std::max<std::size_t>(2u, n / 50u);
+    const std::size_t nn = n > numcon2 ? n - numcon2 : 1u;
+    if (nn < 2u) return 0u;
+    constexpr double floor = 1.0e-36;
+    const double x = 13.6;
+    const double xx1 = energy[0], xx2 = energy[1], xxn = energy[nn - 1u];
+    std::size_t jlo_one_based = 1u;
+    if (x >= floor && xx1 > floor && xxn > floor) {
+        const double xtmp = std::max(x, xx2);
+        const double denom = std::log(xxn / xx1);
+        if (std::isfinite(denom) && denom != 0.0) {
+            const double raw = static_cast<double>(nn - 1u) * std::log(xtmp / xx1) / denom;
+            if (std::isfinite(raw)) {
+                const long long base = static_cast<long long>(raw);
+                jlo_one_based = static_cast<std::size_t>(std::max<long long>(1ll, base + 1ll));
+            }
+        }
+        if (jlo_one_based < nn) {
+            const std::size_t a = jlo_one_based - 1u, b = jlo_one_based;
+            const double tst = std::abs(std::log(x / (floor + energy[a])));
+            const double tst2 = std::abs(std::log(x / (floor + energy[b])));
+            if (tst2 < tst) ++jlo_one_based;
+        }
+    }
+    jlo_one_based = std::max<std::size_t>(1u, std::min(nn, jlo_one_based));
+    return std::min(n - 1u, jlo_one_based);
+}
+
+bool live_radiation_balance_percent(
+    const FixedDsecSnapshot& snapshot,
+    double& percent) {
+    const auto& energy = snapshot.radiation_energy_ev;
+    const std::size_t n = energy.size();
+    if (n < 2u || snapshot.zrems.size() < n) return false;
+    const auto& incident = snapshot.zremsz.size() >= n ? snapshot.zremsz : snapshot.radiation_flux;
+    if (incident.size() < n) return false;
+    double sum_in = 0.0, sum_out = 0.0;
+    double in_prev = std::isfinite(incident[0]) ? incident[0] : 0.0;
+    double out_prev = std::isfinite(snapshot.zrems[0]) ? snapshot.zrems[0] : 0.0;
+    for (std::size_t i = 1u; i < n; ++i) {
+        const double in_cur = std::isfinite(incident[i]) ? incident[i] : 0.0;
+        const double out_cur = std::isfinite(snapshot.zrems[i]) ? snapshot.zrems[i] : 0.0;
+        const double de = energy[i] - energy[i - 1u];
+        if (std::isfinite(de)) {
+            sum_in += 0.5 * (in_cur + in_prev) * de;
+            sum_out += 0.5 * (out_cur + out_prev) * de;
+        }
+        in_prev = in_cur;
+        out_prev = out_cur;
+    }
+    const double denom = sum_in + 1.0e-24;
+    if (!std::isfinite(sum_in) || !std::isfinite(sum_out) || denom == 0.0) return false;
+    percent = 100.0 * (sum_in - sum_out) / denom;
+    return std::isfinite(percent);
+}
+
+void print_xstar_style_live_header() {
+    std::cerr << " xstar_tools version " << XSTAR_API_VERSION_STRING << "\n\n"
+              << " pass number=" << std::setw(12) << 1 << std::setw(12) << -1 << "\n"
+              << "   log(r) delr/r log(N) log(xi) x_e   log(n) log(t) h-c(%) h-c(%) log(tau)\n"
+              << "                                                                  fwd    rev\n"
+              << std::flush;
+}
+
+void print_xstar_style_live_zone(
+    const FixedDsecSnapshot& snapshot,
+    const xstar_atdb_runtime::ProductionParameters& params,
+    double source_depth_cm,
+    std::size_t dsec_evaluations) {
+    auto safe_log = [](double v, double floor) { return v > 0.0 ? std::log10(v) : floor; };
+    const double radius = params.initial_radius_cm + source_depth_cm;
+    const double depth = std::max(0.0, source_depth_cm);
+    const double column = params.density_cm3 * depth;
+    const double log_rel = radius > 0.0 && depth > 0.0 ? std::log10(depth / radius) : -36.0;
+    const double r19 = radius * static_cast<double>(static_cast<float>(1.0e-19));
+    const double live_xi = (r19 > 0.0 && params.density_cm3 > 0.0)
+        ? params.luminosity_1e38 / (r19 * r19 * params.density_cm3) : 0.0;
+    const double log_xi = live_xi > 0.0 ? std::log10(live_xi) : -10.0;
+    const double log_temp = snapshot.temperature_t4 > 0.0
+        ? 4.0 + std::log10(snapshot.temperature_t4) : -10.0;
+
+    double log_fwd = -10.0, log_rev = -10.0;
+    const auto& energy = snapshot.radiation_energy_ev;
+    if (energy.size() >= 2u && snapshot.dpthc.size() >= 2u * energy.size()) {
+        const std::size_t rb = live_option17_reference_bin_zero_based(energy);
+        const double fwd = std::max(0.0, snapshot.dpthc[rb]);
+        const double rev = std::max(0.0, snapshot.dpthc[energy.size() + rb]);
+        log_fwd = fwd > 0.0 ? std::log10(fwd) : -10.0;
+        log_rev = rev > 0.0 ? std::log10(rev) : -10.0;
+    }
+    double radiation_balance = 0.0;
+    (void)live_radiation_balance_percent(snapshot, radiation_balance);
+    // XSTAR pprint option 9 writes ntotit directly.  dsec.f90 increments
+    // ntotit once per calc_hmc_all thermal evaluation, which is exactly the
+    // retained dsec_evaluations count.  Do not subtract the historical proxy 1.
+    const std::size_t numrec = dsec_evaluations;
+
+    std::cerr << std::fixed << std::setprecision(2)
+              << std::setw(8) << safe_log(radius, -10.0)
+              << std::setw(7) << log_rel
+              << std::setw(7) << safe_log(column, -10.0)
+              << std::setw(7) << log_xi
+              << std::setw(7) << snapshot.computed_electron_fraction
+              << std::setw(7) << safe_log(params.density_cm3, -10.0)
+              << std::setw(7) << log_temp
+              << std::setw(7) << std::clamp(100.0 * snapshot.hmctot, -99.99, 99.99)
+              << std::setw(7) << std::clamp(radiation_balance, -99.99, 99.99)
+              << std::setw(7) << log_fwd
+              << std::setw(7) << log_rev
+              << std::setw(3) << numrec << "\n"
+              << std::flush;
+    std::cerr.unsetf(std::ios::floatfield);
+    std::cerr << std::setprecision(17);
+    ++g_live_zone_rows;
+}
+
 // XSTAR-FUNCTION-COMMENT-BEGIN
 // Purpose: Implement production zone mark complete in the standalone controller/front-end workflow without duplicating the scientific kernels.
 // Reference context: XSTAR Manual ch14 for controller/radial workflow; implementation helper unless the called shared core performs the physics.
@@ -3899,6 +4031,12 @@ int fixed_dsec_evaluator(
     // projecting the 9999-bin surfaces only at real source product events.
     if (snapshot.kind != "final") {
         input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_DEFER_PRODUCT_PROJECTION;
+        // XSTAR dsec.f90 evaluates calc_hmc_all only.  Do not spend the
+        // production thermal-iteration hot path in calc_emisab/linopac; the
+        // accepted xstarcalc boundary below still performs those source stages.
+        if (data->true_production_v65) {
+            input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_DSEC_HMC_ONLY;
+        }
     }
 
     snapshot.radiation_energy_ev.assign(input.radiation_energy_ev, input.radiation_energy_ev + input.radiation_bin_count);
@@ -9987,8 +10125,24 @@ void retain_controller_owned_product_workspaces(
             return e.abundance > 0.0 && e.atomic_number != 1 && e.atomic_number != 2 &&
                    e.atomic_number != 6 && e.atomic_number != 12;
         });
-    const double radius0 = json_number_value(json, "initial_radius_cm",
-        json_number_value(json, "radius", 1.778279410038923e17));
+    // 0.6.82.3: preserve the radius already owned by the accepted controller
+    // boundary.  The public .par -> JSON envelope intentionally does not carry
+    // an initial_radius_cm field, so reconstructing geometry here from a
+    // hard-coded historical benchmark fallback changed a valid rread1-derived
+    // radius (and therefore xi and luminosity normalization) for broad
+    // multi-element production.  Older diagnostic-only retained-state paths
+    // may not carry live geometry; keep their explicit historical fallback.
+    const auto& first_live_zone_v06823 = whole.radial_zones.front();
+    const double first_live_depth_v06823 = std::max(first_live_zone_v06823.delta_radius_cm, 0.0);
+    const double controller_radius0_v06823 = first_live_zone_v06823.radius_cm - first_live_depth_v06823;
+    const bool controller_radius_valid_v06823 =
+        std::isfinite(first_live_zone_v06823.radius_cm) && first_live_zone_v06823.radius_cm > 0.0 &&
+        std::isfinite(first_live_zone_v06823.delta_radius_cm) && first_live_zone_v06823.delta_radius_cm >= 0.0 &&
+        std::isfinite(controller_radius0_v06823) && controller_radius0_v06823 > 0.0;
+    const double radius0 = controller_radius_valid_v06823
+        ? controller_radius0_v06823
+        : json_number_value(json, "initial_radius_cm",
+            json_number_value(json, "radius", 1.778279410038923e17));
     const double total_depth = density > 0.0 && column > 0.0 ? column / density : 0.0;
 
     // The controller now owns the public pprint(12) event sequence.  The four
@@ -14798,6 +14952,17 @@ int standalone_iteration_evaluator(
         if (!v0648941_terminal_reference_dsec && !v0648123350_target_projection) {
             input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_DEFER_PRODUCT_PROJECTION;
         }
+        // 0.6.82.5: this is the actual production DSEC evaluator used by
+        // build_general_standalone_product(). Source dsec.f90 calls
+        // calc_hmc_all only; calc_emisab_all/calc_emis_all belong to the
+        // accepted xstarcalc boundary. Suppress those profile/product stages
+        // on ordinary production DSEC trials while retaining explicit
+        // qualification target projections.
+        const bool native_production_v06825 = std::getenv("XSTAR_NATIVE_PRODUCTION") != nullptr;
+        if (snapshot.kind == "dsec" && native_production_v06825 &&
+            !v0648123350_target_projection) {
+            input.runtime_state_flags |= XSTAR_FIXED_RUNTIME_STATE_DSEC_HMC_ONLY;
+        }
         write_postsolve_fixed_input_capture(*data, input, snapshot);
         if (snapshot.call_index == 1u && snapshot.evaluation_index == 1u) {
             write_fixed_input_capture(*data, input, snapshot.sequence, "fixed_call1_eval1");
@@ -16980,6 +17145,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
 
         static constexpr std::array<std::size_t,4> expected_dsec_counts{{20u,1u,17u,16u}};
         std::vector<std::size_t> actual_dsec_counts;
+        std::vector<std::size_t> actual_dsec_ntotit;
         std::vector<FixedDsecSnapshot> finals;
         finals.reserve(static_cast<std::size_t>(std::max(params.nsteps, 4)));
         std::optional<FixedDsecSnapshot> terminal_transport_boundary_v82_patch520144;
@@ -17080,6 +17246,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             }
             const std::size_t dsec_count = data.evaluations - before;
             actual_dsec_counts.push_back(dsec_count);
+            actual_dsec_ntotit.push_back(static_cast<std::size_t>(std::max(stats.ntotit, 0)));
             if (g_performance_v064890 && call >= 1u && call <= 4u) {
                 g_performance_v064890->controller_call_evaluations[call - 1u] += static_cast<std::uint64_t>(dsec_count);
             }
@@ -17390,6 +17557,11 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             g_shared_zone_dsec_v0648110.push_back(dsec_count);
             production_zone_mark_complete(
                 call, finals.back(), dsec_count, zone_seconds_v0648110, done_after_zone_v0648110);
+            if (live_text_zone_progress_enabled()) {
+                print_xstar_style_live_zone(
+                    finals.back(), params, source_boundary_depth_cm.back(),
+                    static_cast<std::size_t>(std::max(stats.ntotit, 0)));
+            }
 
             std::cout << "V048746255172582_CONTROLLER_CALL=" << call
                       << " DSEC_EVALUATIONS=" << dsec_count
@@ -17644,7 +17816,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         }
         const std::size_t radial_event_count = finals.size() + 1u;
         auto append_zone = [&](const FixedDsecSnapshot& snapshot, const std::string& reason,
-                               double source_depth) {
+                               double source_depth, std::size_t dsec_ntotit) {
             xstar_run_state::AcceptedControllerState accepted;
             accepted.call_index = snapshot.call_index;
             accepted.accepted_sequence = snapshot.sequence;
@@ -17673,6 +17845,7 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             zone.column_density_cm2 = params.density_cm3 * std::max(source_depth, 0.0);
             zone.temperature_t4 = accepted.evaluation.temperature_t4;
             zone.electron_fraction = accepted.evaluation.computed_electron_fraction;
+            zone.dsec_ntotit = dsec_ntotit;
             zone.provisional_from_controller = false;
             zone.accepted_boundary_exact = true;
             zone.boundary_provenance = "standalone C++ naturally terminated controller boundary";
@@ -17695,8 +17868,9 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
             whole.abundance_radial_rows.push_back(abundance);
         };
         for (std::size_t i = 0; i < finals.size(); ++i) {
+            const std::size_t ntotit = i < actual_dsec_ntotit.size() ? actual_dsec_ntotit[i] : 0u;
             append_zone(finals[i], "qualification_free_native_call_final_pretransport",
-                        source_boundary_depth_cm[i]);
+                        source_boundary_depth_cm[i], ntotit);
         }
         // Source saves a distinct terminal row after the last radial transfer.
         // Keep the actual transported call-4 workspace rather than duplicating
@@ -17706,7 +17880,18 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         }
         append_zone(*terminal_transport_boundary_v82_patch520144,
                     "qualification_free_native_terminal_posttransport",
-                    data.cumulative_depth_cm);
+                    data.cumulative_depth_cm,
+                    actual_dsec_ntotit.empty() ? 0u : actual_dsec_ntotit.back());
+        // Canonical xstar.f90 executes `pprint(9,...)` once more after the
+        // radial loop.  Mirror that live-console row as well as retaining it
+        // for xout_step.log.  No new HMC/DSEC evaluation is performed here,
+        // so the final DSEC ntotit is repeated exactly as in FORTRAN.
+        if (live_text_zone_progress_enabled()) {
+            print_xstar_style_live_zone(
+                *terminal_transport_boundary_v82_patch520144, params,
+                data.cumulative_depth_cm,
+                actual_dsec_ntotit.empty() ? 0u : actual_dsec_ntotit.back());
+        }
         retain_controller_owned_product_workspaces(whole, options.parameters_path);
         // v71 retains the complete boundary event state in memory.  The
         // benchmark radial depth split is source-compatible with v63 and is
@@ -17746,8 +17931,14 @@ xstar_run_state::ProductWritingState build_general_standalone_product(
         write_radial_zone_rccemis_edge(whole);
         whole.exact_legacy_pprint_state_retained = false;
         whole.diagnostic_preview_partial = false;
-        whole.physical_radial_boundaries_expected = finals.size();
-        whole.physical_radial_boundaries_retained = finals.size();
+        // XSTAR 2.59g xstar.f90 prints one additional pprint(9) row after
+        // the radial loop, after the final STPCUT/TRNFRN commit.  That
+        // post-transport endpoint is a physical Option-17 row; it is distinct
+        // from the later zero-thickness xstarcalc/pprint(22) evaluation.
+        // radial_event_count is therefore finals.size()+1 and all of those
+        // retained radial_zones belong to the canonical STEP trajectory.
+        whole.physical_radial_boundaries_expected = radial_event_count;
+        whole.physical_radial_boundaries_retained = whole.radial_zones.size();
         whole.physical_transport_intervals_completed = data.physical_transport_intervals_completed;
         std::cout << std::setprecision(17)
                   << "V048746255172582_PATCH52011_TERMINAL_TRANSPORT_INTERVALS="
@@ -18291,10 +18482,9 @@ void print_xstar_style_progress(const xstar_run_state::ProductWritingState& stat
               << "   log(r) delr/r log(N) log(xi) x_e   log(n) log(t) h-c(%) h-c(%) log(tau)\n"
               << "                                                                  fwd    rev\n";
     auto safe_log = [](double v, double floor) { return v > 0.0 ? std::log10(v) : floor; };
-    std::map<std::size_t,std::size_t> call_max_eval;
-    for (const auto& e : state.fixed_evaluations) {
-        call_max_eval[e.call_index] = std::max(call_max_eval[e.call_index], e.evaluation_index);
-    }
+    // 0.6.82.5: ntotit is retained explicitly on each physical radial zone.
+    // Do not reconstruct it from evaluation_index, which also counts accepted-
+    // boundary/final evaluations and caused a +1 publication mismatch.
     for (std::size_t i = 0; i < state.radial_zones.size(); ++i) {
         const auto& zone = state.radial_zones[i];
         const auto& eval = zone.accepted_controller.evaluation;
@@ -18310,9 +18500,7 @@ void print_xstar_style_progress(const xstar_run_state::ProductWritingState& stat
         }
         double radiation_balance = 0.0;
         (void)source_option17_radiation_balance_percent(eval, radiation_balance);
-        const std::size_t call = std::min<std::size_t>(i + 1u, 4u);
-        const std::size_t max_eval = call_max_eval.count(call) ? call_max_eval[call] : 0u;
-        const std::size_t numrec = max_eval > 0u ? max_eval - 1u : 0u;
+        const std::size_t numrec = zone.dsec_ntotit;
         const double radius = zone.radius_cm;
         const double depth = std::max(0.0, radius - (state.radial_zones.empty() ? radius : state.radial_zones.front().radius_cm));
         const double column = zone.density_cm3 * depth;
@@ -18827,6 +19015,9 @@ int command_run_standalone_production(const Options& options, const std::filesys
         double controller_seconds = 0.0;
         std::size_t evaluations = 0;
         const bool quiet_controller_v064897 = !verbose_controller_diagnostics();
+        const bool live_text_progress = live_text_zone_progress_enabled();
+        g_live_zone_rows = 0u;
+        if (live_text_progress) print_xstar_style_live_header();
         auto product = [&]() {
             ScopedCoutSilenceV064897 silence(quiet_controller_v064897);
             return build_general_standalone_product(
@@ -18861,7 +19052,9 @@ int command_run_standalone_production(const Options& options, const std::filesys
                   << (forced_096_provenance_v064897 ? "LEGACY_096_RETAIN_ALL" : "COMPACT_DEFERRED_DSEC_ELISION") << "\n"
                   << "V064897_BOUND_FREE_095=FROZEN_PREPARED_LAZY\n"
                   << "V064897_BOUNDARY_CORRECTNESS_0942=FROZEN_EXACT_RECOMPUTE\n";
-        print_xstar_style_progress(product);
+        if (!live_text_progress) {
+            print_xstar_style_progress(product);
+        }
         const auto trajectory = summarize_standalone_trajectory(product);
         const bool reference_benchmark = is_reference_mg11_benchmark(params);
         if (!product.product_state_complete) throw std::runtime_error("product state incomplete before publication");

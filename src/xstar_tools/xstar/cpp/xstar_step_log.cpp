@@ -399,10 +399,15 @@ void append_native_radial_summary(std::ofstream& out,
         state.backend == "cpp-general-standalone" && !state.radial_zones.empty();
     if (native_general_rows) {
         rows.clear();
-        rows.reserve(state.radial_zones.size());
+        const std::size_t physical_rows = state.physical_radial_boundaries_retained > 0u
+            ? std::min(state.physical_radial_boundaries_retained, state.radial_zones.size())
+            : (state.terminal_synthetic_row_present && !state.radial_zones.empty()
+                ? state.radial_zones.size() - 1u : state.radial_zones.size());
+        rows.reserve(physical_rows);
         const double xlum = parameter_number(state, "rlrad38", 0.0);
         const double source_radius_scale = static_cast<double>(static_cast<float>(1.0e-19));
-        for (const auto& zone : state.radial_zones) {
+        for (std::size_t zi = 0; zi < physical_rows; ++zi) {
+            const auto& zone = state.radial_zones[zi];
             double logxi = zone.log_ionization_parameter;
             const double r19 = zone.radius_cm * source_radius_scale;
             if (xlum > 0.0 && zone.density_cm3 > 0.0 && r19 > 0.0) {
@@ -588,13 +593,8 @@ void append_native_radial_summary(std::ofstream& out,
     if (retained_heat_balance_complete && !retained_heat_balance_percent.empty()) {
         heat_balance_percent.swap(retained_heat_balance_percent);
     }
-    std::map<std::size_t,std::pair<double,std::size_t>> call_metrics;
-    for(const auto& e:state.fixed_evaluations){
-        auto& m=call_metrics[e.call_index];
-        m.first=std::max(m.first,100.0*std::abs(e.computed_electron_fraction-e.electron_fraction_input));
-        m.second=std::max(m.second,e.evaluation_index);
-    }
-    const std::size_t last_call = call_metrics.empty() ? 0u : call_metrics.rbegin()->first;
+    // 0.6.82.5: Option-17 ntotit comes from the thermal engine and is
+    // retained on RadialZoneState. Do not infer it from evaluation_index.
 
     // xstar.f90 calls ispcg2 immediately after "running ...".  Reconstruct
     // its source-grid photon-band and bolometric diagnostics from the retained
@@ -639,12 +639,15 @@ void append_native_radial_summary(std::ofstream& out,
     out << "   log(r) delr/r log(N) log(xi) x_e   log(n) log(t) h-c(%) h-c(%) log(tau)\n";
     out << "                                                                  fwd    rev\n";
     auto safe_log=[](double v,double floor){return v>0.0?std::log10(v):floor;};
-    const std::size_t output_rows=std::max<std::size_t>(state.radial_zones.size(),rows.size());
+    // Option 17 owns the complete physical pprint(9) trajectory: ordinary
+    // radial boundaries plus the canonical post-loop/post-transport endpoint.
+    // The later zero-thickness xstarcalc/pprint(22) evaluation is not stored in
+    // radial_zones and must never expand xout_step.
+    const std::size_t output_rows = rows.size();
     for(std::size_t i=0;i<output_rows && !rows.empty();++i){
-        const Row& r=rows[std::min(i,rows.size()-1)];
+        const Row& r=rows[i];
         const auto depths=i<depth_logs.size()?depth_logs[i]:std::pair<double,double>{-10.0,-10.0};
-        const std::size_t call=last_call>0u?std::min<std::size_t>(i+1,last_call):i+1;
-        const auto cm=call_metrics.count(call)?call_metrics[call]:std::pair<double,std::size_t>{0.0,0};
+        const std::size_t ntotit = i < state.radial_zones.size() ? state.radial_zones[i].dsec_ntotit : 0u;
         out<<std::fixed<<std::setprecision(2)
            <<std::setw(8)<<safe_log(r.radius,-10.0)
            <<std::setw(7)<<(r.radius>0&&r.dr>0?std::log10(r.dr/r.radius):-36.0)
@@ -655,7 +658,7 @@ void append_native_radial_summary(std::ofstream& out,
            <<std::setw(7)<<std::clamp(100.0*r.heat_error,-99.99,99.99)
            <<std::setw(7)<<std::clamp((i<heat_balance_percent.size()?heat_balance_percent[i]:0.0),-99.99,99.99)
            <<std::setw(7)<<depths.first<<std::setw(7)<<depths.second
-           <<std::setw(3)<<(cm.second>0?cm.second-1:0)<<"\n";
+           <<std::setw(3)<<ntotit<<"\n";
     }
     out.unsetf(std::ios::floatfield); out<<std::setprecision(17);
     if (state.legacy_pprint.final_zero_thickness_evaluation_present) {

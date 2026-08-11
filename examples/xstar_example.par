@@ -1,5 +1,5 @@
 #########################################################################
-# xstar.par example for xstar_tools 0.6.82.1
+# xstar.par example for xstar_tools 0.6.82.3
 # Realistic multi-element standalone XSTAR run using xdef abundances.
 # This intentionally exercises the general H-through-Ni native ATDB lowering
 # rather than a single-metal H+He smoke case.  With lwrite=0,npass=1 the four

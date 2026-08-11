@@ -150,3 +150,80 @@ include tools/qualification/check_multi_element_atdb_lowering_0_6_82_1.py
 include docs/developer/multi_element_atdb_lowering_0_6_82_1.md
 include tests/test_multi_element_atdb_lowering_0_6_82_1.py
 include examples/xstar_example.par
+include docs/developer/xstar_cpp_file_silent_0_6_82_1.md
+include tools/qualification/run_multi_element_host_smoke_0_6_82_1.py
+
+# 0.6.82.2 broad-element Type-51 production fallback closure.
+include qualification/type51_broad_element_closure_0_6_82_2.json
+include tools/qualification/check_type51_broad_element_closure_0_6_82_2.py
+include tools/qualification/run_multi_element_host_smoke_0_6_82_2.py
+include docs/developer/type51_broad_element_closure_0_6_82_2.md
+include tests/test_type51_broad_element_closure_0_6_82_2.py
+
+# 0.6.82.3 broad multi-element radius/Fe thermal closure + live zone progress.
+include qualification/live_zone_progress_0_6_82_3.json
+include qualification/broad_multi_element_science_0_6_82_3.json
+include tools/qualification/check_live_zone_progress_0_6_82_3.py
+include tools/qualification/check_broad_multi_element_science_0_6_82_3.py
+include tools/qualification/run_multi_element_host_smoke_0_6_82_3.py
+include docs/developer/live_zone_progress_0_6_82_3.md
+include docs/developer/broad_multi_element_science_0_6_82_3.md
+include tests/test_live_zone_progress_0_6_82_3.py
+include tests/test_broad_multi_element_science_0_6_82_3.py
+
+# 0.6.82.4 broad multi-element FORTRAN-oracle closure.
+include qualification/broad_multi_element_oracle_0_6_82_4.json
+include qualification/broad_multi_element_step_fortran_2_59g_0_6_82_4.csv
+include tools/qualification/check_broad_multi_element_oracle_0_6_82_4.py
+include tools/qualification/run_multi_element_host_smoke_0_6_82_4.py
+include docs/developer/broad_multi_element_oracle_0_6_82_4.md
+include tests/test_broad_multi_element_oracle_0_6_82_4.py
+
+
+# 0.6.82.5 broad multi-element Type-85/DSEC/STEP closure.
+include qualification/broad_multi_element_closure_0_6_82_5.json
+include tools/qualification/check_broad_multi_element_closure_0_6_82_5.py
+include tools/qualification/run_multi_element_host_smoke_0_6_82_5.py
+include docs/developer/broad_multi_element_closure_0_6_82_5.md
+include tests/test_broad_multi_element_closure_0_6_82_5.py
+
+# 0.6.82.6 canonical terminal STEP endpoint restoration.
+include qualification/canonical_terminal_step_endpoint_0_6_82_6.json
+recursive-include qualification/c5_terminal_step_0_6_82_6 *.json *.par
+include tools/qualification/check_canonical_terminal_step_endpoint_0_6_82_6.py
+include tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_6.py
+include docs/developer/canonical_terminal_step_endpoint_0_6_82_6.md
+include tests/test_canonical_terminal_step_endpoint_0_6_82_6.py
+
+# 0.6.82.7 canonical Type-63 low-temperature source cutoff.
+include qualification/type63_source_cutoff_0_6_82_7.json
+recursive-include qualification/type63_source_cutoff_0_6_82_7 *.json
+include tools/qualification/check_type63_source_cutoff_0_6_82_7.py
+include tools/qualification/run_c5_rlogxi_host_smoke_0_6_82_7.py
+include tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_7.py
+include docs/developer/type63_source_cutoff_0_6_82_7.md
+include tests/test_type63_source_cutoff_0_6_82_7.py
+include tests/test_type63_source_cutoff_manifest_0_6_82_7.py
+
+# 0.6.82.8 source-faithful levwkelement rnisi(nd) workspace lifetime.
+include qualification/lte_rnisi_workspace_0_6_82_8.json
+include tools/qualification/check_lte_rnisi_workspace_0_6_82_8.py
+include tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_8.py
+include docs/developer/lte_rnisi_workspace_0_6_82_8.md
+include tests/test_lte_rnisi_workspace_0_6_82_8.py
+include tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_8.py
+
+# 0.6.82.9 source-faithful msolvelucy fixed-loop closure
+include qualification/msolvelucy_fixed_loop_0_6_82_9.json
+include tools/qualification/check_msolvelucy_fixed_loop_0_6_82_9.py
+include tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_9.py
+include tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_9.py
+include docs/developer/msolvelucy_fixed_loop_0_6_82_9.md
+include tests/test_msolvelucy_fixed_loop_0_6_82_9.py
+
+include tools/qualification/check_type53_all_element_live_escape_0_6_82_10.py
+include tools/qualification/run_c5_wide_rlogxi_host_smoke_0_6_82_10.py
+include tools/qualification/run_c5_terminal_step_host_smoke_0_6_82_10.py
+include qualification/type53_all_element_live_escape_0_6_82_10.json
+include docs/developer/type53_all_element_live_escape_0_6_82_10.md
+include tests/test_type53_all_element_live_escape_0_6_82_10.py

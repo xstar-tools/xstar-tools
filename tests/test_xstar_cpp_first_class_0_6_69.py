@@ -68,17 +68,17 @@ def test_frontend_accepts_par_data_output_and_structured_extensions(tmp_path):
     data=tmp_path/'data'; data.mkdir(); (data/'atdb.fits').write_bytes(b'atdb'); (data/'coheat.dat').write_bytes(b'coheat')
     par=tmp_path/'xstar.par'
     par.write_text('spectrum,s,h,pow,,,spectrum\ncolumn,r,h,1.23456789E+22,0,,column\nmodelname,s,h,"test, model",,,model\n',encoding='utf-8')
-    out=tmp_path/'run'; summary=tmp_path/'summary.json'; prov=tmp_path/'prov.json'; profile=tmp_path/'profile.json'
+    out=tmp_path/'run'; summary=tmp_path/'summary.json'; prov=tmp_path/'prov.json'; profile=tmp_path/'profile.json'; parameters=tmp_path/'parameters.json'
     proc=subprocess.run([
         str(exe),'--input',str(par),'--data-dir',str(data),'--output',str(out),
-        '--json-summary',str(summary),'--provenance',str(prov),'--profile',str(profile),
+        '--json-summary',str(summary),'--provenance',str(prov),'--profile',str(profile),'--parameters-out',str(parameters),
         '--progress','json','--threads','2','--deterministic','--print-option','24',
     ],text=True,capture_output=True)
     assert proc.returncode==0,proc.stdout+proc.stderr
     assert '"event":"run_started"' in proc.stdout
     assert '"event":"run_completed"' in proc.stdout
     assert 'print option: 24' in proc.stdout and 'rrc-two' in proc.stdout
-    envelope=json.loads((out/'.xstar-cpp-parameters.json').read_text())
+    envelope=json.loads(parameters.read_text())
     assert envelope['column']=='1.23456789E+22'
     assert envelope['modelname']=='test, model'
     assert envelope['atomic_database']==str(data/'atdb.fits')
@@ -90,6 +90,43 @@ def test_frontend_accepts_par_data_output_and_structured_extensions(tmp_path):
     assert prov_data['c_api_abi']==C_API_ABI_VERSION and prov_data['zone_abi']==ZONE_ABI_VERSION
     assert prov_data['threads']==2 and prov_data['deterministic_requested'] is True
     assert json.loads(profile.read_text())['scope']=='frontend-orchestration'
+
+
+def test_frontend_default_parameter_envelope_is_ephemeral_and_output_starts_clean(tmp_path):
+    exe=_build_stub_frontend(tmp_path)
+    sibling=tmp_path/'xstar_cpp'
+    sibling.write_text(
+        '#!/usr/bin/env python3\n'
+        'import pathlib,sys\n'
+        'args=sys.argv[1:]\n'
+        'out=pathlib.Path(args[args.index("--output-dir")+1])\n'
+        'params=pathlib.Path(args[args.index("--parameters")+1])\n'
+        'out.mkdir(parents=True,exist_ok=True)\n'
+        'foreign=list(out.iterdir())\n'
+        'if foreign:\n'
+        '    print("foreign-before-native="+",".join(p.name for p in foreign),file=sys.stderr)\n'
+        '    raise SystemExit(91)\n'
+        'if out in params.parents:\n'
+        '    print("parameter-envelope-inside-output",file=sys.stderr)\n'
+        '    raise SystemExit(92)\n'
+        '(out/"xout_abund1.fits").write_bytes(b"fake")\n'
+        '(out/"xout_step.log").write_text("print option: 1\\n",encoding="utf-8")\n'
+        'raise SystemExit(0)\n', encoding='utf-8')
+    sibling.chmod(0o755)
+    data=tmp_path/'data'; data.mkdir(); (data/'atdb.fits').write_bytes(b'atdb'); (data/'coheat.dat').write_bytes(b'coheat')
+    par=tmp_path/'xstar.par'
+    par.write_text('spectrum,s,h,pow,,,spectrum\ncolumn,r,h,1.e20,0,,column\n',encoding='utf-8')
+    out=tmp_path/'run'
+    temp_dir=tmp_path/'temp'; temp_dir.mkdir()
+    env=dict(os.environ,TMPDIR=str(temp_dir))
+    proc=subprocess.run([
+        str(exe),'--input',str(par),'--data-dir',str(data),'--output',str(out),'--progress','none'
+    ],text=True,capture_output=True,env=env)
+    assert proc.returncode==0,proc.stdout+proc.stderr
+    assert not (out/'.xstar-cpp-parameters.json').exists()
+    assert (out/'xstar_execution_provenance.json').is_file()
+    assert (out/'xout_abund1.fits').is_file()
+    assert not list(temp_dir.glob('xstar-cpp-parameters-*.json'))
 
 
 def test_frontend_fails_before_science_on_zone_abi_mismatch(tmp_path):

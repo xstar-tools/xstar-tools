@@ -541,12 +541,25 @@ double native_velimp(int n,int l,double temp,int ic,double ne,double asum) {
 }
 
 // XSTAR-FUNCTION-COMMENT-BEGIN
-// Purpose: Implement native type63 scalars as a local helper for the xstar engine module; inputs and outputs are kept in the source-compatible units expected by its caller.
-// Reference context: Implementation/ABI helper; no independent scientific formula beyond the shared core it invokes.
+// Purpose: Evaluate canonical XSTAR Type-63 collisional channels, including the source pre-branch DeltaE/kT cutoff, in the units expected by the native engine caller.
+// Reference context: xstarlib/src/ucalc.f90 label 63; the literal delt.gt.50 source gate precedes both same-n AMCRS and n-changing ERC branches.
 // XSTAR-FUNCTION-COMMENT-END
 bool native_type63_scalars(int ni,int li,int nf,int lf,int iq,double temp,double ne,double ei,double ef,double gi,double gf,double out[6]) {
     for (int q=0;q<6;++q) out[q]=0.0;
     if (ni<=0||nf<=0||li<0||lf<0||iq<=0||temp<=0.0||ne<0.0) return false;
+
+    // Canonical XSTAR ucalc.f90 type-63 source gate.  The source computes
+    // wavelength from the packed endpoint energies, converts the public
+    // temperature from Kelvin back to XSTAR's T4 variable, and exits before
+    // either the same-n or n-changing branch when DeltaE/kT is strictly
+    // greater than 50.  Preserve the literal operation order because this
+    // threshold can change the DSEC root-search trajectory.
+    const double elin=12398.4016/std::abs(ef-ei+1.0e-24);
+    const double t4=temp/1.0e4;
+    const double ekt=0.861707*t4;
+    const double delt=12398.4016/elin/ekt;
+    if (delt>50.0) return true;
+
     double qf=0.0,qr=0.0;
     if (ni==nf) {
         if (std::abs(lf-li)!=1) return true;

@@ -44,3 +44,8 @@ These extensions are orchestration/provenance features, not required canonical X
 The public frontend delegates scientific execution to the compatibility native `xstar_cpp run-production` path. `zone-cpp` and `zone-all` converge on the same frozen production operator rather than maintaining separate science implementations.
 
 The detailed Milestone-6 architecture record remains available in `docs/developer/xstar_cpp.md`.
+
+
+## 0.6.82.1 file-silent parameter-envelope note
+
+By default the frontend parameter envelope is temporary, lives outside the requested science output directory, and is removed after the native run. Use `--parameters-out FILE` to retain it explicitly. This keeps the native `artifact_profile=none` publication boundary free of frontend orchestration files.

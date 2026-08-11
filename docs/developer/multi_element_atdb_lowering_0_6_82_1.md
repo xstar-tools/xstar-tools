@@ -93,3 +93,20 @@ The package-local source/structural gate does not pretend that this external
 - production-zone ABI: `6048110`
 - fixed-state ABI: `60488`
 - XSPEC-table ABI: `1`
+
+
+## Frontend file-silent closure
+
+The host O VII/aspl run exposed an independent productization defect after the science calculation completed: the public `xstar-cpp` frontend had created `.xstar-cpp-parameters.json` inside the science output directory, and the native `artifact_profile=none` validator correctly rejected that non-product file. In 0.6.82.1 the default envelope is temporary, outside the science directory, and removed after the native run. `--parameters-out FILE` remains the explicit retained-envelope option. See `docs/developer/xstar_cpp_file_silent_0_6_82_1.md`.
+
+## Physical host gate
+
+The structural/source-concordance gate does not substitute for a physical run against the canonical XSTAR `atdb.fits`. Run:
+
+```bash
+python3 tools/qualification/run_multi_element_host_smoke_0_6_82_1.py \
+  --data-dir /path/to/xstar/data \
+  --replace
+```
+
+The host gate requires 15 active elements, successful ATDB lowering/controller/publication, five standard FITS products for `lwrite=0,npass=1`, `xout_step.log`, no legacy compact-endpoint rejection, and no frontend parameter-envelope/file-silent rejection.

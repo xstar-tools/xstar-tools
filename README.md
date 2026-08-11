@@ -2,7 +2,17 @@
 
 `xstar-tools` is a source-faithful Python/C++ productization of XSTAR photoionization calculations. It preserves an accepted scientific baseline tied to XSTAR Fortran 2.59g while providing a stable Python API, one primary CLI, accelerated/shared C++ modes, and a native standalone `xstar-cpp` executable.
 
-**Distribution:** `0.6.82`  
+**Distribution:** `0.6.82.10`  
+
+**0.6.82.10 all-element Type-53 live escape closure:** the source-faithful
+Type-53/RRC escape factors now use each record's live continuum optical depths
+and `cfrac` for every active element, rather than relying on element-specific
+H/He/Mg/Carbon compatibility ownership. Together with the 0.6.82.9 Lucy-loop
+repair, this makes the full displayed H+He+C `rlogxi=0`, `cfrac=1` STEP/`ntotit`
+trajectory match canonical FORTRAN. `rlogxi=-3,-2` remain open, `-5` retains two
+`ntotit` mismatches, and `cfrac<1` has not yet been qualified. The accepted
+science revision and public ABIs remain intentionally frozen until broad
+all-element concordance closes.
 **Accepted science revision:** `0.6.48.12.3.45.3.3.8`  
 **Frozen C++ all-62 baseline:** `0.6.48.12.3.44`  
 **C API ABI:** `60487`  
@@ -300,4 +310,57 @@ xstar-tools version
 ### Realistic multi-element native example
 
 `examples/xstar_example.par` is a ready-to-run broad-composition parameter file for `xstar-cpp`.  It enables H, He, C, N, O, Ne, Mg, Al, Si, S, Ar, Ca, Cr, Fe, and Ni and exercises the general native ATDB lowering path rather than a single-metal smoke case.  See `examples/README.md` for the command.
+For the 0.6.82.1 physical acceptance on a host with canonical XSTAR data, `tools/qualification/run_multi_element_host_smoke_0_6_82_2.py --data-dir /path/to/xstar/data --replace` verifies the full 15-element path and the public `xstar-cpp` file-silent frontend boundary.
 
+
+
+### 0.6.82.3 broad multi-element science closure and live progress
+
+`0.6.82.3` addresses two source-concordance defects exposed by the first completed 15-element `0.6.82.2` host comparison.  Retained products now keep the radius already derived by the controller from the XSTAR `rread1` semantics instead of substituting a historical benchmark fallback when the public JSON envelope omits `initial_radius_cm`.  Fe Type-85 photoionization heating now follows the XSTAR 2.59g `ucalc.f90` post-`phintfo` channel mapping (`ans4=-piht`, `ans6=-piht2`) rather than selecting recombination-cooling channels.
+
+Long native runs are also observable: with `xstar-cpp --progress text`, the XSTAR-style header is emitted before the controller starts and each accepted radial-zone row is flushed immediately when that zone completes.  The version-locked broad-mixture host runner tees the native transcript live while retaining `host_smoke.log`.  The canonical broad FORTRAN fixture remains an external acceptance gate; this release does not claim host parity until that run is returned.
+
+### 0.6.82.2 broad-element Type-51 closure
+
+`0.6.82.2` keeps the accepted `0.6.82.1` multi-element lowering and file-silent frontend repairs, and closes the downstream Type-51 production abort exposed by the real 15-element host run. Finite legacy Type-51 results remain the compatibility result; source-faithful Type-51 is used only when that legacy evaluator cannot represent an otherwise valid canonical record. The physical broad-mixture gate is version-locked through `tools/qualification/run_multi_element_host_smoke_0_6_82_2.py`.
+
+### 0.6.82.6 canonical terminal STEP endpoint restoration
+
+`0.6.82.6` restores the canonical post-loop `pprint(9)` endpoint to native
+STEP Option 17 and to live `--progress text` output.  XSTAR 2.59g prints this
+physical post-transport boundary after the radial loop; it is distinct from the
+later zero-thickness `xstarcalc`/`pprint(22)` final evaluation.  The correction
+restores the final `log(N)=20.00` row in the historical C5 H+He+C cases without
+changing their already-matching common-row thermal science.  The newly exposed
+H+He+C `rlogxi=1.0` thermal discrepancy remains an open, separate science
+investigation and is not altered by this release.
+
+### 0.6.82.5 Type-85/DSEC/STEP physical-trajectory closure
+
+`0.6.82.5` is the next broad-mixture host candidate after the rejected
+`0.6.82.4` run.  It restores the source Type-85 post-`phintfo` channel
+rearrangement while retaining energy-ordered endpoint ownership, moves DSEC
+HMC-only execution into the actual production evaluator, retains the thermal
+engine's literal `stats.ntotit`, and limits STEP Option 17 to physical radial
+boundaries.  The canonical FORTRAN 2.59g broad fixture remains an external
+science (`<1%`) and performance gate.
+
+### 0.6.82.4 broad multi-element FORTRAN-oracle closure
+
+`0.6.82.4` is the next host-qualification candidate after the completed
+15-element `0.6.82.3` run exposed remaining Fe thermal, STEP convergence, and
+performance differences.  Type-85 endpoints now follow XSTAR's universal
+energy ordering before thermal accumulation; live/STEP iteration counts use the
+literal DSEC count; and production DSEC trials no longer execute the
+`calc_emisab`/`calc_emis` spectral projection that source `dsec.f90` does not
+call.  Use the version-locked runner:
+
+```bash
+python3 tools/qualification/run_multi_element_host_smoke_0_6_82_4.py \
+    --data-dir ../xstar/data \
+    --replace
+```
+
+The runner compares the broad fixture to the preserved FORTRAN 2.59g STEP and
+thermal oracles, requires material discrepancies below 1%, and reports the
+runtime ratio separately.

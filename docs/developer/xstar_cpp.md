@@ -32,7 +32,7 @@ The following are orchestration extensions, not canonical XSTAR parameters:
 - `--profile FILE` — frontend wall-time/profile JSON;
 - `--deterministic` — record reproducible-run intent in provenance;
 - `--print-option N` — read-only extraction from the completed `xout_step.log`;
-- `--parameters-out FILE` — retain the generated JSON parameter envelope;
+- `--parameters-out FILE` — retain the generated JSON parameter envelope. Without this option, the envelope is an ephemeral system-temporary orchestration file and is removed after native execution; it is never placed in the science output directory;
 - `--abi` — print expected and runtime ABI identities.
 
 `--print-option` never changes STEP generation.  It only reads a completed log.

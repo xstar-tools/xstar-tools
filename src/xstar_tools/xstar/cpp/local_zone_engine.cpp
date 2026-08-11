@@ -53,6 +53,12 @@ using clock_type = std::chrono::steady_clock;
 constexpr double kBoltzmannEvK = xstar_constants::kModernBoltzmannEvPerK;
 constexpr double kErgPerEv = xstar_constants::kModernErgPerEv;
 constexpr std::size_t kSourceLeveltempNdlV06481231 = 5000u;
+// XSTAR 2.59g globaldata/PARAM declares nd=20000.  levwkelement.f90's
+// local real(8) rnisi(nd) is a large fixed-size workspace.  In the canonical
+// gfortran build it has static storage lifetime, is zero-filled initially, and
+// retains entries outside the 1:nlev slice overwritten by each levwk call.
+// Preserve that source lifetime explicitly on the reusable C++ context.
+constexpr std::size_t kSourceLevWkRnisiNdV06828 = 20000u;
 constexpr double kRydEv = 13.60569253;
 // The v0.6.47.2 type-53 evaluator uses the historical rounded Rydberg
 // constant.  Keep it separate from the newer global constant: changing this
@@ -3600,6 +3606,12 @@ struct xstar_fixed_state_context_impl {
     // per-ion static ATDB snapshot when no active ion writes a destination
     // column.  Preserve the source workspace explicitly.
     std::vector<double> source_leveltemp_energy_workspace_v06481231;
+    // 0.6.82.8: source-faithful levwkelement.f90 rnisi(nd) lifetime.  This
+    // workspace is shared by every element and retained across fixed-state
+    // evaluations, exactly like the canonical large fixed local array.  Index
+    // zero is intentionally unused so source 1-based rnisi(1:nd) maps directly.
+    std::array<double, kSourceLevWkRnisiNdV06828 + 1u>
+        source_levwk_rnisi_workspace_v06828{};
     // v0.6.48.11.4: model runtime calc_hmc_element critf.  Keep this on
     // the context so the historical xstar_fixed_state_input_v1 ABI remains
     // byte-for-byte unchanged.
@@ -4331,16 +4343,26 @@ double type51_upsilon_legacy(
     const double* r, std::size_t n, const std::int64_t* ints,
     std::size_t ni, double temperature_k
 ) {
-    if (!r || n < 7 || !ints || ni < 1 || r[0] <= 0.0 || r[1] <= 0.0) return -1.0;
+    if (!r || n < 7 || !ints || ni < 1 || !std::isfinite(r[0]) ||
+        !std::isfinite(r[1]) || r[0] <= 0.0)
+        return std::numeric_limits<double>::quiet_NaN();
     const int bt_type = static_cast<int>(ints[0]);
     const double eij_ryd = r[0], c = r[1];
     const double u = temperature_k / (eij_ryd * 157887.0);
-    if (!(u > 0.0)) return -1.0;
+    if (!(u > 0.0)) return std::numeric_limits<double>::quiet_NaN();
     double x = 0.0;
     switch (bt_type) {
-        case 1: case 4: x = 1.0 - std::log(c) / std::log(u + c); break;
-        case 2: case 3: case 5: case 6: x = u / (u + c); break;
-        default: return -1.0;
+        case 1: case 4:
+            if (!(c > 0.0) || !(u + c > 0.0) || std::log(u + c) == 0.0)
+                return std::numeric_limits<double>::quiet_NaN();
+            x = 1.0 - std::log(c) / std::log(u + c);
+            break;
+        case 2: case 3: case 5: case 6:
+            if ((u + c) == 0.0 || !std::isfinite(u + c))
+                return std::numeric_limits<double>::quiet_NaN();
+            x = u / (u + c);
+            break;
+        default: return std::numeric_limits<double>::quiet_NaN();
     }
     double scaled = 0.0;
     if (n == 7) {
@@ -4351,7 +4373,7 @@ double type51_upsilon_legacy(
         scaled = y[k] + f * (y[k + 1] - y[k]);
     } else if (n >= 11) {
         scaled = natural_spline9(r + 2, x);
-    } else return -1.0;
+    } else return std::numeric_limits<double>::quiet_NaN();
     switch (bt_type) {
         case 1: return scaled * std::log(u + std::exp(1.0));
         case 2: return scaled;
@@ -4359,7 +4381,7 @@ double type51_upsilon_legacy(
         case 4: return scaled * std::log(u + c);
         case 5: return scaled / u;
         case 6: return std::pow(10.0, scaled);
-        default: return -1.0;
+        default: return std::numeric_limits<double>::quiet_NaN();
     }
 }
 
@@ -4389,7 +4411,8 @@ Type51UpsilonEvaluation type51_upsilon(
     std::size_t ni, double temperature_k
 ) {
     Type51UpsilonEvaluation result;
-    if (!r || n < 7 || !ints || ni < 1 || r[0] <= 0.0 || r[1] <= 0.0 || !(temperature_k > 0.0)) return result;
+    if (!r || n < 7 || !ints || ni < 1 || !std::isfinite(r[0]) ||
+        !std::isfinite(r[1]) || r[0] <= 0.0 || !(temperature_k > 0.0)) return result;
     result.bt_type = static_cast<int>(ints[0]);
     result.point_count = n == 7 ? 5 : (n >= 11 ? 9 : 0);
     result.eij_ryd = r[0];
@@ -4406,6 +4429,7 @@ Type51UpsilonEvaluation type51_upsilon(
     double x = 0.0;
     if (result.point_count == 5) {
         if (result.bt_type == 1 || result.bt_type == 4) {
+            if (!(result.scaling_c > 0.0) || !(u + result.scaling_c > 0.0)) return result;
             const double denom = std::log(u + result.scaling_c);
             if (denom == 0.0 || !std::isfinite(denom)) return result;
             x = std::log((u + result.scaling_c) / result.scaling_c) / denom;
@@ -4415,18 +4439,23 @@ Type51UpsilonEvaluation type51_upsilon(
             // while using the later type-5/type-6 transforms.  The source
             // interpolation remains splinem5; only the temperature transform
             // and final inverse scaling follow the general BT definitions.
-            x = u / (u + result.scaling_c);
+            const double denom = u + result.scaling_c;
+            if (denom == 0.0 || !std::isfinite(denom)) return result;
+            x = u / denom;
         } else {
             return result;
         }
         result.scaled_upsilon = type51_splinem5(r + 2, x);
     } else if (result.point_count == 9) {
         if (result.bt_type == 1 || result.bt_type == 4) {
+            if (!(result.scaling_c > 0.0) || !(u + result.scaling_c > 0.0)) return result;
             const double denom = std::log(u + result.scaling_c);
             if (denom == 0.0 || !std::isfinite(denom)) return result;
             x = 1.0 - std::log(result.scaling_c) / denom;
         } else if (result.bt_type == 2 || result.bt_type == 3 || result.bt_type == 5 || result.bt_type == 6) {
-            x = u / (u + result.scaling_c);
+            const double denom = u + result.scaling_c;
+            if (denom == 0.0 || !std::isfinite(denom)) return result;
+            x = u / denom;
         } else {
             return result;
         }
@@ -6950,6 +6979,42 @@ EvaluatedRecord evaluate_record(
             const auto pescv_source = [](double tau) {
                 return std::max(std::exp(-tau), 1.0e-12) / 2.0;
             };
+
+            // v0.6.82.10: canonical calc_hmc_ion applies Type-53/RRC
+            // escape factors to every element. Bind the record-local live
+            // continuum optical depths and covering fraction once here,
+            // before any historical element-specific compatibility/audit
+            // branches. The source equations are valid for the full cfrac
+            // domain [0,1]:
+            //   ptmp1 = pescv(tau_in) * (1-cfrac)
+            //   ptmp2 = pescv(tau_out) * (1-cfrac)
+            //         + 2*pescv(tau_in+tau_out) * cfrac.
+            // The explicit helium row-46 oracle below may override this live
+            // state only for its captured historical contract.
+            if (!row46_contract) {
+                if (!record_context.valid || record_context.continuum_index_one_based <= 0) {
+                    throw std::runtime_error(
+                        "Type-53 source-faithful evaluation requires lowered continuum-index context for every element");
+                }
+                const int type53_continuum_index = record_context.continuum_index_one_based;
+                const bool has_type53_continuum_workspace =
+                    input.continuum_tau_in && input.continuum_tau_out &&
+                    static_cast<std::size_t>(type53_continuum_index) <= input.continuum_tau_count;
+                if (!has_type53_continuum_workspace) {
+                    throw std::runtime_error(
+                        "Type-53 source-faithful evaluation requires canonical live continuum optical depths for every element");
+                }
+                contract_tau_in = input.continuum_tau_in[type53_continuum_index - 1];
+                contract_tau_out = input.continuum_tau_out[type53_continuum_index - 1];
+                const bool type53_has_dsec_covering =
+                    (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_DSEC_COVERING_FRACTION) != 0u;
+                contract_covering = std::clamp(
+                    type53_has_dsec_covering ? input.dsec_covering_fraction : input.covering_fraction,
+                    0.0, 1.0);
+                contract_ptmp1 = pescv_source(contract_tau_in) * (1.0 - contract_covering);
+                contract_ptmp2 = pescv_source(contract_tau_out) * (1.0 - contract_covering) +
+                    2.0 * pescv_source(contract_tau_in + contract_tau_out) * contract_covering;
+            }
             if (hydrogen_source_faithful) {
                 if (!environment_flag("XSTAR_QUALIFICATION_REPLACEMENT")) {
                     throw std::runtime_error(
@@ -7951,31 +8016,16 @@ EvaluatedRecord evaluate_record(
             break;
         }
         case XSTAR_FIXED_OPCODE_TYPE51_BT_COLLISION: {
-            const double legacy_ups = type51_upsilon_legacy(
-                r, record.real_count, ints, record.int_count, input.temperature_k
-            );
-            if (!(legacy_ups >= 0.0) || !std::isfinite(legacy_ups)) {
-                throw std::runtime_error("invalid legacy type51 payload");
-            }
-            const double legacy_root_t = std::sqrt(input.temperature_k);
-            const double legacy_kt_ev =
-                xstar_constants::kSourceCollisionBoltzmannEvPerK * input.temperature_k;
-            const double legacy_qex =
-                xstar_constants::kCollisionRateCoefficientPerSqrtK * legacy_ups *
-                std::exp(-delta_ev / legacy_kt_ev) /
-                (lower.statistical_weight * legacy_root_t);
-            const double legacy_qde =
-                xstar_constants::kCollisionRateCoefficientPerSqrtK * legacy_ups /
-                (upper.statistical_weight * legacy_root_t);
-            const std::array<double,6> legacy_ans{{
-                legacy_qex * ne,
-                legacy_qde * ne,
-                0.0,
-                0.0,
-                legacy_qde * ne * delta_ev * xstar_constants::kLegacyCollisionErgPerEv,
-                legacy_qex * ne * delta_ev * xstar_constants::kLegacyCollisionErgPerEv,
-            }};
+            // XSTAR ucalc.f90 label 51 evaluates only nrdt=7 (five-point)
+            // and nrdt=11 (nine-point) Burgess-Tully records.  Other payload
+            // lengths follow the source no-contribution path rather than
+            // terminating the model.
+            if (record.real_count != 7 && record.real_count != 11) break;
 
+            // Evaluate the canonical/source-faithful representation first.
+            // The legacy evaluator remains the committed compatibility path
+            // wherever it produces a finite result, preserving all accepted
+            // pre-0.6.82.2 outputs.
             const auto bt = type51_upsilon(
                 r, record.real_count, ints, record.int_count, input.temperature_k
             );
@@ -8014,25 +8064,63 @@ EvaluatedRecord evaluate_record(
                 source_ans2 * bt.eij_ev * xstar_constants::kLegacyCollisionErgPerEv,
                 source_ans1 * bt.eij_ev * xstar_constants::kLegacyCollisionErgPerEv,
             }};
+
+            const double legacy_ups = type51_upsilon_legacy(
+                r, record.real_count, ints, record.int_count, input.temperature_k
+            );
+            const bool legacy_valid = std::isfinite(legacy_ups);
+            std::array<double,6> legacy_ans{{
+                std::numeric_limits<double>::quiet_NaN(),
+                std::numeric_limits<double>::quiet_NaN(),
+                0.0,
+                0.0,
+                std::numeric_limits<double>::quiet_NaN(),
+                std::numeric_limits<double>::quiet_NaN(),
+            }};
+            if (legacy_valid) {
+                const double legacy_root_t = std::sqrt(input.temperature_k);
+                const double legacy_kt_ev =
+                    xstar_constants::kSourceCollisionBoltzmannEvPerK * input.temperature_k;
+                const double legacy_qex =
+                    xstar_constants::kCollisionRateCoefficientPerSqrtK * legacy_ups *
+                    std::exp(-delta_ev / legacy_kt_ev) /
+                    (lower.statistical_weight * legacy_root_t);
+                const double legacy_qde =
+                    xstar_constants::kCollisionRateCoefficientPerSqrtK * legacy_ups /
+                    (upper.statistical_weight * legacy_root_t);
+                legacy_ans = {{
+                    legacy_qex * ne,
+                    legacy_qde * ne,
+                    0.0,
+                    0.0,
+                    legacy_qde * ne * delta_ev * xstar_constants::kLegacyCollisionErgPerEv,
+                    legacy_qex * ne * delta_ev * xstar_constants::kLegacyCollisionErgPerEv,
+                }};
+            }
             // v0.6.48.7.46.21.8: the source Type-51 evaluator contract is
             // element-independent.  The earlier Mg-only promotion left the
             // Hydrogen and Helium collision energy channels on the legacy
             // constants/path even during independent Thermal qualification.
             // Preserve the old Mg flag as a compatibility alias, while the
             // general flag promotes the same source-faithful path for H/He/Mg.
-            const bool source_faithful =
+            const bool source_faithful_requested =
                 environment_flag("XSTAR_QUALIFICATION_TYPE51_SOURCE_FAITHFUL") ||
                 (element.element_z == 12 &&
                  environment_flag("XSTAR_QUALIFICATION_MG_TYPE51_SOURCE_FAITHFUL"));
-            const auto& committed = source_faithful ? source_ans : legacy_ans;
+            // A non-finite legacy sentinel means the compatibility evaluator
+            // cannot represent this source-valid record.  In that case use
+            // the canonical result instead of aborting broad-element runs.
+            const bool source_faithful_committed =
+                source_faithful_requested || !legacy_valid;
+            const auto& committed = source_faithful_committed ? source_ans : legacy_ans;
             c.ans1 = committed[0]; c.ans2 = committed[1];
             c.ans3 = committed[2]; c.ans4 = committed[3];
             c.ans5 = committed[4]; c.ans6 = committed[5];
 
             auto& shadow = out.type51_shadow;
             shadow.valid = true;
-            shadow.source_faithful_mode = source_faithful;
-            shadow.replacement_applied = source_faithful;
+            shadow.source_faithful_mode = source_faithful_committed;
+            shadow.replacement_applied = source_faithful_committed;
             shadow.endpoint_order_exact = lower.energy_ev <= upper.energy_ev;
             shadow.bt_type = bt.bt_type;
             shadow.point_count = bt.point_count;
@@ -8576,7 +8664,15 @@ EvaluatedRecord evaluate_record(
                     else if(dt==36||dt==12||dt==55){threshold=std::abs(upper.energy_ev-lower.energy_ev);double z=(dt==55)?static_cast<double>(element.element_z-record.ion_stage):static_cast<double>(element.element_z-record.ion_stage+1);z=std::max(z,1.0);double nq=(dt==55)?1.0:std::min<double>(10.0,ints&&record.int_count?ints[0]:1.0),sg0=6.3e-18*nq*nq/(z*z);sw=lower.statistical_weight/std::max(upper.statistical_weight,1e-48);for(std::size_t k=0;k<n;++k)if(epi[k]>=threshold&&threshold>0)sigma[k]=sg0*std::pow(epi[k]/threshold,-3);}
                     else if(dt==15){int na=ints&&record.int_count>=5?std::max<int>(1,ints[record.int_count-5]):1;std::vector<double>bs;std::vector<std::array<double,11>>co;double d=0;threshold=0;for(int sh=0;sh<na;++sh){std::size_t off=15u*sh;if(off+13>=record.real_count)break;threshold=r[off];d=r[off+1];bs.push_back(r[off+2]);std::array<double,11>a{};for(int q=0;q<11;++q)a[q]=r[off+3+q];co.push_back(a);}sw=first.statistical_weight/std::max(terminal.statistical_weight,1e-48);for(std::size_t k=0;k<n;++k)if(epi[k]>=threshold&&!bs.empty()){double xx=epi[k]*1e-3-d;if(xx>0){std::size_t j=0;while(j+1<bs.size()&&xx>=bs[j])++j;double yy=std::log10(std::max(xx,1e-300)),tmp=0;for(int q=10;q>=0;--q)tmp=co[j][q]+yy*tmp;tmp=std::clamp(tmp,-50.0,24.0);sigma[k]=std::pow(10.0,tmp-24.0);}}}
                     else if(dt==64){threshold=std::abs(upper.energy_ev-lower.energy_ev);int nq=ints&&record.int_count?std::max<int>(ints[0],1):1,l=ints&&record.int_count>1?std::max<int>(ints[1],0):0,charge=ints&&record.int_count>2?std::max<int>(ints[2],1):1;std::vector<double>er(n),smb(n);for(std::size_t k=0;k<n;++k){er[k]=std::max((epi[k]-threshold)/13.605692,0.0);smb[k]=source_hphotx_mb_generic(er[k],charge,nq,l);sigma[k]=smb[k]*1e-18;}sw=lower.statistical_weight;commit_phint(sigma,threshold,sw,false);c.ans2=type99_milne_alpha(er,smb,threshold/13.6,input.temperature_k)*sw;break;}
-                    else if(dt==85){int nmin=ints&&record.int_count?static_cast<int>(ints[0]):1,id3=ints&&record.int_count?static_cast<int>(ints[record.int_count-1]):114;double zc=id3-114,eion=r[1],far=r[2],gam=r[3],scal=r[4];threshold=eion*13.605692*.8;sw=1;for(std::size_t k=0;k<n;++k)sigma[k]=source_pexs_sigma_mb_generic(nmin,zc,eion,far,gam,scal,epi[k]/13.605692)*1e-18;auto ph=source_phintfo_sigma_generic(sigma,threshold,sw,false,calc_hmc_input);c.ans1=ph.ans[0];c.ans4=-ph.ans[2];c.ans6=-ph.ans[4];out.opakab=0;out.spectral=record.continuum_index_one_based>0;out.bound_free_spectral=out.spectral;out.continuum_index_one_based=record.continuum_index_one_based;out.line_energy_ev=threshold;break;}
+                    else if(dt==85){int nmin=ints&&record.int_count?static_cast<int>(ints[0]):1,id3=ints&&record.int_count?static_cast<int>(ints[record.int_count-1]):114;double zc=id3-114,eion=r[1],far=r[2],gam=r[3],scal=r[4];threshold=eion*13.605692*.8;sw=1;for(std::size_t k=0;k<n;++k)sigma[k]=source_pexs_sigma_mb_generic(nmin,zc,eion,far,gam,scal,epi[k]/13.605692)*1e-18;auto ph=source_phintfo_sigma_generic(sigma,threshold,sw,false,calc_hmc_input);
+                        // 0.6.82.5 Fe Type-85 source-faithful post-phintfo rearrangement.
+                        // source_phintfo_sigma_generic already returns the ordinary ucalc
+                        // channel ordering used by the generic bound-free path.  The Type-85
+                        // branch then applies the additional source label-85 rearrangement:
+                        // reverse channels are zeroed and photoionization heating is taken
+                        // from the negated ordinary ans3/ans5 slots.  Keep the 0.6.82.4
+                        // energy-ordered endpoint ownership from xstar_atdb_runtime.cpp.
+                        c.ans1=ph.ans[0];c.ans2=0.0;c.ans3=0.0;c.ans4=-ph.ans[2];c.ans5=0.0;c.ans6=-ph.ans[4];out.opakab=0;out.spectral=record.continuum_index_one_based>0;out.bound_free_spectral=out.spectral;out.continuum_index_one_based=record.continuum_index_one_based;out.line_energy_ev=threshold;break;}
                     if (dt != 64 && dt != 85) {
                         commit_phint(sigma, threshold, sw, zero_reverse);
                     }
@@ -9871,6 +9967,7 @@ std::vector<double> compute_element_lte_populations(
     const xstar_fixed_state_input_v1& input,
     int active_min_stage,
     int active_max_stage,
+    std::array<double, kSourceLevWkRnisiNdV06828 + 1u>& rnisi,
     bool* used_exact_source_topology = nullptr
 ) {
     if (element.rows.empty() || element.n_rows <= 0) {
@@ -9923,11 +10020,13 @@ std::vector<double> compute_element_lte_populations(
     const double source_cap66 = 1.0e66;
 
     std::vector<double> rnise(static_cast<std::size_t>(element.n_rows) + 1u, 0.0);
-    std::vector<double> rnisi;
     int last_nlev = 0;
     int ipmatsv = 0;
     for (const auto& topo : topology) {
         const int nlev = topo.nlev;
+        if (nlev > static_cast<int>(kSourceLevWkRnisiNdV06828)) {
+            throw std::runtime_error("LTE source ion nlev exceeds levwkelement rnisi(nd=20000)");
+        }
         const bool active = topo.ion_stage >= active_min_stage && topo.ion_stage <= active_max_stage;
         if (active) {
             const LteLevelData* terminal_level = exact_leveltemp
@@ -9939,7 +10038,9 @@ std::vector<double> compute_element_lte_populations(
             const double terminal_energy = terminal_level ? terminal_level->energy_ev : topo.terminal_energy_ev;
             const double terminal_weight = terminal_level ? terminal_level->statistical_weight : topo.terminal_statistical_weight;
             const double rs = q2 / terminal_weight;
-            rnisi.assign(static_cast<std::size_t>(nlev) + 1u, 0.0);
+            // Literal levwk.f90 lifetime: overwrite rnisi(1:nlev) only.
+            // Entries above nlev deliberately retain values from earlier
+            // element/evaluation calls in the same model context.
             rnisi[static_cast<std::size_t>(nlev)] = 1.0;
             double bb = 1.0;
             for (int local = 1; local < nlev; ++local) {
@@ -10014,9 +10115,16 @@ std::vector<double> compute_element_lte_populations(
         last_nlev = nlev;
     }
 
-    if (last_nlev < 2 || ipmatsv + 1 != element.n_rows || rnisi.size() <= static_cast<std::size_t>(last_nlev)) {
+    if (last_nlev < 2 ||
+        last_nlev > static_cast<int>(kSourceLevWkRnisiNdV06828) ||
+        ipmatsv + 1 != element.n_rows) {
         throw std::runtime_error("LTE fully stripped source topology is invalid");
     }
+    // levwkelement.f90 intentionally uses rnisi(nlev:nlev-1) after the source
+    // ion loop even when the final source ion is outside mml:mmu.  Because the
+    // canonical rnisi(nd) has persistent static storage, these values may be
+    // retained from a prior levwk call.  Do not require the current active ion
+    // window to have written them.
     rnise[static_cast<std::size_t>(ipmatsv + 1)] =
         rnise[static_cast<std::size_t>(ipmatsv)] *
         rnisi[static_cast<std::size_t>(last_nlev)] /
@@ -10078,7 +10186,8 @@ std::vector<double> compute_element_lte_populations(
 std::vector<double> compute_exact_lte_populations(
     const Program& program,
     const xstar_fixed_state_input_v1& input,
-    const std::map<int, std::pair<int,int>>& active_stage_windows
+    const std::map<int, std::pair<int,int>>& active_stage_windows,
+    std::array<double, kSourceLevWkRnisiNdV06828 + 1u>& rnisi_workspace
 ) {
     if (!(input.temperature_k > 0.0) || !(input.electron_density_cm3 >= 0.0)) {
         throw std::runtime_error("LTE population inputs are invalid");
@@ -10101,7 +10210,8 @@ std::vector<double> compute_exact_lte_populations(
         }
         bool exact_topology = false;
         auto full_lte = compute_element_lte_populations(
-            program, element, input, active_min_stage, active_max_stage, &exact_topology);
+            program, element, input, active_min_stage, active_max_stage,
+            rnisi_workspace, &exact_topology);
 
         if (source_sequence == 58 && element.element_z == 12) {
             const auto topology = lte_topology_for_element(program, element);
@@ -11413,6 +11523,8 @@ int run_impl(
     ctx.last_call1_thermal_oracle = (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_CALL1_THERMAL_ORACLE) != 0u;
     const bool defer_product_projection =
         (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_DEFER_PRODUCT_PROJECTION) != 0u;
+    const bool dsec_hmc_only_v06824 =
+        (input.runtime_state_flags & XSTAR_FIXED_RUNTIME_STATE_DSEC_HMC_ONLY) != 0u;
     // v0.6.48.9.7: the ordinary DSEC hot path never exposes record-product
     // provenance to the standalone writer; exact product diagnostics are
     // consumed only from the non-deferred accepted-boundary/final evaluations.
@@ -13237,7 +13349,8 @@ int run_impl(
             throw std::runtime_error("fixed-state source-workspace ABI mismatch");
         }
         const auto lte_populations = compute_exact_lte_populations(
-            ctx.program, input, ctx.retained_active_stage_windows);
+            ctx.program, input, ctx.retained_active_stage_windows,
+            ctx.source_levwk_rnisi_workspace_v06828);
         // Small (~population-row sized) state; retain it on every controller
         // evaluation so the final accepted DSEC snapshot can be promoted
         // without recomputing LTE solely for product publication.
@@ -13349,7 +13462,12 @@ int run_impl(
     stats.continuum_seconds += elapsed(continuum_start);
 
     const auto spectral_start = clock_type::now();
-    if (!spectral.empty() && input.radiation_bin_count > 0) {
+    // Source dsec.f90 stops after calc_hmc_all.  Only xstarcalc product
+    // boundaries proceed through calc_emisab_all/calc_emis_all and linopac.
+    // This production-only flag removes a previously duplicated spectral
+    // projection from every DSEC trial while leaving all rate/matrix/thermal
+    // work and every accepted-boundary product calculation unchanged.
+    if (!dsec_hmc_only_v06824 && !spectral.empty() && input.radiation_bin_count > 0) {
         // Line records and continuum bins are different index spaces.  The
         // contribution engine owns per-line luminosity/opacity records; the
         // exact native Gaussian/Voigt path then projects those luminosities to
@@ -16032,6 +16150,7 @@ int xstar_fixed_state_context_reset_v1(xstar_fixed_state_context* context, char*
         context->source_leveltemp_energy_workspace_v06481231.begin(),
         context->source_leveltemp_energy_workspace_v06481231.end(),
         0.0);
+    context->source_levwk_rnisi_workspace_v06828.fill(0.0);
     context->last_record_diagnostics.clear();
     context->last_element_diagnostics.clear();
     context->last_source_workspaces_valid_v064894 = false;

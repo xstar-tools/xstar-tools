@@ -1,5 +1,13 @@
 # CHANGELOG
 
+# 0.6.82.10 — all-element Type-53 live escape-state generalization - 2026-08-10
+
+- Promote the source-faithful Type-53/RRC escape-state calculation to every active element. Canonical `calc_hmc_ion.f90` computes the Type-53 `ptmp1`/`ptmp2` factors from each record's live continuum optical depths and `cfrac`; the native path no longer relies on Carbon-only/default `0.5/0.5` ownership.
+- Bind the common source equations before historical H/He/C/Mg compatibility/audit branches: `ptmp1=pescv(tau_in)*(1-cfrac)` and `ptmp2=pescv(tau_out)*(1-cfrac)+2*pescv(tau_in+tau_out)*cfrac`, with `pescv=max(exp(-tau),1e-12)/2`. This is valid for the full `0<=cfrac<=1` domain; `cfrac<1` remains to be host-qualified against FORTRAN.
+- Retain the 0.6.82.9 `msolvelucy` fixed-loop correction, 0.6.82.8 persistent `rnisi(nd=20000)` workspace, 0.6.82.7 Type-63 cutoff, and 0.6.82.6 terminal STEP endpoint. The rejected Type-73 and temperature-roundtrip experiments are not included.
+- Host `cfrac=1` status at release creation: `rlogxi=-4,-1,0` close at STEP/material level, with `rlogxi=0` displayed STEP and `ntotit` matching FORTRAN throughout. `rlogxi=-5` has material acceptance but two remaining `ntotit` mismatches; `rlogxi=-3,-2` remain scientifically open with material and convergence-sequence differences.
+- Preserve accepted science revision `0.6.48.12.3.45.3.3.8` and ABI identifiers `60487`/`6048110` until the broad all-element FORTRAN-concordance campaign is closed; ABI numbers are changed only for actual binary-interface changes.
+
 # 0.6.82.1 — full multi-element native ATDB/lowering closure - 2026-08-10
 
 - Generalize native ATDB endpoint lowering for realistic multi-element XSTAR mixtures instead of rejecting source-valid `idest` endpoints that extend beyond the compact element matrix dimension.

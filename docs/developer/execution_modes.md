@@ -76,7 +76,7 @@ src/xstar_tools/xstar/cpp/xstar-cpp run-production \
   --output-dir native-run
 ```
 
-The compatibility executable name `xstar_cpp` remains built. After each public native production run, `xstar-cpp` writes `xstar_execution_provenance.json` in the output directory with requested/actual mode, package/science versions, C API and zone ABIs, native executable identity, CPU/Type50 dispatch capability, native return code, fallback events, and SHA-256 identities for the resolved atomic-data files supplied to the frontend. `xstar-tools run --mode xstar-cpp` is an optional Python convenience boundary that converts an ordinary `run_xstar.sh` or literal XSTAR command into the same qualified machine-readable native parameter envelope.
+The compatibility executable name `xstar_cpp` remains built. The generated JSON parameter envelope is ephemeral and outside the science output directory unless `--parameters-out FILE` explicitly requests retention. After each public native production run, `xstar-cpp` writes `xstar_execution_provenance.json` in the output directory with requested/actual mode, package/science versions, C API and zone ABIs, native executable identity, CPU/Type50 dispatch capability, native return code, fallback events, and SHA-256 identities for the resolved atomic-data files supplied to the frontend. `xstar-tools run --mode xstar-cpp` is an optional Python convenience boundary that converts an ordinary `run_xstar.sh` or literal XSTAR command into the same qualified machine-readable native parameter envelope.
 
 ## Provenance contract
 
